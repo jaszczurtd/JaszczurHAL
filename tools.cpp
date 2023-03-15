@@ -61,18 +61,19 @@ float getAverageValueFrom(int tpin) {
 
 float ntcToTemp(int tpin, int thermistor, int r) {
 
-    // Get the average value from the analog input
     float average = getAverageValueFrom(tpin);
 
-    // Convert the value to resistance
-    float resistance = (4095.0 / average - 1) * r;
+    // convert the value to resistance
+    average = 4095.0 / average - 1;
+    average = r / average;
 
-    // Calculate the temperature using the Steinhart-Hart equation
-    float steinhart = log(resistance / thermistor);  // ln(R/Ro)
-    steinhart /= BCOEFFICIENT;                      // 1/B * ln(R/Ro)
+    float steinhart;
+    steinhart = average / thermistor;     // (R/Ro)
+    steinhart = log(steinhart);                  // ln(R/Ro)
+    steinhart /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
     steinhart += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
-    steinhart = 1.0 / steinhart;                     // Invert
-    steinhart -= 273.15;                             // Convert absolute temp to C    
+    steinhart = 1.0 / steinhart;                 // Invert
+    steinhart -= 273.15;                         // convert absolute temp to C    
 
     return steinhart;
 }
