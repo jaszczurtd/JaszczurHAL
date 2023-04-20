@@ -134,13 +134,20 @@ unsigned long getSeconds(void) {
   return ((millis() + 500) / 1000);
 }
 
+byte MSB(unsigned short value){
+  return (byte)(value >> 8) & 0xFF;
+}
+
+byte LSB(unsigned short value){
+  return (byte)(value & 0x00FF);
+}
 
 unsigned short byteArrayToWord(unsigned char* bytes) {
-    unsigned short word = ((unsigned short)bytes[0] << 8) | bytes[1];
-    return word;
+  unsigned short word = ((unsigned short)bytes[0] << 8) | bytes[1];
+  return word;
 }
 
 void wordToByteArray(unsigned short word, unsigned char* bytes) {
-    bytes[0] = (word >> 8) & 0xFF;
-    bytes[1] = word & 0xFF;
+  bytes[0] = MSB(word);
+  bytes[1] = LSB(word);
 }

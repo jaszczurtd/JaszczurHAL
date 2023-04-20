@@ -34,6 +34,8 @@ void i2cScanner(void);
 float getAverageValueFrom(int tpin);
 unsigned long getSeconds(void);
 unsigned short byteArrayToWord(unsigned char* bytes);
+byte MSB(unsigned short value);
+byte LSB(unsigned short value);
 void wordToByteArray(unsigned short word, unsigned char* bytes);
 
 #endif
