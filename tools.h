@@ -24,6 +24,7 @@
 #endif
 
 void deb(const char *format, ...);
+void derr(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
 float adcToVolt(int adc, float r1, float r2);
 float ntcToTemp(int tpin, int thermistor, int r);

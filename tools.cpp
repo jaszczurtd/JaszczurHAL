@@ -20,6 +20,25 @@ void deb(const char *format, ...) {
   va_end(valist);
 }
 
+void derr(const char *format, ...) {
+
+  va_list valist;
+  va_start(valist, format);
+
+  char buffer[128];
+  memset (buffer, 0, sizeof(buffer));
+
+  const char *error = "ERROR! ";
+  int len = strlen(error);
+
+  strcpy(buffer, error);
+
+  vsnprintf(buffer + len, sizeof(buffer) - 1 - len, format, valist);
+  Serial.println(buffer);
+
+  va_end(valist);
+}
+
 void floatToDec(float val, int *hi, int *lo) {
 	int t1 = (int)val;
 	if(t1 > -128) {
