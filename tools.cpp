@@ -7,6 +7,36 @@
 
 #include "tools.h"
 
+static bool loggerInitialized = false;
+File loggerFile;
+
+bool initSDLogger(int cs) {
+#ifdef SD_LOGGER
+  EEPROM.begin(512);
+
+  int logNumber = (EEPROM.read(0) << 24) | (EEPROM.read(1) << 16) | (EEPROM.read(2) << 8) | EEPROM.read(3);
+  char fileName[16] = {0};
+  snprintf(fileName, sizeof(fileName), "log%d.txt", logNumber);
+  logNumber++;
+
+  EEPROM.write(0, (logNumber >> 24) & 0xFF);
+  EEPROM.write(1, (logNumber >> 16) & 0xFF);
+  EEPROM.write(2, (logNumber >> 8) & 0xFF);
+  EEPROM.write(3, (logNumber & 0xFF));
+  EEPROM.commit();
+
+  loggerInitialized = SD.begin(cs);
+  if(loggerInitialized) {
+    loggerFile = SD.open(fileName, FILE_WRITE);
+  }
+#endif
+  return loggerInitialized;
+}
+
+bool isSDLoggerInitialized(void) {
+  return loggerInitialized;
+}
+
 void deb(const char *format, ...) {
 
   va_list valist;
@@ -16,6 +46,13 @@ void deb(const char *format, ...) {
   memset (buffer, 0, sizeof(buffer));
   vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
   Serial.println(buffer);
+
+#ifdef SD_LOGGER
+  if(isSDLoggerInitialized()) {
+    loggerFile.println(buffer);
+    loggerFile.flush();
+  }
+#endif
 
   va_end(valist);
 }
@@ -35,6 +72,13 @@ void derr(const char *format, ...) {
 
   vsnprintf(buffer + len, sizeof(buffer) - 1 - len, format, valist);
   Serial.println(buffer);
+
+#ifdef SD_LOGGER
+  if(isSDLoggerInitialized()) {
+    loggerFile.println(buffer);
+    loggerFile.flush();
+  }
+#endif
 
   va_end(valist);
 }

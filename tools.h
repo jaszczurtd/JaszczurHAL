@@ -2,6 +2,10 @@
 #define T_TOOOLS
 
 #include <Arduino.h>
+#include <SD.h>
+#include <EEPROM.h>
+
+#define SD_LOGGER
 
 #ifndef ADC_BITS
 #define ADC_BITS 12
@@ -23,6 +27,8 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
+bool initSDLogger(int cs);
+bool isSDLoggerInitialized(void);
 void deb(const char *format, ...);
 void derr(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);

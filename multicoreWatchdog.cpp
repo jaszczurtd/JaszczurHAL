@@ -21,6 +21,9 @@ bool setupWatchdog(Timer<> *timer, unsigned int time) {
 
   timer->every(time / 10, watchdogHandle);
 
+  deb("Start of Watchdog with time: %ds and refresh %ds", 
+    time / 1000, (time / 10) / 1000);
+
   bool rebooted = watchdog_caused_reboot();
   if (rebooted) {
     deb("Rebooted by Watchdog!\n");
