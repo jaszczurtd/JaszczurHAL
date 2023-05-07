@@ -2,10 +2,23 @@
 #define T_TOOOLS
 
 #include <Arduino.h>
+#include <SPI.h>
 #include <SD.h>
 #include <EEPROM.h>
+#include <Wire.h>
 
+#define AT24C256
+#define EEPROM_I2C_ADDRESS 0x50
 #define SD_LOGGER
+
+#ifdef SD_LOGGER
+#define EEPROM_LOGGER_ADDR 0
+#define EEPROM_FIRST_ADDR 4
+#else
+#define EEPROM_FIRST_ADDR 0
+#endif
+
+//#define I2C_SCANNER
 
 #ifndef ADC_BITS
 #define ADC_BITS 12
@@ -27,6 +40,7 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
+int getSDLoggerNumber(void);
 bool initSDLogger(int cs);
 bool isSDLoggerInitialized(void);
 void deb(const char *format, ...);
@@ -43,6 +57,10 @@ unsigned long getSeconds(void);
 unsigned short byteArrayToWord(unsigned char* bytes);
 byte MSB(unsigned short value);
 byte LSB(unsigned short value);
+bool isWireBusy(unsigned int dataAddress);
 void wordToByteArray(unsigned short word, unsigned char* bytes);
-
+void writeAT24(unsigned int dataAddress, byte dataVal);
+byte readAT24(unsigned int dataAddress);
+void writeAT24Int(unsigned int dataAddress, int dataVal);
+int readAT24Int(unsigned int dataAddress);
 #endif

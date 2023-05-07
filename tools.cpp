@@ -9,26 +9,38 @@
 
 static bool loggerInitialized = false;
 File loggerFile;
+SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
+
+int getSDLoggerNumber(void) {
+#ifdef SD_LOGGER
+  return readAT24Int(EEPROM_LOGGER_ADDR);
+#else
+  return -1;
+#endif
+}
 
 bool initSDLogger(int cs) {
 #ifdef SD_LOGGER
-  EEPROM.begin(512);
 
-  int logNumber = (EEPROM.read(0) << 24) | (EEPROM.read(1) << 16) | (EEPROM.read(2) << 8) | EEPROM.read(3);
-  char fileName[16] = {0};
-  snprintf(fileName, sizeof(fileName), "log%d.txt", logNumber);
+  char buf[128] = {0};
+
+  #ifndef AT24C256
+  EEPROM.begin(512);
+  #endif
+
+  int logNumber = getSDLoggerNumber();
+  snprintf(buf, sizeof(buf) - 1, "log%d.txt", logNumber);
   logNumber++;
 
-  EEPROM.write(0, (logNumber >> 24) & 0xFF);
-  EEPROM.write(1, (logNumber >> 16) & 0xFF);
-  EEPROM.write(2, (logNumber >> 8) & 0xFF);
-  EEPROM.write(3, (logNumber & 0xFF));
-  EEPROM.commit();
+  SPI.beginTransaction(settingsA);
 
   loggerInitialized = SD.begin(cs);
   if(loggerInitialized) {
-    loggerFile = SD.open(fileName, FILE_WRITE);
+    loggerFile = SD.open(buf, FILE_WRITE);
   }
+  SPI.endTransaction();
+
+  writeAT24Int(EEPROM_LOGGER_ADDR, logNumber);
 #endif
   return loggerInitialized;
 }
@@ -49,8 +61,10 @@ void deb(const char *format, ...) {
 
 #ifdef SD_LOGGER
   if(isSDLoggerInitialized()) {
+    SPI.beginTransaction(settingsA);
     loggerFile.println(buffer);
     loggerFile.flush();
+    SPI.endTransaction();
   }
 #endif
 
@@ -75,8 +89,10 @@ void derr(const char *format, ...) {
 
 #ifdef SD_LOGGER
   if(isSDLoggerInitialized()) {
+    SPI.beginTransaction(settingsA);
     loggerFile.println(buffer);
     loggerFile.flush();
+    SPI.endTransaction();
   }
 #endif
 
@@ -160,6 +176,7 @@ void i2cScanner(void) {
   
     nDevices = 0;
     for(address = 1; address < 127; address++ ) {
+      watchdog_update();
       // The i2c_scanner uses the return value of
       // the Write.endTransmisstion to see if
       // a device did acknowledge to the address.
@@ -213,4 +230,59 @@ unsigned short byteArrayToWord(unsigned char* bytes) {
 void wordToByteArray(unsigned short word, unsigned char* bytes) {
   bytes[0] = MSB(word);
   bytes[1] = LSB(word);
+}
+
+bool isWireBusy(unsigned int dataAddress) {
+  Wire.beginTransmission(dataAddress);
+  return Wire.endTransmission();
+}
+
+void writeAT24(unsigned int dataAddress, byte dataVal) {
+  #ifdef AT24C256
+  Wire.beginTransmission(EEPROM_I2C_ADDRESS);
+  Wire.write(dataAddress >> 8);
+  Wire.write(dataAddress & 0xff);
+  Wire.write(dataVal);
+  Wire.endTransmission();
+  while(isWireBusy(EEPROM_I2C_ADDRESS)){   
+    delayMicroseconds(100);
+  }
+  #else
+  EEPROM.write(dataAddress, dataVal);
+  EEPROM.commit();
+  #endif
+}
+
+// Function to read from EEPROM
+byte readAT24(unsigned int dataAddress) {
+  byte readData = 0;
+  #ifdef AT24C256
+  Wire.beginTransmission(EEPROM_I2C_ADDRESS);
+  Wire.write(dataAddress >> 8);
+  Wire.write(dataAddress & 0xff);
+  Wire.requestFrom(EEPROM_I2C_ADDRESS, 1);
+  Wire.endTransmission();
+
+  while(isWireBusy(EEPROM_I2C_ADDRESS)){   
+    delayMicroseconds(100);
+  }
+
+  #else
+  readData = EEPROM.read(dataAddress);
+  #endif
+  return readData;
+}
+
+void writeAT24Int(unsigned int dataAddress, int dataVal) {
+  writeAT24(dataAddress + 0, (dataVal >> 24) & 0xFF);
+  writeAT24(dataAddress + 1, (dataVal >> 16) & 0xFF);
+  writeAT24(dataAddress + 2, (dataVal >> 8) & 0xFF);
+  writeAT24(dataAddress + 3, (dataVal & 0xFF));
+}
+
+int readAT24Int(unsigned int dataAddress) {
+  return  (readAT24(dataAddress + 0) << 24) |
+          (readAT24(dataAddress + 1) << 16) |
+          (readAT24(dataAddress + 2) << 8) |
+          (readAT24(dataAddress + 3));
 }
