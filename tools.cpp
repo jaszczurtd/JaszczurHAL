@@ -10,6 +10,7 @@
 static bool loggerInitialized = false;
 File loggerFile;
 SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
+String logBuffer = "";
 
 int getSDLoggerNumber(void) {
 #ifdef SD_LOGGER
@@ -37,6 +38,9 @@ bool initSDLogger(int cs) {
   loggerInitialized = SD.begin(cs);
   if(loggerInitialized) {
     loggerFile = SD.open(buf, FILE_WRITE);
+    if(!loggerFile) {
+      loggerInitialized = false;
+    }
   }
   SPI.endTransaction();
 
@@ -47,6 +51,36 @@ bool initSDLogger(int cs) {
 
 bool isSDLoggerInitialized(void) {
   return loggerInitialized;
+}
+
+static unsigned long lastWriteTime = 0; 
+void updateSD(String data) {
+  if(isSDLoggerInitialized()) {  
+    logBuffer += data;
+    logBuffer += "\n";
+    unsigned long currentTime = millis();
+    if (currentTime - lastWriteTime >= WRITE_INTERVAL) {
+      lastWriteTime = currentTime;
+
+      SPI.beginTransaction(settingsA);
+      loggerFile.println(logBuffer);
+      loggerFile.flush();
+      SPI.endTransaction();
+      logBuffer = "";
+    }
+  }
+}
+
+void saveLoggerAndClose(void) {
+  if(isSDLoggerInitialized()) {  
+    loggerInitialized = false;
+    SPI.beginTransaction(settingsA);
+    loggerFile.println(logBuffer);
+    loggerFile.flush();
+    loggerFile.close();
+    SPI.endTransaction();
+    logBuffer = "";
+  }
 }
 
 void deb(const char *format, ...) {
@@ -60,12 +94,7 @@ void deb(const char *format, ...) {
   Serial.println(buffer);
 
 #ifdef SD_LOGGER
-  if(isSDLoggerInitialized()) {
-    SPI.beginTransaction(settingsA);
-    loggerFile.println(buffer);
-    loggerFile.flush();
-    SPI.endTransaction();
-  }
+  updateSD(buffer);
 #endif
 
   va_end(valist);
@@ -88,12 +117,7 @@ void derr(const char *format, ...) {
   Serial.println(buffer);
 
 #ifdef SD_LOGGER
-  if(isSDLoggerInitialized()) {
-    SPI.beginTransaction(settingsA);
-    loggerFile.println(buffer);
-    loggerFile.flush();
-    SPI.endTransaction();
-  }
+  updateSD(buffer);
 #endif
 
   va_end(valist);
@@ -247,6 +271,7 @@ void writeAT24(unsigned int dataAddress, byte dataVal) {
   while(isWireBusy(EEPROM_I2C_ADDRESS)){   
     delayMicroseconds(100);
   }
+  delay(5);
   #else
   EEPROM.write(dataAddress, dataVal);
   EEPROM.commit();
@@ -260,13 +285,11 @@ byte readAT24(unsigned int dataAddress) {
   Wire.beginTransmission(EEPROM_I2C_ADDRESS);
   Wire.write(dataAddress >> 8);
   Wire.write(dataAddress & 0xff);
-  Wire.requestFrom(EEPROM_I2C_ADDRESS, 1);
   Wire.endTransmission();
-
-  while(isWireBusy(EEPROM_I2C_ADDRESS)){   
-    delayMicroseconds(100);
+  Wire.requestFrom(EEPROM_I2C_ADDRESS, 1);
+  if (Wire.available()) {
+    readData = Wire.read();
   }
-
   #else
   readData = EEPROM.read(dataAddress);
   #endif

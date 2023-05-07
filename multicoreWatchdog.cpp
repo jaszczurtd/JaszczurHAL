@@ -30,6 +30,8 @@ bool setupWatchdog(Timer<> *timer, unsigned int time) {
     deb("core 0 started:%d updated:%d \n", started_a.load(), core0.load());
     deb("core 1 started:%d updated:%d \n", started_b.load(), core1.load());
 
+    saveLoggerAndClose();
+
   } else {
     deb("Clean boot\n");
   }

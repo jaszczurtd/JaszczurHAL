@@ -12,6 +12,7 @@
 #define SD_LOGGER
 
 #ifdef SD_LOGGER
+#define WRITE_INTERVAL 2000
 #define EEPROM_LOGGER_ADDR 0
 #define EEPROM_FIRST_ADDR 4
 #else
@@ -40,9 +41,12 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
+#define roundz(x,d) ((floor(((x)*pow(10,d))+.5))/pow(10,d))
+
 int getSDLoggerNumber(void);
 bool initSDLogger(int cs);
 bool isSDLoggerInitialized(void);
+void saveLoggerAndClose(void);
 void deb(const char *format, ...);
 void derr(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
