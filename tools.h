@@ -41,8 +41,6 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
-#define roundz(x,d) ((floor(((x)*pow(10,d))+.5))/pow(10,d))
-
 int getSDLoggerNumber(void);
 bool initSDLogger(int cs);
 bool isSDLoggerInitialized(void);
@@ -67,4 +65,5 @@ void writeAT24(unsigned int dataAddress, byte dataVal);
 byte readAT24(unsigned int dataAddress);
 void writeAT24Int(unsigned int dataAddress, int dataVal);
 int readAT24Int(unsigned int dataAddress);
+float roundf(float dval);
 #endif
