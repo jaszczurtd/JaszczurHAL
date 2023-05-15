@@ -6,6 +6,7 @@
 #include <SD.h>
 #include <EEPROM.h>
 #include <Wire.h>
+#include "unity.h"
 
 #define AT24C256
 #define EEPROM_I2C_ADDRESS 0x50
