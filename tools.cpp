@@ -311,5 +311,5 @@ int readAT24Int(unsigned int dataAddress) {
 }
 
 float rroundf(float val) {
-  return (int(val * 10) / 10.0);   
+  return (int(val * 10) / 10.0);
 }
