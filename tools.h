@@ -67,4 +67,5 @@ void writeAT24(unsigned int dataAddress, byte dataVal);
 byte readAT24(unsigned int dataAddress);
 void writeAT24Int(unsigned int dataAddress, int dataVal);
 int readAT24Int(unsigned int dataAddress);
+float rroundf(float val);
 #endif

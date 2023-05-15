@@ -309,3 +309,7 @@ int readAT24Int(unsigned int dataAddress) {
           (readAT24(dataAddress + 2) << 8) |
           (readAT24(dataAddress + 3));
 }
+
+float rroundf(float val) {
+  return (int(val * 10) / 10.0);
+}
