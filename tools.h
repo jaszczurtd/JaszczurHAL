@@ -32,6 +32,9 @@
 #define NUMSAMPLES 8
 #endif
 
+//size for tables used for average value calculation
+#define TEMPERATURE_TABLES_SIZE 5
+
 // The beta coefficient of the thermistor (usually 3000-4000)
 #ifndef BCOEFFICIENT
 #define BCOEFFICIENT 3600
@@ -56,6 +59,7 @@ int percentToGivenVal(float percent, int maxWidth);
 void i2cScanner(void);
 #endif
 float getAverageValueFrom(int tpin);
+float getAverageForTable(int *idx, int *overall, float val, float *table);
 unsigned long getSeconds(void);
 unsigned short byteArrayToWord(unsigned char* bytes);
 byte MSB(unsigned short value);

@@ -162,6 +162,25 @@ float getAverageValueFrom(int tpin) {
     return average;
 }
 
+float getAverageForTable(int *idx, int *overall, float val, float *table) {
+
+  table[(*idx)++] = val;
+  if(*idx > TEMPERATURE_TABLES_SIZE - 1) {
+    *idx = 0;
+  }
+  (*overall)++;
+  if(*overall >= TEMPERATURE_TABLES_SIZE - 1) {
+    *overall = TEMPERATURE_TABLES_SIZE - 1;
+  }
+
+  float average = 0;
+  for (int i = 0; i < *overall; i++) {
+      average += table[i];
+  }
+  average /= *overall;
+  return average;
+}
+
 float ntcToTemp(int tpin, int thermistor, int r) {
 
     float average = getAverageValueFrom(tpin);
