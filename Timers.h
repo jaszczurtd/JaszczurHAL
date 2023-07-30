@@ -7,7 +7,8 @@
 #define SECONDS_IN_MINUTE 60
 #define MILIS_IN_MINUTE 60000.0
 
-#define SECS(t) (unsigned long) (t * 1000)
+#define SECOND 1000
+#define SECS(t) (unsigned long) (t * SECOND)
 #define MINS(t) SECS(t) * 60
 #define HOURS(t) MINS(t) * 60
 #define STOP 0
