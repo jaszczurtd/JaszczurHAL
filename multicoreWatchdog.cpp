@@ -9,10 +9,10 @@ static std::atomic<bool> started_a(false);
 static std::atomic<bool> core1(false);
 static std::atomic<bool> started_b(false);
 
-__attribute__((section(".noinit")))  bool _core0;
-__attribute__((section(".noinit")))  bool _started_a;
-__attribute__((section(".noinit")))  bool _core1;
-__attribute__((section(".noinit")))  bool _started_b;
+NOINIT bool _core0;
+NOINIT bool _started_a;
+NOINIT bool _core1;
+NOINIT bool _started_b;
 
 static Timer watchdogTimer;
 

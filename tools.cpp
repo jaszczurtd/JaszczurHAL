@@ -201,44 +201,52 @@ void crashReport(const char *format, ...) {
 #endif
 }
 
+NOINIT static char deb_buffer[128];
 void deb(const char *format, ...) {
+
+  rp2040.idleOtherCore();
 
   va_list valist;
   va_start(valist, format);
 
-  char buffer[128];
-  memset (buffer, 0, sizeof(buffer));
-  vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
-  Serial.println(buffer);
+  memset (deb_buffer, 0, sizeof(deb_buffer));
+  vsnprintf(deb_buffer, sizeof(deb_buffer) - 1, format, valist);
+  Serial.println(deb_buffer);
 
 #ifdef SD_LOGGER
-  updateSD(buffer);
+  updateSD(deb_buffer);
 #endif
 
   va_end(valist);
+
+  rp2040.resumeOtherCore();
 }
 
+NOINIT static char derr_buffer[128];
 void derr(const char *format, ...) {
+
+  rp2040.idleOtherCore();
 
   va_list valist;
   va_start(valist, format);
 
-  char buffer[128];
-  memset (buffer, 0, sizeof(buffer));
+  memset (derr_buffer, 0, sizeof(derr_buffer));
 
   const char *error = "ERROR! ";
   int len = strlen(error);
 
-  strcpy(buffer, error);
+  strcpy(derr_buffer, error);
 
-  vsnprintf(buffer + len, sizeof(buffer) - 1 - len, format, valist);
-  Serial.println(buffer);
+  vsnprintf(derr_buffer + len, sizeof(derr_buffer) - 1 - len, format, valist);
+  Serial.println(derr_buffer);
 
 #ifdef SD_LOGGER
-  updateSD(buffer);
+  updateSD(derr_buffer);
 #endif
 
   va_end(valist);
+
+  rp2040.resumeOtherCore();
 }
 
 void floatToDec(float val, int *hi, int *lo) {

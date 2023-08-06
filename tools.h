@@ -8,6 +8,10 @@
 #include <Wire.h>
 #include "unity.h"
 
+#ifndef NOINIT
+#define NOINIT __attribute__((section(".noinit"))) 
+#endif
+
 #define AT24C256
 #define EEPROM_I2C_ADDRESS 0x50
 #define SD_LOGGER
