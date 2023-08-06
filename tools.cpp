@@ -8,9 +8,12 @@
 #include "tools.h"
 
 static bool loggerInitialized = false;
-File loggerFile;
-SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
-String logBuffer = "";
+static bool crashLoggerInitialized = false;
+static bool SDStarted = false;
+static File loggerFile;
+static File crashFile;
+static SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
+static String logBuffer = "";
 
 int getSDLoggerNumber(void) {
 #ifdef SD_LOGGER
@@ -20,22 +23,39 @@ int getSDLoggerNumber(void) {
 #endif
 }
 
+#ifndef AT24C256
+static bool eepromStarted = false;
+#endif
+void startRaspberryEEPROM(int size) {
+  #ifndef AT24C256
+  if(!eepromStarted) {
+    EEPROM.begin(size);
+    eepromStarted = true;
+  }
+  #endif
+}
+
+//cs: chip select/SD addres
 bool initSDLogger(int cs) {
 #ifdef SD_LOGGER
 
   char buf[128] = {0};
 
   #ifndef AT24C256
-  EEPROM.begin(512);
+  startRaspberryEEPROM(RASPBERRY_EEPROM_SIZE);
   #endif
 
   int logNumber = getSDLoggerNumber();
   snprintf(buf, sizeof(buf) - 1, "log%d.txt", logNumber);
   logNumber++;
+  writeAT24Int(EEPROM_LOGGER_ADDR, logNumber);
 
   SPI.beginTransaction(settingsA);
-
-  loggerInitialized = SD.begin(cs);
+  if(!SDStarted) {
+    SDStarted = loggerInitialized = SD.begin(cs);
+  } else {
+    loggerInitialized = SDStarted;
+  }
   if(loggerInitialized) {
     loggerFile = SD.open(buf, FILE_WRITE);
     if(!loggerFile) {
@@ -44,7 +64,6 @@ bool initSDLogger(int cs) {
   }
   SPI.endTransaction();
 
-  writeAT24Int(EEPROM_LOGGER_ADDR, logNumber);
 #endif
   return loggerInitialized;
 }
@@ -81,6 +100,105 @@ void saveLoggerAndClose(void) {
     SPI.endTransaction();
     logBuffer = "";
   }
+}
+
+int getSDCrashNumber(void) {
+#ifdef SD_LOGGER
+  return readAT24Int(EEPROM_CRASH_ADDR);
+#else
+  return -1;
+#endif
+}
+
+//cs: chip select/SD addres
+bool initCrashLogger(const char *addToName, int cs) {
+#ifdef SD_LOGGER
+
+  char buf[128] = {0};
+
+  #ifndef AT24C256
+  startRaspberryEEPROM(RASPBERRY_EEPROM_SIZE);
+  #endif
+
+  int crashNumber = getSDCrashNumber();
+  if(addToName != NULL && strlen(addToName) > 0) {
+    snprintf(buf, sizeof(buf) - 1, "watchdog%d(%s).txt", crashNumber, addToName);
+  } else {
+    snprintf(buf, sizeof(buf) - 1, "watchdog%d.txt", crashNumber);
+  }
+  crashNumber++;
+
+  writeAT24Int(EEPROM_CRASH_ADDR, crashNumber);
+
+  SPI.beginTransaction(settingsA);
+
+  if(!SDStarted) {
+    SDStarted = crashLoggerInitialized = SD.begin(cs);
+  } else {
+    crashLoggerInitialized = SDStarted;
+  }
+
+  if(crashLoggerInitialized) {
+    crashFile = SD.open(buf, FILE_WRITE);
+    if(!crashFile) {
+      crashLoggerInitialized = false;
+    }
+  }
+  SPI.endTransaction();
+
+  if(crashLoggerInitialized) {
+    snprintf(buf, sizeof(buf) - 1, "corresponded log file: log%d.txt", 
+      getSDLoggerNumber() - 1);
+
+    updateCrashReport(buf);
+  }
+
+#endif
+  return crashLoggerInitialized;
+}
+
+bool isCrashLoggerInitialized(void) {
+  return crashLoggerInitialized;
+}
+
+void updateCrashReport(String data) {
+#ifdef SD_LOGGER
+  if(isCrashLoggerInitialized()) {  
+    SPI.beginTransaction(settingsA);
+    crashFile.println(data + "\n");
+    crashFile.flush();
+    SPI.endTransaction();
+  }
+#endif
+}
+
+void saveCrashLoggerAndClose(void) {
+#ifdef SD_LOGGER
+  if(isCrashLoggerInitialized()) {  
+    crashLoggerInitialized = false;
+    SPI.beginTransaction(settingsA);
+    crashFile.flush();
+    crashFile.close();
+    SPI.endTransaction();
+  }
+#endif
+}
+
+void crashReport(const char *format, ...) {
+#ifdef SD_LOGGER
+  if(isCrashLoggerInitialized()) {  
+    va_list valist;
+    va_start(valist, format);
+
+    char buffer[128];
+    memset (buffer, 0, sizeof(buffer));
+    vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
+
+    updateCrashReport(buffer);
+
+    va_end(valist);
+  }
+#endif
 }
 
 void deb(const char *format, ...) {
@@ -280,6 +398,23 @@ bool isWireBusy(unsigned int dataAddress) {
   return Wire.endTransmission();
 }
 
+void resetEEPROM(void) {
+#ifndef AT24C256
+  if(!eepromStarted) {
+    startRaspberryEEPROM(RASPBERRY_EEPROM_SIZE);
+    for(int a = 0; a < RASPBERRY_EEPROM_SIZE; a++) {
+      EEPROM.write(a, 0);
+    }
+    EEPROM.commit();
+  }
+#else
+  for(int a = 0; a < AT24C256_EEPROM_SIZE; a++) {
+    writeAT24(a, 0);
+    watchdog_update();
+  }
+#endif
+}
+
 void writeAT24(unsigned int dataAddress, byte dataVal) {
   #ifdef AT24C256
   Wire.beginTransmission(EEPROM_I2C_ADDRESS);
@@ -289,6 +424,7 @@ void writeAT24(unsigned int dataAddress, byte dataVal) {
   Wire.endTransmission();
   while(isWireBusy(EEPROM_I2C_ADDRESS)){   
     delayMicroseconds(100);
+    watchdog_update();
   }
   delay(5);
   #else
@@ -331,4 +467,26 @@ int readAT24Int(unsigned int dataAddress) {
 
 float rroundf(float val) {
   return (int(val * 10) / 10.0);
+}
+
+bool isValidString(const char *s, int maxBufSize) {
+  if (*s == '\0') {
+      return false; 
+  }
+
+  for (int a = 0; a < maxBufSize; a++) {
+      if (s[a] == '\0') {
+          return true; 
+      }
+      
+      bool p = (
+          isdigit(s[a]) || 
+          isalpha(s[a]) || 
+          isspace(s[a]) || 
+          isgraph(s[a]) );
+      if (!p) {
+          return false; 
+      }
+  }
+  return true; 
 }

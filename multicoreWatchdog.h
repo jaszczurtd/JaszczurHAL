@@ -7,7 +7,9 @@
 #include <stdint.h>
 #include "tools.h"
 
-bool setupWatchdog(Timer<> *timer, unsigned int time);
+#define WATCHDOG_VALUES_AMOUNT 4
+
+bool setupWatchdog(void(*function)(int *values, int size), unsigned int time);
 void updateWatchdogCore0(void);
 void updateWatchdogCore1(void);
 
