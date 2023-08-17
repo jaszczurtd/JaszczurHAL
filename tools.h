@@ -91,4 +91,5 @@ void writeAT24Int(unsigned int dataAddress, int dataVal);
 int readAT24Int(unsigned int dataAddress);
 float rroundf(float val);
 bool isValidString(const char *s, int maxBufSize);
+unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
 #endif

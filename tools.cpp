@@ -498,3 +498,11 @@ bool isValidString(const char *s, int maxBufSize) {
   }
   return true; 
 }
+
+unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b) {
+    unsigned short r5 = (r >> 3) & 0x1F;
+    unsigned short g6 = (g >> 2) & 0x3F;
+    unsigned short b5 = (b >> 3) & 0x1F;
+    
+    return (r5 << 11) | (g6 << 5) | b5;
+}
