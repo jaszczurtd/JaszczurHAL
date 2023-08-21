@@ -8,6 +8,10 @@
 #include <Wire.h>
 #include "unity.h"
 
+#ifdef PICO_W
+#include <WiFi.h>
+#endif
+
 #ifndef NOINIT
 #define NOINIT __attribute__((section(".noinit"))) 
 #endif
@@ -92,4 +96,7 @@ int readAT24Int(unsigned int dataAddress);
 float rroundf(float val);
 bool isValidString(const char *s, int maxBufSize);
 unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
+const char *macToString(uint8_t mac[6]);
+const char *encToString(uint8_t enc);
+bool scanNetworks(const char *networkToFind);
 #endif

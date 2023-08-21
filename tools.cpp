@@ -506,3 +506,51 @@ unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b) {
     
     return (r5 << 11) | (g6 << 5) | b5;
 }
+
+const char *macToString(uint8_t mac[6]) {
+  static char s[20];
+  snprintf(s, sizeof(s) - 1, "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+  return s;
+}
+
+const char *encToString(uint8_t enc) {
+  #ifdef PICO_W
+  switch (enc) {
+    case ENC_TYPE_NONE: return "NONE";
+    case ENC_TYPE_TKIP: return "WPA";
+    case ENC_TYPE_CCMP: return "WPA2";
+    case ENC_TYPE_AUTO: return "AUTO";
+  }
+  #endif
+  return "UNKN";
+}
+
+bool scanNetworks(const char *networkToFind) {
+  bool networkFound = false;
+  #ifdef PICO_W
+  deb("Beginning scan at %lu\n", millis());
+  auto cnt = WiFi.scanNetworks();
+  if (!cnt) {
+    deb("No WiFi networks found");
+  } else {
+    deb("Found %d networks\n", cnt);
+    deb("%32s %5s %17s %2s %4s", "SSID", "ENC", "BSSID        ", "CH", "RSSI");
+    for (auto i = 0; i < cnt; i++) {
+      uint8_t bssid[6];
+      WiFi.BSSID(i, bssid);
+      deb("%32s %5s %17s %2d %4ld", WiFi.SSID(i), encToString(WiFi.encryptionType(i)), macToString(bssid), WiFi.channel(i), WiFi.RSSI(i));
+      
+      if(networkToFind != NULL && strlen(networkToFind) > 0) {
+        if(!strncmp(WiFi.SSID(i), networkToFind, strlen(networkToFind))) {
+          deb("network %s is available", networkToFind);
+          networkFound = true;
+        }
+      }
+    }
+  }
+  deb("\n--- END --- at %lu\n", millis());
+  #else
+  deb("No PicoW configured, WiFi disabled");
+  #endif
+  return networkFound;
+}
