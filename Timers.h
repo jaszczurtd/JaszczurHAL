@@ -1,6 +1,7 @@
 #ifndef _Timers_h
 #define _Timers_h
 
+#include "libConfig.h"
 #include <Arduino.h>
 #include <inttypes.h>
 

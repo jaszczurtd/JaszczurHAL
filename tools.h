@@ -1,6 +1,7 @@
 #ifndef T_TOOOLS
 #define T_TOOOLS
 
+#include "libConfig.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include <SD.h>
@@ -15,10 +16,6 @@
 #ifndef NOINIT
 #define NOINIT __attribute__((section(".noinit"))) 
 #endif
-
-#define AT24C256
-#define EEPROM_I2C_ADDRESS 0x50
-#define SD_LOGGER
 
 #ifdef SD_LOGGER
 #define WRITE_INTERVAL 2000

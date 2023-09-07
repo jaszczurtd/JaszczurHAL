@@ -2,6 +2,7 @@
 #ifndef T_WATCHDOG
 #define T_WATCHDOG
 
+#include "libConfig.h"
 #include <arduino-timer.h>
 #include <atomic> 
 #include <stdint.h>

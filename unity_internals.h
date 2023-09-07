@@ -4,6 +4,8 @@
     [Released under MIT License. Please refer to license.txt for details]
 ========================================== */
 
+#include "libConfig.h"
+
 #ifndef UNITY_INTERNALS_H
 #define UNITY_INTERNALS_H
 

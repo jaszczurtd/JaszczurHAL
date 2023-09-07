@@ -4,6 +4,8 @@
     [Released under MIT License. Please refer to license.txt for details]
 ========================================== */
 
+#include "libConfig.h"
+
 #ifndef UNITY_FRAMEWORK_H
 #define UNITY_FRAMEWORK_H
 #define UNITY
