@@ -61,7 +61,10 @@ bool initSDLogger(int cs) {
     if(!loggerFile) {
       loggerInitialized = false;
     }
+  } else {
+    Serial.println("logger: Card Mount Failed");
   }
+
   SPI.endTransaction();
 
 #endif
@@ -147,7 +150,10 @@ bool initCrashLogger(const char *addToName, int cs) {
     if(!crashFile) {
       crashLoggerInitialized = false;
     }
+  } else {
+    Serial.println("crash logger: Card Mount Failed");
   }
+
   SPI.endTransaction();
 
   if(crashLoggerInitialized) {
