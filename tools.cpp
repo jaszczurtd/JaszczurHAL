@@ -74,6 +74,7 @@ bool isSDLoggerInitialized(void) {
 
 static unsigned long lastWriteTime = 0; 
 void updateSD(String data) {
+#ifdef SD_LOGGER
   if(isSDLoggerInitialized()) {  
     logBuffer += data;
     logBuffer += "\n";
@@ -88,9 +89,11 @@ void updateSD(String data) {
       logBuffer = "";
     }
   }
+  #endif
 }
 
 void saveLoggerAndClose(void) {
+#ifdef SD_LOGGER
   if(isSDLoggerInitialized()) {  
     loggerInitialized = false;
     SPI.beginTransaction(settingsA);
@@ -100,6 +103,7 @@ void saveLoggerAndClose(void) {
     SPI.endTransaction();
     logBuffer = "";
   }
+#endif
 }
 
 int getSDCrashNumber(void) {
