@@ -291,7 +291,7 @@ float getAverageValueFrom(int tpin) {
     // take N samples in a row, with a slight delay
     for (i = 0; i < NUMSAMPLES; i++) {
         average += analogRead(tpin);
-        delay(1);
+        delayMicroseconds(250);
     }
     average /= NUMSAMPLES;
 
@@ -391,6 +391,32 @@ void i2cScanner(void) {
 
 unsigned long getSeconds(void) {
   return ((millis() + 500) / 1000);
+}
+
+bool isDaylightSavingTime(int year, int month, int day) {
+     if ((month > 3 && month < 10) || 
+        (month == 3 && day >= 25) || 
+        (month == 10 && day < 29)) {
+        return true;
+    }
+    return false;
+}
+
+void adjustTime(int *year, int *month, int *day, int *hour, int *minute) {
+    (*hour)++;
+    if (isDaylightSavingTime(*year, *month, *day)) {
+        (*hour)++;
+        if (*hour == 24) {
+            *hour = 0;
+            (*day)++;
+        }
+    } else {
+      (*hour)--;
+        if (*hour == -1) {
+            *hour = 23;
+            (*day)--;
+        }
+    }
 }
 
 byte MSB(unsigned short value){

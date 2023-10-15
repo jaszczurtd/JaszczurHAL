@@ -80,6 +80,8 @@ void i2cScanner(void);
 float getAverageValueFrom(int tpin);
 float getAverageForTable(int *idx, int *overall, float val, float *table);
 unsigned long getSeconds(void);
+bool isDaylightSavingTime(int year, int month, int day);
+void adjustTime(int *year, int *month, int *day, int *hour, int *minute);
 unsigned short byteArrayToWord(unsigned char* bytes);
 byte MSB(unsigned short value);
 byte LSB(unsigned short value);
