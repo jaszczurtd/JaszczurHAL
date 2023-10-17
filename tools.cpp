@@ -9,11 +9,14 @@
 
 static bool loggerInitialized = false;
 static bool crashLoggerInitialized = false;
-static bool SDStarted = false;
 static File loggerFile;
 static File crashFile;
 static SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
 static String logBuffer = "";
+
+#ifdef SD_LOGGER
+static bool SDStarted = false;
+#endif
 
 int getSDLoggerNumber(void) {
 #ifdef SD_LOGGER
@@ -75,7 +78,9 @@ bool isSDLoggerInitialized(void) {
   return loggerInitialized;
 }
 
+#ifdef SD_LOGGER
 static unsigned long lastWriteTime = 0; 
+#endif
 void updateSD(String data) {
 #ifdef SD_LOGGER
   if(isSDLoggerInitialized()) {  
