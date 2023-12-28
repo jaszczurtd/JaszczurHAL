@@ -42,7 +42,7 @@
 // how many samples to take and average, more takes longer
 // but is more 'smooth'
 #ifndef NUMSAMPLES
-#define NUMSAMPLES 8
+#define NUMSAMPLES 4
 #endif
 
 //size for tables used for average value calculation
