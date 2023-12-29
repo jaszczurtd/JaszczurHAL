@@ -219,7 +219,7 @@ void crashReport(const char *format, ...) {
 NOINIT static char deb_buffer[128];
 void deb(const char *format, ...) {
 
-  rp2040.idleOtherCore();
+  //rp2040.idleOtherCore();
 
   va_list valist;
   va_start(valist, format);
@@ -234,13 +234,13 @@ void deb(const char *format, ...) {
 
   va_end(valist);
 
-  rp2040.resumeOtherCore();
+  //rp2040.resumeOtherCore();
 }
 
 NOINIT static char derr_buffer[128];
 void derr(const char *format, ...) {
 
-  rp2040.idleOtherCore();
+  //rp2040.idleOtherCore();
 
   va_list valist;
   va_start(valist, format);
@@ -261,7 +261,7 @@ void derr(const char *format, ...) {
 
   va_end(valist);
 
-  rp2040.resumeOtherCore();
+  //rp2040.resumeOtherCore();
 }
 
 void floatToDec(float val, int *hi, int *lo) {
