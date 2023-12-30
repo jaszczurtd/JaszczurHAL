@@ -216,10 +216,18 @@ void crashReport(const char *format, ...) {
 #endif
 }
 
+static mutex_t debugMutex;
+static mutex_t debugErrMutex;
+void debugInit(void) {
+  mutex_init(&debugMutex);
+  mutex_init(&debugErrMutex);
+  Serial.begin(9600);
+}
+
 NOINIT static char deb_buffer[128];
 void deb(const char *format, ...) {
 
-  //rp2040.idleOtherCore();
+  mutex_enter_blocking(&debugMutex);
 
   va_list valist;
   va_start(valist, format);
@@ -234,13 +242,13 @@ void deb(const char *format, ...) {
 
   va_end(valist);
 
-  //rp2040.resumeOtherCore();
+  mutex_exit(&debugMutex);
 }
 
 NOINIT static char derr_buffer[128];
 void derr(const char *format, ...) {
 
-  //rp2040.idleOtherCore();
+  mutex_enter_blocking(&debugErrMutex);
 
   va_list valist;
   va_start(valist, format);
@@ -261,7 +269,7 @@ void derr(const char *format, ...) {
 
   va_end(valist);
 
-  //rp2040.resumeOtherCore();
+  mutex_exit(&debugErrMutex);
 }
 
 void floatToDec(float val, int *hi, int *lo) {

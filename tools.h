@@ -58,6 +58,7 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
+void debugInit(void);
 int getSDLoggerNumber(void);
 int getSDCrashNumber(void);
 bool initSDLogger(int cs);
