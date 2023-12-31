@@ -330,6 +330,21 @@ float getAverageForTable(int *idx, int *overall, float val, float *table) {
   return average;
 }
 
+int getAverageFrom(int *table, int size) {
+  int average = 0;
+  if(size > 0) {
+    for (int i = 0; i < size; i++) {
+        average += table[i];
+    }
+    average /= size;
+    average--;
+    if(average < 0) {
+      average = 0;
+    }
+  }
+  return average;
+}
+
 float ntcToTemp(int tpin, int thermistor, int r) {
 
     float average = getAverageValueFrom(tpin);
