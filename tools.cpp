@@ -337,12 +337,44 @@ int getAverageFrom(int *table, int size) {
         average += table[i];
     }
     average /= size;
-    average--;
     if(average < 0) {
       average = 0;
     }
   }
   return average;
+}
+
+int getMinimumFrom(int *table, int size) {
+    if (size <= 0) {
+        return -1;
+    }
+
+    int min = table[0];
+    for (int i = 1; i < size; ++i) {
+        if (table[i] < min) {
+            min = table[i];
+        }
+    }
+    return min;  
+}
+
+int getHalfwayBetweenMinMax(int *array, int n) {
+    if (n <= 0) {
+        return -1;
+    }
+
+    int min = array[0];
+    int max = array[0];
+
+    for (int i = 1; i < n; ++i) {
+        if (array[i] < min) {
+            min = array[i];
+        } else if (array[i] > max) {
+            max = array[i];
+        }
+    }
+
+    return (max + min) / 2;
 }
 
 float ntcToTemp(int tpin, int thermistor, int r) {
