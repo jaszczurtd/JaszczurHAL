@@ -94,6 +94,7 @@ byte readAT24(unsigned int dataAddress);
 void writeAT24Int(unsigned int dataAddress, int dataVal);
 int readAT24Int(unsigned int dataAddress);
 float rroundf(float val);
+float roundfWithPrecisionTo(float value, int precision);
 bool isValidString(const char *s, int maxBufSize);
 unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
 const char *macToString(uint8_t mac[6]);

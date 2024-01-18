@@ -573,6 +573,15 @@ float rroundf(float val) {
   return (int(val * 10) / 10.0);
 }
 
+float roundfWithPrecisionTo(float value, int precision) {
+    float multiplier = 1.0;
+    for (int i = 0; i < precision; ++i) {
+        multiplier *= 10.0;
+    }
+
+    return (float)((int)(value * multiplier)) / multiplier;
+}
+
 bool isValidString(const char *s, int maxBufSize) {
   if (*s == '\0') {
       return false; 
