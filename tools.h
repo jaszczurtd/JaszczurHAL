@@ -74,6 +74,7 @@ void crashReport(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
 float adcToVolt(int adc, float r1, float r2);
 float ntcToTemp(int tpin, int thermistor, int r);
+float steinhart(float val, float thermistor, int r, bool characteristic);
 int percentToGivenVal(float percent, int maxWidth);
 #ifdef I2C_SCANNER
 void i2cScanner(void);
@@ -103,5 +104,6 @@ bool scanNetworks(const char *networkToFind);
 int getAverageFrom(int *table, int size);
 int getMinimumFrom(int *table, int size);
 int getHalfwayBetweenMinMax(int *array, int n);
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
 
 #endif

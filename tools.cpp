@@ -378,22 +378,30 @@ int getHalfwayBetweenMinMax(int *array, int n) {
 }
 
 float ntcToTemp(int tpin, int thermistor, int r) {
-
     float average = getAverageValueFrom(tpin);
-
-    // convert the value to resistance
+// convert the value to resistance
     average = 4095.0 / average - 1;
-    average = r / average;
+    return steinhart(average, thermistor, r, true);
+}
 
-    float steinhart;
-    steinhart = average / thermistor;     // (R/Ro)
-    steinhart = log(steinhart);                  // ln(R/Ro)
-    steinhart /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
-    steinhart += 1.0 / (TEMPERATURENOMINAL + 273.15); // + (1/To)
+float steinhart(float val, float thermistor, int r, bool characteristic) {
+  val = r / val;
+  float steinhart = val / thermistor;     // (R/Ro)
+  steinhart = log(steinhart);                  // ln(R/Ro)
+  steinhart /= BCOEFFICIENT;                   // 1/B * ln(R/Ro)
+  float invTo = 1.0 / (TEMPERATURENOMINAL + 273.15);
+  if(characteristic) {
+    steinhart += invTo; // + (1/To)
     steinhart = 1.0 / steinhart;                 // Invert
     steinhart -= 273.15;                         // convert absolute temp to C    
+  } else {
+    steinhart -= invTo; // - (1/To)
+    steinhart = 1.0 / steinhart;                // Invert
+    steinhart += 273.15;                         // convert absolute temp to C   
+    steinhart = -steinhart; 
+  }
 
-    return steinhart;
+  return steinhart;  
 }
 
 int percentToGivenVal(float percent, int givenVal) {
@@ -658,4 +666,8 @@ bool scanNetworks(const char *networkToFind) {
   deb("No PicoW configured, WiFi disabled");
   #endif
   return networkFound;
+}
+
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
