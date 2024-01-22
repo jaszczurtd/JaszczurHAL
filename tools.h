@@ -17,6 +17,10 @@
 #define NOINIT __attribute__((section(".noinit"))) 
 #endif
 
+#define D_NONE 0
+#define D_ADD 1
+#define D_SUB 2
+
 #ifdef SD_LOGGER
 #define WRITE_INTERVAL 2000
 #define EEPROM_LOGGER_ADDR  0
