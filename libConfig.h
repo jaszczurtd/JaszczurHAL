@@ -13,5 +13,6 @@
 //#define PICO_W
 #define WIFI_SSID "Jaszczurowo"
 
+//#define FREE_RTOS
 
 #endif
