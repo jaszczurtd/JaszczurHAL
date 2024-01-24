@@ -19,5 +19,6 @@ void setStartedCore1(void);
 bool isEnvironmentStarted(void);
 
 void triggerSystemReset(void);
+void watchdog_feed(void);
 
 #endif

@@ -59,11 +59,11 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
   watchdogTimer.every(time / 10, watchdogHandle);
 
   deb("Start of Watchdog with time: %ds and refresh %ds", 
-    time / 1000, (time / 10) / 1000);
+    time / SECOND, (time / 10) / SECOND);
 
   watchdog_enable(watchdogTime, false);
-  watchdog_update();
   watchdogStarted = true;
+  watchdog_feed();
 
   return rebooted;
 }
@@ -96,7 +96,7 @@ bool watchdogHandle(void *argument) {
   _core1 = core1.load();
 
   if(core0.load() && core1.load()) {
-    watchdog_update();
+    watchdog_feed();
   }
 
   return true;
@@ -124,4 +124,10 @@ void setStartedCore1(void) {
 
 bool isEnvironmentStarted(void) {
   return started_a.load() && started_b.load();
+}
+
+void watchdog_feed(void) {
+  if(watchdogStarted) {
+    watchdog_update();
+  }
 }

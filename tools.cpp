@@ -304,7 +304,7 @@ float getAverageValueFrom(int tpin) {
     // take N samples in a row, with a slight delay
     for (i = 0; i < NUMSAMPLES; i++) {
         average += analogRead(tpin);
-        delayMicroseconds(10);
+        m_delay_microseconds(10);
     }
     average /= NUMSAMPLES;
 
@@ -451,7 +451,7 @@ void i2cScanner(void) {
     else
       Serial.println("done\n");
   
-    delay(500);           // wait 500 mseconds for next scan
+    m_delay(500);           // wait 500 mseconds for next scan
   }
 
 }
@@ -535,10 +535,10 @@ void writeAT24(unsigned int dataAddress, byte dataVal) {
   Wire.write(dataVal);
   Wire.endTransmission();
   while(isWireBusy(EEPROM_I2C_ADDRESS)){   
-    delayMicroseconds(100);
+    m_delay_microseconds(100);
     watchdog_update();
   }
-  delay(5);
+  m_delay(5);
   #else
   EEPROM.write(dataAddress, dataVal);
   EEPROM.commit();

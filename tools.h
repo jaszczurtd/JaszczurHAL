@@ -13,6 +13,7 @@
 #include <EEPROM.h>
 #include <Wire.h>
 #include "unity.h"
+#include "SmartTimers.h"
 
 #ifndef INC_FREERTOS_H
 #define m_mutex_def(mutexname) static mutex_t mutexname
@@ -28,7 +29,7 @@
 #include "semphr.h"
 #define m_mutex_def(mutexname) static SemaphoreHandle_t mutexname
 #define m_mutex_init(mutexname) mutexname = xSemaphoreCreateMutex()
-#define m_mutex_enter_blocking(mutexname) xSemaphoreTake(mutexname, portMAX_DELAY)
+#define m_mutex_enter_blocking(mutexname) xSemaphoreTake(mutexname, SECS(2))
 #define m_mutex_exit(mutexname) xSemaphoreGive(mutexname)
 #define m_delay(val) vTaskDelay(val)
 #define m_delay_microseconds(val) sleep_us(val)
