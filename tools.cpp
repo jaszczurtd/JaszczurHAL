@@ -303,12 +303,38 @@ float getAverageValueFrom(int tpin) {
 
     // take N samples in a row, with a slight delay
     for (i = 0; i < NUMSAMPLES; i++) {
-        average += analogRead(tpin);
+        average += adcCompe(analogRead(tpin));
         m_delay_microseconds(10);
     }
     average /= NUMSAMPLES;
 
     return average;
+}
+
+float filter(float alpha, float input, float previous_output) {
+  return alpha * input + (1.0f - alpha) * previous_output;
+}
+
+int adcCompe(int x) {
+  int y = 0;
+
+  if(x > 3584) y = x + 32;
+  else if(x == 3583) y = x + 29;
+  else if(x == 3582) y = x + 27;
+
+  else if(x > 2560) y = x + 24;
+  else if(x == 2559) y = x + 21;
+  else if(x == 2558) y = x + 19;
+
+  else if(x > 1536) y = x + 16;
+  else if(x == 1535) y = x + 13;
+  else if(x == 1534) y = x + 11;
+
+  else if(x > 512) y = x + 8;
+  else if(x == 511) y = x + 5;
+  else if(x == 510) y = x + 3;
+  else y = x;
+  return y;
 }
 
 float getAverageForTable(int *idx, int *overall, float val, float *table) {

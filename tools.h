@@ -110,6 +110,8 @@ int percentToGivenVal(float percent, int maxWidth);
 void i2cScanner(void);
 #endif
 float getAverageValueFrom(int tpin);
+float filter(float alpha, float input, float previous_output);
+int adcCompe(int x);
 float getAverageForTable(int *idx, int *overall, float val, float *table);
 unsigned long getSeconds(void);
 bool isDaylightSavingTime(int year, int month, int day);
