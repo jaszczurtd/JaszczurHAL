@@ -39,6 +39,8 @@
 #include <WiFi.h>
 #endif
 
+#define C_INIT_VAL 0xdeadbeef;
+
 #ifndef NOINIT
 #define NOINIT __attribute__((section(".noinit"))) 
 #endif
@@ -119,6 +121,7 @@ void adjustTime(int *year, int *month, int *day, int *hour, int *minute);
 unsigned short byteArrayToWord(unsigned char* bytes);
 byte MSB(unsigned short value);
 byte LSB(unsigned short value);
+int MsbLsbToInt(byte msb, byte lsb);
 bool isWireBusy(unsigned int dataAddress);
 void resetEEPROM(void);
 void wordToByteArray(unsigned short word, unsigned char* bytes);

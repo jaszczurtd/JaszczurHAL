@@ -521,6 +521,10 @@ byte LSB(unsigned short value){
   return (byte)(value & 0x00FF);
 }
 
+int MsbLsbToInt(byte msb, byte lsb) {
+  return ((unsigned short)msb << 8) | lsb;
+}
+
 unsigned short byteArrayToWord(unsigned char* bytes) {
   unsigned short word = ((unsigned short)bytes[0] << 8) | bytes[1];
   return word;
