@@ -289,6 +289,10 @@ void floatToDec(float val, int *hi, int *lo) {
 	}
 }
 
+float decToFloat(int hi, int lo) {
+  return (float)hi + ((float)lo / 10);
+}
+
 float adcToVolt(int adc, float r1, float r2) {
   const float V_REF = 3.3;
   const float V_DIVIDER_SCALE = (r1 + r2) / r2;

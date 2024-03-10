@@ -104,6 +104,7 @@ void derr(const char *format, ...);
 void updateCrashReport(String data);
 void crashReport(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
+float decToFloat(int hi, int lo);
 float adcToVolt(int adc, float r1, float r2);
 float ntcToTemp(int tpin, int thermistor, int r);
 float steinhart(float val, float thermistor, int r, bool characteristic);
