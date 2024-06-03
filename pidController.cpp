@@ -1,11 +1,12 @@
 
 #include "pidController.h"
 
-PIDController::PIDController(float kp, float ki, float kd) {
+PIDController::PIDController(float kp, float ki, float kd, float mi) {
   pid_kp = kp;
   pid_ki = ki;
   pid_kd = kd;
-  last_time = 0;
+  max_integral = mi;
+  dt = last_time = integral = previous = output = 0;  
 }
 
 void PIDController::updatePIDtime(float timeDivider) {
@@ -17,8 +18,14 @@ void PIDController::updatePIDtime(float timeDivider) {
 float PIDController::updatePIDcontroller(float error) {
   float proportional = error;
   integral += error * dt;
+
+  // Anti-windup: Clamp the integral term within a range
+  if (integral > max_integral) integral = max_integral;
+  else if (integral < -max_integral) integral = -max_integral;
+
   float derivative = (error - previous) / dt;
   previous = error;
-  return (pid_kp * proportional) + (pid_ki * integral) + (pid_kd * derivative);
+  output = (pid_kp * proportional) + (pid_ki * integral) + (pid_kd * derivative);
+  return output;
 }
 

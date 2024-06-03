@@ -8,7 +8,7 @@
 
 class PIDController {
 public:
-  PIDController(float kp, float ki, float kd);
+  PIDController(float kp, float ki, float kd, float mi);
   void updatePIDtime(float timeDivider);
   float updatePIDcontroller(float error);
 
@@ -21,6 +21,7 @@ private:
   float pid_kp;
   float pid_ki;
   float pid_kd;
+  float max_integral;
 };
 
 #endif
