@@ -1,24 +1,24 @@
 
 #include "pidController.h"
 
-void initPIDcontroller(PIDController *c, float kp, float ki, float kd) {
-  c->kp = kp;
-  c->ki = ki;
-  c->kd = kd;
-  c->last_time = 0;
+PIDController::PIDController(float kp, float ki, float kd) {
+  pid_kp = kp;
+  pid_ki = ki;
+  pid_kd = kd;
+  last_time = 0;
 }
 
-void updatePIDtime(PIDController *c, float timeDivider) {
+void PIDController::updatePIDtime(float timeDivider) {
   float now = millis();
-  c->dt = (now - c->last_time) / timeDivider;
-  c->last_time = now;
+  dt = (now - last_time) / timeDivider;
+  last_time = now;
 }
 
-float updatePIDcontroller(PIDController *c, float error) {
+float PIDController::updatePIDcontroller(float error) {
   float proportional = error;
-  c->integral += error * c->dt;
-  float derivative = (error - c->previous) / c->dt;
-  c->previous = error;
-  return (c->kp * proportional) + (c->ki * c->integral) + (c->kd * derivative);
+  integral += error * dt;
+  float derivative = (error - previous) / dt;
+  previous = error;
+  return (pid_kp * proportional) + (pid_ki * integral) + (pid_kd * derivative);
 }
 

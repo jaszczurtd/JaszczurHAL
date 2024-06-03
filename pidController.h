@@ -5,19 +5,22 @@
 #include <Arduino.h>
 #include <inttypes.h>
 
-typedef struct {
+
+class PIDController {
+public:
+  PIDController(float kp, float ki, float kd);
+  void updatePIDtime(float timeDivider);
+  float updatePIDcontroller(float error);
+
+private:
   float dt;
   float last_time;
   float integral;
   float previous;
   float output;
-  float kp;
-  float ki;
-  float kd;
-} PIDController;
-
-void initPIDcontroller(PIDController *c, float kp, float ki, float kd);
-void updatePIDtime(PIDController *c, float timeDivider);
-float updatePIDcontroller(PIDController *c, float error);
+  float pid_kp;
+  float pid_ki;
+  float pid_kd;
+};
 
 #endif
