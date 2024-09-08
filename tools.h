@@ -141,5 +141,6 @@ int getAverageFrom(int *table, int size);
 int getMinimumFrom(int *table, int size);
 int getHalfwayBetweenMinMax(int *array, int n);
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+float filterValue(float currentValue, float newValue, float alpha);
 
 #endif
