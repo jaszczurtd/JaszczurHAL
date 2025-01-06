@@ -12,6 +12,15 @@ enum Direction { FORWARD, BACKWARD };
 class PIDController {
 public:
   PIDController(float kp, float ki, float kd, float mi);
+
+  void setKp(float kp); 
+  void setKi(float ki);
+  void setKd(float kd);
+
+  float getKp() { return pid_kp; }
+  float getKi() { return pid_ki; }
+  float getKd() { return pid_kd; }
+
   void updatePIDtime(float timeDivider);
   float updatePIDcontroller(float error, float V_supply);
   float updatePIDcontroller(float error);

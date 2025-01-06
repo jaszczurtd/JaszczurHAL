@@ -2,9 +2,9 @@
 #include "pidController.h"
 
 PIDController::PIDController(float kp, float ki, float kd, float mi) {
-  pid_kp = kp;
-  pid_ki = ki;
-  pid_kd = kd;
+  setKp(kp);
+  setKi(ki);
+  setKd(kd);
   max_integral = mi;
   last_time = millis();
   dt = integral = previous = output = 0;  
@@ -12,6 +12,10 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setVoltageCompensation(PID_UNINITIALIZED, PID_UNINITIALIZED);
   setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
 }
+
+void PIDController::setKp(float kp) { pid_kp = kp; }
+void PIDController::setKi(float ki) { pid_ki = ki; }
+void PIDController::setKd(float kd) { pid_kd = kd; }
 
 void PIDController::updatePIDtime(float timeDivider) {
   float now = millis();
