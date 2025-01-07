@@ -245,6 +245,36 @@ void deb(const char *format, ...) {
   m_mutex_exit(debugMutex);
 }
 
+NOINIT static char binary_buffer[128];
+char *printBinaryAndSize(int number) {
+  m_mutex_enter_blocking(debugMutex);
+
+  unsigned int bits = 0;
+
+  if (number < 0) {
+    bits = sizeof(int) * 8; 
+  } else if (number <= 0xFF) {
+    bits = 8; 
+  } else if (number <= 0xFFFF) {
+    bits = 16; 
+  } else if (number <= 0xFFFFFFFF) {
+    bits = 32; 
+  } else {
+    bits = sizeof(int) * 8; 
+  }
+
+  memset(binary_buffer, 0, sizeof(binary_buffer));
+
+  for (int i = bits - 1; i >= 0; i--) {
+    binary_buffer[bits - 1 - i] = (number & (1 << i)) ? '1' : '0';
+  }
+
+  binary_buffer[bits] = '\0'; 
+
+  m_mutex_exit(debugMutex);
+  return binary_buffer;
+}
+
 NOINIT static char derr_buffer[128];
 void derr(const char *format, ...) {
 

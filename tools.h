@@ -101,6 +101,7 @@ void saveLoggerAndClose(void);
 void saveCrashLoggerAndClose(void);
 void deb(const char *format, ...);
 void derr(const char *format, ...);
+char *printBinaryAndSize(int number);
 void updateCrashReport(String data);
 void crashReport(const char *format, ...);
 void floatToDec(float val, int *hi, int *lo);
