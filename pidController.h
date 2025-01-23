@@ -4,6 +4,7 @@
 #include "libConfig.h"
 #include <Arduino.h>
 #include <inttypes.h>
+#include <cfloat>
 
 enum Direction { FORWARD, BACKWARD };
 
@@ -29,6 +30,9 @@ public:
   void setOutputLimits(float min, float max);
   void reset();
   void setDirection(Direction d);
+  void checkForOscillations(float error);
+  bool isErrorStable(float error, float tolerance, int stabilityThreshold);
+  bool isOscillating(float tolerance);
 
 private:
   float dt;
@@ -46,6 +50,12 @@ private:
   float Kff;
   float V_nominal;
   float lastVolts;
+
+  float maxOutput = -FLT_MAX;
+  float minOutput = FLT_MAX;
+  int stabilityCounter = 0;
+  int instabilityCounter = 0;
+  int zeroCrossings = 0;
 };
 
 #endif

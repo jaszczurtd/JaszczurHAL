@@ -82,3 +82,40 @@ void PIDController::setDirection(Direction d) {
     pid_kd = -pid_kd;
   }
 }
+
+void PIDController::checkForOscillations(float error) {
+  static float lastError = 0;
+  if ((lastError > 0 && error < 0) || (lastError < 0 && error > 0)) {
+    zeroCrossings++;
+  }
+  lastError = error;
+}
+
+bool PIDController::isErrorStable(float error, float tolerance, int stabilityThreshold) {
+
+  if (fabs(error) < tolerance) {
+    stabilityCounter++;
+    instabilityCounter = 0;  
+  } else {
+    instabilityCounter++;
+    stabilityCounter = 0;    
+  }
+
+  if (instabilityCounter > stabilityThreshold) {
+    return false;
+  }
+
+  return true;
+}
+
+bool PIDController::isOscillating(float tolerance) {
+  if (output > maxOutput) maxOutput = output;
+  if (output < minOutput) minOutput = output;
+
+  if ((maxOutput - minOutput) > tolerance) {
+    return true;
+  }
+
+  return false;
+}
+
