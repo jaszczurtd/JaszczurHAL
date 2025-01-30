@@ -9,7 +9,6 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   last_time = millis();
   dt = integral = previous = output = 0;  
   dir = FORWARD;
-  setVoltageCompensation(PID_UNINITIALIZED, PID_UNINITIALIZED);
   setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
 }
 
@@ -24,21 +23,7 @@ void PIDController::updatePIDtime(float timeDivider) {
   last_time = now;
 }
 
-void PIDController::setVoltageCompensation(float kff, float v_nominal) {
-  Kff = kff;
-  V_nominal = v_nominal;
-  lastVolts = 0.0;
-}
-
-float PIDController::compensateVoltageThreshold(float V_supply) {
-  if (fabs(V_supply - lastVolts) > Kff) {
-    lastVolts = V_supply;
-  }
-
-  return (V_nominal / lastVolts);    
-}
-
-float PIDController::updatePIDcontroller(float error, float V_supply) {
+float PIDController::updatePIDcontroller(float error) {
   float proportional = error;
   integral += error * dt;
 
@@ -56,10 +41,6 @@ float PIDController::updatePIDcontroller(float error, float V_supply) {
   }
 
   return output;
-}
-
-float PIDController::updatePIDcontroller(float error) {
-  return updatePIDcontroller(error, PID_UNINITIALIZED);
 }
 
 void PIDController::setOutputLimits(float min, float max) {
@@ -83,14 +64,6 @@ void PIDController::setDirection(Direction d) {
   }
 }
 
-void PIDController::checkForOscillations(float error) {
-  static float lastError = 0;
-  if ((lastError > 0 && error < 0) || (lastError < 0 && error > 0)) {
-    zeroCrossings++;
-  }
-  lastError = error;
-}
-
 bool PIDController::isErrorStable(float error, float tolerance, int stabilityThreshold) {
 
   if (fabs(error) < tolerance) {
@@ -108,14 +81,22 @@ bool PIDController::isErrorStable(float error, float tolerance, int stabilityThr
   return true;
 }
 
-bool PIDController::isOscillating(float tolerance) {
-  if (output > maxOutput) maxOutput = output;
-  if (output < minOutput) minOutput = output;
+bool PIDController::isOscillating(float currentError, int windowSize) {
+    static std::deque<float> errorHistory;
+    errorHistory.push_back(fabs(currentError)); 
+    
+    if (errorHistory.size() > windowSize) {
+        errorHistory.pop_front();
+    }
 
-  if ((maxOutput - minOutput) > tolerance) {
-    return true;
-  }
+    int zeroCrossings = 0;
+    for (size_t i = 1; i < errorHistory.size(); ++i) {
+        if ((errorHistory[i-1] < 0 && errorHistory[i] >= 0) || 
+            (errorHistory[i-1] >= 0 && errorHistory[i] < 0)) {
+            zeroCrossings++;
+        }
+    }
 
-  return false;
+    return (zeroCrossings > 3); 
 }
 

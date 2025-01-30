@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <inttypes.h>
 #include <cfloat>
+#include <deque>
 
 enum Direction { FORWARD, BACKWARD };
 
@@ -23,16 +24,12 @@ public:
   float getKd() { return pid_kd; }
 
   void updatePIDtime(float timeDivider);
-  float updatePIDcontroller(float error, float V_supply);
   float updatePIDcontroller(float error);
-  void setVoltageCompensation(float kff, float v_nominal);
-  float compensateVoltageThreshold(float V_supply);
   void setOutputLimits(float min, float max);
   void reset();
   void setDirection(Direction d);
-  void checkForOscillations(float error);
   bool isErrorStable(float error, float tolerance, int stabilityThreshold);
-  bool isOscillating(float tolerance);
+  bool isOscillating(float currentError, int windowSize = 20);
 
 private:
   float dt;
@@ -47,12 +44,7 @@ private:
   float outputMin;
   float outputMax;
   int dir;
-  float Kff;
-  float V_nominal;
-  float lastVolts;
 
-  float maxOutput = -FLT_MAX;
-  float minOutput = FLT_MAX;
   int stabilityCounter = 0;
   int instabilityCounter = 0;
   int zeroCrossings = 0;
