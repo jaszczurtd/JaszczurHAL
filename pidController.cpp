@@ -30,8 +30,9 @@ float PIDController::updatePIDcontroller(float error) {
   // Anti-windup: Clamp the integral term within a range
   integral = constrain(integral, -max_integral, max_integral);
 
-  float derivative = (error - previous) / dt;
-  previous = error;
+  float raw_derivative = (error - previous) / dt;
+  float derivative = previous_derivative + (dt / (dt + Tf)) * (raw_derivative - previous_derivative);
+  previous_derivative = derivative;
 
   output = (pid_kp * proportional) + (pid_ki * integral) + (pid_kd * derivative);
 

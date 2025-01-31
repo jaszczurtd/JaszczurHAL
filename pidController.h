@@ -45,6 +45,9 @@ private:
   float outputMax;
   int dir;
 
+  float previous_derivative = 0;
+  float Tf = 0.05; // Stała czasowa filtra (dostrój w zależności od systemu)
+
   int stabilityCounter = 0;
   int instabilityCounter = 0;
   int zeroCrossings = 0;
