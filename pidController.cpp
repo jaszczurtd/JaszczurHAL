@@ -15,11 +15,18 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
 void PIDController::setKp(float kp) { pid_kp = kp; }
 void PIDController::setKi(float ki) { pid_ki = ki; }
 void PIDController::setKd(float kd) { pid_kd = kd; }
+void PIDController::setTf(float tf) { Tf = tf; }
 
 void PIDController::updatePIDtime(float timeDivider) {
   float now = millis();
-  dt = (now - last_time) / timeDivider;
-  if (dt <= 0) dt = 0.001;
+
+  if (timeDivider == 0) {
+    dt = 0.001;  
+  } else {
+    dt = (now - last_time) / timeDivider;
+    if (dt <= 0) dt = 0.001;  
+  }
+
   last_time = now;
 }
 
@@ -40,6 +47,8 @@ float PIDController::updatePIDcontroller(float error) {
      outputMin != PID_UNINITIALIZED) {
     output = constrain(output, outputMin, outputMax);
   }
+
+  previous = error;
 
   return output;
 }
@@ -66,24 +75,17 @@ void PIDController::setDirection(Direction d) {
 }
 
 bool PIDController::isErrorStable(float error, float tolerance, int stabilityThreshold) {
-
   if (fabs(error) < tolerance) {
     stabilityCounter++;
-    instabilityCounter = 0;  
+    instabilityCounter = 0;
   } else {
+    stabilityCounter = 0;
     instabilityCounter++;
-    stabilityCounter = 0;    
   }
-
-  if (instabilityCounter > stabilityThreshold) {
-    return false;
-  }
-
-  return true;
+  return (stabilityCounter >= stabilityThreshold);
 }
 
 bool PIDController::isOscillating(float currentError, int windowSize) {
-    static std::deque<float> errorHistory;
     errorHistory.push_back(fabs(currentError)); 
     
     if (errorHistory.size() > windowSize) {

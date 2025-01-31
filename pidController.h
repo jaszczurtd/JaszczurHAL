@@ -1,5 +1,5 @@
-#ifndef _PidController_h
-#define _PidController_h
+#ifndef PID_CONTROLLER_H
+#define PID_CONTROLLER_H
 
 #include "libConfig.h"
 #include <Arduino.h>
@@ -18,10 +18,12 @@ public:
   void setKp(float kp); 
   void setKi(float ki);
   void setKd(float kd);
+  void setTf(float tf);
 
   float getKp() { return pid_kp; }
   float getKi() { return pid_ki; }
   float getKd() { return pid_kd; }
+  float getTf() { return Tf; }
 
   void updatePIDtime(float timeDivider);
   float updatePIDcontroller(float error);
@@ -45,8 +47,10 @@ private:
   float outputMax;
   int dir;
 
+  std::deque<float> errorHistory;
+
   float previous_derivative = 0;
-  float Tf = 0.05; // Stała czasowa filtra (dostrój w zależności od systemu)
+  float Tf = 0.05;
 
   int stabilityCounter = 0;
   int instabilityCounter = 0;
