@@ -7,8 +7,10 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setKd(kd);
   max_integral = mi;
   last_time = millis();
-  dt = integral = previous = output = 0;  
+  integral = previous = output = previous_derivative = output = 0;  
   dir = FORWARD;
+  dt = 0.001; 
+
   setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
 }
 
@@ -59,10 +61,9 @@ void PIDController::setOutputLimits(float min, float max) {
 }
 
 void PIDController::reset() {
-  integral = 0;
-  previous = 0;
-  output = 0;
-  dt = last_time = 0;
+  last_time = millis();
+  integral = previous = output = previous_derivative = 0;  
+  dt = 0.001; 
 }
 
 void PIDController::setDirection(Direction d) {
