@@ -11,6 +11,13 @@ enum Direction { FORWARD, BACKWARD };
 
 #define PID_UNINITIALIZED -1234567.0f
 
+typedef struct {
+  float kP;
+  float kI;
+  float kD;
+  float Tf;
+} PIDValues;
+
 class PIDController {
 public:
   PIDController(float kp, float ki, float kd, float mi);
