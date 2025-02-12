@@ -5,7 +5,7 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setKp(kp);
   setKi(ki);
   setKd(kd);
-  max_integral = mi;
+  setMaxIntegral(mi);
   last_time = millis();
   integral = previous = output = previous_derivative = output = 0;  
   dir = FORWARD;
@@ -18,6 +18,8 @@ void PIDController::setKp(float kp) { pid_kp = kp; }
 void PIDController::setKi(float ki) { pid_ki = ki; }
 void PIDController::setKd(float kd) { pid_kd = kd; }
 void PIDController::setTf(float tf) { Tf = tf; }
+void PIDController::setMaxIntegral(float mi) { max_integral = mi; }
+
 
 void PIDController::updatePIDtime(float timeDivider) {
   float now = millis();

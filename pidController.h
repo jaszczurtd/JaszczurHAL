@@ -20,12 +20,14 @@ typedef struct {
 
 class PIDController {
 public:
+  PIDController() : pid_kp(0.0), pid_ki(0.0), pid_kd(0.0), max_integral(0.0) { }
   PIDController(float kp, float ki, float kd, float mi);
 
   void setKp(float kp); 
   void setKi(float ki);
   void setKd(float kd);
   void setTf(float tf);
+  void setMaxIntegral(float mi);
 
   float getKp() { return pid_kp; }
   float getKi() { return pid_ki; }
