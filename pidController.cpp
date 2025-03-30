@@ -7,7 +7,7 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setKd(kd);
   setMaxIntegral(mi);
   last_time = millis();
-  integral = previous = output = previous_derivative = output = 0;  
+  integral = previous = output = previous_derivative = 0;  
   dir = FORWARD;
   dt = 0.001; 
 
@@ -91,7 +91,7 @@ bool PIDController::isErrorStable(float error, float tolerance, int stabilityThr
 bool PIDController::isOscillating(float currentError, int windowSize) {
     errorHistory.push_back(fabs(currentError)); 
     
-    if (errorHistory.size() > windowSize) {
+    if (errorHistory.size() > static_cast<size_t>(windowSize)) {
         errorHistory.pop_front();
     }
 

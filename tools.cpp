@@ -257,10 +257,8 @@ char *printBinaryAndSize(int number) {
     bits = 8; 
   } else if (number <= 0xFFFF) {
     bits = 16; 
-  } else if (number <= 0xFFFFFFFF) {
-    bits = 32; 
   } else {
-    bits = sizeof(int) * 8; 
+    bits = 32; 
   }
 
   memset(binary_buffer, 0, sizeof(binary_buffer));
