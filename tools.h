@@ -8,6 +8,10 @@
 #include <FreeRTOS.h>
 #endif
 
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+
 #include <SPI.h>
 #include <SD.h>
 #include <EEPROM.h>
@@ -90,6 +94,10 @@
 #define TEMPERATURENOMINAL 21   
 #endif
 
+#ifndef PRINTABLE_BUFFER_SIZE
+#define PRINTABLE_BUFFER_SIZE 512
+#endif
+
 void debugInit(void);
 int getSDLoggerNumber(void);
 int getSDCrashNumber(void);
@@ -143,5 +151,7 @@ int getMinimumFrom(int *table, int size);
 int getHalfwayBetweenMinMax(int *array, int n);
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
 float filterValue(float currentValue, float newValue, float alpha);
+char hexToChar(char high, char low);
+void urlDecode(const char *src, char *dst);
 
 #endif

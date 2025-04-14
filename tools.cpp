@@ -224,7 +224,7 @@ void debugInit(void) {
   Serial.begin(9600);
 }
 
-NOINIT static char deb_buffer[128];
+NOINIT static char deb_buffer[PRINTABLE_BUFFER_SIZE];
 void deb(const char *format, ...) {
 
   m_mutex_enter_blocking(debugMutex);
@@ -245,7 +245,7 @@ void deb(const char *format, ...) {
   m_mutex_exit(debugMutex);
 }
 
-NOINIT static char binary_buffer[128];
+NOINIT static char binary_buffer[PRINTABLE_BUFFER_SIZE];
 char *printBinaryAndSize(int number) {
   m_mutex_enter_blocking(debugMutex);
 
@@ -273,7 +273,7 @@ char *printBinaryAndSize(int number) {
   return binary_buffer;
 }
 
-NOINIT static char derr_buffer[128];
+NOINIT static char derr_buffer[PRINTABLE_BUFFER_SIZE];
 void derr(const char *format, ...) {
 
   m_mutex_enter_blocking(debugErrMutex);
@@ -699,6 +699,32 @@ const char *encToString(uint8_t enc) {
   #endif
   return "UNKN";
 }
+
+char hexToChar(char high, char low) {
+  int hi = isdigit(high) ? high - '0' : toupper(high) - 'A' + 10;
+  int lo = isdigit(low) ? low - '0' : toupper(low) - 'A' + 10;
+  return (char)((hi << 4) | lo);
+}
+
+void urlDecode(const char *src, char *dst) {
+  while (*src) {
+      if (*src == '%') {
+          if (isxdigit(src[1]) && isxdigit(src[2])) {
+              *dst++ = hexToChar(src[1], src[2]);
+              src += 3;
+          } else {
+              *dst++ = *src++; // kopiuj jak jest błędny format
+          }
+      } else if (*src == '+') {
+          *dst++ = ' ';
+          src++;
+      } else {
+          *dst++ = *src++;
+      }
+  }
+  *dst = '\0';
+}
+
 
 bool scanNetworks(const char *networkToFind) {
   bool networkFound = false;
