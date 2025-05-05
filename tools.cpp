@@ -763,3 +763,42 @@ float mapfloat(float x, float in_min, float in_max, float out_min, float out_max
 float filterValue(float currentValue, float newValue, float alpha) {
     return (alpha * newValue) + ((1.0 - alpha) * currentValue);
 }
+
+void removeSpaces(char *str) {
+  char *src = str, *dst = str;
+  while (*src) {
+      if (!isspace((unsigned char)*src)) {
+          *dst++ = *src;
+      }
+      src++;
+  }
+  *dst = '\0';
+}
+
+int getRandomEverySomeMillis(uint32_t time, int maxValue) {
+  static uint32_t lastTime = 0;
+  static int lastValue = -1;
+
+  uint32_t now = millis();
+  if (now - lastTime >= time) {
+    lastTime = now;
+    lastValue = rand() % maxValue;
+  }
+
+  return lastValue;
+}
+
+float getRandomFloatEverySomeMillis(uint32_t time, float maxValue) {
+    static uint32_t lastTime = 0;
+    static float lastValue = -1.0f;
+
+    uint32_t now = millis();
+    if (now - lastTime >= time) {
+        lastTime = now;
+        uint32_t r = ((uint32_t)rand() << 16) | (uint32_t)rand(); // 32-bit los
+        lastValue =  (r / (float)UINT32_MAX) * maxValue;        
+    }
+
+    return lastValue;
+}
+
