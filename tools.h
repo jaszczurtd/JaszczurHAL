@@ -154,6 +154,9 @@ float filterValue(float currentValue, float newValue, float alpha);
 char hexToChar(char high, char low);
 void urlDecode(const char *src, char *dst);
 void removeSpaces(char *str);
+bool startsWith(const char *str, const char *prefix);
+bool is_time_in_range(long now, long start, long end);
+void extract_time(long timeInMinutes, int* hours, int* minutes);
 int getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 

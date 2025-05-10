@@ -775,6 +775,20 @@ void removeSpaces(char *str) {
   *dst = '\0';
 }
 
+bool startsWith(const char *str, const char *prefix) {
+  size_t lenPrefix = strlen(prefix);
+  return strncmp(str, prefix, lenPrefix) == 0;
+}
+
+bool is_time_in_range(long now, long start, long end) {
+  return (now >= start && now < end);
+}
+
+void extract_time(long timeInMinutes, int* hours, int* minutes) {
+  *hours = (int)(timeInMinutes / 60);
+  *minutes = (int)(timeInMinutes % 60);
+}
+
 int getRandomEverySomeMillis(uint32_t time, int maxValue) {
   static uint32_t lastTime = 0;
   static int lastValue = -1;
