@@ -159,5 +159,6 @@ bool is_time_in_range(long now, long start, long end);
 void extract_time(long timeInMinutes, int* hours, int* minutes);
 int getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
+char *remove_non_ascii(const char* input);
 
 #endif

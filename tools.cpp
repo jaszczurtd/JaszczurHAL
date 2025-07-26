@@ -816,3 +816,35 @@ float getRandomFloatEverySomeMillis(uint32_t time, float maxValue) {
     return lastValue;
 }
 
+char *remove_non_ascii(const char* input) {
+    static char output[256];
+    int i = 0, j = 0;
+
+    while (input[i]) {
+        if ((unsigned char)input[i] == 0xC4 || (unsigned char)input[i] == 0xC5) {
+            unsigned char next = input[i + 1];
+
+            if (next == 0x85) output[j++] = 'a';     // ą
+            else if (next == 0x87) output[j++] = 'c'; // ć
+            else if (next == 0x99) output[j++] = 'e'; // ę
+            else if (next == 0x82) output[j++] = 'l'; // ł
+            else if (next == 0x84) output[j++] = 'n'; // ń
+            else if (next == 0xB3) output[j++] = 'o'; // ó
+            else if (next == 0x9B) output[j++] = 's'; // ś
+            else if (next == 0xBA) output[j++] = 'z'; // ź
+            else if (next == 0xBC) output[j++] = 'z'; // ż
+            else if (next == 0x84) output[j++] = 'n'; // ń (C5 84)
+            else if (next == 0x81) output[j++] = 'L'; // Ł
+            else j++; 
+
+            i += 2; 
+        } else {
+            output[j++] = input[i++];
+        }
+    }
+
+    output[j] = '\0';
+    return output;
+}
+
+
