@@ -118,6 +118,7 @@ float adcToVolt(int adc, float r1, float r2);
 float ntcToTemp(int tpin, int thermistor, int r);
 float steinhart(float val, float thermistor, int r, bool characteristic);
 int percentToGivenVal(float percent, int maxWidth);
+int percentFrom(int givenVal, int maxVal);
 #ifdef I2C_SCANNER
 void i2cScanner(void);
 #endif

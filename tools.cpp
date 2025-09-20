@@ -466,6 +466,10 @@ int percentToGivenVal(float percent, int givenVal) {
     return int(((percent / 100.0) * givenVal));
 }
 
+int percentFrom(int givenVal, int maxVal) {
+  return (givenVal * 100) / maxVal;
+}
+
 #ifdef I2C_SCANNER
 
 unsigned int loopCounter = 0;
