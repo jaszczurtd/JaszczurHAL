@@ -216,12 +216,20 @@ void crashReport(const char *format, ...) {
 #endif
 }
 
+NOINIT static char prefix[PRINTABLE_PREFIX_SIZE];
 m_mutex_def(debugMutex);
 m_mutex_def(debugErrMutex);
 void debugInit(void) {
+  memset(prefix, 0, PRINTABLE_PREFIX_SIZE);
   m_mutex_init(debugMutex);
   m_mutex_init(debugErrMutex);
   Serial.begin(9600);
+}
+
+void setDebugPrefix(char *prf) {
+  if(prf != NULL && strlen(prf) > 0 && strlen(prf) < PRINTABLE_PREFIX_SIZE) {
+    strncpy(prefix, prf, PRINTABLE_PREFIX_SIZE);
+  }
 }
 
 NOINIT static char deb_buffer[PRINTABLE_BUFFER_SIZE];
@@ -233,7 +241,18 @@ void deb(const char *format, ...) {
   va_start(valist, format);
 
   memset (deb_buffer, 0, sizeof(deb_buffer));
-  vsnprintf(deb_buffer, sizeof(deb_buffer) - 1, format, valist);
+  size_t used = 0;
+  if (strlen(prefix) > 0) {
+      int n = snprintf(deb_buffer, sizeof(deb_buffer), "%s ", prefix);
+      if (n > 0) {
+          used = (size_t)n;
+          if (used >= sizeof(deb_buffer)) {
+              used = sizeof(deb_buffer) - 1;
+          }
+      }
+  }
+
+  vsnprintf(deb_buffer + used, sizeof(deb_buffer) - used, format, valist);
   Serial.println(deb_buffer);
 
 #ifdef SD_LOGGER

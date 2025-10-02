@@ -97,8 +97,12 @@
 #ifndef PRINTABLE_BUFFER_SIZE
 #define PRINTABLE_BUFFER_SIZE 512
 #endif
+#ifndef PRINTABLE_PREFIX_SIZE
+#define PRINTABLE_PREFIX_SIZE 16
+#endif
 
 void debugInit(void);
+void setDebugPrefix(char *prf);
 int getSDLoggerNumber(void);
 int getSDCrashNumber(void);
 bool initSDLogger(int cs);
