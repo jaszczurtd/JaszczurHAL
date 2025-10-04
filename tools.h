@@ -102,7 +102,7 @@
 #endif
 
 void debugInit(void);
-void setDebugPrefix(char *prf);
+void setDebugPrefix(const char *prf);
 int getSDLoggerNumber(void);
 int getSDCrashNumber(void);
 bool initSDLogger(int cs);

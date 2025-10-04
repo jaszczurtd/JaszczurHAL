@@ -226,7 +226,7 @@ void debugInit(void) {
   Serial.begin(9600);
 }
 
-void setDebugPrefix(char *prf) {
+void setDebugPrefix(const char *prf) {
   if(prf != NULL && strlen(prf) > 0 && strlen(prf) < PRINTABLE_PREFIX_SIZE) {
     strncpy(prefix, prf, PRINTABLE_PREFIX_SIZE);
   }
