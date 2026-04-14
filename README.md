@@ -217,7 +217,31 @@ for the RP2040 (ARM Cortex-M0+) target using the Arduino toolchain.
 
 ### Quick build (automatic)
 
-From the repository root:
+If you don't have arduino-cli installed:
+
+```bash
+mkdir -p ~/bin
+
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=~/bin sh
+echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+
+arduino-cli version
+```
+
+Then you have to add RP2040 index and core:
+
+```bash
+arduino-cli config init
+arduino-cli config add board_manager.additional_urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+arduino-cli core update-index
+arduino-cli core install rp2040:rp2040
+
+arduino-cli core list
+ls -l ~/.arduino15/packages/rp2040
+```
+
+And then just type from the repository root:
 
 ```bash
 ./build_arduino_lib.sh
