@@ -1,0 +1,117 @@
+JaszczurHAL - Feature Flags (HAL_DISABLE / HAL_ENABLE)
+======================================================
+
+How to set flags
+----------------
+- In project-local `hal_project_config.h` (recommended), or
+- As compiler defines, e.g. `-DHAL_DISABLE_WIFI`.
+
+HAL_DISABLE_* flags
+-------------------
+HAL_DISABLE_ASSERTS
+  Disable HAL_ASSERT runtime checks.
+
+HAL_DISABLE_WIFI
+  Exclude WiFi module.
+
+HAL_DISABLE_TIME
+  Exclude time/NTP module.
+
+HAL_DISABLE_EEPROM
+  Exclude EEPROM module.
+
+HAL_DISABLE_KV
+  Exclude key-value store module.
+
+HAL_DISABLE_GPS
+  Exclude GPS module.
+
+HAL_DISABLE_THERMOCOUPLE
+  Exclude full thermocouple module.
+
+HAL_DISABLE_MCP9600
+  Exclude MCP9600 thermocouple backend.
+
+HAL_DISABLE_MAX6675
+  Exclude MAX6675 thermocouple backend.
+
+HAL_DISABLE_UART
+  Exclude hardware UART module.
+
+HAL_DISABLE_SWSERIAL
+  Exclude software serial module.
+
+HAL_DISABLE_I2C
+  Exclude I2C master module.
+
+HAL_DISABLE_I2C_SLAVE
+  Exclude I2C slave/target module (register-map interface).
+
+HAL_DISABLE_EXTERNAL_ADC
+  Exclude ADS1115 external ADC module.
+
+HAL_DISABLE_PWM_FREQ
+  Exclude frequency-controlled PWM module.
+
+HAL_DISABLE_RGB_LED
+  Exclude NeoPixel RGB LED module.
+
+HAL_DISABLE_CAN
+  Exclude CAN module.
+
+HAL_DISABLE_DISPLAY
+  Exclude full display module.
+
+HAL_DISABLE_TFT
+  Exclude all TFT display backends.
+
+HAL_DISABLE_SSD1306
+  Exclude SSD1306 display backend.
+
+HAL_DISABLE_ILI9341
+  Exclude ILI9341 TFT driver.
+
+HAL_DISABLE_ST7789
+  Exclude ST7789 TFT driver.
+
+HAL_DISABLE_ST7735
+  Exclude ST7735 TFT driver.
+
+HAL_DISABLE_ST7796S
+  Exclude ST7796S TFT driver.
+
+HAL_DISABLE_UNITY
+  Disable bundled Unity framework includes/sources.
+  Notes:
+  - `src/utils/tools.h` will not include Unity headers.
+  - `src/utils/unity.*` compile to empty translation units.
+  - This repository's CMake test setup always builds Unity and tests.
+    Use this flag in non-test / external builds where Unity is unnecessary.
+
+HAL_ENABLE_* flags
+------------------
+HAL_ENABLE_CJSON
+  Enable bundled cJSON/cJSON_Utils headers and sources.
+  Used by `src/tools.h` to expose cJSON includes.
+
+Automatic propagation rules
+---------------------------
+HAL_DISABLE_EEPROM      -> HAL_DISABLE_KV
+HAL_DISABLE_WIFI        -> HAL_DISABLE_TIME
+HAL_DISABLE_I2C         -> HAL_DISABLE_EXTERNAL_ADC
+HAL_DISABLE_SWSERIAL    -> HAL_DISABLE_GPS
+
+HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675
+                        -> HAL_DISABLE_THERMOCOUPLE
+
+HAL_DISABLE_ILI9341 + HAL_DISABLE_ST7789 +
+HAL_DISABLE_ST7735 + HAL_DISABLE_ST7796S
+                        -> HAL_DISABLE_TFT
+
+HAL_DISABLE_TFT + HAL_DISABLE_SSD1306
+                        -> HAL_DISABLE_DISPLAY
+
+Important
+---------
+- Display driver selection still requires explicit HAL_DISPLAY_* choice when TFT is enabled.
+- `HAL_DISABLE_*` removes API declarations and implementation code for corresponding modules.
