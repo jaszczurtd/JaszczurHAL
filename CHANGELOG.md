@@ -4,13 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-04-15
 
+### Added
+- `hal_i2c_slave_get_transaction_count()` and
+  `hal_i2c_slave_get_transaction_count_bus(uint8_t bus)` — return the
+  number of completed I2C bus transactions (master reads and writes)
+  since initialisation. Incremented inside the Wire `onReceive` /
+  `onRequest` callbacks, so the counter reflects genuine bus activity.
+  Resets to 0 on `hal_i2c_slave_init*()`. Wraps at `UINT32_MAX`.
+  Thread-safe (atomic access).
+- `hal_i2c_get_transaction_count()` and
+  `hal_i2c_get_transaction_count_bus(uint8_t bus)` — symmetric API
+  for the I2C master (controller) side. Incremented on every
+  `hal_i2c_end_transmission*()` (write) and `hal_i2c_request_from*()`
+  (read). Resets to 0 on `hal_i2c_init*()`. Wraps at `UINT32_MAX`.
+
 ### Changed
-- `hal_i2c_slave_reg_write8[_bus]()` now returns `uint8_t` (1 on success,
-  0 if register out of range) instead of `void`.
-- `hal_i2c_slave_reg_write16[_bus]()` now returns `uint16_t` (2 on success,
-  0 if register out of range) instead of `void`.
-- Callers can accumulate return values to count bytes written to the
-  register map without querying separate counters.
+- `hal_i2c_slave_reg_write8[_bus]()` and
+  `hal_i2c_slave_reg_write16[_bus]()` return `void` again (reverts the
+  short-lived return-value approach: writes always target the local
+  register-map buffer and therefore always succeed, making return values
+  meaningless for detecting real bus activity).
 
 ## [1.4.0] - 2026-04-14
 

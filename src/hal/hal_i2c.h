@@ -204,6 +204,22 @@ bool hal_i2c_is_busy(uint8_t address);
  */
 bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 
+/**
+ * @brief Return the number of completed I2C transactions (writes and reads)
+ *        since initialisation on the default bus (bus 0).
+ *
+ * Incremented by hal_i2c_end_transmission() (write) and
+ * hal_i2c_request_from() (read). Resets to 0 on hal_i2c_init().
+ * Wraps at UINT32_MAX. Thread-safe (atomic access).
+ */
+uint32_t hal_i2c_get_transaction_count(void);
+
+/**
+ * @brief Return the transaction count for a specific I2C bus.
+ * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ */
+uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
+
 
 #endif /* HAL_DISABLE_I2C */
 #ifdef __cplusplus

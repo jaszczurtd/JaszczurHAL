@@ -176,27 +176,40 @@ void test_mock_get_reg_out_of_range(void) {
     TEST_ASSERT_EQUAL_UINT8(0, hal_mock_i2c_slave_get_reg(HAL_I2C_SLAVE_REG_MAP_SIZE));
 }
 
-/* ── reg_write return values ───────────────────────────────────────────────── */
+/* ── Transaction count ─────────────────────────────────────────────────────── */
 
-void test_write8_returns_1_on_success(void) {
-    TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_slave_reg_write8(0x00, 0xAB));
+void test_transaction_count_starts_at_zero(void) {
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_slave_get_transaction_count());
 }
 
-void test_write8_returns_0_on_out_of_range(void) {
-    TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_slave_reg_write8(HAL_I2C_SLAVE_REG_MAP_SIZE, 0xFF));
+void test_transaction_count_increments_on_receive(void) {
+    const uint8_t data[] = {0x00, 0xAA};
+    hal_mock_i2c_slave_simulate_receive(data, 2);
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_slave_get_transaction_count());
+    hal_mock_i2c_slave_simulate_receive(data, 2);
+    TEST_ASSERT_EQUAL_UINT32(2, hal_i2c_slave_get_transaction_count());
 }
 
-void test_write16_returns_2_on_success(void) {
-    TEST_ASSERT_EQUAL_UINT16(2, hal_i2c_slave_reg_write16(0x00, 0x1234));
+void test_transaction_count_increments_on_request(void) {
+    uint8_t buf[1];
+    hal_mock_i2c_slave_simulate_request(buf, 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_slave_get_transaction_count());
 }
 
-void test_write16_returns_0_on_out_of_range(void) {
-    TEST_ASSERT_EQUAL_UINT16(0, hal_i2c_slave_reg_write16(HAL_I2C_SLAVE_REG_MAP_SIZE - 1, 0xFFFF));
+void test_transaction_count_resets_on_init(void) {
+    const uint8_t data[] = {0x00, 0xBB};
+    hal_mock_i2c_slave_simulate_receive(data, 2);
+    TEST_ASSERT_TRUE(hal_i2c_slave_get_transaction_count() > 0);
+    hal_i2c_slave_init(4, 5, 0x30);
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_slave_get_transaction_count());
 }
 
-void test_write8_bus_returns_1_on_success(void) {
+void test_transaction_count_bus_independence(void) {
     hal_i2c_slave_init_bus(1, 6, 7, 0x42);
-    TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_slave_reg_write8_bus(1, 0x00, 0xCC));
+    const uint8_t data[] = {0x00, 0xCC};
+    hal_mock_i2c_slave_simulate_receive(data, 2);  /* bus 0 */
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_slave_get_transaction_count());
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_slave_get_transaction_count_bus(1));
 }
 
 /* ── Runner ───────────────────────────────────────────────────────────────── */
@@ -224,10 +237,10 @@ int main(void) {
     RUN_TEST(test_init_clears_registers);
     RUN_TEST(test_mock_set_get_reg);
     RUN_TEST(test_mock_get_reg_out_of_range);
-    RUN_TEST(test_write8_returns_1_on_success);
-    RUN_TEST(test_write8_returns_0_on_out_of_range);
-    RUN_TEST(test_write16_returns_2_on_success);
-    RUN_TEST(test_write16_returns_0_on_out_of_range);
-    RUN_TEST(test_write8_bus_returns_1_on_success);
+    RUN_TEST(test_transaction_count_starts_at_zero);
+    RUN_TEST(test_transaction_count_increments_on_receive);
+    RUN_TEST(test_transaction_count_increments_on_request);
+    RUN_TEST(test_transaction_count_resets_on_init);
+    RUN_TEST(test_transaction_count_bus_independence);
     return UNITY_END();
 }

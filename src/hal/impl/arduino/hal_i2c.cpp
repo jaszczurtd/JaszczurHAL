@@ -6,6 +6,7 @@
 #include <Wire.h>
 
 static hal_mutex_t s_i2c_mutex[2] = {NULL, NULL};
+static volatile uint32_t s_i2c_transaction_count[2] = {0, 0};
 
 static inline uint8_t i2c_bus_index(uint8_t bus) {
     return bus == 1 ? 1 : 0;
@@ -38,6 +39,7 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
     uint8_t idx = i2c_bus_index(bus);
     i2c_ensure_mutex(idx);
+    s_i2c_transaction_count[idx] = 0;
     TwoWire *wire = i2c_bus_wire(bus);
     wire->setSDA(sda_pin);
     wire->setSCL(scl_pin);
@@ -101,6 +103,7 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
     uint8_t idx = i2c_bus_index(bus);
     i2c_ensure_mutex(idx);
     uint8_t result = i2c_bus_wire(idx)->endTransmission();
+    s_i2c_transaction_count[idx]++;
     hal_mutex_unlock(s_i2c_mutex[idx]);
     return result;
 }
@@ -114,6 +117,7 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
     i2c_ensure_mutex(idx);
     hal_mutex_lock(s_i2c_mutex[idx]);
     uint8_t received = i2c_bus_wire(idx)->requestFrom(address, count);
+    s_i2c_transaction_count[idx]++;
     hal_mutex_unlock(s_i2c_mutex[idx]);
     return received;
 }
@@ -141,6 +145,14 @@ bool hal_i2c_is_busy(uint8_t address) {
 bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
     hal_i2c_begin_transmission_bus(bus, address);
     return hal_i2c_end_transmission_bus(bus) != 0;
+}
+
+uint32_t hal_i2c_get_transaction_count(void) {
+    return hal_i2c_get_transaction_count_bus(0);
+}
+
+uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
+    return s_i2c_transaction_count[i2c_bus_index(bus)];
 }
 
 #endif /* HAL_DISABLE_I2C */
