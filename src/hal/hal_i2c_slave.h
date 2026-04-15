@@ -66,19 +66,21 @@ void hal_i2c_slave_deinit_bus(uint8_t bus);
  * @brief Write a single byte into the register map.
  * @param reg   Register offset (0 .. HAL_I2C_SLAVE_REG_MAP_SIZE-1).
  * @param value Byte to store.
- * @return 1 if the byte was written, 0 if reg is out of range.
+ *
+ * Writes to out-of-range registers are silently ignored.
  */
-uint8_t hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
-uint8_t hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
+void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
+void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
 
 /**
  * @brief Write a 16-bit value into the register map (big-endian).
  * @param reg   Register offset of the MSB (LSB goes to reg+1).
  * @param value 16-bit value to store.
- * @return 2 if both bytes were written, 0 if reg+1 >= map size.
+ *
+ * Both bytes must fit; writes are ignored if reg+1 >= map size.
  */
-uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);
-uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
+void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);
+void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
 /**
  * @brief Read a single byte from the register map.
@@ -101,6 +103,19 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg);
  */
 uint8_t hal_i2c_slave_get_address(void);
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
+
+/**
+ * @brief Return the number of completed I2C transactions (master reads
+ *        and writes) since initialisation.
+ *
+ * Incremented inside the Wire onReceive / onRequest callbacks, so the
+ * counter reflects actual bus activity initiated by an external master.
+ * The value wraps at UINT32_MAX.
+ *
+ * Thread-safe: uses atomic access; callable from any core or context.
+ */
+uint32_t hal_i2c_slave_get_transaction_count(void);
+uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 
 #endif /* HAL_DISABLE_I2C_SLAVE */
 #ifdef __cplusplus

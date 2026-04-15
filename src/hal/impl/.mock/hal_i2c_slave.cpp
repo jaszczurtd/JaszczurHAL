@@ -9,6 +9,7 @@ typedef struct {
     uint8_t  address;
     bool     initialized;
     int      lock_depth;
+    uint32_t transaction_count;
 } mock_i2c_slave_state_t;
 
 static mock_i2c_slave_state_t s_slave_state[2];
@@ -36,6 +37,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
     st->address     = address;
     st->initialized = true;
     st->lock_depth  = 0;
+    st->transaction_count = 0;
 }
 
 void hal_i2c_slave_deinit(void) {
@@ -48,36 +50,35 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
     st->address     = 0;
     st->reg_ptr     = 0;
     st->lock_depth  = 0;
+    st->transaction_count = 0;
     memset(st->regs, 0, sizeof(st->regs));
 }
 
 /* ── Register accessors ──────────────────────────────────────────────────── */
 
-uint8_t hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
-    return hal_i2c_slave_reg_write8_bus(0, reg, value);
+void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
+    hal_i2c_slave_reg_write8_bus(0, reg, value);
 }
 
-uint8_t hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
-    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
+void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
+    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
     mock_i2c_slave_state_t *st = slave_st(bus);
     st->lock_depth++;
     st->regs[reg] = value;
     st->lock_depth--;
-    return 1;
 }
 
-uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
-    return hal_i2c_slave_reg_write16_bus(0, reg, value);
+void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
+    hal_i2c_slave_reg_write16_bus(0, reg, value);
 }
 
-uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
-    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
+void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
+    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
     mock_i2c_slave_state_t *st = slave_st(bus);
     st->lock_depth++;
     st->regs[reg]     = (uint8_t)(value >> 8);
     st->regs[reg + 1] = (uint8_t)(value & 0xFF);
     st->lock_depth--;
-    return 2;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {
@@ -112,6 +113,14 @@ uint8_t hal_i2c_slave_get_address(void) {
 
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus) {
     return slave_st(bus)->address;
+}
+
+uint32_t hal_i2c_slave_get_transaction_count(void) {
+    return hal_i2c_slave_get_transaction_count_bus(0);
+}
+
+uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
+    return slave_st(bus)->transaction_count;
 }
 
 /* ── Mock helpers ─────────────────────────────────────────────────────────── */
@@ -159,6 +168,8 @@ void hal_mock_i2c_slave_simulate_receive_bus(uint8_t bus, const uint8_t *data,
     if (len < 1) return;
     mock_i2c_slave_state_t *st = slave_st(bus);
 
+    st->transaction_count++;
+
     /* First byte = register pointer. */
     st->reg_ptr = data[0];
 
@@ -177,6 +188,7 @@ int hal_mock_i2c_slave_simulate_request(uint8_t *out_buf, int max_len) {
 int hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf,
                                             int max_len) {
     mock_i2c_slave_state_t *st = slave_st(bus);
+    st->transaction_count++;
     int count = 0;
     while (count < max_len && st->reg_ptr < HAL_I2C_SLAVE_REG_MAP_SIZE) {
         out_buf[count++] = st->regs[st->reg_ptr++];

@@ -7,13 +7,14 @@
 #define MOCK_I2C_BUF_SIZE 255
 
 typedef struct {
-    uint8_t rx_buf[MOCK_I2C_BUF_SIZE];
-    int     rx_len;
-    int     rx_pos;
-    uint8_t cur_addr;
-    bool    busy;
-    bool    initialized;
-    int     lock_depth;
+    uint8_t  rx_buf[MOCK_I2C_BUF_SIZE];
+    int      rx_len;
+    int      rx_pos;
+    uint8_t  cur_addr;
+    bool     busy;
+    bool     initialized;
+    int      lock_depth;
+    uint32_t transaction_count;
 } mock_i2c_bus_state_t;
 
 static mock_i2c_bus_state_t s_i2c_state[2];
@@ -37,6 +38,7 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     st->rx_len = 0;
     st->rx_pos = 0;
     st->lock_depth = 0;
+    st->transaction_count = 0;
 }
 
 void hal_i2c_deinit(void) {
@@ -96,6 +98,7 @@ uint8_t hal_i2c_end_transmission(void) {
 }
 
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
+    i2c_state(bus)->transaction_count++;
     hal_i2c_unlock_bus(bus);
     return 0;
 }
@@ -110,6 +113,7 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
     (void)address;
     st->rx_len = count;
     st->rx_pos = 0;
+    st->transaction_count++;
     hal_i2c_unlock_bus(bus);
     return count;
 }
@@ -188,4 +192,12 @@ void hal_mock_i2c_set_busy(bool busy) {
 
 void hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy) {
     i2c_state(bus)->busy = busy;
+}
+
+uint32_t hal_i2c_get_transaction_count(void) {
+    return hal_i2c_get_transaction_count_bus(0);
+}
+
+uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
+    return i2c_state(bus)->transaction_count;
 }

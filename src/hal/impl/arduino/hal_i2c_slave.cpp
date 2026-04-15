@@ -14,6 +14,7 @@ typedef struct {
     uint8_t     address;
     hal_mutex_t mutex;
     bool        initialized;
+    volatile uint32_t transaction_count;
 } i2c_slave_state_t;
 
 static i2c_slave_state_t s_slave[2];
@@ -50,6 +51,8 @@ static void on_receive_0(int num_bytes) {
 
     if (num_bytes < 1) return;
 
+    st->transaction_count++;
+
     /* First byte is the register pointer. */
     st->reg_ptr = (uint8_t)wire->read();
     num_bytes--;
@@ -69,6 +72,8 @@ static void on_receive_0(int num_bytes) {
 static void on_request_0(void) {
     i2c_slave_state_t *st = &s_slave[0];
     TwoWire *wire = &Wire;
+
+    st->transaction_count++;
 
     hal_mutex_lock(st->mutex);
     uint8_t ptr = st->reg_ptr;
@@ -94,6 +99,8 @@ static void on_receive_1(int num_bytes) {
 
     if (num_bytes < 1) return;
 
+    st->transaction_count++;
+
     st->reg_ptr = (uint8_t)wire->read();
     num_bytes--;
 
@@ -111,6 +118,8 @@ static void on_receive_1(int num_bytes) {
 static void on_request_1(void) {
     i2c_slave_state_t *st = &s_slave[1];
     TwoWire *wire = &Wire1;
+
+    st->transaction_count++;
 
     hal_mutex_lock(st->mutex);
     uint8_t ptr = st->reg_ptr;
@@ -144,6 +153,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
     st->reg_ptr = 0;
     st->address = address;
     st->initialized = true;
+    st->transaction_count = 0;
 
     TwoWire *wire = slave_bus_wire(idx);
     wire->setSDA(sda_pin);
@@ -174,33 +184,31 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
 
 /* ── Register accessors (mutex-protected) ─────────────────────────────────── */
 
-uint8_t hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
-    return hal_i2c_slave_reg_write8_bus(0, reg, value);
+void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
+    hal_i2c_slave_reg_write8_bus(0, reg, value);
 }
 
-uint8_t hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
+void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
     uint8_t idx = slave_bus_index(bus);
-    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
+    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
     slave_ensure_mutex(idx);
     hal_mutex_lock(s_slave[idx].mutex);
     s_slave[idx].regs[reg] = value;
     hal_mutex_unlock(s_slave[idx].mutex);
-    return 1;
 }
 
-uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
-    return hal_i2c_slave_reg_write16_bus(0, reg, value);
+void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
+    hal_i2c_slave_reg_write16_bus(0, reg, value);
 }
 
-uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
+void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
     uint8_t idx = slave_bus_index(bus);
-    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
+    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
     slave_ensure_mutex(idx);
     hal_mutex_lock(s_slave[idx].mutex);
     s_slave[idx].regs[reg]     = (uint8_t)(value >> 8);
     s_slave[idx].regs[reg + 1] = (uint8_t)(value & 0xFF);
     hal_mutex_unlock(s_slave[idx].mutex);
-    return 2;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {
@@ -238,6 +246,14 @@ uint8_t hal_i2c_slave_get_address(void) {
 
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus) {
     return s_slave[slave_bus_index(bus)].address;
+}
+
+uint32_t hal_i2c_slave_get_transaction_count(void) {
+    return hal_i2c_slave_get_transaction_count_bus(0);
+}
+
+uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
+    return s_slave[slave_bus_index(bus)].transaction_count;
 }
 
 #endif /* HAL_DISABLE_I2C_SLAVE */

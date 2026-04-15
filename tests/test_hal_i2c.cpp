@@ -125,6 +125,45 @@ void test_deinit_marks_bus_uninitialized(void) {
     TEST_ASSERT_FALSE(hal_mock_i2c_is_initialized_bus(1));
 }
 
+/* ── Transaction count ─────────────────────────────────────────────────────── */
+
+void test_transaction_count_starts_at_zero(void) {
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_get_transaction_count());
+}
+
+void test_transaction_count_increments_on_write(void) {
+    hal_i2c_begin_transmission(0x50);
+    hal_i2c_write(0xAA);
+    hal_i2c_end_transmission();
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_get_transaction_count());
+    hal_i2c_begin_transmission(0x50);
+    hal_i2c_end_transmission();
+    TEST_ASSERT_EQUAL_UINT32(2, hal_i2c_get_transaction_count());
+}
+
+void test_transaction_count_increments_on_request(void) {
+    const uint8_t rx[] = {0x01};
+    hal_mock_i2c_inject_rx(rx, 1);
+    hal_i2c_request_from(0x48, 1);
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_get_transaction_count());
+}
+
+void test_transaction_count_resets_on_init(void) {
+    hal_i2c_begin_transmission(0x50);
+    hal_i2c_end_transmission();
+    TEST_ASSERT_TRUE(hal_i2c_get_transaction_count() > 0);
+    hal_i2c_init(4, 5, 400000);
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_get_transaction_count());
+}
+
+void test_transaction_count_bus_independence(void) {
+    hal_i2c_init_bus(1, 6, 7, 100000);
+    hal_i2c_begin_transmission(0x50);
+    hal_i2c_end_transmission();  /* bus 0 */
+    TEST_ASSERT_EQUAL_UINT32(1, hal_i2c_get_transaction_count());
+    TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_get_transaction_count_bus(1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_transmission_sets_last_address);
@@ -136,5 +175,10 @@ int main(void) {
     RUN_TEST(test_transmission_calls_balance_lock_depth);
     RUN_TEST(test_request_from_balances_lock_depth);
     RUN_TEST(test_deinit_marks_bus_uninitialized);
+    RUN_TEST(test_transaction_count_starts_at_zero);
+    RUN_TEST(test_transaction_count_increments_on_write);
+    RUN_TEST(test_transaction_count_increments_on_request);
+    RUN_TEST(test_transaction_count_resets_on_init);
+    RUN_TEST(test_transaction_count_bus_independence);
     return UNITY_END();
 }

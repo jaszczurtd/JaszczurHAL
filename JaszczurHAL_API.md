@@ -1110,6 +1110,11 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count);
 int     hal_i2c_available_bus(uint8_t bus);
 int     hal_i2c_read_bus(uint8_t bus);
 
+// Transaction counter — counts completed write (end_transmission) and read
+// (request_from) transactions since init. Resets on init. Wraps at UINT32_MAX.
+uint32_t hal_i2c_get_transaction_count(void);
+uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
+
 // Device-busy probe - send address, check ACK/NACK immediately.
 // Returns true if the device did NOT ACK (busy or absent).
 // Typical use: poll after an AT24C256 write until the chip is ready.
@@ -1161,11 +1166,11 @@ void hal_i2c_slave_deinit(void);
 void hal_i2c_slave_deinit_bus(uint8_t bus);
 
 // Write to register map (application → slave buffer).
-// Returns number of bytes written (1 or 2), or 0 if reg is out of range.
-uint8_t  hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
-uint8_t  hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
-uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB at reg, LSB at reg+1
-uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
+// Out-of-range registers are silently ignored.
+void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
+void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
+void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB at reg, LSB at reg+1
+void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
 // Read from register map
 uint8_t  hal_i2c_slave_reg_read8(uint8_t reg);
@@ -1176,6 +1181,12 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg);
 // Query address
 uint8_t hal_i2c_slave_get_address(void);
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
+
+// Transaction counter — counts completed master reads and writes since init.
+// Useful for detecting live bus activity without polling reg_write return values.
+// Resets on init. Wraps at UINT32_MAX. Thread-safe (atomic).
+uint32_t hal_i2c_slave_get_transaction_count(void);
+uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 ```
 
 **Register map protocol (I2C):**
