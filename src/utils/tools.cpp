@@ -390,6 +390,15 @@ int getHalfwayBetweenMinMax(int *array, int n) {
 
 float ntcToTemp(int tpin, int thermistor, int r) {
     float average = getAverageValueFrom(tpin);
+    // adcCompe() can return values above ADC_MAXVALUE (RP2040 DNL fix adds up to +32).
+    // Clamp to ADC_MAXVALUE-1 to prevent (MAXVALUE/average - 1) going to zero or negative,
+    // which would produce NaN via log(negative) in steinhart().
+    if (average >= (float)HAL_TOOLS_ADC_MAXVALUE) {
+        average = (float)(HAL_TOOLS_ADC_MAXVALUE - 1);
+    }
+    if (average <= 0.0f) {
+        average = 1.0f;
+    }
 // convert the value to resistance
     average = HAL_TOOLS_ADC_MAXVALUE / average - 1;
     return steinhart(average, thermistor, r, true);

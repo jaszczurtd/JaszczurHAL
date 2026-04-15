@@ -3,6 +3,8 @@
 
 static bool           s_state[64] = {};
 static hal_gpio_mode_t s_mode[64]  = {};
+static void          (*s_callback[64])(void) = {};
+static hal_gpio_irq_mode_t s_irq_mode[64] = {};
 
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
     if (pin < 64) s_mode[pin] = mode;
@@ -17,7 +19,10 @@ bool hal_gpio_read(uint8_t pin) {
 }
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode) {
-    (void)pin; (void)callback; (void)mode;
+    if (pin < 64) {
+        s_callback[pin] = callback;
+        s_irq_mode[pin] = mode;
+    }
 }
 
 // ── Mock helpers ──────────────────────────────────────────────────────────────
@@ -36,4 +41,10 @@ hal_gpio_mode_t hal_mock_gpio_get_mode(uint8_t pin) {
 
 void hal_mock_gpio_inject_level(uint8_t pin, bool high) {
     if (pin < 64) s_state[pin] = high;
+}
+
+void hal_mock_gpio_fire_interrupt(uint8_t pin) {
+    if (pin < 64 && s_callback[pin]) {
+        s_callback[pin]();
+    }
 }
