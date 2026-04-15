@@ -14,6 +14,10 @@
 
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @brief Colour constants for the onboard status LED. */
 typedef enum {
     HAL_RGB_LED_NONE   = 0,
@@ -85,5 +89,9 @@ void hal_rgb_led_off(void);
  * @param color Desired colour.
  */
 void hal_rgb_led_set_color(hal_rgb_led_color_t color);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_DISABLE_RGB_LED */

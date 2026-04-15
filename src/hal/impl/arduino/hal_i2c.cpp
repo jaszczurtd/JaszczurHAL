@@ -36,7 +36,8 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
 }
 
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
-    i2c_ensure_mutex(bus);
+    uint8_t idx = i2c_bus_index(bus);
+    i2c_ensure_mutex(idx);
     TwoWire *wire = i2c_bus_wire(bus);
     wire->setSDA(sda_pin);
     wire->setSCL(scl_pin);
@@ -49,7 +50,8 @@ void hal_i2c_deinit(void) {
 }
 
 void hal_i2c_deinit_bus(uint8_t bus) {
-    i2c_bus_wire(bus)->end();
+    uint8_t idx = i2c_bus_index(bus);
+    i2c_bus_wire(idx)->end();
 }
 
 void hal_i2c_lock(void) {
@@ -140,6 +142,5 @@ bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
     hal_i2c_begin_transmission_bus(bus, address);
     return hal_i2c_end_transmission_bus(bus) != 0;
 }
-
 
 #endif /* HAL_DISABLE_I2C */

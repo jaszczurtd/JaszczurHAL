@@ -1160,11 +1160,12 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint8
 void hal_i2c_slave_deinit(void);
 void hal_i2c_slave_deinit_bus(uint8_t bus);
 
-// Write to register map (application → slave buffer)
-void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
-void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
-void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB at reg, LSB at reg+1
-void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
+// Write to register map (application → slave buffer).
+// Returns number of bytes written (1 or 2), or 0 if reg is out of range.
+uint8_t  hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
+uint8_t  hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
+uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);   // big-endian: MSB at reg, LSB at reg+1
+uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
 // Read from register map
 uint8_t  hal_i2c_slave_reg_read8(uint8_t reg);
