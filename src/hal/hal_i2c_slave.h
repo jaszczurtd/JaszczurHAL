@@ -66,21 +66,19 @@ void hal_i2c_slave_deinit_bus(uint8_t bus);
  * @brief Write a single byte into the register map.
  * @param reg   Register offset (0 .. HAL_I2C_SLAVE_REG_MAP_SIZE-1).
  * @param value Byte to store.
- *
- * Writes to out-of-range registers are silently ignored.
+ * @return 1 if the byte was written, 0 if reg is out of range.
  */
-void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
-void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
+uint8_t hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
+uint8_t hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
 
 /**
  * @brief Write a 16-bit value into the register map (big-endian).
  * @param reg   Register offset of the MSB (LSB goes to reg+1).
  * @param value 16-bit value to store.
- *
- * Both bytes must fit; writes are ignored if reg+1 >= map size.
+ * @return 2 if both bytes were written, 0 if reg+1 >= map size.
  */
-void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);
-void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
+uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value);
+uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value);
 
 /**
  * @brief Read a single byte from the register map.

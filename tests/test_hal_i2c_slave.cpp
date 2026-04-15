@@ -176,6 +176,29 @@ void test_mock_get_reg_out_of_range(void) {
     TEST_ASSERT_EQUAL_UINT8(0, hal_mock_i2c_slave_get_reg(HAL_I2C_SLAVE_REG_MAP_SIZE));
 }
 
+/* ── reg_write return values ───────────────────────────────────────────────── */
+
+void test_write8_returns_1_on_success(void) {
+    TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_slave_reg_write8(0x00, 0xAB));
+}
+
+void test_write8_returns_0_on_out_of_range(void) {
+    TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_slave_reg_write8(HAL_I2C_SLAVE_REG_MAP_SIZE, 0xFF));
+}
+
+void test_write16_returns_2_on_success(void) {
+    TEST_ASSERT_EQUAL_UINT16(2, hal_i2c_slave_reg_write16(0x00, 0x1234));
+}
+
+void test_write16_returns_0_on_out_of_range(void) {
+    TEST_ASSERT_EQUAL_UINT16(0, hal_i2c_slave_reg_write16(HAL_I2C_SLAVE_REG_MAP_SIZE - 1, 0xFFFF));
+}
+
+void test_write8_bus_returns_1_on_success(void) {
+    hal_i2c_slave_init_bus(1, 6, 7, 0x42);
+    TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_slave_reg_write8_bus(1, 0x00, 0xCC));
+}
+
 /* ── Runner ───────────────────────────────────────────────────────────────── */
 
 int main(void) {
@@ -201,5 +224,10 @@ int main(void) {
     RUN_TEST(test_init_clears_registers);
     RUN_TEST(test_mock_set_get_reg);
     RUN_TEST(test_mock_get_reg_out_of_range);
+    RUN_TEST(test_write8_returns_1_on_success);
+    RUN_TEST(test_write8_returns_0_on_out_of_range);
+    RUN_TEST(test_write16_returns_2_on_success);
+    RUN_TEST(test_write16_returns_0_on_out_of_range);
+    RUN_TEST(test_write8_bus_returns_1_on_success);
     return UNITY_END();
 }

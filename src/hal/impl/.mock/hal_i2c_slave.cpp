@@ -53,29 +53,31 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
 
 /* ── Register accessors ──────────────────────────────────────────────────── */
 
-void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
-    hal_i2c_slave_reg_write8_bus(0, reg, value);
+uint8_t hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {
+    return hal_i2c_slave_reg_write8_bus(0, reg, value);
 }
 
-void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
-    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
+uint8_t hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value) {
+    if (reg >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
     mock_i2c_slave_state_t *st = slave_st(bus);
     st->lock_depth++;
     st->regs[reg] = value;
     st->lock_depth--;
+    return 1;
 }
 
-void hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
-    hal_i2c_slave_reg_write16_bus(0, reg, value);
+uint16_t hal_i2c_slave_reg_write16(uint8_t reg, uint16_t value) {
+    return hal_i2c_slave_reg_write16_bus(0, reg, value);
 }
 
-void hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
-    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return;
+uint16_t hal_i2c_slave_reg_write16_bus(uint8_t bus, uint8_t reg, uint16_t value) {
+    if ((uint16_t)reg + 1U >= HAL_I2C_SLAVE_REG_MAP_SIZE) return 0;
     mock_i2c_slave_state_t *st = slave_st(bus);
     st->lock_depth++;
     st->regs[reg]     = (uint8_t)(value >> 8);
     st->regs[reg + 1] = (uint8_t)(value & 0xFF);
     st->lock_depth--;
+    return 2;
 }
 
 uint8_t hal_i2c_slave_reg_read8(uint8_t reg) {

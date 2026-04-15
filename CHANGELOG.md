@@ -2,27 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-04-14
+## [Unreleased] - 2026-04-15
+
+### Changed
+- `hal_i2c_slave_reg_write8[_bus]()` now returns `uint8_t` (1 on success,
+  0 if register out of range) instead of `void`.
+- `hal_i2c_slave_reg_write16[_bus]()` now returns `uint16_t` (2 on success,
+  0 if register out of range) instead of `void`.
+- Callers can accumulate return values to count bytes written to the
+  register map without querying separate counters.
+
+## [1.4.0] - 2026-04-14
 
 ### Added
-- New `hal_i2c_slave` module — I2C peripheral (slave/target) mode with
-  register-map interface:
-  - `hal_i2c_slave_init[_bus]()` / `hal_i2c_slave_deinit[_bus]()`
-  - `hal_i2c_slave_reg_write8[_bus]()` / `hal_i2c_slave_reg_write16[_bus]()`
-  - `hal_i2c_slave_reg_read8[_bus]()` / `hal_i2c_slave_reg_read16[_bus]()`
-  - `hal_i2c_slave_get_address[_bus]()`
-  - Configurable map size via `HAL_I2C_SLAVE_REG_MAP_SIZE` (default 32)
-  - Per-bus mutex for multicore-safe register access (Arduino backend)
-  - Mock backend with `simulate_receive` / `simulate_request` helpers
-  - New `HAL_DISABLE_I2C_SLAVE` feature flag
-- New host test suite `tests/test_hal_i2c_slave.cpp` (21 tests) covering:
-  - Init/deinit, address query, bus independence
-  - 8-bit and 16-bit register read/write roundtrips
-  - Big-endian 16-bit layout verification
-  - Out-of-range boundary checks
-  - Mock simulate receive (master-write) and request (master-read)
-  - Register map clearing on re-init
-- JaszczurHAL API docs updated with full `hal_i2c_slave` section.
 - New `HAL_TOOLS_ADC_MAXVALUE` macro in `tools_sensor_config.h`, derived from
   `HAL_TOOLS_ADC_BITS` (default 12).
 
