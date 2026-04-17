@@ -488,6 +488,7 @@ ctest --test-dir build --output-on-failure
 | `digitalWrite(pin, HIGH/LOW)` | `hal_gpio_write(pin, true/false)` |
 | `digitalRead(pin)` | `hal_gpio_read(pin)` |
 | `attachInterrupt(...)` | `hal_gpio_attach_interrupt(pin, cb, mode)` |
+| `irq_set_priority(IO_IRQ_BANK0, p)` | `hal_gpio_set_irq_priority(priority)` |
 | `analogWriteResolution(b)` | `hal_pwm_set_resolution(b)` |
 | `analogWrite(pin, val)` | `hal_pwm_write(pin, val)` |
 | `analogReadResolution(b)` | `hal_adc_set_resolution(b)` |
@@ -543,10 +544,20 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode);
 void hal_gpio_write(uint8_t pin, bool high);
 bool hal_gpio_read(uint8_t pin);
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode);
+
+typedef enum {
+    HAL_IRQ_PRIORITY_HIGHEST = 0,
+    HAL_IRQ_PRIORITY_HIGH    = 1,
+    HAL_IRQ_PRIORITY_DEFAULT = 2,
+    HAL_IRQ_PRIORITY_LOW     = 3,
+} hal_irq_priority_t;
+
+void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 ```
 
 **Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, `Serial`, or any blocking call inside it.
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
+**IRQ priority:** `hal_gpio_set_irq_priority` sets the NVIC priority of the GPIO interrupt bank. On RP2040 all GPIO pins share IO_IRQ_BANK0. Call after `hal_gpio_attach_interrupt()`. Raising priority above other peripherals (e.g. I2C) prevents their ISRs from blocking edge counting. On platforms without configurable IRQ priorities this is a no-op.
 
 ---
 
