@@ -133,6 +133,14 @@ void hal_serial_println(const char *s) {
     Serial.println(s);
 }
 
+int hal_serial_available(void) {
+    return Serial.available();
+}
+
+int hal_serial_read(void) {
+    return Serial.read();
+}
+
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void) {
     hal_debug_rate_limit_t cfg = {5u, 1000u, 30000u};
     return cfg;

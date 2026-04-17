@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased] - 2026-04-15
 
 ### Added
+- `hal_serial_available()` — return the number of bytes available for
+  reading from the serial port (wraps `Serial.available()`).
+- `hal_serial_read()` — read one byte from the serial port; returns
+  0–255 or -1 when empty (wraps `Serial.read()`).
+- `float_to_u32()` / `u32_to_float()` — `static inline` bitcast helpers
+  (float ↔ uint32_t via memcpy) in `tools_api.h`.
+- Mock: `hal_mock_serial_inject_rx(data, len)` — inject bytes into the
+  mock serial RX buffer for testing `hal_serial_available/read`.
 - `hal_i2c_slave_get_transaction_count()` and
   `hal_i2c_slave_get_transaction_count_bus(uint8_t bus)` — return the
   number of completed I2C bus transactions (master reads and writes)

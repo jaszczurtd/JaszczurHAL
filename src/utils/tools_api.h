@@ -12,6 +12,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,6 +108,14 @@ int getMinimumFrom(int *table, int size);
 int getHalfwayBetweenMinMax(int *array, int n);
 /** @brief Floating-point map helper. */
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+/** @brief Bit-cast float to uint32_t (type punning via memcpy). */
+static inline uint32_t float_to_u32(float f) {
+  uint32_t u; memcpy(&u, &f, sizeof(u)); return u;
+}
+/** @brief Bit-cast uint32_t back to float (type punning via memcpy). */
+static inline float u32_to_float(uint32_t u) {
+  float f; memcpy(&f, &u, sizeof(f)); return f;
+}
 /** @} */
 
 /** @name Time/date helpers */

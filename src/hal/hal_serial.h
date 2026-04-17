@@ -98,6 +98,18 @@ void hal_serial_print(const char *s);
 void hal_serial_println(const char *s);
 
 /**
+ * @brief Return the number of bytes available for reading from the serial port.
+ * @return Number of bytes in the receive buffer, or 0 if none.
+ */
+int hal_serial_available(void);
+
+/**
+ * @brief Read one byte from the serial port.
+ * @return The first byte of incoming data (0–255), or -1 if nothing available.
+ */
+int hal_serial_read(void);
+
+/**
  * @brief Initialise the debug output subsystem.
  *
  * If never called explicitly, the first call to hal_deb() / hal_derr()
@@ -107,7 +119,11 @@ void hal_serial_println(const char *s);
  * @param cfg  Optional rate-limit configuration for noncritical repeated
  *             errors. Pass nullptr / 0 to use defaults.
  */
+#ifdef __cplusplus
 void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg = 0);
+#else
+void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg);
+#endif
 
 /**
  * @brief Check whether the debug subsystem has been initialised.

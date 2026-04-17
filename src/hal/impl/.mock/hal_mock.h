@@ -45,8 +45,7 @@ void     hal_mock_set_chip_temp(float celsius);
 // ── Serial / Debug ────────────────────────────────────────────────────────────
 const char *hal_mock_serial_last_line(void);
 const char *hal_mock_deb_last_line(void);
-void        hal_mock_serial_reset(void);
-
+void        hal_mock_serial_reset(void);void        hal_mock_serial_inject_rx(const char *data, int len);
 // ── CAN ──────────────────────────────────────────────────────────────────────
 #include "../../hal_can.h"
 void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
