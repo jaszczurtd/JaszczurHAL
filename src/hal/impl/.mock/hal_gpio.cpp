@@ -25,6 +25,12 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq
     }
 }
 
+static hal_irq_priority_t s_gpio_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
+
+void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
+    s_gpio_irq_priority = priority;
+}
+
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
 bool hal_mock_gpio_get_state(uint8_t pin) {
@@ -47,4 +53,8 @@ void hal_mock_gpio_fire_interrupt(uint8_t pin) {
     if (pin < 64 && s_callback[pin]) {
         s_callback[pin]();
     }
+}
+
+hal_irq_priority_t hal_mock_gpio_get_irq_priority(void) {
+    return s_gpio_irq_priority;
 }

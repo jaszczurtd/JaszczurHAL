@@ -26,6 +26,14 @@ typedef enum {
     HAL_GPIO_IRQ_CHANGE  = 2,    /**< Trigger on any edge. */
 } hal_gpio_irq_mode_t;
 
+/** @brief Hardware interrupt priority levels (lower value = higher priority). */
+typedef enum {
+    HAL_IRQ_PRIORITY_HIGHEST = 0,    /**< Highest (most urgent) priority. */
+    HAL_IRQ_PRIORITY_HIGH    = 1,    /**< Above-default priority.         */
+    HAL_IRQ_PRIORITY_DEFAULT = 2,    /**< Default SDK startup priority.   */
+    HAL_IRQ_PRIORITY_LOW     = 3,    /**< Below-default priority.         */
+} hal_irq_priority_t;
+
 /**
  * @brief Configure a GPIO pin mode.
  * @param pin  Pin number.
@@ -54,6 +62,21 @@ bool hal_gpio_read(uint8_t pin);
  * @param mode     Edge trigger mode.
  */
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode);
+
+/**
+ * @brief Set the NVIC priority of the GPIO interrupt bank.
+ *
+ * On RP2040 all GPIO pins share a single IRQ (IO_IRQ_BANK0).  Raising its
+ * priority above other peripherals (e.g. I2C, SPI) prevents those ISRs
+ * from blocking GPIO edge counting and causing pulse loss.
+ *
+ * Call this @b after hal_gpio_attach_interrupt().
+ *
+ * @param priority  Desired priority level.
+ *
+ * @note On platforms without configurable IRQ priorities this is a no-op.
+ */
+void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 
 #ifdef __cplusplus
 }
