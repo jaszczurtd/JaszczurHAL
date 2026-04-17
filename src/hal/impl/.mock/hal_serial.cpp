@@ -113,6 +113,10 @@ static void hal_debug_ensure_init(void) {
     }
 }
 
+static char s_mock_rx_buf[HAL_DEBUG_BUF_SIZE] = {};
+static int  s_mock_rx_len = 0;
+static int  s_mock_rx_pos = 0;
+
 void hal_serial_begin(uint32_t baud) {
     (void)baud;
 }
@@ -126,6 +130,15 @@ void hal_serial_println(const char *s) {
     printf("%s\n", s);
     strncpy(s_last_serial_line, s, sizeof(s_last_serial_line) - 1);
     s_last_serial_line[sizeof(s_last_serial_line) - 1] = '\0';
+}
+
+int hal_serial_available(void) {
+    return s_mock_rx_len - s_mock_rx_pos;
+}
+
+int hal_serial_read(void) {
+    if(s_mock_rx_pos >= s_mock_rx_len) return -1;
+    return (unsigned char)s_mock_rx_buf[s_mock_rx_pos++];
 }
 
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void) {
@@ -313,4 +326,14 @@ const char *hal_mock_deb_last_line(void) {
 void hal_mock_serial_reset(void) {
     s_last_serial_line[0] = '\0';
     s_last_deb_line[0]    = '\0';
+    s_mock_rx_pos = 0;
+    s_mock_rx_len = 0;
+}
+
+void hal_mock_serial_inject_rx(const char *data, int len) {
+    if(len < 0) len = (int)strlen(data);
+    if(len > (int)sizeof(s_mock_rx_buf)) len = (int)sizeof(s_mock_rx_buf);
+    memcpy(s_mock_rx_buf, data, (size_t)len);
+    s_mock_rx_len = len;
+    s_mock_rx_pos = 0;
 }

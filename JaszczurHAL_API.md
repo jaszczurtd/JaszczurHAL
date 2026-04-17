@@ -498,6 +498,8 @@ ctest --test-dir build --output-on-failure
 | `Serial.begin(baud)` | `hal_serial_begin(baud)` / `hal_debug_init(baud)` |
 | `Serial.print(s)` | `hal_serial_print(s)` |
 | `Serial.println(s)` | `hal_serial_println(s)` |
+| `Serial.available()` | `hal_serial_available()` |
+| `Serial.read()` | `hal_serial_read()` |
 | `deb(fmt, ...)` | `hal_deb(fmt, ...)` - macro alias still available via tools.h |
 | `derr(fmt, ...)` | `hal_derr(fmt, ...)` - macro alias still available via tools.h |
 | repeated noisy error logs | `hal_derr_limited(source, fmt, ...)` - per-source rate-limited logging |
@@ -784,6 +786,8 @@ typedef struct {
 void hal_serial_begin(uint32_t baud);
 void hal_serial_print(const char *s);
 void hal_serial_println(const char *s);
+int  hal_serial_available(void);   // bytes waiting in RX buffer
+int  hal_serial_read(void);        // read one byte, or -1 if empty
 
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void);
 const hal_debug_rate_limit_t *hal_debug_get_rate_limit(void);
@@ -826,6 +830,8 @@ Limiter implementation details:
 
 **impl/arduino:** Arduino `Serial`.
 **impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
+RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
+`hal_serial_available()` / `hal_serial_read()`.
 
 ### Error Handling Policy
 
@@ -1966,6 +1972,8 @@ int   getAverageFrom(int *table, int size);
 int   getMinimumFrom(int *table, int size);
 int   getHalfwayBetweenMinMax(int *array, int n);
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+static inline uint32_t float_to_u32(float f);   // bitcast float → uint32_t (memcpy)
+static inline float    u32_to_float(uint32_t u); // bitcast uint32_t → float (memcpy)
 unsigned long getSeconds(void);
 bool  isDaylightSavingTime(int year, int month, int day);
 void  adjustTime(int *year, int *month, int *day, int *hour, int *minute);
@@ -2237,7 +2245,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_pwm` | resolution config, write |
 | `test_hal_timer` | alarm add/cancel, `advance_us` dispatch |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
-| `test_hal_serial` | `println` capture, `deb` capture, `reset` |
+| `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
