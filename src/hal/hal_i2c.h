@@ -31,6 +31,13 @@ extern "C" {
  *   - For multi-step sequences involving third-party I2C libraries
  *     (e.g. ADS1115) that call Wire directly, use hal_i2c_lock() and
  *     hal_i2c_unlock() to guard the whole sequence explicitly.
+ *
+ * Mutex lifecycle: the internal mutex is created lazily on first use
+ * (for example by hal_i2c_lock() or the first transfer call), not only
+ * by hal_i2c_init().
+ *
+ * Init order: hal_i2c_init()/hal_i2c_init_bus() is still required to
+ * configure pins, clock and start Wire/Wire1 before real bus traffic.
  */
 
 #include <stdint.h>
@@ -71,7 +78,6 @@ void hal_i2c_deinit_bus(uint8_t bus);
  * Use this together with hal_i2c_unlock() when wrapping a third-party
  * library that talks to Wire directly (e.g. ADS1115).
  *
- * @note Requires hal_i2c_init() first. Calling before init triggers HAL_ASSERT.
  */
 void hal_i2c_lock(void);
 
@@ -83,7 +89,6 @@ void hal_i2c_lock_bus(uint8_t bus);
 
 /**
  * @brief Release the I2C bus mutex.
- * @note Requires hal_i2c_init() first. Calling before init triggers HAL_ASSERT.
  */
 void hal_i2c_unlock(void);
 
@@ -96,7 +101,6 @@ void hal_i2c_unlock_bus(uint8_t bus);
 /**
  * @brief Acquire the mutex and begin a transmission to the given address.
  * @param address 7-bit I2C device address.
- * @note Requires hal_i2c_init() first. Calling before init triggers HAL_ASSERT.
  */
 void hal_i2c_begin_transmission(uint8_t address);
 
@@ -125,7 +129,6 @@ size_t hal_i2c_write_bus(uint8_t bus, uint8_t data);
 /**
  * @brief Flush the transmission buffer to the bus and release the mutex.
  * @return 0 on success, non-zero error code on failure.
- * @note Requires hal_i2c_init() first. Calling before init triggers HAL_ASSERT.
  */
 uint8_t hal_i2c_end_transmission(void);
 
@@ -141,7 +144,6 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
  * @param address 7-bit I2C device address.
  * @param count   Number of bytes to request.
  * @return Number of bytes received.
- * @note Requires hal_i2c_init() first. Calling before init triggers HAL_ASSERT.
  */
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);
 
