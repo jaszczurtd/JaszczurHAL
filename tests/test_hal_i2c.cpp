@@ -164,6 +164,32 @@ void test_transaction_count_bus_independence(void) {
     TEST_ASSERT_EQUAL_UINT32(0, hal_i2c_get_transaction_count_bus(1));
 }
 
+/* ── Bus clear ─────────────────────────────────────────────────────────────── */
+
+void test_bus_clear_increments_count(void) {
+    TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_bus_clear_count());
+    hal_i2c_bus_clear(4, 5);
+    TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count());
+    hal_i2c_bus_clear(4, 5);
+    TEST_ASSERT_EQUAL_UINT32(2, hal_mock_i2c_get_bus_clear_count());
+}
+
+void test_bus_clear_count_resets_on_init(void) {
+    hal_i2c_bus_clear(4, 5);
+    TEST_ASSERT_TRUE(hal_mock_i2c_get_bus_clear_count() > 0);
+    hal_i2c_init(4, 5, 400000);
+    TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_bus_clear_count());
+}
+
+void test_bus_clear_bus_independence(void) {
+    hal_i2c_init_bus(1, 6, 7, 100000);
+    hal_i2c_bus_clear(4, 5);
+    hal_i2c_bus_clear_bus(1, 6, 7);
+    hal_i2c_bus_clear_bus(1, 6, 7);
+    TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count());
+    TEST_ASSERT_EQUAL_UINT32(2, hal_mock_i2c_get_bus_clear_count_bus(1));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_transmission_sets_last_address);
@@ -180,5 +206,8 @@ int main(void) {
     RUN_TEST(test_transaction_count_increments_on_request);
     RUN_TEST(test_transaction_count_resets_on_init);
     RUN_TEST(test_transaction_count_bus_independence);
+    RUN_TEST(test_bus_clear_increments_count);
+    RUN_TEST(test_bus_clear_count_resets_on_init);
+    RUN_TEST(test_bus_clear_bus_independence);
     return UNITY_END();
 }
