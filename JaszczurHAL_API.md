@@ -838,8 +838,8 @@ RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 
 ### Error Handling Policy
 
-- `HAL_ASSERT(...)` is used for critical programming errors and invalid init order in
-    core primitives (e.g. NULL mutex in sync/I2C paths).
+- `HAL_ASSERT(...)` is used for critical programming errors in core primitives
+    (e.g. NULL mutex in sync paths).
 - Soft validation + error log is used for noncritical runtime misuse in peripheral
     APIs where continuing execution is acceptable.
 - `hal_derr(...)` prints every error (no suppression).
@@ -1102,7 +1102,7 @@ void hal_spi_unlock(uint8_t bus);
 ```c
 #include <hal/hal_i2c.h>
 
-// Init bus, set clock, initialise internal mutex
+// Init bus, set clock, start Wire/Wire1 (mutex is lazy-initialized on use)
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=Wire, 1=Wire1
 void    hal_i2c_deinit(void);
@@ -1150,6 +1150,10 @@ bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 ```
+
+**Init behavior:** The I2C mutex is created lazily on first lock/transfer call.
+`hal_i2c_init*()` configures SDA/SCL, clock and starts `Wire`/`Wire1`, and should
+still be called during setup before normal I2C traffic.
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
 **impl/.mock:** ring buffer; injectable via mock helpers. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
