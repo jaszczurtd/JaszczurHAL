@@ -2,9 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-04-15
+## [Unreleased] - 2026-04-19
 
 ### Added
+- `hal_i2c_bus_clear(sda_pin, scl_pin)` /
+  `hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin)` — I2C bus clear
+  procedure per I2C specification §3.1.16: toggles SCL up to 9 times
+  at GPIO level to release a slave holding SDA low, then generates a
+  STOP condition. Must be called before `hal_i2c_init()`.
+  Arduino implementation uses native Arduino GPIO primitives.
+- Mock: `hal_mock_i2c_get_bus_clear_count()` /
+  `hal_mock_i2c_get_bus_clear_count_bus(bus)` — return the number of
+  `hal_i2c_bus_clear()` calls since the last `hal_i2c_init()`.
+- Tests: 3 new I2C bus clear tests (count, reset-on-init, bus
+  independence). Total I2C test count: 17.
 - `hal_serial_available()` — return the number of bytes available for
   reading from the serial port (wraps `Serial.available()`).
 - `hal_serial_read()` — read one byte from the serial port; returns
@@ -25,6 +36,17 @@ All notable changes to this project will be documented in this file.
   for the I2C master (controller) side. Incremented on every
   `hal_i2c_end_transmission*()` (write) and `hal_i2c_request_from*()`
   (read). Resets to 0 on `hal_i2c_init*()`. Wraps at `UINT32_MAX`.
+
+### Changed
+- `hal_pwm_freq_create()` no longer starts the PWM slice immediately.
+  The GPIO function and slice enable are deferred until the first
+  `hal_pwm_freq_write()` call, preventing a power-on glitch on pins
+  with inverted logic (0 % duty = actuator ON).
+
+### Fixed
+- Mock `hal_i2c_end_transmission_bus()` now returns 2 (NACK on address)
+  when the mock busy flag is set. Previously it always returned 0,
+  making it impossible to test I2C error paths.
 
 ### Changed
 - `hal_i2c_slave_reg_write8[_bus]()` and

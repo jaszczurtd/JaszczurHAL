@@ -599,8 +599,11 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
 
-**impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
+**impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` — computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
+The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** — the GPIO
+function and slice enable are deferred until the first `hal_pwm_freq_write()` call. This
+prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
 **impl/.mock:** stores last written value; injectable via mock helpers.
 
 **Mock helpers:**
@@ -1137,10 +1140,19 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
 // Typical use: poll after an AT24C256 write until the chip is ready.
 bool    hal_i2c_is_busy(uint8_t address);
 bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
+
+// I2C bus clear (per I2C specification §3.1.16).
+// Toggles SCL up to 9 times at GPIO level to release a slave holding SDA
+// low (e.g. after master reset mid-transaction), then generates a STOP
+// condition.  Leaves SDA/SCL as inputs with pull-ups.
+// Must be called BEFORE hal_i2c_init() — the bus is not usable for Wire
+// transactions during this procedure.
+void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
+void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 ```
 
-**impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions.
-**impl/.mock:** ring buffer; injectable via mock helpers.
+**impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
+**impl/.mock:** ring buffer; injectable via mock helpers. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Arduino backend: transfer APIs are thread-safe and multicore-safe. An internal per-bus `hal_mutex_t` serializes transactions; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around third-party `Wire` calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and should be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -1153,8 +1165,10 @@ int     hal_mock_i2c_get_lock_depth(void);                                      
 int     hal_mock_i2c_get_lock_depth_bus(uint8_t bus);                             // current lock depth on selected bus
 bool    hal_mock_i2c_is_initialized(void);                                        // init state for bus 0
 bool    hal_mock_i2c_is_initialized_bus(uint8_t bus);                             // init state for selected bus
-void    hal_mock_i2c_set_busy(bool busy);                                         // control hal_i2c_is_busy() on bus 0
-void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);                        // control hal_i2c_is_busy() on selected bus
+void    hal_mock_i2c_set_busy(bool busy);                                         // control hal_i2c_is_busy() + end_transmission NACK on bus 0
+void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);                        // control hal_i2c_is_busy() + end_transmission NACK on selected bus
+uint32_t hal_mock_i2c_get_bus_clear_count(void);                                  // number of bus_clear calls on bus 0
+uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                       // number of bus_clear calls on selected bus
 ```
 
 ---

@@ -15,6 +15,7 @@ typedef struct {
     bool     initialized;
     int      lock_depth;
     uint32_t transaction_count;
+    uint32_t bus_clear_count;
 } mock_i2c_bus_state_t;
 
 static mock_i2c_bus_state_t s_i2c_state[2];
@@ -39,6 +40,7 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     st->rx_pos = 0;
     st->lock_depth = 0;
     st->transaction_count = 0;
+    st->bus_clear_count = 0;
 }
 
 void hal_i2c_deinit(void) {
@@ -98,9 +100,10 @@ uint8_t hal_i2c_end_transmission(void) {
 }
 
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
-    i2c_state(bus)->transaction_count++;
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    st->transaction_count++;
     hal_i2c_unlock_bus(bus);
-    return 0;
+    return st->busy ? 2 : 0;  // 2 = NACK on address (simulates device not responding)
 }
 
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
@@ -165,6 +168,23 @@ int hal_mock_i2c_get_lock_depth_bus(uint8_t bus) {
 
 int hal_mock_i2c_get_lock_depth(void) {
     return hal_mock_i2c_get_lock_depth_bus(0);
+}
+
+void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
+    hal_i2c_bus_clear_bus(0, sda_pin, scl_pin);
+}
+
+void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
+    (void)sda_pin; (void)scl_pin;
+    i2c_state(bus)->bus_clear_count++;
+}
+
+uint32_t hal_mock_i2c_get_bus_clear_count(void) {
+    return hal_mock_i2c_get_bus_clear_count_bus(0);
+}
+
+uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus) {
+    return i2c_state(bus)->bus_clear_count;
 }
 
 bool hal_mock_i2c_is_initialized_bus(uint8_t bus) {

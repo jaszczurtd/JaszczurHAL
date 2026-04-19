@@ -220,6 +220,29 @@ uint32_t hal_i2c_get_transaction_count(void);
  */
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
 
+/**
+ * @brief Perform an I2C bus clear procedure (per I2C specification).
+ *
+ * Toggles SCL up to 9 times at GPIO level to release a slave that is
+ * holding SDA low (e.g. after a master reset mid-transaction), then
+ * generates a STOP condition.  Leaves SDA/SCL as inputs with pull-ups.
+ *
+ * Must be called @b before hal_i2c_init() — the bus is not usable for
+ * Wire transactions during this procedure.
+ *
+ * @param sda_pin  SDA pin number.
+ * @param scl_pin  SCL pin number.
+ */
+void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
+
+/**
+ * @brief Perform a bus clear on the specified I2C controller pins.
+ * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
+ * @param sda_pin SDA pin number.
+ * @param scl_pin SCL pin number.
+ */
+void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
+
 
 #endif /* HAL_DISABLE_I2C */
 #ifdef __cplusplus

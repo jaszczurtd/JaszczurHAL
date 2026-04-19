@@ -155,4 +155,42 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
     return s_i2c_transaction_count[i2c_bus_index(bus)];
 }
 
+void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
+    hal_i2c_bus_clear_bus(0, sda_pin, scl_pin);
+}
+
+void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
+    (void)bus;
+
+    // SDA as input (read), SCL as output (clock)
+    pinMode(sda_pin, INPUT_PULLUP);
+    pinMode(scl_pin, OUTPUT);
+    digitalWrite(scl_pin, HIGH);
+    delayMicroseconds(5);
+
+    // Toggle SCL up to 9 times to release a stuck slave
+    for (uint8_t i = 0; i < 9; i++) {
+        if (digitalRead(sda_pin)) {
+            break;   // SDA released
+        }
+        digitalWrite(scl_pin, LOW);
+        delayMicroseconds(5);
+        digitalWrite(scl_pin, HIGH);
+        delayMicroseconds(5);
+    }
+
+    // Generate STOP condition: SDA low → SCL high → SDA high
+    pinMode(sda_pin, OUTPUT);
+    digitalWrite(sda_pin, LOW);
+    delayMicroseconds(5);
+    digitalWrite(scl_pin, HIGH);
+    delayMicroseconds(5);
+    digitalWrite(sda_pin, HIGH);
+    delayMicroseconds(5);
+
+    // Return pins to input — hal_i2c_init will reconfigure for I2C
+    pinMode(sda_pin, INPUT_PULLUP);
+    pinMode(scl_pin, INPUT_PULLUP);
+}
+
 #endif /* HAL_DISABLE_I2C */

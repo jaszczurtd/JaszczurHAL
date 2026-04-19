@@ -229,6 +229,10 @@ bool    hal_mock_i2c_is_initialized(void);
 void    hal_mock_i2c_set_busy(bool busy);
 /** @brief Control busy state for selected I2C mock bus (0 = Wire, 1 = Wire1). */
 void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);
+/** @brief Return how many times hal_i2c_bus_clear() was called on bus 0. */
+uint32_t hal_mock_i2c_get_bus_clear_count(void);
+/** @brief Return how many times hal_i2c_bus_clear_bus() was called on the given bus. */
+uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);
 
 // ── I2C Slave ────────────────────────────────────────────────────────────────
 #include "../../hal_i2c_slave.h"
