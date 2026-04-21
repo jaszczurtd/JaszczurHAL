@@ -288,7 +288,12 @@ void test_read_byte_balances_lock_depth(void) {
 
 void test_read_byte_bus_routes_to_selected_controller(void) {
     hal_i2c_init_bus(1, 6, 7, 100000);
+    // Inject different bytes on each bus so a misrouted read returns the
+    // wrong value. hal_i2c_request_from_bus() does not update cur_addr, so
+    // we can't assert via hal_mock_i2c_get_last_addr_bus() here.
+    const uint8_t rx0[] = {0x11};
     const uint8_t rx1[] = {0x9F};
+    hal_mock_i2c_inject_rx(rx0, 1);
     hal_mock_i2c_inject_rx_bus(1, rx1, 1);
 
     bool readOk = false;
@@ -296,7 +301,6 @@ void test_read_byte_bus_routes_to_selected_controller(void) {
 
     TEST_ASSERT_EQUAL_UINT8(0x9F, value);
     TEST_ASSERT_TRUE(readOk);
-    TEST_ASSERT_EQUAL_UINT8(0x68, hal_mock_i2c_get_last_addr_bus(1));
 }
 
 void test_read_byte_increments_transaction_count(void) {
