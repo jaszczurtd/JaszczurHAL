@@ -2,9 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-04-19
+## [Unreleased] - 2026-04-21
 
 ### Added
+- `hal_i2c_write_byte(address, data, *outWriteOk)` /
+  `hal_i2c_write_byte_bus(bus, address, data, *outWriteOk)` — one-shot
+  convenience helper that performs the common "beginTransmission +
+  write one byte + endTransmission" sequence. The internal I2C mutex
+  is acquired and released automatically; the optional `outWriteOk`
+  pointer receives the queue-byte status, and the return value is the
+  `endTransmission` error code. Extracted from ECU PCF8574/Adjustometer
+  call sites that previously open-coded the three-step pattern.
+- `hal_i2c_read_byte(address, *outReadOk)` /
+  `hal_i2c_read_byte_bus(bus, address, *outReadOk)` — symmetric read
+  counterpart: requests and returns a single byte from a slave. The
+  optional `outReadOk` pointer lets callers distinguish a valid `0x00`
+  value from a failed transaction (request_from short read or
+  `hal_i2c_read()` returning -1). Extracted from ECU PCF8574 read path.
+- Tests: 6 new `hal_i2c_write_byte` tests (begin/write/end sequence,
+  busy-bus NACK path, NULL out-flag, lock-depth balance, per-bus
+  routing, transaction-count increment) and 6 new `hal_i2c_read_byte`
+  tests (injected-byte round-trip, zero value vs. failure disambiguation,
+  NULL out-flag, lock-depth balance, per-bus routing, transaction-count
+  increment). Total I2C test count: 29.
 - `hal_i2c_bus_clear(sda_pin, scl_pin)` /
   `hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin)` — I2C bus clear
   procedure per I2C specification §3.1.16: toggles SCL up to 9 times

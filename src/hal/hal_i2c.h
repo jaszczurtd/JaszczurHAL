@@ -133,6 +133,58 @@ size_t hal_i2c_write_bus(uint8_t bus, uint8_t data);
 uint8_t hal_i2c_end_transmission(void);
 
 /**
+ * @brief One-shot "beginTransmission + write one byte + endTransmission" helper.
+ *
+ * Wraps the three-step sequence most commonly used to push a single register
+ * pointer or configuration byte to an I2C slave. The internal I2C mutex is
+ * acquired by begin and released by end, so the helper is safe to call from
+ * cooperating threads without any extra locking.
+ *
+ * @param address    7-bit I2C slave address.
+ * @param data       Byte to transmit.
+ * @param outWriteOk Optional pointer. Receives true when hal_i2c_write()
+ *                   reported the byte was queued, false otherwise. May be NULL.
+ * @return hal_i2c_end_transmission() status (0 on success, non-zero on error).
+ */
+uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
+
+/**
+ * @brief Bus-selecting variant of hal_i2c_write_byte().
+ * @param bus        I2C controller index (0 = Wire, 1 = Wire1).
+ * @param address    7-bit I2C slave address.
+ * @param data       Byte to transmit.
+ * @param outWriteOk Optional pointer; see hal_i2c_write_byte(). May be NULL.
+ * @return hal_i2c_end_transmission_bus() status.
+ */
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk);
+
+/**
+ * @brief One-shot "request 1 byte + read" helper, symmetric to hal_i2c_write_byte().
+ *
+ * Requests a single byte from @p address and returns it. The internal I2C
+ * mutex is acquired and released inside hal_i2c_request_from(); the read
+ * itself is unlocked but consumes the byte still cached in the Wire RX
+ * buffer immediately after the request returns.
+ *
+ * @param address   7-bit I2C slave address.
+ * @param outReadOk Optional pointer. Receives true when request_from returned
+ *                  exactly one byte AND hal_i2c_read() returned a value >= 0.
+ *                  Receives false on any failure. May be NULL.
+ * @return The byte read, or 0 when the transaction failed (inspect @p outReadOk
+ *         to distinguish a valid 0x00 from a failure).
+ */
+uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
+
+/**
+ * @brief Bus-selecting variant of hal_i2c_read_byte().
+ * @param bus       I2C controller index (0 = Wire, 1 = Wire1).
+ * @param address   7-bit I2C slave address.
+ * @param outReadOk Optional pointer; see hal_i2c_read_byte(). May be NULL.
+ * @return The byte read, or 0 when the transaction failed.
+ */
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
+
+/**
  * @brief Flush selected bus transmission and release its mutex.
  * @param bus I2C controller index (0 = Wire, 1 = Wire1).
  * @return 0 on success, non-zero error code on failure.
