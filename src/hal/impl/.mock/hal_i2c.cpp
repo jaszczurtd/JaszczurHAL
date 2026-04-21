@@ -14,6 +14,7 @@ typedef struct {
     bool     busy;
     bool     initialized;
     int      lock_depth;
+    int      read_byte_lock_depth_at_read;
     uint32_t transaction_count;
     uint32_t bus_clear_count;
 } mock_i2c_bus_state_t;
@@ -39,6 +40,7 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     st->rx_len = 0;
     st->rx_pos = 0;
     st->lock_depth = 0;
+    st->read_byte_lock_depth_at_read = 0;
     st->transaction_count = 0;
     st->bus_clear_count = 0;
 }
@@ -51,6 +53,7 @@ void hal_i2c_deinit_bus(uint8_t bus) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
     st->initialized = false;
     st->lock_depth = 0;
+    st->read_byte_lock_depth_at_read = 0;
     st->rx_len = 0;
     st->rx_pos = 0;
     st->cur_addr = 0;
@@ -124,12 +127,22 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
 }
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
-    uint8_t received = hal_i2c_request_from_bus(bus, address, 1);
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    hal_i2c_lock_bus(bus);
+    (void)address;
+    st->rx_len = 1;
+    st->rx_pos = 0;
+    st->transaction_count++;
+
+    uint8_t received = 1;
     if (received != 1) {
         if (outReadOk != NULL) *outReadOk = false;
+        hal_i2c_unlock_bus(bus);
         return 0;
     }
-    int raw = hal_i2c_read_bus(bus);
+    st->read_byte_lock_depth_at_read = st->lock_depth;
+    int raw = (st->rx_pos < st->rx_len) ? st->rx_buf[st->rx_pos++] : -1;
+    hal_i2c_unlock_bus(bus);
     if (raw < 0) {
         if (outReadOk != NULL) *outReadOk = false;
         return 0;
@@ -200,6 +213,14 @@ int hal_mock_i2c_get_lock_depth_bus(uint8_t bus) {
 
 int hal_mock_i2c_get_lock_depth(void) {
     return hal_mock_i2c_get_lock_depth_bus(0);
+}
+
+int hal_mock_i2c_get_read_byte_lock_depth_bus(uint8_t bus) {
+    return i2c_state(bus)->read_byte_lock_depth_at_read;
+}
+
+int hal_mock_i2c_get_read_byte_lock_depth(void) {
+    return hal_mock_i2c_get_read_byte_lock_depth_bus(0);
 }
 
 void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {

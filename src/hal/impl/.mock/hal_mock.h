@@ -221,6 +221,10 @@ uint8_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);
 int     hal_mock_i2c_get_lock_depth_bus(uint8_t bus);
 /** @brief Return lock depth for default I2C bus (0 = Wire). */
 int     hal_mock_i2c_get_lock_depth(void);
+/** @brief Return lock depth observed at the byte-read point inside hal_i2c_read_byte_bus(). */
+int     hal_mock_i2c_get_read_byte_lock_depth_bus(uint8_t bus);
+/** @brief Return lock depth observed at the byte-read point for default I2C bus. */
+int     hal_mock_i2c_get_read_byte_lock_depth(void);
 /** @brief Return true when selected I2C mock bus is marked initialized. */
 bool    hal_mock_i2c_is_initialized_bus(uint8_t bus);
 /** @brief Return initialized flag for default I2C bus (0 = Wire). */

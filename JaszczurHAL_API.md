@@ -1129,6 +1129,7 @@ uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
 uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk);
 
 // Symmetric one-shot "request + read 1 byte" helper.
+// The internal mutex is held across the full request+read sequence.
 // *outReadOk (optional) receives true when exactly one byte was received.
 // Returns the byte read, or 0 on failure — inspect *outReadOk to distinguish
 // a genuine 0x00 from a communication error.
@@ -1180,6 +1181,8 @@ uint8_t hal_mock_i2c_get_last_addr(void);                                       
 uint8_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);                              // last address on selected bus
 int     hal_mock_i2c_get_lock_depth(void);                                        // current lock depth on bus 0
 int     hal_mock_i2c_get_lock_depth_bus(uint8_t bus);                             // current lock depth on selected bus
+int     hal_mock_i2c_get_read_byte_lock_depth(void);                              // lock depth captured at the byte-read point in hal_i2c_read_byte() on bus 0
+int     hal_mock_i2c_get_read_byte_lock_depth_bus(uint8_t bus);                   // lock depth captured at the byte-read point in hal_i2c_read_byte_bus() on selected bus
 bool    hal_mock_i2c_is_initialized(void);                                        // init state for bus 0
 bool    hal_mock_i2c_is_initialized_bus(uint8_t bus);                             // init state for selected bus
 void    hal_mock_i2c_set_busy(bool busy);                                         // control hal_i2c_is_busy() + end_transmission NACK on bus 0

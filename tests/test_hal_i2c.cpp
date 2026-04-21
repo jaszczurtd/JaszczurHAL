@@ -286,6 +286,18 @@ void test_read_byte_balances_lock_depth(void) {
     TEST_ASSERT_EQUAL_INT(before, hal_mock_i2c_get_lock_depth());
 }
 
+void test_read_byte_holds_lock_during_byte_read(void) {
+    const uint8_t rx[] = {0x33};
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    bool readOk = false;
+    uint8_t value = hal_i2c_read_byte(0x55, &readOk);
+
+    TEST_ASSERT_TRUE(readOk);
+    TEST_ASSERT_EQUAL_UINT8(0x33, value);
+    TEST_ASSERT_TRUE(hal_mock_i2c_get_read_byte_lock_depth() > 0);
+}
+
 void test_read_byte_bus_routes_to_selected_controller(void) {
     hal_i2c_init_bus(1, 6, 7, 100000);
     // Inject different bytes on each bus so a misrouted read returns the
@@ -340,6 +352,7 @@ int main(void) {
     RUN_TEST(test_read_byte_preserves_zero_value);
     RUN_TEST(test_read_byte_accepts_null_out_flag);
     RUN_TEST(test_read_byte_balances_lock_depth);
+    RUN_TEST(test_read_byte_holds_lock_during_byte_read);
     RUN_TEST(test_read_byte_bus_routes_to_selected_controller);
     RUN_TEST(test_read_byte_increments_transaction_count);
     return UNITY_END();

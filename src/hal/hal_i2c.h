@@ -162,9 +162,8 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool 
  * @brief One-shot "request 1 byte + read" helper, symmetric to hal_i2c_write_byte().
  *
  * Requests a single byte from @p address and returns it. The internal I2C
- * mutex is acquired and released inside hal_i2c_request_from(); the read
- * itself is unlocked but consumes the byte still cached in the Wire RX
- * buffer immediately after the request returns.
+ * mutex is held across the full request+read sequence, making this helper
+ * atomic with respect to other HAL I2C operations on the same bus.
  *
  * @param address   7-bit I2C slave address.
  * @param outReadOk Optional pointer. Receives true when request_from returned
