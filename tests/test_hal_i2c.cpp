@@ -190,6 +190,123 @@ void test_bus_clear_bus_independence(void) {
     TEST_ASSERT_EQUAL_UINT32(2, hal_mock_i2c_get_bus_clear_count_bus(1));
 }
 
+// ── hal_i2c_write_byte convenience helper ───────────────────────────────────
+
+void test_write_byte_performs_begin_write_end_sequence(void) {
+    hal_mock_i2c_set_busy(false);
+    bool writeOk = false;
+    uint8_t status = hal_i2c_write_byte(0x42, 0xA5, &writeOk);
+    TEST_ASSERT_EQUAL_UINT8(0, status);
+    TEST_ASSERT_TRUE(writeOk);
+    TEST_ASSERT_EQUAL_UINT8(0x42, hal_mock_i2c_get_last_addr());
+}
+
+void test_write_byte_returns_end_tx_error_when_bus_busy(void) {
+    hal_mock_i2c_set_busy(true);
+    bool writeOk = false;
+    uint8_t status = hal_i2c_write_byte(0x55, 0x11, &writeOk);
+    TEST_ASSERT_NOT_EQUAL(0, status);
+    TEST_ASSERT_TRUE(writeOk);  // the queue-one-byte step itself succeeded
+    hal_mock_i2c_set_busy(false);
+}
+
+void test_write_byte_accepts_null_out_flag(void) {
+    hal_mock_i2c_set_busy(false);
+    uint8_t status = hal_i2c_write_byte(0x21, 0x00, NULL);
+    TEST_ASSERT_EQUAL_UINT8(0, status);
+    TEST_ASSERT_EQUAL_UINT8(0x21, hal_mock_i2c_get_last_addr());
+}
+
+void test_write_byte_balances_lock_depth(void) {
+    hal_mock_i2c_set_busy(false);
+    int before = hal_mock_i2c_get_lock_depth();
+    hal_i2c_write_byte(0x3C, 0x7F, NULL);
+    TEST_ASSERT_EQUAL_INT(before, hal_mock_i2c_get_lock_depth());
+}
+
+void test_write_byte_bus_routes_to_selected_controller(void) {
+    hal_i2c_init_bus(1, 6, 7, 100000);
+    hal_mock_i2c_set_busy_bus(1, false);
+
+    bool writeOk = false;
+    uint8_t status = hal_i2c_write_byte_bus(1, 0x68, 0x5A, &writeOk);
+
+    TEST_ASSERT_EQUAL_UINT8(0, status);
+    TEST_ASSERT_TRUE(writeOk);
+    TEST_ASSERT_EQUAL_UINT8(0x68, hal_mock_i2c_get_last_addr_bus(1));
+    // The helper must not touch bus 0.
+    TEST_ASSERT_NOT_EQUAL(0x68, hal_mock_i2c_get_last_addr_bus(0));
+}
+
+void test_write_byte_increments_transaction_count(void) {
+    hal_mock_i2c_set_busy(false);
+    uint32_t before = hal_i2c_get_transaction_count();
+    hal_i2c_write_byte(0x30, 0x01, NULL);
+    TEST_ASSERT_EQUAL_UINT32(before + 1, hal_i2c_get_transaction_count());
+}
+
+// ── hal_i2c_read_byte convenience helper ────────────────────────────────────
+
+void test_read_byte_returns_injected_value(void) {
+    const uint8_t rx[] = {0xA5};
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    bool readOk = false;
+    uint8_t value = hal_i2c_read_byte(0x48, &readOk);
+
+    TEST_ASSERT_EQUAL_UINT8(0xA5, value);
+    TEST_ASSERT_TRUE(readOk);
+}
+
+void test_read_byte_preserves_zero_value(void) {
+    // Verify a genuine 0x00 is reported as success (not confused with failure).
+    const uint8_t rx[] = {0x00};
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    bool readOk = false;
+    uint8_t value = hal_i2c_read_byte(0x22, &readOk);
+
+    TEST_ASSERT_EQUAL_UINT8(0x00, value);
+    TEST_ASSERT_TRUE(readOk);
+}
+
+void test_read_byte_accepts_null_out_flag(void) {
+    const uint8_t rx[] = {0x7E};
+    hal_mock_i2c_inject_rx(rx, 1);
+
+    uint8_t value = hal_i2c_read_byte(0x3C, NULL);
+    TEST_ASSERT_EQUAL_UINT8(0x7E, value);
+}
+
+void test_read_byte_balances_lock_depth(void) {
+    const uint8_t rx[] = {0x42};
+    hal_mock_i2c_inject_rx(rx, 1);
+    int before = hal_mock_i2c_get_lock_depth();
+    (void)hal_i2c_read_byte(0x55, NULL);
+    TEST_ASSERT_EQUAL_INT(before, hal_mock_i2c_get_lock_depth());
+}
+
+void test_read_byte_bus_routes_to_selected_controller(void) {
+    hal_i2c_init_bus(1, 6, 7, 100000);
+    const uint8_t rx1[] = {0x9F};
+    hal_mock_i2c_inject_rx_bus(1, rx1, 1);
+
+    bool readOk = false;
+    uint8_t value = hal_i2c_read_byte_bus(1, 0x68, &readOk);
+
+    TEST_ASSERT_EQUAL_UINT8(0x9F, value);
+    TEST_ASSERT_TRUE(readOk);
+    TEST_ASSERT_EQUAL_UINT8(0x68, hal_mock_i2c_get_last_addr_bus(1));
+}
+
+void test_read_byte_increments_transaction_count(void) {
+    const uint8_t rx[] = {0x01};
+    hal_mock_i2c_inject_rx(rx, 1);
+    uint32_t before = hal_i2c_get_transaction_count();
+    (void)hal_i2c_read_byte(0x30, NULL);
+    TEST_ASSERT_EQUAL_UINT32(before + 1, hal_i2c_get_transaction_count());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_transmission_sets_last_address);
@@ -209,5 +326,17 @@ int main(void) {
     RUN_TEST(test_bus_clear_increments_count);
     RUN_TEST(test_bus_clear_count_resets_on_init);
     RUN_TEST(test_bus_clear_bus_independence);
+    RUN_TEST(test_write_byte_performs_begin_write_end_sequence);
+    RUN_TEST(test_write_byte_returns_end_tx_error_when_bus_busy);
+    RUN_TEST(test_write_byte_accepts_null_out_flag);
+    RUN_TEST(test_write_byte_balances_lock_depth);
+    RUN_TEST(test_write_byte_bus_routes_to_selected_controller);
+    RUN_TEST(test_write_byte_increments_transaction_count);
+    RUN_TEST(test_read_byte_returns_injected_value);
+    RUN_TEST(test_read_byte_preserves_zero_value);
+    RUN_TEST(test_read_byte_accepts_null_out_flag);
+    RUN_TEST(test_read_byte_balances_lock_depth);
+    RUN_TEST(test_read_byte_bus_routes_to_selected_controller);
+    RUN_TEST(test_read_byte_increments_transaction_count);
     return UNITY_END();
 }

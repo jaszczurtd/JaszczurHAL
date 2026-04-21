@@ -1122,6 +1122,19 @@ void    hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address);
 size_t  hal_i2c_write_bus(uint8_t bus, uint8_t data);
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 
+// One-shot "begin + write one byte + end" helper (acquires/releases mutex internally).
+// *outWriteOk (optional) receives the hal_i2c_write() queued-bytes status.
+// Return value is the end_transmission status (0 on success).
+uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk);
+
+// Symmetric one-shot "request + read 1 byte" helper.
+// *outReadOk (optional) receives true when exactly one byte was received.
+// Returns the byte read, or 0 on failure — inspect *outReadOk to distinguish
+// a genuine 0x00 from a communication error.
+uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
+
 // Request + read (acquires/releases mutex around the request; read is unlocked)
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // returns bytes received
 int     hal_i2c_available(void);    // bytes in receive buffer
@@ -1174,6 +1187,55 @@ void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);                      
 uint32_t hal_mock_i2c_get_bus_clear_count(void);                                  // number of bus_clear calls on bus 0
 uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                       // number of bus_clear calls on selected bus
 ```
+
+**Example — PCF8574 8-bit I/O expander using the one-shot helpers:**
+
+PCF8574 is addressed once and has no register layout: a single write byte
+drives all 8 output latches; a single read byte returns the current port
+value. Using `hal_i2c_write_byte()` and `hal_i2c_read_byte()` keeps the
+driver code free of explicit begin/write/end or request/read sequences.
+
+```c
+#include <hal/hal_i2c.h>
+
+#define PCF8574_ADDR 0x38   // 7-bit address (A2..A0 = 0)
+
+static uint8_t s_portLatch;  // shadow of the 8 output bits
+
+/** Initialize the expander to all-zero outputs. */
+bool pcf8574_init(void) {
+    s_portLatch = 0x00;
+    bool writeOk = false;
+    uint8_t endTx = hal_i2c_write_byte(PCF8574_ADDR, s_portLatch, &writeOk);
+    return writeOk && (endTx == 0);
+}
+
+/** Drive one output pin (0..7). */
+bool pcf8574_write_pin(uint8_t pin, bool high) {
+    if (pin > 7) return false;
+    if (high) s_portLatch |=  (uint8_t)(1u << pin);
+    else      s_portLatch &= (uint8_t)~(1u << pin);
+
+    bool writeOk = false;
+    uint8_t endTx = hal_i2c_write_byte(PCF8574_ADDR, s_portLatch, &writeOk);
+    return writeOk && (endTx == 0);
+}
+
+/** Sample one input pin (0..7). Returns false on I2C error too. */
+bool pcf8574_read_pin(uint8_t pin) {
+    if (pin > 7) return false;
+    bool readOk = false;
+    uint8_t port = hal_i2c_read_byte(PCF8574_ADDR, &readOk);
+    if (!readOk) return false;
+    return (port & (uint8_t)(1u << pin)) != 0;
+}
+```
+
+Note: the helpers rely on the HAL's *internal* per-bus mutex, which covers
+a single begin/end pair. Code that interleaves a write-then-read against
+another multi-step transaction on the same bus (e.g. set register pointer
+→ request N bytes) must serialize the two sequences with a caller-owned
+mutex in addition, since the HAL mutex is released at each `end_transmission`.
 
 ---
 

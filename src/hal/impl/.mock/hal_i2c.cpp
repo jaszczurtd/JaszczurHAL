@@ -106,6 +106,38 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
     return st->busy ? 2 : 0;  // 2 = NACK on address (simulates device not responding)
 }
 
+uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk) {
+    return hal_i2c_write_byte_bus(0, address, data, outWriteOk);
+}
+
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk) {
+    hal_i2c_begin_transmission_bus(bus, address);
+    size_t written = hal_i2c_write_bus(bus, data);
+    if (outWriteOk != NULL) {
+        *outWriteOk = (written == 1);
+    }
+    return hal_i2c_end_transmission_bus(bus);
+}
+
+uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
+    return hal_i2c_read_byte_bus(0, address, outReadOk);
+}
+
+uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
+    uint8_t received = hal_i2c_request_from_bus(bus, address, 1);
+    if (received != 1) {
+        if (outReadOk != NULL) *outReadOk = false;
+        return 0;
+    }
+    int raw = hal_i2c_read_bus(bus);
+    if (raw < 0) {
+        if (outReadOk != NULL) *outReadOk = false;
+        return 0;
+    }
+    if (outReadOk != NULL) *outReadOk = true;
+    return (uint8_t)raw;
+}
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
     return hal_i2c_request_from_bus(0, address, count);
 }
