@@ -126,12 +126,19 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
 }
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
-    uint8_t received = hal_i2c_request_from_bus(bus, address, 1);
+    uint8_t idx = i2c_bus_index(bus);
+    i2c_ensure_mutex(idx);
+    hal_mutex_lock(s_i2c_mutex[idx]);
+
+    uint8_t received = i2c_bus_wire(idx)->requestFrom(address, (uint8_t)1);
+    s_i2c_transaction_count[idx]++;
     if (received != 1) {
         if (outReadOk != NULL) *outReadOk = false;
+        hal_mutex_unlock(s_i2c_mutex[idx]);
         return 0;
     }
-    int raw = hal_i2c_read_bus(bus);
+    int raw = i2c_bus_wire(idx)->read();
+    hal_mutex_unlock(s_i2c_mutex[idx]);
     if (raw < 0) {
         if (outReadOk != NULL) *outReadOk = false;
         return 0;

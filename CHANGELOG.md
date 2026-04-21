@@ -24,7 +24,8 @@ All notable changes to this project will be documented in this file.
   routing, transaction-count increment) and 6 new `hal_i2c_read_byte`
   tests (injected-byte round-trip, zero value vs. failure disambiguation,
   NULL out-flag, lock-depth balance, per-bus routing, transaction-count
-  increment). Total I2C test count: 29.
+  increment), plus 1 test verifying that `hal_i2c_read_byte()` holds
+  the mutex during the actual byte read. Total I2C test count: 30.
 - `hal_i2c_bus_clear(sda_pin, scl_pin)` /
   `hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin)` — I2C bus clear
   procedure per I2C specification §3.1.16: toggles SCL up to 9 times
@@ -67,6 +68,13 @@ All notable changes to this project will be documented in this file.
 - Mock `hal_i2c_end_transmission_bus()` now returns 2 (NACK on address)
   when the mock busy flag is set. Previously it always returned 0,
   making it impossible to test I2C error paths.
+- `hal_i2c_read_byte()` / `hal_i2c_read_byte_bus()` now hold the internal
+  I2C mutex across the full one-shot `request + read` sequence, making
+  the helper atomic on a given bus (symmetric with `hal_i2c_write_byte()`).
+- Mock: added `hal_mock_i2c_get_read_byte_lock_depth()` /
+  `hal_mock_i2c_get_read_byte_lock_depth_bus()` to expose lock-depth
+  captured at the byte-read point inside one-shot `read_byte` helpers
+  for mutex-behavior tests.
 
 ### Changed
 - `hal_i2c_slave_reg_write8[_bus]()` and
