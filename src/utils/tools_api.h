@@ -150,6 +150,8 @@ float rroundf(float val);
 float roundfWithPrecisionTo(float value, int precision);
 /** @brief Print integer as binary with size metadata to provided buffer. */
 char *printBinaryAndSize(int number, char *buf, size_t bufSize);
+/** @brief Concatenate two strings into destination buffer with size check. */
+bool concatStrings(char* dest, size_t destSize, const char* src1, const char* src2);
 /** @brief Validate zero-terminated string length/content. */
 bool isValidString(const char *s, int maxBufSize);
 /** @brief Convert two hex characters into one byte value. */

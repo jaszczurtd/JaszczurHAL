@@ -10,6 +10,8 @@
  * - Hardware watchdog control (@ref hal_watchdog_enable,
  *   @ref hal_watchdog_feed, @ref hal_watchdog_caused_reboot).
  * - Free-heap query and on-chip temperature sensor.
+ * - Controlled reboot into RP2040 USB bootloader mode
+ *   (@ref hal_enter_bootloader).
  * - Shared utility helpers that have no better home and must be visible to
  *   both C and C++ translation units:
  *   - @ref COUNTOF  — element count of a static array.
@@ -137,6 +139,23 @@ uint32_t hal_get_free_heap(void);
  * @return Die temperature in degrees Celsius as a floating-point value.
  */
 float hal_read_chip_temp(void);
+
+/**
+ * @brief Reboot into USB bootloader mode (UF2 mass-storage mode).
+ *
+ * On RP2040 targets this calls the ROM bootloader entry path (BOOTSEL mode),
+ * disconnecting the running application and exposing the USB UF2 flashing
+ * interface.
+ *
+ * Typical use:
+ * - acknowledge the host command first,
+ * - ensure outputs are placed in a safe state,
+ * - call this function as the final step.
+ *
+ * @note This function does not return on real hardware.
+ * @note In mock/unit-test builds this is implemented as a non-resetting flag.
+ */
+void hal_enter_bootloader(void);
 
 /**
  * @def NONULL(x)

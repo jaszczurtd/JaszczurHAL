@@ -562,6 +562,34 @@ float roundfWithPrecisionTo(float value, int precision) {
     return roundf(value * multiplier) / multiplier;
 }
 
+bool concatStrings(char* dest, size_t destSize, const char* src1, const char* src2) {
+  size_t len1;
+  size_t len2;
+
+  if(dest == NULL || src1 == NULL || src2 == NULL) {
+    return false;
+  }
+
+  len1 = strlen(src1);
+  len2 = strlen(src2);
+
+  if(destSize == 0) {
+    return false;
+  }
+
+  if((len1 + len2 + 1) > destSize) {
+    return false;
+  }
+
+  while((*dest++ = *src1++) != '\0') { }
+
+  --dest;
+
+  while((*dest++ = *src2++) != '\0') { }
+
+  return true;
+}
+
 bool isValidString(const char *s, int maxBufSize) {
   if (s == NULL || maxBufSize <= 0) {
       return false;

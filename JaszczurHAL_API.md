@@ -452,7 +452,7 @@ Covered test targets include:
 
 - `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`, `test_hal_timer`
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
-- `test_hal_serial`, `test_hal_uart`, `test_hal_swserial`
+- `test_hal_serial`, `test_hal_serial_session`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
 - `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_time`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
@@ -674,6 +674,7 @@ bool     hal_watchdog_caused_reboot(void);
 void     hal_idle(void);
 uint32_t hal_get_free_heap(void);     // available heap in bytes
 float    hal_read_chip_temp(void);    // on-die temperature in °C (±2 °C typical)
+void     hal_enter_bootloader(void);  // jump to RP2040 USB bootloader (does not return on hardware)
 uint32_t hal_get_core_id(void);       // 0 or 1
 void     hal_u32_to_bytes_be(uint32_t val, uint8_t *buf); // writes big-endian bytes
 
@@ -705,6 +706,8 @@ void hal_mock_watchdog_reset_flag(void);
 void hal_mock_set_caused_reboot(bool val);
 void hal_mock_set_free_heap(uint32_t bytes);  // default: 256 KB
 void hal_mock_set_chip_temp(float celsius);   // default: 25.0 °C
+bool hal_mock_bootloader_was_requested(void);
+void hal_mock_bootloader_reset_flag(void);
 ```
 
 ---
@@ -845,6 +848,43 @@ RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 - `hal_derr(...)` prints every error (no suppression).
 - `hal_derr_limited(source, ...)` should be preferred for potentially repetitive
     noncritical errors to avoid log flooding.
+
+---
+
+## `hal_serial_session` - Minimal text session helper
+
+```c
+#include <hal/hal_serial_session.h>
+
+#define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
+#define HAL_SERIAL_SESSION_MAX_LINE 48u
+
+typedef struct {
+    bool active;
+    uint32_t session_id;
+    uint32_t hello_counter;
+    uint32_t last_activity_ms;
+    uint8_t line_len;
+    char line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
+} hal_serial_session_t;
+
+void     hal_serial_session_init(hal_serial_session_t *session);
+bool     hal_serial_session_is_active(const hal_serial_session_t *session);
+uint32_t hal_serial_session_id(const hal_serial_session_t *session);
+void     hal_serial_session_poll(hal_serial_session_t *session, const char *module_tag);
+```
+
+Current protocol commands:
+- `HELLO`
+
+Current responses:
+- `OK HELLO module=<name> proto=1 session=<id>`
+- `ERR UNKNOWN`
+
+Notes:
+- parser is line-based (`\r` / `\n` terminate a command),
+- helpers are header-only (`static inline`) and state lives in `hal_serial_session_t`,
+- session id is non-cryptographic and intended for bootstrap tracking only.
 
 ---
 
@@ -2070,6 +2110,7 @@ int      MsbLsbToInt(uint8_t msb, uint8_t lsb);
 float rroundf(float val);
 float roundfWithPrecisionTo(float value, int precision);
 char *printBinaryAndSize(int number, char *buf, size_t bufSize);  // writes binary string into buf
+bool  concatStrings(char *dest, size_t destSize, const char *src1, const char *src2); // false on NULL args or too-small dest
 bool  isValidString(const char *s, int maxBufSize);
 char  hexToChar(char high, char low);
 void  urlDecode(const char *src, char *dst);
@@ -2298,7 +2339,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-All 25 test suites complete in < 1 s on a standard desktop machine.
+All 28 test suites complete in < 1 s on a standard desktop machine.
 
 ### How it works
 
@@ -2329,6 +2370,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_timer` | alarm add/cancel, `advance_us` dispatch |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
+| `test_hal_serial_session` | HELLO handshake parser, unknown command response, multi-command RX handling, null-arg safety |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
