@@ -27,6 +27,7 @@
 #include "hal_system.h"
 #include "hal_sync.h"
 #include "hal_serial.h"
+#include "hal_serial_session.h"
 #ifndef HAL_DISABLE_UART
 #include "hal_uart.h"
 #endif

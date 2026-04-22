@@ -41,6 +41,10 @@ void     hal_mock_set_caused_reboot(bool val);
 void     hal_mock_set_free_heap(uint32_t bytes);
 /** @brief Inject a chip temperature value returned by hal_read_chip_temp(). Default: 25.0 °C. */
 void     hal_mock_set_chip_temp(float celsius);
+/** @brief Return true if hal_enter_bootloader() has been called in the mock backend. */
+bool     hal_mock_bootloader_was_requested(void);
+/** @brief Clear the mock bootloader request flag. */
+void     hal_mock_bootloader_reset_flag(void);
 
 // ── Serial / Debug ────────────────────────────────────────────────────────────
 const char *hal_mock_serial_last_line(void);
@@ -57,6 +61,7 @@ uint8_t hal_mock_adc_get_resolution(void);
 void    hal_mock_adc_inject(uint8_t pin, int value);
 
 // ── SoftwareSerial (swserial) ─────────────────────────────────────────────────
+#ifndef HAL_DISABLE_SWSERIAL
 #include "../../hal_swserial.h"
 /** @brief Inject bytes into the mock software-serial RX buffer. */
 void hal_mock_swserial_push(hal_swserial_t h, const uint8_t *data, int len);
@@ -64,8 +69,10 @@ void hal_mock_swserial_push(hal_swserial_t h, const uint8_t *data, int len);
 void hal_mock_swserial_reset(hal_swserial_t h);
 /** @brief Return the last string written via hal_swserial_write/println. */
 const char *hal_mock_swserial_last_write(hal_swserial_t h);
+#endif
 
 // ── Hardware UART ─────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_UART
 #include "../../hal_uart.h"
 /** @brief Inject bytes into the mock hardware-UART RX buffer. */
 void hal_mock_uart_push(hal_uart_t h, const uint8_t *data, int len);
@@ -77,6 +84,7 @@ const char *hal_mock_uart_last_write(hal_uart_t h);
 uint8_t hal_mock_uart_get_rx_pin(hal_uart_t h);
 /** @brief Return the current TX pin stored in the handle. */
 uint8_t hal_mock_uart_get_tx_pin(hal_uart_t h);
+#endif
 
 // ── SPI ───────────────────────────────────────────────────────────────────────
 bool    hal_mock_spi_is_initialized(void);
@@ -98,6 +106,7 @@ uint8_t             hal_mock_rgb_led_get_num_pixels(void);
 void                hal_mock_rgb_led_reset(void);
 
 // ── Display ───────────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_DISPLAY
 #include "../../hal_display.h"
 /** @brief Reset all mock display state to defaults. */
 void         hal_mock_display_reset(void);
@@ -117,6 +126,7 @@ void         hal_mock_display_get_cursor(int *x, int *y);
 void         hal_mock_display_get_last_fill_rect(int *x, int *y, int *w, int *h, uint16_t *color);
 /** @brief Read parameters of the last hal_display_draw_rgb_bitmap() call. */
 void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w, int *h);
+#endif
 
 // ── WiFi ─────────────────────────────────────────────────────────────────────
 #include "../../hal_wifi.h"
@@ -157,6 +167,7 @@ const char *hal_mock_time_get_ntp_primary(void);
 const char *hal_mock_time_get_ntp_secondary(void);
 
 // ── Thermocouple ──────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_THERMOCOUPLE
 #include "../../hal_thermocouple.h"
 /** @brief Inject the hot-junction temperature returned by hal_thermocouple_read(). */
 void hal_mock_thermocouple_set_temp(hal_thermocouple_t h, float temp);
@@ -166,6 +177,7 @@ void hal_mock_thermocouple_set_ambient(hal_thermocouple_t h, float temp);
 void hal_mock_thermocouple_set_adc_raw(hal_thermocouple_t h, int32_t raw);
 /** @brief Inject the status byte returned by hal_thermocouple_get_status(). */
 void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
+#endif
 
 // ── GPS ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +199,7 @@ void hal_mock_gps_set_time(int hour, int minute, int second);
 void hal_mock_gps_reset(void);
 
 // ── EEPROM ───────────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_EEPROM
 #include "../../hal_eeprom.h"
 /** @brief Read a byte directly from the mock EEPROM backing store. */
 uint8_t           hal_mock_eeprom_get_byte(uint16_t addr);
@@ -202,6 +215,7 @@ uint32_t          hal_mock_eeprom_get_write_count(void);
 void              hal_mock_eeprom_clear_write_count(void);
 /** @brief Reset all mock EEPROM state (memory, type, committed flag) to defaults. */
 void              hal_mock_eeprom_reset(void);
+#endif
 
 // ── I2C ──────────────────────────────────────────────────────────────────────
 

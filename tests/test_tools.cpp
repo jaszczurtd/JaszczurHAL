@@ -303,6 +303,45 @@ void test_roundfWithPrecisionTo_0dp(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 2.0f, roundfWithPrecisionTo(1.5f, 0));
 }
 
+/* ── concatStrings ─────────────────────────────────────────────────────── */
+
+void test_concatStrings_basic(void) {
+    char buf[16] = {0};
+    TEST_ASSERT_TRUE(concatStrings(buf, sizeof(buf), "hello", " world"));
+    TEST_ASSERT_EQUAL_STRING("hello world", buf);
+}
+
+void test_concatStrings_empty_sources(void) {
+    char buf[4] = {'X', 0, 0, 0};
+    TEST_ASSERT_TRUE(concatStrings(buf, sizeof(buf), "", ""));
+    TEST_ASSERT_EQUAL_STRING("", buf);
+}
+
+void test_concatStrings_exact_fit(void) {
+    char buf[6] = {0}; /* "abcde" + '\0' */
+    TEST_ASSERT_TRUE(concatStrings(buf, sizeof(buf), "abc", "de"));
+    TEST_ASSERT_EQUAL_STRING("abcde", buf);
+}
+
+void test_concatStrings_too_small_buffer(void) {
+    char buf[5] = "init";
+    TEST_ASSERT_FALSE(concatStrings(buf, sizeof(buf), "abc", "de"));
+    TEST_ASSERT_EQUAL_STRING("init", buf);
+}
+
+void test_concatStrings_zero_dest_size(void) {
+    char buf[4] = "abc";
+    TEST_ASSERT_FALSE(concatStrings(buf, 0, "a", "b"));
+    TEST_ASSERT_EQUAL_STRING("abc", buf);
+}
+
+void test_concatStrings_null_args(void) {
+    char buf[8] = {0};
+    TEST_ASSERT_FALSE(concatStrings(NULL, sizeof(buf), "a", "b"));
+    TEST_ASSERT_FALSE(concatStrings(buf, sizeof(buf), NULL, "b"));
+    TEST_ASSERT_FALSE(concatStrings(buf, sizeof(buf), "a", NULL));
+}
+
 /* ── isValidString ─────────────────────────────────────────────────────── */
 
 void test_isValidString_valid(void) {
@@ -735,6 +774,12 @@ int main(void) {
     RUN_TEST(test_rroundf_rounds_up);
     RUN_TEST(test_roundfWithPrecisionTo_2dp);
     RUN_TEST(test_roundfWithPrecisionTo_0dp);
+    RUN_TEST(test_concatStrings_basic);
+    RUN_TEST(test_concatStrings_empty_sources);
+    RUN_TEST(test_concatStrings_exact_fit);
+    RUN_TEST(test_concatStrings_too_small_buffer);
+    RUN_TEST(test_concatStrings_zero_dest_size);
+    RUN_TEST(test_concatStrings_null_args);
 
     RUN_TEST(test_isValidString_valid);
     RUN_TEST(test_isValidString_null);

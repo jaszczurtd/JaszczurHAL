@@ -6,6 +6,7 @@ static uint32_t s_micros         = 0;
 static bool     s_watchdog_fed   = false;
 static bool     s_caused_reboot  = false;
 static uint32_t s_free_heap      = 256 * 1024;
+static bool     s_bootloader_requested = false;
 
 uint32_t hal_millis(void) {
     return s_millis;
@@ -94,4 +95,16 @@ float hal_read_chip_temp(void) {
 
 void hal_mock_set_chip_temp(float celsius) {
     s_chip_temp = celsius;
+}
+
+void hal_enter_bootloader(void) {
+    s_bootloader_requested = true;
+}
+
+bool hal_mock_bootloader_was_requested(void) {
+    return s_bootloader_requested;
+}
+
+void hal_mock_bootloader_reset_flag(void) {
+    s_bootloader_requested = false;
 }

@@ -1,5 +1,6 @@
 #include "../../hal_system.h"
 #include <Arduino.h>
+#include <pico/bootrom.h>
 #include <pico/stdlib.h>
 #include <hardware/watchdog.h>
 
@@ -45,4 +46,11 @@ uint32_t hal_get_free_heap(void) {
 
 float hal_read_chip_temp(void) {
     return analogReadTemp();
+}
+
+void hal_enter_bootloader(void) {
+    reset_usb_boot(0, 0);
+    while (true) {
+        tight_loop_contents();
+    }
 }

@@ -8,6 +8,7 @@ void setUp(void) {
     hal_mock_set_caused_reboot(false);
     hal_mock_set_free_heap(256 * 1024);
     hal_mock_set_chip_temp(25.0f);
+    hal_mock_bootloader_reset_flag();
 }
 
 void tearDown(void) {}
@@ -53,6 +54,12 @@ void test_heap_and_chip_temp_helpers(void) {
 
     hal_mock_set_chip_temp(41.75f);
     TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.75f, hal_read_chip_temp());
+}
+
+void test_enter_bootloader_sets_mock_flag(void) {
+    TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+    hal_enter_bootloader();
+    TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
 }
 
 void test_constrain_clamps_to_range(void) {
@@ -135,6 +142,7 @@ int main(void) {
     RUN_TEST(test_micros_helpers_keep_millis_in_sync);
     RUN_TEST(test_watchdog_feed_and_reboot_flag);
     RUN_TEST(test_heap_and_chip_temp_helpers);
+    RUN_TEST(test_enter_bootloader_sets_mock_flag);
     RUN_TEST(test_constrain_clamps_to_range);
     RUN_TEST(test_constrain_accepts_float);
     RUN_TEST(test_map_maps_integer_ranges);
