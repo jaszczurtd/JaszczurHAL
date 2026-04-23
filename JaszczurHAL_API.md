@@ -23,21 +23,21 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 
 ## Library structure
 
-- `src/JaszczurHAL.h` — umbrella include for HAL + utility modules.
-- `src/HAL_FLAGS.txt` — concise `HAL_DISABLE_*` / `HAL_ENABLE_*` flag summary.
-- `src/libConfig.h` — backward-compat redirect to `hal/hal_config.h`.
-- `src/tools.h` — C++ utility aggregator.
-- `src/tools_c.h` — C-compatible utility declarations.
-- `src/arduino_host_stubs/` — host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
-- `src/hal/hal.h` — HAL-only umbrella include.
-- `src/hal/hal_config.h` and `src/hal/hal_config.cpp` — build-time feature flags and runtime config helpers.
-- `src/hal/*.h` — public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` — shared HAL wrapper implementations.
-- `src/hal/hal_uart_config.h` — UART configuration constants and helpers.
-- `src/hal/impl/arduino/` — Arduino / RP2040 backend.
-- `src/hal/impl/.mock/` — deterministic host-test backend.
-- `src/hal/impl/drivers/` — bundled third-party drivers used by optional HAL modules.
-- `src/utils/` — higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
+- `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
+- `src/HAL_FLAGS.txt` - concise `HAL_DISABLE_*` / `HAL_ENABLE_*` flag summary.
+- `src/libConfig.h` - backward-compat redirect to `hal/hal_config.h`.
+- `src/tools.h` - C++ utility aggregator.
+- `src/tools_c.h` - C-compatible utility declarations.
+- `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
+- `src/hal/hal.h` - HAL-only umbrella include.
+- `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
+- `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
+- `src/hal/impl/arduino/` - Arduino / RP2040 backend.
+- `src/hal/impl/.mock/` - deterministic host-test backend.
+- `src/hal/impl/drivers/` - bundled third-party drivers used by optional HAL modules.
+- `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
 default include in project code. `hal/hal.h` remains available as a HAL-only
@@ -547,9 +547,9 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
 
-**impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` — computes clkdiv and wrap
+**impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
-The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** — the GPIO
+The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
 function and slice enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
 **impl/.mock:** stores last written value; injectable via mock helpers.
@@ -626,6 +626,13 @@ void     hal_enter_bootloader(void);  // jump to RP2040 USB bootloader (does not
 uint32_t hal_get_core_id(void);       // 0 or 1
 void     hal_u32_to_bytes_be(uint32_t val, uint8_t *buf); // writes big-endian bytes
 
+// Device unique identifier (RP2040 flash unique id).
+#define HAL_DEVICE_UID_BYTES        8u
+#define HAL_DEVICE_UID_HEX_BUF_SIZE 17u  // 16 hex chars + NUL
+
+void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
+bool hal_get_device_uid_hex(char *buf, size_t buflen);
+
 // Type-independent math helpers (macros)
 #define hal_constrain(v, lo, hi) ...
 #define hal_map(x, in_min, in_max, out_min, out_max) ...
@@ -634,8 +641,8 @@ void     hal_u32_to_bytes_be(uint32_t val, uint8_t *buf); // writes big-endian b
 #define NONULL(x) do { if ((x) == NULL) { goto error; } } while (0)
 ```
 
-**impl/arduino:** `millis()`, `micros()`, `time_us_64()`, `delay()`, `delayMicroseconds()`, pico SDK `watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`.
-**impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot` and `hal_get_free_heap` injectable.
+**impl/arduino:** `millis()`, `micros()`, `time_us_64()`, `delay()`, `delayMicroseconds()`, pico SDK `watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `reset_usb_boot()`, `pico_get_unique_board_id()`.
+**impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting.
 **Thread safety:** Arduino backend: time/watchdog APIs are safe to call from both cores. `hal_delay_ms` / `hal_delay_us` block only the calling core and can be used concurrently. Mock backend uses shared unsynchronized state and is intended for single-threaded tests.
 **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
 **Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
@@ -656,7 +663,24 @@ void hal_mock_set_free_heap(uint32_t bytes);  // default: 256 KB
 void hal_mock_set_chip_temp(float celsius);   // default: 25.0 °C
 bool hal_mock_bootloader_was_requested(void);
 void hal_mock_bootloader_reset_flag(void);
+void hal_mock_set_device_uid(const uint8_t uid[8]);  // override UID
+void hal_mock_reset_device_uid(void);                // restore default E661A4D1234567AB
 ```
+
+**Device UID details:**
+- `hal_get_device_uid(uid)` fills an exactly 8-byte output buffer. Passing
+  `NULL` is a safe no-op.
+- `hal_get_device_uid_hex(buf, buflen)` writes 16 uppercase hex characters
+  followed by a NUL terminator (17 bytes total). Returns `false` and writes
+  nothing when `buf` is `NULL` or `buflen < HAL_DEVICE_UID_HEX_BUF_SIZE`.
+- On RP2040 hardware the source is the 64-bit unique identifier stored in
+  the external QSPI flash chip, read via `pico_get_unique_board_id()`.
+  This identifier is persistent across reboots, unique per device, and the
+  same value that arduino-pico exposes as USB iSerialNumber.
+- In the mock backend the default value is deterministic
+  (`0xE6 0x61 0xA4 0xD1 0x23 0x45 0x67 0xAB` → `"E661A4D1234567AB"`) so
+  tests that compare the UID string can hard-code the expected value.
+  Use `hal_mock_set_device_uid()` to simulate a second board.
 
 ---
 
@@ -811,34 +835,80 @@ RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 #include <hal/hal_serial_session.h>
 
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
-#define HAL_SERIAL_SESSION_MAX_LINE 48u
+#define HAL_SERIAL_SESSION_MAX_LINE         48u
+#define HAL_SERIAL_SESSION_UNKNOWN          "unknown"
 
 typedef struct {
-    bool active;
-    uint32_t session_id;
-    uint32_t hello_counter;
-    uint32_t last_activity_ms;
-    uint8_t line_len;
-    char line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
+    bool        active;
+    uint32_t    session_id;
+    uint32_t    hello_counter;
+    uint32_t    last_activity_ms;
+    uint8_t     line_len;
+    char        line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
+    const char *module_tag;   // bound at init
+    const char *fw_version;   // bound at init (may be NULL → "unknown")
+    const char *build_id;     // bound at init (may be NULL → "unknown")
+    char        uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE];  // captured at init
 } hal_serial_session_t;
 
-void     hal_serial_session_init(hal_serial_session_t *session);
+void     hal_serial_session_init(hal_serial_session_t *session,
+                                 const char *module_tag,
+                                 const char *fw_version,
+                                 const char *build_id);
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
-void     hal_serial_session_poll(hal_serial_session_t *session, const char *module_tag);
+void     hal_serial_session_poll(hal_serial_session_t *session);
 ```
 
 Current protocol commands:
 - `HELLO`
 
 Current responses:
-- `OK HELLO module=<name> proto=1 session=<id>`
+- `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
 - `ERR UNKNOWN`
+
+Identity binding model:
+- `module_tag` must not be NULL and must reference a string with static
+  lifetime (typically the module's compile-time `MODULE_NAME`).
+- `fw_version` and `build_id` may be NULL or empty at init; both are reported
+  as `unknown` in that case. When non-NULL, they are captured by pointer and
+  must likewise remain valid for the lifetime of the session.
+- The device UID hex string is captured by value at init via
+  `hal_get_device_uid_hex()` and stored inside the session struct.
+- All identity is immutable after init; `hal_serial_session_poll()` takes no
+  identity arguments.
 
 Notes:
 - parser is line-based (`\r` / `\n` terminate a command),
 - helpers are header-only (`static inline`) and state lives in `hal_serial_session_t`,
-- session id is non-cryptographic and intended for bootstrap tracking only.
+- session id is non-cryptographic and intended for bootstrap tracking only,
+- the HELLO response buffer is sized for the six mandatory fields plus
+  reasonable slack; the implementation uses a 192-byte internal buffer.
+
+Typical wiring (firmware module):
+```c
+#include <hal/hal_serial_session.h>
+
+static hal_serial_session_t s_session;
+
+void configSessionInit(void) {
+    hal_serial_session_init(&s_session,
+                            MODULE_NAME,  // e.g. "ECU"
+                            FW_VERSION,   // e.g. "0.1.0"
+                            BUILD_ID);    // e.g. __DATE__ " " __TIME__
+}
+
+void configSessionTick(void) {
+    hal_serial_session_poll(&s_session);
+}
+```
+
+Test observability (mock backend):
+- Use `hal_mock_serial_inject_rx("HELLO\n", -1)` to feed input.
+- Inspect `hal_mock_serial_last_line()` to verify the HELLO response fields
+  (`module=`, `proto=`, `session=`, `fw=`, `build=`, `uid=`).
+- Use `hal_mock_set_device_uid(...)` to simulate a different physical board
+  when asserting `uid=` values.
 
 ---
 
@@ -901,7 +971,7 @@ initialisation. In one-shot mode, when a transmitted frame receives no ACK (e.g.
 the hardware frees the TX buffer immediately instead of retransmitting indefinitely. This prevents TX buffer
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
 every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`. For periodic broadcast applications (where
-fresh data is sent on the next timer tick anyway) one-shot has no practical downside — an individual lost frame
+fresh data is sent on the next timer tick anyway) one-shot has no practical downside - an individual lost frame
 is transparent to the receiver. When the bus is healthy and all receivers are present, one-shot behaviour is
 identical to normal mode: the first attempt succeeds and no retry is needed. `hal_can_send()` failure due to
 missing ACK is logged via `hal_derr_limited("can", ...)` to avoid serial flooding.
@@ -1125,7 +1195,7 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool 
 // Symmetric one-shot "request + read 1 byte" helper.
 // The internal mutex is held across the full request+read sequence.
 // *outReadOk (optional) receives true when exactly one byte was received.
-// Returns the byte read, or 0 on failure — inspect *outReadOk to distinguish
+// Returns the byte read, or 0 on failure - inspect *outReadOk to distinguish
 // a genuine 0x00 from a communication error.
 uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
@@ -1138,7 +1208,7 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count);
 int     hal_i2c_available_bus(uint8_t bus);
 int     hal_i2c_read_bus(uint8_t bus);
 
-// Transaction counter — counts completed write (end_transmission) and read
+// Transaction counter - counts completed write (end_transmission) and read
 // (request_from) transactions since init. Resets on init. Wraps at UINT32_MAX.
 uint32_t hal_i2c_get_transaction_count(void);
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
@@ -1153,7 +1223,7 @@ bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 // Toggles SCL up to 9 times at GPIO level to release a slave holding SDA
 // low (e.g. after master reset mid-transaction), then generates a STOP
 // condition.  Leaves SDA/SCL as inputs with pull-ups.
-// Must be called BEFORE hal_i2c_init() — the bus is not usable for Wire
+// Must be called BEFORE hal_i2c_init() - the bus is not usable for Wire
 // transactions during this procedure.
 void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
@@ -1185,7 +1255,7 @@ uint32_t hal_mock_i2c_get_bus_clear_count(void);                                
 uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                       // number of bus_clear calls on selected bus
 ```
 
-**Example — PCF8574 8-bit I/O expander using the one-shot helpers:**
+**Example - PCF8574 8-bit I/O expander using the one-shot helpers:**
 
 PCF8574 is addressed once and has no register layout: a single write byte
 drives all 8 output latches; a single read byte returns the current port
@@ -1242,7 +1312,7 @@ Exposes a fixed-size register map over I2C slave mode. A remote master writes
 a one-byte register pointer, then reads N bytes starting from that address.
 The register pointer auto-increments on each byte read.
 
-This is independent of the I2C master module (`hal_i2c`) — both can be
+This is independent of the I2C master module (`hal_i2c`) - both can be
 disabled/enabled separately, but they cannot share the same bus simultaneously.
 
 ```c
@@ -1276,7 +1346,7 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg);
 uint8_t hal_i2c_slave_get_address(void);
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
 
-// Transaction counter — counts completed master reads and writes since init.
+// Transaction counter - counts completed master reads and writes since init.
 // Useful for detecting live bus activity without polling reg_write return values.
 // Resets on init. Wraps at UINT32_MAX. Thread-safe (atomic).
 uint32_t hal_i2c_slave_get_transaction_count(void);
@@ -1284,9 +1354,9 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 ```
 
 **Register map protocol (I2C):**
-1. Master writes: `[reg_address]` — sets the register pointer
-2. Master reads N bytes — slave responds with `regs[ptr], regs[ptr+1], ...`
-3. Master writes: `[reg_address, data0, data1, ...]` — sets pointer, then writes data sequentially
+1. Master writes: `[reg_address]` - sets the register pointer
+2. Master reads N bytes - slave responds with `regs[ptr], regs[ptr+1], ...`
+3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1` in slave mode (`Wire.begin(address)`).  `onReceive` / `onRequest` callbacks handle the register-map protocol.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
@@ -1584,7 +1654,7 @@ the mock lets tests inject position, speed, date and time directly.
 **Auto-detect framing:** After ~500 received characters, if every NMEA sentence
 failed its checksum, the implementation automatically toggles between 8N1 and
 7N1 and re-initialises the serial port.  This handles both genuine u-blox modules
-(8N1) and clone NEO-6M boards that ship as 7N1 — no user intervention required.
+(8N1) and clone NEO-6M boards that ship as 7N1 - no user intervention required.
 
 ```c
 #include <hal/hal_gps.h>
@@ -1644,7 +1714,7 @@ is only 32 bytes and overflows in ~33 ms at 9600 baud.
 
 `HAL_GPS_DEFAULT_UART_CONFIG` (defined in `hal/hal_config.h`) defaults to
 `HAL_UART_CFG_8N1` (the NMEA 0183 standard).  The auto-detect mechanism makes
-this safe for clone modules too — it will switch to 7N1 automatically if needed.
+this safe for clone modules too - it will switch to 7N1 automatically if needed.
 
 ```c
 // hal/hal_config.h default (can be overridden in build flags):
@@ -1985,8 +2055,8 @@ bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float c
 **Thread safety:** Not thread-safe. Use one controller instance per control loop or serialize externally.
 
 **Anti-windup:** two complementary mechanisms:
-1. **Integral hard clamp** — `setMaxIntegral()` / `hal_pid_controller_set_max_integral()` limits `|integral|`.
-2. **Clamping anti-windup** — integral accumulation is skipped when the output
+1. **Integral hard clamp** - `setMaxIntegral()` / `hal_pid_controller_set_max_integral()` limits `|integral|`.
+2. **Clamping anti-windup** - integral accumulation is skipped when the output
    is saturated in the direction of the error (i.e. output ≥ max and error > 0,
    or output ≤ min and error < 0). This prevents integral windup at output
    limits without requiring manual tuning of the integral cap.

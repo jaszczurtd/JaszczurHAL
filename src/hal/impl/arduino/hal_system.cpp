@@ -2,7 +2,9 @@
 #include <Arduino.h>
 #include <pico/bootrom.h>
 #include <pico/stdlib.h>
+#include <pico/unique_id.h>
 #include <hardware/watchdog.h>
+#include <string.h>
 
 uint32_t hal_millis(void) {
     return millis();
@@ -53,4 +55,32 @@ void hal_enter_bootloader(void) {
     while (true) {
         tight_loop_contents();
     }
+}
+
+void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
+    if (uid == nullptr) {
+        return;
+    }
+    pico_unique_board_id_t id;
+    pico_get_unique_board_id(&id);
+    /* PICO_UNIQUE_BOARD_ID_SIZE_BYTES is defined as 8. */
+    memcpy(uid, id.id, HAL_DEVICE_UID_BYTES);
+}
+
+bool hal_get_device_uid_hex(char *buf, size_t buflen) {
+    if (buf == nullptr) {
+        return false;
+    }
+    if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+        return false;
+    }
+    uint8_t uid[HAL_DEVICE_UID_BYTES];
+    hal_get_device_uid(uid);
+    static const char kHex[] = "0123456789ABCDEF";
+    for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
+        buf[(i * 2u) + 0u] = kHex[(uid[i] >> 4) & 0x0Fu];
+        buf[(i * 2u) + 1u] = kHex[uid[i] & 0x0Fu];
+    }
+    buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
+    return true;
 }

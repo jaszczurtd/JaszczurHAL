@@ -11,13 +11,18 @@
  * - `HELLO`
  *
  * Current responses:
- * - `OK HELLO module=<name> proto=1 session=<id>`
+ * - `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
  * - `ERR UNKNOWN`
  *
  * Design intent:
  * - Keep command parsing in one shared HAL place.
  * - Let each module own only its module-tag and polling call.
  * - Provide a stable skeleton for future expansion (AUTH/GET/SET/etc.).
+ *
+ * Identity fields (module tag, firmware version, build id) are immutable for
+ * the lifetime of a session and are therefore captured at init time rather
+ * than passed on every poll. The device UID is sourced from
+ * @ref hal_get_device_uid_hex and is also captured at init.
  */
 
 #include "hal_serial.h"
@@ -37,8 +42,15 @@ extern "C" {
 /** @brief Maximum accepted command line length (excluding terminator). */
 #define HAL_SERIAL_SESSION_MAX_LINE 48u
 
+/** @brief Fallback string for fw/build fields when the caller passes NULL/""  */
+#define HAL_SERIAL_SESSION_UNKNOWN "unknown"
+
 /**
  * @brief Runtime state for one serial session endpoint.
+ *
+ * The string pointers @c module_tag, @c fw_version and @c build_id are stored
+ * as-is and must remain valid for the lifetime of the session (typically
+ * compile-time string literals defined in each module's config header).
  */
 typedef struct {
     bool active;                               /**< true after successful HELLO handshake. */
@@ -47,17 +59,41 @@ typedef struct {
     uint32_t last_activity_ms;                 /**< Last time a command was processed. */
     uint8_t line_len;                          /**< Current receive line length. */
     char line[HAL_SERIAL_SESSION_MAX_LINE + 1u]; /**< Command line buffer (NUL-terminated on parse). */
+    const char *module_tag;                    /**< Module identity (MODULE_NAME) used in HELLO. */
+    const char *fw_version;                    /**< Firmware version string used in HELLO. */
+    const char *build_id;                      /**< Build identifier string used in HELLO. */
+    char uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE]; /**< Cached device UID hex string. */
 } hal_serial_session_t;
 
 /**
- * @brief Initialize/clear one serial session context.
- * @param session Session context to reset.
+ * @brief Initialize/clear one serial session context and bind identity fields.
+ *
+ * The identity fields are captured by pointer and the device UID hex string
+ * is captured by value at init time. @p module_tag must remain valid for the
+ * lifetime of the session; @p fw_version and @p build_id may be NULL and will
+ * be reported as @ref HAL_SERIAL_SESSION_UNKNOWN.
+ *
+ * @param session     Session context to reset.
+ * @param module_tag  Short module identifier (e.g. "ECU"), must not be NULL.
+ * @param fw_version  Firmware version string, or NULL.
+ * @param build_id    Build identifier string, or NULL.
  */
-static inline void hal_serial_session_init(hal_serial_session_t *session) {
+static inline void hal_serial_session_init(hal_serial_session_t *session,
+                                           const char *module_tag,
+                                           const char *fw_version,
+                                           const char *build_id) {
     if (session == NULL) {
         return;
     }
     memset(session, 0, sizeof(*session));
+    session->module_tag = (module_tag != NULL) ? module_tag : HAL_SERIAL_SESSION_UNKNOWN;
+    session->fw_version = ((fw_version != NULL) && (fw_version[0] != '\0'))
+                              ? fw_version : HAL_SERIAL_SESSION_UNKNOWN;
+    session->build_id   = ((build_id != NULL) && (build_id[0] != '\0'))
+                              ? build_id : HAL_SERIAL_SESSION_UNKNOWN;
+    if (!hal_get_device_uid_hex(session->uid_hex, sizeof(session->uid_hex))) {
+        session->uid_hex[0] = '\0';
+    }
 }
 
 /**
@@ -84,12 +120,13 @@ static inline uint32_t hal_serial_session_id(const hal_serial_session_t *session
  * The parser is line-oriented (`\\n` and/or `\\r` terminate command line).
  * Unknown commands currently return `ERR UNKNOWN`.
  *
+ * Identity fields reported in the HELLO response come from the session
+ * context (populated by @ref hal_serial_session_init).
+ *
  * @param session Session context to update.
- * @param module_tag Short module identifier returned in HELLO response
- *                   (for example: `"ECU"`, `"CLOCKS"`, `"OILANDSPEED"`).
  */
-static inline void hal_serial_session_poll(hal_serial_session_t *session, const char *module_tag) {
-    if ((session == NULL) || (module_tag == NULL)) {
+static inline void hal_serial_session_poll(hal_serial_session_t *session) {
+    if ((session == NULL) || (session->module_tag == NULL)) {
         return;
     }
 
@@ -115,12 +152,17 @@ static inline void hal_serial_session_poll(hal_serial_session_t *session, const 
                     ((uint32_t)session->hello_counter << 20) ^
                     (session->last_activity_ms & 0x000FFFFFu);
 
-                char response[96];
+                char response[192];
                 snprintf(response, sizeof(response),
-                         "OK HELLO module=%s proto=%u session=%lu",
-                         module_tag,
+                         "OK HELLO module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
+                         session->module_tag,
                          (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-                         (unsigned long)session->session_id);
+                         (unsigned long)session->session_id,
+                         (session->fw_version != NULL) ? session->fw_version
+                                                       : HAL_SERIAL_SESSION_UNKNOWN,
+                         (session->build_id != NULL) ? session->build_id
+                                                     : HAL_SERIAL_SESSION_UNKNOWN,
+                         session->uid_hex);
                 hal_serial_println(response);
             } else {
                 hal_serial_println("ERR UNKNOWN");
