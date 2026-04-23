@@ -158,6 +158,47 @@ float hal_read_chip_temp(void);
 void hal_enter_bootloader(void);
 
 /**
+ * @brief Length in bytes of the unique device identifier.
+ */
+#define HAL_DEVICE_UID_BYTES 8u
+
+/**
+ * @brief Minimum buffer size (including NUL) for the hex representation
+ *        of the unique device identifier returned by
+ *        @ref hal_get_device_uid_hex.
+ */
+#define HAL_DEVICE_UID_HEX_BUF_SIZE 17u
+
+/**
+ * @brief Read the 64-bit unique device identifier.
+ *
+ * On RP2040 hardware this wraps @c pico_get_unique_board_id() which reads the
+ * 64-bit unique id stored in the external QSPI flash chip.
+ *
+ * On mock/unit-test builds this returns a deterministic pattern, overridable
+ * via @c hal_mock_set_device_uid().
+ *
+ * @param uid Output buffer of exactly @ref HAL_DEVICE_UID_BYTES bytes.
+ */
+void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
+
+/**
+ * @brief Write the unique device identifier as an uppercase hex string.
+ *
+ * The output contains 2 hex chars per UID byte followed by a NUL terminator
+ * (16 hex chars + NUL = @ref HAL_DEVICE_UID_HEX_BUF_SIZE bytes total).
+ *
+ * If @p buflen is smaller than @ref HAL_DEVICE_UID_HEX_BUF_SIZE the call
+ * writes nothing and returns false. The buffer is left unchanged on failure
+ * only when @p buf is NULL; otherwise it is zero-initialised.
+ *
+ * @param buf    Output buffer.
+ * @param buflen Size of @p buf in bytes.
+ * @return true on success, false on NULL buffer or insufficient size.
+ */
+bool hal_get_device_uid_hex(char *buf, size_t buflen);
+
+/**
  * @def NONULL(x)
  * @brief Guard-pointer helper that jumps to a local `error:` label when `x` is null.
  *

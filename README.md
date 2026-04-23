@@ -192,13 +192,13 @@ Detailed suite coverage, mock behavior notes, and testing workflow are in
 
 ### Platform-Specific Templates
 
-- **[Windows](vscode-templates/windows/)** — Complete setup with Python build orchestration, Arduino CLI integration, debugging, and serial monitor
+- **[Windows](vscode-templates/windows/)** - Complete setup with Python build orchestration, Arduino CLI integration, debugging, and serial monitor
   - Python-based build system for cross-platform consistency
   - Smart serial monitor with auto-reconnection (VID:PID aware)
   - Interactive board/options selector
   - Cortex-Debug integration for live debugging
 
-- **[Linux/macOS](vscode-templates/linux/)** — Bash-based build and deployment scripts
+- **[Linux/macOS](vscode-templates/linux/)** - Bash-based build and deployment scripts
   - Lightweight bash implementation
   - Compatible with standard GNU toolchains
   - Same feature set as Windows (build, upload, debug, monitor)
@@ -214,13 +214,13 @@ See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup,
 
 ### Features
 
-- ✅ One-key build, upload, and debugging
-- ✅ Persistent serial monitor (auto-reconnect on device replug)
-- ✅ Cortex-Debug live debugging with breakpoints
-- ✅ IntelliSense with full RP2040/RP2350 API
-- ✅ Support for 6+ Raspberry Pi Pico variants
-- ✅ UF2 bootloader upload mode
-- ✅ Board selection with custom clock/optimization settings
+- One-key build, upload, and debugging
+- Persistent serial monitor (auto-reconnect on device replug)
+- Cortex-Debug live debugging with breakpoints
+- IntelliSense with full RP2040/RP2350 API
+- Support for 6+ Raspberry Pi Pico variants
+- UF2 bootloader upload mode
+- Board selection with custom clock/optimization settings
 
 ## Building as a static library (.a)
 
@@ -229,7 +229,7 @@ for the RP2040 (ARM Cortex-M0+) target using the Arduino toolchain.
 
 > **Note:** This option **does not replace** the standard workflow where
 > arduino-cli compiles JaszczurHAL sources together with your project.
-> The precompiled `.a` is an additional possibility — useful when you want to
+> The precompiled `.a` is an additional possibility - useful when you want to
 > speed up the compile cycle, use JaszczurHAL in a CMake-based project, or
 > link the library manually outside the arduino-cli ecosystem.
 > Both approaches (joint compilation and `.a` linking) use the same source
@@ -287,10 +287,10 @@ the output (`libJaszczurHAL.a`) is placed in `build_arduino/`.
 | `-r`, `--root PATH` | `~/.arduino15/packages/rp2040` | Arduino RP2040 package root |
 | `-b`, `--board VARIANT` | `rpipico` | Board variant (e.g. `rpipicow`, `rpipico2`) |
 | `-c`, `--chip CHIP` | `rp2040` | Target chip (`rp2040` / `rp2350`) |
-| `-p`, `--project-config DIR` | — | Directory containing `hal_project_config.h` |
-| `-D KEY=VALUE` | — | Extra compile definitions (repeatable) |
+| `-p`, `--project-config DIR` | - | Directory containing `hal_project_config.h` |
+| `-D KEY=VALUE` | - | Extra compile definitions (repeatable) |
 | `-o`, `--output DIR` | `./build_arduino` | Output directory |
-| `--clean` | — | Remove build directory before building |
+| `--clean` | - | Remove build directory before building |
 | `-j`, `--jobs N` | `nproc` | Parallel build jobs |
 
 ### Examples
@@ -349,8 +349,8 @@ Available CMake configuration variables:
 | `BOARD_NAME` | `RASPBERRY_PI_PICO` | Arduino board macro name |
 | `ARDUINO_F_CPU` | `125000000` | CPU frequency (Hz) |
 | `HAL_DISPLAY_DRIVER` | `HAL_DISPLAY_ILI9341` | TFT display driver |
-| `EXTRA_HAL_DEFINES` | — | Semicolon-separated list of extra defines |
-| `HAL_PROJECT_CONFIG_DIR` | — | Path to directory with `hal_project_config.h` |
+| `EXTRA_HAL_DEFINES` | - | Semicolon-separated list of extra defines |
+| `HAL_PROJECT_CONFIG_DIR` | - | Path to directory with `hal_project_config.h` |
 
 ### Linking with your project
 

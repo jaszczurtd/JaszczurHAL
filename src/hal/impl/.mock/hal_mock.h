@@ -45,6 +45,10 @@ void     hal_mock_set_chip_temp(float celsius);
 bool     hal_mock_bootloader_was_requested(void);
 /** @brief Clear the mock bootloader request flag. */
 void     hal_mock_bootloader_reset_flag(void);
+/** @brief Override the 8-byte UID returned by hal_get_device_uid(). */
+void     hal_mock_set_device_uid(const uint8_t uid[8]);
+/** @brief Restore the default deterministic mock UID. */
+void     hal_mock_reset_device_uid(void);
 
 // ── Serial / Debug ────────────────────────────────────────────────────────────
 const char *hal_mock_serial_last_line(void);

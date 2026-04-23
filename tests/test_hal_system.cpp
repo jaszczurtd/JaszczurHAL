@@ -9,6 +9,7 @@ void setUp(void) {
     hal_mock_set_free_heap(256 * 1024);
     hal_mock_set_chip_temp(25.0f);
     hal_mock_bootloader_reset_flag();
+    hal_mock_reset_device_uid();
 }
 
 void tearDown(void) {}
@@ -120,6 +121,62 @@ void test_u32_to_bytes_be_converts_correctly(void) {
     TEST_ASSERT_EQUAL_HEX8(0x78u, bytes[3]);
 }
 
+void test_get_device_uid_returns_default_mock_pattern(void) {
+    uint8_t uid[HAL_DEVICE_UID_BYTES] = {0};
+    hal_get_device_uid(uid);
+    /* Default mock UID is {0xE6,0x61,0xA4,0xD1,0x23,0x45,0x67,0xAB}. */
+    TEST_ASSERT_EQUAL_HEX8(0xE6, uid[0]);
+    TEST_ASSERT_EQUAL_HEX8(0x61, uid[1]);
+    TEST_ASSERT_EQUAL_HEX8(0xAB, uid[7]);
+}
+
+void test_get_device_uid_reflects_injected_value(void) {
+    const uint8_t custom[HAL_DEVICE_UID_BYTES] = {
+        0xDE, 0xAD, 0xBE, 0xEF, 0xCA, 0xFE, 0xBA, 0xBE
+    };
+    hal_mock_set_device_uid(custom);
+
+    uint8_t out[HAL_DEVICE_UID_BYTES] = {0};
+    hal_get_device_uid(out);
+
+    for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
+        TEST_ASSERT_EQUAL_HEX8(custom[i], out[i]);
+    }
+}
+
+void test_get_device_uid_null_arg_is_safe(void) {
+    hal_get_device_uid(NULL);
+    /* No crash, no observable effect. */
+    TEST_PASS();
+}
+
+void test_get_device_uid_hex_formats_default_as_uppercase(void) {
+    char buf[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
+    TEST_ASSERT_TRUE(hal_get_device_uid_hex(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("E661A4D1234567AB", buf);
+}
+
+void test_get_device_uid_hex_formats_injected_value(void) {
+    const uint8_t custom[HAL_DEVICE_UID_BYTES] = {
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF
+    };
+    hal_mock_set_device_uid(custom);
+
+    char buf[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
+    TEST_ASSERT_TRUE(hal_get_device_uid_hex(buf, sizeof(buf)));
+    TEST_ASSERT_EQUAL_STRING("0123456789ABCDEF", buf);
+}
+
+void test_get_device_uid_hex_rejects_small_buffer(void) {
+    char buf[HAL_DEVICE_UID_HEX_BUF_SIZE - 1u] = {0};
+    TEST_ASSERT_FALSE(hal_get_device_uid_hex(buf, sizeof(buf)));
+}
+
+void test_get_device_uid_hex_null_buffer_is_safe(void) {
+    TEST_ASSERT_FALSE(hal_get_device_uid_hex(NULL, 0));
+    TEST_ASSERT_FALSE(hal_get_device_uid_hex(NULL, HAL_DEVICE_UID_HEX_BUF_SIZE));
+}
+
 void test_countof_returns_static_array_size(void) {
     int values[5] = {0};
     TEST_ASSERT_EQUAL_UINT32(5u, (uint32_t)COUNTOF(values));
@@ -150,6 +207,13 @@ int main(void) {
     RUN_TEST(test_nonull_macro_accepts_non_null);
     RUN_TEST(test_nonull_macro_jumps_on_null);
     RUN_TEST(test_u32_to_bytes_be_converts_correctly);
+    RUN_TEST(test_get_device_uid_returns_default_mock_pattern);
+    RUN_TEST(test_get_device_uid_reflects_injected_value);
+    RUN_TEST(test_get_device_uid_null_arg_is_safe);
+    RUN_TEST(test_get_device_uid_hex_formats_default_as_uppercase);
+    RUN_TEST(test_get_device_uid_hex_formats_injected_value);
+    RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);
+    RUN_TEST(test_get_device_uid_hex_null_buffer_is_safe);
     RUN_TEST(test_countof_returns_static_array_size);
     return UNITY_END();
 }
