@@ -23,74 +23,21 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 
 ## Library structure
 
-```
-src/
-  JaszczurHAL.h           ← umbrella include (all HAL + utilities)
-  HAL_FLAGS.txt           ← concise list of HAL_DISABLE_* / HAL_ENABLE_* flags
-    libConfig.h             ← backward-compat redirect to hal/hal_config.h
-    tools.h                 ← utility aggregator include (re-exports utils/*)
-    tools_c.h               ← C-compatible helper API include
-    arduino_host_stubs/     ← host-build Arduino compatibility stubs
-        Arduino.h
-        SD.h
-        SPI.h
-  hal/
-    hal.h                 ← master HAL-only include
-    hal_config.h          ← build-time feature flags, HAL_DISABLE_* guards
-    hal_config.cpp
-    hal_gpio.h                                    (core)
-    hal_pwm.h                                     (core)
-    hal_pwm_freq.h                                (optional - HAL_DISABLE_PWM_FREQ)
-    hal_adc.h                                     (core)
-    hal_timer.h                                   (core)
-    hal_soft_timer.h                               (core, C wrapper over SmartTimers)
-    hal_pid_controller.h                           (core, C wrapper over pidController)
-    hal_system.h                                  (core)
-    hal_bits.h                                    (core)
-    hal_sync.h                                    (core)
-    hal_serial.h                                  (core)
-    hal_uart.h                                    (optional - HAL_DISABLE_UART)
-    hal_can.h                                     (optional - HAL_DISABLE_CAN)
-    hal_display.h                                 (optional - HAL_DISABLE_DISPLAY)
-    hal_spi.h                                     (core)
-    hal_i2c.h                                     (optional - HAL_DISABLE_I2C)
-    hal_i2c_slave.h                               (optional - HAL_DISABLE_I2C_SLAVE)
-    hal_swserial.h                                (optional - HAL_DISABLE_SWSERIAL)
-    hal_rgb_led.h                                 (optional - HAL_DISABLE_RGB_LED)
-    hal_thermocouple.h                            (optional - HAL_DISABLE_THERMOCOUPLE)
-    hal_external_adc.h                            (optional - HAL_DISABLE_EXTERNAL_ADC)
-    hal_math.h                                    (core)
-    hal_gps.h                                     (optional - HAL_DISABLE_GPS)
-    hal_eeprom.h                                  (optional - HAL_DISABLE_EEPROM)
-    hal_wifi.h                                    (optional - HAL_DISABLE_WIFI)
-    hal_time.h                                    (optional - HAL_DISABLE_TIME)
-    hal_kv.h                                      (optional - HAL_DISABLE_KV)
-    hal_can_util.cpp
-    hal_kv.cpp
-    hal_soft_timer.cpp
-    hal_pid_controller.cpp
-    hal_uart_config.h
-    impl/
-      arduino/          ← Arduino / RP2040 hardware implementations
-        .mock/            ← deterministic host/test backend
-        drivers/          ← bundled third-party drivers used by optional HAL modules
-  utils/
-    tools.h / tools.cpp
-    tools_common_defs.h
-    tools_logger_config.h
-    tools_sensor_config.h
-    tools_printable_config.h
-    tools_api.h
-    SmartTimers.h / SmartTimers.cpp
-    pidController.h / pidController.cpp
-    multicoreWatchdog.h / multicoreWatchdog.cpp
-    draw7Segment.h / draw7Segment.cpp
-    cJSON.h / cJSON.c                (optional - HAL_ENABLE_CJSON)
-    cJSON_Utils.h / cJSON_Utils.c    (optional - HAL_ENABLE_CJSON)
-    unity.h / unity.c                (can be excluded from library code with HAL_DISABLE_UNITY)
-    unity_config.h
-    unity_internals.h
-```
+- `src/JaszczurHAL.h` — umbrella include for HAL + utility modules.
+- `src/HAL_FLAGS.txt` — concise `HAL_DISABLE_*` / `HAL_ENABLE_*` flag summary.
+- `src/libConfig.h` — backward-compat redirect to `hal/hal_config.h`.
+- `src/tools.h` — C++ utility aggregator.
+- `src/tools_c.h` — C-compatible utility declarations.
+- `src/arduino_host_stubs/` — host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
+- `src/hal/hal.h` — HAL-only umbrella include.
+- `src/hal/hal_config.h` and `src/hal/hal_config.cpp` — build-time feature flags and runtime config helpers.
+- `src/hal/*.h` — public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` — shared HAL wrapper implementations.
+- `src/hal/hal_uart_config.h` — UART configuration constants and helpers.
+- `src/hal/impl/arduino/` — Arduino / RP2040 backend.
+- `src/hal/impl/.mock/` — deterministic host-test backend.
+- `src/hal/impl/drivers/` — bundled third-party drivers used by optional HAL modules.
+- `src/utils/` — higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
 default include in project code. `hal/hal.h` remains available as a HAL-only
@@ -504,6 +451,7 @@ ctest --test-dir build --output-on-failure
 | `derr(fmt, ...)` | `hal_derr(fmt, ...)` - macro alias still available via tools.h |
 | repeated noisy error logs | `hal_derr_limited(source, fmt, ...)` - per-source rate-limited logging |
 | `setDebugPrefix(p)` | `hal_deb_set_prefix(p)` - macro alias via tools.h |
+| manual `concatStrings(buf, ..., MODULE_NAME, ":")` + `setDebugPrefix(buf)` | `setDebugPrefixWithColon(MODULE_NAME)` |
 | `mutex_t` + pico SDK mutex | `hal_mutex_t` + `hal_mutex_create/lock/unlock/destroy` |
 | `constrain(v, lo, hi)` | `hal_constrain(v, lo, hi)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`); `pid_clamp` is a backward-compat alias |
 | `map(x, …)` | `hal_map(x, in_min, in_max, out_min, out_max)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`) |
@@ -826,13 +774,19 @@ Limiter implementation details:
 - when `HAL_DEBUG_RATE_LIMIT_SOURCES_MAX` is exhausted, new sources are grouped into
     an internal `overflow` bucket instead of reusing unrelated source state
 
-**Macro aliases in tools.h:**
+**Debug helpers in `tools.h` / `tools_c.h`:**
 ```c
+void  debugInit(void);                          // wrapper around hal_debug_init(HAL_DEBUG_DEFAULT_BAUD)
+void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwards to hal_deb_set_prefix()
+
 #define deb            hal_deb
 #define derr           hal_derr
 #define derr_limited   hal_derr_limited
 #define setDebugPrefix hal_deb_set_prefix
 ```
+
+`setDebugPrefixWithColon(...)` truncates the module name if needed so the
+generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
 **impl/arduino:** Arduino `Serial`.
 **impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
@@ -2045,6 +1999,7 @@ Physical location: `src/utils/*`.
 
 Recommended include options:
 - `#include <tools.h>` (aggregator include in `src/`)
+- `#include <tools_c.h>` (C-compatible utility declarations from `src/`)
 - direct include from `utils/`, for example `#include <utils/SmartTimers.h>`
 
 Utilities depend on HAL internally.
@@ -2079,6 +2034,7 @@ that modify state), because macro arguments may be evaluated more than once.
 
 ```c
 void  debugInit(void);                  // optional - hal_deb() lazy-inits automatically
+void  setDebugPrefixWithColon(const char *moduleName); // builds "<module>:" within HAL_DEBUG_PREFIX_SIZE and forwards to hal_deb_set_prefix
 void  floatToDec(float val, int *hi, int *lo);
 float decToFloat(int hi, int lo);
 float adcToVolt(int adc, float r1, float r2);
@@ -2390,7 +2346,7 @@ headers, no pico SDK, no hardware.
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
-| `test_tools` | host-stubbed utility coverage from `tools.cpp` |
+| `test_tools` | host-stubbed utility coverage from `tools.cpp`, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
 
 ### Adding a new test suite
 

@@ -220,6 +220,25 @@ void debugInit(void) {
   hal_debug_init(HAL_DEBUG_DEFAULT_BAUD);
 }
 
+void setDebugPrefixWithColon(const char *moduleName) {
+  char prefix[HAL_DEBUG_PREFIX_SIZE] = {0};
+  size_t prefixLen = 0;
+
+  if (moduleName == NULL) {
+    return;
+  }
+
+  while (moduleName[prefixLen] != '\0' && prefixLen < (sizeof(prefix) - 2)) {
+    prefix[prefixLen] = moduleName[prefixLen];
+    prefixLen++;
+  }
+
+  prefix[prefixLen++] = ':';
+  prefix[prefixLen] = '\0';
+
+  hal_deb_set_prefix(prefix);
+}
+
 char *printBinaryAndSize(int number, char *buf, size_t bufSize) {
   if (buf == NULL || bufSize == 0) {
     return buf;

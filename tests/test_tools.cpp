@@ -342,6 +342,16 @@ void test_concatStrings_null_args(void) {
     TEST_ASSERT_FALSE(concatStrings(buf, sizeof(buf), "a", NULL));
 }
 
+void test_setDebugPrefixWithColon_logs_module_prefix(void) {
+    hal_mock_serial_reset();
+
+    debugInit();
+    setDebugPrefixWithColon("ECU");
+    deb("hello");
+
+    TEST_ASSERT_EQUAL_STRING("ECU: hello", hal_mock_deb_last_line());
+}
+
 /* ── isValidString ─────────────────────────────────────────────────────── */
 
 void test_isValidString_valid(void) {
@@ -780,6 +790,7 @@ int main(void) {
     RUN_TEST(test_concatStrings_too_small_buffer);
     RUN_TEST(test_concatStrings_zero_dest_size);
     RUN_TEST(test_concatStrings_null_args);
+    RUN_TEST(test_setDebugPrefixWithColon_logs_module_prefix);
 
     RUN_TEST(test_isValidString_valid);
     RUN_TEST(test_isValidString_null);
