@@ -36,6 +36,16 @@ The internal header:
 
 is still available for advanced/internal usage.
 
+Utility-only includes are also available:
+
+```cpp
+#include <tools.h>    // C++ utility aggregator
+```
+
+```c
+#include <tools_c.h>  // C-compatible utility API
+```
+
 ## What you get (high-level)
 
 - Portable HAL modules (`hal_gpio_*`, `hal_i2c_*`, `hal_can_*`, `hal_display_*`, ...)
@@ -88,6 +98,25 @@ void loop() {
     hal_delay_ms(200);
 }
 ```
+
+## Debug helper quick example
+
+For codebases that already use `debugInit()`, `deb(...)`, and module prefixes,
+the utility layer provides a shorthand that replaces manual
+`concatStrings(..., MODULE_NAME, ":")` setup:
+
+```c
+#include <tools_c.h>
+
+void setup(void) {
+  debugInit();
+  setDebugPrefixWithColon("ECU");
+  deb("ready");
+}
+```
+
+`setDebugPrefixWithColon(...)` appends `:` to the provided module name and
+forwards the final prefix to `hal_deb_set_prefix(...)`.
 
 ## Soft timer table quick example
 

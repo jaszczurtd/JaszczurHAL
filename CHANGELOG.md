@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased] - 2026-04-21
 
 ### Added
+- `setDebugPrefixWithColon(moduleName)` — utility helper in `tools_api.h` /
+  `tools.cpp` that appends `:` to a module tag and forwards the result to
+  `hal_deb_set_prefix()`. Intended to replace repetitive local-buffer +
+  `concatStrings(..., MODULE_NAME, ":")` setup code in clients.
 - `hal_i2c_write_byte(address, data, *outWriteOk)` /
   `hal_i2c_write_byte_bus(bus, address, data, *outWriteOk)` — one-shot
   convenience helper that performs the common "beginTransmission +
@@ -45,6 +49,8 @@ All notable changes to this project will be documented in this file.
   (float ↔ uint32_t via memcpy) in `tools_api.h`.
 - Mock: `hal_mock_serial_inject_rx(data, len)` — inject bytes into the
   mock serial RX buffer for testing `hal_serial_available/read`.
+- Tests: `test_tools` now verifies that `setDebugPrefixWithColon("ECU")`
+  produces the expected `ECU:` debug prefix.
 - `hal_i2c_slave_get_transaction_count()` and
   `hal_i2c_slave_get_transaction_count_bus(uint8_t bus)` — return the
   number of completed I2C bus transactions (master reads and writes)
@@ -59,10 +65,18 @@ All notable changes to this project will be documented in this file.
   (read). Resets to 0 on `hal_i2c_init*()`. Wraps at `UINT32_MAX`.
 
 ### Changed
+- Documentation updated to cover `setDebugPrefixWithColon(...)`, fix the
+  published `src/` / `hal/impl/` layout in the API reference, and align the
+  utility include guidance (`tools.h` vs `tools_c.h`) with the actual tree.
 - `hal_pwm_freq_create()` no longer starts the PWM slice immediately.
   The GPIO function and slice enable are deferred until the first
   `hal_pwm_freq_write()` call, preventing a power-on glitch on pins
   with inverted logic (0 % duty = actuator ON).
+- `hal_i2c_slave_reg_write8[_bus]()` and
+  `hal_i2c_slave_reg_write16[_bus]()` return `void` again (reverts the
+  short-lived return-value approach: writes always target the local
+  register-map buffer and therefore always succeed, making return values
+  meaningless for detecting real bus activity).
 
 ### Fixed
 - Mock `hal_i2c_end_transmission_bus()` now returns 2 (NACK on address)
@@ -75,13 +89,6 @@ All notable changes to this project will be documented in this file.
   `hal_mock_i2c_get_read_byte_lock_depth_bus()` to expose lock-depth
   captured at the byte-read point inside one-shot `read_byte` helpers
   for mutex-behavior tests.
-
-### Changed
-- `hal_i2c_slave_reg_write8[_bus]()` and
-  `hal_i2c_slave_reg_write16[_bus]()` return `void` again (reverts the
-  short-lived return-value approach: writes always target the local
-  register-map buffer and therefore always succeed, making return values
-  meaningless for detecting real bus activity).
 
 ## [1.4.0] - 2026-04-14
 

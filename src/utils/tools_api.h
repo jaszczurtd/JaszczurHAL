@@ -42,6 +42,8 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
 
 /** @brief Initialise debug backend. */
 void debugInit(void);
+/** @brief Set debug prefix to module name followed by a colon. */
+void setDebugPrefixWithColon(const char *moduleName);
 /** @brief Legacy alias for @ref hal_deb_set_prefix. */
 #define setDebugPrefix hal_deb_set_prefix
 /** @brief Legacy alias for @ref hal_deb. */
