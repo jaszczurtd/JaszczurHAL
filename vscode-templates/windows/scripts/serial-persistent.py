@@ -5,6 +5,9 @@ Persistent Serial Monitor.
 Waits for a serial device, connects, reads continuously, and when the device
 disappears it goes back to waiting. Ctrl+C exits.
 
+By default, the monitor keeps exclusive access to the port and waits if
+another process currently owns the lock.
+
 Supported modes:
 - pico  : only Pico/RP2040 USB CDC devices, Debug Probe excluded
 - probe : only Raspberry Pi Debug Probe / Picoprobe
@@ -218,7 +221,7 @@ def _clear_hupcl(fd: int) -> None:
         pass
 
 
-def open_serial(port, baud):
+def open_serial(port, baud, exclusive=True):
     ser = serial.Serial()
     ser.port         = port
     ser.baudrate     = baud
@@ -228,10 +231,11 @@ def open_serial(port, baud):
     ser.dsrdtr       = False
     ser.rtscts       = False
 
-    try:
-        ser.exclusive = True
-    except Exception:
-        pass
+    if exclusive:
+        try:
+            ser.exclusive = True
+        except Exception:
+            pass
 
     ser.open()
     if os.name != "nt":
@@ -257,12 +261,28 @@ def open_serial(port, baud):
     return ser
 
 
-def monitor(port, baud):
+def is_exclusive_lock_error(exc):
+    text = str(exc).lower()
+    return (
+        "could not exclusively lock port" in text
+        or "resource temporarily unavailable" in text
+        or "errno 11" in text
+    )
+
+
+def monitor(port, baud, use_exclusive=True):
     try:
-        ser = open_serial(port, baud)
+        ser = open_serial(port, baud, exclusive=use_exclusive)
     except serial.SerialException as e:
-        print(f"{RED}Cannot open {port}: {e}{NC}")
-        return "error"
+        if use_exclusive and is_exclusive_lock_error(e):
+            print(
+                f"{YELLOW}Port {port} is locked by another process; "
+                f"waiting for exclusive access...{NC}"
+            )
+            return "locked"
+        else:
+            print(f"{RED}Cannot open {port}: {e}{NC}")
+            return "error"
 
     print(f"{GREEN}Connected to {port} @ {baud}{NC}")
     print(f"{DIM}{'─' * 80}{NC}")
@@ -324,6 +344,11 @@ def parse_args():
         default="pico",
         help="Autodetection mode (default: pico)",
     )
+    parser.add_argument(
+        "--no-exclusive",
+        action="store_true",
+        help="Disable exclusive lock attempt when opening serial port",
+    )
     return parser.parse_args()
 
 
@@ -338,6 +363,7 @@ def main():
     print(f"  Baud:   {GREEN}{args.baud}{NC}")
     print(f"  Mode:   {GREEN}{args.mode}{NC}")
     print(f"  Port:   {GREEN}{preferred if preferred else 'auto'}{NC}")
+    print(f"  Lock:   {GREEN}{'shared' if args.no_exclusive else 'exclusive-only'}{NC}")
     print(f"  {YELLOW}Ctrl+C{NC} to stop")
     print()
 
@@ -347,7 +373,7 @@ def main():
         if not port:
             port = wait_for_device(args.mode, preferred)
 
-        result = monitor(port, args.baud)
+        result = monitor(port, args.baud, use_exclusive=not args.no_exclusive)
 
         if result == "quit":
             print(f"\n{CYAN}Done.{NC}")
@@ -357,6 +383,10 @@ def main():
             print(f"\n{DIM}{'─' * 80}{NC}")
             print(f"{YELLOW}Device disconnected: {port}{NC}\n")
             time.sleep(0.5)
+            continue
+
+        if result == "locked":
+            time.sleep(0.8)
             continue
 
         if result == "error":
