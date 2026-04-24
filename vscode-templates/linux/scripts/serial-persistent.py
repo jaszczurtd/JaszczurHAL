@@ -5,6 +5,11 @@ Persistent Serial Monitor.
 Waits for a serial device, connects, reads continuously, and when the device
 disappears it goes back to waiting. Ctrl+C exits.
 
+This is the primary serial-monitor path for the template. It re-reads the
+preferred port (`persistentSerialMonitor.port` or `arduino.uploadPort` in
+`.vscode/settings.json`) while running, so a `Change port` task
+(`Ctrl+Shift+9`) takes effect without restarting the monitor.
+
 Supported modes:
 - pico  : only Pico/RP2040 USB CDC devices, Debug Probe excluded
 - probe : only Raspberry Pi Debug Probe / Picoprobe
@@ -109,10 +114,13 @@ def format_port_info(port_info):
     return f"{port_info.device}[{kind}|{uid}|{desc}]"
 
 
-def find_settings():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_dir = os.path.dirname(script_dir)
-    settings_path = os.path.join(project_dir, ".vscode", "settings.json")
+def find_settings(project_dir=""):
+    if project_dir:
+        settings_path = os.path.join(project_dir, ".vscode", "settings.json")
+    else:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_dir = os.path.dirname(script_dir)
+        settings_path = os.path.join(project_dir, ".vscode", "settings.json")
 
     if os.path.isfile(settings_path):
         try:
@@ -124,11 +132,11 @@ def find_settings():
     return {}
 
 
-def get_preferred_port(cli_port):
+def get_preferred_port(cli_port, project_dir=""):
     if cli_port:
         return cli_port
 
-    settings = find_settings()
+    settings = find_settings(project_dir)
     candidates = [
         settings.get("persistentSerialMonitor.port", ""),
         settings.get("arduino.uploadPort", ""),
@@ -140,6 +148,12 @@ def get_preferred_port(cli_port):
             return port.strip()
 
     return ""
+
+
+def resolve_preferred_port(cli_port, project_dir=""):
+    """Resolve the preferred port on every call so live edits to
+    `.vscode/settings.json` propagate without restarting the monitor."""
+    return get_preferred_port(cli_port, project_dir)
 
 
 def find_port(mode, preferred_port=""):
@@ -156,11 +170,22 @@ def find_port(mode, preferred_port=""):
     return None, "not-found"
 
 
-def wait_for_device(mode, preferred_port=""):
+def wait_for_device(mode, cli_port="", project_dir=""):
     spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
     i = 0
+    last_preferred = None
 
     while True:
+        preferred_port = resolve_preferred_port(cli_port, project_dir)
+
+        if preferred_port != last_preferred:
+            print(f"\r{' ' * 140}\r", end="", flush=True)
+            if last_preferred is not None:
+                before = last_preferred if last_preferred else "auto"
+                after = preferred_port if preferred_port else "auto"
+                print(f"{CYAN}Port preference changed: {before} -> {after}{NC}")
+            last_preferred = preferred_port
+
         port, reason = find_port(mode, preferred_port)
 
         if port:
@@ -251,7 +276,7 @@ def open_serial(port, baud):
     return ser
 
 
-def monitor(port, baud):
+def monitor(port, baud, cli_port="", project_dir=""):
     try:
         ser = open_serial(port, baud)
     except serial.SerialException as e:
@@ -267,6 +292,16 @@ def monitor(port, baud):
                 raw = ser.readline()
             except (serial.SerialException, OSError):
                 break
+
+            preferred_port = resolve_preferred_port(cli_port, project_dir)
+            if preferred_port and preferred_port != port:
+                print()
+                print(f"{CYAN}Port preference changed: {port} -> {preferred_port}{NC}")
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+                return "port-changed"
 
             if not raw:
                 continue
@@ -318,12 +353,18 @@ def parse_args():
         default="pico",
         help="Autodetection mode (default: pico)",
     )
+    parser.add_argument(
+        "--project-dir",
+        default="",
+        help="Project directory used to read .vscode/settings.json for preferred-port lookup. "
+             "If omitted, the script uses the parent of its own scripts/ directory.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
-    preferred = get_preferred_port(args.port)
+    preferred = resolve_preferred_port(args.port, args.project_dir)
 
     print()
     print(f"{BOLD}{CYAN}╔══════════════════════════════════════════════════════════╗{NC}")
@@ -336,16 +377,22 @@ def main():
     print()
 
     while True:
+        preferred = resolve_preferred_port(args.port, args.project_dir)
         port, _ = find_port(args.mode, preferred)
 
         if not port:
-            port = wait_for_device(args.mode, preferred)
+            port = wait_for_device(args.mode, args.port, args.project_dir)
 
-        result = monitor(port, args.baud)
+        result = monitor(port, args.baud, args.port, args.project_dir)
 
         if result == "quit":
             print(f"\n{CYAN}Done.{NC}")
             break
+
+        if result == "port-changed":
+            print(f"\n{DIM}{'─' * 80}{NC}")
+            time.sleep(0.2)
+            continue
 
         if result == "disconnected":
             print(f"\n{DIM}{'─' * 80}{NC}")

@@ -17,6 +17,10 @@ install_manifest.txt
 
 # IDE / editor
 .vscode/
+# …but vscode-templates ships a reference .vscode/ that downstream projects copy,
+# so keep those tracked:
+!vscode-templates/*/.vscode/
+!vscode-templates/*/.vscode/**
 .idea/
 .codex
 *.swp

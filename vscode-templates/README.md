@@ -60,9 +60,9 @@ Each platform template includes:
 | Script | Purpose | Platform |
 |--------|---------|----------|
 | `arduino_vscode.py` | Main build orchestrator | Windows |
-| `build.sh` | Main build orchestrator | Linux |
+| `build.sh` | Main build orchestrator (Build / Debug / Upload) | Linux |
 | `select-board.sh` | Interactive board/options selector | Both |
-| `serial-persistent.py` | Smart serial monitor (auto-reconnect) | Both |
+| `serial-persistent.py` | Persistent serial monitor — **default** (auto-reconnect, live port re-read) | Both |
 | `refresh-intellisense.sh` | Regenerate `compile_commands.json` | Both |
 | `upload-uf2.sh` | UF2 bootloader upload | Both |
 
@@ -81,16 +81,26 @@ Each platform template includes:
 - Support for debug symbols
 
 **Linux** (via `build.sh`):
-- Similar build process using bash
-- Compatible with standard toolchains
+- Single entry point for Build / Build (Debug) / Upload — picks up FQBN,
+  port, USB identity, and `-Werror` settings from `.vscode/settings.json`
+- Starts the persistent serial monitor in the background on Upload so
+  logs are visible immediately after the board re-enumerates
 
 ### 2. Serial Monitoring
 
-`serial-persistent.py` provides intelligent monitoring:
-- Auto-waits for device to appear
+`serial-persistent.py` is the **default** monitor going forward. It:
+- Auto-waits for the device to appear
 - Auto-reconnects after unplug/replug
+- Re-reads the preferred port (`persistentSerialMonitor.port` /
+  `arduino.uploadPort`) from `.vscode/settings.json` while running, so
+  **Change port** (`Ctrl+Shift+9`) applies live without restarting the monitor
 - USB VID:PID filtering (recognize Pico vs Debug Probe)
 - Modes: `pico`, `probe`, `any`, or explicit port
+
+One-shot serial-monitor scripts (`serial-monitor.py/.sh`) are still
+present in the Windows template for legacy use but are **deprecated** in
+favor of the persistent path; new projects should use
+`serial-persistent.py` for all monitoring.
 
 ### 3. Debugging
 
@@ -185,7 +195,7 @@ Edit `.vscode/keybindings.json` (create if it doesn't exist):
     {
         "key": "ctrl+alt+b",
         "command": "workbench.action.tasks.runTask",
-        "args": "Arduino: Build"
+        "args": "Build"
     }
 ]
 ```
