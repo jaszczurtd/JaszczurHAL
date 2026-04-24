@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_timer.h"
 #include "../../hal_config.h"
 
@@ -47,3 +49,5 @@ bool hal_timer_cancel_alarm(hal_alarm_id_t alarm_id) {
     }
     return false;
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

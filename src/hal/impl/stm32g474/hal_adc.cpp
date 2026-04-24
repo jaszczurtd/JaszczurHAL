@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_adc.h"
 #include "../../hal_sync.h"
 
@@ -30,3 +32,5 @@ int hal_adc_read(uint8_t pin) {
     hal_mutex_unlock(s_adc_mutex);
     return val;
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

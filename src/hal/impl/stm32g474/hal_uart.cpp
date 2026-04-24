@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_config.h"
 #ifndef HAL_DISABLE_UART
 
@@ -132,3 +134,5 @@ void hal_uart_destroy(hal_uart_t h) {
 }
 
 #endif /* HAL_DISABLE_UART */
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

@@ -46,6 +46,22 @@ extern "C" {
 #define HAL_SERIAL_SESSION_UNKNOWN "unknown"
 
 /**
+ * @brief Optional callback invoked when an incoming line is not recognised
+ *        as a built-in session command.
+ *
+ * When registered via @ref hal_serial_session_set_unknown_handler, the helper
+ * stops emitting the default `ERR UNKNOWN` reply and instead forwards the
+ * full line (NUL-terminated, without trailing CR/LF) to this callback. This
+ * allows higher-level modules (e.g. test fixtures, application command
+ * handlers) to consume serial commands only after the bootstrap session
+ * parser has had its chance to handle them, preventing two consumers from
+ * fighting over individual bytes on the same UART/CDC stream.
+ *
+ * The callback is responsible for any reply it wishes to send.
+ */
+typedef void (*hal_serial_session_unknown_cb_t)(const char *line, void *user);
+
+/**
  * @brief Runtime state for one serial session endpoint.
  *
  * The string pointers @c module_tag, @c fw_version and @c build_id are stored
@@ -63,6 +79,8 @@ typedef struct {
     const char *fw_version;                    /**< Firmware version string used in HELLO. */
     const char *build_id;                      /**< Build identifier string used in HELLO. */
     char uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE]; /**< Cached device UID hex string. */
+    hal_serial_session_unknown_cb_t unknown_handler; /**< Optional sink for non-protocol command lines. */
+    void *unknown_user;                        /**< Opaque user pointer forwarded to @c unknown_handler. */
 } hal_serial_session_t;
 
 /**
@@ -94,6 +112,29 @@ static inline void hal_serial_session_init(hal_serial_session_t *session,
     if (!hal_get_device_uid_hex(session->uid_hex, sizeof(session->uid_hex))) {
         session->uid_hex[0] = '\0';
     }
+    session->unknown_handler = NULL;
+    session->unknown_user = NULL;
+}
+
+/**
+ * @brief Register (or clear) a sink for unrecognised command lines.
+ *
+ * When @p cb is non-NULL the session helper stops printing the default
+ * `ERR UNKNOWN` reply for unknown lines and instead invokes @p cb with the
+ * received line. Pass NULL for @p cb to restore the default behaviour.
+ *
+ * @param session Session context.
+ * @param cb      Callback to invoke for unknown lines, or NULL to clear.
+ * @param user    Opaque pointer forwarded to @p cb.
+ */
+static inline void hal_serial_session_set_unknown_handler(hal_serial_session_t *session,
+                                                          hal_serial_session_unknown_cb_t cb,
+                                                          void *user) {
+    if (session == NULL) {
+        return;
+    }
+    session->unknown_handler = cb;
+    session->unknown_user = user;
 }
 
 /**
@@ -165,7 +206,11 @@ static inline void hal_serial_session_poll(hal_serial_session_t *session) {
                          session->uid_hex);
                 hal_serial_println(response);
             } else {
-                hal_serial_println("ERR UNKNOWN");
+                if (session->unknown_handler != NULL) {
+                    session->unknown_handler(session->line, session->unknown_user);
+                } else {
+                    hal_serial_println("ERR UNKNOWN");
+                }
             }
 
             session->line_len = 0u;

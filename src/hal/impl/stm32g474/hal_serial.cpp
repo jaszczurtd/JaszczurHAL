@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_serial.h"
 #include "../../hal_system.h"
 #include "../../hal_config.h"
@@ -135,14 +137,35 @@ void hal_serial_println(const char *s) {
 }
 
 int hal_serial_available(void) {
-    return s_mock_rx_len - s_mock_rx_pos;
+    int len = s_mock_rx_len;
+    if (len < 0) {
+        len = 0;
+    } else if (len > (int)sizeof(s_mock_rx_buf)) {
+        len = (int)sizeof(s_mock_rx_buf);
+    }
+
+    if (s_mock_rx_pos < 0 || s_mock_rx_pos >= len) {
+        return 0;
+    }
+
+    return len - s_mock_rx_pos;
 }
 
 int hal_serial_read(void) {
-    if (s_mock_rx_pos >= s_mock_rx_len) {
+    int len = s_mock_rx_len;
+    if (len < 0) {
+        len = 0;
+    } else if (len > (int)sizeof(s_mock_rx_buf)) {
+        len = (int)sizeof(s_mock_rx_buf);
+    }
+
+    if (s_mock_rx_pos < 0 || s_mock_rx_pos >= len) {
         return -1;
     }
-    return (int)s_mock_rx_buf[s_mock_rx_pos++];
+
+    const int pos = s_mock_rx_pos;
+    s_mock_rx_pos = pos + 1;
+    return (int)s_mock_rx_buf[(size_t)pos];
 }
 
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void) {
@@ -333,3 +356,5 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes) 
 
     hal_deb("%s", line);
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

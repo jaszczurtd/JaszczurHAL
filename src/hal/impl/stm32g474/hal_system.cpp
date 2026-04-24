@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_system.h"
 
 #include <string.h>
@@ -90,3 +92,5 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen) {
     buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
     return true;
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
