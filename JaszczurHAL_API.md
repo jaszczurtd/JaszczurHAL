@@ -36,7 +36,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/drivers/` - bundled third-party drivers used by optional HAL modules.
+- `src/hal/impl/arduino/drivers/` - bundled third-party drivers used by optional HAL modules.
 - `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the

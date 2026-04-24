@@ -105,6 +105,14 @@ All notable changes to this project will be documented in this file.
   for the I2C master (controller) side. Incremented on every
   `hal_i2c_end_transmission*()` (write) and `hal_i2c_request_from*()`
   (read). Resets to 0 on `hal_i2c_init*()`. Wraps at `UINT32_MAX`.
+- `hal_gpio_set_irq_priority(priority)` and `hal_irq_priority_t`
+  (`HAL_IRQ_PRIORITY_HIGHEST` / `HIGH` / `DEFAULT` / `LOW`) -
+  configurable NVIC priority for the GPIO interrupt bank. On RP2040 all
+  GPIO pins share `IO_IRQ_BANK0`; call after `hal_gpio_attach_interrupt()`.
+  Raising priority above other peripherals (e.g. I2C) prevents their
+  ISRs from blocking edge counting. No-op on platforms without
+  configurable IRQ priorities. Mock backend exposes the configured
+  value for testing.
 
 ### Changed
 - **Breaking API**: `hal_serial_session_init()` signature changed from

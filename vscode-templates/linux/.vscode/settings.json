@@ -1,0 +1,38 @@
+{
+    "//note1": "Keys under `arduino.*` follow the VS Code Arduino extension",
+    "//note2": "convention, so the same settings.json stays compatible with that",
+    "//note3": "extension if it is installed. build.sh reads them directly and",
+    "//note4": "does not depend on the extension being present.",
+
+    "//": "--- Required ---",
+    "arduino.fqbn": "rp2040:rp2040:rpipico",
+    "arduino.uploadPort": "/dev/ttyACM0",
+    "arduino.sketchbookPath": "",
+
+    "//1": "--- Optional arduino-cli binary overrides ---",
+    "arduino.cliPath": "",
+    "arduino.verbose": false,
+
+    "//2": "--- Optional: per-device USB identity (Earle Philhower rp2040 core) ---",
+    "//3": "Host tools and `dmesg` / `lsusb` will report these strings. Useful when",
+    "//4": "several boards with identical VID/PID are plugged in simultaneously and",
+    "//5": "you want a human-readable way to tell them apart.",
+    "build.usbManufacturer": "",
+    "build.usbProduct": "",
+
+    "//6": "--- Optional: add -Werror to compiler flags ---",
+    "build.werror": false,
+
+    "//7": "--- Optional: persistent serial monitor preferred port (overrides arduino.uploadPort) ---",
+    "persistentSerialMonitor.port": "",
+
+    "//8": "--- Required for F5 debugging via Raspberry Pi Debug Probe ---",
+    "//9": "openocd and arm-none-eabi-gdb ship with the arduino-pico core.",
+    "//10": "Replace the `<version>` segments below with whatever arduino-cli",
+    "//11": "installed under ~/.arduino15/packages/rp2040/ (check `ls` there).",
+    "cortex-debug.openocdPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/<version>/bin/openocd",
+    "cortex-debug.openocdScriptsPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-openocd/<version>/share/openocd/scripts",
+    "cortex-debug.gdbPath": "${userHome}/.arduino15/packages/rp2040/tools/pqt-gcc/<version>/bin/arm-none-eabi-gdb",
+    "cortex-debug.svdFileRP2040": "${userHome}/.arduino15/packages/rp2040/hardware/rp2040/<core-version>/pico-sdk/src/rp2040/hardware_regs/RP2040.svd",
+    "cortex-debug.svdFileRP2350": "${userHome}/.arduino15/packages/rp2040/hardware/rp2040/<core-version>/pico-sdk/src/rp2350/hardware_regs/RP2350.svd"
+}

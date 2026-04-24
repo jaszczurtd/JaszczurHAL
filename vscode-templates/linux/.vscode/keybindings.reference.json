@@ -1,0 +1,85 @@
+// =====================================================================
+// Reference keybindings for JaszczurHAL projects.
+//
+// These are NOT auto-loaded. To install:
+//   Ctrl+K Ctrl+S            → open keyboard shortcuts editor
+//   Click the {} icon         → open user keybindings.json
+//   Paste entries below into the [] array at that file.
+//
+// Each binding is scoped to code files via the `when` clause, so it won't
+// interfere with shortcuts in other file types.
+// =====================================================================
+[
+    {
+        "key": "ctrl+shift+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Build",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Upload",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+3",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Monitor (persistent)",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+4",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Upload (UF2 / BOOTSEL)",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+5",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Monitor (Debug Probe)",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+6",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Refresh IntelliSense",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+7",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Clean",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+8",
+        "command": "workbench.action.tasks.runTask",
+        "args": "List ports",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+9",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Change port",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+0",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Install library",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+alt+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Select board (GUI)",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    },
+    {
+        "key": "ctrl+shift+alt+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Select board (interactive)",
+        "when": "resourceExtname == .ino || editorLangId == cpp || editorLangId == c"
+    }
+]
