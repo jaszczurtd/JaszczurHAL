@@ -121,10 +121,16 @@ find_sketch() {
 start_persistent_monitor() {
     local monitor="$PROJECT_DIR/scripts/serial-persistent.py"
     [[ -f "$monitor" ]] || return 0
-    if ! pgrep -f "serial-persistent.py -m pico" >/dev/null 2>&1; then
-        nohup python3 "$monitor" --project-dir "$PROJECT_DIR" -m pico \
-            >/tmp/persistent-monitor.log 2>&1 &
+
+    # Keep exactly one monitor instance per project to avoid mixed serial output.
+    if pgrep -f -- "$PROJECT_DIR/scripts/serial-persistent.py" >/dev/null 2>&1 \
+        || pgrep -f -- "$PROJECT_DIR/scripts/serial-monitor.py" >/dev/null 2>&1 \
+        || pgrep -f -- "serial-persistent.py .*--project-dir $PROJECT_DIR" >/dev/null 2>&1; then
+        return 0
     fi
+
+    nohup python3 "$monitor" --project-dir "$PROJECT_DIR" -m pico \
+        >/tmp/persistent-monitor.log 2>&1 &
 }
 
 # -----------------------------------------------------------------------------
