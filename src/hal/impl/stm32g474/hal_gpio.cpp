@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_gpio.h"
 
 static bool s_state[128] = {};
@@ -34,3 +36,5 @@ void hal_gpio_attach_interrupt(uint8_t pin,
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
     s_gpio_irq_priority = priority;
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_config.h"
 #include "../../hal_time.h"
 #include "../../hal_serial.h"
@@ -103,3 +105,5 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format) {
 }
 
 #endif /* HAL_DISABLE_TIME */
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

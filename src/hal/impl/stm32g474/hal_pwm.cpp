@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_pwm.h"
 
 static uint8_t s_resolution = 8u;
@@ -13,3 +15,5 @@ void hal_pwm_write(uint8_t pin, uint32_t value) {
         s_values[pin] = value;
     }
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_spi.h"
 #include "../../hal_sync.h"
 
@@ -48,3 +50,5 @@ void hal_spi_unlock(uint8_t bus) {
     spi_ensure_mutex(idx);
     hal_mutex_unlock(s_spi[idx].mutex);
 }
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

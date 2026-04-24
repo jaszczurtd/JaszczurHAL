@@ -1,3 +1,5 @@
+#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+
 #include "../../hal_config.h"
 #ifndef HAL_DISABLE_I2C
 
@@ -223,3 +225,5 @@ void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
 }
 
 #endif /* HAL_DISABLE_I2C */
+
+#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

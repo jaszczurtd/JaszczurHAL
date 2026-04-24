@@ -139,6 +139,12 @@ All notable changes to this project will be documented in this file.
   meaningless for detecting real bus activity).
 
 ### Fixed
+- stm32g474 backend source files now compile as symbol-empty units on
+  non-STM32 Arduino targets. This avoids duplicate-definition link failures
+  when platform build systems compile all backend directories under `src/`.
+- stm32g474 mock serial RX path (`hal_serial.cpp`) now guards index ranges and
+  normalizes requested lengths before buffer access, removing host-compiler
+  array-bounds warnings and preventing potential out-of-bounds reads.
 - Mock `hal_i2c_end_transmission_bus()` now returns 2 (NACK on address)
   when the mock busy flag is set. Previously it always returned 0,
   making it impossible to test I2C error paths.

@@ -7,6 +7,13 @@ JaszczurHAL is a hardware abstraction layer and utility library for embedded pro
 Today the most complete backend targets RP2040 boards through Arduino-pico, but the long-term 
 goal is to bring more targets, like STM32.
 
+Backend coexistence note:
+
+- stm32g474 backend translation units are compile-guarded to emit no symbols
+  on non-STM32 Arduino builds (for example RP2040). This prevents
+  cross-backend duplicate-symbol linker failures in build systems that compile
+  every source file under `src/`.
+
 ## Why this exists
 
 Typical embedded projects start as quick written code and later become harder to evolve
