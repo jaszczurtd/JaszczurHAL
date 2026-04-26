@@ -16,7 +16,9 @@
 #include "hal_gpio.h"
 #include "hal_math.h"
 #include "hal_bits.h"
+#ifdef HAL_ENABLE_CRYPTO
 #include "hal_crypto.h"
+#endif
 #include "hal_pwm.h"
 #ifndef HAL_DISABLE_PWM_FREQ
 #include "hal_pwm_freq.h"

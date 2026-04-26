@@ -94,6 +94,16 @@ HAL_ENABLE_CJSON
   Enable bundled cJSON/cJSON_Utils headers and sources.
   Used by `src/tools.h` to expose cJSON includes.
 
+HAL_ENABLE_CRYPTO
+  Enable `hal_crypto` (Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20,
+  ChaCha20-Poly1305) and the dependent `hal_sc_auth` helper. Without
+  this flag the public headers expand to nothing and `hal_crypto.cpp`
+  produces an empty translation unit, so projects that never touch
+  crypto pay zero code/RAM cost.
+  `hal_serial_session` still works without crypto: the
+  `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` handlers are compiled out and
+  `hal_serial_session_is_authenticated()` returns false unconditionally.
+
 Automatic propagation rules
 ---------------------------
 HAL_DISABLE_EEPROM      -> HAL_DISABLE_KV

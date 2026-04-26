@@ -145,6 +145,25 @@
   #endif
 #endif
 
+/* ── Module enable flags (opt-in) ────────────────────────────────────── */
+/* These pull in optional code that is OFF by default. Define them in
+   `hal_project_config.h` (or via `-D`) when the project actually uses the
+   corresponding API.
+
+   Supported flags:
+     HAL_ENABLE_CJSON           — bundled cJSON / cJSON_Utils sources.
+     HAL_ENABLE_CRYPTO          — `hal_crypto` (Base64, MD5, SHA-256,
+                                  HMAC-SHA256, ChaCha20 / -Poly1305) and
+                                  the dependent `hal_sc_auth` helper.
+                                  Without this flag the headers expand
+                                  to nothing and the implementation TUs
+                                  produce empty objects.
+                                  `hal_serial_session` keeps working —
+                                  the `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`
+                                  handlers are simply compiled out and
+                                  the session never enters the
+                                  authenticated state.                   */
+
 /* ── Platform-independent Arduino-compat macros ──────────────────────── */
 /* Only define fallbacks when building WITHOUT Arduino — on Arduino the
    real F()/PROGMEM come from the core headers included later.          */

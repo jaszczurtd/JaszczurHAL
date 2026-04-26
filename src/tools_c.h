@@ -42,7 +42,9 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #include <hal/hal_soft_timer.h>
 #include <hal/hal_pid_controller.h>
 #include <hal/hal_system.h>
+#ifdef HAL_ENABLE_CRYPTO
 #include <hal/hal_crypto.h>
+#endif
 #include <hal/hal_sync.h>
 #include <hal/hal_spi.h>
 #ifndef HAL_DISABLE_I2C

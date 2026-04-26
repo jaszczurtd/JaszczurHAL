@@ -2,11 +2,21 @@
 
 /**
  * @file hal_crypto.h
- * @brief Backend-agnostic Base64, MD5 and ChaCha20 helpers.
+ * @brief Backend-agnostic Base64, MD5, SHA-256 / HMAC-SHA256 and ChaCha20 helpers.
  *
  * Implements RFC 4648 "base64" alphabet (`A-Z`, `a-z`, `0-9`, `+`, `/`)
- * with `=` padding, RFC 1321 MD5 hashing and IETF ChaCha20 (RFC 8439).
+ * with `=` padding, RFC 1321 MD5 hashing, FIPS 180-4 SHA-256 with the
+ * RFC 2104 HMAC construction, and IETF ChaCha20 (RFC 8439).
+ *
+ * The whole module is opt-in: define @c HAL_ENABLE_CRYPTO in
+ * `hal_project_config.h` (or via `-D`) to compile it in. Without that
+ * flag this header is empty and `hal_crypto.cpp` produces an empty TU,
+ * so projects that never touch crypto pay zero code/RAM cost.
  */
+
+#include "hal_config.h"
+
+#ifdef HAL_ENABLE_CRYPTO
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -210,6 +220,80 @@ bool hal_base64_decode(const char *input,
                        size_t out_size,
                        size_t *out_len);
 
+/** @brief SHA-256 digest length in bytes. */
+#define HAL_SHA256_DIGEST_BYTES 32u
+
+/** @brief Required buffer size for SHA-256 lowercase hex string (`64 + NUL`). */
+#define HAL_SHA256_HEX_BUF_SIZE 65u
+
+/** @brief HMAC-SHA256 block size in bytes (matches the inner SHA-256 block). */
+#define HAL_HMAC_SHA256_BLOCK_BYTES 64u
+
+/**
+ * @brief Compute SHA-256 digest of input data (FIPS 180-4).
+ *
+ * @param input      Input data pointer (may be NULL only when @p input_len=0).
+ * @param input_len  Input size in bytes.
+ * @param out_digest Output buffer of @ref HAL_SHA256_DIGEST_BYTES bytes.
+ * @return true on success, false on invalid args.
+ */
+bool hal_sha256(const uint8_t *input,
+                size_t input_len,
+                uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
+
+/**
+ * @brief Compute SHA-256 digest and format it as lowercase hex.
+ *
+ * Example output: `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`.
+ *
+ * @param input      Input data pointer (may be NULL only when @p input_len=0).
+ * @param input_len  Input size in bytes.
+ * @param output     Output string buffer (at least @ref HAL_SHA256_HEX_BUF_SIZE bytes).
+ * @param out_size   Size of @p output in bytes.
+ * @return true on success, false on invalid args or insufficient buffer.
+ */
+bool hal_sha256_hex(const uint8_t *input,
+                    size_t input_len,
+                    char *output,
+                    size_t out_size);
+
+/**
+ * @brief Compute HMAC-SHA256 (RFC 2104).
+ *
+ * @param key         Key bytes (may be NULL only when @p key_len=0).
+ * @param key_len     Key size in bytes (no upper bound; longer keys are
+ *                    pre-hashed per RFC 2104).
+ * @param message     Message bytes (may be NULL only when @p message_len=0).
+ * @param message_len Message size in bytes.
+ * @param out_mac     Output buffer of @ref HAL_SHA256_DIGEST_BYTES bytes.
+ * @return true on success, false on invalid args.
+ */
+bool hal_hmac_sha256(const uint8_t *key,
+                     size_t key_len,
+                     const uint8_t *message,
+                     size_t message_len,
+                     uint8_t out_mac[HAL_SHA256_DIGEST_BYTES]);
+
+/**
+ * @brief Compute HMAC-SHA256 and format the tag as lowercase hex.
+ *
+ * @param key         Key bytes (may be NULL only when @p key_len=0).
+ * @param key_len     Key size in bytes.
+ * @param message     Message bytes (may be NULL only when @p message_len=0).
+ * @param message_len Message size in bytes.
+ * @param output      Output string buffer (at least @ref HAL_SHA256_HEX_BUF_SIZE bytes).
+ * @param out_size    Size of @p output in bytes.
+ * @return true on success, false on invalid args or insufficient buffer.
+ */
+bool hal_hmac_sha256_hex(const uint8_t *key,
+                         size_t key_len,
+                         const uint8_t *message,
+                         size_t message_len,
+                         char *output,
+                         size_t out_size);
+
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_CRYPTO */

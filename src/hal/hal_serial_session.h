@@ -28,9 +28,13 @@
  * @ref hal_get_device_uid_hex and is also captured at init.
  */
 
+#include "hal_config.h"
 #include "hal_serial.h"
 #include "hal_serial_frame.h"
 #include "hal_system.h"
+#ifdef HAL_ENABLE_CRYPTO
+#include "hal_sc_auth.h"
+#endif
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -93,6 +97,17 @@ typedef struct {
     void *unknown_user;                        /**< Opaque user pointer forwarded to @c unknown_handler. */
     bool in_request;                           /**< true while dispatching a framed request (gates `hal_serial_session_println`). */
     uint16_t request_seq;                      /**< Sequence number of the in-flight framed request. */
+#ifdef HAL_ENABLE_CRYPTO
+    /* Authentication state (Phase 3). Compiled in only when
+     * HAL_ENABLE_CRYPTO is defined; otherwise the session helper still
+     * accepts framed traffic but never enters the authenticated state. */
+    uint8_t uid_bytes[HAL_DEVICE_UID_BYTES];   /**< Cached binary device UID (used for K_device). */
+    bool authenticated;                        /**< true once a valid AUTH_PROVE has been seen for the current session. */
+    bool challenge_pending;                    /**< true between AUTH_BEGIN and the next AUTH_PROVE (or session reset). */
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES]; /**< Last issued challenge nonce. */
+    uint32_t auth_counter;                     /**< Monotonic counter mixed into challenge derivation. */
+    uint32_t auth_failures;                    /**< Counter of failed AUTH_PROVE attempts (for Phase 7 lockout). */
+#endif /* HAL_ENABLE_CRYPTO */
 } hal_serial_session_t;
 
 /**
@@ -121,6 +136,9 @@ static inline void hal_serial_session_init(hal_serial_session_t *session,
                               ? fw_version : HAL_SERIAL_SESSION_UNKNOWN;
     session->build_id   = ((build_id != NULL) && (build_id[0] != '\0'))
                               ? build_id : HAL_SERIAL_SESSION_UNKNOWN;
+#ifdef HAL_ENABLE_CRYPTO
+    hal_get_device_uid(session->uid_bytes);
+#endif
     if (!hal_get_device_uid_hex(session->uid_hex, sizeof(session->uid_hex))) {
         session->uid_hex[0] = '\0';
     }
@@ -165,6 +183,29 @@ static inline bool hal_serial_session_is_active(const hal_serial_session_t *sess
  */
 static inline uint32_t hal_serial_session_id(const hal_serial_session_t *session) {
     return (session != NULL) ? session->session_id : 0u;
+}
+
+/**
+ * @brief Return true when a valid AUTH_PROVE has been seen for the current
+ *        session (i.e. the session is authenticated and may execute
+ *        sensitive commands).
+ *
+ * Cleared by every fresh HELLO and by AUTH_PROVE failure.
+ *
+ * Always returns false when @c HAL_ENABLE_CRYPTO is not defined — the
+ * AUTH handshake is then compiled out and the session can never enter
+ * the authenticated state.
+ *
+ * @param session Session context.
+ */
+static inline bool hal_serial_session_is_authenticated(
+    const hal_serial_session_t *session) {
+#ifdef HAL_ENABLE_CRYPTO
+    return (session != NULL) ? session->authenticated : false;
+#else
+    (void)session;
+    return false;
+#endif
 }
 
 /**
@@ -223,6 +264,213 @@ static inline void hal_serial_session__emit_hello(hal_serial_session_t *session)
     hal_serial_session_println(session, response);
 }
 
+#ifdef HAL_ENABLE_CRYPTO
+/**
+ * @brief Internal: clear authentication state.
+ *
+ * Called on every fresh HELLO (which mints a new session_id) and after a
+ * failed AUTH_PROVE.
+ */
+static inline void hal_serial_session__reset_auth(hal_serial_session_t *session) {
+    session->authenticated = false;
+    session->challenge_pending = false;
+    memset(session->challenge, 0, sizeof(session->challenge));
+}
+
+/**
+ * @brief Internal: parse exactly 2*N lowercase/uppercase hex characters into N bytes.
+ * @return true on success.
+ */
+static inline bool hal_serial_session__hex_decode(const char *hex,
+                                                  uint8_t *out,
+                                                  size_t out_len) {
+    if (hex == NULL || out == NULL) {
+        return false;
+    }
+    for (size_t i = 0u; i < out_len; ++i) {
+        uint8_t v = 0u;
+        for (uint8_t k = 0u; k < 2u; ++k) {
+            const char c = hex[i * 2u + k];
+            uint8_t nibble;
+            if (c >= '0' && c <= '9') {
+                nibble = (uint8_t)(c - '0');
+            } else if (c >= 'A' && c <= 'F') {
+                nibble = (uint8_t)(10 + (c - 'A'));
+            } else if (c >= 'a' && c <= 'f') {
+                nibble = (uint8_t)(10 + (c - 'a'));
+            } else {
+                return false;
+            }
+            v = (uint8_t)((v << 4) | nibble);
+        }
+        out[i] = v;
+    }
+    return true;
+}
+
+/**
+ * @brief Internal: derive a fresh challenge nonce.
+ *
+ * The challenge is produced as the first @ref HAL_SC_AUTH_CHALLENGE_BYTES of
+ *
+ *     SHA-256(uid_bytes || micros64_be || session_id_be || hello_counter_be
+ *             || auth_counter_be)
+ *
+ * which is unpredictable enough to withstand the bench-laptop replay threat
+ * model from §7.3 of the SerialConfigurator context provider. RP2040 bench
+ * hardware exposes a microsecond timer that ticks over millions of times per
+ * second, so feeding it into SHA-256 yields fresh values per call without
+ * relying on a hardware RNG that the HAL does not currently abstract.
+ */
+static inline void hal_serial_session__generate_challenge(
+    hal_serial_session_t *session) {
+    session->auth_counter++;
+
+    uint8_t mix[HAL_DEVICE_UID_BYTES + 8u + 4u + 4u + 4u];
+    size_t off = 0u;
+    memcpy(&mix[off], session->uid_bytes, HAL_DEVICE_UID_BYTES);
+    off += HAL_DEVICE_UID_BYTES;
+
+    const uint64_t now = hal_micros64();
+    for (size_t i = 0u; i < 8u; ++i) {
+        mix[off + i] = (uint8_t)(now >> (56u - i * 8u));
+    }
+    off += 8u;
+
+    hal_u32_to_bytes_be(session->session_id, &mix[off]);
+    off += 4u;
+    hal_u32_to_bytes_be(session->hello_counter, &mix[off]);
+    off += 4u;
+    hal_u32_to_bytes_be(session->auth_counter, &mix[off]);
+    off += 4u;
+
+    uint8_t digest[HAL_SHA256_DIGEST_BYTES];
+    if (hal_sha256(mix, off, digest)) {
+        memcpy(session->challenge, digest, HAL_SC_AUTH_CHALLENGE_BYTES);
+    } else {
+        /* Fallback: derive from session id + counter only — still unique
+         * per call within a session. */
+        memset(session->challenge, 0, HAL_SC_AUTH_CHALLENGE_BYTES);
+        hal_u32_to_bytes_be(session->session_id, &session->challenge[0]);
+        hal_u32_to_bytes_be(session->auth_counter, &session->challenge[4]);
+        hal_u32_to_bytes_be(session->hello_counter, &session->challenge[8]);
+    }
+}
+
+/**
+ * @brief Internal: handle SC_AUTH_BEGIN.
+ *
+ * Requires an active (HELLO-acknowledged) session. Generates a fresh
+ * challenge, stashes it on the session, and replies with the hex-encoded
+ * challenge. Each AUTH_BEGIN supersedes any previously pending challenge.
+ */
+static inline void hal_serial_session__handle_auth_begin(
+    hal_serial_session_t *session) {
+    if (!session->active) {
+        hal_serial_session_println(session, "SC_NOT_READY HELLO_REQUIRED");
+        return;
+    }
+
+    hal_serial_session__generate_challenge(session);
+    session->challenge_pending = true;
+
+    char hex[HAL_SC_AUTH_CHALLENGE_HEX_BUF_SIZE];
+    static const char k_hex[] = "0123456789abcdef";
+    for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
+        hex[i * 2u] = k_hex[(session->challenge[i] >> 4) & 0x0Fu];
+        hex[i * 2u + 1u] = k_hex[session->challenge[i] & 0x0Fu];
+    }
+    hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u] = '\0';
+
+    char response[64];
+    snprintf(response, sizeof(response),
+             "SC_OK AUTH_CHALLENGE %s", hex);
+    hal_serial_session_println(session, response);
+}
+
+/**
+ * @brief Internal: handle SC_AUTH_PROVE <hex>.
+ *
+ * @p args points to the first character after `SC_AUTH_PROVE` (including the
+ * leading space, which is skipped). On success the session becomes
+ * authenticated; on failure the challenge is consumed (one-shot — the host
+ * must request a new AUTH_BEGIN) and `auth_failures` is incremented.
+ */
+static inline void hal_serial_session__handle_auth_prove(
+    hal_serial_session_t *session,
+    const char *args) {
+    if (!session->active) {
+        hal_serial_session_println(session, "SC_NOT_READY HELLO_REQUIRED");
+        return;
+    }
+    if (!session->challenge_pending) {
+        hal_serial_session_println(session, "SC_AUTH_FAILED no_challenge");
+        return;
+    }
+
+    /* Skip leading spaces. */
+    while (*args == ' ') {
+        ++args;
+    }
+
+    /* Expect exactly 64 lowercase/uppercase hex chars (32 bytes), then
+     * optional trailing whitespace, then end-of-string. */
+    size_t hex_len = 0u;
+    while (args[hex_len] != '\0' && args[hex_len] != ' ') {
+        ++hex_len;
+    }
+    if (hex_len != HAL_SC_AUTH_RESPONSE_BYTES * 2u) {
+        session->challenge_pending = false;
+        session->auth_failures++;
+        hal_serial_session_println(session, "SC_AUTH_FAILED bad_length");
+        return;
+    }
+
+    uint8_t provided[HAL_SC_AUTH_RESPONSE_BYTES];
+    if (!hal_serial_session__hex_decode(args, provided, sizeof(provided))) {
+        session->challenge_pending = false;
+        session->auth_failures++;
+        hal_serial_session_println(session, "SC_AUTH_FAILED bad_hex");
+        return;
+    }
+
+    uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+    if (!hal_sc_auth_derive_device_key(session->uid_bytes,
+                                       HAL_DEVICE_UID_BYTES,
+                                       key)) {
+        session->challenge_pending = false;
+        session->auth_failures++;
+        hal_serial_session_println(session, "SC_AUTH_FAILED key_derivation");
+        return;
+    }
+
+    uint8_t expected[HAL_SC_AUTH_RESPONSE_BYTES];
+    if (!hal_sc_auth_compute_response(key,
+                                      session->challenge,
+                                      HAL_SC_AUTH_CHALLENGE_BYTES,
+                                      session->session_id,
+                                      expected)) {
+        session->challenge_pending = false;
+        session->auth_failures++;
+        hal_serial_session_println(session, "SC_AUTH_FAILED mac_compute");
+        return;
+    }
+
+    /* One-shot: consume the challenge regardless of outcome to defeat
+     * brute-force-by-replay attempts within a single AUTH_BEGIN. */
+    session->challenge_pending = false;
+
+    if (!hal_sc_auth_macs_equal(provided, expected, sizeof(expected))) {
+        session->auth_failures++;
+        hal_serial_session_println(session, "SC_AUTH_FAILED bad_mac");
+        return;
+    }
+
+    session->authenticated = true;
+    hal_serial_session_println(session, "SC_OK AUTH_OK");
+}
+#endif /* HAL_ENABLE_CRYPTO */
+
 /**
  * @brief Internal: dispatch one already-unwrapped inner command line.
  */
@@ -236,9 +484,30 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
         session->session_id =
             ((uint32_t)session->hello_counter << 20) ^
             (session->last_activity_ms & 0x000FFFFFu);
+#ifdef HAL_ENABLE_CRYPTO
+        /* New session id invalidates any previously authenticated state. */
+        hal_serial_session__reset_auth(session);
+#endif
         hal_serial_session__emit_hello(session);
         return;
     }
+
+#ifdef HAL_ENABLE_CRYPTO
+    if (strcmp(inner, "SC_AUTH_BEGIN") == 0) {
+        hal_serial_session__handle_auth_begin(session);
+        return;
+    }
+
+    static const char k_auth_prove_prefix[] = "SC_AUTH_PROVE";
+    const size_t k_auth_prove_prefix_len = sizeof(k_auth_prove_prefix) - 1u;
+    if (strncmp(inner, k_auth_prove_prefix, k_auth_prove_prefix_len) == 0 &&
+        (inner[k_auth_prove_prefix_len] == ' ' ||
+         inner[k_auth_prove_prefix_len] == '\0')) {
+        hal_serial_session__handle_auth_prove(
+            session, inner + k_auth_prove_prefix_len);
+        return;
+    }
+#endif /* HAL_ENABLE_CRYPTO */
 
     if (session->unknown_handler != NULL) {
         session->unknown_handler(inner, session->unknown_user);
