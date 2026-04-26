@@ -2,7 +2,77 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-04-26
+## [Unreleased] - 2026-04-26 (HAL_ENABLE_CRYPTO opt-in)
+
+### Changed
+- `hal_crypto` is now an **opt-in** module gated by `HAL_ENABLE_CRYPTO`
+  (define it in `hal_project_config.h` or via `-D`). Without the flag
+  `hal_crypto.h` expands to nothing and `hal_crypto.cpp` compiles to an
+  empty translation unit, so projects that never touch crypto pay zero
+  code/RAM cost. `hal_sc_auth.h` follows the same gate.
+- `hal_serial_session` keeps working without crypto: the
+  `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` handlers, the auth state fields
+  (`authenticated`, `challenge_pending`, `challenge[]`, `auth_counter`,
+  `auth_failures`, `uid_bytes`), and the `hal_sc_auth.h` include all
+  collapse to nothing. `hal_serial_session_is_authenticated()` stays
+  callable and returns `false` unconditionally when crypto is off.
+- `hal.h` and `tools_c.h` now include `hal_crypto.h` only inside an
+  `#ifdef HAL_ENABLE_CRYPTO` guard.
+- `hal_config.h` documents the new flag in its `HAL_ENABLE_*` section
+  alongside the existing `HAL_ENABLE_CJSON`.
+- VS Code project templates (`vscode-templates/{linux,windows}`) gained
+  a commented-out `HAL_ENABLE_CRYPTO` block so users can see the flag
+  next to the existing `HAL_DISABLE_*` list.
+
+### Build / tests
+- The host-test `hal_mock` library defines `HAL_ENABLE_CRYPTO` publicly
+  so the existing `test_hal_crypto` and the auth cases in
+  `test_hal_serial_session` keep running. STM32 and Arduino builds keep
+  the flag off by default; consumer projects opt in via their own
+  `hal_project_config.h`.
+
+### Migration
+- Projects that already use any `hal_*` symbol from `hal_crypto.h`
+  (Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, AEAD) or any
+  `hal_sc_auth_*` helper must add `#define HAL_ENABLE_CRYPTO` to their
+  `hal_project_config.h`. Without the flag the linker reports the
+  helpers as undefined.
+
+## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 3)
+
+### Added
+- `hal_crypto`: SHA-256 and HMAC-SHA256 helpers (`hal_sha256`, `hal_sha256_hex`,
+  `hal_hmac_sha256`, `hal_hmac_sha256_hex`). Portable C++ implementation
+  validated against FIPS 180-2 and RFC 4231 vectors. Bit-stable with the
+  host-side copy in SerialConfigurator's `sc_sha256.c`.
+- `hal_sc_auth.h` — new header-only helper for the SerialConfigurator
+  authentication handshake. Defines the compile-time salt
+  (`FIESTA-SC-AUTH-v1`), per-device key derivation
+  (`K_device = HMAC-SHA256(salt, uid_bytes)`), challenge/response
+  computation (`HMAC-SHA256(K_device, challenge || session_id_be32)`),
+  and a constant-time MAC comparison helper. Salt and constants must
+  stay byte-for-byte in sync with `src/SerialConfigurator/src/core/sc_auth.h`
+  in the Fiesta repo.
+- `hal_serial_session_is_authenticated(session)` — public reader for the
+  new auth state.
+- Built-in framed commands `SC_AUTH_BEGIN` and `SC_AUTH_PROVE <hex>` in
+  `hal_serial_session_poll`. Modules consume them automatically through
+  the existing wrapper — no per-module rollout work required.
+
+### Changed
+- `hal_serial_session_t` gained five auth fields (`authenticated`,
+  `challenge_pending`, `challenge[16]`, `auth_counter`, `auth_failures`)
+  plus a cached binary `uid_bytes` used for in-RAM key derivation. A new
+  HELLO mints a new `session_id` and clears `authenticated` /
+  `challenge_pending`.
+
+### Tests
+- 7 new cases in `test_hal_serial_session` covering AUTH_BEGIN gating,
+  challenge issuance, fresh-challenge-per-BEGIN, correct-MAC success,
+  bad-MAC rejection with one-shot challenge consumption, malformed
+  payload rejection, and auth-clear-on-new-HELLO. Suite size: 13 → 20.
+
+## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 2 — framed protocol)
 
 ### Added
 - `hal_serial_frame.h` — new header-only wire-framing helpers shared with

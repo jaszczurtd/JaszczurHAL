@@ -18,6 +18,15 @@
  * The provided tasks.json already does this via ${workspaceFolder}.
  */
 
+/* ── Opt-in modules (uncomment to enable) ─────────────────────────────── */
+
+// #define HAL_ENABLE_CRYPTO           /* hal_crypto: Base64, MD5, SHA-256,
+//                                        HMAC-SHA256, ChaCha20-Poly1305.
+//                                        Also enables hal_sc_auth (per-
+//                                        device key + SC_AUTH handshake
+//                                        on top of hal_serial_session).   */
+// #define HAL_ENABLE_CJSON            /* bundled cJSON / cJSON_Utils       */
+
 /* ── Uncomment to disable ─────────────────────────────────────────────── */
 
 // #define HAL_DISABLE_WIFI            /* WiFi — needs PICO_W               */

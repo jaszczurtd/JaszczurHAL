@@ -327,6 +327,253 @@ void test_poll_handles_multiple_framed_commands_in_one_rx_buffer(void) {
     TEST_ASSERT_NOT_NULL(strstr(reply_payload, "OK HELLO"));
 }
 
+/* ── Authentication handshake (Phase 3) ──────────────────────────────────── */
+
+static const uint8_t k_mock_uid[HAL_DEVICE_UID_BYTES] = {
+    /* Default mock UID: E6 61 A4 D1 23 45 67 AB. */
+    0xE6u, 0x61u, 0xA4u, 0xD1u, 0x23u, 0x45u, 0x67u, 0xABu
+};
+
+static void hex_to_bytes(const char *hex, uint8_t *out, size_t out_len) {
+    for (size_t i = 0u; i < out_len; ++i) {
+        unsigned int v = 0u;
+        sscanf(hex + i * 2u, "%2x", &v);
+        out[i] = (uint8_t)v;
+    }
+}
+
+static void bytes_to_hex_lower(const uint8_t *bytes, size_t len,
+                               char *out, size_t out_size) {
+    static const char k_hex[] = "0123456789abcdef";
+    if (len * 2u + 1u > out_size) {
+        if (out_size > 0u) out[0] = '\0';
+        return;
+    }
+    for (size_t i = 0u; i < len; ++i) {
+        out[i * 2u] = k_hex[(bytes[i] >> 4) & 0x0Fu];
+        out[i * 2u + 1u] = k_hex[bytes[i] & 0x0Fu];
+    }
+    out[len * 2u] = '\0';
+}
+
+/**
+ * Read the framed reply payload, expect it to start with `SC_OK AUTH_CHALLENGE `
+ * and decode the trailing 32-character hex challenge.
+ */
+static bool extract_challenge_from_reply(uint16_t expected_seq,
+                                          uint8_t out_challenge[HAL_SC_AUTH_CHALLENGE_BYTES]) {
+    uint16_t seq = 0u;
+    char payload[192];
+    if (!decode_last_framed_reply(&seq, payload, sizeof(payload))) {
+        return false;
+    }
+    if (seq != expected_seq) {
+        return false;
+    }
+    static const char k_prefix[] = "SC_OK AUTH_CHALLENGE ";
+    if (strncmp(payload, k_prefix, sizeof(k_prefix) - 1u) != 0) {
+        return false;
+    }
+    const char *hex = payload + sizeof(k_prefix) - 1u;
+    if (strlen(hex) != HAL_SC_AUTH_CHALLENGE_BYTES * 2u) {
+        return false;
+    }
+    hex_to_bytes(hex, out_challenge, HAL_SC_AUTH_CHALLENGE_BYTES);
+    return true;
+}
+
+void test_auth_begin_before_hello_returns_not_ready(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(5u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(s.challenge_pending);
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(5u, reply_seq);
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_NOT_READY"));
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "HELLO_REQUIRED"));
+}
+
+void test_auth_begin_after_hello_issues_challenge(void) {
+    hal_serial_session_t s;
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_TRUE(s.challenge_pending);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(2u, challenge));
+    /* Challenge must not be all-zero. */
+    uint8_t accumulator = 0u;
+    for (size_t i = 0u; i < HAL_SC_AUTH_CHALLENGE_BYTES; ++i) {
+        accumulator = (uint8_t)(accumulator | challenge[i]);
+    }
+    TEST_ASSERT_NOT_EQUAL_UINT8(0u, accumulator);
+}
+
+void test_repeated_auth_begin_yields_different_challenges(void) {
+    hal_serial_session_t s;
+    uint8_t a[HAL_SC_AUTH_CHALLENGE_BYTES];
+    uint8_t b[HAL_SC_AUTH_CHALLENGE_BYTES];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+
+    /* Move the mock micros forward between AUTH_BEGINs so the SHA-256 mix
+     * has different entropy in addition to the auth_counter increment. */
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(2u, a));
+
+    hal_mock_set_micros(123456u);
+    inject_framed_line(3u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(3u, b));
+
+    TEST_ASSERT_NOT_EQUAL(0, memcmp(a, b, sizeof(a)));
+}
+
+void test_auth_prove_with_correct_mac_authenticates_session(void) {
+    hal_serial_session_t s;
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(2u, challenge));
+    const uint32_t session_id = hal_serial_session_id(&s);
+    TEST_ASSERT_NOT_EQUAL_UINT32(0u, session_id);
+
+    /* Compute the expected MAC against the bench-known mock UID. */
+    uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
+    uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_compute_response(key, challenge, sizeof(challenge),
+                                                  session_id, mac));
+
+    char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+    bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
+
+    char prove_line[256];
+    snprintf(prove_line, sizeof(prove_line), "SC_AUTH_PROVE %s", hex);
+    inject_framed_line(3u, prove_line, '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(&s));
+    TEST_ASSERT_FALSE(s.challenge_pending);
+    TEST_ASSERT_EQUAL_UINT32(0u, s.auth_failures);
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(3u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_OK AUTH_OK", reply_payload);
+}
+
+void test_auth_prove_with_bad_mac_fails_and_consumes_challenge(void) {
+    hal_serial_session_t s;
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(2u, challenge));
+
+    /* All-zero MAC will not match any real HMAC output. */
+    char prove_line[256];
+    snprintf(prove_line, sizeof(prove_line),
+             "SC_AUTH_PROVE 0000000000000000000000000000000000000000000000000000000000000000");
+    inject_framed_line(3u, prove_line, '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+    TEST_ASSERT_FALSE(s.challenge_pending);
+    TEST_ASSERT_EQUAL_UINT32(1u, s.auth_failures);
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(3u, reply_seq);
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_AUTH_FAILED"));
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "bad_mac"));
+
+    /* Replay of even the original AUTH_PROVE line is now refused — challenge
+     * was consumed by the failed attempt. */
+    inject_framed_line(4u, prove_line, '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(4u, reply_seq);
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_AUTH_FAILED"));
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "no_challenge"));
+}
+
+void test_auth_prove_with_malformed_payload_is_rejected(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+
+    /* Length too short. */
+    inject_framed_line(3u, "SC_AUTH_PROVE deadbeef", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_AUTH_FAILED"));
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "bad_length"));
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+}
+
+void test_new_hello_clears_authenticated_state(void) {
+    hal_serial_session_t s;
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+
+    inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(2u, challenge));
+
+    uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
+    uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_compute_response(key, challenge, sizeof(challenge),
+                                                  hal_serial_session_id(&s), mac));
+    char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+    bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
+    char prove_line[256];
+    snprintf(prove_line, sizeof(prove_line), "SC_AUTH_PROVE %s", hex);
+    inject_framed_line(3u, prove_line, '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(&s));
+
+    /* New HELLO: re-mints session_id and clears auth state. */
+    hal_mock_set_millis(1u);  /* Force a different session id seed. */
+    inject_framed_line(4u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+    TEST_ASSERT_FALSE(s.challenge_pending);
+}
+
 void test_poll_null_args_is_safe(void) {
     hal_serial_session_t s;
     hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
@@ -356,6 +603,13 @@ int main(void) {
     RUN_TEST(test_poll_mutes_debug_during_framed_dispatch_and_restores_state);
     RUN_TEST(test_hal_serial_session_println_is_gated_by_request_window);
     RUN_TEST(test_poll_handles_multiple_framed_commands_in_one_rx_buffer);
+    RUN_TEST(test_auth_begin_before_hello_returns_not_ready);
+    RUN_TEST(test_auth_begin_after_hello_issues_challenge);
+    RUN_TEST(test_repeated_auth_begin_yields_different_challenges);
+    RUN_TEST(test_auth_prove_with_correct_mac_authenticates_session);
+    RUN_TEST(test_auth_prove_with_bad_mac_fails_and_consumes_challenge);
+    RUN_TEST(test_auth_prove_with_malformed_payload_is_rejected);
+    RUN_TEST(test_new_hello_clears_authenticated_state);
     RUN_TEST(test_poll_null_args_is_safe);
     return UNITY_END();
 }

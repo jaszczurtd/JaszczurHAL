@@ -706,7 +706,13 @@ void hal_mock_reset_device_uid(void);                // restore default E661A4D1
 
 ---
 
-## `hal_crypto` - Base64, MD5, ChaCha20, ChaCha20-Poly1305
+## `hal_crypto` - Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305  *(opt-in - `HAL_ENABLE_CRYPTO`)*
+
+This module is **opt-in**. Define `HAL_ENABLE_CRYPTO` in
+`hal_project_config.h` (or via `-D`) to compile it in. Without the
+flag the header below expands to nothing, `hal_crypto.cpp` becomes an
+empty translation unit, and any caller of these helpers fails at link
+time with an undefined-reference error.
 
 ```c
 #include <hal/hal_crypto.h>
@@ -720,6 +726,11 @@ void hal_mock_reset_device_uid(void);                // restore default E661A4D1
 // MD5 constants
 #define HAL_MD5_DIGEST_BYTES              16u
 #define HAL_MD5_HEX_BUF_SIZE              33u  // 32 hex chars + NUL
+
+// SHA-256 / HMAC-SHA256 constants
+#define HAL_SHA256_DIGEST_BYTES           32u
+#define HAL_SHA256_HEX_BUF_SIZE           65u  // 64 hex chars + NUL
+#define HAL_HMAC_SHA256_BLOCK_BYTES       64u
 
 // Base64 helpers
 size_t hal_base64_encoded_len(size_t input_len);
@@ -763,16 +774,30 @@ bool hal_chacha20_poly1305_decrypt(
     const uint8_t *ciphertext, size_t text_len,
     const uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES],
     uint8_t *plaintext);
+
+// SHA-256 / HMAC-SHA256 (FIPS 180-4 + RFC 2104)
+bool hal_sha256(const uint8_t *input, size_t input_len,
+                uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
+bool hal_sha256_hex(const uint8_t *input, size_t input_len,
+                    char *output, size_t out_size);
+bool hal_hmac_sha256(const uint8_t *key, size_t key_len,
+                     const uint8_t *message, size_t message_len,
+                     uint8_t out_mac[HAL_SHA256_DIGEST_BYTES]);
+bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
+                         const uint8_t *message, size_t message_len,
+                         char *output, size_t out_size);
 ```
 
 **Behavior notes:**
 - Base64 is strict RFC 4648 (`A-Z a-z 0-9 + /` and `=` padding), no whitespace tolerance.
-- `hal_md5_hex(...)` outputs lowercase hex.
+- `hal_md5_hex(...)` and `hal_sha256_hex(...)` / `hal_hmac_sha256_hex(...)` output lowercase hex.
 - `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
+- `hal_hmac_sha256(...)` follows RFC 2104 — keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
+- SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with the host-side mirror in SerialConfigurator (`sc_sha256.c`).
 
-**Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required.
+**Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required. Prefer SHA-256 / HMAC-SHA256 for any new integrity or authentication need.
 
 **Thread safety:** Stateless implementation; safe for multicore use when caller-provided buffers do not alias across threads unexpectedly.
 
@@ -924,11 +949,18 @@ typedef struct {
     const char *module_tag;   // bound at init
     const char *fw_version;   // bound at init (may be NULL → "unknown")
     const char *build_id;     // bound at init (may be NULL → "unknown")
+    uint8_t     uid_bytes[HAL_DEVICE_UID_BYTES];       // captured at init (auth)
     char        uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE];  // captured at init
     hal_serial_session_unknown_cb_t unknown_handler;   // optional sink
     void       *unknown_user;
     bool        in_request;   // gates `hal_serial_session_println`
     uint16_t    request_seq;  // seq echoed in framed replies
+    // Authentication state (Phase 3)
+    bool        authenticated;
+    bool        challenge_pending;
+    uint8_t     challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+    uint32_t    auth_counter;
+    uint32_t    auth_failures;
 } hal_serial_session_t;
 
 void     hal_serial_session_init(hal_serial_session_t *session,
@@ -939,6 +971,7 @@ void     hal_serial_session_set_unknown_handler(hal_serial_session_t *s,
                                                 hal_serial_session_unknown_cb_t cb,
                                                 void *user);
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
+bool     hal_serial_session_is_authenticated(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
 void     hal_serial_session_poll(hal_serial_session_t *session);
 void     hal_serial_session_println(hal_serial_session_t *session,
@@ -952,11 +985,19 @@ Wire protocol (both directions):
 See [`hal_serial_frame`](#hal_serial_frame---wire-framing-helpers) for the
 frame codec.
 
-Built-in command (inside the frame envelope):
-- `HELLO`
+Built-in commands (inside the frame envelope):
+- `HELLO` — activates the session and reports identity.
+- `SC_AUTH_BEGIN` — mints a fresh 16-byte challenge for the active session.
+- `SC_AUTH_PROVE <64 hex chars>` — proves the host knows `K_device` for
+  this UID; on success the session becomes authenticated.
 
-Built-in response (inside the frame envelope, echoes the inbound `<seq>`):
+Built-in responses (inside the frame envelope, each echoes the inbound `<seq>`):
 - `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
+- `SC_OK AUTH_CHALLENGE <32 hex chars>` (after `SC_AUTH_BEGIN`)
+- `SC_OK AUTH_OK` (after `SC_AUTH_PROVE` with the correct MAC)
+- `SC_AUTH_FAILED <reason>` — `bad_mac`, `bad_length`, `bad_hex`,
+  `no_challenge`, `key_derivation`, `mac_compute`
+- `SC_NOT_READY HELLO_REQUIRED` (AUTH_BEGIN/PROVE before HELLO)
 
 Unrecognised inner payloads:
 - if a user callback is registered via
@@ -987,6 +1028,29 @@ Reply gating:
   inject unsolicited bytes into the framed stream; if you need to send
   state asynchronously, do it from the unknown-handler callback in
   response to a request.
+
+Authentication (Phase 3) — opt-in:
+- The whole AUTH path is compiled in only when `HAL_ENABLE_CRYPTO` is
+  defined. Without it the session struct loses the auth fields, the
+  `SC_AUTH_*` handlers are not dispatched, and
+  `hal_serial_session_is_authenticated()` always returns false. The
+  rest of the framed session (HELLO + module-defined SC_* commands)
+  is unaffected.
+- See [`hal_sc_auth`](#hal_sc_auth---serialconfigurator-authentication-helper--opt-in---hal_enable_crypto)
+  for the salt + key-derivation primitives.
+- `SC_AUTH_BEGIN` requires an active (HELLO-acknowledged) session and
+  mints a fresh challenge derived from
+  `SHA-256(uid || hal_micros64() || session_id || hello_counter || auth_counter)`,
+  taking the first 16 bytes.
+- `SC_AUTH_PROVE` is one-shot per challenge: success or failure both
+  consume the pending challenge, so a captured valid response cannot be
+  replayed against the same `SC_AUTH_BEGIN`.
+- A new HELLO mints a new `session_id` and clears `authenticated` /
+  `challenge_pending`. Module code that gates sensitive operations must
+  re-check `hal_serial_session_is_authenticated(session)` after every
+  command, not just once.
+- `auth_failures` counts failed `SC_AUTH_PROVE` attempts; rate-limit and
+  lockout policies on top of it are deferred to Phase 7.
 
 Notes:
 - parser is line-based (`\r` / `\n` terminate a frame),
@@ -1073,6 +1137,75 @@ This header is byte-for-byte compatible with the host-side mirror at
 `Fiesta/src/SerialConfigurator/src/core/sc_frame.h`. Do not change one
 without updating the other; both sides assert the same CRC reference
 vector in their test suites.
+
+---
+
+## `hal_sc_auth` - SerialConfigurator authentication helper  *(opt-in - `HAL_ENABLE_CRYPTO`)*
+
+Pulled in by the same `HAL_ENABLE_CRYPTO` flag as `hal_crypto`. The
+module depends on `hal_hmac_sha256`, so enabling auth without crypto
+is not a meaningful configuration. When the flag is off
+`hal_serial_session` keeps working — the `SC_AUTH_BEGIN` /
+`SC_AUTH_PROVE` handlers are compiled out and
+`hal_serial_session_is_authenticated()` returns `false`.
+
+```c
+#include <hal/hal_sc_auth.h>
+
+#define HAL_SC_AUTH_SCHEME_TAG          "FIESTA-SC-AUTH-v1"
+#define HAL_SC_AUTH_SCHEME_TAG_LEN      17u
+#define HAL_SC_AUTH_SALT                ((const uint8_t *)HAL_SC_AUTH_SCHEME_TAG)
+#define HAL_SC_AUTH_SALT_LEN            HAL_SC_AUTH_SCHEME_TAG_LEN
+#define HAL_SC_AUTH_KEY_BYTES           HAL_SHA256_DIGEST_BYTES   // 32
+#define HAL_SC_AUTH_CHALLENGE_BYTES     16u
+#define HAL_SC_AUTH_CHALLENGE_HEX_BUF_SIZE  33u                   // 32 hex + NUL
+#define HAL_SC_AUTH_RESPONSE_BYTES      HAL_SHA256_DIGEST_BYTES   // 32
+#define HAL_SC_AUTH_RESPONSE_HEX_BUF_SIZE   HAL_SHA256_HEX_BUF_SIZE
+
+bool hal_sc_auth_derive_device_key(
+    const uint8_t *uid, size_t uid_len,
+    uint8_t out_key[HAL_SC_AUTH_KEY_BYTES]);
+
+bool hal_sc_auth_compute_response(
+    const uint8_t device_key[HAL_SC_AUTH_KEY_BYTES],
+    const uint8_t *challenge, size_t challenge_len,
+    uint32_t session_id,
+    uint8_t out_response[HAL_SC_AUTH_RESPONSE_BYTES]);
+
+bool hal_sc_auth_macs_equal(const uint8_t *a, const uint8_t *b, size_t len);
+```
+
+Constructions:
+
+- `K_device  = HMAC-SHA256(key=salt, message=uid_bytes)`
+- `response  = HMAC-SHA256(key=K_device, message=challenge || session_id_be32)`
+
+The session id is serialised big-endian via `hal_u32_to_bytes_be` so the
+firmware and host MAC the exact same byte sequence regardless of host
+endianness.
+
+`hal_sc_auth_macs_equal` is a constant-time OR-accumulator comparison
+intended for MAC verification — it does not short-circuit on first
+difference, so timing does not leak where the bytes diverged.
+
+The salt is a public, project-wide compile-time constant. Secrecy of the
+scheme rests on HMAC-SHA256 + the per-device UID, **not** on salt
+secrecy. Treating the salt as confidential would only obscure design
+intent.
+
+This header is byte-for-byte compatible with the host-side mirror at
+`Fiesta/src/SerialConfigurator/src/core/sc_auth.{h,c}`. Both sides ship
+their own test for key derivation and response MAC computation; the
+host suite includes a hand-anchored cross-vector check that recomputes
+the MAC from `sc_crypto` primitives, so any divergence between the two
+copies surfaces as a test failure rather than a runtime AUTH_FAILED on
+the bench.
+
+The handshake itself is wired in
+[`hal_serial_session`](#hal_serial_session---framed-serial-session-helper)
+as built-in `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` commands; modules consume
+authentication state through `hal_serial_session_is_authenticated(...)`
+and do not need to call the helpers below directly.
 
 ---
 
