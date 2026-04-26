@@ -2,22 +2,25 @@
 
 /**
  * @file hal_serial_session.h
- * @brief Minimal text-based serial session helper for desktop tooling.
+ * @brief Framed serial session helper for the SerialConfigurator transport.
  *
- * This helper provides a tiny session state machine intended as a bootstrap
- * transport for future configurator protocols.
+ * This helper provides a tiny session state machine that speaks ONLY the
+ * framed wire protocol described in @ref hal_serial_frame.h:
  *
- * Current command set:
- * - `HELLO`
+ *     $SC,<seq>,<inner>*<crc8>\n
  *
- * Current responses:
- * - `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
- * - `ERR UNKNOWN`
+ * Lines that do not start with the `$SC,` sentinel are silently discarded.
+ * There is intentionally no plain-text fall-through: the host SerialConfigurator
+ * always frames its requests, and removing the legacy path eliminates a class
+ * of bugs (substring matches in debug logs, unframed bytes corrupting the
+ * stream, modules accidentally responding to noise).
  *
- * Design intent:
- * - Keep command parsing in one shared HAL place.
- * - Let each module own only its module-tag and polling call.
- * - Provide a stable skeleton for future expansion (AUTH/GET/SET/etc.).
+ * Built-in command:
+ * - `HELLO` → `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
+ *
+ * Any other inner payload is forwarded to the user-supplied unknown-line
+ * handler (see @ref hal_serial_session_set_unknown_handler) so each module
+ * can implement its own SC_* command set.
  *
  * Identity fields (module tag, firmware version, build id) are immutable for
  * the lifetime of a session and are therefore captured at init time rather
@@ -26,6 +29,7 @@
  */
 
 #include "hal_serial.h"
+#include "hal_serial_frame.h"
 #include "hal_system.h"
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,28 +40,34 @@
 extern "C" {
 #endif
 
-/** @brief Current plain-text session protocol version. */
+/** @brief Current session protocol version. */
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
 
-/** @brief Maximum accepted command line length (excluding terminator). */
-#define HAL_SERIAL_SESSION_MAX_LINE 48u
+/** @brief Maximum accepted command line length (excluding terminator).
+ *
+ *  Sized to fit a framed `$SC,<seq>,<inner>*<crc>` request whose @c <inner>
+ *  may carry the longest configurator command (currently `SC_GET_PARAM
+ *  <id>`), with margin for future growth. */
+#define HAL_SERIAL_SESSION_MAX_LINE 128u
 
 /** @brief Fallback string for fw/build fields when the caller passes NULL/""  */
 #define HAL_SERIAL_SESSION_UNKNOWN "unknown"
 
 /**
- * @brief Optional callback invoked when an incoming line is not recognised
- *        as a built-in session command.
+ * @brief Optional callback invoked when an incoming inner payload is not
+ *        recognised as a built-in session command.
  *
  * When registered via @ref hal_serial_session_set_unknown_handler, the helper
- * stops emitting the default `ERR UNKNOWN` reply and instead forwards the
- * full line (NUL-terminated, without trailing CR/LF) to this callback. This
- * allows higher-level modules (e.g. test fixtures, application command
- * handlers) to consume serial commands only after the bootstrap session
- * parser has had its chance to handle them, preventing two consumers from
- * fighting over individual bytes on the same UART/CDC stream.
+ * forwards the inner payload (NUL-terminated, already unwrapped from the
+ * `$SC,<seq>,...*<crc>` envelope) to this callback. This lets each module
+ * implement its own SC_* command set without duplicating frame parsing.
  *
- * The callback is responsible for any reply it wishes to send.
+ * The callback is responsible for any reply it wishes to send via
+ * @ref hal_serial_session_println; replies are automatically wrapped into a
+ * frame carrying the same @c <seq> as the inbound request, so the host can
+ * correlate them.
+ *
+ * If no handler is registered, the helper emits a `SC_UNKNOWN_CMD` reply.
  */
 typedef void (*hal_serial_session_unknown_cb_t)(const char *line, void *user);
 
@@ -81,6 +91,8 @@ typedef struct {
     char uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE]; /**< Cached device UID hex string. */
     hal_serial_session_unknown_cb_t unknown_handler; /**< Optional sink for non-protocol command lines. */
     void *unknown_user;                        /**< Opaque user pointer forwarded to @c unknown_handler. */
+    bool in_request;                           /**< true while dispatching a framed request (gates `hal_serial_session_println`). */
+    uint16_t request_seq;                      /**< Sequence number of the in-flight framed request. */
 } hal_serial_session_t;
 
 /**
@@ -156,13 +168,99 @@ static inline uint32_t hal_serial_session_id(const hal_serial_session_t *session
 }
 
 /**
+ * @brief Return true when a line should suppress debug logs during handling.
+ *
+ * Only framed protocol lines (`$SC,...`) qualify; everything else is dropped
+ * by the parser anyway, so leaving debug enabled for those bytes is harmless.
+ */
+static inline bool hal_serial_session_should_mute_debug_for_line(const char *line) {
+    if (line == NULL) {
+        return false;
+    }
+    return strncmp(line, HAL_SERIAL_FRAME_PREFIX, HAL_SERIAL_FRAME_PREFIX_LEN) == 0;
+}
+
+/**
+ * @brief Emit one SC payload as a framed reply to the in-flight request.
+ *
+ * Must be called from inside @ref hal_serial_session_poll while a request is
+ * being dispatched (i.e. from the HELLO branch or from the user-supplied
+ * unknown-line handler). Calls outside that window are dropped: the framed
+ * protocol has no place for unsolicited responses, and emitting raw bytes
+ * would corrupt the stream.
+ *
+ * @param session Session context (must be non-NULL).
+ * @param payload Inner payload to wrap. Must not contain `*`, `\r` or `\n`.
+ */
+static inline void hal_serial_session_println(hal_serial_session_t *session,
+                                              const char *payload) {
+    if ((session == NULL) || (payload == NULL) || !session->in_request) {
+        return;
+    }
+
+    char framed[HAL_SERIAL_FRAME_LINE_MAX];
+    if (hal_serial_frame_encode(session->request_seq, payload,
+                                framed, sizeof(framed), NULL)) {
+        hal_serial_println(framed);
+    }
+}
+
+/**
+ * @brief Internal: build and emit the OK HELLO response.
+ */
+static inline void hal_serial_session__emit_hello(hal_serial_session_t *session) {
+    char response[192];
+    snprintf(response, sizeof(response),
+             "OK HELLO module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
+             session->module_tag,
+             (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
+             (unsigned long)session->session_id,
+             (session->fw_version != NULL) ? session->fw_version
+                                           : HAL_SERIAL_SESSION_UNKNOWN,
+             (session->build_id != NULL) ? session->build_id
+                                         : HAL_SERIAL_SESSION_UNKNOWN,
+             session->uid_hex);
+    hal_serial_session_println(session, response);
+}
+
+/**
+ * @brief Internal: dispatch one already-unwrapped inner command line.
+ */
+static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *session,
+                                                      const char *inner) {
+    if (strcmp(inner, "HELLO") == 0) {
+        session->active = true;
+        session->hello_counter++;
+        session->last_activity_ms = hal_millis();
+        /* Non-cryptographic seed for bootstrap session tracking. */
+        session->session_id =
+            ((uint32_t)session->hello_counter << 20) ^
+            (session->last_activity_ms & 0x000FFFFFu);
+        hal_serial_session__emit_hello(session);
+        return;
+    }
+
+    if (session->unknown_handler != NULL) {
+        session->unknown_handler(inner, session->unknown_user);
+    } else {
+        hal_serial_session_println(session, "SC_UNKNOWN_CMD");
+    }
+}
+
+/**
  * @brief Process all pending serial bytes and handle supported commands.
  *
- * The parser is line-oriented (`\\n` and/or `\\r` terminate command line).
- * Unknown commands currently return `ERR UNKNOWN`.
+ * The parser is line-oriented (`\n` and/or `\r` terminate the command).
+ * Only framed lines (`$SC,<seq>,<inner>*<crc8>`) are accepted; everything
+ * else is silently discarded, including:
+ *   - lines that do not start with the `$SC,` sentinel,
+ *   - frames whose CRC does not validate,
+ *   - frames whose seq is malformed or out of range.
  *
- * Identity fields reported in the HELLO response come from the session
- * context (populated by @ref hal_serial_session_init).
+ * Replies emitted by built-in commands or by the unknown-line handler are
+ * automatically wrapped in a frame carrying the same @c <seq> as the inbound
+ * request, allowing the host to correlate request/response pairs and to fail
+ * fast on corruption.
  *
  * @param session Session context to update.
  */
@@ -178,49 +276,52 @@ static inline void hal_serial_session_poll(hal_serial_session_t *session) {
         }
 
         char c = (char)raw;
-        if ((c == '\r') || (c == '\n')) {
-            if (session->line_len == 0u) {
-                continue;
+        if ((c != '\r') && (c != '\n')) {
+            if (session->line_len < HAL_SERIAL_SESSION_MAX_LINE) {
+                session->line[session->line_len++] = c;
             }
+            continue;
+        }
 
-            session->line[session->line_len] = '\0';
-            if (strcmp(session->line, "HELLO") == 0) {
-                session->active = true;
-                session->hello_counter++;
-                session->last_activity_ms = hal_millis();
-                /* Non-cryptographic seed for bootstrap session tracking. */
-                session->session_id =
-                    ((uint32_t)session->hello_counter << 20) ^
-                    (session->last_activity_ms & 0x000FFFFFu);
+        if (session->line_len == 0u) {
+            continue;
+        }
 
-                char response[192];
-                snprintf(response, sizeof(response),
-                         "OK HELLO module=%s proto=%u session=%lu fw=%s build=%s uid=%s",
-                         session->module_tag,
-                         (unsigned)HAL_SERIAL_SESSION_PROTOCOL_VERSION,
-                         (unsigned long)session->session_id,
-                         (session->fw_version != NULL) ? session->fw_version
-                                                       : HAL_SERIAL_SESSION_UNKNOWN,
-                         (session->build_id != NULL) ? session->build_id
-                                                     : HAL_SERIAL_SESSION_UNKNOWN,
-                         session->uid_hex);
-                hal_serial_println(response);
-            } else {
-                if (session->unknown_handler != NULL) {
-                    session->unknown_handler(session->line, session->unknown_user);
-                } else {
-                    hal_serial_println("ERR UNKNOWN");
-                }
-            }
+        session->line[session->line_len] = '\0';
+        const uint8_t line_len = session->line_len;
+        session->line_len = 0u;
 
-            session->line_len = 0u;
+        /* Reject anything that is not a framed request — no fall-through. */
+        if (line_len < HAL_SERIAL_FRAME_PREFIX_LEN ||
+            strncmp(session->line, HAL_SERIAL_FRAME_PREFIX,
+                    HAL_SERIAL_FRAME_PREFIX_LEN) != 0) {
             session->line[0] = '\0';
             continue;
         }
 
-        if (session->line_len < HAL_SERIAL_SESSION_MAX_LINE) {
-            session->line[session->line_len++] = c;
+        const bool mute_debug = hal_serial_session_should_mute_debug_for_line(session->line);
+        const bool debug_was_muted = mute_debug ? hal_debug_is_muted() : false;
+        if (mute_debug && !debug_was_muted) {
+            hal_debug_set_muted(true);
         }
+
+        uint16_t seq = 0u;
+        char inner[HAL_SERIAL_SESSION_MAX_LINE + 1u];
+        inner[0] = '\0';
+        if (hal_serial_frame_decode(session->line, &seq,
+                                    inner, sizeof(inner))) {
+            session->in_request = true;
+            session->request_seq = seq;
+            hal_serial_session__dispatch_inner(session, inner);
+            session->in_request = false;
+        }
+        /* Bad CRC / malformed frame → silent drop (host retries / times out). */
+
+        if (mute_debug && !debug_was_muted) {
+            hal_debug_set_muted(false);
+        }
+
+        session->line[0] = '\0';
     }
 }
 

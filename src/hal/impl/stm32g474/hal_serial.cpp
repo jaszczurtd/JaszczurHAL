@@ -16,6 +16,7 @@ static hal_mutex_t s_deb_mutex = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex = NULL;
 static volatile bool s_debug_initialized = false;
+static volatile bool s_debug_muted = false;
 static hal_debug_rate_limit_t s_rate_limit_cfg = {5u, 1000u, 30000u};
 static hal_debug_timestamp_hook_t s_timestamp_hook = NULL;
 static void *s_timestamp_user = NULL;
@@ -191,11 +192,22 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
     s_derr_mutex = hal_mutex_create();
     s_rl_mutex = hal_mutex_create();
     hal_serial_begin(baud);
+    s_debug_muted = false;
     s_debug_initialized = true;
 }
 
 bool hal_deb_is_initialized(void) {
     return s_debug_initialized;
+}
+
+void hal_debug_set_muted(bool muted) {
+    hal_critical_section_enter();
+    s_debug_muted = muted;
+    hal_critical_section_exit();
+}
+
+bool hal_debug_is_muted(void) {
+    return s_debug_muted;
 }
 
 void hal_deb_set_prefix(const char *prefix) {
@@ -207,6 +219,10 @@ void hal_deb_set_prefix(const char *prefix) {
 }
 
 void hal_deb(const char *format, ...) {
+    if (hal_debug_is_muted()) {
+        return;
+    }
+
     hal_debug_ensure_init();
     hal_mutex_lock(s_deb_mutex);
 
@@ -233,6 +249,10 @@ void hal_deb(const char *format, ...) {
 }
 
 void hal_derr(const char *format, ...) {
+    if (hal_debug_is_muted()) {
+        return;
+    }
+
     hal_debug_ensure_init();
     hal_mutex_lock(s_derr_mutex);
 
@@ -268,6 +288,10 @@ void hal_derr(const char *format, ...) {
 }
 
 void hal_derr_limited(const char *source, const char *format, ...) {
+    if (hal_debug_is_muted()) {
+        return;
+    }
+
     hal_debug_ensure_init();
 
     HAL_ASSERT(s_rl_mutex != NULL, "hal_derr_limited: rate-limit mutex is NULL");
