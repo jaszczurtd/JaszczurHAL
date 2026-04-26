@@ -60,6 +60,7 @@ Utility-only includes are also available:
 - Bundled third-party drivers (for example display/CAN/GPS stacks), compiled only when related HAL modules are enabled
 - Mock backend for deterministic host/unit tests
 - Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
+- Crypto helpers (`hal_crypto`: Base64, MD5, ChaCha20, ChaCha20-Poly1305)
 - C soft-timer wrapper API with table-based setup/tick helpers (`hal_soft_timer_*`)
 - Optional bundled JSON utilities (`HAL_ENABLE_CJSON`)
 
@@ -163,6 +164,29 @@ void loop(void) {
 ```
 
 `hal_soft_timer_setup_table(...)` and `hal_soft_timer_tick_table(...)` return `false` for invalid input (`table == NULL` or `count == 0`) and log via `hal_derr(...)`.
+
+## Crypto quick example
+
+```c
+#include <JaszczurHAL.h>
+
+static const uint8_t key[HAL_CHACHA20_KEY_BYTES] = {0};
+static const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES] = {0};
+
+void demo_crypto(void) {
+  const uint8_t msg[] = "hello";
+  uint8_t cipher[sizeof(msg)] = {0};
+  uint8_t plain[sizeof(msg)] = {0};
+  uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES] = {0};
+  char md5_hex[HAL_MD5_HEX_BUF_SIZE] = {0};
+
+  (void)hal_md5_hex(msg, sizeof(msg) - 1u, md5_hex, sizeof(md5_hex));
+  (void)hal_chacha20_poly1305_encrypt(key, nonce, NULL, 0u,
+                                      msg, sizeof(msg), cipher, tag);
+  (void)hal_chacha20_poly1305_decrypt(key, nonce, NULL, 0u,
+                                      cipher, sizeof(msg), tag, plain);
+}
+```
 
 ## Module selection (quick)
 

@@ -19,6 +19,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
+    ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/utils/SmartTimers.cpp

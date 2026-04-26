@@ -31,8 +31,8 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/.mock/` - deterministic host-test backend.
@@ -71,6 +71,7 @@ logic from Arduino and other board-specific SDK calls:
 
 - `hal_gpio`, `hal_adc`, `hal_pwm`, `hal_pwm_freq`
 - `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`, `hal_serial`
+- `hal_crypto`
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
 - `hal_can`, `hal_display`, `hal_rgb_led`
@@ -224,6 +225,7 @@ arduino-cli compile \
 | `hal_sync` | Mutexes, critical sections |
 | `hal_serial` | Debug serial output |
 | `hal_spi` | SPI bus init |
+| `hal_crypto` | Base64, MD5, ChaCha20, ChaCha20-Poly1305 helpers |
 | `hal_math` | type-independent `hal_constrain` / `hal_map` macros |
 
 ### SD library (`<SD.h>`)
@@ -274,7 +276,7 @@ section below.  The general pattern is:
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
 - **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_kv`, debug serial).
-- **Stateless helpers** (`hal_bits`, `hal_math`, `hal_constrain`, `hal_map`) are inherently thread-safe.
+- **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
 must be serialized by the caller or used from a single core.
@@ -701,6 +703,78 @@ void hal_mock_reset_device_uid(void);                // restore default E661A4D1
 
 **Note:** All helpers are macros (type-width independent). Avoid passing expressions with side effects (`i++`, stateful function calls), because arguments may be evaluated more than once. `bitSet/bitClear/bitRead` remain guarded with `#ifndef` for Arduino compatibility.
 **Thread safety:** Stateless helpers; thread-safe by themselves. When multiple contexts touch the same variable/register, synchronization is the caller's responsibility.
+
+---
+
+## `hal_crypto` - Base64, MD5, ChaCha20, ChaCha20-Poly1305
+
+```c
+#include <hal/hal_crypto.h>
+
+// ChaCha20 / AEAD constants
+#define HAL_CHACHA20_KEY_BYTES            32u
+#define HAL_CHACHA20_NONCE_BYTES          12u
+#define HAL_CHACHA20_BLOCK_BYTES          64u
+#define HAL_CHACHA20_POLY1305_TAG_BYTES   16u
+
+// MD5 constants
+#define HAL_MD5_DIGEST_BYTES              16u
+#define HAL_MD5_HEX_BUF_SIZE              33u  // 32 hex chars + NUL
+
+// Base64 helpers
+size_t hal_base64_encoded_len(size_t input_len);
+size_t hal_base64_decoded_max_len(size_t input_len);
+bool hal_base64_encode(const uint8_t *input, size_t input_len,
+                       char *output, size_t out_size, size_t *out_len);
+bool hal_base64_decode(const char *input, size_t input_len,
+                       uint8_t *output, size_t out_size, size_t *out_len);
+
+// MD5 helpers
+bool hal_md5(const uint8_t *input, size_t input_len,
+             uint8_t out_digest[HAL_MD5_DIGEST_BYTES]);
+bool hal_md5_hex(const uint8_t *input, size_t input_len,
+                 char *output, size_t out_size);
+
+// ChaCha20 stream helpers (IETF RFC 8439)
+bool hal_chacha20_block(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
+                        uint32_t counter,
+                        const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
+                        uint8_t out_block[HAL_CHACHA20_BLOCK_BYTES]);
+bool hal_chacha20_xor(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
+                      uint32_t counter,
+                      const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
+                      const uint8_t *input,
+                      size_t input_len,
+                      uint8_t *output);
+
+// ChaCha20-Poly1305 AEAD (RFC 8439)
+bool hal_chacha20_poly1305_encrypt(
+    const uint8_t key[HAL_CHACHA20_KEY_BYTES],
+    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
+    const uint8_t *aad, size_t aad_len,
+    const uint8_t *plaintext, size_t text_len,
+    uint8_t *ciphertext,
+    uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES]);
+
+bool hal_chacha20_poly1305_decrypt(
+    const uint8_t key[HAL_CHACHA20_KEY_BYTES],
+    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
+    const uint8_t *aad, size_t aad_len,
+    const uint8_t *ciphertext, size_t text_len,
+    const uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES],
+    uint8_t *plaintext);
+```
+
+**Behavior notes:**
+- Base64 is strict RFC 4648 (`A-Z a-z 0-9 + /` and `=` padding), no whitespace tolerance.
+- `hal_md5_hex(...)` outputs lowercase hex.
+- `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
+- `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
+- For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
+
+**Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required.
+
+**Thread safety:** Stateless implementation; safe for multicore use when caller-provided buffers do not alias across threads unexpectedly.
 
 ---
 

@@ -15,6 +15,7 @@ file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
 set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
+    ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/hal/hal_pid_controller.cpp
