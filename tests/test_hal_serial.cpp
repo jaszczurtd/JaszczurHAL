@@ -17,6 +17,7 @@ static bool fixed_ts_hook(char *out, size_t out_size, void *user) {
 void setUp(void) {
     hal_debug_init(115200);
     hal_mock_serial_reset();
+    hal_debug_set_muted(false);
     hal_debug_set_timestamp_hook(NULL, NULL);
 }
 
@@ -59,6 +60,24 @@ void test_derr_with_timestamp_hook(void) {
     TEST_ASSERT_NOT_NULL(strstr(line, "hooked error"));
 }
 
+void test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output(void) {
+    hal_debug_set_muted(true);
+    TEST_ASSERT_TRUE(hal_debug_is_muted());
+
+    hal_deb("muted deb");
+    hal_derr("muted err");
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+
+    hal_serial_println("proto line");
+    TEST_ASSERT_EQUAL_STRING("proto line", hal_mock_serial_last_line());
+
+    hal_debug_set_muted(false);
+    TEST_ASSERT_FALSE(hal_debug_is_muted());
+    hal_deb("after unmute");
+    TEST_ASSERT_EQUAL_STRING("after unmute", hal_mock_deb_last_line());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_println_captured);
@@ -67,5 +86,6 @@ int main(void) {
     RUN_TEST(test_deb_captured);
     RUN_TEST(test_derr_without_timestamp_hook);
     RUN_TEST(test_derr_with_timestamp_hook);
+    RUN_TEST(test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output);
     return UNITY_END();
 }

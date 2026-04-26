@@ -903,14 +903,16 @@ RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 
 ---
 
-## `hal_serial_session` - Minimal text session helper
+## `hal_serial_session` - Framed serial session helper
 
 ```c
 #include <hal/hal_serial_session.h>
 
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
-#define HAL_SERIAL_SESSION_MAX_LINE         48u
+#define HAL_SERIAL_SESSION_MAX_LINE         128u
 #define HAL_SERIAL_SESSION_UNKNOWN          "unknown"
+
+typedef void (*hal_serial_session_unknown_cb_t)(const char *line, void *user);
 
 typedef struct {
     bool        active;
@@ -923,23 +925,50 @@ typedef struct {
     const char *fw_version;   // bound at init (may be NULL → "unknown")
     const char *build_id;     // bound at init (may be NULL → "unknown")
     char        uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE];  // captured at init
+    hal_serial_session_unknown_cb_t unknown_handler;   // optional sink
+    void       *unknown_user;
+    bool        in_request;   // gates `hal_serial_session_println`
+    uint16_t    request_seq;  // seq echoed in framed replies
 } hal_serial_session_t;
 
 void     hal_serial_session_init(hal_serial_session_t *session,
                                  const char *module_tag,
                                  const char *fw_version,
                                  const char *build_id);
+void     hal_serial_session_set_unknown_handler(hal_serial_session_t *s,
+                                                hal_serial_session_unknown_cb_t cb,
+                                                void *user);
 bool     hal_serial_session_is_active(const hal_serial_session_t *session);
 uint32_t hal_serial_session_id(const hal_serial_session_t *session);
 void     hal_serial_session_poll(hal_serial_session_t *session);
+void     hal_serial_session_println(hal_serial_session_t *session,
+                                    const char *payload);
 ```
 
-Current protocol commands:
+Wire protocol (both directions):
+
+    $SC,<seq>,<inner>*<crc8>\n
+
+See [`hal_serial_frame`](#hal_serial_frame---wire-framing-helpers) for the
+frame codec.
+
+Built-in command (inside the frame envelope):
 - `HELLO`
 
-Current responses:
+Built-in response (inside the frame envelope, echoes the inbound `<seq>`):
 - `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
-- `ERR UNKNOWN`
+
+Unrecognised inner payloads:
+- if a user callback is registered via
+  `hal_serial_session_set_unknown_handler`, it receives the unwrapped
+  inner line and is responsible for any reply (use
+  `hal_serial_session_println` so the reply inherits the request's `<seq>`).
+- otherwise the helper emits `SC_UNKNOWN_CMD` (still framed).
+
+Non-framed input is silently dropped — there is no plain-text
+fall-through. This is intentional: the SerialConfigurator host always
+frames its requests, and removing the legacy path eliminates substring
+mismatches against debug-log lines.
 
 Identity binding model:
 - `module_tag` must not be NULL and must reference a string with static
@@ -952,11 +981,18 @@ Identity binding model:
 - All identity is immutable after init; `hal_serial_session_poll()` takes no
   identity arguments.
 
+Reply gating:
+- `hal_serial_session_println` is a no-op outside the request-dispatch
+  window (`session->in_request == false`). Modules cannot accidentally
+  inject unsolicited bytes into the framed stream; if you need to send
+  state asynchronously, do it from the unknown-handler callback in
+  response to a request.
+
 Notes:
-- parser is line-based (`\r` / `\n` terminate a command),
+- parser is line-based (`\r` / `\n` terminate a frame),
 - helpers are header-only (`static inline`) and state lives in `hal_serial_session_t`,
 - session id is non-cryptographic and intended for bootstrap tracking only,
-- the HELLO response buffer is sized for the six mandatory fields plus
+- the HELLO inner-payload buffer is sized for the six mandatory fields plus
   reasonable slack; the implementation uses a 192-byte internal buffer.
 
 Typical wiring (firmware module):
@@ -965,11 +1001,16 @@ Typical wiring (firmware module):
 
 static hal_serial_session_t s_session;
 
+static void on_unknown(const char *inner, void *user) {
+    (void)user;
+    if (strcmp(inner, "SC_GET_META") == 0) {
+        hal_serial_session_println(&s_session, "SC_OK META ...");
+    }
+}
+
 void configSessionInit(void) {
-    hal_serial_session_init(&s_session,
-                            MODULE_NAME,  // e.g. "ECU"
-                            FW_VERSION,   // e.g. "0.1.0"
-                            BUILD_ID);    // e.g. __DATE__ " " __TIME__
+    hal_serial_session_init(&s_session, MODULE_NAME, FW_VERSION, BUILD_ID);
+    hal_serial_session_set_unknown_handler(&s_session, on_unknown, NULL);
 }
 
 void configSessionTick(void) {
@@ -978,11 +1019,60 @@ void configSessionTick(void) {
 ```
 
 Test observability (mock backend):
-- Use `hal_mock_serial_inject_rx("HELLO\n", -1)` to feed input.
-- Inspect `hal_mock_serial_last_line()` to verify the HELLO response fields
-  (`module=`, `proto=`, `session=`, `fw=`, `build=`, `uid=`).
+- Build a framed request with `hal_serial_frame_encode(seq, "HELLO", buf,
+  sizeof(buf), NULL)`, append `\n`, and feed it via
+  `hal_mock_serial_inject_rx(buf, -1)`.
+- Inspect `hal_mock_serial_last_line()` and decode it with
+  `hal_serial_frame_decode(...)` to assert HELLO response fields
+  (`module=`, `proto=`, `session=`, `fw=`, `build=`, `uid=`) and that the
+  reply seq matches the request seq.
 - Use `hal_mock_set_device_uid(...)` to simulate a different physical board
   when asserting `uid=` values.
+
+---
+
+## `hal_serial_frame` - Wire framing helpers
+
+```c
+#include <hal/hal_serial_frame.h>
+
+#define HAL_SERIAL_FRAME_PREFIX        "$SC,"
+#define HAL_SERIAL_FRAME_PREFIX_LEN    4u
+#define HAL_SERIAL_FRAME_PAYLOAD_MAX   256u
+#define HAL_SERIAL_FRAME_LINE_MAX      (HAL_SERIAL_FRAME_PAYLOAD_MAX + 32u)
+
+uint8_t hal_serial_frame_crc8(const uint8_t *data, size_t len);
+
+bool    hal_serial_frame_encode(uint16_t seq,
+                                const char *payload,
+                                char *out, size_t out_size,
+                                size_t *out_len);
+
+bool    hal_serial_frame_decode(const char *line,
+                                uint16_t *seq_out,
+                                char *payload_out,
+                                size_t payload_out_size);
+```
+
+Frame format (both directions):
+
+    $SC,<seq>,<payload>*<crc8>\n
+
+- Literal start sentinel `$SC,`.
+- `<seq>`: ASCII unsigned decimal in `[0..65535]`. The response always
+  echoes the request's seq so the host can correlate.
+- `<payload>`: free-form ASCII text. Must not contain `*`, `\r` or `\n`.
+- `<crc8>`: two uppercase hex digits. CRC-8/CCITT (poly `0x07`, init
+  `0x00`, no reflect, no xor-out) over the bytes between (but excluding)
+  the leading `$` and the `*` separator. Reference vector:
+  `"123456789" → 0xF4`.
+- `\n` line terminator (encode helpers do **not** append it; use
+  `hal_serial_println()` which already does).
+
+This header is byte-for-byte compatible with the host-side mirror at
+`Fiesta/src/SerialConfigurator/src/core/sc_frame.h`. Do not change one
+without updating the other; both sides assert the same CRC reference
+vector in their test suites.
 
 ---
 
@@ -2470,7 +2560,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_timer` | alarm add/cancel, `advance_us` dispatch |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
-| `test_hal_serial_session` | HELLO handshake parser, unknown command response, multi-command RX handling, null-arg safety |
+| `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |

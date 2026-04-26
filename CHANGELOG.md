@@ -2,6 +2,56 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-26
+
+### Added
+- `hal_serial_frame.h` — new header-only wire-framing helpers shared with
+  the SerialConfigurator host. Exposes `hal_serial_frame_encode`,
+  `hal_serial_frame_decode`, and `hal_serial_frame_crc8` along with the
+  constants `HAL_SERIAL_FRAME_PREFIX` (`"$SC,"`),
+  `HAL_SERIAL_FRAME_PREFIX_LEN`, `HAL_SERIAL_FRAME_PAYLOAD_MAX` (256) and
+  `HAL_SERIAL_FRAME_LINE_MAX`. Frame format:
+  `$SC,<seq>,<payload>*<crc8>\n`. CRC-8/CCITT (poly `0x07`, init `0x00`,
+  no reflect, no xor-out) over the bytes between the leading `$` and the
+  `*` separator. The `"123456789" → 0xF4` reference vector is asserted by
+  the host-test suite.
+- `hal_serial_session_set_unknown_handler(session, cb, user)` — register
+  a per-module sink for unrecognised inner payloads (used by ECU/Clocks/
+  OilAndSpeed to implement their `SC_*` command sets).
+- `hal_serial_session_println(session, payload)` — emit one inner payload
+  as a framed reply that echoes the in-flight request's `<seq>`. No-op
+  outside the request-dispatch window.
+
+### Changed
+- **BREAKING:** `hal_serial_session.h` is now framed-only. Lines that do
+  not start with the `$SC,` sentinel are silently discarded by
+  `hal_serial_session_poll`. The previous plain-text fall-through (which
+  replied `ERR UNKNOWN`) has been removed; the SerialConfigurator host
+  always frames its requests, and dropping the legacy path eliminates a
+  class of bugs (substring matches against debug-log lines, unframed
+  bytes corrupting the stream, modules accidentally responding to noise).
+- **BREAKING:** Default reply for unrecognised framed payloads changed
+  from `ERR UNKNOWN` (plain text) to `SC_UNKNOWN_CMD` (inside the frame
+  envelope, echoing the inbound `<seq>`).
+- `HAL_SERIAL_SESSION_MAX_LINE` widened from 48 to 128 bytes to
+  accommodate the framing overhead and longer SC payloads.
+- `hal_serial_session_t` gained two new fields:
+  - `bool in_request` — gates `hal_serial_session_println` so modules
+    cannot inject unsolicited bytes,
+  - `uint16_t request_seq` — the seq carried in the in-flight request,
+    automatically used by `hal_serial_session_println` to correlate
+    replies.
+- `hal_serial_session.h` documentation rewritten to describe the framed
+  protocol (see updated `JaszczurHAL_API.md` §`hal_serial_session`).
+
+### Tests
+- `test_hal_serial_session` rewritten for the framed protocol: round-trip
+  HELLO with CRC validation, request<->response seq echo, custom unknown
+  handler dispatch and reply seq inheritance, default `SC_UNKNOWN_CMD`
+  reply when no handler is registered, and silent drop of non-framed
+  input. New independent CRC reference vector locks the wire format on
+  the firmware side.
+
 ## [Unreleased] - 2026-04-24
 
 ### Added

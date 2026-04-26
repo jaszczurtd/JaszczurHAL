@@ -132,6 +132,23 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg);
 bool hal_deb_is_initialized(void);
 
 /**
+ * @brief Enable or disable debug log emission from hal_deb()/hal_derr().
+ *
+ * When muted, debug helpers return immediately and do not emit text to the
+ * underlying serial output. Protocol traffic sent with hal_serial_print*()
+ * is unaffected.
+ *
+ * @param muted true to suppress debug logs, false to allow them.
+ */
+void hal_debug_set_muted(bool muted);
+
+/**
+ * @brief Check whether debug log emission is currently muted.
+ * @return true when debug output is muted.
+ */
+bool hal_debug_is_muted(void);
+
+/**
  * @brief Set the prefix prepended to every hal_deb() / hal_derr() message.
  * @param prefix Null-terminated prefix string (max HAL_DEBUG_PREFIX_SIZE-1 chars).
  */
