@@ -420,9 +420,17 @@ static inline void hal_serial_session__handle_auth_begin(
     }
     hex[HAL_SC_AUTH_CHALLENGE_BYTES * 2u] = '\0';
 
+    /* The AUTH handler is opt-in via vocabulary: callers that don't supply a
+     * challenge fmt get silent dispatch (the challenge is generated and
+     * stashed but not echoed). Misconfiguration rather than common case —
+     * documented in hal_serial_session_vocabulary.h. */
+    const char *fmt =
+        HAL_SERIAL_SESSION_VOCAB(session, reply_auth_challenge_fmt);
+    if (fmt == NULL) {
+        return;
+    }
     char response[64];
-    snprintf(response, sizeof(response),
-             HAL_SERIAL_SESSION_VOCAB(session, reply_auth_challenge_fmt), hex);
+    snprintf(response, sizeof(response), fmt, hex);
     hal_serial_session_println(session, response);
 }
 
@@ -571,27 +579,34 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
     }
 
 #ifdef HAL_ENABLE_CRYPTO
+    /* Each cmd_* lookup may be NULL when the project hasn't supplied a
+     * vocabulary (or has explicitly opted out of that command). NULL means
+     * "not recognised" → fall through to the unknown-line handler so the
+     * line still has a path to a custom dispatcher. */
     const char *cmd_auth_begin =
         HAL_SERIAL_SESSION_VOCAB(session, cmd_auth_begin);
-    if (strcmp(inner, cmd_auth_begin) == 0) {
+    if (cmd_auth_begin != NULL && strcmp(inner, cmd_auth_begin) == 0) {
         hal_serial_session__handle_auth_begin(session);
         return;
     }
 
     const char *cmd_auth_prove =
         HAL_SERIAL_SESSION_VOCAB(session, cmd_auth_prove);
-    const size_t cmd_auth_prove_len = strlen(cmd_auth_prove);
-    if (strncmp(inner, cmd_auth_prove, cmd_auth_prove_len) == 0 &&
-        (inner[cmd_auth_prove_len] == ' ' ||
-         inner[cmd_auth_prove_len] == '\0')) {
-        hal_serial_session__handle_auth_prove(
-            session, inner + cmd_auth_prove_len);
-        return;
+    if (cmd_auth_prove != NULL) {
+        const size_t cmd_auth_prove_len = strlen(cmd_auth_prove);
+        if (strncmp(inner, cmd_auth_prove, cmd_auth_prove_len) == 0 &&
+            (inner[cmd_auth_prove_len] == ' ' ||
+             inner[cmd_auth_prove_len] == '\0')) {
+            hal_serial_session__handle_auth_prove(
+                session, inner + cmd_auth_prove_len);
+            return;
+        }
     }
 
     const char *cmd_reboot_bootloader =
         HAL_SERIAL_SESSION_VOCAB(session, cmd_reboot_bootloader);
-    if (strcmp(inner, cmd_reboot_bootloader) == 0) {
+    if (cmd_reboot_bootloader != NULL &&
+        strcmp(inner, cmd_reboot_bootloader) == 0) {
         hal_serial_session__handle_reboot_bootloader(session);
         return;
     }

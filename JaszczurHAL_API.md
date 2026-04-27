@@ -1064,16 +1064,22 @@ Authentication (Phase 3) — opt-in:
 - `auth_failures` counts failed `SC_AUTH_PROVE` attempts; rate-limit and
   lockout policies on top of it are deferred to Phase 7.
 
-Vocabulary override (R1.0) — opt-in:
-- The inbound command tokens (`SC_AUTH_BEGIN`, `SC_AUTH_PROVE`,
-  `SC_REBOOT_BOOTLOADER`) and outbound reply payloads listed above are
-  captured by `hal_serial_session_vocabulary_t`. Pass an instance to
-  `hal_serial_session_init_with_vocabulary()` to make the helper speak a
-  project-specific dialect; pass NULL (or call the classic
-  `hal_serial_session_init()`) to keep the historical Fiesta defaults.
-- Each field is independently optional — a NULL field falls back to the
-  matching field of the exposed `hal_serial_session_vocabulary_default`
-  singleton, so callers can override only the tokens they care about.
+Vocabulary configuration (R1.0 + R1.6):
+- The inbound command tokens (`cmd_auth_begin`, `cmd_auth_prove`,
+  `cmd_reboot_bootloader`) and outbound reply payloads are captured by
+  `hal_serial_session_vocabulary_t`. Pass a populated instance to
+  `hal_serial_session_init_with_vocabulary()` to enable AUTH and
+  REBOOT_BOOTLOADER handling in the project's preferred dialect.
+- R1.6 stripped the historical SC_* defaults from JaszczurHAL.
+  `hal_serial_session_vocabulary_default` is now an empty placeholder
+  (every field NULL). The classic `hal_serial_session_init()` keeps
+  working for HELLO-only sessions: HELLO is structural and not
+  vocabulary-driven, but AUTH and REBOOT commands fall through to the
+  unknown-line handler when no vocabulary is supplied.
+- Per-field NULL means "this command is not recognised" / "this reply
+  is not emitted". Callers that want partial AUTH support can leave
+  command fields NULL; the helper will skip those branches and keep
+  the rest of the dialect intact.
 - HELLO and the `OK HELLO module=... proto=... session=... fw=... build=...
   uid=...` reply are intentionally NOT configurable: their structure is
   parsed by every host and is treated as part of the protocol contract.

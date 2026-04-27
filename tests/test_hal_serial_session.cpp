@@ -4,6 +4,37 @@
 
 #include <string.h>
 
+/* R1.6: the production HAL default vocabulary is empty (all NULL). The
+ * test fixture below stays as the SC_* family so the existing assertions
+ * (SC_OK AUTH_OK, SC_NOT_AUTHORIZED, SC_OK REBOOT, etc.) still apply.
+ * Every test that exercises AUTH / REBOOT / unknown-cmd / not-ready paths
+ * routes through `init_session_with_test_vocab` so the helper recognises
+ * those tokens. HELLO-only tests can stick to `hal_serial_session_init`. */
+static const hal_serial_session_vocabulary_t k_test_sc_vocab = {
+    .cmd_auth_begin = "SC_AUTH_BEGIN",
+    .cmd_auth_prove = "SC_AUTH_PROVE",
+    .cmd_reboot_bootloader = "SC_REBOOT_BOOTLOADER",
+    .reply_unknown_cmd = "SC_UNKNOWN_CMD",
+    .reply_not_ready_hello_required = "SC_NOT_READY HELLO_REQUIRED",
+    .reply_auth_challenge_fmt = "SC_OK AUTH_CHALLENGE %s",
+    .reply_auth_ok = "SC_OK AUTH_OK",
+    .reply_auth_failed_no_challenge = "SC_AUTH_FAILED no_challenge",
+    .reply_auth_failed_bad_length = "SC_AUTH_FAILED bad_length",
+    .reply_auth_failed_bad_hex = "SC_AUTH_FAILED bad_hex",
+    .reply_auth_failed_key_derivation = "SC_AUTH_FAILED key_derivation",
+    .reply_auth_failed_mac_compute = "SC_AUTH_FAILED mac_compute",
+    .reply_auth_failed_bad_mac = "SC_AUTH_FAILED bad_mac",
+    .reply_not_authorized = "SC_NOT_AUTHORIZED",
+    .reply_reboot_ok = "SC_OK REBOOT",
+};
+
+static void init_session_with_test_vocab(hal_serial_session_t *s,
+                                         const char *tag, const char *fw,
+                                         const char *build) {
+    hal_serial_session_init_with_vocabulary(s, tag, fw, build,
+                                            &k_test_sc_vocab);
+}
+
 static hal_serial_session_t *g_unknown_session = NULL;
 static char g_unknown_line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
 static void *g_unknown_user = NULL;
@@ -95,7 +126,7 @@ void test_session_init_clears_state_and_binds_identity(void) {
     hal_serial_session_t s;
     memset(&s, 0xAA, sizeof(s));
 
-    hal_serial_session_init(&s, "ECU", "1.2.3", "abc123");
+    init_session_with_test_vocab(&s, "ECU", "1.2.3", "abc123");
 
     TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
     TEST_ASSERT_EQUAL_UINT32(0u, hal_serial_session_id(&s));
@@ -114,11 +145,11 @@ void test_session_init_clears_state_and_binds_identity(void) {
 
 void test_session_init_nullable_identity_defaults_to_unknown(void) {
     hal_serial_session_t s;
-    hal_serial_session_init(&s, "ECU", NULL, NULL);
+    init_session_with_test_vocab(&s, "ECU", NULL, NULL);
     TEST_ASSERT_EQUAL_STRING("unknown", s.fw_version);
     TEST_ASSERT_EQUAL_STRING("unknown", s.build_id);
 
-    hal_serial_session_init(&s, "ECU", "", "");
+    init_session_with_test_vocab(&s, "ECU", "", "");
     TEST_ASSERT_EQUAL_STRING("unknown", s.fw_version);
     TEST_ASSERT_EQUAL_STRING("unknown", s.build_id);
 }
@@ -128,7 +159,7 @@ void test_poll_hello_reports_full_identity_and_seq_echo(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[192];
 
-    hal_serial_session_init(&s, "ECU", "1.2.3", "abc123");
+    init_session_with_test_vocab(&s, "ECU", "1.2.3", "abc123");
     hal_mock_set_millis(1234);
     inject_framed_line(42u, "HELLO", '\n');
 
@@ -156,7 +187,7 @@ void test_poll_hello_with_unknown_identity(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[192];
 
-    hal_serial_session_init(&s, "ECU", NULL, NULL);
+    init_session_with_test_vocab(&s, "ECU", NULL, NULL);
     inject_framed_line(7u, "HELLO", '\n');
 
     hal_serial_session_poll(&s);
@@ -177,7 +208,7 @@ void test_poll_uses_injected_mock_uid(void) {
     hal_mock_set_device_uid(custom_uid);
 
     hal_serial_session_t s;
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(11u, "HELLO", '\n');
 
     hal_serial_session_poll(&s);
@@ -192,7 +223,7 @@ void test_poll_unknown_payload_without_handler_returns_sc_unknown_cmd(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[HAL_SERIAL_SESSION_MAX_LINE + 1u];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(9u, "PING", '\n');
 
     hal_serial_session_poll(&s);
@@ -209,7 +240,7 @@ void test_poll_unknown_payload_with_handler_dispatches_inner_and_reply_seq(void)
     uint16_t reply_seq = 0u;
     char reply_payload[HAL_SERIAL_SESSION_MAX_LINE + 1u];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     g_unknown_session = &s;
     hal_serial_session_set_unknown_handler(&s, unknown_reply_cb, &user_tag);
     inject_framed_line(333u, "SC_GET_META", '\n');
@@ -230,7 +261,7 @@ void test_poll_drops_non_framed_and_bad_crc_lines(void) {
     char bad_crc_line[HAL_SERIAL_FRAME_LINE_MAX + 2u];
     size_t len = 0u;
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_serial_inject_rx("HELLO\nPING\n", -1);
 
     hal_serial_session_poll(&s);
@@ -259,7 +290,7 @@ void test_poll_mutes_debug_during_framed_dispatch_and_restores_state(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[HAL_SERIAL_SESSION_MAX_LINE + 1u];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     g_unknown_session = &s;
     hal_serial_session_set_unknown_handler(&s, noisy_unknown_cb, NULL);
     inject_framed_line(77u, "SC_NOISY", '\n');
@@ -278,7 +309,7 @@ void test_hal_serial_session_println_is_gated_by_request_window(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[HAL_SERIAL_SESSION_MAX_LINE + 1u];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_serial_session_println(&s, "SC_SHOULD_NOT_EMIT");
     TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
 
@@ -302,7 +333,7 @@ void test_poll_handles_multiple_framed_commands_in_one_rx_buffer(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[192];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     TEST_ASSERT_TRUE(hal_serial_frame_encode(10u, "HELLO", frame_a, sizeof(frame_a), &len_a));
     TEST_ASSERT_TRUE(hal_serial_frame_encode(11u, "HELLO", frame_b, sizeof(frame_b), &len_b));
 
@@ -387,7 +418,7 @@ void test_auth_begin_before_hello_returns_not_ready(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(5u, "SC_AUTH_BEGIN", '\n');
     hal_serial_session_poll(&s);
 
@@ -402,7 +433,7 @@ void test_auth_begin_after_hello_issues_challenge(void) {
     hal_serial_session_t s;
     uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
@@ -425,7 +456,7 @@ void test_repeated_auth_begin_yields_different_challenges(void) {
     uint8_t a[HAL_SC_AUTH_CHALLENGE_BYTES];
     uint8_t b[HAL_SC_AUTH_CHALLENGE_BYTES];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
 
@@ -449,7 +480,7 @@ void test_auth_prove_with_correct_mac_authenticates_session(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
 
@@ -488,7 +519,7 @@ void test_auth_prove_with_bad_mac_fails_and_consumes_challenge(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
 
@@ -526,7 +557,7 @@ void test_auth_prove_with_malformed_payload_is_rejected(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     inject_framed_line(2u, "SC_AUTH_BEGIN", '\n');
@@ -545,7 +576,7 @@ void test_new_hello_clears_authenticated_state(void) {
     hal_serial_session_t s;
     uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
 
@@ -615,7 +646,7 @@ void test_reboot_bootloader_without_auth_is_rejected(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_bootloader_reset_flag();
 
     /* No HELLO and no AUTH yet — must refuse. */
@@ -633,7 +664,7 @@ void test_reboot_bootloader_after_hello_only_is_rejected(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_bootloader_reset_flag();
 
     /* HELLO activates the session but the AUTH path has not been
@@ -657,7 +688,7 @@ void test_reboot_bootloader_after_auth_acks_and_enters_bootloader(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_bootloader_reset_flag();
     (void)authenticate_session(&s, 1u, 2u, 3u);
 
@@ -675,7 +706,7 @@ void test_reboot_bootloader_blocked_after_new_hello_clears_auth(void) {
     uint16_t reply_seq = 0u;
     char reply_payload[128];
 
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_bootloader_reset_flag();
     (void)authenticate_session(&s, 1u, 2u, 3u);
 
@@ -697,7 +728,7 @@ void test_reboot_bootloader_blocked_after_new_hello_clears_auth(void) {
 
 void test_poll_null_args_is_safe(void) {
     hal_serial_session_t s;
-    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     inject_framed_line(1u, "HELLO", '\n');
 
     hal_serial_session_poll(NULL);

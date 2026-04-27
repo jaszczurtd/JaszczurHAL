@@ -105,24 +105,34 @@ void setUp(void) {
 
 void tearDown(void) {}
 
-/* ── Default-vocabulary smoke (no custom override) ──────────────────────── */
+/* ── Empty-default smoke (no custom override) ──────────────────────────── */
 
-void test_classic_init_keeps_default_vocabulary(void) {
+/* R1.6 stripped the SC_* defaults from JaszczurHAL. Calling the classic
+ * `hal_serial_session_init` (no vocab) leaves every reply field NULL, so
+ * the helper silently drops the unknown-cmd reply and AUTH commands fall
+ * through to the unknown-line handler. HELLO (structural) keeps working. */
+void test_classic_init_default_vocabulary_is_empty(void) {
     hal_serial_session_t s;
-    uint16_t reply_seq = 0u;
-    char reply_payload[128];
 
     hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
     TEST_ASSERT_NULL(s.vocab);
 
-    /* Unknown command → default SC_UNKNOWN_CMD reply. */
+    /* Unknown command → no reply (reply_unknown_cmd is NULL by default). */
     inject_framed_line(9u, "PING", '\n');
     hal_serial_session_poll(&s);
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
 
+    /* HELLO is structural and not vocabulary-driven — still works. */
+    inject_framed_line(10u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+
+    uint16_t reply_seq = 0u;
+    char reply_payload[192];
     TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
                                               sizeof(reply_payload)));
-    TEST_ASSERT_EQUAL_UINT16(9u, reply_seq);
-    TEST_ASSERT_EQUAL_STRING("SC_UNKNOWN_CMD", reply_payload);
+    TEST_ASSERT_EQUAL_UINT16(10u, reply_seq);
+    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "OK HELLO"));
 }
 
 /* ── Full custom vocabulary: every override visible on the wire ─────────── */
@@ -333,9 +343,15 @@ void test_custom_vocab_auth_failed_uses_override(void) {
     TEST_ASSERT_EQUAL_STRING("X_AUTH_FAILED bad_length", reply_payload);
 }
 
-/* ── Partial override: only one field set, rest fall back ───────────────── */
+/* ── Partial override: only one field set, rest fall back to NULL ──────── */
 
-void test_partial_vocab_falls_back_to_defaults_per_field(void) {
+/* R1.6 contract: NULL fields fall back to the empty default (NULL), so
+ * commands without a configured token are not recognised and replies
+ * without a configured payload are silently dropped. The partial vocab
+ * here only sets `reply_unknown_cmd`, so AUTH commands fall through to
+ * the unknown handler — they get the renamed unknown reply rather than
+ * a synthetic SC_AUTH_CHALLENGE. */
+void test_partial_vocab_unset_fields_remain_unrecognised(void) {
     hal_serial_session_t s;
     uint16_t reply_seq = 0u;
     char reply_payload[192];
@@ -343,7 +359,7 @@ void test_partial_vocab_falls_back_to_defaults_per_field(void) {
     hal_serial_session_init_with_vocabulary(&s, "ECU", "1.0.0", "dev",
                                             &k_partial_vocab);
 
-    /* Unknown command → custom Y_UNKNOWN. */
+    /* Unknown command → custom Y_UNKNOWN (the one field that IS set). */
     inject_framed_line(1u, "PING", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
@@ -351,23 +367,23 @@ void test_partial_vocab_falls_back_to_defaults_per_field(void) {
     TEST_ASSERT_EQUAL_UINT16(1u, reply_seq);
     TEST_ASSERT_EQUAL_STRING("Y_UNKNOWN", reply_payload);
 
-    /* AUTH commands NOT overridden → still respond to default SC_AUTH_BEGIN
-     * literal and default SC_OK AUTH_CHALLENGE prefix. */
+    /* AUTH command not configured → unrecognised → unknown-handler path
+     * → emits the (custom) unknown reply, not a challenge. */
     inject_framed_line(2u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     inject_framed_line(3u, "SC_AUTH_BEGIN", '\n');
     hal_serial_session_poll(&s);
 
-    TEST_ASSERT_TRUE(s.challenge_pending);
+    TEST_ASSERT_FALSE(s.challenge_pending);
     TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
                                               sizeof(reply_payload)));
     TEST_ASSERT_EQUAL_UINT16(3u, reply_seq);
-    TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_OK AUTH_CHALLENGE "));
+    TEST_ASSERT_EQUAL_STRING("Y_UNKNOWN", reply_payload);
 }
 
 int main(void) {
     UNITY_BEGIN();
-    RUN_TEST(test_classic_init_keeps_default_vocabulary);
+    RUN_TEST(test_classic_init_default_vocabulary_is_empty);
     RUN_TEST(test_custom_vocab_renames_unknown_reply);
     RUN_TEST(test_custom_vocab_renames_auth_command_and_replies);
     RUN_TEST(test_custom_vocab_sc_prefix_falls_through_to_unknown);
@@ -375,6 +391,6 @@ int main(void) {
     RUN_TEST(test_custom_vocab_not_authorized_uses_override);
     RUN_TEST(test_custom_vocab_not_ready_uses_override);
     RUN_TEST(test_custom_vocab_auth_failed_uses_override);
-    RUN_TEST(test_partial_vocab_falls_back_to_defaults_per_field);
+    RUN_TEST(test_partial_vocab_unset_fields_remain_unrecognised);
     return UNITY_END();
 }
