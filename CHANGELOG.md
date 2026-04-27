@@ -2,6 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-27 (Fiesta R1.6 — strip SC_* literals from production code)
+
+### Changed
+- `hal_serial_session_vocabulary_default` is now an empty placeholder
+  (every field NULL). The R1.0 decoupling kept Fiesta's SC_* tokens
+  baked in as the per-field NULL fallback; R1.6 finishes the
+  decoupling. Projects that need AUTH or REBOOT_BOOTLOADER handlers
+  MUST pass a populated vocabulary via
+  `hal_serial_session_init_with_vocabulary`. The legacy
+  `hal_serial_session_init` still works for HELLO-only sessions.
+- Dispatch path in `hal_serial_session.h` gained NULL guards on the
+  three command lookups (`cmd_auth_begin`, `cmd_auth_prove`,
+  `cmd_reboot_bootloader`) and the one fmt lookup
+  (`reply_auth_challenge_fmt`). NULL means "this command is not
+  recognised by this session" → falls through to the unknown-line
+  handler. The reply-side `println` calls were already NULL-safe.
+
+### Tests
+- `test_hal_serial_session.cpp` introduced a test-local
+  `k_test_sc_vocab` fixture carrying the SC_* family verbatim, and an
+  `init_session_with_test_vocab` helper. All 24 existing init call
+  sites route through it so the suite still asserts on the SC_*
+  wire output. JaszczurHAL `src/` now has zero SC_* literals; SC_*
+  appears only in `tests/` as fixture data (acceptance criterion
+  from the R1.0 pre-flight grep snapshot).
+- `test_hal_serial_session_vocabulary.cpp` updated the two cases
+  that encoded the R1.0 fallback contract:
+  * `test_classic_init_default_vocabulary_is_empty` — verifies the
+    new empty-default semantics (unknown-cmd silently dropped,
+    HELLO still works structurally).
+  * `test_partial_vocab_unset_fields_remain_unrecognised` — verifies
+    that NULL fields fall back to NULL (= unrecognised) rather than
+    to a built-in SC_* token, so SC_AUTH_BEGIN with a partial vocab
+    that doesn't set `cmd_auth_begin` falls through to the unknown
+    handler.
+- Full HAL ctest 30/30 green.
+
+### Migration
+- Fiesta firmware (ECU/Clocks/OilAndSpeed) already passes
+  `fiesta_default_vocabulary` explicitly via R1.2/R1.4/R1.5, so this
+  change is silent on that side. Other consumers that relied on the
+  built-in SC_* defaults need to either supply their own vocabulary
+  or accept that AUTH/REBOOT commands fall through to their unknown
+  handler.
+
 ## [Unreleased] - 2026-04-27 (Fiesta R1.0 — session vocabulary decoupling)
 
 ### Added

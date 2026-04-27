@@ -2,29 +2,34 @@
 
 /**
  * @file hal_serial_session_vocabulary.h
- * @brief Optional vocabulary table for @ref hal_serial_session.
+ * @brief Vocabulary table for @ref hal_serial_session.
  *
  * The framed serial session helper recognises a small set of inbound command
- * tokens (SC_AUTH_BEGIN, SC_AUTH_PROVE, SC_REBOOT_BOOTLOADER) and emits a
- * matching set of outbound reply tokens (SC_OK AUTH_OK, SC_AUTH_FAILED ...,
- * SC_NOT_AUTHORIZED, ...). Historically those literals were hard-coded inside
- * the helper, baking Fiesta-specific protocol vocabulary into JaszczurHAL.
+ * tokens and emits a matching set of outbound reply tokens. Their actual
+ * spellings are project-specific (Fiesta, for example, uses the SC_* dialect)
+ * and live OUTSIDE JaszczurHAL: the host project provides them at session init
+ * time via @ref hal_serial_session_init_with_vocabulary.
  *
- * A @ref hal_serial_session_vocabulary_t lets callers pass the whole vocabulary
- * via @ref hal_serial_session_init_with_vocabulary, decoupling the helper from
- * any one project. NULL fields fall back per-field to the historical defaults
- * via @ref hal_serial_session_vocabulary_default, so adopters can override only
- * the tokens they care about. The classic @ref hal_serial_session_init entry
- * point keeps working unchanged: it stores a NULL vocab pointer and every
- * lookup falls back to the default.
+ * R1.6 (2026-04-27) finished the decoupling: this header no longer carries any
+ * SC_* literals. @ref hal_serial_session_vocabulary_default is a placeholder
+ * with every field NULL, which the dispatch path reads as "this command is not
+ * recognised / this reply is not emitted". Projects that need the AUTH /
+ * REBOOT_BOOTLOADER handlers MUST pass a populated vocabulary instance; the
+ * Fiesta default lives in `src/common/scDefinitions/sc_session_vocabulary.h`
+ * (`fiesta_default_vocabulary`).
+ *
+ * The classic @ref hal_serial_session_init entry point still works for
+ * HELLO-only sessions: HELLO is structural and intentionally NOT configurable
+ * (see below). It just won't recognise AUTH / REBOOT commands, which fall
+ * through to the unknown-line handler.
  *
  * Design notes:
  * - HELLO is structural and intentionally NOT configurable here. Hosts parse
  *   the `OK HELLO module=... proto=... session=... fw=... build=... uid=...`
  *   line by structure; renaming the keyword would break every host.
  * - Reply strings ending in @c _fmt are passed to @c printf-family formatters.
- *   The %s/%u placeholders in the default match the historical wire format and
- *   MUST be preserved by overrides; format mismatch is undefined behaviour.
+ *   The %s/%u placeholders MUST be preserved by overrides; format mismatch is
+ *   undefined behaviour.
  */
 
 #include <stddef.h>
@@ -64,32 +69,36 @@ typedef struct {
 } hal_serial_session_vocabulary_t;
 
 /**
- * @brief Default vocabulary — the SC tokens hard-coded into
- *        @ref hal_serial_session prior to R1.0.
+ * @brief Empty placeholder vocabulary — every field is NULL.
  *
  * Defined as @c static @c const in the header so consumers can resolve
  * NULL-fallbacks at compile time without a dedicated translation unit.
- * String literal merging dedupes the underlying chars across TUs; the
- * 15-pointer struct itself is small enough that the per-TU copy is not
- * worth optimising.
+ *
+ * R1.6 stripped the historical SC_* defaults. The dispatch path reads a
+ * NULL command field as "this command is not recognised by this session"
+ * (the inner payload falls through to the unknown-line handler) and a
+ * NULL reply field as "this reply is not emitted by this session"
+ * (silent drop). Callers that want AUTH / REBOOT handling MUST pass a
+ * fully populated vocabulary via
+ * @ref hal_serial_session_init_with_vocabulary.
  */
 static const hal_serial_session_vocabulary_t
     hal_serial_session_vocabulary_default = {
-        .cmd_auth_begin = "SC_AUTH_BEGIN",
-        .cmd_auth_prove = "SC_AUTH_PROVE",
-        .cmd_reboot_bootloader = "SC_REBOOT_BOOTLOADER",
-        .reply_unknown_cmd = "SC_UNKNOWN_CMD",
-        .reply_not_ready_hello_required = "SC_NOT_READY HELLO_REQUIRED",
-        .reply_auth_challenge_fmt = "SC_OK AUTH_CHALLENGE %s",
-        .reply_auth_ok = "SC_OK AUTH_OK",
-        .reply_auth_failed_no_challenge = "SC_AUTH_FAILED no_challenge",
-        .reply_auth_failed_bad_length = "SC_AUTH_FAILED bad_length",
-        .reply_auth_failed_bad_hex = "SC_AUTH_FAILED bad_hex",
-        .reply_auth_failed_key_derivation = "SC_AUTH_FAILED key_derivation",
-        .reply_auth_failed_mac_compute = "SC_AUTH_FAILED mac_compute",
-        .reply_auth_failed_bad_mac = "SC_AUTH_FAILED bad_mac",
-        .reply_not_authorized = "SC_NOT_AUTHORIZED",
-        .reply_reboot_ok = "SC_OK REBOOT",
+        .cmd_auth_begin = NULL,
+        .cmd_auth_prove = NULL,
+        .cmd_reboot_bootloader = NULL,
+        .reply_unknown_cmd = NULL,
+        .reply_not_ready_hello_required = NULL,
+        .reply_auth_challenge_fmt = NULL,
+        .reply_auth_ok = NULL,
+        .reply_auth_failed_no_challenge = NULL,
+        .reply_auth_failed_bad_length = NULL,
+        .reply_auth_failed_bad_hex = NULL,
+        .reply_auth_failed_key_derivation = NULL,
+        .reply_auth_failed_mac_compute = NULL,
+        .reply_auth_failed_bad_mac = NULL,
+        .reply_not_authorized = NULL,
+        .reply_reboot_ok = NULL,
 };
 
 /**
