@@ -5,7 +5,7 @@ using **JaszczurHAL** on RP2040 / RP2350 boards (Raspberry Pi Pico family).
 
 Copy the contents of this directory into your new project's root to get a
 working build/upload/debug/monitor environment out of the box. Every file is
-meant to be edited — this is a starting point, not a framework.
+meant to be edited - this is a starting point, not a framework.
 
 ---
 
@@ -25,7 +25,7 @@ vscode-template/linux/
     select-board.sh            ← interactive FQBN selector with menu options
     upload-uf2.sh              ← compile + copy UF2 to BOOTSEL drive
     serial-persistent.py       ← persistent serial monitor (see notes below)
-  hal_project_config.h         ← template — HAL module disable flags
+  hal_project_config.h         ← template - HAL module disable flags
 ```
 
 > **Note on serial monitor scripts**
@@ -34,7 +34,7 @@ vscode-template/linux/
 > re-reads the preferred port from `settings.json` while running, so
 > **Change port** (`Ctrl+Shift+9`) takes effect without restarting the
 > monitor. A separate one-shot `serial-monitor.py` is deliberately omitted
-> from the Linux template — the persistent variant is stricter superset
+> from the Linux template - the persistent variant is stricter superset
 > and should be the default.
 
 ---
@@ -67,7 +67,7 @@ Optional fields are documented inline in the file. See
 
 ### 3. Configure HAL modules (optional)
 
-Edit `hal_project_config.h` — uncomment `#define HAL_DISABLE_*` lines for
+Edit `hal_project_config.h` - uncomment `#define HAL_DISABLE_*` lines for
 modules your project does not use.  If the file is present and the build
 scripts are used, it is picked up automatically.
 
@@ -78,7 +78,7 @@ the project and auto-generate `c_cpp_properties.json`.
 
 ### 5. Install keyboard shortcuts (optional)
 
-Open VS Code keyboard settings (`Ctrl+K Ctrl+S` → `{}` icon) and paste the
+Open VS Code keyboard settings (`Ctrl+K Ctrl+S` -> `{}` icon) and paste the
 contents of `.vscode/keybindings.reference.json` into your `keybindings.json`.
 
 ---
@@ -159,7 +159,7 @@ Typical adaptations:
 
 - **Rename tasks**: the `label` field is what VS Code shows in the task
   picker. Keybindings in `keybindings.reference.json` refer to tasks by
-  label — if you rename a task, update the `args` field in the
+  label - if you rename a task, update the `args` field in the
   corresponding keybinding entry.
 - **Change the build entry point**: every Build / Debug / Upload task
   delegates to `scripts/build.sh`. If your project has a different
@@ -170,7 +170,7 @@ Typical adaptations:
   "Monitor (Debug Probe)" and "Ctrl+Shift+5" from your
   keybindings.
 - **Add project-specific tasks**: e.g. a `Quality: cppcheck`, `Test: host`,
-  `Package: .uf2 release` task. Follow the same structure — keep
+  `Package: .uf2 release` task. Follow the same structure - keep
   `presentation.panel` as `"shared"` for stateless tasks and
   `"dedicated"` for long-running ones like the monitor.
 - **Inputs**: `inputs[]` at the top of the file back the `${input:*}`
@@ -195,7 +195,7 @@ custom USB **manufacturer** and **product** strings. These show up in:
 - macOS `system_profiler SPUSBDataType`
 
 This is the cleanest way to disambiguate multiple boards with identical
-VID:PID plugged into the same host — each device comes up with its own
+VID:PID plugged into the same host - each device comes up with its own
 human-readable name instead of an anonymous "Board CDC".
 
 The template exposes this as two optional fields in `.vscode/settings.json`:
@@ -216,14 +216,14 @@ as:
 ```
 
 You can also hard-code them per project by editing `build.sh`
-directly — the settings-based approach just keeps them alongside the
+directly - the settings-based approach just keeps them alongside the
 other per-project values. Leave both empty to fall back to the core's
 defaults ("Raspberry Pi" / "Pico").
 
-**Tip — per-module identities in a multi-module project**: if a single
+**Tip - per-module identities in a multi-module project**: if a single
 repository ships firmware for several boards, give each one a different
 `build.usbProduct` (e.g. `"FleetBot Motor"`, `"FleetBot Sensor"`). Host
-tooling can then pin a friendly name per device by iProduct string — no
+tooling can then pin a friendly name per device by iProduct string - no
 need to track `/dev/ttyACM*` numbers across reboots.
 
 ---
@@ -250,10 +250,10 @@ watches, and live-watch samples straight from VS Code. The shipped
    CMSIS-DAP (`interface/cmsis-dap.cfg`) which the current probe firmware
    implements natively.
 2. **SWD wiring** to the target:
-   - Probe **SC** → target **SWCLK**
-   - Probe **SD** → target **SWDIO**
-   - Probe **GND** → target **GND**
-   - (Optional) Probe **TX/RX** → target UART for log capture via Probe.
+   - Probe **SC** -> target **SWCLK**
+   - Probe **SD** -> target **SWDIO**
+   - Probe **GND** -> target **GND**
+   - (Optional) Probe **TX/RX** -> target UART for log capture via Probe.
 3. **Power**: either power the target over USB separately, or take 3.3 V
    from the probe's debug header if your target supports it.
 
@@ -262,7 +262,7 @@ watches, and live-watch samples straight from VS Code. The shipped
 1. Install the `marus25.cortex-debug` extension (VS Code will prompt you
    because it is listed in `.vscode/extensions.json`).
 2. OpenOCD and `arm-none-eabi-gdb` are bundled with the `rp2040:rp2040`
-   Arduino core — no separate install. They live under
+   Arduino core - no separate install. They live under
    `~/.arduino15/packages/rp2040/tools/`.
 3. Fill in the `cortex-debug.*` paths in `.vscode/settings.json`.
    The template ships placeholders with `<version>` / `<core-version>`
@@ -312,7 +312,7 @@ watches, and live-watch samples straight from VS Code. The shipped
 ## Notes
 
 - **`c_cpp_properties.json`** is generated by the Refresh IntelliSense script.
-  Do not edit it manually — re-run the script after changing boards or libraries.
+  Do not edit it manually - re-run the script after changing boards or libraries.
 - All paths in tasks and scripts are dynamic (`${workspaceFolder}`,
   `${config:arduino.*}`, `SCRIPT_DIR`).  No hardcoded project paths.
 - The `--build-property "compiler.cpp.extra_flags=-I '${workspaceFolder}'"`

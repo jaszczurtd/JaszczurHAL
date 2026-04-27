@@ -2,8 +2,8 @@
 // Reference keybindings for JaszczurHAL projects.
 //
 // These are NOT auto-loaded. To install:
-//   Ctrl+K Ctrl+S            → open keyboard shortcuts editor
-//   Click the {} icon         → open user keybindings.json
+//   Ctrl+K Ctrl+S            -> open keyboard shortcuts editor
+//   Click the {} icon         -> open user keybindings.json
 //   Paste entries below into the [] array at that file.
 //
 // Each binding is scoped to code files via the `when` clause, so it won't

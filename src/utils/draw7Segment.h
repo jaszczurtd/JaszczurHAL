@@ -11,7 +11,7 @@
  * Draws proportional 7-segment characters using hal_display_* primitives.
  * Supported characters: digits 0-9, hex A-F, space, +, -, ., :, %, ^.
  *
- * No dependency on a specific display driver — works with any backend that
+ * No dependency on a specific display driver - works with any backend that
  * implements hal_display.h.
  */
 

@@ -7,7 +7,7 @@ This folder contains a complete VS Code project configuration template for Ardui
 1. **Copy this folder** to your project directory
 2. **Configure environment variables** in VS Code settings (see Configuration)
 3. **Open the project** in VS Code
-4. **Select build target** using tasks (Ctrl+Shift+P → Tasks: Run Task)
+4. **Select build target** using tasks (Ctrl+Shift+P -> Tasks: Run Task)
 
 ## Project Structure
 
@@ -35,7 +35,7 @@ windows/
 
 ### 1. Environment Variables (Windows)
 
-Set these in **Settings** → **Workspace Settings** (`.vscode/settings.json`):
+Set these in **Settings** -> **Workspace Settings** (`.vscode/settings.json`):
 
 - **`ARDUINO_CLI_PATH`**: Full path to `arduino-cli.exe`
   - Example: `C:\arduino-cli\arduino-cli.exe`

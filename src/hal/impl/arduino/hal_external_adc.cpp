@@ -8,7 +8,7 @@
 #include "drivers/ADS1X15/ADS1X15.h"
 #include <Wire.h>
 
-/* Address placeholder — overwritten by hal_ext_adc_init(). */
+/* Address placeholder - overwritten by hal_ext_adc_init(). */
 static ADS1115 ads_instance(0);
 static ADS1115 *ads = NULL;
 static float s_adc_range = 1.0f;

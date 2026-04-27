@@ -15,11 +15,11 @@
  *                              open-circuit detection.
  *
  * Backend selection (compile-time):
- *   HAL_DISABLE_MCP9600  — exclude the Adafruit MCP9600/MCP9601 backend;
+ *   HAL_DISABLE_MCP9600  - exclude the Adafruit MCP9600/MCP9601 backend;
  *                          MAX6675 remains available
- *   HAL_DISABLE_MAX6675  — exclude the MAX6675 backend;
+ *   HAL_DISABLE_MAX6675  - exclude the MAX6675 backend;
  *                          MCP9600 remains available
- *   Both flags must not be set simultaneously — use HAL_DISABLE_THERMOCOUPLE
+ *   Both flags must not be set simultaneously - use HAL_DISABLE_THERMOCOUPLE
  *   instead (hal_config.h propagates this automatically).
  *
  * Functions not available on the selected chip print an error to the serial
@@ -164,7 +164,7 @@ typedef struct {
  * @brief Initialise a thermocouple chip and return an opaque handle.
  *
  * For MCP9600: calls hal_i2c_init() internally, then verifies the chip via
- * its device-ID register.  Two sensors on the same I2C bus are supported —
+ * its device-ID register.  Two sensors on the same I2C bus are supported -
  * call hal_thermocouple_init() for each; repeated hal_i2c_init() calls with
  * identical parameters are idempotent on Arduino-pico.
  *
@@ -202,7 +202,7 @@ float hal_thermocouple_read(hal_thermocouple_t h);
 /**
  * @brief Read the cold-junction (on-chip ambient) temperature in °C.
  *
- * MCP9600 only — the chip contains an internal thermistor for cold-junction
+ * MCP9600 only - the chip contains an internal thermistor for cold-junction
  * compensation.  MAX6675 has no on-chip CJC sensor.
  *
  * @param h  Valid handle.
@@ -237,7 +237,7 @@ void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t typ
  * @brief Return the currently configured thermocouple wire type.
  *
  * MCP9600: reads from the sensor-configuration register.
- * MAX6675: always returns HAL_THERMOCOUPLE_TYPE_K (fixed silicon — no error).
+ * MAX6675: always returns HAL_THERMOCOUPLE_TYPE_K (fixed silicon - no error).
  *
  * @param h  Valid handle.
  * @return Current wire type.
@@ -268,7 +268,7 @@ uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
 /**
  * @brief Set the hot-junction ADC conversion resolution.
  *
- * MCP9600 only.  Higher resolution → longer conversion time.
+ * MCP9600 only.  Higher resolution -> longer conversion time.
  *
  * @param h    Valid handle.
  * @param res  Desired ADC resolution.

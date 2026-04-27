@@ -9,7 +9,7 @@
  *
  * Hardware implementation uses Adafruit_NeoPixel; the mock implementation
  * is a no-op stub that records the last requested colour for unit testing.
- * Project code only depends on this header — no Adafruit headers are required.
+ * Project code only depends on this header - no Adafruit headers are required.
  */
 
 #include <stdint.h>
@@ -33,7 +33,7 @@ typedef enum {
  * @brief Pixel colour-order / speed flags for hal_rgb_led_init_ex().
  *
  * Values intentionally mirror the matching Adafruit_NeoPixel NEO_* constants
- * so the HAL implementation can cast them directly — but project code never
+ * so the HAL implementation can cast them directly - but project code never
  * needs to include Adafruit headers.
  */
 typedef enum {
@@ -84,7 +84,7 @@ void hal_rgb_led_off(void);
 
 /**
  * @brief Set the status LED colour.
- * Repeated calls with the same colour are suppressed — the LED is only
+ * Repeated calls with the same colour are suppressed - the LED is only
  * updated when the colour actually changes, keeping SPI/DMA traffic minimal.
  * @param color Desired colour.
  */

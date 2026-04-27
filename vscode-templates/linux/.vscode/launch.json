@@ -1,13 +1,13 @@
 // =============================================================================
 // Cortex-Debug launch configurations for RP2040 / RP2350 via Raspberry Pi
-// Debug Probe (CMSIS-DAP). See `linux/README.md` → "Debugging with Raspberry
+// Debug Probe (CMSIS-DAP). See `linux/README.md` -> "Debugging with Raspberry
 // Pi Debug Probe" for SWD wiring, probe firmware requirements, and the set
 // of `cortex-debug.*` paths you need in `.vscode/settings.json`.
 //
 // Targets (adjust `device` and `configFiles` to your board):
-//   - Debug: RP2040 (Pico / Pico W / Zero / Plus) — launch: flash + break at main
-//   - Debug: RP2350 (Pico 2 / Pico 2 W)          — launch: flash + break at main
-//   - Debug: Attach RP2040 / RP2350              — attach without re-flashing
+//   - Debug: RP2040 (Pico / Pico W / Zero / Plus) - launch: flash + break at main
+//   - Debug: RP2350 (Pico 2 / Pico 2 W)          - launch: flash + break at main
+//   - Debug: Attach RP2040 / RP2350              - attach without re-flashing
 //
 // Preconditions:
 //   1. Raspberry Pi Debug Probe connected to target SWD pins (SWCLK, SWDIO, GND).
@@ -15,7 +15,7 @@
 //   3. `cortex-debug.openocdPath`, `cortex-debug.gdbPath`,
 //      `cortex-debug.openocdScriptsPath`, `cortex-debug.svdFileRP2040`, and
 //      `cortex-debug.svdFileRP2350` set in `.vscode/settings.json`
-//      (openocd and arm-none-eabi-gdb ship with the arduino-pico core —
+//      (openocd and arm-none-eabi-gdb ship with the arduino-pico core -
 //      see settings.json comments for the exact paths).
 //   4. For the `launch` configurations, the pre-launch task
 //      "Build (Debug)" produces an ELF at

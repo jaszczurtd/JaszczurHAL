@@ -16,7 +16,7 @@
  * stream, modules accidentally responding to noise).
  *
  * Built-in command:
- * - `HELLO` → `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
+ * - `HELLO` -> `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
  *
  * Any other inner payload is forwarded to the user-supplied unknown-line
  * handler (see @ref hal_serial_session_set_unknown_handler) so each module
@@ -109,7 +109,7 @@ typedef struct {
     void *unknown_user;                        /**< Opaque user pointer forwarded to @c unknown_handler. */
     bool in_request;                           /**< true while dispatching a framed request (gates `hal_serial_session_println`). */
     uint16_t request_seq;                      /**< Sequence number of the in-flight framed request. */
-    const hal_serial_session_vocabulary_t *vocab; /**< Optional override of inbound/outbound SC tokens (NULL → defaults). */
+    const hal_serial_session_vocabulary_t *vocab; /**< Optional override of inbound/outbound SC tokens (NULL -> defaults). */
 #ifdef HAL_ENABLE_CRYPTO
     /* Authentication state (Phase 3). Compiled in only when
      * HAL_ENABLE_CRYPTO is defined; otherwise the session helper still
@@ -229,7 +229,7 @@ static inline uint32_t hal_serial_session_id(const hal_serial_session_t *session
  *
  * Cleared by every fresh HELLO and by AUTH_PROVE failure.
  *
- * Always returns false when @c HAL_ENABLE_CRYPTO is not defined — the
+ * Always returns false when @c HAL_ENABLE_CRYPTO is not defined - the
  * AUTH handshake is then compiled out and the session can never enter
  * the authenticated state.
  *
@@ -385,7 +385,7 @@ static inline void hal_serial_session__generate_challenge(
     if (hal_sha256(mix, off, digest)) {
         memcpy(session->challenge, digest, HAL_SC_AUTH_CHALLENGE_BYTES);
     } else {
-        /* Fallback: derive from session id + counter only — still unique
+        /* Fallback: derive from session id + counter only - still unique
          * per call within a session. */
         memset(session->challenge, 0, HAL_SC_AUTH_CHALLENGE_BYTES);
         hal_u32_to_bytes_be(session->session_id, &session->challenge[0]);
@@ -422,7 +422,7 @@ static inline void hal_serial_session__handle_auth_begin(
 
     /* The AUTH handler is opt-in via vocabulary: callers that don't supply a
      * challenge fmt get silent dispatch (the challenge is generated and
-     * stashed but not echoed). Misconfiguration rather than common case —
+     * stashed but not echoed). Misconfiguration rather than common case -
      * documented in hal_serial_session_vocabulary.h. */
     const char *fmt =
         HAL_SERIAL_SESSION_VOCAB(session, reply_auth_challenge_fmt);
@@ -439,7 +439,7 @@ static inline void hal_serial_session__handle_auth_begin(
  *
  * @p args points to the first character after `SC_AUTH_PROVE` (including the
  * leading space, which is skipped). On success the session becomes
- * authenticated; on failure the challenge is consumed (one-shot — the host
+ * authenticated; on failure the challenge is consumed (one-shot - the host
  * must request a new AUTH_BEGIN) and `auth_failures` is incremented.
  */
 static inline void hal_serial_session__handle_auth_prove(
@@ -581,7 +581,7 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
 #ifdef HAL_ENABLE_CRYPTO
     /* Each cmd_* lookup may be NULL when the project hasn't supplied a
      * vocabulary (or has explicitly opted out of that command). NULL means
-     * "not recognised" → fall through to the unknown-line handler so the
+     * "not recognised" -> fall through to the unknown-line handler so the
      * line still has a path to a custom dispatcher. */
     const char *cmd_auth_begin =
         HAL_SERIAL_SESSION_VOCAB(session, cmd_auth_begin);
@@ -664,7 +664,7 @@ static inline void hal_serial_session_poll(hal_serial_session_t *session) {
         const uint8_t line_len = session->line_len;
         session->line_len = 0u;
 
-        /* Reject anything that is not a framed request — no fall-through. */
+        /* Reject anything that is not a framed request - no fall-through. */
         if (line_len < HAL_SERIAL_FRAME_PREFIX_LEN ||
             strncmp(session->line, HAL_SERIAL_FRAME_PREFIX,
                     HAL_SERIAL_FRAME_PREFIX_LEN) != 0) {
@@ -688,7 +688,7 @@ static inline void hal_serial_session_poll(hal_serial_session_t *session) {
             hal_serial_session__dispatch_inner(session, inner);
             session->in_request = false;
         }
-        /* Bad CRC / malformed frame → silent drop (host retries / times out). */
+        /* Bad CRC / malformed frame -> silent drop (host retries / times out). */
 
         if (mute_debug && !debug_was_muted) {
             hal_debug_set_muted(false);

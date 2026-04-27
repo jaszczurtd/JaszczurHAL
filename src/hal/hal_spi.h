@@ -9,8 +9,8 @@
  * using the mock implementation.
  *
  * Two SPI controllers are supported via the @p bus parameter:
- *   - bus 0 → SPI  (default controller)
- *   - bus 1 → SPI1 (second controller, RP2040)
+ *   - bus 0 -> SPI  (default controller)
+ *   - bus 1 -> SPI1 (second controller, RP2040)
  */
 
 #include <stdint.h>

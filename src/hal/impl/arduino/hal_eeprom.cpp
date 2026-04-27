@@ -131,7 +131,7 @@ void hal_eeprom_commit(void) {
         EEPROM.commit();
         hal_mutex_unlock(s_eeprom_mutex);
     }
-    /* AT24C256: no-op — writes are already committed to the chip */
+    /* AT24C256: no-op - writes are already committed to the chip */
 }
 
 void hal_eeprom_reset(void) {

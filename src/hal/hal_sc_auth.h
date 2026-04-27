@@ -27,7 +27,7 @@
  * deployment.
  *
  * The salt is intentionally a public, project-wide constant. It does not
- * grant any authority by itself — the secret is the per-device UID +
+ * grant any authority by itself - the secret is the per-device UID +
  * salt mixture. Treating the salt as confidential would only obscure
  * design intent; integrity of the derivation depends on HMAC-SHA256, not
  * on salt secrecy.

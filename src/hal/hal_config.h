@@ -6,8 +6,8 @@
  *
  * This file contains:
  *  1. Application-level feature toggles (formerly libConfig.h).
- *  2. Static-pool size defaults — override with project-level -D flags.
- *  3. Runtime configuration via hal_setup() — allows changing effective
+ *  2. Static-pool size defaults - override with project-level -D flags.
+ *  3. Runtime configuration via hal_setup() - allows changing effective
  *     pool limits at startup (cannot exceed compile-time max).
  *  4. HAL_ASSERT debug mechanism.
  *
@@ -53,7 +53,7 @@
 /* If the sketch (project) directory contains a file named
    hal_project_config.h, it is automatically included here.  Use it to
    define HAL_DISABLE_* flags, override pool sizes, or set feature
-  toggles — without modifying the library itself.
+  toggles - without modifying the library itself.
   Note: this requires the sketch directory to be present on the include
   path for library compilation units (for example via
   compiler.cpp.extra_flags / compiler.c.extra_flags).                    */
@@ -72,34 +72,34 @@
    library resolver.
 
    Supported flags:
-     HAL_DISABLE_WIFI           — WiFi (requires PICO_W to be useful anyway)
-     HAL_DISABLE_TIME           — NTP / system time (depends on WiFi)
-     HAL_DISABLE_EEPROM         — EEPROM (AT24C256 / RP2040 flash)
-     HAL_DISABLE_KV             — Key-value store (depends on EEPROM)
-     HAL_DISABLE_GPS            — GPS / NMEA receiver (depends on SWSERIAL)
-     HAL_DISABLE_THERMOCOUPLE   — all thermocouple backends (MCP9600 + MAX6675)
-     HAL_DISABLE_MCP9600        — Adafruit MCP9600/MCP9601 backend only;
+     HAL_DISABLE_WIFI           - WiFi (requires PICO_W to be useful anyway)
+     HAL_DISABLE_TIME           - NTP / system time (depends on WiFi)
+     HAL_DISABLE_EEPROM         - EEPROM (AT24C256 / RP2040 flash)
+     HAL_DISABLE_KV             - Key-value store (depends on EEPROM)
+     HAL_DISABLE_GPS            - GPS / NMEA receiver (depends on SWSERIAL)
+     HAL_DISABLE_THERMOCOUPLE   - all thermocouple backends (MCP9600 + MAX6675)
+     HAL_DISABLE_MCP9600        - Adafruit MCP9600/MCP9601 backend only;
                                   MAX6675 remains available
-     HAL_DISABLE_MAX6675        — MAX6675 backend only; MCP9600 remains available
-     HAL_DISABLE_UART           — Hardware UART (SerialUART)
-     HAL_DISABLE_SWSERIAL       — SoftwareSerial
-     HAL_DISABLE_I2C            — I2C bus (Wire, master mode)
-     HAL_DISABLE_I2C_SLAVE      — I2C slave/target mode with register map
-     HAL_DISABLE_EXTERNAL_ADC   — ADS1115 external ADC (depends on I2C)
-     HAL_DISABLE_PWM_FREQ       — Frequency-controlled PWM
-     HAL_DISABLE_RGB_LED        — NeoPixel RGB status LED
-     HAL_DISABLE_CAN            — MCP2515 CAN bus
-     HAL_DISABLE_DISPLAY        — TFT / OLED display (excludes both backends)
-     HAL_DISABLE_TFT            — SPI TFT drivers only (ILI9341/ST7789/ST7735/ST7796S);
+     HAL_DISABLE_MAX6675        - MAX6675 backend only; MCP9600 remains available
+     HAL_DISABLE_UART           - Hardware UART (SerialUART)
+     HAL_DISABLE_SWSERIAL       - SoftwareSerial
+     HAL_DISABLE_I2C            - I2C bus (Wire, master mode)
+     HAL_DISABLE_I2C_SLAVE      - I2C slave/target mode with register map
+     HAL_DISABLE_EXTERNAL_ADC   - ADS1115 external ADC (depends on I2C)
+     HAL_DISABLE_PWM_FREQ       - Frequency-controlled PWM
+     HAL_DISABLE_RGB_LED        - NeoPixel RGB status LED
+     HAL_DISABLE_CAN            - MCP2515 CAN bus
+     HAL_DISABLE_DISPLAY        - TFT / OLED display (excludes both backends)
+     HAL_DISABLE_TFT            - SPI TFT drivers only (ILI9341/ST7789/ST7735/ST7796S);
                                   SSD1306 remains available
-     HAL_DISABLE_SSD1306        — SSD1306 OLED driver only; TFT remains available
-     HAL_DISABLE_ILI9341        — ILI9341 TFT driver only
-     HAL_DISABLE_ST7789         — ST7789 TFT driver only
-     HAL_DISABLE_ST7735         — ST7735 TFT driver only
-     HAL_DISABLE_ST7796S        — ST7796S TFT driver only
-     HAL_DISABLE_UNITY          — disable bundled Unity framework includes/sources
+     HAL_DISABLE_SSD1306        - SSD1306 OLED driver only; TFT remains available
+     HAL_DISABLE_ILI9341        - ILI9341 TFT driver only
+     HAL_DISABLE_ST7789         - ST7789 TFT driver only
+     HAL_DISABLE_ST7735         - ST7735 TFT driver only
+     HAL_DISABLE_ST7796S        - ST7796S TFT driver only
+     HAL_DISABLE_UNITY          - disable bundled Unity framework includes/sources
 
-   Dependency propagation — disabling a base module automatically
+   Dependency propagation - disabling a base module automatically
    disables modules that depend on it:                                   */
 
 #ifdef HAL_DISABLE_EEPROM
@@ -151,21 +151,21 @@
    corresponding API.
 
    Supported flags:
-     HAL_ENABLE_CJSON           — bundled cJSON / cJSON_Utils sources.
-     HAL_ENABLE_CRYPTO          — `hal_crypto` (Base64, MD5, SHA-256,
+     HAL_ENABLE_CJSON           - bundled cJSON / cJSON_Utils sources.
+     HAL_ENABLE_CRYPTO          - `hal_crypto` (Base64, MD5, SHA-256,
                                   HMAC-SHA256, ChaCha20 / -Poly1305) and
                                   the dependent `hal_sc_auth` helper.
                                   Without this flag the headers expand
                                   to nothing and the implementation TUs
                                   produce empty objects.
-                                  `hal_serial_session` keeps working —
+                                  `hal_serial_session` keeps working -
                                   the `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`
                                   handlers are simply compiled out and
                                   the session never enters the
                                   authenticated state.                   */
 
 /* ── Platform-independent Arduino-compat macros ──────────────────────── */
-/* Only define fallbacks when building WITHOUT Arduino — on Arduino the
+/* Only define fallbacks when building WITHOUT Arduino - on Arduino the
    real F()/PROGMEM come from the core headers included later.          */
 
 #ifndef ARDUINO
@@ -419,7 +419,7 @@ const hal_config_t* hal_get_config(void);
 #else /* asserts enabled (default) */
 
 #ifdef ARDUINO
-  /* Real target — print and hang (watchdog will fire).                */
+  /* Real target - print and hang (watchdog will fire).                */
   #include <Arduino.h>
   #define HAL_ASSERT(cond, msg)                                       \
       do {                                                            \
@@ -430,7 +430,7 @@ const hal_config_t* hal_get_config(void);
           }                                                           \
       } while (0)
 #else
-  /* Mock / hosted build — print to stderr and abort.                  */
+  /* Mock / hosted build - print to stderr and abort.                  */
   #include <stdio.h>
   #include <stdlib.h>
   #define HAL_ASSERT(cond, msg)                                       \

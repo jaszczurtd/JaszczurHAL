@@ -13,7 +13,7 @@
  * guarantee cross-core visibility.
  *
  * watchdogTimer.tick() is called from both cores.  SmartTimers
- * is NOT thread-safe — two concurrent tick() calls may both detect the same
+ * is NOT thread-safe - two concurrent tick() calls may both detect the same
  * timer as expired and invoke the callback twice.  We guard the tick with a
  * hal_mutex to serialise access and eliminate the double-fire race.
  */

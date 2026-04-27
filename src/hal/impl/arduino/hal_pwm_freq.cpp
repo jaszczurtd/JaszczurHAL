@@ -73,7 +73,7 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
                                   ((float)cfg->analogScale * cfg->frequency_hz));
     pwm_config_set_wrap(&c, cfg->analogScale - 1u);
 
-    // Configure slice but do NOT start yet — prevents glitch on pins
+    // Configure slice but do NOT start yet - prevents glitch on pins
     // with inverted logic (0% duty = actuator ON).  The slice and GPIO
     // function are enabled on the first hal_pwm_freq_write() call,
     // after the correct duty-cycle level has been set.

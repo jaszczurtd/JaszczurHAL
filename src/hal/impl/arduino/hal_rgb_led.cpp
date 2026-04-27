@@ -6,7 +6,7 @@
 #include "drivers/Adafruit_NeoPixel/Adafruit_NeoPixel.h"
 #include <new>
 
-// Placement-new storage — avoids global C++ constructor ordering issues
+// Placement-new storage - avoids global C++ constructor ordering issues
 static uint8_t            s_pixel_mem[sizeof(Adafruit_NeoPixel)]
     __attribute__((aligned(__alignof__(Adafruit_NeoPixel))));
 static Adafruit_NeoPixel *s_pixels    = NULL;

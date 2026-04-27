@@ -218,7 +218,7 @@ void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
         delayMicroseconds(5);
     }
 
-    // Generate STOP condition: SDA low → SCL high → SDA high
+    // Generate STOP condition: SDA low -> SCL high -> SDA high
     pinMode(sda_pin, OUTPUT);
     digitalWrite(sda_pin, LOW);
     delayMicroseconds(5);
@@ -227,7 +227,7 @@ void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
     digitalWrite(sda_pin, HIGH);
     delayMicroseconds(5);
 
-    // Return pins to input — hal_i2c_init will reconfigure for I2C
+    // Return pins to input - hal_i2c_init will reconfigure for I2C
     pinMode(sda_pin, INPUT_PULLUP);
     pinMode(scl_pin, INPUT_PULLUP);
 }

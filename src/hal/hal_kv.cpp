@@ -464,7 +464,7 @@ static bool set_blob_locked(uint16_t key, uint8_t type, const uint8_t *data, uin
         return false;
     }
 
-    // Compute payload address now — used_offset is stable after ensure_space_locked.
+    // Compute payload address now - used_offset is stable after ensure_space_locked.
     const uint16_t payload_addr = (uint16_t)(kv_bank_base(s_active_bank)
                                              + s_active_hdr.used_offset
                                              + KV_REC_HDR_SIZE);
@@ -476,7 +476,7 @@ static bool set_blob_locked(uint16_t key, uint8_t type, const uint8_t *data, uin
         return false;
     }
 
-    // Update index directly — no EEPROM rescan needed.
+    // Update index directly - no EEPROM rescan needed.
     idx = index_find(key);
     if (idx < 0) idx = index_alloc();
     s_index[idx].in_use      = true;
@@ -504,7 +504,7 @@ static bool delete_locked(uint16_t key) {
         return false;
     }
 
-    // Update index directly — no EEPROM rescan needed.
+    // Update index directly - no EEPROM rescan needed.
     const int idx = index_find(key);
     if (idx >= 0) s_index[idx].in_use = false;
     return true;

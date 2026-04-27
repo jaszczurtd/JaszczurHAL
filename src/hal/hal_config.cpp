@@ -21,7 +21,7 @@ static hal_config_t s_config = {
 
 /* Helper: cap value to compile-time max */
 static int cap(int val, int compile_max) {
-    if (val <= 0) return compile_max;         /* 0 or negative → use default */
+    if (val <= 0) return compile_max;         /* 0 or negative -> use default */
     return val < compile_max ? val : compile_max;
 }
 

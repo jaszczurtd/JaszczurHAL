@@ -31,7 +31,7 @@
  * To exclude all SPI TFT drivers define HAL_DISABLE_TFT.
  * To exclude the SSD1306 OLED driver define HAL_DISABLE_SSD1306.
  * At least one backend must be enabled (do not define both disable flags
- * at the same time — use HAL_DISABLE_DISPLAY instead).
+ * at the same time - use HAL_DISABLE_DISPLAY instead).
  * -------------------------------------------------------------------------- */
 
 #ifndef HAL_DISABLE_TFT
@@ -268,11 +268,11 @@ bool hal_display_configure(int width, int height, uint8_t rotation,
     }
 #elif defined(HAL_DISPLAY_ST7796S)
     {
-        /* ST7796S init() signature: init(height, width, …) — note the swap */
+        /* ST7796S init() signature: init(height, width, …) - note the swap */
         s_tft->init(height, width, 0, 0, bgr ? ST7796S_BGR : 0);
         s_tft->invertDisplay(invert);
     }
-#else /* ILI9341 — begin() already called in hal_display_init() */
+#else /* ILI9341 - begin() already called in hal_display_init() */
     {
         s_tft->invertDisplay(invert);
         (void)bgr;

@@ -391,8 +391,8 @@ main() {
     ok "IntelliSense configuration refreshed"
     echo ""
     echo "  Next steps in VS Code:"
-    echo "  1. Ctrl+Shift+P → C/C++: Reset IntelliSense Database"
-    echo "  2. Ctrl+Shift+P → Developer: Reload Window"
+    echo "  1. Ctrl+Shift+P -> C/C++: Reset IntelliSense Database"
+    echo "  2. Ctrl+Shift+P -> Developer: Reload Window"
     echo ""
 }
 

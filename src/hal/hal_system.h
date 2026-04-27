@@ -14,9 +14,9 @@
  *   (@ref hal_enter_bootloader).
  * - Shared utility helpers that have no better home and must be visible to
  *   both C and C++ translation units:
- *   - @ref COUNTOF  — element count of a static array.
- *   - @ref hal_u32_to_bytes_be — 32-bit big-endian serialisation.
- *   - @ref NONULL   — null-pointer guard with goto-error idiom.
+ *   - @ref COUNTOF  - element count of a static array.
+ *   - @ref hal_u32_to_bytes_be - 32-bit big-endian serialisation.
+ *   - @ref NONULL   - null-pointer guard with goto-error idiom.
  *   - Type-conversion macros: @ref SECS, @ref MINS, @ref HOURS.
  */
 

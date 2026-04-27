@@ -110,7 +110,7 @@ static hal_error_slot_t *get_error_slot(const char *source) {
 /**
  * @brief Ensure the debug subsystem is initialised (lazy init).
  *
- * Safe to call from multiple cores — worst case is a harmless
+ * Safe to call from multiple cores - worst case is a harmless
  * double-init because hal_debug_init() overwrites the same statics.
  */
 static void hal_debug_ensure_init(void) {

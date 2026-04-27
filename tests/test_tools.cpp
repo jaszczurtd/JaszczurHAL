@@ -64,12 +64,12 @@ void test_decToFloat_roundtrip(void) {
 /* ── filter / filterValue ──────────────────────────────────────────────── */
 
 void test_filter_alpha_one(void) {
-    /* alpha=1 → output = input */
+    /* alpha=1 -> output = input */
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 5.0f, filter(1.0f, 5.0f, 100.0f));
 }
 
 void test_filter_alpha_zero(void) {
-    /* alpha=0 → output = previous */
+    /* alpha=0 -> output = previous */
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 100.0f, filter(0.0f, 5.0f, 100.0f));
 }
 
@@ -79,7 +79,7 @@ void test_filter_mid_alpha(void) {
 }
 
 void test_filterValue_alpha_one(void) {
-    /* alpha=1 → output = newValue */
+    /* alpha=1 -> output = newValue */
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 9.0f, filterValue(3.0f, 9.0f, 1.0f));
 }
 
@@ -95,7 +95,7 @@ void test_adcCompe_zero(void) {
 }
 
 void test_adcCompe_boundary_512(void) {
-    /* 512 is not > 512, not 511, not 510 → falls through to else */
+    /* 512 is not > 512, not 511, not 510 -> falls through to else */
     TEST_ASSERT_EQUAL_INT(512, adcCompe(512));
 }
 
@@ -552,7 +552,7 @@ void test_mapfloat_max(void) {
 }
 
 void test_mapfloat_equal_in_range(void) {
-    /* in_max == in_min → returns out_min */
+    /* in_max == in_min -> returns out_min */
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.0f, mapfloat(5.0f, 5.0f, 5.0f, 0.0f, 100.0f));
 }
 
@@ -633,7 +633,7 @@ void test_printBinaryAndSize_null_buf(void) {
 void test_getAverageValueFrom(void) {
     hal_mock_adc_inject(0, 513);
     float avg = getAverageValueFrom(0);
-    /* adcCompe(513) = 521; all NUMSAMPLES samples identical → avg = 521 */
+    /* adcCompe(513) = 521; all NUMSAMPLES samples identical -> avg = 521 */
     TEST_ASSERT_FLOAT_WITHIN(0.5f, 521.0f, avg);
 }
 
@@ -649,7 +649,7 @@ void test_adcToVolt_zero_adc(void) {
 }
 
 void test_adcToVolt_full_scale_no_divider(void) {
-    /* ADC = 4096, r1=0 (no high-side resistor), r2=1 → scale = 1.0 */
+    /* ADC = 4096, r1=0 (no high-side resistor), r2=1 -> scale = 1.0 */
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 3.3f, adcToVolt(4096, 0.0f, 1.0f));
 }
 
@@ -658,7 +658,7 @@ void test_adcToVolt_half_scale_no_divider(void) {
 }
 
 void test_adcToVolt_equal_divider(void) {
-    /* r1=r2 → scale = 2.0; full-scale ADC → 2 * 3.3 V */
+    /* r1=r2 -> scale = 2.0; full-scale ADC -> 2 * 3.3 V */
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 6.6f, adcToVolt(4096, 10000.0f, 10000.0f));
 }
 
@@ -673,7 +673,7 @@ void test_steinhart_nominal_temp(void) {
 }
 
 void test_steinhart_warm_temp(void) {
-    /* NTC ≈ 3333 Ω → ~50 °C with B=3600, To=21 °C, Ro=10000. */
+    /* NTC ≈ 3333 Ω -> ~50 °C with B=3600, To=21 °C, Ro=10000. */
     float result = steinhart(1.0f, 10000, 3333, true);
     TEST_ASSERT_FLOAT_WITHIN(2.0f, 50.0f, result);
 }

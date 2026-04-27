@@ -64,7 +64,7 @@ extern "C" {
  * Must be called before any other hal_eeprom_* function.
  *
  * @param type      Which EEPROM back-end to use.
- * @param size      Memory size in bytes.  Used only for HAL_EEPROM_RP2040 —
+ * @param size      Memory size in bytes.  Used only for HAL_EEPROM_RP2040 -
  *                  it is passed to EEPROM.begin().  Ignored for
  *                  HAL_EEPROM_AT24C256 (size is always 32768).
  * @param i2c_addr  7-bit I2C address of the AT24C256 chip.  Used only for
@@ -129,7 +129,7 @@ void hal_eeprom_commit(void);
  * For HAL_EEPROM_RP2040: writes 0 to every byte then calls EEPROM.commit().
  * For HAL_EEPROM_AT24C256: writes 0 to every byte (with watchdog feeding).
  *
- * @warning This is a slow operation — avoid calling it in time-critical paths.
+ * @warning This is a slow operation - avoid calling it in time-critical paths.
  */
 void hal_eeprom_reset(void);
 

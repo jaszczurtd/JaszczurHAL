@@ -542,7 +542,7 @@ void test_auth_prove_with_bad_mac_fails_and_consumes_challenge(void) {
     TEST_ASSERT_NOT_NULL(strstr(reply_payload, "SC_AUTH_FAILED"));
     TEST_ASSERT_NOT_NULL(strstr(reply_payload, "bad_mac"));
 
-    /* Replay of even the original AUTH_PROVE line is now refused — challenge
+    /* Replay of even the original AUTH_PROVE line is now refused - challenge
      * was consumed by the failed attempt. */
     inject_framed_line(4u, prove_line, '\n');
     hal_serial_session_poll(&s);
@@ -649,7 +649,7 @@ void test_reboot_bootloader_without_auth_is_rejected(void) {
     init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
     hal_mock_bootloader_reset_flag();
 
-    /* No HELLO and no AUTH yet — must refuse. */
+    /* No HELLO and no AUTH yet - must refuse. */
     inject_framed_line(5u, "SC_REBOOT_BOOTLOADER", '\n');
     hal_serial_session_poll(&s);
 
@@ -668,7 +668,7 @@ void test_reboot_bootloader_after_hello_only_is_rejected(void) {
     hal_mock_bootloader_reset_flag();
 
     /* HELLO activates the session but the AUTH path has not been
-     * cleared — the bootloader command must still be refused. */
+     * cleared - the bootloader command must still be refused. */
     inject_framed_line(1u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));

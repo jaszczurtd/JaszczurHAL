@@ -201,7 +201,7 @@ def _clear_hupcl(fd: int) -> None:
     """Clear HUPCL so the kernel does not drop DTR on close (Linux only).
 
     Without this, closing the serial port lowers DTR, which causes the
-    RP2040 USB CDC to reset and re-enumerate — triggering a spurious
+    RP2040 USB CDC to reset and re-enumerate - triggering a spurious
     disconnect/reconnect cycle in the monitor.
     """
     import fcntl

@@ -6,8 +6,8 @@ Professional VS Code configurations for building Arduino projects on **RP2040/RP
 
 This directory contains platform-specific project templates optimized for different operating systems:
 
-- **[Windows](windows/)** — Complete VS Code setup with Python helpers and Arduino CLI integration
-- **[Linux](linux/)** — Bash-based build scripts and configuration for Linux development
+- **[Windows](windows/)** - Complete VS Code setup with Python helpers and Arduino CLI integration
+- **[Linux](linux/)** - Bash-based build scripts and configuration for Linux development
 
 Both templates include:
 - ✅ Full build, upload, and debugging workflows
@@ -62,12 +62,12 @@ Each platform template includes:
 | `arduino_vscode.py` | Main build orchestrator | Windows |
 | `build.sh` | Main build orchestrator (Build / Debug / Upload) | Linux |
 | `select-board.sh` | Interactive board/options selector | Both |
-| `serial-persistent.py` | Persistent serial monitor — **default** (auto-reconnect, live port re-read) | Both |
+| `serial-persistent.py` | Persistent serial monitor - **default** (auto-reconnect, live port re-read) | Both |
 | `refresh-intellisense.sh` | Regenerate `compile_commands.json` | Both |
 | `upload-uf2.sh` | UF2 bootloader upload | Both |
 
 ### Root Configuration File
-- **`hal_project_config.h`** — Template for enabling/disabling JaszczurHAL modules
+- **`hal_project_config.h`** - Template for enabling/disabling JaszczurHAL modules
   - Copy to your sketch directory and customize
   - Supported flags: `HAL_DISABLE_GPIO`, `HAL_DISABLE_I2C`, `HAL_DISABLE_GPS`, etc.
 
@@ -81,7 +81,7 @@ Each platform template includes:
 - Support for debug symbols
 
 **Linux** (via `build.sh`):
-- Single entry point for Build / Build (Debug) / Upload — picks up FQBN,
+- Single entry point for Build / Build (Debug) / Upload - picks up FQBN,
   port, USB identity, and `-Werror` settings from `.vscode/settings.json`
 - Starts the persistent serial monitor in the background on Upload so
   logs are visible immediately after the board re-enumerates

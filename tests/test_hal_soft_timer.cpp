@@ -95,11 +95,11 @@ void test_restart_resets_timer(void) {
     hal_soft_timer_begin(t, cb_a, 100);
     hal_mock_set_millis(T0 + 50);
     hal_soft_timer_restart(t);
-    /* 99 ms after restart → not yet */
+    /* 99 ms after restart -> not yet */
     hal_mock_set_millis(T0 + 149);
     hal_soft_timer_tick(t);
     TEST_ASSERT_EQUAL_INT(0, s_cb_a_count);
-    /* 100 ms after restart → fire */
+    /* 100 ms after restart -> fire */
     hal_mock_set_millis(T0 + 150);
     hal_soft_timer_tick(t);
     TEST_ASSERT_EQUAL_INT(1, s_cb_a_count);

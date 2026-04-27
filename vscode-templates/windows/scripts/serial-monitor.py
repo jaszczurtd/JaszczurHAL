@@ -29,7 +29,7 @@ def find_settings():
     return {}
 
 def monitor_with_pyserial(port, baud):
-    """Monitor z pyserial — preferowana metoda."""
+    """Monitor z pyserial - preferowana metoda."""
     import serial
     
     print(f"  Metoda: pyserial")
@@ -48,7 +48,7 @@ def monitor_with_pyserial(port, baud):
         rtscts=False,
     )
     
-    # Ustaw DTR — kluczowe dla USB CDC na Pico
+    # Ustaw DTR - kluczowe dla USB CDC na Pico
     ser.dtr = True
     ser.rts = True
     
@@ -65,7 +65,7 @@ def monitor_with_pyserial(port, baud):
         print("\n\033[0;36mRozłączono.\033[0m")
 
 def monitor_with_termios(port, baud):
-    """Fallback monitor z termios — bez pyserial."""
+    """Fallback monitor z termios - bez pyserial."""
     import termios
     import fcntl
     import struct
@@ -92,10 +92,10 @@ def monitor_with_termios(port, baud):
     try:
         # Konfiguracja portu
         attrs = termios.tcgetattr(fd)
-        attrs[0] = 0        # iflag — brak przetwarzania wejścia
-        attrs[1] = 0        # oflag — brak przetwarzania wyjścia
+        attrs[0] = 0        # iflag - brak przetwarzania wejścia
+        attrs[1] = 0        # oflag - brak przetwarzania wyjścia
         attrs[2] = (termios.CS8 | termios.CREAD | termios.CLOCAL | termios.HUPCL)
-        attrs[3] = 0        # lflag — raw mode
+        attrs[3] = 0        # lflag - raw mode
         attrs[4] = baud_const  # ispeed
         attrs[5] = baud_const  # ospeed
         attrs[6][termios.VMIN] = 0
@@ -148,7 +148,7 @@ def main():
         for p in sorted(ports):
             print(f"  {p}")
         if not ports:
-            print("  (brak — podłącz płytkę)")
+            print("  (brak - podłącz płytkę)")
         sys.exit(1)
     
     # Spróbuj pyserial, fallback na termios
@@ -156,7 +156,7 @@ def main():
         import serial
         monitor_with_pyserial(port, baud)
     except ImportError:
-        print("  \033[1;33mpyserial nie zainstalowany — używam termios\033[0m")
+        print("  \033[1;33mpyserial nie zainstalowany - używam termios\033[0m")
         print("  (Tip: pip install pyserial --break-system-packages)")
         print()
         monitor_with_termios(port, baud)

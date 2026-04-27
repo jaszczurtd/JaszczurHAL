@@ -91,7 +91,7 @@ static const hal_serial_session_vocabulary_t k_custom_vocab = {
 /* Partial override: only the "unknown" reply is custom, all auth tokens
  * keep the SC_* defaults via NULL fallback. */
 static const hal_serial_session_vocabulary_t k_partial_vocab = {
-    /* cmd_* and reply_auth_* fields are zero-initialised → NULL → default. */
+    /* cmd_* and reply_auth_* fields are zero-initialised -> NULL -> default. */
     .reply_unknown_cmd = "Y_UNKNOWN",
 };
 
@@ -117,12 +117,12 @@ void test_classic_init_default_vocabulary_is_empty(void) {
     hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
     TEST_ASSERT_NULL(s.vocab);
 
-    /* Unknown command → no reply (reply_unknown_cmd is NULL by default). */
+    /* Unknown command -> no reply (reply_unknown_cmd is NULL by default). */
     inject_framed_line(9u, "PING", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
 
-    /* HELLO is structural and not vocabulary-driven — still works. */
+    /* HELLO is structural and not vocabulary-driven - still works. */
     inject_framed_line(10u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
@@ -169,7 +169,7 @@ void test_custom_vocab_renames_auth_command_and_replies(void) {
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
 
-    /* Renamed AUTH_BEGIN → custom challenge prefix on wire. */
+    /* Renamed AUTH_BEGIN -> custom challenge prefix on wire. */
     inject_framed_line(2u, "X_AUTH_BEGIN", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(s.challenge_pending);
@@ -211,7 +211,7 @@ void test_custom_vocab_renames_auth_command_and_replies(void) {
 
 void test_custom_vocab_sc_prefix_falls_through_to_unknown(void) {
     /* When commands are renamed, the original SC_AUTH_BEGIN literal must
-     * NOT be intercepted by the helper — it should reach the unknown
+     * NOT be intercepted by the helper - it should reach the unknown
      * handler (or the default unknown-reply path) untouched. */
     hal_serial_session_t s;
     uint16_t reply_seq = 0u;
@@ -291,7 +291,7 @@ void test_custom_vocab_not_authorized_uses_override(void) {
                                             &k_custom_vocab);
     hal_mock_bootloader_reset_flag();
 
-    /* Reboot before AUTH → must refuse with the renamed token. */
+    /* Reboot before AUTH -> must refuse with the renamed token. */
     inject_framed_line(1u, "X_REBOOT", '\n');
     hal_serial_session_poll(&s);
 
@@ -310,7 +310,7 @@ void test_custom_vocab_not_ready_uses_override(void) {
     hal_serial_session_init_with_vocabulary(&s, "ECU", "1.0.0", "dev",
                                             &k_custom_vocab);
 
-    /* AUTH_BEGIN before HELLO — must use the renamed not-ready string. */
+    /* AUTH_BEGIN before HELLO - must use the renamed not-ready string. */
     inject_framed_line(1u, "X_AUTH_BEGIN", '\n');
     hal_serial_session_poll(&s);
 
@@ -349,7 +349,7 @@ void test_custom_vocab_auth_failed_uses_override(void) {
  * commands without a configured token are not recognised and replies
  * without a configured payload are silently dropped. The partial vocab
  * here only sets `reply_unknown_cmd`, so AUTH commands fall through to
- * the unknown handler — they get the renamed unknown reply rather than
+ * the unknown handler - they get the renamed unknown reply rather than
  * a synthetic SC_AUTH_CHALLENGE. */
 void test_partial_vocab_unset_fields_remain_unrecognised(void) {
     hal_serial_session_t s;
@@ -359,7 +359,7 @@ void test_partial_vocab_unset_fields_remain_unrecognised(void) {
     hal_serial_session_init_with_vocabulary(&s, "ECU", "1.0.0", "dev",
                                             &k_partial_vocab);
 
-    /* Unknown command → custom Y_UNKNOWN (the one field that IS set). */
+    /* Unknown command -> custom Y_UNKNOWN (the one field that IS set). */
     inject_framed_line(1u, "PING", '\n');
     hal_serial_session_poll(&s);
     TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
@@ -367,8 +367,8 @@ void test_partial_vocab_unset_fields_remain_unrecognised(void) {
     TEST_ASSERT_EQUAL_UINT16(1u, reply_seq);
     TEST_ASSERT_EQUAL_STRING("Y_UNKNOWN", reply_payload);
 
-    /* AUTH command not configured → unrecognised → unknown-handler path
-     * → emits the (custom) unknown reply, not a challenge. */
+    /* AUTH command not configured -> unrecognised -> unknown-handler path
+     * -> emits the (custom) unknown reply, not a challenge. */
     inject_framed_line(2u, "HELLO", '\n');
     hal_serial_session_poll(&s);
     inject_framed_line(3u, "SC_AUTH_BEGIN", '\n');

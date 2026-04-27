@@ -1,6 +1,6 @@
 #pragma once
 /*
- * Minimal SD.h stub for Arduino platform — host/test builds only.
+ * Minimal SD.h stub for Arduino platform - host/test builds only.
  * File is referenced at file scope in tools.cpp (not inside #ifdef SD_LOGGER).
  * SD object and FILE_WRITE/FILE_READ are used only inside #ifdef SD_LOGGER
  * (dead code on test builds), but the definitions are harmless.

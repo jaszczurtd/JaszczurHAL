@@ -52,7 +52,7 @@ int16_t hal_ext_adc_read(uint8_t channel);
 /**
  * @brief Read a channel and apply the stored adc_range scale factor.
  *
- * Returns (raw * adc_range) / 1000.0f — the scaled floating-point value
+ * Returns (raw * adc_range) / 1000.0f - the scaled floating-point value
  * without any further conversion. Use this when the caller still needs to
  * apply project-specific corrections (e.g. voltage divider, Steinhart-Hart).
  *

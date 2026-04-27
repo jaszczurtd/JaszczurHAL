@@ -30,7 +30,7 @@ void test_uart_reads_injected_bytes(void) {
 
 void test_uart_captures_written_line(void) {
     size_t n = hal_uart_println(s_uart, "AT");
-    /* println adds \r\n → "AT\r\n" = 4 bytes */
+    /* println adds \r\n -> "AT\r\n" = 4 bytes */
     TEST_ASSERT_EQUAL_UINT32(4u, n);
     TEST_ASSERT_EQUAL_STRING("AT\r\n", hal_mock_uart_last_write(s_uart));
 }
@@ -118,7 +118,7 @@ void test_uart_create_destroy_recycles_slot(void) {
 /* ── ring buffer overflow ───────────────────────────────────────────────── */
 
 void test_uart_ring_buffer_overflow_drops_excess(void) {
-    /* Push 512 bytes into a 511-capacity ring buffer → last byte dropped */
+    /* Push 512 bytes into a 511-capacity ring buffer -> last byte dropped */
     uint8_t big[512];
     memset(big, 0xAA, sizeof(big));
     hal_mock_uart_push(s_uart, big, (int)sizeof(big));
