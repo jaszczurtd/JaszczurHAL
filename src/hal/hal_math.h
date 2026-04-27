@@ -12,7 +12,7 @@
  * @brief Clamp a value to the range [lo, hi] (type-independent).
  *
  * Generic replacement for Arduino constrain().
- * No hardware dependency — safe to include anywhere.
+ * No hardware dependency - safe to include anywhere.
  *
  * @note Arguments may be evaluated more than once. Avoid side effects.
  */
@@ -24,7 +24,7 @@
  * @brief Re-map a value from one range to another (type-independent).
  *
  * Generic replacement for Arduino map().
- * No hardware dependency — safe to include anywhere.
+ * No hardware dependency - safe to include anywhere.
  *
  * When @p in_min equals @p in_max the macro returns @p out_min to avoid
  * division by zero (matches the behaviour of mapfloat()).

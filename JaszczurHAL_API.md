@@ -149,13 +149,13 @@ To exclude modules your project does not use, define one or more
 Disabling a base module automatically disables its dependants:
 
 ```
-HAL_DISABLE_EEPROM   →  HAL_DISABLE_KV
-HAL_DISABLE_WIFI     →  HAL_DISABLE_TIME
-HAL_DISABLE_I2C      →  HAL_DISABLE_EXTERNAL_ADC
-HAL_DISABLE_SWSERIAL →  HAL_DISABLE_GPS
-HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675 → HAL_DISABLE_THERMOCOUPLE
-HAL_DISABLE_ILI9341 + HAL_DISABLE_ST7789 + HAL_DISABLE_ST7735 + HAL_DISABLE_ST7796S → HAL_DISABLE_TFT
-HAL_DISABLE_TFT + HAL_DISABLE_SSD1306 → HAL_DISABLE_DISPLAY
+HAL_DISABLE_EEPROM   ->  HAL_DISABLE_KV
+HAL_DISABLE_WIFI     ->  HAL_DISABLE_TIME
+HAL_DISABLE_I2C      ->  HAL_DISABLE_EXTERNAL_ADC
+HAL_DISABLE_SWSERIAL ->  HAL_DISABLE_GPS
+HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675 -> HAL_DISABLE_THERMOCOUPLE
+HAL_DISABLE_ILI9341 + HAL_DISABLE_ST7789 + HAL_DISABLE_ST7735 + HAL_DISABLE_ST7796S -> HAL_DISABLE_TFT
+HAL_DISABLE_TFT + HAL_DISABLE_SSD1306 -> HAL_DISABLE_DISPLAY
 ```
 
 You may also define a dependant flag alone (e.g. `HAL_DISABLE_KV` without
@@ -168,12 +168,12 @@ Create `hal_project_config.h` in your sketch directory:
 ```c
 #pragma once
 #define HAL_DISABLE_WIFI
-#define HAL_DISABLE_EEPROM      // → propagates HAL_DISABLE_KV
+#define HAL_DISABLE_EEPROM      // -> propagates HAL_DISABLE_KV
 #define HAL_DISABLE_GPS
 #define HAL_DISABLE_THERMOCOUPLE
 #define HAL_DISABLE_UART
 #define HAL_DISABLE_SWSERIAL
-#define HAL_DISABLE_I2C         // → propagates HAL_DISABLE_EXTERNAL_ADC
+#define HAL_DISABLE_I2C         // -> propagates HAL_DISABLE_EXTERNAL_ADC
 #define HAL_DISABLE_PWM_FREQ
 ```
 
@@ -680,7 +680,7 @@ void hal_mock_reset_device_uid(void);                // restore default E661A4D1
   This identifier is persistent across reboots, unique per device, and the
   same value that arduino-pico exposes as USB iSerialNumber.
 - In the mock backend the default value is deterministic
-  (`0xE6 0x61 0xA4 0xD1 0x23 0x45 0x67 0xAB` → `"E661A4D1234567AB"`) so
+  (`0xE6 0x61 0xA4 0xD1 0x23 0x45 0x67 0xAB` -> `"E661A4D1234567AB"`) so
   tests that compare the UID string can hard-code the expected value.
   Use `hal_mock_set_device_uid()` to simulate a second board.
 
@@ -794,7 +794,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
-- `hal_hmac_sha256(...)` follows RFC 2104 — keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
+- `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
 - SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with the host-side mirror in SerialConfigurator (`sc_sha256.c`).
 
 **Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required. Prefer SHA-256 / HMAC-SHA256 for any new integrity or authentication need.
@@ -947,8 +947,8 @@ typedef struct {
     uint8_t     line_len;
     char        line[HAL_SERIAL_SESSION_MAX_LINE + 1u];
     const char *module_tag;   // bound at init
-    const char *fw_version;   // bound at init (may be NULL → "unknown")
-    const char *build_id;     // bound at init (may be NULL → "unknown")
+    const char *fw_version;   // bound at init (may be NULL -> "unknown")
+    const char *build_id;     // bound at init (may be NULL -> "unknown")
     uint8_t     uid_bytes[HAL_DEVICE_UID_BYTES];       // captured at init (auth)
     char        uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE];  // captured at init
     hal_serial_session_unknown_cb_t unknown_handler;   // optional sink
@@ -991,34 +991,49 @@ Wire protocol (both directions):
 See [`hal_serial_frame`](#hal_serial_frame---wire-framing-helpers) for the
 frame codec.
 
-Built-in commands (inside the frame envelope):
-- `HELLO` — activates the session and reports identity.
-- `SC_AUTH_BEGIN` — mints a fresh 16-byte challenge for the active session.
-- `SC_AUTH_PROVE <64 hex chars>` — proves the host knows `K_device` for
-  this UID; on success the session becomes authenticated.
-- `SC_REBOOT_BOOTLOADER` — auth-gated; on success the firmware ACKs and
-  hands control to the boot ROM (BOOTSEL/UF2 mass-storage mode).
+Built-in command (always recognised, structural):
+- `HELLO` - activates the session, mints a fresh `session_id`, and emits
+  the identity response.
 
-Built-in responses (inside the frame envelope, each echoes the inbound `<seq>`):
-- `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
-- `SC_OK AUTH_CHALLENGE <32 hex chars>` (after `SC_AUTH_BEGIN`)
-- `SC_OK AUTH_OK` (after `SC_AUTH_PROVE` with the correct MAC)
-- `SC_AUTH_FAILED <reason>` — `bad_mac`, `bad_length`, `bad_hex`,
-  `no_challenge`, `key_derivation`, `mac_compute`
-- `SC_NOT_READY HELLO_REQUIRED` (AUTH_BEGIN/PROVE before HELLO)
-- `SC_OK REBOOT` (after authenticated `SC_REBOOT_BOOTLOADER`; the boot
-  ROM is entered ~50 ms later)
-- `SC_NOT_AUTHORIZED` (`SC_REBOOT_BOOTLOADER` without a valid prior
-  AUTH_PROVE)
+The HELLO response is the only structurally-fixed reply (its
+`module=... proto=... session=... fw=... build=... uid=...` shape is
+parsed by every host):
+
+    OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>
+
+Vocabulary-driven commands (R1.0 + R1.6):
+- `cmd_auth_begin` - mints a fresh 16-byte challenge for the active session;
+  the helper formats the challenge through `reply_auth_challenge_fmt` (must
+  contain a `%s` for the hex bytes).
+- `cmd_auth_prove <64 hex chars>` - proves the host knows `K_device` for
+  this UID. Outcomes go through the vocabulary's reply tokens
+  (`reply_auth_ok` on success, one of the `reply_auth_failed_*` family on
+  failure, `reply_not_ready_hello_required` if HELLO has not been seen).
+- `cmd_reboot_bootloader` - auth-gated. Successful path emits
+  `reply_reboot_ok`, drains for ~50 ms, then jumps to the boot ROM
+  (BOOTSEL/UF2 mass-storage mode); unauthenticated path emits
+  `reply_not_authorized`.
+
+After R1.6 these tokens are NOT hard-coded in JaszczurHAL. They come from
+the `hal_serial_session_vocabulary_t` instance the project hands to
+`hal_serial_session_init_with_vocabulary`. Any field left NULL (or any
+session initialised with the classic `hal_serial_session_init`) makes
+the corresponding command unrecognised - the inner payload falls
+through to the unknown-line handler. The Fiesta dialect lives in
+`Fiesta/src/common/scDefinitions/sc_session_vocabulary.h`
+(`fiesta_default_vocabulary`); see the Vocabulary configuration section
+below.
 
 Unrecognised inner payloads:
 - if a user callback is registered via
   `hal_serial_session_set_unknown_handler`, it receives the unwrapped
   inner line and is responsible for any reply (use
   `hal_serial_session_println` so the reply inherits the request's `<seq>`).
-- otherwise the helper emits `SC_UNKNOWN_CMD` (still framed).
+- otherwise the helper emits the vocabulary's `reply_unknown_cmd` (still
+  framed). With the classic init this field is NULL, so the unknown line
+  is silently dropped - register the callback to observe it.
 
-Non-framed input is silently dropped — there is no plain-text
+Non-framed input is silently dropped - there is no plain-text
 fall-through. This is intentional: the SerialConfigurator host always
 frames its requests, and removing the legacy path eliminates substring
 mismatches against debug-log lines.
@@ -1041,22 +1056,27 @@ Reply gating:
   state asynchronously, do it from the unknown-handler callback in
   response to a request.
 
-Authentication (Phase 3) — opt-in:
+Authentication (Phase 3) - opt-in:
 - The whole AUTH path is compiled in only when `HAL_ENABLE_CRYPTO` is
   defined. Without it the session struct loses the auth fields, the
-  `SC_AUTH_*` handlers are not dispatched, and
+  AUTH handlers are not dispatched, and
   `hal_serial_session_is_authenticated()` always returns false. The
-  rest of the framed session (HELLO + module-defined SC_* commands)
-  is unaffected.
+  rest of the framed session (HELLO + project-defined commands routed
+  through the unknown-line handler) is unaffected.
+- The actual command tokens (`cmd_auth_begin`, `cmd_auth_prove`) come
+  from the vocabulary instance - Fiesta supplies `"SC_AUTH_BEGIN"` /
+  `"SC_AUTH_PROVE"`; a different project can supply different names. A
+  NULL token field disables that command and routes the inner line to
+  the unknown handler.
 - See [`hal_sc_auth`](#hal_sc_auth---serialconfigurator-authentication-helper--opt-in---hal_enable_crypto)
   for the salt + key-derivation primitives.
-- `SC_AUTH_BEGIN` requires an active (HELLO-acknowledged) session and
-  mints a fresh challenge derived from
+- The AUTH_BEGIN handler requires an active (HELLO-acknowledged) session
+  and mints a fresh challenge derived from
   `SHA-256(uid || hal_micros64() || session_id || hello_counter || auth_counter)`,
   taking the first 16 bytes.
-- `SC_AUTH_PROVE` is one-shot per challenge: success or failure both
-  consume the pending challenge, so a captured valid response cannot be
-  replayed against the same `SC_AUTH_BEGIN`.
+- The AUTH_PROVE handler is one-shot per challenge: success or failure
+  both consume the pending challenge, so a captured valid response
+  cannot be replayed against the same challenge.
 - A new HELLO mints a new `session_id` and clears `authenticated` /
   `challenge_pending`. Module code that gates sensitive operations must
   re-check `hal_serial_session_is_authenticated(session)` after every
@@ -1094,7 +1114,8 @@ Notes:
 - the HELLO inner-payload buffer is sized for the six mandatory fields plus
   reasonable slack; the implementation uses a 192-byte internal buffer.
 
-Typical wiring (firmware module):
+Typical wiring (firmware module, HELLO + project-specific commands via
+unknown-handler - no AUTH/REBOOT):
 ```c
 #include <hal/hal_serial_session.h>
 
@@ -1116,6 +1137,12 @@ void configSessionTick(void) {
     hal_serial_session_poll(&s_session);
 }
 ```
+
+For AUTH/REBOOT-capable modules, swap the init for
+`hal_serial_session_init_with_vocabulary(&s_session, MODULE_NAME,
+FW_VERSION, BUILD_ID, &my_vocab)` where `my_vocab` is the project's
+populated `hal_serial_session_vocabulary_t` instance. See the
+"Vocabulary configuration" section below.
 
 Test observability (mock backend):
 - Build a framed request with `hal_serial_frame_encode(seq, "HELLO", buf,
@@ -1164,7 +1191,7 @@ Frame format (both directions):
 - `<crc8>`: two uppercase hex digits. CRC-8/CCITT (poly `0x07`, init
   `0x00`, no reflect, no xor-out) over the bytes between (but excluding)
   the leading `$` and the `*` separator. Reference vector:
-  `"123456789" → 0xF4`.
+  `"123456789" -> 0xF4`.
 - `\n` line terminator (encode helpers do **not** append it; use
   `hal_serial_println()` which already does).
 
@@ -1180,9 +1207,10 @@ vector in their test suites.
 Pulled in by the same `HAL_ENABLE_CRYPTO` flag as `hal_crypto`. The
 module depends on `hal_hmac_sha256`, so enabling auth without crypto
 is not a meaningful configuration. When the flag is off
-`hal_serial_session` keeps working — the `SC_AUTH_BEGIN` /
-`SC_AUTH_PROVE` handlers are compiled out and
-`hal_serial_session_is_authenticated()` returns `false`.
+`hal_serial_session` keeps working - the AUTH / REBOOT handlers are
+compiled out (no command tokens are recognised regardless of what the
+vocabulary supplies) and `hal_serial_session_is_authenticated()`
+returns `false`.
 
 ```c
 #include <hal/hal_sc_auth.h>
@@ -1220,7 +1248,7 @@ firmware and host MAC the exact same byte sequence regardless of host
 endianness.
 
 `hal_sc_auth_macs_equal` is a constant-time OR-accumulator comparison
-intended for MAC verification — it does not short-circuit on first
+intended for MAC verification - it does not short-circuit on first
 difference, so timing does not leak where the bytes diverged.
 
 The salt is a public, project-wide compile-time constant. Secrecy of the
@@ -1238,7 +1266,8 @@ the bench.
 
 The handshake itself is wired in
 [`hal_serial_session`](#hal_serial_session---framed-serial-session-helper)
-as built-in `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` commands; modules consume
+behind the vocabulary's `cmd_auth_begin` / `cmd_auth_prove` slots
+(Fiesta names them `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Modules consume
 authentication state through `hal_serial_session_is_authenticated(...)`
 and do not need to call the helpers below directly.
 
@@ -1633,7 +1662,7 @@ bool pcf8574_read_pin(uint8_t pin) {
 Note: the helpers rely on the HAL's *internal* per-bus mutex, which covers
 a single begin/end pair. Code that interleaves a write-then-read against
 another multi-step transaction on the same bus (e.g. set register pointer
-→ request N bytes) must serialize the two sequences with a caller-owned
+-> request N bytes) must serialize the two sequences with a caller-owned
 mutex in addition, since the HAL mutex is released at each `end_transmission`.
 
 ---
@@ -1661,7 +1690,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint8
 void hal_i2c_slave_deinit(void);
 void hal_i2c_slave_deinit_bus(uint8_t bus);
 
-// Write to register map (application → slave buffer).
+// Write to register map (application -> slave buffer).
 // Out-of-range registers are silently ignored.
 void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value);
 void hal_i2c_slave_reg_write8_bus(uint8_t bus, uint8_t reg, uint8_t value);
@@ -2157,8 +2186,8 @@ hal_eeprom_write_int(0, my_value);
 hal_eeprom_commit();
 
 // AT24C256 at default address 0x50 (I2C must already be initialised via hal_i2c_init):
-hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0);            // 0 → use EEPROM_I2C_ADDRESS
-// or with an explicit address (e.g. A0 pin tied high → 0x51):
+hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0);            // 0 -> use EEPROM_I2C_ADDRESS
+// or with an explicit address (e.g. A0 pin tied high -> 0x51):
 hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0x51);
 hal_eeprom_write_byte(0, 0xAB);
 // no commit needed for AT24C256
@@ -2453,8 +2482,8 @@ int   getAverageFrom(int *table, int size);
 int   getMinimumFrom(int *table, int size);
 int   getHalfwayBetweenMinMax(int *array, int n);
 float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
-static inline uint32_t float_to_u32(float f);   // bitcast float → uint32_t (memcpy)
-static inline float    u32_to_float(uint32_t u); // bitcast uint32_t → float (memcpy)
+static inline uint32_t float_to_u32(float f);   // bitcast float -> uint32_t (memcpy)
+static inline float    u32_to_float(uint32_t u); // bitcast uint32_t -> float (memcpy)
 unsigned long getSeconds(void);
 bool  isDaylightSavingTime(int year, int month, int day);
 void  adjustTime(int *year, int *month, int *day, int *hour, int *minute);

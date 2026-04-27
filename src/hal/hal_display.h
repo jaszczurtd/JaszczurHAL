@@ -11,22 +11,22 @@
  *
  * Backend selection:
  *
- *   HAL_DISABLE_TFT     — exclude all SPI TFT drivers (ILI9341/ST7789/ST7735/ST7796S);
+ *   HAL_DISABLE_TFT     - exclude all SPI TFT drivers (ILI9341/ST7789/ST7735/ST7796S);
  *                         hal_display_init() and hal_display_soft_init() are not available
- *   HAL_DISABLE_SSD1306 — exclude the SSD1306 OLED driver;
+ *   HAL_DISABLE_SSD1306 - exclude the SSD1306 OLED driver;
  *                         hal_display_init_ssd1306_i2c() is not available
  *
- * Both flags may not be defined simultaneously — use HAL_DISABLE_DISPLAY instead.
+ * Both flags may not be defined simultaneously - use HAL_DISABLE_DISPLAY instead.
  *
  * TFT drivers are selected at compile time (ignored when HAL_DISABLE_TFT is set):
  * Define exactly one of the following before including this header (or in
  * the build system):
  *
- *   HAL_DISPLAY_ILI9341  — 240×320
- *   HAL_DISPLAY_ST7789   — variable size (pass w/h to hal_display_configure)
- *   HAL_DISPLAY_ST7735   — 128×160 typical; set HAL_DISPLAY_ST7735_TAB to
+ *   HAL_DISPLAY_ILI9341  - 240×320
+ *   HAL_DISPLAY_ST7789   - variable size (pass w/h to hal_display_configure)
+ *   HAL_DISPLAY_ST7735   - 128×160 typical; set HAL_DISPLAY_ST7735_TAB to
  *                          override initR() tab-colour (default INITR_BLACKTAB)
- *   HAL_DISPLAY_ST7796S  — 320×480 typical, BGR colour order
+ *   HAL_DISPLAY_ST7796S  - 320×480 typical, BGR colour order
  *
  * Per-driver exclusion flags (from hal_config.h):
  *   HAL_DISABLE_ILI9341 / HAL_DISABLE_ST7789 / HAL_DISABLE_ST7735 / HAL_DISABLE_ST7796S

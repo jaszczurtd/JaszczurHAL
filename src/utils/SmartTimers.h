@@ -56,7 +56,7 @@ public:
    *
    * Returns the number of milliseconds left until the interval elapses.
    * Returns 0 when the timer has already elapsed or is stopped.
-   * Does NOT return the configured interval — use a separate variable for that.
+   * Does NOT return the configured interval - use a separate variable for that.
    *
    * @return Milliseconds remaining, or 0 if elapsed / stopped.
    */
@@ -65,7 +65,7 @@ public:
   /**
    * @brief Set a new timer interval.
    *
-   * Only updates the interval — does NOT reset the internal timestamp.
+   * Only updates the interval - does NOT reset the internal timestamp.
    * Call restart() afterwards if you want the new interval to start counting
    * from now.
    *

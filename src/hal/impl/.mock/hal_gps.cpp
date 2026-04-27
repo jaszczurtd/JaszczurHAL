@@ -23,7 +23,7 @@ void hal_gps_encode(char c) {
 }
 
 void hal_gps_update(void) {
-    /* no-op in mock — use hal_mock_gps_set_* inject helpers */
+    /* no-op in mock - use hal_mock_gps_set_* inject helpers */
 }
 
 bool     hal_gps_location_is_valid(void)   { return s_mock_gps.valid;      }

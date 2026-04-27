@@ -300,7 +300,7 @@ for entry in original_commands:
     if src_file.endswith(".ino.cpp"):
         # Find original .ino in project
         basename = os.path.basename(src_file)  # np. sketch.ino.cpp
-        ino_name = basename.replace(".ino.cpp", ".ino")  # → sketch.ino
+        ino_name = basename.replace(".ino.cpp", ".ino")  # -> sketch.ino
 
         # Search for this .ino in project tree
         for root, dirs, files in os.walk(project_dir):
@@ -387,8 +387,8 @@ main() {
     ok "IntelliSense configuration refreshed"
     echo ""
     echo "  Next steps in VS Code:"
-    echo "  1. Ctrl+Shift+P → C/C++: Reset IntelliSense Database"
-    echo "  2. Ctrl+Shift+P → Developer: Reload Window"
+    echo "  1. Ctrl+Shift+P -> C/C++: Reset IntelliSense Database"
+    echo "  2. Ctrl+Shift+P -> Developer: Reload Window"
     echo ""
 }
 

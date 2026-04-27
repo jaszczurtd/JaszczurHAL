@@ -280,7 +280,7 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
  * holding SDA low (e.g. after a master reset mid-transaction), then
  * generates a STOP condition.  Leaves SDA/SCL as inputs with pull-ups.
  *
- * Must be called @b before hal_i2c_init() — the bus is not usable for
+ * Must be called @b before hal_i2c_init() - the bus is not usable for
  * Wire transactions during this procedure.
  *
  * @param sda_pin  SDA pin number.

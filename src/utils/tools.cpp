@@ -301,7 +301,7 @@ float getAverageValueFrom(int tpin) {
     uint8_t i;
     float average = 0;
 
-    // Dummy read — RP2040 ADC mux cross-talk fix: first read after channel
+    // Dummy read - RP2040 ADC mux cross-talk fix: first read after channel
     // switch carries residual charge from the previous channel.
     (void)hal_adc_read(tpin);
 

@@ -4,18 +4,18 @@
 // How to use:
 //   1. Copy this whole `.vscode/` directory into your project root.
 //   2. Adjust task labels / commands / shortcuts to fit your workflow.
-//   3. Most tasks delegate to ${workspaceFolder}/scripts/* — edit those
+//   3. Most tasks delegate to ${workspaceFolder}/scripts/* - edit those
 //      scripts if you need project-specific behavior instead of touching
 //      this file.
 //   4. Keep the "inputs" array in sync with any `${input:*}` references
-//      below — VS Code resolves these interactively.
+//      below - VS Code resolves these interactively.
 //
 // Key design notes:
 //   - Build / Debug / Upload all delegate to scripts/build.sh.
 //     Swap it for your own entry point if you need a different flow.
 //   - "Upload" starts the persistent serial monitor in the background so
 //     log output is visible immediately after re-enumeration.
-//   - "Change port" (Ctrl+Shift+9) only edits settings.json — the
+//   - "Change port" (Ctrl+Shift+9) only edits settings.json - the
 //     persistent monitor re-reads the setting while running, so the new
 //     port takes effect without restarting the monitor.
 // =============================================================================
@@ -27,14 +27,14 @@
             "description": "Select target board",
             "type": "pickString",
             "options": [
-                "rp2040:rp2040:rpipico          — Raspberry Pi Pico",
-                "rp2040:rp2040:rpipicow         — Raspberry Pi Pico W",
-                "rp2040:rp2040:rpipico2         — Raspberry Pi Pico 2",
-                "rp2040:rp2040:rpipico2w        — Raspberry Pi Pico 2 W",
-                "rp2040:rp2040:waveshare_rp2040_zero — Waveshare RP2040-Zero",
-                "rp2040:rp2040:waveshare_rp2040_plus — Waveshare RP2040-Plus"
+                "rp2040:rp2040:rpipico          - Raspberry Pi Pico",
+                "rp2040:rp2040:rpipicow         - Raspberry Pi Pico W",
+                "rp2040:rp2040:rpipico2         - Raspberry Pi Pico 2",
+                "rp2040:rp2040:rpipico2w        - Raspberry Pi Pico 2 W",
+                "rp2040:rp2040:waveshare_rp2040_zero - Waveshare RP2040-Zero",
+                "rp2040:rp2040:waveshare_rp2040_plus - Waveshare RP2040-Plus"
             ],
-            "default": "rp2040:rp2040:rpipico          — Raspberry Pi Pico"
+            "default": "rp2040:rp2040:rpipico          - Raspberry Pi Pico"
         },
         {
             "id": "libraryName",
@@ -52,7 +52,7 @@
     "tasks": [
         {
             "label": "Build",
-            "detail": "Ctrl+Shift+1 — compile sketch",
+            "detail": "Ctrl+Shift+1 - compile sketch",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/build.sh",
             "args": ["build"],
@@ -92,7 +92,7 @@
         },
         {
             "label": "Upload",
-            "detail": "Ctrl+Shift+2 — start persistent monitor (if needed) + compile + upload",
+            "detail": "Ctrl+Shift+2 - start persistent monitor (if needed) + compile + upload",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/build.sh",
             "args": ["upload"],
@@ -111,7 +111,7 @@
         },
         {
             "label": "Upload (UF2 / BOOTSEL)",
-            "detail": "Ctrl+Shift+4 — compile + copy UF2 to BOOTSEL drive",
+            "detail": "Ctrl+Shift+4 - compile + copy UF2 to BOOTSEL drive",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/upload-uf2.sh",
             "presentation": {
@@ -122,7 +122,7 @@
         },
         {
             "label": "Monitor (persistent)",
-            "detail": "Ctrl+Shift+3 — auto-reconnecting monitor; re-reads the preferred port while running",
+            "detail": "Ctrl+Shift+3 - auto-reconnecting monitor; re-reads the preferred port while running",
             "type": "shell",
             "command": "python3",
             "args": [
@@ -139,7 +139,7 @@
         },
         {
             "label": "Monitor (Debug Probe)",
-            "detail": "Ctrl+Shift+5 — monitor for Raspberry Pi Debug Probe / Picoprobe",
+            "detail": "Ctrl+Shift+5 - monitor for Raspberry Pi Debug Probe / Picoprobe",
             "type": "shell",
             "command": "python3",
             "args": [
@@ -173,12 +173,12 @@
         },
         {
             "label": "Select board (GUI)",
-            "detail": "Ctrl+Shift+Alt+1 — quick selection from VS Code dropdown",
+            "detail": "Ctrl+Shift+Alt+1 - quick selection from VS Code dropdown",
             "type": "shell",
             "command": "bash",
             "args": [
                 "-c",
-                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *—.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*— *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Refresh IntelliSense')\""
+                "SELECTION='${input:boardChoice}'; FQBN=$(echo \"$SELECTION\" | sed 's/ *-.*//'); FQBN=$(echo $FQBN | xargs); DESC=$(echo \"$SELECTION\" | sed 's/.*- *//'); echo \"Setting board: $DESC\"; echo \"FQBN: $FQBN\"; python3 -c \"import json; f='${workspaceFolder}/.vscode/settings.json'; s=json.load(open(f)); s['arduino.fqbn']='$FQBN'; s['arduino.boardDescription']='$DESC'; json.dump(s,open(f,'w'),indent=4); print('\\nOK: settings.json updated'); print('Run: Refresh IntelliSense')\""
             ],
             "presentation": {
                 "echo": true, "reveal": "always", "focus": false,
@@ -188,7 +188,7 @@
         },
         {
             "label": "Select board (interactive)",
-            "detail": "Ctrl+Shift+Alt+2 — full menu with advanced options (flash, freq, USB, debug)",
+            "detail": "Ctrl+Shift+Alt+2 - full menu with advanced options (flash, freq, USB, debug)",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/select-board.sh",
             "presentation": {
@@ -199,7 +199,7 @@
         },
         {
             "label": "Refresh IntelliSense",
-            "detail": "Ctrl+Shift+6 — compile project and regenerate c_cpp_properties.json",
+            "detail": "Ctrl+Shift+6 - compile project and regenerate c_cpp_properties.json",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/refresh-intellisense.sh",
             "presentation": {
@@ -210,7 +210,7 @@
         },
         {
             "label": "Install library",
-            "detail": "Ctrl+Shift+0 — install library via arduino-cli",
+            "detail": "Ctrl+Shift+0 - install library via arduino-cli",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
             "args": ["lib", "install", "${input:libraryName}"],
@@ -222,7 +222,7 @@
         },
         {
             "label": "Clean",
-            "detail": "Ctrl+Shift+7 — remove .build directory",
+            "detail": "Ctrl+Shift+7 - remove .build directory",
             "type": "shell",
             "command": "rm",
             "args": ["-rf", "${workspaceFolder}/.build"],
@@ -234,7 +234,7 @@
         },
         {
             "label": "List ports",
-            "detail": "Ctrl+Shift+8 — list connected Arduino devices",
+            "detail": "Ctrl+Shift+8 - list connected Arduino devices",
             "type": "shell",
             "command": "${config:arduino.cliPath}",
             "args": ["board", "list"],
@@ -246,7 +246,7 @@
         },
         {
             "label": "Change port",
-            "detail": "Ctrl+Shift+9 — set upload port in settings.json (persistent monitor picks this up without restart)",
+            "detail": "Ctrl+Shift+9 - set upload port in settings.json (persistent monitor picks this up without restart)",
             "type": "shell",
             "command": "python3",
             "args": [

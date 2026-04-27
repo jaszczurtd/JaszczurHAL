@@ -219,7 +219,7 @@ hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h) {
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600)
         v = (hal_thermocouple_type_t)as_mcp(h)->getThermocoupleType();
 #endif
-    /* MAX6675 is permanently K-type — return the correct value without error. */
+    /* MAX6675 is permanently K-type - return the correct value without error. */
     hal_mutex_unlock(h->mutex);
     return v;
 }
@@ -315,7 +315,7 @@ void hal_thermocouple_enable(hal_thermocouple_t h, bool enable) {
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h) {
     if (!h) return false;
     hal_mutex_lock(h->mutex);
-    bool v = true;  /* MAX6675 has no sleep mode — always active. */
+    bool v = true;  /* MAX6675 has no sleep mode - always active. */
 #ifndef HAL_DISABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) v = as_mcp(h)->enabled();
 #endif

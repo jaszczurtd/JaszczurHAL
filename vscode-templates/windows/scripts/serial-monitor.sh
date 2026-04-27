@@ -72,5 +72,5 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-# Czytaj port — cat działa najlepiej w VS Code terminalu
+# Czytaj port - cat działa najlepiej w VS Code terminalu
 cat "$PORT"

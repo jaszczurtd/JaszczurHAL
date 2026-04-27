@@ -1,6 +1,6 @@
 #pragma once
 /*
- * Minimal Arduino.h stub for Arduino platform — host/test builds only.
+ * Minimal Arduino.h stub for Arduino platform - host/test builds only.
  * Provides only the types that tools.h / tools.cpp require.
  * Does NOT define ARDUINO so hal_config.h uses the hosted-build paths.
  */
@@ -12,7 +12,7 @@
 #include <ctype.h>
 #include <string>
 
-/* String — minimal subset used in tools.h / tools.cpp function signatures */
+/* String - minimal subset used in tools.h / tools.cpp function signatures */
 class String {
     std::string _s;
 public:

@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-04-27 (Fiesta R1.6 — strip SC_* literals from production code)
+## [Unreleased] - 2026-04-27 (Fiesta R1.6 - strip SC_* literals from production code)
 
 ### Changed
 - `hal_serial_session_vocabulary_default` is now an empty placeholder
@@ -16,7 +16,7 @@ All notable changes to this project will be documented in this file.
   three command lookups (`cmd_auth_begin`, `cmd_auth_prove`,
   `cmd_reboot_bootloader`) and the one fmt lookup
   (`reply_auth_challenge_fmt`). NULL means "this command is not
-  recognised by this session" → falls through to the unknown-line
+  recognised by this session" -> falls through to the unknown-line
   handler. The reply-side `println` calls were already NULL-safe.
 
 ### Tests
@@ -29,10 +29,10 @@ All notable changes to this project will be documented in this file.
   from the R1.0 pre-flight grep snapshot).
 - `test_hal_serial_session_vocabulary.cpp` updated the two cases
   that encoded the R1.0 fallback contract:
-  * `test_classic_init_default_vocabulary_is_empty` — verifies the
+  * `test_classic_init_default_vocabulary_is_empty` - verifies the
     new empty-default semantics (unknown-cmd silently dropped,
     HELLO still works structurally).
-  * `test_partial_vocab_unset_fields_remain_unrecognised` — verifies
+  * `test_partial_vocab_unset_fields_remain_unrecognised` - verifies
     that NULL fields fall back to NULL (= unrecognised) rather than
     to a built-in SC_* token, so SC_AUTH_BEGIN with a partial vocab
     that doesn't set `cmd_auth_begin` falls through to the unknown
@@ -47,7 +47,7 @@ All notable changes to this project will be documented in this file.
   or accept that AUTH/REBOOT commands fall through to their unknown
   handler.
 
-## [Unreleased] - 2026-04-27 (Fiesta R1.0 — session vocabulary decoupling)
+## [Unreleased] - 2026-04-27 (Fiesta R1.0 - session vocabulary decoupling)
 
 ### Added
 - `hal_serial_session_vocabulary.h`: optional vocabulary table that lets
@@ -56,7 +56,7 @@ All notable changes to this project will be documented in this file.
   (`SC_OK AUTH_OK`, `SC_AUTH_FAILED ...`, `SC_NOT_AUTHORIZED`,
   `SC_NOT_READY HELLO_REQUIRED`, `SC_OK REBOOT`, `SC_OK AUTH_CHALLENGE %s`,
   `SC_UNKNOWN_CMD`) used by the framed session helper. Each field is
-  independently optional — NULL falls back to the matching field of the
+  independently optional - NULL falls back to the matching field of the
   exposed `hal_serial_session_vocabulary_default` singleton.
 - `hal_serial_session_init_with_vocabulary()`: new entry point that takes
   a vocabulary pointer alongside the existing identity arguments. The
@@ -69,7 +69,7 @@ All notable changes to this project will be documented in this file.
   auth-failed / reboot reply paths.
 
 ### Changed
-- The framed session helper no longer hard-codes the SC token strings —
+- The framed session helper no longer hard-codes the SC token strings -
   every dispatch / reply site now looks them up via
   `HAL_SERIAL_SESSION_VOCAB(session, field)`. Default behaviour is
   byte-identical: existing `test_hal_serial_session` (24 cases) passes
@@ -103,7 +103,7 @@ All notable changes to this project will be documented in this file.
 - 4 new `test_hal_serial_session` cases:
   reboot-without-auth-rejected, reboot-after-hello-only-rejected,
   reboot-after-auth-acks-and-enters-bootloader, and
-  reboot-blocked-after-new-hello-clears-auth. Suite: 20 → 24.
+  reboot-blocked-after-new-hello-clears-auth. Suite: 20 -> 24.
 
 ### Notes
 - `hal_enter_bootloader` already existed; Phase 5 only wires it into
@@ -153,7 +153,7 @@ All notable changes to this project will be documented in this file.
   `hal_hmac_sha256`, `hal_hmac_sha256_hex`). Portable C++ implementation
   validated against FIPS 180-2 and RFC 4231 vectors. Bit-stable with the
   host-side copy in SerialConfigurator's `sc_sha256.c`.
-- `hal_sc_auth.h` — new header-only helper for the SerialConfigurator
+- `hal_sc_auth.h` - new header-only helper for the SerialConfigurator
   authentication handshake. Defines the compile-time salt
   (`FIESTA-SC-AUTH-v1`), per-device key derivation
   (`K_device = HMAC-SHA256(salt, uid_bytes)`), challenge/response
@@ -161,11 +161,11 @@ All notable changes to this project will be documented in this file.
   and a constant-time MAC comparison helper. Salt and constants must
   stay byte-for-byte in sync with `src/SerialConfigurator/src/core/sc_auth.h`
   in the Fiesta repo.
-- `hal_serial_session_is_authenticated(session)` — public reader for the
+- `hal_serial_session_is_authenticated(session)` - public reader for the
   new auth state.
 - Built-in framed commands `SC_AUTH_BEGIN` and `SC_AUTH_PROVE <hex>` in
   `hal_serial_session_poll`. Modules consume them automatically through
-  the existing wrapper — no per-module rollout work required.
+  the existing wrapper - no per-module rollout work required.
 
 ### Changed
 - `hal_serial_session_t` gained five auth fields (`authenticated`,
@@ -178,12 +178,12 @@ All notable changes to this project will be documented in this file.
 - 7 new cases in `test_hal_serial_session` covering AUTH_BEGIN gating,
   challenge issuance, fresh-challenge-per-BEGIN, correct-MAC success,
   bad-MAC rejection with one-shot challenge consumption, malformed
-  payload rejection, and auth-clear-on-new-HELLO. Suite size: 13 → 20.
+  payload rejection, and auth-clear-on-new-HELLO. Suite size: 13 -> 20.
 
-## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 2 — framed protocol)
+## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 2 - framed protocol)
 
 ### Added
-- `hal_serial_frame.h` — new header-only wire-framing helpers shared with
+- `hal_serial_frame.h` - new header-only wire-framing helpers shared with
   the SerialConfigurator host. Exposes `hal_serial_frame_encode`,
   `hal_serial_frame_decode`, and `hal_serial_frame_crc8` along with the
   constants `HAL_SERIAL_FRAME_PREFIX` (`"$SC,"`),
@@ -191,12 +191,12 @@ All notable changes to this project will be documented in this file.
   `HAL_SERIAL_FRAME_LINE_MAX`. Frame format:
   `$SC,<seq>,<payload>*<crc8>\n`. CRC-8/CCITT (poly `0x07`, init `0x00`,
   no reflect, no xor-out) over the bytes between the leading `$` and the
-  `*` separator. The `"123456789" → 0xF4` reference vector is asserted by
+  `*` separator. The `"123456789" -> 0xF4` reference vector is asserted by
   the host-test suite.
-- `hal_serial_session_set_unknown_handler(session, cb, user)` — register
+- `hal_serial_session_set_unknown_handler(session, cb, user)` - register
   a per-module sink for unrecognised inner payloads (used by ECU/Clocks/
   OilAndSpeed to implement their `SC_*` command sets).
-- `hal_serial_session_println(session, payload)` — emit one inner payload
+- `hal_serial_session_println(session, payload)` - emit one inner payload
   as a framed reply that echoes the in-flight request's `<seq>`. No-op
   outside the request-dispatch window.
 
@@ -214,9 +214,9 @@ All notable changes to this project will be documented in this file.
 - `HAL_SERIAL_SESSION_MAX_LINE` widened from 48 to 128 bytes to
   accommodate the framing overhead and longer SC payloads.
 - `hal_serial_session_t` gained two new fields:
-  - `bool in_request` — gates `hal_serial_session_println` so modules
+  - `bool in_request` - gates `hal_serial_session_println` so modules
     cannot inject unsolicited bytes,
-  - `uint16_t request_seq` — the seq carried in the in-flight request,
+  - `uint16_t request_seq` - the seq carried in the in-flight request,
     automatically used by `hal_serial_session_println` to correlate
     replies.
 - `hal_serial_session.h` documentation rewritten to describe the framed

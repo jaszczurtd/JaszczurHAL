@@ -473,7 +473,7 @@ def command_upload_uf2(_: argparse.Namespace) -> int:
 def command_set_board(args: argparse.Namespace) -> int:
     settings = load_settings()
     selection = args.selection.strip()
-    fqbn, desc = selection.split("—", 1)
+    fqbn, desc = selection.split("-", 1)
     settings["arduino.fqbn"] = fqbn.strip()
     settings["arduino.boardDescription"] = desc.strip()
     save_settings(settings)

@@ -64,7 +64,7 @@ void test_error_stable_within_tolerance(void) {
     PIDController pid(1.0f, 0.0f, 0.0f, 0.0f);
     pid.setOutputLimits(-1000.0f, 1000.0f);
     pid.updatePIDtime(1.0f);
-    /* isErrorStable() itself increments the stability counter — call it 3 times */
+    /* isErrorStable() itself increments the stability counter - call it 3 times */
     bool stable = false;
     for (int i = 0; i < 3; i++) {
         pid.updatePIDcontroller(0.1f);

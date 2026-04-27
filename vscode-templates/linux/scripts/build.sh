@@ -3,10 +3,10 @@
 # JaszczurHAL build wrapper for VS Code tasks
 #
 # Single entry point used by tasks.json for Build / Build (Debug) / Upload.
-# Adapt freely — this is a template, not a framework.
+# Adapt freely - this is a template, not a framework.
 #
 # The underlying toolchain today is `arduino-cli` (for the RP2040/RP2350
-# arduino-pico core), but the script itself is the HAL-level interface —
+# arduino-pico core), but the script itself is the HAL-level interface -
 # point tasks.json at this file regardless of what toolchain you later
 # swap in.
 #
@@ -20,10 +20,10 @@
 #   - arduino.fqbn                  (required)
 #   - arduino.uploadPort            (required for `upload`)
 #   - arduino.sketchbookPath        (optional; used to find libraries/)
-#   - arduino.verbose               (optional; `true` → pass -v to the tool)
+#   - arduino.verbose               (optional; `true` -> pass -v to the tool)
 #   - build.usbManufacturer         (optional; passed as build.usb_manufacturer)
 #   - build.usbProduct              (optional; passed as build.usb_product)
-#   - build.werror                  (optional; `true` → add -Werror)
+#   - build.werror                  (optional; `true` -> add -Werror)
 #
 # On `upload`, this script also starts the persistent serial monitor in the
 # background if one is not already running, so log output is visible

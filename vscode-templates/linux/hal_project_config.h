@@ -2,13 +2,13 @@
 
 /**
  * @file hal_project_config.h
- * @brief JaszczurHAL module configuration — project template.
+ * @brief JaszczurHAL module configuration - project template.
  *
  * Copy this file to your sketch (project) directory and uncomment the
  * HAL_DISABLE_* flags for modules your project does not use.
  *
  * This file is automatically picked up by hal_config.h via __has_include.
- * Dependency propagation (e.g. EEPROM → KV) is handled by hal_config.h —
+ * Dependency propagation (e.g. EEPROM -> KV) is handled by hal_config.h -
  * you only need to disable the base module.
  *
  * Build requirement: the sketch directory must be on the compiler include
@@ -29,13 +29,13 @@
 
 /* ── Uncomment to disable ─────────────────────────────────────────────── */
 
-// #define HAL_DISABLE_WIFI            /* WiFi — needs PICO_W               */
-// #define HAL_DISABLE_EEPROM          /* EEPROM / AT24C256 → propagates KV */
+// #define HAL_DISABLE_WIFI            /* WiFi - needs PICO_W               */
+// #define HAL_DISABLE_EEPROM          /* EEPROM / AT24C256 -> propagates KV */
 // #define HAL_DISABLE_GPS             /* GPS / NMEA (TinyGPS++)            */
 // #define HAL_DISABLE_THERMOCOUPLE    /* MCP9600 / MAX6675                 */
 // #define HAL_DISABLE_UART            /* Hardware UART (SerialUART)        */
-// #define HAL_DISABLE_SWSERIAL        /* SoftwareSerial → propagates GPS   */
-// #define HAL_DISABLE_I2C             /* I2C (Wire) → propagates EXT. ADC  */
+// #define HAL_DISABLE_SWSERIAL        /* SoftwareSerial -> propagates GPS   */
+// #define HAL_DISABLE_I2C             /* I2C (Wire) -> propagates EXT. ADC  */
 // #define HAL_DISABLE_EXTERNAL_ADC    /* ADS1115 external ADC              */
 // #define HAL_DISABLE_PWM_FREQ        /* Frequency-controlled PWM          */
 // #define HAL_DISABLE_RGB_LED         /* NeoPixel RGB status LED            */

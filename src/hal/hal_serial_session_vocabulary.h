@@ -43,7 +43,7 @@ extern "C" {
  *
  * Each field is independently optional: NULL falls back to the corresponding
  * field of @ref hal_serial_session_vocabulary_default. Pointer storage is
- * borrowed — strings must remain valid for the lifetime of the session.
+ * borrowed - strings must remain valid for the lifetime of the session.
  */
 typedef struct {
     /* Inbound command tokens (matched verbatim, except cmd_auth_prove which
@@ -69,7 +69,7 @@ typedef struct {
 } hal_serial_session_vocabulary_t;
 
 /**
- * @brief Empty placeholder vocabulary — every field is NULL.
+ * @brief Empty placeholder vocabulary - every field is NULL.
  *
  * Defined as @c static @c const in the header so consumers can resolve
  * NULL-fallbacks at compile time without a dedicated translation unit.
