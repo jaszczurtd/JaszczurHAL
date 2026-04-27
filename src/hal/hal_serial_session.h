@@ -31,6 +31,7 @@
 #include "hal_config.h"
 #include "hal_serial.h"
 #include "hal_serial_frame.h"
+#include "hal_serial_session_vocabulary.h"
 #include "hal_system.h"
 #ifdef HAL_ENABLE_CRYPTO
 #include "hal_sc_auth.h"
@@ -46,6 +47,17 @@ extern "C" {
 
 /** @brief Current session protocol version. */
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
+
+/**
+ * @brief Resolve a vocabulary field for the given session.
+ *
+ * Shorthand for @ref HAL_SERIAL_SESSION_VOCAB_FIELD that takes the session
+ * pointer directly. Falls back to @ref hal_serial_session_vocabulary_default
+ * when either the session has no vocab override (classic init) or the
+ * specific field is NULL in the override.
+ */
+#define HAL_SERIAL_SESSION_VOCAB(session, field) \
+    HAL_SERIAL_SESSION_VOCAB_FIELD((session)->vocab, field)
 
 /** @brief Maximum accepted command line length (excluding terminator).
  *
@@ -97,6 +109,7 @@ typedef struct {
     void *unknown_user;                        /**< Opaque user pointer forwarded to @c unknown_handler. */
     bool in_request;                           /**< true while dispatching a framed request (gates `hal_serial_session_println`). */
     uint16_t request_seq;                      /**< Sequence number of the in-flight framed request. */
+    const hal_serial_session_vocabulary_t *vocab; /**< Optional override of inbound/outbound SC tokens (NULL → defaults). */
 #ifdef HAL_ENABLE_CRYPTO
     /* Authentication state (Phase 3). Compiled in only when
      * HAL_ENABLE_CRYPTO is defined; otherwise the session helper still
@@ -111,22 +124,30 @@ typedef struct {
 } hal_serial_session_t;
 
 /**
- * @brief Initialize/clear one serial session context and bind identity fields.
+ * @brief Initialize/clear one serial session context, bind identity fields,
+ *        and (optionally) install a custom @ref hal_serial_session_vocabulary_t.
  *
  * The identity fields are captured by pointer and the device UID hex string
  * is captured by value at init time. @p module_tag must remain valid for the
  * lifetime of the session; @p fw_version and @p build_id may be NULL and will
  * be reported as @ref HAL_SERIAL_SESSION_UNKNOWN.
  *
+ * @p vocab is borrowed and must remain valid for the lifetime of the session.
+ * Pass NULL to keep the historical Fiesta-default tokens (equivalent to
+ * @ref hal_serial_session_init).
+ *
  * @param session     Session context to reset.
  * @param module_tag  Short module identifier (e.g. "ECU"), must not be NULL.
  * @param fw_version  Firmware version string, or NULL.
  * @param build_id    Build identifier string, or NULL.
+ * @param vocab       Optional vocabulary override, or NULL for defaults.
  */
-static inline void hal_serial_session_init(hal_serial_session_t *session,
-                                           const char *module_tag,
-                                           const char *fw_version,
-                                           const char *build_id) {
+static inline void hal_serial_session_init_with_vocabulary(
+    hal_serial_session_t *session,
+    const char *module_tag,
+    const char *fw_version,
+    const char *build_id,
+    const hal_serial_session_vocabulary_t *vocab) {
     if (session == NULL) {
         return;
     }
@@ -144,6 +165,22 @@ static inline void hal_serial_session_init(hal_serial_session_t *session,
     }
     session->unknown_handler = NULL;
     session->unknown_user = NULL;
+    session->vocab = vocab;
+}
+
+/**
+ * @brief Initialize a serial session with the historical default vocabulary.
+ *
+ * Thin wrapper over @ref hal_serial_session_init_with_vocabulary that passes
+ * NULL for @c vocab. Kept as the canonical entry point for callers that do
+ * not need to override SC token strings.
+ */
+static inline void hal_serial_session_init(hal_serial_session_t *session,
+                                           const char *module_tag,
+                                           const char *fw_version,
+                                           const char *build_id) {
+    hal_serial_session_init_with_vocabulary(session, module_tag, fw_version,
+                                            build_id, NULL);
 }
 
 /**
@@ -367,7 +404,8 @@ static inline void hal_serial_session__generate_challenge(
 static inline void hal_serial_session__handle_auth_begin(
     hal_serial_session_t *session) {
     if (!session->active) {
-        hal_serial_session_println(session, "SC_NOT_READY HELLO_REQUIRED");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_not_ready_hello_required));
         return;
     }
 
@@ -384,7 +422,7 @@ static inline void hal_serial_session__handle_auth_begin(
 
     char response[64];
     snprintf(response, sizeof(response),
-             "SC_OK AUTH_CHALLENGE %s", hex);
+             HAL_SERIAL_SESSION_VOCAB(session, reply_auth_challenge_fmt), hex);
     hal_serial_session_println(session, response);
 }
 
@@ -400,11 +438,13 @@ static inline void hal_serial_session__handle_auth_prove(
     hal_serial_session_t *session,
     const char *args) {
     if (!session->active) {
-        hal_serial_session_println(session, "SC_NOT_READY HELLO_REQUIRED");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_not_ready_hello_required));
         return;
     }
     if (!session->challenge_pending) {
-        hal_serial_session_println(session, "SC_AUTH_FAILED no_challenge");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_no_challenge));
         return;
     }
 
@@ -422,7 +462,8 @@ static inline void hal_serial_session__handle_auth_prove(
     if (hex_len != HAL_SC_AUTH_RESPONSE_BYTES * 2u) {
         session->challenge_pending = false;
         session->auth_failures++;
-        hal_serial_session_println(session, "SC_AUTH_FAILED bad_length");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_bad_length));
         return;
     }
 
@@ -430,7 +471,8 @@ static inline void hal_serial_session__handle_auth_prove(
     if (!hal_serial_session__hex_decode(args, provided, sizeof(provided))) {
         session->challenge_pending = false;
         session->auth_failures++;
-        hal_serial_session_println(session, "SC_AUTH_FAILED bad_hex");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_bad_hex));
         return;
     }
 
@@ -440,7 +482,8 @@ static inline void hal_serial_session__handle_auth_prove(
                                        key)) {
         session->challenge_pending = false;
         session->auth_failures++;
-        hal_serial_session_println(session, "SC_AUTH_FAILED key_derivation");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_key_derivation));
         return;
     }
 
@@ -452,7 +495,8 @@ static inline void hal_serial_session__handle_auth_prove(
                                       expected)) {
         session->challenge_pending = false;
         session->auth_failures++;
-        hal_serial_session_println(session, "SC_AUTH_FAILED mac_compute");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_mac_compute));
         return;
     }
 
@@ -462,12 +506,14 @@ static inline void hal_serial_session__handle_auth_prove(
 
     if (!hal_sc_auth_macs_equal(provided, expected, sizeof(expected))) {
         session->auth_failures++;
-        hal_serial_session_println(session, "SC_AUTH_FAILED bad_mac");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_auth_failed_bad_mac));
         return;
     }
 
     session->authenticated = true;
-    hal_serial_session_println(session, "SC_OK AUTH_OK");
+    hal_serial_session_println(session,
+        HAL_SERIAL_SESSION_VOCAB(session, reply_auth_ok));
 }
 
 /**
@@ -491,10 +537,12 @@ static inline void hal_serial_session__handle_auth_prove(
 static inline void hal_serial_session__handle_reboot_bootloader(
     hal_serial_session_t *session) {
     if (!session->authenticated) {
-        hal_serial_session_println(session, "SC_NOT_AUTHORIZED");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_not_authorized));
         return;
     }
-    hal_serial_session_println(session, "SC_OK REBOOT");
+    hal_serial_session_println(session,
+        HAL_SERIAL_SESSION_VOCAB(session, reply_reboot_ok));
     /* Drain window for the ACK frame on the USB CDC stack. */
     hal_delay_ms(50u);
     hal_enter_bootloader();
@@ -523,22 +571,27 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
     }
 
 #ifdef HAL_ENABLE_CRYPTO
-    if (strcmp(inner, "SC_AUTH_BEGIN") == 0) {
+    const char *cmd_auth_begin =
+        HAL_SERIAL_SESSION_VOCAB(session, cmd_auth_begin);
+    if (strcmp(inner, cmd_auth_begin) == 0) {
         hal_serial_session__handle_auth_begin(session);
         return;
     }
 
-    static const char k_auth_prove_prefix[] = "SC_AUTH_PROVE";
-    const size_t k_auth_prove_prefix_len = sizeof(k_auth_prove_prefix) - 1u;
-    if (strncmp(inner, k_auth_prove_prefix, k_auth_prove_prefix_len) == 0 &&
-        (inner[k_auth_prove_prefix_len] == ' ' ||
-         inner[k_auth_prove_prefix_len] == '\0')) {
+    const char *cmd_auth_prove =
+        HAL_SERIAL_SESSION_VOCAB(session, cmd_auth_prove);
+    const size_t cmd_auth_prove_len = strlen(cmd_auth_prove);
+    if (strncmp(inner, cmd_auth_prove, cmd_auth_prove_len) == 0 &&
+        (inner[cmd_auth_prove_len] == ' ' ||
+         inner[cmd_auth_prove_len] == '\0')) {
         hal_serial_session__handle_auth_prove(
-            session, inner + k_auth_prove_prefix_len);
+            session, inner + cmd_auth_prove_len);
         return;
     }
 
-    if (strcmp(inner, "SC_REBOOT_BOOTLOADER") == 0) {
+    const char *cmd_reboot_bootloader =
+        HAL_SERIAL_SESSION_VOCAB(session, cmd_reboot_bootloader);
+    if (strcmp(inner, cmd_reboot_bootloader) == 0) {
         hal_serial_session__handle_reboot_bootloader(session);
         return;
     }
@@ -547,7 +600,8 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
     if (session->unknown_handler != NULL) {
         session->unknown_handler(inner, session->unknown_user);
     } else {
-        hal_serial_session_println(session, "SC_UNKNOWN_CMD");
+        hal_serial_session_println(session,
+            HAL_SERIAL_SESSION_VOCAB(session, reply_unknown_cmd));
     }
 }
 

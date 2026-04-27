@@ -2,6 +2,49 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-27 (Fiesta R1.0 — session vocabulary decoupling)
+
+### Added
+- `hal_serial_session_vocabulary.h`: optional vocabulary table that lets
+  a project override the inbound command tokens (`SC_AUTH_BEGIN`,
+  `SC_AUTH_PROVE`, `SC_REBOOT_BOOTLOADER`) and the outbound reply tokens
+  (`SC_OK AUTH_OK`, `SC_AUTH_FAILED ...`, `SC_NOT_AUTHORIZED`,
+  `SC_NOT_READY HELLO_REQUIRED`, `SC_OK REBOOT`, `SC_OK AUTH_CHALLENGE %s`,
+  `SC_UNKNOWN_CMD`) used by the framed session helper. Each field is
+  independently optional — NULL falls back to the matching field of the
+  exposed `hal_serial_session_vocabulary_default` singleton.
+- `hal_serial_session_init_with_vocabulary()`: new entry point that takes
+  a vocabulary pointer alongside the existing identity arguments. The
+  classic `hal_serial_session_init()` is now a thin wrapper that passes
+  NULL, so existing call sites keep their wire behaviour unchanged.
+- `test_hal_serial_session_vocabulary`: new ctest target with 9 cases
+  covering full override, partial (per-field) NULL fallback, fall-through
+  of original `SC_*` literals to the unknown handler when commands are
+  renamed, and verifications for unknown / not-ready / not-authorized /
+  auth-failed / reboot reply paths.
+
+### Changed
+- The framed session helper no longer hard-codes the SC token strings —
+  every dispatch / reply site now looks them up via
+  `HAL_SERIAL_SESSION_VOCAB(session, field)`. Default behaviour is
+  byte-identical: existing `test_hal_serial_session` (24 cases) passes
+  unmodified, and the wire output verified by ctest is unchanged (`OK
+  HELLO`, `SC_OK AUTH_CHALLENGE …`, `SC_OK AUTH_OK`, `SC_OK REBOOT`,
+  `SC_AUTH_FAILED …`, `SC_NOT_AUTHORIZED`, `SC_NOT_READY HELLO_REQUIRED`,
+  `SC_UNKNOWN_CMD`).
+- HELLO and the structural `OK HELLO module=...` reply remain
+  intentionally non-configurable: they encode protocol structure that
+  every host parses, not project vocabulary.
+
+### Notes
+- HAL itself stays project-agnostic: the vocabulary header has no Fiesta
+  scDefinitions dependency, the default singleton is purely a captured
+  snapshot of the historical defaults, and consumers that want the old
+  behaviour pass NULL (or simply call the classic init).
+- This is the foundation for Fiesta refactor R1.1+, which moves the SC
+  token strings into a single source of truth on the Fiesta side and
+  passes the table at session init.
+
 ## [Unreleased] - 2026-04-27 (SerialConfigurator Phase 5)
 
 ### Added

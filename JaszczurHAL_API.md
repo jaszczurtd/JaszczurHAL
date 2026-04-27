@@ -401,7 +401,7 @@ Covered test targets include:
 
 - `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`, `test_hal_timer`
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
-- `test_hal_serial`, `test_hal_serial_session`, `test_hal_uart`, `test_hal_swserial`
+- `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
 - `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_time`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
@@ -967,6 +967,12 @@ void     hal_serial_session_init(hal_serial_session_t *session,
                                  const char *module_tag,
                                  const char *fw_version,
                                  const char *build_id);
+void     hal_serial_session_init_with_vocabulary(
+                                 hal_serial_session_t *session,
+                                 const char *module_tag,
+                                 const char *fw_version,
+                                 const char *build_id,
+                                 const hal_serial_session_vocabulary_t *vocab);
 void     hal_serial_session_set_unknown_handler(hal_serial_session_t *s,
                                                 hal_serial_session_unknown_cb_t cb,
                                                 void *user);
@@ -1057,6 +1063,23 @@ Authentication (Phase 3) — opt-in:
   command, not just once.
 - `auth_failures` counts failed `SC_AUTH_PROVE` attempts; rate-limit and
   lockout policies on top of it are deferred to Phase 7.
+
+Vocabulary override (R1.0) — opt-in:
+- The inbound command tokens (`SC_AUTH_BEGIN`, `SC_AUTH_PROVE`,
+  `SC_REBOOT_BOOTLOADER`) and outbound reply payloads listed above are
+  captured by `hal_serial_session_vocabulary_t`. Pass an instance to
+  `hal_serial_session_init_with_vocabulary()` to make the helper speak a
+  project-specific dialect; pass NULL (or call the classic
+  `hal_serial_session_init()`) to keep the historical Fiesta defaults.
+- Each field is independently optional — a NULL field falls back to the
+  matching field of the exposed `hal_serial_session_vocabulary_default`
+  singleton, so callers can override only the tokens they care about.
+- HELLO and the `OK HELLO module=... proto=... session=... fw=... build=...
+  uid=...` reply are intentionally NOT configurable: their structure is
+  parsed by every host and is treated as part of the protocol contract.
+- Reply strings ending in `_fmt` (currently only `reply_auth_challenge_fmt`)
+  are passed to `printf`-family formatters; overrides MUST preserve the
+  `%s` placeholder for the hex challenge.
 
 Notes:
 - parser is line-based (`\r` / `\n` terminate a frame),
