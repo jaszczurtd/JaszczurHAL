@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-27 (SerialConfigurator Phase 5)
+
+### Added
+- `hal_serial_session`: built-in `SC_REBOOT_BOOTLOADER` framed command,
+  gated on `hal_serial_session_is_authenticated()`. Authenticated
+  sessions get `SC_OK REBOOT`, a brief drain window, and a call to
+  `hal_enter_bootloader()`. Unauthenticated sessions get
+  `SC_NOT_AUTHORIZED` and the boot ROM is NOT entered. Like the AUTH
+  handlers this surface is wrapped in `#ifdef HAL_ENABLE_CRYPTO`; with
+  crypto off the command falls through to the user unknown-handler.
+- 4 new `test_hal_serial_session` cases:
+  reboot-without-auth-rejected, reboot-after-hello-only-rejected,
+  reboot-after-auth-acks-and-enters-bootloader, and
+  reboot-blocked-after-new-hello-clears-auth. Suite: 20 → 24.
+
+### Notes
+- `hal_enter_bootloader` already existed; Phase 5 only wires it into
+  the framed protocol behind the auth gate. Mock backend keeps its
+  observable flag (`hal_mock_bootloader_was_requested`).
+
 ## [Unreleased] - 2026-04-26 (HAL_ENABLE_CRYPTO opt-in)
 
 ### Changed

@@ -574,6 +574,127 @@ void test_new_hello_clears_authenticated_state(void) {
     TEST_ASSERT_FALSE(s.challenge_pending);
 }
 
+/* ── SC_REBOOT_BOOTLOADER (Phase 5) ──────────────────────────────────────── */
+
+/**
+ * Drive a session through HELLO + AUTH_BEGIN + AUTH_PROVE so the next
+ * test step starts from a fully authenticated state. Returns the session
+ * id for callers that need it.
+ */
+static uint32_t authenticate_session(hal_serial_session_t *s,
+                                     uint16_t hello_seq,
+                                     uint16_t begin_seq,
+                                     uint16_t prove_seq) {
+    inject_framed_line(hello_seq, "HELLO", '\n');
+    hal_serial_session_poll(s);
+    inject_framed_line(begin_seq, "SC_AUTH_BEGIN", '\n');
+    hal_serial_session_poll(s);
+
+    uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+    TEST_ASSERT_TRUE(extract_challenge_from_reply(begin_seq, challenge));
+    const uint32_t session_id = hal_serial_session_id(s);
+
+    uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
+    uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+    TEST_ASSERT_TRUE(hal_sc_auth_compute_response(key, challenge, sizeof(challenge),
+                                                  session_id, mac));
+    char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+    bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
+
+    char prove_line[256];
+    snprintf(prove_line, sizeof(prove_line), "SC_AUTH_PROVE %s", hex);
+    inject_framed_line(prove_seq, prove_line, '\n');
+    hal_serial_session_poll(s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(s));
+    return session_id;
+}
+
+void test_reboot_bootloader_without_auth_is_rejected(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    hal_mock_bootloader_reset_flag();
+
+    /* No HELLO and no AUTH yet — must refuse. */
+    inject_framed_line(5u, "SC_REBOOT_BOOTLOADER", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(5u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", reply_payload);
+}
+
+void test_reboot_bootloader_after_hello_only_is_rejected(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    hal_mock_bootloader_reset_flag();
+
+    /* HELLO activates the session but the AUTH path has not been
+     * cleared — the bootloader command must still be refused. */
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+
+    inject_framed_line(2u, "SC_REBOOT_BOOTLOADER", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(2u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", reply_payload);
+}
+
+void test_reboot_bootloader_after_auth_acks_and_enters_bootloader(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    hal_mock_bootloader_reset_flag();
+    (void)authenticate_session(&s, 1u, 2u, 3u);
+
+    inject_framed_line(7u, "SC_REBOOT_BOOTLOADER", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(7u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_OK REBOOT", reply_payload);
+}
+
+void test_reboot_bootloader_blocked_after_new_hello_clears_auth(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
+    hal_mock_bootloader_reset_flag();
+    (void)authenticate_session(&s, 1u, 2u, 3u);
+
+    /* New HELLO mints a new session id and clears authenticated state.
+     * A subsequent SC_REBOOT_BOOTLOADER must be refused. */
+    hal_mock_set_millis(1u);
+    inject_framed_line(4u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+
+    inject_framed_line(5u, "SC_REBOOT_BOOTLOADER", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload, sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(5u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", reply_payload);
+}
+
 void test_poll_null_args_is_safe(void) {
     hal_serial_session_t s;
     hal_serial_session_init(&s, "ECU", "1.0.0", "dev");
@@ -610,6 +731,10 @@ int main(void) {
     RUN_TEST(test_auth_prove_with_bad_mac_fails_and_consumes_challenge);
     RUN_TEST(test_auth_prove_with_malformed_payload_is_rejected);
     RUN_TEST(test_new_hello_clears_authenticated_state);
+    RUN_TEST(test_reboot_bootloader_without_auth_is_rejected);
+    RUN_TEST(test_reboot_bootloader_after_hello_only_is_rejected);
+    RUN_TEST(test_reboot_bootloader_after_auth_acks_and_enters_bootloader);
+    RUN_TEST(test_reboot_bootloader_blocked_after_new_hello_clears_auth);
     RUN_TEST(test_poll_null_args_is_safe);
     return UNITY_END();
 }
