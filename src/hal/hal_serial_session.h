@@ -469,6 +469,36 @@ static inline void hal_serial_session__handle_auth_prove(
     session->authenticated = true;
     hal_serial_session_println(session, "SC_OK AUTH_OK");
 }
+
+/**
+ * @brief Internal: handle SC_REBOOT_BOOTLOADER (Phase 5).
+ *
+ * Auth-gated. The single guard is @c hal_serial_session_is_authenticated;
+ * there is no RPM == 0 check or service-mode flag (per SC design defaults).
+ *
+ * On a successful handshake the function:
+ *   1. emits the framed `SC_OK REBOOT` reply,
+ *   2. sleeps briefly so the USB CDC stack has a chance to drain the ACK
+ *      frame before the boot ROM grabs the controller,
+ *   3. calls @c hal_enter_bootloader. On real hardware the call does not
+ *      return; the mock backend simply flips a test-observable flag and
+ *      returns, which lets host-side tests verify the request reached
+ *      the right entry point.
+ *
+ * On an unauthenticated session the firmware refuses the command and
+ * keeps running normally.
+ */
+static inline void hal_serial_session__handle_reboot_bootloader(
+    hal_serial_session_t *session) {
+    if (!session->authenticated) {
+        hal_serial_session_println(session, "SC_NOT_AUTHORIZED");
+        return;
+    }
+    hal_serial_session_println(session, "SC_OK REBOOT");
+    /* Drain window for the ACK frame on the USB CDC stack. */
+    hal_delay_ms(50u);
+    hal_enter_bootloader();
+}
 #endif /* HAL_ENABLE_CRYPTO */
 
 /**
@@ -505,6 +535,11 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
          inner[k_auth_prove_prefix_len] == '\0')) {
         hal_serial_session__handle_auth_prove(
             session, inner + k_auth_prove_prefix_len);
+        return;
+    }
+
+    if (strcmp(inner, "SC_REBOOT_BOOTLOADER") == 0) {
+        hal_serial_session__handle_reboot_bootloader(session);
         return;
     }
 #endif /* HAL_ENABLE_CRYPTO */

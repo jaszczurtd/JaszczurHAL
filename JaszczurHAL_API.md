@@ -990,6 +990,8 @@ Built-in commands (inside the frame envelope):
 - `SC_AUTH_BEGIN` — mints a fresh 16-byte challenge for the active session.
 - `SC_AUTH_PROVE <64 hex chars>` — proves the host knows `K_device` for
   this UID; on success the session becomes authenticated.
+- `SC_REBOOT_BOOTLOADER` — auth-gated; on success the firmware ACKs and
+  hands control to the boot ROM (BOOTSEL/UF2 mass-storage mode).
 
 Built-in responses (inside the frame envelope, each echoes the inbound `<seq>`):
 - `OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>`
@@ -998,6 +1000,10 @@ Built-in responses (inside the frame envelope, each echoes the inbound `<seq>`):
 - `SC_AUTH_FAILED <reason>` — `bad_mac`, `bad_length`, `bad_hex`,
   `no_challenge`, `key_derivation`, `mac_compute`
 - `SC_NOT_READY HELLO_REQUIRED` (AUTH_BEGIN/PROVE before HELLO)
+- `SC_OK REBOOT` (after authenticated `SC_REBOOT_BOOTLOADER`; the boot
+  ROM is entered ~50 ms later)
+- `SC_NOT_AUTHORIZED` (`SC_REBOOT_BOOTLOADER` without a valid prior
+  AUTH_PROVE)
 
 Unrecognised inner payloads:
 - if a user callback is registered via
