@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-30 (Fiesta R1.7 - structural BYE in framed session)
+
+### Added
+- `hal_serial_session_vocabulary_t` gains `cmd_bye` and `reply_bye_ok`
+  fields. When a vocabulary populates `cmd_bye`, the dispatch path
+  recognises it as a structural session-close command: the helper
+  emits `reply_bye_ok` (when set), drops `session->active`, and clears
+  any pending crypto auth state. Inactive sessions accept BYE and
+  re-emit OK (idempotent).
+- `hal_serial_session__handle_bye` lives outside `HAL_ENABLE_CRYPTO`
+  so projects that compile out the AUTH path can still close sessions
+  cleanly. This lets the host orchestrate a graceful disconnect (e.g.
+  re-enabling debug logs that were muted while the session was
+  active) without polling for an activity timeout.
+
+### Changed
+- BYE is the second structural command alongside HELLO: it is
+  vocabulary-gated like AUTH/REBOOT (NULL `cmd_bye` -> command
+  unrecognised, line falls through to the unknown handler), but its
+  handler is unconditionally compiled in. HELLO remains the only
+  command whose token spelling is hard-coded.
+
+### Migration
+- Existing projects that don't populate `cmd_bye` see no behaviour
+  change: `SC_BYE` (or whatever the host calls it) falls through to
+  the unknown handler exactly like before.
+- Fiesta's `fiesta_default_vocabulary` adds the two new fields so
+  every Fiesta firmware that picks up this HAL release will respond
+  natively to `SC_BYE` from the SerialConfigurator GUI / CLI.
+
 ## [Unreleased] - 2026-04-27 (Fiesta R1.6 - strip SC_* literals from production code)
 
 ### Changed

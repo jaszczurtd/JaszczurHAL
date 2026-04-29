@@ -61,7 +61,7 @@ Utility-only includes are also available:
 - Mock backend for deterministic host/unit tests
 - Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
 - Crypto helpers (`hal_crypto`: Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305) - **opt-in via `HAL_ENABLE_CRYPTO`**
-- Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied auth + reboot vocabulary)
+- Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied bye / auth / reboot vocabulary)
 - SerialConfigurator authentication helper (`hal_sc_auth`: per-device key derivation + challenge/response over the framed session) - pulled in by the same `HAL_ENABLE_CRYPTO` flag
 - C soft-timer wrapper API with table-based setup/tick helpers (`hal_soft_timer_*`)
 - Optional bundled JSON utilities (`HAL_ENABLE_CJSON`)
