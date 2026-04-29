@@ -14,6 +14,14 @@ static char        s_derr_buf[HAL_DEBUG_BUF_SIZE]  = {};
 static hal_mutex_t s_deb_mutex  = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex   = NULL;
+/* Single global lock around the underlying Serial TX path. Without this,
+ * `hal_deb` (lock = s_deb_mutex), `hal_derr` (lock = s_derr_mutex) and
+ * `hal_serial_session_println` (no lock) can interleave their bytes on
+ * dual-core RP2040: each only protects its own format buffer, not the
+ * actual `Serial.println(s)` call that runs as two separate `write()`s
+ * (the string, then "\r\n"). The single-byte CDC drops observed in the
+ * field were that interleave. */
+static hal_mutex_t s_tx_mutex   = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
 static hal_debug_rate_limit_t s_rate_limit_cfg = {5u, 1000u, 30000u};
@@ -122,16 +130,47 @@ static void hal_debug_ensure_init(void) {
     hal_critical_section_exit();
 }
 
+/* Lazy-init guard for the TX mutex. Direct callers of hal_serial_print
+ * may run before hal_debug_init (e.g. very early bring-up); we don't
+ * want to require an explicit init order just to lock. */
+static void hal_serial_ensure_tx_mutex(void) {
+    if (s_tx_mutex != NULL) return;
+    hal_critical_section_enter();
+    if (s_tx_mutex == NULL) {
+        s_tx_mutex = hal_mutex_create();
+    }
+    hal_critical_section_exit();
+}
+
 void hal_serial_begin(uint32_t baud) {
     Serial.begin(baud);
 }
 
+/* `Serial.flush()` waits until the TX FIFO has actually been drained
+ * to the USB host. We need this **inside** the TX mutex window: on
+ * RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes into the
+ * USB CDC ring buffer and returns immediately. Without flush, a
+ * follow-up `hal_serial_println` (from the session helper or from
+ * `hal_deb` on the other core) takes the mutex and starts writing
+ * fresh bytes into a FIFO that still contains tail bytes of the
+ * previous frame. The TinyUSB ring-pointer race in that overlap is
+ * what produced the single-byte drops observed in the field
+ * (`buid` / `defaut` / `efault` etc.). Flushing before unlock keeps
+ * exactly one frame in flight at a time. */
 void hal_serial_print(const char *s) {
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
     Serial.print(s);
+    Serial.flush();
+    hal_mutex_unlock(s_tx_mutex);
 }
 
 void hal_serial_println(const char *s) {
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
     Serial.println(s);
+    Serial.flush();
+    hal_mutex_unlock(s_tx_mutex);
 }
 
 int hal_serial_available(void) {
@@ -164,6 +203,7 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
     s_deb_mutex  = hal_mutex_create();
     s_derr_mutex = hal_mutex_create();
     s_rl_mutex   = hal_mutex_create();
+    hal_serial_ensure_tx_mutex();
     hal_serial_begin(baud);
     s_debug_muted = false;
     s_debug_initialized = true;

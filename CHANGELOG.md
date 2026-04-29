@@ -2,6 +2,60 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialised + flushed TX on hal_serial)
+
+### Added
+- New private TX mutex (`s_tx_mutex`) inside every `hal_serial.cpp`
+  backend (Arduino, STM32G474, mock). `hal_serial_print` and
+  `hal_serial_println` now lock it for the duration of the underlying
+  `Serial.print/println` (Arduino) / `printf` (STM32 / mock) call.
+- Arduino backend additionally calls `Serial.flush()` *inside* the
+  mutex window after every `Serial.print/println`. Required because
+  on RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes
+  into the CDC ring buffer and returns immediately - without flush,
+  a follow-up emitter takes the mutex and starts writing fresh
+  bytes into a FIFO that still contains tail bytes of the previous
+  frame, and the TinyUSB ring-pointer race in that overlap was the
+  source of the single-byte drops observed in the field
+  (`buid`/`defaut`/`efault` mid-frame). With flush, exactly one
+  frame is in flight at a time.
+
+### Changed
+- Single point of serialization for the TX path. Previously each of
+  `hal_deb`, `hal_derr`, `hal_derr_limited` and
+  `hal_serial_session_println` ran its own per-function mutex (or
+  none) and only protected its own format buffer; the actual
+  underlying `Serial.println(s)` (which on the Arduino `Print` API
+  is two distinct `write()`s - the string, then `"\r\n"`) was
+  unprotected. On dual-core RP2040 this allowed core 1 `hal_deb` to
+  splice bytes in the middle of a framed session reply being emitted
+  by core 0 (or vice-versa). The mutex closes the API-level race;
+  the flush closes the ring-buffer-level race underneath it.
+- The new TX mutex is acquired at the `hal_serial_print/println`
+  boundary, so every caller (debug helpers, session helper, direct
+  uses) goes through the same gate. The existing per-function
+  mutexes remain in place to protect their format buffers; the new
+  lock is strictly nested inside them and never leads to deadlock
+  because the outer mutexes never wrap each other.
+- The TX mutex is lazy-created via a small `ensure_tx_mutex` helper
+  so callers that emit before `hal_debug_init` (very early bring-up,
+  test fixtures) still see a valid lock.
+- STM32G474 / mock backends keep the mutex but DO NOT flush - they
+  use plain `printf`, which already drains line-buffered to stdout
+  / debug UART without the USB CDC ring-buffer hazard.
+
+### Migration
+- Source-compatible: no API changes.
+- Throughput note: Arduino `hal_serial_println` now blocks until the
+  CDC TX FIFO is drained (typically sub-millisecond for ~200-byte
+  frames at 12 Mbps USB). Callers that previously fired multiple
+  short println()s back-to-back will now serialise them on the
+  USB transfer rate; this is the intended trade-off and matches
+  the wire contract that no two emitters ever share the bus.
+- Multi-core projects that previously serialised TX with their own
+  global mutex can drop it; double-locking the same critical section
+  is harmless but redundant.
+
 ## [Unreleased] - 2026-04-30 (Fiesta R1.7 - structural BYE in framed session)
 
 ### Added
