@@ -381,6 +381,37 @@ void test_partial_vocab_unset_fields_remain_unrecognised(void) {
     TEST_ASSERT_EQUAL_STRING("Y_UNKNOWN", reply_payload);
 }
 
+/* BYE is vocabulary-gated like AUTH/REBOOT: a NULL `cmd_bye` field in
+ * the project's vocabulary leaves the helper unable to recognise the
+ * inbound BYE token, so the inner line falls through to the unknown
+ * handler. The partial vocab below sets only `reply_unknown_cmd`, so
+ * SC_BYE arrives at the wire as the renamed unknown reply. This guards
+ * the backward-compat contract: pre-R1.7 projects that don't populate
+ * cmd_bye see no behavioural change beyond what their unknown handler
+ * already does. */
+void test_partial_vocab_without_cmd_bye_falls_through_to_unknown(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    hal_serial_session_init_with_vocabulary(&s, "ECU", "1.0.0", "dev",
+                                            &k_partial_vocab);
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+
+    inject_framed_line(2u, "SC_BYE", '\n');
+    hal_serial_session_poll(&s);
+
+    /* No native BYE handling: session stays active, wire shows the
+     * partial vocab's custom unknown reply instead of an OK BYE. */
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
+                                              sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(2u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("Y_UNKNOWN", reply_payload);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_classic_init_default_vocabulary_is_empty);
@@ -392,5 +423,6 @@ int main(void) {
     RUN_TEST(test_custom_vocab_not_ready_uses_override);
     RUN_TEST(test_custom_vocab_auth_failed_uses_override);
     RUN_TEST(test_partial_vocab_unset_fields_remain_unrecognised);
+    RUN_TEST(test_partial_vocab_without_cmd_bye_falls_through_to_unknown);
     return UNITY_END();
 }
