@@ -11,9 +11,11 @@
  * routes through `init_session_with_test_vocab` so the helper recognises
  * those tokens. HELLO-only tests can stick to `hal_serial_session_init`. */
 static const hal_serial_session_vocabulary_t k_test_sc_vocab = {
+    .cmd_bye = "SC_BYE",
     .cmd_auth_begin = "SC_AUTH_BEGIN",
     .cmd_auth_prove = "SC_AUTH_PROVE",
     .cmd_reboot_bootloader = "SC_REBOOT_BOOTLOADER",
+    .reply_bye_ok = "SC_OK BYE",
     .reply_unknown_cmd = "SC_UNKNOWN_CMD",
     .reply_not_ready_hello_required = "SC_NOT_READY HELLO_REQUIRED",
     .reply_auth_challenge_fmt = "SC_OK AUTH_CHALLENGE %s",
@@ -726,6 +728,63 @@ void test_reboot_bootloader_blocked_after_new_hello_clears_auth(void) {
     TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", reply_payload);
 }
 
+void test_bye_clears_active_and_replies_ok(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+    inject_framed_line(1u, "HELLO", '\n');
+    hal_serial_session_poll(&s);
+    TEST_ASSERT_TRUE(hal_serial_session_is_active(&s));
+
+    inject_framed_line(2u, "SC_BYE", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
+                                              sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(2u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_OK BYE", reply_payload);
+}
+
+void test_bye_idempotent_on_inactive_session(void) {
+    hal_serial_session_t s;
+    uint16_t reply_seq = 0u;
+    char reply_payload[128];
+
+    /* Fresh session - HELLO has not been seen, `active` is false. BYE
+     * still succeeds (replies OK and leaves the session inactive). This
+     * matches the host's "send BYE to every detected module on
+     * disconnect" pattern even when one module never reached HELLO. */
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+    TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
+
+    inject_framed_line(7u, "SC_BYE", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
+    TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
+                                              sizeof(reply_payload)));
+    TEST_ASSERT_EQUAL_UINT16(7u, reply_seq);
+    TEST_ASSERT_EQUAL_STRING("SC_OK BYE", reply_payload);
+}
+
+void test_bye_resets_authenticated_state(void) {
+    hal_serial_session_t s;
+
+    init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+    (void)authenticate_session(&s, 1u, 2u, 3u);
+    TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(&s));
+
+    inject_framed_line(4u, "SC_BYE", '\n');
+    hal_serial_session_poll(&s);
+
+    TEST_ASSERT_FALSE(hal_serial_session_is_active(&s));
+    TEST_ASSERT_FALSE(hal_serial_session_is_authenticated(&s));
+    TEST_ASSERT_FALSE(s.challenge_pending);
+}
+
 void test_poll_null_args_is_safe(void) {
     hal_serial_session_t s;
     init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
@@ -766,6 +825,9 @@ int main(void) {
     RUN_TEST(test_reboot_bootloader_after_hello_only_is_rejected);
     RUN_TEST(test_reboot_bootloader_after_auth_acks_and_enters_bootloader);
     RUN_TEST(test_reboot_bootloader_blocked_after_new_hello_clears_auth);
+    RUN_TEST(test_bye_clears_active_and_replies_ok);
+    RUN_TEST(test_bye_idempotent_on_inactive_session);
+    RUN_TEST(test_bye_resets_authenticated_state);
     RUN_TEST(test_poll_null_args_is_safe);
     return UNITY_END();
 }
