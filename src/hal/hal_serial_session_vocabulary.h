@@ -48,11 +48,13 @@ extern "C" {
 typedef struct {
     /* Inbound command tokens (matched verbatim, except cmd_auth_prove which
      * is a prefix followed by a space and the response hex). */
+    const char *cmd_bye;
     const char *cmd_auth_begin;
     const char *cmd_auth_prove;
     const char *cmd_reboot_bootloader;
 
     /* Outbound reply payloads. */
+    const char *reply_bye_ok;
     const char *reply_unknown_cmd;
     const char *reply_not_ready_hello_required;
     /** Format string carrying one %s for the hex challenge. */
@@ -84,9 +86,11 @@ typedef struct {
  */
 static const hal_serial_session_vocabulary_t
     hal_serial_session_vocabulary_default = {
+        .cmd_bye = NULL,
         .cmd_auth_begin = NULL,
         .cmd_auth_prove = NULL,
         .cmd_reboot_bootloader = NULL,
+        .reply_bye_ok = NULL,
         .reply_unknown_cmd = NULL,
         .reply_not_ready_hello_required = NULL,
         .reply_auth_challenge_fmt = NULL,

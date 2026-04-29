@@ -1001,7 +1001,12 @@ parsed by every host):
 
     OK HELLO module=<name> proto=1 session=<id> fw=<ver> build=<id> uid=<hex>
 
-Vocabulary-driven commands (R1.0 + R1.6):
+Vocabulary-driven commands (R1.0 + R1.6 + R1.7):
+- `cmd_bye` - closes the framed session. Replies with `reply_bye_ok` (when
+  set), drops `active`, and clears auth state (when CRYPTO). Always
+  succeeds; an inactive session simply repeats the OK reply. BYE lives
+  outside `HAL_ENABLE_CRYPTO` so any session can be closed cleanly,
+  regardless of whether the AUTH path is compiled in.
 - `cmd_auth_begin` - mints a fresh 16-byte challenge for the active session;
   the helper formats the challenge through `reply_auth_challenge_fmt` (must
   contain a `%s` for the hex bytes).
@@ -1084,11 +1089,11 @@ Authentication (Phase 3) - opt-in:
 - `auth_failures` counts failed `SC_AUTH_PROVE` attempts; rate-limit and
   lockout policies on top of it are deferred to Phase 7.
 
-Vocabulary configuration (R1.0 + R1.6):
-- The inbound command tokens (`cmd_auth_begin`, `cmd_auth_prove`,
+Vocabulary configuration (R1.0 + R1.6 + R1.7):
+- The inbound command tokens (`cmd_bye`, `cmd_auth_begin`, `cmd_auth_prove`,
   `cmd_reboot_bootloader`) and outbound reply payloads are captured by
   `hal_serial_session_vocabulary_t`. Pass a populated instance to
-  `hal_serial_session_init_with_vocabulary()` to enable AUTH and
+  `hal_serial_session_init_with_vocabulary()` to enable BYE, AUTH and
   REBOOT_BOOTLOADER handling in the project's preferred dialect.
 - R1.6 stripped the historical SC_* defaults from JaszczurHAL.
   `hal_serial_session_vocabulary_default` is now an empty placeholder

@@ -558,6 +558,30 @@ static inline void hal_serial_session__handle_reboot_bootloader(
 #endif /* HAL_ENABLE_CRYPTO */
 
 /**
+ * @brief Internal: handle SC_BYE.
+ *
+ * Closes the framed session: replies (if a reply token is configured), drops
+ * `active`, and clears any cryptographic auth state. After BYE the firmware
+ * reverts to its pre-HELLO state — `hal_serial_session_is_active` returns
+ * false so the host orchestration (e.g. debug-mute toggle) follows along
+ * without polling for activity timeouts. Always succeeds; an inactive session
+ * simply repeats the OK reply.
+ */
+static inline void hal_serial_session__handle_bye(
+    hal_serial_session_t *session) {
+    const char *reply_bye_ok =
+        HAL_SERIAL_SESSION_VOCAB(session, reply_bye_ok);
+    if (reply_bye_ok != NULL) {
+        hal_serial_session_println(session, reply_bye_ok);
+    }
+    session->active = false;
+    session->last_activity_ms = hal_millis();
+#ifdef HAL_ENABLE_CRYPTO
+    hal_serial_session__reset_auth(session);
+#endif
+}
+
+/**
  * @brief Internal: dispatch one already-unwrapped inner command line.
  */
 static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *session,
@@ -575,6 +599,15 @@ static inline void hal_serial_session__dispatch_inner(hal_serial_session_t *sess
         hal_serial_session__reset_auth(session);
 #endif
         hal_serial_session__emit_hello(session);
+        return;
+    }
+
+    /* BYE is structural (always available) so the host can cleanly close any
+     * session without depending on AUTH/CRYPTO being compiled in. NULL
+     * vocab field => command not recognised, line falls through. */
+    const char *cmd_bye = HAL_SERIAL_SESSION_VOCAB(session, cmd_bye);
+    if (cmd_bye != NULL && strcmp(inner, cmd_bye) == 0) {
+        hal_serial_session__handle_bye(session);
         return;
     }
 
