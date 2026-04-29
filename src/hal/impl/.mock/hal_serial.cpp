@@ -15,6 +15,9 @@ static char        s_last_deb_line[HAL_DEBUG_BUF_SIZE]    = {};
 static hal_mutex_t s_deb_mutex  = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex   = NULL;
+/* Global lock around the underlying TX path - mirrors the Arduino
+ * impl. See arduino/hal_serial.cpp for the full rationale. */
+static hal_mutex_t s_tx_mutex   = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
 static hal_debug_rate_limit_t s_rate_limit_cfg = {5u, 1000u, 30000u};
@@ -118,19 +121,34 @@ static char s_mock_rx_buf[HAL_DEBUG_BUF_SIZE] = {};
 static int  s_mock_rx_len = 0;
 static int  s_mock_rx_pos = 0;
 
+static void hal_serial_ensure_tx_mutex(void) {
+    if (s_tx_mutex != NULL) return;
+    hal_critical_section_enter();
+    if (s_tx_mutex == NULL) {
+        s_tx_mutex = hal_mutex_create();
+    }
+    hal_critical_section_exit();
+}
+
 void hal_serial_begin(uint32_t baud) {
     (void)baud;
 }
 
 void hal_serial_print(const char *s) {
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
     printf("%s", s);
     strncat(s_last_serial_line, s, sizeof(s_last_serial_line) - strlen(s_last_serial_line) - 1);
+    hal_mutex_unlock(s_tx_mutex);
 }
 
 void hal_serial_println(const char *s) {
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
     printf("%s\n", s);
     strncpy(s_last_serial_line, s, sizeof(s_last_serial_line) - 1);
     s_last_serial_line[sizeof(s_last_serial_line) - 1] = '\0';
+    hal_mutex_unlock(s_tx_mutex);
 }
 
 int hal_serial_available(void) {
@@ -165,6 +183,7 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
     s_deb_mutex  = hal_mutex_create();
     s_derr_mutex = hal_mutex_create();
     s_rl_mutex   = hal_mutex_create();
+    hal_serial_ensure_tx_mutex();
     s_debug_muted = false;
     s_debug_initialized = true;
 }

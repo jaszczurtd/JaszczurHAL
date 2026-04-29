@@ -891,6 +891,44 @@ before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAUL
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
 
+### TX serialization (R1.8)
+
+`hal_serial_print()` and `hal_serial_println()` take a single global TX
+mutex around the underlying `Serial.print/println` (Arduino) /
+`printf` (STM32 / mock) call. This serialises every emitter that ever
+reaches the wire - the debug helpers (`hal_deb`, `hal_derr`,
+`hal_derr_limited`), the framed session helper
+(`hal_serial_session_println`), and any direct caller - against each
+other.
+
+Without this lock, on dual-core RP2040 a `hal_deb` from core 1 could
+interleave its bytes mid-frame with a session reply being emitted by
+core 0, producing single-byte CDC drops that broke `$SC,...*<crc>`
+CRCs and forced the host to retry every command. The per-function
+mutexes around format buffers (`s_deb_mutex`, `s_derr_mutex`) only
+protected those buffers; they could not stop two unrelated callers
+from racing the actual `Serial.write()` calls.
+
+The TX mutex is created lazily on first use (or eagerly in
+`hal_debug_init()` when called explicitly), so callers that emit
+during very early bring-up still see a valid lock. It is strictly
+nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
+the other way around, so deadlock is impossible.
+
+On the Arduino backend, the mutex window additionally includes a
+`Serial.flush()` after every `Serial.print/println`. RP2040 +
+TinyUSB CDC `Serial.println(s)` returns as soon as the bytes are
+copied into the CDC ring buffer, NOT when they have been delivered
+to the USB host. Without flush, the next emitter took the mutex and
+started writing fresh bytes into a FIFO that still held tail bytes
+of the previous frame; the TinyUSB ring-pointer race in that
+overlap produced single-byte drops mid-frame
+(`buid`/`defaut`/`efault` etc.). Flushing inside the mutex makes
+"only one frame in flight" the structural invariant. STM32G474 and
+mock backends use plain `printf`, which line-buffers to stdout /
+debug UART without the CDC ring-buffer hazard, so they keep the
+mutex but skip the flush.
+
 Limiter implementation details:
 - source matching uses `hash + source string` (collision-safe lookup)
 - limiter state is protected by an internal mutex (thread-safe)
