@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0] - 2026-05-04
+
+Next release.
+
 ## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialised + flushed TX on hal_serial)
 
 ### Added
