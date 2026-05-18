@@ -2,6 +2,10 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.1] - 2026-05-18
+
+Minor update.
+
 ## [1.5.0] - 2026-05-04
 
 Next release.
