@@ -155,6 +155,41 @@ const char *hal_mock_wifi_get_hostname(void);
 /** @brief Return the timeout set by hal_wifi_set_timeout_ms(). */
 uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
+// ── WireGuard ───────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_WIREGUARD
+#include "../../hal_wireguard.h"
+/** @brief Reset all mock WireGuard state to defaults. */
+void        hal_mock_wireguard_reset(void);
+/** @brief Control result returned by hal_wireguard_begin*() (default: true). */
+void        hal_mock_wireguard_set_begin_result(bool result);
+/** @brief Control result returned by hal_wireguard_peer_up() (default: false). */
+void        hal_mock_wireguard_set_peer_up_result(bool result);
+/** @brief Control result returned by hal_wireguard_kick_handshake() (default: true). */
+void        hal_mock_wireguard_set_kick_result(bool result);
+/** @brief Force initialized state observed by hal_wireguard_is_initialized(). */
+void        hal_mock_wireguard_set_initialized(bool initialized);
+/** @brief Set endpoint values returned by hal_wireguard_peer_up(). */
+void        hal_mock_wireguard_set_peer_endpoint(const uint8_t ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t port);
+/** @brief Return last local tunnel IP passed to hal_wireguard_begin*(). */
+const uint8_t *hal_mock_wireguard_get_last_local_ip(void);
+/** @brief Return last allowed IP passed to hal_wireguard_begin_advanced(). */
+const uint8_t *hal_mock_wireguard_get_last_allowed_ip(void);
+/** @brief Return last allowed mask passed to hal_wireguard_begin_advanced(). */
+const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
+/** @brief Return endpoint host passed to hal_wireguard_begin*(). */
+const char *hal_mock_wireguard_get_last_remote_peer_address(void);
+/** @brief Return endpoint port passed to hal_wireguard_begin*(). */
+uint16_t    hal_mock_wireguard_get_last_remote_peer_port(void);
+/** @brief Return true when latest start used hal_wireguard_begin_advanced(). */
+bool        hal_mock_wireguard_was_begin_advanced(void);
+/** @brief Return probe IP passed to hal_wireguard_kick_handshake(). */
+const uint8_t *hal_mock_wireguard_get_last_probe_ip(void);
+/** @brief Return probe port passed to hal_wireguard_kick_handshake(). */
+uint16_t    hal_mock_wireguard_get_last_probe_port(void);
+/** @brief Return min interval passed to hal_wireguard_kick_handshake(). */
+uint32_t    hal_mock_wireguard_get_last_probe_min_interval_ms(void);
+#endif
+
 // ── MQTT ─────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_MQTT
 #include "../../hal_mqtt.h"

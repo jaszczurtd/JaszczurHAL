@@ -5,7 +5,7 @@
 #include "../../hal_swserial.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#include "drivers/TinyGPSPlus/src/TinyGPS++.h"
+#include "frameworks/TinyGPSPlus/src/TinyGPS++.h"
 
 static TinyGPSPlus s_gps;
 static hal_swserial_t s_serial = NULL;

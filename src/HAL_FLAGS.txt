@@ -94,6 +94,10 @@ HAL_ENABLE_CJSON
   Enable bundled cJSON/cJSON_Utils headers and sources.
   Used by `src/tools.h` to expose cJSON includes.
 
+HAL_ENABLE_WIREGUARD
+  Enable `hal_wireguard` (thread-safe WireGuard wrapper).
+  Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
+
 HAL_ENABLE_MQTT
   Enable `hal_mqtt` (thread-safe PubSubClient wrapper).
   Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
@@ -129,4 +133,5 @@ Important
 ---------
 - Display driver selection still requires explicit HAL_DISPLAY_* choice when TFT is enabled.
 - `HAL_DISABLE_*` removes API declarations and implementation code for corresponding modules.
+- `HAL_ENABLE_WIREGUARD` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.
 - `HAL_ENABLE_MQTT` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.

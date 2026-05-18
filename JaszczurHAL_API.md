@@ -31,12 +31,13 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/arduino/drivers/` - bundled third-party drivers used by optional HAL modules.
+- `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
+- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`, `TinyGPSPlus`).
 - `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
@@ -76,7 +77,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_external_adc`, `hal_gps`
-- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_mqtt`, `hal_time`
+- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_wireguard`, `hal_mqtt`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
 
@@ -143,6 +144,7 @@ To exclude modules your project does not use, define one or more
 | Flag | Scope | Effect |
 |---|---|---|
 | `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | exposes bundled `utils/cJSON.h` and `utils/cJSON_Utils.h` includes |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard` module | enables thread-safe WireGuard wrapper (requires WiFi support) |
 | `HAL_ENABLE_MQTT` | `hal_mqtt` module | enables thread-safe PubSubClient wrapper (requires WiFi support) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto` and `hal_sc_auth` | enables crypto helpers and SerialConfigurator auth path |
 
@@ -277,7 +279,7 @@ section below.  The general pattern is:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
-- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_mqtt`, `hal_kv`, debug serial).
+- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
@@ -292,10 +294,12 @@ unless explicitly stated otherwise.
 
 ---
 
-## Drivers
+## Drivers and frameworks
 
-Bundled drivers live under `src/hal/impl/arduino/drivers/` and are integrated
-as HAL-internal implementation detail (not public API).
+Bundled low-level drivers live under `src/hal/impl/arduino/drivers/`.
+Bundled high-level integration frameworks live under
+`src/hal/impl/arduino/frameworks/`.
+Both are integrated as HAL-internal implementation detail (not public API).
 
 ### Inventory, authors and license paths
 
@@ -312,8 +316,9 @@ as HAL-internal implementation detail (not public API).
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
 | `MAX6675` | thermocouple MAX6675 backend | Adafruit (Limor Fried) | BSD (license file in driver folder) | `src/hal/impl/arduino/drivers/MAX6675/license.txt` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
-| `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/drivers/PubSubClient/LICENSE.txt` |
-| `TinyGPSPlus` | `hal_gps` parser backend | Mikal Hart | LGPL-2.1+ notice in source headers | `src/hal/impl/arduino/drivers/TinyGPSPlus/src/TinyGPS++.h` |
+| `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
+| `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
+| `TinyGPSPlus` | `hal_gps` parser backend | Mikal Hart | LGPL-2.1+ notice in source headers | `src/hal/impl/arduino/frameworks/TinyGPSPlus/src/TinyGPS++.h` |
 
 Note: `Adafruit_GFX_Library/Fonts/` includes additional per-font notices in
 font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
@@ -322,7 +327,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 
 | Area | What changed | Why |
 |---|---|---|
-| Include wiring | HAL modules include bundled drivers from local `drivers/` paths; driver-to-driver includes were rewired to local relative paths. | Keeps third-party code encapsulated inside HAL internals and avoids global include namespace leaks. |
+| Include wiring | HAL modules include bundled dependencies from local `drivers/` and `frameworks/` paths; intra-module includes were rewired to local relative paths. | Keeps third-party code encapsulated inside HAL internals and avoids global include namespace leaks. |
 | Conditional compilation | Driver `.cpp` files are wrapped with module-level `HAL_DISABLE_*` guards. | Disabled modules remove both HAL wrappers and third-party backend code from build. |
 | SPI synchronization | Drivers using SPI transactions now integrate `hal_spi_lock`/`hal_spi_unlock` where needed (CAN, BusIO SPI, SPITFT path). | Prevents cross-thread/cross-core SPI transaction interleaving. |
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed Wire/Wire1 transactions and improves determinism under concurrency. |
@@ -330,6 +335,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
 | TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_DISABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
+| WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
 
 ---
@@ -407,7 +413,7 @@ Covered test targets include:
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
-- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_mqtt`, `test_hal_time`
+- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_time`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
@@ -2294,6 +2300,76 @@ uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
 ---
 
+## `hal_wireguard` - WireGuard tunnel wrapper  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
+
+Thread-safe wrapper around bundled `arduino-wireguard-pico-w` API.
+
+```c
+#include <hal/hal_wireguard.h>
+
+#define HAL_WIREGUARD_IPV4_OCTETS 4u
+#define HAL_WIREGUARD_IP_STR_LEN 16u
+
+bool hal_wireguard_begin(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
+                         const char *private_key,
+                         const char *remote_peer_address,
+                         const char *remote_peer_public_key,
+                         uint16_t remote_peer_port);
+
+bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
+                                  const char *private_key,
+                                  const char *remote_peer_address,
+                                  const char *remote_peer_public_key,
+                                  uint16_t remote_peer_port,
+                                  const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
+                                  const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
+
+void hal_wireguard_end(void);
+bool hal_wireguard_is_initialized(void);
+
+bool hal_wireguard_peer_up(char *endpoint_ip_out,
+                           size_t endpoint_ip_out_size,
+                           uint16_t *endpoint_port_out);
+
+bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
+                                  uint16_t probe_port,
+                                  uint32_t min_interval_ms);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_WIREGUARD` is defined.
+- `hal_wireguard_begin(...)` uses full-tunnel mode (`AllowedIPs = 0.0.0.0/0`).
+- `hal_wireguard_begin_advanced(...)` enables split-tunnel mode via explicit AllowedIPs.
+- `hal_wireguard_peer_up(...)` can optionally return current endpoint IP/port.
+- `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
+
+**impl/arduino:** bundled `arduino-wireguard-pico-w` driver.
+**impl/.mock:** deterministic stateful test double with captured configuration,
+peer endpoint injection and handshake-trigger observability.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+
+**Mock helpers:**
+```c
+void        hal_mock_wireguard_reset(void);
+void        hal_mock_wireguard_set_begin_result(bool result);
+void        hal_mock_wireguard_set_peer_up_result(bool result);
+void        hal_mock_wireguard_set_kick_result(bool result);
+void        hal_mock_wireguard_set_initialized(bool initialized);
+void        hal_mock_wireguard_set_peer_endpoint(const uint8_t ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t port);
+const uint8_t *hal_mock_wireguard_get_last_local_ip(void);
+const uint8_t *hal_mock_wireguard_get_last_allowed_ip(void);
+const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
+const char *hal_mock_wireguard_get_last_remote_peer_address(void);
+uint16_t    hal_mock_wireguard_get_last_remote_peer_port(void);
+bool        hal_mock_wireguard_was_begin_advanced(void);
+const uint8_t *hal_mock_wireguard_get_last_probe_ip(void);
+uint16_t    hal_mock_wireguard_get_last_probe_port(void);
+uint32_t    hal_mock_wireguard_get_last_probe_min_interval_ms(void);
+```
+
+---
+
 ## `hal_mqtt` - MQTT client  *(opt-in - `HAL_ENABLE_MQTT`)*
 
 Thread-safe MQTT wrapper around bundled PubSubClient with callback dispatch
@@ -2335,7 +2411,7 @@ bool hal_mqtt_unsubscribe(const char *topic);
 - Inbound messages are copied to an internal buffer and delivered from
   `hal_mqtt_loop()` after releasing the internal mutex.
 
-**impl/arduino:** bundled `PubSubClient` (`drivers/PubSubClient`) over `WiFiClient`.
+**impl/arduino:** bundled `PubSubClient` (`frameworks/PubSubClient`) over `WiFiClient`.
 **impl/.mock:** deterministic stateful test double with injectable connect result,
 loop result and inbound messages.
 **Thread safety:** Arduino backend is thread-safe and multicore-safe for public
@@ -2816,6 +2892,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
+| `hal_wireguard` | bundled `arduino-wireguard-pico-w` + Arduino-pico WiFi/lwIP stack |
 | `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
@@ -2844,7 +2921,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-All 31 test suites complete in < 1 s on a standard desktop machine.
+All 32 test suites complete in < 1 s on a standard desktop machine.
 
 ### How it works
 
@@ -2889,6 +2966,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
+| `test_hal_wireguard` | begin/full vs advanced mode capture, peer-up endpoint reporting, handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |

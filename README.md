@@ -52,6 +52,7 @@ Utility-only includes are also available:
 - Mock backend for deterministic host/unit tests
 - Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
 - Crypto helpers (`hal_crypto`: Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305) - **opt-in via `HAL_ENABLE_CRYPTO`**
+- Thread-safe WireGuard wrapper (`hal_wireguard`) - **opt-in via `HAL_ENABLE_WIREGUARD`** (requires WiFi support)
 - Thread-safe MQTT client wrapper (`hal_mqtt`) - **opt-in via `HAL_ENABLE_MQTT`** (requires WiFi support)
 - Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied bye / auth / reboot vocabulary)
 - SerialConfigurator authentication helper (`hal_sc_auth`: per-device key derivation + challenge/response over the framed session) - pulled in by the same `HAL_ENABLE_CRYPTO` flag
@@ -74,6 +75,7 @@ src/
       arduino/             # Arduino/RP2040 backend
       .mock/               # deterministic host/test backend
       drivers/             # bundled third-party drivers
+      frameworks/          # bundled high-level integrations (WireGuard/MQTT/GPS parser)
   utils/                   # helper modules and bundled optional utilities
 tests/                     # host unit tests (CMake + Unity)
 vscode-templates/          # ready-to-use VS Code project configurations
@@ -416,23 +418,24 @@ examples, and host-test coverage.
 
 ## Notes and credits
 
-- `SmartTimers` is based on Nettigo Timers: https://github.com/nettigo/Timers
-  (fork of https://github.com/garthoff/Timers)
-- Unity test framework sources are bundled in `src/`:
-  https://github.com/ThrowTheSwitch/Unity
-- `cJSON`/`cJSON_Utils` are bundled and optional via `HAL_ENABLE_CJSON`:
-  https://github.com/DaveGamble/cJSON
-- Bundled driver authors (from upstream LICENSE/README files in `src/hal/impl/arduino/drivers/`):
-- `ADS1X15` - Rob Tillaart
-- `Adafruit_BusIO` - Adafruit Industries
-- `Adafruit_GFX_Library` - Limor Fried (Ladyada) for Adafruit Industries
-- `Adafruit_ILI9341` - Limor Fried (Ladyada) for Adafruit Industries
-- `Adafruit_MCP9600` - Kevin Townsend and Limor Fried for Adafruit Industries
-- `Adafruit_NeoPixel` - Phil "Paint Your Dragon" Burgess (with contributions by PJRC and Michael Miller)
-- `Adafruit_SSD1306` - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
-- `Adafruit_ST7735_and_ST7789_Library` - Limor Fried (Ladyada) for Adafruit Industries
-- `Adafruit_Zero_DMA_Library` - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
-- `MAX6675` - Limor Fried for Adafruit Industries
-- `MCP2515` - Loovee / Seeed Technology, with contributions by Cory J. Fowler
-- `TinyGPSPlus` - Mikal Hart
-- `PubSubClient` - Nick O'Leary
+- SmartTimers is based on [Nettigo Timers](https://github.com/nettigo/Timers)
+  (fork of [garthoff/Timers](https://github.com/garthoff/Timers)).
+- Unity test framework sources are bundled in src/:
+  [ThrowTheSwitch/Unity](https://github.com/ThrowTheSwitch/Unity)
+- cJSON/cJSON_Utils are bundled and optional via HAL_ENABLE_CJSON:
+  [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
+- Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
+- [ADS1X15](https://github.com/RobTillaart/ADS1X15) - Rob Tillaart
+- [Adafruit_BusIO](https://github.com/adafruit/Adafruit_BusIO) - Adafruit Industries
+- [Adafruit_GFX_Library](https://github.com/adafruit/Adafruit-GFX-Library) - Limor Fried (Ladyada) for Adafruit Industries
+- [Adafruit_ILI9341](https://github.com/adafruit/Adafruit_ILI9341) - Limor Fried (Ladyada) for Adafruit Industries
+- [Adafruit_MCP9600](https://github.com/adafruit/Adafruit_MCP9600) - Kevin Townsend and Limor Fried for Adafruit Industries
+- [Adafruit_NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel) - Phil "Paint Your Dragon" Burgess (with contributions by PJRC and Michael Miller)
+- [Adafruit_SSD1306](https://github.com/adafruit/Adafruit_SSD1306) - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
+- [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries
+- [Adafruit_Zero_DMA_Library](https://github.com/adafruit/Adafruit_ZeroDMA) - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
+- [MAX6675](https://github.com/adafruit/MAX6675-library) - Limor Fried for Adafruit Industries
+- [MCP2515](https://github.com/coryjfowler/MCP_CAN_lib) - Loovee / Seeed Technology, with contributions by Cory J. Fowler
+- [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) - Mikal Hart
+- [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
+- [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary
