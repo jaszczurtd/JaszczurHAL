@@ -155,6 +155,49 @@ const char *hal_mock_wifi_get_hostname(void);
 /** @brief Return the timeout set by hal_wifi_set_timeout_ms(). */
 uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
+// ── LittleFS ─────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_LITTLEFS
+#include "../../hal_littlefs.h"
+/** @brief Reset all mock LittleFS state to defaults. */
+void        hal_mock_littlefs_reset(void);
+/** @brief Control result returned by hal_littlefs_begin() (default: true). */
+void        hal_mock_littlefs_set_begin_result(bool result);
+/** @brief Control result returned by hal_littlefs_format() (default: true). */
+void        hal_mock_littlefs_set_format_result(bool result);
+/** @brief Inject total bytes returned by hal_littlefs_total_bytes(). */
+void        hal_mock_littlefs_set_total_bytes(size_t total_bytes);
+/** @brief Inject used bytes returned by hal_littlefs_used_bytes(). */
+void        hal_mock_littlefs_set_used_bytes(size_t used_bytes);
+/** @brief Inject file existence for a path. */
+void        hal_mock_littlefs_set_exists(const char *path, bool exists);
+#endif
+
+// ── UDP ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_UDP
+#include "../../hal_udp.h"
+/** @brief Reset all mock UDP state to defaults. */
+void        hal_mock_udp_reset(void);
+/** @brief Inject one inbound UDP datagram for hal_udp_parse_packet/read. */
+void        hal_mock_udp_inject_packet(const char *remote_ip,
+									   uint16_t remote_port,
+									   const uint8_t *payload,
+									   uint16_t len);
+/** @brief Control result returned by hal_udp_end_packet() (default: true). */
+void        hal_mock_udp_set_end_packet_result(bool result);
+/** @brief Return local port set by hal_udp_begin(). */
+uint16_t    hal_mock_udp_get_local_port(void);
+/** @brief Return destination host captured by hal_udp_begin_packet*(). */
+const char *hal_mock_udp_get_last_begin_packet_host(void);
+/** @brief Return destination port captured by hal_udp_begin_packet*(). */
+uint16_t    hal_mock_udp_get_last_begin_packet_port(void);
+/** @brief Return payload captured from hal_udp_write*(). */
+const uint8_t *hal_mock_udp_get_last_tx_payload(void);
+/** @brief Return payload length captured from hal_udp_write*(). */
+uint16_t    hal_mock_udp_get_last_tx_len(void);
+/** @brief Return whether hal_udp_end_packet() was called. */
+bool        hal_mock_udp_was_end_packet_called(void);
+#endif
+
 // ── WireGuard ───────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_WIREGUARD
 #include "../../hal_wireguard.h"
@@ -170,6 +213,8 @@ void        hal_mock_wireguard_set_kick_result(bool result);
 void        hal_mock_wireguard_set_initialized(bool initialized);
 /** @brief Set endpoint values returned by hal_wireguard_peer_up(). */
 void        hal_mock_wireguard_set_peer_endpoint(const uint8_t ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t port);
+/** @brief Return number of hal_wireguard_peer_up_quick() calls since reset. */
+uint32_t    hal_mock_wireguard_get_peer_up_quick_call_count(void);
 /** @brief Return last local tunnel IP passed to hal_wireguard_begin*(). */
 const uint8_t *hal_mock_wireguard_get_last_local_ip(void);
 /** @brief Return last allowed IP passed to hal_wireguard_begin_advanced*(). */
@@ -227,6 +272,31 @@ const char *hal_mock_mqtt_get_last_unsubscribe_topic(void);
 uint16_t    hal_mock_mqtt_get_keepalive(void);
 /** @brief Return socket timeout value set by hal_mqtt_set_socket_timeout(). */
 uint16_t    hal_mock_mqtt_get_socket_timeout(void);
+#endif
+
+// ── OTA ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_OTA
+#include "../../hal_ota.h"
+/** @brief Reset all mock OTA state to defaults. */
+void        hal_mock_ota_reset(void);
+/** @brief Control result returned by hal_ota_begin() (default: true). */
+void        hal_mock_ota_set_begin_result(bool result);
+/** @brief Inject OTA start event consumed on next hal_ota_handle(). */
+void        hal_mock_ota_inject_start(hal_ota_command_t command);
+/** @brief Inject OTA end event consumed on next hal_ota_handle(). */
+void        hal_mock_ota_inject_end(void);
+/** @brief Inject OTA progress event consumed on next hal_ota_handle(). */
+void        hal_mock_ota_inject_progress(uint32_t progress, uint32_t total);
+/** @brief Inject OTA error event consumed on next hal_ota_handle(). */
+void        hal_mock_ota_inject_error(hal_ota_error_t error);
+/** @brief Return currently configured OTA port. */
+uint16_t    hal_mock_ota_get_port(void);
+/** @brief Return currently configured OTA hostname. */
+const char *hal_mock_ota_get_hostname(void);
+/** @brief Return currently configured OTA password. */
+const char *hal_mock_ota_get_password(void);
+/** @brief Return number of hal_ota_handle() calls. */
+uint32_t    hal_mock_ota_get_handle_count(void);
 #endif
 
 // ── Time / NTP ──────────────────────────────────────────────────────────────

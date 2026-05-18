@@ -276,6 +276,10 @@ bool hal_wireguard_peer_up(char *endpoint_ip_out,
     return true;
 }
 
+bool hal_wireguard_peer_up_quick(void) {
+    return hal_wireguard_peer_up(NULL, 0u, NULL);
+}
+
 bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   uint16_t probe_port,
                                   uint32_t min_interval_ms) {

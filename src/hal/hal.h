@@ -59,11 +59,20 @@
 #ifndef HAL_DISABLE_WIFI
 #include "hal_wifi.h"
 #endif
+#ifdef HAL_ENABLE_LITTLEFS
+#include "hal_littlefs.h"
+#endif
+#ifdef HAL_ENABLE_UDP
+#include "hal_udp.h"
+#endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include "hal_wireguard.h"
 #endif
 #ifdef HAL_ENABLE_MQTT
 #include "hal_mqtt.h"
+#endif
+#ifdef HAL_ENABLE_OTA
+#include "hal_ota.h"
 #endif
 #ifndef HAL_DISABLE_TIME
 #include "hal_time.h"

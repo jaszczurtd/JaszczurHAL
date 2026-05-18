@@ -49,7 +49,7 @@ parse_platform_inc_file(
     PLATFORM_INC_DIRS
 )
 
-# ── Arduino platform libraries (Wire, SPI, EEPROM, WiFi, …) ─────────────────
+# ── Arduino platform libraries (Wire, SPI, EEPROM, WiFi, ...) ─────────────────
 # arduino-cli resolves these on the fly; we include all of them so that HAL
 # modules can find <Wire.h>, <SPI.h>, etc.
 file(GLOB _arduino_lib_dirs "${ARDUINO_PLATFORM_DIR}/libraries/*/src")

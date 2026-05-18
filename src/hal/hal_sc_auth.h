@@ -3,10 +3,10 @@
 /**
  * @file hal_sc_auth.h
  * @brief Compile-time salt + per-device key derivation for the
- *        SerialConfigurator authentication handshake (Phase 3).
+ *        framed-session authentication handshake.
  *
- * Threat model and design notes live in the SerialConfigurator context
- * provider (sections 7 and the Phase 3 roadmap entry). In short:
+ * Threat model and design notes should live in project-level protocol
+ * documentation. In short:
  *
  *   - The firmware never stores a long-term shared secret in flash KV.
  *     A per-device key is derived at boot from the immutable factory UID
@@ -22,7 +22,7 @@
  *   - response = HMAC-SHA256(key=K_device, message=challenge || session_id_be32)
  *
  * The salt value @ref HAL_SC_AUTH_SALT must stay byte-for-byte identical
- * with the host-side mirror (`src/SerialConfigurator/src/core/sc_auth.h`).
+ * with the host-side mirror implementation used by companion host tooling.
  * Changing it on one side without the other invalidates every existing
  * deployment.
  *

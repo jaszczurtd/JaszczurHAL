@@ -77,8 +77,9 @@ bool hal_mqtt_set_server(const char *host, uint16_t port) {
     if (!validate_non_empty(host, "hal_mqtt_set_server", "host")) {
         return false;
     }
-    if (port == 0u) {
-        hal_derr("hal_mqtt_set_server: port must be > 0");
+
+    if(port <= 0 || port > 65535) {
+        hal_derr("hal_mqtt_set_server: invalid broker port: %d", port);
         return false;
     }
 

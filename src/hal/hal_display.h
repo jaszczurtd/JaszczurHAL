@@ -41,7 +41,7 @@
  * Typical usage:
  *   hal_display_init(CS, DC, RST);
  *   hal_display_configure(width, height, rotation, invert, bgr);
- *   // draw …
+ *   // draw ...
  */
 
 #include <stdint.h>

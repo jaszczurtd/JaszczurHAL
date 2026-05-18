@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, WireGuard, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -77,7 +77,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_external_adc`, `hal_gps`
-- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_wireguard`, `hal_mqtt`, `hal_time`
+- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
 
@@ -144,9 +144,12 @@ To exclude modules your project does not use, define one or more
 | Flag | Scope | Effect |
 |---|---|---|
 | `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | exposes bundled `utils/cJSON.h` and `utils/cJSON_Utils.h` includes |
+| `HAL_ENABLE_LITTLEFS` | `hal_littlefs` module | enables thread-safe LittleFS lifecycle and basic FS helpers |
+| `HAL_ENABLE_UDP` | `hal_udp` module | enables thread-safe WiFiUDP wrapper (requires WiFi support) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard` module | enables thread-safe WireGuard wrapper (requires WiFi support) |
 | `HAL_ENABLE_MQTT` | `hal_mqtt` module | enables thread-safe PubSubClient wrapper (requires WiFi support) |
-| `HAL_ENABLE_CRYPTO` | `hal_crypto` and `hal_sc_auth` | enables crypto helpers and SerialConfigurator auth path |
+| `HAL_ENABLE_OTA` | `hal_ota` module | enables thread-safe ArduinoOTA wrapper with callback dispatch from `hal_ota_handle()` (requires WiFi support) |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto` and `hal_sc_auth` | enables crypto helpers and framed-session auth path |
 
 ### Dependency propagation (hal\_config.h)
 
@@ -279,7 +282,7 @@ section below.  The general pattern is:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
-- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
+- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
@@ -335,6 +338,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
 | TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_DISABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
+| WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
 
@@ -396,6 +400,7 @@ Typical flows covered there:
 - GPIO plus timing
 - I2C plus EEPROM
 - WiFi plus NTP/system time
+- WiFi plus UDP datagrams
 - display initialisation
 
 This file keeps the lower-level API reference and migration mapping.
@@ -413,7 +418,7 @@ Covered test targets include:
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
-- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_time`
+- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
@@ -466,7 +471,7 @@ ctest --test-dir build --output-on-failure
 | manual `concatStrings(buf, ..., MODULE_NAME, ":")` + `setDebugPrefix(buf)` | `setDebugPrefixWithColon(MODULE_NAME)` |
 | `mutex_t` + pico SDK mutex | `hal_mutex_t` + `hal_mutex_create/lock/unlock/destroy` |
 | `constrain(v, lo, hi)` | `hal_constrain(v, lo, hi)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`); `pid_clamp` is a backward-compat alias |
-| `map(x, …)` | `hal_map(x, in_min, in_max, out_min, out_max)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`) |
+| `map(x, ...)` | `hal_map(x, in_min, in_max, out_min, out_max)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`) |
 | `min(a, b)` | `hal_min(a, b)` (macro, in `hal/hal_config.h`) |
 | `max(a, b)` | `hal_max(a, b)` (macro, in `hal/hal_config.h`) |
 | `EEPROM.begin(size)` | `hal_eeprom_init(HAL_EEPROM_RP2040, size)` |
@@ -805,7 +810,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
-- SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with the host-side mirror in SerialConfigurator (`sc_sha256.c`).
+- SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).
 
 **Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required. Prefer SHA-256 / HMAC-SHA256 for any new integrity or authentication need.
 
@@ -1087,8 +1092,8 @@ Unrecognised inner payloads:
   is silently dropped - register the callback to observe it.
 
 Non-framed input is silently dropped - there is no plain-text
-fall-through. This is intentional: the SerialConfigurator host always
-frames its requests, and removing the legacy path eliminates substring
+fall-through. This is intentional: host-side tools are expected to
+frame requests, and removing the legacy path eliminates substring
 mismatches against debug-log lines.
 
 Identity binding model:
@@ -1121,7 +1126,7 @@ Authentication (Phase 3) - opt-in:
   `"SC_AUTH_PROVE"`; a different project can supply different names. A
   NULL token field disables that command and routes the inner line to
   the unknown handler.
-- See [`hal_sc_auth`](#hal_sc_auth---serialconfigurator-authentication-helper--opt-in---hal_enable_crypto)
+- See [`hal_sc_auth`](#hal_sc_auth---auth-handshake-helper--opt-in---hal_enable_crypto)
   for the salt + key-derivation primitives.
 - The AUTH_BEGIN handler requires an active (HELLO-acknowledged) session
   and mints a fresh challenge derived from
@@ -1248,14 +1253,13 @@ Frame format (both directions):
 - `\n` line terminator (encode helpers do **not** append it; use
   `hal_serial_println()` which already does).
 
-This header is byte-for-byte compatible with the host-side mirror at
-`Fiesta/src/SerialConfigurator/src/core/sc_frame.h`. Do not change one
-without updating the other; both sides assert the same CRC reference
-vector in their test suites.
+This header can be mirrored byte-for-byte on the host side. If your
+host stack carries a stand-alone copy, keep both sides synchronized;
+both sides should assert the same CRC reference vector in test suites.
 
 ---
 
-## `hal_sc_auth` - SerialConfigurator authentication helper  *(opt-in - `HAL_ENABLE_CRYPTO`)*
+## `hal_sc_auth` - Auth handshake helper  *(opt-in - `HAL_ENABLE_CRYPTO`)*
 
 Pulled in by the same `HAL_ENABLE_CRYPTO` flag as `hal_crypto`. The
 module depends on `hal_hmac_sha256`, so enabling auth without crypto
@@ -1309,13 +1313,10 @@ scheme rests on HMAC-SHA256 + the per-device UID, **not** on salt
 secrecy. Treating the salt as confidential would only obscure design
 intent.
 
-This header is byte-for-byte compatible with the host-side mirror at
-`Fiesta/src/SerialConfigurator/src/core/sc_auth.{h,c}`. Both sides ship
-their own test for key derivation and response MAC computation; the
-host suite includes a hand-anchored cross-vector check that recomputes
-the MAC from `sc_crypto` primitives, so any divergence between the two
-copies surfaces as a test failure rather than a runtime AUTH_FAILED on
-the bench.
+If your host stack carries a mirror copy of this helper, keep both
+sides synchronized and test key derivation + response MAC vectors on
+both sides. Cross-vector checks catch divergence early and avoid
+runtime AUTH_FAILED mismatches during integration.
 
 The handshake itself is wired in
 [`hal_serial_session`](#hal_serial_session---framed-serial-session-helper)
@@ -2300,6 +2301,181 @@ uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
 ---
 
+## `hal_littlefs` - LittleFS lifecycle helpers  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
+
+Thread-safe wrapper for LittleFS mount/format and lightweight path helpers.
+
+```c
+#include <hal/hal_littlefs.h>
+
+bool   hal_littlefs_begin(void);
+void   hal_littlefs_end(void);
+bool   hal_littlefs_format(void);
+bool   hal_littlefs_is_mounted(void);
+bool   hal_littlefs_exists(const char *path);
+bool   hal_littlefs_remove(const char *path);
+size_t hal_littlefs_total_bytes(void);
+size_t hal_littlefs_used_bytes(void);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_LITTLEFS` is defined.
+- `hal_littlefs_begin()` mounts the filesystem; `hal_littlefs_end()` unmounts it.
+- `hal_littlefs_format()` formats the LittleFS partition.
+- When `hal_littlefs_format()` fails, mounted/path/stat state is left unchanged.
+- Path helpers require mounted filesystem and validate non-empty paths.
+
+**impl/arduino:** Arduino-pico `LittleFS` backend.
+**impl/.mock:** deterministic test double with injectable mount/format result,
+path presence, and volume size stats.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+
+**Mock helpers:**
+```c
+void hal_mock_littlefs_reset(void);
+void hal_mock_littlefs_set_begin_result(bool result);
+void hal_mock_littlefs_set_format_result(bool result);
+void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
+void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
+void hal_mock_littlefs_set_exists(const char *path, bool exists);
+```
+
+---
+
+## `hal_ota` - ArduinoOTA wrapper  *(opt-in - `HAL_ENABLE_OTA`)*
+
+Thread-safe wrapper around ArduinoOTA with callback dispatch from
+`hal_ota_handle()` (outside internal lock), similar to `hal_mqtt_loop()` style.
+
+```c
+#include <hal/hal_ota.h>
+
+typedef enum {
+  HAL_OTA_COMMAND_SKETCH = 0,
+  HAL_OTA_COMMAND_FILESYSTEM = 1,
+  HAL_OTA_COMMAND_UNKNOWN = 255
+} hal_ota_command_t;
+
+typedef enum {
+  HAL_OTA_ERROR_AUTH = 1,
+  HAL_OTA_ERROR_BEGIN = 2,
+  HAL_OTA_ERROR_CONNECT = 3,
+  HAL_OTA_ERROR_RECEIVE = 4,
+  HAL_OTA_ERROR_END = 5,
+  HAL_OTA_ERROR_UNKNOWN = 255
+} hal_ota_error_t;
+
+typedef void (*hal_ota_on_start_callback_t)(hal_ota_command_t command, void *user);
+typedef void (*hal_ota_on_end_callback_t)(void *user);
+typedef void (*hal_ota_on_progress_callback_t)(uint32_t progress, uint32_t total, void *user);
+typedef void (*hal_ota_on_error_callback_t)(hal_ota_error_t error, void *user);
+
+bool hal_ota_set_port(uint16_t port);
+bool hal_ota_set_hostname(const char *hostname);
+bool hal_ota_set_password(const char *password);
+
+bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user);
+bool hal_ota_on_end(hal_ota_on_end_callback_t callback, void *user);
+bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user);
+bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user);
+
+bool hal_ota_begin(void);
+void hal_ota_handle(void);
+bool hal_ota_is_started(void);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_OTA` is defined.
+- Requires WiFi support (`HAL_DISABLE_WIFI` must be unset).
+- `hal_ota_begin()` initializes OTA service and registers internal event hooks.
+- `hal_ota_handle()` polls OTA transport and dispatches queued events to user callbacks.
+- Callback handlers can be replaced or unregistered by passing `NULL`.
+- Re-entering `hal_ota_begin()` clears queued mock/driver events before processing.
+
+**impl/arduino:** Arduino-pico `ArduinoOTA` backend.
+**impl/.mock:** deterministic event-injection test double.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all wrapper calls and callback
+dispatch is performed outside that lock.
+
+**Mock helpers:**
+```c
+void        hal_mock_ota_reset(void);
+void        hal_mock_ota_set_begin_result(bool result);
+void        hal_mock_ota_inject_start(hal_ota_command_t command);
+void        hal_mock_ota_inject_end(void);
+void        hal_mock_ota_inject_progress(uint32_t progress, uint32_t total);
+void        hal_mock_ota_inject_error(hal_ota_error_t error);
+uint16_t    hal_mock_ota_get_port(void);
+const char *hal_mock_ota_get_hostname(void);
+const char *hal_mock_ota_get_password(void);
+uint32_t    hal_mock_ota_get_handle_count(void);
+```
+
+---
+
+## `hal_udp` - UDP datagrams  *(opt-in - `HAL_ENABLE_UDP`)*
+
+Thread-safe wrapper around Arduino-pico `WiFiUDP` for single-socket datagram
+receive/send flows.
+
+```c
+#include <hal/hal_udp.h>
+
+#define HAL_UDP_IP_STR_LEN 16u
+
+bool hal_udp_begin(uint16_t local_port);
+void hal_udp_stop(void);
+
+int  hal_udp_parse_packet(void);
+int  hal_udp_read(uint8_t *buffer, uint16_t max_len);
+
+bool     hal_udp_remote_ip(char *out, size_t out_size);
+uint16_t hal_udp_remote_port(void);
+
+bool     hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port);
+bool     hal_udp_begin_packet_remote(void);
+uint16_t hal_udp_write(const uint8_t *data, uint16_t len);
+uint16_t hal_udp_write_str(const char *text);
+bool     hal_udp_end_packet(void);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_UDP` is defined.
+- `hal_udp_begin(...)` opens one UDP socket bound to a local port.
+- `hal_udp_parse_packet()` returns packet size, `0` when no packet is available.
+- `hal_udp_remote_ip(...)` and `hal_udp_remote_port()` expose sender endpoint
+  captured from the last successful `hal_udp_parse_packet()`.
+- `hal_udp_begin_packet_remote()` sends response datagram to that captured sender.
+- `hal_udp_write(...)` / `hal_udp_write_str(...)` append payload bytes to the
+  datagram opened by `hal_udp_begin_packet*()`.
+- `hal_udp_stop()` clears cached remote endpoint and active packet-send context.
+
+**impl/arduino:** Arduino-pico `WiFiUDP` backend.
+**impl/.mock:** deterministic stateful test double with injected inbound packet,
+captured outbound packet metadata and payload.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+
+**Mock helpers:**
+```c
+void        hal_mock_udp_reset(void);
+void        hal_mock_udp_inject_packet(const char *remote_ip,
+                                       uint16_t remote_port,
+                                       const uint8_t *payload,
+                                       uint16_t len);
+void        hal_mock_udp_set_end_packet_result(bool result);
+uint16_t    hal_mock_udp_get_local_port(void);
+const char *hal_mock_udp_get_last_begin_packet_host(void);
+uint16_t    hal_mock_udp_get_last_begin_packet_port(void);
+const uint8_t *hal_mock_udp_get_last_tx_payload(void);
+uint16_t    hal_mock_udp_get_last_tx_len(void);
+bool        hal_mock_udp_was_end_packet_called(void);
+```
+
+---
+
 ## `hal_wireguard` - WireGuard tunnel wrapper  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
 
 Thread-safe wrapper around bundled `arduino-wireguard-pico-w` API.
@@ -2348,6 +2524,8 @@ bool hal_wireguard_peer_up(char *endpoint_ip_out,
                            size_t endpoint_ip_out_size,
                            uint16_t *endpoint_port_out);
 
+bool hal_wireguard_peer_up_quick(void);
+
 bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   uint16_t probe_port,
                                   uint32_t min_interval_ms);
@@ -2365,6 +2543,7 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_begin_advanced(...)` enables split-tunnel mode via explicit AllowedIPs.
 - `hal_wireguard_begin_advanced_text(...)` parses local/allowed/mask dotted IPv4 text and delegates to `hal_wireguard_begin_advanced(...)`.
 - `hal_wireguard_peer_up(...)` can optionally return current endpoint IP/port.
+- `hal_wireguard_peer_up_quick(...)` is a no-argument convenience check equivalent to `hal_wireguard_peer_up(NULL, 0u, NULL)`.
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
@@ -2382,6 +2561,7 @@ void        hal_mock_wireguard_set_peer_up_result(bool result);
 void        hal_mock_wireguard_set_kick_result(bool result);
 void        hal_mock_wireguard_set_initialized(bool initialized);
 void        hal_mock_wireguard_set_peer_endpoint(const uint8_t ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t port);
+uint32_t    hal_mock_wireguard_get_peer_up_quick_call_count(void);
 const uint8_t *hal_mock_wireguard_get_last_local_ip(void);
 const uint8_t *hal_mock_wireguard_get_last_allowed_ip(void);
 const uint8_t *hal_mock_wireguard_get_last_allowed_mask(void);
@@ -2917,8 +3097,11 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
+| `hal_littlefs` | Arduino-pico `LittleFS` |
+| `hal_udp` | Arduino-pico `WiFiUDP` |
 | `hal_wireguard` | bundled `arduino-wireguard-pico-w` + Arduino-pico WiFi/lwIP stack |
 | `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
+| `hal_ota` | Arduino-pico `ArduinoOTA` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
 | `tools` | `EEPROM.h`, `SD.h`, `SPI.h`, `Wire.h` (Arduino-pico) |
@@ -2946,7 +3129,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-All 32 test suites complete in < 1 s on a standard desktop machine.
+All 35 test suites complete in < 1 s on a standard desktop machine.
 
 ### How it works
 
@@ -2991,8 +3174,11 @@ headers, no pico SDK, no hardware.
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
-| `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting, handshake kick trigger, input validation |
+| `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, missing-path remove semantics, input validation |
+| `test_hal_udp` | begin/parse/read flow, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
+| `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
+| `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |

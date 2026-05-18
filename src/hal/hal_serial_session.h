@@ -2,7 +2,7 @@
 
 /**
  * @file hal_serial_session.h
- * @brief Framed serial session helper for the SerialConfigurator transport.
+ * @brief Framed serial session helper for SC-style serial transport.
  *
  * This helper provides a tiny session state machine that speaks ONLY the
  * framed wire protocol described in @ref hal_serial_frame.h:
@@ -10,8 +10,8 @@
  *     $SC,<seq>,<inner>*<crc8>\n
  *
  * Lines that do not start with the `$SC,` sentinel are silently discarded.
- * There is intentionally no plain-text fall-through: the host SerialConfigurator
- * always frames its requests, and removing the legacy path eliminates a class
+* There is intentionally no plain-text fall-through: host-side tools are
+* expected to frame requests, and removing the legacy path eliminates a class
  * of bugs (substring matches in debug logs, unframed bytes corrupting the
  * stream, modules accidentally responding to noise).
  *
@@ -62,7 +62,7 @@ extern "C" {
 /** @brief Maximum accepted command line length (excluding terminator).
  *
  *  Sized to fit a framed `$SC,<seq>,<inner>*<crc>` request whose @c <inner>
- *  may carry the longest configurator command (currently `SC_GET_PARAM
+ *  may carry the longest expected command (currently `SC_GET_PARAM
  *  <id>`), with margin for future growth. */
 #define HAL_SERIAL_SESSION_MAX_LINE 128u
 
@@ -133,7 +133,7 @@ typedef struct {
  * be reported as @ref HAL_SERIAL_SESSION_UNKNOWN.
  *
  * @p vocab is borrowed and must remain valid for the lifetime of the session.
- * Pass NULL to keep the historical Fiesta-default tokens (equivalent to
+ * Pass NULL to keep the built-in default tokens (equivalent to
  * @ref hal_serial_session_init).
  *
  * @param session     Session context to reset.
@@ -354,7 +354,7 @@ static inline bool hal_serial_session__hex_decode(const char *hex,
  *             || auth_counter_be)
  *
  * which is unpredictable enough to withstand the bench-laptop replay threat
- * model from §7.3 of the SerialConfigurator context provider. RP2040 bench
+ * model for host/firmware authenticated sessions. RP2040 bench
  * hardware exposes a microsecond timer that ticks over millions of times per
  * second, so feeding it into SHA-256 yields fresh values per call without
  * relying on a hardware RNG that the HAL does not currently abstract.
@@ -562,7 +562,7 @@ static inline void hal_serial_session__handle_reboot_bootloader(
  *
  * Closes the framed session: replies (if a reply token is configured), drops
  * `active`, and clears any cryptographic auth state. After BYE the firmware
- * reverts to its pre-HELLO state — `hal_serial_session_is_active` returns
+ * reverts to its pre-HELLO state - `hal_serial_session_is_active` returns
  * false so the host orchestration (e.g. debug-mute toggle) follows along
  * without polling for activity timeouts. Always succeeds; an inactive session
  * simply repeats the OK reply.

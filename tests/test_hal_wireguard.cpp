@@ -243,6 +243,9 @@ void test_peer_up_output_variants_and_down_state(void) {
     hal_mock_wireguard_set_peer_up_result(true);
     hal_mock_wireguard_set_peer_endpoint(peer_ip, 41000u);
 
+    TEST_ASSERT_TRUE(hal_wireguard_peer_up_quick());
+    TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_wireguard_get_peer_up_quick_call_count());
+
     uint16_t endpoint_port = 0u;
     TEST_ASSERT_TRUE(hal_wireguard_peer_up(NULL, 0u, &endpoint_port));
     TEST_ASSERT_EQUAL_UINT16(41000u, endpoint_port);
@@ -255,10 +258,14 @@ void test_peer_up_output_variants_and_down_state(void) {
     endpoint_port = 11111u;
     TEST_ASSERT_FALSE(hal_wireguard_peer_up(NULL, 0u, &endpoint_port));
     TEST_ASSERT_EQUAL_UINT16(11111u, endpoint_port);
+    TEST_ASSERT_FALSE(hal_wireguard_peer_up_quick());
+    TEST_ASSERT_EQUAL_UINT32(2u, hal_mock_wireguard_get_peer_up_quick_call_count());
 
     hal_wireguard_end();
     hal_mock_wireguard_set_peer_up_result(true);
     TEST_ASSERT_FALSE(hal_wireguard_peer_up(NULL, 0u, &endpoint_port));
+    TEST_ASSERT_FALSE(hal_wireguard_peer_up_quick());
+    TEST_ASSERT_EQUAL_UINT32(3u, hal_mock_wireguard_get_peer_up_quick_call_count());
 }
 
 void test_kick_handshake_requires_initialization_and_returns_driver_result(void) {

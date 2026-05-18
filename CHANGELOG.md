@@ -6,6 +6,60 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+## [Unreleased] - 2026-05-18 (OTA + LittleFS module bootstrap)
+
+### Added
+- New opt-in `HAL_ENABLE_LITTLEFS` feature flag and public `hal_littlefs` API.
+- Arduino backend implementation of `hal_littlefs` as a thread-safe wrapper
+  around Arduino-pico `LittleFS` mount/format/path helpers.
+- Mock backend implementation + helper observability APIs in `hal_mock`
+  for mount/format result control, file-existence injection and size stats.
+- New host unit test suite `test_hal_littlefs`.
+- New opt-in `HAL_ENABLE_OTA` feature flag and public `hal_ota` API.
+- Arduino backend implementation of `hal_ota` as a thread-safe wrapper
+  around Arduino-pico `ArduinoOTA`, with queued callback dispatch from
+  `hal_ota_handle()`.
+- Mock backend implementation + helper observability APIs in `hal_mock`
+  for OTA event injection and callback dispatch validation.
+- New host unit test suite `test_hal_ota`.
+
+### Changed
+- `hal/hal.h` and `tools_c.h` now expose `hal_littlefs.h` and `hal_ota.h`
+  when corresponding `HAL_ENABLE_*` flags are enabled.
+- `hal_config.h` now validates `HAL_ENABLE_OTA` cannot be combined with
+  `HAL_DISABLE_WIFI`.
+- Host-test build enables `HAL_ENABLE_LITTLEFS` and `HAL_ENABLE_OTA` in
+  `hal_mock` compile definitions and registers both suites in
+  `tests/CMakeLists.txt`.
+- Expanded `test_hal_littlefs` with format-failure state preservation and
+  missing-path remove semantics.
+- Expanded `test_hal_ota` with callback replace/unregister flow and re-begin
+  queue-clear coverage.
+- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+  `JaszczurHAL_API.md`).
+
+## [Unreleased] - 2026-05-18 (UDP module bootstrap)
+
+### Added
+- New opt-in `HAL_ENABLE_UDP` feature flag and public `hal_udp` API.
+- Arduino backend implementation of `hal_udp` as a thread-safe wrapper around
+  Arduino-pico `WiFiUDP`.
+- Mock backend implementation + helper observability APIs in `hal_mock`
+  for inbound packet injection and outbound packet capture.
+- New host unit test suite `test_hal_udp`.
+
+### Changed
+- `hal/hal.h` and `tools_c.h` now expose `hal_udp.h` when
+  `HAL_ENABLE_UDP` is enabled.
+- `hal_config.h` now validates `HAL_ENABLE_UDP` cannot be combined with
+  `HAL_DISABLE_WIFI`.
+- Host-test build enables `HAL_ENABLE_UDP` in `hal_mock` compile
+  definitions and registers the new suite in `tests/CMakeLists.txt`.
+- Expanded `test_hal_udp` with chunked-read behavior and stop/reset state
+  coverage for cached remote endpoint + packet context.
+- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+  `JaszczurHAL_API.md`).
+
 ## [Unreleased] - 2026-05-18 (WireGuard IPv4 helper APIs)
 
 ### Added
@@ -148,7 +202,7 @@ Next release.
   the unknown handler exactly like before.
 - Fiesta's `fiesta_default_vocabulary` adds the two new fields so
   every Fiesta firmware that picks up this HAL release will respond
-  natively to `SC_BYE` from the SerialConfigurator GUI / CLI.
+  natively to `SC_BYE` from a companion host GUI / CLI.
 
 ## [Unreleased] - 2026-04-27 (Fiesta R1.6 - strip SC_* literals from production code)
 
@@ -222,8 +276,8 @@ Next release.
   `HAL_SERIAL_SESSION_VOCAB(session, field)`. Default behaviour is
   byte-identical: existing `test_hal_serial_session` (24 cases) passes
   unmodified, and the wire output verified by ctest is unchanged (`OK
-  HELLO`, `SC_OK AUTH_CHALLENGE …`, `SC_OK AUTH_OK`, `SC_OK REBOOT`,
-  `SC_AUTH_FAILED …`, `SC_NOT_AUTHORIZED`, `SC_NOT_READY HELLO_REQUIRED`,
+  HELLO`, `SC_OK AUTH_CHALLENGE ...`, `SC_OK AUTH_OK`, `SC_OK REBOOT`,
+  `SC_AUTH_FAILED ...`, `SC_NOT_AUTHORIZED`, `SC_NOT_READY HELLO_REQUIRED`,
   `SC_UNKNOWN_CMD`).
 - HELLO and the structural `OK HELLO module=...` reply remain
   intentionally non-configurable: they encode protocol structure that
@@ -238,7 +292,7 @@ Next release.
   token strings into a single source of truth on the Fiesta side and
   passes the table at session init.
 
-## [Unreleased] - 2026-04-27 (SerialConfigurator Phase 5)
+## [Unreleased] - 2026-04-27 (Framed session Phase 5)
 
 ### Added
 - `hal_serial_session`: built-in `SC_REBOOT_BOOTLOADER` framed command,
@@ -294,21 +348,21 @@ Next release.
   `hal_project_config.h`. Without the flag the linker reports the
   helpers as undefined.
 
-## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 3)
+## [Unreleased] - 2026-04-26 (Auth handshake Phase 3)
 
 ### Added
 - `hal_crypto`: SHA-256 and HMAC-SHA256 helpers (`hal_sha256`, `hal_sha256_hex`,
   `hal_hmac_sha256`, `hal_hmac_sha256_hex`). Portable C++ implementation
   validated against FIPS 180-2 and RFC 4231 vectors. Bit-stable with the
-  host-side copy in SerialConfigurator's `sc_sha256.c`.
-- `hal_sc_auth.h` - new header-only helper for the SerialConfigurator
+  host-side mirror copy (for example `sc_sha256.c`).
+- `hal_sc_auth.h` - new header-only helper for the framed-session
   authentication handshake. Defines the compile-time salt
   (`FIESTA-SC-AUTH-v1`), per-device key derivation
   (`K_device = HMAC-SHA256(salt, uid_bytes)`), challenge/response
   computation (`HMAC-SHA256(K_device, challenge || session_id_be32)`),
   and a constant-time MAC comparison helper. Salt and constants must
-  stay byte-for-byte in sync with `src/SerialConfigurator/src/core/sc_auth.h`
-  in the Fiesta repo.
+  stay byte-for-byte in sync with the project-specific host mirror in
+  the companion repository.
 - `hal_serial_session_is_authenticated(session)` - public reader for the
   new auth state.
 - Built-in framed commands `SC_AUTH_BEGIN` and `SC_AUTH_PROVE <hex>` in
@@ -328,11 +382,11 @@ Next release.
   bad-MAC rejection with one-shot challenge consumption, malformed
   payload rejection, and auth-clear-on-new-HELLO. Suite size: 13 -> 20.
 
-## [Unreleased] - 2026-04-26 (SerialConfigurator Phase 2 - framed protocol)
+## [Unreleased] - 2026-04-26 (Framed protocol Phase 2)
 
 ### Added
 - `hal_serial_frame.h` - new header-only wire-framing helpers shared with
-  the SerialConfigurator host. Exposes `hal_serial_frame_encode`,
+  companion host tools. Exposes `hal_serial_frame_encode`,
   `hal_serial_frame_decode`, and `hal_serial_frame_crc8` along with the
   constants `HAL_SERIAL_FRAME_PREFIX` (`"$SC,"`),
   `HAL_SERIAL_FRAME_PREFIX_LEN`, `HAL_SERIAL_FRAME_PAYLOAD_MAX` (256) and
@@ -352,8 +406,8 @@ Next release.
 - **BREAKING:** `hal_serial_session.h` is now framed-only. Lines that do
   not start with the `$SC,` sentinel are silently discarded by
   `hal_serial_session_poll`. The previous plain-text fall-through (which
-  replied `ERR UNKNOWN`) has been removed; the SerialConfigurator host
-  always frames its requests, and dropping the legacy path eliminates a
+  replied `ERR UNKNOWN`) has been removed; host-side tools are expected
+  to frame requests, and dropping the legacy path eliminates a
   class of bugs (substring matches against debug-log lines, unframed
   bytes corrupting the stream, modules accidentally responding to noise).
 - **BREAKING:** Default reply for unrecognised framed payloads changed
