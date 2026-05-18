@@ -155,6 +155,45 @@ const char *hal_mock_wifi_get_hostname(void);
 /** @brief Return the timeout set by hal_wifi_set_timeout_ms(). */
 uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
+// ── MQTT ─────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_MQTT
+#include "../../hal_mqtt.h"
+/** @brief Reset all mock MQTT state to defaults. */
+void        hal_mock_mqtt_reset(void);
+/** @brief Control whether hal_mqtt_connect*() succeeds (default: true). */
+void        hal_mock_mqtt_set_connect_result(bool result);
+/** @brief Control value returned by hal_mqtt_loop() (default: true). */
+void        hal_mock_mqtt_set_loop_result(bool result);
+/** @brief Force connection state returned by hal_mqtt_connected(). */
+void        hal_mock_mqtt_set_connected(bool connected);
+/** @brief Force state value returned by hal_mqtt_state(). */
+void        hal_mock_mqtt_set_state(int state);
+/** @brief Queue one inbound MQTT message delivered on next hal_mqtt_loop(). */
+void        hal_mock_mqtt_inject_message(const char *topic, const uint8_t *payload, uint16_t length);
+/** @brief Return broker host configured via hal_mqtt_set_server(). */
+const char *hal_mock_mqtt_get_server_host(void);
+/** @brief Return broker port configured via hal_mqtt_set_server(). */
+uint16_t    hal_mock_mqtt_get_server_port(void);
+/** @brief Return topic captured from last hal_mqtt_publish*(). */
+const char *hal_mock_mqtt_get_last_publish_topic(void);
+/** @brief Return payload captured from last hal_mqtt_publish*(). */
+const uint8_t *hal_mock_mqtt_get_last_publish_payload(void);
+/** @brief Return payload length captured from last hal_mqtt_publish*(). */
+uint16_t    hal_mock_mqtt_get_last_publish_len(void);
+/** @brief Return retained flag captured from last hal_mqtt_publish*(). */
+bool        hal_mock_mqtt_get_last_publish_retained(void);
+/** @brief Return topic captured from last hal_mqtt_subscribe(). */
+const char *hal_mock_mqtt_get_last_subscribe_topic(void);
+/** @brief Return qos captured from last hal_mqtt_subscribe(). */
+uint8_t     hal_mock_mqtt_get_last_subscribe_qos(void);
+/** @brief Return topic captured from last hal_mqtt_unsubscribe(). */
+const char *hal_mock_mqtt_get_last_unsubscribe_topic(void);
+/** @brief Return keepalive value set by hal_mqtt_set_keepalive(). */
+uint16_t    hal_mock_mqtt_get_keepalive(void);
+/** @brief Return socket timeout value set by hal_mqtt_set_socket_timeout(). */
+uint16_t    hal_mock_mqtt_get_socket_timeout(void);
+#endif
+
 // ── Time / NTP ──────────────────────────────────────────────────────────────
 #include "../../hal_time.h"
 /** @brief Reset all mock time state to defaults. */

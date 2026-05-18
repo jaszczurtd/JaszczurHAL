@@ -52,6 +52,7 @@ Utility-only includes are also available:
 - Mock backend for deterministic host/unit tests
 - Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
 - Crypto helpers (`hal_crypto`: Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305) - **opt-in via `HAL_ENABLE_CRYPTO`**
+- Thread-safe MQTT client wrapper (`hal_mqtt`) - **opt-in via `HAL_ENABLE_MQTT`** (requires WiFi support)
 - Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied bye / auth / reboot vocabulary)
 - SerialConfigurator authentication helper (`hal_sc_auth`: per-device key derivation + challenge/response over the framed session) - pulled in by the same `HAL_ENABLE_CRYPTO` flag
 - C soft-timer wrapper API with table-based setup/tick helpers (`hal_soft_timer_*`)
@@ -434,3 +435,4 @@ examples, and host-test coverage.
 - `MAX6675` - Limor Fried for Adafruit Industries
 - `MCP2515` - Loovee / Seeed Technology, with contributions by Cory J. Fowler
 - `TinyGPSPlus` - Mikal Hart
+- `PubSubClient` - Nick O'Leary

@@ -6,6 +6,27 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+## [Unreleased] - 2026-05-18 (MQTT module bootstrap)
+
+### Added
+- New opt-in `HAL_ENABLE_MQTT` feature flag and public `hal_mqtt` API.
+- Arduino backend implementation of `hal_mqtt` as a thread-safe
+  wrapper around bundled PubSubClient (`drivers/PubSubClient`).
+- Mock backend implementation + helper observability APIs in
+  `hal_mock` for MQTT state, publish/subscribe capture and inbound
+  message injection.
+- New host unit test suite `test_hal_mqtt`.
+
+### Changed
+- `hal/hal.h` and `tools_c.h` now expose `hal_mqtt.h` when
+  `HAL_ENABLE_MQTT` is enabled.
+- Bundled `PubSubClient.cpp` is now compile-gated by
+  `HAL_ENABLE_MQTT` (same conditional model as other optional drivers).
+- Host-test build enables `HAL_ENABLE_MQTT` in `hal_mock` compile
+  definitions and registers the new suite in `tests/CMakeLists.txt`.
+- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+  `JaszczurHAL_API.md`).
+
 ## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialised + flushed TX on hal_serial)
 
 ### Added
