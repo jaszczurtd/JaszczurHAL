@@ -2,7 +2,7 @@
 
 /**
  * @file hal_serial_frame.h
- * @brief Wire framing for the Fiesta SerialConfigurator (SC) protocol.
+ * @brief Wire framing for the SC serial-session protocol.
  *
  * Frame format (both directions):
  * @code
@@ -19,10 +19,9 @@
  *   the leading `$` and the `*` (i.e. over `SC,<seq>,<payload>`).
  * - Trailing `\n` line terminator.
  *
- * This header is shared verbatim between firmware and the host
- * SerialConfigurator. The configurator carries a stand-alone copy with
- * matching constants and CRC parameters; do not change one without the
- * other.
+ * This header may be shared verbatim between firmware and companion host
+ * tooling. If your host stack carries a stand-alone copy with matching
+ * constants and CRC parameters, keep both sides synchronized.
  */
 
 #include <stdbool.h>

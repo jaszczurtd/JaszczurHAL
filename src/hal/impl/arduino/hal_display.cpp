@@ -268,7 +268,7 @@ bool hal_display_configure(int width, int height, uint8_t rotation,
     }
 #elif defined(HAL_DISPLAY_ST7796S)
     {
-        /* ST7796S init() signature: init(height, width, …) - note the swap */
+        /* ST7796S init() signature: init(height, width, ...) - note the swap */
         s_tft->init(height, width, 0, 0, bgr ? ST7796S_BGR : ST7796S_RGB);
         s_tft->invertDisplay(invert);
     }

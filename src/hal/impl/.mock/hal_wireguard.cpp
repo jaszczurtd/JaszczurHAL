@@ -29,6 +29,7 @@ static struct {
 
     uint8_t peer_endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS];
     uint16_t peer_endpoint_port;
+    uint32_t peer_up_quick_call_count;
 
     uint8_t last_probe_ip[HAL_WIREGUARD_IPV4_OCTETS];
     uint16_t last_probe_port;
@@ -255,6 +256,11 @@ bool hal_wireguard_peer_up(char *endpoint_ip_out,
     return true;
 }
 
+bool hal_wireguard_peer_up_quick(void) {
+    s_wireguard.peer_up_quick_call_count++;
+    return hal_wireguard_peer_up(NULL, 0u, NULL);
+}
+
 bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   uint16_t probe_port,
                                   uint32_t min_interval_ms) {
@@ -310,6 +316,10 @@ void hal_mock_wireguard_set_peer_endpoint(const uint8_t ip[HAL_WIREGUARD_IPV4_OC
     }
     memcpy(s_wireguard.peer_endpoint_ip, ip, HAL_WIREGUARD_IPV4_OCTETS);
     s_wireguard.peer_endpoint_port = port;
+}
+
+uint32_t hal_mock_wireguard_get_peer_up_quick_call_count(void) {
+    return s_wireguard.peer_up_quick_call_count;
 }
 
 const uint8_t *hal_mock_wireguard_get_last_local_ip(void) {

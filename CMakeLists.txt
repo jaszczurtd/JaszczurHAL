@@ -37,7 +37,10 @@ target_include_directories(hal_mock PUBLIC ${SRC})
 
 target_compile_definitions(hal_mock PUBLIC
     UNITY_INCLUDE_CONFIG_H  # use the project's unity_config.h
+    HAL_ENABLE_LITTLEFS     # exercise hal_littlefs in host tests
     HAL_DISPLAY_ILI9341     # explicit TFT driver choice for host tests
+    HAL_ENABLE_OTA          # exercise hal_ota in host tests
+    HAL_ENABLE_UDP          # exercise hal_udp in host tests
     HAL_ENABLE_WIREGUARD    # exercise hal_wireguard in host tests
     HAL_ENABLE_MQTT         # exercise hal_mqtt in host tests
     HAL_ENABLE_CRYPTO       # exercise hal_crypto + hal_sc_auth in host tests

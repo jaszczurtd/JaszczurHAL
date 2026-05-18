@@ -48,6 +48,15 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #ifdef HAL_ENABLE_MQTT
 #include <hal/hal_mqtt.h>
 #endif
+#ifdef HAL_ENABLE_LITTLEFS
+#include <hal/hal_littlefs.h>
+#endif
+#ifdef HAL_ENABLE_OTA
+#include <hal/hal_ota.h>
+#endif
+#ifdef HAL_ENABLE_UDP
+#include <hal/hal_udp.h>
+#endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include <hal/hal_wireguard.h>
 #endif

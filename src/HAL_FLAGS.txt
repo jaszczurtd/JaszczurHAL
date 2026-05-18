@@ -94,12 +94,23 @@ HAL_ENABLE_CJSON
   Enable bundled cJSON/cJSON_Utils headers and sources.
   Used by `src/tools.h` to expose cJSON includes.
 
+HAL_ENABLE_LITTLEFS
+  Enable `hal_littlefs` (thread-safe LittleFS lifecycle and basic FS helpers).
+
 HAL_ENABLE_WIREGUARD
   Enable `hal_wireguard` (thread-safe WireGuard wrapper).
   Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
 
 HAL_ENABLE_MQTT
   Enable `hal_mqtt` (thread-safe PubSubClient wrapper).
+  Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
+
+HAL_ENABLE_UDP
+  Enable `hal_udp` (thread-safe WiFiUDP wrapper).
+  Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
+
+HAL_ENABLE_OTA
+  Enable `hal_ota` (thread-safe ArduinoOTA wrapper).
   Requires WiFi support (cannot be used with `HAL_DISABLE_WIFI`).
 
 HAL_ENABLE_CRYPTO
@@ -135,3 +146,5 @@ Important
 - `HAL_DISABLE_*` removes API declarations and implementation code for corresponding modules.
 - `HAL_ENABLE_WIREGUARD` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.
 - `HAL_ENABLE_MQTT` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.
+- `HAL_ENABLE_UDP` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.
+- `HAL_ENABLE_OTA` requires WiFi support and cannot be combined with `HAL_DISABLE_WIFI`.

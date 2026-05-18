@@ -248,7 +248,7 @@ hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h);
 /**
  * @brief Set the hardware IIR filter coefficient.
  *
- * MCP9600 only.  Coefficient range: 0 (filter off) … 7 (maximum smoothing).
+ * MCP9600 only.  Coefficient range: 0 (filter off) ... 7 (maximum smoothing).
  *
  * @param h      Valid handle.
  * @param coeff  Filter coefficient in [0, 7].

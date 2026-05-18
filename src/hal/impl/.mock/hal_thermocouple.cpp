@@ -26,7 +26,7 @@ struct hal_thermocouple_impl_s {
     hal_thermocouple_adc_res_t     adc_res;
     hal_thermocouple_ambient_res_t ambient_res;
     bool                           enabled;
-    float                          alert_temps[4];  /* [0] = ch1 … [3] = ch4 */
+    float                          alert_temps[4];  /* [0] = ch1 ... [3] = ch4 */
 #endif
 };
 

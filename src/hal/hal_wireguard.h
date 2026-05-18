@@ -131,6 +131,13 @@ bool hal_wireguard_peer_up(char *endpoint_ip_out,
                            uint16_t *endpoint_port_out);
 
 /**
+ * @brief Check if WireGuard peer session is up (no endpoint outputs).
+ *
+ * Equivalent to `hal_wireguard_peer_up(NULL, 0u, NULL)`.
+ */
+bool hal_wireguard_peer_up_quick(void);
+
+/**
  * @brief Trigger non-blocking handshake via tiny UDP probe.
  *
  * @param probe_ip Probe IPv4 as octets.
