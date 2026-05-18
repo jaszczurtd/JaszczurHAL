@@ -5,7 +5,7 @@
 #include "../../hal_mqtt.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#include "drivers/PubSubClient/src/PubSubClient.h"
+#include "frameworks/PubSubClient/src/PubSubClient.h"
 
 #include <WiFiClient.h>
 #include <stdio.h>

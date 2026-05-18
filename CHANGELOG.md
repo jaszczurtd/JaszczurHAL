@@ -6,12 +6,34 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+## [Unreleased] - 2026-05-18 (WireGuard module bootstrap)
+
+### Added
+- New opt-in `HAL_ENABLE_WIREGUARD` feature flag and public `hal_wireguard` API.
+- Arduino backend implementation of `hal_wireguard` as a thread-safe
+  wrapper around bundled `arduino-wireguard-pico-w` sources.
+- Mock backend implementation + helper observability APIs in `hal_mock`
+  for WireGuard config capture, endpoint inject and handshake trigger.
+- New host unit test suite `test_hal_wireguard`.
+
+### Changed
+- `hal/hal.h` and `tools_c.h` now expose `hal_wireguard.h` when
+  `HAL_ENABLE_WIREGUARD` is enabled.
+- Bundled WireGuard sources (`WireGuard.cpp`, `wireguard.c`,
+  `wireguardif.c`, `wireguard-platform.c`, `crypto.c`)
+  are now compile-gated by `HAL_ENABLE_WIREGUARD`.
+- Host-test build enables `HAL_ENABLE_WIREGUARD` in `hal_mock`
+  compile definitions and registers the new suite in
+  `tests/CMakeLists.txt`.
+- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+  `JaszczurHAL_API.md`).
+
 ## [Unreleased] - 2026-05-18 (MQTT module bootstrap)
 
 ### Added
 - New opt-in `HAL_ENABLE_MQTT` feature flag and public `hal_mqtt` API.
 - Arduino backend implementation of `hal_mqtt` as a thread-safe
-  wrapper around bundled PubSubClient (`drivers/PubSubClient`).
+  wrapper around bundled PubSubClient (`frameworks/PubSubClient`).
 - Mock backend implementation + helper observability APIs in
   `hal_mock` for MQTT state, publish/subscribe capture and inbound
   message injection.

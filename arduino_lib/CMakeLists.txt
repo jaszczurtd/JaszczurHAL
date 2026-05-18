@@ -89,6 +89,12 @@ file(GLOB_RECURSE DRIVER_SOURCES
     ${SRC}/hal/impl/arduino/drivers/*.c
 )
 
+# ── Framework sources (bundled high-level integrations) ──────────────────────
+file(GLOB_RECURSE FRAMEWORK_SOURCES
+    ${SRC}/hal/impl/arduino/frameworks/*.cpp
+    ${SRC}/hal/impl/arduino/frameworks/*.c
+)
+
 # ── Common HAL sources (not implementation-specific) ─────────────────────────
 set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
@@ -119,6 +125,7 @@ endif()
 add_library(JaszczurHAL STATIC
     ${ARDUINO_IMPL_SOURCES}
     ${DRIVER_SOURCES}
+    ${FRAMEWORK_SOURCES}
     ${HAL_COMMON_SOURCES}
     ${UTIL_SOURCES}
 )
