@@ -59,6 +59,9 @@
 #ifndef HAL_DISABLE_WIFI
 #include "hal_wifi.h"
 #endif
+#ifdef HAL_ENABLE_MQTT
+#include "hal_mqtt.h"
+#endif
 #ifndef HAL_DISABLE_TIME
 #include "hal_time.h"
 #endif

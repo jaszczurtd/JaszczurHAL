@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -76,7 +76,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_external_adc`, `hal_gps`
-- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_time`
+- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_mqtt`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
 
@@ -143,6 +143,8 @@ To exclude modules your project does not use, define one or more
 | Flag | Scope | Effect |
 |---|---|---|
 | `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | exposes bundled `utils/cJSON.h` and `utils/cJSON_Utils.h` includes |
+| `HAL_ENABLE_MQTT` | `hal_mqtt` module | enables thread-safe PubSubClient wrapper (requires WiFi support) |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto` and `hal_sc_auth` | enables crypto helpers and SerialConfigurator auth path |
 
 ### Dependency propagation (hal\_config.h)
 
@@ -275,7 +277,7 @@ section below.  The general pattern is:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
-- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_kv`, debug serial).
+- **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_mqtt`, `hal_kv`, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
@@ -310,6 +312,7 @@ as HAL-internal implementation detail (not public API).
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
 | `MAX6675` | thermocouple MAX6675 backend | Adafruit (Limor Fried) | BSD (license file in driver folder) | `src/hal/impl/arduino/drivers/MAX6675/license.txt` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
+| `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/drivers/PubSubClient/LICENSE.txt` |
 | `TinyGPSPlus` | `hal_gps` parser backend | Mikal Hart | LGPL-2.1+ notice in source headers | `src/hal/impl/arduino/drivers/TinyGPSPlus/src/TinyGPS++.h` |
 
 Note: `Adafruit_GFX_Library/Fonts/` includes additional per-font notices in
@@ -327,6 +330,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
 | TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_DISABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
+| PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
 
 ---
 
@@ -403,7 +407,7 @@ Covered test targets include:
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
-- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_time`
+- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_mqtt`, `test_hal_time`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
@@ -2290,6 +2294,76 @@ uint32_t    hal_mock_wifi_get_timeout_ms(void);
 
 ---
 
+## `hal_mqtt` - MQTT client  *(opt-in - `HAL_ENABLE_MQTT`)*
+
+Thread-safe MQTT wrapper around bundled PubSubClient with callback dispatch
+outside the internal mutex to avoid lock-order deadlocks in user handlers.
+
+```c
+#include <hal/hal_mqtt.h>
+
+typedef void (*hal_mqtt_message_callback_t)(const char *topic,
+                                            const uint8_t *payload,
+                                            uint16_t length,
+                                            void *user);
+
+bool hal_mqtt_set_server(const char *host, uint16_t port);
+bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user);
+bool hal_mqtt_set_keepalive(uint16_t keepalive_s);
+bool hal_mqtt_set_socket_timeout(uint16_t timeout_s);
+bool hal_mqtt_set_buffer_size(uint16_t size);
+uint16_t hal_mqtt_get_buffer_size(void);
+
+bool hal_mqtt_connect(const char *client_id);
+bool hal_mqtt_connect_auth(const char *client_id, const char *user, const char *pass);
+void hal_mqtt_disconnect(void);
+bool hal_mqtt_connected(void);
+int  hal_mqtt_state(void);
+
+bool hal_mqtt_loop(void);
+bool hal_mqtt_publish(const char *topic, const uint8_t *payload, uint16_t payload_len, bool retained);
+bool hal_mqtt_publish_str(const char *topic, const char *payload, bool retained);
+bool hal_mqtt_subscribe(const char *topic, uint8_t qos);
+bool hal_mqtt_unsubscribe(const char *topic);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_MQTT` is defined.
+- Current Arduino backend uses `WiFiClient` + bundled `PubSubClient`.
+- `hal_mqtt_loop()` must be polled regularly to drive keepalive and receive
+  inbound publishes.
+- Inbound messages are copied to an internal buffer and delivered from
+  `hal_mqtt_loop()` after releasing the internal mutex.
+
+**impl/arduino:** bundled `PubSubClient` (`drivers/PubSubClient`) over `WiFiClient`.
+**impl/.mock:** deterministic stateful test double with injectable connect result,
+loop result and inbound messages.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all MQTT client calls.
+
+**Mock helpers:**
+```c
+void        hal_mock_mqtt_reset(void);
+void        hal_mock_mqtt_set_connect_result(bool result);
+void        hal_mock_mqtt_set_loop_result(bool result);
+void        hal_mock_mqtt_set_connected(bool connected);
+void        hal_mock_mqtt_set_state(int state);
+void        hal_mock_mqtt_inject_message(const char *topic, const uint8_t *payload, uint16_t length);
+const char *hal_mock_mqtt_get_server_host(void);
+uint16_t    hal_mock_mqtt_get_server_port(void);
+const char *hal_mock_mqtt_get_last_publish_topic(void);
+const uint8_t *hal_mock_mqtt_get_last_publish_payload(void);
+uint16_t    hal_mock_mqtt_get_last_publish_len(void);
+bool        hal_mock_mqtt_get_last_publish_retained(void);
+const char *hal_mock_mqtt_get_last_subscribe_topic(void);
+uint8_t     hal_mock_mqtt_get_last_subscribe_qos(void);
+const char *hal_mock_mqtt_get_last_unsubscribe_topic(void);
+uint16_t    hal_mock_mqtt_get_keepalive(void);
+uint16_t    hal_mock_mqtt_get_socket_timeout(void);
+```
+
+---
+
 ## `hal_time` - System time & NTP  *(optional - `HAL_DISABLE_TIME`)*
 
 ```c
@@ -2742,6 +2816,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
+| `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
 | `tools` | `EEPROM.h`, `SD.h`, `SPI.h`, `Wire.h` (Arduino-pico) |
@@ -2769,7 +2844,7 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-All 28 test suites complete in < 1 s on a standard desktop machine.
+All 31 test suites complete in < 1 s on a standard desktop machine.
 
 ### How it works
 
@@ -2814,6 +2889,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
+| `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |

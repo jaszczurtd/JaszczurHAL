@@ -114,6 +114,10 @@
   #endif
 #endif
 
+#if defined(HAL_ENABLE_MQTT) && defined(HAL_DISABLE_WIFI)
+  #error "HAL_ENABLE_MQTT requires HAL_DISABLE_WIFI to be unset"
+#endif
+
 #ifdef HAL_DISABLE_I2C
   #ifndef HAL_DISABLE_EXTERNAL_ADC
     #define HAL_DISABLE_EXTERNAL_ADC
@@ -152,6 +156,8 @@
 
    Supported flags:
      HAL_ENABLE_CJSON           - bundled cJSON / cJSON_Utils sources.
+     HAL_ENABLE_MQTT            - `hal_mqtt` module (PubSubClient wrapper,
+                                  requires WiFi backend).
      HAL_ENABLE_CRYPTO          - `hal_crypto` (Base64, MD5, SHA-256,
                                   HMAC-SHA256, ChaCha20 / -Poly1305) and
                                   the dependent `hal_sc_auth` helper.
