@@ -2310,11 +2310,20 @@ Thread-safe wrapper around bundled `arduino-wireguard-pico-w` API.
 #define HAL_WIREGUARD_IPV4_OCTETS 4u
 #define HAL_WIREGUARD_IP_STR_LEN 16u
 
+bool hal_wireguard_parse_ipv4(const char *ip_text,
+                              uint8_t out_ip[HAL_WIREGUARD_IPV4_OCTETS]);
+
 bool hal_wireguard_begin(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
                          const char *private_key,
                          const char *remote_peer_address,
                          const char *remote_peer_public_key,
                          uint16_t remote_peer_port);
+
+bool hal_wireguard_begin_text(const char *local_ip_text,
+                              const char *private_key,
+                              const char *remote_peer_address,
+                              const char *remote_peer_public_key,
+                              uint16_t remote_peer_port);
 
 bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   const char *private_key,
@@ -2323,6 +2332,14 @@ bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTE
                                   uint16_t remote_peer_port,
                                   const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
+
+bool hal_wireguard_begin_advanced_text(const char *local_ip_text,
+                                       const char *private_key,
+                                       const char *remote_peer_address,
+                                       const char *remote_peer_public_key,
+                                       uint16_t remote_peer_port,
+                                       const char *allowed_ip_text,
+                                       const char *allowed_mask_text);
 
 void hal_wireguard_end(void);
 bool hal_wireguard_is_initialized(void);
@@ -2334,14 +2351,22 @@ bool hal_wireguard_peer_up(char *endpoint_ip_out,
 bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   uint16_t probe_port,
                                   uint32_t min_interval_ms);
+
+bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
+                                       uint16_t probe_port,
+                                       uint32_t min_interval_ms);
 ```
 
 **Behavior notes:**
 - Module is available only when `HAL_ENABLE_WIREGUARD` is defined.
+- `hal_wireguard_parse_ipv4(...)` validates and parses dotted IPv4 text (`a.b.c.d`) into octets.
 - `hal_wireguard_begin(...)` uses full-tunnel mode (`AllowedIPs = 0.0.0.0/0`).
+- `hal_wireguard_begin_text(...)` parses dotted local IP text and delegates to `hal_wireguard_begin(...)`.
 - `hal_wireguard_begin_advanced(...)` enables split-tunnel mode via explicit AllowedIPs.
+- `hal_wireguard_begin_advanced_text(...)` parses local/allowed/mask dotted IPv4 text and delegates to `hal_wireguard_begin_advanced(...)`.
 - `hal_wireguard_peer_up(...)` can optionally return current endpoint IP/port.
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
+- `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
 **impl/arduino:** bundled `arduino-wireguard-pico-w` driver.
 **impl/.mock:** deterministic stateful test double with captured configuration,
@@ -2966,7 +2991,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
-| `test_hal_wireguard` | begin/full vs advanced mode capture, peer-up endpoint reporting, handshake kick trigger, input validation |
+| `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting, handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
