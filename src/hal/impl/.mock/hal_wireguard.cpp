@@ -51,6 +51,50 @@ static bool validate_ip_ptr(const uint8_t *ip, const char *fn, const char *name)
     return true;
 }
 
+bool hal_wireguard_parse_ipv4(const char *ip_text,
+                              uint8_t out_ip[HAL_WIREGUARD_IPV4_OCTETS]) {
+    if (!validate_non_empty(ip_text, "hal_wireguard_parse_ipv4", "ip_text")) {
+        return false;
+    }
+    if (!validate_ip_ptr(out_ip, "hal_wireguard_parse_ipv4", "out_ip")) {
+        return false;
+    }
+
+    const char *p = ip_text;
+    for (size_t idx = 0u; idx < HAL_WIREGUARD_IPV4_OCTETS; ++idx) {
+        if (*p < '0' || *p > '9') {
+            hal_derr("hal_wireguard_parse_ipv4: invalid IPv4 format '%s'", ip_text);
+            return false;
+        }
+
+        uint16_t octet = 0u;
+        while (*p >= '0' && *p <= '9') {
+            octet = (uint16_t)(octet * 10u + (uint16_t)(*p - '0'));
+            if (octet > 255u) {
+                hal_derr("hal_wireguard_parse_ipv4: octet out of range in '%s'", ip_text);
+                return false;
+            }
+            ++p;
+        }
+
+        out_ip[idx] = (uint8_t)octet;
+        if (idx + 1u < HAL_WIREGUARD_IPV4_OCTETS) {
+            if (*p != '.') {
+                hal_derr("hal_wireguard_parse_ipv4: invalid IPv4 format '%s'", ip_text);
+                return false;
+            }
+            ++p;
+        }
+    }
+
+    if (*p != '\0') {
+        hal_derr("hal_wireguard_parse_ipv4: invalid IPv4 suffix in '%s'", ip_text);
+        return false;
+    }
+
+    return true;
+}
+
 void hal_mock_wireguard_reset(void) {
     memset(&s_wireguard, 0, sizeof(s_wireguard));
     s_wireguard.begin_result = true;
@@ -97,6 +141,23 @@ bool hal_wireguard_begin(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
     return s_wireguard.begin_result;
 }
 
+bool hal_wireguard_begin_text(const char *local_ip_text,
+                              const char *private_key,
+                              const char *remote_peer_address,
+                              const char *remote_peer_public_key,
+                              uint16_t remote_peer_port) {
+    uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
+    if (!hal_wireguard_parse_ipv4(local_ip_text, local_ip)) {
+        return false;
+    }
+
+    return hal_wireguard_begin(local_ip,
+                               private_key,
+                               remote_peer_address,
+                               remote_peer_public_key,
+                               remote_peer_port);
+}
+
 bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
                                   const char *private_key,
                                   const char *remote_peer_address,
@@ -122,6 +183,36 @@ bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTE
     memcpy(s_wireguard.last_allowed_mask, allowed_mask, HAL_WIREGUARD_IPV4_OCTETS);
     s_wireguard.begin_advanced_called = true;
     return true;
+}
+
+bool hal_wireguard_begin_advanced_text(const char *local_ip_text,
+                                       const char *private_key,
+                                       const char *remote_peer_address,
+                                       const char *remote_peer_public_key,
+                                       uint16_t remote_peer_port,
+                                       const char *allowed_ip_text,
+                                       const char *allowed_mask_text) {
+    uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
+    uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
+    uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
+
+    if (!hal_wireguard_parse_ipv4(local_ip_text, local_ip)) {
+        return false;
+    }
+    if (!hal_wireguard_parse_ipv4(allowed_ip_text, allowed_ip)) {
+        return false;
+    }
+    if (!hal_wireguard_parse_ipv4(allowed_mask_text, allowed_mask)) {
+        return false;
+    }
+
+    return hal_wireguard_begin_advanced(local_ip,
+                                        private_key,
+                                        remote_peer_address,
+                                        remote_peer_public_key,
+                                        remote_peer_port,
+                                        allowed_ip,
+                                        allowed_mask);
 }
 
 void hal_wireguard_end(void) {
@@ -182,6 +273,19 @@ bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTE
     s_wireguard.last_probe_port = probe_port;
     s_wireguard.last_probe_min_interval_ms = min_interval_ms;
     return s_wireguard.kick_result;
+}
+
+bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
+                                       uint16_t probe_port,
+                                       uint32_t min_interval_ms) {
+    uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
+    if (!hal_wireguard_parse_ipv4(probe_ip_text, probe_ip)) {
+        return false;
+    }
+
+    return hal_wireguard_kick_handshake(probe_ip,
+                                        probe_port,
+                                        min_interval_ms);
 }
 
 void hal_mock_wireguard_set_begin_result(bool result) {

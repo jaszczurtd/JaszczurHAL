@@ -52,7 +52,7 @@ Utility-only includes are also available:
 - Mock backend for deterministic host/unit tests
 - Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
 - Crypto helpers (`hal_crypto`: Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305) - **opt-in via `HAL_ENABLE_CRYPTO`**
-- Thread-safe WireGuard wrapper (`hal_wireguard`) - **opt-in via `HAL_ENABLE_WIREGUARD`** (requires WiFi support)
+- Thread-safe WireGuard wrapper (`hal_wireguard`) with IPv4 text helpers (`hal_wireguard_parse_ipv4(...)`, `hal_wireguard_begin_text(...)`, `hal_wireguard_begin_advanced_text(...)`, `hal_wireguard_kick_handshake_text(...)`) - **opt-in via `HAL_ENABLE_WIREGUARD`** (requires WiFi support)
 - Thread-safe MQTT client wrapper (`hal_mqtt`) - **opt-in via `HAL_ENABLE_MQTT`** (requires WiFi support)
 - Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied bye / auth / reboot vocabulary)
 - SerialConfigurator authentication helper (`hal_sc_auth`: per-device key derivation + challenge/response over the framed session) - pulled in by the same `HAL_ENABLE_CRYPTO` flag

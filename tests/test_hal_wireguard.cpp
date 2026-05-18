@@ -11,6 +11,94 @@ void setUp(void) {
 
 void tearDown(void) {}
 
+void test_parse_ipv4_helper_validation(void) {
+    uint8_t parsed[4] = {0u, 0u, 0u, 0u};
+    const uint8_t expected[4] = {192u, 168u, 10u, 25u};
+
+    TEST_ASSERT_TRUE(hal_wireguard_parse_ipv4("192.168.10.25", parsed));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, parsed, 4);
+
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4(NULL, parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("", parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("10.8.0", parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("10.8.0.300", parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("10.8.0.1x", parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("10..0.1", parsed));
+    TEST_ASSERT_FALSE(hal_wireguard_parse_ipv4("10.8.0.1", NULL));
+}
+
+void test_text_helpers_begin_begin_advanced_and_kick_success_path(void) {
+    const uint8_t expected_local_ip[4] = {10u, 8u, 0u, 60u};
+    const uint8_t expected_allowed_ip[4] = {192u, 168u, 20u, 0u};
+    const uint8_t expected_allowed_mask[4] = {255u, 255u, 255u, 0u};
+    const uint8_t expected_probe_ip[4] = {198u, 51u, 100u, 9u};
+
+    TEST_ASSERT_TRUE(hal_wireguard_begin_text("10.8.0.60",
+                                              "priv-txt",
+                                              "wg.example.com",
+                                              "pub-txt",
+                                              51820u));
+    TEST_ASSERT_TRUE(hal_wireguard_is_initialized());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_local_ip,
+                                  hal_mock_wireguard_get_last_local_ip(),
+                                  4);
+
+    TEST_ASSERT_TRUE(hal_wireguard_begin_advanced_text("10.8.0.60",
+                                                       "priv-txt-adv",
+                                                       "wg.example.com",
+                                                       "pub-txt-adv",
+                                                       51820u,
+                                                       "192.168.20.0",
+                                                       "255.255.255.0"));
+    TEST_ASSERT_TRUE(hal_mock_wireguard_was_begin_advanced());
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_local_ip,
+                                  hal_mock_wireguard_get_last_local_ip(),
+                                  4);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_allowed_ip,
+                                  hal_mock_wireguard_get_last_allowed_ip(),
+                                  4);
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_allowed_mask,
+                                  hal_mock_wireguard_get_last_allowed_mask(),
+                                  4);
+
+    TEST_ASSERT_TRUE(hal_wireguard_kick_handshake_text("198.51.100.9", 33434u, 444u));
+    TEST_ASSERT_EQUAL_UINT8_ARRAY(expected_probe_ip,
+                                  hal_mock_wireguard_get_last_probe_ip(),
+                                  4);
+    TEST_ASSERT_EQUAL_UINT16(33434u, hal_mock_wireguard_get_last_probe_port());
+    TEST_ASSERT_EQUAL_UINT32(444u, hal_mock_wireguard_get_last_probe_min_interval_ms());
+}
+
+void test_text_helpers_reject_invalid_ipv4_and_preserve_state_on_failure(void) {
+    const uint8_t local_ip[4] = {10u, 8u, 0u, 77u};
+
+    TEST_ASSERT_TRUE(hal_wireguard_begin(local_ip,
+                                         "priv-pre",
+                                         "wg.example.com",
+                                         "pub-pre",
+                                         51820u));
+
+    hal_mock_wireguard_set_kick_result(true);
+
+    TEST_ASSERT_FALSE(hal_wireguard_begin_text("10.8.0.999",
+                                               "priv",
+                                               "wg.example.com",
+                                               "pub",
+                                               51820u));
+    TEST_ASSERT_FALSE(hal_wireguard_begin_advanced_text("10.8.0.77",
+                                                        "priv",
+                                                        "wg.example.com",
+                                                        "pub",
+                                                        51820u,
+                                                        "192.168.20.0",
+                                                        "255.255.bad.0"));
+
+    TEST_ASSERT_FALSE(hal_wireguard_kick_handshake_text("300.1.1.1", 33434u, 100u));
+
+    TEST_ASSERT_TRUE(hal_wireguard_is_initialized());
+    TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+}
+
 void test_begin_and_end_full_tunnel_flow(void) {
     const uint8_t local_ip[4] = {10u, 8u, 0u, 50u};
 
@@ -197,6 +285,9 @@ void test_kick_handshake_requires_initialization_and_returns_driver_result(void)
 
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_parse_ipv4_helper_validation);
+    RUN_TEST(test_text_helpers_begin_begin_advanced_and_kick_success_path);
+    RUN_TEST(test_text_helpers_reject_invalid_ipv4_and_preserve_state_on_failure);
     RUN_TEST(test_begin_and_end_full_tunnel_flow);
     RUN_TEST(test_begin_advanced_peer_up_and_kick);
     RUN_TEST(test_invalid_inputs_are_rejected);

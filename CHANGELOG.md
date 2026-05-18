@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+## [Unreleased] - 2026-05-18 (WireGuard IPv4 helper APIs)
+
+### Added
+- New `hal_wireguard_parse_ipv4(...)` helper in `hal_wireguard` public API,
+  for strict dotted-IPv4 to octet-array conversion.
+- New IPv4-text convenience wrappers in `hal_wireguard` public API:
+  `hal_wireguard_begin_text(...)`,
+  `hal_wireguard_begin_advanced_text(...)`,
+  `hal_wireguard_kick_handshake_text(...)`.
+- Validation coverage for the new parser in `test_hal_wireguard`.
+- Validation coverage for WireGuard text wrappers in `test_hal_wireguard`
+  (success + invalid IPv4 paths).
+
+### Changed
+- Documentation updated (`README.md`, `JaszczurHAL_API.md`) with the new
+  WireGuard helper APIs.
+
 ## [Unreleased] - 2026-05-18 (WireGuard module bootstrap)
 
 ### Added
