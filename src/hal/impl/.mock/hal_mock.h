@@ -327,6 +327,19 @@ void hal_mock_thermocouple_set_adc_raw(hal_thermocouple_t h, int32_t raw);
 void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
 #endif
 
+// ── DS18B20 ───────────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_DS18B20
+#include "../../hal_ds18b20.h"
+/** @brief Inject value consumed by the next successful conversion completion. */
+void hal_mock_ds18b20_set_next_temp(hal_ds18b20_t h, float temp_c);
+/** @brief Control presence result used by init/request checks. */
+void hal_mock_ds18b20_set_presence(hal_ds18b20_t h, bool present);
+/** @brief Control CRC result of the scratchpad read at conversion completion. */
+void hal_mock_ds18b20_set_crc_ok(hal_ds18b20_t h, bool ok);
+/** @brief Return number of successful hal_ds18b20_request() starts. */
+uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
+#endif
+
 // ── GPS ───────────────────────────────────────────────────────────────────
 
 /** @brief Inject latitude and longitude into the mock GPS. */

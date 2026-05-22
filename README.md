@@ -46,24 +46,28 @@ Utility-only includes are also available:
 
 ## What you get (high-level)
 
-- Portable HAL modules (`hal_gpio_*`, `hal_i2c_*`, `hal_can_*`, `hal_display_*`, ...)
-- Optional integrations controlled by `HAL_DISABLE_*` flags
-- Bundled third-party drivers (for example display/CAN/GPS stacks), compiled only when related HAL modules are enabled
-- Mock backend for deterministic host/unit tests
-- Utility modules (`tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`)
-- Crypto helpers (`hal_crypto`: Base64, MD5, SHA-256 / HMAC-SHA256, ChaCha20, ChaCha20-Poly1305) - **opt-in via `HAL_ENABLE_CRYPTO`**
-- Thread-safe WireGuard wrapper (`hal_wireguard`) with IPv4 text helpers (`hal_wireguard_parse_ipv4(...)`, `hal_wireguard_begin_text(...)`, `hal_wireguard_begin_advanced_text(...)`, `hal_wireguard_kick_handshake_text(...)`) - **opt-in via `HAL_ENABLE_WIREGUARD`** (requires WiFi support)
-- Thread-safe MQTT client wrapper (`hal_mqtt`) - **opt-in via `HAL_ENABLE_MQTT`** (requires WiFi support)
-- Thread-safe UDP datagram wrapper (`hal_udp`) - **opt-in via `HAL_ENABLE_UDP`** (requires WiFi support)
-- Thread-safe LittleFS wrapper (`hal_littlefs`) for mount/format/existence helpers - **opt-in via `HAL_ENABLE_LITTLEFS`**
-- Thread-safe ArduinoOTA wrapper (`hal_ota`) with callback dispatch from `hal_ota_handle()` - **opt-in via `HAL_ENABLE_OTA`** (requires WiFi support)
-- Framed serial session helper (`hal_serial_session`: `$SC,<seq>,<inner>*<crc8>\n` line codec, HELLO handshake with module identity / firmware metadata / device UID, project-supplied bye / auth / reboot vocabulary)
-- Authentication helper (`hal_sc_auth`: per-device key derivation + challenge/response over the framed serial session) - pulled in by the same `HAL_ENABLE_CRYPTO` flag
-- C soft-timer wrapper API with table-based setup/tick helpers (`hal_soft_timer_*`)
-- Optional bundled JSON utilities (`HAL_ENABLE_CJSON`)
-...and many more
+- Hardware abstraction layer for common embedded peripherals and system services
+- Consistent, portable APIs that keep hardware details separate from application logic
+- Optional modules controlled by compile-time flags (`HAL_DISABLE_*`, `HAL_ENABLE_*`)
+- Built-in mock backend for deterministic host/unit testing
+- Utility toolkit for common embedded patterns (timers, PID, watchdog, helpers)
+- Optional connectivity/security/storage stack for connected firmware projects
 
-Full module-by-module API and behavior are documented in `JaszczurHAL_API.md`.
+## Supported modules and drivers (overview)
+
+- Core HAL domains: GPIO, ADC, PWM, timers, system, synchronization, serial I/O
+- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, GPS, external ADC, EEPROM and key-value storage
+- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers
+- Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
+
+## Thread safety (overview)
+
+- On Arduino backend, runtime HAL calls are generally multicore-safe and internally synchronized
+- As a project rule, initialization and teardown (`init/create/destroy/deinit`) should be done from one core
+- Mock backend targets deterministic single-threaded tests rather than true concurrent synchronization
+- Exact guarantees are documented per module in `JaszczurHAL_API.md`
+
+For detailed signatures, module contracts, backend notes, and test coverage, see `JaszczurHAL_API.md`.
 
 ## Library structure
 

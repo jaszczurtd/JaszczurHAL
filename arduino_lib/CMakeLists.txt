@@ -101,6 +101,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
+    ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/hal/hal_pid_controller.cpp
 )

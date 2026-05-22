@@ -21,6 +21,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
+    ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/utils/SmartTimers.cpp
     ${SRC}/utils/pidController.cpp

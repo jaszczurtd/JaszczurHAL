@@ -80,6 +80,9 @@
 #ifndef HAL_DISABLE_THERMOCOUPLE
 #include "hal_thermocouple.h"
 #endif
+#ifndef HAL_DISABLE_DS18B20
+#include "hal_ds18b20.h"
+#endif
 #ifndef HAL_DISABLE_GPS
 #include "hal_gps.h"
 #endif

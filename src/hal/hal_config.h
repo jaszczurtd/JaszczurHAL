@@ -78,6 +78,7 @@
      HAL_DISABLE_KV             - Key-value store (depends on EEPROM)
      HAL_DISABLE_GPS            - GPS / NMEA receiver (depends on SWSERIAL)
      HAL_DISABLE_THERMOCOUPLE   - all thermocouple backends (MCP9600 + MAX6675)
+     HAL_DISABLE_DS18B20        - DS18B20 digital temperature sensor (1-Wire)
      HAL_DISABLE_MCP9600        - Adafruit MCP9600/MCP9601 backend only;
                                   MAX6675 remains available
      HAL_DISABLE_MAX6675        - MAX6675 backend only; MCP9600 remains available
@@ -315,6 +316,15 @@
  */
 #ifndef HAL_THERMOCOUPLE_MAX_INSTANCES
 #define HAL_THERMOCOUPLE_MAX_INSTANCES 4
+#endif
+
+/**
+ * @def HAL_DS18B20_MAX_INSTANCES
+ * Maximum number of simultaneous DS18B20 handles.
+ * Each slot stores one state machine plus a small cache.
+ */
+#ifndef HAL_DS18B20_MAX_INSTANCES
+#define HAL_DS18B20_MAX_INSTANCES 4
 #endif
 
 /**

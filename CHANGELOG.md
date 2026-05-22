@@ -2,6 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-05-22 (DS18B20 non-blocking module bootstrap)
+
+### Added
+- New `hal_ds18b20` public API with non-blocking flow:
+  `hal_ds18b20_request()`, `hal_ds18b20_poll()`,
+  `hal_ds18b20_take_latest()`.
+- Arduino backend implementation of `hal_ds18b20` with software 1-Wire
+  timing (reset/presence, read/write slots, scratchpad CRC check).
+- Mock backend implementation + helper observability APIs in `hal_mock`
+  for presence/CRC control and injected temperatures.
+- New host unit test suite `test_hal_ds18b20`.
+
+### Changed
+- `hal/hal.h` now exposes `hal_ds18b20.h` when `HAL_DISABLE_DS18B20`
+  is not defined.
+- `hal_config.h` and `src/HAL_FLAGS.txt` now document
+  `HAL_DISABLE_DS18B20` and `HAL_DS18B20_MAX_INSTANCES`.
+- Host-test build registers `test_hal_ds18b20` in `tests/CMakeLists.txt`.
+- STM32 bootstrap profile now disables DS18B20 by default
+  (`HAL_DISABLE_DS18B20`) in `stm32_lib/CMakeLists.txt`.
+- `hal_timer` now exposes an alarm-pool API (`hal_timer_pool_*`) so RP2040
+  projects can create dedicated pools on additional hardware alarms and scale
+  logical timer count beyond the default pool.
+- RP2040 timer backend now treats `add_alarm_in_us()` return values `<= 0`
+  as invalid IDs (fix for missed failure path when the SDK returns `0`).
+- RP2040 DS18B20 backend now uses PIO for 1-Wire slot timing (reset, read/write
+  slots), replacing the previous `delayMicroseconds()`-based bit timing path.
+- DS18B20 conversion wait now uses managed `hal_timer_t`
+  (`hal_timer_create/start/stop/get_state` + `set_period_us`) with
+  `hal_micros64()` deadline fallback, reducing polling overhead and removing
+  direct alarm-ID race surfaces.
+- Documentation synchronized with current APIs:
+  `README.md`, `JaszczurHAL_API.md`, and `src/HAL_FLAGS.txt` now reflect
+  extended `hal_timer` semantics and the DS18B20 module/test surface.
+
 ## [1.5.1] - 2026-05-18
 
 Minor update.
