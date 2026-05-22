@@ -299,6 +299,8 @@ examples, and host-test coverage.
 - [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_Zero_DMA_Library](https://github.com/adafruit/Adafruit_ZeroDMA) - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
 - [MAX6675](https://github.com/adafruit/MAX6675-library) - Limor Fried for Adafruit Industries
+- [OneWire](https://github.com/PaulStoffregen/OneWire) - Jim Studt (original), maintained by Paul Stoffregen
+- [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library) - Miles Burton
 - [MCP2515](https://github.com/coryjfowler/MCP_CAN_lib) - Loovee / Seeed Technology, with contributions by Cory J. Fowler
 - [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) - Mikal Hart
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)

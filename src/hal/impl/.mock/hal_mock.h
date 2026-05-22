@@ -99,6 +99,33 @@ uint8_t hal_mock_spi_get_sck_pin(void);
 int     hal_mock_spi_get_lock_depth(uint8_t bus);
 void    hal_mock_spi_reset(void);
 
+// ── OneWire ───────────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_ONEWIRE
+#include "../../hal_onewire.h"
+/** @brief Force presence response returned by hal_onewire_reset(). */
+void     hal_mock_onewire_set_presence(hal_onewire_t h, bool present);
+/** @brief Inject byte stream consumed by hal_onewire_read/read_bytes/read_bit. */
+void     hal_mock_onewire_inject_read(hal_onewire_t h, const uint8_t *data, int len);
+/** @brief Clear queued ROMs used by hal_onewire_search(). */
+void     hal_mock_onewire_reset_search_roms(hal_onewire_t h);
+/** @brief Append ROM to the search queue. Returns false when queue is full. */
+bool     hal_mock_onewire_push_search_rom(hal_onewire_t h, const uint8_t rom[8]);
+/** @brief Return the latest byte written via hal_onewire_write/write_bytes. */
+uint8_t  hal_mock_onewire_get_last_write(hal_onewire_t h);
+/** @brief Return the latest bit written via hal_onewire_write_bit(). */
+uint8_t  hal_mock_onewire_get_last_write_bit(hal_onewire_t h);
+/** @brief Return true and copy ROM selected by hal_onewire_select(). */
+bool     hal_mock_onewire_get_last_selected_rom(hal_onewire_t h, uint8_t out_rom[8]);
+/** @brief Return number of hal_onewire_reset() calls. */
+uint32_t hal_mock_onewire_get_reset_count(hal_onewire_t h);
+/** @brief Return number of hal_onewire_skip() calls. */
+uint32_t hal_mock_onewire_get_skip_count(hal_onewire_t h);
+/** @brief Return number of hal_onewire_depower() calls. */
+uint32_t hal_mock_onewire_get_depower_count(hal_onewire_t h);
+/** @brief Return maximal lock depth observed for this handle. */
+int      hal_mock_onewire_get_max_lock_depth(hal_onewire_t h);
+#endif
+
 // ── RGB LED ───────────────────────────────────────────────────────────────────
 #include "../../hal_rgb_led.h"
 bool                hal_mock_rgb_led_is_initialized(void);

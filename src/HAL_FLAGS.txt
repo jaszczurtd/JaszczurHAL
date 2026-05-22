@@ -32,6 +32,9 @@ HAL_DISABLE_THERMOCOUPLE
 HAL_DISABLE_DS18B20
   Exclude DS18B20 digital temperature sensor module.
 
+HAL_DISABLE_ONEWIRE
+  Exclude generic OneWire bus API module.
+
 HAL_DISABLE_MCP9600
   Exclude MCP9600 thermocouple backend.
 
@@ -131,6 +134,10 @@ Selected compile-time sizing knobs
 HAL_DS18B20_MAX_INSTANCES
   Maximum simultaneous DS18B20 handles (default: 4).
   Each handle stores sensor state/cache and backend resources.
+
+HAL_ONEWIRE_MAX_INSTANCES
+  Maximum simultaneous generic OneWire handles (default: 4).
+  Each handle binds one 1-Wire data pin and per-instance synchronization.
 
 MOCK_MAX_ALARMS
   Mock backend limit for simultaneous pending `hal_timer` alarms

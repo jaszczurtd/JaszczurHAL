@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, thermocouple/DS18B20 sensors, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -74,7 +74,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`, `hal_serial`
 - `hal_crypto`
 - `hal_pid_controller`
-- `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
+- `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_external_adc`, `hal_gps`
 - `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
@@ -120,7 +120,8 @@ To exclude modules your project does not use, define one or more
 | `HAL_DISABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(depends on EEPROM)* |
 | `HAL_DISABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ |
 | `HAL_DISABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600/MAX6675 drivers |
-| `HAL_DISABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | RP2040/RP2350 backend: pico SDK PIO + GPIO; mock backend: host state machine |
+| `HAL_DISABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` stack |
+| `HAL_DISABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
 | `HAL_DISABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 driver |
 | `HAL_DISABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 driver |
 | `HAL_DISABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
@@ -319,8 +320,10 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | `Adafruit_SSD1306` | OLED backend (`HAL_DISABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
 | `Adafruit_ST7735_and_ST7789_Library` | ST7735/ST7789/ST7796S backends | Limor Fried (Ladyada) | MIT | `src/hal/impl/arduino/drivers/Adafruit_ST7735_and_ST7789_Library/README.txt` |
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
+| `DallasTemperature` | DS18B20 backend (`hal_ds18b20`) | Miles Burton | MIT | `src/hal/impl/arduino/drivers/DallasTemperature/LICENSE` |
 | `MAX6675` | thermocouple MAX6675 backend | Adafruit (Limor Fried) | BSD (license file in driver folder) | `src/hal/impl/arduino/drivers/MAX6675/license.txt` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
+| `OneWire` | generic OneWire API (`hal_onewire`) and DS18B20 backend transport | Jim Studt (original), Paul Stoffregen (maintainer) | MIT | `src/hal/impl/arduino/drivers/OneWire/LICENSE` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
 | `TinyGPSPlus` | `hal_gps` parser backend | Mikal Hart | LGPL-2.1+ notice in source headers | `src/hal/impl/arduino/frameworks/TinyGPSPlus/src/TinyGPS++.h` |

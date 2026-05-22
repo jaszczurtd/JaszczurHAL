@@ -38,6 +38,9 @@
 #include "hal_swserial.h"
 #endif
 #include "hal_spi.h"
+#ifndef HAL_DISABLE_ONEWIRE
+#include "hal_onewire.h"
+#endif
 #ifndef HAL_DISABLE_I2C
 #include "hal_i2c.h"
 #endif
