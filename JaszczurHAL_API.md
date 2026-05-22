@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, CAN, display, thermocouple/DS18B20 sensors, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -76,7 +76,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`
 - `hal_can`, `hal_display`, `hal_rgb_led`
-- `hal_thermocouple`, `hal_external_adc`, `hal_gps`
+- `hal_thermocouple`, `hal_ds18b20`, `hal_external_adc`, `hal_gps`
 - `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
@@ -120,6 +120,7 @@ To exclude modules your project does not use, define one or more
 | `HAL_DISABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(depends on EEPROM)* |
 | `HAL_DISABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ |
 | `HAL_DISABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600/MAX6675 drivers |
+| `HAL_DISABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | RP2040/RP2350 backend: pico SDK PIO + GPIO; mock backend: host state machine |
 | `HAL_DISABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 driver |
 | `HAL_DISABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 driver |
 | `HAL_DISABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
@@ -226,14 +227,15 @@ arduino-cli compile \
 | `hal_gpio` | GPIO read / write / interrupts |
 | `hal_adc` | On-chip ADC |
 | `hal_pwm` | Basic analogWrite PWM |
-| `hal_timer` | One-shot alarm timers |
+| `hal_timer` | Low-level one-shot alarms plus managed timers (periodic/one-shot create/start/stop/pause/resume/query) |
 | `hal_system` | millis / delay / watchdog / idle + type-independent `hal_constrain` / `hal_map` + `COUNTOF(arr)` |
 | `hal_bits` | bit helpers (`is_set`, `set_bit`, `bitSet`, volatile register ops) |
 | `hal_sync` | Mutexes, critical sections |
 | `hal_serial` | Debug serial output |
 | `hal_spi` | SPI bus init |
-| `hal_crypto` | Base64, MD5, ChaCha20, ChaCha20-Poly1305 helpers |
 | `hal_math` | type-independent `hal_constrain` / `hal_map` macros |
+
+`hal_crypto` is opt-in via `HAL_ENABLE_CRYPTO` (it is not part of the always-on core set).
 
 ### SD library (`<SD.h>`)
 
@@ -401,6 +403,7 @@ Typical flows covered there:
 - I2C plus EEPROM
 - WiFi plus NTP/system time
 - WiFi plus UDP datagrams
+- DS18B20 request/poll/read non-blocking workflow
 - display initialisation
 
 This file keeps the lower-level API reference and migration mapping.
@@ -414,11 +417,11 @@ backend together with selected utility modules.
 
 Covered test targets include:
 
-- `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`, `test_hal_timer`
+- `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`, `test_hal_timer`, `test_hal_ds18b20`
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
-- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`
+- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
@@ -605,14 +608,62 @@ int  hal_adc_read(uint8_t pin);
 typedef int32_t hal_alarm_id_t;
 #define HAL_ALARM_INVALID (-1)
 typedef int64_t (*hal_alarm_callback_t)(hal_alarm_id_t id, void *user_data);
+typedef enum { ... } hal_timer_result_t;
+typedef enum { HAL_TIMER_STATE_STOPPED, HAL_TIMER_STATE_RUNNING, HAL_TIMER_STATE_PAUSED } hal_timer_state_t;
 
-hal_alarm_id_t hal_timer_add_alarm_us(uint32_t delay_us, hal_alarm_callback_t callback,
-                                      void *user_data, bool fire_if_past);
+// Layer 1: low-level alarms (one-shot + cancel)
+hal_alarm_id_t hal_timer_add_alarm_us(uint32_t delay_us,
+                                      hal_alarm_callback_t callback,
+                                      void *user_data,
+                                      bool fire_if_past);
+hal_alarm_id_t hal_timer_add_alarm_us_ex(uint32_t delay_us,
+                                         hal_alarm_callback_t callback,
+                                         void *user_data,
+                                         bool fire_if_past,
+                                         hal_timer_result_t *out_result);
 bool hal_timer_cancel_alarm(hal_alarm_id_t alarm_id);
+
+// Layer 1 advanced: alarm pools (scale logical alarms beyond default pool)
+typedef struct hal_timer_pool_impl_s *hal_timer_pool_t;
+#define HAL_TIMER_POOL_DEFAULT ((hal_timer_pool_t)0)
+hal_timer_pool_t hal_timer_pool_create(uint8_t hardware_alarm_num, uint16_t max_timers);
+hal_timer_pool_t hal_timer_pool_create_auto(uint16_t max_timers);
+void hal_timer_pool_destroy(hal_timer_pool_t pool);
+hal_alarm_id_t hal_timer_pool_add_alarm_us(hal_timer_pool_t pool,
+                                           uint32_t delay_us,
+                                           hal_alarm_callback_t callback,
+                                           void *user_data,
+                                           bool fire_if_past);
+hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(hal_timer_pool_t pool,
+                                              uint32_t delay_us,
+                                              hal_alarm_callback_t callback,
+                                              void *user_data,
+                                              bool fire_if_past,
+                                              hal_timer_result_t *out_result);
+bool hal_timer_pool_cancel_alarm(hal_timer_pool_t pool, hal_alarm_id_t alarm_id);
+
+// Layer 2: managed timers (one-shot or periodic)
+typedef struct hal_timer_impl_s *hal_timer_t;
+typedef void (*hal_timer_callback_t)(hal_timer_t timer, void *user_data);
+hal_timer_result_t hal_timer_create(hal_timer_pool_t pool, uint32_t period_us,
+                                    bool periodic, hal_timer_callback_t callback,
+                                    void *user_data, hal_timer_t *out_timer);
+hal_timer_result_t hal_timer_destroy(hal_timer_t timer);
+hal_timer_result_t hal_timer_start(hal_timer_t timer);
+hal_timer_result_t hal_timer_stop(hal_timer_t timer);
+hal_timer_result_t hal_timer_pause(hal_timer_t timer);
+hal_timer_result_t hal_timer_resume(hal_timer_t timer);
+hal_timer_result_t hal_timer_set_period_us(hal_timer_t timer, uint32_t period_us,
+                                           bool restart_if_running);
+hal_timer_result_t hal_timer_get_period_us(hal_timer_t timer, uint32_t *out_period_us);
+hal_timer_state_t  hal_timer_get_state(hal_timer_t timer);
+hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_remaining_us);
 ```
 
-**impl/arduino:** pico SDK `add_alarm_in_us` / `cancel_alarm`.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for scheduling/canceling alarms. Alarm callbacks execute in interrupt context - avoid blocking calls and long critical sections inside callbacks. Mock backend is deterministic but not synchronized for concurrent test-thread access.
+**Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
+**Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
+**impl/arduino:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0` are treated as invalid and mapped to explicit result codes in `_ex`.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for scheduling/canceling and managed-timer state transitions. Alarm callbacks execute in interrupt context; keep callbacks short and non-blocking. Mock backend is deterministic for tests but not synchronized for concurrent host threads.
 
 ---
 
@@ -2028,6 +2079,59 @@ uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status regist
 
 ---
 
+## `hal_ds18b20` - DS18B20 digital temperature sensor  *(optional - `HAL_DISABLE_DS18B20`)*
+
+Non-blocking sensor workflow:
+
+1. `hal_ds18b20_request()` starts conversion.
+2. `hal_ds18b20_poll()` advances the state machine.
+3. `hal_ds18b20_take_latest()` reads cached sample (`fresh=true` only once per new sample).
+
+```c
+#include <hal/hal_ds18b20.h>
+
+#ifndef HAL_DS18B20_MAX_INSTANCES
+#define HAL_DS18B20_MAX_INSTANCES 4
+#endif
+
+typedef struct hal_ds18b20_impl_s *hal_ds18b20_t;
+
+typedef enum {
+    HAL_DS18B20_RES_9_BIT  = 9,
+    HAL_DS18B20_RES_10_BIT = 10,
+    HAL_DS18B20_RES_11_BIT = 11,
+    HAL_DS18B20_RES_12_BIT = 12,
+} hal_ds18b20_resolution_t;
+
+typedef struct {
+    uint8_t data_pin;
+    bool    use_rom;      // false: Skip ROM (single-device bus), true: Match ROM
+    uint8_t rom_code[8];  // valid when use_rom=true
+    hal_ds18b20_resolution_t resolution_hint;
+} hal_ds18b20_config_t;
+
+hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg);
+void          hal_ds18b20_deinit(hal_ds18b20_t h);
+bool          hal_ds18b20_request(hal_ds18b20_t h);
+void          hal_ds18b20_poll(hal_ds18b20_t h);
+bool          hal_ds18b20_is_busy(hal_ds18b20_t h);
+bool          hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
+```
+
+**impl/arduino:** 1-Wire timing is performed in backend code (RP2040/RP2350 path uses PIO helpers), scratchpad CRC is verified, and conversion wait is coordinated through managed `hal_timer_t` (`start/stop/get_state`) with `hal_micros64()` deadline fallback.
+**impl/.mock:** deterministic conversion state machine driven by mock time (`hal_mock_set_micros` / `hal_mock_advance_micros`), with injected presence/CRC/temperature.
+**Thread safety:** Arduino backend: per-handle mutex protects runtime API calls; create/destroy should still follow the project-wide single-core init/deinit policy. Mock backend is intended for single-threaded tests.
+
+**Mock helpers:**
+```c
+void     hal_mock_ds18b20_set_next_temp(hal_ds18b20_t h, float temp_c);
+void     hal_mock_ds18b20_set_presence(hal_ds18b20_t h, bool present);
+void     hal_mock_ds18b20_set_crc_ok(hal_ds18b20_t h, bool ok);
+uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
+```
+
+---
+
 ## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_DISABLE_EXTERNAL_ADC`)*
 
 ```c
@@ -3083,7 +3187,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 |---|---|
 | `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`) |
 | `hal_sync` | pico SDK `pico/mutex.h` |
-| `hal_timer` | pico SDK `pico/time.h`, `hardware/timer.h` |
+| `hal_timer` | pico SDK alarm/time APIs (`pico/time.h`) |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | bundled MCP2515 driver (`drivers/MCP2515/mcp_can`) |
@@ -3095,6 +3199,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_rgb_led` | `Adafruit_NeoPixel` |
 | `hal_thermocouple` (MCP9600) | bundled MCP9600 driver (`drivers/Adafruit_MCP9600`) |
 | `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |
+| `hal_ds18b20` | Arduino core GPIO APIs; RP2040/RP2350 backend also uses pico SDK PIO/clock APIs (`hardware/pio.h`, `hardware/clocks.h`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
 | `hal_littlefs` | Arduino-pico `LittleFS` |
@@ -3129,8 +3234,6 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-All 35 test suites complete in < 1 s on a standard desktop machine.
-
 ### How it works
 
 The CMake build at the project root compiles a static library `hal_mock` from:
@@ -3157,7 +3260,8 @@ headers, no pico SDK, no hardware.
 | `test_hal_gpio` | pin modes, read/write, level injection |
 | `test_hal_adc` | resolution config, inject + read |
 | `test_hal_pwm` | resolution config, write |
-| `test_hal_timer` | alarm add/cancel, `advance_us` dispatch |
+| `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
+| `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
@@ -3181,6 +3285,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
+| `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior and input validation |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |

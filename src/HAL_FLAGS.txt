@@ -29,6 +29,9 @@ HAL_DISABLE_GPS
 HAL_DISABLE_THERMOCOUPLE
   Exclude full thermocouple module.
 
+HAL_DISABLE_DS18B20
+  Exclude DS18B20 digital temperature sensor module.
+
 HAL_DISABLE_MCP9600
   Exclude MCP9600 thermocouple backend.
 
@@ -122,6 +125,16 @@ HAL_ENABLE_CRYPTO
   `hal_serial_session` still works without crypto: the
   `SC_AUTH_BEGIN` / `SC_AUTH_PROVE` handlers are compiled out and
   `hal_serial_session_is_authenticated()` returns false unconditionally.
+
+Selected compile-time sizing knobs
+----------------------------------
+HAL_DS18B20_MAX_INSTANCES
+  Maximum simultaneous DS18B20 handles (default: 4).
+  Each handle stores sensor state/cache and backend resources.
+
+MOCK_MAX_ALARMS
+  Mock backend limit for simultaneous pending `hal_timer` alarms
+  (default: 16, used by host tests).
 
 Automatic propagation rules
 ---------------------------

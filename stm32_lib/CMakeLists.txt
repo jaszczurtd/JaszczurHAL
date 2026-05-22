@@ -17,6 +17,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
+    ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/hal/hal_pid_controller.cpp
 )
@@ -50,6 +51,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_DISABLE_EEPROM
     HAL_DISABLE_GPS
     HAL_DISABLE_THERMOCOUPLE
+    HAL_DISABLE_DS18B20
     HAL_DISABLE_SWSERIAL
     HAL_DISABLE_I2C_SLAVE
     HAL_DISABLE_EXTERNAL_ADC
