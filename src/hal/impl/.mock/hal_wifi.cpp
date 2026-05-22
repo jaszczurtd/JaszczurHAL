@@ -130,6 +130,19 @@ int hal_wifi_ping(const char *host_or_ip) {
     return s_ping_result;
 }
 
+int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
+    if (!host_or_ip || host_or_ip[0] == '\0') {
+        hal_derr("hal_wifi_ping_ex: host_or_ip is NULL/empty");
+        return -1;
+    }
+
+    const uint32_t previous_timeout_ms = s_timeout_ms;
+    s_timeout_ms = timeout_ms;
+    const int res = s_ping_result;
+    s_timeout_ms = previous_timeout_ms;
+    return res;
+}
+
 void hal_mock_wifi_reset(void) {
     s_connected = false;
     s_status = 0;

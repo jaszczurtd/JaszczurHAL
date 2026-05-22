@@ -125,6 +125,30 @@ int32_t hal_eeprom_read_int(uint16_t addr) {
     return val;
 }
 
+void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len) {
+    if (!data || len == 0u) {
+        return;
+    }
+    eeprom_ensure_mutex();
+    hal_mutex_lock(s_eeprom_mutex);
+    for (uint16_t i = 0; i < len; i++) {
+        write_byte_nolock((uint16_t)(addr + i), data[i]);
+    }
+    hal_mutex_unlock(s_eeprom_mutex);
+}
+
+void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
+    if (!out || len == 0u) {
+        return;
+    }
+    eeprom_ensure_mutex();
+    hal_mutex_lock(s_eeprom_mutex);
+    for (uint16_t i = 0; i < len; i++) {
+        out[i] = read_byte_nolock((uint16_t)(addr + i));
+    }
+    hal_mutex_unlock(s_eeprom_mutex);
+}
+
 void hal_eeprom_commit(void) {
     if (s_type == HAL_EEPROM_RP2040) {
         hal_mutex_lock(s_eeprom_mutex);

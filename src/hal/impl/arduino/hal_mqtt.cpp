@@ -14,6 +14,7 @@
 #define HAL_MQTT_HOST_BUF_SIZE 128u
 #define HAL_MQTT_TOPIC_BUF_SIZE 128u
 #define HAL_MQTT_PAYLOAD_BUF_SIZE 512u
+#define HAL_MQTT_RX_QUEUE_DEPTH 8u
 
 static WiFiClient s_wifi_client;
 static PubSubClient s_client(s_wifi_client);
@@ -25,10 +26,23 @@ static char s_server_host[HAL_MQTT_HOST_BUF_SIZE] = {0};
 static hal_mqtt_message_callback_t s_user_callback = NULL;
 static void *s_user_callback_user = NULL;
 
-static bool s_pending_valid = false;
-static char s_pending_topic[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
-static uint8_t s_pending_payload[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
-static uint16_t s_pending_length = 0;
+// Bounded FIFO of inbound MQTT messages. PubSubClient may deliver several
+// publishes inside a single s_client.loop() call; the original single-slot
+// pending buffer overwrote earlier messages, which produced "module stopped
+// responding" symptoms during MQTT bursts. The queue is drained from
+// hal_mqtt_loop() one message at a time with the user callback invoked
+// outside the module mutex.
+typedef struct {
+    char     topic[HAL_MQTT_TOPIC_BUF_SIZE];
+    uint8_t  payload[HAL_MQTT_PAYLOAD_BUF_SIZE];
+    uint16_t length;
+} hal_mqtt_rx_slot_t;
+
+static hal_mqtt_rx_slot_t s_rx_queue[HAL_MQTT_RX_QUEUE_DEPTH];
+static uint8_t  s_rx_head = 0;          // next slot to read
+static uint8_t  s_rx_tail = 0;          // next slot to write
+static uint8_t  s_rx_count = 0;
+static uint32_t s_rx_overflow_count = 0;
 
 static inline void mqtt_ensure_mutex(void) {
     if (s_mqtt_mutex == NULL) {
@@ -52,9 +66,6 @@ static void mqtt_internal_callback(char *topic, uint8_t *payload, unsigned int l
     const char *safe_topic = topic ? topic : "";
     const size_t topic_len = strnlen(safe_topic, HAL_MQTT_TOPIC_BUF_SIZE - 1u);
 
-    memcpy(s_pending_topic, safe_topic, topic_len);
-    s_pending_topic[topic_len] = '\0';
-
     uint16_t copy_len = (uint16_t)length;
     if (copy_len > HAL_MQTT_PAYLOAD_BUF_SIZE) {
         hal_derr("mqtt_internal_callback: payload length %u exceeds buffer size, truncating",
@@ -62,11 +73,27 @@ static void mqtt_internal_callback(char *topic, uint8_t *payload, unsigned int l
         copy_len = HAL_MQTT_PAYLOAD_BUF_SIZE;
     }
 
-    if (payload && copy_len > 0u) {
-        memcpy(s_pending_payload, payload, copy_len);
+    if (s_rx_count >= HAL_MQTT_RX_QUEUE_DEPTH) {
+        // Queue full: drop newest (preserve earliest message ordering) and log.
+        s_rx_overflow_count++;
+        hal_derr("mqtt_internal_callback: RX queue full (depth=%u), dropping topic='%s' (overflow=%lu)",
+             (unsigned)HAL_MQTT_RX_QUEUE_DEPTH,
+             safe_topic,
+             (unsigned long)s_rx_overflow_count);
+        return;
     }
-    s_pending_length = copy_len;
-    s_pending_valid = true;
+
+    hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_tail];
+    memcpy(slot->topic, safe_topic, topic_len);
+    slot->topic[topic_len] = '\0';
+
+    if (payload && copy_len > 0u) {
+        memcpy(slot->payload, payload, copy_len);
+    }
+    slot->length = copy_len;
+
+    s_rx_tail = (uint8_t)((s_rx_tail + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
+    s_rx_count++;
 }
 
 static inline void mqtt_bind_callback(void) {
@@ -225,39 +252,44 @@ int hal_mqtt_state(void) {
 }
 
 bool hal_mqtt_loop(void) {
-    char topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
-    uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
-    uint16_t payload_len = 0;
-    bool has_message = false;
-
-    hal_mqtt_message_callback_t callback = NULL;
-    void *callback_user = NULL;
-
     mqtt_ensure_mutex();
     hal_mutex_lock(s_mqtt_mutex);
 
     mqtt_bind_callback();
     const bool ok = s_client.loop();
 
-    if (s_pending_valid) {
-        snprintf(topic_copy, sizeof(topic_copy), "%s", s_pending_topic);
-        payload_len = s_pending_length;
-        if (payload_len > 0u) {
-            memcpy(payload_copy, s_pending_payload, payload_len);
-        }
-
-        callback = s_user_callback;
-        callback_user = s_user_callback_user;
-
-        s_pending_valid = false;
-        s_pending_length = 0u;
-        has_message = true;
-    }
+    hal_mqtt_message_callback_t callback = s_user_callback;
+    void *callback_user = s_user_callback_user;
 
     hal_mutex_unlock(s_mqtt_mutex);
 
-    if (has_message && callback) {
-        callback(topic_copy, payload_copy, payload_len, callback_user);
+    // Drain the inbound queue one message at a time. The user callback is
+    // invoked OUTSIDE the module mutex so it may safely re-enter publish/
+    // subscribe operations.
+    while (true) {
+        char    topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
+        uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
+        uint16_t payload_len = 0;
+        bool has_message = false;
+
+        hal_mutex_lock(s_mqtt_mutex);
+        if (s_rx_count > 0u) {
+            hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_head];
+            snprintf(topic_copy, sizeof(topic_copy), "%s", slot->topic);
+            payload_len = slot->length;
+            if (payload_len > 0u) {
+                memcpy(payload_copy, slot->payload, payload_len);
+            }
+            s_rx_head = (uint8_t)((s_rx_head + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
+            s_rx_count--;
+            has_message = true;
+        }
+        hal_mutex_unlock(s_mqtt_mutex);
+
+        if (!has_message) break;
+        if (callback) {
+            callback(topic_copy, payload_copy, payload_len, callback_user);
+        }
     }
 
     return ok;

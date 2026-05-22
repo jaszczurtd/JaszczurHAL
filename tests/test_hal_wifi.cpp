@@ -67,6 +67,8 @@ void test_hostname_timeout_ping_and_disconnect(void) {
 
     hal_mock_wifi_set_ping_result(17);
     TEST_ASSERT_EQUAL_INT(17, hal_wifi_ping("8.8.8.8"));
+    TEST_ASSERT_EQUAL_INT(17, hal_wifi_ping_ex("8.8.4.4", 250));
+    TEST_ASSERT_EQUAL_UINT32(1234, hal_mock_wifi_get_timeout_ms());
 
     hal_mock_wifi_set_connected(true);
     hal_mock_wifi_set_local_ip("10.0.0.5");
@@ -79,6 +81,7 @@ void test_invalid_begin_and_ping_inputs(void) {
     TEST_ASSERT_FALSE(hal_wifi_begin_station(NULL, "pass", true));
     TEST_ASSERT_FALSE(hal_wifi_begin_station("ssid", NULL, true));
     TEST_ASSERT_EQUAL_INT(-1, hal_wifi_ping(NULL));
+    TEST_ASSERT_EQUAL_INT(-1, hal_wifi_ping_ex(NULL, 1000));
 }
 
 int main(void) {

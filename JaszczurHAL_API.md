@@ -2289,6 +2289,10 @@ uint8_t hal_eeprom_read_byte(uint16_t addr);
 void    hal_eeprom_write_int(uint16_t addr, int32_t val);
 int32_t hal_eeprom_read_int(uint16_t addr);
 
+// Batched byte access under one internal lock.
+void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
+void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
+
 // Flush buffered writes to non-volatile storage.
 // HAL_EEPROM_RP2040: calls EEPROM.commit().
 // HAL_EEPROM_AT24C256: no-op.
@@ -2304,9 +2308,10 @@ uint16_t hal_eeprom_size(void);
 **Integer byte order:** `hal_eeprom_write_int` / `hal_eeprom_read_int` use
 **little-endian** order (LSB at the lowest address).
 
-**Commit semantics:** For `HAL_EEPROM_RP2040`, `hal_eeprom_write_byte` and
-`hal_eeprom_write_int` only update the RAM buffer - call `hal_eeprom_commit()`
-once after a group of writes to persist them to flash.  For `HAL_EEPROM_AT24C256`
+**Commit semantics:** For `HAL_EEPROM_RP2040`, `hal_eeprom_write_byte`,
+`hal_eeprom_write_int`, and `hal_eeprom_write_bytes` only update the RAM buffer
+- call `hal_eeprom_commit()` once after a group of writes to persist them to
+flash.  For `HAL_EEPROM_AT24C256`
 each byte write is committed immediately to the chip; `hal_eeprom_commit()` is
 a no-op.
 
@@ -2381,7 +2386,8 @@ int     hal_wifi_get_strength(void);                // 0..5 bars
 bool    hal_wifi_get_local_ip(char *out, size_t out_size);
 bool    hal_wifi_get_dns_ip(char *out, size_t out_size);
 bool    hal_wifi_get_mac(char *out, size_t out_size);
-int     hal_wifi_ping(const char *host_or_ip);      // >=0 ok, <0 error
+int     hal_wifi_ping(const char *host_or_ip);      // >=0 ok, <0 error (uses timeout set by hal_wifi_set_timeout_ms)
+int     hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms); // >=0 ok, <0 error (per-call timeout)
 ```
 
 **impl/arduino:** Arduino-pico WiFi stack (`WiFi.h`).
@@ -2807,6 +2813,8 @@ bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *ou
 bool hal_kv_delete(uint16_t key);
 bool hal_kv_gc(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
+void hal_kv_set_auto_commit(bool enabled);
+bool hal_kv_commit(void);
 ```
 
 **Dependencies:** `hal_eeprom`, `hal_sync`, `hal_serial`.
@@ -2814,6 +2822,10 @@ bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 
 **Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
 value is unchanged, avoiding unnecessary flash wear.
+
+**Commit policy:** auto-commit is enabled by default (historical behavior).
+Use `hal_kv_set_auto_commit(false)` to defer physical EEPROM/flash commit and
+coalesce multiple writes, then flush once with `hal_kv_commit()`.
 
 ---
 

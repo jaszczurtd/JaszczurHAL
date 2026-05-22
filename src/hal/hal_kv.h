@@ -57,6 +57,33 @@ bool hal_kv_gc(void);
 /** @brief Return runtime statistics of active KV bank. */
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
 
+/**
+ * @brief Switch the KV store between auto-commit and deferred-commit modes.
+ *
+ * By default the store auto-commits to underlying EEPROM/flash after every
+ * write (set_u32/set_blob/delete/gc) -- this preserves the historical
+ * behaviour but, on RP2040 emulated EEPROM, every commit erases and re-flashes
+ * a full sector. Switching to deferred mode (`enabled = false`) lets a caller
+ * coalesce several writes into a single flash commit by calling
+ * hal_kv_commit() at the end of the batch.
+ *
+ * Mode change itself does NOT flush pending writes; call hal_kv_commit()
+ * explicitly if needed before disabling deferred mode.
+ *
+ * @param enabled true (default) for auto-commit, false to defer commits.
+ */
+void hal_kv_set_auto_commit(bool enabled);
+
+/**
+ * @brief Flush pending writes to non-volatile storage.
+ *
+ * In auto-commit mode this is a no-op (returns true). In deferred mode it
+ * issues a single hal_eeprom_commit() if any dirty writes are pending.
+ *
+ * @return true on success or if nothing was dirty.
+ */
+bool hal_kv_commit(void);
+
 
 #endif /* HAL_DISABLE_KV */
 #ifdef __cplusplus

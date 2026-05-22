@@ -88,5 +88,13 @@ bool hal_wifi_get_mac(char *out, size_t out_size);
  */
 int hal_wifi_ping(const char *host_or_ip);
 
+/**
+ * @brief Send ICMP ping with per-call timeout.
+ * @param host_or_ip Hostname or dotted-quad IP.
+ * @param timeout_ms Timeout in milliseconds for this call only.
+ * @return >=0 on success, <0 on error.
+ */
+int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms);
+
 
 #endif /* HAL_DISABLE_WIFI */
