@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 static hal_mutex_t s_wifi_mutex = NULL;
+static uint32_t s_wifi_timeout_ms = 15000u;
 
 static inline void wifi_ensure_mutex(void) {
     if (s_wifi_mutex == NULL) {
@@ -104,6 +105,7 @@ bool hal_wifi_begin_station(const char *ssid, const char *password, bool non_blo
 bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
     wifi_ensure_mutex();
     hal_mutex_lock(s_wifi_mutex);
+    s_wifi_timeout_ms = timeout_ms;
     WiFi.setTimeout(timeout_ms);
     hal_mutex_unlock(s_wifi_mutex);
     return true;
@@ -199,14 +201,25 @@ bool hal_wifi_get_mac(char *out, size_t out_size) {
 }
 
 int hal_wifi_ping(const char *host_or_ip) {
+    return hal_wifi_ping_ex(host_or_ip, s_wifi_timeout_ms);
+}
+
+int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
     if (!host_or_ip || host_or_ip[0] == '\0') {
-        hal_derr("hal_wifi_ping: host_or_ip is NULL/empty");
+        hal_derr("hal_wifi_ping_ex: host_or_ip is NULL/empty");
         return -1;
     }
 
     wifi_ensure_mutex();
     hal_mutex_lock(s_wifi_mutex);
+    const uint32_t previous_timeout_ms = s_wifi_timeout_ms;
+    if (timeout_ms != previous_timeout_ms) {
+        WiFi.setTimeout(timeout_ms);
+    }
     const int res = WiFi.ping(host_or_ip);
+    if (timeout_ms != previous_timeout_ms) {
+        WiFi.setTimeout(previous_timeout_ms);
+    }
     hal_mutex_unlock(s_wifi_mutex);
     return res;
 }

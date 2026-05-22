@@ -113,6 +113,38 @@ void hal_eeprom_write_int(uint16_t addr, int32_t val);
 int32_t hal_eeprom_read_int(uint16_t addr);
 
 /**
+ * @brief Write a contiguous block of bytes to EEPROM under a single internal
+ *        lock acquisition.
+ *
+ * Equivalent to calling hal_eeprom_write_byte() in a loop, but the EEPROM
+ * mutex is taken only once for the whole batch. Use this when a higher-level
+ * module needs to push a structured record into EEPROM without thrashing the
+ * mutex per byte.
+ *
+ * For HAL_EEPROM_RP2040 the data is buffered until hal_eeprom_commit() is
+ * called. For HAL_EEPROM_AT24C256 every byte is committed to the chip
+ * synchronously (the function feeds the watchdog while it waits).
+ *
+ * @param addr EEPROM start address.
+ * @param data Source buffer (must contain at least @p len bytes).
+ * @param len  Number of bytes to write.
+ */
+void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
+
+/**
+ * @brief Read a contiguous block of bytes from EEPROM under a single internal
+ *        lock acquisition.
+ *
+ * Equivalent to calling hal_eeprom_read_byte() in a loop, but the EEPROM
+ * mutex is taken only once for the whole batch.
+ *
+ * @param addr EEPROM start address.
+ * @param out  Destination buffer (must hold at least @p len bytes).
+ * @param len  Number of bytes to read.
+ */
+void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
+
+/**
  * @brief Commit buffered writes to non-volatile storage.
  *
  * For HAL_EEPROM_RP2040: flushes the RAM buffer to flash (calls EEPROM.commit()).
