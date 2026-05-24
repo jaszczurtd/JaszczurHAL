@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-05-24 (RTC module feature expansion)
+
+### Added
+- Extended `hal_rtc` public API with generic RTC controls:
+  interrupt enable mask (`HAL_RTC_IRQ_*`), read-clear event flags
+  (`HAL_RTC_FLAG_*`), CLKOUT modes, timer source/count, and alarm
+  field configuration (`hal_rtc_alarm_t`).
+- Arduino backend implementation for PCF8563 control/status features:
+  alarm, timer, CLKOUT, IRQ-enable, and flag read-clear paths.
+- Mock backend support for the extended RTC API, including event-flag
+  injection helper `hal_mock_rtc_set_flags(...)`.
+
+### Changed
+- Expanded `test_hal_rtc` coverage with roundtrip and invalid-input
+  tests for interrupt mask, event flags, CLKOUT, timer, and alarm APIs.
+- Documentation synchronized with the current RTC surface:
+  `README.md` and `JaszczurHAL_API.md` now include RTC module scope,
+  flags/dependency notes, API contracts, and test-suite coverage.
+
 ## [Unreleased] - 2026-05-22 (DS18B20 non-blocking module bootstrap)
 
 ### Added

@@ -56,7 +56,7 @@ Utility-only includes are also available:
 ## Supported modules and drivers (overview)
 
 - Core HAL domains: GPIO, ADC, PWM, timers, system, synchronization, serial I/O
-- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, GPS, external ADC, EEPROM and key-value storage
+- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM and key-value storage
 - Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 

@@ -80,6 +80,9 @@
 #ifndef HAL_DISABLE_TIME
 #include "hal_time.h"
 #endif
+#ifndef HAL_DISABLE_RTC
+#include "hal_rtc.h"
+#endif
 #ifndef HAL_DISABLE_THERMOCOUPLE
 #include "hal_thermocouple.h"
 #endif

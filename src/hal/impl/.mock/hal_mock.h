@@ -367,6 +367,17 @@ void hal_mock_ds18b20_set_crc_ok(hal_ds18b20_t h, bool ok);
 uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 #endif
 
+// ── RTC ─────────────────────────────────────────────────────────────────────
+#ifndef HAL_DISABLE_RTC
+#include "../../hal_rtc.h"
+/** @brief Replace current mock RTC date-time payload. */
+void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
+/** @brief Inject clock integrity state returned by hal_rtc_get_clock_integrity(). */
+void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
+/** @brief Inject event flags consumed by hal_rtc_get_and_clear_flags(). */
+void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
+#endif
+
 // ── GPS ───────────────────────────────────────────────────────────────────
 
 /** @brief Inject latitude and longitude into the mock GPS. */

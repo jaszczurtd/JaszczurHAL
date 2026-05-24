@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -76,7 +76,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
-- `hal_thermocouple`, `hal_ds18b20`, `hal_external_adc`, `hal_gps`
+- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`
 - `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
@@ -121,6 +121,8 @@ To exclude modules your project does not use, define one or more
 | `HAL_DISABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ |
 | `HAL_DISABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600/MAX6675 drivers |
 | `HAL_DISABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` stack |
+| `HAL_DISABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 RTC backend |
+| `HAL_DISABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 RTC backend (propagates `HAL_DISABLE_RTC`) |
 | `HAL_DISABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
 | `HAL_DISABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 driver |
 | `HAL_DISABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 driver |
@@ -161,7 +163,9 @@ Disabling a base module automatically disables its dependants:
 HAL_DISABLE_EEPROM   ->  HAL_DISABLE_KV
 HAL_DISABLE_WIFI     ->  HAL_DISABLE_TIME
 HAL_DISABLE_I2C      ->  HAL_DISABLE_EXTERNAL_ADC
+HAL_DISABLE_I2C      ->  HAL_DISABLE_PCF8563
 HAL_DISABLE_SWSERIAL ->  HAL_DISABLE_GPS
+HAL_DISABLE_PCF8563  ->  HAL_DISABLE_RTC
 HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675 -> HAL_DISABLE_THERMOCOUPLE
 HAL_DISABLE_ILI9341 + HAL_DISABLE_ST7789 + HAL_DISABLE_ST7735 + HAL_DISABLE_ST7796S -> HAL_DISABLE_TFT
 HAL_DISABLE_TFT + HAL_DISABLE_SSD1306 -> HAL_DISABLE_DISPLAY
@@ -182,7 +186,7 @@ Create `hal_project_config.h` in your sketch directory:
 #define HAL_DISABLE_THERMOCOUPLE
 #define HAL_DISABLE_UART
 #define HAL_DISABLE_SWSERIAL
-#define HAL_DISABLE_I2C         // -> propagates HAL_DISABLE_EXTERNAL_ADC
+#define HAL_DISABLE_I2C         // -> propagates HAL_DISABLE_EXTERNAL_ADC + HAL_DISABLE_PCF8563/HAL_DISABLE_RTC
 #define HAL_DISABLE_PWM_FREQ
 ```
 
@@ -283,7 +287,7 @@ After initialisation, most HAL runtime APIs are multicore-safe on the Arduino
 backend.  Each module documents its thread-safety guarantee in the per-module
 section below.  The general pattern is:
 
-- **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `SmartTimers`).
+- **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
 - **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
@@ -2135,6 +2139,123 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 
 ---
 
+## `hal_rtc` - Real-time clock  *(optional - `HAL_DISABLE_RTC`)*
+
+Handle-based RTC abstraction. Current backend is PCF8563 over I2C.
+The API is vendor-neutral and already exposes generic alarm/timer/clock-output
+and event/IRQ controls.
+
+```c
+#include <hal/hal_rtc.h>
+
+#ifndef HAL_RTC_MAX_INSTANCES
+#define HAL_RTC_MAX_INSTANCES 4
+#endif
+
+typedef struct hal_rtc_impl_s *hal_rtc_t;
+
+typedef enum {
+  HAL_RTC_CHIP_PCF8563 = 0,
+} hal_rtc_chip_t;
+
+typedef struct {
+  uint8_t  sda_pin;
+  uint8_t  scl_pin;
+  uint32_t clock_hz;
+  uint8_t  i2c_bus;   // 0 = Wire, 1 = Wire1
+  uint8_t  i2c_addr;  // 0 = default 0x51
+} hal_rtc_i2c_cfg_t;
+
+typedef struct {
+  hal_rtc_chip_t chip;
+  union {
+    hal_rtc_i2c_cfg_t i2c;
+  } bus;
+} hal_rtc_config_t;
+
+typedef struct {
+  uint8_t  second;    // 0..59
+  uint8_t  minute;    // 0..59
+  uint8_t  hour;      // 0..23
+  uint8_t  day;       // 1..31
+  uint8_t  weekday;   // 0..6
+  uint8_t  month;     // 1..12
+  uint16_t year;      // 1900..2099
+  bool     clock_integrity;
+} hal_rtc_datetime_t;
+
+#define HAL_RTC_FLAG_ALARM (1u << 0)
+#define HAL_RTC_FLAG_TIMER (1u << 1)
+
+#define HAL_RTC_IRQ_ALARM  (1u << 0)
+#define HAL_RTC_IRQ_TIMER  (1u << 1)
+
+typedef enum {
+  HAL_RTC_CLKOUT_DISABLED = 0,
+  HAL_RTC_CLKOUT_1_HZ,
+  HAL_RTC_CLKOUT_32_HZ,
+  HAL_RTC_CLKOUT_1024_HZ,
+  HAL_RTC_CLKOUT_32768_HZ,
+} hal_rtc_clkout_mode_t;
+
+typedef enum {
+  HAL_RTC_TIMER_DISABLED = 0,
+  HAL_RTC_TIMER_1_60_HZ,
+  HAL_RTC_TIMER_1_HZ,
+  HAL_RTC_TIMER_64_HZ,
+  HAL_RTC_TIMER_4096_HZ,
+} hal_rtc_timer_clock_t;
+
+typedef struct {
+  bool    minute_enabled;
+  uint8_t minute;
+  bool    hour_enabled;
+  uint8_t hour;
+  bool    day_enabled;
+  uint8_t day;
+  bool    weekday_enabled;
+  uint8_t weekday;
+} hal_rtc_alarm_t;
+
+hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg);
+void      hal_rtc_deinit(hal_rtc_t h);
+
+bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
+bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
+bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok);
+
+bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask);
+bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask);
+bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags);
+
+bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode);
+bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode);
+
+bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock, uint8_t count);
+bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint8_t *out_count);
+
+bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
+bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
+```
+
+**impl/arduino:** direct PCF8563 register access over `hal_i2c` (date-time,
+clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
+interrupt enable mask and read-clear event flags).
+**impl/.mock:** in-memory state model with deterministic behavior for unit tests.
+**Thread safety:** Arduino backend: per-handle mutex serializes runtime API calls;
+I2C traffic is additionally protected by the `hal_i2c` bus mutex. Create/destroy
+should follow the project-wide single-core init/deinit policy. Mock backend is
+for deterministic single-threaded tests.
+
+**Mock helpers:**
+```c
+void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
+void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
+void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
+```
+
+---
+
 ## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_DISABLE_EXTERNAL_ADC`)*
 
 ```c
@@ -3277,6 +3398,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_pwm` | resolution config, write |
 | `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
+| `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
