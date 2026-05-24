@@ -26,6 +26,12 @@ HAL_DISABLE_KV
 HAL_DISABLE_GPS
   Exclude GPS module.
 
+HAL_DISABLE_RTC
+  Exclude RTC module.
+
+HAL_DISABLE_PCF8563
+  Exclude PCF8563 RTC backend.
+
 HAL_DISABLE_THERMOCOUPLE
   Exclude full thermocouple module.
 
@@ -135,6 +141,10 @@ HAL_DS18B20_MAX_INSTANCES
   Maximum simultaneous DS18B20 handles (default: 4).
   Each handle stores sensor state/cache and backend resources.
 
+HAL_RTC_MAX_INSTANCES
+  Maximum simultaneous RTC handles (default: 4).
+  Each handle stores backend config/state and synchronization metadata.
+
 HAL_ONEWIRE_MAX_INSTANCES
   Maximum simultaneous generic OneWire handles (default: 4).
   Each handle binds one 1-Wire data pin and per-instance synchronization.
@@ -148,7 +158,9 @@ Automatic propagation rules
 HAL_DISABLE_EEPROM      -> HAL_DISABLE_KV
 HAL_DISABLE_WIFI        -> HAL_DISABLE_TIME
 HAL_DISABLE_I2C         -> HAL_DISABLE_EXTERNAL_ADC
+HAL_DISABLE_I2C         -> HAL_DISABLE_PCF8563
 HAL_DISABLE_SWSERIAL    -> HAL_DISABLE_GPS
+HAL_DISABLE_PCF8563     -> HAL_DISABLE_RTC
 
 HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675
                         -> HAL_DISABLE_THERMOCOUPLE

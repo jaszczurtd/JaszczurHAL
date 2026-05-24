@@ -77,6 +77,8 @@
      HAL_DISABLE_EEPROM         - EEPROM (AT24C256 / RP2040 flash)
      HAL_DISABLE_KV             - Key-value store (depends on EEPROM)
      HAL_DISABLE_GPS            - GPS / NMEA receiver (depends on SWSERIAL)
+    HAL_DISABLE_RTC            - RTC module (generic API)
+    HAL_DISABLE_PCF8563        - PCF8563 RTC backend (I2C)
      HAL_DISABLE_THERMOCOUPLE   - all thermocouple backends (MCP9600 + MAX6675)
      HAL_DISABLE_DS18B20        - DS18B20 digital temperature sensor (1-Wire)
     HAL_DISABLE_ONEWIRE        - generic 1-Wire bus API wrapper
@@ -135,6 +137,15 @@
 #ifdef HAL_DISABLE_I2C
   #ifndef HAL_DISABLE_EXTERNAL_ADC
     #define HAL_DISABLE_EXTERNAL_ADC
+  #endif
+  #ifndef HAL_DISABLE_PCF8563
+    #define HAL_DISABLE_PCF8563
+  #endif
+#endif
+
+#ifdef HAL_DISABLE_PCF8563
+  #ifndef HAL_DISABLE_RTC
+    #define HAL_DISABLE_RTC
   #endif
 #endif
 
@@ -307,6 +318,17 @@
  */
 #ifndef HAL_UART_MAX_INSTANCES
 #define HAL_UART_MAX_INSTANCES 2
+#endif
+
+/**
+ * @def HAL_RTC_MAX_INSTANCES
+ * Maximum number of simultaneous RTC handles.
+ *
+ * The current backend set contains PCF8563. Each slot stores per-instance
+ * runtime state and synchronization metadata.
+ */
+#ifndef HAL_RTC_MAX_INSTANCES
+#define HAL_RTC_MAX_INSTANCES 4
 #endif
 
 /**
