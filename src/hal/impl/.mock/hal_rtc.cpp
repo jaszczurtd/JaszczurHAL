@@ -325,7 +325,7 @@ bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
         return false;
     }
 
-    hal_rtc_datetime_t dt = {0};
+    hal_rtc_datetime_t dt = {};
     if (!hal_rtc_get_datetime(h, &dt)) {
         return false;
     }
@@ -338,7 +338,7 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch) {
         return false;
     }
 
-    hal_rtc_datetime_t dt = {0};
+    hal_rtc_datetime_t dt = {};
     if (!rtc_epoch_to_datetime(epoch, &dt)) {
         return false;
     }
