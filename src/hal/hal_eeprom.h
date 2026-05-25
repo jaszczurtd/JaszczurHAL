@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_EEPROM
+#ifdef HAL_ENABLE_EEPROM
 
 /**
  * @file hal_eeprom.h
@@ -178,4 +178,4 @@ uint16_t hal_eeprom_size(void);
 #endif
 
 
-#endif /* HAL_DISABLE_EEPROM */
+#endif /* HAL_ENABLE_EEPROM */

@@ -2,7 +2,7 @@
  * @file hal.h
  * @brief Internal HAL-only umbrella include.
  *
- * This header aggregates all HAL modules and applies `HAL_DISABLE_*` guards
+ * This header aggregates all HAL modules and applies `HAL_ENABLE_*` guards
  * from `hal_config.h` to include only enabled interfaces.
  *
  * Prefer `#include <JaszczurHAL.h>` in application code.
@@ -20,7 +20,7 @@
 #include "hal_crypto.h"
 #endif
 #include "hal_pwm.h"
-#ifndef HAL_DISABLE_PWM_FREQ
+#ifdef HAL_ENABLE_PWM_FREQ
 #include "hal_pwm_freq.h"
 #endif
 #include "hal_adc.h"
@@ -31,35 +31,35 @@
 #include "hal_sync.h"
 #include "hal_serial.h"
 #include "hal_serial_session.h"
-#ifndef HAL_DISABLE_UART
+#ifdef HAL_ENABLE_UART
 #include "hal_uart.h"
 #endif
-#ifndef HAL_DISABLE_SWSERIAL
+#ifdef HAL_ENABLE_SWSERIAL
 #include "hal_swserial.h"
 #endif
 #include "hal_spi.h"
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 #include "hal_onewire.h"
 #endif
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
 #include "hal_i2c.h"
 #endif
-#ifndef HAL_DISABLE_I2C_SLAVE
+#ifdef HAL_ENABLE_I2C_SLAVE
 #include "hal_i2c_slave.h"
 #endif
-#ifndef HAL_DISABLE_EXTERNAL_ADC
+#ifdef HAL_ENABLE_EXTERNAL_ADC
 #include "hal_external_adc.h"
 #endif
-#ifndef HAL_DISABLE_RGB_LED
+#ifdef HAL_ENABLE_RGB_LED
 #include "hal_rgb_led.h"
 #endif
-#ifndef HAL_DISABLE_CAN
+#ifdef HAL_ENABLE_CAN
 #include "hal_can.h"
 #endif
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 #include "hal_display.h"
 #endif
-#ifndef HAL_DISABLE_WIFI
+#ifdef HAL_ENABLE_WIFI
 #include "hal_wifi.h"
 #endif
 #ifdef HAL_ENABLE_LITTLEFS
@@ -77,24 +77,24 @@
 #ifdef HAL_ENABLE_OTA
 #include "hal_ota.h"
 #endif
-#ifndef HAL_DISABLE_TIME
+#ifdef HAL_ENABLE_TIME
 #include "hal_time.h"
 #endif
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 #include "hal_rtc.h"
 #endif
-#ifndef HAL_DISABLE_THERMOCOUPLE
+#ifdef HAL_ENABLE_THERMOCOUPLE
 #include "hal_thermocouple.h"
 #endif
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 #include "hal_ds18b20.h"
 #endif
-#ifndef HAL_DISABLE_GPS
+#ifdef HAL_ENABLE_GPS
 #include "hal_gps.h"
 #endif
-#ifndef HAL_DISABLE_EEPROM
+#ifdef HAL_ENABLE_EEPROM
 #include "hal_eeprom.h"
 #endif
-#ifndef HAL_DISABLE_KV
+#ifdef HAL_ENABLE_KV
 #include "hal_kv.h"
 #endif

@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT) && !defined(HAL_DISABLE_ILI9341)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT) && defined(HAL_ENABLE_ILI9341)
 
 /*!
  * @file Adafruit_ILI9341.cpp
@@ -343,4 +343,4 @@ uint8_t Adafruit_ILI9341::readcommand8(uint8_t commandByte, uint8_t index) {
   return Adafruit_SPITFT::readcommand8(commandByte);
 }
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT && !HAL_DISABLE_ILI9341 */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT && !HAL_ENABLE_ILI9341 */

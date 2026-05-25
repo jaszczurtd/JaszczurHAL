@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_CAN
+#ifdef HAL_ENABLE_CAN
 
 /**
  * @file hal_can.h
@@ -132,7 +132,7 @@ hal_can_t hal_can_create_with_retry(uint8_t cs_pin,
  */
 uint8_t hal_can_encode_temp_i8(float temp_c);
 
-#endif /* HAL_DISABLE_CAN */
+#endif /* HAL_ENABLE_CAN */
 
 #ifdef __cplusplus
 }

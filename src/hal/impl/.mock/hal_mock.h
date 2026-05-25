@@ -65,7 +65,7 @@ uint8_t hal_mock_adc_get_resolution(void);
 void    hal_mock_adc_inject(uint8_t pin, int value);
 
 // ── SoftwareSerial (swserial) ─────────────────────────────────────────────────
-#ifndef HAL_DISABLE_SWSERIAL
+#ifdef HAL_ENABLE_SWSERIAL
 #include "../../hal_swserial.h"
 /** @brief Inject bytes into the mock software-serial RX buffer. */
 void hal_mock_swserial_push(hal_swserial_t h, const uint8_t *data, int len);
@@ -76,7 +76,7 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h);
 #endif
 
 // ── Hardware UART ─────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_UART
+#ifdef HAL_ENABLE_UART
 #include "../../hal_uart.h"
 /** @brief Inject bytes into the mock hardware-UART RX buffer. */
 void hal_mock_uart_push(hal_uart_t h, const uint8_t *data, int len);
@@ -100,7 +100,7 @@ int     hal_mock_spi_get_lock_depth(uint8_t bus);
 void    hal_mock_spi_reset(void);
 
 // ── OneWire ───────────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 #include "../../hal_onewire.h"
 /** @brief Force presence response returned by hal_onewire_reset(). */
 void     hal_mock_onewire_set_presence(hal_onewire_t h, bool present);
@@ -137,7 +137,7 @@ uint8_t             hal_mock_rgb_led_get_num_pixels(void);
 void                hal_mock_rgb_led_reset(void);
 
 // ── Display ───────────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 #include "../../hal_display.h"
 /** @brief Reset all mock display state to defaults. */
 void         hal_mock_display_reset(void);
@@ -342,7 +342,7 @@ const char *hal_mock_time_get_ntp_primary(void);
 const char *hal_mock_time_get_ntp_secondary(void);
 
 // ── Thermocouple ──────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_THERMOCOUPLE
+#ifdef HAL_ENABLE_THERMOCOUPLE
 #include "../../hal_thermocouple.h"
 /** @brief Inject the hot-junction temperature returned by hal_thermocouple_read(). */
 void hal_mock_thermocouple_set_temp(hal_thermocouple_t h, float temp);
@@ -355,7 +355,7 @@ void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
 #endif
 
 // ── DS18B20 ───────────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 #include "../../hal_ds18b20.h"
 /** @brief Inject value consumed by the next successful conversion completion. */
 void hal_mock_ds18b20_set_next_temp(hal_ds18b20_t h, float temp_c);
@@ -368,7 +368,7 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 #endif
 
 // ── RTC ─────────────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 #include "../../hal_rtc.h"
 /** @brief Replace current mock RTC date-time payload. */
 void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
@@ -398,7 +398,7 @@ void hal_mock_gps_set_time(int hour, int minute, int second);
 void hal_mock_gps_reset(void);
 
 // ── EEPROM ───────────────────────────────────────────────────────────────────
-#ifndef HAL_DISABLE_EEPROM
+#ifdef HAL_ENABLE_EEPROM
 #include "../../hal_eeprom.h"
 /** @brief Read a byte directly from the mock EEPROM backing store. */
 uint8_t           hal_mock_eeprom_get_byte(uint16_t addr);

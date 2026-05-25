@@ -6,7 +6,7 @@
 
 #include "libConfig.h"
 
-#ifndef HAL_DISABLE_UNITY
+#ifdef HAL_ENABLE_UNITY
 
 #ifndef UNITY_INTERNALS_H
 #define UNITY_INTERNALS_H
@@ -1148,4 +1148,4 @@ int UnityTestMatches(void);
 /* End of UNITY_INTERNALS_H */
 #endif
 
-#endif /* !HAL_DISABLE_UNITY */
+#endif /* HAL_ENABLE_UNITY */

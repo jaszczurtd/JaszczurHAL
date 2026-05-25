@@ -77,14 +77,14 @@ Default build (Raspberry Pi Pico, ILI9341):
 ./build_arduino_lib.sh
 ```
 
-With a project configuration and disabled modules:
+With a project configuration and explicit module enables (opt-in):
 
 ```bash
 ./build_arduino_lib.sh \
   -p /path/to/project \
-  -D HAL_DISABLE_WIFI \
-  -D HAL_DISABLE_GPS \
-  -D HAL_DISABLE_THERMOCOUPLE
+  -D HAL_ENABLE_WIFI \
+  -D HAL_ENABLE_GPS \
+  -D HAL_ENABLE_MCP9600
 ```
 
 For Pico W with an ST7789 display:

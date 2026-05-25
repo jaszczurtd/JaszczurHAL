@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_EXTERNAL_ADC
+#ifdef HAL_ENABLE_EXTERNAL_ADC
 
 #include "../../hal_external_adc.h"
 #include "../../hal_i2c.h"
@@ -93,4 +93,4 @@ float hal_ext_adc_read_scaled(uint8_t channel) {
 }
 
 
-#endif /* HAL_DISABLE_EXTERNAL_ADC */
+#endif /* HAL_ENABLE_EXTERNAL_ADC */

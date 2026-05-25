@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY)
+#if defined(HAL_ENABLE_DISPLAY)
 
 /*
 This is the core graphics library for all our displays, providing a common
@@ -2697,4 +2697,4 @@ void GFXcanvas16::drawFastRawHLine(int16_t x, int16_t y, int16_t w,
   }
 }
 
-#endif /* !HAL_DISABLE_DISPLAY */
+#endif /* HAL_ENABLE_DISPLAY */

@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_CAN)
+#if defined(HAL_ENABLE_CAN)
 
 /*
   mcp_can.cpp
@@ -1419,4 +1419,4 @@ INT8U MCP_CAN::getGPI(void)
   END FILE
 *********************************************************************************************************/
 
-#endif /* !HAL_DISABLE_CAN */
+#endif /* HAL_ENABLE_CAN */

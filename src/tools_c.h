@@ -34,7 +34,7 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #include <hal/hal_config.h>
 #include <hal/hal_gpio.h>
 #include <hal/hal_pwm.h>
-#ifndef HAL_DISABLE_PWM_FREQ
+#ifdef HAL_ENABLE_PWM_FREQ
 #include <hal/hal_pwm_freq.h>
 #endif
 #include <hal/hal_adc.h>
@@ -62,22 +62,22 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #endif
 #include <hal/hal_sync.h>
 #include <hal/hal_spi.h>
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
 #include <hal/hal_i2c.h>
 #endif
-#ifndef HAL_DISABLE_EXTERNAL_ADC
+#ifdef HAL_ENABLE_EXTERNAL_ADC
 #include <hal/hal_external_adc.h>
 #endif
-#ifndef HAL_DISABLE_CAN
+#ifdef HAL_ENABLE_CAN
 #include <hal/hal_can.h>
 #endif
-#ifndef HAL_DISABLE_GPS
+#ifdef HAL_ENABLE_GPS
 #include <hal/hal_gps.h>
 #endif
-#ifndef HAL_DISABLE_EEPROM
+#ifdef HAL_ENABLE_EEPROM
 #include <hal/hal_eeprom.h>
 #endif
-#ifndef HAL_DISABLE_KV
+#ifdef HAL_ENABLE_KV
 #include <hal/hal_kv.h>
 #endif
 

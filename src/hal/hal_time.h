@@ -19,14 +19,14 @@ extern "C" {
 /**
  * @brief Convert local date/time components to Unix epoch seconds.
  *
- * This helper is available even when HAL_DISABLE_TIME is defined.
+ * This helper is available even when HAL_ENABLE_TIME is not defined.
  *
  * @return Unix epoch seconds, or 0 when components are outside a valid range.
  */
 uint32_t hal_time_from_components(int year, int month, int day,
                                   int hour, int minute, int second);
 
-#ifndef HAL_DISABLE_TIME
+#ifdef HAL_ENABLE_TIME
 
 /**
  * @brief Configure POSIX timezone string (TZ environment variable).
@@ -73,7 +73,7 @@ bool hal_time_get_local(struct tm *out_tm);
 bool hal_time_format_local(char *out, size_t out_size, const char *format);
 
 
-#endif /* HAL_DISABLE_TIME */
+#endif /* HAL_ENABLE_TIME */
 #ifdef __cplusplus
 }
 #endif

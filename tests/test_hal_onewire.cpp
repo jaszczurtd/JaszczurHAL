@@ -5,7 +5,7 @@
 #include <thread>
 #include <vector>
 
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 
 static hal_onewire_t s_bus = NULL;
 
@@ -127,4 +127,4 @@ int main(void) {
     return UNITY_END();
 }
 
-#endif /* HAL_DISABLE_ONEWIRE */
+#endif /* HAL_ENABLE_ONEWIRE */

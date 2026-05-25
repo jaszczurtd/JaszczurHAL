@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT)
 
 /*!
  * @file Adafruit_ZeroDMA.cpp
@@ -725,4 +725,4 @@ bool Adafruit_ZeroDMA::isActive() {
 
 #endif // ARDUINO_ARCH_SAMD
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT */

@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 
 /**
  * @file hal_onewire.h
@@ -146,7 +146,7 @@ bool hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8], bool search_mode);
  */
 uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len);
 
-#endif /* HAL_DISABLE_ONEWIRE */
+#endif /* HAL_ENABLE_ONEWIRE */
 #ifdef __cplusplus
 }
 #endif

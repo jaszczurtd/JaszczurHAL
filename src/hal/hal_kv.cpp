@@ -1,5 +1,5 @@
 #include "hal_config.h"
-#ifndef HAL_DISABLE_KV
+#ifdef HAL_ENABLE_KV
 
 #include "hal_kv.h"
 
@@ -762,4 +762,4 @@ bool hal_kv_commit(void) {
 }
 
 
-#endif /* HAL_DISABLE_KV */
+#endif /* HAL_ENABLE_KV */

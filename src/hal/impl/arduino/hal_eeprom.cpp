@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_EEPROM
+#ifdef HAL_ENABLE_EEPROM
 
 #include "../../hal_eeprom.h"
 #include "../../hal_i2c.h"
@@ -171,4 +171,4 @@ uint16_t hal_eeprom_size(void) {
 }
 
 
-#endif /* HAL_DISABLE_EEPROM */
+#endif /* HAL_ENABLE_EEPROM */

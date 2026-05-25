@@ -1,5 +1,5 @@
 #include "../../../../../hal_config.h"
-#if !defined(HAL_DISABLE_GPS)
+#if defined(HAL_ENABLE_GPS)
 
 /*
 TinyGPS++ - a small GPS library for Arduino providing universal NMEA parsing
@@ -507,4 +507,4 @@ void TinyGPSPlus::insertCustom(TinyGPSCustom *pElt, const char *sentenceName, in
    *ppelt = pElt;
 }
 
-#endif /* !HAL_DISABLE_GPS */
+#endif /* HAL_ENABLE_GPS */

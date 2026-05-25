@@ -67,9 +67,10 @@ Optional fields are documented inline in the file. See
 
 ### 3. Configure HAL modules (optional)
 
-Edit `hal_project_config.h` - uncomment `#define HAL_DISABLE_*` lines for
-modules your project does not use.  If the file is present and the build
-scripts are used, it is picked up automatically.
+Edit `hal_project_config.h` - uncomment `#define HAL_ENABLE_*` lines for
+the modules your project uses (opt-in model: nothing is compiled by
+default). If the file is present and the build scripts are used, it is
+picked up automatically.
 
 ### 4. Generate IntelliSense
 

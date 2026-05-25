@@ -21,7 +21,7 @@ struct hal_thermocouple_impl_s {
 
     /* Configurable state */
     hal_thermocouple_type_t        type;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     uint8_t                        filter;
     hal_thermocouple_adc_res_t     adc_res;
     hal_thermocouple_ambient_res_t ambient_res;
@@ -34,7 +34,7 @@ static hal_thermocouple_impl_t s_pool[HAL_THERMOCOUPLE_MAX_INSTANCES];
 
 /* ── Private helpers ─────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 static const char *chip_name(hal_thermocouple_chip_t chip) {
     switch (chip) {
         case HAL_THERMOCOUPLE_CHIP_MCP9600: return "MCP9600";
@@ -72,7 +72,7 @@ hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg) {
     h->mutex        = hal_mutex_create();
     h->mock_temp    = 25.0f;
     h->mock_ambient = 22.0f;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     h->enabled      = true;
     h->adc_res      = HAL_THERMOCOUPLE_ADC_RES_18;
     h->ambient_res  = HAL_THERMOCOUPLE_AMBIENT_RES_0_0625;
@@ -101,7 +101,7 @@ float hal_thermocouple_read(hal_thermocouple_t h) {
     return v;
 }
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 float hal_thermocouple_read_ambient(hal_thermocouple_t h) {
     if (!h) return NAN;
     hal_mutex_lock(h->mutex);
@@ -127,11 +127,11 @@ int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Wire type ───────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t type) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -142,13 +142,13 @@ void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t typ
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h) {
     if (!h) return HAL_THERMOCOUPLE_TYPE_K;
     hal_mutex_lock(h->mutex);
     hal_thermocouple_type_t v = HAL_THERMOCOUPLE_TYPE_K;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) v = h->type;
 #endif
     hal_mutex_unlock(h->mutex);
@@ -157,7 +157,7 @@ hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h) {
 
 /* ── IIR filter ──────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -181,11 +181,11 @@ uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Hot-junction ADC resolution ─────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
                                           hal_thermocouple_adc_res_t res) {
     if (!h) return;
@@ -210,11 +210,11 @@ hal_thermocouple_adc_res_t hal_thermocouple_get_adc_resolution(hal_thermocouple_
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Cold-junction (ambient) resolution ──────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
                                               hal_thermocouple_ambient_res_t res) {
     if (!h) return;
@@ -226,11 +226,11 @@ void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Enable / sleep ──────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_enable(hal_thermocouple_t h, bool enable) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -241,13 +241,13 @@ void hal_thermocouple_enable(hal_thermocouple_t h, bool enable) {
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h) {
     if (!h) return false;
     hal_mutex_lock(h->mutex);
     bool v = true;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) v = h->enabled;
 #endif
     hal_mutex_unlock(h->mutex);
@@ -256,7 +256,7 @@ bool hal_thermocouple_is_enabled(hal_thermocouple_t h) {
 
 /* ── Alerts ──────────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
                                  bool enabled,
                                  const hal_thermocouple_alert_cfg_t *cfg) {
@@ -285,11 +285,11 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Status register ─────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h) {
     if (!h) return 0;
     hal_mutex_lock(h->mutex);
@@ -302,7 +302,7 @@ uint8_t hal_thermocouple_get_status(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Mock injection helpers ──────────────────────────────────────────────── */
 
@@ -313,7 +313,7 @@ void hal_mock_thermocouple_set_temp(hal_thermocouple_t h, float temp) {
     hal_mutex_unlock(h->mutex);
 }
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_mock_thermocouple_set_ambient(hal_thermocouple_t h, float temp) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -334,4 +334,4 @@ void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status) {
     h->mock_status = status;
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */

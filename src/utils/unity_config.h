@@ -34,7 +34,7 @@
  *     further definitions it may need.
  */
 
-#ifndef HAL_DISABLE_UNITY
+#ifdef HAL_ENABLE_UNITY
 
 #ifndef UNITY_CONFIG_H
 #define UNITY_CONFIG_H
@@ -245,4 +245,4 @@
 
 #endif /* UNITY_CONFIG_H */
 
-#endif /* !HAL_DISABLE_UNITY */
+#endif /* HAL_ENABLE_UNITY */

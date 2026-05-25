@@ -1,5 +1,5 @@
 #include "hal_config.h"
-#ifndef HAL_DISABLE_CAN
+#ifdef HAL_ENABLE_CAN
 
 #include "hal_can.h"
 #include "hal_gpio.h"
@@ -66,4 +66,4 @@ uint8_t hal_can_encode_temp_i8(float temp_c) {
     return (uint8_t)(int8_t)value;
 }
 
-#endif /* HAL_DISABLE_CAN */
+#endif /* HAL_ENABLE_CAN */

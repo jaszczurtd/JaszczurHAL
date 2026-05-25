@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_RGB_LED
+#ifdef HAL_ENABLE_RGB_LED
 
 #include "../../hal_rgb_led.h"
 #include "../../hal_sync.h"
@@ -93,4 +93,4 @@ void hal_rgb_led_set_color(hal_rgb_led_color_t color) {
     rgb_unlock();
 }
 
-#endif /* HAL_DISABLE_RGB_LED */
+#endif /* HAL_ENABLE_RGB_LED */

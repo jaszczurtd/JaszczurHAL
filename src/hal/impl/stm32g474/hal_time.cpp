@@ -40,7 +40,7 @@ uint32_t hal_time_from_components(int year, int month, int day,
     return days * 86400u + (uint32_t)hour * 3600u + (uint32_t)minute * 60u + (uint32_t)second;
 }
 
-#ifndef HAL_DISABLE_TIME
+#ifdef HAL_ENABLE_TIME
 
 bool hal_time_set_timezone(const char *tz) {
     if (!tz || tz[0] == '\0') {
@@ -104,6 +104,6 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format) {
     return strftime(out, out_size, format, &tm_local) > 0u;
 }
 
-#endif /* HAL_DISABLE_TIME */
+#endif /* HAL_ENABLE_TIME */
 
 #endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

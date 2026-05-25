@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_EXTERNAL_ADC
+#ifdef HAL_ENABLE_EXTERNAL_ADC
 
 /**
  * @file hal_external_adc.h
@@ -62,7 +62,7 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float hal_ext_adc_read_scaled(uint8_t channel);
 
 
-#endif /* HAL_DISABLE_EXTERNAL_ADC */
+#endif /* HAL_ENABLE_EXTERNAL_ADC */
 #ifdef __cplusplus
 }
 #endif

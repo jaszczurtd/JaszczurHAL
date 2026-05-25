@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
 
 #include "../../hal_i2c.h"
 #include "../../hal_sync.h"
@@ -232,4 +232,4 @@ void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
     pinMode(scl_pin, INPUT_PULLUP);
 }
 
-#endif /* HAL_DISABLE_I2C */
+#endif /* HAL_ENABLE_I2C */

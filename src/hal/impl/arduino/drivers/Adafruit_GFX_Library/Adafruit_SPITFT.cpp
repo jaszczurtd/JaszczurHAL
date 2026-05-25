@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT)
 
 /*!
  * @file Adafruit_SPITFT.cpp
@@ -2642,4 +2642,4 @@ inline void Adafruit_SPITFT::TFT_RD_LOW(void) {
 
 #endif // end __AVR_ATtiny85__ __AVR_ATtiny84__
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT */

@@ -23,7 +23,7 @@
 #ifdef SD_LOGGER
 #include <SD.h>
 #endif
-#ifndef HAL_DISABLE_UNITY
+#ifdef HAL_ENABLE_UNITY
 #include "unity.h"
 #endif
 #include "SmartTimers.h"

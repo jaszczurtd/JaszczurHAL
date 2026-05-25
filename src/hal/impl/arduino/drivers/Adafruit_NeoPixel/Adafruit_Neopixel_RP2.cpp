@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_RGB_LED)
+#if defined(HAL_ENABLE_RGB_LED)
 
 #if defined(ARDUINO_ARCH_RP2040)// RP2040 specific driver
 
@@ -53,4 +53,4 @@ void  Adafruit_NeoPixel::rp2040Show(uint8_t *pixels, uint32_t numBytes)
 }
 #endif
 
-#endif /* !HAL_DISABLE_RGB_LED */
+#endif /* HAL_ENABLE_RGB_LED */

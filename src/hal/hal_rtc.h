@@ -1,20 +1,25 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 
 /**
  * @file hal_rtc.h
  * @brief Hardware abstraction for real-time clocks (RTC).
  *
  * The module is designed to support multiple RTC backends under one API.
- * At the moment the only available backend is PCF8563 (I2C).
+ * Currently available backends are PCF8563 and DS3231 (I2C).
  *
- * Backend selection (compile-time):
- *   HAL_DISABLE_PCF8563 - exclude the PCF8563 backend.
+ * Backend selection (compile-time, opt-in):
+ *   HAL_ENABLE_PCF8563 - enable the PCF8563 backend (propagates
+ *                        HAL_ENABLE_RTC + HAL_ENABLE_I2C).
+ *   HAL_ENABLE_DS3231  - enable the DS3231 backend  (propagates
+ *                        HAL_ENABLE_RTC + HAL_ENABLE_I2C).
  *
- * With the current single-backend implementation, disabling PCF8563 also
- * disables the RTC module (HAL_DISABLE_RTC) via hal_config.h propagation.
+ * Both backends may be enabled simultaneously; chip selection is then
+ * made per-handle via @ref hal_rtc_config_t::chip. Enabling
+ * HAL_ENABLE_RTC alone (without a backend) triggers a compile-time
+ * #error from hal_config.h.
  */
 
 #include <stdbool.h>
@@ -34,18 +39,24 @@ extern "C" {
 #define HAL_RTC_PCF8563_DEFAULT_I2C_ADDR 0x51
 #endif
 
+/** @brief Default 7-bit I2C address for DS3231. */
+#ifndef HAL_RTC_DS3231_DEFAULT_I2C_ADDR
+#define HAL_RTC_DS3231_DEFAULT_I2C_ADDR 0x68
+#endif
+
 /** @brief Supported RTC backends. */
 typedef enum {
     HAL_RTC_CHIP_PCF8563 = 0, /**< PCF8563 over I2C. */
+    HAL_RTC_CHIP_DS3231,      /**< DS3231 over I2C.  */
 } hal_rtc_chip_t;
 
-/** @brief I2C bus parameters used by PCF8563 backend. */
+/** @brief I2C bus parameters used by I2C RTC backends (PCF8563 / DS3231). */
 typedef struct {
     uint8_t  sda_pin;   /**< SDA GPIO pin. */
     uint8_t  scl_pin;   /**< SCL GPIO pin. */
     uint32_t clock_hz;  /**< I2C bus speed in Hz (for example 100000 or 400000). */
     uint8_t  i2c_bus;   /**< I2C bus index: 0 = Wire, 1 = Wire1. */
-    uint8_t  i2c_addr;  /**< 7-bit I2C address (0 = use HAL_RTC_PCF8563_DEFAULT_I2C_ADDR). */
+    uint8_t  i2c_addr;  /**< 7-bit I2C address (0 = backend default address). */
 } hal_rtc_i2c_cfg_t;
 
 /**
@@ -56,7 +67,7 @@ typedef struct {
 typedef struct {
     hal_rtc_chip_t chip;
     union {
-        hal_rtc_i2c_cfg_t i2c; /**< Used for HAL_RTC_CHIP_PCF8563. */
+        hal_rtc_i2c_cfg_t i2c; /**< Used for HAL_RTC_CHIP_PCF8563 and HAL_RTC_CHIP_DS3231. */
     } bus;
 } hal_rtc_config_t;
 
@@ -138,7 +149,7 @@ typedef struct {
 /**
  * @brief Initialize an RTC backend and return an opaque handle.
  *
- * For PCF8563 this configures the I2C bus and probes the device.
+ * For I2C backends this configures the I2C bus and probes the device.
  *
  * @param cfg Backend configuration.
  * @return Handle on success, NULL on invalid config/probe failure/pool exhaustion.
@@ -173,9 +184,32 @@ bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
 bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 
 /**
+ * @brief Read current RTC date/time as Unix epoch seconds.
+ *
+ * Conversion is performed in UTC and supports years 1970..2099.
+ *
+ * @param h          Valid handle.
+ * @param out_epoch  Output epoch value.
+ * @return true on success, false on communication/argument/range error.
+ */
+bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch);
+
+/**
+ * @brief Write RTC date/time from Unix epoch seconds.
+ *
+ * Conversion is performed in UTC and supports years 1970..2099.
+ *
+ * @param h      Valid handle.
+ * @param epoch  Unix epoch seconds.
+ * @return true on success, false on argument/range/communication error.
+ */
+bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
+
+/**
  * @brief Read RTC clock-integrity status.
  *
  * For PCF8563 this maps to the VL (voltage-low) status bit in seconds register.
+ * For DS3231 this maps to the OSF (oscillator-stop) status via oscillatorCheck().
  *
  * @param h      Valid handle.
  * @param out_ok Output: true when integrity is OK.
@@ -235,4 +269,4 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 }
 #endif
 
-#endif /* HAL_DISABLE_RTC */
+#endif /* HAL_ENABLE_RTC */

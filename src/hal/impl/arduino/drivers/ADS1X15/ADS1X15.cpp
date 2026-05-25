@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_EXTERNAL_ADC)
+#if defined(HAL_ENABLE_EXTERNAL_ADC)
 
 //
 //    FILE: ADS1X15.cpp
@@ -781,4 +781,4 @@ void ADS1115::requestADC_Differential_2_3()
 //  -- END OF FILE --
 
 
-#endif /* !HAL_DISABLE_EXTERNAL_ADC */
+#endif /* HAL_ENABLE_EXTERNAL_ADC */

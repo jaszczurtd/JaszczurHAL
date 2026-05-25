@@ -137,17 +137,18 @@ pip install pyserial
 
 ## HAL Configuration
 
-Copy `hal_project_config.h` to your sketch directory to customize JaszczurHAL modules:
+Copy `hal_project_config.h` to your sketch directory and enable the
+JaszczurHAL modules your project uses (opt-in model):
 
 ```cpp
-// Example: disable GPS support
-#define HAL_DISABLE_GPS
+// Example: enable GPS support (auto-enables SWSERIAL too)
+#define HAL_ENABLE_GPS
 
-// Example: disable JSON utilities
-#define HAL_DISABLE_CJSON
+// Example: enable bundled cJSON / cJSON_Utils
+#define HAL_ENABLE_CJSON
 ```
 
-See `JaszczurHAL_API.md` for all available `HAL_DISABLE_*` flags.
+See `JaszczurHAL_API.md` for all available `HAL_ENABLE_*` flags.
 
 ## IntelliSense and Code Completion
 

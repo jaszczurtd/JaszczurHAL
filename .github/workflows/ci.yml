@@ -25,6 +25,82 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # ── Flag-propagation regression matrix ─────────────────────────────────────
+  # JaszczurHAL uses an opt-in HAL_ENABLE_* model with automatic upstream
+  # dependency propagation (e.g. HAL_ENABLE_PCF8563 implies HAL_ENABLE_RTC
+  # and HAL_ENABLE_I2C). The three matrix profiles below exercise the
+  # extreme corners of the flag space so any regression in
+  # src/hal/hal_config.h (broken propagation, missing #ifdef guard in a
+  # backend TU, stale consistency #error) shows up as a failed Arduino
+  # static-library build.
+  #
+  #   empty-core   - no HAL_ENABLE_* flags at all. Validates that the
+  #                  bare-core library still compiles when every optional
+  #                  module is off (catches missing #ifdef guards in
+  #                  arduino backend TUs).
+  #   typical-set  - a realistic subset chosen so that *every*
+  #                  propagation chain in hal_config.h fires at least
+  #                  once (KV->EEPROM, MQTT->WIFI, PCF8563->RTC+I2C,
+  #                  GPS->SWSERIAL, MCP9600->THERMOCOUPLE+I2C,
+  #                  DS18B20->ONEWIRE, ILI9341->TFT->DISPLAY).
+  #   all-enabled  - every HAL_ENABLE_* flag set explicitly. Validates
+  #                  that no two backends collide and that all
+  #                  consistency #error checks stay satisfied.
+  arduino-flag-matrix:
+    runs-on: ubuntu-latest
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: empty-core
+            flags: ""
+          - profile: typical-set
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_MQTT
+              -D HAL_ENABLE_KV
+              -D HAL_ENABLE_PCF8563
+              -D HAL_ENABLE_MCP9600
+              -D HAL_ENABLE_DS18B20
+              -D HAL_ENABLE_GPS
+              -D HAL_ENABLE_ILI9341
+              -D HAL_ENABLE_PWM_FREQ
+          - profile: all-enabled
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_TIME
+              -D HAL_ENABLE_MQTT
+              -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_OTA
+              -D HAL_ENABLE_WIREGUARD
+              -D HAL_ENABLE_EEPROM
+              -D HAL_ENABLE_KV
+              -D HAL_ENABLE_LITTLEFS
+              -D HAL_ENABLE_UART
+              -D HAL_ENABLE_SWSERIAL
+              -D HAL_ENABLE_I2C
+              -D HAL_ENABLE_I2C_SLAVE
+              -D HAL_ENABLE_CAN
+              -D HAL_ENABLE_PCF8563
+              -D HAL_ENABLE_DS3231
+              -D HAL_ENABLE_MCP9600
+              -D HAL_ENABLE_MAX6675
+              -D HAL_ENABLE_DS18B20
+              -D HAL_ENABLE_ONEWIRE
+              -D HAL_ENABLE_EXTERNAL_ADC
+              -D HAL_ENABLE_GPS
+              -D HAL_ENABLE_PWM_FREQ
+              -D HAL_ENABLE_RGB_LED
+              -D HAL_ENABLE_ILI9341
+              -D HAL_ENABLE_SSD1306
+              -D HAL_ENABLE_CRYPTO
+              -D HAL_ENABLE_CJSON
+
+    name: "Arduino lib (${{ matrix.profile }})"
+    steps:
+      - uses: actions/checkout@v5
+
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
@@ -35,7 +111,7 @@ jobs:
           arduino-cli core install rp2040:rp2040 \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
-      - name: "Quality Gate: Build Arduino static library"
+      - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
         run: |
-          ./build_arduino_lib.sh --clean
+          ./build_arduino_lib.sh --clean ${{ matrix.flags }}
           test -f build_arduino/libJaszczurHAL.a

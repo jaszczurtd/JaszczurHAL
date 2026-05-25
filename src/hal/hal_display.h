@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 
 /**
  * @file hal_display.h
@@ -9,16 +9,23 @@
  *
  * Supports SPI TFT displays and SSD1306 OLED over I2C.
  *
- * Backend selection:
+ * Backend selection (compile-time, opt-in):
  *
- *   HAL_DISABLE_TFT     - exclude all SPI TFT drivers (ILI9341/ST7789/ST7735/ST7796S);
- *                         hal_display_init() and hal_display_soft_init() are not available
- *   HAL_DISABLE_SSD1306 - exclude the SSD1306 OLED driver;
- *                         hal_display_init_ssd1306_i2c() is not available
+ *   HAL_ENABLE_TFT     - enable the SPI TFT family (requires one of the
+ *                         HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S
+ *                         driver flags; propagates HAL_ENABLE_DISPLAY).
+ *                         Without HAL_ENABLE_TFT, hal_display_init() and
+ *                         hal_display_soft_init() are not available.
+ *   HAL_ENABLE_SSD1306 - enable the SSD1306 OLED driver (propagates
+ *                         HAL_ENABLE_DISPLAY).
+ *                         Without it, hal_display_init_ssd1306_i2c() is
+ *                         not available.
  *
- * Both flags may not be defined simultaneously - use HAL_DISABLE_DISPLAY instead.
+ * Both flags may be enabled simultaneously; the runtime entry points
+ * stay independent. Enabling HAL_ENABLE_DISPLAY alone (without a TFT
+ * driver or SSD1306) triggers a compile-time #error from hal_config.h.
  *
- * TFT drivers are selected at compile time (ignored when HAL_DISABLE_TFT is set):
+ * TFT drivers are selected at compile time (ignored when HAL_ENABLE_TFT is unset):
  * Define exactly one of the following before including this header (or in
  * the build system):
  *
@@ -29,12 +36,12 @@
  *   HAL_DISPLAY_ST7796S  - 320×480 typical, BGR colour order
  *
  * Per-driver exclusion flags (from hal_config.h):
- *   HAL_DISABLE_ILI9341 / HAL_DISABLE_ST7789 / HAL_DISABLE_ST7735 / HAL_DISABLE_ST7796S
+ *   HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S
  *
  * There is no implicit TFT default driver. The project must explicitly define
  * exactly one HAL_DISPLAY_* macro when TFT backend is enabled.
  *
- * SSD1306 is initialized through the dedicated I2C helper (requires HAL_DISABLE_SSD1306
+ * SSD1306 is initialized through the dedicated I2C helper (requires HAL_ENABLE_SSD1306
  * to be undefined):
  *   hal_display_init_ssd1306_i2c(...)
  *
@@ -49,7 +56,7 @@
 #include <stddef.h>
 #include <stdarg.h>
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 #if (((defined(HAL_DISPLAY_ILI9341) ? 1 : 0) + \
       (defined(HAL_DISPLAY_ST7789)  ? 1 : 0) + \
       (defined(HAL_DISPLAY_ST7735)  ? 1 : 0) + \
@@ -59,22 +66,22 @@
 
 #if !defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISPLAY_ST7789) && \
     !defined(HAL_DISPLAY_ST7735) && !defined(HAL_DISPLAY_ST7796S)
-#error "No TFT driver selected. Define one HAL_DISPLAY_* macro or set HAL_DISABLE_TFT."
+#error "No TFT driver selected. Define one HAL_DISPLAY_* macro or unset HAL_ENABLE_TFT."
 #endif
 
-#if defined(HAL_DISPLAY_ILI9341) && defined(HAL_DISABLE_ILI9341)
-#error "HAL_DISPLAY_ILI9341 selected, but HAL_DISABLE_ILI9341 is defined."
+#if defined(HAL_DISPLAY_ILI9341) && !defined(HAL_ENABLE_ILI9341)
+#error "HAL_DISPLAY_ILI9341 selected, but HAL_ENABLE_ILI9341 is not defined."
 #endif
-#if defined(HAL_DISPLAY_ST7789) && defined(HAL_DISABLE_ST7789)
-#error "HAL_DISPLAY_ST7789 selected, but HAL_DISABLE_ST7789 is defined."
+#if defined(HAL_DISPLAY_ST7789) && !defined(HAL_ENABLE_ST7789)
+#error "HAL_DISPLAY_ST7789 selected, but HAL_ENABLE_ST7789 is not defined."
 #endif
-#if defined(HAL_DISPLAY_ST7735) && defined(HAL_DISABLE_ST7735)
-#error "HAL_DISPLAY_ST7735 selected, but HAL_DISABLE_ST7735 is defined."
+#if defined(HAL_DISPLAY_ST7735) && !defined(HAL_ENABLE_ST7735)
+#error "HAL_DISPLAY_ST7735 selected, but HAL_ENABLE_ST7735 is not defined."
 #endif
-#if defined(HAL_DISPLAY_ST7796S) && defined(HAL_DISABLE_ST7796S)
-#error "HAL_DISPLAY_ST7796S selected, but HAL_DISABLE_ST7796S is defined."
+#if defined(HAL_DISPLAY_ST7796S) && !defined(HAL_ENABLE_ST7796S)
+#error "HAL_DISPLAY_ST7796S selected, but HAL_ENABLE_ST7796S is not defined."
 #endif
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 
 /* ---- Common RGB565 colors ----------------------------------------------- */
 /*
@@ -171,11 +178,11 @@ typedef enum {
 
 /* ---- Init / control ---- */
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 /**
  * @brief Construct the display object and start the SPI driver.
  *
- * Not available when HAL_DISABLE_TFT is defined.
+ * Only available when HAL_ENABLE_TFT is defined.
  *
  * For ILI9341 this also calls begin().  For all other drivers the full
  * hardware initialisation is deferred to hal_display_configure() because
@@ -186,13 +193,13 @@ typedef enum {
  * @param rst Reset pin.
  */
 void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
 /**
  * @brief Construct and initialise an SSD1306 OLED connected via I2C.
  *
- * Not available when HAL_DISABLE_SSD1306 is defined.
+ * Only available when HAL_ENABLE_SSD1306 is defined.
  *
  * This helper is intended for monochrome SSD1306 modules that use Wire.
  * The I2C peripheral should be configured before calling this function
@@ -225,7 +232,7 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
 bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
                                      uint8_t i2c_addr, int8_t rst_pin,
                                      uint8_t switchvcc, bool periphBegin);
-#endif /* !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_SSD1306 */
 
 /**
  * @brief Configure display dimensions, colour order, rotation and inversion.
@@ -519,4 +526,4 @@ int hal_display_prepare_text(char *display_txt, size_t display_txt_size,
 int hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
                                const char *format, va_list args);
 
-#endif /* HAL_DISABLE_DISPLAY */
+#endif /* HAL_ENABLE_DISPLAY */

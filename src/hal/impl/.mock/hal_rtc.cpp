@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 
 #include "../../hal_rtc.h"
 #include "../../hal_i2c.h"
@@ -25,6 +25,16 @@ struct hal_rtc_impl_s {
 };
 
 static hal_rtc_impl_t s_pool[HAL_RTC_MAX_INSTANCES];
+
+static bool rtc_backend_supported(hal_rtc_chip_t chip) {
+    switch (chip) {
+        case HAL_RTC_CHIP_PCF8563:
+        case HAL_RTC_CHIP_DS3231:
+            return true;
+        default:
+            return false;
+    }
+}
 
 static void rtc_release_pool_slot(hal_rtc_impl_t *h) {
     hal_critical_section_enter();
@@ -71,6 +81,111 @@ static bool rtc_validate_alarm(const hal_rtc_alarm_t *alarm) {
         return false;
     }
     return true;
+}
+
+static bool rtc_is_leap_year(uint16_t year) {
+    return ((year % 4u) == 0u && (year % 100u) != 0u) || ((year % 400u) == 0u);
+}
+
+static uint8_t rtc_days_in_month(uint16_t year, uint8_t month) {
+    switch (month) {
+        case 1u:  return 31u;
+        case 2u:  return rtc_is_leap_year(year) ? 29u : 28u;
+        case 3u:  return 31u;
+        case 4u:  return 30u;
+        case 5u:  return 31u;
+        case 6u:  return 30u;
+        case 7u:  return 31u;
+        case 8u:  return 31u;
+        case 9u:  return 30u;
+        case 10u: return 31u;
+        case 11u: return 30u;
+        case 12u: return 31u;
+        default:  return 0u;
+    }
+}
+
+static bool rtc_datetime_to_epoch(const hal_rtc_datetime_t *dt, uint64_t *out_epoch) {
+    if (!dt || !out_epoch || !rtc_validate_datetime(dt) || dt->year < 1970u) {
+        return false;
+    }
+
+    uint64_t days = 0u;
+
+    for (uint16_t year = 1970u; year < dt->year; ++year) {
+        days += rtc_is_leap_year(year) ? 366u : 365u;
+    }
+
+    for (uint8_t month = 1u; month < dt->month; ++month) {
+        const uint8_t dim = rtc_days_in_month(dt->year, month);
+        if (dim == 0u) {
+            return false;
+        }
+        days += dim;
+    }
+
+    days += (uint64_t)(dt->day - 1u);
+
+    *out_epoch = days * 86400ull
+               + (uint64_t)dt->hour * 3600ull
+               + (uint64_t)dt->minute * 60ull
+               + (uint64_t)dt->second;
+    return true;
+}
+
+static bool rtc_epoch_to_datetime(uint64_t epoch, hal_rtc_datetime_t *out_dt) {
+    if (!out_dt) {
+        return false;
+    }
+
+    const uint64_t epoch_days = epoch / 86400ull;
+    uint64_t remaining_days = epoch_days;
+    uint32_t sod = (uint32_t)(epoch % 86400ull);
+
+    uint16_t year = 1970u;
+    while (year <= 2099u) {
+        const uint16_t diy = rtc_is_leap_year(year) ? 366u : 365u;
+        if (remaining_days < (uint64_t)diy) {
+            break;
+        }
+        remaining_days -= (uint64_t)diy;
+        ++year;
+    }
+
+    if (year > 2099u) {
+        return false;
+    }
+
+    uint8_t month = 1u;
+    while (month <= 12u) {
+        const uint8_t dim = rtc_days_in_month(year, month);
+        if (dim == 0u) {
+            return false;
+        }
+        if (remaining_days < (uint64_t)dim) {
+            break;
+        }
+        remaining_days -= (uint64_t)dim;
+        ++month;
+    }
+
+    if (month > 12u) {
+        return false;
+    }
+
+    out_dt->year = year;
+    out_dt->month = month;
+    out_dt->day = (uint8_t)(remaining_days + 1u);
+
+    out_dt->hour = (uint8_t)(sod / 3600u);
+    sod %= 3600u;
+    out_dt->minute = (uint8_t)(sod / 60u);
+    out_dt->second = (uint8_t)(sod % 60u);
+
+    out_dt->weekday = (uint8_t)((epoch_days + 4ull) % 7ull);
+    out_dt->clock_integrity = true;
+
+    return rtc_validate_datetime(out_dt);
 }
 
 static bool rtc_validate_clkout_mode(hal_rtc_clkout_mode_t mode) {
@@ -130,7 +245,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
         return NULL;
     }
 
-    if (cfg->chip != HAL_RTC_CHIP_PCF8563) {
+    if (!rtc_backend_supported(cfg->chip)) {
         hal_serial_println("hal_rtc_init: unsupported RTC backend");
         hal_mutex_destroy(h->mutex);
         h->mutex = NULL;
@@ -138,10 +253,14 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
         return NULL;
     }
 
+    const uint8_t default_addr = (cfg->chip == HAL_RTC_CHIP_DS3231)
+        ? (uint8_t)HAL_RTC_DS3231_DEFAULT_I2C_ADDR
+        : (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
+
     const hal_rtc_i2c_cfg_t *ic = &cfg->bus.i2c;
     const uint8_t addr = (ic->i2c_addr != 0u)
         ? ic->i2c_addr
-        : (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
+        : default_addr;
 
     h->i2c_bus = ic->i2c_bus;
     h->i2c_addr = addr;
@@ -199,6 +318,32 @@ bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
     h->dt.year = dt->year;
     hal_mutex_unlock(h->mutex);
     return true;
+}
+
+bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
+    if (!h || !out_epoch) {
+        return false;
+    }
+
+    hal_rtc_datetime_t dt = {0};
+    if (!hal_rtc_get_datetime(h, &dt)) {
+        return false;
+    }
+
+    return rtc_datetime_to_epoch(&dt, out_epoch);
+}
+
+bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch) {
+    if (!h) {
+        return false;
+    }
+
+    hal_rtc_datetime_t dt = {0};
+    if (!rtc_epoch_to_datetime(epoch, &dt)) {
+        return false;
+    }
+
+    return hal_rtc_set_datetime(h, &dt);
 }
 
 bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
@@ -350,4 +495,4 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags) {
     hal_mutex_unlock(h->mutex);
 }
 
-#endif /* HAL_DISABLE_RTC */
+#endif /* HAL_ENABLE_RTC */

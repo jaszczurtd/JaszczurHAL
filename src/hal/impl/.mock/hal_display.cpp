@@ -43,10 +43,10 @@ static void copy_text(char *dst, size_t dst_size, const char *src) {
 	dst[dst_size - 1] = '\0';
 }
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst)                    { (void)cs; (void)dc; (void)rst; }
-#endif /* !HAL_DISABLE_TFT */
-#ifndef HAL_DISABLE_SSD1306
+#endif /* HAL_ENABLE_TFT */
+#ifdef HAL_ENABLE_SSD1306
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,
                                   bool periphBegin) {
@@ -70,7 +70,7 @@ bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
 	s_height = height;
 	return true;
 }
-#endif /* !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_SSD1306 */
 bool hal_display_configure(int w, int h, uint8_t r, bool inv, bool bgr)        {
 	if (w <= 0 || h <= 0) {
 		hal_derr("hal_display_configure: invalid size %dx%d", w, h);

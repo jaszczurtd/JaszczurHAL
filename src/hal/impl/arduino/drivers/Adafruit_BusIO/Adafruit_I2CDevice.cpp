@@ -1,8 +1,8 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) || (!defined(HAL_DISABLE_THERMOCOUPLE) && !defined(HAL_DISABLE_MCP9600) && !defined(HAL_DISABLE_I2C))
+#if defined(HAL_ENABLE_DISPLAY) || (defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C))
 
 #include "Adafruit_I2CDevice.h"
-#if !defined(HAL_DISABLE_I2C)
+#if defined(HAL_ENABLE_I2C)
 #include "../../../../hal_i2c.h"
 #endif
 
@@ -25,7 +25,7 @@ static bool busio_i2c_map_wire(TwoWire *wire, uint8_t *bus_out) {
 class BusioI2CLockGuard {
 public:
   explicit BusioI2CLockGuard(TwoWire *wire) : _locked(false), _bus(0) {
-#if !defined(HAL_DISABLE_I2C)
+#if defined(HAL_ENABLE_I2C)
     if (busio_i2c_map_wire(wire, &_bus)) {
       hal_i2c_lock_bus(_bus);
       _locked = true;
@@ -36,7 +36,7 @@ public:
   }
 
   ~BusioI2CLockGuard() {
-#if !defined(HAL_DISABLE_I2C)
+#if defined(HAL_ENABLE_I2C)
     if (_locked) {
       hal_i2c_unlock_bus(_bus);
     }

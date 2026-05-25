@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_GPS
+#ifdef HAL_ENABLE_GPS
 
 #include "../../hal_gps.h"
 #include "../../hal_swserial.h"
@@ -161,4 +161,4 @@ int hal_gps_time_minute(void) { gps_ensure_mutex(); hal_mutex_lock(s_gps_mutex);
 int hal_gps_time_second(void) { gps_ensure_mutex(); hal_mutex_lock(s_gps_mutex); int v = s_gps.time.second(); hal_mutex_unlock(s_gps_mutex); return v; }
 
 
-#endif /* HAL_DISABLE_GPS */
+#endif /* HAL_ENABLE_GPS */

@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_CAN
+#ifdef HAL_ENABLE_CAN
 
 #include "../../hal_can.h"
 #include "../../hal_config.h"
@@ -134,4 +134,4 @@ bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1) {
     return ok;
 }
 
-#endif /* HAL_DISABLE_CAN */
+#endif /* HAL_ENABLE_CAN */

@@ -24,7 +24,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 ## Library structure
 
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
-- `src/HAL_FLAGS.txt` - concise `HAL_DISABLE_*` / `HAL_ENABLE_*` flag summary.
+- `src/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
 - `src/libConfig.h` - backward-compat redirect to `hal/hal_config.h`.
 - `src/tools.h` - C++ utility aggregator.
 - `src/tools_c.h` - C-compatible utility declarations.
@@ -98,96 +98,112 @@ boundary conceptually.
 
 ---
 
-## Selective module inclusion (`HAL_DISABLE_*`)
+## Selective module inclusion (`HAL_ENABLE_*`)
 
-By default every module listed above is compiled and linked.
-To exclude modules your project does not use, define one or more
-`HAL_DISABLE_<MODULE>` preprocessor flags.  This removes:
+JaszczurHAL uses an **opt-in** model: by default *no* optional module is
+compiled. To use a module, define its `HAL_ENABLE_<MODULE>` flag (in
+`hal_project_config.h` or via `-D`). Enabling a flag pulls in:
 
-* the **API declarations** from the header (the file compiles to an empty
-  translation unit, so calling a disabled function gives a clear compile-time
-  error);
-* the **implementation** .cpp (no object code, no third-party `#include`);
+* the **API declarations** in the corresponding header (otherwise the file
+  compiles to an empty translation unit and calls to its functions raise a
+  clear compile-time error);
+* the **implementation** .cpp (and the bundled third-party drivers it
+  depends on - all `#include`s are gated);
 * the entry in the **umbrella header** `hal/hal.h`.
+
+Modules that are not enabled cost zero code, zero RAM, and pull in no
+third-party libraries via arduino-cli.
 
 ### Available flags
 
-| Flag | Header | Impl | 3rd-party deps removed |
+| Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
-| `HAL_DISABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | WiFi (arduino-pico) |
-| `HAL_DISABLE_TIME` | `hal_time.h`* | `hal_time.cpp` | WiFi NTP helpers |
-| `HAL_DISABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
-| `HAL_DISABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(depends on EEPROM)* |
-| `HAL_DISABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ |
-| `HAL_DISABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600/MAX6675 drivers |
-| `HAL_DISABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` stack |
-| `HAL_DISABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 RTC backend |
-| `HAL_DISABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 RTC backend (propagates `HAL_DISABLE_RTC`) |
-| `HAL_DISABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
-| `HAL_DISABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 driver |
-| `HAL_DISABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 driver |
-| `HAL_DISABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
-| `HAL_DISABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
-| `HAL_DISABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
-| `HAL_DISABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
-| `HAL_DISABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver |
-| `HAL_DISABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
-| `HAL_DISABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
-| `HAL_DISABLE_CAN` | `hal_can.h` | `hal_can.cpp` | bundled MCP2515 driver |
-| `HAL_DISABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | Adafruit GFX, ILI9341/ST77xx/SSD1306 |
-| `HAL_DISABLE_TFT` | `hal_display.h` | `hal_display.cpp` | all TFT drivers (`Adafruit_ILI9341`, `Adafruit_ST7789`, `Adafruit_ST7735`, `Adafruit_ST7796S`) |
-| `HAL_DISABLE_SSD1306` | `hal_display.h` | `hal_display.cpp` | `Adafruit_SSD1306` |
-| `HAL_DISABLE_ILI9341` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ILI9341` |
-| `HAL_DISABLE_ST7789` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7789` |
-| `HAL_DISABLE_ST7735` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7735` |
-| `HAL_DISABLE_ST7796S` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7796S` |
-| `HAL_DISABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
+| `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | WiFi (arduino-pico) |
+| `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates WIFI) |
+| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
+| `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
+| `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
+| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
+| `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
+| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS |
+| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
+| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
+| `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
+| `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
+| `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` | bundled MCP2515 driver |
+| `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
+| `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
+| `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
+| `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
+| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 (propagates THERMOCOUPLE + I2C) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 (propagates THERMOCOUPLE) |
+| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
+| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
+| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver (propagates I2C) |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ (propagates SWSERIAL) |
+| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
+| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
+| `HAL_ENABLE_TFT` | `hal_display.h` | `hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY)* |
+| `HAL_ENABLE_ILI9341` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ILI9341` (propagates TFT + DISPLAY) |
+| `HAL_ENABLE_ST7789` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7789` (propagates TFT + DISPLAY) |
+| `HAL_ENABLE_ST7735` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7735` (propagates TFT + DISPLAY) |
+| `HAL_ENABLE_ST7796S` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7796S` (propagates TFT + DISPLAY) |
+| `HAL_ENABLE_SSD1306` | `hal_display.h` | `hal_display.cpp` | `Adafruit_SSD1306` (propagates DISPLAY) |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
+| `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | `utils/cJSON.c`, `utils/cJSON_Utils.c` | bundled cJSON |
+| `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
 
-### `HAL_ENABLE_*` flags
+### Opt-out flag
 
-| Flag | Scope | Effect |
-|---|---|---|
-| `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | exposes bundled `utils/cJSON.h` and `utils/cJSON_Utils.h` includes |
-| `HAL_ENABLE_LITTLEFS` | `hal_littlefs` module | enables thread-safe LittleFS lifecycle and basic FS helpers |
-| `HAL_ENABLE_UDP` | `hal_udp` module | enables thread-safe WiFiUDP wrapper (requires WiFi support) |
-| `HAL_ENABLE_WIREGUARD` | `hal_wireguard` module | enables thread-safe WireGuard wrapper (requires WiFi support) |
-| `HAL_ENABLE_MQTT` | `hal_mqtt` module | enables thread-safe PubSubClient wrapper (requires WiFi support) |
-| `HAL_ENABLE_OTA` | `hal_ota` module | enables thread-safe ArduinoOTA wrapper with callback dispatch from `hal_ota_handle()` (requires WiFi support) |
-| `HAL_ENABLE_CRYPTO` | `hal_crypto` and `hal_sc_auth` | enables crypto helpers and framed-session auth path |
+| Flag | Effect |
+|---|---|
+| `HAL_DISABLE_ASSERTS` | Compiles every `HAL_ASSERT()` to a no-op. Asserts are ON by default. Mirrors the standard `NDEBUG` convention. |
 
 ### Dependency propagation (hal\_config.h)
 
-Disabling a base module automatically disables its dependants:
+Enabling a leaf module automatically enables every module it requires:
 
 ```
-HAL_DISABLE_EEPROM   ->  HAL_DISABLE_KV
-HAL_DISABLE_WIFI     ->  HAL_DISABLE_TIME
-HAL_DISABLE_I2C      ->  HAL_DISABLE_EXTERNAL_ADC
-HAL_DISABLE_I2C      ->  HAL_DISABLE_PCF8563
-HAL_DISABLE_SWSERIAL ->  HAL_DISABLE_GPS
-HAL_DISABLE_PCF8563  ->  HAL_DISABLE_RTC
-HAL_DISABLE_MCP9600 + HAL_DISABLE_MAX6675 -> HAL_DISABLE_THERMOCOUPLE
-HAL_DISABLE_ILI9341 + HAL_DISABLE_ST7789 + HAL_DISABLE_ST7735 + HAL_DISABLE_ST7796S -> HAL_DISABLE_TFT
-HAL_DISABLE_TFT + HAL_DISABLE_SSD1306 -> HAL_DISABLE_DISPLAY
+HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
+HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
+HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
+HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
+HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
+HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
+HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
+HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
+HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
+HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
+HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
+HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
+HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY
+HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
 ```
 
-You may also define a dependant flag alone (e.g. `HAL_DISABLE_KV` without
-`HAL_DISABLE_EEPROM`) to keep the base while excluding the dependant.
+Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,
+`HAL_ENABLE_DISPLAY`, `HAL_ENABLE_TFT`) emit a compile-time `#error` if
+enabled without any backend.
+
+You only need to enable the **leaf** module you actually use; everything
+upstream is pulled in for you.
 
 ### Passing flags - recommended: `hal_project_config.h`
 
-Create `hal_project_config.h` in your sketch directory:
+Create `hal_project_config.h` in your sketch directory and enable the
+modules you use:
 
 ```c
 #pragma once
-#define HAL_DISABLE_WIFI
-#define HAL_DISABLE_EEPROM      // -> propagates HAL_DISABLE_KV
-#define HAL_DISABLE_GPS
-#define HAL_DISABLE_THERMOCOUPLE
-#define HAL_DISABLE_UART
-#define HAL_DISABLE_SWSERIAL
-#define HAL_DISABLE_I2C         // -> propagates HAL_DISABLE_EXTERNAL_ADC + HAL_DISABLE_PCF8563/HAL_DISABLE_RTC
-#define HAL_DISABLE_PWM_FREQ
+#define HAL_ENABLE_WIFI
+#define HAL_ENABLE_KV            // -> propagates EEPROM
+#define HAL_ENABLE_GPS           // -> propagates SWSERIAL
+#define HAL_ENABLE_MCP9600       // -> propagates THERMOCOUPLE + I2C
+#define HAL_ENABLE_UART
+#define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
+#define HAL_ENABLE_PWM_FREQ
 ```
 
 `hal_config.h` detects it via `__has_include("hal_project_config.h")`.
@@ -212,15 +228,15 @@ In VS Code tasks, use `${workspaceFolder}` for the path.
 arduino-cli compile \
   --fqbn rp2040:rp2040:rpipico \
   --build-property "build.extra_flags=\
--DHAL_DISABLE_WIFI \
--DHAL_DISABLE_EEPROM \
--DHAL_DISABLE_GPS \
--DHAL_DISABLE_THERMOCOUPLE \
--DHAL_DISABLE_UART \
--DHAL_DISABLE_SWSERIAL \
--DHAL_DISABLE_I2C \
--DHAL_DISABLE_EXTERNAL_ADC \
--DHAL_DISABLE_PWM_FREQ" \
+-DHAL_ENABLE_WIFI \
+-DHAL_ENABLE_EEPROM \
+-DHAL_ENABLE_GPS \
+-DHAL_ENABLE_THERMOCOUPLE \
+-DHAL_ENABLE_UART \
+-DHAL_ENABLE_SWSERIAL \
+-DHAL_ENABLE_I2C \
+-DHAL_ENABLE_EXTERNAL_ADC \
+-DHAL_ENABLE_PWM_FREQ" \
   --build-path .build \
   --warnings all .
 ```
@@ -244,7 +260,7 @@ arduino-cli compile \
 
 ### SD library (`<SD.h>`)
 
-Separate from `HAL_DISABLE_*`: the `<SD.h>` include in `tools.h` is guarded by
+Separate from `HAL_ENABLE_*`: the `<SD.h>` include in `tools.h` is guarded by
 `#ifdef SD_LOGGER`.  If your project does not define `SD_LOGGER`, the SD
 library is not compiled.
 
@@ -256,11 +272,13 @@ Optional Arduino drivers used by HAL modules are vendored in
 
 Actual compiled dependencies are controlled by the module set:
 
-- enabled modules may pull their third-party backends
-- disabled modules compile out both declarations and implementation details
+- enabled modules (`HAL_ENABLE_*`) pull in their third-party backends
+- modules left disabled (the default) compile out both declarations and
+  implementation details
 
-\* `HAL_DISABLE_TIME` hides NTP/local-time APIs, but `hal_time_from_components(...)`
-remains available as a pure conversion helper with no network dependency.
+\* `HAL_ENABLE_TIME` enables NTP/local-time APIs;
+`hal_time_from_components(...)` remains available unconditionally as a pure
+conversion helper with no network dependency.
 
 ---
 
@@ -321,10 +339,11 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | `Adafruit_ILI9341` | TFT backend (`HAL_DISPLAY_ILI9341`) | Limor Fried (Ladyada) | license notice in sources (BSD) + README note (MIT) | `src/hal/impl/arduino/drivers/Adafruit_ILI9341/Adafruit_ILI9341.h` and `src/hal/impl/arduino/drivers/Adafruit_ILI9341/README.md` |
 | `Adafruit_MCP9600` | thermocouple MCP9600 backend | Kevin Townsend, Limor Fried | BSD in driver docs/sources (`license.txt`) + extra MIT file | `src/hal/impl/arduino/drivers/Adafruit_MCP9600/license.txt` and `src/hal/impl/arduino/drivers/Adafruit_MCP9600/LICENSE` |
 | `Adafruit_NeoPixel` | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors | LGPL | `src/hal/impl/arduino/drivers/Adafruit_NeoPixel/COPYING` |
-| `Adafruit_SSD1306` | OLED backend (`HAL_DISABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
+| `Adafruit_SSD1306` | OLED backend (`HAL_ENABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
 | `Adafruit_ST7735_and_ST7789_Library` | ST7735/ST7789/ST7796S backends | Limor Fried (Ladyada) | MIT | `src/hal/impl/arduino/drivers/Adafruit_ST7735_and_ST7789_Library/README.txt` |
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
 | `DallasTemperature` | DS18B20 backend (`hal_ds18b20`) | Miles Burton | MIT | `src/hal/impl/arduino/drivers/DallasTemperature/LICENSE` |
+| `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in sources + repository LICENSE | `src/hal/impl/arduino/drivers/DS3231/DS3231.h`, `src/hal/impl/arduino/drivers/DS3231/DS3231.cpp`, `src/hal/impl/arduino/drivers/DS3231/LICENSE` |
 | `MAX6675` | thermocouple MAX6675 backend | Adafruit (Limor Fried) | BSD (license file in driver folder) | `src/hal/impl/arduino/drivers/MAX6675/license.txt` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
 | `OneWire` | generic OneWire API (`hal_onewire`) and DS18B20 backend transport | Jim Studt (original), Paul Stoffregen (maintainer) | MIT | `src/hal/impl/arduino/drivers/OneWire/LICENSE` |
@@ -340,13 +359,13 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Area | What changed | Why |
 |---|---|---|
 | Include wiring | HAL modules include bundled dependencies from local `drivers/` and `frameworks/` paths; intra-module includes were rewired to local relative paths. | Keeps third-party code encapsulated inside HAL internals and avoids global include namespace leaks. |
-| Conditional compilation | Driver `.cpp` files are wrapped with module-level `HAL_DISABLE_*` guards. | Disabled modules remove both HAL wrappers and third-party backend code from build. |
+| Conditional compilation | Driver `.cpp` files are wrapped with module-level `HAL_ENABLE_*` guards. | Disabled-by-default modules remove both HAL wrappers and third-party backend code from the build. |
 | SPI synchronization | Drivers using SPI transactions now integrate `hal_spi_lock`/`hal_spi_unlock` where needed (CAN, BusIO SPI, SPITFT path). | Prevents cross-thread/cross-core SPI transaction interleaving. |
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed Wire/Wire1 transactions and improves determinism under concurrency. |
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `Adafruit_MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
-| TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_DISABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
+| TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_ENABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
 | WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
@@ -552,7 +571,7 @@ void hal_pwm_write(uint8_t pin, uint32_t value);
 
 ---
 
-## `hal_pwm_freq` - PWM with frequency control (pico SDK-backed)  *(optional - `HAL_DISABLE_PWM_FREQ`)*
+## `hal_pwm_freq` - PWM with frequency control (pico SDK-backed)  *(optional - `HAL_ENABLE_PWM_FREQ`)*
 
 Use this instead of `hal_pwm` when you need a specific PWM frequency (e.g. 160 Hz, 300 Hz).
 
@@ -1385,7 +1404,7 @@ and do not need to call the helpers below directly.
 
 ---
 
-## `hal_can` - CAN bus  *(optional - `HAL_DISABLE_CAN`)*
+## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`)*
 
 ```c
 #include <hal/hal_can.h>
@@ -1451,7 +1470,7 @@ missing ACK is logged via `hal_derr_limited("can", ...)` to avoid serial floodin
 
 ---
 
-## `hal_display` - TFT / OLED display  *(optional - `HAL_DISABLE_DISPLAY`)*
+## `hal_display` - TFT / OLED display  *(optional - `HAL_ENABLE_DISPLAY`)*
 
 Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S) and SSD1306 OLED over I2C.
 
@@ -1463,10 +1482,10 @@ Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S) and SSD1306 OLED ov
 #define HAL_DISPLAY_ST7796S
 
 // Optional per-driver excludes:
-// #define HAL_DISABLE_ILI9341
-// #define HAL_DISABLE_ST7789
-// #define HAL_DISABLE_ST7735
-// #define HAL_DISABLE_ST7796S
+// #define HAL_ENABLE_ILI9341
+// #define HAL_ENABLE_ST7789
+// #define HAL_ENABLE_ST7735
+// #define HAL_ENABLE_ST7796S
 ```
 
 ```c
@@ -1634,7 +1653,7 @@ void hal_spi_unlock(uint8_t bus);
 
 ---
 
-## `hal_i2c` - I2C bus  *(optional - `HAL_DISABLE_I2C`)*
+## `hal_i2c` - I2C bus  *(optional - `HAL_ENABLE_I2C`)*
 
 ```c
 #include <hal/hal_i2c.h>
@@ -1779,7 +1798,7 @@ mutex in addition, since the HAL mutex is released at each `end_transmission`.
 
 ---
 
-## `hal_i2c_slave` - I2C slave/target with register map  *(optional - `HAL_DISABLE_I2C_SLAVE`)*
+## `hal_i2c_slave` - I2C slave/target with register map  *(optional - `HAL_ENABLE_I2C_SLAVE`)*
 
 Exposes a fixed-size register map over I2C slave mode. A remote master writes
 a one-byte register pointer, then reads N bytes starting from that address.
@@ -1853,7 +1872,7 @@ int     hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf, i
 
 ---
 
-## `hal_swserial` - Software serial  *(optional - `HAL_DISABLE_SWSERIAL`)*
+## `hal_swserial` - Software serial  *(optional - `HAL_ENABLE_SWSERIAL`)*
 
 UART frame-format constants for `config` are defined in `hal/hal_uart_config.h`.
 
@@ -1903,7 +1922,7 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h);
 
 ---
 
-## `hal_uart` - Hardware UART  *(optional - `HAL_DISABLE_UART`)*
+## `hal_uart` - Hardware UART  *(optional - `HAL_ENABLE_UART`)*
 
 ```c
 #include <hal/hal_uart.h>
@@ -1942,7 +1961,7 @@ uint8_t     hal_mock_uart_get_tx_pin(hal_uart_t h);
 
 ---
 
-## `hal_rgb_led` - NeoPixel status LED  *(optional - `HAL_DISABLE_RGB_LED`)*
+## `hal_rgb_led` - NeoPixel status LED  *(optional - `HAL_ENABLE_RGB_LED`)*
 
 ```c
 #include <hal/hal_rgb_led.h>
@@ -1996,7 +2015,7 @@ void                hal_mock_rgb_led_reset(void);
 
 ---
 
-## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_DISABLE_THERMOCOUPLE`)*
+## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
 Supports MCP9600 (I2C) and MAX6675 (SPI bit-bang). Functions not available on the
 selected chip return a safe default (NAN / 0 / false) and print an error.
@@ -2086,7 +2105,7 @@ uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status regist
 
 ---
 
-## `hal_ds18b20` - DS18B20 digital temperature sensor  *(optional - `HAL_DISABLE_DS18B20`)*
+## `hal_ds18b20` - DS18B20 digital temperature sensor  *(optional - `HAL_ENABLE_DS18B20`)*
 
 Non-blocking sensor workflow:
 
@@ -2139,9 +2158,9 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 
 ---
 
-## `hal_rtc` - Real-time clock  *(optional - `HAL_DISABLE_RTC`)*
+## `hal_rtc` - Real-time clock  *(optional - `HAL_ENABLE_RTC`)*
 
-Handle-based RTC abstraction. Current backend is PCF8563 over I2C.
+Handle-based RTC abstraction. Current backends are PCF8563 and DS3231 over I2C.
 The API is vendor-neutral and already exposes generic alarm/timer/clock-output
 and event/IRQ controls.
 
@@ -2156,6 +2175,7 @@ typedef struct hal_rtc_impl_s *hal_rtc_t;
 
 typedef enum {
   HAL_RTC_CHIP_PCF8563 = 0,
+  HAL_RTC_CHIP_DS3231,
 } hal_rtc_chip_t;
 
 typedef struct {
@@ -2163,7 +2183,7 @@ typedef struct {
   uint8_t  scl_pin;
   uint32_t clock_hz;
   uint8_t  i2c_bus;   // 0 = Wire, 1 = Wire1
-  uint8_t  i2c_addr;  // 0 = default 0x51
+  uint8_t  i2c_addr;  // 0 = backend default (0x51 PCF8563, 0x68 DS3231)
 } hal_rtc_i2c_cfg_t;
 
 typedef struct {
@@ -2238,9 +2258,14 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 ```
 
-**impl/arduino:** direct PCF8563 register access over `hal_i2c` (date-time,
-clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
-interrupt enable mask and read-clear event flags).
+**impl/arduino:**
+- PCF8563 backend: direct register access over `hal_i2c` (date-time,
+  clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
+  interrupt enable mask and read-clear event flags).
+- DS3231 backend: vendored `DS3231` library integration with date-time,
+  clock integrity via OSF/`oscillatorCheck()`, alarm/IRQ mapping using Alarm2,
+  and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
+  Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
 **impl/.mock:** in-memory state model with deterministic behavior for unit tests.
 **Thread safety:** Arduino backend: per-handle mutex serializes runtime API calls;
 I2C traffic is additionally protected by the `hal_i2c` bus mutex. Create/destroy
@@ -2256,7 +2281,7 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 
 ---
 
-## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_DISABLE_EXTERNAL_ADC`)*
+## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_ENABLE_EXTERNAL_ADC`)*
 
 ```c
 #include <hal/hal_external_adc.h>
@@ -2288,7 +2313,7 @@ float hal_mock_ext_adc_get_range(void);                               // return 
 
 ---
 
-## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_DISABLE_GPS`)*
+## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_ENABLE_GPS`)*
 
 Singleton GPS subsystem. Wraps TinyGPS++ behind a platform-independent API.
 The real implementation feeds the parser from a PIO-based SoftwareSerial port;
@@ -2381,7 +2406,7 @@ void hal_mock_gps_reset(void);                                 // zero all state
 
 ---
 
-## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_DISABLE_EEPROM`)*
+## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_ENABLE_EEPROM`)*
 
 Single API that works with both the RP2040 internal flash-backed EEPROM and the
 external AT24C256 I2C EEPROM.  The back-end is selected at runtime in
@@ -2482,7 +2507,7 @@ hal_eeprom_write_byte(0, 0xAB);
 
 ---
 
-## `hal_wifi` - WiFi  *(optional - `HAL_DISABLE_WIFI`)*
+## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
 
 ```c
 #include <hal/hal_wifi.h>
@@ -2621,7 +2646,7 @@ bool hal_ota_is_started(void);
 
 **Behavior notes:**
 - Module is available only when `HAL_ENABLE_OTA` is defined.
-- Requires WiFi support (`HAL_DISABLE_WIFI` must be unset).
+- Requires WiFi support (`HAL_ENABLE_WIFI` must be unset).
 - `hal_ota_begin()` initializes OTA service and registers internal event hooks.
 - `hal_ota_handle()` polls OTA transport and dispatches queued events to user callbacks.
 - Callback handlers can be replaced or unregistered by passing `NULL`.
@@ -2879,7 +2904,7 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 
 ---
 
-## `hal_time` - System time & NTP  *(optional - `HAL_DISABLE_TIME`)*
+## `hal_time` - System time & NTP  *(optional - `HAL_ENABLE_TIME`)*
 
 ```c
 #include <hal/hal_time.h>
@@ -2908,7 +2933,7 @@ const char *hal_mock_time_get_ntp_secondary(void);
 
 ---
 
-## `hal_kv` - Key-value storage on EEPROM  *(optional - `HAL_DISABLE_KV`)*
+## `hal_kv` - Key-value storage on EEPROM  *(optional - `HAL_ENABLE_KV`)*
 
 Thread-safe append-only KV/record storage on top of `hal_eeprom`.
 Uses dual-bank layout with CRC16-protected headers and records.
