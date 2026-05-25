@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_KV
+#ifdef HAL_ENABLE_KV
 
 /**
  * @file hal_kv.h
@@ -85,7 +85,7 @@ void hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
 
 
-#endif /* HAL_DISABLE_KV */
+#endif /* HAL_ENABLE_KV */
 #ifdef __cplusplus
 }
 #endif

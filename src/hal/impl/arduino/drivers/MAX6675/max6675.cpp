@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_THERMOCOUPLE) && !defined(HAL_DISABLE_MAX6675)
+#if defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MAX6675)
 
 // this library is public domain. enjoy!
 // https://learn.adafruit.com/thermocouple/
@@ -94,4 +94,4 @@ byte MAX6675::spiread(void) {
   return d;
 }
 
-#endif /* !HAL_DISABLE_THERMOCOUPLE && !HAL_DISABLE_MAX6675 */
+#endif /* HAL_ENABLE_THERMOCOUPLE && !HAL_ENABLE_MAX6675 */

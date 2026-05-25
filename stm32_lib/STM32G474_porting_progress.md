@@ -40,20 +40,20 @@ Charakter implementacji:
 
 ### 3. Domyślny profil funkcjonalny STM32 (na start)
 W `stm32_lib/CMakeLists.txt` domyślnie ustawiono:
-- `HAL_DISABLE_WIFI`
-- `HAL_DISABLE_TIME`
-- `HAL_DISABLE_EEPROM`
-- `HAL_DISABLE_GPS`
-- `HAL_DISABLE_THERMOCOUPLE`
-- `HAL_DISABLE_DS18B20`
-- `HAL_DISABLE_SWSERIAL`
-- `HAL_DISABLE_I2C_SLAVE`
-- `HAL_DISABLE_EXTERNAL_ADC`
-- `HAL_DISABLE_PWM_FREQ`
-- `HAL_DISABLE_RGB_LED`
-- `HAL_DISABLE_CAN`
-- `HAL_DISABLE_DISPLAY`
-- `HAL_DISABLE_UNITY`
+- `HAL_ENABLE_WIFI`
+- `HAL_ENABLE_TIME`
+- `HAL_ENABLE_EEPROM`
+- `HAL_ENABLE_GPS`
+- `HAL_ENABLE_THERMOCOUPLE`
+- `HAL_ENABLE_DS18B20`
+- `HAL_ENABLE_SWSERIAL`
+- `HAL_ENABLE_I2C_SLAVE`
+- `HAL_ENABLE_EXTERNAL_ADC`
+- `HAL_ENABLE_PWM_FREQ`
+- `HAL_ENABLE_RGB_LED`
+- `HAL_ENABLE_CAN`
+- `HAL_ENABLE_DISPLAY`
+- `HAL_ENABLE_UNITY`
 
 To ogranicza zakres do "rdzenia" backendu i upraszcza pierwsze etapy portu.
 
@@ -93,4 +93,4 @@ Opcjonalnie:
 2. Realna implementacja `hal_timer_*` (sprzętowe timery/IRQ).
 3. Integracja `hal_system` (watchdog, UID MCU, bootloader, czas).
 4. Dodanie smoke-testów sprzętowych (GPIO/UART/I2C/SPI) na płytce STM32G474.
-5. Stopniowe odblokowywanie kolejnych modułów (`HAL_DISABLE_*`) w miarę portowania.
+5. Stopniowe odblokowywanie kolejnych modułów (`HAL_ENABLE_*`) w miarę portowania.

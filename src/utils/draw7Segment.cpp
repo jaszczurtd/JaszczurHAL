@@ -1,5 +1,5 @@
 #include "draw7Segment.h"
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 
 static const uint8_t SEGMENT_MAP[16][7] = {
   {1,1,1,1,1,1,0}, // 0
@@ -155,4 +155,4 @@ int get7SegStringWidth(const char* str, int digitWidth, float thickness) {
   return static_cast<int>(totalWidth);
 }
 
-#endif /* HAL_DISABLE_DISPLAY */
+#endif /* HAL_ENABLE_DISPLAY */

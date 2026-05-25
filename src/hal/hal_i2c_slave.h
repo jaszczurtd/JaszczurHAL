@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_I2C_SLAVE
+#ifdef HAL_ENABLE_I2C_SLAVE
 
 /**
  * @file hal_i2c_slave.h
@@ -117,7 +117,7 @@ uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
 uint32_t hal_i2c_slave_get_transaction_count(void);
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 
-#endif /* HAL_DISABLE_I2C_SLAVE */
+#endif /* HAL_ENABLE_I2C_SLAVE */
 #ifdef __cplusplus
 }
 #endif

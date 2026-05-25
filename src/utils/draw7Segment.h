@@ -2,7 +2,7 @@
 #define DRAW_7_SEGMENT_H
 
 #include <hal/hal_config.h>
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 
 /**
  * @file draw7Segment.h
@@ -41,5 +41,5 @@ void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeig
  */
 int get7SegStringWidth(const char* str, int digitWidth, float thickness);
 
-#endif /* HAL_DISABLE_DISPLAY */
+#endif /* HAL_ENABLE_DISPLAY */
 #endif /* DRAW_7_SEGMENT_H */

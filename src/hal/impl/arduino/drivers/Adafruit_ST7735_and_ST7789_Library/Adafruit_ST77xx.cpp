@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT) && (!defined(HAL_DISABLE_ST7735) || !defined(HAL_DISABLE_ST7789) || !defined(HAL_DISABLE_ST7796S))
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT) && (defined(HAL_ENABLE_ST7735) || defined(HAL_ENABLE_ST7789) || defined(HAL_ENABLE_ST7796S))
 
 /**************************************************************************
   This is a library for several Adafruit displays based on ST77* drivers.
@@ -363,4 +363,4 @@ void Adafruit_ST77xx::enableSleep(boolean enable) {
 
  */
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT && any ST77xx backend enabled */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT && any ST77xx backend enabled */

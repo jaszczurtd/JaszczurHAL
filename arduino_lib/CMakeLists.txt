@@ -117,8 +117,8 @@ set(UTIL_SOURCES
     ${SRC}/utils/cJSON_Utils.c
 )
 
-# Unity is optionally included (can be disabled via HAL_DISABLE_UNITY)
-if(NOT HAL_DISABLE_UNITY)
+# Unity is opt-in: enable it via -DHAL_ENABLE_UNITY=ON when configuring.
+if(HAL_ENABLE_UNITY)
     list(APPEND UTIL_SOURCES ${SRC}/utils/unity.c)
 endif()
 
@@ -172,7 +172,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     ${CHIP_DEFS}
 )
 
-# Extra user-supplied defines (e.g. HAL_DISABLE_WIFI, PICO_W, etc.)
+# Extra user-supplied defines (e.g. HAL_ENABLE_WIFI, PICO_W, etc.)
 if(DEFINED EXTRA_HAL_DEFINES)
     target_compile_definitions(JaszczurHAL PUBLIC ${EXTRA_HAL_DEFINES})
 endif()

@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_UART
+#ifdef HAL_ENABLE_UART
 
 #include "../../hal_uart.h"
 
@@ -106,4 +106,4 @@ void hal_uart_destroy(hal_uart_t h) {
 }
 
 
-#endif /* HAL_DISABLE_UART */
+#endif /* HAL_ENABLE_UART */

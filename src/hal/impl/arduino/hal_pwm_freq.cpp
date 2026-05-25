@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_PWM_FREQ
+#ifdef HAL_ENABLE_PWM_FREQ
 
 #include "../../hal_pwm_freq.h"
 #include "../../hal_sync.h"
@@ -116,4 +116,4 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch) {
 }
 
 
-#endif /* HAL_DISABLE_PWM_FREQ */
+#endif /* HAL_ENABLE_PWM_FREQ */

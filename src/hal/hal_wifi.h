@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_WIFI
+#ifdef HAL_ENABLE_WIFI
 
 /**
  * @file hal_wifi.h
@@ -97,4 +97,4 @@ int hal_wifi_ping(const char *host_or_ip);
 int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms);
 
 
-#endif /* HAL_DISABLE_WIFI */
+#endif /* HAL_ENABLE_WIFI */

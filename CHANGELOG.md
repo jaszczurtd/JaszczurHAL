@@ -2,6 +2,81 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0] - 2026-05-25
+
+- Flag model: opt-in `HAL_ENABLE_*` (BREAKING CHANGE)
+
+### Breaking
+- **Removed every `HAL_DISABLE_<MODULE>` flag** (e.g. `HAL_DISABLE_WIFI`,
+  `HAL_DISABLE_RTC`, `HAL_DISABLE_THERMOCOUPLE`, `HAL_DISABLE_DISPLAY`,
+  `HAL_DISABLE_UNITY`, ...). They are replaced by `HAL_ENABLE_<MODULE>`
+  flags that follow an **opt-in** model: by default *no* optional module
+  is compiled. Each module must be explicitly enabled in the project's
+  `hal_project_config.h` (or via `-D`).
+- The previously-existing opt-in flags (`HAL_ENABLE_CJSON`,
+  `HAL_ENABLE_LITTLEFS`, `HAL_ENABLE_UDP`, `HAL_ENABLE_WIREGUARD`,
+  `HAL_ENABLE_MQTT`, `HAL_ENABLE_OTA`, `HAL_ENABLE_CRYPTO`) keep their
+  meaning; they now sit next to the rest of the unified `HAL_ENABLE_*`
+  family.
+- The only `HAL_DISABLE_*` flag still recognised is **`HAL_DISABLE_ASSERTS`**,
+  kept for compatibility with the standard `NDEBUG` / `assert.h` convention
+  (asserts are ON by default).
+
+### Migration
+- Replace every `HAL_DISABLE_X` in your `hal_project_config.h` / build
+  scripts with the corresponding `HAL_ENABLE_<Y>` flags for the modules
+  you actually need (the previously implicit "enabled by default" set is
+  now explicit). For example:
+
+  ```diff
+  - // (nothing - everything was on)
+  + #define HAL_ENABLE_WIFI
+  + #define HAL_ENABLE_KV          // -> propagates HAL_ENABLE_EEPROM
+  + #define HAL_ENABLE_PCF8563     // -> propagates HAL_ENABLE_RTC + HAL_ENABLE_I2C
+  + #define HAL_ENABLE_GPS         // -> propagates HAL_ENABLE_SWSERIAL
+  ```
+
+  ```diff
+  - #define HAL_DISABLE_DISPLAY
+  - #define HAL_DISABLE_CAN
+  - #define HAL_DISABLE_GPS
+  + // (do nothing - those modules are off by default in the opt-in model)
+  ```
+
+### Added
+- Automatic upward **dependency propagation** in `hal_config.h`: enabling
+  a leaf module also enables every module it depends on (e.g.
+  `HAL_ENABLE_MQTT` -> `HAL_ENABLE_WIFI`,
+  `HAL_ENABLE_PCF8563` -> `HAL_ENABLE_RTC` + `HAL_ENABLE_I2C`,
+  `HAL_ENABLE_DS18B20` -> `HAL_ENABLE_ONEWIRE`,
+  `HAL_ENABLE_ILI9341` -> `HAL_ENABLE_TFT` -> `HAL_ENABLE_DISPLAY`).
+- Compile-time **consistency checks** for facade modules that need a
+  backend: `HAL_ENABLE_RTC` without `PCF8563`/`DS3231`,
+  `HAL_ENABLE_THERMOCOUPLE` without `MCP9600`/`MAX6675`,
+  `HAL_ENABLE_DISPLAY` without `TFT`/`SSD1306`, and `HAL_ENABLE_TFT`
+  without any concrete TFT driver all emit a clear `#error`.
+- New diagnostic flag **`HAL_CONFIG_VERBOSE`**: when defined, the
+  preprocessor emits a `#pragma message` for every `HAL_ENABLE_*` flag
+  that is active after propagation.
+- Refreshed `src/HAL_FLAGS.txt` and the corresponding section of
+  `JaszczurHAL_API.md` to describe the new opt-in surface, dependency
+  graph, and consistency checks.
+
+### Changed
+- `vscode-templates/{linux,windows}/hal_project_config.h` rewritten as
+  an opt-in checklist with a comment block per module group and a
+  commented `HAL_DISABLE_ASSERTS` suggestion.
+- `stm32_lib/CMakeLists.txt`: removed the long list of `HAL_DISABLE_*`
+  defines (now redundant - modules are off by default in the opt-in
+  model); the STM32G474 skeleton now enables only `HAL_ENABLE_I2C` and
+  `HAL_ENABLE_UART` that its current backend actually implements.
+- `arduino_lib/CMakeLists.txt` and `stm32_lib/CMakeLists.txt`: the Unity
+  inclusion check flipped from `if(NOT HAL_DISABLE_UNITY)` to
+  `if(HAL_ENABLE_UNITY)`.
+- Root `CMakeLists.txt`: the host-test `hal_mock` target now enables the
+  full `HAL_ENABLE_*` matrix so every test in `tests/` keeps building
+  against the mock backend.
+
 ## [Unreleased] - 2026-05-24 (RTC module feature expansion)
 
 ### Added
@@ -11,12 +86,18 @@ All notable changes to this project will be documented in this file.
   field configuration (`hal_rtc_alarm_t`).
 - Arduino backend implementation for PCF8563 control/status features:
   alarm, timer, CLKOUT, IRQ-enable, and flag read-clear paths.
+- Added DS3231 RTC backend integration (vendored `DS3231` driver),
+  selectable via `hal_rtc_config_t.chip = HAL_RTC_CHIP_DS3231`.
 - Mock backend support for the extended RTC API, including event-flag
   injection helper `hal_mock_rtc_set_flags(...)`.
 
 ### Changed
 - Expanded `test_hal_rtc` coverage with roundtrip and invalid-input
   tests for interrupt mask, event flags, CLKOUT, timer, and alarm APIs.
+- RTC backend flags now support independent backend selection:
+  `HAL_ENABLE_PCF8563` and `HAL_ENABLE_DS3231` can be enabled
+  independently or together; either backend propagates
+  `HAL_ENABLE_RTC` automatically.
 - Documentation synchronized with the current RTC surface:
   `README.md` and `JaszczurHAL_API.md` now include RTC module scope,
   flags/dependency notes, API contracts, and test-suite coverage.
@@ -34,13 +115,13 @@ All notable changes to this project will be documented in this file.
 - New host unit test suite `test_hal_ds18b20`.
 
 ### Changed
-- `hal/hal.h` now exposes `hal_ds18b20.h` when `HAL_DISABLE_DS18B20`
+- `hal/hal.h` now exposes `hal_ds18b20.h` when `HAL_ENABLE_DS18B20`
   is not defined.
 - `hal_config.h` and `src/HAL_FLAGS.txt` now document
-  `HAL_DISABLE_DS18B20` and `HAL_DS18B20_MAX_INSTANCES`.
+  `HAL_ENABLE_DS18B20` and `HAL_DS18B20_MAX_INSTANCES`.
 - Host-test build registers `test_hal_ds18b20` in `tests/CMakeLists.txt`.
 - STM32 bootstrap profile now disables DS18B20 by default
-  (`HAL_DISABLE_DS18B20`) in `stm32_lib/CMakeLists.txt`.
+  (`HAL_ENABLE_DS18B20`) in `stm32_lib/CMakeLists.txt`.
 - `hal_timer` now exposes an alarm-pool API (`hal_timer_pool_*`) so RP2040
   projects can create dedicated pools on additional hardware alarms and scale
   logical timer count beyond the default pool.
@@ -85,7 +166,7 @@ Next release.
 - `hal/hal.h` and `tools_c.h` now expose `hal_littlefs.h` and `hal_ota.h`
   when corresponding `HAL_ENABLE_*` flags are enabled.
 - `hal_config.h` now validates `HAL_ENABLE_OTA` cannot be combined with
-  `HAL_DISABLE_WIFI`.
+  `HAL_ENABLE_WIFI`.
 - Host-test build enables `HAL_ENABLE_LITTLEFS` and `HAL_ENABLE_OTA` in
   `hal_mock` compile definitions and registers both suites in
   `tests/CMakeLists.txt`.
@@ -110,7 +191,7 @@ Next release.
 - `hal/hal.h` and `tools_c.h` now expose `hal_udp.h` when
   `HAL_ENABLE_UDP` is enabled.
 - `hal_config.h` now validates `HAL_ENABLE_UDP` cannot be combined with
-  `HAL_DISABLE_WIFI`.
+  `HAL_ENABLE_WIFI`.
 - Host-test build enables `HAL_ENABLE_UDP` in `hal_mock` compile
   definitions and registers the new suite in `tests/CMakeLists.txt`.
 - Expanded `test_hal_udp` with chunked-read behavior and stop/reset state
@@ -390,7 +471,7 @@ Next release.
   alongside the existing `HAL_ENABLE_CJSON`.
 - VS Code project templates (`vscode-templates/{linux,windows}`) gained
   a commented-out `HAL_ENABLE_CRYPTO` block so users can see the flag
-  next to the existing `HAL_DISABLE_*` list.
+  next to the existing module enable list.
 
 ### Build / tests
 - The host-test `hal_mock` library defines `HAL_ENABLE_CRYPTO` publicly

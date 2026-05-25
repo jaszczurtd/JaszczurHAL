@@ -48,7 +48,7 @@ Utility-only includes are also available:
 
 - Hardware abstraction layer for common embedded peripherals and system services
 - Consistent, portable APIs that keep hardware details separate from application logic
-- Optional modules controlled by compile-time flags (`HAL_DISABLE_*`, `HAL_ENABLE_*`)
+- Optional modules controlled by compile-time `HAL_ENABLE_*` flags (opt-in)
 - Built-in mock backend for deterministic host/unit testing
 - Utility toolkit for common embedded patterns (timers, PID, watchdog, helpers)
 - Optional connectivity/security/storage stack for connected firmware projects
@@ -74,7 +74,7 @@ For detailed signatures, module contracts, backend notes, and test coverage, see
 ```text
 src/
   JaszczurHAL.h            # primary public include
-  HAL_FLAGS.txt            # HAL_DISABLE_* / HAL_ENABLE_* summary
+  HAL_FLAGS.txt            # HAL_ENABLE_* flag summary
   libConfig.h              # backward-compat include
   tools.h, tools_c.h       # utility aggregators (C++ / C)
   arduino_host_stubs/      # host-build Arduino compatibility headers
@@ -194,14 +194,16 @@ void demo_crypto(void) {
 
 ## Module selection (quick)
 
-To exclude optional subsystems, define `HAL_DISABLE_*` flags in a project-local
+JaszczurHAL uses an OPT-IN flag model: by default no optional module is
+compiled. To enable the modules your project uses, define `HAL_ENABLE_*`
+flags in a project-local
 `hal_project_config.h`:
 
 ```c
 #pragma once
-#define HAL_DISABLE_WIFI
-#define HAL_DISABLE_TIME
-#define HAL_DISABLE_GPS
+#define HAL_ENABLE_WIFI
+#define HAL_ENABLE_TIME
+#define HAL_ENABLE_GPS
 ```
 
 For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` options,
@@ -301,6 +303,7 @@ examples, and host-test coverage.
 - [MAX6675](https://github.com/adafruit/MAX6675-library) - Limor Fried for Adafruit Industries
 - [OneWire](https://github.com/PaulStoffregen/OneWire) - Jim Studt (original), maintained by Paul Stoffregen
 - [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library) - Miles Burton
+- [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors
 - [MCP2515](https://github.com/coryjfowler/MCP_CAN_lib) - Loovee / Seeed Technology, with contributions by Cory J. Fowler
 - [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) - Mikal Hart
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)

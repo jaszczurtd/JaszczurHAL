@@ -2,7 +2,7 @@
 #include "hal/hal_rgb_led.h"
 #include "hal/impl/.mock/hal_mock.h"
 
-#ifndef HAL_DISABLE_RGB_LED
+#ifdef HAL_ENABLE_RGB_LED
 
 void setUp(void) {
     hal_mock_rgb_led_reset();
@@ -71,4 +71,4 @@ int main(void) {
     return UNITY_END();
 }
 
-#endif /* HAL_DISABLE_RGB_LED */
+#endif /* HAL_ENABLE_RGB_LED */

@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 
 #include "../../hal_ds18b20.h"
 #include "../../hal_serial.h"
@@ -302,4 +302,4 @@ bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
     return true;
 }
 
-#endif /* HAL_DISABLE_DS18B20 */
+#endif /* HAL_ENABLE_DS18B20 */

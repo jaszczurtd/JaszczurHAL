@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_SWSERIAL
+#ifdef HAL_ENABLE_SWSERIAL
 
 /**
  * @file hal_swserial.h
@@ -98,4 +98,4 @@ void hal_swserial_flush(hal_swserial_t h);
 void hal_swserial_destroy(hal_swserial_t h);
 
 
-#endif /* HAL_DISABLE_SWSERIAL */
+#endif /* HAL_ENABLE_SWSERIAL */

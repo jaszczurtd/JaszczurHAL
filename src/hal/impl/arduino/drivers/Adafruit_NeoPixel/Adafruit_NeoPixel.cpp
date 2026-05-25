@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_RGB_LED)
+#if defined(HAL_ENABLE_RGB_LED)
 
 /*!
  * @file Adafruit_NeoPixel.cpp
@@ -3779,4 +3779,4 @@ neoPixelType Adafruit_NeoPixel::str2order(const char *v) {
   return (w << 6) | (r << 4) | ((g & 3) << 2) | (b & 3);
 }
 
-#endif /* !HAL_DISABLE_RGB_LED */
+#endif /* HAL_ENABLE_RGB_LED */

@@ -52,7 +52,7 @@
 /* ── Project-level configuration hook ────────────────────────────────── */
 /* If the sketch (project) directory contains a file named
    hal_project_config.h, it is automatically included here.  Use it to
-   define HAL_DISABLE_* flags, override pool sizes, or set feature
+   define HAL_ENABLE_* flags, override pool sizes, or set feature
   toggles - without modifying the library itself.
   Note: this requires the sketch directory to be present on the include
   path for library compilation units (for example via
@@ -63,146 +63,368 @@
   #endif
 #endif
 
-/* ── Module disable flags ────────────────────────────────────────────── */
-/* Define any of the HAL_DISABLE_* macros (via -D compiler flags, or in
-   hal_project_config.h in your sketch directory) to exclude the
-   corresponding HAL module from the build.  Both the header declarations
-   and the implementation file are compiled out, and any third-party
-   libraries they depend on are no longer pulled in by the arduino-cli
-   library resolver.
-
-   Supported flags:
-     HAL_DISABLE_WIFI           - WiFi (requires PICO_W to be useful anyway)
-     HAL_DISABLE_TIME           - NTP / system time (depends on WiFi)
-     HAL_DISABLE_EEPROM         - EEPROM (AT24C256 / RP2040 flash)
-     HAL_DISABLE_KV             - Key-value store (depends on EEPROM)
-     HAL_DISABLE_GPS            - GPS / NMEA receiver (depends on SWSERIAL)
-    HAL_DISABLE_RTC            - RTC module (generic API)
-    HAL_DISABLE_PCF8563        - PCF8563 RTC backend (I2C)
-     HAL_DISABLE_THERMOCOUPLE   - all thermocouple backends (MCP9600 + MAX6675)
-     HAL_DISABLE_DS18B20        - DS18B20 digital temperature sensor (1-Wire)
-    HAL_DISABLE_ONEWIRE        - generic 1-Wire bus API wrapper
-     HAL_DISABLE_MCP9600        - Adafruit MCP9600/MCP9601 backend only;
-                                  MAX6675 remains available
-     HAL_DISABLE_MAX6675        - MAX6675 backend only; MCP9600 remains available
-     HAL_DISABLE_UART           - Hardware UART (SerialUART)
-     HAL_DISABLE_SWSERIAL       - SoftwareSerial
-     HAL_DISABLE_I2C            - I2C bus (Wire, master mode)
-     HAL_DISABLE_I2C_SLAVE      - I2C slave/target mode with register map
-     HAL_DISABLE_EXTERNAL_ADC   - ADS1115 external ADC (depends on I2C)
-     HAL_DISABLE_PWM_FREQ       - Frequency-controlled PWM
-     HAL_DISABLE_RGB_LED        - NeoPixel RGB status LED
-     HAL_DISABLE_CAN            - MCP2515 CAN bus
-     HAL_DISABLE_DISPLAY        - TFT / OLED display (excludes both backends)
-     HAL_DISABLE_TFT            - SPI TFT drivers only (ILI9341/ST7789/ST7735/ST7796S);
-                                  SSD1306 remains available
-     HAL_DISABLE_SSD1306        - SSD1306 OLED driver only; TFT remains available
-     HAL_DISABLE_ILI9341        - ILI9341 TFT driver only
-     HAL_DISABLE_ST7789         - ST7789 TFT driver only
-     HAL_DISABLE_ST7735         - ST7735 TFT driver only
-     HAL_DISABLE_ST7796S        - ST7796S TFT driver only
-     HAL_DISABLE_UNITY          - disable bundled Unity framework includes/sources
-
-   Dependency propagation - disabling a base module automatically
-   disables modules that depend on it:                                   */
-
-#ifdef HAL_DISABLE_EEPROM
-  #ifndef HAL_DISABLE_KV
-    #define HAL_DISABLE_KV
-  #endif
-#endif
-
-#ifdef HAL_DISABLE_WIFI
-  #ifndef HAL_DISABLE_TIME
-    #define HAL_DISABLE_TIME
-  #endif
-#endif
-
-#if defined(HAL_ENABLE_MQTT) && defined(HAL_DISABLE_WIFI)
-  #error "HAL_ENABLE_MQTT requires HAL_DISABLE_WIFI to be unset"
-#endif
-
-#if defined(HAL_ENABLE_WIREGUARD) && defined(HAL_DISABLE_WIFI)
-  #error "HAL_ENABLE_WIREGUARD requires HAL_DISABLE_WIFI to be unset"
-#endif
-
-#if defined(HAL_ENABLE_UDP) && defined(HAL_DISABLE_WIFI)
-  #error "HAL_ENABLE_UDP requires HAL_DISABLE_WIFI to be unset"
-#endif
-
-#if defined(HAL_ENABLE_OTA) && defined(HAL_DISABLE_WIFI)
-  #error "HAL_ENABLE_OTA requires HAL_DISABLE_WIFI to be unset"
-#endif
-
-#ifdef HAL_DISABLE_I2C
-  #ifndef HAL_DISABLE_EXTERNAL_ADC
-    #define HAL_DISABLE_EXTERNAL_ADC
-  #endif
-  #ifndef HAL_DISABLE_PCF8563
-    #define HAL_DISABLE_PCF8563
-  #endif
-#endif
-
-#ifdef HAL_DISABLE_PCF8563
-  #ifndef HAL_DISABLE_RTC
-    #define HAL_DISABLE_RTC
-  #endif
-#endif
-
-#ifdef HAL_DISABLE_SWSERIAL
-  #ifndef HAL_DISABLE_GPS
-    #define HAL_DISABLE_GPS
-  #endif
-#endif
-
-#if defined(HAL_DISABLE_MCP9600) && defined(HAL_DISABLE_MAX6675)
-  #ifndef HAL_DISABLE_THERMOCOUPLE
-    #define HAL_DISABLE_THERMOCOUPLE
-  #endif
-#endif
-
-#if defined(HAL_DISABLE_ILI9341) && defined(HAL_DISABLE_ST7789) && \
-    defined(HAL_DISABLE_ST7735) && defined(HAL_DISABLE_ST7796S)
-  #ifndef HAL_DISABLE_TFT
-    #define HAL_DISABLE_TFT
-  #endif
-#endif
-
-#if defined(HAL_DISABLE_TFT) && defined(HAL_DISABLE_SSD1306)
-  #ifndef HAL_DISABLE_DISPLAY
-    #define HAL_DISABLE_DISPLAY
-  #endif
-#endif
-
 /* ── Module enable flags (opt-in) ────────────────────────────────────── */
-/* These pull in optional code that is OFF by default. Define them in
-   `hal_project_config.h` (or via `-D`) when the project actually uses the
-   corresponding API.
+/* JaszczurHAL uses an OPT-IN flag model: by default *nothing* beyond the
+   bare core is compiled. Each module must be explicitly enabled with a
+   HAL_ENABLE_* macro - either via compiler -D flags or by defining it in
+   the project-local `hal_project_config.h`. Both the header declarations
+   and the implementation file are compiled out unless the corresponding
+   flag is defined, so unused modules cost zero code/RAM and any
+   third-party libraries they depend on are not pulled in by the
+   arduino-cli library resolver.
 
-   Supported flags:
-     HAL_ENABLE_CJSON           - bundled cJSON / cJSON_Utils sources.
-    HAL_ENABLE_LITTLEFS        - `hal_littlefs` module (LittleFS lifecycle
-                  and basic filesystem helpers).
-     HAL_ENABLE_UDP             - `hal_udp` module (thread-safe WiFiUDP
-                                  wrapper, requires WiFi backend).
-     HAL_ENABLE_WIREGUARD       - `hal_wireguard` module based on bundled
-                                  arduino-wireguard-pico-w wrapper.
-                                  Requires WiFi backend.
-     HAL_ENABLE_MQTT            - `hal_mqtt` module (PubSubClient wrapper,
-                                  requires WiFi backend).
-    HAL_ENABLE_OTA             - `hal_ota` module (ArduinoOTA wrapper,
-                  requires WiFi backend).
-     HAL_ENABLE_CRYPTO          - `hal_crypto` (Base64, MD5, SHA-256,
+   Supported module flags:
+
+     Connectivity:
+       HAL_ENABLE_WIFI          - WiFi (arduino-pico, requires PICO_W).
+       HAL_ENABLE_TIME          - NTP / system time (propagates: WIFI).
+       HAL_ENABLE_MQTT          - PubSubClient wrapper (propagates: WIFI).
+       HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).
+       HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
+       HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI).
+
+     Storage:
+       HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / RP2040 flash).
+       HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
+       HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
+
+     Buses:
+       HAL_ENABLE_UART          - Hardware UART (SerialUART).
+       HAL_ENABLE_SWSERIAL      - SoftwareSerial.
+       HAL_ENABLE_I2C           - I2C master (Wire).
+       HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
+       HAL_ENABLE_CAN           - MCP2515 CAN bus.
+
+     Time-of-day:
+       HAL_ENABLE_RTC           - generic RTC API (requires at least one
+                                  backend: PCF8563 or DS3231).
+       HAL_ENABLE_PCF8563       - PCF8563 RTC backend (propagates: RTC, I2C).
+       HAL_ENABLE_DS3231        - DS3231 RTC backend  (propagates: RTC, I2C).
+
+     Sensors:
+       HAL_ENABLE_THERMOCOUPLE  - generic thermocouple API (requires at
+                                  least one backend: MCP9600 or MAX6675).
+       HAL_ENABLE_MCP9600       - MCP9600/MCP9601 backend (propagates:
+                                  THERMOCOUPLE, I2C).
+       HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
+                                  THERMOCOUPLE).
+       HAL_ENABLE_DS18B20       - DS18B20 1-Wire temperature sensor
+                                  (propagates: ONEWIRE).
+       HAL_ENABLE_ONEWIRE       - generic 1-Wire bus API wrapper.
+       HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC (propagates: I2C).
+       HAL_ENABLE_GPS           - GPS / NMEA receiver (propagates: SWSERIAL).
+
+     PWM / status:
+       HAL_ENABLE_PWM_FREQ      - Frequency-controlled PWM.
+       HAL_ENABLE_RGB_LED       - NeoPixel RGB status LED.
+
+     Display (fasada + backend):
+       HAL_ENABLE_DISPLAY       - generic display API (requires at least
+                                  one backend: TFT or SSD1306).
+       HAL_ENABLE_TFT           - SPI TFT family (requires at least one
+                                  driver below; propagates: DISPLAY).
+       HAL_ENABLE_ILI9341       - ILI9341 TFT driver (propagates: TFT).
+       HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT).
+       HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT).
+       HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT).
+       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY).
+
+     Crypto + bundled libs:
+       HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
                                   HMAC-SHA256, ChaCha20 / -Poly1305) and
-                                  the dependent `hal_sc_auth` helper.
+                                  the dependent hal_sc_auth helper.
                                   Without this flag the headers expand
                                   to nothing and the implementation TUs
-                                  produce empty objects.
-                                  `hal_serial_session` keeps working -
-                                  the `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`
-                                  handlers are simply compiled out and
-                                  the session never enters the
-                                  authenticated state.                   */
+                                  produce empty objects. hal_serial_session
+                                  keeps working - the SC_AUTH_BEGIN /
+                                  SC_AUTH_PROVE handlers are simply
+                                  compiled out and the session never
+                                  enters the authenticated state.
+       HAL_ENABLE_CJSON         - bundled cJSON / cJSON_Utils sources.
+
+     Test framework:
+       HAL_ENABLE_UNITY         - bundled Unity framework. Typically
+                                  enabled only by the host-test CMake.
+
+   Special opt-OUT flag (kept for compatibility with assert.h/NDEBUG
+   convention):
+     HAL_DISABLE_ASSERTS        - compile HAL_ASSERT() to no-ops.
+                                  Asserts are ON by default.
+
+   Dependency propagation - enabling a dependent module automatically
+   enables every module it requires.                                     */
+
+/* ── Dependency propagation (enabling a child enables its parents) ──── */
+
+#ifdef HAL_ENABLE_KV
+  #ifndef HAL_ENABLE_EEPROM
+    #define HAL_ENABLE_EEPROM
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_TIME
+  #ifndef HAL_ENABLE_WIFI
+    #define HAL_ENABLE_WIFI
+  #endif
+#endif
+
+/* WiFi-dependent network modules. */
+#ifdef HAL_ENABLE_MQTT
+  #ifndef HAL_ENABLE_WIFI
+    #define HAL_ENABLE_WIFI
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_UDP
+  #ifndef HAL_ENABLE_WIFI
+    #define HAL_ENABLE_WIFI
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_OTA
+  #ifndef HAL_ENABLE_WIFI
+    #define HAL_ENABLE_WIFI
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_WIREGUARD
+  #ifndef HAL_ENABLE_WIFI
+    #define HAL_ENABLE_WIFI
+  #endif
+#endif
+
+/* I2C-dependent sensors / RTCs. */
+#ifdef HAL_ENABLE_EXTERNAL_ADC
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_PCF8563
+  #ifndef HAL_ENABLE_RTC
+    #define HAL_ENABLE_RTC
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_DS3231
+  #ifndef HAL_ENABLE_RTC
+    #define HAL_ENABLE_RTC
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_MCP9600
+  #ifndef HAL_ENABLE_THERMOCOUPLE
+    #define HAL_ENABLE_THERMOCOUPLE
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_MAX6675
+  #ifndef HAL_ENABLE_THERMOCOUPLE
+    #define HAL_ENABLE_THERMOCOUPLE
+  #endif
+#endif
+
+/* 1-Wire stack. */
+#ifdef HAL_ENABLE_DS18B20
+  #ifndef HAL_ENABLE_ONEWIRE
+    #define HAL_ENABLE_ONEWIRE
+  #endif
+#endif
+
+/* GPS uses SoftwareSerial. */
+#ifdef HAL_ENABLE_GPS
+  #ifndef HAL_ENABLE_SWSERIAL
+    #define HAL_ENABLE_SWSERIAL
+  #endif
+#endif
+
+/* Display driver family. */
+#ifdef HAL_ENABLE_ILI9341
+  #ifndef HAL_ENABLE_TFT
+    #define HAL_ENABLE_TFT
+  #endif
+#endif
+#ifdef HAL_ENABLE_ST7789
+  #ifndef HAL_ENABLE_TFT
+    #define HAL_ENABLE_TFT
+  #endif
+#endif
+#ifdef HAL_ENABLE_ST7735
+  #ifndef HAL_ENABLE_TFT
+    #define HAL_ENABLE_TFT
+  #endif
+#endif
+#ifdef HAL_ENABLE_ST7796S
+  #ifndef HAL_ENABLE_TFT
+    #define HAL_ENABLE_TFT
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_TFT
+  #ifndef HAL_ENABLE_DISPLAY
+    #define HAL_ENABLE_DISPLAY
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_SSD1306
+  #ifndef HAL_ENABLE_DISPLAY
+    #define HAL_ENABLE_DISPLAY
+  #endif
+#endif
+
+/* ── Consistency checks for fasada modules that need a backend ──────── */
+/* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI/SWSERIAL, UART, EEPROM,
+   KV, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
+   TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
+   NOT need such checks - they can be enabled on their own. The checks
+   below only catch generic-API modules enabled without any backend,
+   which would otherwise leave the user with a non-functional binary. */
+
+#if defined(HAL_ENABLE_RTC) && \
+    !defined(HAL_ENABLE_PCF8563) && !defined(HAL_ENABLE_DS3231)
+  #error "HAL_ENABLE_RTC requires at least one backend: HAL_ENABLE_PCF8563 or HAL_ENABLE_DS3231"
+#endif
+
+#if defined(HAL_ENABLE_THERMOCOUPLE) && \
+    !defined(HAL_ENABLE_MCP9600) && !defined(HAL_ENABLE_MAX6675)
+  #error "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
+#endif
+
+#if defined(HAL_ENABLE_DISPLAY) && \
+    !defined(HAL_ENABLE_TFT) && !defined(HAL_ENABLE_SSD1306)
+  #error "HAL_ENABLE_DISPLAY requires at least one backend: HAL_ENABLE_TFT or HAL_ENABLE_SSD1306"
+#endif
+
+#if defined(HAL_ENABLE_TFT) && \
+    !defined(HAL_ENABLE_ILI9341) && !defined(HAL_ENABLE_ST7789) && \
+    !defined(HAL_ENABLE_ST7735)  && !defined(HAL_ENABLE_ST7796S)
+  #error "HAL_ENABLE_TFT requires at least one driver: HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S"
+#endif
+
+/* ── Optional verbose flag report ───────────────────────────────────── */
+/* Define HAL_CONFIG_VERBOSE (e.g. -DHAL_CONFIG_VERBOSE) to make the
+   preprocessor print every HAL_ENABLE_* flag that is active after
+   propagation. Useful for debugging "why is module X being compiled?". */
+
+#ifdef HAL_CONFIG_VERBOSE
+  #ifdef HAL_ENABLE_WIFI
+    #pragma message("HAL_CONFIG: HAL_ENABLE_WIFI")
+  #endif
+  #ifdef HAL_ENABLE_TIME
+    #pragma message("HAL_CONFIG: HAL_ENABLE_TIME")
+  #endif
+  #ifdef HAL_ENABLE_MQTT
+    #pragma message("HAL_CONFIG: HAL_ENABLE_MQTT")
+  #endif
+  #ifdef HAL_ENABLE_UDP
+    #pragma message("HAL_CONFIG: HAL_ENABLE_UDP")
+  #endif
+  #ifdef HAL_ENABLE_OTA
+    #pragma message("HAL_CONFIG: HAL_ENABLE_OTA")
+  #endif
+  #ifdef HAL_ENABLE_WIREGUARD
+    #pragma message("HAL_CONFIG: HAL_ENABLE_WIREGUARD")
+  #endif
+  #ifdef HAL_ENABLE_EEPROM
+    #pragma message("HAL_CONFIG: HAL_ENABLE_EEPROM")
+  #endif
+  #ifdef HAL_ENABLE_KV
+    #pragma message("HAL_CONFIG: HAL_ENABLE_KV")
+  #endif
+  #ifdef HAL_ENABLE_LITTLEFS
+    #pragma message("HAL_CONFIG: HAL_ENABLE_LITTLEFS")
+  #endif
+  #ifdef HAL_ENABLE_UART
+    #pragma message("HAL_CONFIG: HAL_ENABLE_UART")
+  #endif
+  #ifdef HAL_ENABLE_SWSERIAL
+    #pragma message("HAL_CONFIG: HAL_ENABLE_SWSERIAL")
+  #endif
+  #ifdef HAL_ENABLE_I2C
+    #pragma message("HAL_CONFIG: HAL_ENABLE_I2C")
+  #endif
+  #ifdef HAL_ENABLE_I2C_SLAVE
+    #pragma message("HAL_CONFIG: HAL_ENABLE_I2C_SLAVE")
+  #endif
+  #ifdef HAL_ENABLE_CAN
+    #pragma message("HAL_CONFIG: HAL_ENABLE_CAN")
+  #endif
+  #ifdef HAL_ENABLE_RTC
+    #pragma message("HAL_CONFIG: HAL_ENABLE_RTC")
+  #endif
+  #ifdef HAL_ENABLE_PCF8563
+    #pragma message("HAL_CONFIG: HAL_ENABLE_PCF8563")
+  #endif
+  #ifdef HAL_ENABLE_DS3231
+    #pragma message("HAL_CONFIG: HAL_ENABLE_DS3231")
+  #endif
+  #ifdef HAL_ENABLE_THERMOCOUPLE
+    #pragma message("HAL_CONFIG: HAL_ENABLE_THERMOCOUPLE")
+  #endif
+  #ifdef HAL_ENABLE_MCP9600
+    #pragma message("HAL_CONFIG: HAL_ENABLE_MCP9600")
+  #endif
+  #ifdef HAL_ENABLE_MAX6675
+    #pragma message("HAL_CONFIG: HAL_ENABLE_MAX6675")
+  #endif
+  #ifdef HAL_ENABLE_DS18B20
+    #pragma message("HAL_CONFIG: HAL_ENABLE_DS18B20")
+  #endif
+  #ifdef HAL_ENABLE_ONEWIRE
+    #pragma message("HAL_CONFIG: HAL_ENABLE_ONEWIRE")
+  #endif
+  #ifdef HAL_ENABLE_EXTERNAL_ADC
+    #pragma message("HAL_CONFIG: HAL_ENABLE_EXTERNAL_ADC")
+  #endif
+  #ifdef HAL_ENABLE_GPS
+    #pragma message("HAL_CONFIG: HAL_ENABLE_GPS")
+  #endif
+  #ifdef HAL_ENABLE_PWM_FREQ
+    #pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")
+  #endif
+  #ifdef HAL_ENABLE_RGB_LED
+    #pragma message("HAL_CONFIG: HAL_ENABLE_RGB_LED")
+  #endif
+  #ifdef HAL_ENABLE_DISPLAY
+    #pragma message("HAL_CONFIG: HAL_ENABLE_DISPLAY")
+  #endif
+  #ifdef HAL_ENABLE_TFT
+    #pragma message("HAL_CONFIG: HAL_ENABLE_TFT")
+  #endif
+  #ifdef HAL_ENABLE_ILI9341
+    #pragma message("HAL_CONFIG: HAL_ENABLE_ILI9341")
+  #endif
+  #ifdef HAL_ENABLE_ST7789
+    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7789")
+  #endif
+  #ifdef HAL_ENABLE_ST7735
+    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7735")
+  #endif
+  #ifdef HAL_ENABLE_ST7796S
+    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7796S")
+  #endif
+  #ifdef HAL_ENABLE_SSD1306
+    #pragma message("HAL_CONFIG: HAL_ENABLE_SSD1306")
+  #endif
+  #ifdef HAL_ENABLE_CRYPTO
+    #pragma message("HAL_CONFIG: HAL_ENABLE_CRYPTO")
+  #endif
+  #ifdef HAL_ENABLE_CJSON
+    #pragma message("HAL_CONFIG: HAL_ENABLE_CJSON")
+  #endif
+  #ifdef HAL_ENABLE_UNITY
+    #pragma message("HAL_CONFIG: HAL_ENABLE_UNITY")
+  #endif
+#endif /* HAL_CONFIG_VERBOSE */
 
 /* ── Platform-independent Arduino-compat macros ──────────────────────── */
 /* Only define fallbacks when building WITHOUT Arduino - on Arduino the
@@ -324,7 +546,7 @@
  * @def HAL_RTC_MAX_INSTANCES
  * Maximum number of simultaneous RTC handles.
  *
- * The current backend set contains PCF8563. Each slot stores per-instance
+ * The current backend set contains PCF8563 and DS3231. Each slot stores per-instance
  * runtime state and synchronization metadata.
  */
 #ifndef HAL_RTC_MAX_INSTANCES

@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_PWM_FREQ
+#ifdef HAL_ENABLE_PWM_FREQ
 
 /**
  * @file hal_pwm_freq.h
@@ -55,7 +55,7 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 
 
-#endif /* HAL_DISABLE_PWM_FREQ */
+#endif /* HAL_ENABLE_PWM_FREQ */
 #ifdef __cplusplus
 }
 #endif

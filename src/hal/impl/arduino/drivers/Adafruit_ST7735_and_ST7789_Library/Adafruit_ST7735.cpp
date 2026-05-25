@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT) && !defined(HAL_DISABLE_ST7735)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT) && defined(HAL_ENABLE_ST7735)
 
 #include "Adafruit_ST7735.h"
 #include "Adafruit_ST77xx.h"
@@ -386,4 +386,4 @@ void Adafruit_ST7735::setRotation(uint8_t m) {
   sendCommand(ST77XX_MADCTL, &madctl, 1);
 }
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT && !HAL_DISABLE_ST7735 */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT && !HAL_ENABLE_ST7735 */

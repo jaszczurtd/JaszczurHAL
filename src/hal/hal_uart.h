@@ -1,7 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
-#ifndef HAL_DISABLE_UART
+#ifdef HAL_ENABLE_UART
 
 /**
  * @file hal_uart.h
@@ -74,4 +74,4 @@ void hal_uart_flush(hal_uart_t h);
 /** @brief Release resources. The handle must not be used after this call. */
 void hal_uart_destroy(hal_uart_t h);
 
-#endif /* HAL_DISABLE_UART */
+#endif /* HAL_ENABLE_UART */

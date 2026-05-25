@@ -2,7 +2,7 @@
 #include "hal/hal_rtc.h"
 #include "hal/impl/.mock/hal_mock.h"
 
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 
 static hal_rtc_t s_rtc = nullptr;
 
@@ -42,6 +42,44 @@ void tearDown(void) {
 
 void test_init_returns_handle(void) {
     TEST_ASSERT_NOT_NULL(s_rtc);
+}
+
+void test_init_ds3231_backend_returns_handle(void) {
+    hal_rtc_config_t cfg = default_cfg();
+    cfg.chip = HAL_RTC_CHIP_DS3231;
+
+    hal_rtc_t rtc = hal_rtc_init(&cfg);
+    TEST_ASSERT_NOT_NULL(rtc);
+
+    hal_rtc_datetime_t in = {};
+    in.second = 30;
+    in.minute = 15;
+    in.hour = 8;
+    in.day = 1;
+    in.weekday = 1;
+    in.month = 6;
+    in.year = 2026;
+
+    TEST_ASSERT_TRUE(hal_rtc_set_datetime(rtc, &in));
+
+    hal_rtc_datetime_t out = {};
+    TEST_ASSERT_TRUE(hal_rtc_get_datetime(rtc, &out));
+    TEST_ASSERT_EQUAL_UINT8(in.second, out.second);
+    TEST_ASSERT_EQUAL_UINT8(in.minute, out.minute);
+    TEST_ASSERT_EQUAL_UINT8(in.hour, out.hour);
+    TEST_ASSERT_EQUAL_UINT8(in.day, out.day);
+    TEST_ASSERT_EQUAL_UINT8(in.month, out.month);
+    TEST_ASSERT_EQUAL_UINT16(in.year, out.year);
+
+    hal_rtc_deinit(rtc);
+}
+
+void test_init_rejects_unknown_backend(void) {
+    hal_rtc_config_t cfg = default_cfg();
+    cfg.chip = (hal_rtc_chip_t)255;
+
+    hal_rtc_t rtc = hal_rtc_init(&cfg);
+    TEST_ASSERT_NULL(rtc);
 }
 
 void test_default_datetime_is_readable(void) {
@@ -98,6 +136,83 @@ void test_set_datetime_rejects_invalid_values(void) {
     bad.month = 1;
     bad.year = 2100;
     TEST_ASSERT_FALSE(hal_rtc_set_datetime(s_rtc, &bad));
+}
+
+void test_epoch_roundtrip_from_unix_epoch_start(void) {
+    TEST_ASSERT_TRUE(hal_rtc_set_epoch(s_rtc, 0ull));
+
+    hal_rtc_datetime_t dt = {};
+    TEST_ASSERT_TRUE(hal_rtc_get_datetime(s_rtc, &dt));
+    TEST_ASSERT_EQUAL_UINT16(1970, dt.year);
+    TEST_ASSERT_EQUAL_UINT8(1, dt.month);
+    TEST_ASSERT_EQUAL_UINT8(1, dt.day);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.hour);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.minute);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.second);
+    TEST_ASSERT_EQUAL_UINT8(4, dt.weekday);
+
+    uint64_t epoch = 123ull;
+    TEST_ASSERT_TRUE(hal_rtc_get_epoch(s_rtc, &epoch));
+    TEST_ASSERT_EQUAL_UINT64(0ull, epoch);
+}
+
+void test_epoch_leap_day_roundtrip(void) {
+    const uint64_t leap_day_epoch = 951782400ull; /* 2000-02-29 00:00:00 UTC */
+
+    TEST_ASSERT_TRUE(hal_rtc_set_epoch(s_rtc, leap_day_epoch));
+
+    hal_rtc_datetime_t dt = {};
+    TEST_ASSERT_TRUE(hal_rtc_get_datetime(s_rtc, &dt));
+    TEST_ASSERT_EQUAL_UINT16(2000, dt.year);
+    TEST_ASSERT_EQUAL_UINT8(2, dt.month);
+    TEST_ASSERT_EQUAL_UINT8(29, dt.day);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.hour);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.minute);
+    TEST_ASSERT_EQUAL_UINT8(0, dt.second);
+    TEST_ASSERT_EQUAL_UINT8(2, dt.weekday);
+
+    uint64_t epoch = 0ull;
+    TEST_ASSERT_TRUE(hal_rtc_get_epoch(s_rtc, &epoch));
+    TEST_ASSERT_EQUAL_UINT64(leap_day_epoch, epoch);
+}
+
+void test_get_epoch_from_datetime(void) {
+    hal_rtc_datetime_t dt = {};
+    dt.second = 0;
+    dt.minute = 0;
+    dt.hour = 0;
+    dt.day = 29;
+    dt.weekday = 2;
+    dt.month = 2;
+    dt.year = 2000;
+
+    TEST_ASSERT_TRUE(hal_rtc_set_datetime(s_rtc, &dt));
+
+    uint64_t epoch = 0ull;
+    TEST_ASSERT_TRUE(hal_rtc_get_epoch(s_rtc, &epoch));
+    TEST_ASSERT_EQUAL_UINT64(951782400ull, epoch);
+}
+
+void test_set_epoch_rejects_out_of_supported_range(void) {
+    /* 2100-01-01 00:00:00 UTC */
+    TEST_ASSERT_FALSE(hal_rtc_set_epoch(s_rtc, 4102444800ull));
+}
+
+void test_get_epoch_rejects_pre_unix_datetime(void) {
+    hal_rtc_datetime_t dt = {};
+    dt.second = 59;
+    dt.minute = 59;
+    dt.hour = 23;
+    dt.day = 31;
+    dt.weekday = 3;
+    dt.month = 12;
+    dt.year = 1969;
+    dt.clock_integrity = true;
+
+    hal_mock_rtc_set_datetime(s_rtc, &dt);
+
+    uint64_t epoch = 0ull;
+    TEST_ASSERT_FALSE(hal_rtc_get_epoch(s_rtc, &epoch));
 }
 
 void test_clock_integrity_flag_can_be_injected(void) {
@@ -242,12 +357,17 @@ void test_invalid_arguments_return_false(void) {
     hal_rtc_timer_clock_t timer_clock = HAL_RTC_TIMER_DISABLED;
     uint8_t timer_count = 0;
     hal_rtc_alarm_t alarm = valid_alarm();
+    uint64_t epoch = 0ull;
 
     TEST_ASSERT_FALSE(hal_rtc_get_datetime(nullptr, &dt));
     TEST_ASSERT_FALSE(hal_rtc_get_datetime(s_rtc, nullptr));
 
     TEST_ASSERT_FALSE(hal_rtc_set_datetime(nullptr, &dt));
     TEST_ASSERT_FALSE(hal_rtc_set_datetime(s_rtc, nullptr));
+
+    TEST_ASSERT_FALSE(hal_rtc_get_epoch(nullptr, &epoch));
+    TEST_ASSERT_FALSE(hal_rtc_get_epoch(s_rtc, nullptr));
+    TEST_ASSERT_FALSE(hal_rtc_set_epoch(nullptr, 0ull));
 
     TEST_ASSERT_FALSE(hal_rtc_get_clock_integrity(nullptr, &ok));
     TEST_ASSERT_FALSE(hal_rtc_get_clock_integrity(s_rtc, nullptr));
@@ -277,9 +397,16 @@ void test_invalid_arguments_return_false(void) {
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_returns_handle);
+    RUN_TEST(test_init_ds3231_backend_returns_handle);
+    RUN_TEST(test_init_rejects_unknown_backend);
     RUN_TEST(test_default_datetime_is_readable);
     RUN_TEST(test_set_and_get_datetime_roundtrip);
     RUN_TEST(test_set_datetime_rejects_invalid_values);
+    RUN_TEST(test_epoch_roundtrip_from_unix_epoch_start);
+    RUN_TEST(test_epoch_leap_day_roundtrip);
+    RUN_TEST(test_get_epoch_from_datetime);
+    RUN_TEST(test_set_epoch_rejects_out_of_supported_range);
+    RUN_TEST(test_get_epoch_rejects_pre_unix_datetime);
     RUN_TEST(test_clock_integrity_flag_can_be_injected);
     RUN_TEST(test_mock_datetime_injection);
     RUN_TEST(test_interrupt_enable_roundtrip);
@@ -298,4 +425,4 @@ int main(void) {
     return UNITY_END();
 }
 
-#endif /* HAL_DISABLE_RTC */
+#endif /* HAL_ENABLE_RTC */

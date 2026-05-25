@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_TFT) && !defined(HAL_DISABLE_ST7796S)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT) && defined(HAL_ENABLE_ST7796S)
 
 // Adafruit_ST7796S.cpp
 //
@@ -180,4 +180,4 @@ void Adafruit_ST7796S::setRotation(uint8_t m) {
   sendCommand(ST77XX_MADCTL, &madctl, 1);
 }
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_TFT && !HAL_DISABLE_ST7796S */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_TFT && !HAL_ENABLE_ST7796S */

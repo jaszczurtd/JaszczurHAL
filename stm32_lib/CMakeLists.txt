@@ -31,7 +31,8 @@ set(UTIL_SOURCES
     ${SRC}/utils/cJSON_Utils.c
 )
 
-if(NOT HAL_DISABLE_UNITY)
+# Unity is opt-in: enable it via -DHAL_ENABLE_UNITY=ON when configuring.
+if(HAL_ENABLE_UNITY)
     list(APPEND UTIL_SOURCES ${SRC}/utils/unity.c)
 endif()
 
@@ -44,23 +45,16 @@ add_library(JaszczurHAL STATIC
 target_include_directories(JaszczurHAL PUBLIC ${SRC})
 
 # Default STM32G474 profile for the initial skeleton backend.
+#
+# Opt-in flag model: modules are OFF by default; only the I2C / UART /
+# system-time pieces that the STM32 skeleton currently provides are
+# enabled here. Application projects can enable extra modules via
+# EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_CAN) once their
+# STM32G474 backend lands.
 target_compile_definitions(JaszczurHAL PUBLIC
     JH_TARGET_STM32G474=1
-    HAL_DISABLE_WIFI
-    HAL_DISABLE_TIME
-    HAL_DISABLE_EEPROM
-    HAL_DISABLE_GPS
-    HAL_DISABLE_RTC
-    HAL_DISABLE_THERMOCOUPLE
-    HAL_DISABLE_DS18B20
-    HAL_DISABLE_SWSERIAL
-    HAL_DISABLE_I2C_SLAVE
-    HAL_DISABLE_EXTERNAL_ADC
-    HAL_DISABLE_PWM_FREQ
-    HAL_DISABLE_RGB_LED
-    HAL_DISABLE_CAN
-    HAL_DISABLE_DISPLAY
-    HAL_DISABLE_UNITY
+    HAL_ENABLE_I2C
+    HAL_ENABLE_UART
 )
 
 if(DEFINED EXTRA_HAL_DEFINES)

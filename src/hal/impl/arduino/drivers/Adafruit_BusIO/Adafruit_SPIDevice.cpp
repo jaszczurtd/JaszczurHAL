@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) || (!defined(HAL_DISABLE_THERMOCOUPLE) && !defined(HAL_DISABLE_MCP9600) && !defined(HAL_DISABLE_I2C))
+#if defined(HAL_ENABLE_DISPLAY) || (defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C))
 
 #include "Adafruit_SPIDevice.h"
 #include "../../../../hal_spi.h"

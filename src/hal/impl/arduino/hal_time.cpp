@@ -35,7 +35,7 @@ uint32_t hal_time_from_components(int year, int month, int day,
     return days * 86400u + (uint32_t)hour * 3600u + (uint32_t)minute * 60u + (uint32_t)second;
 }
 
-#ifndef HAL_DISABLE_TIME
+#ifdef HAL_ENABLE_TIME
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -103,4 +103,4 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format) {
 }
 
 
-#endif /* HAL_DISABLE_TIME */
+#endif /* HAL_ENABLE_TIME */

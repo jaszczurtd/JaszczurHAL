@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_THERMOCOUPLE) && !defined(HAL_DISABLE_MCP9600) && !defined(HAL_DISABLE_I2C)
+#if defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C)
 
 /**************************************************************************/
 /*!
@@ -27,7 +27,7 @@
 /**************************************************************************/
 #include "Adafruit_MCP9600.h"
 
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
 #include "../../../../hal_i2c.h"
 #endif
 
@@ -67,7 +67,7 @@ static bool mcp9600_map_wire_bus(TwoWire *wire, uint8_t *bus_out) {
 
 void Adafruit_MCP9600::lock_bus_(void) {
   hal_mutex_lock(_mutex);
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
   uint8_t bus = 0;
   if (mcp9600_map_wire_bus(_wire, &bus)) {
     hal_i2c_lock_bus(bus);
@@ -76,7 +76,7 @@ void Adafruit_MCP9600::lock_bus_(void) {
 }
 
 void Adafruit_MCP9600::unlock_bus_(void) {
-#ifndef HAL_DISABLE_I2C
+#ifdef HAL_ENABLE_I2C
   uint8_t bus = 0;
   if (mcp9600_map_wire_bus(_wire, &bus)) {
     hal_i2c_unlock_bus(bus);
@@ -572,4 +572,4 @@ void Adafruit_MCP9600::setAmbientResolution(Ambient_Resolution res_value) {
   unlock_bus_();
 }
 
-#endif /* !HAL_DISABLE_THERMOCOUPLE && !HAL_DISABLE_MCP9600 && !HAL_DISABLE_I2C */
+#endif /* HAL_ENABLE_THERMOCOUPLE && !HAL_ENABLE_MCP9600 && !HAL_ENABLE_I2C */

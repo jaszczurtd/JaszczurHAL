@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 
 #include "../../hal_onewire.h"
 #include "../../hal_sync.h"
@@ -241,4 +241,4 @@ uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len) {
     return OneWire::crc8(data, len);
 }
 
-#endif /* HAL_DISABLE_ONEWIRE */
+#endif /* HAL_ENABLE_ONEWIRE */

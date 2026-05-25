@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 
 /**
  * @file hal_ds18b20.h
@@ -101,7 +101,7 @@ bool hal_ds18b20_is_busy(hal_ds18b20_t h);
 bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
 
 
-#endif /* HAL_DISABLE_DS18B20 */
+#endif /* HAL_ENABLE_DS18B20 */
 #ifdef __cplusplus
 }
 #endif

@@ -1,14 +1,14 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_THERMOCOUPLE
+#ifdef HAL_ENABLE_THERMOCOUPLE
 
 #include "../../hal_thermocouple.h"
 #include "../../hal_i2c.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 #include "drivers/Adafruit_MCP9600/Adafruit_MCP9600.h"
 #endif
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
 #include "drivers/MAX6675/max6675.h"
 #endif
 #include <Wire.h>
@@ -23,10 +23,10 @@ struct hal_thermocouple_impl_s {
     bool                    in_use;
     hal_mutex_t             mutex;
     union {
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
         alignas(Adafruit_MCP9600) uint8_t mcp_mem[sizeof(Adafruit_MCP9600)];
 #endif
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
         alignas(MAX6675)           uint8_t max_mem[sizeof(MAX6675)];
 #endif
     } storage;
@@ -36,7 +36,7 @@ static hal_thermocouple_impl_t s_pool[HAL_THERMOCOUPLE_MAX_INSTANCES];
 
 /* ── Private helpers ─────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 static inline Adafruit_MCP9600 *as_mcp(hal_thermocouple_impl_t *h) {
     return reinterpret_cast<Adafruit_MCP9600 *>(h->storage.mcp_mem);
 }
@@ -51,13 +51,13 @@ static TwoWire *thermocouple_i2c_wire(uint8_t bus) {
 }
 #endif
 
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
 static inline MAX6675 *as_max(hal_thermocouple_impl_t *h) {
     return reinterpret_cast<MAX6675 *>(h->storage.max_mem);
 }
 #endif
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 static const char *chip_name(hal_thermocouple_chip_t chip) {
     switch (chip) {
         case HAL_THERMOCOUPLE_CHIP_MCP9600: return "MCP9600";
@@ -94,7 +94,7 @@ hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg) {
     h->chip  = cfg->chip;
     h->mutex = hal_mutex_create();
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (cfg->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) {
         const hal_thermocouple_i2c_cfg_t &ic = cfg->bus.i2c;
         hal_i2c_init_bus(ic.i2c_bus, ic.sda_pin, ic.scl_pin, ic.clock_hz);
@@ -109,7 +109,7 @@ hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg) {
         }
     } else
 #endif
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
     if (cfg->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
         const hal_thermocouple_spi_cfg_t &sc = cfg->bus.spi;
         new(h->storage.max_mem) MAX6675(
@@ -133,12 +133,12 @@ hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg) {
 void hal_thermocouple_deinit(hal_thermocouple_t h) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) {
         as_mcp(h)->~Adafruit_MCP9600();
     }
 #endif
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
         as_max(h)->~MAX6675();
     }
@@ -156,11 +156,11 @@ float hal_thermocouple_read(hal_thermocouple_t h) {
     if (!h) return NAN;
     hal_mutex_lock(h->mutex);
     float v = NAN;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) v = as_mcp(h)->readThermocouple();
     else
 #endif
-#ifndef HAL_DISABLE_MAX6675
+#ifdef HAL_ENABLE_MAX6675
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) v = as_max(h)->readCelsius();
 #endif
     (void)v;
@@ -168,7 +168,7 @@ float hal_thermocouple_read(hal_thermocouple_t h) {
     return v;
 }
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 float hal_thermocouple_read_ambient(hal_thermocouple_t h) {
     if (!h) return NAN;
     hal_mutex_lock(h->mutex);
@@ -194,11 +194,11 @@ int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Wire type ───────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t type) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -209,13 +209,13 @@ void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t typ
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h) {
     if (!h) return HAL_THERMOCOUPLE_TYPE_K;
     hal_mutex_lock(h->mutex);
     hal_thermocouple_type_t v = HAL_THERMOCOUPLE_TYPE_K;
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600)
         v = (hal_thermocouple_type_t)as_mcp(h)->getThermocoupleType();
 #endif
@@ -226,7 +226,7 @@ hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h) {
 
 /* ── IIR filter ──────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -250,11 +250,11 @@ uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Hot-junction ADC resolution ─────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
                                           hal_thermocouple_adc_res_t res) {
     if (!h) return;
@@ -279,11 +279,11 @@ hal_thermocouple_adc_res_t hal_thermocouple_get_adc_resolution(hal_thermocouple_
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Cold-junction (ambient) resolution ──────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
                                               hal_thermocouple_ambient_res_t res) {
     if (!h) return;
@@ -295,11 +295,11 @@ void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Enable / sleep ──────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_enable(hal_thermocouple_t h, bool enable) {
     if (!h) return;
     hal_mutex_lock(h->mutex);
@@ -310,13 +310,13 @@ void hal_thermocouple_enable(hal_thermocouple_t h, bool enable) {
     }
     hal_mutex_unlock(h->mutex);
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h) {
     if (!h) return false;
     hal_mutex_lock(h->mutex);
     bool v = true;  /* MAX6675 has no sleep mode - always active. */
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) v = as_mcp(h)->enabled();
 #endif
     hal_mutex_unlock(h->mutex);
@@ -325,7 +325,7 @@ bool hal_thermocouple_is_enabled(hal_thermocouple_t h) {
 
 /* ── Alerts ──────────────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
                                  bool enabled,
                                  const hal_thermocouple_alert_cfg_t *cfg) {
@@ -362,11 +362,11 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 /* ── Status register ─────────────────────────────────────────────────────── */
 
-#ifndef HAL_DISABLE_MCP9600
+#ifdef HAL_ENABLE_MCP9600
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h) {
     if (!h) return 0;
     hal_mutex_lock(h->mutex);
@@ -379,7 +379,7 @@ uint8_t hal_thermocouple_get_status(hal_thermocouple_t h) {
     hal_mutex_unlock(h->mutex);
     return v;
 }
-#endif /* !HAL_DISABLE_MCP9600 */
+#endif /* HAL_ENABLE_MCP9600 */
 
 
-#endif /* HAL_DISABLE_THERMOCOUPLE */
+#endif /* HAL_ENABLE_THERMOCOUPLE */

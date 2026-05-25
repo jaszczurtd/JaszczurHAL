@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 
 #include "../../hal_ds18b20.h"
 #include "../../hal_sync.h"
@@ -192,4 +192,4 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h) {
     return v;
 }
 
-#endif /* HAL_DISABLE_DS18B20 */
+#endif /* HAL_ENABLE_DS18B20 */

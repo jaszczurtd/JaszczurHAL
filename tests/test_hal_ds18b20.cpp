@@ -6,7 +6,7 @@
 #include <thread>
 #include <vector>
 
-#ifndef HAL_DISABLE_DS18B20
+#ifdef HAL_ENABLE_DS18B20
 
 static hal_ds18b20_t s_sensor = nullptr;
 
@@ -177,4 +177,4 @@ int main(void) {
     return UNITY_END();
 }
 
-#endif /* HAL_DISABLE_DS18B20 */
+#endif /* HAL_ENABLE_DS18B20 */

@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_ONEWIRE
+#ifdef HAL_ENABLE_ONEWIRE
 
 #include "../../hal_onewire.h"
 #include "../../hal_sync.h"
@@ -430,4 +430,4 @@ int hal_mock_onewire_get_max_lock_depth(hal_onewire_t h) {
     return v;
 }
 
-#endif /* HAL_DISABLE_ONEWIRE */
+#endif /* HAL_ENABLE_ONEWIRE */

@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_THERMOCOUPLE) && !defined(HAL_DISABLE_MCP9600) && !defined(HAL_DISABLE_I2C)
+#if defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C)
 
 /**************************************************************************/
 /*!
@@ -26,4 +26,4 @@
 /**************************************************************************/
 Adafruit_MCP9601::Adafruit_MCP9601() { _device_id = 0x41; }
 
-#endif /* !HAL_DISABLE_THERMOCOUPLE && !HAL_DISABLE_MCP9600 && !HAL_DISABLE_I2C */
+#endif /* HAL_ENABLE_THERMOCOUPLE && !HAL_ENABLE_MCP9600 && !HAL_ENABLE_I2C */

@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if !defined(HAL_DISABLE_DISPLAY) && !defined(HAL_DISABLE_SSD1306)
+#if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_SSD1306)
 
 /*!
  * @file Adafruit_GrayOLED.cpp
@@ -424,4 +424,4 @@ void Adafruit_GrayOLED::setContrast(uint8_t level) {
 
 #endif /* ATTIN85 not supported */
 
-#endif /* !HAL_DISABLE_DISPLAY && !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_DISPLAY && !HAL_ENABLE_SSD1306 */

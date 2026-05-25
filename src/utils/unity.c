@@ -5,7 +5,7 @@
 ============================================================================ */
 
 #include "libConfig.h"
-#ifndef HAL_DISABLE_UNITY
+#ifdef HAL_ENABLE_UNITY
 #include "unity.h"
 
 #ifndef UNITY_PROGMEM
@@ -2467,4 +2467,4 @@ int UnityTestMatches(void)
 #endif /* UNITY_USE_COMMAND_LINE_ARGS */
 /*-----------------------------------------------*/
 
-#endif /* !HAL_DISABLE_UNITY */
+#endif /* HAL_ENABLE_UNITY */

@@ -5,7 +5,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-#ifndef HAL_DISABLE_GPS
+#ifdef HAL_ENABLE_GPS
 
 /**
  * @file hal_gps.h
@@ -115,7 +115,7 @@ uint32_t hal_gps_sentences_with_fix(void);
 int hal_gps_serial_available(void);
 
 
-#endif /* HAL_DISABLE_GPS */
+#endif /* HAL_ENABLE_GPS */
 #ifdef __cplusplus
 }
 #endif

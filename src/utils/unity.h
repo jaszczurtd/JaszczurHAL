@@ -6,7 +6,7 @@
 
 #include "libConfig.h"
 
-#ifndef HAL_DISABLE_UNITY
+#ifdef HAL_ENABLE_UNITY
 
 #ifndef UNITY_FRAMEWORK_H
 #define UNITY_FRAMEWORK_H
@@ -690,4 +690,4 @@ void verifyTest(void);
 #endif
 #endif
 
-#endif /* !HAL_DISABLE_UNITY */
+#endif /* HAL_ENABLE_UNITY */

@@ -67,9 +67,9 @@ Each platform template includes:
 | `upload-uf2.sh` | UF2 bootloader upload | Both |
 
 ### Root Configuration File
-- **`hal_project_config.h`** - Template for enabling/disabling JaszczurHAL modules
+- **`hal_project_config.h`** - Template for enabling JaszczurHAL modules (opt-in)
   - Copy to your sketch directory and customize
-  - Supported flags: `HAL_DISABLE_GPIO`, `HAL_DISABLE_I2C`, `HAL_DISABLE_GPS`, etc.
+  - Supported flags: `HAL_ENABLE_I2C`, `HAL_ENABLE_GPS`, `HAL_ENABLE_PCF8563`, etc.
 
 ## Key Features
 

@@ -1,5 +1,5 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_I2C_SLAVE
+#ifdef HAL_ENABLE_I2C_SLAVE
 
 #include "../../hal_i2c_slave.h"
 #include "../../hal_sync.h"
@@ -256,4 +256,4 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
     return s_slave[slave_bus_index(bus)].transaction_count;
 }
 
-#endif /* HAL_DISABLE_I2C_SLAVE */
+#endif /* HAL_ENABLE_I2C_SLAVE */

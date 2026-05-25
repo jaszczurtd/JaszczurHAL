@@ -1,12 +1,12 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_DISPLAY
+#ifdef HAL_ENABLE_DISPLAY
 
 #include "../../hal_display.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include <Arduino.h>
 #include "drivers/Adafruit_GFX_Library/Adafruit_GFX.h"
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
 #include "drivers/Adafruit_SSD1306/Adafruit_SSD1306.h"
 #include <Wire.h>
 #endif
@@ -28,13 +28,14 @@
  * For ST7735 you may also define HAL_DISPLAY_ST7735_TAB to override the
  * initR() tab-colour constant (defaults to INITR_BLACKTAB).
  *
- * To exclude all SPI TFT drivers define HAL_DISABLE_TFT.
- * To exclude the SSD1306 OLED driver define HAL_DISABLE_SSD1306.
- * At least one backend must be enabled (do not define both disable flags
- * at the same time - use HAL_DISABLE_DISPLAY instead).
+ * To enable the SPI TFT family define HAL_ENABLE_TFT (and exactly one of
+ * the HAL_DISPLAY_* macros above).
+ * To enable the SSD1306 OLED driver define HAL_ENABLE_SSD1306.
+ * Both backends may be enabled simultaneously; either one propagates
+ * HAL_ENABLE_DISPLAY automatically.
  * -------------------------------------------------------------------------- */
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
     #include "drivers/Adafruit_ILI9341/Adafruit_ILI9341.h"
     using DisplayDriver = Adafruit_ILI9341;
@@ -53,22 +54,22 @@
 #else
     #error "No TFT driver selected. Define one HAL_DISPLAY_* macro."
 #endif
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 
 /* ---- Static state -------------------------------------------------------- */
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 static uint8_t s_tft_mem[sizeof(DisplayDriver)]
     __attribute__((aligned(__alignof__(DisplayDriver))));
 // Keep concrete driver type so bitmap drawing resolves to Adafruit_SPITFT fast path.
 static DisplayDriver *s_tft = NULL;
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
 static uint8_t s_oled_mem[sizeof(Adafruit_SSD1306)]
     __attribute__((aligned(__alignof__(Adafruit_SSD1306))));
 static Adafruit_SSD1306 *s_oled = NULL;
-#endif /* !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_SSD1306 */
 
 typedef enum {
     HAL_DISPLAY_BACKEND_NONE = 0,
@@ -101,7 +102,7 @@ struct DisplayLock {
 /* -------------------------------------------------------------------------- */
 
 static inline bool using_tft(void) {
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     return s_backend == HAL_DISPLAY_BACKEND_TFT && s_tft != NULL;
 #else
     return false;
@@ -109,7 +110,7 @@ static inline bool using_tft(void) {
 }
 
 static inline bool using_oled(void) {
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     return s_backend == HAL_DISPLAY_BACKEND_SSD1306 && s_oled != NULL;
 #else
     return false;
@@ -128,7 +129,7 @@ static bool ensure_display_ready(const char *fn) {
     return false;
 }
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
 static inline uint16_t map_color_to_oled(uint16_t color) {
     if (color == HAL_COLOR_BLACK) {
         return SSD1306_BLACK;
@@ -147,11 +148,11 @@ static TwoWire *display_i2c_wire(uint8_t bus) {
     return &Wire;
 #endif
 }
-#endif /* !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_SSD1306 */
 
 /* ---- ILI9341 extended init command table --------------------------------- */
 
-#if defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISABLE_TFT)
+#if defined(HAL_DISPLAY_ILI9341) && defined(HAL_ENABLE_TFT)
 static const uint8_t PROGMEM s_initcmd[] = {
     0xEF, 3, 0x03, 0x80, 0x02,
     0xCF, 3, 0x00, 0xC1, 0x30,
@@ -179,11 +180,11 @@ static const uint8_t PROGMEM s_initcmd[] = {
     ILI9341_DISPON  , 0x80,
     0x00
 };
-#endif /* HAL_DISPLAY_ILI9341 && !HAL_DISABLE_TFT */
+#endif /* HAL_DISPLAY_ILI9341 && !HAL_ENABLE_TFT */
 
 /* ---- Init / control ------------------------------------------------------ */
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
 void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
     s_tft = new(s_tft_mem) DisplayDriver(cs, dc, rst);
     s_backend = HAL_DISPLAY_BACKEND_TFT;
@@ -194,9 +195,9 @@ void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst) {
     /* For all other drivers, hardware init is deferred to
      * hal_display_configure() which carries the required dimensions. */
 }
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,
                                   bool periphBegin) {
@@ -225,7 +226,7 @@ bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
     s_height = height;
     return true;
 }
-#endif /* !HAL_DISABLE_SSD1306 */
+#endif /* HAL_ENABLE_SSD1306 */
 
 bool hal_display_configure(int width, int height, uint8_t rotation,
                             bool invert, bool bgr) {
@@ -235,7 +236,7 @@ bool hal_display_configure(int width, int height, uint8_t rotation,
         return false;
     }
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_width = width;
         s_height = height;
@@ -246,7 +247,7 @@ bool hal_display_configure(int width, int height, uint8_t rotation,
     }
 #endif
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (!using_tft()) {
         hal_derr("hal_display_configure: TFT backend is not initialized");
         return false;
@@ -284,12 +285,12 @@ bool hal_display_configure(int width, int height, uint8_t rotation,
 #else
     hal_derr("hal_display_configure: no active display backend");
     return false;
-#endif /* !HAL_DISABLE_TFT */
+#endif /* HAL_ENABLE_TFT */
 }
 
 void hal_display_soft_init(int delay_ms) {
     DisplayLock guard;
-#if defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISABLE_TFT)
+#if defined(HAL_DISPLAY_ILI9341) && defined(HAL_ENABLE_TFT)
     if (!s_tft) return;
     uint8_t cmd, x, numArgs;
     const uint8_t *addr = s_initcmd;
@@ -310,13 +311,13 @@ void hal_display_soft_init(int delay_ms) {
 bool hal_display_set_rotation(uint8_t r) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_set_rotation")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->setRotation(r);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->setRotation(r);
         return true;
@@ -328,13 +329,13 @@ bool hal_display_set_rotation(uint8_t r) {
 bool hal_display_invert(bool invert) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_invert")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->invertDisplay(invert);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->invertDisplay(invert);
         return true;
@@ -351,13 +352,13 @@ int hal_display_get_height(void) { return s_height; }
 bool hal_display_fill_screen(uint16_t color) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_fill_screen")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->fillScreen(map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->fillScreen(color);
         return true;
@@ -369,7 +370,7 @@ bool hal_display_fill_screen(uint16_t color) {
 bool hal_display_flush(void) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_flush")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->display();
     }
@@ -393,13 +394,13 @@ bool hal_display_fill_rect(int x, int y, int w, int h, uint16_t color) {
         hal_derr("hal_display_fill_rect: invalid size %dx%d", w, h);
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->fillRect(x, y, w, h, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->fillRect(x, y, w, h, color);
         return true;
@@ -415,13 +416,13 @@ bool hal_display_draw_rect(int x, int y, int w, int h, uint16_t color) {
         hal_derr("hal_display_draw_rect: invalid size %dx%d", w, h);
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->drawRect(x, y, w, h, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->drawRect(x, y, w, h, color);
         return true;
@@ -437,13 +438,13 @@ bool hal_display_fill_circle(int x, int y, int r, uint16_t color) {
         hal_derr("hal_display_fill_circle: invalid radius %d", r);
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->fillCircle(x, y, r, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->fillCircle(x, y, r, color);
         return true;
@@ -459,13 +460,13 @@ bool hal_display_draw_circle(int x, int y, int r, uint16_t color) {
         hal_derr("hal_display_draw_circle: invalid radius %d", r);
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->drawCircle(x, y, r, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->drawCircle(x, y, r, color);
         return true;
@@ -481,13 +482,13 @@ bool hal_display_fill_round_rect(int x, int y, int w, int h, int r, uint16_t col
         hal_derr("hal_display_fill_round_rect: invalid size/radius w=%d h=%d r=%d", w, h, r);
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->fillRoundRect(x, y, w, h, r, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->fillRoundRect(x, y, w, h, r, color);
         return true;
@@ -499,13 +500,13 @@ bool hal_display_fill_round_rect(int x, int y, int w, int h, int r, uint16_t col
 bool hal_display_draw_line(int x0, int y0, int x1, int y1, uint16_t color) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_draw_line")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->drawLine(x0, y0, x1, y1, map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->drawLine(x0, y0, x1, y1, color);
         return true;
@@ -527,7 +528,7 @@ bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h) {
         hal_derr("hal_display_draw_rgb_bitmap: invalid size %dx%d", w, h);
         return false;
     }
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->drawRGBBitmap(x, y, data, w, h);
         return true;
@@ -542,7 +543,7 @@ bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h) {
 bool hal_display_set_font(hal_font_id_t font) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_set_font")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         switch (font) {
             case HAL_FONT_SANS_BOLD_9PT: s_oled->setFont(&FreeSansBold9pt7b); break;
@@ -552,7 +553,7 @@ bool hal_display_set_font(hal_font_id_t font) {
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (!using_tft()) return false;
     switch (font) {
         case HAL_FONT_SANS_BOLD_9PT: s_tft->setFont(&FreeSansBold9pt7b); break;
@@ -568,13 +569,13 @@ bool hal_display_set_font(hal_font_id_t font) {
 bool hal_display_set_text_color(uint16_t color) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_set_text_color")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->setTextColor(map_color_to_oled(color));
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->setTextColor(color);
         return true;
@@ -590,13 +591,13 @@ bool hal_display_set_text_size(uint8_t size) {
         hal_derr("hal_display_set_text_size: size must be > 0");
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->setTextSize(size);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->setTextSize(size);
         return true;
@@ -608,13 +609,13 @@ bool hal_display_set_text_size(uint8_t size) {
 bool hal_display_set_cursor(int x, int y) {
     DisplayLock guard;
     if (!ensure_display_ready("hal_display_set_cursor")) return false;
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->setCursor(x, y);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->setCursor(x, y);
         return true;
@@ -630,13 +631,13 @@ bool hal_display_print(const char *s) {
         hal_derr("hal_display_print: text pointer is NULL");
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->print(s);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->print(s);
         return true;
@@ -652,13 +653,13 @@ bool hal_display_println(const char *s) {
         hal_derr("hal_display_println: text pointer is NULL");
         return false;
     }
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         s_oled->println(s);
         return true;
     }
 #endif
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (using_tft()) {
         s_tft->println(s);
         return true;
@@ -764,7 +765,7 @@ bool hal_display_get_text_bounds(const char *s, int *w, int *h) {
         return false;
     }
 
-#ifndef HAL_DISABLE_SSD1306
+#ifdef HAL_ENABLE_SSD1306
     if (using_oled()) {
         int16_t x1, y1;
         uint16_t uw, uh;
@@ -775,7 +776,7 @@ bool hal_display_get_text_bounds(const char *s, int *w, int *h) {
     }
 #endif
 
-#ifndef HAL_DISABLE_TFT
+#ifdef HAL_ENABLE_TFT
     if (!using_tft()) { *out_w = 0; *out_h = 0; return false; }
     int16_t x1, y1;
     uint16_t uw, uh;
@@ -875,4 +876,4 @@ int hal_display_prepare_text(char *display_txt, size_t display_txt_size,
     return w;
 }
 
-#endif /* HAL_DISABLE_DISPLAY */
+#endif /* HAL_ENABLE_DISPLAY */

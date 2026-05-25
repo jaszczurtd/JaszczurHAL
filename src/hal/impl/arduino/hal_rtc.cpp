@@ -1,60 +1,54 @@
 #include "../../hal_config.h"
-#ifndef HAL_DISABLE_RTC
+#ifdef HAL_ENABLE_RTC
 
 #include "../../hal_rtc.h"
 #include "../../hal_i2c.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 
+#ifdef HAL_ENABLE_PCF8563
+#include "drivers/PCF8563/PCF8563.h"
+#endif
+#ifdef HAL_ENABLE_DS3231
+#include "drivers/DS3231/DS3231.h"
+#include <new>
+#endif
+
 #include <string.h>
-
-/* PCF8563 register map used by this HAL module. */
-#define PCF8563_REG_CONTROL_STATUS_1 0x00
-#define PCF8563_REG_CONTROL_STATUS_2 0x01
-#define PCF8563_REG_SECONDS          0x02
-#define PCF8563_REG_ALARM_MINUTE     0x09
-#define PCF8563_REG_CLKOUT_CONTROL   0x0D
-#define PCF8563_REG_TIMER_CONTROL    0x0E
-
-#define PCF8563_SECONDS_VL_MASK  0x80
-#define PCF8563_SECONDS_MASK     0x7F
-#define PCF8563_MINUTES_MASK     0x7F
-#define PCF8563_HOURS_MASK       0x3F
-#define PCF8563_DAY_MASK         0x3F
-#define PCF8563_WEEKDAY_MASK     0x07
-#define PCF8563_MONTH_MASK       0x1F
-#define PCF8563_MONTH_CENTURY    0x80
-
-#define PCF8563_ALARM_DISABLE    0x80
-
-#define PCF8563_CS2_TIE          (1u << 0)
-#define PCF8563_CS2_AIE          (1u << 1)
-#define PCF8563_CS2_TF           (1u << 2)
-#define PCF8563_CS2_AF           (1u << 3)
-#define PCF8563_CS2_TI_TP        (1u << 4)
-
-#define PCF8563_CLKOUT_MASK      0x83
-
-#define PCF8563_TIMER_MASK       0x83
-#define PCF8563_TIMER_DISABLED   0x03
-#define PCF8563_TIMER_1_60_HZ    0x83
-#define PCF8563_TIMER_1_HZ       0x82
-#define PCF8563_TIMER_64_HZ      0x81
-#define PCF8563_TIMER_4096_HZ    0x80
 
 struct hal_rtc_impl_s {
     hal_rtc_chip_t chip;
     bool           in_use;
     hal_mutex_t    mutex;
-    struct {
-        uint8_t i2c_bus;
-        uint8_t i2c_addr;
-    } pcf;
+#ifdef HAL_ENABLE_DS3231
+    hal_rtc_clkout_mode_t ds3231_clkout_mode;
+#endif
+    union {
+#ifdef HAL_ENABLE_PCF8563
+        pcf8563_t pcf;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        alignas(DS3231) uint8_t ds3231_mem[sizeof(DS3231)];
+#endif
+    } backend;
 };
 
 static hal_rtc_impl_t s_pool[HAL_RTC_MAX_INSTANCES];
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
+static bool rtc_backend_supported(hal_rtc_chip_t chip) {
+    switch (chip) {
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563:
+            return true;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            return true;
+#endif
+        default:
+            return false;
+    }
+}
 
 static void rtc_release_pool_slot(hal_rtc_impl_t *h) {
     hal_critical_section_enter();
@@ -103,230 +97,201 @@ static bool rtc_validate_alarm(const hal_rtc_alarm_t *alarm) {
     return true;
 }
 
-static uint8_t rtc_to_bcd(uint8_t value) {
-    return (uint8_t)((((uint8_t)(value / 10u)) << 4) | (uint8_t)(value % 10u));
+static bool rtc_is_leap_year(uint16_t year) {
+    return ((year % 4u) == 0u && (year % 100u) != 0u) || ((year % 400u) == 0u);
 }
 
-static uint8_t rtc_from_bcd(uint8_t value) {
-    return (uint8_t)((uint8_t)(((value >> 4) & 0x0Fu) * 10u) + (value & 0x0Fu));
+static uint8_t rtc_days_in_month(uint16_t year, uint8_t month) {
+    switch (month) {
+        case 1u:  return 31u;
+        case 2u:  return rtc_is_leap_year(year) ? 29u : 28u;
+        case 3u:  return 31u;
+        case 4u:  return 30u;
+        case 5u:  return 31u;
+        case 6u:  return 30u;
+        case 7u:  return 31u;
+        case 8u:  return 31u;
+        case 9u:  return 30u;
+        case 10u: return 31u;
+        case 11u: return 30u;
+        case 12u: return 31u;
+        default:  return 0u;
+    }
 }
 
-static bool pcf_write_regs(hal_rtc_impl_t *h,
-                           uint8_t reg,
-                           const uint8_t *data,
-                           uint8_t count) {
-    if (!h || !data || count == 0u) {
+static bool rtc_datetime_to_epoch(const hal_rtc_datetime_t *dt, uint64_t *out_epoch) {
+    if (!dt || !out_epoch || !rtc_validate_datetime(dt) || dt->year < 1970u) {
         return false;
     }
 
-    hal_i2c_begin_transmission_bus(h->pcf.i2c_bus, h->pcf.i2c_addr);
+    uint64_t days = 0u;
 
-    if (hal_i2c_write_bus(h->pcf.i2c_bus, reg) != 1u) {
-        (void)hal_i2c_end_transmission_bus(h->pcf.i2c_bus);
-        return false;
+    for (uint16_t year = 1970u; year < dt->year; ++year) {
+        days += rtc_is_leap_year(year) ? 366u : 365u;
     }
 
-    for (uint8_t i = 0; i < count; i++) {
-        if (hal_i2c_write_bus(h->pcf.i2c_bus, data[i]) != 1u) {
-            (void)hal_i2c_end_transmission_bus(h->pcf.i2c_bus);
+    for (uint8_t month = 1u; month < dt->month; ++month) {
+        const uint8_t dim = rtc_days_in_month(dt->year, month);
+        if (dim == 0u) {
             return false;
         }
+        days += dim;
     }
 
-    return hal_i2c_end_transmission_bus(h->pcf.i2c_bus) == 0u;
-}
+    days += (uint64_t)(dt->day - 1u);
 
-static bool pcf_read_regs(hal_rtc_impl_t *h,
-                          uint8_t reg,
-                          uint8_t *data,
-                          uint8_t count) {
-    if (!h || !data || count == 0u) {
-        return false;
-    }
-
-    hal_i2c_begin_transmission_bus(h->pcf.i2c_bus, h->pcf.i2c_addr);
-
-    if (hal_i2c_write_bus(h->pcf.i2c_bus, reg) != 1u) {
-        (void)hal_i2c_end_transmission_bus(h->pcf.i2c_bus);
-        return false;
-    }
-
-    if (hal_i2c_end_transmission_bus(h->pcf.i2c_bus) != 0u) {
-        return false;
-    }
-
-    const uint8_t received = hal_i2c_request_from_bus(h->pcf.i2c_bus,
-                                                       h->pcf.i2c_addr,
-                                                       count);
-    if (received != count) {
-        return false;
-    }
-
-    for (uint8_t i = 0; i < count; i++) {
-        if (hal_i2c_available_bus(h->pcf.i2c_bus) <= 0) {
-            return false;
-        }
-        const int raw = hal_i2c_read_bus(h->pcf.i2c_bus);
-        if (raw < 0) {
-            return false;
-        }
-        data[i] = (uint8_t)raw;
-    }
-
+    *out_epoch = days * 86400ull
+               + (uint64_t)dt->hour * 3600ull
+               + (uint64_t)dt->minute * 60ull
+               + (uint64_t)dt->second;
     return true;
 }
 
-static bool pcf_get_datetime(hal_rtc_impl_t *h, hal_rtc_datetime_t *out_dt) {
-    uint8_t buffer[7] = {0};
-    if (!pcf_read_regs(h, PCF8563_REG_SECONDS, buffer, (uint8_t)sizeof(buffer))) {
+static bool rtc_epoch_to_datetime(uint64_t epoch, hal_rtc_datetime_t *out_dt) {
+    if (!out_dt) {
         return false;
     }
 
-    out_dt->clock_integrity = (buffer[0] & PCF8563_SECONDS_VL_MASK) == 0u;
-    out_dt->second = rtc_from_bcd((uint8_t)(buffer[0] & PCF8563_SECONDS_MASK));
-    out_dt->minute = rtc_from_bcd((uint8_t)(buffer[1] & PCF8563_MINUTES_MASK));
-    out_dt->hour = rtc_from_bcd((uint8_t)(buffer[2] & PCF8563_HOURS_MASK));
-    out_dt->day = rtc_from_bcd((uint8_t)(buffer[3] & PCF8563_DAY_MASK));
-    out_dt->weekday = (uint8_t)(buffer[4] & PCF8563_WEEKDAY_MASK);
-    out_dt->month = rtc_from_bcd((uint8_t)(buffer[5] & PCF8563_MONTH_MASK));
+    const uint64_t epoch_days = epoch / 86400ull;
+    uint64_t remaining_days = epoch_days;
+    uint32_t sod = (uint32_t)(epoch % 86400ull);
 
-    if ((buffer[5] & PCF8563_MONTH_CENTURY) != 0u) {
-        out_dt->year = (uint16_t)(2000u + rtc_from_bcd(buffer[6]));
-    } else {
-        out_dt->year = (uint16_t)(1900u + rtc_from_bcd(buffer[6]));
+    uint16_t year = 1970u;
+    while (year <= 2099u) {
+        const uint16_t diy = rtc_is_leap_year(year) ? 366u : 365u;
+        if (remaining_days < (uint64_t)diy) {
+            break;
+        }
+        remaining_days -= (uint64_t)diy;
+        ++year;
     }
+
+    if (year > 2099u) {
+        return false;
+    }
+
+    uint8_t month = 1u;
+    while (month <= 12u) {
+        const uint8_t dim = rtc_days_in_month(year, month);
+        if (dim == 0u) {
+            return false;
+        }
+        if (remaining_days < (uint64_t)dim) {
+            break;
+        }
+        remaining_days -= (uint64_t)dim;
+        ++month;
+    }
+
+    if (month > 12u) {
+        return false;
+    }
+
+    out_dt->year = year;
+    out_dt->month = month;
+    out_dt->day = (uint8_t)(remaining_days + 1u);
+
+    out_dt->hour = (uint8_t)(sod / 3600u);
+    sod %= 3600u;
+    out_dt->minute = (uint8_t)(sod / 60u);
+    out_dt->second = (uint8_t)(sod % 60u);
+
+    out_dt->weekday = (uint8_t)((epoch_days + 4ull) % 7ull);
+    out_dt->clock_integrity = true;
 
     return rtc_validate_datetime(out_dt);
 }
 
-static bool pcf_set_datetime(hal_rtc_impl_t *h, const hal_rtc_datetime_t *dt) {
-    if (!rtc_validate_datetime(dt)) {
-        return false;
-    }
-
-    uint8_t buffer[7] = {0};
-
-    buffer[0] = (uint8_t)(rtc_to_bcd(dt->second) & PCF8563_SECONDS_MASK);
-    buffer[1] = (uint8_t)(rtc_to_bcd(dt->minute) & PCF8563_MINUTES_MASK);
-    buffer[2] = (uint8_t)(rtc_to_bcd(dt->hour) & PCF8563_HOURS_MASK);
-    buffer[3] = (uint8_t)(rtc_to_bcd(dt->day) & PCF8563_DAY_MASK);
-    buffer[4] = (uint8_t)(rtc_to_bcd(dt->weekday) & PCF8563_WEEKDAY_MASK);
-    buffer[5] = (uint8_t)(rtc_to_bcd(dt->month) & PCF8563_MONTH_MASK);
-
-    if (dt->year >= 2000u) {
-        buffer[5] = (uint8_t)(buffer[5] | PCF8563_MONTH_CENTURY);
-        buffer[6] = rtc_to_bcd((uint8_t)(dt->year - 2000u));
-    } else {
-        buffer[6] = rtc_to_bcd((uint8_t)(dt->year - 1900u));
-    }
-
-    return pcf_write_regs(h, PCF8563_REG_SECONDS, buffer, (uint8_t)sizeof(buffer));
+#ifdef HAL_ENABLE_PCF8563
+static void rtc_to_pcf_datetime(const hal_rtc_datetime_t *src, pcf8563_datetime_t *dst) {
+    dst->second = src->second;
+    dst->minute = src->minute;
+    dst->hour = src->hour;
+    dst->day = src->day;
+    dst->weekday = src->weekday;
+    dst->month = src->month;
+    dst->year = src->year;
+    dst->clock_integrity = src->clock_integrity;
 }
 
-static bool pcf_get_clock_integrity(hal_rtc_impl_t *h, bool *out_ok) {
-    uint8_t seconds = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_SECONDS, &seconds, 1u)) {
-        return false;
-    }
-    *out_ok = (seconds & PCF8563_SECONDS_VL_MASK) == 0u;
-    return true;
+static void pcf_to_rtc_datetime(const pcf8563_datetime_t *src, hal_rtc_datetime_t *dst) {
+    dst->second = src->second;
+    dst->minute = src->minute;
+    dst->hour = src->hour;
+    dst->day = src->day;
+    dst->weekday = src->weekday;
+    dst->month = src->month;
+    dst->year = src->year;
+    dst->clock_integrity = src->clock_integrity;
 }
 
-static bool pcf_set_interrupt_enable(hal_rtc_impl_t *h, uint8_t irq_mask) {
-    uint8_t cs2 = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_CONTROL_STATUS_2, &cs2, 1u)) {
-        return false;
-    }
-
-    cs2 = (uint8_t)(cs2 & (uint8_t)~(PCF8563_CS2_AIE | PCF8563_CS2_TIE));
-    if ((irq_mask & HAL_RTC_IRQ_ALARM) != 0u) {
-        cs2 = (uint8_t)(cs2 | PCF8563_CS2_AIE);
-    }
-    if ((irq_mask & HAL_RTC_IRQ_TIMER) != 0u) {
-        cs2 = (uint8_t)(cs2 | PCF8563_CS2_TIE);
-    }
-
-    return pcf_write_regs(h, PCF8563_REG_CONTROL_STATUS_2, &cs2, 1u);
+static void rtc_to_pcf_alarm(const hal_rtc_alarm_t *src, pcf8563_alarm_t *dst) {
+    dst->minute_enabled = src->minute_enabled;
+    dst->minute = src->minute;
+    dst->hour_enabled = src->hour_enabled;
+    dst->hour = src->hour;
+    dst->day_enabled = src->day_enabled;
+    dst->day = src->day;
+    dst->weekday_enabled = src->weekday_enabled;
+    dst->weekday = src->weekday;
 }
 
-static bool pcf_get_interrupt_enable(hal_rtc_impl_t *h, uint8_t *out_irq_mask) {
-    uint8_t cs2 = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_CONTROL_STATUS_2, &cs2, 1u)) {
-        return false;
-    }
-
-    uint8_t irq = 0;
-    if ((cs2 & PCF8563_CS2_AIE) != 0u) {
-        irq = (uint8_t)(irq | HAL_RTC_IRQ_ALARM);
-    }
-    if ((cs2 & PCF8563_CS2_TIE) != 0u) {
-        irq = (uint8_t)(irq | HAL_RTC_IRQ_TIMER);
-    }
-
-    *out_irq_mask = irq;
-    return true;
+static void pcf_to_rtc_alarm(const pcf8563_alarm_t *src, hal_rtc_alarm_t *dst) {
+    dst->minute_enabled = src->minute_enabled;
+    dst->minute = src->minute;
+    dst->hour_enabled = src->hour_enabled;
+    dst->hour = src->hour;
+    dst->day_enabled = src->day_enabled;
+    dst->day = src->day;
+    dst->weekday_enabled = src->weekday_enabled;
+    dst->weekday = src->weekday;
 }
 
-static bool pcf_get_and_clear_flags(hal_rtc_impl_t *h, uint8_t *out_flags) {
-    uint8_t cs2 = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_CONTROL_STATUS_2, &cs2, 1u)) {
+static bool rtc_to_pcf_clkout_mode(hal_rtc_clkout_mode_t mode, pcf8563_clkout_mode_t *out_mode) {
+    if (!out_mode) {
         return false;
     }
 
-    uint8_t flags = 0;
-    if ((cs2 & PCF8563_CS2_AF) != 0u) {
-        flags = (uint8_t)(flags | HAL_RTC_FLAG_ALARM);
-    }
-    if ((cs2 & PCF8563_CS2_TF) != 0u) {
-        flags = (uint8_t)(flags | HAL_RTC_FLAG_TIMER);
-    }
-
-    const uint8_t cleared = (uint8_t)(cs2 & (PCF8563_CS2_TI_TP | PCF8563_CS2_AIE | PCF8563_CS2_TIE));
-    if (!pcf_write_regs(h, PCF8563_REG_CONTROL_STATUS_2, &cleared, 1u)) {
-        return false;
-    }
-
-    *out_flags = flags;
-    return true;
-}
-
-static bool pcf_encode_clkout_mode(hal_rtc_clkout_mode_t mode, uint8_t *out_reg) {
     switch (mode) {
         case HAL_RTC_CLKOUT_DISABLED:
-            *out_reg = 0x00;
+            *out_mode = PCF8563_CLKOUT_DISABLED;
             return true;
         case HAL_RTC_CLKOUT_1_HZ:
-            *out_reg = 0x83;
+            *out_mode = PCF8563_CLKOUT_1_HZ;
             return true;
         case HAL_RTC_CLKOUT_32_HZ:
-            *out_reg = 0x82;
+            *out_mode = PCF8563_CLKOUT_32_HZ;
             return true;
         case HAL_RTC_CLKOUT_1024_HZ:
-            *out_reg = 0x81;
+            *out_mode = PCF8563_CLKOUT_1024_HZ;
             return true;
         case HAL_RTC_CLKOUT_32768_HZ:
-            *out_reg = 0x80;
+            *out_mode = PCF8563_CLKOUT_32768_HZ;
             return true;
         default:
             return false;
     }
 }
 
-static bool pcf_decode_clkout_mode(uint8_t reg, hal_rtc_clkout_mode_t *out_mode) {
-    switch ((uint8_t)(reg & PCF8563_CLKOUT_MASK)) {
-        case 0x00:
+static bool pcf_to_rtc_clkout_mode(pcf8563_clkout_mode_t mode, hal_rtc_clkout_mode_t *out_mode) {
+    if (!out_mode) {
+        return false;
+    }
+
+    switch (mode) {
+        case PCF8563_CLKOUT_DISABLED:
             *out_mode = HAL_RTC_CLKOUT_DISABLED;
             return true;
-        case 0x83:
+        case PCF8563_CLKOUT_1_HZ:
             *out_mode = HAL_RTC_CLKOUT_1_HZ;
             return true;
-        case 0x82:
+        case PCF8563_CLKOUT_32_HZ:
             *out_mode = HAL_RTC_CLKOUT_32_HZ;
             return true;
-        case 0x81:
+        case PCF8563_CLKOUT_1024_HZ:
             *out_mode = HAL_RTC_CLKOUT_1024_HZ;
             return true;
-        case 0x80:
+        case PCF8563_CLKOUT_32768_HZ:
             *out_mode = HAL_RTC_CLKOUT_32768_HZ;
             return true;
         default:
@@ -334,52 +299,43 @@ static bool pcf_decode_clkout_mode(uint8_t reg, hal_rtc_clkout_mode_t *out_mode)
     }
 }
 
-static bool pcf_set_clkout_mode(hal_rtc_impl_t *h, hal_rtc_clkout_mode_t mode) {
-    uint8_t reg = 0;
-    if (!pcf_encode_clkout_mode(mode, &reg)) {
+static bool rtc_to_pcf_timer_clock(hal_rtc_timer_clock_t timer_clock,
+                                   pcf8563_timer_clock_t *out_timer_clock) {
+    if (!out_timer_clock) {
         return false;
     }
-    return pcf_write_regs(h, PCF8563_REG_CLKOUT_CONTROL, &reg, 1u);
-}
 
-static bool pcf_get_clkout_mode(hal_rtc_impl_t *h, hal_rtc_clkout_mode_t *out_mode) {
-    uint8_t reg = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_CLKOUT_CONTROL, &reg, 1u)) {
-        return false;
-    }
-    return pcf_decode_clkout_mode(reg, out_mode);
-}
-
-static bool pcf_encode_timer_clock(hal_rtc_timer_clock_t timer_clock, uint8_t *out_reg) {
     switch (timer_clock) {
         case HAL_RTC_TIMER_DISABLED:
-            *out_reg = PCF8563_TIMER_DISABLED;
+            *out_timer_clock = PCF8563_TIMER_DISABLED;
             return true;
         case HAL_RTC_TIMER_1_60_HZ:
-            *out_reg = PCF8563_TIMER_1_60_HZ;
+            *out_timer_clock = PCF8563_TIMER_1_60_HZ;
             return true;
         case HAL_RTC_TIMER_1_HZ:
-            *out_reg = PCF8563_TIMER_1_HZ;
+            *out_timer_clock = PCF8563_TIMER_1_HZ;
             return true;
         case HAL_RTC_TIMER_64_HZ:
-            *out_reg = PCF8563_TIMER_64_HZ;
+            *out_timer_clock = PCF8563_TIMER_64_HZ;
             return true;
         case HAL_RTC_TIMER_4096_HZ:
-            *out_reg = PCF8563_TIMER_4096_HZ;
+            *out_timer_clock = PCF8563_TIMER_4096_HZ;
             return true;
         default:
             return false;
     }
 }
 
-static bool pcf_decode_timer_clock(uint8_t reg, hal_rtc_timer_clock_t *out_timer_clock) {
-    const uint8_t mode = (uint8_t)(reg & PCF8563_TIMER_MASK);
-    if ((mode & 0x80u) == 0u) {
-        *out_timer_clock = HAL_RTC_TIMER_DISABLED;
-        return true;
+static bool pcf_to_rtc_timer_clock(pcf8563_timer_clock_t timer_clock,
+                                   hal_rtc_timer_clock_t *out_timer_clock) {
+    if (!out_timer_clock) {
+        return false;
     }
 
-    switch (mode) {
+    switch (timer_clock) {
+        case PCF8563_TIMER_DISABLED:
+            *out_timer_clock = HAL_RTC_TIMER_DISABLED;
+            return true;
         case PCF8563_TIMER_1_60_HZ:
             *out_timer_clock = HAL_RTC_TIMER_1_60_HZ;
             return true;
@@ -396,80 +352,165 @@ static bool pcf_decode_timer_clock(uint8_t reg, hal_rtc_timer_clock_t *out_timer
             return false;
     }
 }
+#endif /* HAL_ENABLE_PCF8563 */
 
-static bool pcf_set_timer(hal_rtc_impl_t *h, hal_rtc_timer_clock_t timer_clock, uint8_t count) {
-    uint8_t mode = 0;
-    if (!pcf_encode_timer_clock(timer_clock, &mode)) {
-        return false;
-    }
-
-    uint8_t buffer[2] = {mode, count};
-    return pcf_write_regs(h, PCF8563_REG_TIMER_CONTROL, buffer, (uint8_t)sizeof(buffer));
+#ifdef HAL_ENABLE_DS3231
+static inline DS3231 *as_ds3231(hal_rtc_impl_t *h) {
+    return reinterpret_cast<DS3231 *>(h->backend.ds3231_mem);
 }
 
-static bool pcf_get_timer(hal_rtc_impl_t *h, hal_rtc_timer_clock_t *out_timer_clock, uint8_t *out_count) {
-    uint8_t buffer[2] = {0};
-    if (!pcf_read_regs(h, PCF8563_REG_TIMER_CONTROL, buffer, (uint8_t)sizeof(buffer))) {
+static TwoWire *rtc_i2c_wire(uint8_t bus) {
+#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
+    return bus == 1u ? &Wire1 : &Wire;
+#else
+    (void)bus;
+    return &Wire;
+#endif
+}
+
+static bool ds3231_probe(uint8_t i2c_bus, uint8_t i2c_addr) {
+    hal_i2c_begin_transmission_bus(i2c_bus, i2c_addr);
+    if (hal_i2c_write_bus(i2c_bus, 0x00u) != 1u) {
+        (void)hal_i2c_end_transmission_bus(i2c_bus);
         return false;
     }
-    if (!pcf_decode_timer_clock(buffer[0], out_timer_clock)) {
+    return hal_i2c_end_transmission_bus(i2c_bus) == 0u;
+}
+
+static uint8_t rtc_weekday_to_ds3231(uint8_t weekday) {
+    return (uint8_t)(weekday + 1u);
+}
+
+static uint8_t ds3231_weekday_to_rtc(uint8_t weekday) {
+    return (weekday >= 1u && weekday <= 7u)
+        ? (uint8_t)(weekday - 1u)
+        : 0u;
+}
+
+static uint8_t ds3231_hour_to_24h(uint8_t hour, bool h12, bool pm) {
+    if (!h12) {
+        return hour <= 23u ? hour : (uint8_t)(hour % 24u);
+    }
+
+    if (hour == 12u) {
+        return pm ? 12u : 0u;
+    }
+
+    if (hour > 12u) {
+        hour = (uint8_t)(hour % 12u);
+    }
+
+    return pm ? (uint8_t)(hour + 12u) : hour;
+}
+
+static bool rtc_set_ds3231_clkout(hal_rtc_impl_t *h, hal_rtc_clkout_mode_t mode) {
+    DS3231 *rtc = as_ds3231(h);
+
+    switch (mode) {
+        case HAL_RTC_CLKOUT_DISABLED:
+            rtc->enable32kHz(false);
+            rtc->enableOscillator(false, false, 0u);
+            h->ds3231_clkout_mode = mode;
+            return true;
+        case HAL_RTC_CLKOUT_1_HZ:
+            rtc->enable32kHz(false);
+            rtc->enableOscillator(true, false, 0u);
+            h->ds3231_clkout_mode = mode;
+            return true;
+        case HAL_RTC_CLKOUT_1024_HZ:
+            rtc->enable32kHz(false);
+            rtc->enableOscillator(true, false, 1u);
+            h->ds3231_clkout_mode = mode;
+            return true;
+        case HAL_RTC_CLKOUT_32768_HZ:
+            rtc->enableOscillator(false, false, 0u);
+            rtc->enable32kHz(true);
+            h->ds3231_clkout_mode = mode;
+            return true;
+        case HAL_RTC_CLKOUT_32_HZ:
+        default:
+            return false;
+    }
+}
+
+static bool rtc_to_ds3231_alarm2(const hal_rtc_alarm_t *src,
+                                 uint8_t *out_day,
+                                 uint8_t *out_hour,
+                                 uint8_t *out_minute,
+                                 uint8_t *out_alarm_bits,
+                                 bool *out_day_mode) {
+    if (!src || !out_day || !out_hour || !out_minute || !out_alarm_bits || !out_day_mode) {
         return false;
     }
-    *out_count = buffer[1];
+
+    if (src->day_enabled && src->weekday_enabled) {
+        return false;
+    }
+
+    uint8_t bits = 0u;
+    if (!src->minute_enabled) {
+        bits = (uint8_t)(bits | 0x10u);
+    }
+    if (!src->hour_enabled) {
+        bits = (uint8_t)(bits | 0x20u);
+    }
+
+    uint8_t day = 1u;
+    bool day_mode = false;
+    if (src->day_enabled) {
+        day_mode = false;
+        day = src->day;
+    } else if (src->weekday_enabled) {
+        day_mode = true;
+        day = rtc_weekday_to_ds3231(src->weekday);
+    } else {
+        bits = (uint8_t)(bits | 0x40u);
+    }
+
+    *out_day = day;
+    *out_hour = src->hour;
+    *out_minute = src->minute;
+    *out_alarm_bits = bits;
+    *out_day_mode = day_mode;
     return true;
 }
 
-static bool pcf_set_alarm(hal_rtc_impl_t *h, const hal_rtc_alarm_t *alarm) {
-    if (!rtc_validate_alarm(alarm)) {
-        return false;
+static void ds3231_alarm2_to_rtc(uint8_t day,
+                                 uint8_t hour,
+                                 uint8_t minute,
+                                 uint8_t alarm_bits,
+                                 bool day_mode,
+                                 hal_rtc_alarm_t *dst) {
+    const bool minute_enabled = (alarm_bits & 0x10u) == 0u;
+    const bool hour_enabled = (alarm_bits & 0x20u) == 0u;
+    const bool day_or_weekday_enabled = (alarm_bits & 0x40u) == 0u;
+
+    dst->minute_enabled = minute_enabled;
+    dst->minute = minute_enabled ? minute : 0u;
+    dst->hour_enabled = hour_enabled;
+    dst->hour = hour_enabled ? hour : 0u;
+
+    if (!day_or_weekday_enabled) {
+        dst->day_enabled = false;
+        dst->day = 0u;
+        dst->weekday_enabled = false;
+        dst->weekday = 0u;
+        return;
     }
 
-    uint8_t buffer[4] = {0};
-
-    buffer[0] = alarm->minute_enabled
-        ? (uint8_t)(rtc_to_bcd(alarm->minute) & PCF8563_MINUTES_MASK)
-        : PCF8563_ALARM_DISABLE;
-    buffer[1] = alarm->hour_enabled
-        ? (uint8_t)(rtc_to_bcd(alarm->hour) & PCF8563_HOURS_MASK)
-        : PCF8563_ALARM_DISABLE;
-    buffer[2] = alarm->day_enabled
-        ? (uint8_t)(rtc_to_bcd(alarm->day) & PCF8563_DAY_MASK)
-        : PCF8563_ALARM_DISABLE;
-    buffer[3] = alarm->weekday_enabled
-        ? (uint8_t)(rtc_to_bcd(alarm->weekday) & PCF8563_WEEKDAY_MASK)
-        : PCF8563_ALARM_DISABLE;
-
-    return pcf_write_regs(h, PCF8563_REG_ALARM_MINUTE, buffer, (uint8_t)sizeof(buffer));
-}
-
-static bool pcf_get_alarm(hal_rtc_impl_t *h, hal_rtc_alarm_t *out_alarm) {
-    uint8_t buffer[4] = {0};
-    if (!pcf_read_regs(h, PCF8563_REG_ALARM_MINUTE, buffer, (uint8_t)sizeof(buffer))) {
-        return false;
+    if (day_mode) {
+        dst->day_enabled = false;
+        dst->day = 0u;
+        dst->weekday_enabled = true;
+        dst->weekday = ds3231_weekday_to_rtc(day);
+    } else {
+        dst->day_enabled = true;
+        dst->day = day;
+        dst->weekday_enabled = false;
+        dst->weekday = 0u;
     }
-
-    out_alarm->minute_enabled = (buffer[0] & PCF8563_ALARM_DISABLE) == 0u;
-    out_alarm->hour_enabled = (buffer[1] & PCF8563_ALARM_DISABLE) == 0u;
-    out_alarm->day_enabled = (buffer[2] & PCF8563_ALARM_DISABLE) == 0u;
-    out_alarm->weekday_enabled = (buffer[3] & PCF8563_ALARM_DISABLE) == 0u;
-
-    out_alarm->minute = out_alarm->minute_enabled
-        ? rtc_from_bcd((uint8_t)(buffer[0] & PCF8563_MINUTES_MASK))
-        : 0u;
-    out_alarm->hour = out_alarm->hour_enabled
-        ? rtc_from_bcd((uint8_t)(buffer[1] & PCF8563_HOURS_MASK))
-        : 0u;
-    out_alarm->day = out_alarm->day_enabled
-        ? rtc_from_bcd((uint8_t)(buffer[2] & PCF8563_DAY_MASK))
-        : 0u;
-    out_alarm->weekday = out_alarm->weekday_enabled
-        ? rtc_from_bcd((uint8_t)(buffer[3] & PCF8563_WEEKDAY_MASK))
-        : 0u;
-
-    return rtc_validate_alarm(out_alarm);
 }
-
-/* ── Public API ─────────────────────────────────────────────────────────── */
+#endif /* HAL_ENABLE_DS3231 */
 
 hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
     if (!cfg) {
@@ -503,7 +544,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
         return NULL;
     }
 
-    if (cfg->chip != HAL_RTC_CHIP_PCF8563) {
+    if (!rtc_backend_supported(cfg->chip)) {
         hal_derr("hal_rtc_init: unsupported RTC backend %d", (int)cfg->chip);
         hal_mutex_destroy(h->mutex);
         h->mutex = NULL;
@@ -511,12 +552,28 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
         return NULL;
     }
 
+    uint8_t default_addr = 0u;
+    switch (cfg->chip) {
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563:
+            default_addr = (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
+            break;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            default_addr = (uint8_t)HAL_RTC_DS3231_DEFAULT_I2C_ADDR;
+            break;
+#endif
+        default:
+            break;
+    }
+
     const hal_rtc_i2c_cfg_t *ic = &cfg->bus.i2c;
     const uint8_t addr = (ic->i2c_addr != 0u)
         ? ic->i2c_addr
-        : (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
+        : default_addr;
 
-    if (addr > 0x7Fu || ic->clock_hz == 0u) {
+    if (default_addr == 0u || addr > 0x7Fu || ic->clock_hz == 0u) {
         hal_derr("hal_rtc_init: invalid I2C config (addr=0x%02X, clock=%lu)",
                  (unsigned)addr,
                  (unsigned long)ic->clock_hz);
@@ -526,22 +583,66 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
         return NULL;
     }
 
-    h->pcf.i2c_bus = ic->i2c_bus;
-    h->pcf.i2c_addr = addr;
-
-    hal_i2c_init_bus(ic->i2c_bus, ic->sda_pin, ic->scl_pin, ic->clock_hz);
-
-    uint8_t probe = 0;
-    if (!pcf_read_regs(h, PCF8563_REG_CONTROL_STATUS_1, &probe, 1u)) {
-        hal_derr("hal_rtc_init: PCF8563 probe failed (bus=%u addr=0x%02X)",
-                 (unsigned)h->pcf.i2c_bus,
-                 (unsigned)h->pcf.i2c_addr);
+#ifdef HAL_ENABLE_DS3231
+    if (cfg->chip == HAL_RTC_CHIP_DS3231 &&
+        addr != (uint8_t)HAL_RTC_DS3231_DEFAULT_I2C_ADDR) {
+        hal_derr("hal_rtc_init: DS3231 supports only addr=0x%02X (got 0x%02X)",
+                 (unsigned)HAL_RTC_DS3231_DEFAULT_I2C_ADDR,
+                 (unsigned)addr);
         hal_mutex_destroy(h->mutex);
         h->mutex = NULL;
         rtc_release_pool_slot(h);
         return NULL;
     }
-    (void)probe;
+#endif
+
+    hal_i2c_init_bus(ic->i2c_bus, ic->sda_pin, ic->scl_pin, ic->clock_hz);
+
+    switch (cfg->chip) {
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563:
+            h->backend.pcf.i2c_bus = ic->i2c_bus;
+            h->backend.pcf.i2c_addr = addr;
+            if (!pcf8563_probe(&h->backend.pcf)) {
+                hal_derr("hal_rtc_init: PCF8563 probe failed (bus=%u addr=0x%02X)",
+                         (unsigned)h->backend.pcf.i2c_bus,
+                         (unsigned)h->backend.pcf.i2c_addr);
+                hal_mutex_destroy(h->mutex);
+                h->mutex = NULL;
+                rtc_release_pool_slot(h);
+                return NULL;
+            }
+            break;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            if (!ds3231_probe(ic->i2c_bus, addr)) {
+                hal_derr("hal_rtc_init: DS3231 probe failed (bus=%u addr=0x%02X)",
+                         (unsigned)ic->i2c_bus,
+                         (unsigned)addr);
+                hal_mutex_destroy(h->mutex);
+                h->mutex = NULL;
+                rtc_release_pool_slot(h);
+                return NULL;
+            }
+
+            new (h->backend.ds3231_mem) DS3231(*rtc_i2c_wire(ic->i2c_bus));
+            if (!rtc_set_ds3231_clkout(h, HAL_RTC_CLKOUT_DISABLED)) {
+                as_ds3231(h)->~DS3231();
+                hal_mutex_destroy(h->mutex);
+                h->mutex = NULL;
+                rtc_release_pool_slot(h);
+                return NULL;
+            }
+            break;
+#endif
+        default:
+            hal_derr("hal_rtc_init: unsupported RTC backend %d", (int)cfg->chip);
+            hal_mutex_destroy(h->mutex);
+            h->mutex = NULL;
+            rtc_release_pool_slot(h);
+            return NULL;
+    }
 
     return h;
 }
@@ -552,11 +653,16 @@ void hal_rtc_deinit(hal_rtc_t h) {
     }
 
     hal_mutex_lock(h->mutex);
-    h->in_use = false;
+#ifdef HAL_ENABLE_DS3231
+    if (h->chip == HAL_RTC_CHIP_DS3231) {
+        as_ds3231(h)->~DS3231();
+    }
+#endif
     hal_mutex_t m = h->mutex;
     h->mutex = NULL;
     hal_mutex_unlock(m);
     hal_mutex_destroy(m);
+    rtc_release_pool_slot(h);
 }
 
 bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
@@ -568,9 +674,35 @@ bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_datetime(h, out_dt);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            pcf8563_datetime_t pcf_dt = {0};
+            ok = pcf8563_get_datetime(&h->backend.pcf, &pcf_dt);
+            if (ok) {
+                pcf_to_rtc_datetime(&pcf_dt, out_dt);
+                ok = rtc_validate_datetime(out_dt);
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            DS3231 *rtc = as_ds3231(h);
+            DateTime now = RTClib::now(rtc->_Wire);
+
+            out_dt->second = (uint8_t)now.second();
+            out_dt->minute = (uint8_t)now.minute();
+            out_dt->hour = (uint8_t)now.hour();
+            out_dt->day = (uint8_t)now.day();
+            out_dt->weekday = (uint8_t)now.dayOfTheWeek();
+            out_dt->month = (uint8_t)now.month();
+            out_dt->year = (uint16_t)now.year();
+            out_dt->clock_integrity = rtc->oscillatorCheck();
+
+            ok = rtc_validate_datetime(out_dt);
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -581,7 +713,7 @@ bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
 }
 
 bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
-    if (!h || !dt) {
+    if (!h || !dt || !rtc_validate_datetime(dt)) {
         return false;
     }
 
@@ -589,9 +721,23 @@ bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_set_datetime(h, dt);
+        {
+            pcf8563_datetime_t pcf_dt = {0};
+            rtc_to_pcf_datetime(dt, &pcf_dt);
+            ok = pcf8563_set_datetime(&h->backend.pcf, &pcf_dt);
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            DateTime ds_dt(dt->year, dt->month, dt->day, dt->hour, dt->minute, dt->second);
+            as_ds3231(h)->adjust(ds_dt);
+            ok = true;
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -599,6 +745,32 @@ bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
 
     hal_mutex_unlock(h->mutex);
     return ok;
+}
+
+bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
+    if (!h || !out_epoch) {
+        return false;
+    }
+
+    hal_rtc_datetime_t dt = {0};
+    if (!hal_rtc_get_datetime(h, &dt)) {
+        return false;
+    }
+
+    return rtc_datetime_to_epoch(&dt, out_epoch);
+}
+
+bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch) {
+    if (!h) {
+        return false;
+    }
+
+    hal_rtc_datetime_t dt = {0};
+    if (!rtc_epoch_to_datetime(epoch, &dt)) {
+        return false;
+    }
+
+    return hal_rtc_set_datetime(h, &dt);
 }
 
 bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
@@ -610,9 +782,17 @@ bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_clock_integrity(h, out_ok);
+            ok = pcf8563_get_clock_integrity(&h->backend.pcf, out_ok);
             break;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            *out_ok = as_ds3231(h)->oscillatorCheck();
+            ok = true;
+            break;
+#endif
         default:
             ok = false;
             break;
@@ -631,9 +811,32 @@ bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask) {
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_set_interrupt_enable(h, irq_mask);
+            ok = pcf8563_set_interrupt_enable(&h->backend.pcf,
+                                              (irq_mask & HAL_RTC_IRQ_ALARM) != 0u,
+                                              (irq_mask & HAL_RTC_IRQ_TIMER) != 0u);
             break;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            if ((irq_mask & HAL_RTC_IRQ_TIMER) != 0u) {
+                ok = false;
+                break;
+            }
+
+            DS3231 *rtc = as_ds3231(h);
+            if ((irq_mask & HAL_RTC_IRQ_ALARM) != 0u) {
+                rtc->turnOnAlarm(1);
+                rtc->turnOnAlarm(2);
+            } else {
+                rtc->turnOffAlarm(1);
+                rtc->turnOffAlarm(2);
+            }
+            ok = true;
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -652,9 +855,37 @@ bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask) {
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_interrupt_enable(h, out_irq_mask);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            bool alarm_irq_enabled = false;
+            bool timer_irq_enabled = false;
+            ok = pcf8563_get_interrupt_enable(&h->backend.pcf, &alarm_irq_enabled, &timer_irq_enabled);
+            if (ok) {
+                uint8_t irq_mask = 0;
+                if (alarm_irq_enabled) {
+                    irq_mask = (uint8_t)(irq_mask | HAL_RTC_IRQ_ALARM);
+                }
+                if (timer_irq_enabled) {
+                    irq_mask = (uint8_t)(irq_mask | HAL_RTC_IRQ_TIMER);
+                }
+                *out_irq_mask = irq_mask;
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            DS3231 *rtc = as_ds3231(h);
+            const bool alarm_irq_enabled = rtc->checkAlarmEnabled(1) || rtc->checkAlarmEnabled(2);
+            uint8_t irq_mask = 0u;
+            if (alarm_irq_enabled) {
+                irq_mask = (uint8_t)(irq_mask | HAL_RTC_IRQ_ALARM);
+            }
+            *out_irq_mask = irq_mask;
+            ok = true;
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -673,9 +904,37 @@ bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_and_clear_flags(h, out_flags);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            bool alarm_flag = false;
+            bool timer_flag = false;
+            ok = pcf8563_get_and_clear_flags(&h->backend.pcf, &alarm_flag, &timer_flag);
+            if (ok) {
+                uint8_t flags = 0;
+                if (alarm_flag) {
+                    flags = (uint8_t)(flags | HAL_RTC_FLAG_ALARM);
+                }
+                if (timer_flag) {
+                    flags = (uint8_t)(flags | HAL_RTC_FLAG_TIMER);
+                }
+                *out_flags = flags;
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            const bool alarm1_flag = as_ds3231(h)->checkIfAlarm(1, true);
+            const bool alarm2_flag = as_ds3231(h)->checkIfAlarm(2, true);
+            uint8_t flags = 0u;
+            if (alarm1_flag || alarm2_flag) {
+                flags = (uint8_t)(flags | HAL_RTC_FLAG_ALARM);
+            }
+            *out_flags = flags;
+            ok = true;
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -694,9 +953,23 @@ bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode) {
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_set_clkout_mode(h, mode);
+        {
+            pcf8563_clkout_mode_t pcf_mode = PCF8563_CLKOUT_DISABLED;
+            if (rtc_to_pcf_clkout_mode(mode, &pcf_mode)) {
+                ok = pcf8563_set_clkout_mode(&h->backend.pcf, pcf_mode);
+            } else {
+                ok = false;
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            ok = rtc_set_ds3231_clkout(h, mode);
+            break;
+#endif
         default:
             ok = false;
             break;
@@ -715,9 +988,22 @@ bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode) {
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_clkout_mode(h, out_mode);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            pcf8563_clkout_mode_t pcf_mode = PCF8563_CLKOUT_DISABLED;
+            ok = pcf8563_get_clkout_mode(&h->backend.pcf, &pcf_mode);
+            if (ok) {
+                ok = pcf_to_rtc_clkout_mode(pcf_mode, out_mode);
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            *out_mode = h->ds3231_clkout_mode;
+            ok = true;
+            break;
+#endif
         default:
             ok = false;
             break;
@@ -736,9 +1022,25 @@ bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock, uint8_t c
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_set_timer(h, timer_clock, count);
+        {
+            pcf8563_timer_clock_t pcf_timer_clock = PCF8563_TIMER_DISABLED;
+            if (rtc_to_pcf_timer_clock(timer_clock, &pcf_timer_clock)) {
+                ok = pcf8563_set_timer(&h->backend.pcf, pcf_timer_clock, count);
+            } else {
+                ok = false;
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            (void)timer_clock;
+            (void)count;
+            ok = false;
+            break;
+#endif
         default:
             ok = false;
             break;
@@ -757,9 +1059,21 @@ bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_timer(h, out_timer_clock, out_count);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            pcf8563_timer_clock_t pcf_timer_clock = PCF8563_TIMER_DISABLED;
+            ok = pcf8563_get_timer(&h->backend.pcf, &pcf_timer_clock, out_count);
+            if (ok) {
+                ok = pcf_to_rtc_timer_clock(pcf_timer_clock, out_timer_clock);
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            ok = false;
+            break;
+#endif
         default:
             ok = false;
             break;
@@ -770,7 +1084,7 @@ bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint
 }
 
 bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
-    if (!h || !alarm) {
+    if (!h || !alarm || !rtc_validate_alarm(alarm)) {
         return false;
     }
 
@@ -778,9 +1092,31 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
     bool ok = false;
 
     switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
         case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_set_alarm(h, alarm);
+        {
+            pcf8563_alarm_t pcf_alarm = {0};
+            rtc_to_pcf_alarm(alarm, &pcf_alarm);
+            ok = pcf8563_set_alarm(&h->backend.pcf, &pcf_alarm);
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            uint8_t day = 1u;
+            uint8_t hour = 0u;
+            uint8_t minute = 0u;
+            uint8_t alarm_bits = 0u;
+            bool day_mode = false;
+
+            ok = rtc_to_ds3231_alarm2(alarm, &day, &hour, &minute, &alarm_bits, &day_mode);
+            if (ok) {
+                as_ds3231(h)->setA2Time(day, hour, minute, alarm_bits, day_mode, false, false);
+                ok = true;
+            }
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -799,9 +1135,40 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
     bool ok = false;
 
     switch (h->chip) {
-        case HAL_RTC_CHIP_PCF8563:
-            ok = pcf_get_alarm(h, out_alarm);
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563: {
+            pcf8563_alarm_t pcf_alarm = {0};
+            ok = pcf8563_get_alarm(&h->backend.pcf, &pcf_alarm);
+            if (ok) {
+                pcf_to_rtc_alarm(&pcf_alarm, out_alarm);
+                ok = rtc_validate_alarm(out_alarm);
+            }
             break;
+        }
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231: {
+            uint8_t day = 0u;
+            uint8_t hour = 0u;
+            uint8_t minute = 0u;
+            uint8_t alarm_bits = 0u;
+            bool day_mode = false;
+            bool h12 = false;
+            bool pm = false;
+
+            as_ds3231(h)->getA2Time(day, hour, minute, alarm_bits, day_mode, h12, pm, true);
+
+            if (day_mode && (alarm_bits & 0x40u) == 0u && (day < 1u || day > 7u)) {
+                ok = false;
+                break;
+            }
+
+            const uint8_t hour_24 = ds3231_hour_to_24h(hour, h12, pm);
+            ds3231_alarm2_to_rtc(day, hour_24, minute, alarm_bits, day_mode, out_alarm);
+            ok = rtc_validate_alarm(out_alarm);
+            break;
+        }
+#endif
         default:
             ok = false;
             break;
@@ -811,4 +1178,4 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
     return ok;
 }
 
-#endif /* HAL_DISABLE_RTC */
+#endif /* HAL_ENABLE_RTC */
