@@ -2,6 +2,101 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### hal_serial / hal_system — ISR-safe debug logging
+
+- ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
+  `hal_derr_limited()` may now be called from interrupt context. The
+  callers detect ISR context via the new `hal_in_isr()` (ARM Cortex-M
+  `IPSR` read on Arduino/STM32, mock-injected flag on host) and on the
+  ISR fast-path enqueue the formatted message into a per-backend
+  single-producer / single-consumer (SPSC) lock-free ring instead of
+  touching the UART. No mutex, no lazy init, no timestamp hook, no
+  rate-limiter table lookup, no I/O is performed from the ISR.
+- New public API `void hal_debug_loop(void)` drains the ISR ring from
+  task context using the regular mutex-protected serial path. Each
+  drained line is annotated with `[ISR ts=<micros>]` (original event
+  time, not "now") and respects the current `hal_deb_set_prefix()` for
+  debug records and the standard `ERROR! ` marker for error records.
+  Ring overrun is reported once per drain via a single
+  `ERROR! [ISR] dropped N debug message(s)` summary line and the
+  internal drop counter is reset.
+- `hal_debug_loop()` is safe to call from the very first iteration of
+  the main loop, even when no `hal_debug_init()` / `hal_deb()` /
+  `hal_derr()` was called yet: the emit path performs the same lazy
+  init as `hal_deb()`, and the in-ISR / muted short-circuits use only
+  zero-initialised statics. Calling it from ISR context is itself a
+  no-op (prevents drain re-entry via the underlying UART mutex).
+- Mute (`hal_debug_set_muted(true)`) propagates correctly through the
+  ISR path: the producer silently drops without writing to the ring
+  and without bumping the drop counter; the consumer discards pending
+  records and clears the drop counter on drain.
+- New compile-time knobs `HAL_DEBUG_ISR_SLOT_COUNT` (default `16u`,
+  must be `>= 2`) and `HAL_DEBUG_ISR_TEXT_MAX` (default `160u`) size
+  the per-backend ring.
+- Mock-only introspection helpers added in `hal_mock.h` for tests:
+  `hal_mock_set_in_isr()`, `hal_mock_debug_isr_used_slots()`,
+  `hal_mock_debug_isr_capacity()`, `hal_mock_debug_isr_dropped()`,
+  `hal_mock_debug_isr_reset()`,
+  `hal_mock_debug_isr_set_test_capacity()`,
+  `hal_mock_debug_isr_restore_default_ring()`.
+- `test_hal_serial` extended with 30 new Unity test cases covering ISR
+  detection, ISR-path routing for all three log APIs, drain FIFO
+  ordering, prefix / `ERROR!` / `[ISR ts=]` formatting, ring overflow
+  and drop-summary accounting, ring wrap-around, reset, mute-in-ISR
+  semantics, timestamp-hook isolation, payload truncation at
+  `HAL_DEBUG_ISR_TEXT_MAX`, and lazy-init bypass on the ISR path.
+
+### hal_wireguard (Pico W) — lwIP background-context race + leak fixes
+
+- `WireGuard::beginAdvanced()`, `WireGuard::end()`, `WireGuard::peerUp()`
+  and `WireGuard::kickHandshake()` now hold the cyw43/lwIP recursive
+  lock (`cyw43_arch_lwip_begin/end`) around every lwIP mutation. On
+  Pico W the cyw43/lwIP stack runs in
+  `async_context_threadsafe_background` mode; lwIP timers (incl. the
+  self-rescheduling `wireguardif_tmr`) and UDP RX callbacks fire from
+  a low-priority IRQ/alarm and could observe half-built state during
+  WG reconnects, which previously manifested as watchdog reboots.
+  The app-level mutex in `hal_wireguard.cpp` does not cover that
+  context; this lock does. Implemented as an RAII guard so every
+  early-return path in `beginAdvanced()` releases the lock
+  automatically. `resolve_ipv4()` is intentionally left outside the
+  lock (may perform a blocking DNS query that needs the background
+  context running).
+- Compile-time guard: on `ARDUINO_ARCH_RP2040`, the absence of
+  `pico/cyw43_arch.h` is now a hard `#error` instead of silently
+  degrading the lock to a no-op (which would reintroduce the
+  reconnect race).
+- `WireGuard::end()` now calls `wireguardif_shutdown(wg_netif)` after
+  `netif_remove()`. `netif_remove()` does not clean up the WireGuard
+  device context; without the shutdown call every `begin()/end()`
+  cycle leaked the `wireguard_device`, left the UDP pcb registered in
+  lwIP's demux list (with a dangling `udp_recv` arg) and kept the
+  self-rescheduling `wireguardif_tmr` timeout alive forever. Over
+  repeated reconnects this exhausted lwIP MEMP pools and led to
+  asynchronous hardfaults.
+- `wireguardif.c::wireguardif_peer_output`: explicit validation of
+  `netif` / `q` / `peer` / `netif->state` / `payload`, and removal of
+  the erroneous `pbuf_free(q)` calls on the error paths. The caller
+  owns `q` and frees it exactly once; the previous code caused a
+  double-free when the UDP pcb or underlying netif was missing.
+- `wireguardif.c::wireguardif_network_rx`: explicit validation of
+  `arg` / `pcb` / `p` / `addr` and of the pbuf payload; a single
+  `pbuf_free(p)` on the error path.
+- `wireguardif.c::wireguardif_shutdown`: `free(device)` →
+  `mem_free(device)`. The device is allocated via `mem_calloc()` in
+  `wireguardif_init()`, so when `MEM_LIBC_MALLOC == 0` releasing it
+  with libc `free()` corrupted the lwIP heap.
+
+### hal_mqtt (Arduino)
+
+- `hal_mqtt_set_socket_timeout()` now also propagates the timeout to
+  the underlying `WiFiClient` (`s_wifi_client.setTimeout(timeout_s *
+  1000)`). Previously only the MQTT-client layer honoured the value,
+  so blocking TCP reads on the WiFi socket could still stall for far
+  longer than the requested timeout.
+
 ## [1.6.0] - 2026-05-25
 
 - Flag model: opt-in `HAL_ENABLE_*` (BREAKING CHANGE)

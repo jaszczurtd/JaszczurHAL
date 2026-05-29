@@ -38,6 +38,117 @@ typedef struct {
 static hal_error_slot_t s_error_slots[HAL_DEBUG_RATE_LIMIT_SOURCES_MAX] = {};
 static hal_error_slot_t s_overflow_slot = {};
 
+// ── ISR-deferred debug ring (SPSC) ───────────────────────────────────────────
+//
+// Producer (ISR): hal_deb / hal_derr / hal_derr_limited when hal_in_isr()
+//                 is true. Format into a stack buffer, push to ring, return.
+// Consumer (task): hal_debug_loop() drains records, applies the same prefix
+//                  / ERROR! markup the non-ISR path would, and emits them
+//                  through the regular mutex-protected serial output.
+// Overflow: producer drops the new record and increments s_isr_dropped;
+//           the next drain emits one summary line and clears the counter.
+
+typedef enum {
+    HAL_ISR_REC_DEB  = 0,
+    HAL_ISR_REC_DERR = 1,
+} hal_isr_rec_level_t;
+
+typedef struct {
+    uint8_t  level;
+    uint32_t ts_us;
+    size_t   text_len;
+    char     text[HAL_DEBUG_ISR_TEXT_MAX];
+} hal_isr_rec_t;
+
+static hal_isr_rec_t   s_isr_slots[HAL_DEBUG_ISR_SLOT_COUNT];
+static volatile size_t   s_isr_head    = 0u;
+static volatile size_t   s_isr_tail    = 0u;
+static volatile uint32_t s_isr_dropped = 0u;
+
+static inline size_t isr_ring_next(size_t idx) {
+    size_t n = idx + 1u;
+    if (n >= HAL_DEBUG_ISR_SLOT_COUNT) n = 0u;
+    return n;
+}
+
+static bool isr_ring_push(uint8_t level, uint32_t ts_us, const char *text) {
+    const size_t head = __atomic_load_n(&s_isr_head, __ATOMIC_RELAXED);
+    const size_t tail = __atomic_load_n(&s_isr_tail, __ATOMIC_ACQUIRE);
+    const size_t next = isr_ring_next(head);
+    if (next == tail) {
+        __atomic_fetch_add(&s_isr_dropped, 1u, __ATOMIC_RELAXED);
+        return false;
+    }
+    hal_isr_rec_t *slot = &s_isr_slots[head];
+    slot->level = level;
+    slot->ts_us = ts_us;
+    size_t n = 0u;
+    if (text != NULL) {
+        while (n < (HAL_DEBUG_ISR_TEXT_MAX - 1u) && text[n] != '\0') {
+            ++n;
+        }
+        if (n > 0u) {
+            memcpy(slot->text, text, n);
+        }
+    }
+    slot->text[n] = '\0';
+    slot->text_len = n;
+    __atomic_store_n(&s_isr_head, next, __ATOMIC_RELEASE);
+    return true;
+}
+
+static bool isr_ring_pop(hal_isr_rec_t *out) {
+    const size_t tail = __atomic_load_n(&s_isr_tail, __ATOMIC_RELAXED);
+    const size_t head = __atomic_load_n(&s_isr_head, __ATOMIC_ACQUIRE);
+    if (tail == head) {
+        return false;
+    }
+    *out = s_isr_slots[tail];
+    __atomic_store_n(&s_isr_tail, isr_ring_next(tail), __ATOMIC_RELEASE);
+    return true;
+}
+
+static uint32_t isr_ring_consume_dropped(void) {
+    return __atomic_exchange_n(&s_isr_dropped, 0u, __ATOMIC_ACQ_REL);
+}
+
+static bool isr_enqueue_vformat(uint8_t level, uint32_t ts_us,
+                                const char *format, va_list args) {
+    char buf[HAL_DEBUG_ISR_TEXT_MAX];
+    if (format == NULL) {
+        buf[0] = '\0';
+    } else {
+        int n = vsnprintf(buf, sizeof buf, format, args);
+        if (n < 0) {
+            buf[0] = '\0';
+        }
+    }
+    return isr_ring_push(level, ts_us, buf);
+}
+
+static bool isr_enqueue_derr_limited(uint32_t ts_us, const char *source,
+                                     const char *format, va_list args) {
+    char buf[HAL_DEBUG_ISR_TEXT_MAX];
+    const char *src = (source && source[0]) ? source : "global";
+    int prefix_n = snprintf(buf, sizeof buf, "[%s] ", src);
+    if (prefix_n < 0) {
+        prefix_n = 0;
+        buf[0] = '\0';
+    }
+    size_t used = (size_t)prefix_n;
+    if (used >= sizeof buf) {
+        used = sizeof buf - 1u;
+        buf[used] = '\0';
+    }
+    if (format != NULL && used < sizeof buf - 1u) {
+        int n = vsnprintf(buf + used, sizeof buf - used, format, args);
+        if (n < 0) {
+            buf[used] = '\0';
+        }
+    }
+    return isr_ring_push(HAL_ISR_REC_DERR, ts_us, buf);
+}
+
 #ifndef HAL_DEBUG_COLOR_ERRORS
 #define HAL_DEBUG_COLOR_ERRORS 1
 #endif
@@ -242,6 +353,18 @@ void hal_deb(const char *format, ...) {
         return;
     }
 
+    if (hal_in_isr()) {
+        /* ISR fast path: no lazy init, no mutex, no prefix application.
+         * Prefix/timestamp markup is applied later by hal_debug_loop()
+         * from a safe context. */
+        va_list args;
+        va_start(args, format);
+        (void)isr_enqueue_vformat(HAL_ISR_REC_DEB, hal_micros(),
+                                      format, args);
+        va_end(args);
+        return;
+    }
+
     hal_debug_ensure_init();
     hal_mutex_lock(s_deb_mutex);
 
@@ -258,6 +381,17 @@ void hal_deb(const char *format, ...) {
                 used = sizeof(s_deb_buf) - 1u;
             }
         }
+    }
+
+    if (hal_in_isr()) {
+        /* ISR fast path: skip timestamp hook (it may take locks) and
+         * skip the ERROR! marker - both are applied at drain time. */
+        va_list args;
+        va_start(args, format);
+        (void)isr_enqueue_vformat(HAL_ISR_REC_DERR, hal_micros(),
+                                      format, args);
+        va_end(args);
+        return;
     }
 
     vsnprintf(s_deb_buf + used, sizeof(s_deb_buf) - used, format, args);
@@ -300,6 +434,17 @@ void hal_derr(const char *format, ...) {
     }
 
     vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1u - len, format, args);
+    if (hal_in_isr()) {
+        /* ISR fast path: rate limiter relies on a shared slot table
+         * protected by a mutex, so we bypass it entirely and enqueue
+         * the message with the source tag baked into the text. */
+        va_list args;
+        va_start(args, format);
+        (void)isr_enqueue_derr_limited(hal_micros(), source, format, args);
+        va_end(args);
+        return;
+    }
+
     va_end(args);
 
     hal_serial_println(s_derr_buf);
@@ -398,6 +543,62 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes) 
     }
 
     hal_deb("%s", line);
+}
+
+// ── ISR-deferred debug ring ───────────────────────────────────────────────────
+
+void hal_debug_loop(void) {
+    /* Calling drain from ISR is unsupported: the consumer side takes
+     * the TX mutex and writes via stdio, so it must run from task
+     * context. Silently bail out so the caller cannot deadlock. */
+    if (hal_in_isr()) {
+        return;
+    }
+
+    /* When muted, drop pending records (and the dropped-counter)
+     * silently. Tracking would be misleading because the records were
+     * never going to be emitted anyway. */
+    if (hal_debug_is_muted()) {
+        hal_isr_rec_t rec;
+        while (isr_ring_pop(&rec)) {
+            /* discard */
+        }
+        (void)isr_ring_consume_dropped();
+        return;
+    }
+
+    hal_debug_ensure_init();
+
+    hal_isr_rec_t rec;
+    char line[HAL_DEBUG_BUF_SIZE];
+    while (isr_ring_pop(&rec)) {
+        if (rec.level == HAL_ISR_REC_DERR) {
+            snprintf(line, sizeof line, "%s[ISR ts=%lu] %s",
+                     HAL_ERR_PREFIX,
+                     (unsigned long)rec.ts_us,
+                     rec.text);
+        } else if (s_prefix[0] != '\0') {
+            snprintf(line, sizeof line, "%s [ISR ts=%lu] %s",
+                     s_prefix,
+                     (unsigned long)rec.ts_us,
+                     rec.text);
+        } else {
+            snprintf(line, sizeof line, "[ISR ts=%lu] %s",
+                     (unsigned long)rec.ts_us,
+                     rec.text);
+        }
+        hal_serial_println(line);
+    }
+
+    const uint32_t dropped = isr_ring_consume_dropped();
+    if (dropped > 0u) {
+        char drop_line[96];
+        snprintf(drop_line, sizeof drop_line,
+                 "%s[ISR] dropped %lu debug message(s)",
+                 HAL_ERR_PREFIX,
+                 (unsigned long)dropped);
+        hal_serial_println(drop_line);
+    }
 }
 
 #endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

@@ -49,11 +49,36 @@ void     hal_mock_bootloader_reset_flag(void);
 void     hal_mock_set_device_uid(const uint8_t uid[8]);
 /** @brief Restore the default deterministic mock UID. */
 void     hal_mock_reset_device_uid(void);
+/** @brief Force the return value of hal_in_isr() in the mock backend.
+ *
+ * Lets unit tests exercise ISR-only code paths (e.g. the deferred
+ * debug ring used by hal_deb/hal_derr/hal_derr_limited). Defaults
+ * to false; remains stable until changed. */
+void     hal_mock_set_in_isr(bool in_isr);
 
 // ── Serial / Debug ────────────────────────────────────────────────────────────
 const char *hal_mock_serial_last_line(void);
 const char *hal_mock_deb_last_line(void);
 void        hal_mock_serial_reset(void);void        hal_mock_serial_inject_rx(const char *data, int len);
+
+// ── ISR-deferred debug ring (test introspection) ─────────────────────────────
+/** @brief Number of records currently pending in the ISR ring. */
+size_t   hal_mock_debug_isr_used_slots(void);
+/** @brief Total slot capacity of the active ISR ring (effective = cap-1). */
+size_t   hal_mock_debug_isr_capacity(void);
+/** @brief Number of records dropped due to overflow since last drain. */
+uint32_t hal_mock_debug_isr_dropped(void);
+/** @brief Reset the ISR ring (head/tail/dropped) without draining records. */
+void     hal_mock_debug_isr_reset(void);
+/** @brief Swap the ring buffer for a smaller test-owned slot array.
+ *
+ * Pass slots == NULL (and any cap) to restore the built-in default ring.
+ * The caller retains ownership of the slot array; it must outlive any
+ * subsequent debug log activity. The ring is reset by this call.
+ * @param cap Number of slots; must be >= 2. */
+void     hal_mock_debug_isr_set_test_capacity(size_t cap);
+/** @brief Restore the built-in default ISR ring. */
+void     hal_mock_debug_isr_restore_default_ring(void);
 // ── CAN ──────────────────────────────────────────────────────────────────────
 #include "../../hal_can.h"
 void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);

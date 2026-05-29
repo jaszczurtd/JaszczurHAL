@@ -56,6 +56,15 @@ void hal_idle(void) {
     /* STM32G474 TODO: add low-power wait-for-interrupt / cooperative yield. */
 }
 
+bool hal_in_isr(void) {
+    /* On Cortex-M, IPSR is zero in Thread mode and equal to the active
+     * exception number in Handler mode. We mask to the documented 9-bit
+     * exception-number field. */
+    uint32_t ipsr;
+    __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
+    return (ipsr & 0x1FFu) != 0u;
+}
+
 uint32_t hal_get_free_heap(void) {
     return s_free_heap;
 }

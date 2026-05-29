@@ -110,8 +110,15 @@ void hal_watchdog_feed(void);
 void hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
 
 /**
- * @brief Check whether the last boot was caused by a watchdog reset.
- * @return true if watchdog caused the reboot.
+ * @brief Check whether the last boot was caused by a watchdog *timeout*.
+ *
+ * Reports true only for a genuine watchdog starvation while the application
+ * watchdog was armed (via @ref hal_watchdog_enable). A programmatic/commanded
+ * reboot -- firmware upload (picotool / UF2 / BOOTSEL) or an explicit reboot
+ * request -- is intentionally NOT reported as a watchdog event, even though on
+ * some MCUs (e.g. RP2040) it is implemented on top of the watchdog hardware.
+ *
+ * @return true if a watchdog timeout caused the reboot.
  */
 bool hal_watchdog_caused_reboot(void);
 
@@ -119,6 +126,24 @@ bool hal_watchdog_caused_reboot(void);
  * @brief Yield to the system (cooperative multitasking / idle hook).
  */
 void hal_idle(void);
+
+/**
+ * @brief Return true when the current execution context is an interrupt
+ *        service routine (hardware exception/IRQ handler).
+ *
+ * Implementations:
+ * - On Cortex-M targets (RP2040, STM32G474) this reads the IPSR register;
+ *   any non-zero exception number means handler mode.
+ * - On mock/host builds the value is controlled by a test hook
+ *   (default false). See hal_mock_set_in_isr().
+ *
+ * Intended use: HAL primitives that have an ISR-safe fast path
+ * (e.g. hal_deb() routing log lines to a deferred ring buffer instead
+ * of touching the underlying UART) can branch on this helper.
+ *
+ * @return true if called from interrupt context.
+ */
+bool hal_in_isr(void);
 
 /**
  * @brief Return the amount of free heap memory in bytes.

@@ -21,6 +21,46 @@
 #include "wireguard-platform.h"
 #include "wg_port_pico.h"
 
+// ---- cyw43/lwIP lock (Pico W) ----------------------------------------------
+// On Pico W the cyw43/lwIP stack runs in async_context_threadsafe_background
+// mode: lwIP timers (incl. the self-rescheduling wireguardif_tmr) and udp RX
+// callbacks fire from a low-priority IRQ/alarm, preempting normal code.
+// begin()/beginAdvanced()/end() mutate lwIP state (netif list, udp_pcb,
+// sys_timeout list) and free the wireguard device, so they must run atomically
+// w.r.t. that background context. cyw43_arch_lwip_begin/end is the recursive
+// lock that defers it; the app-level mutex in hal_wireguard.cpp does NOT cover
+// this. (See JaszczurHAL notes: WG reconnect race -> watchdog reboots.)
+#if __has_include("pico/cyw43_arch.h")
+#include "pico/cyw43_arch.h"
+#define WG_HAS_LWIP_LOCK 1
+#endif
+
+// Compile-time guarantee: on RP2040 the lock MUST be compiled in. If
+// cyw43_arch.h is ever not found here, fail the build loudly instead of
+// silently degrading to a no-op (which would reintroduce the reconnect race).
+#if defined(ARDUINO_ARCH_RP2040) && !defined(WG_HAS_LWIP_LOCK)
+#error "WireGuard: pico/cyw43_arch.h not found on RP2040 build; lwIP lock would be a silent no-op"
+#endif
+
+namespace {
+// RAII guard: acquires the cyw43/lwIP lock for its lifetime. Auto-releases on
+// every scope exit, including the early `return` paths in beginAdvanced().
+struct WgLwipLock {
+    WgLwipLock() {
+#ifdef WG_HAS_LWIP_LOCK
+        cyw43_arch_lwip_begin();
+#endif
+    }
+    ~WgLwipLock() {
+#ifdef WG_HAS_LWIP_LOCK
+        cyw43_arch_lwip_end();
+#endif
+    }
+    WgLwipLock(const WgLwipLock &) = delete;
+    WgLwipLock &operator=(const WgLwipLock &) = delete;
+};
+} // namespace
+
 // ---- Globals kept for backward-compat with the original library API ----
 static struct netif wg_netif_instance;
 static struct netif *wg_netif = &wg_netif_instance;
@@ -107,6 +147,11 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP,
     IP4_ADDR(&gateway, 0, 0, 0, 0);
 
     // Capture the current default netif (Wi-Fi) so we can bind UDP traffic there.
+    // Hold the cyw43/lwIP lock for ALL lwIP mutations below so a firing WG timer
+    // / RX callback in the background context cannot observe half-built state.
+    // resolve_ipv4() above is intentionally left OUT of the lock: it may perform
+    // a blocking DNS query that needs the background context running.
+    WgLwipLock _wg_lock;
     previous_default_netif = netif_default;
 
     // Initialize lwIP netif.
@@ -189,8 +234,19 @@ void WireGuard::end() {
         return;
     }
 
+    WgLwipLock _wg_lock;
     wireguardif_remove_peer(wg_netif, peer_index);
     netif_remove(wg_netif);
+
+    // netif_remove() does NOT clean up the WireGuard device context. Without
+    // this, every begin()/end() cycle leaks the wireguard_device, leaves the
+    // UDP pcb registered in lwIP's demux list (with a dangling udp_recv arg)
+    // and keeps the self-rescheduling wireguardif_tmr timeout alive forever.
+    // Over repeated reconnects this exhausts lwIP MEMP pools and leads to
+    // asynchronous hardfaults. wireguardif_shutdown() cancels the timer,
+    // removes the pcb and frees the device. netif->state still points at the
+    // device here (netif_remove does not clear it), so this is safe.
+    wireguardif_shutdown(wg_netif);
 
     if (previous_default_netif != nullptr) {
         netif_set_default(previous_default_netif);
@@ -207,6 +263,7 @@ bool WireGuard::peerUp(IPAddress* currentEndpointIp, uint16_t* currentEndpointPo
     ip_addr_t ep_ip;
     u16_t ep_port = 0;
 
+    WgLwipLock _wg_lock;
     err_t rc = wireguardif_peer_is_up(
         wg_netif,
         peer_index,
@@ -238,6 +295,8 @@ bool WireGuard::kickHandshake(const IPAddress& probeIp, uint16_t probePort, uint
     _lastKickMs = now;
 
     // Non-blocking trigger: one small UDP datagram to an AllowedIPs address.
+    // Serialize the UDP send against the lwIP background context (recursive lock).
+    WgLwipLock _wg_lock;
     WiFiUDP udp;
     udp.begin(0); // ephemeral local port
     udp.beginPacket(probeIp, probePort);

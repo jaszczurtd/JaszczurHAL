@@ -1,5 +1,6 @@
 #include "utils/unity.h"
 #include "hal/hal_serial.h"
+#include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <stdio.h>
@@ -14,14 +15,33 @@ static bool fixed_ts_hook(char *out, size_t out_size, void *user) {
     return true;
 }
 
+static bool s_ts_hook_invoked = false;
+static bool tracking_ts_hook(char *out, size_t out_size, void *user) {
+    (void)user;
+    s_ts_hook_invoked = true;
+    if (!out || out_size == 0) {
+        return false;
+    }
+    snprintf(out, out_size, "TS");
+    return true;
+}
+
 void setUp(void) {
     hal_debug_init(115200);
     hal_mock_serial_reset();
     hal_debug_set_muted(false);
     hal_debug_set_timestamp_hook(NULL, NULL);
+    hal_mock_set_in_isr(false);
+    hal_mock_debug_isr_restore_default_ring();
+    hal_deb_set_prefix("");
+    s_ts_hook_invoked = false;
 }
 
-void tearDown(void) {}
+void tearDown(void) {
+    /* Always leave the mock in a sane state for the next test. */
+    hal_mock_set_in_isr(false);
+    hal_mock_debug_isr_restore_default_ring();
+}
 
 void test_println_captured(void) {
     hal_serial_println("hello");
@@ -78,6 +98,384 @@ void test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output(void
     TEST_ASSERT_EQUAL_STRING("after unmute", hal_mock_deb_last_line());
 }
 
+// ── ISR-deferred debug ring tests ────────────────────────────────────────────
+
+void test_in_isr_mock_default_is_false(void) {
+    TEST_ASSERT_FALSE(hal_in_isr());
+}
+
+void test_in_isr_mock_toggle(void) {
+    hal_mock_set_in_isr(true);
+    TEST_ASSERT_TRUE(hal_in_isr());
+    hal_mock_set_in_isr(false);
+    TEST_ASSERT_FALSE(hal_in_isr());
+}
+
+void test_default_ring_capacity_matches_compile_time_define(void) {
+    TEST_ASSERT_EQUAL_size_t(HAL_DEBUG_ISR_SLOT_COUNT,
+                             hal_mock_debug_isr_capacity());
+}
+
+void test_ring_starts_empty(void) {
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_isr_deb_does_not_emit_immediately(void) {
+    hal_mock_set_in_isr(true);
+    hal_deb("from isr deb");
+    /* Nothing must reach the serial transport while we are in ISR. */
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    /* But the ring must contain exactly one pending record. */
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_isr_derr_does_not_emit_immediately(void) {
+    hal_mock_set_in_isr(true);
+    hal_derr("from isr err");
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+}
+
+void test_isr_derr_limited_does_not_emit_immediately(void) {
+    hal_mock_set_in_isr(true);
+    hal_derr_limited("src", "limited from isr");
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+}
+
+void test_debug_loop_when_empty_is_noop(void) {
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+}
+
+void test_debug_loop_drains_deb_record(void) {
+    hal_mock_set_in_isr(true);
+    hal_deb("hello %d", 42);
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    /* Ring must be empty after drain. */
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    /* Drained deb record updates the mock's last-deb-line capture. */
+    const char *line = hal_mock_deb_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "[ISR ts="));
+    TEST_ASSERT_NOT_NULL(strstr(line, "hello 42"));
+}
+
+void test_debug_loop_drains_derr_record_with_error_prefix(void) {
+    hal_mock_set_in_isr(true);
+    hal_derr("bad thing %s", "X");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "ERROR!"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "[ISR ts="));
+    TEST_ASSERT_NOT_NULL(strstr(line, "bad thing X"));
+}
+
+void test_debug_loop_applies_user_prefix_to_deb(void) {
+    hal_deb_set_prefix("[ECU]");
+    hal_mock_set_in_isr(true);
+    hal_deb("payload");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    const char *line = hal_mock_deb_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "[ECU]"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "[ISR ts="));
+    TEST_ASSERT_NOT_NULL(strstr(line, "payload"));
+}
+
+void test_debug_loop_preserves_fifo_order(void) {
+    hal_mock_set_in_isr(true);
+    hal_deb("one");
+    hal_deb("two");
+    hal_deb("three");
+    TEST_ASSERT_EQUAL_size_t(3u, hal_mock_debug_isr_used_slots());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    /* The last emitted line must be the last pushed record. */
+    const char *line = hal_mock_deb_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "three"));
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+}
+
+void test_debug_loop_in_isr_is_noop(void) {
+    /* Push something first from ISR... */
+    hal_mock_set_in_isr(true);
+    hal_deb("queued");
+    /* ...then call drain while still in ISR. Drain must refuse to run
+     * so the ring stays full and the serial path is untouched. */
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+}
+
+void test_isr_derr_limited_bakes_source_into_text(void) {
+    hal_mock_set_in_isr(true);
+    hal_derr_limited("gps", "ublox fix lost");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "ERROR!"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "[gps]"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "ublox fix lost"));
+}
+
+void test_isr_derr_limited_null_source_becomes_global(void) {
+    hal_mock_set_in_isr(true);
+    hal_derr_limited(NULL, "no source");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "[global]"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "no source"));
+}
+
+void test_isr_derr_does_not_invoke_timestamp_hook(void) {
+    hal_debug_set_timestamp_hook(tracking_ts_hook, NULL);
+    hal_mock_set_in_isr(true);
+    hal_derr("from isr");
+    TEST_ASSERT_FALSE(s_ts_hook_invoked);
+
+    /* Drain runs the underlying path but our ISR-deferred drain bakes
+     * its own [ISR ts=..] marker and intentionally does NOT call the
+     * hook (would emit a misleading "current time" for a past event). */
+    hal_mock_set_in_isr(false);
+    s_ts_hook_invoked = false;
+    hal_debug_loop();
+    TEST_ASSERT_FALSE(s_ts_hook_invoked);
+}
+
+void test_isr_long_text_is_truncated_not_overflowed(void) {
+    /* Build a payload that overflows HAL_DEBUG_ISR_TEXT_MAX. */
+    char big[HAL_DEBUG_ISR_TEXT_MAX * 2];
+    memset(big, 'A', sizeof(big) - 1);
+    big[sizeof(big) - 1] = '\0';
+
+    hal_mock_set_in_isr(true);
+    hal_deb("%s", big);
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    /* Drain must not crash and the captured line is bounded by the
+     * mock's HAL_DEBUG_BUF_SIZE. We just verify some 'A's made it. */
+    const char *line = hal_mock_deb_last_line();
+    TEST_ASSERT_TRUE(strlen(line) > 16u);
+    TEST_ASSERT_NOT_NULL(strchr(line, 'A'));
+}
+
+void test_isr_path_does_not_trigger_lazy_init_after_reset(void) {
+    /* This test exercises the "no lazy init in ISR" rule. We cannot
+     * un-initialise the debug subsystem (no public API), so we assert
+     * the related invariant: pushing from ISR never touches the rate
+     * limiter mutex (it would if it took the non-ISR path) and never
+     * emits to serial. */
+    hal_mock_set_in_isr(true);
+    for (int i = 0; i < 3; ++i) {
+        hal_derr_limited("isolated", "msg %d", i);
+    }
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    /* All 3 enqueued: rate limiter is bypassed in ISR. */
+    TEST_ASSERT_EQUAL_size_t(3u, hal_mock_debug_isr_used_slots());
+}
+
+void test_muted_in_isr_drops_silently_no_drop_counter(void) {
+    hal_debug_set_muted(true);
+    hal_mock_set_in_isr(true);
+    hal_deb("muted isr");
+    hal_derr("muted isr err");
+    hal_derr_limited("src", "muted isr limited");
+
+    /* Muted ISR calls must NOT touch the ring at all (and especially
+     * must not bump the dropped counter - that's reserved for overflow). */
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_muted_drain_swallows_pending_and_clears_dropped(void) {
+    /* Queue some real records first... */
+    hal_mock_set_in_isr(true);
+    hal_deb("a");
+    hal_deb("b");
+    hal_mock_set_in_isr(false);
+    /* ...then mute and drain. Drain must discard them silently and
+     * also clear the dropped counter so the next loop iteration is
+     * clean. */
+    hal_debug_set_muted(true);
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_deb_last_line());
+}
+
+void test_ring_overflow_drops_and_increments_counter(void) {
+    /* Shrink to capacity = 4 (effective = 3). */
+    hal_mock_debug_isr_set_test_capacity(4u);
+    TEST_ASSERT_EQUAL_size_t(4u, hal_mock_debug_isr_capacity());
+
+    hal_mock_set_in_isr(true);
+    /* Fill 3 effective slots... */
+    hal_deb("rec0");
+    hal_deb("rec1");
+    hal_deb("rec2");
+    TEST_ASSERT_EQUAL_size_t(3u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+
+    /* ...then push 2 more - both must be dropped. */
+    hal_deb("rec3-dropped");
+    hal_deb("rec4-dropped");
+    TEST_ASSERT_EQUAL_size_t(3u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(2u, hal_mock_debug_isr_dropped());
+}
+
+void test_drain_emits_dropped_summary_and_clears_counter(void) {
+    hal_mock_debug_isr_set_test_capacity(3u);  // effective = 2
+
+    hal_mock_set_in_isr(true);
+    hal_deb("kept0");
+    hal_deb("kept1");
+    hal_deb("dropped0");
+    hal_deb("dropped1");
+    hal_deb("dropped2");
+    TEST_ASSERT_EQUAL_UINT32(3u, hal_mock_debug_isr_dropped());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+
+    /* After drain the counter must be zero (consumed and reported). */
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+    /* And the very last emitted serial line must be the drop summary. */
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "ERROR!"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "[ISR]"));
+    TEST_ASSERT_NOT_NULL(strstr(line, "dropped 3"));
+}
+
+void test_drain_without_drops_does_not_emit_summary(void) {
+    hal_mock_set_in_isr(true);
+    hal_deb("only");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    /* Last serial line must be the drained record, not a drop summary. */
+    const char *line = hal_mock_serial_last_line();
+    TEST_ASSERT_NULL(strstr(line, "dropped"));
+}
+
+void test_ring_recovers_after_drain_following_overflow(void) {
+    hal_mock_debug_isr_set_test_capacity(3u);  // effective = 2
+
+    hal_mock_set_in_isr(true);
+    hal_deb("a");
+    hal_deb("b");
+    hal_deb("c-drop");
+    TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_debug_isr_dropped());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+
+    /* Ring usable again. */
+    hal_mock_set_in_isr(true);
+    hal_deb("after");
+    hal_deb("drain");
+    TEST_ASSERT_EQUAL_size_t(2u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_ring_reset_clears_pending(void) {
+    hal_mock_set_in_isr(true);
+    hal_deb("a");
+    hal_deb("b");
+    TEST_ASSERT_EQUAL_size_t(2u, hal_mock_debug_isr_used_slots());
+
+    hal_mock_debug_isr_reset();
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_ring_wraps_around_and_keeps_fifo(void) {
+    hal_mock_debug_isr_set_test_capacity(4u);  // effective = 3
+
+    hal_mock_set_in_isr(true);
+    /* Push 2, drain 2 (advances tail) so subsequent pushes will wrap. */
+    hal_deb("first0");
+    hal_deb("first1");
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+
+    /* Now push 3 more (head will pass the buffer end). */
+    hal_mock_set_in_isr(true);
+    hal_deb("wrap0");
+    hal_deb("wrap1");
+    hal_deb("wrap2");
+    TEST_ASSERT_EQUAL_size_t(3u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    const char *line = hal_mock_deb_last_line();
+    TEST_ASSERT_NOT_NULL(strstr(line, "wrap2"));
+}
+
+void test_test_capacity_clamps_to_minimum(void) {
+    hal_mock_debug_isr_set_test_capacity(0u);
+    TEST_ASSERT_EQUAL_size_t(2u, hal_mock_debug_isr_capacity());
+}
+
+void test_restore_default_ring_brings_back_full_capacity(void) {
+    hal_mock_debug_isr_set_test_capacity(2u);
+    TEST_ASSERT_EQUAL_size_t(2u, hal_mock_debug_isr_capacity());
+    hal_mock_debug_isr_restore_default_ring();
+    TEST_ASSERT_EQUAL_size_t(HAL_DEBUG_ISR_SLOT_COUNT,
+                             hal_mock_debug_isr_capacity());
+}
+
+void test_non_isr_path_does_not_touch_ring(void) {
+    /* Sanity: when not in ISR, the normal path is taken and the ring
+     * must stay completely untouched. */
+    hal_mock_set_in_isr(false);
+    hal_deb("normal");
+    hal_derr("normal err");
+    hal_derr_limited("src", "normal limited");
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_debug_isr_dropped());
+}
+
+void test_mixed_isr_and_non_isr_calls_keep_ring_isolated(void) {
+    /* Non-ISR call must emit directly. */
+    hal_deb("direct");
+    TEST_ASSERT_EQUAL_STRING("direct", hal_mock_deb_last_line());
+    TEST_ASSERT_EQUAL_size_t(0u, hal_mock_debug_isr_used_slots());
+
+    /* ISR call only goes to the ring. */
+    hal_mock_set_in_isr(true);
+    hal_deb("queued");
+    TEST_ASSERT_EQUAL_size_t(1u, hal_mock_debug_isr_used_slots());
+    /* Direct line is still the last captured deb-line until drain. */
+    TEST_ASSERT_EQUAL_STRING("direct", hal_mock_deb_last_line());
+
+    hal_mock_set_in_isr(false);
+    hal_debug_loop();
+    TEST_ASSERT_NOT_NULL(strstr(hal_mock_deb_last_line(), "queued"));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_println_captured);
@@ -87,5 +485,37 @@ int main(void) {
     RUN_TEST(test_derr_without_timestamp_hook);
     RUN_TEST(test_derr_with_timestamp_hook);
     RUN_TEST(test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output);
+
+    /* ISR-deferred debug ring */
+    RUN_TEST(test_in_isr_mock_default_is_false);
+    RUN_TEST(test_in_isr_mock_toggle);
+    RUN_TEST(test_default_ring_capacity_matches_compile_time_define);
+    RUN_TEST(test_ring_starts_empty);
+    RUN_TEST(test_isr_deb_does_not_emit_immediately);
+    RUN_TEST(test_isr_derr_does_not_emit_immediately);
+    RUN_TEST(test_isr_derr_limited_does_not_emit_immediately);
+    RUN_TEST(test_debug_loop_when_empty_is_noop);
+    RUN_TEST(test_debug_loop_drains_deb_record);
+    RUN_TEST(test_debug_loop_drains_derr_record_with_error_prefix);
+    RUN_TEST(test_debug_loop_applies_user_prefix_to_deb);
+    RUN_TEST(test_debug_loop_preserves_fifo_order);
+    RUN_TEST(test_debug_loop_in_isr_is_noop);
+    RUN_TEST(test_isr_derr_limited_bakes_source_into_text);
+    RUN_TEST(test_isr_derr_limited_null_source_becomes_global);
+    RUN_TEST(test_isr_derr_does_not_invoke_timestamp_hook);
+    RUN_TEST(test_isr_long_text_is_truncated_not_overflowed);
+    RUN_TEST(test_isr_path_does_not_trigger_lazy_init_after_reset);
+    RUN_TEST(test_muted_in_isr_drops_silently_no_drop_counter);
+    RUN_TEST(test_muted_drain_swallows_pending_and_clears_dropped);
+    RUN_TEST(test_ring_overflow_drops_and_increments_counter);
+    RUN_TEST(test_drain_emits_dropped_summary_and_clears_counter);
+    RUN_TEST(test_drain_without_drops_does_not_emit_summary);
+    RUN_TEST(test_ring_recovers_after_drain_following_overflow);
+    RUN_TEST(test_ring_reset_clears_pending);
+    RUN_TEST(test_ring_wraps_around_and_keeps_fifo);
+    RUN_TEST(test_test_capacity_clamps_to_minimum);
+    RUN_TEST(test_restore_default_ring_brings_back_full_capacity);
+    RUN_TEST(test_non_isr_path_does_not_touch_ring);
+    RUN_TEST(test_mixed_isr_and_non_isr_calls_keep_ring_isolated);
     return UNITY_END();
 }

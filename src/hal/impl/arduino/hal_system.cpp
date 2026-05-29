@@ -34,12 +34,39 @@ void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
     watchdog_enable(ms, pause_on_debug);
 }
 
+namespace {
+// Latched once, during C++ static initialization -- i.e. BEFORE setup() runs
+// and therefore before any hal_watchdog_enable() call can rewrite watchdog
+// scratch register 4. This lets us tell apart a genuine application watchdog
+// *timeout* (the watchdog was armed via watchdog_enable(), which writes
+// WATCHDOG_NON_REBOOT_MAGIC into scratch[4]) from a *commanded* reboot through
+// watchdog_reboot() -- used by picotool upload, BOOTSEL/UF2 relaunch and
+// rp2040.reboot() -- which sets scratch[4] to 0xb007c0d3 or 0. watchdog_reboot
+// also uses the watchdog hardware, so plain watchdog_caused_reboot() reports
+// true for a fresh flash and makes every upload look like a watchdog
+// starvation. watchdog_enable_caused_reboot() additionally checks the scratch
+// marker, so it is true ONLY for a real timeout after watchdog_enable().
+bool g_watchdog_timeout_boot = false;
+
+__attribute__((constructor)) void hal_watchdog_latch_boot_reason(void) {
+    g_watchdog_timeout_boot = watchdog_enable_caused_reboot();
+}
+} // namespace
+
 bool hal_watchdog_caused_reboot(void) {
-    return watchdog_caused_reboot();
+    return g_watchdog_timeout_boot;
 }
 
 void hal_idle(void) {
     tight_loop_contents();
+}
+
+bool hal_in_isr(void) {
+    /* RP2040 is Cortex-M0+. IPSR is zero in Thread mode and equal to the
+     * active exception number in Handler mode. */
+    uint32_t ipsr;
+    __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
+    return (ipsr & 0x1FFu) != 0u;
 }
 
 uint32_t hal_get_free_heap(void) {
