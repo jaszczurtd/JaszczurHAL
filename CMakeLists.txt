@@ -21,6 +21,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_kv.cpp
+    ${SRC}/hal/hal_modem_at.cpp
+    ${SRC}/hal/hal_simcom_a76xx.cpp
     ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/utils/SmartTimers.cpp
@@ -48,6 +50,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_UDP
     HAL_ENABLE_OTA
     HAL_ENABLE_WIREGUARD
+    HAL_ENABLE_A7670          # propagates HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
     HAL_ENABLE_EEPROM
     HAL_ENABLE_KV
     HAL_ENABLE_LITTLEFS

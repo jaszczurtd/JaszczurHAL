@@ -10,6 +10,9 @@ set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 # ── HAL implementation sources (STM32G474 skeleton) ────────────────────────
 file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
+# SoC-specific drivers under impl/stm32g474/drivers/<soc>/
+file(GLOB STM32_DRIVER_SOURCES ${SRC}/hal/impl/stm32g474/drivers/*/*.cpp)
+list(APPEND STM32_IMPL_SOURCES ${STM32_DRIVER_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES

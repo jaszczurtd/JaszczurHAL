@@ -25,6 +25,23 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # ── STM32 skeleton compile gate ────────────────────────────────────────────
+  # This job builds the STM32G474 static-library target with the host compiler
+  # (no Arduino core). It catches backend regressions in src/hal/impl/stm32g474
+  # and contributes directly to CI quality scoring.
+  stm32-build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure STM32 host build
+        run: cmake -S stm32_lib -B build_stm32_host
+
+      - name: Build STM32 host static library
+        run: cmake --build build_stm32_host --parallel
+
   # ── Flag-propagation regression matrix ─────────────────────────────────────
   # JaszczurHAL uses an opt-in HAL_ENABLE_* model with automatic upstream
   # dependency propagation (e.g. HAL_ENABLE_PCF8563 implies HAL_ENABLE_RTC
@@ -48,7 +65,7 @@ jobs:
   #                  consistency #error checks stay satisfied.
   arduino-flag-matrix:
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, stm32-build]
     strategy:
       fail-fast: false
       matrix:
@@ -115,3 +132,37 @@ jobs:
         run: |
           ./build_arduino_lib.sh --clean ${{ matrix.flags }}
           test -f build_arduino/libJaszczurHAL.a
+
+  # ── Examples build gate ────────────────────────────────────────────────────
+  # Compile all Arduino examples to catch real-world integration issues
+  # and ensure each sketch is reproducible with its hal_project_config.h.
+  arduino-examples:
+    runs-on: ubuntu-latest
+    needs: arduino-flag-matrix
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install Arduino RP2040 core
+        run: |
+          arduino-cli core update-index \
+            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core install rp2040:rp2040 \
+            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+
+      - name: Compile examples
+        run: |
+          set -e
+          for example in examples/01_blink examples/02_debug_helper examples/03_soft_timer_table examples/04_crypto examples/05_modem_A7670E; do
+            echo "Compiling $example..."
+            arduino-cli compile \
+              --library "$PWD" \
+              --fqbn rp2040:rp2040:rpipico \
+              --build-path "$example/.build" \
+              --build-property "compiler.cpp.extra_flags=-I '$PWD/$example'" \
+              --build-property "compiler.c.extra_flags=-I '$PWD/$example'" \
+              "$example"
+          done

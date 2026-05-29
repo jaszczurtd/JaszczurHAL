@@ -1,10 +1,7 @@
 #include "../../hal_system.h"
+#include "drivers/rp2040/rp2040_fault.h"
+#include "drivers/rp2040/rp2040_system.h"
 #include <Arduino.h>
-#include <pico/bootrom.h>
-#include <pico/stdlib.h>
-#include <pico/unique_id.h>
-#include <hardware/watchdog.h>
-#include <string.h>
 
 uint32_t hal_millis(void) {
     return millis();
@@ -26,88 +23,106 @@ void hal_delay_us(uint32_t us) {
     delayMicroseconds(us);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Watchdog, idle, ISR-context check, free-heap, on-die temp, bootloader
+// entry, device UID. All RP2040 / pico-sdk bindings and the Cortex-M IPSR
+// query live in the SoC driver; this layer is pure dispatch.
+// ─────────────────────────────────────────────────────────────────────────────
+
 void hal_watchdog_feed(void) {
-    watchdog_update();
+    rp2040_system_watchdog_feed();
 }
 
 void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
-    watchdog_enable(ms, pause_on_debug);
+    rp2040_system_watchdog_enable(ms, pause_on_debug);
 }
-
-namespace {
-// Latched once, during C++ static initialization -- i.e. BEFORE setup() runs
-// and therefore before any hal_watchdog_enable() call can rewrite watchdog
-// scratch register 4. This lets us tell apart a genuine application watchdog
-// *timeout* (the watchdog was armed via watchdog_enable(), which writes
-// WATCHDOG_NON_REBOOT_MAGIC into scratch[4]) from a *commanded* reboot through
-// watchdog_reboot() -- used by picotool upload, BOOTSEL/UF2 relaunch and
-// rp2040.reboot() -- which sets scratch[4] to 0xb007c0d3 or 0. watchdog_reboot
-// also uses the watchdog hardware, so plain watchdog_caused_reboot() reports
-// true for a fresh flash and makes every upload look like a watchdog
-// starvation. watchdog_enable_caused_reboot() additionally checks the scratch
-// marker, so it is true ONLY for a real timeout after watchdog_enable().
-bool g_watchdog_timeout_boot = false;
-
-__attribute__((constructor)) void hal_watchdog_latch_boot_reason(void) {
-    g_watchdog_timeout_boot = watchdog_enable_caused_reboot();
-}
-} // namespace
 
 bool hal_watchdog_caused_reboot(void) {
-    return g_watchdog_timeout_boot;
+    return rp2040_system_watchdog_caused_reboot();
 }
 
 void hal_idle(void) {
-    tight_loop_contents();
+    rp2040_system_idle();
 }
 
 bool hal_in_isr(void) {
-    /* RP2040 is Cortex-M0+. IPSR is zero in Thread mode and equal to the
-     * active exception number in Handler mode. */
-    uint32_t ipsr;
-    __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
-    return (ipsr & 0x1FFu) != 0u;
+    return rp2040_system_in_isr();
 }
 
 uint32_t hal_get_free_heap(void) {
-    return rp2040.getFreeHeap();
+    return rp2040_system_get_free_heap();
 }
 
 float hal_read_chip_temp(void) {
-    return analogReadTemp();
+    return rp2040_system_read_chip_temp();
 }
 
 void hal_enter_bootloader(void) {
-    reset_usb_boot(0, 0);
-    while (true) {
-        tight_loop_contents();
-    }
+    rp2040_system_enter_bootloader();
 }
 
 void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
-    if (uid == nullptr) {
-        return;
-    }
-    pico_unique_board_id_t id;
-    pico_get_unique_board_id(&id);
-    /* PICO_UNIQUE_BOARD_ID_SIZE_BYTES is defined as 8. */
-    memcpy(uid, id.id, HAL_DEVICE_UID_BYTES);
+    rp2040_system_get_device_uid(uid);
 }
 
 bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-    if (buf == nullptr) {
-        return false;
+    return rp2040_system_get_device_uid_hex(buf, buflen);
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fault / crash diagnostics
+//
+// All architecture-specific logic (HardFault handler, retained scratch
+// layout, stack canary placement, reset-reason latching) lives in the
+// RP2040 SoC driver. The wrappers below keep the HAL surface uniform
+// across backends.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void hal_fault_subsystem_init(void) {
+    rp2040_fault_init();
+}
+
+hal_reset_reason_t hal_get_reset_reason(void) {
+    return rp2040_fault_get_reset_reason();
+}
+
+const char *hal_reset_reason_str(hal_reset_reason_t reason) {
+    switch (reason) {
+        case HAL_RESET_REASON_POWER_ON:       return "POWER_ON";
+        case HAL_RESET_REASON_RUN_PIN:        return "RUN_PIN";
+        case HAL_RESET_REASON_SOFT:           return "SOFT";
+        case HAL_RESET_REASON_WATCHDOG:       return "WATCHDOG";
+        case HAL_RESET_REASON_DEBUG:          return "DEBUG";
+        case HAL_RESET_REASON_GLITCH:         return "GLITCH";
+        case HAL_RESET_REASON_BROWNOUT:       return "BROWNOUT";
+        case HAL_RESET_REASON_HARDFAULT:      return "HARDFAULT";
+        case HAL_RESET_REASON_STACK_OVERFLOW: return "STACK_OVERFLOW";
+        case HAL_RESET_REASON_UNKNOWN:
+        default:                              return "UNKNOWN";
     }
-    if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
-        return false;
-    }
-    uint8_t uid[HAL_DEVICE_UID_BYTES];
-    hal_get_device_uid(uid);
-    static const char kHex[] = "0123456789ABCDEF";
-    for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
-        buf[(i * 2u) + 0u] = kHex[(uid[i] >> 4) & 0x0Fu];
-        buf[(i * 2u) + 1u] = kHex[uid[i] & 0x0Fu];
-    }
-    buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
-    return true;
+}
+
+bool hal_get_last_fault(hal_fault_info_t *out) {
+    return rp2040_fault_get_last_fault(out);
+}
+
+void hal_clear_last_fault(void) {
+    rp2040_fault_clear_last_fault();
+}
+
+bool hal_last_boot_was_brownout(void) {
+    return rp2040_fault_brownout_suspected();
+}
+
+void hal_alive_mark(void) {
+    rp2040_fault_alive_mark();
+}
+
+bool hal_stack_guard_init(void) {
+    return rp2040_fault_stack_guard_init();
+}
+
+void hal_stack_guard_check(void) {
+    rp2040_fault_stack_guard_check();
 }

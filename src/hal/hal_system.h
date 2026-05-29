@@ -122,6 +122,165 @@ void hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
  */
 bool hal_watchdog_caused_reboot(void);
 
+/* -- Crash / fault diagnostics --------------------------------------------- */
+
+/**
+ * @brief Coarse-grained classification of the reason for the last MCU reset.
+ *
+ * Values are intentionally backend-agnostic. Not every reason is detectable
+ * on every target -- backends that cannot distinguish a specific cause
+ * collapse it into @ref HAL_RESET_REASON_UNKNOWN or the closest superset.
+ *
+ * Notes per backend:
+ * - RP2040 (arduino-pico): @ref HAL_RESET_REASON_BROWNOUT is *not* reported
+ *   by silicon (POR and BOR share one flag). See
+ *   @ref hal_last_boot_was_brownout for a heuristic that flags suspected
+ *   brown-outs using a retained alive marker.
+ * - RP2350: brown-out and supply glitches have dedicated flags.
+ * - @ref HAL_RESET_REASON_HARDFAULT is synthesised: the HardFault handler
+ *   installed by the HAL records a marker into retained scratch storage and
+ *   triggers a reboot, which the HAL recognises on the next boot.
+ */
+typedef enum {
+    HAL_RESET_REASON_UNKNOWN = 0,
+    HAL_RESET_REASON_POWER_ON,
+    HAL_RESET_REASON_RUN_PIN,
+    HAL_RESET_REASON_SOFT,
+    HAL_RESET_REASON_WATCHDOG,
+    HAL_RESET_REASON_DEBUG,
+    HAL_RESET_REASON_GLITCH,
+    HAL_RESET_REASON_BROWNOUT,
+    HAL_RESET_REASON_HARDFAULT,
+    HAL_RESET_REASON_STACK_OVERFLOW
+} hal_reset_reason_t;
+
+/**
+ * @brief Captured CPU state at the moment of the last HardFault.
+ *
+ * Populated by the HAL's HardFault handler from the exception stack frame
+ * before a reboot is forced. Survives the reboot via retained scratch
+ * registers (RP2040: watchdog scratch[0..3]).
+ *
+ * On Cortex-M0+ there are no CFSR/HFSR/BFAR/MMFAR registers, so the field
+ * set is intentionally minimal. PC plus LR is usually enough to identify the
+ * crashing call site via @c arm-none-eabi-addr2line.
+ */
+typedef struct {
+    bool     valid; /**< true when the previous boot was preceded by a fault */
+    uint32_t pc;    /**< stacked PC (return address at fault)               */
+    uint32_t lr;    /**< stacked LR (caller return address)                  */
+    uint32_t psr;   /**< stacked xPSR                                        */
+} hal_fault_info_t;
+
+/**
+ * @brief Initialise the fault-diagnostic subsystem.
+ *
+ * Call this as the very first thing in @c setup() (before any code that may
+ * write to retained scratch storage or arm the watchdog with custom magic).
+ * On backends that need it, this installs the HardFault handler, latches the
+ * boot reason, snapshots any captured fault info into RAM, and clears the
+ * retained alive marker so the next @ref hal_alive_mark call seeds it again.
+ *
+ * Idempotent. No effect on backends that do not provide this facility.
+ */
+void hal_fault_subsystem_init(void);
+
+/**
+ * @brief Return the cause of the last MCU reset.
+ *
+ * Stable after @ref hal_fault_subsystem_init. Backends without diagnostic
+ * support return @ref HAL_RESET_REASON_UNKNOWN.
+ *
+ * @return Reset reason classification.
+ */
+hal_reset_reason_t hal_get_reset_reason(void);
+
+/**
+ * @brief Human-readable, statically-allocated name for a reset reason.
+ * @return Pointer to a literal string. Never NULL.
+ */
+const char *hal_reset_reason_str(hal_reset_reason_t reason);
+
+/**
+ * @brief Retrieve the CPU state captured by the previous HardFault.
+ *
+ * @param out Destination, populated only when the function returns true.
+ * @return true if a fault snapshot is available (i.e. the previous boot
+ *         followed a HardFault captured by this HAL). false otherwise, in
+ *         which case @p out is left untouched.
+ */
+bool hal_get_last_fault(hal_fault_info_t *out);
+
+/**
+ * @brief Discard any captured HardFault snapshot.
+ *
+ * Subsequent calls to @ref hal_get_last_fault return false until another
+ * fault occurs and the device reboots through the HAL handler.
+ */
+void hal_clear_last_fault(void);
+
+/**
+ * @brief Heuristic: was the previous boot caused by a brown-out?
+ *
+ * On targets where the silicon does not distinguish brown-out from power-on
+ * reset (notably RP2040), the HAL uses a retained "alive marker". The
+ * application calls @ref hal_alive_mark from its main loop after early init
+ * completes. If the next boot reports a power-on reset but the alive marker
+ * is still set in retained storage, the previous run was clearly past the
+ * point where the marker was written, which strongly suggests a supply
+ * dip rather than a true cold boot.
+ *
+ * Backends with hardware BOR detection (e.g. RP2350) use the hardware flag
+ * directly and ignore the marker.
+ *
+ * The function returns a stable value once @ref hal_fault_subsystem_init has
+ * run; it does not depend on the marker being refreshed in the current boot.
+ *
+ * @return true if a brown-out is suspected. false otherwise, including on
+ *         backends with no supported detection path.
+ */
+bool hal_last_boot_was_brownout(void);
+
+/**
+ * @brief Refresh the retained alive marker used by the brown-out heuristic.
+ *
+ * Cheap (a single 32-bit store on RP2040). Call periodically from the main
+ * loop. The exact interval is not critical; once per second is more than
+ * enough. The marker is cleared by @ref hal_fault_subsystem_init so that
+ * the very first call after boot is what arms the heuristic for the *next*
+ * boot.
+ */
+void hal_alive_mark(void);
+
+/**
+ * @brief Install a stack-overflow detector for the calling core.
+ *
+ * Implementation strategy depends on the backend:
+ * - RP2040 (arduino-pico): writes a canary word at the bottom of the linker
+ *   stack region (@c __StackLimit). @ref hal_stack_guard_check verifies the
+ *   canary; corruption indicates the stack grew past its allocation. On
+ *   detection the HAL synthesises a HardFault-equivalent reset with reason
+ *   @ref HAL_RESET_REASON_STACK_OVERFLOW.
+ * - Other backends: not implemented; returns false.
+ *
+ * The detector is *soft* -- it does not trap at the instant of overflow,
+ * only at the next @ref hal_stack_guard_check call. For instant trapping,
+ * an MPU-based guard region would be required (not provided here).
+ *
+ * @return true if the guard was installed. false if unsupported on this
+ *         target.
+ */
+bool hal_stack_guard_init(void);
+
+/**
+ * @brief Verify the stack canary installed by @ref hal_stack_guard_init.
+ *
+ * Call periodically (e.g. once per main loop iteration). On corruption the
+ * function records the event in retained scratch storage and reboots the
+ * MCU; it does not return. If no guard was installed, this is a no-op.
+ */
+void hal_stack_guard_check(void);
+
 /**
  * @brief Yield to the system (cooperative multitasking / idle hook).
  */

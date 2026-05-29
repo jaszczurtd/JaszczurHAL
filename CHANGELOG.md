@@ -4,6 +4,201 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_modem_at — `expected` no longer races early "OK"
+
+- **Bug fix.** When a caller passed an `expected` substring to
+  `hal_modem_at_send`/`_send_with_data` (e.g. `"+CMQTTSUB: 0,0"`,
+  `"+CMQTTCONNECT: <ci>,0"`, `"+CMQTTPUB: <ci>,0"`,
+  `"+CMQTTSTART: 0"`), the response terminator could trigger on the
+  bare `\r\nOK\r\n` line that SimCom CMQTT* commands emit BEFORE the
+  asynchronous result-code URC. The driver then returned success and
+  fired the next AT command while the modem was still processing the
+  previous one (subscribe in flight, broker round-trip pending). The
+  next CMQTT* command silently failed with `NO_PROMPT` because the
+  modem was unresponsive during that window.
+- New semantics in `hal_modem_at`: when `expected` is non-NULL, only
+  `expected` (and `ERROR` / `+CME ERROR` / `+CMS ERROR`) terminate the
+  wait. The bare `OK` line is no longer treated as success in that
+  mode. When `expected` is NULL, behaviour is unchanged.
+- Regression test added (`test_send_expected_waits_past_early_ok`).
+- Companion fix: when `expected` matched, `hal_modem_at_send` now
+  performs a short tail-drain (≤200 ms) until `\r\nOK\r\n` /
+  `\r\nERROR\r\n` arrives. This prevents the trailing `OK` of payload
+  responses like `+CCLK: "…"\r\n\r\nOK\r\n` (where `expected="+CCLK:"`
+  matches before `OK`) from leaking into the next command's RX buffer.
+  Regression test: `test_send_expected_drains_trailing_ok`.
+- No public API change; no driver change required (the existing
+  `expected="+CMQTT…: <ci>,0"` strings now actually wait for the URC).
+
+### hal_modem_at + hal_simcom_a76xx — watchdog-friendly long waits
+
+- `hal_modem_at` now exposes an application "tick" callback installed
+  via `hal_modem_at_set_tick_callback(h, cb, user)`. Every internal
+  poll loop (`hal_modem_at_send`, `_send_with_data`, `_listen_until`)
+  invokes it at the start of each ~2 ms slice.
+- New public helper `hal_modem_at_sleep_ms(h, ms)` — a watchdog-friendly
+  drop-in for `hal_delay_ms()`. Sleeps the requested duration in slices
+  of at most 20 ms, calling the tick callback before every slice.
+  Degrades to plain `hal_delay_ms` when no tick is installed or `h` is
+  NULL.
+- `hal_simcom_a76xx` now uses `hal_modem_at_sleep_ms()` internally for
+  every blocking wait (PWRKEY pulse, hard-reset, AT retry, SIM-ready
+  poll, network-registered poll, MQTT tear-down). Long bring-up
+  sequences (`wait_boot` + `wait_sim_ready` + `wait_network_registered`
+  can stack up to ~75 s) no longer starve the application watchdog
+  when the tick callback is installed.
+- Tests: 5 new unit tests inside `test_hal_modem_at` (cadence during
+  send timeout, unregister, sleep without tick is a plain delay,
+  sleep with tick fires the callback, NULL-handle safety). All 40
+  CTest binaries remain green.
+
+### hal_modem_at + hal_simcom_a76xx — cellular modem stack
+
+- New facade module `hal_modem_at` (`HAL_ENABLE_CELLULAR_MODEM`): generic
+  transport-level AT-command engine sitting on top of `hal_uart`. Single
+  shared implementation works on both Arduino and mock backends.
+  - Public API: `hal_modem_at_create` / `_destroy`, `hal_modem_at_send`,
+    `hal_modem_at_send_with_data` (3-phase: command → `>` prompt →
+    payload → OK/ERROR), `hal_modem_at_listen_until` (passive boot/URC
+    waiter with quiet-window logic), `hal_modem_at_last_response`,
+    `hal_modem_at_urc_register` / `_urc_poll`, `hal_modem_at_set_log_filter`
+    (redacts secrets in debug output), `hal_modem_at_set_line_observer`
+    (raw per-line tap used for multi-line URC payload reassembly).
+  - Every handle is multi-thread safe via a per-instance `hal_mutex`.
+- New driver `hal_simcom_a76xx` (`HAL_ENABLE_A7670`, auto-propagates
+  `HAL_ENABLE_CELLULAR_MODEM` + `HAL_ENABLE_UART`): vendor-specific
+  bring-up and full MQTT client for SimCom A76xx-family modems
+  (A7670E/SA/G, A7672E/S, A7608, ...).
+  - Lifecycle: `_create` / `_destroy` / `_get_at`.
+  - Power: `_power_toggle` (PWRKEY pulse), `_hard_reset` (double-pulse
+    sequence). Both no-op when `pwr_pin == -1` (test fixtures).
+  - Bring-up: `_wait_boot` (passive listener for `*ATREADY` / `+CPIN:
+    READY` / `SMS DONE` / `PB DONE` with grace + quiet-window logic),
+    `_init` (AT/ATE0/CLTS/CEREG handshake), `_wait_sim_ready`,
+    `_wait_network_registered` (home or roaming), `_attach_pdp` (CGDCONT
+    + CGACT).
+  - Time: `_get_network_time_iso8601` (parses `AT+CCLK?` and emits
+    `2024-03-21T14:30:00+02:00`-style strings with TZ quarter-hour
+    offsets).
+  - MQTT publish: `_mqtt_connect` (with optional SSL profile applied via
+    `CSSLCFG` + `CMQTTSSLCFG`, full tear-down of any previous session
+    before `CMQTTSTART`), `_mqtt_disconnect`, `_mqtt_publish` (3-phase
+    `CMQTTTOPIC` / `CMQTTPAYLOAD` / `CMQTTPUB`).
+  - **MQTT subscribe (new on the cellular stack)**: `_mqtt_subscribe`
+    (`CMQTTSUBTOPIC` + `CMQTTSUB`), `_mqtt_unsubscribe`,
+    `_mqtt_set_message_callback`, `_mqtt_poll`. Incoming messages
+    arrive as a four-URC sequence (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` /
+    `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`) interleaved with bare topic
+    and payload lines; the driver reassembles them internally and
+    delivers a single `hal_simcom_a76xx_mqtt_message_cb_t` invocation
+    per message from inside `_mqtt_poll`.
+  - Connection state: `_mqtt_is_connected` is maintained automatically
+    (set on `CMQTTCONNECT: <ci>,0`, cleared on `_mqtt_disconnect` and on
+    the `+CMQTTCONNLOST:` URC).
+  - Two CMQTT client slots (0..1) tracked independently.
+- Mock UART fixture: new TX-side hook
+  `hal_mock_uart_set_write_callback(h, cb, user)` for scripted-reply
+  unit tests. Cleared on destroy.
+- Tests: 25 unit tests for `hal_modem_at`, 38 unit tests for
+  `hal_simcom_a76xx` (covering create/destroy, power, boot, init,
+  SIM/network/PDP bring-up, CCLK parser incl. negative TZ, MQTT
+  connect/publish/subscribe/unsubscribe, RX URC reassembly with
+  callback dispatch, CONNLOST URC). Full suite: 40/40 green.
+
+### hal_system — crash / fault diagnostics
+
+- New public API in `hal/hal_system.h` for post-mortem diagnostics across
+  reboots:
+  - `hal_fault_subsystem_init()` — early-boot init; latches the silicon
+    reset-reason flags, snapshots any retained HardFault info into RAM,
+    then clears the volatile flag bits.
+  - `hal_get_reset_reason()` / `hal_reset_reason_str()` — backend-agnostic
+    classification (`POWER_ON`, `RUN_PIN`, `SOFT`, `WATCHDOG`, `DEBUG`,
+    `GLITCH`, `BROWNOUT`, `HARDFAULT`, `STACK_OVERFLOW`, `UNKNOWN`).
+  - `hal_get_last_fault()` / `hal_clear_last_fault()` — retrieve captured
+    `hal_fault_info_t { valid, pc, lr, psr }` from the previous boot's
+    HardFault.
+  - `hal_last_boot_was_brownout()` — heuristic for chips (RP2040) whose
+    silicon does not distinguish BOR from POR; uses a retained alive
+    marker refreshed by `hal_alive_mark()`.
+  - `hal_alive_mark()` — call periodically from the main loop to keep the
+    brown-out heuristic honest.
+  - `hal_stack_guard_init()` / `hal_stack_guard_check()` — install and
+    verify a stack-bottom canary at `__StackLimit`; on corruption the
+    backend records a synthetic `STACK_OVERFLOW` fault and reboots.
+- All three backends (`impl/arduino`, `impl/.mock`, `impl/stm32g474`)
+  implement the API surface. STM32G474 backend currently provides no-op
+  stubs (returning `UNKNOWN` / `false`); a first-class STM32G474 fault
+  driver is planned.
+
+### hal_system / drivers — STM32G474 SoC driver extraction
+
+- Mirrored the RP2040 layout for the STM32G474 backend. All SoC-specific
+  bindings (today: host-stub state; planned: RCC/IWDG/__WFI/ADC1/UID_BASE
+  reads) moved out of `src/hal/impl/stm32g474/hal_system.cpp` into
+  dedicated SoC drivers at
+  `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` and
+  `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`.
+- `hal_system.cpp` (STM32G474) is now pure dispatch (~120 lines), matching
+  the Arduino backend in structure. `hal_reset_reason_str` stays in the
+  HAL layer as a pure enum-to-string mapping.
+- `stm32_lib/CMakeLists.txt` gained a recursive glob for
+  `impl/stm32g474/drivers/*/*.cpp` so SoC driver sources are picked up
+  automatically. Host-stub build (`build_stm32_host`) verified green.
+
+### hal_system / drivers — RP2040 SoC driver extraction
+
+- All RP2040-specific fault-diagnostics logic moved out of
+  `src/hal/impl/arduino/hal_system.cpp` into a dedicated SoC driver at
+  `src/hal/impl/arduino/drivers/rp2040/rp2040_fault.{h,cpp}`. The HAL
+  layer now contains only thin wrappers calling `rp2040_fault_*`.
+- All remaining RP2040 / pico-sdk bindings (`watchdog_*`,
+  `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`,
+  `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR`
+  read backing `hal_in_isr()`, and the UID hex formatter moved out of
+  `src/hal/impl/arduino/hal_system.cpp` into a new SoC driver at
+  `src/hal/impl/arduino/drivers/rp2040/rp2040_system.{h,cpp}`. The HAL
+  file is now a pure dispatch surface containing only Arduino-generic
+  calls (`millis/micros/delay`) plus thin wrappers calling
+  `rp2040_system_*` / `rp2040_fault_*`.
+- The "watchdog timeout caused reboot" latch (C++ static-init
+  `__attribute__((constructor))`) now lives inside the driver, keeping
+  its rationale (scratch[4] magic vs. `watchdog_reboot()`-driven
+  uploads) co-located with the pico-sdk usage.
+- Driver owns: the naked-ASM HardFault trampoline, the Cortex-M0+
+  exception-frame capture, the retained scratch layout in
+  `watchdog_hw->scratch[0..3]` (with the `'JHD'` signature; `[4..7]`
+  remain reserved by pico-sdk), the stack canary placement at
+  `__StackLimit`, and the pico-sdk reset-reason mapping.
+- The `__StackLimit` address is laundered through inline asm
+  (`__asm__("" : "+r"(p));`) to avoid the GCC `-Warray-bounds` false
+  positive caused by arduino-pico declaring `__StackLimit` as `char[1]`;
+  no `-Wno-array-bounds` waiver was added.
+
+### Mock backend — fault-diagnostics test hooks
+
+- New mock helpers in `src/hal/impl/.mock/hal_mock.h`:
+  `hal_mock_set_reset_reason`, `hal_mock_set_last_fault`,
+  `hal_mock_set_brownout_suspected`, `hal_mock_alive_was_marked`,
+  `hal_mock_alive_reset_flag`, `hal_mock_fault_subsystem_was_inited`,
+  `hal_mock_stack_guard_is_armed`, `hal_mock_stack_guard_check_was_triggered`,
+  `hal_mock_fault_diagnostics_reset`.
+
+### STM32G474 / CI
+
+- Fixed `src/hal/impl/stm32g474/hal_serial.cpp` compilation regression
+  (removed misplaced ISR-path snippets from `hal_deb()`,
+  restored the correct ISR fast-path in `hal_derr()` and removed the
+  invalid `source` reference there).
+- CI now includes an explicit STM32 compile gate:
+  `cmake -S stm32_lib -B build_stm32_host` + build.
+  This makes `src/hal/impl/stm32g474/*` compile regressions fail PR checks.
+
+### hal_can
+
+- `hal_can_destroy()` now releases its internal mutex on both Arduino and
+  mock backends (previously the mutex was left allocated after destroy).
+
 ### hal_serial / hal_system — ISR-safe debug logging
 
 - ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
