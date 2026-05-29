@@ -149,6 +149,7 @@ bool hal_mqtt_set_socket_timeout(uint16_t timeout_s) {
     hal_mutex_lock(s_mqtt_mutex);
 
     s_client.setSocketTimeout(timeout_s);
+    s_wifi_client.setTimeout((unsigned long)timeout_s * 1000UL);
 
     hal_mutex_unlock(s_mqtt_mutex);
     return true;

@@ -52,6 +52,16 @@ void hal_idle(void) {
     // no-op
 }
 
+static bool s_in_isr = false;
+
+bool hal_in_isr(void) {
+    return s_in_isr;
+}
+
+void hal_mock_set_in_isr(bool in_isr) {
+    s_in_isr = in_isr;
+}
+
 // ── Mock helpers ──────────────────────────────────────────────────────────────
 
 void hal_mock_set_millis(uint32_t ms) {

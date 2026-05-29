@@ -37,6 +37,25 @@ extern "C" {
 #endif
 
 /**
+ * @brief Slot count of the per-backend SPSC ring buffer that holds debug
+ *        records produced from interrupt context (drained by
+ *        @ref hal_debug_loop). Must be >= 2; the effective capacity is
+ *        slot_count - 1 because one slot is reserved to distinguish full
+ *        from empty.
+ */
+#ifndef HAL_DEBUG_ISR_SLOT_COUNT
+#define HAL_DEBUG_ISR_SLOT_COUNT 16u
+#endif
+
+/**
+ * @brief Maximum stored payload length (including NUL terminator) of a
+ *        single ISR-deferred debug record.
+ */
+#ifndef HAL_DEBUG_ISR_TEXT_MAX
+#define HAL_DEBUG_ISR_TEXT_MAX 160u
+#endif
+
+/**
  * @brief Configuration for rate-limiting repeated noncritical debug errors.
  */
 typedef struct {
@@ -186,6 +205,35 @@ void hal_derr_limited(const char *source, const char *format, ...);
  * @param maxBytes Maximum number of bytes to display (clamped to 1..48).
  */
 void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
+
+/**
+ * @brief Flush debug records that were captured from interrupt context.
+ *
+ * When hal_deb(), hal_derr() or hal_derr_limited() are invoked from an
+ * ISR (detected via hal_in_isr()), the formatted message is enqueued in
+ * an internal SPSC ring buffer instead of touching the UART. This
+ * function drains that buffer and emits each captured record using the
+ * normal (mutex-protected) serial path.
+ *
+ * Call this periodically from the main loop / a low-priority task.
+ * Calling it from ISR context is a no-op (the drain is never re-entered
+ * from an interrupt).
+ *
+ * If any ISR records were dropped because the ring was full since the
+ * previous drain, a single summary line of the form
+ * "ERROR! [ISR] dropped N debug message(s)" is emitted after the
+ * regular records and the internal drop counter is reset to zero.
+ *
+ * When debug output is muted (see hal_debug_set_muted()), pending
+ * records are discarded silently and the drop counter is cleared.
+ *
+ * Safe from the very first iteration of the main loop, even when no
+ * hal_debug_init() / hal_deb() / hal_derr() has been called yet: the
+ * function performs the same lazy init as hal_deb() on the emit path
+ * and uses only zero-initialised statics on the in-ISR / muted short
+ * circuits.
+ */
+void hal_debug_loop(void);
 
 #ifdef __cplusplus
 }

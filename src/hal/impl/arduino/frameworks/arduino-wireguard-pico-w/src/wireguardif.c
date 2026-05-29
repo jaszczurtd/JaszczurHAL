@@ -90,27 +90,44 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 // }
 
 static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q, struct wireguard_peer *peer) {
+	// Ownership contract:
+	// - caller owns 'q' and must free it exactly once,
+	// - this function never frees 'q'.
+	if ((netif == NULL) || (q == NULL) || (peer == NULL)) {
+		log_e(TAG "wireguardif_peer_output: invalid arg(s): netif=%p q=%p peer=%p",
+		      netif, q, peer);
+		return ERR_ARG;
+	}
+
     struct wireguard_device *device = (struct wireguard_device *)netif->state;
+	if (device == NULL) {
+		log_e(TAG "wireguardif_peer_output: netif->state is NULL");
+		return ERR_ARG;
+	}
     
     char ip_str[16];
     ipaddr_ntoa_r(&peer->ip, ip_str, sizeof(ip_str));
     log_i(TAG "SENDING to %s:%d, size: %d bytes", ip_str, peer->port, q->tot_len);
     
-    uint8_t *data = (uint8_t *)q->payload;
-    log_i(TAG "Packet type: 0x%02X", data[0]);
+    if ((q->payload != NULL) && (q->len > 0u)) {
+		uint8_t *data = (uint8_t *)q->payload;
+		log_i(TAG "Packet type: 0x%02X", data[0]);
+    } else {
+		log_e(TAG "wireguardif_peer_output: invalid pbuf payload=%p len=%u",
+		      q->payload, (unsigned)q->len);
+		return ERR_ARG;
+    }
     
     // DEBUG: Sprawdź PCB i netif
     log_i(TAG "PCB: %p, Underlying netif: %p", device->udp_pcb, device->underlying_netif);
     
     if (device->udp_pcb == NULL) {
         log_e(TAG "UDP PCB is NULL!");
-        pbuf_free(q);
         return ERR_ARG;
     }
     
     if (device->underlying_netif == NULL) {
         log_e(TAG "Underlying netif is NULL!");
-        pbuf_free(q);
         return ERR_ARG;
     }
     
@@ -584,8 +601,22 @@ static bool wireguardif_check_response_message(struct wireguard_device *device, 
 
 
 void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port) {
-	//LWIP_ASSERT("wireguardif_network_rx: invalid arg", arg != NULL);
-	//LWIP_ASSERT("wireguardif_network_rx: invalid pbuf", p != NULL);
+	if (!arg || !pcb || !p || !addr) {
+		log_e(TAG "wireguardif_network_rx: invalid args: arg=%p pcb=%p p=%p addr=%p",
+		      arg, pcb, p, addr);
+		if(p) {
+			pbuf_free(p);
+		}
+		return;
+	}
+
+	if ((p->payload == NULL) || (p->len == 0u)) {
+		log_e(TAG "wireguardif_network_rx: invalid pbuf payload=%p len=%u",
+		      p->payload, (unsigned)p->len);
+		pbuf_free(p);
+		return;
+	}
+	
 	// We have received a packet from the base_netif to our UDP port - process this as a possible Wireguard packet
 	struct wireguard_device *device = (struct wireguard_device *)arg;
 	struct wireguard_peer *peer;
@@ -1053,8 +1084,10 @@ void wireguardif_shutdown(struct netif *netif) {
 		udp_remove(device->udp_pcb);
 		device->udp_pcb = NULL;
 	}
-	// remove device context.
-	free(device);
+	// remove device context. Must match the allocator used in
+	// wireguardif_init() (mem_calloc), otherwise freeing a lwIP-heap pointer
+	// with libc free() corrupts the heap when MEM_LIBC_MALLOC == 0.
+	mem_free(device);
 	netif->state = NULL;
 }
 

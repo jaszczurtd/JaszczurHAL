@@ -714,6 +714,7 @@ void     hal_watchdog_feed(void);
 void     hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
 bool     hal_watchdog_caused_reboot(void);
 void     hal_idle(void);
+bool     hal_in_isr(void);            // true when called from an exception/IRQ handler
 uint32_t hal_get_free_heap(void);     // available heap in bytes
 float    hal_read_chip_temp(void);    // on-die temperature in °C (±2 °C typical)
 void     hal_enter_bootloader(void);  // jump to RP2040 USB bootloader (does not return on hardware)
@@ -735,8 +736,9 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen);
 #define NONULL(x) do { if ((x) == NULL) { goto error; } } while (0)
 ```
 
-**impl/arduino:** `millis()`, `micros()`, `time_us_64()`, `delay()`, `delayMicroseconds()`, pico SDK `watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `reset_usb_boot()`, `pico_get_unique_board_id()`.
-**impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting.
+**impl/arduino:** `millis()`, `micros()`, `time_us_64()`, `delay()`, `delayMicroseconds()`, pico SDK `watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `reset_usb_boot()`, `pico_get_unique_board_id()`. `hal_in_isr()` reads the ARM Cortex-M `IPSR` register (non-zero ⇒ exception/IRQ handler).
+**impl/stm32g474:** ChibiOS HAL `osalOsGetSystemTimeX()`, `chThdSleepMilliseconds()`, IWDG. `hal_in_isr()` reads `IPSR` (same rule as Arduino).
+**impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 **Thread safety:** Arduino backend: time/watchdog APIs are safe to call from both cores. `hal_delay_ms` / `hal_delay_us` block only the calling core and can be used concurrently. Mock backend uses shared unsynchronized state and is intended for single-threaded tests.
 **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
 **Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
@@ -759,6 +761,7 @@ bool hal_mock_bootloader_was_requested(void);
 void hal_mock_bootloader_reset_flag(void);
 void hal_mock_set_device_uid(const uint8_t uid[8]);  // override UID
 void hal_mock_reset_device_uid(void);                // restore default E661A4D1234567AB
+void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() return value for tests
 ```
 
 **Device UID details:**
@@ -945,6 +948,8 @@ void hal_critical_section_exit(void);   // re-enable interrupts
 // #define HAL_DEBUG_DEFAULT_BAUD 9600   // used by lazy init
 // #define HAL_DEBUG_RATE_LIMIT_SOURCES_MAX 16
 // #define HAL_DEBUG_RATE_LIMIT_SOURCE_NAME_MAX 24
+// #define HAL_DEBUG_ISR_SLOT_COUNT 16u  // SPSC ring slots for ISR-deferred logs (>= 2)
+// #define HAL_DEBUG_ISR_TEXT_MAX  160u  // per-record payload (incl. NUL terminator)
 
 typedef struct {
     uint16_t full_logs_limit;   // default 5
@@ -972,6 +977,52 @@ void hal_derr_limited(const char *source, const char *format, ...);
 // source is caller-defined free-form tag (e.g. "gps", "can"); 0 -> "global"
 void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
 // logs: "<prefix> len=<n> bytes: XX XX ...", maxBytes is clamped to 1..48
+
+void hal_debug_loop(void);  // drain ISR-deferred debug records (call from main loop)
+```
+
+### ISR-deferred debug logging
+
+`hal_deb()`, `hal_derr()` and `hal_derr_limited()` may now be called from
+interrupt context. They detect ISR context via `hal_in_isr()` and on
+the hot path do **no** mutex acquisition, **no** lazy init, **no**
+timestamp hook, **no** rate-limiter table lookup, and **no** UART I/O.
+The formatted payload is enqueued into a per-backend single-producer /
+single-consumer (SPSC) lock-free ring (`HAL_DEBUG_ISR_SLOT_COUNT`
+slots × `HAL_DEBUG_ISR_TEXT_MAX` bytes each, default 16 × 160 B) using
+release/acquire atomics. For `hal_derr_limited()` the `[source]` tag
+is baked into the queued text up front, since the global rate-limiter
+is bypassed in ISR context.
+
+`hal_debug_loop()` drains the ring from task context and emits each
+record using the normal mutex-protected serial path. Every drained
+line is annotated with `[ISR ts=<micros>]` (the original event time,
+not "now") and respects the current `hal_deb_set_prefix()` for
+debug records and the standard `ERROR! ` marker for error records.
+When the producer overruns the ring it bumps an internal counter and
+the next drain emits one summary line
+`"ERROR! [ISR] dropped N debug message(s)"` before resetting the
+counter. When `hal_debug_set_muted(true)` is active, both the
+producer (silently drops, no ring write, no drop-counter bump) and
+the consumer (discards pending records and clears the drop counter)
+behave as no-ops.
+
+`hal_debug_loop()` is **safe to call from the very first iteration**
+of the main loop, even when no `hal_debug_init()` / `hal_deb()` /
+`hal_derr()` has been called yet: the emit path performs the same
+lazy init as `hal_deb()`, and the in-ISR / muted short-circuits use
+only zero-initialised statics. Calling it from ISR context is itself
+a no-op (prevents drain re-entry via the underlying UART mutex).
+
+**Mock-only ring introspection helpers** (declared in `hal_mock.h`):
+
+```c
+size_t   hal_mock_debug_isr_used_slots(void);            // pending records
+size_t   hal_mock_debug_isr_capacity(void);              // current ring capacity
+uint32_t hal_mock_debug_isr_dropped(void);               // overflow counter (peek)
+void     hal_mock_debug_isr_reset(void);                 // clear head/tail/dropped
+void     hal_mock_debug_isr_set_test_capacity(size_t);   // swap to a small test ring
+void     hal_mock_debug_isr_restore_default_ring(void);  // restore production ring
 ```
 
 ### Lazy initialisation
