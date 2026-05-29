@@ -77,6 +77,12 @@
 #ifdef HAL_ENABLE_OTA
 #include "hal_ota.h"
 #endif
+#ifdef HAL_ENABLE_CELLULAR_MODEM
+#include "hal_modem_at.h"
+#endif
+#ifdef HAL_ENABLE_A7670
+#include "hal_simcom_a76xx.h"
+#endif
 #ifdef HAL_ENABLE_TIME
 #include "hal_time.h"
 #endif

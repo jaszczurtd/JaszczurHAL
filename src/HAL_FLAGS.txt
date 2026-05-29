@@ -32,6 +32,13 @@ Connectivity
     ArduinoOTA wrapper. Propagates: WIFI.
   HAL_ENABLE_WIREGUARD
     arduino-wireguard-pico-w wrapper. Propagates: WIFI.
+  HAL_ENABLE_CELLULAR_MODEM
+    Generic AT-command engine (hal_modem_at) for cellular / serial-AT
+    modems. Requires at least one backend (e.g. HAL_ENABLE_A7670),
+    otherwise a compile-time #error is emitted.
+  HAL_ENABLE_A7670
+    SimCom A7670 LTE Cat-1 cellular modem backend.
+    Propagates: CELLULAR_MODEM, UART.
 
 Storage
   HAL_ENABLE_EEPROM
@@ -124,6 +131,7 @@ HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
+HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM, HAL_ENABLE_UART
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
@@ -142,6 +150,7 @@ Consistency checks (compile-time #error)
 ----------------------------------------
 
   HAL_ENABLE_RTC          requires HAL_ENABLE_PCF8563 OR HAL_ENABLE_DS3231
+  HAL_ENABLE_CELLULAR_MODEM requires HAL_ENABLE_A7670
   HAL_ENABLE_THERMOCOUPLE requires HAL_ENABLE_MCP9600 OR HAL_ENABLE_MAX6675
   HAL_ENABLE_DISPLAY      requires HAL_ENABLE_TFT     OR HAL_ENABLE_SSD1306
   HAL_ENABLE_TFT          requires HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S

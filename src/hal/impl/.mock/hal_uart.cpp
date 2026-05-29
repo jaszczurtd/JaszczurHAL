@@ -15,6 +15,8 @@ struct hal_uart_impl_s {
     int head;
     int tail;
     int in_use;
+    hal_mock_uart_write_cb_t write_cb;
+    void *write_cb_user;
 };
 
 static hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES];
@@ -80,6 +82,7 @@ size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
 
     memcpy(h->last_write, data, copy_len);
     h->last_write[copy_len] = '\0';
+    if (h->write_cb) h->write_cb(h, h->last_write, h->write_cb_user);
     return copy_len;
 }
 
@@ -98,6 +101,7 @@ size_t hal_uart_println(hal_uart_t h, const char *s) {
     if (copy_text + 2 < sizeof(h->last_write))
         h->last_write[copy_text + 1] = '\n';
     h->last_write[total] = '\0';
+    if (h->write_cb) h->write_cb(h, h->last_write, h->write_cb_user);
     return total;
 }
 
@@ -106,7 +110,11 @@ void hal_uart_flush(hal_uart_t h) {
 }
 
 void hal_uart_destroy(hal_uart_t h) {
-    if (h) h->in_use = 0;
+    if (h) {
+        h->write_cb = NULL;
+        h->write_cb_user = NULL;
+        h->in_use = 0;
+    }
 }
 
 void hal_mock_uart_push(hal_uart_t h, const uint8_t *data, int len) {
@@ -137,4 +145,12 @@ uint8_t hal_mock_uart_get_rx_pin(hal_uart_t h) {
 
 uint8_t hal_mock_uart_get_tx_pin(hal_uart_t h) {
     return h ? h->tx_pin : 0u;
+}
+
+void hal_mock_uart_set_write_callback(hal_uart_t h,
+                                      hal_mock_uart_write_cb_t cb,
+                                      void *user) {
+    if (!h) return;
+    h->write_cb = cb;
+    h->write_cb_user = user;
 }

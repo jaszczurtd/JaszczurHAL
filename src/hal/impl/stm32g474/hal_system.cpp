@@ -1,105 +1,121 @@
 #if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
 
 #include "../../hal_system.h"
+#include "drivers/stm32g474/stm32g474_system.h"
+#include "drivers/stm32g474/stm32g474_fault.h"
 
-#include <string.h>
+// ─────────────────────────────────────────────────────────────────────────────
+// Time / delays
+// ─────────────────────────────────────────────────────────────────────────────
 
-static uint32_t s_millis = 0u;
-static uint32_t s_micros = 0u;
-static bool s_watchdog_fed = false;
-static bool s_watchdog_caused_reboot = false;
-static uint32_t s_free_heap = 0u;
-static float s_chip_temp_c = 0.0f;
+uint32_t hal_millis(void)            { return stm32g474_system_millis(); }
+uint32_t hal_micros(void)            { return stm32g474_system_micros(); }
+uint64_t hal_micros64(void)          { return stm32g474_system_micros64(); }
+void     hal_delay_ms(uint32_t ms)   { stm32g474_system_delay_ms(ms); }
+void     hal_delay_us(uint32_t us)   { stm32g474_system_delay_us(us); }
 
-/* Placeholder UID used until STM32 UID registers are wired in. */
-static uint8_t s_device_uid[HAL_DEVICE_UID_BYTES] = {
-    0x47, 0x34, 0x74, 0x00, 0x00, 0x00, 0x00, 0x01
-};
-
-uint32_t hal_millis(void) {
-    return s_millis;
-}
-
-uint32_t hal_micros(void) {
-    return s_micros;
-}
-
-uint64_t hal_micros64(void) {
-    return (uint64_t)s_micros;
-}
-
-void hal_delay_ms(uint32_t ms) {
-    s_millis += ms;
-    s_micros += (ms * 1000u);
-}
-
-void hal_delay_us(uint32_t us) {
-    s_micros += us;
-    s_millis = s_micros / 1000u;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Watchdog, idle, ISR-context check, free-heap, on-die temp, bootloader
+// entry, device UID. All STM32G474-specific (or planned-specific) bindings
+// live in the SoC driver; this layer is pure dispatch.
+// ─────────────────────────────────────────────────────────────────────────────
 
 void hal_watchdog_feed(void) {
-    s_watchdog_fed = true;
+    stm32g474_system_watchdog_feed();
 }
 
 void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
-    (void)ms;
-    (void)pause_on_debug;
-    s_watchdog_fed = false;
+    stm32g474_system_watchdog_enable(ms, pause_on_debug);
 }
 
 bool hal_watchdog_caused_reboot(void) {
-    return s_watchdog_caused_reboot;
+    return stm32g474_system_watchdog_caused_reboot();
 }
 
 void hal_idle(void) {
-    /* STM32G474 TODO: add low-power wait-for-interrupt / cooperative yield. */
+    stm32g474_system_idle();
 }
 
 bool hal_in_isr(void) {
-    /* On Cortex-M, IPSR is zero in Thread mode and equal to the active
-     * exception number in Handler mode. We mask to the documented 9-bit
-     * exception-number field. */
-    uint32_t ipsr;
-    __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
-    return (ipsr & 0x1FFu) != 0u;
+    return stm32g474_system_in_isr();
 }
 
 uint32_t hal_get_free_heap(void) {
-    return s_free_heap;
+    return stm32g474_system_get_free_heap();
 }
 
 float hal_read_chip_temp(void) {
-    return s_chip_temp_c;
+    return stm32g474_system_read_chip_temp();
 }
 
 void hal_enter_bootloader(void) {
-    /* STM32G474 TODO: jump to STM32 system bootloader. */
+    stm32g474_system_enter_bootloader();
 }
 
 void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
-    if (uid == nullptr) {
-        return;
-    }
-
-    memcpy(uid, s_device_uid, HAL_DEVICE_UID_BYTES);
+    stm32g474_system_get_device_uid(uid);
 }
 
 bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-    if (buf == nullptr) {
-        return false;
-    }
-    if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
-        return false;
-    }
+    return stm32g474_system_get_device_uid_hex(buf, buflen);
+}
 
-    static const char kHex[] = "0123456789ABCDEF";
-    for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
-        buf[(i * 2u) + 0u] = kHex[(s_device_uid[i] >> 4) & 0x0Fu];
-        buf[(i * 2u) + 1u] = kHex[s_device_uid[i] & 0x0Fu];
+// ─────────────────────────────────────────────────────────────────────────────
+// Fault / crash diagnostics
+//
+// All architecture-specific logic lives in the STM32G474 SoC driver
+// (currently a no-op stub; planned real impl will use RCC->CSR,
+// SCB->{CFSR,HFSR,MMFAR,BFAR} and TAMP->BKPxR). The wrappers below keep
+// the HAL surface uniform across backends. `hal_reset_reason_str` is a
+// pure mapping and stays here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void hal_fault_subsystem_init(void) {
+    stm32g474_fault_init();
+}
+
+hal_reset_reason_t hal_get_reset_reason(void) {
+    return stm32g474_fault_get_reset_reason();
+}
+
+const char *hal_reset_reason_str(hal_reset_reason_t reason) {
+    switch (reason) {
+        case HAL_RESET_REASON_POWER_ON:       return "POWER_ON";
+        case HAL_RESET_REASON_RUN_PIN:        return "RUN_PIN";
+        case HAL_RESET_REASON_SOFT:           return "SOFT";
+        case HAL_RESET_REASON_WATCHDOG:       return "WATCHDOG";
+        case HAL_RESET_REASON_DEBUG:          return "DEBUG";
+        case HAL_RESET_REASON_GLITCH:         return "GLITCH";
+        case HAL_RESET_REASON_BROWNOUT:       return "BROWNOUT";
+        case HAL_RESET_REASON_HARDFAULT:      return "HARDFAULT";
+        case HAL_RESET_REASON_STACK_OVERFLOW: return "STACK_OVERFLOW";
+        case HAL_RESET_REASON_UNKNOWN:
+        default:                              return "UNKNOWN";
     }
-    buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
-    return true;
+}
+
+bool hal_get_last_fault(hal_fault_info_t *out) {
+    return stm32g474_fault_get_last_fault(out);
+}
+
+void hal_clear_last_fault(void) {
+    stm32g474_fault_clear_last_fault();
+}
+
+bool hal_last_boot_was_brownout(void) {
+    return stm32g474_fault_brownout_suspected();
+}
+
+void hal_alive_mark(void) {
+    stm32g474_fault_alive_mark();
+}
+
+bool hal_stack_guard_init(void) {
+    return stm32g474_fault_stack_guard_init();
+}
+
+void hal_stack_guard_check(void) {
+    stm32g474_fault_stack_guard_check();
 }
 
 #endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */

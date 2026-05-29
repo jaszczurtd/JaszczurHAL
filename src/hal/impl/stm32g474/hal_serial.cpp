@@ -383,17 +383,6 @@ void hal_deb(const char *format, ...) {
         }
     }
 
-    if (hal_in_isr()) {
-        /* ISR fast path: skip timestamp hook (it may take locks) and
-         * skip the ERROR! marker - both are applied at drain time. */
-        va_list args;
-        va_start(args, format);
-        (void)isr_enqueue_vformat(HAL_ISR_REC_DERR, hal_micros(),
-                                      format, args);
-        va_end(args);
-        return;
-    }
-
     vsnprintf(s_deb_buf + used, sizeof(s_deb_buf) - used, format, args);
     va_end(args);
 
@@ -403,6 +392,17 @@ void hal_deb(const char *format, ...) {
 
 void hal_derr(const char *format, ...) {
     if (hal_debug_is_muted()) {
+        return;
+    }
+
+    if (hal_in_isr()) {
+        /* ISR fast path: skip timestamp hook (it may take locks) and
+         * skip the ERROR! marker - both are applied at drain time. */
+        va_list args;
+        va_start(args, format);
+        (void)isr_enqueue_vformat(HAL_ISR_REC_DERR, hal_micros(),
+                                      format, args);
+        va_end(args);
         return;
     }
 
@@ -434,17 +434,6 @@ void hal_derr(const char *format, ...) {
     }
 
     vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1u - len, format, args);
-    if (hal_in_isr()) {
-        /* ISR fast path: rate limiter relies on a shared slot table
-         * protected by a mutex, so we bypass it entirely and enqueue
-         * the message with the source tag baked into the text. */
-        va_list args;
-        va_start(args, format);
-        (void)isr_enqueue_derr_limited(hal_micros(), source, format, args);
-        va_end(args);
-        return;
-    }
-
     va_end(args);
 
     hal_serial_println(s_derr_buf);
@@ -453,6 +442,17 @@ void hal_derr(const char *format, ...) {
 
 void hal_derr_limited(const char *source, const char *format, ...) {
     if (hal_debug_is_muted()) {
+        return;
+    }
+
+    if (hal_in_isr()) {
+        /* ISR fast path: rate limiter relies on a shared slot table
+         * protected by a mutex, so we bypass it entirely and enqueue
+         * the message with the source tag baked into the text. */
+        va_list args;
+        va_start(args, format);
+        (void)isr_enqueue_derr_limited(hal_micros(), source, format, args);
+        va_end(args);
         return;
     }
 

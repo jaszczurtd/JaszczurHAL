@@ -61,9 +61,16 @@ hal_can_t hal_can_create(uint8_t cs_pin) {
 
 void hal_can_destroy(hal_can_t h) {
     if (!h) return;
-    hal_mutex_lock(h->mutex);
+    hal_mutex_t m = h->mutex;
+    if (m) {
+        hal_mutex_lock(m);
+    }
     h->in_use = 0;
-    hal_mutex_unlock(h->mutex);
+    if (m) {
+        hal_mutex_unlock(m);
+        hal_mutex_destroy(m);
+    }
+    h->mutex = NULL;
 }
 
 bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data) {

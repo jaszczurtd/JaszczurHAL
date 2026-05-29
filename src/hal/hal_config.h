@@ -82,6 +82,13 @@
        HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
        HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI).
+       HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
+                                  Requires at least one backend (e.g.
+                                  HAL_ENABLE_A7670), otherwise a
+                                  compile-time #error is emitted.
+       HAL_ENABLE_A7670         - SimCom A7670 LTE Cat-1 cellular modem
+                                  backend (propagates: CELLULAR_MODEM,
+                                  UART).
 
      Storage:
        HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / RP2040 flash).
@@ -193,6 +200,16 @@
   #endif
 #endif
 
+/* Cellular modem backends. */
+#ifdef HAL_ENABLE_A7670
+  #ifndef HAL_ENABLE_CELLULAR_MODEM
+    #define HAL_ENABLE_CELLULAR_MODEM
+  #endif
+  #ifndef HAL_ENABLE_UART
+    #define HAL_ENABLE_UART
+  #endif
+#endif
+
 /* I2C-dependent sensors / RTCs. */
 #ifdef HAL_ENABLE_EXTERNAL_ADC
   #ifndef HAL_ENABLE_I2C
@@ -294,6 +311,11 @@
   #error "HAL_ENABLE_RTC requires at least one backend: HAL_ENABLE_PCF8563 or HAL_ENABLE_DS3231"
 #endif
 
+#if defined(HAL_ENABLE_CELLULAR_MODEM) && \
+    !defined(HAL_ENABLE_A7670)
+  #error "HAL_ENABLE_CELLULAR_MODEM requires at least one backend: HAL_ENABLE_A7670"
+#endif
+
 #if defined(HAL_ENABLE_THERMOCOUPLE) && \
     !defined(HAL_ENABLE_MCP9600) && !defined(HAL_ENABLE_MAX6675)
   #error "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
@@ -333,6 +355,12 @@
   #endif
   #ifdef HAL_ENABLE_WIREGUARD
     #pragma message("HAL_CONFIG: HAL_ENABLE_WIREGUARD")
+  #endif
+  #ifdef HAL_ENABLE_CELLULAR_MODEM
+    #pragma message("HAL_CONFIG: HAL_ENABLE_CELLULAR_MODEM")
+  #endif
+  #ifdef HAL_ENABLE_A7670
+    #pragma message("HAL_CONFIG: HAL_ENABLE_A7670")
   #endif
   #ifdef HAL_ENABLE_EEPROM
     #pragma message("HAL_CONFIG: HAL_ENABLE_EEPROM")

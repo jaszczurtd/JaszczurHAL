@@ -162,3 +162,132 @@ void hal_mock_reset_device_uid(void) {
     };
     memcpy(s_device_uid, kDefault, HAL_DEVICE_UID_BYTES);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Fault / crash diagnostics -- mock backend
+// ─────────────────────────────────────────────────────────────────────────────
+
+static hal_reset_reason_t s_reset_reason       = HAL_RESET_REASON_UNKNOWN;
+static hal_fault_info_t   s_fault_info         = { false, 0u, 0u, 0u };
+static bool               s_brownout_suspected = false;
+static bool               s_alive_marked       = false;
+static bool               s_subsystem_init     = false;
+static bool               s_stack_guard_armed  = false;
+static bool               s_stack_guard_check_triggered = false;
+
+void hal_fault_subsystem_init(void) {
+    s_subsystem_init = true;
+    // Test fixtures stage state via hal_mock_set_reset_reason() /
+    // hal_mock_set_last_fault() / hal_mock_set_brownout_suspected()
+    // before calling this function; the mock impl preserves whatever
+    // the test set and does not auto-reset it.
+}
+
+hal_reset_reason_t hal_get_reset_reason(void) {
+    return s_reset_reason;
+}
+
+const char *hal_reset_reason_str(hal_reset_reason_t reason) {
+    switch (reason) {
+        case HAL_RESET_REASON_POWER_ON:       return "POWER_ON";
+        case HAL_RESET_REASON_RUN_PIN:        return "RUN_PIN";
+        case HAL_RESET_REASON_SOFT:           return "SOFT";
+        case HAL_RESET_REASON_WATCHDOG:       return "WATCHDOG";
+        case HAL_RESET_REASON_DEBUG:          return "DEBUG";
+        case HAL_RESET_REASON_GLITCH:         return "GLITCH";
+        case HAL_RESET_REASON_BROWNOUT:       return "BROWNOUT";
+        case HAL_RESET_REASON_HARDFAULT:      return "HARDFAULT";
+        case HAL_RESET_REASON_STACK_OVERFLOW: return "STACK_OVERFLOW";
+        case HAL_RESET_REASON_UNKNOWN:
+        default:                              return "UNKNOWN";
+    }
+}
+
+bool hal_get_last_fault(hal_fault_info_t *out) {
+    if (out == nullptr || !s_fault_info.valid) {
+        return false;
+    }
+    *out = s_fault_info;
+    return true;
+}
+
+void hal_clear_last_fault(void) {
+    s_fault_info.valid = false;
+    s_fault_info.pc = 0;
+    s_fault_info.lr = 0;
+    s_fault_info.psr = 0;
+}
+
+bool hal_last_boot_was_brownout(void) {
+    return s_brownout_suspected;
+}
+
+void hal_alive_mark(void) {
+    s_alive_marked = true;
+}
+
+bool hal_stack_guard_init(void) {
+    s_stack_guard_armed = true;
+    s_stack_guard_check_triggered = false;
+    return true;
+}
+
+void hal_stack_guard_check(void) {
+    if (!s_stack_guard_armed) {
+        return;
+    }
+    /* Mock does not actually reboot. Tests can observe the trigger flag
+     * via hal_mock_stack_guard_check_was_triggered(). */
+    s_stack_guard_check_triggered = true;
+}
+
+// ── Mock-only test hooks ────────────────────────────────────────────────────
+
+void hal_mock_set_reset_reason(hal_reset_reason_t reason) {
+    s_reset_reason = reason;
+}
+
+void hal_mock_set_last_fault(const hal_fault_info_t *info) {
+    if (info == nullptr) {
+        s_fault_info.valid = false;
+        s_fault_info.pc = 0;
+        s_fault_info.lr = 0;
+        s_fault_info.psr = 0;
+        return;
+    }
+    s_fault_info = *info;
+}
+
+void hal_mock_set_brownout_suspected(bool val) {
+    s_brownout_suspected = val;
+}
+
+bool hal_mock_alive_was_marked(void) {
+    return s_alive_marked;
+}
+
+void hal_mock_alive_reset_flag(void) {
+    s_alive_marked = false;
+}
+
+bool hal_mock_fault_subsystem_was_inited(void) {
+    return s_subsystem_init;
+}
+
+bool hal_mock_stack_guard_is_armed(void) {
+    return s_stack_guard_armed;
+}
+
+bool hal_mock_stack_guard_check_was_triggered(void) {
+    return s_stack_guard_check_triggered;
+}
+
+void hal_mock_fault_diagnostics_reset(void) {
+    s_reset_reason       = HAL_RESET_REASON_UNKNOWN;
+    s_fault_info         = { false, 0u, 0u, 0u };
+    s_brownout_suspected = false;
+    s_alive_marked       = false;
+    s_subsystem_init     = false;
+    s_stack_guard_armed  = false;
+    s_stack_guard_check_triggered = false;
+}

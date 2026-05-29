@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <time.h>
 #include "../../hal_gpio.h"
+#include "../../hal_system.h"
 
 // ── GPIO ─────────────────────────────────────────────────────────────────────
 bool            hal_mock_gpio_get_state(uint8_t pin);
@@ -55,6 +56,29 @@ void     hal_mock_reset_device_uid(void);
  * debug ring used by hal_deb/hal_derr/hal_derr_limited). Defaults
  * to false; remains stable until changed. */
 void     hal_mock_set_in_isr(bool in_isr);
+
+// ── Fault / crash diagnostics ───────────────────────────────────────────────
+/** @brief Override the value returned by hal_get_reset_reason(). */
+void hal_mock_set_reset_reason(hal_reset_reason_t reason);
+/** @brief Stage a fault snapshot to be returned by hal_get_last_fault().
+ *         Pass NULL to mark "no fault available". */
+void hal_mock_set_last_fault(const hal_fault_info_t *info);
+/** @brief Override the value returned by hal_last_boot_was_brownout(). */
+void hal_mock_set_brownout_suspected(bool val);
+/** @brief Return true if hal_alive_mark() has been called. */
+bool hal_mock_alive_was_marked(void);
+/** @brief Clear the alive-marked flag captured by the mock. */
+void hal_mock_alive_reset_flag(void);
+/** @brief Return true if hal_fault_subsystem_init() has been called. */
+bool hal_mock_fault_subsystem_was_inited(void);
+/** @brief Return true if hal_stack_guard_init() has armed the guard. */
+bool hal_mock_stack_guard_is_armed(void);
+/** @brief Return true if hal_stack_guard_check() detected corruption.
+ *         The mock backend does NOT actually reboot; it only records the
+ *         event so tests can observe it. */
+bool hal_mock_stack_guard_check_was_triggered(void);
+/** @brief Reset all fault-diagnostic mock state to defaults. */
+void hal_mock_fault_diagnostics_reset(void);
 
 // ── Serial / Debug ────────────────────────────────────────────────────────────
 const char *hal_mock_serial_last_line(void);
@@ -113,6 +137,13 @@ const char *hal_mock_uart_last_write(hal_uart_t h);
 uint8_t hal_mock_uart_get_rx_pin(hal_uart_t h);
 /** @brief Return the current TX pin stored in the handle. */
 uint8_t hal_mock_uart_get_tx_pin(hal_uart_t h);
+
+/** @brief TX observer callback signature for mock UART scripting. */
+typedef void (*hal_mock_uart_write_cb_t)(hal_uart_t h, const char *text, void *user);
+/** @brief Install a callback fired after every write/println; pass NULL to clear. */
+void hal_mock_uart_set_write_callback(hal_uart_t h,
+                                      hal_mock_uart_write_cb_t cb,
+                                      void *user);
 #endif
 
 // ── SPI ───────────────────────────────────────────────────────────────────────

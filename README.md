@@ -57,7 +57,7 @@ Utility-only includes are also available:
 
 - Core HAL domains: GPIO, ADC, PWM, timers, system, synchronization, serial I/O
 - Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM and key-value storage
-- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers
+- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT)
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 
 ## Thread safety (overview)
@@ -81,10 +81,15 @@ src/
   hal/                     # HAL headers + common wrappers + backend dispatch
     impl/
       arduino/             # Arduino/RP2040 backend
+        drivers/           # bundled third-party Arduino drivers (pico compatible)
+          rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
+        frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser, etc)
       .mock/               # deterministic host/test backend
-      drivers/             # bundled third-party, multithread safe Arduino drivers, (pico compatible)
-      frameworks/          # bundled high-level integrations (WireGuard/MQTT/GPS parser, etc)
+      stm32g474/           # STM32G474 backend (host-stub today, hardware impl in progress)
+        drivers/
+          stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
   utils/                   # helper modules and bundled optional utilities
+examples/                 # ready-to-run Arduino sketches
 tests/                     # host unit tests (CMake + Unity)
 vscode-templates/          # ready-to-use VS Code project configurations
   windows/                 # Windows template (Python + Arduino CLI)
@@ -94,103 +99,24 @@ vscode-templates/          # ready-to-use VS Code project configurations
 Detailed per-file layout is maintained in `JaszczurHAL_API.md` (`## Library structure`).
 
 ## Quick start
+See [examples](examples/).
 
-```cpp
-#include <JaszczurHAL.h>
+## Examples
 
-void setup() {
-    hal_debug_init(115200);
-    hal_gpio_set_mode(25, HAL_GPIO_OUTPUT);
-}
+The `examples/` tree contains small, focused Arduino sketches. Each
+example folder is self-contained: it includes its own
+`hal_project_config.h` and `.vscode/` build configuration so it can be
+opened and compiled directly in VS Code.
 
-void loop() {
-    hal_gpio_write(25, true);
-    hal_delay_ms(200);
-    hal_gpio_write(25, false);
-    hal_delay_ms(200);
-}
-```
+Every example folder now has a minimal `.vscode/` task that compiles the
+sketch against the local `JaszczurHAL/src` tree, plus a matching
+`hal_project_config.h` for module flags.
 
-## Debug helper quick example
+### Opening an example in VS Code
 
-For codebases that already use `debugInit()`, `deb(...)`, and module prefixes,
-the utility layer provides a shorthand that replaces manual
-`concatStrings(..., MODULE_NAME, ":")` setup:
-
-```c
-#include <tools_c.h>
-
-void setup(void) {
-  debugInit();
-  setDebugPrefixWithColon("ECU");
-  deb("ready");
-}
-```
-
-`setDebugPrefixWithColon(...)` appends `:` to the provided module name and
-forwards the final prefix to `hal_deb_set_prefix(...)`.
-
-## Soft timer table quick example
-
-```c
-#include <hal/hal_soft_timer.h>
-#include <hal/hal_system.h>
-
-static hal_soft_timer_t timerFast = NULL;
-static hal_soft_timer_t timerSlow = NULL;
-
-static void onFast(void) {
-  // fast periodic work
-}
-
-static void onSlow(void) {
-  // slow periodic work
-}
-
-static const hal_soft_timer_table_entry_t timers[] = {
-  { &timerFast, onFast, 50 },
-  { &timerSlow, onSlow, 1000 }
-};
-
-void setup(void) {
-  bool ok = hal_soft_timer_setup_table(timers,
-                     COUNTOF(timers),
-                     hal_watchdog_feed,
-                     2);
-  if (!ok) {
-    hal_derr("timer table setup failed");
-  }
-}
-
-void loop(void) {
-  (void)hal_soft_timer_tick_table(timers, COUNTOF(timers));
-}
-```
-
-`hal_soft_timer_setup_table(...)` and `hal_soft_timer_tick_table(...)` return `false` for invalid input (`table == NULL` or `count == 0`) and log via `hal_derr(...)`.
-
-## Crypto quick example
-
-```c
-#include <JaszczurHAL.h>
-
-static const uint8_t key[HAL_CHACHA20_KEY_BYTES] = {0};
-static const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES] = {0};
-
-void demo_crypto(void) {
-  const uint8_t msg[] = "hello";
-  uint8_t cipher[sizeof(msg)] = {0};
-  uint8_t plain[sizeof(msg)] = {0};
-  uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES] = {0};
-  char md5_hex[HAL_MD5_HEX_BUF_SIZE] = {0};
-
-  (void)hal_md5_hex(msg, sizeof(msg) - 1u, md5_hex, sizeof(md5_hex));
-  (void)hal_chacha20_poly1305_encrypt(key, nonce, NULL, 0u,
-                                      msg, sizeof(msg), cipher, tag);
-  (void)hal_chacha20_poly1305_decrypt(key, nonce, NULL, 0u,
-                                      cipher, sizeof(msg), tag, plain);
-}
-```
+1. Open the example folder in VS Code: `code examples/01_blink/`
+2. Edit `.vscode/settings.json` if needed (set `arduino.fqbn`, `arduino.uploadPort`)
+3. Press `Ctrl+Shift+1` to build (or run the task **Build**)
 
 ## Module selection (quick)
 
@@ -250,7 +176,7 @@ Detailed suite coverage, mock behavior notes, and testing workflow are in
   - Interactive board/options selector
   - Cortex-Debug integration for live debugging
 
-### Quick Start
+Quick Start:
 
 1. Choose your platform: [Windows](vscode-templates/windows/) or [Linux](vscode-templates/linux/)
 2. Copy the template to your project directory
