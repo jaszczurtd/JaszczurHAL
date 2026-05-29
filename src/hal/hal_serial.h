@@ -44,7 +44,7 @@ extern "C" {
  *        from empty.
  */
 #ifndef HAL_DEBUG_ISR_SLOT_COUNT
-#define HAL_DEBUG_ISR_SLOT_COUNT 16u
+#define HAL_DEBUG_ISR_SLOT_COUNT 64u
 #endif
 
 /**
