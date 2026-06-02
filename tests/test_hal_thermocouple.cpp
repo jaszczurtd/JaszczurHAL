@@ -1,4 +1,5 @@
 #include "utils/unity.h"
+#include "hal/hal_i2c.h"
 #include "hal/hal_thermocouple.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include <math.h>
@@ -14,7 +15,7 @@ static hal_thermocouple_t max;
 static hal_thermocouple_config_t mcp_cfg(void) {
     hal_thermocouple_config_t cfg = {};
     cfg.chip        = HAL_THERMOCOUPLE_CHIP_MCP9600;
-    cfg.bus.i2c     = {4, 5, 400000, 0, 0x67};
+    cfg.bus.i2c     = {4, 5, HAL_I2C_CLOCK_STANDARD_HZ, 0, 0x67};
     return cfg;
 }
 #endif

@@ -22,6 +22,8 @@ install_manifest.txt
 # so keep those tracked:
 !vscode-templates/*/.vscode/
 !vscode-templates/*/.vscode/**
+!examples/*/.vscode/
+!examples/*/.vscode/**
 .idea/
 .codex
 *.swp

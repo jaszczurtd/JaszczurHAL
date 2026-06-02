@@ -57,7 +57,7 @@ Utility-only includes are also available:
 
 - Core HAL domains: GPIO, ADC, PWM, timers, system, synchronization, serial I/O
 - Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM and key-value storage
-- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT)
+- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT, including coarse cell-based location)
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 
 ## Thread safety (overview)
@@ -137,6 +137,15 @@ see:
 
 - `JaszczurHAL_API.md`
 - `src/HAL_FLAGS.txt`
+
+## I2C clock presets
+
+`hal_i2c.h` exposes named clock constants for common bus modes:
+`HAL_I2C_CLOCK_STANDARD_HZ` (100 kHz), `HAL_I2C_CLOCK_FAST_HZ` (400 kHz),
+`HAL_I2C_CLOCK_FAST_PLUS_HZ` (1 MHz), and
+`HAL_I2C_CLOCK_HIGH_SPEED_HZ` (3.4 MHz). Use the faster modes only when the
+controller, wiring, pull-ups, capacitance, and all devices on the bus support
+them; 3.4 MHz High-speed mode is especially target-dependent.
 
 ## Host tests (quick)
 

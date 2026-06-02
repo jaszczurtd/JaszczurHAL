@@ -498,6 +498,10 @@ int     hal_mock_i2c_get_read_byte_lock_depth(void);
 bool    hal_mock_i2c_is_initialized_bus(uint8_t bus);
 /** @brief Return initialized flag for default I2C bus (0 = Wire). */
 bool    hal_mock_i2c_is_initialized(void);
+/** @brief Return the last configured I2C clock for selected I2C mock bus. */
+uint32_t hal_mock_i2c_get_clock_hz_bus(uint8_t bus);
+/** @brief Return the last configured I2C clock for default I2C bus. */
+uint32_t hal_mock_i2c_get_clock_hz(void);
 /** @brief Control the value returned by hal_i2c_is_busy() (default: false). */
 void    hal_mock_i2c_set_busy(bool busy);
 /** @brief Control busy state for selected I2C mock bus (0 = Wire, 1 = Wire1). */

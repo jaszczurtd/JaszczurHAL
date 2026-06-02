@@ -4,6 +4,64 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_math — generic decimal rounding helper
+
+- Added `roundToN(float v, int n)` to `hal_math.h`
+  (with backward-compatible alias `hal_roundToN(v, n)`).
+- Behavior: `n < 0` is treated as `0`, `n > 6` is clamped to `6`,
+  and half values are rounded away from zero.
+- Added unit tests in `test_hal_system` for signed values and
+  precision clamping.
+
+### hal_simcom_a76xx — cellular location (LBS) API
+
+- New public type `hal_simcom_a76xx_cell_location_t` and helper
+  `hal_simcom_a76xx_get_cell_location()`.
+- The helper issues `AT+CLBS=1,1`, parses `+CLBS: 0,<lat>,<lon>,<accuracy>`,
+  and returns coarse cell-based coordinates (non-GNSS).
+- Parser accepts both modem variants: `+CLBS: 0,<lat>,<lon>,<accuracy>`
+  and `+CLBS: 0,<lat>,<lon>` (with `accuracy_m = -1`).
+- The same API now returns HAL-estimated speed in `speed_kmh` (computed
+  from consecutive fixes, with basic outlier filtering and smoothing;
+  `-1` when unavailable).
+- Added unit tests in `test_hal_simcom_a76xx` covering success,
+  non-zero modem status parsing, and invalid arguments.
+
+### hal_simcom_a76xx — `+CLBS` parser tolerates fragmented URC
+
+- **Bug fix.** Some A7670 firmware builds split the `+CLBS:` URC across
+  multiple UART writes, and the CRLF boundary can land in the middle of
+  a numeric field — e.g. the line is delivered as
+  `+CLBS: 0,50.2743\r\n72,19.124077,550\r\n` instead of
+  `+CLBS: 0,50.274372,19.124077,550\r\n`. The previous parser bailed
+  on the embedded CRLF and the helper returned `HAL_SIMCOM_A76XX_PARSE`
+  (callers saw `cell_valid=0, cell_error=5`, and `speed_kmh` stayed
+  `-1` because no successive fix was ever produced).
+- The parser now stitches contiguous fragments by inspecting the
+  character that follows the embedded CRLF: if it continues a numeric
+  field (digit / `.` / `,` / sign / whitespace) the CRLF is dropped;
+  otherwise the CRLF is treated as the real line terminator. Truncated
+  payloads (no terminator seen at all) still return PARSE so callers
+  do not consume half-received coordinates.
+- Added regression test
+  `test_get_cell_location_payload_split_mid_number`.
+
+### hal_modem_at — new `hal_modem_at_listen_more()`
+
+- Same contract as `hal_modem_at_listen_until()` but does **not** call
+  `reset_rx()` before draining. Lets callers preserve the partial
+  response left in the scratch buffer by a preceding
+  `hal_modem_at_send()` / `_send_with_data()` and append additional
+  bytes that arrive afterwards.
+- Needed for SimCom commands like `AT+CLBS=1,1` where the trailing
+  `\r\nOK\r\n` arrives **before** the matched `+CLBS:` URC payload.
+  In that timing the tail-grace window inside `hal_modem_at_send()`
+  exits as soon as `+CLBS:` appears, leaving the rest of the line in
+  flight; the previous `listen_until()` fallback would `reset_rx()`
+  and discard the already-received marker + leading digits.
+- `hal_simcom_a76xx_get_cell_location()` now uses `_listen_more()` on
+  the parse-retry path so the stitching parser sees the full URC line.
+
 ### hal_modem_at — `expected` no longer races early "OK"
 
 - **Bug fix.** When a caller passed an `expected` substring to

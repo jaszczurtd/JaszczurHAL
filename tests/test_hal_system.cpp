@@ -86,6 +86,16 @@ void test_map_equal_in_range_returns_out_min(void) {
     TEST_ASSERT_EQUAL_INT32(7, hal_map(5, 3, 3, 7, 99));
 }
 
+void test_round_to_n_two_decimals(void) {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.35f, hal_roundToN(12.345f, 2));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -12.35f, hal_roundToN(-12.345f, 2));
+}
+
+void test_round_to_n_clamps_precision_and_negative_n(void) {
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 12.0f, hal_roundToN(12.49f, -5));
+    TEST_ASSERT_FLOAT_WITHIN(0.000001f, 1.123457f, hal_roundToN(1.1234567f, 9));
+}
+
 void test_nonull_macro_accepts_non_null(void) {
     /* NONULL must not branch when the pointer is valid. */
     int dummy = 42;
@@ -204,6 +214,8 @@ int main(void) {
     RUN_TEST(test_constrain_accepts_float);
     RUN_TEST(test_map_maps_integer_ranges);
     RUN_TEST(test_map_equal_in_range_returns_out_min);
+    RUN_TEST(test_round_to_n_two_decimals);
+    RUN_TEST(test_round_to_n_clamps_precision_and_negative_n);
     RUN_TEST(test_nonull_macro_accepts_non_null);
     RUN_TEST(test_nonull_macro_jumps_on_null);
     RUN_TEST(test_u32_to_bytes_be_converts_correctly);

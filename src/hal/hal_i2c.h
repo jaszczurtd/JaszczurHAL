@@ -43,12 +43,27 @@ extern "C" {
 #include <stdint.h>
 #include <stddef.h>
 
+/** @brief I2C standard-mode clock: 100 kHz. */
+#define HAL_I2C_CLOCK_STANDARD_HZ 100000UL
+
+/** @brief I2C fast-mode clock: 400 kHz. */
+#define HAL_I2C_CLOCK_FAST_HZ 400000UL
+
+/** @brief I2C fast-mode plus clock: 1 MHz. */
+#define HAL_I2C_CLOCK_FAST_PLUS_HZ 1000000UL
+
+/** @brief I2C high-speed mode clock: 3.4 MHz. */
+#define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL
+
 /**
  * @brief Configure I2C pins, start the bus in controller (master) mode,
  *        and initialise the internal thread-safety mutex.
  * @param sda_pin  SDA pin number.
  * @param scl_pin  SCL pin number.
- * @param clock_hz Bus clock frequency in Hz (e.g. 100000, 400000).
+ * @param clock_hz Bus clock frequency in Hz, e.g.
+ *                 HAL_I2C_CLOCK_STANDARD_HZ, HAL_I2C_CLOCK_FAST_HZ,
+ *                 HAL_I2C_CLOCK_FAST_PLUS_HZ, or
+ *                 HAL_I2C_CLOCK_HIGH_SPEED_HZ.
  */
 void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 
@@ -60,6 +75,19 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
  * @param clock_hz Bus clock frequency in Hz.
  */
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
+
+/**
+ * @brief Change the clock of the default I2C controller after init.
+ * @param clock_hz Bus clock frequency in Hz.
+ */
+void hal_i2c_set_clock(uint32_t clock_hz);
+
+/**
+ * @brief Change the clock of the selected I2C controller after init.
+ * @param bus      I2C controller index (0 = Wire, 1 = Wire1).
+ * @param clock_hz Bus clock frequency in Hz.
+ */
+void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
 
 /**
  * @brief Stop the I2C bus.

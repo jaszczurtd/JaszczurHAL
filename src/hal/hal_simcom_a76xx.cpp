@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 /* Forward decl from hal_time / hal_system. */
 extern uint32_t hal_millis(void);
@@ -72,6 +73,12 @@ struct hal_simcom_a76xx_impl_s {
     void *msg_cb_user;
     int   dispatched_in_poll;
 
+    bool     cell_prev_fix_valid;
+    float    cell_prev_lat;
+    float    cell_prev_lon;
+    uint32_t cell_prev_fix_ms;
+    float    cell_speed_kmh;
+
     bool in_use;
 };
 
@@ -89,6 +96,190 @@ static hal_simcom_a76xx_result_t map_at(hal_modem_at_result_t r) {
         case HAL_MODEM_AT_BUSY:        return HAL_SIMCOM_A76XX_NOT_READY;
         default:                       return HAL_SIMCOM_A76XX_ERROR;
     }
+}
+
+/* Copy the +CLBS payload into `out`. Some modem firmwares fragment
+   the URC across UART writes so a CRLF can land in the middle of a
+   numeric field (e.g. the line shows up as
+   "+CLBS: 0,50.2743\r\n72,19.124077,550"). When we encounter a CRLF
+   sequence, peek at what follows: if it is another numeric/punctuation
+   character belonging to the same payload, drop the CRLF and keep
+   stitching; otherwise stop — that CRLF terminates the URC line.
+   Returns true when a true line terminator was reached (so the caller
+   knows the payload is complete), false when the buffer ended before
+   a terminator was seen (possible truncation). */
+static bool clbs_collapse_line(const char *src, char *out, size_t out_size,
+                               size_t *out_len) {
+    if (out_len) *out_len = 0;
+    if (!src || !out || out_size == 0) return false;
+
+    size_t w = 0;
+    bool terminated = false;
+    const char *p = src;
+
+    while (*p && w + 1 < out_size) {
+        if (*p == '\r' || *p == '\n') {
+            const char *q = p;
+            while (*q == '\r' || *q == '\n') ++q;
+            char c = *q;
+            bool continuation = (c == ',' || c == '.' || c == '+' ||
+                                 c == '-' || c == ' ' || c == '\t' ||
+                                 (c >= '0' && c <= '9'));
+            /* '+' is ambiguous: it can be a sign in the next field, or
+               the start of a new URC like "+CMQTTPUB:". If followed by
+               a letter, it's a URC; if followed by a digit, sign of a
+               number. */
+            if (c == '+') {
+                continuation = (q[1] >= '0' && q[1] <= '9');
+            }
+            if (!continuation) {
+                terminated = true;
+                break;
+            }
+            p = q;
+            continue;
+        }
+        out[w++] = *p++;
+    }
+    out[w] = '\0';
+    if (out_len) *out_len = w;
+    return terminated;
+}
+
+static bool parse_clbs_from_response(const char *resp,
+                                     int *status,
+                                     float *lat,
+                                     float *lon,
+                                     int *acc) {
+    if (!resp || !status || !lat || !lon || !acc) return false;
+
+    /* Parse from the LAST occurrence so a stale, partial line in the
+       buffer does not shadow a fresh, complete one. */
+    const char *p = NULL;
+    for (const char *cur = resp;;) {
+        const char *hit = strstr(cur, "+CLBS:");
+        if (!hit) break;
+        p = hit;
+        cur = hit + 6;
+    }
+    if (!p) return false;
+
+    char buf[96];
+    size_t buf_len = 0;
+    bool terminated = clbs_collapse_line(p, buf, sizeof(buf), &buf_len);
+    if (!terminated) return false; /* incomplete fragment — likely truncated */
+
+    int consumed = 0;
+    int st = -1;
+    float la = 0.0f;
+    float lo = 0.0f;
+    int ac = -1;
+
+    int n = sscanf(buf, "+CLBS: %d,%f,%f,%d%n", &st, &la, &lo, &ac, &consumed);
+    if (n != 4) {
+        consumed = 0;
+        n = sscanf(buf, "+CLBS: %d, %f, %f, %d%n", &st, &la, &lo, &ac, &consumed);
+    }
+    if (n == 4 && (size_t)consumed == buf_len) {
+        *status = st;
+        *lat = la;
+        *lon = lo;
+        *acc = ac;
+        return true;
+    }
+
+    consumed = 0;
+    n = sscanf(buf, "+CLBS: %d,%f,%f%n", &st, &la, &lo, &consumed);
+    if (n != 3) {
+        consumed = 0;
+        n = sscanf(buf, "+CLBS: %d, %f, %f%n", &st, &la, &lo, &consumed);
+    }
+    if (n == 3 && (size_t)consumed == buf_len) {
+        *status = st;
+        *lat = la;
+        *lon = lo;
+        *acc = -1;
+        return true;
+    }
+
+    /* Status-only response (modem error variants like "+CLBS: 5"). */
+    consumed = 0;
+    n = sscanf(buf, "+CLBS: %d%n", &st, &consumed);
+    if (n == 1 && (size_t)consumed == buf_len) {
+        *status = st;
+        *lat = 0.0f;
+        *lon = 0.0f;
+        *acc = -1;
+        return true;
+    }
+
+    return false;
+}
+
+static void update_cell_speed_state(hal_simcom_a76xx_t h,
+                                    float lat,
+                                    float lon,
+                                    uint32_t now_ms,
+                                    float *out_speed_kmh) {
+    const float max_speed_kmh = 220.0f;
+    const float ema_alpha = 0.35f;
+
+    if (!h || !out_speed_kmh) return;
+
+    if (!h->cell_prev_fix_valid) {
+        h->cell_prev_fix_valid = true;
+        h->cell_prev_lat = lat;
+        h->cell_prev_lon = lon;
+        h->cell_prev_fix_ms = now_ms;
+        h->cell_speed_kmh = -1.0f;
+        *out_speed_kmh = -1.0f;
+        return;
+    }
+
+    uint32_t dt_ms = now_ms - h->cell_prev_fix_ms;
+    if (dt_ms == 0u) {
+        *out_speed_kmh = h->cell_speed_kmh;
+        return;
+    }
+
+    if (dt_ms < 3000u || dt_ms > 120000u) {
+        h->cell_prev_lat = lat;
+        h->cell_prev_lon = lon;
+        h->cell_prev_fix_ms = now_ms;
+        *out_speed_kmh = h->cell_speed_kmh;
+        return;
+    }
+
+    const float meters_per_deg = 111320.0f;
+    float mean_lat_rad = ((lat + h->cell_prev_lat) * 0.5f) * 0.01745329252f;
+    float dlat_m = (lat - h->cell_prev_lat) * meters_per_deg;
+    float dlon_m = (lon - h->cell_prev_lon) * meters_per_deg * cosf(mean_lat_rad);
+    float dist_m = sqrtf(dlat_m * dlat_m + dlon_m * dlon_m);
+
+    if (dist_m < 5.0f) {
+        dist_m = 0.0f;
+    }
+
+    float speed_mps = dist_m / ((float)dt_ms / 1000.0f);
+    float raw_speed_kmh = speed_mps * 3.6f;
+
+    if (raw_speed_kmh > max_speed_kmh) {
+        raw_speed_kmh = (h->cell_speed_kmh >= 0.0f) ? h->cell_speed_kmh : -1.0f;
+    }
+
+    if (raw_speed_kmh >= 0.0f) {
+        if (h->cell_speed_kmh < 0.0f) {
+            h->cell_speed_kmh = raw_speed_kmh;
+        } else {
+            h->cell_speed_kmh = (ema_alpha * raw_speed_kmh)
+                              + ((1.0f - ema_alpha) * h->cell_speed_kmh);
+        }
+    }
+
+    h->cell_prev_lat = lat;
+    h->cell_prev_lon = lon;
+    h->cell_prev_fix_ms = now_ms;
+    *out_speed_kmh = h->cell_speed_kmh;
 }
 
 /* ── MQTT-RX URC handlers ────────────────────────────────────────────── */
@@ -426,6 +617,51 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a
                       "20%02d-%02d-%02dT%02d:%02d:%02d%c%02d:%02d",
                       yy, mo, dd, hh, mm, ss, tz_sign, tz_h, tz_m);
     if (wn <= 0 || (size_t)wn >= out_size) return HAL_SIMCOM_A76XX_INVALID_ARG;
+    return HAL_SIMCOM_A76XX_OK;
+}
+
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(hal_simcom_a76xx_t h,
+                                                             hal_simcom_a76xx_cell_location_t *out_location,
+                                                             uint32_t timeout_ms) {
+    if (!h || !out_location) return HAL_SIMCOM_A76XX_INVALID_ARG;
+
+    hal_modem_at_result_t r = hal_modem_at_send(h->at,
+                                                "AT+CLBS=1,1",
+                                                "+CLBS:",
+                                                timeout_ms ? timeout_ms : 12000u);
+    if (r != HAL_MODEM_AT_OK) return map_at(r);
+
+    const char *resp = hal_modem_at_last_response(h->at);
+    if (!resp) return HAL_SIMCOM_A76XX_PARSE;
+
+    int status = -1;
+    float lat = 0.0f;
+    float lon = 0.0f;
+    int acc = -1;
+
+    bool parsed = parse_clbs_from_response(resp, &status, &lat, &lon, &acc);
+
+    if (!parsed) {
+        /* Some A7670 firmware builds split the +CLBS URC across multiple
+           UART writes, and `AT+CLBS=1,1` is also unusual in that the
+           trailing "\r\nOK\r\n" arrives BEFORE the "+CLBS:" payload.
+           That means the at_send() tail-grace window observes the OK
+           that came from earlier and returns while only the head of the
+           URC is in the buffer. Continue draining WITHOUT resetting so
+           the prefix (including the "+CLBS:" marker and any partial
+           digits) is preserved and the remaining bytes are appended. */
+        (void)hal_modem_at_listen_more(h->at, NULL, NULL, 1500u);
+        resp = hal_modem_at_last_response(h->at);
+        if (!resp) return HAL_SIMCOM_A76XX_PARSE;
+        parsed = parse_clbs_from_response(resp, &status, &lat, &lon, &acc);
+    }
+
+    if (!parsed || status != 0) return HAL_SIMCOM_A76XX_PARSE;
+
+    out_location->latitude_deg = lat;
+    out_location->longitude_deg = lon;
+    out_location->accuracy_m = acc;
+    update_cell_speed_state(h, lat, lon, hal_millis(), &out_location->speed_kmh);
     return HAL_SIMCOM_A76XX_OK;
 }
 

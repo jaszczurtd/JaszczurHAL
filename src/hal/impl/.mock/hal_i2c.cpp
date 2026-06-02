@@ -13,6 +13,7 @@ typedef struct {
     uint8_t  cur_addr;
     bool     busy;
     bool     initialized;
+    uint32_t clock_hz;
     int      lock_depth;
     int      read_byte_lock_depth_at_read;
     uint32_t transaction_count;
@@ -35,14 +36,23 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
 
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
-    (void)sda_pin; (void)scl_pin; (void)clock_hz;
+    (void)sda_pin; (void)scl_pin;
     st->initialized = true;
+    st->clock_hz = clock_hz;
     st->rx_len = 0;
     st->rx_pos = 0;
     st->lock_depth = 0;
     st->read_byte_lock_depth_at_read = 0;
     st->transaction_count = 0;
     st->bus_clear_count = 0;
+}
+
+void hal_i2c_set_clock(uint32_t clock_hz) {
+    hal_i2c_set_clock_bus(0, clock_hz);
+}
+
+void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
+    i2c_state(bus)->clock_hz = clock_hz;
 }
 
 void hal_i2c_deinit(void) {
@@ -246,6 +256,14 @@ bool hal_mock_i2c_is_initialized_bus(uint8_t bus) {
 
 bool hal_mock_i2c_is_initialized(void) {
     return hal_mock_i2c_is_initialized_bus(0);
+}
+
+uint32_t hal_mock_i2c_get_clock_hz_bus(uint8_t bus) {
+    return i2c_state(bus)->clock_hz;
+}
+
+uint32_t hal_mock_i2c_get_clock_hz(void) {
+    return hal_mock_i2c_get_clock_hz_bus(0);
 }
 
 bool hal_i2c_is_busy(uint8_t address) {

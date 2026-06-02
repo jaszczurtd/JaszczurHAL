@@ -21,7 +21,7 @@ Module enable flags
 
 Connectivity
   HAL_ENABLE_WIFI
-    WiFi (arduino-pico, requires PICO_W to be useful at runtime).
+    WiFi (arduino-pico; use a WiFi-capable board/FQBN such as rpipicow).
   HAL_ENABLE_TIME
     NTP / system time. Propagates: WIFI.
   HAL_ENABLE_MQTT
