@@ -224,6 +224,31 @@ hal_modem_at_result_t hal_modem_at_listen_until(hal_modem_at_t h,
                                                 uint32_t total_timeout_ms);
 
 /**
+ * @brief Same as hal_modem_at_listen_until() but does NOT discard the
+ *        existing scratch buffer first.
+ *
+ * Use this when the previous call (typically hal_modem_at_send()) returned
+ * with a partial response in the buffer — for example, an `expected`
+ * substring matched in the middle of a URC line whose payload was split
+ * across UART writes — and you need to keep collecting the tail of that
+ * line. Bytes already in the buffer are preserved; new bytes are appended.
+ * If @p ready is non-NULL it is invoked once on the existing content
+ * before any new bytes are drained, so a predicate that is already
+ * satisfied returns immediately after the configured quiet window.
+ *
+ * @param h                 Handle.
+ * @param ready             Optional predicate. May be NULL.
+ * @param user              Opaque pointer passed to @p ready.
+ * @param total_timeout_ms  Hard upper bound on the total wait.
+ * @return HAL_MODEM_AT_OK when the predicate fired or the stream went
+ *         quiet, HAL_MODEM_AT_TIMEOUT otherwise.
+ */
+hal_modem_at_result_t hal_modem_at_listen_more(hal_modem_at_t h,
+                                               hal_modem_at_ready_cb_t ready,
+                                               void *user,
+                                               uint32_t total_timeout_ms);
+
+/**
  * @brief Pointer to the NUL-terminated buffer holding the response of the
  *        most recent successful or failed operation.
  *

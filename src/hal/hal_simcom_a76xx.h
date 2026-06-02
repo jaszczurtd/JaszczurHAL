@@ -118,6 +118,20 @@ typedef struct {
 } hal_simcom_a76xx_apn_t;
 
 /**
+ * @brief Coarse cellular location resolved by the modem LBS service.
+ *
+ * Coordinates are approximate and derived from serving-cell context
+ * (not GNSS). Expected accuracy heavily depends on network density and
+ * operator support.
+ */
+typedef struct {
+    float latitude_deg;   /**< Latitude in decimal degrees. */
+    float longitude_deg;  /**< Longitude in decimal degrees. */
+    int   accuracy_m;     /**< Estimated radius in meters, or -1 when omitted by modem reply. */
+    float speed_kmh;      /**< HAL-estimated speed from consecutive fixes; -1 when unavailable. */
+} hal_simcom_a76xx_cell_location_t;
+
+/**
  * @brief SSL/TLS profile for MQTT connections.
  *
  * Applied via AT+CSSLCFG before AT+CMQTTSSLCFG.
@@ -284,6 +298,28 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
 hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a76xx_t h,
                                                                      char *out,
                                                                      size_t out_size);
+
+/**
+ * @brief Query coarse cellular location (LBS) via AT+CLBS.
+ *
+ * Sends @c AT+CLBS=1,1 and parses a successful @c +CLBS line to fill
+ * @p out_location.
+ *
+ * Typical successful modem response shape:
+ * @code
+ * +CLBS: 0,<lat>,<lon>,<accuracy>
+ * @endcode
+ *
+ * @param h            Handle.
+ * @param out_location Destination for parsed location data.
+ * @param timeout_ms   Command timeout in ms (0 = driver default).
+ * @return HAL_SIMCOM_A76XX_OK on success,
+ *         HAL_SIMCOM_A76XX_PARSE when reply is present but malformed,
+ *         or a mapped modem error/timeout result otherwise.
+ */
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(hal_simcom_a76xx_t h,
+                                                             hal_simcom_a76xx_cell_location_t *out_location,
+                                                             uint32_t timeout_ms);
 
 /**
  * @brief Return the underlying AT engine handle for advanced/raw use.

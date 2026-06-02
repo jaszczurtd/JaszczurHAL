@@ -47,6 +47,18 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     wire->begin();
 }
 
+void hal_i2c_set_clock(uint32_t clock_hz) {
+    hal_i2c_set_clock_bus(0, clock_hz);
+}
+
+void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
+    uint8_t idx = i2c_bus_index(bus);
+    i2c_ensure_mutex(idx);
+    hal_mutex_lock(s_i2c_mutex[idx]);
+    i2c_bus_wire(idx)->setClock(clock_hz);
+    hal_mutex_unlock(s_i2c_mutex[idx]);
+}
+
 void hal_i2c_deinit(void) {
     hal_i2c_deinit_bus(0);
 }

@@ -66,6 +66,28 @@ void test_bus1_api_independent_state(void) {
     TEST_ASSERT_FALSE(hal_i2c_is_busy_bus(1, 0x52));
 }
 
+void test_init_records_clock_per_bus(void) {
+    TEST_ASSERT_EQUAL_UINT32(400000u, hal_mock_i2c_get_clock_hz());
+
+    hal_i2c_init_bus(1, 6, 7, 100000);
+    TEST_ASSERT_EQUAL_UINT32(100000u, hal_mock_i2c_get_clock_hz_bus(1));
+    TEST_ASSERT_EQUAL_UINT32(400000u, hal_mock_i2c_get_clock_hz_bus(0));
+}
+
+void test_set_clock_updates_default_bus(void) {
+    hal_i2c_set_clock(HAL_I2C_CLOCK_FAST_PLUS_HZ);
+    TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_PLUS_HZ, hal_mock_i2c_get_clock_hz());
+}
+
+void test_set_clock_bus_keeps_buses_independent(void) {
+    hal_i2c_init_bus(1, 6, 7, HAL_I2C_CLOCK_STANDARD_HZ);
+
+    hal_i2c_set_clock_bus(1, HAL_I2C_CLOCK_HIGH_SPEED_HZ);
+
+    TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_HZ, hal_mock_i2c_get_clock_hz_bus(0));
+    TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_HIGH_SPEED_HZ, hal_mock_i2c_get_clock_hz_bus(1));
+}
+
 void test_manual_lock_unlock_tracks_depth_per_bus(void) {
     TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(0));
     TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(1));
@@ -330,6 +352,9 @@ int main(void) {
     RUN_TEST(test_write_and_end_transmission_return_success);
     RUN_TEST(test_is_busy_reflects_mock_state);
     RUN_TEST(test_bus1_api_independent_state);
+    RUN_TEST(test_init_records_clock_per_bus);
+    RUN_TEST(test_set_clock_updates_default_bus);
+    RUN_TEST(test_set_clock_bus_keeps_buses_independent);
     RUN_TEST(test_manual_lock_unlock_tracks_depth_per_bus);
     RUN_TEST(test_transmission_calls_balance_lock_depth);
     RUN_TEST(test_request_from_balances_lock_depth);

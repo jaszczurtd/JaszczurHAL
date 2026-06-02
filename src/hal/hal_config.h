@@ -45,7 +45,7 @@
  *   #define SD_LOGGER
  *   #define I2C_SCANNER
  *   #define RESET_EEPROM
- *   #define PICO_W
+ *   #define PICO_W     // legacy tools helpers only; HAL WiFi uses HAL_ENABLE_WIFI
  *   #define FREE_RTOS
  */
 
@@ -76,7 +76,8 @@
    Supported module flags:
 
      Connectivity:
-       HAL_ENABLE_WIFI          - WiFi (arduino-pico, requires PICO_W).
+       HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable
+                                  board/FQBN such as rpipicow at runtime).
        HAL_ENABLE_TIME          - NTP / system time (propagates: WIFI).
        HAL_ENABLE_MQTT          - PubSubClient wrapper (propagates: WIFI).
        HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).

@@ -1,0 +1,8 @@
+{
+    "arduino.fqbn": "rp2040:rp2040:rpipicow",
+    "arduino.uploadPort": "/dev/ttyACM0",
+    "arduino.sketchbookPath": "",
+    "arduino.cliPath": "",
+    "arduino.verbose": false,
+    "build.werror": false
+}

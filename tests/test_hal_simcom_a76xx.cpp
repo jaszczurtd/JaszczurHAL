@@ -260,6 +260,95 @@ void test_get_network_time_buffer_too_small(void) {
                                                                 out, sizeof(out)));
 }
 
+/* ── Cellular location (LBS) ─────────────────────────────────────────── */
+
+void test_get_cell_location_happy_path(void) {
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 0,52.2297,21.0122,1200\r\n\r\nOK\r\n");
+
+    hal_mock_set_millis(10000);
+
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc, 0));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 52.2297f, loc.latitude_deg);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 21.0122f, loc.longitude_deg);
+    TEST_ASSERT_EQUAL_INT(1200, loc.accuracy_m);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -1.0f, loc.speed_kmh);
+}
+
+void test_get_cell_location_happy_path_without_accuracy(void) {
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 0,50.274372,19.124077\r\n\r\nOK\r\n");
+
+    hal_mock_set_millis(10000);
+
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc, 0));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 50.274372f, loc.latitude_deg);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 19.124077f, loc.longitude_deg);
+    TEST_ASSERT_EQUAL_INT(-1, loc.accuracy_m);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -1.0f, loc.speed_kmh);
+}
+
+void test_get_cell_location_second_fix_reports_speed(void) {
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 0,50.274372,19.124077,550\r\n\r\nOK\r\n");
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 0,50.274372,19.125077,550\r\n\r\nOK\r\n");
+
+    hal_simcom_a76xx_cell_location_t loc1 = {0};
+    hal_simcom_a76xx_cell_location_t loc2 = {0};
+
+    hal_mock_set_millis(10000);
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc1, 0));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, -1.0f, loc1.speed_kmh);
+
+    hal_mock_set_millis(30000);
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc2, 0));
+    TEST_ASSERT_TRUE(loc2.speed_kmh > 0.0f);
+}
+
+void test_get_cell_location_parse_fail_truncated_lon(void) {
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 0,50.274372,19.124");
+
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_PARSE,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc, 0));
+}
+
+void test_get_cell_location_parse_fail_nonzero_status(void) {
+    script_push("AT+CLBS=1,1", "\r\n+CLBS: 2,0.0000,0.0000,0\r\n\r\nOK\r\n");
+
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_PARSE,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc, 0));
+}
+
+void test_get_cell_location_payload_split_mid_number(void) {
+    /* Real-world capture: modem fragments the URC across UART writes
+       and a CRLF lands in the middle of the latitude. Without the
+       fragment-stitching parser the call would return PARSE. */
+    script_push("AT+CLBS=1,1",
+                "\r\nOK\r\n+CLBS: 0,50.2743\r\n72,19.124077,550\r\n");
+
+    hal_mock_set_millis(10000);
+
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                      hal_simcom_a76xx_get_cell_location(s_modem, &loc, 0));
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 50.274372f, loc.latitude_deg);
+    TEST_ASSERT_FLOAT_WITHIN(0.0001f, 19.124077f, loc.longitude_deg);
+    TEST_ASSERT_EQUAL_INT(550, loc.accuracy_m);
+}
+
+void test_get_cell_location_invalid_args(void) {
+    hal_simcom_a76xx_cell_location_t loc = {0};
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                      hal_simcom_a76xx_get_cell_location(NULL, &loc, 0));
+    TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_INVALID_ARG,
+                      hal_simcom_a76xx_get_cell_location(s_modem, NULL, 0));
+}
+
 /* ── MQTT connect / disconnect ────────────────────────────────────────── */
 
 static void script_mqtt_connect_plain(int ci) {
@@ -515,6 +604,14 @@ int main(void) {
     RUN_TEST(test_get_network_time_negative_tz);
     RUN_TEST(test_get_network_time_parse_fail);
     RUN_TEST(test_get_network_time_buffer_too_small);
+
+    RUN_TEST(test_get_cell_location_happy_path);
+    RUN_TEST(test_get_cell_location_happy_path_without_accuracy);
+    RUN_TEST(test_get_cell_location_second_fix_reports_speed);
+    RUN_TEST(test_get_cell_location_parse_fail_truncated_lon);
+    RUN_TEST(test_get_cell_location_parse_fail_nonzero_status);
+    RUN_TEST(test_get_cell_location_payload_split_mid_number);
+    RUN_TEST(test_get_cell_location_invalid_args);
 
     RUN_TEST(test_mqtt_connect_happy_path);
     RUN_TEST(test_mqtt_connect_invalid_args);

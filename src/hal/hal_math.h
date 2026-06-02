@@ -36,3 +36,35 @@
     ((in_max) == (in_min) ? (out_min) : \
      (((x) - (in_min)) * ((out_max) - (out_min)) / ((in_max) - (in_min)) + (out_min)))
 #endif
+
+/**
+ * @brief Round a floating-point value to @p n decimal places.
+ *
+ * Rules:
+ * - n < 0 is treated as 0.
+ * - n > 6 is clamped to 6 to avoid excessive scaling.
+ * - Half values are rounded away from zero.
+ */
+static inline float roundToN(float v, int n) {
+    if (n < 0) {
+        n = 0;
+    } else if (n > 6) {
+        n = 6;
+    }
+
+    float scale = 1.0f;
+    for (int i = 0; i < n; ++i) {
+        scale *= 10.0f;
+    }
+
+    float scaled = v * scale;
+    long rounded = (scaled >= 0.0f)
+        ? (long)(scaled + 0.5f)
+        : (long)(scaled - 0.5f);
+
+    return ((float)rounded) / scale;
+}
+
+#ifndef hal_roundToN
+#define hal_roundToN(v, n) roundToN((v), (n))
+#endif

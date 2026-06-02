@@ -1,4 +1,5 @@
 #include "utils/unity.h"
+#include "hal/hal_i2c.h"
 #include "hal/hal_rtc.h"
 #include "hal/impl/.mock/hal_mock.h"
 
@@ -11,7 +12,7 @@ static hal_rtc_config_t default_cfg(void) {
     cfg.chip = HAL_RTC_CHIP_PCF8563;
     cfg.bus.i2c.sda_pin = 4;
     cfg.bus.i2c.scl_pin = 5;
-    cfg.bus.i2c.clock_hz = 400000;
+    cfg.bus.i2c.clock_hz = HAL_I2C_CLOCK_FAST_HZ;
     cfg.bus.i2c.i2c_bus = 0;
     cfg.bus.i2c.i2c_addr = 0;
     return cfg;

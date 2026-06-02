@@ -1817,9 +1817,17 @@ void hal_spi_unlock(uint8_t bus);
 ```c
 #include <hal/hal_i2c.h>
 
+// Common I2C clock constants:
+#define HAL_I2C_CLOCK_STANDARD_HZ    100000UL   // Standard-mode, 100 kHz
+#define HAL_I2C_CLOCK_FAST_HZ        400000UL   // Fast-mode, 400 kHz
+#define HAL_I2C_CLOCK_FAST_PLUS_HZ  1000000UL   // Fast-mode Plus, 1 MHz
+#define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL   // High-speed mode, 3.4 MHz
+
 // Init bus, set clock, start Wire/Wire1 (mutex is lazy-initialized on use)
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=Wire, 1=Wire1
+void    hal_i2c_set_clock(uint32_t clock_hz);
+void    hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
 void    hal_i2c_deinit(void);
 void    hal_i2c_deinit_bus(uint8_t bus);
 
@@ -1882,7 +1890,23 @@ void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 
 **Init behavior:** The I2C mutex is created lazily on first lock/transfer call.
 `hal_i2c_init*()` configures SDA/SCL, clock and starts `Wire`/`Wire1`, and should
-still be called during setup before normal I2C traffic.
+still be called during setup before normal I2C traffic. Use
+`hal_i2c_set_clock()` / `hal_i2c_set_clock_bus()` to retune an already
+configured bus while keeping the change inside the HAL bus mutex.
+
+**Clock modes:** The named clock constants map to I2C-bus specification modes:
+Standard-mode (100 kHz), Fast-mode (400 kHz), Fast-mode Plus / Fm+ (1 MHz),
+and High-speed mode / Hs-mode (3.4 MHz). 1 MHz and 3.4 MHz are real-world
+use cases: Fm+ is common for faster local board-level peripherals and bus
+buffers, while Hs-mode appears in high-rate sensors such as some Bosch
+environmental sensors and ST motion sensors. Always check the controller,
+board routing, pull-ups, bus capacitance, and every device datasheet before
+selecting these speeds. In particular, Hs-mode has protocol/timing requirements
+beyond simply writing a larger clock value, so backend/controller support must
+be verified on the target platform.
+
+**Reference:** NXP UM10204, "I2C-bus specification and user manual", defines
+Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
 **impl/.mock:** ring buffer; injectable via mock helpers. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
@@ -2207,7 +2231,7 @@ the application watchdog alive across long modem bring-up sequences.
 High-level driver for SimCom A76xx-family modems (A7670E/SA/G, A7672E/S,
 A7608, ...). Built on top of `hal_modem_at`. Provides power control,
 boot synchronisation, SIM/network bring-up, PDP attach, network-time
-retrieval, and a full MQTT client (**publish and subscribe**) on top of
+retrieval, coarse cellular location retrieval (LBS), and a full MQTT client (**publish and subscribe**) on top of
 the `CMQTT*` command family.
 
 ```c
@@ -2237,6 +2261,13 @@ typedef struct {
     const char *user;      // may be NULL
     const char *password;  // may be NULL
 } hal_simcom_a76xx_apn_t;
+
+typedef struct {
+  float latitude_deg;
+  float longitude_deg;
+  int   accuracy_m;   // -1 when modem reply omits accuracy
+  float speed_kmh;    // HAL-estimated from consecutive fixes, -1 when unavailable
+} hal_simcom_a76xx_cell_location_t;
 
 typedef struct {
     bool        enabled;
@@ -2306,6 +2337,9 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
 hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a76xx_t h,
                                                                     char *out,
                                                                     size_t out_size);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(hal_simcom_a76xx_t h,
+                                                             hal_simcom_a76xx_cell_location_t *out_location,
+                                                             uint32_t timeout_ms);
 
 /* MQTT */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
@@ -2341,6 +2375,25 @@ a single `hal_simcom_a76xx_mqtt_message_cb_t` invocation from inside
 
 **Thread safety:** every handle serialises on the underlying
 `hal_modem_at` mutex. Safe to call from multiple threads/cores.
+
+---
+
+## `hal_math` - Lightweight numeric helpers
+
+`hal_math.h` provides platform-independent helpers usable from both C and C++.
+
+```c
+#include <hal/hal_math.h>
+
+#define hal_constrain(v, lo, hi) ...
+#define hal_map(x, in_min, in_max, out_min, out_max) ...
+
+static inline float roundToN(float v, int n);
+/* Backward-compatible alias: hal_roundToN(v, n) */
+```
+
+`roundToN` rounds to `n` decimal places (`n < 0` -> `0`, `n > 6` -> `6`).
+Half values are rounded away from zero.
 
 ---
 
@@ -2891,6 +2944,11 @@ hal_eeprom_write_byte(0, 0xAB);
 ---
 
 ## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
+
+Arduino builds should select a WiFi-capable board/FQBN (for example
+`rp2040:rp2040:rpipicow`). `PICO_W` is not the HAL WiFi enable flag; keep using
+`HAL_ENABLE_WIFI` directly or enable a dependent module such as
+`HAL_ENABLE_MQTT` / `HAL_ENABLE_WIREGUARD`, which propagates WiFi.
 
 ```c
 #include <hal/hal_wifi.h>

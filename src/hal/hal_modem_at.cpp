@@ -459,6 +459,65 @@ hal_modem_at_result_t hal_modem_at_listen_until(hal_modem_at_t h,
     return res;
 }
 
+hal_modem_at_result_t hal_modem_at_listen_more(hal_modem_at_t h,
+                                               hal_modem_at_ready_cb_t ready,
+                                               void *user,
+                                               uint32_t total_timeout_ms) {
+    if (!h || !h->in_use) return HAL_MODEM_AT_INVALID_ARG;
+    if (total_timeout_ms == 0) total_timeout_ms = h->cfg.default_timeout_ms;
+
+    hal_mutex_lock(h->mutex);
+
+    /* Deliberately do NOT reset_rx: the caller wants to keep whatever
+       arrived during the preceding hal_modem_at_send/_send_with_data
+       call and append new bytes to it. */
+
+    uint32_t start = hal_millis();
+    uint32_t last_byte_ms = start;
+    /* If the buffer already contains bytes and a predicate was supplied,
+       give it the chance to fire on the existing content before we wait
+       for new input. */
+    bool ready_seen = false;
+    if (ready && h->rx_len > 0) {
+        if (ready(h->cfg.rx_buf, h->rx_len, user)) {
+            ready_seen = true;
+        }
+    }
+    hal_modem_at_result_t res = HAL_MODEM_AT_TIMEOUT;
+
+    for (;;) {
+        int consumed = drain_uart(h);
+        uint32_t now = hal_millis();
+        if (consumed > 0) {
+            last_byte_ms = now;
+            if (ready && !ready_seen) {
+                if (ready(h->cfg.rx_buf, h->rx_len, user)) {
+                    ready_seen = true;
+                }
+            }
+        }
+        if (ready_seen && (now - last_byte_ms) >= h->cfg.quiet_window_ms) {
+            res = HAL_MODEM_AT_OK;
+            break;
+        }
+        if (!ready && consumed == 0 &&
+            (now - last_byte_ms) >= h->cfg.quiet_window_ms) {
+            res = HAL_MODEM_AT_OK;
+            break;
+        }
+        if ((now - start) >= total_timeout_ms) {
+            break;
+        }
+        engine_poll_sleep(h);
+    }
+
+    if (h->rx_len > 0) {
+        log_filtered(h, "RX", h->cfg.rx_buf);
+    }
+    hal_mutex_unlock(h->mutex);
+    return res;
+}
+
 bool hal_modem_at_urc_register(hal_modem_at_t h,
                                const char *prefix,
                                hal_modem_at_urc_cb_t cb,

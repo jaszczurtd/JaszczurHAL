@@ -61,7 +61,7 @@ typedef enum {
 typedef struct {
     uint8_t  sda_pin;   /**< SDA GPIO pin.                                  */
     uint8_t  scl_pin;   /**< SCL GPIO pin.                                  */
-    uint32_t clock_hz;  /**< Bus speed in Hz (e.g. 400000).                 */
+    uint32_t clock_hz;  /**< Bus speed in Hz (MCP9600 supports up to 100 kHz). */
     uint8_t  i2c_bus;   /**< I2C bus index: 0 = Wire, 1 = Wire1.            */
     uint8_t  i2c_addr;  /**< 7-bit I2C address (default 0x67).              */
 } hal_thermocouple_i2c_cfg_t;

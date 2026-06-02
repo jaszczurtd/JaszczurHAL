@@ -17,6 +17,7 @@ typedef struct {
     uint8_t cur_addr;
     bool busy;
     bool initialized;
+    uint32_t clock_hz;
     uint32_t transaction_count;
     uint32_t bus_clear_count;
     hal_mutex_t mutex;
@@ -50,7 +51,6 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
     (void)sda_pin;
     (void)scl_pin;
-    (void)clock_hz;
 
     i2c_ensure_mutex(bus);
 
@@ -60,9 +60,21 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     st->rx_pos = 0;
     st->cur_addr = 0u;
     st->busy = false;
+    st->clock_hz = clock_hz;
     st->transaction_count = 0u;
     st->bus_clear_count = 0u;
     st->initialized = true;
+}
+
+void hal_i2c_set_clock(uint32_t clock_hz) {
+    hal_i2c_set_clock_bus(0, clock_hz);
+}
+
+void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
+    i2c_ensure_mutex(bus);
+    hal_mutex_lock(i2c_state(bus)->mutex);
+    i2c_state(bus)->clock_hz = clock_hz;
+    hal_mutex_unlock(i2c_state(bus)->mutex);
 }
 
 void hal_i2c_deinit(void) {

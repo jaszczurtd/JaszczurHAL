@@ -156,7 +156,9 @@ jobs:
       - name: Compile examples
         run: |
           set -e
-          for example in examples/01_blink examples/02_debug_helper examples/03_soft_timer_table examples/04_crypto examples/05_modem_A7670E; do
+          for example in examples/*; do
+            test -d "$example" || continue
+            test -f "$example/$(basename "$example").ino" || continue
             echo "Compiling $example..."
             arduino-cli compile \
               --library "$PWD" \
