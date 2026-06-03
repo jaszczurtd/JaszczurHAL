@@ -78,6 +78,7 @@ src/
   arduino_host_stubs/      # host-build Arduino compatibility headers
   hal/                     # HAL headers + common wrappers + backend dispatch
     impl/
+      shared/              # backend-agnostic internal engine code reused by multiple backends
       arduino/             # Arduino/RP2040 backend
         drivers/           # bundled third-party Arduino drivers (pico compatible)
           rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
@@ -95,6 +96,16 @@ vscode-templates/          # ready-to-use VS Code project configurations
 ```
 
 Detailed per-file layout is maintained in `JaszczurHAL_API.md` (`## Library structure`).
+
+Folder `src/hal/impl/shared/` is for internal, backend-agnostic implementation
+pieces used by at least two hardware backends. Put there only code that:
+
+- depends on HAL contracts,
+- has identical behavior across targets,
+- can be reused without per-target `#if HAL_TARGET_IS_*` forks in that file.
+
+Do not place target-specific register access, pin/peripheral bring-up, ISR glue,
+or SDK object ownership in `shared/` - those belong to backend folders.
 
 ## Quick start
 See [examples](examples/).

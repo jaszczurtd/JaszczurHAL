@@ -60,13 +60,15 @@ target_include_directories(test_multicoreWatchdog BEFORE PRIVATE ${STUBS})
 add_test(NAME test_multicoreWatchdog COMMAND test_multicoreWatchdog)
 
 # test_gps_nmea_parser: the portable NMEA parser is backend-agnostic (not part
-# of the mock lib), so compile it straight into the test and feed real
-# sentences through it.
+# of the mock lib), so compile it (with shared tools helpers) straight into the
+# test and feed real sentences through it.
 add_executable(test_gps_nmea_parser
     test_gps_nmea_parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/gps_nmea_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_gps_nmea_parser PRIVATE hal_mock)
+target_include_directories(test_gps_nmea_parser BEFORE PRIVATE ${STUBS})
 add_test(NAME test_gps_nmea_parser COMMAND test_gps_nmea_parser)
 
 # test_tools: compiles tools.cpp with Arduino/SPI/SD stubs so the pure

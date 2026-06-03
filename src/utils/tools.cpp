@@ -749,6 +749,56 @@ int parseNumber(const char **str) {
   return value;
 }
 
+int from_hex(char a) {
+  if (a >= 'A' && a <= 'F') {
+    return a - 'A' + 10;
+  }
+  if (a >= 'a' && a <= 'f') {
+    return a - 'a' + 10;
+  }
+  return a - '0';
+}
+
+int32_t parse_decimal(const char *t) {
+  bool neg = (*t == '-');
+  if (neg) {
+    ++t;
+  }
+  int32_t ret = 100 * (int32_t)atol(t);
+  while (isdigit((unsigned char)*t)) {
+    ++t;
+  }
+  if (*t == '.' && isdigit((unsigned char)t[1])) {
+    ret += 10 * (t[1] - '0');
+    if (isdigit((unsigned char)t[2])) {
+      ret += t[2] - '0';
+    }
+  }
+  return neg ? -ret : ret;
+}
+
+void parse_degrees(const char *t, int16_t *deg, uint32_t *billionths) {
+  if (deg == NULL || billionths == NULL) {
+    return;
+  }
+
+  uint32_t left = (uint32_t)atol(t);
+  uint16_t minutes = (uint16_t)(left % 100);
+  uint32_t mult = 10000000UL;
+  uint32_t tenmillionths = minutes * mult;
+  *deg = (int16_t)(left / 100);
+  while (isdigit((unsigned char)*t)) {
+    ++t;
+  }
+  if (*t == '.') {
+    while (isdigit((unsigned char)*++t)) {
+      mult /= 10;
+      tenmillionths += (uint32_t)(*t - '0') * mult;
+    }
+  }
+  *billionths = (5 * tenmillionths + 1) / 3;
+}
+
 bool startsWith(const char *str, const char *prefix) {
   size_t lenPrefix = strlen(prefix);
   return strncmp(str, prefix, lenPrefix) == 0;

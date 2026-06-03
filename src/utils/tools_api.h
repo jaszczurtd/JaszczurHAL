@@ -164,6 +164,12 @@ void urlDecode(const char *src, char *dst);
 void removeSpaces(char *str);
 /** @brief Parse integer number from current position and advance pointer. */
 int parseNumber(const char **str);
+/** @brief Convert one hexadecimal digit character to numeric value. */
+int from_hex(char a);
+/** @brief Parse signed decimal with up to 2 fractional digits as value*100. */
+int32_t parse_decimal(const char *t);
+/** @brief Parse NMEA DDMM.MMMM coordinate to degrees and billionths. */
+void parse_degrees(const char *t, int16_t *deg, uint32_t *billionths);
 /** @brief Return true when string starts with provided prefix. */
 bool startsWith(const char *str, const char *prefix);
 /** @brief Copy string while dropping non-ASCII characters. */

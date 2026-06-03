@@ -37,6 +37,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (host-stub today, hardware implementation in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
+- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends.
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
