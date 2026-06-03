@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
@@ -576,3 +578,4 @@ void hal_debug_loop(void) {
         hal_serial_println(drop_line);
     }
 }
+#endif  // HAL_TARGET_IS_RP2040

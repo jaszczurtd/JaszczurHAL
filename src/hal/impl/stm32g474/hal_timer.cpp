@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_timer.h"
 #include "../../hal_config.h"
@@ -202,4 +203,4 @@ bool hal_timer_cancel_alarm(hal_alarm_id_t alarm_id) {
     return hal_timer_pool_cancel_alarm(HAL_TIMER_POOL_DEFAULT, alarm_id);
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_spi.h"
 #include "hal_mock.h"
 
@@ -49,3 +51,4 @@ void hal_mock_spi_reset(void) {
     s_lock_depth[0] = 0;
     s_lock_depth[1] = 0;
 }
+#endif  // HAL_TARGET_IS_MOCK

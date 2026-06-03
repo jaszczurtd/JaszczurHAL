@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_pwm.h"
 #include "hal_mock.h"
 
@@ -21,3 +23,4 @@ uint32_t hal_mock_pwm_get_value(uint8_t pin) {
 uint8_t hal_mock_pwm_get_resolution(void) {
     return s_resolution;
 }
+#endif  // HAL_TARGET_IS_MOCK

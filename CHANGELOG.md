@@ -4,6 +4,43 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_target — explicit multiplatform backend selection
+
+- New `src/hal/hal_target.h`: a single, canonical compile-time switch that
+  selects the hardware backend. Define exactly one of `HAL_TARGET_RP2040`,
+  `HAL_TARGET_STM32G474`, `HAL_TARGET_MOCK` in `hal_project_config.h` (or via
+  `-D`).
+- If none is defined the target is auto-detected from the toolchain, so
+  existing RP2040/Arduino consumers need no change (bare `ARDUINO` is a
+  catch-all → RP2040). Selecting two targets, or a bare-metal ARM build with no
+  match, is a compile-time `#error`.
+- Exposes `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and
+  `HAL_TARGET_NAME`; derives `JH_STM32G474_HW` (G474 + ARM) for register code
+  vs host-stub builds.
+- Replaced the fuzzy per-file `#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)`
+  guards across all backend files (arduino / .mock / stm32g474) with explicit
+  `#if HAL_TARGET_IS_*` guards. Unused backends compile to nothing.
+- Wired the switch into `hal_config.h` and the build configs
+  (`CMakeLists.txt` → MOCK, `arduino_lib` → RP2040, `stm32_lib` → STM32G474).
+  Documented in `src/HAL_FLAGS.txt`.
+
+### stm32g474 — first real (non-stub) backend bring-up
+
+- Added a self-contained bare-metal port under
+  `src/hal/impl/stm32g474/port/` (CMSIS-light register map, C startup + vector
+  table, `SystemInit`, 1 kHz SysTick) plus `stm32_lib/STM32G474RETx_FLASH.ld`.
+- Real time base (`hal_millis/micros/delay` via SysTick, replacing the
+  `g_millis += ms` stub), real GPIO (with a `port*16+pin` numbering map),
+  real `hal_serial`/debug over USART2 (ST-Link VCP), `__WFI` idle, and device
+  UID from `UID_BASE` — all gated by the derived `JH_STM32G474_HW`.
+- Cortex-M4 fault capture (`port/exception_info.*`) modelled on
+  teltonika-tdf's crash_dump: stacked frame (R0-R3/R12/LR/PC/xPSR) +
+  CFSR/HFSR/MMFAR/BFAR, retained in `.noinit` across reset and dumped over the
+  debug console.
+- New example `stm32_lib/blink_g474/` (portable `hal_*` blink + boot/fault
+  report) with `build.sh`, CMake, and a Linux-Mint/Debian build-and-flash
+  guide for the Nucleo-G474RE.
+
 ### hal_math — generic decimal rounding helper
 
 - Added `roundToN(float v, int n)` to `hal_math.h`

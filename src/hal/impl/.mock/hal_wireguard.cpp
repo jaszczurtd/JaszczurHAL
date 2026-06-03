@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_WIREGUARD
@@ -359,3 +361,4 @@ uint32_t hal_mock_wireguard_get_last_probe_min_interval_ms(void) {
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
+#endif  // HAL_TARGET_IS_MOCK

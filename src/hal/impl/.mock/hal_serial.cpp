@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_serial.h"
 #include "../../hal_system.h"
 #include "../../hal_config.h"
@@ -641,3 +643,4 @@ void hal_debug_loop(void) {
         hal_serial_println(drop_line);
     }
 }
+#endif  // HAL_TARGET_IS_MOCK

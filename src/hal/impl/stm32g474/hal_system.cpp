@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_system.h"
 #include "drivers/stm32g474/stm32g474_system.h"
@@ -118,4 +119,4 @@ void hal_stack_guard_check(void) {
     stm32g474_fault_stack_guard_check();
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

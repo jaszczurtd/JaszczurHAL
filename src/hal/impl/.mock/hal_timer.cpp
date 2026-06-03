@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_timer.h"
 #include "../../hal_config.h"
 #include "hal_mock.h"
@@ -228,3 +230,4 @@ void hal_mock_timer_reset(void) {
     s_next_id = 1;
     memset(s_alarms, 0, sizeof(s_alarms));
 }
+#endif  // HAL_TARGET_IS_MOCK

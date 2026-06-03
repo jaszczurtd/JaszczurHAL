@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_WIREGUARD
@@ -316,3 +318,4 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
+#endif  // HAL_TARGET_IS_RP2040

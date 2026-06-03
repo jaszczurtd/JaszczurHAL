@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_adc.h"
 #include "../../hal_sync.h"
@@ -33,4 +34,4 @@ int hal_adc_read(uint8_t pin) {
     return val;
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_i2c_slave.h"
 #include "hal_mock.h"
 
@@ -195,3 +197,4 @@ int hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf,
     }
     return count;
 }
+#endif  // HAL_TARGET_IS_MOCK

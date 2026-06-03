@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_pwm_freq.h"
 #include "../../hal_config.h"
 #include "hal_mock.h"
@@ -55,3 +57,4 @@ uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch) {
 uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch) {
     return ch ? ch->pin : 0;
 }
+#endif  // HAL_TARGET_IS_MOCK

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_spi.h"
 #include "../../hal_sync.h"
 #include <SPI.h>
@@ -46,3 +48,4 @@ void hal_spi_unlock(uint8_t bus) {
     spi_ensure_mutex(idx);
     hal_mutex_unlock(s_spi_mutex[idx]);
 }
+#endif  // HAL_TARGET_IS_RP2040

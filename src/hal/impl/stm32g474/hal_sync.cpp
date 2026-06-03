@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_sync.h"
 #include "../../hal_config.h"
@@ -62,4 +63,4 @@ void hal_critical_section_exit(void) {
     /* STM32G474 TODO: replace with PRIMASK/NVIC critical-section handling. */
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

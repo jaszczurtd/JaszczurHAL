@@ -55,7 +55,8 @@ target_include_directories(JaszczurHAL PUBLIC ${SRC})
 # EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_CAN) once their
 # STM32G474 backend lands.
 target_compile_definitions(JaszczurHAL PUBLIC
-    JH_TARGET_STM32G474=1
+    HAL_TARGET_STM32G474=1   # canonical backend selection (see src/hal/hal_target.h)
+    JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     HAL_ENABLE_I2C
     HAL_ENABLE_UART
 )

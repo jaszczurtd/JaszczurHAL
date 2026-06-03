@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_ONEWIRE
 
@@ -242,3 +244,4 @@ uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len) {
 }
 
 #endif /* HAL_ENABLE_ONEWIRE */
+#endif  // HAL_TARGET_IS_RP2040

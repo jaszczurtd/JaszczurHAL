@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_EEPROM
 
@@ -172,3 +174,4 @@ uint16_t hal_eeprom_size(void) {
 
 
 #endif /* HAL_ENABLE_EEPROM */
+#endif  // HAL_TARGET_IS_RP2040

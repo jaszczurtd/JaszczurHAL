@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_THERMOCOUPLE
 
@@ -383,3 +385,4 @@ uint8_t hal_thermocouple_get_status(hal_thermocouple_t h) {
 
 
 #endif /* HAL_ENABLE_THERMOCOUPLE */
+#endif  // HAL_TARGET_IS_RP2040

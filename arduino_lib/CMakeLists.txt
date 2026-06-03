@@ -156,6 +156,7 @@ set(HAL_DISPLAY_DRIVER "HAL_DISPLAY_ILI9341" CACHE STRING
     "TFT display driver macro (HAL_DISPLAY_ILI9341 / HAL_DISPLAY_ST7789 / ...)")
 
 target_compile_definitions(JaszczurHAL PUBLIC
+    HAL_TARGET_RP2040       # canonical backend selection (see src/hal/hal_target.h)
     ARDUINO=10607
     ARDUINO_BOARD="${BOARD_NAME}"
     ARDUINO_ARCH_RP2040

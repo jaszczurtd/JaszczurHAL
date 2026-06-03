@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_CAN
 
@@ -145,3 +147,4 @@ bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1) {
 }
 
 #endif /* HAL_ENABLE_CAN */
+#endif  // HAL_TARGET_IS_RP2040

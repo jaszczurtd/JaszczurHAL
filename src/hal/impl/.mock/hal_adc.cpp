@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_adc.h"
 #include "../../hal_sync.h"
 #include "hal_mock.h"
@@ -36,3 +38,4 @@ uint8_t hal_mock_adc_get_resolution(void) {
 void hal_mock_adc_inject(uint8_t pin, int value) {
     if (pin < 64) s_adc_values[pin] = value;
 }
+#endif  // HAL_TARGET_IS_MOCK

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_UDP
@@ -279,3 +281,4 @@ bool hal_mock_udp_was_end_packet_called(void) {
 }
 
 #endif /* HAL_ENABLE_UDP */
+#endif  // HAL_TARGET_IS_MOCK

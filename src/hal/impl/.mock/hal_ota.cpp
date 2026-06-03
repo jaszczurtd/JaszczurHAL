@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_OTA
@@ -252,3 +254,4 @@ bool hal_ota_is_started(void) {
 }
 
 #endif /* HAL_ENABLE_OTA */
+#endif  // HAL_TARGET_IS_MOCK

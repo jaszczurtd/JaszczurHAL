@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_thermocouple.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
@@ -335,3 +337,4 @@ void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status) {
     hal_mutex_unlock(h->mutex);
 }
 #endif /* HAL_ENABLE_MCP9600 */
+#endif  // HAL_TARGET_IS_MOCK

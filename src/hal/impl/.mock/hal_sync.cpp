@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_sync.h"
 #include "../../hal_config.h"
 #include <mutex>
@@ -29,3 +31,4 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
 
 void hal_critical_section_enter(void) {}
 void hal_critical_section_exit(void) {}
+#endif  // HAL_TARGET_IS_MOCK

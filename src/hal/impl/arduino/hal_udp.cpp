@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_UDP
@@ -296,3 +298,4 @@ bool hal_udp_end_packet(void) {
 }
 
 #endif /* HAL_ENABLE_UDP */
+#endif  // HAL_TARGET_IS_RP2040

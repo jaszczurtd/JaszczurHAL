@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_WIFI
 
@@ -226,3 +228,4 @@ int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
 
 
 #endif /* HAL_ENABLE_WIFI */
+#endif  // HAL_TARGET_IS_RP2040

@@ -15,6 +15,7 @@
  */
 
 #include <stdint.h>
+#include "hal_target.h"      /* canonical backend/target selection */
 #include "hal_uart_config.h"
 
 /* ── Application feature toggles ─────────────────────────────────────── */

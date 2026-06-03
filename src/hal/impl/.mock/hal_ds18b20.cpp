@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_DS18B20
 
@@ -193,3 +195,4 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h) {
 }
 
 #endif /* HAL_ENABLE_DS18B20 */
+#endif  // HAL_TARGET_IS_MOCK

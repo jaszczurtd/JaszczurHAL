@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_timer.h"
 #include "../../hal_sync.h"
 #include <pico/time.h>
@@ -198,3 +200,4 @@ hal_alarm_id_t hal_timer_add_alarm_us_ex(uint32_t delay_us,
 bool hal_timer_cancel_alarm(hal_alarm_id_t alarm_id) {
     return hal_timer_pool_cancel_alarm(HAL_TIMER_POOL_DEFAULT, alarm_id);
 }
+#endif  // HAL_TARGET_IS_RP2040

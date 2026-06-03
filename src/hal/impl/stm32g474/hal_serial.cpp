@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_serial.h"
 #include "../../hal_system.h"
@@ -8,6 +9,12 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef JH_STM32G474_HW
+/* On real silicon the debug console is USART2 (ST-Link VCP); route the
+ * portable hal_serial TX path to it instead of host stdio. */
+#include "port/g474_debug_uart.h"
+#endif
 
 static char s_prefix[HAL_DEBUG_PREFIX_SIZE] = {};
 static char s_deb_buf[HAL_DEBUG_BUF_SIZE] = {};
@@ -250,19 +257,31 @@ static int s_mock_rx_pos = 0;
 
 void hal_serial_begin(uint32_t baud) {
     (void)baud;
+#ifdef JH_STM32G474_HW
+    g474_debug_uart_init();   /* baud fixed at 115200 in the bring-up UART */
+#endif
 }
 
 void hal_serial_print(const char *s) {
     hal_serial_ensure_tx_mutex();
     hal_mutex_lock(s_tx_mutex);
+#ifdef JH_STM32G474_HW
+    g474_debug_uart_puts(s ? s : "");
+#else
     printf("%s", s ? s : "");
+#endif
     hal_mutex_unlock(s_tx_mutex);
 }
 
 void hal_serial_println(const char *s) {
     hal_serial_ensure_tx_mutex();
     hal_mutex_lock(s_tx_mutex);
+#ifdef JH_STM32G474_HW
+    g474_debug_uart_puts(s ? s : "");
+    g474_debug_uart_puts("\r\n");
+#else
     printf("%s\n", s ? s : "");
+#endif
     hal_mutex_unlock(s_tx_mutex);
 }
 
@@ -601,4 +620,4 @@ void hal_debug_loop(void) {
     }
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

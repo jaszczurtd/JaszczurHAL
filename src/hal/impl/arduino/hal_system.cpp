@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_system.h"
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
@@ -126,3 +128,4 @@ bool hal_stack_guard_init(void) {
 void hal_stack_guard_check(void) {
     rp2040_fault_stack_guard_check();
 }
+#endif  // HAL_TARGET_IS_RP2040

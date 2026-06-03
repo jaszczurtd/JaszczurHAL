@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_RTC
 
@@ -496,3 +498,4 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags) {
 }
 
 #endif /* HAL_ENABLE_RTC */
+#endif  // HAL_TARGET_IS_MOCK

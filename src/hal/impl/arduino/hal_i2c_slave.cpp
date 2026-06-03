@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_I2C_SLAVE
 
@@ -257,3 +259,4 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus) {
 }
 
 #endif /* HAL_ENABLE_I2C_SLAVE */
+#endif  // HAL_TARGET_IS_RP2040
