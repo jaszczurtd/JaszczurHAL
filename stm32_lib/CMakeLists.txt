@@ -59,6 +59,8 @@ target_compile_definitions(JaszczurHAL PUBLIC
     JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     HAL_ENABLE_I2C
     HAL_ENABLE_UART
+    HAL_ENABLE_DAC
+    HAL_ENABLE_PCNT
 )
 
 if(DEFINED EXTRA_HAL_DEFINES)

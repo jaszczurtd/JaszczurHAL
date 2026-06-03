@@ -107,6 +107,8 @@ jobs:
               -D HAL_ENABLE_ONEWIRE
               -D HAL_ENABLE_EXTERNAL_ADC
               -D HAL_ENABLE_GPS
+              -D HAL_ENABLE_DAC
+              -D HAL_ENABLE_PCNT
               -D HAL_ENABLE_PWM_FREQ
               -D HAL_ENABLE_RGB_LED
               -D HAL_ENABLE_ILI9341

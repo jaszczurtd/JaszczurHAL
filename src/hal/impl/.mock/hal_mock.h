@@ -26,6 +26,20 @@ int      hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 
+// ── DAC ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_DAC
+uint16_t hal_mock_dac_get(uint8_t channel);
+bool     hal_mock_dac_is_initialized(uint8_t channel);
+#endif
+
+// ── PCNT (pulse counter) ─────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_PCNT
+#include "../../hal_pcnt.h"
+void            hal_mock_pcnt_inject(uint8_t channel, uint32_t pulses);
+hal_pcnt_edge_t hal_mock_pcnt_get_edge(uint8_t channel);
+uint8_t         hal_mock_pcnt_get_pin(uint8_t channel);
+#endif
+
 // ── Timer ─────────────────────────────────────────────────────────────────────
 void     hal_mock_timer_advance_us(uint64_t us);
 uint64_t hal_mock_timer_get_us(void);

@@ -24,6 +24,12 @@
 #include "hal_pwm_freq.h"
 #endif
 #include "hal_adc.h"
+#ifdef HAL_ENABLE_DAC
+#include "hal_dac.h"
+#endif
+#ifdef HAL_ENABLE_PCNT
+#include "hal_pcnt.h"
+#endif
 #include "hal_timer.h"
 #include "hal_soft_timer.h"
 #include "hal_pid_controller.h"

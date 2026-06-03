@@ -4,6 +4,65 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### stm32g474 — real I2C1 master backend
+
+- The STM32G474 `hal_i2c` backend is now a real I2C v2 master (was a host
+  stub): I2C1 on SCL=PB8 / SDA=PB9 (AF4), 100 kHz, register-level transfers
+  with AUTOEND, NACK and timeout handling, under `JH_STM32G474_HW`. The
+  Wire-style buffered API (begin/write/end, request_from/read, write_byte,
+  read_byte, is_busy) maps onto real master write/read transfers. Host-stub
+  behaviour is preserved for the off-target build.
+- Added I2C1 register definitions and a documented TIMINGR for the 16 MHz
+  bring-up clock to `port/stm32g474_regs.h`.
+- New example `examples/g474_i2c_scan/` — a bus scanner with a
+  Linux-Mint/Debian build-flash-verify guide (wiring, pull-ups, expected
+  output, troubleshooting) for validating the backend on a real Nucleo-G474RE.
+- Note: the register sequence follows RM0440 but is pending on-silicon
+  validation (that is what the scanner example is for).
+
+### examples/portable_blink — fix include path for arduino-cli
+
+- `blink_app.c` now uses the `hal/`-prefixed includes (`<hal/hal_gpio.h>`,
+  ...) so the shared source resolves both under arduino-cli (library `src/` on
+  the path) and the G474 build; fixes the examples CI job. README updated:
+  the portable demo lives in `examples/portable_blink/` (replacing the removed
+  `stm32_lib/blink_g474/`), and the STM32G474 backend status now lists which
+  peripherals are real vs in progress.
+
+### hal_pcnt — edge / pulse counter (multiplatform, opt-in)
+
+- New opt-in module `hal_pcnt` (`HAL_ENABLE_PCNT`): `hal_pcnt_is_supported()`,
+  `hal_pcnt_channel_count()`, `hal_pcnt_init(channel, pin, edge)`,
+  `hal_pcnt_read()`, `hal_pcnt_reset()`, `hal_pcnt_read_and_reset()`.
+  Edge select: rising / falling / both; free-running 32-bit count.
+- STM32G474 backend: hardware counter on TIM2 in external-clock mode 1,
+  channel 0 = TIM2_CH1 (PA0/AF1), zero CPU per edge (register-level under
+  `JH_STM32G474_HW`).
+- RP2040 backend: software counter driven by a GPIO edge interrupt
+  (`hal_gpio_attach_interrupt`) — same contract, ISR-rate limited. A nice
+  contrast: identical API, hardware timer on G474 vs ISR counter on RP2040.
+- Mock backend with `hal_mock_pcnt_inject/_get_edge/_get_pin` and a Unity
+  suite (`test_hal_pcnt`); documented in `src/HAL_FLAGS.txt`.
+- Second of the planned core-peripheral additions (DAC → **PCNT** → GPT
+  capture/compare/encoder → SPI-slave → RNG).
+
+### hal_dac — true DAC output (multiplatform, opt-in)
+
+- New opt-in module `hal_dac` (`HAL_ENABLE_DAC`): `hal_dac_is_supported()`,
+  `hal_dac_resolution_bits()`, `hal_dac_max_value()`, `hal_dac_init()`,
+  `hal_dac_write()`, `hal_dac_write_millivolts()`. Uniform channel numbering
+  (0,1,...); VREF via `HAL_DAC_VREF_MV` (default 3300).
+- STM32G474 backend: real DAC1, 12-bit, channel 0 → PA4, channel 1 → PA5
+  (register-level under `JH_STM32G474_HW`, host-stub otherwise).
+- RP2040 backend: the RP2040 has no DAC, so `hal_dac_is_supported()` returns
+  false and writes are no-ops (the honest multiplatform behaviour; use
+  `hal_pwm` + RC filter instead). Portable code should branch on
+  `hal_dac_is_supported()`.
+- Mock backend with `hal_mock_dac_get()` / `hal_mock_dac_is_initialized()`
+  helpers and a Unity suite (`test_hal_dac`); documented in `src/HAL_FLAGS.txt`.
+- First of the planned core-peripheral additions (DAC → PCNT → GPT
+  capture/compare/encoder → SPI-slave → RNG) hardening the STM32G474 backend.
+
 ### hal_target — explicit multiplatform backend selection
 
 - New `src/hal/hal_target.h`: a single, canonical compile-time switch that

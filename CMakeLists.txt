@@ -67,6 +67,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
     HAL_ENABLE_EXTERNAL_ADC   # propagates HAL_ENABLE_I2C
     HAL_ENABLE_GPS            # propagates HAL_ENABLE_SWSERIAL
+    HAL_ENABLE_DAC
+    HAL_ENABLE_PCNT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED
     HAL_ENABLE_ILI9341        # propagates HAL_ENABLE_TFT + HAL_ENABLE_DISPLAY

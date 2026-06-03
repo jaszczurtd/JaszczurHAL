@@ -35,6 +35,66 @@
 
 #define RCC_APB1ENR1_USART2EN (1u << 17)
 
+#define RCC_AHB2ENR_DAC1EN  (1u << 16)
+
+/* ── DAC1 (DAC1_OUT1 = PA4, DAC1_OUT2 = PA5) ─────────────────────────────── */
+#define DAC1_BASE       0x50000800u
+#define DAC1_CR         JH_REG32(DAC1_BASE + 0x00u)
+#define DAC1_DHR12R1    JH_REG32(DAC1_BASE + 0x08u)   /* ch1, 12-bit right-aligned */
+#define DAC1_DHR12R2    JH_REG32(DAC1_BASE + 0x14u)   /* ch2, 12-bit right-aligned */
+#define DAC_CR_EN1      (1u << 0)
+#define DAC_CR_EN2      (1u << 16)
+
+#define RCC_APB1ENR1_TIM2EN (1u << 0)
+
+/* ── TIM2 (32-bit GP timer; used as a pulse counter on TIM2_CH1 = PA0/AF1) ── */
+#define TIM2_BASE       0x40000000u
+#define TIM2_CR1        JH_REG32(TIM2_BASE + 0x00u)
+#define TIM2_SMCR       JH_REG32(TIM2_BASE + 0x08u)   /* slave-mode / ext clock */
+#define TIM2_CCMR1      JH_REG32(TIM2_BASE + 0x18u)
+#define TIM2_CCER       JH_REG32(TIM2_BASE + 0x20u)
+#define TIM2_CNT        JH_REG32(TIM2_BASE + 0x24u)
+#define TIM2_ARR        JH_REG32(TIM2_BASE + 0x2Cu)
+#define TIM_CR1_CEN     (1u << 0)
+/* CCMR1: CC1S = 01 -> IC1 mapped on TI1. */
+#define TIM_CCMR1_CC1S_TI1 (0x1u << 0)
+/* CCER capture-input polarity: 00 rising, 10 falling, 11 both. */
+#define TIM_CCER_CC1E   (1u << 0)
+#define TIM_CCER_CC1P   (1u << 1)
+#define TIM_CCER_CC1NP  (1u << 3)
+/* SMCR: SMS=111 external clock mode 1; TS=101 selects TI1FP1. */
+#define TIM_SMCR_SMS_EXT1 (0x7u << 0)
+#define TIM_SMCR_TS_TI1FP1 (0x5u << 4)
+
+#define RCC_APB1ENR1_I2C1EN (1u << 21)
+
+/* ── I2C1 (I2C v2 peripheral; SCL=PB8, SDA=PB9, AF4 on Nucleo-G474RE) ─────── */
+#define I2C1_BASE       0x40005400u
+#define I2C1_CR1        JH_REG32(I2C1_BASE + 0x00u)
+#define I2C1_CR2        JH_REG32(I2C1_BASE + 0x04u)
+#define I2C1_TIMINGR    JH_REG32(I2C1_BASE + 0x10u)
+#define I2C1_ISR        JH_REG32(I2C1_BASE + 0x18u)
+#define I2C1_ICR        JH_REG32(I2C1_BASE + 0x1Cu)
+#define I2C1_RXDR       JH_REG32(I2C1_BASE + 0x24u)
+#define I2C1_TXDR       JH_REG32(I2C1_BASE + 0x28u)
+
+#define I2C_CR1_PE      (1u << 0)
+#define I2C_CR2_RD_WRN  (1u << 10)
+#define I2C_CR2_START   (1u << 13)
+#define I2C_CR2_AUTOEND (1u << 25)
+#define I2C_ISR_TXIS    (1u << 1)
+#define I2C_ISR_RXNE    (1u << 2)
+#define I2C_ISR_NACKF   (1u << 4)
+#define I2C_ISR_STOPF   (1u << 5)
+#define I2C_ISR_BUSY    (1u << 15)
+#define I2C_ICR_NACKCF  (1u << 4)
+#define I2C_ICR_STOPCF  (1u << 5)
+
+/* TIMINGR for I2CCLK = 16 MHz (HSI16 / PCLK1 default), standard mode 100 kHz.
+ * Value per STM32CubeMX / RM0440 timing tables. If the core clock is later
+ * raised (PLL), this must be recomputed for the new PCLK1. */
+#define I2C_TIMINGR_100K_16MHZ 0x30420F13u
+
 /* ── GPIO ─────────────────────────────────────────────────────────────────
  * 7 ports A..G, each spaced 0x400 apart starting at 0x48000000.
  */

@@ -26,13 +26,11 @@ Use:
 #include <JaszczurHAL.h>
 ```
 
-The internal header:
+The internal header can be used for advanced/internal usage.
 
 ```cpp
 #include <hal/hal.h>
 ```
-
-is still available for advanced/internal usage.
 
 Utility-only includes are also available:
 
@@ -55,7 +53,7 @@ Utility-only includes are also available:
 
 ## Supported modules and drivers (overview)
 
-- Core HAL domains: GPIO, ADC, PWM, timers, system, synchronization, serial I/O
+- Core HAL domains: GPIO, ADC, DAC, PWM, pulse counter (PCNT), timers, system, synchronization, serial I/O
 - Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM and key-value storage
 - Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT, including coarse cell-based location)
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
@@ -85,7 +83,7 @@ src/
           rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
         frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser, etc)
       .mock/               # deterministic host/test backend
-      stm32g474/           # STM32G474 backend (host-stub today, hardware impl in progress)
+      stm32g474/           # STM32G474 backend (boot/clock/GPIO/UART/DAC/PCNT/fault real; I2C/SPI/ADC/PWM/timer in progress)
         drivers/
           stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
   utils/                   # helper modules and bundled optional utilities
@@ -156,9 +154,12 @@ bare-metal ARM build with no detectable target — is a compile-time `#error`.
 Backend files compile only for their selected target, so unused backends cost
 zero code.
 
-A first bare-metal STM32G474 backend (boot + SysTick time + GPIO + USART2
-console + Cortex-M fault capture) ships as a runnable demo in
-[`stm32_lib/blink_g474/`](stm32_lib/blink_g474/) (Nucleo-G474RE).
+The same demo source builds on both backends from a single example folder:
+[`examples/portable_blink/`](examples/portable_blink/) — an RP2040 sketch
+(`setup()/loop()`) and a bare-metal STM32G474 entry (`g474/main.c`) share one
+portable `blink_app.c`. The STM32G474 build exercises the first real bare-metal
+backend (boot + SysTick time + GPIO + USART2 console + Cortex-M fault capture)
+on the Nucleo-G474RE.
 
 ## I2C clock presets
 
