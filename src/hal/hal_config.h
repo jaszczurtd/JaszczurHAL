@@ -121,7 +121,9 @@
                                   (propagates: ONEWIRE).
        HAL_ENABLE_ONEWIRE       - generic 1-Wire bus API wrapper.
        HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC (propagates: I2C).
-       HAL_ENABLE_GPS           - GPS / NMEA receiver (propagates: SWSERIAL).
+       HAL_ENABLE_GPS           - GPS / NMEA receiver (requires a serial
+                                  transport: HAL_ENABLE_UART or
+                                  HAL_ENABLE_SWSERIAL; does NOT auto-enable one).
 
      Digital potentiometers:
        HAL_ENABLE_DIGIPOT       - generic digital-potentiometer API (requires
@@ -288,10 +290,16 @@
 
 /* GPS needs a serial transport but is not tied to a specific one: it can be
    fed from a hardware UART (hal_uart) or SoftwareSerial (hal_swserial). The
-   caller enables whichever the wiring uses; the consistency check below
-   requires at least one. (The mock backend injects values and needs neither,
-   but the host build enables both anyway.) GPS does NOT auto-enable a
-   transport, so it never drags in SoftwareSerial on targets that lack it. */
+   caller enables whichever the wiring uses. If neither is selected, GPS
+   defaults to the hardware UART, which exists on every target (RP2040,
+   STM32G474, mock). We deliberately default to UART rather than SoftwareSerial
+   so GPS never drags SoftwareSerial onto targets that lack it; a caller wiring
+   GPS to SoftwareSerial simply enables HAL_ENABLE_SWSERIAL explicitly. */
+#ifdef HAL_ENABLE_GPS
+  #if !defined(HAL_ENABLE_UART) && !defined(HAL_ENABLE_SWSERIAL)
+    #define HAL_ENABLE_UART
+  #endif
+#endif
 
 /* Display driver family. */
 #ifdef HAL_ENABLE_ILI9341

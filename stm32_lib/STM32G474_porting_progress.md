@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-03
+Last updated: 2026-06-03 (added driver pool portability analysis)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -109,6 +109,91 @@ The following modules are real, register-level backends under
 
 These register sequences follow RM0440 but are pending on-silicon validation on
 a real Nucleo-G474RE (that is what the `examples/g474_*` programs are for).
+
+## Driver pool analysis — portability to STM32G474
+
+Assessment of the existing JaszczurHAL driver pool and how much of it can be
+reused on the STM32 backend (RP2040 is the only fully-driven target today).
+
+### Two distinct classes of "driver"
+
+**1. Portable HAL-level drivers** — live directly in `src/hal/`, guarded only by
+`HAL_ENABLE_*` (not by target), written against the HAL's own API
+(`hal_i2c`, `hal_serial`, `hal_sync`):
+`hal_digipot`, `hal_crypto`, `hal_kv`, `hal_modem_at`, `hal_simcom_a76xx`,
+`hal_pid_controller`, `hal_soft_timer`, `hal_config`.
+
+`src/hal/hal_digipot.cpp` is the reference pattern (see its header comment:
+"compiles and runs on every backend that provides hal_i2c"). **These already
+work on STM32** as long as the underlying bus HAL exists.
+
+**2. Vendor Arduino libraries** — in `src/hal/impl/arduino/drivers/`:
+`ADS1X15`, `Adafruit_BusIO/GFX/ILI9341/MCP9600/NeoPixel/SSD1306/ST7735_ST7789`,
+`DS3231`, `DallasTemperature`, `MAX6675`, `MCP2515`, `OneWire`, `PCF8563`.
+**All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
+device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, …), each
+guarded by `#if HAL_TARGET_IS_RP2040` and `#include`-ing `<Wire.h>`/`<SPI.h>`
+directly. **These cannot be ported 1:1** — the realistic path is to rewrite the
+device logic as portable `src/hal/` drivers (the digipot pattern).
+
+### Deciding factor: bus state on STM32
+
+| Bus  | STM32G474 status | Consequence |
+|------|------------------|-------------|
+| I2C  | Full Wire-style API (`begin_transmission`/`write`/`end`/`request_from`/`read`) in `impl/stm32g474/hal_i2c.cpp` | I2C device drivers are portable today |
+| SPI  | Only `init`/`lock`/`unlock` in `impl/stm32g474/hal_spi.cpp` | **No transfer primitive anywhere in the HAL** |
+
+Critical blocker: `hal_spi.h` declares **no `transfer` function**. In the Arduino
+backend, SPI transfers go straight through Arduino `SPI.h`; STM32 SPI today is
+just mutex + pin bookkeeping. **Every SPI-based driver is blocked** until a
+`hal_spi_transfer*` primitive is added to the API and implemented on STM32.
+
+### Module gap on STM32
+Modules with Arduino + mock impl but no `impl/stm32g474`:
+`can, display, ds18b20, eeprom, external_adc, i2c_slave, littlefs, mqtt,
+onewire, ota, pwm_freq, rgb_led, rtc, swserial, thermocouple, udp, wifi,
+wireguard`.
+
+### Portability tiers
+
+**🟢 Easy — mirror the digipot pattern (rewrite vendor logic on `hal_i2c`):**
+- `hal_rtc` (PCF8563, DS3231) — plain I2C register access
+- `hal_external_adc` (ADS1115) — plain I2C
+- `hal_thermocouple` MCP9600 part — plain I2C
+
+We do not port the Adafruit/vendor libraries; we extract their register maps and
+write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
+
+**🟡 Blocked until an SPI transfer primitive exists:**
+- `hal_can` (MCP2515) — SPI
+- `hal_display` (ILI9341/ST7735/ST7789 — SPI; SSD1306 — I2C or SPI)
+- `hal_thermocouple` MAX6675 part — SPI read
+Prerequisite: add `hal_spi_transfer()` to `hal_spi.h` + implement SPI1/2/3 on G474.
+
+**🟡 OneWire (bit-bang + timing):**
+- `hal_ds18b20`, `hal_onewire` — OneWire relies on Arduino `digitalWrite` and
+  precise timing/IRQ. Feasible on `hal_gpio` + `hal_time`, but needs a careful
+  delay port. DallasTemperature sits on OneWire.
+
+**🟡 `hal_rgb_led`** (NeoPixel/WS2812) — 800 kHz critical timing; on STM32 this is
+a rewrite (PWM+DMA or SPI), not a library port.
+
+**🔴 Not a "driver port" — different effort entirely:**
+- `hal_wifi / hal_udp / hal_mqtt / hal_wireguard` — tied to Pico-W (CYW43) +
+  PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio → not a port
+  but a different transport (e.g. via the already-portable SIMCom modem).
+  Effectively N/A for a bare G474.
+- `hal_littlefs / hal_eeprom / hal_ota` — STM32 flash/storage specific, not
+  vendor-driver ports.
+- `hal_swserial / hal_i2c_slave / hal_pwm_freq` — STM32 peripheral work.
+
+### Recommended order
+1. **Add `hal_spi_transfer` first** (API + G474 impl) — unblocks CAN, display and
+   MAX6675 in one move; biggest multiplier.
+2. **I2C quick wins** via the digipot pattern: rtc (PCF8563/DS3231),
+   external_adc (ADS1115), thermocouple (MCP9600).
+3. **OneWire** as a portable driver on `hal_gpio` + `hal_time` → unblocks ds18b20.
+4. Remainder (rgb_led, storage, connectivity) — separate decisions, not pure ports.
 
 ## Remaining work for the next stages
 1. Replace the remaining `impl/stm32g474` placeholders with real STM32 HAL/LL calls.
