@@ -496,6 +496,41 @@ void test_parseNumber_zero(void) {
     TEST_ASSERT_EQUAL_CHAR('e', *s);
 }
 
+/* ── from_hex / parse_decimal / parse_degrees ─────────────────────────── */
+
+void test_from_hex_digit(void) {
+    TEST_ASSERT_EQUAL_INT(9, from_hex('9'));
+}
+
+void test_from_hex_upper_letter(void) {
+    TEST_ASSERT_EQUAL_INT(10, from_hex('A'));
+}
+
+void test_from_hex_lower_letter(void) {
+    TEST_ASSERT_EQUAL_INT(15, from_hex('f'));
+}
+
+void test_parse_decimal_integer(void) {
+    TEST_ASSERT_EQUAL_INT(12300, parse_decimal("123"));
+}
+
+void test_parse_decimal_fraction_2dp(void) {
+    TEST_ASSERT_EQUAL_INT(1234, parse_decimal("12.34"));
+}
+
+void test_parse_decimal_negative(void) {
+    TEST_ASSERT_EQUAL_INT(-125, parse_decimal("-1.25"));
+}
+
+void test_parse_degrees_gprmc_latitude_format(void) {
+    int16_t deg = 0;
+    uint32_t billionths = 0;
+    parse_degrees("4807.038", &deg, &billionths);
+
+    TEST_ASSERT_EQUAL_INT(48, deg);
+    TEST_ASSERT_EQUAL_UINT32(117300000UL, billionths);
+}
+
 /* ── is_time_in_range ──────────────────────────────────────────────────── */
 
 void test_is_time_in_range_inside(void) {
@@ -825,6 +860,13 @@ int main(void) {
     RUN_TEST(test_parseNumber_basic);
     RUN_TEST(test_parseNumber_no_digits);
     RUN_TEST(test_parseNumber_zero);
+    RUN_TEST(test_from_hex_digit);
+    RUN_TEST(test_from_hex_upper_letter);
+    RUN_TEST(test_from_hex_lower_letter);
+    RUN_TEST(test_parse_decimal_integer);
+    RUN_TEST(test_parse_decimal_fraction_2dp);
+    RUN_TEST(test_parse_decimal_negative);
+    RUN_TEST(test_parse_degrees_gprmc_latitude_format);
 
     RUN_TEST(test_is_time_in_range_inside);
     RUN_TEST(test_is_time_in_range_at_start);

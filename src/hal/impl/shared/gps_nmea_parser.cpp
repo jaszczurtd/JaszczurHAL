@@ -1,4 +1,5 @@
 #include "gps_nmea_parser.h"
+#include "utils/tools_api.h"
 
 #include <ctype.h>  /* isdigit */
 #include <math.h>   /* sqrt */
@@ -12,50 +13,6 @@
 #define GPS_KMPH_PER_KNOT 1.852
 
 enum { SENT_OTHER = 0, SENT_RMC, SENT_GGA, SENT_GSA, SENT_GSV, SENT_GST };
-
-/* ── Numeric helpers (verbatim logic from TinyGPS++) ─────────────────────── */
-
-static int from_hex(char a) {
-    if (a >= 'A' && a <= 'F')
-        return a - 'A' + 10;
-    if (a >= 'a' && a <= 'f')
-        return a - 'a' + 10;
-    return a - '0';
-}
-
-/* Parse a (possibly negative) number with up to 2 decimals as value*100. */
-static int32_t parse_decimal(const char *t) {
-    bool neg = (*t == '-');
-    if (neg)
-        ++t;
-    int32_t ret = 100 * (int32_t)atol(t);
-    while (isdigit((unsigned char)*t))
-        ++t;
-    if (*t == '.' && isdigit((unsigned char)t[1])) {
-        ret += 10 * (t[1] - '0');
-        if (isdigit((unsigned char)t[2]))
-            ret += t[2] - '0';
-    }
-    return neg ? -ret : ret;
-}
-
-/* Parse NMEA DDMM.MMMM degrees into the high-precision raw form. */
-static void parse_degrees(const char *t, gps_raw_degrees_t *d) {
-    uint32_t left = (uint32_t)atol(t);
-    uint16_t minutes = (uint16_t)(left % 100);
-    uint32_t mult = 10000000UL;
-    uint32_t tenmillionths = minutes * mult;
-    d->deg = (int16_t)(left / 100);
-    while (isdigit((unsigned char)*t))
-        ++t;
-    if (*t == '.')
-        while (isdigit((unsigned char)*++t)) {
-            mult /= 10;
-            tenmillionths += (uint32_t)(*t - '0') * mult;
-        }
-    d->billionths = (5 * tenmillionths + 1) / 3;
-    d->negative = false;
-}
 
 static double raw_to_double(const gps_raw_degrees_t *d) {
     double v = d->deg + d->billionths / 1000000000.0;
@@ -167,13 +124,15 @@ static void decode_term(gps_nmea_t *p) {
                     p->sentence_has_fix = (t[0] == 'A');
                     break;
                 case 3:
-                    parse_degrees(t, &p->new_lat);
+                    parse_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
+                    p->new_lat.negative = false;
                     break;
                 case 4:
                     p->new_lat.negative = (t[0] == 'S');
                     break;
                 case 5:
-                    parse_degrees(t, &p->new_lng);
+                    parse_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
+                    p->new_lng.negative = false;
                     break;
                 case 6:
                     p->new_lng.negative = (t[0] == 'W');
@@ -197,13 +156,15 @@ static void decode_term(gps_nmea_t *p) {
                     p->new_time = (uint32_t)parse_decimal(t);
                     break;
                 case 2:
-                    parse_degrees(t, &p->new_lat);
+                    parse_degrees(t, &p->new_lat.deg, &p->new_lat.billionths);
+                    p->new_lat.negative = false;
                     break;
                 case 3:
                     p->new_lat.negative = (t[0] == 'S');
                     break;
                 case 4:
-                    parse_degrees(t, &p->new_lng);
+                    parse_degrees(t, &p->new_lng.deg, &p->new_lng.billionths);
+                    p->new_lng.negative = false;
                     break;
                 case 5:
                     p->new_lng.negative = (t[0] == 'W');

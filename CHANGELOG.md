@@ -30,6 +30,9 @@ All notable changes to this project will be documented in this file.
 - Mock backend gained matching getters and `hal_mock_gps_set_*` injectors; the
   portable parser has its own host test (`test_gps_nmea_parser`) that feeds real
   sentences (computed checksums) and asserts the decoded fields and mappings.
+- NMEA numeric helpers `from_hex`, `parse_decimal`, `parse_degrees` were moved
+  from `impl/shared/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
+  + `utils/tools_api.h`) and covered by `test_tools` unit tests.
 
 ### hal_digipot — I2C digital potentiometers (multiplatform, opt-in)
 
