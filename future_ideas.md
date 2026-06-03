@@ -1,164 +1,277 @@
 # JaszczurHAL — Future Architecture Improvements
 
-Recommendations for improving the architecture, ordered by priority.
+Architecture notes and remaining recommendations, ordered by practical value.
 
 ---
 
-## 1. Eliminate `float` from wiper calculations
+## Already addressed / no longer future work
 
-**Problem:** On Cortex-M0/M0+ (RP2040) there is no FPU — each float operation costs ~20–70 cycles via soft-float library.
+### Fixed-point digital-potentiometer calculations
 
-**Solution:** Fixed-point arithmetic:
+**Status:** implemented in `src/hal/hal_digipot.cpp`.
+
+The digipot wiper calculations should stay integer-only. RP2040 has no FPU,
+so even simple `float` expressions pull in soft-float helpers and cost extra
+cycles on every resistance update.
+
+Rules preserved from the previous implementation:
+
+- voltage-divider calculations truncate toward zero,
+- MAX5395 rheostat calculations truncate toward zero,
+- MCP401x rheostat calculations round to nearest tap when the remainder is
+  strictly greater than half a step.
+
+The current supported resistance range is small enough for `uint32_t`
+intermediate multiplication:
 
 ```c
-// Instead of:
-wiper = (uint8_t)(((float)ohms / (float)cfg->e2e_resistance) * MAX_STEPS);
-
-// Use:
-wiper = (uint8_t)((uint32_t)ohms * MAX_STEPS / cfg->e2e_resistance);
+100000u * 255u == 25500000u
 ```
 
-For 32-bit values and 8-bit result there is no overflow risk (max `100000 * 255 = 25.5M` — fits in `uint32_t`).
+That fits comfortably in `uint32_t`, so there is no need for `uint64_t` or
+fixed-point scaling helpers wider than the values already used by the API.
+
+### Central compile-time configuration
+
+**Status:** mostly implemented in `src/hal/hal_config.h` and documented in
+`src/HAL_FLAGS.txt`.
+
+The repo now has a single project-level configuration hook:
+
+```c
+// project-local, auto-included when present
+#include "hal_project_config.h"
+```
+
+`HAL_ENABLE_*` flags are opt-in, dependencies are propagated automatically,
+and generic facade modules emit compile-time errors when enabled without a
+backend. Examples:
+
+- `HAL_ENABLE_MCP401X` -> `HAL_ENABLE_DIGIPOT`, `HAL_ENABLE_I2C`
+- `HAL_ENABLE_MAX5395` -> `HAL_ENABLE_DIGIPOT`, `HAL_ENABLE_I2C`
+- `HAL_ENABLE_DISPLAY` requires `HAL_ENABLE_TFT` or `HAL_ENABLE_SSD1306`
+
+Remaining useful polish:
+
+- document one canonical `hal_project_config.h` workflow for Arduino sketches,
+  host tests, and bare-metal builds,
+- optionally add CMake presets or a small generated `hal_build_config.h` for
+  non-Arduino projects,
+- consider Kconfig only if the flag matrix becomes too large to audit by hand.
 
 ---
 
-## 2. Replace `switch/case` dispatch with vtable (ops pattern)
+## Recommended next work
 
-**Problem:** Every new chip requires modifying existing code (`hal_digipot_set_resistance` has switch on chip type).
+## 1. Split digipot chip logic and introduce an ops table
 
-**Solution:** Linux-style ops/vtable pattern:
+**Problem:** `hal_digipot.cpp` currently owns pool management, public dispatch,
+MCP401x logic, and MAX5395 logic. Adding a third chip still means editing the
+same central file.
+
+**Solution:** combine the previous "vtable" and "separate driver files" ideas
+into one refactor. The public module should own handles, locking, and dispatch;
+chip files should own validation, init, set-resistance, and step-count logic.
+
+Suggested shape:
+
+```text
+src/hal/
+  hal_digipot.h              public interface
+  hal_digipot.cpp            handle pool + dispatch
+  impl/shared/digipot/
+    hal_digipot_ops.h        internal ops contract
+    digipot_mcp401x.cpp      MCP401x implementation
+    digipot_max5395.cpp      MAX5395 implementation
+```
+
+Internal contract:
 
 ```c
 typedef struct hal_digipot_ops {
+    bool (*validate)(const hal_digipot_config_t *cfg);
     bool (*init)(const hal_digipot_config_t *cfg);
     bool (*set_resistance)(const hal_digipot_config_t *cfg, uint32_t ohms);
-    bool (*validate)(const hal_digipot_config_t *cfg);
+    uint16_t (*step_count)(void);
 } hal_digipot_ops_t;
-
-// Per-chip registration:
-static const hal_digipot_ops_t mcp401x_ops = {
-    .init = NULL,
-    .set_resistance = mcp401x_set_resistance,
-    .validate = mcp401x_validate,
-};
 ```
 
-Adding a new chip = new file with `_ops`, zero modifications to `hal_digipot.cpp`.
+Each instance stores `const hal_digipot_ops_t *ops`, so the public
+`hal_digipot_set_resistance()` no longer needs a chip switch. Adding a new chip
+still requires extending the public enum/config surface, but it should not
+require editing the existing chip implementations.
+
+**Difficulty:** medium
+**Gain:** high once more digipot chips are added
 
 ---
 
-## 3. Separate driver files from HAL API
+## 2. Add status-returning APIs without breaking bool wrappers
 
-**Problem:** Chip logic (MCP401x, MAX5395) and public API live in one file.
+**Problem:** many HAL APIs return `bool` or `NULL`, which hides the failure
+reason. For digipot this collapses invalid config, I2C NACK, read-back mismatch,
+and pool exhaustion into the same result.
 
-**Solution:**
-
-```
-hal/
-  hal_digipot.h          ← public interface (stable)
-  hal_digipot.c          ← dispatch + pool management
-  drivers/
-    digipot_mcp401x.c    ← single chip logic
-    digipot_max5395.c    ← single chip logic
-```
-
-Each driver registers its `ops` — the public file never changes.
-
----
-
-## 4. Unified error handling
-
-**Problem:** Functions return `bool` or `NULL` — no information about *why* an operation failed.
-
-**Solution:**
+**Solution:** add `_ex` functions returning a shared status enum, then keep the
+existing API as compatibility wrappers.
 
 ```c
 typedef enum {
     HAL_OK = 0,
+    HAL_ERR_INVALID_ARG,
     HAL_ERR_INVALID_CFG,
+    HAL_ERR_UNSUPPORTED,
+    HAL_ERR_POOL_FULL,
     HAL_ERR_I2C_NACK,
     HAL_ERR_I2C_TIMEOUT,
-    HAL_ERR_POOL_FULL,
     HAL_ERR_VERIFY_FAIL,
 } hal_status_t;
 
-hal_status_t hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms);
+hal_status_t hal_digipot_init_ex(const hal_digipot_config_t *cfg,
+                                 hal_digipot_t *out);
+
+hal_status_t hal_digipot_set_resistance_ex(hal_digipot_t h,
+                                           uint32_t ohms);
 ```
 
-Cost: 0 extra RAM (enum → int, which is returned anyway). Migration: add a `bool` wrapper for backward compatibility.
+Migration pattern:
+
+```c
+hal_digipot_t hal_digipot_init(const hal_digipot_config_t *cfg) {
+    hal_digipot_t h = NULL;
+    return hal_digipot_init_ex(cfg, &h) == HAL_OK ? h : NULL;
+}
+
+bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms) {
+    return hal_digipot_set_resistance_ex(h, ohms) == HAL_OK;
+}
+```
+
+Important caveat: useful I2C-specific statuses require the lower-level I2C API
+to preserve more detail than a generic `bool`. Start with status codes that can
+be reported accurately today, then improve I2C mapping per backend.
+
+**Difficulty:** medium
+**Gain:** medium/high for debugging hardware failures
 
 ---
 
-## 5. Central configuration system
+## 3. Separate portable HAL from the Arduino-compatible tools layer
 
-**Problem:** `HAL_ENABLE_*` flags are scattered across `-D` in CMake, no single source of truth.
+**Problem:** the core HAL is moving in the right direction: application code can
+depend on `hal/*` APIs without using Arduino-specific public types. A weaker
+spot remains in the utility layer. Some `tools` headers still have an
+Arduino-compatible character; for example, `src/utils/tools.h` includes
+`Arduino.h` and `SPI.h`.
 
-**Solution:** One `hal_config.cmake` or defconfig file:
+This does not compromise the HAL itself, but it can blur the public story. A
+reader should be able to immediately distinguish:
 
-```cmake
-# hal_config.cmake - single place
-option(HAL_ENABLE_DIGIPOT "Digital potentiometer support" OFF)
-option(HAL_ENABLE_I2C     "I2C bus support" OFF)
+- **portable HAL** - the portability boundary intended for application logic,
+- **legacy/utility layer** - compatibility helpers and convenience utilities
+  that may still depend on Arduino conventions.
 
-# Automatic dependencies:
-if(HAL_ENABLE_DIGIPOT)
-    set(HAL_ENABLE_I2C ON CACHE BOOL "" FORCE)
-endif()
-```
+**Solution:** keep strengthening the architectural boundary rather than trying
+to rewrite everything at once. The recommended direction is:
 
-For full scalability — integrate with Kconfiglib (Python, zero runtime dependencies).
+- document `#include <JaszczurHAL.h>` / `#include <hal/hal.h>` as the portable
+  surface, and `#include <tools.h>` as an optional utility layer. Alternatively, 
+  remove or port Arduino-specific types and dependencies to generic types and 
+  HAL-level dependencies. Removing or porting Arduino-specific types and dependencies 
+  is the most desirable approach.
+- avoid adding new Arduino-dependent declarations to HAL public headers,
+- split Arduino-dependent utility declarations out of `src/utils/tools.h` when
+  touching that area next,
+- prefer C/portable declarations in `tools_c.h` and `utils/tools_api.h` for
+  code shared with STM32G474 and host tests.
+
+**Difficulty:** low/medium
+**Gain:** medium/high for project positioning and future ports
 
 ---
 
-## 6. Board description mechanism
+## 4. Optional board-description layer
 
-**Problem:** HW configuration (I2C address, bus, e2e) is coded at runtime by the caller.
+**Problem:** board wiring and device constants are currently assembled by each
+application at runtime. That is flexible, but repeated projects can drift.
 
-**Solution:** Even a simple header-based board description:
+**Solution:** add an optional header-based board description convention. Keep it
+outside the HAL core so small sketches can continue to pass config structs
+directly.
+
+Example:
 
 ```c
 // boards/my_board.h
 #define BOARD_DIGIPOT_BUS      0
 #define BOARD_DIGIPOT_ADDR     0x28
-#define BOARD_DIGIPOT_E2E      50000
+#define BOARD_DIGIPOT_E2E      50000u
 #define BOARD_DIGIPOT_MODE     HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL
 ```
 
-Or JSON/YAML processed by CMake into a generated header — lightweight Device Tree alternative.
+Possible helper:
+
+```c
+hal_digipot_config_t hal_board_default_digipot_config(void);
+```
+
+JSON/YAML generation can wait. A plain header gives most of the value without
+adding a build-system dependency.
+
+**Difficulty:** low/medium
+**Gain:** medium for reusable boards and examples
 
 ---
 
-## 7. Replace static pool with linker sections
+## 5. Revisit static pools only when RAM pressure is proven
 
-**Problem:** `s_pool[HAL_DIGIPOT_MAX_INSTANCES]` always occupies RAM regardless of actual usage.
+**Problem:** static pools reserve RAM for the configured maximum instance count.
+For digipot:
 
-**Solution A (simple):** Dynamic list with limit:
 ```c
-static uint8_t s_pool_count;
-// Allocate only as needed, fail when exceeded.
+static hal_digipot_impl_s s_pool[HAL_DIGIPOT_MAX_INSTANCES];
 ```
 
-**Solution B (advanced, Zephyr-style):** Linker section + `DEVICE_DEFINE`:
+**Current context:** this pool exists only when `HAL_ENABLE_DIGIPOT` is active,
+and the default max is small. Projects can already lower or raise the compile
+time cap with `HAL_DIGIPOT_MAX_INSTANCES`.
+
+**Recommendation:** do not prioritize linker sections yet. A linker-section
+device model is attractive for board-defined devices, but it is a larger
+cross-toolchain change and gives little benefit for the current digipot pool.
+
+If this becomes necessary later:
+
 ```c
 #define HAL_DIGIPOT_DEFINE(name, config) \
     static hal_digipot_impl_s _digipot_##name \
     __attribute__((section(".hal_digipot"))) = { .cfg = config };
 ```
 
-Linker eliminates unused instances automatically.
+Before doing this, verify behavior on:
+
+- Arduino-pico build,
+- STM32G474 linker script,
+- host/mock CMake tests,
+- dead-code elimination with unused devices.
+
+**Difficulty:** high
+**Gain:** low until board-defined static devices exist
 
 ---
 
-## Priority summary
+## Updated priority summary
 
-| # | Change | Difficulty | Gain |
-|---|--------|-----------|------|
-| 1 | Eliminate float | Low | High (CPU cycles) |
-| 2 | Vtable/ops | Medium | High (scalability) |
-| 3 | Separate driver files | Low | Medium (readability) |
-| 4 | Error codes | Low | Medium (debuggability) |
-| 5 | Central config | Medium | Medium (maintainability) |
-| 6 | Board description | Medium | Medium (portability) |
-| 7 | Linker-section pool | High | Low (RAM savings) |
+| Priority | Change | Difficulty | Gain | Status |
+|---|---|---:|---:|---|
+| Done | Fixed-point digipot arithmetic | Low | High | Implemented |
+| Done-ish | Central `HAL_ENABLE_*` config | Medium | Medium | Implemented, polish remains |
+| 1 | Digipot driver split + ops table | Medium | High | Next architecture step |
+| 2 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
+| 3 | Separate portable HAL from Arduino-compatible tools | Low/medium | Medium/high | Add incrementally |
+| 4 | Header-based board descriptions | Low/medium | Medium | Optional layer |
+| 5 | Linker-section/static device model | High | Low now | Backlog |
 
-Items 1–4 can be implemented incrementally without breaking the existing API.
+The safest implementation path is still incremental: preserve the current public
+API, add tests around each behavior before refactoring dispatch, and avoid
+changing build-system assumptions in the same patch as driver logic.

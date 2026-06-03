@@ -52,6 +52,10 @@ void SystemInit(void)
     SYSTICK_CTRL = SYSTICK_CTRL_CLKSOURCE |
                    SYSTICK_CTRL_TICKINT |
                    SYSTICK_CTRL_ENABLE;
+
+    /* Make the interrupt state explicit so reset/debug entry modes
+     * cannot leave the first delay permanently asleep. */
+    __asm volatile("cpsie i" ::: "memory");
 }
 
 /* ── Time source consumed by the stm32g474_system driver under HW build ──── */

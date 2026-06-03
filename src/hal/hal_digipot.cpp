@@ -101,6 +101,21 @@ static bool dp_read_cmd(uint8_t bus, uint8_t addr, uint8_t cmd, uint8_t *out) {
     return dp_read_raw(bus, addr, out);
 }
 
+static uint8_t scale_to_wiper_trunc(uint32_t value, uint32_t full_scale,
+                                    uint16_t steps) {
+    return (uint8_t)(value * (uint32_t)steps / full_scale);
+}
+
+static uint8_t scale_to_wiper_round_nearest(uint32_t value,
+                                            uint32_t full_scale,
+                                            uint16_t steps) {
+    const uint32_t scaled = value * (uint32_t)steps;
+    uint8_t wiper = (uint8_t)(scaled / full_scale);
+    const uint32_t remainder = scaled % full_scale;
+    wiper += ((remainder * 2u) > full_scale) ? 1u : 0u;
+    return wiper;
+}
+
 /* ── MCP401x ─────────────────────────────────────────────────────────────── */
 
 static bool mcp401x_e2e_valid(uint32_t r) {
@@ -135,20 +150,18 @@ static bool mcp401x_set_resistance(const hal_digipot_config_t *cfg,
             if (cfg->mcp401x_device != HAL_DIGIPOT_MCP4018) {
                 return false;
             }
-            wiper = (uint8_t)(((float)ohms / (float)cfg->e2e_resistance) *
-                              MCP401X_STEP_RESISTANCES);
+            wiper = scale_to_wiper_trunc(ohms, cfg->e2e_resistance,
+                                          MCP401X_STEP_RESISTANCES);
             break;
         case HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL:
         case HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH: {
             const uint32_t r = (MCP401X_WIPER_RESISTANCE > ohms) ?
                                    MCP401X_WIPER_RESISTANCE :
                                    ohms;
-            const float f = (((float)(r - MCP401X_WIPER_RESISTANCE) /
-                              (float)cfg->e2e_resistance) *
-                             MCP401X_STEP_RESISTANCES);
-            wiper = (uint8_t)f;
-            /* Round to nearest tap when the fractional part exceeds 0.5. */
-            wiper += ((f - (float)wiper) > 0.5f) ? 1u : 0u;
+            wiper = scale_to_wiper_round_nearest(
+                r - MCP401X_WIPER_RESISTANCE,
+                cfg->e2e_resistance,
+                MCP401X_STEP_RESISTANCES);
 
             if (cfg->mode == HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH) {
                 if (cfg->mcp401x_device != HAL_DIGIPOT_MCP4018) {
@@ -232,8 +245,8 @@ static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
     uint8_t wiper = 0u;
     switch (cfg->mode) {
         case HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER:
-            wiper = (uint8_t)(((float)ohms / (float)cfg->e2e_resistance) *
-                              MAX5395_STEP_RESISTANCES);
+            wiper = scale_to_wiper_trunc(ohms, cfg->e2e_resistance,
+                                          MAX5395_STEP_RESISTANCES);
             break;
         case HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL:
         case HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH: {
@@ -246,9 +259,9 @@ static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
                     MAX5395_WIPER_RES_QP_OFF :
                     MAX5395_WIPER_RES_QP_ON;
             const uint32_t r = (wiper_res > ohms) ? wiper_res : ohms;
-            wiper = (uint8_t)(((float)(r - wiper_res) /
-                               (float)cfg->e2e_resistance) *
-                              MAX5395_STEP_RESISTANCES);
+            wiper = scale_to_wiper_trunc(r - wiper_res,
+                                          cfg->e2e_resistance,
+                                          MAX5395_STEP_RESISTANCES);
             if (cfg->mode == HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH) {
                 wiper = (uint8_t)(MAX5395_STEP_RESISTANCES - wiper);
             }
