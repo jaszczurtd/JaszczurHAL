@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_adc.h"
 #include "../../hal_sync.h"
 #include <Arduino.h>
@@ -29,3 +31,4 @@ int hal_adc_read(uint8_t pin) {
     hal_mutex_unlock(s_adc_mutex);
     return val;
 }
+#endif  // HAL_TARGET_IS_RP2040

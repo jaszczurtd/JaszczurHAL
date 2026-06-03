@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_gps.h"
 #include "hal_mock.h"
 #include <string.h>
@@ -83,3 +85,4 @@ uint32_t hal_gps_passed_checksum(void)    { return 0; }
 uint32_t hal_gps_failed_checksum(void)    { return 0; }
 uint32_t hal_gps_sentences_with_fix(void) { return 0; }
 int      hal_gps_serial_available(void)   { return 0; }
+#endif  // HAL_TARGET_IS_MOCK

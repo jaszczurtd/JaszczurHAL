@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_wifi.h"
 #include "../../hal_serial.h"
 #include "hal_mock.h"
@@ -193,3 +195,4 @@ const char *hal_mock_wifi_get_hostname(void) {
 uint32_t hal_mock_wifi_get_timeout_ms(void) {
     return s_timeout_ms;
 }
+#endif  // HAL_TARGET_IS_MOCK

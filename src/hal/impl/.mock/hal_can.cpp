@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_can.h"
 #include "../../hal_config.h"
 #include "../../hal_sync.h"
@@ -153,3 +155,4 @@ void hal_mock_can_reset(hal_can_t h) {
     h->tx_head = h->tx_tail = h->tx_count = 0;
     hal_mutex_unlock(h->mutex);
 }
+#endif  // HAL_TARGET_IS_MOCK

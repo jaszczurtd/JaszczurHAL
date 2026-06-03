@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_gpio.h"
 #include <Arduino.h>
 #include <hardware/irq.h>
@@ -42,3 +44,4 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
                     : PICO_DEFAULT_IRQ_PRIORITY;
     irq_set_priority(IO_IRQ_BANK0, hw_prio);
 }
+#endif  // HAL_TARGET_IS_RP2040

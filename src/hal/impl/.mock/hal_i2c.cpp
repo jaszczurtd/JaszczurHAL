@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_i2c.h"
 #include "hal_mock.h"
 
@@ -292,3 +294,4 @@ uint32_t hal_i2c_get_transaction_count(void) {
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
     return i2c_state(bus)->transaction_count;
 }
+#endif  // HAL_TARGET_IS_MOCK

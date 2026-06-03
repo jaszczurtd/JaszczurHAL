@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_swserial.h"
 #include "../../hal_config.h"
 #include "hal_mock.h"
@@ -111,3 +113,4 @@ void hal_mock_swserial_reset(hal_swserial_t h) {
 const char *hal_mock_swserial_last_write(hal_swserial_t h) {
     return h ? h->last_write : "";
 }
+#endif  // HAL_TARGET_IS_MOCK

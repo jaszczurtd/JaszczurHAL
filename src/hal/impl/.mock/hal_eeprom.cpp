@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_eeprom.h"
 #include "../../hal_sync.h"
 #include "../../hal_config.h"
@@ -155,3 +157,4 @@ void hal_mock_eeprom_reset(void) {
     s_committed = false;
     s_write_count = 0;
 }
+#endif  // HAL_TARGET_IS_MOCK

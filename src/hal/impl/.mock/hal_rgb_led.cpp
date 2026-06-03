@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_rgb_led.h"
 #include "hal_mock.h"
 
@@ -51,3 +53,4 @@ void hal_mock_rgb_led_reset(void) {
     s_pin         = 0;
     s_num_pixels  = 0;
 }
+#endif  // HAL_TARGET_IS_MOCK

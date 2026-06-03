@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_UART
@@ -135,4 +136,4 @@ void hal_uart_destroy(hal_uart_t h) {
 
 #endif /* HAL_ENABLE_UART */
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

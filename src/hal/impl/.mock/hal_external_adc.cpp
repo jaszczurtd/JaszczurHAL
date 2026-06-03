@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_external_adc.h"
 #include "hal_mock.h"
 
@@ -36,3 +38,4 @@ void hal_mock_ext_adc_inject_scaled(uint8_t channel, float value) {
 float hal_mock_ext_adc_get_range(void) {
     return s_adc_range;
 }
+#endif  // HAL_TARGET_IS_MOCK

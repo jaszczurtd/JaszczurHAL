@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_gpio.h"
 #include "hal_mock.h"
 
@@ -58,3 +60,4 @@ void hal_mock_gpio_fire_interrupt(uint8_t pin) {
 hal_irq_priority_t hal_mock_gpio_get_irq_priority(void) {
     return s_gpio_irq_priority;
 }
+#endif  // HAL_TARGET_IS_MOCK

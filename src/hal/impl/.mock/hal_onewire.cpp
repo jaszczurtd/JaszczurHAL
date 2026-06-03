@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_ONEWIRE
 
@@ -431,3 +433,4 @@ int hal_mock_onewire_get_max_lock_depth(hal_onewire_t h) {
 }
 
 #endif /* HAL_ENABLE_ONEWIRE */
+#endif  // HAL_TARGET_IS_MOCK

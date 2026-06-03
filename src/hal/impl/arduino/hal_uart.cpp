@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_UART
 
@@ -107,3 +109,4 @@ void hal_uart_destroy(hal_uart_t h) {
 
 
 #endif /* HAL_ENABLE_UART */
+#endif  // HAL_TARGET_IS_RP2040

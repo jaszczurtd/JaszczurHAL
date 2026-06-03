@@ -138,6 +138,28 @@ see:
 - `JaszczurHAL_API.md`
 - `src/HAL_FLAGS.txt`
 
+## Target selection (multiplatform)
+
+Separate from the per-module flags, JaszczurHAL selects exactly one hardware
+backend through a single canonical switch (`src/hal/hal_target.h`). Define one
+of the following in `hal_project_config.h` (or via `-D`):
+
+```c
+#define HAL_TARGET_RP2040      // Raspberry Pi RP2040 / arduino-pico
+#define HAL_TARGET_STM32G474   // STM32G474 (bare-metal backend)
+#define HAL_TARGET_MOCK        // host unit-test / simulation backend
+```
+
+If you define none, the target is **auto-detected** from the toolchain, so
+existing RP2040/Arduino projects need no change. Selecting two targets — or a
+bare-metal ARM build with no detectable target — is a compile-time `#error`.
+Backend files compile only for their selected target, so unused backends cost
+zero code.
+
+A first bare-metal STM32G474 backend (boot + SysTick time + GPIO + USART2
+console + Cortex-M fault capture) ships as a runnable demo in
+[`stm32_lib/blink_g474/`](stm32_lib/blink_g474/) (Nucleo-G474RE).
+
 ## I2C clock presets
 
 `hal_i2c.h` exposes named clock constants for common bus modes:

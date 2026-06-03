@@ -39,6 +39,7 @@ add_library(hal_mock STATIC
 target_include_directories(hal_mock PUBLIC ${SRC})
 
 target_compile_definitions(hal_mock PUBLIC
+    HAL_TARGET_MOCK         # canonical backend selection (see src/hal/hal_target.h)
     UNITY_INCLUDE_CONFIG_H  # use the project's unity_config.h
     HAL_DISPLAY_ILI9341     # explicit TFT driver choice for host tests
     # Opt-in modules: host tests exercise the full HAL surface, so we

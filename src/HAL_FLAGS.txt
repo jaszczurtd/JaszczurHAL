@@ -16,6 +16,31 @@ The only opt-OUT flag is `HAL_DISABLE_ASSERTS`, kept for compatibility with
 the standard NDEBUG / assert.h convention. HAL_ASSERT() is ON by default.
 
 
+Target (backend) selection
+---------------------------
+
+Separate from the per-module HAL_ENABLE_* flags, JaszczurHAL selects exactly
+one hardware backend via a single switch (see src/hal/hal_target.h). Define ONE
+of the following in your `hal_project_config.h` (or via -D):
+
+    HAL_TARGET_RP2040       Raspberry Pi RP2040 / arduino-pico
+    HAL_TARGET_STM32G474    STM32G474 (bare-metal backend)
+    HAL_TARGET_MOCK         host unit-test / simulation backend
+
+If you define none, the target is AUTO-DETECTED from the toolchain, so existing
+projects need no change:
+
+    arduino-pico / RP2040 SDK   -> HAL_TARGET_RP2040
+    STM32G474xx (CubeG4 / -D)   -> HAL_TARGET_STM32G474
+    any host compiler           -> HAL_TARGET_MOCK
+    bare-metal ARM, no match    -> compile-time #error (real misconfiguration)
+
+Selecting two targets at once is a compile-time #error. The rest of the library
+tests `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and the string
+`HAL_TARGET_NAME`. Backend implementation files compile only for their own
+target, so unused backends cost zero code.
+
+
 Module enable flags
 -------------------
 

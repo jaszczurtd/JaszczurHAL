@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_spi.h"
 #include "../../hal_sync.h"
@@ -51,4 +52,4 @@ void hal_spi_unlock(uint8_t bus) {
     hal_mutex_unlock(s_spi[idx].mutex);
 }
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474

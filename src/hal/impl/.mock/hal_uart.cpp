@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_uart.h"
 #include "../../hal_config.h"
 #include "hal_mock.h"
@@ -154,3 +156,4 @@ void hal_mock_uart_set_write_callback(hal_uart_t h,
     h->write_cb = cb;
     h->write_cb_user = user;
 }
+#endif  // HAL_TARGET_IS_MOCK

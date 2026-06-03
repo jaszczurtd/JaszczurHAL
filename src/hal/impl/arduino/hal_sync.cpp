@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_sync.h"
 #include "../../hal_config.h"
 #include <Arduino.h>
@@ -36,3 +38,4 @@ void hal_critical_section_enter(void) {
 void hal_critical_section_exit(void) {
     interrupts();
 }
+#endif  // HAL_TARGET_IS_RP2040

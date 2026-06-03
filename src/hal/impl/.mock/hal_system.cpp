@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_system.h"
 #include "hal_mock.h"
 
@@ -291,3 +293,4 @@ void hal_mock_fault_diagnostics_reset(void) {
     s_stack_guard_armed  = false;
     s_stack_guard_check_triggered = false;
 }
+#endif  // HAL_TARGET_IS_MOCK

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_time.h"
 #include "../../hal_serial.h"
 #include "hal_mock.h"
@@ -132,3 +134,4 @@ const char *hal_mock_time_get_ntp_primary(void) {
 const char *hal_mock_time_get_ntp_secondary(void) {
     return s_ntp_secondary;
 }
+#endif  // HAL_TARGET_IS_MOCK

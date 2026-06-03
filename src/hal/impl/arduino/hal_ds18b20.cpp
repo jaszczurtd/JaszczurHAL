@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_DS18B20
 
@@ -303,3 +305,4 @@ bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
 }
 
 #endif /* HAL_ENABLE_DS18B20 */
+#endif  // HAL_TARGET_IS_RP2040

@@ -1,3 +1,5 @@
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_MOCK
 #include "../../hal_display.h"
 #include "../../hal_serial.h"
 #include <stdarg.h>
@@ -418,3 +420,4 @@ void hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w, i
 	if (w) *w = s_last_bitmap_w;
 	if (h) *h = s_last_bitmap_h;
 }
+#endif  // HAL_TARGET_IS_MOCK

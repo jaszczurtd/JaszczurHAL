@@ -1,4 +1,5 @@
-#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)
+#include "../../hal_target.h"
+#if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_config.h"
 #include "../../hal_time.h"
@@ -106,4 +107,4 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format) {
 
 #endif /* HAL_ENABLE_TIME */
 
-#endif /* !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32) */
+#endif  // HAL_TARGET_IS_STM32G474
