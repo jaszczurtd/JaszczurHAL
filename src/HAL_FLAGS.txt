@@ -95,7 +95,22 @@ Sensors
   HAL_ENABLE_DS18B20       DS18B20 1-Wire temperature. Propagates: ONEWIRE.
   HAL_ENABLE_ONEWIRE       Generic 1-Wire bus API wrapper.
   HAL_ENABLE_EXTERNAL_ADC  ADS1115 external ADC. Propagates: I2C.
-  HAL_ENABLE_GPS           TinyGPS++ NMEA parser. Propagates: SWSERIAL.
+  HAL_ENABLE_GPS           Portable NMEA receiver. Backend-agnostic engine
+                           (RP2040 + STM32G474); decodes position, altitude,
+                           course, speed, date/time, fix quality/mode, DOPs,
+                           satellites used/in-view and GST accuracy. Needs a
+                           transport: HAL_ENABLE_SWSERIAL or HAL_ENABLE_UART
+                           (does NOT auto-enable one).
+
+Digital potentiometers
+  HAL_ENABLE_DIGIPOT
+    Generic digital-potentiometer API. Requires at least one backend below.
+  HAL_ENABLE_MCP401X       MCP4017/4018/4019 (I2C 0x2F, 128 taps).
+                           Propagates: DIGIPOT, I2C.
+  HAL_ENABLE_MAX5395       MAX5395 (I2C 0x28/0x29/0x2B, 256 taps).
+                           Propagates: DIGIPOT, I2C.
+                           Backend-agnostic: one source over hal_i2c, runs on
+                           RP2040 and STM32G474 alike.
 
 Analog out / status
   HAL_ENABLE_DAC           True DAC output. Real on STM32G474 (DAC1, 12-bit,
@@ -170,8 +185,9 @@ HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE, HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
+HAL_ENABLE_MAX5395     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
-HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
 HAL_ENABLE_ILI9341     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY
 HAL_ENABLE_ST7789      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY
 HAL_ENABLE_ST7735      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY
@@ -185,5 +201,7 @@ Consistency checks (compile-time #error)
   HAL_ENABLE_RTC          requires HAL_ENABLE_PCF8563 OR HAL_ENABLE_DS3231
   HAL_ENABLE_CELLULAR_MODEM requires HAL_ENABLE_A7670
   HAL_ENABLE_THERMOCOUPLE requires HAL_ENABLE_MCP9600 OR HAL_ENABLE_MAX6675
+  HAL_ENABLE_DIGIPOT      requires HAL_ENABLE_MCP401X OR HAL_ENABLE_MAX5395
+  HAL_ENABLE_GPS          requires HAL_ENABLE_SWSERIAL OR HAL_ENABLE_UART
   HAL_ENABLE_DISPLAY      requires HAL_ENABLE_TFT     OR HAL_ENABLE_SSD1306
   HAL_ENABLE_TFT          requires HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S

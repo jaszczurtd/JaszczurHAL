@@ -4,6 +4,74 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_gps — portable NMEA engine + STM32G474 support + richer fix data
+
+- The GPS parser is now a dependency-free, in-tree NMEA engine
+  (`impl/shared/gps_nmea_parser.cpp`) wrapped by a shared facade
+  (`impl/shared/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
+  is ported from TinyGPS++ (no longer linked, no Arduino/`millis()`
+  dependency); GSA / GSV / GST decoding follows the minmea-kind GNSS parser.
+  Position age is stamped via `hal_millis()` in the facade.
+- **STM32G474 now has a GPS backend** (the porting goal): the same engine runs
+  there, fed from a hardware UART (`hal_uart`, USART1 by default). RP2040 keeps
+  its behaviour; its transport is no longer hard-wired to SoftwareSerial — it
+  can use UART or SoftwareSerial (compile-time `HAL_GPS_TRANSPORT_*`, default
+  SoftwareSerial), and the 8N1<->7N1 auto-detect is preserved.
+- `HAL_ENABLE_GPS` no longer auto-enables SoftwareSerial. It now requires a
+  transport — `HAL_ENABLE_SWSERIAL` **or** `HAL_ENABLE_UART` — enforced by a
+  compile-time `#error` (the `07_gps` example config gained `HAL_ENABLE_SWSERIAL`).
+- Extended API (additive, existing getters unchanged): `hal_gps_altitude_m`,
+  `hal_gps_course_deg`, `hal_gps_satellites_used`, `hal_gps_satellites_in_view`
+  (summed across GP/GL/GA/GB), `hal_gps_hdop` / `hal_gps_vdop` / `hal_gps_pdop`,
+  `hal_gps_fix_quality`, `hal_gps_fix_mode`, `hal_gps_horizontal_accuracy_m`
+  (GST, sqrt of the error-ellipse axes) — parity with the GNSS fix fields
+  decodable from standard NMEA (per-satellite/DR data is left out as
+  module-specific).
+- Mock backend gained matching getters and `hal_mock_gps_set_*` injectors; the
+  portable parser has its own host test (`test_gps_nmea_parser`) that feeds real
+  sentences (computed checksums) and asserts the decoded fields and mappings.
+
+### hal_digipot — I2C digital potentiometers (multiplatform, opt-in)
+
+- New opt-in module `hal_digipot` (`HAL_ENABLE_DIGIPOT`):
+  `hal_digipot_init()`, `hal_digipot_deinit()`, `hal_digipot_set_resistance()`,
+  `hal_digipot_step_count()`, `hal_digipot_e2e_resistance()`,
+  `hal_digipot_mode()`. Handle-based, multi-instance (up to
+  `HAL_DIGIPOT_MAX_INSTANCES`, default 4), per-instance mutex.
+- Two backends, selected per-handle: `HAL_ENABLE_MCP401X`
+  (Microchip MCP4017/4018/4019, I2C 0x2F, 128 taps) and `HAL_ENABLE_MAX5395`
+  (Maxim MAX5395, I2C 0x28/0x29/0x2B, 256 taps); both propagate
+  `HAL_ENABLE_DIGIPOT` + `HAL_ENABLE_I2C`. Modes: voltage divider and W-L / W-H
+  rheostat.
+- Proof-of-concept for the portable-driver model: a single backend-agnostic
+  source (`hal_digipot.cpp`) sits on top of `hal_i2c`, so the *same* code runs
+  on RP2040 and STM32G474 (and the host mock). Verified to build on the mock,
+  the STM32 host-sanity target and the real ARM `stm32_lib`.
+- Mock `hal_i2c` gained a write-frame capture log
+  (`hal_mock_i2c_reset_write_log()`, `hal_mock_i2c_get_write_frame_count()`,
+  `hal_mock_i2c_get_write_frame()`) so the Unity suite asserts the exact bytes
+  the driver transmits against hand-computed wiper values.
+
+### stm32g474 — real ADC1 backend
+
+- The STM32G474 `hal_adc` backend is now a real ADC1 reader (was a host
+  stub): single-ended, polled, one regular conversion per `hal_adc_read()`,
+  under `JH_STM32G474_HW`. The first read lazily brings ADC1 up (ADC12 clock,
+  internal regulator + startup wait, single-ended calibration, enable) and
+  routes the requested pin to analog mode on demand; no public init entry
+  point was added, so the simple `set_resolution` / `read` API is unchanged.
+- ADC kernel clock is HCLK/1 (CKMODE=01), so the HSI16 bring-up clock gives a
+  16 MHz ADC clock (in spec). Resolution (6/8/10/12-bit) maps onto CFGR.RES;
+  sample time is 247.5 cycles for higher-impedance sources. EOC is polled with
+  a bounded busy-loop (same style as the I2C backend).
+- Pin → channel map (JaszczurHAL pin id `port*16+pin`) covers the ADC1
+  single-ended inputs per RM0440: PA0..PA3 → IN1..IN4, PB0 → IN15, PB1 → IN12,
+  PB11 → IN14, PB12 → IN11, PB14 → IN5, PC0..PC3 → IN6..IN9. Unreachable pins
+  return 0. Host-stub behaviour is preserved for the off-target build.
+- Added ADC1 + ADC12-common register definitions to `port/stm32g474_regs.h`.
+- Note: the register sequence follows RM0440 but is pending on-silicon
+  validation on a real Nucleo-G474RE (same status as the I2C backend).
+
 ### stm32g474 — real I2C1 master backend
 
 - The STM32G474 `hal_i2c` backend is now a real I2C v2 master (was a host
@@ -92,8 +160,7 @@ All notable changes to this project will be documented in this file.
   `g_millis += ms` stub), real GPIO (with a `port*16+pin` numbering map),
   real `hal_serial`/debug over USART2 (ST-Link VCP), `__WFI` idle, and device
   UID from `UID_BASE` — all gated by the derived `JH_STM32G474_HW`.
-- Cortex-M4 fault capture (`port/exception_info.*`) modelled on
-  teltonika-tdf's crash_dump: stacked frame (R0-R3/R12/LR/PC/xPSR) +
+- Cortex-M4 fault capture (`port/exception_info.*`): stacked frame (R0-R3/R12/LR/PC/xPSR) +
   CFSR/HFSR/MMFAR/BFAR, retained in `.noinit` across reset and dumped over the
   debug console.
 - New example `stm32_lib/blink_g474/` (portable `hal_*` blink + boot/fault

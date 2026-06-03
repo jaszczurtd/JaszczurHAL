@@ -18,9 +18,9 @@ extern "C" {
  * Only one GPS instance is supported (singleton).
  */
 
-#include <stdint.h>
-#include <stdbool.h>
-#include "hal_uart_config.h"
+#    include "hal_uart_config.h"
+#    include <stdbool.h>
+#    include <stdint.h>
 
 /**
  * @brief Initialise the GPS subsystem.
@@ -34,7 +34,10 @@ extern "C" {
  * @param baud    Baud rate (typically 9600).
  * @param config  UART frame format constant (e.g. HAL_UART_CFG_8N1).
  */
-void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config);
+void hal_gps_init(uint8_t rx_pin,
+                  uint8_t tx_pin,
+                  uint32_t baud,
+                  uint16_t config);
 
 /**
  * @brief Drain all available bytes from the serial port into the NMEA parser.
@@ -84,6 +87,47 @@ double hal_gps_longitude(void);
 /** @brief Ground speed in km/h. Returns 0.0 when no fix. */
 double hal_gps_speed_kmph(void);
 
+/* ── Extended fix data ───────────────────────────────────────────────────
+ * Native fields come from GGA/RMC; the remainder are
+ * parsed from GSA / GSV / GST. Each getter returns a safe default (0) when
+ * the corresponding sentence has not been received. On the mock backend the
+ * values are whatever the hal_mock_gps_set_* helpers injected. */
+
+/** @brief Altitude above mean sea level in metres (GGA). 0.0 when no fix. */
+double hal_gps_altitude_m(void);
+
+/** @brief Course over ground in degrees, 0..360 (RMC/VTG). 0.0 when no fix. */
+double hal_gps_course_deg(void);
+
+/** @brief Satellites used in the navigation solution (GGA). */
+uint32_t hal_gps_satellites_used(void);
+
+/** @brief Satellites in view, summed across GP/GL/GA/GB talkers (GSV). */
+uint8_t hal_gps_satellites_in_view(void);
+
+/** @brief Horizontal dilution of precision (GGA/GSA). 0.0 when unavailable. */
+double hal_gps_hdop(void);
+
+/** @brief Vertical dilution of precision (GSA). 0.0 when unavailable. */
+double hal_gps_vdop(void);
+
+/** @brief Position (3-D) dilution of precision (GSA). 0.0 when unavailable. */
+double hal_gps_pdop(void);
+
+/** @brief GGA fix-quality indicator (0 = no fix, 1 = GPS, 2 = DGPS, ...). */
+uint8_t hal_gps_fix_quality(void);
+
+/** @brief GSA fix mode (1 = no fix, 2 = 2-D, 3 = 3-D). */
+uint8_t hal_gps_fix_mode(void);
+
+/**
+ * @brief Estimated horizontal position accuracy in metres (GST).
+ *
+ * Computed as sqrt(semi_major^2 + semi_minor^2) from the GST error-ellipse
+ * deviations. 0.0 when no GST sentence.
+ */
+double hal_gps_horizontal_accuracy_m(void);
+
 /** @brief Four-digit year from the GPS date sentence. */
 int hal_gps_date_year(void);
 /** @brief Month (1-12). */
@@ -113,7 +157,6 @@ uint32_t hal_gps_sentences_with_fix(void);
 
 /** @brief Bytes currently waiting in the underlying serial RX buffer. */
 int hal_gps_serial_available(void);
-
 
 #endif /* HAL_ENABLE_GPS */
 #ifdef __cplusplus

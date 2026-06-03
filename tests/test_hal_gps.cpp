@@ -59,6 +59,26 @@ void test_update_and_encode_do_not_corrupt_state_in_mock(void) {
     TEST_ASSERT_TRUE(fabs(hal_gps_longitude() - 19.0) < 0.0001);
 }
 
+void test_extended_fix_fields(void) {
+    hal_mock_gps_set_altitude_m(123.4);
+    hal_mock_gps_set_course_deg(270.5);
+    hal_mock_gps_set_dop(0.9, 1.5, 2.1);
+    hal_mock_gps_set_satellites(9, 14);
+    hal_mock_gps_set_fix(2, 3);
+    hal_mock_gps_set_horizontal_accuracy_m(2.5);
+
+    TEST_ASSERT_TRUE(fabs(hal_gps_altitude_m() - 123.4) < 0.001);
+    TEST_ASSERT_TRUE(fabs(hal_gps_course_deg() - 270.5) < 0.001);
+    TEST_ASSERT_TRUE(fabs(hal_gps_hdop() - 0.9) < 0.001);
+    TEST_ASSERT_TRUE(fabs(hal_gps_vdop() - 1.5) < 0.001);
+    TEST_ASSERT_TRUE(fabs(hal_gps_pdop() - 2.1) < 0.001);
+    TEST_ASSERT_EQUAL_UINT32(9, hal_gps_satellites_used());
+    TEST_ASSERT_EQUAL_UINT8(14, hal_gps_satellites_in_view());
+    TEST_ASSERT_EQUAL_UINT8(2, hal_gps_fix_quality());
+    TEST_ASSERT_EQUAL_UINT8(3, hal_gps_fix_mode());
+    TEST_ASSERT_TRUE(fabs(hal_gps_horizontal_accuracy_m() - 2.5) < 0.001);
+}
+
 void test_diagnostics_default_to_zero_in_mock(void) {
     TEST_ASSERT_EQUAL_UINT32(0, hal_gps_chars_processed());
     TEST_ASSERT_EQUAL_UINT32(0, hal_gps_passed_checksum());

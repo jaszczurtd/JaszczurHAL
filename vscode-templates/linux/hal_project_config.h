@@ -58,7 +58,7 @@
 // #define HAL_ENABLE_DS18B20         /* DS18B20 1-Wire  -> ONEWIRE         */
 // #define HAL_ENABLE_ONEWIRE         /* Raw 1-Wire bus API                 */
 // #define HAL_ENABLE_EXTERNAL_ADC    /* ADS1115         -> I2C             */
-// #define HAL_ENABLE_GPS             /* TinyGPS++       -> SWSERIAL        */
+// #define HAL_ENABLE_GPS             /* NMEA GPS; needs SWSERIAL or UART   */
 
 /* ── PWM / status ─────────────────────────────────────────────────────── */
 // #define HAL_ENABLE_PWM_FREQ        /* Frequency-controlled PWM           */

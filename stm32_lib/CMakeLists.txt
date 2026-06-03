@@ -13,12 +13,17 @@ file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
 # SoC-specific drivers under impl/stm32g474/drivers/<soc>/
 file(GLOB STM32_DRIVER_SOURCES ${SRC}/hal/impl/stm32g474/drivers/*/*.cpp)
 list(APPEND STM32_IMPL_SOURCES ${STM32_DRIVER_SOURCES})
+# Backend-agnostic implementations shared with the RP2040 backend
+# (e.g. the portable NMEA GPS engine + parser).
+file(GLOB STM32_SHARED_SOURCES ${SRC}/hal/impl/shared/*.cpp)
+list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/hal_digipot.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
@@ -61,6 +66,9 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_UART
     HAL_ENABLE_DAC
     HAL_ENABLE_PCNT
+    HAL_ENABLE_MCP401X   # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
+    HAL_ENABLE_MAX5395   # second digipot backend
+    HAL_ENABLE_GPS       # portable NMEA engine; transport = UART on this target
 )
 
 if(DEFINED EXTRA_HAL_DEFINES)
