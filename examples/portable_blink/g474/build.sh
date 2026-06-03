@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
-# Build the JaszczurHAL STM32G474 blink + exception-info demo into a flashable
-# ELF/BIN/HEX for the Nucleo-G474RE.
+# Build the portable_blink demo for STM32G474 (Nucleo-G474RE) into a flashable
+# ELF/BIN/HEX. Shares blink_app.c with the RP2040 sketch one level up.
 #
 # Requires the GNU Arm Embedded toolchain (arm-none-eabi-gcc/g++) on PATH.
-#
-# Usage:
 #   ./build.sh                 # normal blink
-#   FAULT_TEST=1 ./build.sh    # build the fault self-test variant
+#   FAULT_TEST=1 ./build.sh    # (reserved) fault self-test variant
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-JH_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+EXAMPLE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+JH_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 SRC="${JH_ROOT}/src"
 G474="${SRC}/hal/impl/stm32g474"
 LD="${JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld"
@@ -18,14 +17,13 @@ OUT="${SCRIPT_DIR}/build"
 mkdir -p "${OUT}"
 
 ARCH="-mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard"
-# Target is selected through the canonical project-config switch. The ARM arch
-# makes hal_target.h derive JH_STM32G474_HW (real registers vs host stub).
+# Target selected through the canonical switch; ARM arch derives JH_STM32G474_HW.
 DEFS="-DHAL_TARGET_STM32G474=1"
-[ "${FAULT_TEST:-0}" = "1" ] && DEFS="${DEFS} -DJH_BLINK_FAULT_TEST=1"
-CFLAGS="${ARCH} -ffreestanding -ffunction-sections -fdata-sections -Wall -Wextra -O2 ${DEFS} -include ${SRC}/hal/hal_target.h -I${SRC}/hal -I${G474}"
+CFLAGS="${ARCH} -ffreestanding -ffunction-sections -fdata-sections -Wall -Wextra -O2 ${DEFS} -include ${SRC}/hal/hal_target.h -I${EXAMPLE_DIR} -I${SRC} -I${SRC}/hal -I${G474}"
 
 C_SOURCES=(
     "${SCRIPT_DIR}/main.c"
+    "${EXAMPLE_DIR}/blink_app.c"
     "${G474}/port/startup_stm32g474.c"
     "${G474}/port/system_stm32g474.c"
     "${G474}/port/g474_debug_uart.c"
@@ -55,12 +53,12 @@ for f in "${CXX_SOURCES[@]}"; do
     OBJS+=("$o")
 done
 
-echo "  LD  blink_g474.elf"
+echo "  LD  portable_blink_g474.elf"
 arm-none-eabi-g++ ${ARCH} -T"${LD}" -nostartfiles -Wl,--gc-sections \
-    -Wl,-Map="${OUT}/blink_g474.map" --specs=nano.specs --specs=nosys.specs \
-    "${OBJS[@]}" -o "${OUT}/blink_g474.elf"
+    -Wl,-Map="${OUT}/portable_blink_g474.map" --specs=nano.specs --specs=nosys.specs \
+    "${OBJS[@]}" -o "${OUT}/portable_blink_g474.elf"
 
-arm-none-eabi-objcopy -O binary "${OUT}/blink_g474.elf" "${OUT}/blink_g474.bin"
-arm-none-eabi-objcopy -O ihex   "${OUT}/blink_g474.elf" "${OUT}/blink_g474.hex"
-arm-none-eabi-size "${OUT}/blink_g474.elf"
+arm-none-eabi-objcopy -O binary "${OUT}/portable_blink_g474.elf" "${OUT}/portable_blink_g474.bin"
+arm-none-eabi-objcopy -O ihex   "${OUT}/portable_blink_g474.elf" "${OUT}/portable_blink_g474.hex"
+arm-none-eabi-size "${OUT}/portable_blink_g474.elf"
 echo "Artifacts in ${OUT}/ (elf/bin/hex)"
