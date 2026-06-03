@@ -464,6 +464,18 @@ void hal_mock_gps_set_speed(double kmph);
 void hal_mock_gps_set_date(int year, int month, int day);
 /** @brief Set the mock GPS time fields (UTC). */
 void hal_mock_gps_set_time(int hour, int minute, int second);
+/** @brief Set the mock GPS altitude (metres). */
+void hal_mock_gps_set_altitude_m(double altitude_m);
+/** @brief Set the mock GPS course over ground (degrees). */
+void hal_mock_gps_set_course_deg(double course_deg);
+/** @brief Set the mock GPS dilution-of-precision values. */
+void hal_mock_gps_set_dop(double hdop, double vdop, double pdop);
+/** @brief Set the mock GPS satellite counts (used / in view). */
+void hal_mock_gps_set_satellites(uint32_t used, uint8_t in_view);
+/** @brief Set the mock GPS fix quality (GGA) and fix mode (GSA). */
+void hal_mock_gps_set_fix(uint8_t quality, uint8_t mode);
+/** @brief Set the mock GPS horizontal accuracy (metres). */
+void hal_mock_gps_set_horizontal_accuracy_m(double accuracy_m);
 /** @brief Reset all mock GPS state to zero / invalid. */
 void hal_mock_gps_reset(void);
 
@@ -524,6 +536,21 @@ void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);
 uint32_t hal_mock_i2c_get_bus_clear_count(void);
 /** @brief Return how many times hal_i2c_bus_clear_bus() was called on the given bus. */
 uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);
+/** @brief Clear the captured write-frame log on bus 0. */
+void hal_mock_i2c_reset_write_log(void);
+/** @brief Clear the captured write-frame log on the given bus. */
+void hal_mock_i2c_reset_write_log_bus(uint8_t bus);
+/** @brief Number of write frames (begin..end) captured on bus 0 since reset. */
+int hal_mock_i2c_get_write_frame_count(void);
+/** @brief Number of write frames captured on the given bus since reset. */
+int hal_mock_i2c_get_write_frame_count_bus(uint8_t bus);
+/**
+ * @brief Copy a captured write frame (bus 0) into @p out.
+ * @return frame length in bytes, or -1 if @p index is out of range.
+ */
+int hal_mock_i2c_get_write_frame(int index, uint8_t *out, int max);
+/** @brief Copy a captured write frame on the given bus into @p out. */
+int hal_mock_i2c_get_write_frame_bus(uint8_t bus, int index, uint8_t *out, int max);
 
 // ── I2C Slave ────────────────────────────────────────────────────────────────
 #include "../../hal_i2c_slave.h"

@@ -36,6 +36,52 @@
 #define RCC_APB1ENR1_USART2EN (1u << 17)
 
 #define RCC_AHB2ENR_DAC1EN  (1u << 16)
+#define RCC_AHB2ENR_ADC12EN (1u << 13)
+
+/* ── ADC1 + ADC12 common (single-channel polled regular conversions) ───────
+ * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/1
+ * (CKMODE=01) so the HSI16 bring-up clock yields a 16 MHz ADC clock, in spec.
+ * Register layout / bit positions per RM0440; pending on-silicon validation
+ * (see examples/g474_adc_read). */
+#define ADC1_BASE         0x50000000u
+#define ADC12_COMMON_BASE 0x50000300u
+
+#define ADC1_ISR     JH_REG32(ADC1_BASE + 0x00u)
+#define ADC1_CR      JH_REG32(ADC1_BASE + 0x08u)
+#define ADC1_CFGR    JH_REG32(ADC1_BASE + 0x0Cu)
+#define ADC1_SMPR1   JH_REG32(ADC1_BASE + 0x14u)   /* sample time, ch 0..9   */
+#define ADC1_SMPR2   JH_REG32(ADC1_BASE + 0x18u)   /* sample time, ch 10..18 */
+#define ADC1_SQR1    JH_REG32(ADC1_BASE + 0x30u)   /* regular sequence       */
+#define ADC1_DR      JH_REG32(ADC1_BASE + 0x40u)   /* regular data (read clears EOC) */
+#define ADC12_CCR    JH_REG32(ADC12_COMMON_BASE + 0x08u)
+
+#define ADC_ISR_ADRDY (1u << 0)
+#define ADC_ISR_EOC   (1u << 2)
+
+#define ADC_CR_ADEN     (1u << 0)
+#define ADC_CR_ADSTART  (1u << 2)
+#define ADC_CR_ADVREGEN (1u << 28)
+#define ADC_CR_DEEPPWD  (1u << 29)
+#define ADC_CR_ADCALDIF (1u << 30)
+#define ADC_CR_ADCAL    (1u << 31)
+
+/* CFGR RES field [4:3]: 00 = 12-bit, 01 = 10-bit, 10 = 8-bit, 11 = 6-bit. */
+#define ADC_CFGR_RES_POS  3u
+#define ADC_CFGR_RES_MASK (0x3u << ADC_CFGR_RES_POS)
+
+/* SQR1: SQ1 (first/only channel) sits at [10:6]; L (length-1) stays 0. */
+#define ADC_SQR1_SQ1_POS  6u
+
+/* Common CCR CKMODE [17:16]: 01 = synchronous HCLK/1. */
+#define ADC_CCR_CKMODE_MASK      (0x3u << 16)
+#define ADC_CCR_CKMODE_HCLK_DIV1 (0x1u << 16)
+
+/* SMPR 3-bit sample-time code: 0b110 = 247.5 ADC clock cycles (safe for
+ * higher-impedance sources during bring-up). */
+#define ADC_SMP_247CYCLES 0x6u
+
+/* Busy-poll bound for one conversion (matches the I2C backend's style). */
+#define ADC_POLL_TIMEOUT  200000u
 
 /* ── DAC1 (DAC1_OUT1 = PA4, DAC1_OUT2 = PA5) ─────────────────────────────── */
 #define DAC1_BASE       0x50000800u
@@ -120,6 +166,27 @@
 #define GPIO_PUPD_NONE   0x0u
 #define GPIO_PUPD_UP     0x1u
 #define GPIO_PUPD_DOWN   0x2u
+
+/* ── Generic USART (v2) register accessors by peripheral base ─────────────
+ * Used by the hal_uart backend for USART1 (PORT_1) and USART2 (PORT_2). The
+ * debug console keeps its own dedicated USART2_* accessors below. */
+#define USART_CR1(base) JH_REG32((base) + 0x00u)
+#define USART_BRR(base) JH_REG32((base) + 0x0Cu)
+#define USART_ISR(base) JH_REG32((base) + 0x1Cu)
+#define USART_ICR(base) JH_REG32((base) + 0x20u)
+#define USART_RDR(base) JH_REG32((base) + 0x24u)
+#define USART_TDR(base) JH_REG32((base) + 0x28u)
+
+#define USART_CR1_RE_BIT (1u << 2)
+#define USART_CR1_TE_BIT (1u << 3)
+#define USART_ISR_RXNE_F (1u << 5)
+#define USART_ISR_ORE_F  (1u << 3)
+#define USART_ISR_TXE_F  (1u << 7)
+#define USART_ICR_ORECF_F (1u << 3)
+
+#define USART1_BASE     0x40013800u
+#define RCC_APB2ENR     JH_REG32(RCC_BASE + 0x60u)   /* USART1 clock          */
+#define RCC_APB2ENR_USART1EN (1u << 14)
 
 /* ── USART2 (APB1, used as the debug console / ST-Link VCP on Nucleo-G474RE)  */
 #define USART2_BASE     0x40004400u

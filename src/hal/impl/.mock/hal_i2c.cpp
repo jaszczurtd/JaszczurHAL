@@ -8,6 +8,12 @@
 /* request_from() uses uint8_t count, so 255 is the maximum meaningful size. */
 #define MOCK_I2C_BUF_SIZE 255
 
+/* Write-frame capture: lets tests inspect exactly what a driver transmitted
+ * (one frame = one begin_transmission..end_transmission). Sized for small
+ * register-style writes; longer payloads are truncated to MOCK_I2C_WLOG_LEN. */
+#define MOCK_I2C_WLOG_FRAMES 32
+#define MOCK_I2C_WLOG_LEN    8
+
 typedef struct {
     uint8_t  rx_buf[MOCK_I2C_BUF_SIZE];
     int      rx_len;
@@ -20,6 +26,12 @@ typedef struct {
     int      read_byte_lock_depth_at_read;
     uint32_t transaction_count;
     uint32_t bus_clear_count;
+    /* Write-frame log (see MOCK_I2C_WLOG_* above). */
+    uint8_t  tx_buf[MOCK_I2C_WLOG_LEN];
+    int      tx_len;
+    uint8_t  wlog[MOCK_I2C_WLOG_FRAMES][MOCK_I2C_WLOG_LEN];
+    int      wlog_flen[MOCK_I2C_WLOG_FRAMES];
+    int      wlog_count;
 } mock_i2c_bus_state_t;
 
 static mock_i2c_bus_state_t s_i2c_state[2];
@@ -47,6 +59,8 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     st->read_byte_lock_depth_at_read = 0;
     st->transaction_count = 0;
     st->bus_clear_count = 0;
+    st->tx_len = 0;
+    st->wlog_count = 0;
 }
 
 void hal_i2c_set_clock(uint32_t clock_hz) {
@@ -70,6 +84,8 @@ void hal_i2c_deinit_bus(uint8_t bus) {
     st->rx_pos = 0;
     st->cur_addr = 0;
     st->busy = false;
+    st->tx_len = 0;
+    st->wlog_count = 0;
 }
 
 void hal_i2c_lock(void) {
@@ -97,7 +113,9 @@ void hal_i2c_begin_transmission(uint8_t address) {
 
 void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
     hal_i2c_lock_bus(bus);
-    i2c_state(bus)->cur_addr = address;
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    st->cur_addr = address;
+    st->tx_len = 0;  /* start a fresh write frame */
 }
 
 size_t hal_i2c_write(uint8_t data) {
@@ -105,8 +123,11 @@ size_t hal_i2c_write(uint8_t data) {
 }
 
 size_t hal_i2c_write_bus(uint8_t bus, uint8_t data) {
-    (void)bus;
-    (void)data;
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    if (st->tx_len < MOCK_I2C_WLOG_LEN) {
+        st->tx_buf[st->tx_len] = data;
+    }
+    st->tx_len++;  /* count even past the cap so truncation is observable */
     return 1;
 }
 
@@ -117,6 +138,15 @@ uint8_t hal_i2c_end_transmission(void) {
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
     st->transaction_count++;
+    /* Commit the assembled frame to the write log (for test inspection). */
+    if (st->wlog_count < MOCK_I2C_WLOG_FRAMES) {
+        int n = (st->tx_len < MOCK_I2C_WLOG_LEN) ? st->tx_len : MOCK_I2C_WLOG_LEN;
+        for (int i = 0; i < n; ++i) {
+            st->wlog[st->wlog_count][i] = st->tx_buf[i];
+        }
+        st->wlog_flen[st->wlog_count] = n;
+        st->wlog_count++;
+    }
     hal_i2c_unlock_bus(bus);
     return st->busy ? 2 : 0;  // 2 = NACK on address (simulates device not responding)
 }
@@ -285,6 +315,45 @@ void hal_mock_i2c_set_busy(bool busy) {
 
 void hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy) {
     i2c_state(bus)->busy = busy;
+}
+
+/* ── Write-frame log inspection ───────────────────────────────────────── */
+
+void hal_mock_i2c_reset_write_log(void) {
+    hal_mock_i2c_reset_write_log_bus(0);
+}
+
+void hal_mock_i2c_reset_write_log_bus(uint8_t bus) {
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    st->wlog_count = 0;
+    st->tx_len = 0;
+}
+
+int hal_mock_i2c_get_write_frame_count(void) {
+    return hal_mock_i2c_get_write_frame_count_bus(0);
+}
+
+int hal_mock_i2c_get_write_frame_count_bus(uint8_t bus) {
+    return i2c_state(bus)->wlog_count;
+}
+
+int hal_mock_i2c_get_write_frame(int index, uint8_t *out, int max) {
+    return hal_mock_i2c_get_write_frame_bus(0, index, out, max);
+}
+
+int hal_mock_i2c_get_write_frame_bus(uint8_t bus, int index, uint8_t *out, int max) {
+    mock_i2c_bus_state_t *st = i2c_state(bus);
+    if (index < 0 || index >= st->wlog_count) {
+        return -1;
+    }
+    int n = st->wlog_flen[index];
+    if (out != NULL) {
+        int copy = (n < max) ? n : max;
+        for (int i = 0; i < copy; ++i) {
+            out[i] = st->wlog[index][i];
+        }
+    }
+    return n;
 }
 
 uint32_t hal_i2c_get_transaction_count(void) {

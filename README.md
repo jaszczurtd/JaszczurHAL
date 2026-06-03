@@ -263,6 +263,5 @@ examples, and host-test coverage.
 - [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library) - Miles Burton
 - [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors
 - [MCP2515](https://github.com/coryjfowler/MCP_CAN_lib) - Loovee / Seeed Technology, with contributions by Cory J. Fowler
-- [TinyGPSPlus](https://github.com/mikalhart/TinyGPSPlus) - Mikal Hart
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

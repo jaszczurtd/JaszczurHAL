@@ -40,7 +40,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
-- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`, `TinyGPSPlus`).
+- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
 - `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
@@ -79,7 +79,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
-- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`
+- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`
 - `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
@@ -144,7 +144,10 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver (propagates I2C) |
-| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` | TinyGPS++ (propagates SWSERIAL) |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
+| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` | `hal_digipot.cpp` | *(needs MCP401X or MAX5395 backend)* |
+| `HAL_ENABLE_MCP401X` | `hal_digipot.h` | `hal_digipot.cpp` | MCP4017/4018/4019 over hal_i2c (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_MAX5395` | `hal_digipot.h` | `hal_digipot.cpp` | MAX5395 over hal_i2c (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
@@ -355,7 +358,7 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | `OneWire` | generic OneWire API (`hal_onewire`) and DS18B20 backend transport | Jim Studt (original), Paul Stoffregen (maintainer) | MIT | `src/hal/impl/arduino/drivers/OneWire/LICENSE` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
-| `TinyGPSPlus` | `hal_gps` parser backend | Mikal Hart | LGPL-2.1+ notice in source headers | `src/hal/impl/arduino/frameworks/TinyGPSPlus/src/TinyGPS++.h` |
+| TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps_nmea_parser.cpp` |
 
 Note: `Adafruit_GFX_Library/Fonts/` includes additional per-font notices in
 font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
@@ -371,7 +374,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `Adafruit_MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
-| TinyGPSPlus bundling | `hal_gps` now uses bundled TinyGPSPlus source with `HAL_ENABLE_GPS` compile guard in driver source. | Parser version is controlled in-repo and compiles out with GPS module disable. |
+| Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
 | WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
@@ -2751,7 +2754,7 @@ float hal_mock_ext_adc_get_range(void);                               // return 
 
 ## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_ENABLE_GPS`)*
 
-Singleton GPS subsystem. Wraps TinyGPS++ behind a platform-independent API.
+Singleton GPS subsystem. A portable in-tree NMEA parser behind a platform-independent API.
 The real implementation feeds the parser from a PIO-based SoftwareSerial port;
 the mock lets tests inject position, speed, date and time directly.
 
@@ -2808,11 +2811,16 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
-**impl/arduino:** `TinyGPS++` library + `hal_swserial`.  `hal_gps_update()` must be
-polled from the main loop every iteration; on RP2040 the PIO SoftwareSerial buffer
-is only 32 bytes and overflows in ~33 ms at 9600 baud.
+**Engine:** the portable NMEA parser (`impl/shared/gps_nmea_parser.cpp`) wrapped
+by a shared facade (`impl/shared/hal_gps_core.cpp`) — used by both hardware
+backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
+**impl/arduino (RP2040):** transport only — SoftwareSerial (default) or UART,
+selected at compile time. `hal_gps_update()` must be polled every loop iteration.
+**impl/stm32g474:** transport only — hardware UART (USART1 by default).
 **impl/.mock:** internal state struct; inject helpers set values directly.
-**Thread safety:** Arduino backend: thread-safe and multicore-safe. An internal `hal_mutex_t` protects the TinyGPS++ parser state, serial update, and all accessor calls. Mock backend is unsynchronized and intended for single-threaded tests.
+**Thread safety:** the shared engine is thread-safe and multicore-safe — an
+internal `hal_mutex_t` protects the parser state, the byte feed and all accessor
+calls. Mock backend is unsynchronized and intended for single-threaded tests.
 
 **UART config default:**
 
@@ -3797,7 +3805,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
 | `hal_i2c` | Arduino-pico `Wire.h` |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
-| `hal_gps` | `TinyGPS++` library + `hal_swserial` |
+| `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | `Adafruit_NeoPixel` |
 | `hal_thermocouple` (MCP9600) | bundled MCP9600 driver (`drivers/Adafruit_MCP9600`) |
 | `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |

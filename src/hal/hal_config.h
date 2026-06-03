@@ -123,6 +123,14 @@
        HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC (propagates: I2C).
        HAL_ENABLE_GPS           - GPS / NMEA receiver (propagates: SWSERIAL).
 
+     Digital potentiometers:
+       HAL_ENABLE_DIGIPOT       - generic digital-potentiometer API (requires
+                                  at least one backend: MCP401X or MAX5395).
+       HAL_ENABLE_MCP401X       - MCP4017/4018/4019 backend (propagates:
+                                  DIGIPOT, I2C).
+       HAL_ENABLE_MAX5395       - MAX5395 backend       (propagates:
+                                  DIGIPOT, I2C).
+
      PWM / status:
        HAL_ENABLE_PWM_FREQ      - Frequency-controlled PWM.
        HAL_ENABLE_RGB_LED       - NeoPixel RGB status LED.
@@ -252,6 +260,25 @@
   #endif
 #endif
 
+/* I2C digital potentiometers. */
+#ifdef HAL_ENABLE_MCP401X
+  #ifndef HAL_ENABLE_DIGIPOT
+    #define HAL_ENABLE_DIGIPOT
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_MAX5395
+  #ifndef HAL_ENABLE_DIGIPOT
+    #define HAL_ENABLE_DIGIPOT
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
+  #endif
+#endif
+
 /* 1-Wire stack. */
 #ifdef HAL_ENABLE_DS18B20
   #ifndef HAL_ENABLE_ONEWIRE
@@ -259,12 +286,12 @@
   #endif
 #endif
 
-/* GPS uses SoftwareSerial. */
-#ifdef HAL_ENABLE_GPS
-  #ifndef HAL_ENABLE_SWSERIAL
-    #define HAL_ENABLE_SWSERIAL
-  #endif
-#endif
+/* GPS needs a serial transport but is not tied to a specific one: it can be
+   fed from a hardware UART (hal_uart) or SoftwareSerial (hal_swserial). The
+   caller enables whichever the wiring uses; the consistency check below
+   requires at least one. (The mock backend injects values and needs neither,
+   but the host build enables both anyway.) GPS does NOT auto-enable a
+   transport, so it never drags in SoftwareSerial on targets that lack it. */
 
 /* Display driver family. */
 #ifdef HAL_ENABLE_ILI9341
@@ -321,6 +348,16 @@
 #if defined(HAL_ENABLE_THERMOCOUPLE) && \
     !defined(HAL_ENABLE_MCP9600) && !defined(HAL_ENABLE_MAX6675)
   #error "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
+#endif
+
+#if defined(HAL_ENABLE_DIGIPOT) && \
+    !defined(HAL_ENABLE_MCP401X) && !defined(HAL_ENABLE_MAX5395)
+  #error "HAL_ENABLE_DIGIPOT requires at least one backend: HAL_ENABLE_MCP401X or HAL_ENABLE_MAX5395"
+#endif
+
+#if defined(HAL_ENABLE_GPS) && \
+    !defined(HAL_ENABLE_SWSERIAL) && !defined(HAL_ENABLE_UART)
+  #error "HAL_ENABLE_GPS requires a serial transport: HAL_ENABLE_SWSERIAL or HAL_ENABLE_UART"
 #endif
 
 #if defined(HAL_ENABLE_DISPLAY) && \
@@ -417,6 +454,15 @@
   #endif
   #ifdef HAL_ENABLE_GPS
     #pragma message("HAL_CONFIG: HAL_ENABLE_GPS")
+  #endif
+  #ifdef HAL_ENABLE_DIGIPOT
+    #pragma message("HAL_CONFIG: HAL_ENABLE_DIGIPOT")
+  #endif
+  #ifdef HAL_ENABLE_MCP401X
+    #pragma message("HAL_CONFIG: HAL_ENABLE_MCP401X")
+  #endif
+  #ifdef HAL_ENABLE_MAX5395
+    #pragma message("HAL_CONFIG: HAL_ENABLE_MAX5395")
   #endif
   #ifdef HAL_ENABLE_PWM_FREQ
     #pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")

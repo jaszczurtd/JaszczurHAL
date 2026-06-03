@@ -20,6 +20,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/hal_digipot.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp
@@ -66,7 +67,9 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
     HAL_ENABLE_EXTERNAL_ADC   # propagates HAL_ENABLE_I2C
-    HAL_ENABLE_GPS            # propagates HAL_ENABLE_SWSERIAL
+    HAL_ENABLE_MCP401X        # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
+    HAL_ENABLE_MAX5395        # second digipot backend
+    HAL_ENABLE_GPS            # portable NMEA engine (transport: SWSERIAL/UART, both on below)
     HAL_ENABLE_DAC
     HAL_ENABLE_PCNT
     HAL_ENABLE_PWM_FREQ
