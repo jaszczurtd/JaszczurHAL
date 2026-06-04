@@ -88,7 +88,7 @@ src/
         drivers/
           stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
   utils/                   # helper modules and bundled optional utilities
-examples/                 # ready-to-run Arduino sketches
+examples/                 # ready-to-run rp2040/stm32 examples
 tests/                     # host unit tests (CMake + Unity)
 vscode-templates/          # ready-to-use VS Code project configurations
   windows/                 # Windows template (Python + Arduino CLI)
@@ -108,24 +108,34 @@ Do not place target-specific register access, pin/peripheral bring-up, ISR glue,
 or SDK object ownership in `shared/` - those belong to backend folders.
 
 ## Quick start
-See [examples](examples/).
+See [examples/README.md](examples/README.md) for the full build system guide.
 
 ## Examples
 
-The `examples/` tree contains small, focused Arduino sketches. Each
-example folder is self-contained: it includes its own
-`hal_project_config.h` and `.vscode/` build configuration so it can be
-opened and compiled directly in VS Code.
+The `examples/` tree contains 22 small, focused applications that demonstrate
+HAL modules. Each example is a portable `app.c`/`app.cpp` with a matching
+`hal_project_config.h` - no `.ino` files, no `main()`, no `setup()`/`loop()`.
 
-Every example folder now has a minimal `.vscode/` task that compiles the
-sketch against the local `JaszczurHAL/src` tree, plus a matching
-`hal_project_config.h` for module flags.
+A unified CMake build system compiles all examples for the selected backend:
 
-### Opening an example in VS Code
+```bash
+# RP2040 (requires arduino-cli + rp2040 core)
+cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
+cmake --build build_examples_rp2040
 
-1. Open the example folder in VS Code: `code examples/01_blink/`
-2. Edit `.vscode/settings.json` if needed (set `arduino.fqbn`, `arduino.uploadPort`)
-3. Press `Ctrl+Shift+1` to build (or run the task **Build**)
+# STM32G474 (requires arm-none-eabi-gcc)
+cmake -S examples -B build_examples_stm32 \
+      -DJH_EXAMPLE_TARGET=stm32g474 \
+      -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+cmake --build build_examples_stm32
+
+# Single example
+cmake --build build_examples_rp2040 --target 01_blink_rp2040
+```
+
+Each example uses the portable entry-point contract (`app_start` /
+`app_task0` / `app_task1`) - the same source compiles on both backends.
+See [examples/README.md](examples/README.md) for details.
 
 ## Module selection (quick)
 
@@ -166,11 +176,10 @@ Backend files compile only for their selected target, so unused backends cost
 zero code.
 
 The same demo source builds on both backends from a single example folder:
-[`examples/portable_blink/`](examples/portable_blink/) - an RP2040 sketch
-(`setup()/loop()`) and a bare-metal STM32G474 entry (`g474/main.c`) share one
-portable `blink_app.c`. The STM32G474 build exercises the first real bare-metal
-backend (boot + SysTick time + GPIO + USART2 console + Cortex-M fault capture)
-on the Nucleo-G474RE.
+[`examples/01_blink/`](examples/01_blink/) shows a portable `app.c` that
+compiles and runs on both RP2040 and STM32G474. The STM32G474 build exercises
+the real bare-metal backend (boot + SysTick time + GPIO + USART2 console +
+Cortex-M fault capture) targeting the Nucleo-G474RE.
 
 ## Host tests (quick)
 
@@ -259,6 +268,25 @@ See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup,
 
 The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`): [lib_compilation.md](lib_compilation.md)
+
+## Changing the Arduino RP2040 core version
+
+The pinned version of the `earlephilhower/arduino-pico` core is defined in a
+single file:
+
+```text
+arduino_core_version.conf   ← RP2040_CORE_VERSION=x.y.z
+```
+
+All scripts (`runmefirst.sh`, `runalltests.sh`, CI workflow) source this file
+automatically. To upgrade or downgrade:
+
+1. Edit `arduino_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
+2. Run `./runmefirst.sh` to install the new core locally.
+3. Run `./runalltests.sh` (or at minimum `./build_arduino_lib.sh`) to confirm
+   the library still compiles against the new core.
+
+No other files need to be touched.
 
 ## Documentation
 

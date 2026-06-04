@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-03 (added driver pool portability analysis)
+Last updated: 2026-06-05 (examples build system verified; SPI hardware layer added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -32,7 +32,12 @@ Added files:
 - `src/hal/impl/stm32g474/hal_spi.cpp`
 - `src/hal/impl/stm32g474/hal_i2c.cpp`
 - `src/hal/impl/stm32g474/hal_uart.cpp`
+- `src/hal/impl/stm32g474/hal_dac.cpp`
+- `src/hal/impl/stm32g474/hal_pcnt.cpp`
+- `src/hal/impl/stm32g474/hal_gps.cpp`
 - `src/hal/impl/stm32g474/hal_time.cpp` (always-available `hal_time_from_components`)
+- `src/hal/impl/stm32g474/port/` (startup, system init, debug UART, fault capture, atomic stubs, register map)
+- `src/hal/impl/stm32g474/drivers/stm32g474/` (SoC-specific fault and system drivers)
 
 Nature of the implementation:
 - a minimal, safe skeleton for the later switch to STM32 HAL/LL,
@@ -69,6 +74,16 @@ stages.
 - The real ARM target now builds end-to-end (the `JH_STM32G474_HW` hardware
   paths compile) once the Arm toolchain is installed:
   - `./build_stm32_lib.sh --clean`
+- **Examples build system** - all 10 STM32G474-targeted examples
+  (01_blink, 02_debug_helper, 03_soft_timer_table, 04_crypto, 14_uart,
+  17_pid_controller, 19_timer_ext, 20_i2c_scan, 21_adc_read, 22_gps_uart)
+  compile to ELF/BIN/HEX without errors using the unified CMake build:
+  ```bash
+  cmake -S examples -B build_examples_stm32 \
+        -DJH_EXAMPLE_TARGET=stm32g474 \
+        -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+  cmake --build build_examples_stm32
+  ```
 
 ## How to build for the real STM32G474
 After installing the Arm toolchain:
@@ -91,19 +106,27 @@ The following modules are real, register-level backends under
 
 - `hal_gpio` - direction + digital read/write (pin id = `port*16 + pin`).
 - `hal_i2c` - I2C1 master (SCL=PB8, SDA=PB9, AF4, 100 kHz, AUTOEND).
-- `hal_dac` - DAC1, 12-bit (ch0 → PA4, ch1 → PA5).
+- `hal_dac` - DAC1, 12-bit (ch0 -> PA4, ch1 -> PA5).
 - `hal_pcnt` - hardware pulse counter on TIM2 (external clock mode).
 - `hal_adc` - **ADC1**, single-ended, polled, one regular conversion per
   `hal_adc_read()`. The first read lazily brings ADC1 up (ADC12 clock,
   internal regulator + startup wait, single-ended calibration, enable) and
   routes the requested pin to analog mode on demand. ADC kernel clock is
-  HCLK/1, so the HSI16 bring-up clock gives a 16 MHz ADC clock. Pin → channel
-  map per RM0440: PA0..PA3 → IN1..IN4, PB0 → IN15, PB1 → IN12, PB11 → IN14,
-  PB12 → IN11, PB14 → IN5, PC0..PC3 → IN6..IN9. Example:
-  `examples/g474_adc_read`.
+  HCLK/1, so the HSI16 bring-up clock gives a 16 MHz ADC clock. Pin -> channel
+  map per RM0440: PA0..PA3 -> IN1..IN4, PB0 -> IN15, PB1 -> IN12, PB11 -> IN14,
+  PB12 -> IN11, PB14 -> IN5, PC0..PC3 -> IN6..IN9.
+- `hal_spi` - **SPI1/SPI2**, hardware register-level polling transfers (8-bit
+  full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
+  SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
+  bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
+- `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
+- `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
+  transport).
 
-These register sequences follow RM0440 but are pending on-silicon validation on
-a real Nucleo-G474RE (that is what the `examples/g474_*` programs are for).
+### Still placeholders (compile but use RAM-only state)
+- `hal_pwm` - stores values in array, no timer output.
+- `hal_timer` - slot management only, no hardware timer/IRQ.
+- `hal_sync` - no-op critical sections (single-core, no RTOS yet).
 
 ## Driver pool analysis - portability to STM32G474
 
@@ -136,7 +159,8 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 | Bus  | STM32G474 status | Consequence |
 |------|------------------|-------------|
 | I2C  | Full Wire-style API (`begin_transmission`/`write`/`end`/`request_from`/`read`) in `impl/stm32g474/hal_i2c.cpp` | I2C device drivers are portable today |
-| SPI  | Arduino-style transaction + transfer API in `hal_spi.h`; G474 backend drives SPI1/SPI2 in hardware (polling, 8-bit full-duplex, software NSS) and non-Arduino builds provide `<SPI.h>` with `SPIClass`/`SPISettings` | SPI device drivers can now be ported behind the HAL / Arduino-compatible shim |
+| SPI  | **Hardware SPI1/SPI2** with Arduino-style transaction + transfer API; non-Arduino builds provide `<SPI.h>` (`SPIClass`/`SPISettings`) backed by `hal_spi_*` | SPI device drivers can now be ported behind the HAL / Arduino-compatible shim |
+| UART | USART1 hardware (TX/RX, configurable baud) - used as GPS transport | UART-based peripherals are portable today |
 
 SPI is no longer blocked at the bus layer. The first STM32 implementation is
 polling-based rather than DMA, but it is hardware-backed and matches the
@@ -177,7 +201,7 @@ a rewrite (PWM+DMA or SPI), not a library port.
 
 **🔴 Not a "driver port" - different effort entirely:**
 - `hal_wifi / hal_udp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
-  PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio → not a port
+  PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio -> not a port
   but a different transport (e.g. via the already-portable SIMCom modem).
   Effectively N/A for a bare G474.
 - `hal_littlefs / hal_eeprom / hal_ota` - STM32 flash/storage specific, not
@@ -191,12 +215,18 @@ a rewrite (PWM+DMA or SPI), not a library port.
    external_adc (ADS1115), thermocouple (MCP9600).
 3. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
    for TFT throughput.
-4. **OneWire** as a portable driver on `hal_gpio` + `hal_time` → unblocks ds18b20.
+4. **OneWire** as a portable driver on `hal_gpio` + `hal_time` -> unblocks ds18b20.
 5. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages
-1. Replace the remaining `impl/stm32g474` placeholders with real STM32 HAL/LL calls.
-2. A real `hal_timer_*` implementation (hardware timers/IRQ).
-3. `hal_system` integration (watchdog, MCU UID, bootloader, time).
+1. Replace the remaining `impl/stm32g474` placeholders with real STM32 register code:
+   - `hal_pwm` - needs TIM output compare / PWM mode on a general-purpose timer.
+   - `hal_timer` - hardware timer alarms / periodic IRQ (TIM6/TIM7 or similar).
+   - `hal_sync` - PRIMASK/BASEPRI critical sections (trivial on single-core, but
+     needed before FreeRTOS).
+2. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
+3. Port first SPI device driver (MAX6675 or MCP2515) to validate CS/mode/clock on real hardware.
+4. On-silicon validation on Nucleo-G474RE for all register-level backends.
+5. FreeRTOS integration (enables true `app_task1` parallelism on STM32).
 4. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC) on an STM32G474 board.
 5. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.

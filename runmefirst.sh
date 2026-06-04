@@ -5,6 +5,12 @@
 # Safe to re-run.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# ── Single source of truth for Arduino RP2040 core version ────────────────────
+# shellcheck source=arduino_core_version.conf
+source "${SCRIPT_DIR}/arduino_core_version.conf"
+
 RP2040_INDEX="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
 
 sudo apt-get update
@@ -31,7 +37,7 @@ if ! command -v arduino-cli >/dev/null 2>&1; then
     | sudo BINDIR=/usr/local/bin sh
 fi
 arduino-cli core update-index --additional-urls "$RP2040_INDEX"
-arduino-cli core install rp2040:rp2040 --additional-urls "$RP2040_INDEX"
+arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" --additional-urls "$RP2040_INDEX"
 
 # ── Self-check: report anything still missing ────────────────────────────────
 echo

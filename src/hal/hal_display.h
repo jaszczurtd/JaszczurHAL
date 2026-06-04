@@ -56,6 +56,10 @@
 #include <stddef.h>
 #include <stdarg.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifdef HAL_ENABLE_TFT
 #if (((defined(HAL_DISPLAY_ILI9341) ? 1 : 0) + \
       (defined(HAL_DISPLAY_ST7789)  ? 1 : 0) + \
@@ -525,5 +529,9 @@ int hal_display_prepare_text(char *display_txt, size_t display_txt_size,
  */
 int hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
                                const char *format, va_list args);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_DISPLAY */

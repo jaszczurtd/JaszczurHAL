@@ -10,7 +10,7 @@ static inline uint8_t spi_bus_index(uint8_t bus) {
     return bus == 1 ? 1 : 0;
 }
 
-static inline SPIClass &spi_object(uint8_t bus) {
+static inline SPIClassRP2040 &spi_object(uint8_t bus) {
     return spi_bus_index(bus) == 1 ? SPI1 : SPI;
 }
 
@@ -19,7 +19,7 @@ static SPISettings spi_make_settings(const hal_spi_settings_t *settings) {
         return SPISettings(HAL_SPI_CLOCK_DEFAULT_HZ, MSBFIRST, SPI_MODE0);
     }
     uint32_t clock = settings->clock_hz ? settings->clock_hz : HAL_SPI_CLOCK_DEFAULT_HZ;
-    uint8_t order = settings->bit_order == HAL_SPI_LSBFIRST ? LSBFIRST : MSBFIRST;
+    BitOrder order = settings->bit_order == HAL_SPI_LSBFIRST ? LSBFIRST : MSBFIRST;
     uint8_t mode = settings->data_mode <= SPI_MODE3 ? settings->data_mode : SPI_MODE0;
     return SPISettings(clock, order, mode);
 }
@@ -38,7 +38,7 @@ static void spi_ensure_mutex(uint8_t bus) {
 void hal_spi_init(uint8_t bus, uint8_t rx_miso, uint8_t tx_mosi, uint8_t sck_pin) {
     uint8_t idx = spi_bus_index(bus);
     spi_ensure_mutex(idx);
-    SPIClass &spi = spi_object(idx);
+    SPIClassRP2040 &spi = spi_object(idx);
     spi.setRX(rx_miso);
     spi.setTX(tx_mosi);
     spi.setSCK(sck_pin);
@@ -88,7 +88,7 @@ void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size_t l
     if (len == 0u) {
         return;
     }
-    SPIClass &spi = spi_object(bus);
+    SPIClassRP2040 &spi = spi_object(bus);
     for (size_t i = 0; i < len; ++i) {
         const uint8_t out = tx ? tx[i] : 0xFFu;
         const uint8_t in = spi.transfer(out);

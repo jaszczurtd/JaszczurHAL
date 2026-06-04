@@ -14,6 +14,10 @@
 #include <stddef.h>
 #include "hal_uart_config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Opaque handle for a software-UART instance.
  *
@@ -97,5 +101,8 @@ void hal_swserial_flush(hal_swserial_t h);
  */
 void hal_swserial_destroy(hal_swserial_t h);
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_SWSERIAL */

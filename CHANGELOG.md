@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### examples - unified CMake build system + documentation
+
+- New unified `examples/CMakeLists.txt` build system compiles all 22 examples
+  for RP2040 (via `arduino-cli`) and 10 examples for STM32G474 (bare-metal ELF)
+  from a single CMake invocation. CMakePresets.json provides named presets for
+  both backends.
+- All 22 RP2040 examples and all 10 STM32G474 examples now compile cleanly
+  (verified end-to-end).
+- Fixed `atomic_stubs_cm4.c` preprocessor guard: changed from
+  `#if defined(__arm__) || defined(__thumb__)` (matched RP2040 too, causing
+  multiple-definition linker errors) to
+  `#if defined(HAL_TARGET_STM32G474) || defined(STM32G474xx) || defined(STM32G4)`.
+- Fixed `examples/09_display_tft`: renamed `app.c` -> `app.cpp` because it calls
+  the C++ function `draw7SegString` (C++ linkage mismatch caused undefined
+  reference on RP2040).
+- Added `examples/README.md` documenting the build system, requirements,
+  per-platform compilation commands, application structure, and the
+  `app_start`/`app_task0`/`app_task1` entry-point contract.
+
 ### stm32g474 / hal_spi - hardware SPI transfer layer
 
 - Added Arduino-style SPI transaction/transfer primitives to `hal_spi`
@@ -98,9 +117,9 @@ All notable changes to this project will be documented in this file.
   16 MHz ADC clock (in spec). Resolution (6/8/10/12-bit) maps onto CFGR.RES;
   sample time is 247.5 cycles for higher-impedance sources. EOC is polled with
   a bounded busy-loop (same style as the I2C backend).
-- Pin → channel map (JaszczurHAL pin id `port*16+pin`) covers the ADC1
-  single-ended inputs per RM0440: PA0..PA3 → IN1..IN4, PB0 → IN15, PB1 → IN12,
-  PB11 → IN14, PB12 → IN11, PB14 → IN5, PC0..PC3 → IN6..IN9. Unreachable pins
+- Pin -> channel map (JaszczurHAL pin id `port*16+pin`) covers the ADC1
+  single-ended inputs per RM0440: PA0..PA3 -> IN1..IN4, PB0 -> IN15, PB1 -> IN12,
+  PB11 -> IN14, PB12 -> IN11, PB14 -> IN5, PC0..PC3 -> IN6..IN9. Unreachable pins
   return 0. Host-stub behaviour is preserved for the off-target build.
 - Added ADC1 + ADC12-common register definitions to `port/stm32g474_regs.h`.
 - Note: the register sequence follows RM0440 but is pending on-silicon
@@ -145,8 +164,8 @@ All notable changes to this project will be documented in this file.
   contrast: identical API, hardware timer on G474 vs ISR counter on RP2040.
 - Mock backend with `hal_mock_pcnt_inject/_get_edge/_get_pin` and a Unity
   suite (`test_hal_pcnt`); documented in `src/HAL_FLAGS.txt`.
-- Second of the planned core-peripheral additions (DAC → **PCNT** → GPT
-  capture/compare/encoder → SPI-slave → RNG).
+- Second of the planned core-peripheral additions (DAC -> **PCNT** -> GPT
+  capture/compare/encoder -> SPI-slave -> RNG).
 
 ### hal_dac - true DAC output (multiplatform, opt-in)
 
@@ -154,7 +173,7 @@ All notable changes to this project will be documented in this file.
   `hal_dac_resolution_bits()`, `hal_dac_max_value()`, `hal_dac_init()`,
   `hal_dac_write()`, `hal_dac_write_millivolts()`. Uniform channel numbering
   (0,1,...); VREF via `HAL_DAC_VREF_MV` (default 3300).
-- STM32G474 backend: real DAC1, 12-bit, channel 0 → PA4, channel 1 → PA5
+- STM32G474 backend: real DAC1, 12-bit, channel 0 -> PA4, channel 1 -> PA5
   (register-level under `JH_STM32G474_HW`, host-stub otherwise).
 - RP2040 backend: the RP2040 has no DAC, so `hal_dac_is_supported()` returns
   false and writes are no-ops (the honest multiplatform behaviour; use
@@ -162,8 +181,8 @@ All notable changes to this project will be documented in this file.
   `hal_dac_is_supported()`.
 - Mock backend with `hal_mock_dac_get()` / `hal_mock_dac_is_initialized()`
   helpers and a Unity suite (`test_hal_dac`); documented in `src/HAL_FLAGS.txt`.
-- First of the planned core-peripheral additions (DAC → PCNT → GPT
-  capture/compare/encoder → SPI-slave → RNG) hardening the STM32G474 backend.
+- First of the planned core-peripheral additions (DAC -> PCNT -> GPT
+  capture/compare/encoder -> SPI-slave -> RNG) hardening the STM32G474 backend.
 
 ### hal_target - explicit multiplatform backend selection
 
@@ -173,7 +192,7 @@ All notable changes to this project will be documented in this file.
   `-D`).
 - If none is defined the target is auto-detected from the toolchain, so
   existing RP2040/Arduino consumers need no change (bare `ARDUINO` is a
-  catch-all → RP2040). Selecting two targets, or a bare-metal ARM build with no
+  catch-all -> RP2040). Selecting two targets, or a bare-metal ARM build with no
   match, is a compile-time `#error`.
 - Exposes `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and
   `HAL_TARGET_NAME`; derives `JH_STM32G474_HW` (G474 + ARM) for register code
@@ -182,7 +201,7 @@ All notable changes to this project will be documented in this file.
   guards across all backend files (arduino / .mock / stm32g474) with explicit
   `#if HAL_TARGET_IS_*` guards. Unused backends compile to nothing.
 - Wired the switch into `hal_config.h` and the build configs
-  (`CMakeLists.txt` → MOCK, `arduino_lib` → RP2040, `stm32_lib` → STM32G474).
+  (`CMakeLists.txt` -> MOCK, `arduino_lib` -> RP2040, `stm32_lib` -> STM32G474).
   Documented in `src/HAL_FLAGS.txt`.
 
 ### stm32g474 - first real (non-stub) backend bring-up
@@ -313,8 +332,8 @@ All notable changes to this project will be documented in this file.
   transport-level AT-command engine sitting on top of `hal_uart`. Single
   shared implementation works on both Arduino and mock backends.
   - Public API: `hal_modem_at_create` / `_destroy`, `hal_modem_at_send`,
-    `hal_modem_at_send_with_data` (3-phase: command → `>` prompt →
-    payload → OK/ERROR), `hal_modem_at_listen_until` (passive boot/URC
+    `hal_modem_at_send_with_data` (3-phase: command -> `>` prompt ->
+    payload -> OK/ERROR), `hal_modem_at_listen_until` (passive boot/URC
     waiter with quiet-window logic), `hal_modem_at_last_response`,
     `hal_modem_at_urc_register` / `_urc_poll`, `hal_modem_at_set_log_filter`
     (redacts secrets in debug output), `hal_modem_at_set_line_observer`
@@ -534,7 +553,7 @@ All notable changes to this project will be documented in this file.
 - `wireguardif.c::wireguardif_network_rx`: explicit validation of
   `arg` / `pcb` / `p` / `addr` and of the pbuf payload; a single
   `pbuf_free(p)` on the error path.
-- `wireguardif.c::wireguardif_shutdown`: `free(device)` →
+- `wireguardif.c::wireguardif_shutdown`: `free(device)` ->
   `mem_free(device)`. The device is allocated via `mem_calloc()` in
   `wireguardif_init()`, so when `MEM_LIBC_MALLOC == 0` releasing it
   with libc `free()` corrupted the lwIP heap.

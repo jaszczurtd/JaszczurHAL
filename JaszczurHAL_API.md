@@ -2318,7 +2318,7 @@ hal_modem_at_t      hal_simcom_a76xx_get_at(hal_simcom_a76xx_t h);
 
 /* Power (optional helper).
 
-   The waveform is: idle HIGH → active-LOW pulse → HIGH. Use pwr_pin
+   The waveform is: idle HIGH -> active-LOW pulse -> HIGH. Use pwr_pin
    for any board whose power-control input matches that polarity:
      - SimCom PWRKEY through a transistor, OR
      - relay / load-switch ENABLE where HIGH means "powered"

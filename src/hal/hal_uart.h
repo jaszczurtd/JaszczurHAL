@@ -16,6 +16,10 @@
 #include <stdint.h>
 #include "hal_uart_config.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /** @brief Available hardware UART ports on the RP2040. */
 typedef enum {
     HAL_UART_PORT_1 = 1,
@@ -73,5 +77,9 @@ void hal_uart_flush(hal_uart_t h);
 
 /** @brief Release resources. The handle must not be used after this call. */
 void hal_uart_destroy(hal_uart_t h);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_UART */
