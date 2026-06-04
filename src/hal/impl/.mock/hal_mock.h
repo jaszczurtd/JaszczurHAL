@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <time.h>
 #include "../../hal_gpio.h"
 #include "../../hal_system.h"
@@ -251,6 +252,44 @@ void        hal_mock_wifi_set_ping_result(int result);
 const char *hal_mock_wifi_get_hostname(void);
 /** @brief Return the timeout set by hal_wifi_set_timeout_ms(). */
 uint32_t    hal_mock_wifi_get_timeout_ms(void);
+/** @brief Inject one WiFi scan result returned by hal_wifi_get_scan_result(). */
+bool        hal_mock_wifi_set_scan_result(size_t index,
+                                          const char *ssid,
+                                          hal_wifi_encryption_t encryption,
+                                          const uint8_t bssid[HAL_WIFI_BSSID_LEN],
+                                          int32_t channel,
+                                          int32_t rssi);
+
+// ── SD logger ───────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_SDLOGGER
+#include "../../hal_sdlogger.h"
+/** @brief Reset all mock SD logger state to defaults. */
+void        hal_mock_sdlogger_reset(void);
+/** @brief Control SD.begin() result returned by the mock backend. */
+void        hal_mock_sdlogger_set_sd_begin_result(bool result);
+/** @brief Control periodic log file open result. */
+void        hal_mock_sdlogger_set_log_open_result(bool result);
+/** @brief Control crash log file open result. */
+void        hal_mock_sdlogger_set_crash_open_result(bool result);
+/** @brief Return last periodic log filename. */
+const char *hal_mock_sdlogger_log_filename(void);
+/** @brief Return last crash log filename. */
+const char *hal_mock_sdlogger_crash_filename(void);
+/** @brief Return periodic log content flushed by the mock backend. */
+const char *hal_mock_sdlogger_log_content(void);
+/** @brief Return crash log content written by the mock backend. */
+const char *hal_mock_sdlogger_crash_content(void);
+/** @brief Return number of periodic log flushes. */
+uint32_t    hal_mock_sdlogger_log_flush_count(void);
+/** @brief Return number of crash log flushes. */
+uint32_t    hal_mock_sdlogger_crash_flush_count(void);
+/** @brief Return number of SD.begin() calls. */
+uint32_t    hal_mock_sdlogger_sd_begin_count(void);
+/** @brief Return true after hal_sdlogger_close() closes the log. */
+bool        hal_mock_sdlogger_log_was_closed(void);
+/** @brief Return true after hal_sdlogger_crash_close() closes the crash log. */
+bool        hal_mock_sdlogger_crash_was_closed(void);
+#endif
 
 // ── LittleFS ─────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_LITTLEFS

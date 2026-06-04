@@ -2,6 +2,9 @@
 #include "multicoreWatchdog.h"
 #include "SmartTimers.h"
 #include <hal/hal.h>
+#ifdef HAL_ENABLE_SDLOGGER
+#include <hal/hal_sdlogger.h>
+#endif
 
 /*
  * Multicore safety analysis (RP2040 Cortex-M0+):
@@ -64,7 +67,9 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
       function(valuesToReturn, WATCHDOG_VALUES_AMOUNT);
     }
 
-    saveLoggerAndClose();
+#ifdef HAL_ENABLE_SDLOGGER
+    hal_sdlogger_close();
+#endif
 
   } else {
     deb("Clean boot\n");

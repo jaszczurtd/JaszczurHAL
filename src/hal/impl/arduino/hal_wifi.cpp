@@ -12,6 +12,7 @@
 
 static hal_mutex_t s_wifi_mutex = NULL;
 static uint32_t s_wifi_timeout_ms = 15000u;
+static int s_wifi_scan_count = 0;
 
 static inline void wifi_ensure_mutex(void) {
     if (s_wifi_mutex == NULL) {
@@ -33,6 +34,21 @@ static bool validate_out(char *out, size_t out_size, const char *fn) {
         return false;
     }
     return true;
+}
+
+static hal_wifi_encryption_t map_encryption(uint8_t enc) {
+    switch (enc) {
+        case ENC_TYPE_NONE:
+            return HAL_WIFI_ENC_NONE;
+        case ENC_TYPE_TKIP:
+            return HAL_WIFI_ENC_WPA;
+        case ENC_TYPE_CCMP:
+            return HAL_WIFI_ENC_WPA2;
+        case ENC_TYPE_AUTO:
+            return HAL_WIFI_ENC_AUTO;
+        default:
+            return HAL_WIFI_ENC_UNKNOWN;
+    }
 }
 
 bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
@@ -224,6 +240,55 @@ int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
     }
     hal_mutex_unlock(s_wifi_mutex);
     return res;
+}
+
+int hal_wifi_scan_networks(void) {
+    wifi_ensure_mutex();
+    hal_mutex_lock(s_wifi_mutex);
+    s_wifi_scan_count = WiFi.scanNetworks();
+    hal_mutex_unlock(s_wifi_mutex);
+    return s_wifi_scan_count;
+}
+
+bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+    if (out == NULL) {
+        hal_derr("hal_wifi_get_scan_result: output pointer is NULL");
+        return false;
+    }
+
+    wifi_ensure_mutex();
+    hal_mutex_lock(s_wifi_mutex);
+    if (s_wifi_scan_count <= 0 || index >= (size_t)s_wifi_scan_count) {
+        hal_mutex_unlock(s_wifi_mutex);
+        hal_derr("hal_wifi_get_scan_result: index %u out of range",
+                 (unsigned)index);
+        return false;
+    }
+
+    String ssid = WiFi.SSID((int)index);
+    snprintf(out->ssid, sizeof(out->ssid), "%s", ssid.c_str());
+    WiFi.BSSID((int)index, out->bssid);
+    out->encryption = map_encryption((uint8_t)WiFi.encryptionType((int)index));
+    out->channel = (int32_t)WiFi.channel((int)index);
+    out->rssi = (int32_t)WiFi.RSSI((int)index);
+    hal_mutex_unlock(s_wifi_mutex);
+    return true;
+}
+
+const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {
+    switch (encryption) {
+        case HAL_WIFI_ENC_NONE:
+            return "NONE";
+        case HAL_WIFI_ENC_WPA:
+            return "WPA";
+        case HAL_WIFI_ENC_WPA2:
+            return "WPA2";
+        case HAL_WIFI_ENC_AUTO:
+            return "AUTO";
+        case HAL_WIFI_ENC_UNKNOWN:
+        default:
+            return "UNKN";
+    }
 }
 
 

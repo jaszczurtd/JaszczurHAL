@@ -59,6 +59,37 @@ Remaining useful polish:
   non-Arduino projects,
 - consider Kconfig only if the flag matrix becomes too large to audit by hand.
 
+### Arduino-free tools layer
+
+**Status:** implemented.
+
+The `src/utils` tools layer no longer depends directly on Arduino platform
+headers or Arduino-only public types. The former hard dependencies were moved
+behind HAL APIs:
+
+- WiFi scanning now uses `hal_wifi_scan_networks()` and
+  `hal_wifi_get_scan_result()`.
+- SD/crash logging moved out of `tools` into `hal_sdlogger`, with the
+  Arduino-specific `SD.h` / `SPI.h` code contained in
+  `src/hal/impl/arduino/frameworks/sdlogger/`.
+- Tools declarations use C/portable types such as `const char *`, `bool`,
+  fixed-width integers, and caller-provided buffers rather than Arduino
+  `String`, `File`, or `SPISettings`.
+- `src/utils/tools.cpp`, `SmartTimers`, `pidController`,
+  `multicoreWatchdog`, and `draw7Segment` call HAL APIs for time, delays,
+  ADC, WiFi, display, watchdog, and logging.
+
+Current caveats are compatibility-level rather than Arduino dependencies:
+
+- `hal_config.h` still provides non-Arduino `PROGMEM` and `F()` fallbacks.
+  They are central compatibility macros for bundled Arduino-origin drivers and
+  host builds, not a tools-specific dependency.
+- `src/arduino_host_stubs/` still exists for host diagnostics of Arduino
+  backend code, but `test_tools` and `test_multicoreWatchdog` no longer need
+  those stubs on their include path.
+- The tools layer remains a legacy/convenience layer. New application logic
+  should still prefer direct `hal/*` APIs when possible.
+
 ---
 
 ## Recommended next work
@@ -156,37 +187,28 @@ be reported accurately today, then improve I2C mapping per backend.
 
 ---
 
-## 3. Separate portable HAL from the Arduino-compatible tools layer
+## 3. Polish the legacy utility API after Arduino decoupling
 
-**Problem:** the core HAL is moving in the right direction: application code can
-depend on `hal/*` APIs without using Arduino-specific public types. A weaker
-spot remains in the utility layer. Some `tools` headers still have an
-Arduino-compatible character; for example, `src/utils/tools.h` includes
-`Arduino.h` and `SPI.h`.
+**Problem:** the direct Arduino dependency is gone, but the tools layer still
+mixes several roles: numeric helpers, debug aliases, scan helpers, C/C++
+compatibility, drawing helpers, timers, PID, Unity, and bundled cJSON.
 
-This does not compromise the HAL itself, but it can blur the public story. A
-reader should be able to immediately distinguish:
+That is acceptable for compatibility, but it makes `tools.h` broader than the
+portable HAL boundary and less clear than the focused `hal/*` modules.
 
-- **portable HAL** - the portability boundary intended for application logic,
-- **legacy/utility layer** - compatibility helpers and convenience utilities
-  that may still depend on Arduino conventions.
+**Solution:** keep `tools` HAL-only, but split the public convenience surface
+when touching those files next:
 
-**Solution:** keep strengthening the architectural boundary rather than trying
-to rewrite everything at once. The recommended direction is:
-
-- document `#include <JaszczurHAL.h>` / `#include <hal/hal.h>` as the portable
-  surface, and `#include <tools.h>` as an optional utility layer. Alternatively, 
-  remove or port Arduino-specific types and dependencies to generic types and 
-  HAL-level dependencies. Removing or porting Arduino-specific types and dependencies 
-  is the most desirable approach.
-- avoid adding new Arduino-dependent declarations to HAL public headers,
-- split Arduino-dependent utility declarations out of `src/utils/tools.h` when
-  touching that area next,
-- prefer C/portable declarations in `tools_c.h` and `utils/tools_api.h` for
-  code shared with STM32G474 and host tests.
+- document `#include <JaszczurHAL.h>` / `#include <hal/hal.h>` as the primary
+  portable surface and `#include <tools.h>` as optional compatibility helpers,
+- consider smaller utility headers such as `tools_numeric.h`,
+  `tools_strings.h`, `tools_debug_aliases.h`, and `tools_network_helpers.h`,
+- keep `tools_api.h` and `tools_c.h` free of C++ and Arduino-only types,
+- avoid adding new convenience helpers to `tools` when they naturally belong
+  in a HAL module.
 
 **Difficulty:** low/medium
-**Gain:** medium/high for project positioning and future ports
+**Gain:** medium for readability and future ports
 
 ---
 
@@ -266,9 +288,10 @@ Before doing this, verify behavior on:
 |---|---|---:|---:|---|
 | Done | Fixed-point digipot arithmetic | Low | High | Implemented |
 | Done-ish | Central `HAL_ENABLE_*` config | Medium | Medium | Implemented, polish remains |
+| Done | Arduino-free tools layer | Low/medium | Medium/high | Implemented |
 | 1 | Digipot driver split + ops table | Medium | High | Next architecture step |
 | 2 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
-| 3 | Separate portable HAL from Arduino-compatible tools | Low/medium | Medium/high | Add incrementally |
+| 3 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |
 | 4 | Header-based board descriptions | Low/medium | Medium | Optional layer |
 | 5 | Linker-section/static device model | High | Low now | Backlog |
 

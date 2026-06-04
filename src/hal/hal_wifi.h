@@ -12,12 +12,36 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef HAL_WIFI_SSID_MAX_LEN
+#define HAL_WIFI_SSID_MAX_LEN 33u
+#endif
+
+#ifndef HAL_WIFI_BSSID_LEN
+#define HAL_WIFI_BSSID_LEN 6u
+#endif
+
 typedef enum {
 	HAL_WIFI_MODE_OFF = 0,
 	HAL_WIFI_MODE_STA = 1,
 	HAL_WIFI_MODE_AP = 2,
 	HAL_WIFI_MODE_AP_STA = 3
 } hal_wifi_mode_t;
+
+typedef enum {
+	HAL_WIFI_ENC_UNKNOWN = 0,
+	HAL_WIFI_ENC_NONE,
+	HAL_WIFI_ENC_WPA,
+	HAL_WIFI_ENC_WPA2,
+	HAL_WIFI_ENC_AUTO
+} hal_wifi_encryption_t;
+
+typedef struct {
+	char                  ssid[HAL_WIFI_SSID_MAX_LEN];
+	uint8_t               bssid[HAL_WIFI_BSSID_LEN];
+	hal_wifi_encryption_t encryption;
+	int32_t               rssi;
+	int32_t               channel;
+} hal_wifi_scan_result_t;
 
 /** @brief Set WiFi mode. */
 bool hal_wifi_set_mode(hal_wifi_mode_t mode);
@@ -96,5 +120,21 @@ int hal_wifi_ping(const char *host_or_ip);
  */
 int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms);
 
+/**
+ * @brief Scan nearby WiFi networks.
+ * @return Number of networks found on success; negative value on error.
+ */
+int hal_wifi_scan_networks(void);
+
+/**
+ * @brief Copy one result from the last hal_wifi_scan_networks() call.
+ * @param index Zero-based result index.
+ * @param out Destination result struct.
+ * @return true when @p out was filled; false for invalid index/argument.
+ */
+bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
+
+/** @brief Convert a HAL WiFi encryption value to a short printable label. */
+const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 
 #endif /* HAL_ENABLE_WIFI */

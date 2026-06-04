@@ -6,6 +6,7 @@ void setUp(void) {
     hal_mock_set_millis(0);
     hal_mock_set_micros(0);
     hal_mock_adc_inject(0, 0);
+    hal_mock_wifi_reset();
 }
 
 void tearDown(void) {}
@@ -20,12 +21,13 @@ void test_tools_config_macro_aliases(void) {
     TEST_ASSERT_EQUAL_INT(HAL_TOOLS_PRINTABLE_BUFFER_SIZE, PRINTABLE_BUFFER_SIZE);
     TEST_ASSERT_EQUAL_INT(HAL_TOOLS_PRINTABLE_PREFIX_SIZE, PRINTABLE_PREFIX_SIZE);
 
+    static const char progmem_value[] PROGMEM = "pmem";
+    TEST_ASSERT_EQUAL_STRING("pmem", progmem_value);
+    TEST_ASSERT_EQUAL_STRING("flash", F("flash"));
+
     TEST_ASSERT_EQUAL_INT(HAL_TOOLS_EEPROM_FIRST_ADDR, EEPROM_FIRST_ADDR);
-#ifdef SD_LOGGER
-    TEST_ASSERT_EQUAL_INT(HAL_TOOLS_WRITE_INTERVAL_MS, WRITE_INTERVAL);
-    TEST_ASSERT_EQUAL_INT(HAL_TOOLS_EEPROM_LOGGER_ADDR, EEPROM_LOGGER_ADDR);
-    TEST_ASSERT_EQUAL_INT(HAL_TOOLS_EEPROM_CRASH_ADDR, EEPROM_CRASH_ADDR);
-    TEST_ASSERT_EQUAL_INT(8, EEPROM_FIRST_ADDR);
+#ifdef HAL_ENABLE_SDLOGGER
+    TEST_ASSERT_EQUAL_INT(HAL_SDLOGGER_EEPROM_FIRST_ADDR, EEPROM_FIRST_ADDR);
 #else
     TEST_ASSERT_EQUAL_INT(0, EEPROM_FIRST_ADDR);
 #endif
@@ -403,6 +405,29 @@ void test_macToString(void) {
     char buf[20];
     macToString(mac, buf, sizeof(buf));
     TEST_ASSERT_EQUAL_STRING("11:22:33:AA:BB:CC", buf);
+}
+
+void test_scanNetworks_uses_hal_wifi_scan_results(void) {
+    const uint8_t bssid0[HAL_WIFI_BSSID_LEN] = {0x00, 0x11, 0x22,
+                                                0x33, 0x44, 0x55};
+    const uint8_t bssid1[HAL_WIFI_BSSID_LEN] = {0x66, 0x77, 0x88,
+                                                0x99, 0xAA, 0xBB};
+
+    TEST_ASSERT_TRUE(hal_mock_wifi_set_scan_result(0,
+                                                   "shop",
+                                                   HAL_WIFI_ENC_NONE,
+                                                   bssid0,
+                                                   1,
+                                                   -80));
+    TEST_ASSERT_TRUE(hal_mock_wifi_set_scan_result(1,
+                                                   "home-main",
+                                                   HAL_WIFI_ENC_WPA2,
+                                                   bssid1,
+                                                   11,
+                                                   -42));
+
+    TEST_ASSERT_TRUE(scanNetworks("home"));
+    TEST_ASSERT_FALSE(scanNetworks("missing"));
 }
 
 /* ── hexToChar ─────────────────────────────────────────────────────────── */
@@ -840,6 +865,7 @@ int main(void) {
     RUN_TEST(test_rgbToRgb565_black);
 
     RUN_TEST(test_macToString);
+    RUN_TEST(test_scanNetworks_uses_hal_wifi_scan_results);
 
     RUN_TEST(test_hexToChar_letter_A);
     RUN_TEST(test_hexToChar_space);

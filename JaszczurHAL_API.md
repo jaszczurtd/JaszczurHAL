@@ -31,7 +31,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/arduino_host_stubs/` - host-build compatibility stubs such as `Arduino.h`, `SPI.h`, and `SD.h`.
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, WiFi, UDP, WireGuard, MQTT, and time.
+- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
@@ -41,7 +41,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
-- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
+- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`) and Arduino-specific framework-style helpers such as `sdlogger`.
 - `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
@@ -81,7 +81,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`
-- `hal_eeprom`, `hal_kv`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
+- `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
 
@@ -131,6 +131,7 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS |
+| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
@@ -176,6 +177,7 @@ Enabling a leaf module automatically enables every module it requires:
 
 ```
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
+HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C
 HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
@@ -267,12 +269,6 @@ arduino-cli compile \
 | `hal_math` | type-independent `hal_constrain` / `hal_map` macros |
 
 `hal_crypto` is opt-in via `HAL_ENABLE_CRYPTO` (it is not part of the always-on core set).
-
-### SD library (`<SD.h>`)
-
-Separate from `HAL_ENABLE_*`: the `<SD.h>` include in `tools.h` is guarded by
-`#ifdef SD_LOGGER`.  If your project does not define `SD_LOGGER`, the SD
-library is not compiled.
 
 ### Note about `library.properties:depends`
 
@@ -457,7 +453,7 @@ Covered test targets include:
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
-- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
+- `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_sdlogger`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`
 - `hal_soft_timer_*` and `hal_pid_controller_*` are thin wrappers over these utility cores.
 
@@ -2969,6 +2965,22 @@ typedef enum {
     HAL_WIFI_MODE_AP_STA = 3,
 } hal_wifi_mode_t;
 
+typedef enum {
+    HAL_WIFI_ENC_UNKNOWN = 0,
+    HAL_WIFI_ENC_NONE,
+    HAL_WIFI_ENC_WPA,
+    HAL_WIFI_ENC_WPA2,
+    HAL_WIFI_ENC_AUTO,
+} hal_wifi_encryption_t;
+
+typedef struct {
+    char                  ssid[HAL_WIFI_SSID_MAX_LEN];
+    uint8_t               bssid[HAL_WIFI_BSSID_LEN];
+    hal_wifi_encryption_t encryption;
+    int32_t               rssi;
+    int32_t               channel;
+} hal_wifi_scan_result_t;
+
 bool    hal_wifi_set_mode(hal_wifi_mode_t mode);
 bool    hal_wifi_disconnect(bool erase_credentials);
 bool    hal_wifi_set_hostname(const char *hostname);
@@ -2984,6 +2996,9 @@ bool    hal_wifi_get_dns_ip(char *out, size_t out_size);
 bool    hal_wifi_get_mac(char *out, size_t out_size);
 int     hal_wifi_ping(const char *host_or_ip);      // >=0 ok, <0 error (uses timeout set by hal_wifi_set_timeout_ms)
 int     hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms); // >=0 ok, <0 error (per-call timeout)
+int     hal_wifi_scan_networks(void);               // >=0 result count, <0 error
+bool    hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
+const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 ```
 
 **impl/arduino:** Arduino-pico WiFi stack (`WiFi.h`).
@@ -3006,6 +3021,12 @@ void        hal_mock_wifi_set_mac(const char *mac);
 void        hal_mock_wifi_set_ping_result(int result);
 const char *hal_mock_wifi_get_hostname(void);
 uint32_t    hal_mock_wifi_get_timeout_ms(void);
+bool        hal_mock_wifi_set_scan_result(size_t index,
+                                          const char *ssid,
+                                          hal_wifi_encryption_t encryption,
+                                          const uint8_t bssid[HAL_WIFI_BSSID_LEN],
+                                          int32_t channel,
+                                          int32_t rssi);
 ```
 
 ---
@@ -3048,6 +3069,74 @@ void hal_mock_littlefs_set_format_result(bool result);
 void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
 void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
 void hal_mock_littlefs_set_exists(const char *path, bool exists);
+```
+
+---
+
+## `hal_sdlogger` - SD-card logger  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
+
+Periodic SD-card logger plus crash-report logger. The module stores log/crash
+file counters in `hal_eeprom`, so enabling it propagates `HAL_ENABLE_EEPROM`
+and, for the current Arduino EEPROM backend, `HAL_ENABLE_I2C`.
+
+```c
+#include <hal/hal_sdlogger.h>
+
+int  hal_sdlogger_get_log_number(void);
+int  hal_sdlogger_get_crash_number(void);
+bool hal_sdlogger_init(int cs);
+bool hal_sdlogger_crash_init(const char *add_to_name, int cs);
+bool hal_sdlogger_is_initialized(void);
+bool hal_sdlogger_crash_is_initialized(void);
+void hal_sdlogger_append(const char *data);
+void hal_sdlogger_crash_append(const char *data);
+void hal_sdlogger_close(void);
+void hal_sdlogger_crash_close(void);
+void hal_sdlogger_crash_report(const char *format, ...);
+```
+
+**Configuration defaults:**
+
+```c
+HAL_SDLOGGER_WRITE_INTERVAL_MS  2000u
+HAL_SDLOGGER_EEPROM_LOGGER_ADDR 0u
+HAL_SDLOGGER_EEPROM_CRASH_ADDR  4u
+HAL_SDLOGGER_EEPROM_FIRST_ADDR  8u
+HAL_SDLOGGER_LOG_BUFFER_SIZE    2048u
+HAL_SDLOGGER_NAME_BUFFER_SIZE   128u
+```
+
+**Behavior notes:**
+- `hal_sdlogger_init(cs)` opens `logN.txt` and increments the EEPROM log counter.
+- `hal_sdlogger_append()` buffers lines and flushes every
+  `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` flushes leftovers.
+- `hal_sdlogger_crash_init(add_to_name, cs)` opens `watchdogN.txt` or
+  `watchdogN(<add_to_name>).txt` and writes the corresponding log filename.
+- `hal_sdlogger_crash_append()` and `hal_sdlogger_crash_report()` flush crash
+  entries immediately.
+
+**impl/arduino:** Arduino-pico `SD.h` / `SPI.h`, contained in
+`impl/arduino/frameworks/sdlogger`.
+**impl/.mock:** deterministic test double with injectable SD/open results,
+captured filenames/content, flush counts, and close flags.
+**Thread safety:** Arduino backend serializes public calls with a singleton
+`hal_mutex_t`; init/close should still be treated as single-core lifecycle work.
+
+**Mock helpers:**
+```c
+void        hal_mock_sdlogger_reset(void);
+void        hal_mock_sdlogger_set_sd_begin_result(bool result);
+void        hal_mock_sdlogger_set_log_open_result(bool result);
+void        hal_mock_sdlogger_set_crash_open_result(bool result);
+const char *hal_mock_sdlogger_log_filename(void);
+const char *hal_mock_sdlogger_crash_filename(void);
+const char *hal_mock_sdlogger_log_content(void);
+const char *hal_mock_sdlogger_crash_content(void);
+uint32_t    hal_mock_sdlogger_log_flush_count(void);
+uint32_t    hal_mock_sdlogger_crash_flush_count(void);
+uint32_t    hal_mock_sdlogger_sd_begin_count(void);
+bool        hal_mock_sdlogger_log_was_closed(void);
+bool        hal_mock_sdlogger_crash_was_closed(void);
 ```
 
 ---
@@ -3621,22 +3710,11 @@ void  hal_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
 void  hal_pack_field(uint8_t *buf, const char *str, int width); // zero padding
 unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
 const char *macToString(uint8_t mac[6], char *buf, size_t bufSize);
-const char *encToString(uint8_t enc);       // WiFi encryption type (requires PICO_W)
-bool  scanNetworks(const char *networkToFind);  // requires PICO_W
+const char *encToString(uint8_t enc);       // HAL WiFi encryption label
+bool  scanNetworks(const char *networkToFind);  // requires HAL_ENABLE_WIFI
 int   getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 void  i2cScanner(void);
-
-// SD Logger (requires SD card, enable SD_LOGGER in hal/hal_config.h)
-int  getSDLoggerNumber(void);
-int  getSDCrashNumber(void);
-bool initSDLogger(int cs);
-bool initCrashLogger(const char *addToName, int cs);
-bool isSDLoggerInitialized(void);
-bool isCrashLoggerInitialized(void);
-void saveLoggerAndClose(void);
-void saveCrashLoggerAndClose(void);
-void crashReport(const char *format, ...);
 ```
 
 ---
@@ -3820,7 +3898,8 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_ota` | Arduino-pico `ArduinoOTA` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
-| `tools` | `EEPROM.h`, `SD.h`, `SPI.h`, `Wire.h` (Arduino-pico) |
+| `hal_sdlogger` | Arduino-pico `SD.h` / `SPI.h` in `impl/arduino/frameworks/sdlogger` |
+| `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 
 ## Dependencies (mock / PC build)
@@ -3858,9 +3937,9 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 Each test executable in `tests/` links against `hal_mock` only - no Arduino
 headers, no pico SDK, no hardware.
 
-`tools.cpp` is covered by `test_tools` using Arduino host stubs in
-`src/arduino_host_stubs/`. `multicoreWatchdog.cpp` is covered by
-`test_multicoreWatchdog` using the same host stubs plus HAL mocks.
+`tools.cpp` is covered by `test_tools` using HAL mocks.
+`multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
+logger-close stub plus HAL mocks.
 `utils/draw7Segment.cpp` has no platform dependencies
 (pure `const char*` + `hal_display`).
 
@@ -3891,6 +3970,7 @@ headers, no pico SDK, no hardware.
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
 | `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, missing-path remove semantics, input validation |
+| `test_hal_sdlogger` | EEPROM-backed file numbering, buffered log flush/close, crash-report formatting, SD/open failure paths |
 | `test_hal_udp` | begin/parse/read flow, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
 | `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
@@ -3902,7 +3982,7 @@ headers, no pico SDK, no hardware.
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
-| `test_tools` | host-stubbed utility coverage from `tools.cpp`, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
+| `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
 
 ### Adding a new test suite
 

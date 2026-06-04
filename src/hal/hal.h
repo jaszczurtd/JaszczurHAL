@@ -71,6 +71,9 @@
 #ifdef HAL_ENABLE_LITTLEFS
 #include "hal_littlefs.h"
 #endif
+#ifdef HAL_ENABLE_SDLOGGER
+#include "hal_sdlogger.h"
+#endif
 #ifdef HAL_ENABLE_UDP
 #include "hal_udp.h"
 #endif

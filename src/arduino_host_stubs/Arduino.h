@@ -12,7 +12,7 @@
 #include <ctype.h>
 #include <string>
 
-/* String - minimal subset used in tools.h / tools.cpp function signatures */
+/* String - minimal subset used by selected Arduino-compatible sources. */
 class String {
     std::string _s;
 public:

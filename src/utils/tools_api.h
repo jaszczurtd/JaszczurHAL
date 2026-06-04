@@ -54,28 +54,6 @@ void setDebugPrefixWithColon(const char *moduleName);
 #define derr_limited   hal_derr_limited
 /** @} */
 
-/** @name SD/Crash logger API */
-/** @{ */
-/** @brief Return next logger file number. */
-int getSDLoggerNumber(void);
-/** @brief Return next crash report file number. */
-int getSDCrashNumber(void);
-/** @brief Initialise SD logger backend. */
-bool initSDLogger(int cs);
-/** @brief Initialise crash logger backend. */
-bool initCrashLogger(const char *addToName, int cs);
-/** @brief Return true when SD logger is ready. */
-bool isSDLoggerInitialized(void);
-/** @brief Return true when crash logger is ready. */
-bool isCrashLoggerInitialized(void);
-/** @brief Flush and close SD logger output. */
-void saveLoggerAndClose(void);
-/** @brief Flush and close crash logger output. */
-void saveCrashLoggerAndClose(void);
-/** @brief Append formatted crash report entry. */
-void crashReport(const char *format, ...);
-/** @} */
-
 /** @name Numeric and signal helpers */
 /** @{ */
 /** @brief Split float to integer and fractional parts. */
@@ -188,7 +166,7 @@ const char *encToString(uint8_t enc);
 
 /** @name Network and random helpers */
 /** @{ */
-/** @brief Scan WiFi networks and check if target SSID exists. */
+/** @brief Scan WiFi networks through HAL and check if target SSID exists. */
 bool scanNetworks(const char *networkToFind);
 /** @brief Return pseudo-random integer refreshed every @p time ms. */
 int getRandomEverySomeMillis(uint32_t time, int maxValue);

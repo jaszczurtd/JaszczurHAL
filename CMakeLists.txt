@@ -13,9 +13,9 @@ set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 
-# ── Utility sources compilable without Arduino ────────────────────────────────
-# Excluded: tools.cpp (File/SPI), multicoreWatchdog.cpp,
-#           utils/draw7Segment.cpp (#include <Arduino.h>)
+# ── Utility sources linked into the shared mock test library ──────────────────
+# Excluded sources are compiled by dedicated tests when they need local stubs or
+# extra fixtures.
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
@@ -56,6 +56,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_EEPROM
     HAL_ENABLE_KV
     HAL_ENABLE_LITTLEFS
+    HAL_ENABLE_SDLOGGER
     HAL_ENABLE_UART
     HAL_ENABLE_SWSERIAL
     HAL_ENABLE_I2C

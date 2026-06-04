@@ -43,10 +43,9 @@
 #endif
 
 /* Uncomment (or define via -D) to enable optional features:
- *   #define SD_LOGGER
  *   #define I2C_SCANNER
  *   #define RESET_EEPROM
- *   #define PICO_W     // legacy tools helpers only; HAL WiFi uses HAL_ENABLE_WIFI
+ *   #define PICO_W     // board/core define; HAL WiFi uses HAL_ENABLE_WIFI
  *   #define FREE_RTOS
  */
 
@@ -96,6 +95,8 @@
        HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / RP2040 flash).
        HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
        HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
+       HAL_ENABLE_SDLOGGER      - SD-card logger/crash logger
+                                  (propagates: EEPROM, I2C).
 
      Buses:
        HAL_ENABLE_UART          - Hardware UART (SerialUART).
@@ -178,6 +179,15 @@
 #ifdef HAL_ENABLE_KV
   #ifndef HAL_ENABLE_EEPROM
     #define HAL_ENABLE_EEPROM
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_SDLOGGER
+  #ifndef HAL_ENABLE_EEPROM
+    #define HAL_ENABLE_EEPROM
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
   #endif
 #endif
 
@@ -337,7 +347,7 @@
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI/SWSERIAL, UART, EEPROM,
-   KV, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
+   KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
@@ -417,6 +427,9 @@
   #endif
   #ifdef HAL_ENABLE_LITTLEFS
     #pragma message("HAL_CONFIG: HAL_ENABLE_LITTLEFS")
+  #endif
+  #ifdef HAL_ENABLE_SDLOGGER
+    #pragma message("HAL_CONFIG: HAL_ENABLE_SDLOGGER")
   #endif
   #ifdef HAL_ENABLE_UART
     #pragma message("HAL_CONFIG: HAL_ENABLE_UART")
