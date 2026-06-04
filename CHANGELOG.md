@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### stm32g474 / hal_spi - hardware SPI transfer layer
+
+- Added Arduino-style SPI transaction/transfer primitives to `hal_spi`
+  (`SPISettings`-equivalent settings, byte/word/buffer transfer, write-only
+  helper, deinit).
+- STM32G474 now drives SPI1/SPI2 in hardware with register-level polling
+  transfers, AF5 pin setup, software NSS, SPI modes 0-3, MSB/LSB order and
+  clock prescaler selection.
+- Non-Arduino builds now expose a local `<SPI.h>` (`SPIClass`, `SPISettings`,
+  `SPI`, `SPI1`) backed by `hal_spi_*`, so Arduino SPI drivers can start
+  porting without pulling in the Arduino core.
+- Mock SPI gained scripted RX/TX capture and transaction-setting inspection,
+  with expanded `test_hal_spi` coverage.
+
 ### tools / hal_sdlogger - remove Arduino dependencies from tools
 
 - `scanNetworks()` now uses the HAL WiFi scan API instead of Arduino `WiFi.*`;

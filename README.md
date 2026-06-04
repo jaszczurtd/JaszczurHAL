@@ -84,7 +84,7 @@ src/
           rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
         frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser/SD logger, etc)
       .mock/               # deterministic host/test backend
-      stm32g474/           # STM32G474 backend (boot/clock/GPIO/UART/DAC/PCNT/fault real; I2C/SPI/ADC/PWM/timer in progress)
+      stm32g474/           # STM32G474 backend (boot/clock/GPIO/UART/I2C/SPI/DAC/PCNT/fault real; ADC/PWM/timer in progress)
         drivers/
           stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
   utils/                   # helper modules and bundled optional utilities

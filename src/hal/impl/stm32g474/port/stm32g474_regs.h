@@ -23,7 +23,8 @@
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE        0x40021000u
 #define RCC_AHB2ENR     JH_REG32(RCC_BASE + 0x4Cu)   /* GPIO port clocks      */
-#define RCC_APB1ENR1    JH_REG32(RCC_BASE + 0x58u)   /* USART2 clock          */
+#define RCC_APB1ENR1    JH_REG32(RCC_BASE + 0x58u)   /* USART2 / SPI2 clocks  */
+#define RCC_APB2ENR     JH_REG32(RCC_BASE + 0x60u)   /* USART1 / SPI1 clocks  */
 
 #define RCC_AHB2ENR_GPIOAEN (1u << 0)
 #define RCC_AHB2ENR_GPIOBEN (1u << 1)
@@ -34,6 +35,10 @@
 #define RCC_AHB2ENR_GPIOGEN (1u << 6)
 
 #define RCC_APB1ENR1_USART2EN (1u << 17)
+#define RCC_APB1ENR1_SPI2EN   (1u << 14)
+#define RCC_APB1ENR1_SPI3EN   (1u << 15)
+
+#define RCC_APB2ENR_SPI1EN    (1u << 12)
 
 #define RCC_AHB2ENR_DAC1EN  (1u << 16)
 #define RCC_AHB2ENR_ADC12EN (1u << 13)
@@ -141,6 +146,38 @@
  * raised (PLL), this must be recomputed for the new PCLK1. */
 #define I2C_TIMINGR_100K_16MHZ 0x30420F13u
 
+/* ── SPI master (SPI1/SPI2; 8-bit full-duplex, software NSS) ─────────────── */
+#define SPI1_BASE       0x40013000u
+#define SPI2_BASE       0x40003800u
+#define SPI3_BASE       0x40003C00u
+
+#define SPI_CR1(base)   JH_REG32((base) + 0x00u)
+#define SPI_CR2(base)   JH_REG32((base) + 0x04u)
+#define SPI_SR(base)    JH_REG32((base) + 0x08u)
+#define SPI_DR(base)    JH_REG32((base) + 0x0Cu)
+#define SPI_DR8(base)   (*(volatile uint8_t *)((base) + 0x0Cu))
+
+#define SPI_CR1_CPHA       (1u << 0)
+#define SPI_CR1_CPOL       (1u << 1)
+#define SPI_CR1_MSTR       (1u << 2)
+#define SPI_CR1_BR_POS     3u
+#define SPI_CR1_BR_MASK    (0x7u << SPI_CR1_BR_POS)
+#define SPI_CR1_SPE        (1u << 6)
+#define SPI_CR1_LSBFIRST   (1u << 7)
+#define SPI_CR1_SSI        (1u << 8)
+#define SPI_CR1_SSM        (1u << 9)
+
+#define SPI_CR2_DS_POS     8u
+#define SPI_CR2_DS_8BIT    (0x7u << SPI_CR2_DS_POS)
+#define SPI_CR2_FRXTH      (1u << 12)
+
+#define SPI_SR_RXNE        (1u << 0)
+#define SPI_SR_TXE         (1u << 1)
+#define SPI_SR_OVR         (1u << 6)
+#define SPI_SR_BSY         (1u << 7)
+
+#define SPI_POLL_TIMEOUT   200000u
+
 /* ── GPIO ─────────────────────────────────────────────────────────────────
  * 7 ports A..G, each spaced 0x400 apart starting at 0x48000000.
  */
@@ -185,7 +222,6 @@
 #define USART_ICR_ORECF_F (1u << 3)
 
 #define USART1_BASE     0x40013800u
-#define RCC_APB2ENR     JH_REG32(RCC_BASE + 0x60u)   /* USART1 clock          */
 #define RCC_APB2ENR_USART1EN (1u << 14)
 
 /* ── USART2 (APB1, used as the debug console / ST-Link VCP on Nucleo-G474RE)  */
@@ -240,3 +276,12 @@
 /* STM32G4 boots on HSI16 (16 MHz). The first bring-up keeps this default
  * clock instead of configuring the PLL: correctness over speed. */
 #define JH_G474_CORE_CLOCK_HZ 16000000u
+
+/* ── Peripheral (APB) kernel clocks ──────────────────────────────────────── */
+/* SPI/UART baud is derived from the APB clock (PCLK), which need NOT equal the
+ * core clock once the PLL and APB prescalers are configured. With the current
+ * HSI16 bring-up (no PLL, no APB prescaler) both PCLKs equal the core clock;
+ * update these alongside any clock-tree change. SPI1 is on APB2 (PCLK2),
+ * SPI2 on APB1 (PCLK1). */
+#define JH_G474_PCLK1_HZ JH_G474_CORE_CLOCK_HZ  /* APB1 -> SPI2 */
+#define JH_G474_PCLK2_HZ JH_G474_CORE_CLOCK_HZ  /* APB2 -> SPI1 */

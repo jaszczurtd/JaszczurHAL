@@ -222,8 +222,8 @@ cmake --build build_stm32 -j$(nproc)
 ```
 
 The initial STM32 profile currently enables the backend pieces that exist in
-`stm32_lib/CMakeLists.txt`, including I2C, UART, DAC, PCNT, digipot backends,
-and GPS over UART. Additional modules should be enabled only once their
+`stm32_lib/CMakeLists.txt`, including I2C, SPI, UART, DAC, PCNT, digipot
+backends, and GPS over UART. Additional modules should be enabled only once their
 STM32G474 backend exists.
 
 ### Linking With an STM32G474 Project

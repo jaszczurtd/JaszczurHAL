@@ -14,17 +14,17 @@ sudo apt-get update
 # backend links pthreads, which comes with glibc. curl fetches arduino-cli below.
 sudo apt-get install -y build-essential cmake git curl
 
-# Quality-gate tooling — memory safety (valgrind / `ctest -T memcheck`) and
+# Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
 # See README "Continuous integration and quality gates".
 sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools
 
-# ARM bare-metal toolchain — cross-compiles real STM32G474 firmware
+# ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
 # (build_stm32_lib.sh). The host-compiler STM32 build and the unit tests do not
 # need it, but it is part of a complete JaszczurHAL setup.
 sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
-# Arduino/RP2040 toolchain — arduino-cli is not an apt package, so install it
+# Arduino/RP2040 toolchain - arduino-cli is not an apt package, so install it
 # via the official script (into /usr/local/bin) and then add the RP2040 core.
 if ! command -v arduino-cli >/dev/null 2>&1; then
   curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \

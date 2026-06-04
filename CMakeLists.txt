@@ -55,7 +55,10 @@ add_library(hal_mock STATIC
     ${SRC}/utils/unity.c
 )
 
-target_include_directories(hal_mock PUBLIC ${SRC})
+target_include_directories(hal_mock PUBLIC
+    ${SRC}
+    ${SRC}/arduino_host_stubs
+)
 
 target_compile_definitions(hal_mock PUBLIC
     HAL_TARGET_MOCK         # canonical backend selection (see src/hal/hal_target.h)
@@ -79,6 +82,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_SWSERIAL
     HAL_ENABLE_I2C
     HAL_ENABLE_I2C_SLAVE
+    HAL_ENABLE_SPI
     HAL_ENABLE_CAN
     HAL_ENABLE_PCF8563        # propagates HAL_ENABLE_RTC + HAL_ENABLE_I2C
     HAL_ENABLE_DS3231         # second RTC backend

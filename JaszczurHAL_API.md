@@ -131,18 +131,19 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS |
-| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C) |
+| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
-| `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` | bundled MCP2515 driver |
+| `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
+| `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` | bundled MCP2515 driver (propagates SPI) |
 | `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 (propagates THERMOCOUPLE + I2C) |
-| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 (propagates THERMOCOUPLE) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 (propagates THERMOCOUPLE + SPI) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver (propagates I2C) |
@@ -153,11 +154,11 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
-| `HAL_ENABLE_TFT` | `hal_display.h` | `hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY)* |
-| `HAL_ENABLE_ILI9341` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ILI9341` (propagates TFT + DISPLAY) |
-| `HAL_ENABLE_ST7789` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7789` (propagates TFT + DISPLAY) |
-| `HAL_ENABLE_ST7735` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7735` (propagates TFT + DISPLAY) |
-| `HAL_ENABLE_ST7796S` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7796S` (propagates TFT + DISPLAY) |
+| `HAL_ENABLE_TFT` | `hal_display.h` | `hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
+| `HAL_ENABLE_ILI9341` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ILI9341` (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7789` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7789` (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7735` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7735` (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7796S` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7796S` (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_SSD1306` | `hal_display.h` | `hal_display.cpp` | `Adafruit_SSD1306` (propagates DISPLAY) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
@@ -177,7 +178,7 @@ Enabling a leaf module automatically enables every module it requires:
 
 ```
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
-HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C
+HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C, HAL_ENABLE_SPI
 HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
@@ -187,11 +188,12 @@ HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
-HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
-HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY
+HAL_ENABLE_CAN         -> HAL_ENABLE_SPI
+HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
 ```
 
@@ -1791,7 +1793,7 @@ void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, i
 
 ---
 
-## `hal_spi` - SPI bus init
+## `hal_spi` - SPI bus and transfer API
 
 ```c
 #include <hal/hal_spi.h>
@@ -1799,16 +1801,28 @@ void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, i
 // Configure pins and start the SPI bus in master mode.
 // bus: 0 = SPI (default), 1 = SPI1 (second controller, RP2040)
 void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin, uint8_t sck_pin);
+void hal_spi_deinit(uint8_t bus);
 
 // Optional runtime synchronization for shared SPI buses.
 void hal_spi_lock(uint8_t bus);
 void hal_spi_unlock(uint8_t bus);
+
+// Arduino-compatible transaction settings and transfer primitives.
+hal_spi_settings_t settings = {4000000u, HAL_SPI_MSBFIRST, HAL_SPI_MODE0};
+void     hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
+void     hal_spi_end_transaction(uint8_t bus);
+uint8_t  hal_spi_transfer(uint8_t bus, uint8_t data);
+uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data);
+void     hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
+void     hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size_t len);
+void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 ```
 
-**impl/arduino:** Arduino-pico `SPI` / `SPI1`; per-bus mutex for `hal_spi_lock()` / `hal_spi_unlock()`.
-**impl/.mock:** stores init parameters and lock-depth counters for tests.
-**Thread safety:** Arduino backend provides multicore-safe per-bus locking via `hal_spi_lock()` / `hal_spi_unlock()`. `hal_spi_init()` reconfigures shared bus objects and should be called during single-core setup. Mock backend does not provide real cross-thread synchronization.
-**Note:** `hal_spi_init()` is usually called once during setup. For shared-bus access at runtime (multiple modules/tasks/cores), guard SPI transactions with `hal_spi_lock()`/`hal_spi_unlock()`.
+**impl/arduino:** Arduino-pico `SPI` / `SPI1`; transfers delegate to the core SPI objects.
+**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
+**impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
+**Arduino compatibility:** non-Arduino builds expose a local `<SPI.h>` with `SPISettings`, `SPIClass`, `SPI`, and `SPI1`; methods delegate to `hal_spi_*`.
+**Thread safety:** `hal_spi_begin_transaction()` mirrors Arduino and does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
 
 ---
 
