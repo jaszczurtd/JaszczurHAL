@@ -81,7 +81,12 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
   _started_b = false;
 
   watchdogTimer.begin(watchdogHandle, time / 10);
-  watchdogTickMutex = hal_mutex_create();
+  // Idempotent: create the tick lock only once. setupWatchdog is a boot-time
+  // call, so this never leaks in production; the guard keeps a re-setup from
+  // orphaning the existing mutex. watchdogTickMutex is zero-initialised
+  // (= NULL above), NOT in the NOINIT section used by the _core*/_started_*
+  // flags, so the NULL test is sound.
+  if (watchdogTickMutex == NULL) watchdogTickMutex = hal_mutex_create();
 
   deb("Start of Watchdog with time: %ds and refresh %ds", 
     time / SECOND, (time / 10) / SECOND);

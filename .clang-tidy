@@ -1,0 +1,46 @@
+# clang-tidy configuration for JaszczurHAL.
+#
+# Scope: bug-finding on the project's OWN code. Vendored libraries
+# (src/hal/impl/arduino/drivers, .../frameworks, src/utils/cJSON*) are excluded
+# at invocation time and via HeaderFilterRegex below.
+#
+# Philosophy: enable the static analyzer and bug-prone families; disable the
+# opinionated style/modernize noise that does not fit a portable embedded C/C++
+# HAL. Keep this list frozen so CI (clang-tidy 18 on ubuntu-latest) and local
+# runs agree exactly.
+Checks: >
+  -*,
+  bugprone-*,
+  clang-analyzer-*,
+  cert-*,
+  performance-*,
+  -performance-enum-size,
+  portability-*,
+  misc-redundant-expression,
+  misc-misplaced-const,
+  misc-unused-using-decls,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-reserved-identifier,
+  -bugprone-branch-clone,
+  -cert-dcl16-c,
+  -cert-dcl37-c,
+  -cert-dcl51-cpp,
+  -cert-err58-cpp,
+  -cert-msc32-c,
+  -cert-msc51-cpp,
+  -cert-err33-c,
+  -cert-err34-c,
+  -cert-dcl50-cpp,
+  -cert-msc30-c,
+  -cert-msc50-cpp,
+  -clang-analyzer-optin.performance.Padding,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+
+# Only diagnose headers under our own tree; never vendored or system headers.
+HeaderFilterRegex: 'src/(hal|utils)/(?!impl/arduino/(drivers|frameworks)|cJSON).*'
+
+# First-cut gate: report findings but do not yet hard-fail on every check.
+# (CI decides pass/fail; see ci.yml.) Leave empty here so the policy lives in
+# one place.
+WarningsAsErrors: ''

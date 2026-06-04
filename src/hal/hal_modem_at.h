@@ -228,9 +228,9 @@ hal_modem_at_result_t hal_modem_at_listen_until(hal_modem_at_t h,
  *        existing scratch buffer first.
  *
  * Use this when the previous call (typically hal_modem_at_send()) returned
- * with a partial response in the buffer — for example, an `expected`
+ * with a partial response in the buffer - for example, an `expected`
  * substring matched in the middle of a URC line whose payload was split
- * across UART writes — and you need to keep collecting the tail of that
+ * across UART writes - and you need to keep collecting the tail of that
  * line. Bytes already in the buffer are preserved; new bytes are appended.
  * If @p ready is non-NULL it is invoked once on the existing content
  * before any new bytes are drained, so a predicate that is already
@@ -348,7 +348,7 @@ void hal_modem_at_set_line_observer(hal_modem_at_t h,
  * ~20 ms) from inside those waits. Typical use: feed the application
  * watchdog and refresh status indicators (LEDs).
  *
- * The callback runs with the engine mutex held — it must NOT call any
+ * The callback runs with the engine mutex held - it must NOT call any
  * hal_modem_at_* / hal_simcom_a76xx_* function on the same handle.
  *
  * Pass @p cb == NULL to remove the callback.
@@ -368,7 +368,7 @@ void hal_modem_at_set_tick_callback(hal_modem_at_t h,
  * installed, but never blocks for longer than ~20 ms without giving
  * the application a chance to feed its watchdog.
  *
- * Safe to call with @p h == NULL — degrades to a plain hal_delay_ms.
+ * Safe to call with @p h == NULL - degrades to a plain hal_delay_ms.
  */
 void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 

@@ -6,7 +6,7 @@
 #include <stdlib.h> /* atol */
 #include <string.h>
 
-/* Ported from TinyGPS++ (Mikal Hart, LGPL) — tokenizer / checksum / RMC / GGA.
+/* Ported from TinyGPS++ (Mikal Hart, LGPL) - tokenizer / checksum / RMC / GGA.
  * GSA / GSV / GST field layout is just pure GNSS parser.
  * No HAL/Arduino dependency: age and threading are handled by the facade. */
 

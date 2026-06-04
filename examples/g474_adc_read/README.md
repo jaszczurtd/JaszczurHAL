@@ -1,4 +1,4 @@
-# STM32G474 ADC reader — hardware verification
+# STM32G474 ADC reader - hardware verification
 
 Verifies the **real** `hal_adc` backend on a **Nucleo-G474RE** by periodically
 reading two ADC1 inputs and printing their raw codes (and a rough millivolt
@@ -12,7 +12,7 @@ silicon before relying on it.
 
 > Status: the ADC register sequence (regulator → calibration → enable → polled
 > conversion) compiles and is written to RM0440, but has **not** been validated
-> on silicon in this repo. This example is exactly that validation step — run it
+> on silicon in this repo. This example is exactly that validation step - run it
 > on your Nucleo-G474RE.
 
 ## Hardware wiring
@@ -27,7 +27,7 @@ Nucleo-G474RE
 
 Keep inputs within **0 .. VREF+ (3.3 V)**. A 10k potentiometer between 3V3 and
 GND with its wiper on PA0/PA1 is the easiest test source. Leaving a pin
-floating reads an arbitrary value — that is expected, not a bug.
+floating reads an arbitrary value - that is expected, not a bug.
 
 ## Build & flash (Linux Mint / Debian-like)
 
@@ -71,7 +71,7 @@ enable/convert sequence works end-to-end.
 | Value pinned at `0` on a driven pin | Pin not ADC1-reachable (check the map below); source not actually connected |
 | Value pinned at `4095` | Input at/above VREF+, or pin shorted to 3V3 |
 | Noisy / jumpy readings | Floating input, high source impedance, or no common ground between source and board |
-| Console silent, board powered | Wrong port/baud, or terminal opened before reset — press the black RESET (B2) |
+| Console silent, board powered | Wrong port/baud, or terminal opened before reset - press the black RESET (B2) |
 | `st-info --probe` finds nothing | Use the CN1 (ST-LINK) USB port; check `dmesg \| tail` for `ttyACM0` |
 
 ## Notes
@@ -80,7 +80,7 @@ enable/convert sequence works end-to-end.
   per RM0440: PA0..PA3 → IN1..IN4, PB0 → IN15, PB1 → IN12, PB11 → IN14,
   PB12 → IN11, PB14 → IN5, PC0..PC3 → IN6..IN9. Pins outside this set return 0.
 - This is ADC1 only. ADC2..ADC5 are not wired on this backend yet (so e.g.
-  PA4/PA5, which are ADC2 inputs, are not readable here — they are used by the
+  PA4/PA5, which are ADC2 inputs, are not readable here - they are used by the
   `hal_dac` backend).
 - The millivolt figure assumes VREF+ = 3.3 V and 12-bit full scale (4095). For
   an accurate result use the device VREFINT calibration; this example keeps the

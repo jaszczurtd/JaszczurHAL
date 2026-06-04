@@ -4,6 +4,24 @@ project(JaszczurHAL_Tests CXX C)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD 11)
 
+# ── Valgrind / CTest memcheck configuration ───────────────────────────────────
+# Host-only dynamic analysis for the unit-test suite (NOT firmware - Valgrind
+# cannot run on MCU targets). Run locally or in CI with:
+#
+#     ctest --test-dir build -T memcheck --output-on-failure
+#
+# These variables must be set *before* include(CTest) so the CTest module bakes
+# them into DartConfiguration.tcl. --error-exitcode=1 makes Valgrind fail the
+# individual test (and therefore the whole ctest run) on a real defect, so the
+# CI memcheck job goes red instead of silently passing.
+find_program(MEMORYCHECK_COMMAND NAMES valgrind)
+set(MEMORYCHECK_COMMAND_OPTIONS
+    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
+    CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
+set(MEMORYCHECK_SUPPRESSIONS_FILE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"
+    CACHE FILEPATH "Valgrind suppressions for known third-party/system noise")
+
 # Include CTest to generate standard test metadata (including
 # DartConfiguration.tcl) and keep test tooling output clean.
 include(CTest)

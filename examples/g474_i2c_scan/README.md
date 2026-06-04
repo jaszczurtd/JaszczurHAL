@@ -1,4 +1,4 @@
-# STM32G474 I2C scanner — hardware verification
+# STM32G474 I2C scanner - hardware verification
 
 Verifies the **real** `hal_i2c` backend on a **Nucleo-G474RE** by scanning the
 I2C bus and printing every address that ACKs. Use it to confirm the bare-metal
@@ -10,7 +10,7 @@ I2C1 master works on silicon before relying on it.
 
 > Status: the I2C register sequence (I2C v2, AUTOEND) compiles and is written to
 > RM0440, but has **not** been validated on silicon in this repo. This example
-> is exactly that validation step — run it on your Nucleo-G474RE.
+> is exactly that validation step - run it on your Nucleo-G474RE.
 
 ## Hardware wiring
 
@@ -24,7 +24,7 @@ Nucleo-G474RE                 I2C device (e.g. PCF8563 RTC, AT24C256, BME280)
   GND ──────────────────────────── GND
 ```
 
-External pull-ups (2.2k–10k to 3V3) are **required** — STM32 internal pull-ups
+External pull-ups (2.2k–10k to 3V3) are **required** - STM32 internal pull-ups
 are too weak for reliable I2C. Many breakout boards already include them.
 
 ## Build & flash (Linux Mint / Debian-like)
@@ -66,8 +66,8 @@ START / address / ACK / STOP all work end-to-end.
 | Symptom | Likely cause |
 |---|---|
 | `(no devices found)` every round | Missing/weak pull-ups; swapped SDA/SCL; device unpowered; wrong address range |
-| **Every** address 0x08..0x77 reports a device | SDA stuck low (shorted, or no pull-up so the line floats) — not real ACKs |
-| Console silent, board powered | Wrong port/baud, or terminal opened before reset — press the black RESET (B2) |
+| **Every** address 0x08..0x77 reports a device | SDA stuck low (shorted, or no pull-up so the line floats) - not real ACKs |
+| Console silent, board powered | Wrong port/baud, or terminal opened before reset - press the black RESET (B2) |
 | `st-info --probe` finds nothing | Use the CN1 (ST-LINK) USB port; check `dmesg \| tail` for `ttyACM0` |
 | Found address is off by one | Remember these are 7-bit addresses; some datasheets quote the 8-bit (shifted) form |
 

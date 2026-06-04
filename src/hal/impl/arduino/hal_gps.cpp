@@ -7,7 +7,7 @@
  * hal_gps_* getters live in the shared engine (impl/shared/hal_gps_core.cpp);
  * this file just pumps received bytes into it.
  *
- * The transport is not fixed to SoftwareSerial — the receiver can be read over
+ * The transport is not fixed to SoftwareSerial - the receiver can be read over
  * either a hardware UART (hal_uart) or SoftwareSerial (hal_swserial). Selection
  * is compile-time:
  *   - force with HAL_GPS_TRANSPORT_UART / HAL_GPS_TRANSPORT_SWSERIAL, otherwise

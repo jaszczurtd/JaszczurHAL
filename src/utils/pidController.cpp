@@ -13,6 +13,7 @@ PIDController::PIDController(float kp, float ki, float kd, float mi) {
   dt = 0.001f;
   errorHistoryHead = 0;
   errorHistoryCount = 0;
+  for (float &e : errorHistory) e = 0.0f;
 
   setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
 }

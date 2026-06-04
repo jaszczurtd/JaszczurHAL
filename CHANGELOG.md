@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-### tools / hal_sdlogger — remove Arduino dependencies from tools
+### tools / hal_sdlogger - remove Arduino dependencies from tools
 
 - `scanNetworks()` now uses the HAL WiFi scan API instead of Arduino `WiFi.*`;
   scan results are exposed by `hal_wifi_scan_networks()` /
@@ -21,7 +21,7 @@ All notable changes to this project will be documented in this file.
   for non-Arduino builds and bundled Arduino-origin drivers; `tools_c.h` no
   longer defines its own copies.
 
-### hal_gps — portable NMEA engine + STM32G474 support + richer fix data
+### hal_gps - portable NMEA engine + STM32G474 support + richer fix data
 
 - The GPS parser is now a dependency-free, in-tree NMEA engine
   (`impl/shared/gps_nmea_parser.cpp`) wrapped by a shared facade
@@ -31,17 +31,17 @@ All notable changes to this project will be documented in this file.
   Position age is stamped via `hal_millis()` in the facade.
 - **STM32G474 now has a GPS backend** (the porting goal): the same engine runs
   there, fed from a hardware UART (`hal_uart`, USART1 by default). RP2040 keeps
-  its behaviour; its transport is no longer hard-wired to SoftwareSerial — it
+  its behaviour; its transport is no longer hard-wired to SoftwareSerial - it
   can use UART or SoftwareSerial (compile-time `HAL_GPS_TRANSPORT_*`, default
   SoftwareSerial), and the 8N1<->7N1 auto-detect is preserved.
 - `HAL_ENABLE_GPS` no longer auto-enables SoftwareSerial. It now requires a
-  transport — `HAL_ENABLE_SWSERIAL` **or** `HAL_ENABLE_UART` — enforced by a
+  transport - `HAL_ENABLE_SWSERIAL` **or** `HAL_ENABLE_UART` - enforced by a
   compile-time `#error` (the `07_gps` example config gained `HAL_ENABLE_SWSERIAL`).
 - Extended API (additive, existing getters unchanged): `hal_gps_altitude_m`,
   `hal_gps_course_deg`, `hal_gps_satellites_used`, `hal_gps_satellites_in_view`
   (summed across GP/GL/GA/GB), `hal_gps_hdop` / `hal_gps_vdop` / `hal_gps_pdop`,
   `hal_gps_fix_quality`, `hal_gps_fix_mode`, `hal_gps_horizontal_accuracy_m`
-  (GST, sqrt of the error-ellipse axes) — parity with the GNSS fix fields
+  (GST, sqrt of the error-ellipse axes) - parity with the GNSS fix fields
   decodable from standard NMEA (per-satellite/DR data is left out as
   module-specific).
 - Mock backend gained matching getters and `hal_mock_gps_set_*` injectors; the
@@ -51,7 +51,7 @@ All notable changes to this project will be documented in this file.
   from `impl/shared/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
   + `utils/tools_api.h`) and covered by `test_tools` unit tests.
 
-### hal_digipot — I2C digital potentiometers (multiplatform, opt-in)
+### hal_digipot - I2C digital potentiometers (multiplatform, opt-in)
 
 - New opt-in module `hal_digipot` (`HAL_ENABLE_DIGIPOT`):
   `hal_digipot_init()`, `hal_digipot_deinit()`, `hal_digipot_set_resistance()`,
@@ -72,7 +72,7 @@ All notable changes to this project will be documented in this file.
   `hal_mock_i2c_get_write_frame()`) so the Unity suite asserts the exact bytes
   the driver transmits against hand-computed wiper values.
 
-### stm32g474 — real ADC1 backend
+### stm32g474 - real ADC1 backend
 
 - The STM32G474 `hal_adc` backend is now a real ADC1 reader (was a host
   stub): single-ended, polled, one regular conversion per `hal_adc_read()`,
@@ -92,7 +92,7 @@ All notable changes to this project will be documented in this file.
 - Note: the register sequence follows RM0440 but is pending on-silicon
   validation on a real Nucleo-G474RE (same status as the I2C backend).
 
-### stm32g474 — real I2C1 master backend
+### stm32g474 - real I2C1 master backend
 
 - The STM32G474 `hal_i2c` backend is now a real I2C v2 master (was a host
   stub): I2C1 on SCL=PB8 / SDA=PB9 (AF4), 100 kHz, register-level transfers
@@ -102,13 +102,13 @@ All notable changes to this project will be documented in this file.
   behaviour is preserved for the off-target build.
 - Added I2C1 register definitions and a documented TIMINGR for the 16 MHz
   bring-up clock to `port/stm32g474_regs.h`.
-- New example `examples/g474_i2c_scan/` — a bus scanner with a
+- New example `examples/g474_i2c_scan/` - a bus scanner with a
   Linux-Mint/Debian build-flash-verify guide (wiring, pull-ups, expected
   output, troubleshooting) for validating the backend on a real Nucleo-G474RE.
 - Note: the register sequence follows RM0440 but is pending on-silicon
   validation (that is what the scanner example is for).
 
-### examples/portable_blink — fix include path for arduino-cli
+### examples/portable_blink - fix include path for arduino-cli
 
 - `blink_app.c` now uses the `hal/`-prefixed includes (`<hal/hal_gpio.h>`,
   ...) so the shared source resolves both under arduino-cli (library `src/` on
@@ -117,7 +117,7 @@ All notable changes to this project will be documented in this file.
   `stm32_lib/blink_g474/`), and the STM32G474 backend status now lists which
   peripherals are real vs in progress.
 
-### hal_pcnt — edge / pulse counter (multiplatform, opt-in)
+### hal_pcnt - edge / pulse counter (multiplatform, opt-in)
 
 - New opt-in module `hal_pcnt` (`HAL_ENABLE_PCNT`): `hal_pcnt_is_supported()`,
   `hal_pcnt_channel_count()`, `hal_pcnt_init(channel, pin, edge)`,
@@ -127,14 +127,14 @@ All notable changes to this project will be documented in this file.
   channel 0 = TIM2_CH1 (PA0/AF1), zero CPU per edge (register-level under
   `JH_STM32G474_HW`).
 - RP2040 backend: software counter driven by a GPIO edge interrupt
-  (`hal_gpio_attach_interrupt`) — same contract, ISR-rate limited. A nice
+  (`hal_gpio_attach_interrupt`) - same contract, ISR-rate limited. A nice
   contrast: identical API, hardware timer on G474 vs ISR counter on RP2040.
 - Mock backend with `hal_mock_pcnt_inject/_get_edge/_get_pin` and a Unity
   suite (`test_hal_pcnt`); documented in `src/HAL_FLAGS.txt`.
 - Second of the planned core-peripheral additions (DAC → **PCNT** → GPT
   capture/compare/encoder → SPI-slave → RNG).
 
-### hal_dac — true DAC output (multiplatform, opt-in)
+### hal_dac - true DAC output (multiplatform, opt-in)
 
 - New opt-in module `hal_dac` (`HAL_ENABLE_DAC`): `hal_dac_is_supported()`,
   `hal_dac_resolution_bits()`, `hal_dac_max_value()`, `hal_dac_init()`,
@@ -151,7 +151,7 @@ All notable changes to this project will be documented in this file.
 - First of the planned core-peripheral additions (DAC → PCNT → GPT
   capture/compare/encoder → SPI-slave → RNG) hardening the STM32G474 backend.
 
-### hal_target — explicit multiplatform backend selection
+### hal_target - explicit multiplatform backend selection
 
 - New `src/hal/hal_target.h`: a single, canonical compile-time switch that
   selects the hardware backend. Define exactly one of `HAL_TARGET_RP2040`,
@@ -171,7 +171,7 @@ All notable changes to this project will be documented in this file.
   (`CMakeLists.txt` → MOCK, `arduino_lib` → RP2040, `stm32_lib` → STM32G474).
   Documented in `src/HAL_FLAGS.txt`.
 
-### stm32g474 — first real (non-stub) backend bring-up
+### stm32g474 - first real (non-stub) backend bring-up
 
 - Added a self-contained bare-metal port under
   `src/hal/impl/stm32g474/port/` (CMSIS-light register map, C startup + vector
@@ -179,7 +179,7 @@ All notable changes to this project will be documented in this file.
 - Real time base (`hal_millis/micros/delay` via SysTick, replacing the
   `g_millis += ms` stub), real GPIO (with a `port*16+pin` numbering map),
   real `hal_serial`/debug over USART2 (ST-Link VCP), `__WFI` idle, and device
-  UID from `UID_BASE` — all gated by the derived `JH_STM32G474_HW`.
+  UID from `UID_BASE` - all gated by the derived `JH_STM32G474_HW`.
 - Cortex-M4 fault capture (`port/exception_info.*`): stacked frame (R0-R3/R12/LR/PC/xPSR) +
   CFSR/HFSR/MMFAR/BFAR, retained in `.noinit` across reset and dumped over the
   debug console.
@@ -187,7 +187,7 @@ All notable changes to this project will be documented in this file.
   report) with `build.sh`, CMake, and a Linux-Mint/Debian build-and-flash
   guide for the Nucleo-G474RE.
 
-### hal_math — generic decimal rounding helper
+### hal_math - generic decimal rounding helper
 
 - Added `roundToN(float v, int n)` to `hal_math.h`
   (with backward-compatible alias `hal_roundToN(v, n)`).
@@ -196,7 +196,7 @@ All notable changes to this project will be documented in this file.
 - Added unit tests in `test_hal_system` for signed values and
   precision clamping.
 
-### hal_simcom_a76xx — cellular location (LBS) API
+### hal_simcom_a76xx - cellular location (LBS) API
 
 - New public type `hal_simcom_a76xx_cell_location_t` and helper
   `hal_simcom_a76xx_get_cell_location()`.
@@ -210,11 +210,11 @@ All notable changes to this project will be documented in this file.
 - Added unit tests in `test_hal_simcom_a76xx` covering success,
   non-zero modem status parsing, and invalid arguments.
 
-### hal_simcom_a76xx — `+CLBS` parser tolerates fragmented URC
+### hal_simcom_a76xx - `+CLBS` parser tolerates fragmented URC
 
 - **Bug fix.** Some A7670 firmware builds split the `+CLBS:` URC across
   multiple UART writes, and the CRLF boundary can land in the middle of
-  a numeric field — e.g. the line is delivered as
+  a numeric field - e.g. the line is delivered as
   `+CLBS: 0,50.2743\r\n72,19.124077,550\r\n` instead of
   `+CLBS: 0,50.274372,19.124077,550\r\n`. The previous parser bailed
   on the embedded CRLF and the helper returned `HAL_SIMCOM_A76XX_PARSE`
@@ -229,7 +229,7 @@ All notable changes to this project will be documented in this file.
 - Added regression test
   `test_get_cell_location_payload_split_mid_number`.
 
-### hal_modem_at — new `hal_modem_at_listen_more()`
+### hal_modem_at - new `hal_modem_at_listen_more()`
 
 - Same contract as `hal_modem_at_listen_until()` but does **not** call
   `reset_rx()` before draining. Lets callers preserve the partial
@@ -245,7 +245,7 @@ All notable changes to this project will be documented in this file.
 - `hal_simcom_a76xx_get_cell_location()` now uses `_listen_more()` on
   the parse-retry path so the stitching parser sees the full URC line.
 
-### hal_modem_at — `expected` no longer races early "OK"
+### hal_modem_at - `expected` no longer races early "OK"
 
 - **Bug fix.** When a caller passed an `expected` substring to
   `hal_modem_at_send`/`_send_with_data` (e.g. `"+CMQTTSUB: 0,0"`,
@@ -271,13 +271,13 @@ All notable changes to this project will be documented in this file.
 - No public API change; no driver change required (the existing
   `expected="+CMQTT…: <ci>,0"` strings now actually wait for the URC).
 
-### hal_modem_at + hal_simcom_a76xx — watchdog-friendly long waits
+### hal_modem_at + hal_simcom_a76xx - watchdog-friendly long waits
 
 - `hal_modem_at` now exposes an application "tick" callback installed
   via `hal_modem_at_set_tick_callback(h, cb, user)`. Every internal
   poll loop (`hal_modem_at_send`, `_send_with_data`, `_listen_until`)
   invokes it at the start of each ~2 ms slice.
-- New public helper `hal_modem_at_sleep_ms(h, ms)` — a watchdog-friendly
+- New public helper `hal_modem_at_sleep_ms(h, ms)` - a watchdog-friendly
   drop-in for `hal_delay_ms()`. Sleeps the requested duration in slices
   of at most 20 ms, calling the tick callback before every slice.
   Degrades to plain `hal_delay_ms` when no tick is installed or `h` is
@@ -293,7 +293,7 @@ All notable changes to this project will be documented in this file.
   sleep with tick fires the callback, NULL-handle safety). All 40
   CTest binaries remain green.
 
-### hal_modem_at + hal_simcom_a76xx — cellular modem stack
+### hal_modem_at + hal_simcom_a76xx - cellular modem stack
 
 - New facade module `hal_modem_at` (`HAL_ENABLE_CELLULAR_MODEM`): generic
   transport-level AT-command engine sitting on top of `hal_uart`. Single
@@ -346,25 +346,25 @@ All notable changes to this project will be documented in this file.
   connect/publish/subscribe/unsubscribe, RX URC reassembly with
   callback dispatch, CONNLOST URC). Full suite: 40/40 green.
 
-### hal_system — crash / fault diagnostics
+### hal_system - crash / fault diagnostics
 
 - New public API in `hal/hal_system.h` for post-mortem diagnostics across
   reboots:
-  - `hal_fault_subsystem_init()` — early-boot init; latches the silicon
+  - `hal_fault_subsystem_init()` - early-boot init; latches the silicon
     reset-reason flags, snapshots any retained HardFault info into RAM,
     then clears the volatile flag bits.
-  - `hal_get_reset_reason()` / `hal_reset_reason_str()` — backend-agnostic
+  - `hal_get_reset_reason()` / `hal_reset_reason_str()` - backend-agnostic
     classification (`POWER_ON`, `RUN_PIN`, `SOFT`, `WATCHDOG`, `DEBUG`,
     `GLITCH`, `BROWNOUT`, `HARDFAULT`, `STACK_OVERFLOW`, `UNKNOWN`).
-  - `hal_get_last_fault()` / `hal_clear_last_fault()` — retrieve captured
+  - `hal_get_last_fault()` / `hal_clear_last_fault()` - retrieve captured
     `hal_fault_info_t { valid, pc, lr, psr }` from the previous boot's
     HardFault.
-  - `hal_last_boot_was_brownout()` — heuristic for chips (RP2040) whose
+  - `hal_last_boot_was_brownout()` - heuristic for chips (RP2040) whose
     silicon does not distinguish BOR from POR; uses a retained alive
     marker refreshed by `hal_alive_mark()`.
-  - `hal_alive_mark()` — call periodically from the main loop to keep the
+  - `hal_alive_mark()` - call periodically from the main loop to keep the
     brown-out heuristic honest.
-  - `hal_stack_guard_init()` / `hal_stack_guard_check()` — install and
+  - `hal_stack_guard_init()` / `hal_stack_guard_check()` - install and
     verify a stack-bottom canary at `__StackLimit`; on corruption the
     backend records a synthetic `STACK_OVERFLOW` fault and reboots.
 - All three backends (`impl/arduino`, `impl/.mock`, `impl/stm32g474`)
@@ -372,7 +372,7 @@ All notable changes to this project will be documented in this file.
   stubs (returning `UNKNOWN` / `false`); a first-class STM32G474 fault
   driver is planned.
 
-### hal_system / drivers — STM32G474 SoC driver extraction
+### hal_system / drivers - STM32G474 SoC driver extraction
 
 - Mirrored the RP2040 layout for the STM32G474 backend. All SoC-specific
   bindings (today: host-stub state; planned: RCC/IWDG/__WFI/ADC1/UID_BASE
@@ -387,7 +387,7 @@ All notable changes to this project will be documented in this file.
   `impl/stm32g474/drivers/*/*.cpp` so SoC driver sources are picked up
   automatically. Host-stub build (`build_stm32_host`) verified green.
 
-### hal_system / drivers — RP2040 SoC driver extraction
+### hal_system / drivers - RP2040 SoC driver extraction
 
 - All RP2040-specific fault-diagnostics logic moved out of
   `src/hal/impl/arduino/hal_system.cpp` into a dedicated SoC driver at
@@ -416,7 +416,7 @@ All notable changes to this project will be documented in this file.
   positive caused by arduino-pico declaring `__StackLimit` as `char[1]`;
   no `-Wno-array-bounds` waiver was added.
 
-### Mock backend — fault-diagnostics test hooks
+### Mock backend - fault-diagnostics test hooks
 
 - New mock helpers in `src/hal/impl/.mock/hal_mock.h`:
   `hal_mock_set_reset_reason`, `hal_mock_set_last_fault`,
@@ -440,7 +440,7 @@ All notable changes to this project will be documented in this file.
 - `hal_can_destroy()` now releases its internal mutex on both Arduino and
   mock backends (previously the mutex was left allocated after destroy).
 
-### hal_serial / hal_system — ISR-safe debug logging
+### hal_serial / hal_system - ISR-safe debug logging
 
 - ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
   `hal_derr_limited()` may now be called from interrupt context. The
@@ -484,7 +484,7 @@ All notable changes to this project will be documented in this file.
   semantics, timestamp-hook isolation, payload truncation at
   `HAL_DEBUG_ISR_TEXT_MAX`, and lazy-init bypass on the ISR path.
 
-### hal_wireguard (Pico W) — lwIP background-context race + leak fixes
+### hal_wireguard (Pico W) - lwIP background-context race + leak fixes
 
 - `WireGuard::beginAdvanced()`, `WireGuard::end()`, `WireGuard::peerUp()`
   and `WireGuard::kickHandshake()` now hold the cyw43/lwIP recursive

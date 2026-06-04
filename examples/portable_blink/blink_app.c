@@ -1,6 +1,6 @@
 /**
  * @file blink_app.c
- * @brief Portable blink logic — uses only the hal_* surface.
+ * @brief Portable blink logic - uses only the hal_* surface.
  *
  * Compiles unchanged for RP2040, STM32G474 and the host mock. The only
  * per-board line is the LED pin id; everything else (serial, GPIO, time,

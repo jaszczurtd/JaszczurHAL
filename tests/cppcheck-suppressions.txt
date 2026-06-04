@@ -1,0 +1,28 @@
+# cppcheck suppressions for JaszczurHAL.
+# Passed to cppcheck via --suppressions-list in the CI static-analysis job.
+# Only genuine false-positives or project-wide idioms belong here; a real defect
+# must be fixed in code, not silenced.
+
+# Cortex-M startup copies .data / zeroes .bss by iterating between linker
+# symbols (while (dst < &_edata)). cppcheck cannot know these symbols are
+# contiguous, so its "comparing pointers to different objects" is a false
+# positive for this canonical startup idiom.
+comparePointers:src/hal/impl/stm32g474/port/startup_stm32g474.c
+
+# hal_mutex_impl_t is defined separately in each backend (.mock / arduino /
+# stm32g474). The backends are mutually exclusive at build time (one HAL_TARGET
+# per binary), so the ODR is never actually violated; cppcheck flags it only
+# because it analyses all backends together.
+ctuOneDefinitionRuleViolation
+
+# memset(handle, 0, sizeof(*handle)) on structs containing float members. All
+# JaszczurHAL targets are IEEE-754, where the all-zero bit pattern is 0.0f, so
+# zero-initialising HAL handles this way is intentional and portable in practice.
+memsetClassFloat
+
+# Noise unrelated to our code: cppcheck cannot resolve toolchain/Arduino headers,
+# and the #ifdef space is larger than it checks by default.
+missingInclude
+missingIncludeSystem
+toomanyconfigs
+unmatchedSuppression

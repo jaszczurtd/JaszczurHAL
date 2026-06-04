@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief STM32G474 (Nucleo-G474RE) I2C bus scanner — hardware verification of
+ * @brief STM32G474 (Nucleo-G474RE) I2C bus scanner - hardware verification of
  *        the real hal_i2c backend.
  *
  * Probes every 7-bit address 0x08..0x77 and prints those that ACK. This is the

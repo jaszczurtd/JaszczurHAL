@@ -161,7 +161,7 @@ static int drain_uart(hal_modem_at_impl_t *h) {
      +1  -> terminator that means SUCCESS:
               * if `expected` was given: ONLY when `expected` itself is
                 present in the buffer. The bare "\r\nOK\r\n" line is
-                NOT a success terminator in that case — SimCom CMQTT*
+                NOT a success terminator in that case - SimCom CMQTT*
                 (and similar) acknowledge the command with OK first and
                 emit the actual result code as an asynchronous URC
                 (e.g. "+CMQTTSUB: <ci>,<err>") a moment later. Stopping
@@ -312,7 +312,7 @@ hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h,
        Many SimCom responses arrive as "<payload>\r\n\r\nOK\r\n". When
        the caller pinned the wait to a payload substring (e.g.
        "+CCLK:"), `response_terminated` returns success the moment the
-       payload appears — but the trailing "\r\nOK\r\n" (and any pending
+       payload appears - but the trailing "\r\nOK\r\n" (and any pending
        async URC) may still be in flight in the UART FIFO. If we returned
        now, those bytes would bleed into the next command's RX buffer
        and confuse its terminator matcher.
@@ -320,7 +320,7 @@ hal_modem_at_result_t hal_modem_at_send(hal_modem_at_t h,
        So when `expected` was used and the wait succeeded, keep polling
        briefly until "\r\nOK\r\n" / "\r\nERROR\r\n" appears, capped at a
        short grace window. The result code is NOT downgraded if grace
-       expires without OK — `expected` was already matched. */
+       expires without OK - `expected` was already matched. */
     if (res == HAL_MODEM_AT_OK && expected) {
         const uint32_t TAIL_GRACE_MS = 200u;
         uint32_t tail_start = hal_millis();

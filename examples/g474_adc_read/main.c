@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief STM32G474 (Nucleo-G474RE) ADC reader — hardware verification of the
+ * @brief STM32G474 (Nucleo-G474RE) ADC reader - hardware verification of the
  *        real hal_adc backend.
  *
  * Periodically reads a couple of ADC1 inputs and prints their raw codes. This

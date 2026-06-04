@@ -1,5 +1,5 @@
 /*
- * portable_blink — RP2040 / Arduino entry shim.
+ * portable_blink - RP2040 / Arduino entry shim.
  *
  * The actual logic lives in blink_app.c (portable hal_* only). This sketch is
  * just the Arduino-style entry point; the same blink_app is driven from a
@@ -11,7 +11,7 @@
  */
 
 /* Pull in the library umbrella so arduino-cli attaches JaszczurHAL and puts
- * its src/ on the include path — that is what lets blink_app.c resolve its
+ * its src/ on the include path - that is what lets blink_app.c resolve its
  * <hal/...> includes (every other example relies on this too). */
 #include <JaszczurHAL.h>
 

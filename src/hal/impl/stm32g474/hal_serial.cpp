@@ -336,9 +336,14 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
     s_rate_limit_cfg = sanitize_rate_cfg(cfg);
     memset(s_error_slots, 0, sizeof(s_error_slots));
     memset(&s_overflow_slot, 0, sizeof(s_overflow_slot));
-    s_deb_mutex = hal_mutex_create();
-    s_derr_mutex = hal_mutex_create();
-    s_rl_mutex = hal_mutex_create();
+    // Idempotent: allocate each lock only on first init. hal_debug_init is
+    // normally called once at boot, so the unconditional form never leaked in
+    // practice, but guarding it keeps a double-init from orphaning the previous
+    // mutexes and mirrors hal_serial_ensure_tx_mutex(). These statics are
+    // zero-initialised (.bss), so testing against NULL is sound.
+    if (s_deb_mutex == NULL) s_deb_mutex = hal_mutex_create();
+    if (s_derr_mutex == NULL) s_derr_mutex = hal_mutex_create();
+    if (s_rl_mutex == NULL) s_rl_mutex = hal_mutex_create();
     hal_serial_ensure_tx_mutex();
     hal_serial_begin(baud);
     s_debug_muted = false;
@@ -448,8 +453,11 @@ void hal_derr(const char *format, ...) {
     }
 
     if (len == 0u) {
-        strcpy(s_derr_buf, error);
-        len = strlen(error);
+        // Bounded: error is caller-supplied and may exceed s_derr_buf.
+        // snprintf truncates safely; len = strlen(s_derr_buf) stays <= sizeof-1,
+        // so the vsnprintf size computation below cannot underflow.
+        snprintf(s_derr_buf, sizeof(s_derr_buf), "%s", error);
+        len = strlen(s_derr_buf);
     }
 
     vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1u - len, format, args);

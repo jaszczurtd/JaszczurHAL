@@ -77,7 +77,7 @@ static bool dp_write(uint8_t bus, uint8_t addr, const uint8_t *data, size_t n) {
     return hal_i2c_end_transmission_bus(bus) == 0u;
 }
 
-/* Raw single-byte read (no register/command prefix) — MCP401x wiper read-back.
+/* Raw single-byte read (no register/command prefix) - MCP401x wiper read-back.
  */
 static bool dp_read_raw(uint8_t bus, uint8_t addr, uint8_t *out) {
     if (hal_i2c_request_from_bus(bus, addr, 1u) != 1u) {
@@ -91,7 +91,7 @@ static bool dp_read_raw(uint8_t bus, uint8_t addr, uint8_t *out) {
     return true;
 }
 
-/* Command-then-read of one byte — MAX5395 configuration register read. */
+/* Command-then-read of one byte - MAX5395 configuration register read. */
 static bool dp_read_cmd(uint8_t bus, uint8_t addr, uint8_t cmd, uint8_t *out) {
     hal_i2c_begin_transmission_bus(bus, addr);
     hal_i2c_write_bus(bus, cmd);
