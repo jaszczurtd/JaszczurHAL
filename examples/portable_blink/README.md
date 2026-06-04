@@ -1,4 +1,4 @@
-# portable_blink — one demo, two real targets
+# portable_blink - one demo, two real targets
 
 Proves JaszczurHAL portability concretely: the **same** application logic
 ([`blink_app.c`](blink_app.c), portable `hal_*` only) is built and run on
@@ -6,7 +6,7 @@ Proves JaszczurHAL portability concretely: the **same** application logic
 
 ```
 portable_blink/
-  blink_app.h / blink_app.c   # portable logic (hal_* only) — shared by both
+  blink_app.h / blink_app.c   # portable logic (hal_* only) - shared by both
   portable_blink.ino          # RP2040/Arduino entry: setup()/loop()
   hal_project_config.h        # target/flags (auto-detect on Arduino)
   .vscode/                    # tasks: "Build (RP2040)" and "Build (STM32G474)"
@@ -14,7 +14,7 @@ portable_blink/
 ```
 
 `blink_app.c` references only `hal_gpio` / `hal_serial` / `hal_system` and the
-portable `hal_get_reset_reason()` — no target symbols. The only per-board line
+portable `hal_get_reset_reason()` - no target symbols. The only per-board line
 is the LED pin (`BLINK_LED_PIN`). The detailed Cortex-M fault dump lives solely
 in the G474 entry (`g474/main.c`); on RP2040 you still get the portable reset
 reason. Same source, two backends, graceful capability degradation.

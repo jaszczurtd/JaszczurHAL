@@ -1,6 +1,6 @@
 /**
  * @file main.c
- * @brief STM32G474 (Nucleo-G474RE) GPS reader — live NMEA over USART1.
+ * @brief STM32G474 (Nucleo-G474RE) GPS reader - live NMEA over USART1.
  *
  * The STM32 counterpart of the RP2040 `07_gps` sketch: it reads a real GPS
  * receiver through the hardware UART and prints the decoded fix. Parsing is the

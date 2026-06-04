@@ -104,7 +104,7 @@ static hal_simcom_a76xx_result_t map_at(hal_modem_at_result_t r) {
    "+CLBS: 0,50.2743\r\n72,19.124077,550"). When we encounter a CRLF
    sequence, peek at what follows: if it is another numeric/punctuation
    character belonging to the same payload, drop the CRLF and keep
-   stitching; otherwise stop — that CRLF terminates the URC line.
+   stitching; otherwise stop - that CRLF terminates the URC line.
    Returns true when a true line terminator was reached (so the caller
    knows the payload is complete), false when the buffer ended before
    a terminator was seen (possible truncation). */
@@ -167,7 +167,7 @@ static bool parse_clbs_from_response(const char *resp,
     char buf[96];
     size_t buf_len = 0;
     bool terminated = clbs_collapse_line(p, buf, sizeof(buf), &buf_len);
-    if (!terminated) return false; /* incomplete fragment — likely truncated */
+    if (!terminated) return false; /* incomplete fragment - likely truncated */
 
     int consumed = 0;
     int st = -1;
@@ -313,7 +313,7 @@ static void on_urc_rxstart(const char *line, void *user) {
 static void on_urc_rxtopic(const char *line, void *user) {
     hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
     if (!h->rx.in_progress) return;
-    /* +CMQTTRXTOPIC: <idx>,<topic_len>  — the actual topic is on the
+    /* +CMQTTRXTOPIC: <idx>,<topic_len>  - the actual topic is on the
        next non-URC line. Mark that we expect it. */
     int idx = 0, tl = 0;
     if (sscanf(line, "+CMQTTRXTOPIC: %d,%d", &idx, &tl) >= 1) {
@@ -339,7 +339,7 @@ static void on_urc_rxend(const char *line, void *user) {
     h->rx.complete = true;
 }
 
-/* Wildcard handler installed at "" — every URC line reaches us; we
+/* Wildcard handler installed at "" - every URC line reaches us; we
    use it to capture the topic and payload text that follow the
    RXTOPIC / RXPAYLOAD announcements. Lines starting with '+' are
    skipped here (they go through the dedicated handlers). */
@@ -370,7 +370,7 @@ static void on_urc_any(const char *line, void *user) {
 static void on_urc_disconn(const char *line, void *user) {
     (void)line;
     hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
-    /* +CMQTTCONNLOST: <client_index>,<cause>  — best effort: clear both
+    /* +CMQTTCONNLOST: <client_index>,<cause>  - best effort: clear both
        client flags so the application notices and reconnects. */
     int idx = 0, cause = 0;
     if (sscanf(line, "+CMQTTCONNLOST: %d,%d", &idx, &cause) >= 1 &&

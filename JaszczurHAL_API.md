@@ -857,18 +857,18 @@ hal_stack_guard_check();                      // validate canary
 forwards to thin `rp2040_fault_*` wrappers. Retained state lives in
 `watchdog_hw->scratch[0..3]` (scratch `[4..7]` is reserved by pico-sdk for
 `WATCHDOG_NON_REBOOT_MAGIC` / `watchdog_reboot()` arguments). The HardFault
-handler is naked ASM that captures the exception frame (PC/LR/PSR — Cortex-M0+
+handler is naked ASM that captures the exception frame (PC/LR/PSR - Cortex-M0+
 has no CFSR/HFSR/MMFAR/BFAR), stores it into scratch with a `'JHD'` signature,
 then triggers `watchdog_reboot(0, 0, 0)`. The stack canary is placed at
 `__StackLimit` and the address is laundered through inline asm to avoid the
 GCC `-Warray-bounds` false positive caused by arduino-pico declaring
 `__StackLimit` as `char[1]`. `HAL_RESET_REASON_BROWNOUT` is not reported by
-silicon (POR and BOR share one flag) — `hal_last_boot_was_brownout()` is a
+silicon (POR and BOR share one flag) - `hal_last_boot_was_brownout()` is a
 heuristic that returns true when the silicon reported POR but the retained
 alive marker survived (suggesting V<sub>DD</sub> dipped below the BOR
 threshold without losing scratch).
-**impl/stm32g474:** No-op stub backend behind the same dispatch pattern as RP2040 — `src/hal/impl/stm32g474/hal_system.cpp` forwards to `stm32g474_fault_*` thin wrappers, and the stub implementation lives in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`. A first-class STM32G474 fault driver — using `RCC->CSR` for reset reason (including real `BORRSTF` brown-out), `SCB->{CFSR,HFSR,MMFAR,BFAR}` for richer
-Cortex-M4 HardFault info, and `TAMP->BKPxR` for retained storage — is planned and will land in those files without changing the public surface.
+**impl/stm32g474:** No-op stub backend behind the same dispatch pattern as RP2040 - `src/hal/impl/stm32g474/hal_system.cpp` forwards to `stm32g474_fault_*` thin wrappers, and the stub implementation lives in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`. A first-class STM32G474 fault driver - using `RCC->CSR` for reset reason (including real `BORRSTF` brown-out), `SCB->{CFSR,HFSR,MMFAR,BFAR}` for richer
+Cortex-M4 HardFault info, and `TAMP->BKPxR` for retained storage - is planned and will land in those files without changing the public surface.
 **impl/.mock:** All state is injectable; see the mock helpers below. The
 mock `hal_fault_subsystem_init()` does NOT reset the staged reset-reason /
 fault-info so tests can pre-populate state and observe behaviour across an
@@ -2317,7 +2317,7 @@ hal_modem_at_t      hal_simcom_a76xx_get_at(hal_simcom_a76xx_t h);
 
    hard_reset() is the SimCom PWRKEY "force off then on" sequence
    (two pulses + 5 s gaps); for relay-gated boards a single
-   power_toggle() is usually enough — don't double-power-cycle. */
+   power_toggle() is usually enough - don't double-power-cycle. */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_power_toggle(hal_simcom_a76xx_t h,
                                                         uint32_t pulse_ms);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_hard_reset(hal_simcom_a76xx_t h);
@@ -2809,13 +2809,13 @@ int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buf
 ```
 
 **Engine:** the portable NMEA parser (`impl/shared/gps_nmea_parser.cpp`) wrapped
-by a shared facade (`impl/shared/hal_gps_core.cpp`) — used by both hardware
+by a shared facade (`impl/shared/hal_gps_core.cpp`) - used by both hardware
 backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
-**impl/arduino (RP2040):** transport only — SoftwareSerial (default) or UART,
+**impl/arduino (RP2040):** transport only - SoftwareSerial (default) or UART,
 selected at compile time. `hal_gps_update()` must be polled every loop iteration.
-**impl/stm32g474:** transport only — hardware UART (USART1 by default).
+**impl/stm32g474:** transport only - hardware UART (USART1 by default).
 **impl/.mock:** internal state struct; inject helpers set values directly.
-**Thread safety:** the shared engine is thread-safe and multicore-safe — an
+**Thread safety:** the shared engine is thread-safe and multicore-safe - an
 internal `hal_mutex_t` protects the parser state, the byte feed and all accessor
 calls. Mock backend is unsynchronized and intended for single-threaded tests.
 

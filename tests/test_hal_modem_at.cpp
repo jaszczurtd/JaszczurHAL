@@ -114,7 +114,7 @@ void test_send_expected_waits_past_early_ok(void) {
        emit the actual result code as an asynchronous URC ("+CMQTTSUB:
        0,0" etc.) a moment later.  When the caller passes an `expected`
        substring, the engine MUST wait for that substring and NOT
-       short-circuit on the bare "\r\nOK\r\n" — otherwise it races the
+       short-circuit on the bare "\r\nOK\r\n" - otherwise it races the
        URC and fires the next command while the modem is still busy. */
     push_str("\r\nOK\r\n");
     /* expected is given but not yet present -> must time out, not OK. */
@@ -126,7 +126,7 @@ void test_send_expected_waits_past_early_ok(void) {
 void test_send_expected_drains_trailing_ok(void) {
     /* Regression: when `expected` is a payload substring that arrives
        BEFORE the OK terminator (e.g. "+CCLK:" preceding "\r\nOK\r\n"),
-       send() must not return the instant it sees the payload — it has
+       send() must not return the instant it sees the payload - it has
        to keep draining until OK arrives, otherwise the trailing bytes
        (rest of the payload line + "\r\nOK\r\n") leak into the UART FIFO
        and corrupt the next command's RX buffer.
@@ -135,7 +135,7 @@ void test_send_expected_drains_trailing_ok(void) {
     push_str("\r\n+CCLK: \"26/06/02,20:40:25+08\"\r\n\r\nOK\r\n");
     TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                       hal_modem_at_send(s_modem, "AT+CCLK?", "+CCLK:", 500));
-    /* Issue a follow-up command — its RX buffer must NOT contain the
+    /* Issue a follow-up command - its RX buffer must NOT contain the
        trailing "OK" of the previous response. */
     push_str("\r\nOK\r\n");
     TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,

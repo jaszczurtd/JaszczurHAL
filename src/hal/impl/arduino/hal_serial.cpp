@@ -232,7 +232,8 @@ static hal_error_slot_t *get_error_slot(const char *source) {
  * @brief Ensure the debug subsystem is initialised (lazy init).
  *
  * Safe to call from multiple cores - worst case is a harmless
- * double-init because hal_debug_init() overwrites the same statics.
+ * double-init: hal_debug_init() guards each mutex allocation against
+ * NULL, so re-entry neither re-allocates nor orphans the locks.
  */
 static void hal_debug_ensure_init(void) {
     if (s_debug_initialized) return;
@@ -313,9 +314,14 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg) {
     s_rate_limit_cfg = sanitize_rate_cfg(cfg);
     memset(s_error_slots, 0, sizeof(s_error_slots));
     memset(&s_overflow_slot, 0, sizeof(s_overflow_slot));
-    s_deb_mutex  = hal_mutex_create();
-    s_derr_mutex = hal_mutex_create();
-    s_rl_mutex   = hal_mutex_create();
+    // Idempotent: allocate each lock only on first init. hal_debug_init is
+    // normally called once at boot, so the unconditional form never leaked in
+    // practice, but guarding it makes a double-init genuinely harmless (it no
+    // longer orphans the previous mutexes) and mirrors hal_serial_ensure_tx_mutex().
+    // These statics are zero-initialised (.bss), so testing against NULL is sound.
+    if (s_deb_mutex  == NULL) s_deb_mutex  = hal_mutex_create();
+    if (s_derr_mutex == NULL) s_derr_mutex = hal_mutex_create();
+    if (s_rl_mutex   == NULL) s_rl_mutex   = hal_mutex_create();
     hal_serial_ensure_tx_mutex();
     hal_serial_begin(baud);
     s_debug_muted = false;
@@ -415,8 +421,11 @@ void hal_derr(const char *format, ...) {
         }
     }
     if (len == 0) {
-        strcpy(s_derr_buf, error);
-        len = strlen(error);
+        // Bounded: error is caller-supplied and may exceed s_derr_buf.
+        // snprintf truncates safely; len = strlen(s_derr_buf) stays <= sizeof-1,
+        // so the vsnprintf size computation below cannot underflow.
+        snprintf(s_derr_buf, sizeof(s_derr_buf), "%s", error);
+        len = strlen(s_derr_buf);
     }
     vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1 - len, format, args);
     va_end(args);

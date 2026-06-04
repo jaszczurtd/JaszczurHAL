@@ -25,6 +25,87 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
+  # ── Valgrind memcheck gate ─────────────────────────────────────────────────
+  # Runs the host unit-test suite under Valgrind to catch memory defects
+  # (leaks, use-after-free, invalid/uninitialised reads). Host-only: this does
+  # NOT exercise firmware on MCU targets - it validates the portable HAL logic
+  # tested in tests/. Memcheck flags and the suppressions file are configured in
+  # the root CMakeLists.txt (MEMORYCHECK_* -> DartConfiguration.tcl), so a real
+  # defect exits non-zero and fails this job.
+  memcheck:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Valgrind
+        run: sudo apt-get update && sudo apt-get install -y valgrind
+
+      - name: Configure
+        run: cmake -B build
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Run tests under Valgrind
+        run: ctest --test-dir build -T memcheck --output-on-failure
+
+  # ── Static analysis gate ───────────────────────────────────────────────────
+  # Two complementary analyzers on the project's OWN code (vendored libraries
+  # excluded). They reach layers the host valgrind gate cannot run:
+  #
+  #   cppcheck    - parses standalone, so it scans ALL own code: portable logic,
+  #                 the mock/arduino/stm32 backends. This is the only gate that
+  #                 covers the Arduino backend adapters (never host-executable).
+  #   clang-tidy  - needs a compile database, so it covers the host-compilable
+  #                 production code: portable HAL (src/hal/hal_*.cpp), shared/,
+  #                 and the stm32g474 backend. The mock backend (test scaffolding)
+  #                 is intentionally out of scope.
+  #
+  # Tool configs live in .clang-tidy and tests/cppcheck-suppressions.txt. Pinned
+  # to the analyzers shipped on ubuntu-latest (clang-tidy 18, cppcheck 2.13) so
+  # CI and local runs agree. Vendored code excluded: arduino drivers/frameworks,
+  # cJSON, Unity.
+  static-analysis:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install analyzers
+        run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck clang-tools
+
+      - name: Generate compile databases
+        run: |
+          cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -S stm32_lib -B build_stm32 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+      - name: "cppcheck (all own code; vendored excluded)"
+        run: |
+          cppcheck --enable=warning,performance,portability \
+            --inline-suppr \
+            --suppressions-list=tests/cppcheck-suppressions.txt \
+            -i src/hal/impl/arduino/drivers \
+            -i src/hal/impl/arduino/frameworks \
+            -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c -i src/utils/unity.c \
+            --error-exitcode=1 --quiet \
+            src
+
+      - name: "clang-tidy (portable HAL + shared + stm32 backend)"
+        run: |
+          run-clang-tidy -p build -quiet \
+            '^.*/src/(hal/hal_[^/]*|hal/impl/shared/[^/]*|utils/(?!cJSON|unity)[^/]*)\.(cpp|c)$' \
+            | tee tidy_host.log
+          run-clang-tidy -p build_stm32 -quiet \
+            '^.*/src/hal/impl/stm32g474/.*\.(cpp|c)$' \
+            | tee tidy_stm32.log
+          if grep -qE ' (warning|error):' tidy_host.log tidy_stm32.log; then
+            echo "::error::clang-tidy reported findings (see logs above)"
+            exit 1
+          fi
+
   # ── STM32 skeleton compile gate ────────────────────────────────────────────
   # This job builds the STM32G474 static-library target with the host compiler
   # (no Arduino core). It catches backend regressions in src/hal/impl/stm32g474

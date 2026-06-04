@@ -22,7 +22,7 @@ void setDebugPrefixWithColon(const char *moduleName) {
     return;
   }
 
-  while (moduleName[prefixLen] != '\0' && prefixLen < (sizeof(prefix) - 2)) {
+  while (prefixLen < (sizeof(prefix) - 2) && moduleName[prefixLen] != '\0') {
     prefix[prefixLen] = moduleName[prefixLen];
     prefixLen++;
   }

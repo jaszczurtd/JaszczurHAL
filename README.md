@@ -160,26 +160,17 @@ of the following in `hal_project_config.h` (or via `-D`):
 ```
 
 If you define none, the target is **auto-detected** from the toolchain, so
-existing RP2040/Arduino projects need no change. Selecting two targets — or a
-bare-metal ARM build with no detectable target — is a compile-time `#error`.
+existing RP2040/Arduino projects need no change. Selecting two targets - or a
+bare-metal ARM build with no detectable target - is a compile-time `#error`.
 Backend files compile only for their selected target, so unused backends cost
 zero code.
 
 The same demo source builds on both backends from a single example folder:
-[`examples/portable_blink/`](examples/portable_blink/) — an RP2040 sketch
+[`examples/portable_blink/`](examples/portable_blink/) - an RP2040 sketch
 (`setup()/loop()`) and a bare-metal STM32G474 entry (`g474/main.c`) share one
 portable `blink_app.c`. The STM32G474 build exercises the first real bare-metal
 backend (boot + SysTick time + GPIO + USART2 console + Cortex-M fault capture)
 on the Nucleo-G474RE.
-
-## I2C clock presets
-
-`hal_i2c.h` exposes named clock constants for common bus modes:
-`HAL_I2C_CLOCK_STANDARD_HZ` (100 kHz), `HAL_I2C_CLOCK_FAST_HZ` (400 kHz),
-`HAL_I2C_CLOCK_FAST_PLUS_HZ` (1 MHz), and
-`HAL_I2C_CLOCK_HIGH_SPEED_HZ` (3.4 MHz). Use the faster modes only when the
-controller, wiring, pull-ups, capacitance, and all devices on the bus support
-them; 3.4 MHz High-speed mode is especially target-dependent.
 
 ## Host tests (quick)
 
@@ -191,6 +182,42 @@ ctest --test-dir build --output-on-failure
 
 Detailed suite coverage, mock behavior notes, and testing workflow are in
 `JaszczurHAL_API.md`.
+
+## Continuous integration and quality gates
+
+Every push and pull request to `main` runs the CI workflow
+(`.github/workflows/ci.yml`). It builds the library and exercises several
+layers of checks:
+
+- **Host unit tests** - the suite runs against the deterministic mock backend
+  (CMake + Unity).
+- **Compile gates** - the Arduino/RP2040 static library is built across
+  `HAL_ENABLE_*` flag profiles and all examples are compiled, while the
+  STM32G474 backend is built with the host compiler to catch backend
+  regressions.
+- **Memory safety** - the host tests are re-run under Valgrind
+  (`ctest -T memcheck`) to catch leaks, use-after-free, and invalid/uninitialised
+  reads. This covers the portable logic and the mock backend.
+- **Static analysis** - `clang-tidy` and `cppcheck` analyse the project's own
+  code. cppcheck parses standalone, so it also reaches the Arduino backend
+  adapters that never run on the host; clang-tidy covers the host-compilable
+  production code (portable HAL, shared engine, STM32 backend). Bundled
+  third-party libraries are excluded from both.
+
+Tool configuration lives alongside the sources: `.clang-tidy`,
+`tests/cppcheck-suppressions.txt`, and `tests/valgrind.supp`. The same checks
+can be run locally:
+
+```bash
+# memory safety (requires valgrind)
+ctest --test-dir build -T memcheck --output-on-failure
+
+# static analysis (requires clang-tidy, cppcheck, clang-tools)
+cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cppcheck --enable=warning,performance,portability \
+  --suppressions-list=tests/cppcheck-suppressions.txt src
+run-clang-tidy -p build
+```
 
 ## VS Code Development Environment
 
@@ -231,9 +258,7 @@ See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup,
 ## Building as a static library (.a)
 
 The complete guide for compiling JaszczurHAL to a linkable static library
-(`libJaszczurHAL.a`) was moved to:
-
-- [lib_compilation.md](lib_compilation.md)
+(`libJaszczurHAL.a`): [lib_compilation.md](lib_compilation.md)
 
 ## Documentation
 

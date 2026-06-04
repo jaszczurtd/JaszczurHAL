@@ -5,7 +5,7 @@
  * @brief Portable NMEA-0183 parser for JaszczurHAL's GPS HAL.
  *
  * The tokenizer, checksum handling and RMC/GGA decoding logic is ported from
- * TinyGPS++ (Mikal Hart, LGPL) into a dependency-free form — no Arduino, no
+ * TinyGPS++ (Mikal Hart, LGPL) into a dependency-free form - no Arduino, no
  * millis(): position age is stamped by the hal_gps facade via hal_millis()
  * using @ref gps_nmea_t::loc_commit_seq. GSA / GSV / GST decoding (fix mode,
  * DOPs, satellites-in-view, horizontal accuracy) follows the standard NMEA-0183

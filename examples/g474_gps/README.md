@@ -66,13 +66,13 @@ longitude are 1e-7 deg, speed/course/DOP are ×100, altitude/accuracy in cm.)
 |---|---|
 | `chars=0` forever | GPS TX not on PA10; receiver unpowered; wrong baud |
 | `ok=0 fail>0` | Baud/framing mismatch (this build is fixed 9600 8N1) |
-| `waiting for fix` indefinitely | No sky view / cold start — give it minutes outdoors |
+| `waiting for fix` indefinitely | No sky view / cold start - give it minutes outdoors |
 | Console silent | Wrong port/baud, or terminal opened before reset (press B2) |
 
 ## Notes
 
 - The USART backend is polled, so `hal_gps_update()` is called every loop and
-  reporting is throttled separately — don't gate the polling behind a delay.
+  reporting is throttled separately - don't gate the polling behind a delay.
 - Register-level USART (`JH_STM32G474_HW`) follows RM0440 but is pending
   on-silicon validation, like the I2C / ADC backends.
 - GPS transport is decoupled from the parser: `HAL_ENABLE_GPS` requires a

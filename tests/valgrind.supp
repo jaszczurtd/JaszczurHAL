@@ -1,0 +1,29 @@
+# Valgrind suppressions for the JaszczurHAL host test suite.
+#
+# Referenced by MEMORYCHECK_SUPPRESSIONS_FILE in the root CMakeLists.txt and
+# applied automatically by `ctest -T memcheck`.
+#
+# Keep this list minimal: only suppress allocations that are intentional for
+# this project's continuous-operation model (objects that live for the whole
+# program lifetime and are deliberately never freed). NEVER add a suppression to
+# silence a genuine leak in src/ - fix the code instead.
+
+# ── SmartTimers per-instance lock ────────────────────────────────────────────
+# SmartTimers::ensureMutex() lazily allocates one hal_mutex per timer instance
+# (create-once, guarded by `if (!_mutex)`). In production a timer is a long-lived
+# object, so its lock is held for the program lifetime by design and is never
+# destroyed - the project runs continuously and does not tear timers down.
+# The host unit tests, however, construct transient SmartTimer instances per
+# test case, so Valgrind reports each instance's lock as "definitely lost" when
+# the local object goes out of scope. That is a test-harness artifact, not a
+# defect, so we suppress this specific allocation site (anchored on
+# ensureMutex so nothing else is masked).
+{
+   SmartTimers-lifetime-bound-mutex-create-once
+   Memcheck:Leak
+   match-leak-kinds: definite
+   fun:_Znwm
+   fun:hal_mutex_create
+   fun:_ZN11SmartTimers11ensureMutexEv
+   ...
+}

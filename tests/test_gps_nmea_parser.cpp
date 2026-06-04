@@ -6,7 +6,7 @@
 
 /* Exercises the portable NMEA parser directly with real sentences (checksums
  * computed here so any body is accepted), asserting the decoded fields and the
- * ported field mappings — the part most prone to off-by-one term errors. */
+ * ported field mappings - the part most prone to off-by-one term errors. */
 
 static gps_nmea_t p;
 

@@ -73,7 +73,7 @@ typedef struct {
      *   - SimCom PWRKEY through a transistor (active-low pulse toggles
      *     the module's internal PMU on/off),
      *   - relay coil / load switch whose ENABLE matches the same
-     *     polarity (HIGH = powered, LOW = unpowered) — in that case
+     *     polarity (HIGH = powered, LOW = unpowered) - in that case
      *     a power_toggle() becomes a physical power-cycle.
      *
      * Set to -1 to disable the in-driver power control. Choose -1
@@ -223,11 +223,11 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_power_toggle(hal_simcom_a76xx_t h,
  * Equivalent to power_toggle(1500) + 5s + power_toggle(1500) + 5s.
  * This sequence implements the SimCom PWRKEY "force off, then back
  * on" pattern; the modem is expected to keep running between the two
- * pulses (PWRKEY toggles the PMU state machine — it does NOT cut
+ * pulses (PWRKEY toggles the PMU state machine - it does NOT cut
  * VCC). Does nothing if pwr_pin is -1.
  *
  * Boards where pwr_pin physically gates VCC (relay / load switch)
- * usually do NOT want this — a single power_toggle() already cuts and
+ * usually do NOT want this - a single power_toggle() already cuts and
  * re-applies power. Use power_toggle() once and skip hard_reset().
  */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_hard_reset(hal_simcom_a76xx_t h);

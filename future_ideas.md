@@ -1,4 +1,4 @@
-# JaszczurHAL — Future Architecture Improvements
+# JaszczurHAL - Future Architecture Improvements
 
 Architecture notes and remaining recommendations, ordered by practical value.
 

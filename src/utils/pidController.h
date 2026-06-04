@@ -51,7 +51,7 @@ public:
   PIDController() : dt(0.001f), last_time(0.0f), integral(0.0f), previous(0.0f),
                     output(0.0f), pid_kp(0.0f), pid_ki(0.0f), pid_kd(0.0f),
                     max_integral(0.0f), dir(FORWARD),
-                    errorHistoryHead(0), errorHistoryCount(0) {
+                    errorHistory{}, errorHistoryHead(0), errorHistoryCount(0) {
     setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
   }
 

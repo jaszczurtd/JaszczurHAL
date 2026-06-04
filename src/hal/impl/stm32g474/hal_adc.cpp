@@ -12,7 +12,7 @@ static uint8_t s_resolution = 12u;
 static hal_mutex_t s_adc_mutex = nullptr;
 
 #ifndef JH_STM32G474_HW
-/* Host-sanity build: no registers to touch — keep a benign zero-filled store. */
+/* Host-sanity build: no registers to touch - keep a benign zero-filled store. */
 static int s_adc_values[128] = {};
 #endif
 
@@ -86,7 +86,7 @@ static void adc1_hw_init(void) {
     ADC1_CR |= ADC_CR_ADVREGEN;
     for (volatile uint32_t i = 0; i < 4000u; ++i) { }
 
-    /* Single-ended calibration — ADEN must be 0 here (it is after reset). */
+    /* Single-ended calibration - ADEN must be 0 here (it is after reset). */
     ADC1_CR &= ~ADC_CR_ADCALDIF;
     ADC1_CR |= ADC_CR_ADCAL;
     while (ADC1_CR & ADC_CR_ADCAL) { }
