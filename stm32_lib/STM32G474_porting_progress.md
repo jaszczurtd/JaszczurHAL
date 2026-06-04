@@ -36,26 +36,21 @@ Added files:
 
 Nature of the implementation:
 - a minimal, safe skeleton for the later switch to STM32 HAL/LL,
-- no dependency on `Arduino.h` or the Arduino libraries,
-- critical modules have a working API and internal state (placeholder behaviour),
+- no dependency on Arduino libraries (non-Arduino builds use local compatibility
+  headers where Arduino-origin drivers need common types),
+- core modules are moving from placeholders to register-level G474 backends,
 - the code carries TODO markers wherever the STM32 wiring should ultimately go.
 
 ### 3. Default STM32 feature profile (initial)
 `stm32_lib/CMakeLists.txt` enables by default:
-- `HAL_ENABLE_WIFI`
-- `HAL_ENABLE_TIME`
-- `HAL_ENABLE_EEPROM`
+- `HAL_ENABLE_I2C`
+- `HAL_ENABLE_SPI`
+- `HAL_ENABLE_UART`
+- `HAL_ENABLE_DAC`
+- `HAL_ENABLE_PCNT`
+- `HAL_ENABLE_MCP401X`
+- `HAL_ENABLE_MAX5395`
 - `HAL_ENABLE_GPS`
-- `HAL_ENABLE_THERMOCOUPLE`
-- `HAL_ENABLE_DS18B20`
-- `HAL_ENABLE_SWSERIAL`
-- `HAL_ENABLE_I2C_SLAVE`
-- `HAL_ENABLE_EXTERNAL_ADC`
-- `HAL_ENABLE_PWM_FREQ`
-- `HAL_ENABLE_RGB_LED`
-- `HAL_ENABLE_CAN`
-- `HAL_ENABLE_DISPLAY`
-- `HAL_ENABLE_UNITY`
 
 This narrows the scope to the backend "core" and simplifies the first porting
 stages.
@@ -141,12 +136,13 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 | Bus  | STM32G474 status | Consequence |
 |------|------------------|-------------|
 | I2C  | Full Wire-style API (`begin_transmission`/`write`/`end`/`request_from`/`read`) in `impl/stm32g474/hal_i2c.cpp` | I2C device drivers are portable today |
-| SPI  | Only `init`/`lock`/`unlock` in `impl/stm32g474/hal_spi.cpp` | **No transfer primitive anywhere in the HAL** |
+| SPI  | Arduino-style transaction + transfer API in `hal_spi.h`; G474 backend drives SPI1/SPI2 in hardware (polling, 8-bit full-duplex, software NSS) and non-Arduino builds provide `<SPI.h>` with `SPIClass`/`SPISettings` | SPI device drivers can now be ported behind the HAL / Arduino-compatible shim |
 
-Critical blocker: `hal_spi.h` declares **no `transfer` function**. In the Arduino
-backend, SPI transfers go straight through Arduino `SPI.h`; STM32 SPI today is
-just mutex + pin bookkeeping. **Every SPI-based driver is blocked** until a
-`hal_spi_transfer*` primitive is added to the API and implemented on STM32.
+SPI is no longer blocked at the bus layer. The first STM32 implementation is
+polling-based rather than DMA, but it is hardware-backed and matches the
+Arduino driver surface closely enough for MCP2515, MAX6675 and display-driver
+bring-up. Default G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2
+PB14/PB15/PB13; CS remains a normal GPIO owned by each driver.
 
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
@@ -164,11 +160,12 @@ wireguard`.
 We do not port the Adafruit/vendor libraries; we extract their register maps and
 write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
 
-**🟡 Blocked until an SPI transfer primitive exists:**
+**🟡 Ready for first STM32 ports over the new SPI layer:**
 - `hal_can` (MCP2515) - SPI
 - `hal_display` (ILI9341/ST7735/ST7789 - SPI; SSD1306 - I2C or SPI)
 - `hal_thermocouple` MAX6675 part - SPI read
-Prerequisite: add `hal_spi_transfer()` to `hal_spi.h` + implement SPI1/2/3 on G474.
+First target should be a small register-style driver (MAX6675 or MCP2515
+probe), then display bulk writes can decide whether DMA is worth adding.
 
 **🟡 OneWire (bit-bang + timing):**
 - `hal_ds18b20`, `hal_onewire` - OneWire relies on Arduino `digitalWrite` and
@@ -188,12 +185,14 @@ a rewrite (PWM+DMA or SPI), not a library port.
 - `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
 
 ### Recommended order
-1. **Add `hal_spi_transfer` first** (API + G474 impl) - unblocks CAN, display and
-   MAX6675 in one move; biggest multiplier.
+1. **Port one small SPI device first** (MAX6675 read or MCP2515 probe) to
+   validate CS timing, mode, and clock on real G474 hardware.
 2. **I2C quick wins** via the digipot pattern: rtc (PCF8563/DS3231),
    external_adc (ADS1115), thermocouple (MCP9600).
-3. **OneWire** as a portable driver on `hal_gpio` + `hal_time` → unblocks ds18b20.
-4. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
+3. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
+   for TFT throughput.
+4. **OneWire** as a portable driver on `hal_gpio` + `hal_time` → unblocks ds18b20.
+5. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages
 1. Replace the remaining `impl/stm32g474` placeholders with real STM32 HAL/LL calls.

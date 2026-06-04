@@ -10,6 +10,20 @@ static inline uint8_t spi_bus_index(uint8_t bus) {
     return bus == 1 ? 1 : 0;
 }
 
+static inline SPIClass &spi_object(uint8_t bus) {
+    return spi_bus_index(bus) == 1 ? SPI1 : SPI;
+}
+
+static SPISettings spi_make_settings(const hal_spi_settings_t *settings) {
+    if (settings == nullptr) {
+        return SPISettings(HAL_SPI_CLOCK_DEFAULT_HZ, MSBFIRST, SPI_MODE0);
+    }
+    uint32_t clock = settings->clock_hz ? settings->clock_hz : HAL_SPI_CLOCK_DEFAULT_HZ;
+    uint8_t order = settings->bit_order == HAL_SPI_LSBFIRST ? LSBFIRST : MSBFIRST;
+    uint8_t mode = settings->data_mode <= SPI_MODE3 ? settings->data_mode : SPI_MODE0;
+    return SPISettings(clock, order, mode);
+}
+
 static void spi_ensure_mutex(uint8_t bus) {
     uint8_t idx = spi_bus_index(bus);
     if (!s_spi_mutex[idx]) {
@@ -24,17 +38,15 @@ static void spi_ensure_mutex(uint8_t bus) {
 void hal_spi_init(uint8_t bus, uint8_t rx_miso, uint8_t tx_mosi, uint8_t sck_pin) {
     uint8_t idx = spi_bus_index(bus);
     spi_ensure_mutex(idx);
-    if (idx == 1) {
-        SPI1.setRX(rx_miso);
-        SPI1.setTX(tx_mosi);
-        SPI1.setSCK(sck_pin);
-        SPI1.begin(true);
-    } else {
-        SPI.setRX(rx_miso);
-        SPI.setTX(tx_mosi);
-        SPI.setSCK(sck_pin);
-        SPI.begin(true);  // true = controller (master) mode on RP2040
-    }
+    SPIClass &spi = spi_object(idx);
+    spi.setRX(rx_miso);
+    spi.setTX(tx_mosi);
+    spi.setSCK(sck_pin);
+    spi.begin(true);  // true = controller (master) mode on RP2040
+}
+
+void hal_spi_deinit(uint8_t bus) {
+    spi_object(bus).end();
 }
 
 void hal_spi_lock(uint8_t bus) {
@@ -47,5 +59,49 @@ void hal_spi_unlock(uint8_t bus) {
     uint8_t idx = spi_bus_index(bus);
     spi_ensure_mutex(idx);
     hal_mutex_unlock(s_spi_mutex[idx]);
+}
+
+void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings) {
+    spi_object(bus).beginTransaction(spi_make_settings(settings));
+}
+
+void hal_spi_end_transaction(uint8_t bus) {
+    spi_object(bus).endTransaction();
+}
+
+uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
+    return spi_object(bus).transfer(data);
+}
+
+uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {
+    return spi_object(bus).transfer16(data);
+}
+
+void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
+    if (buffer == nullptr || len == 0u) {
+        return;
+    }
+    spi_object(bus).transfer(buffer, len);
+}
+
+void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size_t len) {
+    if (len == 0u) {
+        return;
+    }
+    SPIClass &spi = spi_object(bus);
+    for (size_t i = 0; i < len; ++i) {
+        const uint8_t out = tx ? tx[i] : 0xFFu;
+        const uint8_t in = spi.transfer(out);
+        if (rx) {
+            rx[i] = in;
+        }
+    }
+}
+
+void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
+    if (data == nullptr || len == 0u) {
+        return;
+    }
+    hal_spi_transfer_txrx(bus, data, nullptr, len);
 }
 #endif  // HAL_TARGET_IS_RP2040

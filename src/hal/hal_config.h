@@ -96,14 +96,15 @@
        HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
        HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
        HAL_ENABLE_SDLOGGER      - SD-card logger/crash logger
-                                  (propagates: EEPROM, I2C).
+                                  (propagates: EEPROM, I2C, SPI).
 
      Buses:
        HAL_ENABLE_UART          - Hardware UART (SerialUART).
        HAL_ENABLE_SWSERIAL      - SoftwareSerial.
        HAL_ENABLE_I2C           - I2C master (Wire).
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
-       HAL_ENABLE_CAN           - MCP2515 CAN bus.
+       HAL_ENABLE_SPI           - SPI master (Arduino-compatible SPIClass).
+       HAL_ENABLE_CAN           - MCP2515 CAN bus (propagates: SPI).
 
      Time-of-day:
        HAL_ENABLE_RTC           - generic RTC API (requires at least one
@@ -117,7 +118,7 @@
        HAL_ENABLE_MCP9600       - MCP9600/MCP9601 backend (propagates:
                                   THERMOCOUPLE, I2C).
        HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
-                                  THERMOCOUPLE).
+                                  THERMOCOUPLE, SPI).
        HAL_ENABLE_DS18B20       - DS18B20 1-Wire temperature sensor
                                   (propagates: ONEWIRE).
        HAL_ENABLE_ONEWIRE       - generic 1-Wire bus API wrapper.
@@ -142,11 +143,11 @@
        HAL_ENABLE_DISPLAY       - generic display API (requires at least
                                   one backend: TFT or SSD1306).
        HAL_ENABLE_TFT           - SPI TFT family (requires at least one
-                                  driver below; propagates: DISPLAY).
-       HAL_ENABLE_ILI9341       - ILI9341 TFT driver (propagates: TFT).
-       HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT).
-       HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT).
-       HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT).
+                                  driver below; propagates: DISPLAY, SPI).
+       HAL_ENABLE_ILI9341       - ILI9341 TFT driver (propagates: TFT, SPI).
+       HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT, SPI).
+       HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT, SPI).
+       HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT, SPI).
        HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY).
 
      Crypto + bundled libs:
@@ -188,6 +189,9 @@
   #endif
   #ifndef HAL_ENABLE_I2C
     #define HAL_ENABLE_I2C
+  #endif
+  #ifndef HAL_ENABLE_SPI
+    #define HAL_ENABLE_SPI
   #endif
 #endif
 
@@ -270,6 +274,9 @@
   #ifndef HAL_ENABLE_THERMOCOUPLE
     #define HAL_ENABLE_THERMOCOUPLE
   #endif
+  #ifndef HAL_ENABLE_SPI
+    #define HAL_ENABLE_SPI
+  #endif
 #endif
 
 /* I2C digital potentiometers. */
@@ -337,6 +344,15 @@
   #ifndef HAL_ENABLE_DISPLAY
     #define HAL_ENABLE_DISPLAY
   #endif
+  #ifndef HAL_ENABLE_SPI
+    #define HAL_ENABLE_SPI
+  #endif
+#endif
+
+#ifdef HAL_ENABLE_CAN
+  #ifndef HAL_ENABLE_SPI
+    #define HAL_ENABLE_SPI
+  #endif
 #endif
 
 #ifdef HAL_ENABLE_SSD1306
@@ -346,7 +362,7 @@
 #endif
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
-/* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI/SWSERIAL, UART, EEPROM,
+/* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
    KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
    NOT need such checks - they can be enabled on their own. The checks
@@ -442,6 +458,9 @@
   #endif
   #ifdef HAL_ENABLE_I2C_SLAVE
     #pragma message("HAL_CONFIG: HAL_ENABLE_I2C_SLAVE")
+  #endif
+  #ifdef HAL_ENABLE_SPI
+    #pragma message("HAL_CONFIG: HAL_ENABLE_SPI")
   #endif
   #ifdef HAL_ENABLE_CAN
     #pragma message("HAL_CONFIG: HAL_ENABLE_CAN")
