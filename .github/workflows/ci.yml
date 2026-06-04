@@ -206,9 +206,10 @@ jobs:
 
       - name: Install Arduino RP2040 core
         run: |
+          source arduino_core_version.conf
           arduino-cli core update-index \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          arduino-cli core install rp2040:rp2040 \
+          arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
       - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
@@ -231,9 +232,10 @@ jobs:
 
       - name: Install Arduino RP2040 core
         run: |
+          source arduino_core_version.conf
           arduino-cli core update-index \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          arduino-cli core install rp2040:rp2040 \
+          arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
       - name: Compile examples

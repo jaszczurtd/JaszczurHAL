@@ -67,7 +67,7 @@ typedef struct {
     /**
      * GPIO pin used to drive the modem's power-control input. Pulled
      * LOW for pulse_ms by hal_simcom_a76xx_power_toggle(), then back
-     * HIGH (waveform: idle HIGH → active-LOW pulse → HIGH).
+     * HIGH (waveform: idle HIGH -> active-LOW pulse -> HIGH).
      *
      * Typical wiring:
      *   - SimCom PWRKEY through a transistor (active-low pulse toggles
@@ -203,7 +203,7 @@ void hal_simcom_a76xx_destroy(hal_simcom_a76xx_t h);
 /**
  * @brief Drive the configured pwr_pin LOW for @p pulse_ms, then HIGH.
  *
- * Idle HIGH → active-LOW pulse → HIGH. Works for any board whose
+ * Idle HIGH -> active-LOW pulse -> HIGH. Works for any board whose
  * power-control input matches that polarity:
  *   - PWRKEY through a transistor (standard SimCom wiring), or
  *   - a relay / load switch whose ENABLE is HIGH-active-when-powered

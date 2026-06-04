@@ -12,6 +12,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef HAL_WIFI_SSID_MAX_LEN
 #define HAL_WIFI_SSID_MAX_LEN 33u
 #endif
@@ -136,5 +140,9 @@ bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
 
 /** @brief Convert a HAL WiFi encryption value to a short printable label. */
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_WIFI */

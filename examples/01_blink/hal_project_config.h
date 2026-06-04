@@ -1,5 +1,11 @@
 #pragma once
 
+/* Library provides the entry-point (setup/loop/main). App defines
+ * app_start(), app_task0(), and optionally app_task1(). See hal/hal_app.h. */
+#ifndef HAL_PROVIDE_APP_ENTRY
+#define HAL_PROVIDE_APP_ENTRY
+#endif
+
 /* ── Target (backend) selection ───────────────────────────────────────────
  * JaszczurHAL picks one hardware backend via a single switch. On arduino-pico
  * the RP2040 target is AUTO-DETECTED, so this example needs nothing here.

@@ -39,6 +39,10 @@
 #include <stdbool.h>
 #include <math.h>   /* NAN */
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ── Pool size ───────────────────────────────────────────────────────────── */
 
 /** @brief Maximum number of simultaneous thermocouple instances. */
@@ -361,5 +365,8 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);
 #endif /* HAL_ENABLE_MCP9600 */
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* HAL_ENABLE_THERMOCOUPLE */

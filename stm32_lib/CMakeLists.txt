@@ -28,6 +28,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/hal/hal_pid_controller.cpp
+    ${SRC}/hal_app_entry.cpp
 )
 
 # ── Utility sources safe outside Arduino ────────────────────────────────────

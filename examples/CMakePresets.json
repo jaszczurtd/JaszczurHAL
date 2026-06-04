@@ -1,0 +1,32 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "rp2040",
+      "displayName": "Examples: RP2040",
+      "binaryDir": "../build_examples_rp2040",
+      "cacheVariables": {
+        "JH_EXAMPLE_TARGET": "rp2040"
+      }
+    },
+    {
+      "name": "stm32g474",
+      "displayName": "Examples: STM32G474",
+      "binaryDir": "../build_examples_stm32g474",
+      "cacheVariables": {
+        "JH_EXAMPLE_TARGET": "stm32g474",
+        "CMAKE_TOOLCHAIN_FILE": "../stm32_lib/toolchain_stm32g474.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "rp2040",
+      "configurePreset": "rp2040"
+    },
+    {
+      "name": "stm32g474",
+      "configurePreset": "stm32g474"
+    }
+  ]
+}
