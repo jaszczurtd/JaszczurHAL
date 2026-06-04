@@ -7,214 +7,8 @@
 
 #include "tools.h"
 
-#ifdef SD_LOGGER
-static bool loggerInitialized = false;
-static bool crashLoggerInitialized = false;
-static File loggerFile;
-static File crashFile;
-static SPISettings settingsA(1000000, MSBFIRST, SPI_MODE1);
-static bool SDStarted = false;
-#else
-static bool loggerInitialized = false;
-static bool crashLoggerInitialized = false;
-#endif
-
-int getSDLoggerNumber(void) {
-#ifdef SD_LOGGER
-  return hal_eeprom_read_int(HAL_TOOLS_EEPROM_LOGGER_ADDR);
-#else
-  return -1;
-#endif
-}
-
-//cs: chip select/SD addres
-bool initSDLogger(int cs) {
-  (void)cs;  // Only used when SD_LOGGER is defined
-#ifdef SD_LOGGER
-
-  char buf[128] = {0};
-
-  int logNumber = getSDLoggerNumber();
-  snprintf(buf, sizeof(buf) - 1, "log%d.txt", logNumber);
-  logNumber++;
-  hal_eeprom_write_int(HAL_TOOLS_EEPROM_LOGGER_ADDR, logNumber);
-  hal_eeprom_commit();
-
-  SPI.beginTransaction(settingsA);
-  if(!SDStarted) {
-    SDStarted = loggerInitialized = SD.begin(cs);
-  } else {
-    loggerInitialized = SDStarted;
-  }
-  if(loggerInitialized) {
-    loggerFile = SD.open(buf, FILE_WRITE);
-    if(!loggerFile) {
-      loggerInitialized = false;
-    }
-  } else {
-    hal_serial_println("logger: Card Mount Failed");
-  }
-
-  SPI.endTransaction();
-
-#endif
-  return loggerInitialized;
-}
-
-bool isSDLoggerInitialized(void) {
-  return loggerInitialized;
-}
-
-#ifdef SD_LOGGER
-static unsigned long lastWriteTime = 0; 
-#define LOG_BUFFER_SIZE 2048
-static char logBuffer[LOG_BUFFER_SIZE];
-static int logBufPos = 0;
-#endif
-void updateSD(String data) {
-  (void)data;  // Only used when SD_LOGGER is defined
-#ifdef SD_LOGGER
-  if(isSDLoggerInitialized()) {  
-    const char *s = data.c_str();
-    int slen = strlen(s);
-    if (logBufPos + slen + 1 < LOG_BUFFER_SIZE) {
-      memcpy(logBuffer + logBufPos, s, slen);
-      logBufPos += slen;
-      logBuffer[logBufPos++] = '\n';
-      logBuffer[logBufPos] = '\0';
-    }
-    unsigned long currentTime = hal_millis();
-    if (currentTime - lastWriteTime >= HAL_TOOLS_WRITE_INTERVAL_MS) {
-      lastWriteTime = currentTime;
-
-      SPI.beginTransaction(settingsA);
-      loggerFile.println(logBuffer);
-      loggerFile.flush();
-      SPI.endTransaction();
-      logBufPos = 0;
-      logBuffer[0] = '\0';
-    }
-  }
-  #endif
-}
-
-void saveLoggerAndClose(void) {
-#ifdef SD_LOGGER
-  if(isSDLoggerInitialized()) {  
-    loggerInitialized = false;
-    SPI.beginTransaction(settingsA);
-    loggerFile.println(logBuffer);
-    loggerFile.flush();
-    loggerFile.close();
-    SPI.endTransaction();
-    logBufPos = 0;
-    logBuffer[0] = '\0';
-  }
-#endif
-}
-
-int getSDCrashNumber(void) {
-#ifdef SD_LOGGER
-  return hal_eeprom_read_int(HAL_TOOLS_EEPROM_CRASH_ADDR);
-#else
-  return -1;
-#endif
-}
-
-//cs: chip select/SD addres
-bool initCrashLogger(const char *addToName, int cs) {
-  (void)addToName;  // Only used when SD_LOGGER is defined
-  (void)cs;         // Only used when SD_LOGGER is defined
-#ifdef SD_LOGGER
-
-  char buf[128] = {0};
-
-  int crashNumber = getSDCrashNumber();
-  if(addToName != NULL && strlen(addToName) > 0) {
-    snprintf(buf, sizeof(buf) - 1, "watchdog%d(%s).txt", crashNumber, addToName);
-  } else {
-    snprintf(buf, sizeof(buf) - 1, "watchdog%d.txt", crashNumber);
-  }
-  crashNumber++;
-
-  hal_eeprom_write_int(HAL_TOOLS_EEPROM_CRASH_ADDR, crashNumber);
-  hal_eeprom_commit();
-
-  SPI.beginTransaction(settingsA);
-
-  if(!SDStarted) {
-    SDStarted = crashLoggerInitialized = SD.begin(cs);
-  } else {
-    crashLoggerInitialized = SDStarted;
-  }
-
-  if(crashLoggerInitialized) {
-    crashFile = SD.open(buf, FILE_WRITE);
-    if(!crashFile) {
-      crashLoggerInitialized = false;
-    }
-  } else {
-    hal_serial_println("crash logger: Card Mount Failed");
-  }
-
-  SPI.endTransaction();
-
-  if(crashLoggerInitialized) {
-    snprintf(buf, sizeof(buf) - 1, "corresponded log file: log%d.txt", 
-      getSDLoggerNumber() - 1);
-
-    updateCrashReport(buf);
-  }
-
-#endif
-  return crashLoggerInitialized;
-}
-
-bool isCrashLoggerInitialized(void) {
-  return crashLoggerInitialized;
-}
-
-void updateCrashReport(String data) {
-  (void)data;  // Only used when SD_LOGGER is defined
-#ifdef SD_LOGGER
-  if(isCrashLoggerInitialized()) {  
-    SPI.beginTransaction(settingsA);
-    crashFile.println(data + "\n");
-    crashFile.flush();
-    SPI.endTransaction();
-  }
-#endif
-}
-
-void saveCrashLoggerAndClose(void) {
-#ifdef SD_LOGGER
-  if(isCrashLoggerInitialized()) {  
-    crashLoggerInitialized = false;
-    SPI.beginTransaction(settingsA);
-    crashFile.flush();
-    crashFile.close();
-    SPI.endTransaction();
-  }
-#endif
-}
-
-void crashReport(const char *format, ...) {
-  (void)format;  // Only used when SD_LOGGER is defined
-#ifdef SD_LOGGER
-  if(isCrashLoggerInitialized()) {  
-    va_list valist;
-    va_start(valist, format);
-
-    char buffer[128];
-    memset (buffer, 0, sizeof(buffer));
-    vsnprintf(buffer, sizeof(buffer) - 1, format, valist);
-
-    updateCrashReport(buffer);
-
-    va_end(valist);
-  }
-#endif
-}
+#include <math.h>
+#include <stdlib.h>
 
 void debugInit(void) {
   hal_debug_init(HAL_DEBUG_DEFAULT_BAUD);
@@ -649,17 +443,12 @@ const char *macToString(uint8_t mac[6], char *buf, size_t bufSize) {
 }
 
 const char *encToString(uint8_t enc) {
-  (void)enc;  // Only used when PICO_W is defined
-  #ifdef PICO_W
-  switch (enc) {
-    case ENC_TYPE_NONE: return "NONE";
-    case ENC_TYPE_TKIP: return "WPA";
-    case ENC_TYPE_CCMP: return "WPA2";
-    case ENC_TYPE_AUTO: return "AUTO";
-    default: return "UNKN";
-  }
-  #endif
+#ifdef HAL_ENABLE_WIFI
+  return hal_wifi_encryption_to_string((hal_wifi_encryption_t)enc);
+#else
+  (void)enc;
   return "UNKN";
+#endif
 }
 
 char hexToChar(char high, char low) {
@@ -689,24 +478,34 @@ void urlDecode(const char *src, char *dst) {
 
 
 bool scanNetworks(const char *networkToFind) {
-  (void)networkToFind;  // Only used when PICO_W is defined
   bool networkFound = false;
-  #ifdef PICO_W
+#ifdef HAL_ENABLE_WIFI
   deb("Beginning scan at %lu\n", hal_millis());
-  int cnt = WiFi.scanNetworks();
-  if (!cnt) {
+  int cnt = hal_wifi_scan_networks();
+  if (cnt < 0) {
+    deb("WiFi scan failed");
+    return false;
+  }
+  if (cnt == 0) {
     deb("No WiFi networks found");
   } else {
     deb("Found %d networks\n", cnt);
     deb("%32s %5s %17s %2s %4s", "SSID", "ENC", "BSSID        ", "CH", "RSSI");
     for (int i = 0; i < cnt; i++) {
-      uint8_t bssid[6];
-      WiFi.BSSID(i, bssid);
+      hal_wifi_scan_result_t network;
+      if (!hal_wifi_get_scan_result((size_t)i, &network)) {
+        continue;
+      }
       char macBuf[20];
-      deb("%32s %5s %17s %2d %4ld", WiFi.SSID(i), encToString(WiFi.encryptionType(i)), macToString(bssid, macBuf, sizeof(macBuf)), WiFi.channel(i), WiFi.RSSI(i));
-      
+      deb("%32s %5s %17s %2d %4ld",
+          network.ssid,
+          hal_wifi_encryption_to_string(network.encryption),
+          macToString(network.bssid, macBuf, sizeof(macBuf)),
+          (int)network.channel,
+          (long)network.rssi);
+
       if(networkToFind != NULL && strlen(networkToFind) > 0) {
-        if(!strncmp(WiFi.SSID(i), networkToFind, strlen(networkToFind))) {
+        if(!strncmp(network.ssid, networkToFind, strlen(networkToFind))) {
           deb("network %s is available", networkToFind);
           networkFound = true;
         }
@@ -714,9 +513,10 @@ bool scanNetworks(const char *networkToFind) {
     }
   }
   deb("\n--- END --- at %lu\n", hal_millis());
-  #else
-  deb("No PicoW configured, WiFi disabled");
-  #endif
+#else
+  (void)networkToFind;
+  deb("HAL WiFi disabled");
+#endif
   return networkFound;
 }
 

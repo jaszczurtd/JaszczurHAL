@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### tools / hal_sdlogger — remove Arduino dependencies from tools
+
+- `scanNetworks()` now uses the HAL WiFi scan API instead of Arduino `WiFi.*`;
+  scan results are exposed by `hal_wifi_scan_networks()` /
+  `hal_wifi_get_scan_result()` with mock coverage.
+- Legacy SD/crash logger helpers were moved out of `tools` into the new
+  opt-in `hal_sdlogger` module (`HAL_ENABLE_SDLOGGER`). The Arduino `SD.h` /
+  `SPI.h` implementation now lives under
+  `impl/arduino/frameworks/sdlogger`, with a deterministic mock backend and
+  `test_hal_sdlogger` coverage.
+- `tools` declarations no longer expose Arduino-only public types such as
+  `String`, `File`, or `SPISettings`; the remaining utilities use portable C
+  types and HAL APIs.
+- `PROGMEM` / `F()` compatibility fallbacks are centralized in `hal_config.h`
+  for non-Arduino builds and bundled Arduino-origin drivers; `tools_c.h` no
+  longer defines its own copies.
+
 ### hal_gps — portable NMEA engine + STM32G474 support + richer fix data
 
 - The GPS parser is now a dependency-free, in-tree NMEA engine

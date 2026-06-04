@@ -51,6 +51,9 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #ifdef HAL_ENABLE_LITTLEFS
 #include <hal/hal_littlefs.h>
 #endif
+#ifdef HAL_ENABLE_SDLOGGER
+#include <hal/hal_sdlogger.h>
+#endif
 #ifdef HAL_ENABLE_OTA
 #include <hal/hal_ota.h>
 #endif
@@ -79,20 +82,6 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #endif
 #ifdef HAL_ENABLE_KV
 #include <hal/hal_kv.h>
-#endif
-
-/**
- * @brief Program-memory storage qualifier fallback for plain C builds.
- *
- * On non-Arduino C translation units, PROGMEM may be undefined; in that case it
- * expands to an empty qualifier to keep declarations portable.
- */
-#ifndef PROGMEM
-#define PROGMEM
-#endif
-/** @brief Arduino `F()` macro fallback for plain C builds. */
-#ifndef F
-#define F(s) (s)
 #endif
 
 #include "utils/tools_common_defs.h"

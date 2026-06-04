@@ -1,9 +1,8 @@
 #pragma once
 /*
  * Minimal SPI.h stub for Arduino platform - host/test builds only.
- * SPISettings is referenced at file scope in tools.cpp (not inside #ifdef).
- * SPI object is referenced only inside #ifdef SD_LOGGER (dead code), but the
- * inline definition is harmless.
+ * SPISettings/SPI are referenced by HAL_ENABLE_SDLOGGER builds and by selected
+ * Arduino-compatible sources during host diagnostics.
  */
 #include <stdint.h>
 

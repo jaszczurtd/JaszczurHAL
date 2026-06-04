@@ -72,6 +72,8 @@ Storage
     Key-value store. Propagates: EEPROM.
   HAL_ENABLE_LITTLEFS
     LittleFS lifecycle and basic filesystem helpers.
+  HAL_ENABLE_SDLOGGER
+    SD-card logger and crash-report logger. Propagates: EEPROM, I2C.
 
 Buses
   HAL_ENABLE_UART          Hardware UART (SerialUART).
@@ -174,6 +176,7 @@ Dependency graph (auto-propagation)
 -----------------------------------
 
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
+HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C
 HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI

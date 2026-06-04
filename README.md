@@ -54,7 +54,7 @@ Utility-only includes are also available:
 ## Supported modules and drivers (overview)
 
 - Core HAL domains: GPIO, ADC, DAC, PWM, pulse counter (PCNT), timers, system, synchronization, serial I/O
-- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM and key-value storage
+- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM, key-value storage, and SD logging
 - Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT, including coarse cell-based location)
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 
@@ -82,7 +82,7 @@ src/
       arduino/             # Arduino/RP2040 backend
         drivers/           # bundled third-party Arduino drivers (pico compatible)
           rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
-        frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser, etc)
+        frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser/SD logger, etc)
       .mock/               # deterministic host/test backend
       stm32g474/           # STM32G474 backend (boot/clock/GPIO/UART/DAC/PCNT/fault real; I2C/SPI/ADC/PWM/timer in progress)
         drivers/

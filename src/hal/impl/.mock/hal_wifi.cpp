@@ -18,6 +18,13 @@ static char s_hostname[64] = "";
 static uint32_t s_timeout_ms = 0;
 static int s_ping_result = -1;
 
+#ifndef HAL_MOCK_WIFI_MAX_SCAN_RESULTS
+#define HAL_MOCK_WIFI_MAX_SCAN_RESULTS 8u
+#endif
+
+static hal_wifi_scan_result_t s_scan_results[HAL_MOCK_WIFI_MAX_SCAN_RESULTS];
+static size_t s_scan_count = 0;
+
 static bool validate_out(char *out, size_t out_size, const char *fn) {
     if (!out) {
         hal_derr("%s: output buffer is NULL", fn);
@@ -145,6 +152,40 @@ int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
     return res;
 }
 
+int hal_wifi_scan_networks(void) {
+    return (int)s_scan_count;
+}
+
+bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+    if (out == NULL) {
+        hal_derr("hal_wifi_get_scan_result: output pointer is NULL");
+        return false;
+    }
+    if (index >= s_scan_count) {
+        hal_derr("hal_wifi_get_scan_result: index %u out of range",
+                 (unsigned)index);
+        return false;
+    }
+    *out = s_scan_results[index];
+    return true;
+}
+
+const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {
+    switch (encryption) {
+        case HAL_WIFI_ENC_NONE:
+            return "NONE";
+        case HAL_WIFI_ENC_WPA:
+            return "WPA";
+        case HAL_WIFI_ENC_WPA2:
+            return "WPA2";
+        case HAL_WIFI_ENC_AUTO:
+            return "AUTO";
+        case HAL_WIFI_ENC_UNKNOWN:
+        default:
+            return "UNKN";
+    }
+}
+
 void hal_mock_wifi_reset(void) {
     s_connected = false;
     s_status = 0;
@@ -154,6 +195,8 @@ void hal_mock_wifi_reset(void) {
     s_ping_result = -1;
     s_timeout_ms = 0;
     s_hostname[0] = '\0';
+    s_scan_count = 0;
+    memset(s_scan_results, 0, sizeof(s_scan_results));
     snprintf(s_ip, sizeof(s_ip), "%s", "0.0.0.0");
     snprintf(s_dns, sizeof(s_dns), "%s", "0.0.0.0");
     snprintf(s_mac, sizeof(s_mac), "%s", "00:00:00:00:00:00");
@@ -194,5 +237,30 @@ const char *hal_mock_wifi_get_hostname(void) {
 
 uint32_t hal_mock_wifi_get_timeout_ms(void) {
     return s_timeout_ms;
+}
+
+bool hal_mock_wifi_set_scan_result(size_t index,
+                                   const char *ssid,
+                                   hal_wifi_encryption_t encryption,
+                                   const uint8_t bssid[HAL_WIFI_BSSID_LEN],
+                                   int32_t channel,
+                                   int32_t rssi) {
+    if (index >= HAL_MOCK_WIFI_MAX_SCAN_RESULTS) {
+        return false;
+    }
+
+    hal_wifi_scan_result_t *out = &s_scan_results[index];
+    memset(out, 0, sizeof(*out));
+    snprintf(out->ssid, sizeof(out->ssid), "%s", ssid ? ssid : "");
+    if (bssid != NULL) {
+        memcpy(out->bssid, bssid, HAL_WIFI_BSSID_LEN);
+    }
+    out->encryption = encryption;
+    out->channel = channel;
+    out->rssi = rssi;
+    if (s_scan_count <= index) {
+        s_scan_count = index + 1u;
+    }
+    return true;
 }
 #endif  // HAL_TARGET_IS_MOCK

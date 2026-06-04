@@ -2,12 +2,6 @@
 #include "utils/multicoreWatchdog.h"
 #include "hal/impl/.mock/hal_mock.h"
 
-/*
- * multicoreWatchdog.cpp depends on tools.cpp for this symbol.
- * For host tests we provide a no-op stub.
- */
-void saveLoggerAndClose(void) {}
-
 static const uint32_t T0 = 1000;
 static const uint32_t WATCHDOG_MS = 1000;
 static const uint32_t TICK_MS = WATCHDOG_MS / 10;
