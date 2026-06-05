@@ -8,7 +8,7 @@ Architecture notes and remaining recommendations, ordered by practical value.
 
 ### Fixed-point digital-potentiometer calculations
 
-**Status:** implemented in `src/hal/hal_digipot.cpp`.
+**Status:** implemented in `src/hal/impl/shared/digipot/`.
 
 The digipot wiper calculations should stay integer-only. RP2040 has no FPU,
 so even simple `float` expressions pull in soft-float helpers and cost extra
@@ -30,6 +30,30 @@ intermediate multiplication:
 
 That fits comfortably in `uint32_t`, so there is no need for `uint64_t` or
 fixed-point scaling helpers wider than the values already used by the API.
+
+### Digipot driver split and ops table
+
+**Status:** implemented.
+
+The public digipot module now owns only handle-pool management, per-instance
+locking, and backend selection. Chip-specific logic lives in shared
+target-neutral drivers:
+
+```text
+src/hal/
+  hal_digipot.h
+  hal_digipot.cpp
+  impl/shared/digipot/
+    hal_digipot_ops.h
+    digipot_mcp401x.cpp
+    digipot_max5395.cpp
+```
+
+`hal_digipot.cpp` stores `const hal_digipot_ops_t *ops` per instance and
+dispatches through the internal ops contract. MCP401x and MAX5395 keep their own
+validation, init, set-resistance, step-count, I2C frame sequence and wiper math,
+so adding another digipot chip should require a new shared chip implementation
+and public enum/config extension rather than editing existing chip code.
 
 ### Central compile-time configuration
 
@@ -89,6 +113,25 @@ Current caveats are compatibility-level rather than Arduino dependencies:
   those stubs on their include path.
 - The tools layer remains a legacy/convenience layer. New application logic
   should still prefer direct `hal/*` APIs when possible.
+
+### Shared Arduino-free MAX6675 thermocouple driver
+
+**Status:** implemented in `src/hal/impl/shared/max6675_driver.*`.
+
+The MAX6675 backend no longer uses the old Arduino `MAX6675` class,
+`Arduino.h`, `digitalWrite()`, `digitalRead()`, or Arduino timing calls. The
+shared driver bit-bangs the MAX6675 16-bit read through JaszczurHAL primitives:
+
+- `hal_gpio_set_mode()` / `hal_gpio_write()` / `hal_gpio_read()`,
+- `hal_delay_us()`,
+- the per-instance `hal_thermocouple` mutex in each backend wrapper.
+
+RP2040 now calls this shared driver from the existing Arduino backend wrapper,
+and STM32G474 has its own `hal_thermocouple` wrapper for MAX6675. The public
+MAX6675 config remains source-compatible (`sclk_pin`, `cs_pin`, `miso_pin`).
+
+`HAL_ENABLE_MAX6675` now propagates only `HAL_ENABLE_THERMOCOUPLE`; it no longer
+pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL SPI.
 
 ---
 
@@ -170,50 +213,7 @@ RP2040 pico SDK mutexes or STM32 bare-metal critical-section assumptions.
 Once both targets build and run with the opt-in backend, decide whether FreeRTOS
 should become the default runtime for embedded targets.
 
-## 2. Split digipot chip logic and introduce an ops table
-
-**Problem:** `hal_digipot.cpp` currently owns pool management, public dispatch,
-MCP401x logic, and MAX5395 logic. Adding a third chip still means editing the
-same central file.
-
-**Solution:** combine the previous "vtable" and "separate driver files" ideas
-into one refactor. The public module should own handles, locking, and dispatch;
-chip files should own validation, init, set-resistance, and step-count logic.
-
-Suggested shape:
-
-```text
-src/hal/
-  hal_digipot.h              public interface
-  hal_digipot.cpp            handle pool + dispatch
-  impl/shared/digipot/
-    hal_digipot_ops.h        internal ops contract
-    digipot_mcp401x.cpp      MCP401x implementation
-    digipot_max5395.cpp      MAX5395 implementation
-```
-
-Internal contract:
-
-```c
-typedef struct hal_digipot_ops {
-    bool (*validate)(const hal_digipot_config_t *cfg);
-    bool (*init)(const hal_digipot_config_t *cfg);
-    bool (*set_resistance)(const hal_digipot_config_t *cfg, uint32_t ohms);
-    uint16_t (*step_count)(void);
-} hal_digipot_ops_t;
-```
-
-Each instance stores `const hal_digipot_ops_t *ops`, so the public
-`hal_digipot_set_resistance()` no longer needs a chip switch. Adding a new chip
-still requires extending the public enum/config surface, but it should not
-require editing the existing chip implementations.
-
-**Difficulty:** medium
-**Gain:** high once more digipot chips are added
-
----
-
-## 3. Add status-returning APIs without breaking bool wrappers
+## 2. Add status-returning APIs without breaking bool wrappers
 
 **Problem:** many HAL APIs return `bool` or `NULL`, which hides the failure
 reason. For digipot this collapses invalid config, I2C NACK, read-back mismatch,
@@ -263,7 +263,7 @@ be reported accurately today, then improve I2C mapping per backend.
 
 ---
 
-## 4. Polish the legacy utility API after Arduino decoupling
+## 3. Polish the legacy utility API after Arduino decoupling
 
 **Problem:** the direct Arduino dependency is gone, but the tools layer still
 mixes several roles: numeric helpers, debug aliases, scan helpers, C/C++
@@ -288,7 +288,7 @@ when touching those files next:
 
 ---
 
-## 5. Optional board-description layer
+## 4. Optional board-description layer
 
 **Problem:** board wiring and device constants are currently assembled by each
 application at runtime. That is flexible, but repeated projects can drift.
@@ -321,7 +321,7 @@ adding a build-system dependency.
 
 ---
 
-## 6. Revisit static pools only when RAM pressure is proven
+## 5. Revisit static pools only when RAM pressure is proven
 
 **Problem:** static pools reserve RAM for the configured maximum instance count.
 For digipot:
@@ -363,13 +363,13 @@ Before doing this, verify behavior on:
 | Priority | Change | Difficulty | Gain | Status |
 |---|---|---:|---:|---|
 | Done | Fixed-point digipot arithmetic | Low | High | Implemented |
+| Done | Digipot driver split + ops table | Medium | High | Implemented |
 | Done-ish | Central `HAL_ENABLE_*` config | Medium | Medium | Implemented, polish remains |
 | Done | Arduino-free tools layer | Low/medium | Medium/high | Implemented |
-| 1 | Digipot driver split + ops table | Medium | High | Next architecture step |
-| 2 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
-| 3 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |
-| 4 | Header-based board descriptions | Low/medium | Medium | Optional layer |
-| 5 | Linker-section/static device model | High | Low now | Backlog |
+| 1 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
+| 2 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |
+| 3 | Header-based board descriptions | Low/medium | Medium | Optional layer |
+| 4 | Linker-section/static device model | High | Low now | Backlog |
 
 The safest implementation path is still incremental: preserve the current public
 API, add tests around each behavior before refactoring dispatch, and avoid

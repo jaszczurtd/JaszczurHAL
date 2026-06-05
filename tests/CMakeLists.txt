@@ -8,6 +8,12 @@ endfunction()
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
+add_executable(test_max6675_driver
+    test_max6675_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/max6675_driver.cpp
+)
+target_link_libraries(test_max6675_driver PRIVATE hal_mock)
+add_test(NAME test_max6675_driver COMMAND test_max6675_driver)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)

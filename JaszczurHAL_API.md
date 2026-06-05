@@ -143,14 +143,14 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 (propagates THERMOCOUPLE + I2C) |
-| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MAX6675 (propagates THERMOCOUPLE + SPI) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver (propagates I2C) |
 | `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
-| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` | `hal_digipot.cpp` | *(needs MCP401X or MAX5395 backend)* |
-| `HAL_ENABLE_MCP401X` | `hal_digipot.h` | `hal_digipot.cpp` | MCP4017/4018/4019 over hal_i2c (propagates DIGIPOT + I2C) |
-| `HAL_ENABLE_MAX5395` | `hal_digipot.h` | `hal_digipot.cpp` | MAX5395 over hal_i2c (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
+| `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
@@ -188,7 +188,7 @@ HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
-HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_SPI
+HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
@@ -352,7 +352,6 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
 | `DallasTemperature` | DS18B20 backend (`hal_ds18b20`) | Miles Burton | MIT | `src/hal/impl/arduino/drivers/DallasTemperature/LICENSE` |
 | `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in sources + repository LICENSE | `src/hal/impl/arduino/drivers/DS3231/DS3231.h`, `src/hal/impl/arduino/drivers/DS3231/DS3231.cpp`, `src/hal/impl/arduino/drivers/DS3231/LICENSE` |
-| `MAX6675` | thermocouple MAX6675 backend | Adafruit (Limor Fried) | BSD (license file in driver folder) | `src/hal/impl/arduino/drivers/MAX6675/license.txt` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
 | `OneWire` | generic OneWire API (`hal_onewire`) and DS18B20 backend transport | Jim Studt (original), Paul Stoffregen (maintainer) | MIT | `src/hal/impl/arduino/drivers/OneWire/LICENSE` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
@@ -2467,7 +2466,7 @@ void                hal_mock_rgb_led_reset(void);
 
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
-Supports MCP9600 (I2C) and MAX6675 (SPI bit-bang). Functions not available on the
+Supports MCP9600 (I2C) and MAX6675 (shared SPI bit-bang over HAL GPIO). Functions not available on the
 selected chip return a safe default (NAN / 0 / false) and print an error.
 
 ```c
@@ -2476,7 +2475,7 @@ selected chip return a safe default (NAN / 0 / false) and print an error.
 // Chip selector
 typedef enum {
     HAL_THERMOCOUPLE_CHIP_MCP9600,  // MCP9600/MCP9601 via I2C
-    HAL_THERMOCOUPLE_CHIP_MAX6675,  // MAX6675 via SPI bit-bang (K-type only)
+    HAL_THERMOCOUPLE_CHIP_MAX6675,  // MAX6675 via HAL GPIO bit-bang SPI (K-type only)
 } hal_thermocouple_chip_t;
 
 // Wire type (MCP9600 supports all; MAX6675 is fixed K-type)
@@ -2550,7 +2549,8 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status register
 ```
 
-**impl/arduino:** `Adafruit_MCP9600` (I2C) / `MAX6675` library (SPI).
+**impl/arduino:** `Adafruit_MCP9600` for MCP9600; MAX6675 delegates to the shared Arduino-free HAL GPIO driver.
+**impl/stm32g474:** MAX6675 delegates to the same shared HAL GPIO driver; MCP9600 is not ported yet.
 **Thread safety:** Thread-safe and multicore-safe. Each instance has its own per-instance `hal_mutex_t`. All read, configuration, and deinit operations are protected under this mutex.
 
 ---
@@ -3901,7 +3901,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | `Adafruit_NeoPixel` |
 | `hal_thermocouple` (MCP9600) | bundled MCP9600 driver (`drivers/Adafruit_MCP9600`) |
-| `hal_thermocouple` (MAX6675) | bundled MAX6675 driver (`drivers/MAX6675`) |
+| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675_driver.*`) |
 | `hal_ds18b20` | Arduino core GPIO APIs; RP2040/RP2350 backend also uses pico SDK PIO/clock APIs (`hardware/pio.h`, `hardware/clocks.h`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
@@ -3978,6 +3978,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
+| `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |

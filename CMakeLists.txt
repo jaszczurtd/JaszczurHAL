@@ -39,6 +39,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_digipot.cpp
+    ${SRC}/hal/impl/shared/digipot/digipot_mcp401x.cpp
+    ${SRC}/hal/impl/shared/digipot/digipot_max5395.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp

@@ -4,6 +4,47 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_digipot - shared MCP401x/MAX5395 drivers
+
+- Split the digipot chip logic out of `src/hal/hal_digipot.cpp` into shared
+  target-neutral drivers:
+  `src/hal/impl/shared/digipot/digipot_mcp401x.cpp` and
+  `src/hal/impl/shared/digipot/digipot_max5395.cpp`.
+- Added the internal `hal_digipot_ops_t` contract
+  (`impl/shared/digipot/hal_digipot_ops.h`). `hal_digipot.cpp` now owns only the
+  public handle pool, per-instance mutex, backend selection and ops dispatch,
+  matching the portable-driver shape used by `hal_thermocouple`.
+- Preserved the existing working MCP401x and MAX5395 behaviour, including
+  validation rules, I2C frame order, read-back verification for MCP401x,
+  MAX5395 reset/charge-pump/shutdown handling, and integer-only wiper
+  calculations.
+- Updated CMake/shared-source globs and clang-tidy source selection so nested
+  shared drivers under `impl/shared/*/` are built and checked by RP2040,
+  STM32G474 and host/mock targets.
+
+### hal_thermocouple / MAX6675 - shared Arduino-free driver
+
+- Replaced the Arduino `MAX6675` class backend with a shared in-tree driver
+  (`src/hal/impl/shared/max6675_driver.*`) built only on JaszczurHAL GPIO and
+  delay primitives. The RP2040 thermocouple wrapper now delegates MAX6675 reads
+  to this shared driver instead of including `Arduino.h` / `digitalRead()` /
+  `digitalWrite()` through the old bundled library.
+- Removed the obsolete Arduino `drivers/MAX6675` folder. The protocol
+  attribution and BSD notice for the Adafruit MAX6675 reference now live in the
+  shared driver source instead of README/docs inventory entries.
+- The shared driver preserves the working MAX6675 transaction logic from the
+  old backend: per-driver mutex, CS-low + 10 us settle, two MSB-first 8-bit
+  `spiread()` passes, open-circuit bit check, `raw >> 3`, and 0.25 C/LSB.
+- Added an STM32G474 `hal_thermocouple` backend for MAX6675, using the same
+  shared bit-bang driver as RP2040. MCP9600 remains an STM32 porting task and
+  returns safe unsupported defaults when that backend is selected there.
+- `HAL_ENABLE_MAX6675` now propagates only `HAL_ENABLE_THERMOCOUPLE`; it no
+  longer pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL
+  SPI or Arduino SPI.
+- Added `test_max6675_driver` plus mock GPIO read scripting to verify MAX6675
+  raw-frame decoding, open-circuit detection, pin setup and 16-bit bit-bang
+  reads on the host.
+
 ### examples - unified CMake build system + documentation
 
 - New unified `examples/CMakeLists.txt` build system compiles all 22 examples
@@ -96,10 +137,10 @@ All notable changes to this project will be documented in this file.
   (Maxim MAX5395, I2C 0x28/0x29/0x2B, 256 taps); both propagate
   `HAL_ENABLE_DIGIPOT` + `HAL_ENABLE_I2C`. Modes: voltage divider and W-L / W-H
   rheostat.
-- Proof-of-concept for the portable-driver model: a single backend-agnostic
-  source (`hal_digipot.cpp`) sits on top of `hal_i2c`, so the *same* code runs
-  on RP2040 and STM32G474 (and the host mock). Verified to build on the mock,
-  the STM32 host-sanity target and the real ARM `stm32_lib`.
+- Proof-of-concept for the portable-driver model: `hal_digipot.cpp` is a
+  backend-agnostic facade over shared chip drivers built on `hal_i2c`, so the
+  same chip logic runs on RP2040 and STM32G474 (and the host mock). Verified to
+  build on the mock, the STM32 host-sanity target and the real ARM `stm32_lib`.
 - Mock `hal_i2c` gained a write-frame capture log
   (`hal_mock_i2c_reset_write_log()`, `hal_mock_i2c_get_write_frame_count()`,
   `hal_mock_i2c_get_write_frame()`) so the Unity suite asserts the exact bytes

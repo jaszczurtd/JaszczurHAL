@@ -11,13 +11,13 @@
  *   - MCP9600 (I2C): K/J/T/N/S/E/B/R wire types, cold-junction compensation,
  *                    configurable ADC resolution, hardware IIR filter,
  *                    4-channel programmable alerts, sleep mode.
- *   - MAX6675 (SPI bit-bang): K-type only, 12-bit hot-junction read,
- *                              open-circuit detection.
+ *   - MAX6675 (shared SPI bit-bang over HAL GPIO): K-type only,
+ *                              12-bit hot-junction read, open-circuit detection.
  *
  * Backend selection (compile-time, opt-in):
  *   HAL_ENABLE_MCP9600  - enable the Adafruit MCP9600/MCP9601 backend
  *                          (propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C).
- *   HAL_ENABLE_MAX6675  - enable the MAX6675 backend
+ *   HAL_ENABLE_MAX6675  - enable the shared MAX6675 backend
  *                          (propagates HAL_ENABLE_THERMOCOUPLE).
  *   Both flags may be enabled simultaneously; chip selection is then
  *   made per-handle via @ref hal_thermocouple_config_t::chip.
@@ -55,7 +55,7 @@ extern "C" {
 /** @brief Supported thermocouple amplifier chips. */
 typedef enum {
     HAL_THERMOCOUPLE_CHIP_MCP9600,  /**< MCP9600 / MCP9601 via I2C.        */
-    HAL_THERMOCOUPLE_CHIP_MAX6675,  /**< MAX6675 via SPI (bit-bang).        */
+    HAL_THERMOCOUPLE_CHIP_MAX6675,  /**< MAX6675 via HAL GPIO bit-bang SPI. */
 } hal_thermocouple_chip_t;
 
 /* ── Bus configuration ───────────────────────────────────────────────────── */
@@ -72,7 +72,7 @@ typedef struct {
 #endif /* HAL_ENABLE_MCP9600 */
 
 #ifdef HAL_ENABLE_MAX6675
-/** @brief SPI (bit-bang) parameters for MAX6675. */
+/** @brief SPI bit-bang parameters for MAX6675. */
 typedef struct {
     uint8_t sclk_pin;   /**< Clock pin.                                     */
     uint8_t cs_pin;     /**< Chip-select (active-low).                      */
@@ -174,8 +174,8 @@ typedef struct {
  * call hal_thermocouple_init() for each; repeated hal_i2c_init() calls with
  * identical parameters are idempotent on Arduino-pico.
  *
- * For MAX6675: configures the bit-bang SPI GPIO pins via the MAX6675
- * library constructor.
+ * For MAX6675: configures the bit-bang SPI GPIO pins through the shared,
+ * Arduino-free MAX6675 driver.
  *
  * @param cfg  Pointer to the filled-in configuration struct.
  * @return Handle on success; NULL if the pool is exhausted or the chip

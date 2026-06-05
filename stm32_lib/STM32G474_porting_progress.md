@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-05 (examples build system verified; SPI hardware layer added)
+Last updated: 2026-06-05 (MAX6675 and digipot shared drivers added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -55,6 +55,7 @@ Nature of the implementation:
 - `HAL_ENABLE_PCNT`
 - `HAL_ENABLE_MCP401X`
 - `HAL_ENABLE_MAX5395`
+- `HAL_ENABLE_MAX6675`
 - `HAL_ENABLE_GPS`
 
 This narrows the scope to the backend "core" and simplifies the first porting
@@ -119,6 +120,9 @@ The following modules are real, register-level backends under
   full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
   SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
   bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
+- `hal_thermocouple` - **MAX6675** via the shared Arduino-free driver
+  (`impl/shared/max6675_driver.*`). It bit-bangs the MAX6675 16-bit read using
+  HAL GPIO/delays, so the same code path is used by STM32G474 and RP2040.
 - `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
 - `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
   transport).
@@ -135,21 +139,23 @@ reused on the STM32 backend (RP2040 is the only fully-driven target today).
 
 ### Two distinct classes of "driver"
 
-**1. Portable HAL-level drivers** - live directly in `src/hal/`, guarded only by
-`HAL_ENABLE_*` (not by target), written against the HAL's own API
-(`hal_i2c`, `hal_serial`, `hal_sync`):
+**1. Portable HAL-level drivers** - public facades live directly in `src/hal/`,
+with reusable chip/protocol logic under `src/hal/impl/shared/` when useful.
+They are guarded only by `HAL_ENABLE_*` (not by target) and written against the
+HAL's own API (`hal_i2c`, `hal_serial`, `hal_sync`):
 `hal_digipot`, `hal_crypto`, `hal_kv`, `hal_modem_at`, `hal_simcom_a76xx`,
 `hal_pid_controller`, `hal_soft_timer`, `hal_config`.
 
-`src/hal/hal_digipot.cpp` is the reference pattern (see its header comment:
-"compiles and runs on every backend that provides hal_i2c"). **These already
-work on STM32** as long as the underlying bus HAL exists.
+`src/hal/hal_digipot.cpp` plus `src/hal/impl/shared/digipot/` is the reference
+pattern: the public module owns handles/locking/dispatch, while chip drivers own
+validation, init and I/O sequences. **These already work on STM32** as long as
+the underlying bus HAL exists.
 
 **2. Vendor Arduino libraries** - in `src/hal/impl/arduino/drivers/`:
 `ADS1X15`, `Adafruit_BusIO/GFX/ILI9341/MCP9600/NeoPixel/SSD1306/ST7735_ST7789`,
-`DS3231`, `DallasTemperature`, `MAX6675`, `MCP2515`, `OneWire`, `PCF8563`.
+`DS3231`, `DallasTemperature`, `MCP2515`, `OneWire`, `PCF8563`.
 **All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
-device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, …), each
+device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, ...), each
 guarded by `#if HAL_TARGET_IS_RP2040` and `#include`-ing `<Wire.h>`/`<SPI.h>`
 directly. **These cannot be ported 1:1** - the realistic path is to rewrite the
 device logic as portable `src/hal/` drivers (the digipot pattern).
@@ -164,15 +170,19 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 
 SPI is no longer blocked at the bus layer. The first STM32 implementation is
 polling-based rather than DMA, but it is hardware-backed and matches the
-Arduino driver surface closely enough for MCP2515, MAX6675 and display-driver
-bring-up. Default G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2
-PB14/PB15/PB13; CS remains a normal GPIO owned by each driver.
+Arduino driver surface closely enough for MCP2515 and display-driver bring-up.
+MAX6675 is handled separately by the shared HAL GPIO bit-bang driver. Default
+G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13; CS remains
+a normal GPIO owned by each driver.
 
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
 `can, display, ds18b20, eeprom, external_adc, i2c_slave, littlefs, mqtt,
-onewire, ota, pwm_freq, rgb_led, rtc, swserial, thermocouple, udp, wifi,
-wireguard`.
+onewire, ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
+
+Partial modules:
+- `hal_thermocouple` - MAX6675 is available through the shared HAL GPIO driver;
+  MCP9600 remains an I2C-porting task.
 
 ### Portability tiers
 
@@ -184,12 +194,12 @@ wireguard`.
 We do not port the Adafruit/vendor libraries; we extract their register maps and
 write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
 
-**🟡 Ready for first STM32 ports over the new SPI layer:**
+**🟡 Ready for STM32 ports over the new SPI layer:**
 - `hal_can` (MCP2515) - SPI
 - `hal_display` (ILI9341/ST7735/ST7789 - SPI; SSD1306 - I2C or SPI)
-- `hal_thermocouple` MAX6675 part - SPI read
-First target should be a small register-style driver (MAX6675 or MCP2515
-probe), then display bulk writes can decide whether DMA is worth adding.
+MAX6675 is already handled separately by the shared bit-bang HAL GPIO driver.
+The next small register-style SPI target should be an MCP2515 probe, then
+display bulk writes can decide whether DMA is worth adding.
 
 **🟡 OneWire (bit-bang + timing):**
 - `hal_ds18b20`, `hal_onewire` - OneWire relies on Arduino `digitalWrite` and
@@ -209,8 +219,8 @@ a rewrite (PWM+DMA or SPI), not a library port.
 - `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
 
 ### Recommended order
-1. **Port one small SPI device first** (MAX6675 read or MCP2515 probe) to
-   validate CS timing, mode, and clock on real G474 hardware.
+1. **Port one small hardware-SPI device next** (MCP2515 probe) to validate CS
+   timing, mode, and clock on real G474 hardware.
 2. **I2C quick wins** via the digipot pattern: rtc (PCF8563/DS3231),
    external_adc (ADS1115), thermocouple (MCP9600).
 3. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
@@ -225,7 +235,7 @@ a rewrite (PWM+DMA or SPI), not a library port.
    - `hal_sync` - PRIMASK/BASEPRI critical sections (trivial on single-core, but
      needed before FreeRTOS).
 2. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
-3. Port first SPI device driver (MAX6675 or MCP2515) to validate CS/mode/clock on real hardware.
+3. Port first hardware-SPI device driver (MCP2515) to validate CS/mode/clock on real hardware.
 4. On-silicon validation on Nucleo-G474RE for all register-level backends.
 5. FreeRTOS integration (enables true `app_task1` parallelism on STM32).
 4. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC) on an STM32G474 board.

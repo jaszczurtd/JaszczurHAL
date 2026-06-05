@@ -37,3 +37,6 @@ install_manifest.txt
 compile_commands.json
 .cache/
 .claude/
+AGENTS.md
+.agents
+
