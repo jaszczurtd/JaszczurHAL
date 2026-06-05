@@ -20,7 +20,11 @@ static SPISettings spi_make_settings(const hal_spi_settings_t *settings) {
     }
     uint32_t clock = settings->clock_hz ? settings->clock_hz : HAL_SPI_CLOCK_DEFAULT_HZ;
     BitOrder order = settings->bit_order == HAL_SPI_LSBFIRST ? LSBFIRST : MSBFIRST;
-    uint8_t mode = settings->data_mode <= SPI_MODE3 ? settings->data_mode : SPI_MODE0;
+    uint8_t mode = SPI_MODE0;
+
+    if ((settings->data_mode >= SPI_MODE0) && (settings->data_mode <= SPI_MODE3)) {
+        mode = static_cast<uint8_t>(settings->data_mode);
+    }    
     return SPISettings(clock, order, mode);
 }
 
