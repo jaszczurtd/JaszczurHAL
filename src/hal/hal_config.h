@@ -118,7 +118,7 @@
        HAL_ENABLE_MCP9600       - MCP9600/MCP9601 backend (propagates:
                                   THERMOCOUPLE, I2C).
        HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
-                                  THERMOCOUPLE, SPI).
+                                  THERMOCOUPLE; shared bit-bang over HAL GPIO).
        HAL_ENABLE_DS18B20       - DS18B20 1-Wire temperature sensor
                                   (propagates: ONEWIRE).
        HAL_ENABLE_ONEWIRE       - generic 1-Wire bus API wrapper.
@@ -273,9 +273,6 @@
 #ifdef HAL_ENABLE_MAX6675
   #ifndef HAL_ENABLE_THERMOCOUPLE
     #define HAL_ENABLE_THERMOCOUPLE
-  #endif
-  #ifndef HAL_ENABLE_SPI
-    #define HAL_ENABLE_SPI
   #endif
 #endif
 

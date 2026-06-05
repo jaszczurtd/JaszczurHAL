@@ -179,7 +179,7 @@ cmake --build "${BUILD_STM32}" --parallel "${JOBS}" >/dev/null 2>&1
 
 info "Running clang-tidy on host-compilable code..."
 run-clang-tidy -p "${BUILD_DIR}" -quiet \
-    '^.*/src/(hal/hal_[^/]*|hal/impl/shared/[^/]*|utils/(?!cJSON|unity)[^/]*)\.(cpp|c)$' \
+    '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|unity)[^/]*)\.(cpp|c)$' \
     2>/dev/null | tee /tmp/jh_tidy_host.log
 
 info "Running clang-tidy on STM32 backend..."

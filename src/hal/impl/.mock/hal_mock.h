@@ -12,6 +12,10 @@ bool            hal_mock_gpio_get_state(uint8_t pin);
 bool            hal_mock_gpio_is_output(uint8_t pin);
 hal_gpio_mode_t hal_mock_gpio_get_mode(uint8_t pin);
 void            hal_mock_gpio_inject_level(uint8_t pin, bool high);
+/** @brief Script successive levels returned by hal_gpio_read() for a pin. */
+void            hal_mock_gpio_push_read_sequence(uint8_t pin, const bool *levels, size_t len);
+/** @brief Clear a scripted hal_gpio_read() sequence for a pin. */
+void            hal_mock_gpio_clear_read_sequence(uint8_t pin);
 /** @brief Fire the interrupt callback registered for pin (via hal_gpio_attach_interrupt). */
 void            hal_mock_gpio_fire_interrupt(uint8_t pin);
 /** @brief Return the GPIO IRQ priority set via hal_gpio_set_irq_priority(). */

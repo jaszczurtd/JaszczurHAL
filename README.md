@@ -322,7 +322,6 @@ examples, and host-test coverage.
 - [Adafruit_SSD1306](https://github.com/adafruit/Adafruit_SSD1306) - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
 - [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_Zero_DMA_Library](https://github.com/adafruit/Adafruit_ZeroDMA) - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
-- [MAX6675](https://github.com/adafruit/MAX6675-library) - Limor Fried for Adafruit Industries
 - [OneWire](https://github.com/PaulStoffregen/OneWire) - Jim Studt (original), maintained by Paul Stoffregen
 - [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library) - Miles Burton
 - [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors

@@ -11,7 +11,7 @@
 #include "drivers/Adafruit_MCP9600/Adafruit_MCP9600.h"
 #endif
 #ifdef HAL_ENABLE_MAX6675
-#include "drivers/MAX6675/max6675.h"
+#include "../shared/max6675_driver.h"
 #endif
 #include <Wire.h>
 #include <new>
@@ -29,7 +29,7 @@ struct hal_thermocouple_impl_s {
         alignas(Adafruit_MCP9600) uint8_t mcp_mem[sizeof(Adafruit_MCP9600)];
 #endif
 #ifdef HAL_ENABLE_MAX6675
-        alignas(MAX6675)           uint8_t max_mem[sizeof(MAX6675)];
+        alignas(hal_max6675_t)     uint8_t max_mem[sizeof(hal_max6675_t)];
 #endif
     } storage;
 };
@@ -54,8 +54,8 @@ static TwoWire *thermocouple_i2c_wire(uint8_t bus) {
 #endif
 
 #ifdef HAL_ENABLE_MAX6675
-static inline MAX6675 *as_max(hal_thermocouple_impl_t *h) {
-    return reinterpret_cast<MAX6675 *>(h->storage.max_mem);
+static inline hal_max6675_t *as_max(hal_thermocouple_impl_t *h) {
+    return reinterpret_cast<hal_max6675_t *>(h->storage.max_mem);
 }
 #endif
 
@@ -114,11 +114,15 @@ hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg) {
 #ifdef HAL_ENABLE_MAX6675
     if (cfg->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
         const hal_thermocouple_spi_cfg_t &sc = cfg->bus.spi;
-        new(h->storage.max_mem) MAX6675(
-            (int8_t)sc.sclk_pin,
-            (int8_t)sc.cs_pin,
-            (int8_t)sc.miso_pin
-        );
+        hal_max6675_t *max = new(h->storage.max_mem) hal_max6675_t();
+        const hal_max6675_config_t max_cfg = {sc.sclk_pin, sc.cs_pin, sc.miso_pin};
+        if (!hal_max6675_init(max, &max_cfg)) {
+            hal_mutex_destroy(h->mutex);
+            h->mutex  = NULL;
+            h->in_use = false;
+            hal_serial_println("hal_thermocouple_init: MAX6675 init failed");
+            return NULL;
+        }
     } else
 #endif
     {
@@ -142,7 +146,7 @@ void hal_thermocouple_deinit(hal_thermocouple_t h) {
 #endif
 #ifdef HAL_ENABLE_MAX6675
     if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
-        as_max(h)->~MAX6675();
+        hal_max6675_deinit(as_max(h));
     }
 #endif
     h->in_use = false;
@@ -163,7 +167,7 @@ float hal_thermocouple_read(hal_thermocouple_t h) {
     else
 #endif
 #ifdef HAL_ENABLE_MAX6675
-    if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) v = as_max(h)->readCelsius();
+    if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) v = hal_max6675_read_celsius(as_max(h));
 #endif
     (void)v;
     hal_mutex_unlock(h->mutex);

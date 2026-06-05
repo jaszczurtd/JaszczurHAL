@@ -82,6 +82,7 @@ parse_platform_def_file(
 
 # ── HAL implementation sources (Arduino) ─────────────────────────────────────
 file(GLOB ARDUINO_IMPL_SOURCES ${SRC}/hal/impl/arduino/*.cpp)
+file(GLOB_RECURSE ARDUINO_SHARED_SOURCES ${SRC}/hal/impl/shared/*.cpp)
 
 # ── Driver sources (third-party libraries bundled with HAL) ──────────────────
 file(GLOB_RECURSE DRIVER_SOURCES
@@ -126,6 +127,7 @@ endif()
 # ── Static library target ────────────────────────────────────────────────────
 add_library(JaszczurHAL STATIC
     ${ARDUINO_IMPL_SOURCES}
+    ${ARDUINO_SHARED_SOURCES}
     ${DRIVER_SOURCES}
     ${FRAMEWORK_SOURCES}
     ${HAL_COMMON_SOURCES}
