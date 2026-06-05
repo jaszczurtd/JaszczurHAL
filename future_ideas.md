@@ -94,7 +94,83 @@ Current caveats are compatibility-level rather than Arduino dependencies:
 
 ## Recommended next work
 
-## 1. Split digipot chip logic and introduce an ops table
+## 0. Move Arduino-backed drivers into shared HAL implementations
+
+This is the highest-priority preparation work for real multithreading. Many
+current Arduino-backed integrations should be rewritten as target-neutral HAL
+drivers that can run on both RP2040 and STM32G474.
+
+The direction should be:
+
+- move reusable driver logic into `src/hal/impl/shared/`;
+- keep target-specific glue in the target folders only when it touches hardware,
+  SDK calls, startup, IRQs, DMA, or board-specific details;
+- shrink `src/hal/impl/arduino/` over time until it becomes a thin compatibility
+  layer, and eventually disappears if there is no remaining Arduino-specific
+  responsibility;
+- avoid depending on Arduino libraries for new portable drivers;
+- make shared drivers use HAL primitives for I/O, time, logging, memory policy,
+  and synchronization.
+
+This is probably more urgent than enabling FreeRTOS itself, because FreeRTOS
+will expose pre-existing assumptions in Arduino libraries: single-threaded use,
+implicit global state, weak synchronization, and hidden blocking behavior. Moving
+drivers to shared HAL implementations lets the project define explicit locking,
+ownership, and ISR/task boundaries before true preemptive scheduling is enabled.
+
+The desired end state is that RP2040 and STM32G474 use the same driver logic
+wherever the hardware protocol is the same, with only narrow per-target port
+code below it.
+
+---
+
+## 1. Implement FreeRTOS support as a second priority
+
+This is a priority item. FreeRTOS support must eventually be available on both
+currently supported embedded targets: RP2040 and STM32G474.
+
+Start with an opt-in FreeRTOS backend, for example `HAL_ENABLE_FREERTOS`, rather
+than changing the default runtime immediately. The first milestone should prove
+that the public application contract remains stable:
+
+- `app_start()` is called once before the scheduler starts.
+- `app_task0()` and `app_task1()` remain the client-facing API.
+- When FreeRTOS is enabled, `app_task0()` and `app_task1()` are run from
+  separate FreeRTOS tasks.
+
+This should replace the current STM32 cooperative compatibility path in
+`hal_app_entry.cpp`:
+
+```c
+        app_task0();
+        app_task1();   /* cooperative - same loop, no preemption */
+```
+
+On RP2040, Arduino-pico already provides a FreeRTOS SMP mode. When enabled, the
+core creates a task pinned to core 0 for `setup()` / `loop()` and, if
+`setup1()` or `loop1()` exists, another task pinned to core 1 for that path.
+This means the existing HAL bridge through `setup()` / `loop()` / `loop1()` can
+probably stay in place for RP2040, with the Arduino core owning scheduler
+startup and core affinity.
+
+RP2040 still should not be treated as a trivial "enable it in the core" change.
+FreeRTOS mode changes synchronization and scheduling semantics: other FreeRTOS
+tasks can run under the SMP scheduler, Arduino libraries may not be safe under
+preemptive multithreading, and `hal_sync` must switch to FreeRTOS primitives.
+
+The client-facing API should be 1:1 across both targets. The FreeRTOS version
+should also be kept the same for both targets. Configuration should share a
+common base, with target-specific overrides only where the FreeRTOS port,
+interrupt priorities, tick source, heap/stack setup, or startup code require it.
+
+The implementation should include a FreeRTOS-safe synchronization backend,
+especially for `hal_sync`, using FreeRTOS primitives instead of the current
+RP2040 pico SDK mutexes or STM32 bare-metal critical-section assumptions.
+
+Once both targets build and run with the opt-in backend, decide whether FreeRTOS
+should become the default runtime for embedded targets.
+
+## 2. Split digipot chip logic and introduce an ops table
 
 **Problem:** `hal_digipot.cpp` currently owns pool management, public dispatch,
 MCP401x logic, and MAX5395 logic. Adding a third chip still means editing the
@@ -137,7 +213,7 @@ require editing the existing chip implementations.
 
 ---
 
-## 2. Add status-returning APIs without breaking bool wrappers
+## 3. Add status-returning APIs without breaking bool wrappers
 
 **Problem:** many HAL APIs return `bool` or `NULL`, which hides the failure
 reason. For digipot this collapses invalid config, I2C NACK, read-back mismatch,
@@ -187,7 +263,7 @@ be reported accurately today, then improve I2C mapping per backend.
 
 ---
 
-## 3. Polish the legacy utility API after Arduino decoupling
+## 4. Polish the legacy utility API after Arduino decoupling
 
 **Problem:** the direct Arduino dependency is gone, but the tools layer still
 mixes several roles: numeric helpers, debug aliases, scan helpers, C/C++
@@ -212,7 +288,7 @@ when touching those files next:
 
 ---
 
-## 4. Optional board-description layer
+## 5. Optional board-description layer
 
 **Problem:** board wiring and device constants are currently assembled by each
 application at runtime. That is flexible, but repeated projects can drift.
@@ -245,7 +321,7 @@ adding a build-system dependency.
 
 ---
 
-## 5. Revisit static pools only when RAM pressure is proven
+## 6. Revisit static pools only when RAM pressure is proven
 
 **Problem:** static pools reserve RAM for the configured maximum instance count.
 For digipot:

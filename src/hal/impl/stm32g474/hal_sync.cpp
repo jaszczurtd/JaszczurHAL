@@ -4,6 +4,7 @@
 #include "../../hal_sync.h"
 #include "../../hal_config.h"
 
+#include <stddef.h>
 #include <new>
 
 struct hal_mutex_impl_t {
