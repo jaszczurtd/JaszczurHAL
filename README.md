@@ -317,7 +317,6 @@ examples, and host-test coverage.
 - [Adafruit_BusIO](https://github.com/adafruit/Adafruit_BusIO) - Adafruit Industries
 - [Adafruit_GFX_Library](https://github.com/adafruit/Adafruit-GFX-Library) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_ILI9341](https://github.com/adafruit/Adafruit_ILI9341) - Limor Fried (Ladyada) for Adafruit Industries
-- [Adafruit_MCP9600](https://github.com/adafruit/Adafruit_MCP9600) - Kevin Townsend and Limor Fried for Adafruit Industries
 - [Adafruit_NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel) - Phil "Paint Your Dragon" Burgess (with contributions by PJRC and Michael Miller)
 - [Adafruit_SSD1306](https://github.com/adafruit/Adafruit_SSD1306) - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
 - [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries

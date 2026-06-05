@@ -133,6 +133,24 @@ MAX6675 config remains source-compatible (`sclk_pin`, `cs_pin`, `miso_pin`).
 `HAL_ENABLE_MAX6675` now propagates only `HAL_ENABLE_THERMOCOUPLE`; it no longer
 pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL SPI.
 
+### Shared Arduino-free MCP9600/MCP9601 thermocouple driver
+
+**Status:** implemented in `src/hal/impl/shared/mcp9600_driver.*`.
+
+The MCP9600/MCP9601 backend no longer uses the old Arduino
+`Adafruit_MCP9600` / `Adafruit_MCP9601` classes, `TwoWire`, `Wire`, or BusIO.
+The shared driver keeps the working register logic from the Arduino backend and
+uses JaszczurHAL primitives instead:
+
+- `hal_i2c_write_read_bus()` for register-pointer reads with repeated start,
+- `hal_i2c_begin_transmission_bus()` / `hal_i2c_write_bus()` /
+  `hal_i2c_end_transmission_bus()` for writes,
+- per-driver `hal_mutex_t` locking around read/modify/write sequences.
+
+Both RP2040 and STM32G474 `hal_thermocouple` wrappers now use this shared
+driver for MCP9600/MCP9601. The old Arduino driver folder was removed; upstream
+attribution and the BSD notice live in the shared driver source.
+
 ---
 
 ## Recommended next work

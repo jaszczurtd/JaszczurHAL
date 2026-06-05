@@ -58,8 +58,9 @@ target_include_directories(JaszczurHAL PUBLIC
 
 # Default STM32G474 profile for the initial skeleton backend.
 #
-# Opt-in flag model: modules are OFF by default; only the I2C / UART /
-# system-time pieces that the STM32 skeleton currently provides are
+# Opt-in flag model: modules are OFF by default; only the bus / UART /
+# system-time pieces and shared HAL-level drivers that the STM32 backend
+# currently provides are
 # enabled here. Application projects can enable extra modules via
 # EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_CAN) once their
 # STM32G474 backend lands.
@@ -73,6 +74,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_PCNT
     HAL_ENABLE_MCP401X   # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395   # second digipot backend
+    HAL_ENABLE_MCP9600   # shared MCP9600/MCP9601 thermocouple backend over HAL I2C
     HAL_ENABLE_MAX6675   # shared MAX6675 thermocouple backend over HAL GPIO
     HAL_ENABLE_GPS       # portable NMEA engine; transport = UART on this target
 )

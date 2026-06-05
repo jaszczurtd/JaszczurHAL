@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if defined(HAL_ENABLE_DISPLAY) || (defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C))
+#if defined(HAL_ENABLE_DISPLAY)
 
 #include "Adafruit_BusIO_Register.h"
 
@@ -386,4 +386,4 @@ void Adafruit_BusIO_Register::setAddressWidth(uint16_t address_width) {
 
 #endif // SPI exists
 
-#endif /* display enabled OR MCP9600 backend enabled */
+#endif /* HAL_ENABLE_DISPLAY */

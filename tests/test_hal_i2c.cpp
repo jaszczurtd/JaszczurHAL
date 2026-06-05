@@ -345,6 +345,29 @@ void test_read_byte_increments_transaction_count(void) {
     TEST_ASSERT_EQUAL_UINT32(before + 1, hal_i2c_get_transaction_count());
 }
 
+void test_write_read_writes_register_and_consumes_rx_sequence(void) {
+    const uint8_t rx[] = {0xAA, 0xBB, 0xCC};
+    const uint8_t reg = 0x20;
+    uint8_t out[2] = {};
+    hal_mock_i2c_inject_rx(rx, 3);
+    hal_mock_i2c_reset_write_log();
+
+    uint32_t before = hal_i2c_get_transaction_count();
+    TEST_ASSERT_TRUE(hal_i2c_write_read(0x67, &reg, 1, out, 2));
+
+    TEST_ASSERT_EQUAL_UINT8(0xAA, out[0]);
+    TEST_ASSERT_EQUAL_UINT8(0xBB, out[1]);
+    TEST_ASSERT_EQUAL_UINT32(before + 2, hal_i2c_get_transaction_count());
+
+    uint8_t frame[4] = {};
+    TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame_count());
+    TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame(0, frame, sizeof(frame)));
+    TEST_ASSERT_EQUAL_UINT8(0x20, frame[0]);
+
+    TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_request_from(0x67, 1));
+    TEST_ASSERT_EQUAL_INT(0xCC, hal_i2c_read());
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_begin_transmission_sets_last_address);
@@ -380,5 +403,6 @@ int main(void) {
     RUN_TEST(test_read_byte_holds_lock_during_byte_read);
     RUN_TEST(test_read_byte_bus_routes_to_selected_controller);
     RUN_TEST(test_read_byte_increments_transaction_count);
+    RUN_TEST(test_write_read_writes_register_and_consumes_rx_sequence);
     return UNITY_END();
 }

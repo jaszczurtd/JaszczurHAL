@@ -15,7 +15,7 @@
  *                              12-bit hot-junction read, open-circuit detection.
  *
  * Backend selection (compile-time, opt-in):
- *   HAL_ENABLE_MCP9600  - enable the Adafruit MCP9600/MCP9601 backend
+ *   HAL_ENABLE_MCP9600  - enable the shared MCP9600/MCP9601 backend
  *                          (propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C).
  *   HAL_ENABLE_MAX6675  - enable the shared MAX6675 backend
  *                          (propagates HAL_ENABLE_THERMOCOUPLE).
@@ -356,8 +356,9 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 /**
  * @brief Read the raw 8-bit status register.
  *
- * MCP9600 only.  Bit flags: MCP960X_STATUS_ALERT1..4, MCP960X_STATUS_THUPDATE,
- * MCP960X_STATUS_BURST, MCP960X_STATUS_INPUTRANGE (see Adafruit_MCP9600.h).
+ * MCP9600 only. Bit flags are exposed by the shared MCP9600 driver as
+ * HAL_MCP9600_STATUS_ALERT1..4, HAL_MCP9600_STATUS_THUPDATE,
+ * HAL_MCP9600_STATUS_BURST and HAL_MCP9600_STATUS_INPUTRANGE.
  *
  * @param h  Valid handle.
  * @return Status byte, or 0 if unsupported.

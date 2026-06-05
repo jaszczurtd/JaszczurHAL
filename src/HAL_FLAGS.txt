@@ -93,7 +93,8 @@ Time-of-day (RTC)
 Sensors
   HAL_ENABLE_THERMOCOUPLE
     Generic thermocouple API. Requires at least one backend below.
-  HAL_ENABLE_MCP9600       MCP9600/MCP9601. Propagates: THERMOCOUPLE, I2C.
+  HAL_ENABLE_MCP9600       MCP9600/MCP9601 shared HAL I2C driver.
+                           Propagates: THERMOCOUPLE, I2C.
   HAL_ENABLE_MAX6675       MAX6675 bit-bang over HAL GPIO.
                            Propagates: THERMOCOUPLE.
   HAL_ENABLE_DS18B20       DS18B20 1-Wire temperature. Propagates: ONEWIRE.

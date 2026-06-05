@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-05 (MAX6675 and digipot shared drivers added)
+Last updated: 2026-06-05 (MCP9600/MAX6675 and digipot shared drivers added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -55,6 +55,7 @@ Nature of the implementation:
 - `HAL_ENABLE_PCNT`
 - `HAL_ENABLE_MCP401X`
 - `HAL_ENABLE_MAX5395`
+- `HAL_ENABLE_MCP9600`
 - `HAL_ENABLE_MAX6675`
 - `HAL_ENABLE_GPS`
 
@@ -120,9 +121,10 @@ The following modules are real, register-level backends under
   full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
   SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
   bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
-- `hal_thermocouple` - **MAX6675** via the shared Arduino-free driver
-  (`impl/shared/max6675_driver.*`). It bit-bangs the MAX6675 16-bit read using
-  HAL GPIO/delays, so the same code path is used by STM32G474 and RP2040.
+- `hal_thermocouple` - **MCP9600/MCP9601** via the shared HAL I2C driver
+  (`impl/shared/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
+  GPIO bit-bang driver (`impl/shared/max6675_driver.*`). The same driver logic
+  is used by STM32G474 and RP2040.
 - `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
 - `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
   transport).
@@ -152,7 +154,7 @@ validation, init and I/O sequences. **These already work on STM32** as long as
 the underlying bus HAL exists.
 
 **2. Vendor Arduino libraries** - in `src/hal/impl/arduino/drivers/`:
-`ADS1X15`, `Adafruit_BusIO/GFX/ILI9341/MCP9600/NeoPixel/SSD1306/ST7735_ST7789`,
+`ADS1X15`, `Adafruit_BusIO/GFX/ILI9341/NeoPixel/SSD1306/ST7735_ST7789`,
 `DS3231`, `DallasTemperature`, `MCP2515`, `OneWire`, `PCF8563`.
 **All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
 device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, ...), each
@@ -171,7 +173,8 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 SPI is no longer blocked at the bus layer. The first STM32 implementation is
 polling-based rather than DMA, but it is hardware-backed and matches the
 Arduino driver surface closely enough for MCP2515 and display-driver bring-up.
-MAX6675 is handled separately by the shared HAL GPIO bit-bang driver. Default
+MCP9600/MCP9601 and MAX6675 are handled separately by shared HAL-level drivers.
+Default
 G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13; CS remains
 a normal GPIO owned by each driver.
 
@@ -180,16 +183,11 @@ Modules with Arduino + mock impl but no `impl/stm32g474`:
 `can, display, ds18b20, eeprom, external_adc, i2c_slave, littlefs, mqtt,
 onewire, ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
 
-Partial modules:
-- `hal_thermocouple` - MAX6675 is available through the shared HAL GPIO driver;
-  MCP9600 remains an I2C-porting task.
-
 ### Portability tiers
 
 **🟢 Easy - mirror the digipot pattern (rewrite vendor logic on `hal_i2c`):**
 - `hal_rtc` (PCF8563, DS3231) - plain I2C register access
 - `hal_external_adc` (ADS1115) - plain I2C
-- `hal_thermocouple` MCP9600 part - plain I2C
 
 We do not port the Adafruit/vendor libraries; we extract their register maps and
 write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
@@ -222,7 +220,7 @@ a rewrite (PWM+DMA or SPI), not a library port.
 1. **Port one small hardware-SPI device next** (MCP2515 probe) to validate CS
    timing, mode, and clock on real G474 hardware.
 2. **I2C quick wins** via the digipot pattern: rtc (PCF8563/DS3231),
-   external_adc (ADS1115), thermocouple (MCP9600).
+   external_adc (ADS1115).
 3. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
    for TFT throughput.
 4. **OneWire** as a portable driver on `hal_gpio` + `hal_time` -> unblocks ds18b20.
