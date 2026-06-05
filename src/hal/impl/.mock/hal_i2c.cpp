@@ -15,6 +15,9 @@
 #define MOCK_I2C_WLOG_LEN    8
 
 typedef struct {
+    uint8_t  rx_script[MOCK_I2C_BUF_SIZE];
+    int      rx_script_len;
+    int      rx_script_pos;
     uint8_t  rx_buf[MOCK_I2C_BUF_SIZE];
     int      rx_len;
     int      rx_pos;
@@ -44,6 +47,18 @@ static inline mock_i2c_bus_state_t *i2c_state(uint8_t bus) {
     return &s_i2c_state[i2c_bus_index(bus)];
 }
 
+static void mock_i2c_load_rx(mock_i2c_bus_state_t *st, uint8_t count) {
+    st->rx_len = count;
+    st->rx_pos = 0;
+    for (uint8_t i = 0; i < count; ++i) {
+        if (st->rx_script_pos < st->rx_script_len) {
+            st->rx_buf[i] = st->rx_script[st->rx_script_pos++];
+        } else {
+            st->rx_buf[i] = 0u;
+        }
+    }
+}
+
 void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
     hal_i2c_init_bus(0, sda_pin, scl_pin, clock_hz);
 }
@@ -53,6 +68,8 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t cl
     (void)sda_pin; (void)scl_pin;
     st->initialized = true;
     st->clock_hz = clock_hz;
+    st->rx_script_len = 0;
+    st->rx_script_pos = 0;
     st->rx_len = 0;
     st->rx_pos = 0;
     st->lock_depth = 0;
@@ -80,6 +97,8 @@ void hal_i2c_deinit_bus(uint8_t bus) {
     st->initialized = false;
     st->lock_depth = 0;
     st->read_byte_lock_depth_at_read = 0;
+    st->rx_script_len = 0;
+    st->rx_script_pos = 0;
     st->rx_len = 0;
     st->rx_pos = 0;
     st->cur_addr = 0;
@@ -172,8 +191,7 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
     hal_i2c_lock_bus(bus);
     (void)address;
-    st->rx_len = 1;
-    st->rx_pos = 0;
+    mock_i2c_load_rx(st, 1u);
     st->transaction_count++;
 
     uint8_t received = 1;
@@ -193,6 +211,54 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
     return (uint8_t)raw;
 }
 
+bool hal_i2c_write_read(uint8_t address,
+                        const uint8_t *tx,
+                        size_t tx_len,
+                        uint8_t *rx,
+                        size_t rx_len) {
+    return hal_i2c_write_read_bus(0, address, tx, tx_len, rx, rx_len);
+}
+
+bool hal_i2c_write_read_bus(uint8_t bus,
+                            uint8_t address,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len) {
+    if ((tx_len > 0u && tx == NULL) || (rx_len > 0u && rx == NULL) ||
+        tx_len > 255u || rx_len > 255u) {
+        return false;
+    }
+
+    hal_i2c_begin_transmission_bus(bus, address);
+    for (size_t i = 0; i < tx_len; ++i) {
+        if (hal_i2c_write_bus(bus, tx[i]) != 1u) {
+            (void)hal_i2c_end_transmission_bus(bus);
+            return false;
+        }
+    }
+    if (hal_i2c_end_transmission_bus(bus) != 0u) {
+        return false;
+    }
+
+    if (rx_len == 0u) {
+        return true;
+    }
+
+    if (hal_i2c_request_from_bus(bus, address, (uint8_t)rx_len) !=
+        (uint8_t)rx_len) {
+        return false;
+    }
+    for (size_t i = 0; i < rx_len; ++i) {
+        int raw = hal_i2c_read_bus(bus);
+        if (raw < 0) {
+            return false;
+        }
+        rx[i] = (uint8_t)raw;
+    }
+    return true;
+}
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
     return hal_i2c_request_from_bus(0, address, count);
 }
@@ -201,8 +267,7 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
     hal_i2c_lock_bus(bus);
     (void)address;
-    st->rx_len = count;
-    st->rx_pos = 0;
+    mock_i2c_load_rx(st, count);
     st->transaction_count++;
     hal_i2c_unlock_bus(bus);
     return count;
@@ -235,9 +300,14 @@ void hal_mock_i2c_inject_rx(const uint8_t *data, int len) {
 
 void hal_mock_i2c_inject_rx_bus(uint8_t bus, const uint8_t *data, int len) {
     mock_i2c_bus_state_t *st = i2c_state(bus);
+    if (len < 0) len = 0;
     if (len > MOCK_I2C_BUF_SIZE) len = MOCK_I2C_BUF_SIZE;
-    memcpy(st->rx_buf, data, len);
-    st->rx_len = len;
+    if (len > 0 && data != NULL) {
+        memcpy(st->rx_script, data, len);
+    }
+    st->rx_script_len = len;
+    st->rx_script_pos = 0;
+    st->rx_len = 0;
     st->rx_pos = 0;
 }
 

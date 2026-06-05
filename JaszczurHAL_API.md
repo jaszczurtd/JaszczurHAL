@@ -142,7 +142,7 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
-| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | bundled MCP9600 (propagates THERMOCOUPLE + I2C) |
+| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
@@ -342,10 +342,9 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | Driver folder | HAL usage | Upstream author(s) | License | License path in repo |
 |---|---|---|---|---|
 | `ADS1X15` | `hal_external_adc` | Rob Tillaart | MIT | `src/hal/impl/arduino/drivers/ADS1X15/LICENSE` |
-| `Adafruit_BusIO` | display + MCP9600 transport layer | Adafruit Industries | MIT | `src/hal/impl/arduino/drivers/Adafruit_BusIO/LICENSE` |
+| `Adafruit_BusIO` | display transport layer | Adafruit Industries | MIT | `src/hal/impl/arduino/drivers/Adafruit_BusIO/LICENSE` |
 | `Adafruit_GFX_Library` | display base classes/fonts | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_GFX_Library/license.txt` |
 | `Adafruit_ILI9341` | TFT backend (`HAL_DISPLAY_ILI9341`) | Limor Fried (Ladyada) | license notice in sources (BSD) + README note (MIT) | `src/hal/impl/arduino/drivers/Adafruit_ILI9341/Adafruit_ILI9341.h` and `src/hal/impl/arduino/drivers/Adafruit_ILI9341/README.md` |
-| `Adafruit_MCP9600` | thermocouple MCP9600 backend | Kevin Townsend, Limor Fried | BSD in driver docs/sources (`license.txt`) + extra MIT file | `src/hal/impl/arduino/drivers/Adafruit_MCP9600/license.txt` and `src/hal/impl/arduino/drivers/Adafruit_MCP9600/LICENSE` |
 | `Adafruit_NeoPixel` | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors | LGPL | `src/hal/impl/arduino/drivers/Adafruit_NeoPixel/COPYING` |
 | `Adafruit_SSD1306` | OLED backend (`HAL_ENABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
 | `Adafruit_ST7735_and_ST7789_Library` | ST7735/ST7789/ST7796S backends | Limor Fried (Ladyada) | MIT | `src/hal/impl/arduino/drivers/Adafruit_ST7735_and_ST7789_Library/README.txt` |
@@ -369,7 +368,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Conditional compilation | Driver `.cpp` files are wrapped with module-level `HAL_ENABLE_*` guards. | Disabled-by-default modules remove both HAL wrappers and third-party backend code from the build. |
 | SPI synchronization | Drivers using SPI transactions now integrate `hal_spi_lock`/`hal_spi_unlock` where needed (CAN, BusIO SPI, SPITFT path). | Prevents cross-thread/cross-core SPI transaction interleaving. |
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed Wire/Wire1 transactions and improves determinism under concurrency. |
-| Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `Adafruit_MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
+| Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
 | Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
@@ -1872,6 +1871,16 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool 
 uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
 
+// Combined write-then-read helper for register-pointer sensors.
+// Writes tx bytes, keeps the bus active for a repeated-start read, and reads
+// exactly rx_len bytes. Returns true only when both phases complete.
+bool    hal_i2c_write_read(uint8_t address,
+                           const uint8_t *tx, size_t tx_len,
+                           uint8_t *rx, size_t rx_len);
+bool    hal_i2c_write_read_bus(uint8_t bus, uint8_t address,
+                               const uint8_t *tx, size_t tx_len,
+                               uint8_t *rx, size_t rx_len);
+
 // Request + read (acquires/releases mutex around the request; read is unlocked)
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // returns bytes received
 int     hal_i2c_available(void);    // bytes in receive buffer
@@ -1922,7 +1931,7 @@ be verified on the target platform.
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
-**impl/.mock:** ring buffer; injectable via mock helpers. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
+**impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Arduino backend: transfer APIs are thread-safe and multicore-safe. An internal per-bus `hal_mutex_t` serializes transactions; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around third-party `Wire` calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and should be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -2466,7 +2475,8 @@ void                hal_mock_rgb_led_reset(void);
 
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
-Supports MCP9600 (I2C) and MAX6675 (shared SPI bit-bang over HAL GPIO). Functions not available on the
+Supports MCP9600/MCP9601 (shared HAL I2C driver) and MAX6675 (shared SPI
+bit-bang over HAL GPIO). Functions not available on the
 selected chip return a safe default (NAN / 0 / false) and print an error.
 
 ```c
@@ -2549,8 +2559,8 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status register
 ```
 
-**impl/arduino:** `Adafruit_MCP9600` for MCP9600; MAX6675 delegates to the shared Arduino-free HAL GPIO driver.
-**impl/stm32g474:** MAX6675 delegates to the same shared HAL GPIO driver; MCP9600 is not ported yet.
+**impl/arduino:** MCP9600/MCP9601 and MAX6675 delegate to shared Arduino-free drivers.
+**impl/stm32g474:** MCP9600/MCP9601 and MAX6675 delegate to the same shared drivers as RP2040.
 **Thread safety:** Thread-safe and multicore-safe. Each instance has its own per-instance `hal_mutex_t`. All read, configuration, and deinit operations are protected under this mutex.
 
 ---
@@ -3900,7 +3910,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | `Adafruit_NeoPixel` |
-| `hal_thermocouple` (MCP9600) | bundled MCP9600 driver (`drivers/Adafruit_MCP9600`) |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600_driver.*`) |
 | `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675_driver.*`) |
 | `hal_ds18b20` | Arduino core GPIO APIs; RP2040/RP2350 backend also uses pico SDK PIO/clock APIs (`hardware/pio.h`, `hardware/clocks.h`) |
 | `hal_external_adc` | bundled `ADS1X15` driver |
@@ -3979,6 +3989,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
+| `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |

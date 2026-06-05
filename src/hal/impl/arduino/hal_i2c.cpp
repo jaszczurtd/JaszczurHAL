@@ -161,6 +161,78 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
     return (uint8_t)raw;
 }
 
+bool hal_i2c_write_read(uint8_t address,
+                        const uint8_t *tx,
+                        size_t tx_len,
+                        uint8_t *rx,
+                        size_t rx_len) {
+    return hal_i2c_write_read_bus(0, address, tx, tx_len, rx, rx_len);
+}
+
+bool hal_i2c_write_read_bus(uint8_t bus,
+                            uint8_t address,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len) {
+    if ((tx_len > 0u && tx == NULL) || (rx_len > 0u && rx == NULL) ||
+        tx_len > 255u || rx_len > 255u) {
+        return false;
+    }
+
+    uint8_t idx = i2c_bus_index(bus);
+    i2c_ensure_mutex(idx);
+    hal_mutex_lock(s_i2c_mutex[idx]);
+
+    TwoWire *wire = i2c_bus_wire(idx);
+    wire->beginTransmission(address);
+    for (size_t i = 0; i < tx_len; ++i) {
+        if (wire->write(tx[i]) != 1u) {
+            hal_mutex_unlock(s_i2c_mutex[idx]);
+            return false;
+        }
+    }
+
+    const bool needs_read = rx_len > 0u;
+    uint8_t end_result = wire->endTransmission(needs_read ? false : true);
+    s_i2c_transaction_count[idx]++;
+    if (end_result != 0u) {
+        hal_mutex_unlock(s_i2c_mutex[idx]);
+        return false;
+    }
+
+    if (!needs_read) {
+        hal_mutex_unlock(s_i2c_mutex[idx]);
+        return true;
+    }
+
+    uint8_t received = wire->requestFrom(address, (uint8_t)rx_len);
+    s_i2c_transaction_count[idx]++;
+    if (received != (uint8_t)rx_len) {
+        while (wire->available()) {
+            (void)wire->read();
+        }
+        hal_mutex_unlock(s_i2c_mutex[idx]);
+        return false;
+    }
+
+    for (size_t i = 0; i < rx_len; ++i) {
+        if (!wire->available()) {
+            hal_mutex_unlock(s_i2c_mutex[idx]);
+            return false;
+        }
+        int raw = wire->read();
+        if (raw < 0) {
+            hal_mutex_unlock(s_i2c_mutex[idx]);
+            return false;
+        }
+        rx[i] = (uint8_t)raw;
+    }
+
+    hal_mutex_unlock(s_i2c_mutex[idx]);
+    return true;
+}
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
     return hal_i2c_request_from_bus(0, address, count);
 }

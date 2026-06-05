@@ -42,6 +42,7 @@ extern "C" {
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 /** @brief I2C standard-mode clock: 100 kHz. */
 #define HAL_I2C_CLOCK_STANDARD_HZ 100000UL
@@ -210,6 +211,36 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
  * @return The byte read, or 0 when the transaction failed.
  */
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
+
+/**
+ * @brief Combined write-then-read transaction on the default I2C controller.
+ *
+ * Writes @p tx_len bytes, keeps the transaction active for a repeated-start
+ * read, then reads @p rx_len bytes into @p rx. This matches the common
+ * register-pointer pattern used by I2C sensors.
+ *
+ * @param address 7-bit I2C slave address.
+ * @param tx      Bytes to write before the repeated-start read.
+ * @param tx_len  Number of bytes to write.
+ * @param rx      Destination buffer for read bytes.
+ * @param rx_len  Number of bytes to read.
+ * @return true when both phases complete and exactly @p rx_len bytes are read.
+ */
+bool hal_i2c_write_read(uint8_t address,
+                        const uint8_t *tx,
+                        size_t tx_len,
+                        uint8_t *rx,
+                        size_t rx_len);
+
+/**
+ * @brief Bus-selecting variant of hal_i2c_write_read().
+ */
+bool hal_i2c_write_read_bus(uint8_t bus,
+                            uint8_t address,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len);
 
 /**
  * @brief Flush selected bus transmission and release its mutex.

@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if defined(HAL_ENABLE_DISPLAY) || (defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C))
+#if defined(HAL_ENABLE_DISPLAY)
 
 /*
    Written with help by Claude!
@@ -92,4 +92,4 @@ bool Adafruit_GenericDevice::writeRegister(uint8_t *addr_buf, uint8_t addrsiz,
   return _writereg_func(_obj, addr_buf, addrsiz, buf, bufsiz);
 }
 
-#endif /* display enabled OR MCP9600 backend enabled */
+#endif /* HAL_ENABLE_DISPLAY */

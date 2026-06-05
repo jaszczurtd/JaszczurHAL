@@ -115,8 +115,8 @@
      Sensors:
        HAL_ENABLE_THERMOCOUPLE  - generic thermocouple API (requires at
                                   least one backend: MCP9600 or MAX6675).
-       HAL_ENABLE_MCP9600       - MCP9600/MCP9601 backend (propagates:
-                                  THERMOCOUPLE, I2C).
+       HAL_ENABLE_MCP9600       - MCP9600/MCP9601 shared HAL I2C backend
+                                  (propagates: THERMOCOUPLE, I2C).
        HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
                                   THERMOCOUPLE; shared bit-bang over HAL GPIO).
        HAL_ENABLE_DS18B20       - DS18B20 1-Wire temperature sensor

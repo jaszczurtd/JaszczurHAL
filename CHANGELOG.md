@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_thermocouple - shared MCP9600/MCP9601 driver
+
+- Replaced the bundled Arduino `Adafruit_MCP9600` / `Adafruit_MCP9601`
+  backend with a shared Arduino-free driver
+  (`src/hal/impl/shared/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
+  synchronization primitives.
+- RP2040 and STM32G474 `hal_thermocouple` wrappers now both delegate MCP9600 /
+  MCP9601 operations to the same shared driver. The STM32G474 default profile
+  now enables `HAL_ENABLE_MCP9600` together with the existing MAX6675 backend.
+- Added `hal_i2c_write_read()` / `hal_i2c_write_read_bus()` for atomic
+  write-then-repeated-start-read register transactions, with implementations
+  for RP2040, STM32G474 and mock builds.
+- Preserved the working Adafruit-derived MCP9600 logic: device-ID acceptance
+  for `0x40` and `0x41`, reset config write `0x80`, sleep-mode NAN returns,
+  signed 0.0625 C fixed-point decoding, 24-bit ADC sign extension, alert
+  register layout and the existing inverted ambient-resolution bit mapping.
+- Removed the obsolete Arduino `drivers/Adafruit_MCP9600` folder. The BSD
+  notice and upstream attribution now live in the shared driver source instead
+  of README/docs dependency inventories.
+- Added `test_mcp9600_driver` coverage plus sequential mock I2C RX scripting
+  for multi-register read flows.
+
 ### hal_digipot - shared MCP401x/MAX5395 drivers
 
 - Split the digipot chip logic out of `src/hal/hal_digipot.cpp` into shared
@@ -36,8 +58,7 @@ All notable changes to this project will be documented in this file.
   old backend: per-driver mutex, CS-low + 10 us settle, two MSB-first 8-bit
   `spiread()` passes, open-circuit bit check, `raw >> 3`, and 0.25 C/LSB.
 - Added an STM32G474 `hal_thermocouple` backend for MAX6675, using the same
-  shared bit-bang driver as RP2040. MCP9600 remains an STM32 porting task and
-  returns safe unsupported defaults when that backend is selected there.
+  shared bit-bang driver as RP2040.
 - `HAL_ENABLE_MAX6675` now propagates only `HAL_ENABLE_THERMOCOUPLE`; it no
   longer pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL
   SPI or Arduino SPI.

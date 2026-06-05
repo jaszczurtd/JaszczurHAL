@@ -14,6 +14,12 @@ add_executable(test_max6675_driver
 )
 target_link_libraries(test_max6675_driver PRIVATE hal_mock)
 add_test(NAME test_max6675_driver COMMAND test_max6675_driver)
+add_executable(test_mcp9600_driver
+    test_mcp9600_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp9600_driver.cpp
+)
+target_link_libraries(test_mcp9600_driver PRIVATE hal_mock)
+add_test(NAME test_mcp9600_driver COMMAND test_mcp9600_driver)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)

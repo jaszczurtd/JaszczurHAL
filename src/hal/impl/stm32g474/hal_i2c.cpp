@@ -114,6 +114,57 @@ static int i2c1_hw_read(uint8_t addr, uint8_t *buf, int len) {
     return got;
 }
 
+static bool i2c1_hw_write_read(uint8_t addr,
+                               const uint8_t *tx,
+                               int tx_len,
+                               uint8_t *rx,
+                               int rx_len) {
+    if (tx_len <= 0 || rx_len < 0) { return false; }
+    I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+    I2C1_CR2 = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)tx_len << 16) |
+               I2C_CR2_START;
+    for (int i = 0; i < tx_len; ++i) {
+        uint32_t to = I2C_TIMEOUT;
+        while (!(I2C1_ISR & (I2C_ISR_TXIS | I2C_ISR_NACKF)) && to) { --to; }
+        if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
+            I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+            return false;
+        }
+        I2C1_TXDR = tx[i];
+    }
+
+    uint32_t to = I2C_TIMEOUT;
+    while (!(I2C1_ISR & (I2C_ISR_TC | I2C_ISR_NACKF)) && to) { --to; }
+    if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
+        I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+        return false;
+    }
+
+    if (rx_len == 0) {
+        I2C1_CR2 |= I2C_CR2_STOP;
+        to = I2C_TIMEOUT;
+        while (!(I2C1_ISR & I2C_ISR_STOPF) && to) { --to; }
+        I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+        return to != 0u;
+    }
+
+    I2C1_CR2 = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)rx_len << 16) |
+               I2C_CR2_RD_WRN | I2C_CR2_AUTOEND | I2C_CR2_START;
+    int got = 0;
+    for (int i = 0; i < rx_len; ++i) {
+        to = I2C_TIMEOUT;
+        while (!(I2C1_ISR & (I2C_ISR_RXNE | I2C_ISR_NACKF)) && to) { --to; }
+        if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) { break; }
+        rx[i] = (uint8_t)I2C1_RXDR;
+        ++got;
+    }
+
+    to = I2C_TIMEOUT;
+    while (!(I2C1_ISR & I2C_ISR_STOPF) && to) { --to; }
+    I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+    return (to != 0u) && (got == rx_len);
+}
+
 /* Zero-byte probe: returns true if the device ACKs (is present). */
 static bool i2c1_hw_ack(uint8_t addr) {
     I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
@@ -271,6 +322,67 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
     return (v >= 0) ? (uint8_t)v : 0u;
 }
 
+bool hal_i2c_write_read(uint8_t address,
+                        const uint8_t *tx,
+                        size_t tx_len,
+                        uint8_t *rx,
+                        size_t rx_len) {
+    return hal_i2c_write_read_bus(0, address, tx, tx_len, rx, rx_len);
+}
+
+bool hal_i2c_write_read_bus(uint8_t bus,
+                            uint8_t address,
+                            const uint8_t *tx,
+                            size_t tx_len,
+                            uint8_t *rx,
+                            size_t rx_len) {
+    if ((tx_len > 0u && tx == NULL) || (rx_len > 0u && rx == NULL) ||
+        tx_len > 255u || rx_len > 255u) {
+        return false;
+    }
+
+    i2c_bus_state_t *st = i2c_state(bus);
+    hal_i2c_lock_bus(bus);
+    bool ok = true;
+#ifdef JH_STM32G474_HW
+    if (i2c_hw_bus(bus) && st->initialized) {
+        ok = i2c1_hw_write_read(address, tx, (int)tx_len, rx, (int)rx_len);
+        st->transaction_count += (rx_len > 0u) ? 2u : 1u;
+        hal_i2c_unlock_bus(bus);
+        return ok;
+    }
+#endif
+
+    st->cur_addr = address;
+    st->tx_len = 0;
+    for (size_t i = 0; i < tx_len; ++i) {
+        if (st->tx_len >= STM32_I2C_BUF_SIZE) {
+            ok = false;
+            break;
+        }
+        st->tx_buf[st->tx_len++] = tx[i];
+    }
+    st->tx_len = 0;
+    st->transaction_count++;
+
+    if (ok && rx_len > 0u) {
+        st->rx_len = (int)rx_len;
+        st->rx_pos = 0;
+        for (size_t i = 0; i < rx_len; ++i) {
+            int v = hal_i2c_read_bus(bus);
+            if (v < 0) {
+                ok = false;
+                break;
+            }
+            rx[i] = (uint8_t)v;
+        }
+        st->transaction_count++;
+    }
+
+    hal_i2c_unlock_bus(bus);
+    return ok;
+}
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
     return hal_i2c_request_from_bus(0, address, count);
 }
@@ -332,6 +444,7 @@ bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
         return !ack;   /* busy/absent == did NOT ACK */
     }
 #endif
+    (void)bus;
     (void)address;
     return false;
 }

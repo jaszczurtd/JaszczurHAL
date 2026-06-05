@@ -1,5 +1,5 @@
 #include "../../../../hal_config.h"
-#if defined(HAL_ENABLE_DISPLAY) || (defined(HAL_ENABLE_THERMOCOUPLE) && defined(HAL_ENABLE_MCP9600) && defined(HAL_ENABLE_I2C))
+#if defined(HAL_ENABLE_DISPLAY)
 
 #include "Adafruit_SPIDevice.h"
 #include "../../../../hal_spi.h"
@@ -533,4 +533,4 @@ bool Adafruit_SPIDevice::write_and_read(uint8_t *buffer, size_t len) {
   return true;
 }
 
-#endif /* display enabled OR MCP9600 backend enabled */
+#endif /* HAL_ENABLE_DISPLAY */
