@@ -218,14 +218,18 @@ jobs:
           test -f build_arduino/libJaszczurHAL.a
 
   # ── Examples build gate ────────────────────────────────────────────────────
-  # Compile all Arduino examples to catch real-world integration issues
-  # and ensure each sketch is reproducible with its hal_project_config.h.
+  # Compile all examples through examples/CMakeLists.txt. That file is the
+  # source of truth for app.c/app.cpp examples and their supported targets.
   arduino-examples:
     runs-on: ubuntu-latest
     needs: arduino-flag-matrix
+    name: "Examples (RP2040 + STM32G474)"
 
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install STM32 toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
       - name: Setup Arduino CLI
         uses: arduino/setup-arduino-cli@v2
@@ -238,18 +242,15 @@ jobs:
           arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
-      - name: Compile examples
+      - name: Compile RP2040 examples
         run: |
-          set -e
-          for example in examples/*; do
-            test -d "$example" || continue
-            test -f "$example/$(basename "$example").ino" || continue
-            echo "Compiling $example..."
-            arduino-cli compile \
-              --library "$PWD" \
-              --fqbn rp2040:rp2040:rpipico \
-              --build-path "$example/.build" \
-              --build-property "compiler.cpp.extra_flags=-I '$PWD/$example'" \
-              --build-property "compiler.c.extra_flags=-I '$PWD/$example'" \
-              "$example"
-          done
+          cmake -S examples -B build_examples_rp2040 \
+            -DJH_EXAMPLE_TARGET=rp2040
+          cmake --build build_examples_rp2040 --parallel 4
+
+      - name: Compile STM32G474 examples
+        run: |
+          cmake -S examples -B build_examples_stm32g474 \
+            -DJH_EXAMPLE_TARGET=stm32g474 \
+            -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
+          cmake --build build_examples_stm32g474 --parallel 4
