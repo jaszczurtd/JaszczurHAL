@@ -28,9 +28,9 @@ extern "C" {
  *     around the transfer; the received bytes remain in the Wire
  *     buffer and can be read with hal_i2c_available() / hal_i2c_read()
  *     without holding the lock.
- *   - For multi-step sequences involving third-party I2C libraries
- *     (e.g. ADS1115) that call Wire directly, use hal_i2c_lock() and
- *     hal_i2c_unlock() to guard the whole sequence explicitly.
+ *   - For multi-step device-driver sequences that must be atomic, use
+ *     hal_i2c_lock() and hal_i2c_unlock() to guard the whole sequence
+ *     explicitly.
  *
  * Mutex lifecycle: the internal mutex is created lazily on first use
  * (for example by hal_i2c_lock() or the first transfer call), not only
@@ -104,8 +104,8 @@ void hal_i2c_deinit_bus(uint8_t bus);
 /**
  * @brief Acquire the I2C bus mutex.
  *
- * Use this together with hal_i2c_unlock() when wrapping a third-party
- * library that talks to Wire directly (e.g. ADS1115).
+ * Use this together with hal_i2c_unlock() when a driver needs to guard a
+ * larger multi-step I2C sequence.
  *
  */
 void hal_i2c_lock(void);

@@ -5,6 +5,7 @@
 #include <SPI.h>
 
 static hal_mutex_t s_spi_mutex[2] = {NULL, NULL};
+static bool s_spi_initialized[2] = {false, false};
 
 static inline uint8_t spi_bus_index(uint8_t bus) {
     return bus == 1 ? 1 : 0;
@@ -47,10 +48,13 @@ void hal_spi_init(uint8_t bus, uint8_t rx_miso, uint8_t tx_mosi, uint8_t sck_pin
     spi.setTX(tx_mosi);
     spi.setSCK(sck_pin);
     spi.begin(true);  // true = controller (master) mode on RP2040
+    s_spi_initialized[idx] = true;
 }
 
 void hal_spi_deinit(uint8_t bus) {
-    spi_object(bus).end();
+    uint8_t idx = spi_bus_index(bus);
+    spi_object(idx).end();
+    s_spi_initialized[idx] = false;
 }
 
 void hal_spi_lock(uint8_t bus) {
@@ -66,7 +70,12 @@ void hal_spi_unlock(uint8_t bus) {
 }
 
 void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings) {
-    spi_object(bus).beginTransaction(spi_make_settings(settings));
+    uint8_t idx = spi_bus_index(bus);
+    if (!s_spi_initialized[idx]) {
+        spi_object(idx).begin(true);
+        s_spi_initialized[idx] = true;
+    }
+    spi_object(idx).beginTransaction(spi_make_settings(settings));
 }
 
 void hal_spi_end_transaction(uint8_t bus) {
@@ -74,7 +83,12 @@ void hal_spi_end_transaction(uint8_t bus) {
 }
 
 uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
-    return spi_object(bus).transfer(data);
+    uint8_t idx = spi_bus_index(bus);
+    if (!s_spi_initialized[idx]) {
+        spi_object(idx).begin(true);
+        s_spi_initialized[idx] = true;
+    }
+    return spi_object(idx).transfer(data);
 }
 
 uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {

@@ -35,7 +35,7 @@ cmake --build build_examples_rp2040
 ```bash
 cmake -S examples -B build_examples_stm32 \
       -DJH_EXAMPLE_TARGET=stm32g474 \
-      -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+      -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
 cmake --build build_examples_stm32
 ```
 
@@ -178,7 +178,7 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 03 | soft_timer_table | rp2040, stm32g474 | Software timers |
 | 04 | crypto | rp2040, stm32g474 | Crypto helpers |
 | 05 | modem_A7670E | rp2040 | AT modem, SIMCom |
-| 06 | ds18b20 | rp2040 | OneWire, DS18B20 |
+| 06 | ds18b20 | rp2040, stm32g474 | OneWire, DS18B20 |
 | 07 | gps | rp2040 | GPS (SoftwareSerial) |
 | 08 | thermocouple | rp2040 | MAX6675/MCP9600 |
 | 09 | display_tft | rp2040 | ILI9341/ST7789, draw7Segment |
@@ -195,3 +195,5 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 20 | i2c_scan | rp2040, stm32g474 | I2C bus scan |
 | 21 | adc_read | rp2040, stm32g474 | ADC |
 | 22 | gps_uart | rp2040, stm32g474 | GPS (UART transport) |
+| 23 | external_adc_ads1115 | rp2040, stm32g474 | I2C, ADS1115 external ADC |
+| 24 | can_mcp2515 | rp2040, stm32g474 | SPI, MCP2515 CAN |

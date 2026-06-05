@@ -304,6 +304,47 @@ uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len) {
     return crc;
 }
 
+uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc) {
+    static const uint8_t oddparity[16] = {
+        0u, 1u, 1u, 0u, 1u, 0u, 0u, 1u,
+        1u, 0u, 0u, 1u, 0u, 1u, 1u, 0u
+    };
+
+    if (!data && len != 0u) {
+        return crc;
+    }
+
+    for (uint16_t i = 0u; i < len; ++i) {
+        uint16_t cdata = data[i];
+        cdata = (uint16_t)((cdata ^ crc) & 0xFFu);
+        crc >>= 8u;
+
+        if (oddparity[cdata & 0x0Fu] ^ oddparity[cdata >> 4u]) {
+            crc ^= 0xC001u;
+        }
+
+        cdata <<= 6u;
+        crc ^= cdata;
+        cdata <<= 1u;
+        crc ^= cdata;
+    }
+
+    return crc;
+}
+
+bool hal_onewire_check_crc16(const uint8_t *data,
+                             uint16_t len,
+                             const uint8_t inverted_crc[2],
+                             uint16_t crc) {
+    if (!data || !inverted_crc) {
+        return false;
+    }
+
+    crc = (uint16_t)~hal_onewire_crc16(data, len, crc);
+    return ((crc & 0xFFu) == inverted_crc[0]) &&
+           ((crc >> 8u) == inverted_crc[1]);
+}
+
 /* ── Mock helpers ───────────────────────────────────────────────────────── */
 
 void hal_mock_onewire_set_presence(hal_onewire_t h, bool present) {

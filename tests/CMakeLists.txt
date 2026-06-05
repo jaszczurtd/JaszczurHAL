@@ -10,16 +10,28 @@ add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
 add_executable(test_max6675_driver
     test_max6675_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/max6675_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/max6675/max6675_driver.cpp
 )
 target_link_libraries(test_max6675_driver PRIVATE hal_mock)
 add_test(NAME test_max6675_driver COMMAND test_max6675_driver)
 add_executable(test_mcp9600_driver
     test_mcp9600_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp9600_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp9600/mcp9600_driver.cpp
 )
 target_link_libraries(test_mcp9600_driver PRIVATE hal_mock)
 add_test(NAME test_mcp9600_driver COMMAND test_mcp9600_driver)
+add_executable(test_ads1x15_driver
+    test_ads1x15_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ads1x15/ads1x15_driver.cpp
+)
+target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
+add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
+add_executable(test_mcp2515_driver
+    test_mcp2515_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp2515/mcp2515_driver.cpp
+)
+target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
+add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)
@@ -74,7 +86,7 @@ add_test(NAME test_multicoreWatchdog COMMAND test_multicoreWatchdog)
 # test and feed real sentences through it.
 add_executable(test_gps_nmea_parser
     test_gps_nmea_parser.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/gps_nmea_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/gps/gps_nmea_parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_gps_nmea_parser PRIVATE hal_mock)

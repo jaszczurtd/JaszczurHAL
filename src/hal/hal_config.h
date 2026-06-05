@@ -119,10 +119,11 @@
                                   (propagates: THERMOCOUPLE, I2C).
        HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
                                   THERMOCOUPLE; shared bit-bang over HAL GPIO).
-       HAL_ENABLE_DS18B20       - DS18B20 1-Wire temperature sensor
+       HAL_ENABLE_DS18B20       - shared DS18B20 1-Wire temperature sensor
                                   (propagates: ONEWIRE).
-       HAL_ENABLE_ONEWIRE       - generic 1-Wire bus API wrapper.
-       HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC (propagates: I2C).
+       HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper.
+       HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC via shared ADS1X15
+                                  HAL I2C driver (propagates: I2C).
        HAL_ENABLE_GPS           - GPS / NMEA receiver (requires a serial
                                   transport: HAL_ENABLE_UART or
                                   HAL_ENABLE_SWSERIAL; does NOT auto-enable one).

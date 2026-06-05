@@ -189,7 +189,7 @@ sudo apt install cmake gcc-arm-none-eabi binutils-arm-none-eabi
 
 ```bash
 cmake -S stm32_lib -B build_stm32 \
-  -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
 
 cmake --build build_stm32 -j$(nproc)
 ```
@@ -215,16 +215,17 @@ Example with extra modules:
 
 ```bash
 cmake -S stm32_lib -B build_stm32 \
-  -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake \
-  -DEXTRA_HAL_DEFINES="HAL_ENABLE_CAN;HAL_ENABLE_EXTERNAL_ADC"
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake" \
+  -DEXTRA_HAL_DEFINES="HAL_ENABLE_CAN"
 
 cmake --build build_stm32 -j$(nproc)
 ```
 
 The initial STM32 profile currently enables the backend pieces that exist in
 `stm32_lib/CMakeLists.txt`, including I2C, SPI, UART, DAC, PCNT, digipot
-backends, and GPS over UART. Additional modules should be enabled only once their
-STM32G474 backend exists.
+backends, MCP9600/MAX6675 thermocouple backends, ADS1115 external ADC,
+OneWire/DS18B20, and GPS over UART. Additional modules should be enabled only
+once their STM32G474 backend exists.
 
 ### Linking With an STM32G474 Project
 

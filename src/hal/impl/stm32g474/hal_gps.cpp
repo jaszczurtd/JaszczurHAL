@@ -4,13 +4,13 @@
 #ifdef HAL_ENABLE_GPS
 
 /* STM32G474 GPS backend: hardware-UART transport only. NMEA parsing and the
- * hal_gps_* getters live in the shared engine (impl/shared/hal_gps_core.cpp).
+ * hal_gps_* getters live in the shared engine (impl/shared/gps/hal_gps_core.cpp).
  * The GPS receiver is wired to USART1 (HAL_UART_PORT_1); the rx/tx pins passed
  * to hal_gps_init() are forwarded to hal_uart_create(). */
 
 #include "../../hal_gps.h"
 #include "../../hal_uart.h"
-#include "../shared/hal_gps_core.h"
+#include "../shared/gps/hal_gps_core.h"
 
 #ifndef HAL_GPS_UART_PORT
 #define HAL_GPS_UART_PORT HAL_UART_PORT_1

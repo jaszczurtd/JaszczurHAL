@@ -11,9 +11,9 @@ extern "C" {
  * @file hal_onewire.h
  * @brief Thread-safe HAL wrapper for OneWire bus operations.
  *
- * This module wraps the bundled OneWire driver placed under
- * src/hal/impl/arduino/drivers/OneWire and exposes a platform-neutral
- * API for Arduino and host-mock builds.
+ * This module wraps the shared Arduino-free OneWire driver placed under
+ * src/hal/impl/shared/onewire and exposes a platform-neutral API for
+ * hardware and host-mock builds.
  *
  * Thread-safety model:
  * - Every public operation is protected by an internal handle mutex.
@@ -145,6 +145,28 @@ bool hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8], bool search_mode);
  * @return CRC-8 value.
  */
 uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len);
+
+/**
+ * @brief Verify Dallas/Maxim 16-bit CRC against inverted bytes read from bus.
+ * @param data         Pointer to bytes included in CRC.
+ * @param len          Number of bytes.
+ * @param inverted_crc Two CRC bytes as transmitted by 1-Wire devices.
+ * @param crc          Optional starting CRC value (usually 0).
+ * @return true when CRC matches.
+ */
+bool hal_onewire_check_crc16(const uint8_t *data,
+                             uint16_t len,
+                             const uint8_t inverted_crc[2],
+                             uint16_t crc);
+
+/**
+ * @brief Compute Dallas/Maxim 16-bit CRC.
+ * @param data Pointer to bytes.
+ * @param len  Number of bytes.
+ * @param crc  Optional starting CRC value (usually 0).
+ * @return CRC-16 value before the bus-level bitwise inversion.
+ */
+uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc);
 
 #endif /* HAL_ENABLE_ONEWIRE */
 #ifdef __cplusplus

@@ -7,20 +7,19 @@
 #include "../../hal_config.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#include <SPI.h>
-#include "drivers/MCP2515/mcp_can.h"
+#include "../shared/mcp2515/mcp2515_driver.h"
 #include <string.h>
 #include <new>
 
 struct hal_can_impl_s {
-    MCP_CAN     *mcp;
+    JHMCP2515   *mcp;
     int          in_use;
     hal_mutex_t  mutex;
 };
 
 static hal_can_impl_t s_pool[HAL_CAN_MAX_INSTANCES];
-static uint8_t s_mcp_mem[HAL_CAN_MAX_INSTANCES][sizeof(MCP_CAN)]
-    __attribute__((aligned(__alignof__(MCP_CAN))));
+static uint8_t s_mcp_mem[HAL_CAN_MAX_INSTANCES][sizeof(JHMCP2515)]
+    __attribute__((aligned(__alignof__(JHMCP2515))));
 
 hal_can_t hal_can_create(uint8_t cs_pin) {
     hal_critical_section_enter();
@@ -37,9 +36,9 @@ hal_can_t hal_can_create(uint8_t cs_pin) {
 
     hal_can_impl_t *h = &s_pool[slot];
     h->mutex = hal_mutex_create();
-    h->mcp   = new(s_mcp_mem[slot]) MCP_CAN(cs_pin);
+    h->mcp   = new(s_mcp_mem[slot]) JHMCP2515(cs_pin, 0u);
     if (h->mcp->begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) != CAN_OK) {
-        h->mcp->~MCP_CAN();
+        h->mcp->~JHMCP2515();
         hal_mutex_destroy(h->mutex);
         h->mutex  = NULL;
         h->in_use = 0;
@@ -58,7 +57,7 @@ void hal_can_destroy(hal_can_t h) {
         hal_mutex_lock(m);
     }
     if (h->mcp) {
-        h->mcp->~MCP_CAN();
+        h->mcp->~JHMCP2515();
         h->mcp = NULL;
     }
     h->in_use = 0;
@@ -106,13 +105,13 @@ bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data) {
         hal_mutex_unlock(h->mutex);
         return false;
     }
-    byte buf[HAL_CAN_MAX_DATA_LEN] = {};
-    byte msg_len = 0;
-    long unsigned int msg_id = 0;
+    uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
+    uint8_t msg_len = 0;
+    uint32_t msg_id = 0;
     bool ok = h->mcp->readMsgBuf(&msg_id, &msg_len, buf) == CAN_OK;
     hal_mutex_unlock(h->mutex);
     if (!ok) return false;
-    *id  = (uint32_t)msg_id;
+    *id  = msg_id;
     *len = msg_len;
     memcpy(data, buf, msg_len < HAL_CAN_MAX_DATA_LEN ? msg_len : HAL_CAN_MAX_DATA_LEN);
     return true;
