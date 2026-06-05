@@ -109,6 +109,14 @@ void test_crc8_matches_reference_vector(void) {
     TEST_ASSERT_EQUAL_HEX8(0x34, hal_onewire_crc8(data, 7u));
 }
 
+void test_crc16_matches_reference_vector(void) {
+    const uint8_t data[6] = {0xF0, 0x88, 0x00, 0xAA, 0x55, 0xFF};
+    const uint8_t inverted_crc[2] = {0x54, 0x20};
+
+    TEST_ASSERT_EQUAL_HEX16(0xDFAB, hal_onewire_crc16(data, 6u, 0u));
+    TEST_ASSERT_TRUE(hal_onewire_check_crc16(data, 6u, inverted_crc, 0u));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_returns_handle_and_presence_by_default);
@@ -117,6 +125,7 @@ int main(void) {
     RUN_TEST(test_presence_can_be_forced_false);
     RUN_TEST(test_thread_safety_for_concurrent_calls);
     RUN_TEST(test_crc8_matches_reference_vector);
+    RUN_TEST(test_crc16_matches_reference_vector);
     return UNITY_END();
 }
 

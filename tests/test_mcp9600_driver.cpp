@@ -1,6 +1,6 @@
 #include "hal/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/mcp9600_driver.h"
+#include "hal/impl/shared/mcp9600/mcp9600_driver.h"
 #include "utils/unity.h"
 
 #include <math.h>

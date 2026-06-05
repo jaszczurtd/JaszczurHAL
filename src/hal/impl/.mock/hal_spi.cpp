@@ -91,6 +91,9 @@ void hal_spi_unlock(uint8_t bus) {
 
 void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings) {
     const uint8_t idx = spi_bus_index(bus);
+    if (!s_spi[idx].initialized) {
+        hal_spi_init(idx, 0u, 0u, 0u);
+    }
     s_last_bus = idx;
     s_spi[idx].settings = spi_normalize_settings(settings);
     s_spi[idx].transaction_active = true;
@@ -101,7 +104,11 @@ void hal_spi_end_transaction(uint8_t bus) {
 }
 
 uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
-    mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
+    const uint8_t idx = spi_bus_index(bus);
+    if (!s_spi[idx].initialized) {
+        hal_spi_init(idx, 0u, 0u, 0u);
+    }
+    mock_spi_bus_t *st = &s_spi[idx];
     spi_log_tx(st, data);
     st->transfer_count++;
     return spi_next_rx(st);

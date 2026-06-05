@@ -1,5 +1,5 @@
 #include "utils/unity.h"
-#include "hal/impl/shared/gps_nmea_parser.h"
+#include "hal/impl/shared/gps/gps_nmea_parser.h"
 #include <stdio.h>
 #include <math.h>
 #include <string.h>

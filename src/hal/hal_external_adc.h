@@ -11,12 +11,13 @@ extern "C" {
  * @file hal_external_adc.h
  * @brief Hardware abstraction for the ADS1115 external ADC (I2C).
  *
- * Wraps the bundled ADS1X15 driver so that project code is decoupled from it
- * and can be replaced by a mock implementation for unit testing.
+ * Wraps the shared Arduino-free ADS1X15/ADS1115 driver so that project code is
+ * decoupled from chip-level register details and can be replaced by a mock
+ * implementation for unit testing.
  *
- * Thread-safety: every read is protected by the I2C HAL mutex via
- * hal_i2c_lock() / hal_i2c_unlock(), so callers do not need to take any
- * additional locks.
+ * Thread-safety: RP2040/STM32 reads are serialized by an internal ADC mutex,
+ * while individual bus transactions are protected by the I2C HAL. Callers do
+ * not need to take additional locks.
  */
 
 #include <stdint.h>

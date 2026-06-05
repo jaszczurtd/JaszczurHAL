@@ -37,7 +37,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (host-stub today, hardware implementation in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends.
+- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `gps/`, `max6675/`, `mcp9600/`).
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
@@ -137,17 +137,17 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
-| `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` | bundled MCP2515 driver (propagates SPI) |
+| `HAL_ENABLE_CAN` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | `hal_can.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | shared Arduino-free MCP2515 driver (propagates SPI) |
 | `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
-| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
-| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
-| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` | `hal_ds18b20.cpp` | bundled `OneWire` + `DallasTemperature` (propagates ONEWIRE) |
-| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` | `hal_onewire.cpp` | bundled `OneWire` driver |
-| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` | `hal_external_adc.cpp` | bundled ADS1X15 driver (propagates I2C) |
-| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
+| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
+| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/ds18b20/hal_ds18b20.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
+| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/onewire/hal_onewire.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
+| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/ads1x15/ads1x15_driver.h` | `impl/shared/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
 | `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
@@ -341,7 +341,6 @@ Both are integrated as HAL-internal implementation detail (not public API).
 
 | Driver folder | HAL usage | Upstream author(s) | License | License path in repo |
 |---|---|---|---|---|
-| `ADS1X15` | `hal_external_adc` | Rob Tillaart | MIT | `src/hal/impl/arduino/drivers/ADS1X15/LICENSE` |
 | `Adafruit_BusIO` | display transport layer | Adafruit Industries | MIT | `src/hal/impl/arduino/drivers/Adafruit_BusIO/LICENSE` |
 | `Adafruit_GFX_Library` | display base classes/fonts | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_GFX_Library/license.txt` |
 | `Adafruit_ILI9341` | TFT backend (`HAL_DISPLAY_ILI9341`) | Limor Fried (Ladyada) | license notice in sources (BSD) + README note (MIT) | `src/hal/impl/arduino/drivers/Adafruit_ILI9341/Adafruit_ILI9341.h` and `src/hal/impl/arduino/drivers/Adafruit_ILI9341/README.md` |
@@ -349,13 +348,11 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | `Adafruit_SSD1306` | OLED backend (`HAL_ENABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
 | `Adafruit_ST7735_and_ST7789_Library` | ST7735/ST7789/ST7796S backends | Limor Fried (Ladyada) | MIT | `src/hal/impl/arduino/drivers/Adafruit_ST7735_and_ST7789_Library/README.txt` |
 | `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
-| `DallasTemperature` | DS18B20 backend (`hal_ds18b20`) | Miles Burton | MIT | `src/hal/impl/arduino/drivers/DallasTemperature/LICENSE` |
 | `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in sources + repository LICENSE | `src/hal/impl/arduino/drivers/DS3231/DS3231.h`, `src/hal/impl/arduino/drivers/DS3231/DS3231.cpp`, `src/hal/impl/arduino/drivers/DS3231/LICENSE` |
-| `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (headers indicate LGPL-2.1+, `license.txt` included) | `src/hal/impl/arduino/drivers/MCP2515/license.txt` and `src/hal/impl/arduino/drivers/MCP2515/mcp_can.h` |
-| `OneWire` | generic OneWire API (`hal_onewire`) and DS18B20 backend transport | Jim Studt (original), Paul Stoffregen (maintainer) | MIT | `src/hal/impl/arduino/drivers/OneWire/LICENSE` |
+| `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/mcp2515/license.txt` and `src/hal/impl/shared/mcp2515/mcp2515_driver.h` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
-| TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps_nmea_parser.cpp` |
+| TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps/gps_nmea_parser.cpp` |
 
 Note: `Adafruit_GFX_Library/Fonts/` includes additional per-font notices in
 font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
@@ -371,7 +368,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
 | ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
-| Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
+| Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
 | WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |
@@ -449,8 +446,9 @@ backend together with selected utility modules.
 
 Covered test targets include:
 
-- `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`, `test_hal_timer`, `test_hal_ds18b20`
-- `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
+- `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`,
+  `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`
+- `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
 - `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_sdlogger`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
@@ -1611,7 +1609,7 @@ int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-**impl/arduino:** MCP2515 via bundled `drivers/MCP2515/mcp_can`.
+**impl/shared:** Arduino-free MCP2515 driver in `impl/shared/mcp2515/mcp2515_driver.*`, reused by RP2040 and STM32G474 wrappers.
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
@@ -2171,6 +2169,56 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 
 ---
 
+## `hal_onewire` - 1-Wire bus  *(optional - `HAL_ENABLE_ONEWIRE`)*
+
+Thread-safe wrapper for one 1-Wire bus bound to a single GPIO pin. Hardware
+builds use the shared Arduino-free bit-bang driver in
+`src/hal/impl/shared/onewire/`; the mock backend keeps deterministic scripted
+responses for host tests.
+
+```c
+#include <hal/hal_onewire.h>
+
+typedef struct hal_onewire_impl_s *hal_onewire_t;
+
+hal_onewire_t hal_onewire_init(uint8_t data_pin);
+void          hal_onewire_deinit(hal_onewire_t h);
+
+bool    hal_onewire_reset(hal_onewire_t h);
+void    hal_onewire_select(hal_onewire_t h, const uint8_t rom[8]);
+void    hal_onewire_skip(hal_onewire_t h);
+void    hal_onewire_write(hal_onewire_t h, uint8_t value, bool power);
+size_t  hal_onewire_write_bytes(hal_onewire_t h, const uint8_t *data,
+                                uint16_t len, bool power);
+uint8_t hal_onewire_read(hal_onewire_t h);
+size_t  hal_onewire_read_bytes(hal_onewire_t h, uint8_t *out, uint16_t len);
+void    hal_onewire_write_bit(hal_onewire_t h, uint8_t bit);
+uint8_t hal_onewire_read_bit(hal_onewire_t h);
+void    hal_onewire_depower(hal_onewire_t h);
+
+void    hal_onewire_reset_search(hal_onewire_t h);
+void    hal_onewire_target_search(hal_onewire_t h, uint8_t family_code);
+bool    hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8],
+                           bool search_mode);
+
+uint8_t  hal_onewire_crc8(const uint8_t *data, uint8_t len);
+bool     hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
+                                 const uint8_t inverted_crc[2],
+                                 uint16_t crc);
+uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc);
+```
+
+**impl/arduino + impl/stm32g474:** Both delegate to the same shared driver. The
+driver uses HAL GPIO input/output switching, `hal_delay_us()` slot timing and
+HAL critical sections around timing-sensitive sub-slots. An external 1-Wire
+pull-up is still expected, matching the original OneWire electrical model.
+**impl/.mock:** Scripted presence/read/search responses plus CRC helpers.
+**Thread safety:** Hardware builds use a per-handle mutex and a shared bus
+mutex around public operations. DS18B20 uses its own low-level driver instance
+so multi-step scratchpad transactions remain atomic under the DS18B20 mutex.
+
+---
+
 ## `hal_modem_at` - Generic AT-command engine  *(facade - `HAL_ENABLE_CELLULAR_MODEM`)*
 
 Transport-level layer of the cellular-modem stack. Owns a UART, the
@@ -2604,9 +2652,15 @@ bool          hal_ds18b20_is_busy(hal_ds18b20_t h);
 bool          hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
 ```
 
-**impl/arduino:** 1-Wire timing is performed in backend code (RP2040/RP2350 path uses PIO helpers), scratchpad CRC is verified, and conversion wait is coordinated through managed `hal_timer_t` (`start/stop/get_state`) with `hal_micros64()` deadline fallback.
+**impl/arduino + impl/stm32g474:** Both use the shared Arduino-free
+`src/hal/impl/shared/onewire/` implementation. The backend performs DS18B20
+presence/address probing, scratchpad CRC verification, resolution writes,
+non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
+over the shared 1-Wire bit-bang transport.
 **impl/.mock:** deterministic conversion state machine driven by mock time (`hal_mock_set_micros` / `hal_mock_advance_micros`), with injected presence/CRC/temperature.
-**Thread safety:** Arduino backend: per-handle mutex protects runtime API calls; create/destroy should still follow the project-wide single-core init/deinit policy. Mock backend is intended for single-threaded tests.
+**Thread safety:** Hardware backends use a per-handle mutex. Create/destroy
+should still follow the project-wide single-core init/deinit policy. Mock
+backend is intended for single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -2761,8 +2815,8 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
 
-**impl/arduino:** bundled `ADS1X15` driver; protected by a dedicated `hal_mutex_t` plus the I2C HAL bus mutex.
-**Thread safety:** Arduino backend: thread-safe and multicore-safe. A dedicated internal `hal_mutex_t` serializes ADC channel selection and range access; the I2C bus mutex protects the underlying Wire transaction. `hal_ext_adc_init()` / `hal_ext_adc_init_bus()` modify global singleton state and must be called from one core during init. Mock backend does not synchronize concurrent access.
+**impl/shared:** Arduino-free ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
+**Thread safety:** RP2040/STM32G474: thread-safe and multicore-safe where the backend mutex implementation provides it. A dedicated internal `hal_mutex_t` serializes ADC channel selection and range access; HAL I2C transactions protect the bus. `hal_ext_adc_init()` / `hal_ext_adc_init_bus()` modify global singleton state and should be called during init. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
 ```c
@@ -2832,8 +2886,8 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
-**Engine:** the portable NMEA parser (`impl/shared/gps_nmea_parser.cpp`) wrapped
-by a shared facade (`impl/shared/hal_gps_core.cpp`) - used by both hardware
+**Engine:** the portable NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`) wrapped
+by a shared facade (`impl/shared/gps/hal_gps_core.cpp`) - used by both hardware
 backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
 **impl/arduino (RP2040):** transport only - SoftwareSerial (default) or UART,
 selected at compile time. `hal_gps_update()` must be polled every loop iteration.
@@ -3903,17 +3957,18 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_timer` | pico SDK alarm/time APIs (`pico/time.h`) |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
-| `hal_can` | bundled MCP2515 driver (`drivers/MCP2515/mcp_can`) |
+| `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
 | `hal_display` | `Adafruit_ILI9341` / `Adafruit_ST7789` / `Adafruit_ST7735` / `Adafruit_ST7796S` / `Adafruit_SSD1306` + `Adafruit_GFX_Library` |
 | `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
 | `hal_i2c` | Arduino-pico `Wire.h` |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | `Adafruit_NeoPixel` |
-| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600_driver.*`) |
-| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675_driver.*`) |
-| `hal_ds18b20` | Arduino core GPIO APIs; RP2040/RP2350 backend also uses pico SDK PIO/clock APIs (`hardware/pio.h`, `hardware/clocks.h`) |
-| `hal_external_adc` | bundled `ADS1X15` driver |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675/max6675_driver.*`) |
+| `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/onewire/onewire_driver.*`) over HAL GPIO/time |
+| `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
+| `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/ads1x15/ads1x15_driver.*`) |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
 | `hal_littlefs` | Arduino-pico `LittleFS` |
 | `hal_udp` | Arduino-pico `WiFiUDP` |
@@ -3976,6 +4031,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_pwm` | resolution config, write |
 | `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
+| `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
 | `test_hal_eeprom` | byte/int write–read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
@@ -3990,6 +4046,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
+| `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |

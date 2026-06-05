@@ -4,11 +4,83 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_can - shared Arduino-free MCP2515 driver
+
+- Replaced the bundled Arduino MCP2515 backend with a shared HAL-only driver
+  under `src/hal/impl/shared/mcp2515/`, built on JaszczurHAL SPI, GPIO,
+  timing and synchronization primitives only.
+- RP2040 and STM32G474 `hal_can` wrappers now both delegate to the same shared
+  MCP2515 register/SPI engine, preserving the proven upstream control flow for
+  reset, mode changes, bit timing, TX/RX buffer handling, masks, filters,
+  one-shot TX, wake-up, abort and error counters.
+- Added `test_mcp2515_driver` smoke coverage on the mock backend to verify the
+  shared driver performs MCP2515 reset/config traffic through HAL SPI and
+  configures the chip-select pin through HAL GPIO.
+- Added `examples/24_can_mcp2515` for RP2040 and STM32G474.
+- Removed the obsolete Arduino `drivers/MCP2515` folder. Upstream attribution
+  and LGPL notice now live in the shared driver folder instead of README.
+- Confirmed the migration with a clean full local quality-gate run: host tests,
+  Valgrind, cppcheck, clang-tidy, target static-library builds, and both
+  examples builds all pass end-to-end.
+
+### hal_onewire / hal_ds18b20 - shared OneWire driver and separated DS18B20 module
+
+- Replaced the bundled Arduino `OneWire` transport and `DallasTemperature`
+  dependency with shared Arduino-free code under
+  `src/hal/impl/shared/onewire/`, built only on JaszczurHAL GPIO, timing and
+  synchronization primitives.
+- Separated DS18B20 implementation into a dedicated `src/hal/impl/shared/ds18b20/`
+  submodule while keeping OneWire driver in `src/hal/impl/shared/onewire/`.
+  This follows the per-driver subfolder convention (digipot, gps, mcp9600, max6675, ads1x15).
+- RP2040 and STM32G474 now both use the same shared `hal_onewire`
+  implementation. `hal_ds18b20` also moved to shared code on the same
+  low-level driver, so the STM32G474 default static-library profile now
+  enables `HAL_ENABLE_DS18B20` (`HAL_ENABLE_ONEWIRE` is propagated).
+- Preserved the working OneWire behaviour: reset/presence timing, read/write
+  slots, parasite-power depower semantics, ROM select/skip, normal and
+  conditional search state machine, target-family search, CRC8 and CRC16.
+- Added PRIMASK-backed `hal_critical_section_enter/exit()` for real STM32G474
+  ARM builds so timing-sensitive 1-Wire slots can be protected without Arduino
+  `noInterrupts()` / `interrupts()`.
+- Preserved the DS18B20 flow from the existing backend: init-time address
+  probing, ROM validation, scratchpad CRC checks, resolution writes, conversion
+  deadline scheduling and cached fresh-sample semantics.
+- Added public `hal_onewire_crc16()` and `hal_onewire_check_crc16()` helpers,
+  with host test coverage in `test_hal_onewire`.
+- Enabled `examples/06_ds18b20` for STM32G474 as well as RP2040.
+- Removed obsolete Arduino `drivers/OneWire`, `drivers/DallasTemperature`,
+  `impl/arduino/hal_onewire.cpp` and `impl/arduino/hal_ds18b20.cpp`. Upstream
+  OneWire attribution and MIT notice now live in the shared driver source
+  instead of README/docs dependency inventories.
+
+### hal_external_adc - shared ADS1X15/ADS1115 driver
+
+- Replaced the bundled Arduino `ADS1X15` backend with a shared Arduino-free
+  driver (`src/hal/impl/shared/ads1x15/ads1x15_driver.*`) that uses only JaszczurHAL
+  I2C, timing and idle primitives.
+- RP2040 and STM32G474 now both use the same shared ADS1115 implementation
+  through `hal_external_adc`; the STM32G474 default static-library profile now
+  enables `HAL_ENABLE_EXTERNAL_ADC`.
+- Preserved the working Rob Tillaart ADS1X15 behaviour: ADS1013/1014/1015 and
+  ADS1113/1114/1115 variants, gain/mode/data-rate mapping, blocking and async
+  conversion flow, comparator settings, threshold registers, raw-to-voltage
+  conversion, ADS101x bit shifting and legacy pseudo-differential `0_2`/`1_2`
+  reads.
+- Added `test_ads1x15_driver` coverage for register config writes, readback,
+  ADS1015 shifting, comparator threshold endianness and I2C clock forwarding.
+- Added `examples/23_external_adc_ads1115` for RP2040 and STM32G474.
+- Removed the obsolete Arduino `drivers/ADS1X15` folder. The MIT notice and
+  upstream attribution now live in the shared driver source instead of
+  README/docs dependency inventories.
+- Reorganized shared driver files into per-driver subfolders:
+  `shared/ads1x15/`, `shared/gps/`, `shared/max6675/` and
+  `shared/mcp9600/`, matching the existing `shared/digipot/` layout.
+
 ### hal_thermocouple - shared MCP9600/MCP9601 driver
 
 - Replaced the bundled Arduino `Adafruit_MCP9600` / `Adafruit_MCP9601`
   backend with a shared Arduino-free driver
-  (`src/hal/impl/shared/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
+  (`src/hal/impl/shared/mcp9600/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
   synchronization primitives.
 - RP2040 and STM32G474 `hal_thermocouple` wrappers now both delegate MCP9600 /
   MCP9601 operations to the same shared driver. The STM32G474 default profile
@@ -47,7 +119,7 @@ All notable changes to this project will be documented in this file.
 ### hal_thermocouple / MAX6675 - shared Arduino-free driver
 
 - Replaced the Arduino `MAX6675` class backend with a shared in-tree driver
-  (`src/hal/impl/shared/max6675_driver.*`) built only on JaszczurHAL GPIO and
+  (`src/hal/impl/shared/max6675/max6675_driver.*`) built only on JaszczurHAL GPIO and
   delay primitives. The RP2040 thermocouple wrapper now delegates MAX6675 reads
   to this shared driver instead of including `Arduino.h` / `digitalRead()` /
   `digitalWrite()` through the old bundled library.
@@ -68,11 +140,11 @@ All notable changes to this project will be documented in this file.
 
 ### examples - unified CMake build system + documentation
 
-- New unified `examples/CMakeLists.txt` build system compiles all 22 examples
+- New unified `examples/CMakeLists.txt` build system compiles all 23 examples
   for RP2040 (via `arduino-cli`) and 10 examples for STM32G474 (bare-metal ELF)
   from a single CMake invocation. CMakePresets.json provides named presets for
   both backends.
-- All 22 RP2040 examples and all 10 STM32G474 examples now compile cleanly
+- All 23 RP2040 examples and all 12 STM32G474 examples now compile cleanly
   (verified end-to-end).
 - Fixed `atomic_stubs_cm4.c` preprocessor guard: changed from
   `#if defined(__arm__) || defined(__thumb__)` (matched RP2040 too, causing
@@ -119,8 +191,8 @@ All notable changes to this project will be documented in this file.
 ### hal_gps - portable NMEA engine + STM32G474 support + richer fix data
 
 - The GPS parser is now a dependency-free, in-tree NMEA engine
-  (`impl/shared/gps_nmea_parser.cpp`) wrapped by a shared facade
-  (`impl/shared/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
+  (`impl/shared/gps/gps_nmea_parser.cpp`) wrapped by a shared facade
+  (`impl/shared/gps/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
   is ported from TinyGPS++ (no longer linked, no Arduino/`millis()`
   dependency); GSA / GSV / GST decoding follows the minmea-kind GNSS parser.
   Position age is stamped via `hal_millis()` in the facade.
@@ -143,7 +215,7 @@ All notable changes to this project will be documented in this file.
   portable parser has its own host test (`test_gps_nmea_parser`) that feeds real
   sentences (computed checksums) and asserts the decoded fields and mappings.
 - NMEA numeric helpers `from_hex`, `parse_decimal`, `parse_degrees` were moved
-  from `impl/shared/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
+  from `impl/shared/gps/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
   + `utils/tools_api.h`) and covered by `test_tools` unit tests.
 
 ### hal_digipot - I2C digital potentiometers (multiplatform, opt-in)
@@ -360,11 +432,11 @@ All notable changes to this project will be documented in this file.
 - Companion fix: when `expected` matched, `hal_modem_at_send` now
   performs a short tail-drain (≤200 ms) until `\r\nOK\r\n` /
   `\r\nERROR\r\n` arrives. This prevents the trailing `OK` of payload
-  responses like `+CCLK: "…"\r\n\r\nOK\r\n` (where `expected="+CCLK:"`
+  responses like `+CCLK: "..."\r\n\r\nOK\r\n` (where `expected="+CCLK:"`
   matches before `OK`) from leaking into the next command's RX buffer.
   Regression test: `test_send_expected_drains_trailing_ok`.
 - No public API change; no driver change required (the existing
-  `expected="+CMQTT…: <ci>,0"` strings now actually wait for the URC).
+  `expected="+CMQTT...: <ci>,0"` strings now actually wait for the URC).
 
 ### hal_modem_at + hal_simcom_a76xx - watchdog-friendly long waits
 
@@ -742,23 +814,19 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - `hal/hal.h` now exposes `hal_ds18b20.h` when `HAL_ENABLE_DS18B20`
-  is not defined.
+  is defined.
 - `hal_config.h` and `src/HAL_FLAGS.txt` now document
   `HAL_ENABLE_DS18B20` and `HAL_DS18B20_MAX_INSTANCES`.
 - Host-test build registers `test_hal_ds18b20` in `tests/CMakeLists.txt`.
-- STM32 bootstrap profile now disables DS18B20 by default
-  (`HAL_ENABLE_DS18B20`) in `stm32_lib/CMakeLists.txt`.
+- STM32 bootstrap profile initially left DS18B20 off until the shared OneWire
+  backend landed.
 - `hal_timer` now exposes an alarm-pool API (`hal_timer_pool_*`) so RP2040
   projects can create dedicated pools on additional hardware alarms and scale
   logical timer count beyond the default pool.
 - RP2040 timer backend now treats `add_alarm_in_us()` return values `<= 0`
   as invalid IDs (fix for missed failure path when the SDK returns `0`).
-- RP2040 DS18B20 backend now uses PIO for 1-Wire slot timing (reset, read/write
-  slots), replacing the previous `delayMicroseconds()`-based bit timing path.
-- DS18B20 conversion wait now uses managed `hal_timer_t`
-  (`hal_timer_create/start/stop/get_state` + `set_period_us`) with
-  `hal_micros64()` deadline fallback, reducing polling overhead and removing
-  direct alarm-ID race surfaces.
+- DS18B20 conversion wait uses `hal_micros64()` deadlines in the non-blocking
+  state machine.
 - Documentation synchronized with current APIs:
   `README.md`, `JaszczurHAL_API.md`, and `src/HAL_FLAGS.txt` now reflect
   extended `hal_timer` semantics and the DS18B20 module/test surface.

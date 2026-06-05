@@ -6,10 +6,32 @@
 
 #include <stddef.h>
 #include <new>
+#include <stdint.h>
 
 struct hal_mutex_impl_t {
     volatile uint8_t locked;
 };
+
+namespace {
+#if defined(__arm__) || defined(__thumb__)
+volatile uint32_t s_critical_depth = 0u;
+uint32_t s_saved_primask = 0u;
+
+static inline uint32_t stm32_read_primask(void) {
+    uint32_t primask;
+    __asm__ volatile("MRS %0, primask" : "=r"(primask) :: "memory");
+    return primask;
+}
+
+static inline void stm32_disable_irq(void) {
+    __asm__ volatile("cpsid i" ::: "memory");
+}
+
+static inline void stm32_enable_irq(void) {
+    __asm__ volatile("cpsie i" ::: "memory");
+}
+#endif
+} // namespace
 
 static inline void hal_sync_relax(void) {
 #if defined(__arm__) || defined(__thumb__) || defined(__aarch64__)
@@ -57,11 +79,27 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
 }
 
 void hal_critical_section_enter(void) {
-    /* STM32G474 TODO: replace with PRIMASK/NVIC critical-section handling. */
+#if defined(__arm__) || defined(__thumb__)
+    const uint32_t primask = stm32_read_primask();
+    stm32_disable_irq();
+    if (s_critical_depth == 0u) {
+        s_saved_primask = primask;
+    }
+    ++s_critical_depth;
+#endif
 }
 
 void hal_critical_section_exit(void) {
-    /* STM32G474 TODO: replace with PRIMASK/NVIC critical-section handling. */
+#if defined(__arm__) || defined(__thumb__)
+    if (s_critical_depth == 0u) {
+        return;
+    }
+
+    --s_critical_depth;
+    if ((s_critical_depth == 0u) && ((s_saved_primask & 0x1u) == 0u)) {
+        stm32_enable_irq();
+    }
+#endif
 }
 
 #endif  // HAL_TARGET_IS_STM32G474

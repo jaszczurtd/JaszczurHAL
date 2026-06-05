@@ -93,6 +93,7 @@ function(_jh_add_rp2040_example NAME)
 
     add_custom_target("${_safe}_rp2040" ALL
         COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_output_dir}"
+        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_output_dir}"
         COMMAND arduino-cli compile
             --fqbn "${ARG_FQBN}"
             --build-path "${_output_dir}"
@@ -252,7 +253,7 @@ jh_example(02_debug_helper TARGETS rp2040 stm32g474)
 jh_example(03_soft_timer_table TARGETS rp2040 stm32g474)
 jh_example(04_crypto TARGETS rp2040 stm32g474)
 jh_example(05_modem_A7670E TARGETS rp2040)
-jh_example(06_ds18b20 TARGETS rp2040)
+jh_example(06_ds18b20 TARGETS rp2040 stm32g474)
 jh_example(07_gps TARGETS rp2040)
 jh_example(08_thermocouple TARGETS rp2040)
 jh_example(09_display_tft TARGETS rp2040)
@@ -269,3 +270,5 @@ jh_example(19_timer_ext TARGETS rp2040 stm32g474)
 jh_example(20_i2c_scan TARGETS rp2040 stm32g474)
 jh_example(21_adc_read TARGETS rp2040 stm32g474)
 jh_example(22_gps_uart TARGETS rp2040 stm32g474)
+jh_example(23_external_adc_ads1115 TARGETS rp2040 stm32g474)
+jh_example(24_can_mcp2515 TARGETS rp2040 stm32g474)

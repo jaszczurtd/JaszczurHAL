@@ -3,7 +3,7 @@
  * @brief GPS reader - live NMEA over a hardware UART.
  *
  * Reads a real GPS receiver through the hardware UART and prints the decoded
- * fix. Parsing is the shared portable engine (impl/shared/gps_nmea_parser +
+ * fix. Parsing is the shared portable engine (impl/shared/gps/gps_nmea_parser +
  * hal_gps_core).
  *
  * STM32G474 wiring: GPS TX -> PA10 (USART1 RX), GPS RX -> PA9 (USART1 TX,

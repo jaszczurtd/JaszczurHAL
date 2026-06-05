@@ -104,6 +104,10 @@ pieces used by at least two hardware backends. Put there only code that:
 - has identical behavior across targets,
 - can be reused without per-target `#if HAL_TARGET_IS_*` forks in that file.
 
+Shared device/engine code lives in per-driver subfolders such as
+`shared/ads1x15/`, `shared/mcp9600/`, `shared/max6675/`, `shared/gps/`, and
+`shared/digipot/`.
+
 Do not place target-specific register access, pin/peripheral bring-up, ISR glue,
 or SDK object ownership in `shared/` - those belong to backend folders.
 
@@ -112,9 +116,12 @@ See [examples/README.md](examples/README.md) for the full build system guide.
 
 ## Examples
 
-The `examples/` tree contains 22 small, focused applications that demonstrate
+The `examples/` tree contains 24 small, focused applications that demonstrate
 HAL modules. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h` - no `.ino` files, no `main()`, no `setup()`/`loop()`.
+
+The latest addition is `24_can_mcp2515`, a portable CAN example built on the
+shared HAL-only MCP2515 driver.
 
 A unified CMake build system compiles all examples for the selected backend:
 
@@ -126,7 +133,7 @@ cmake --build build_examples_rp2040
 # STM32G474 (requires arm-none-eabi-gcc)
 cmake -S examples -B build_examples_stm32 \
       -DJH_EXAMPLE_TARGET=stm32g474 \
-      -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+      -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
 cmake --build build_examples_stm32
 
 # Single example
@@ -313,7 +320,6 @@ examples, and host-test coverage.
 - cJSON/cJSON_Utils are bundled and optional via HAL_ENABLE_CJSON:
   [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
 - Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
-- [ADS1X15](https://github.com/RobTillaart/ADS1X15) - Rob Tillaart
 - [Adafruit_BusIO](https://github.com/adafruit/Adafruit_BusIO) - Adafruit Industries
 - [Adafruit_GFX_Library](https://github.com/adafruit/Adafruit-GFX-Library) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_ILI9341](https://github.com/adafruit/Adafruit_ILI9341) - Limor Fried (Ladyada) for Adafruit Industries
@@ -321,9 +327,6 @@ examples, and host-test coverage.
 - [Adafruit_SSD1306](https://github.com/adafruit/Adafruit_SSD1306) - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
 - [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_Zero_DMA_Library](https://github.com/adafruit/Adafruit_ZeroDMA) - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
-- [OneWire](https://github.com/PaulStoffregen/OneWire) - Jim Studt (original), maintained by Paul Stoffregen
-- [DallasTemperature](https://github.com/milesburton/Arduino-Temperature-Control-Library) - Miles Burton
 - [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors
-- [MCP2515](https://github.com/coryjfowler/MCP_CAN_lib) - Loovee / Seeed Technology, with contributions by Cory J. Fowler
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

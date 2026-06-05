@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-05 (MCP9600/MAX6675 and digipot shared drivers added)
+Last updated: 2026-06-05 (shared MCP2515 CAN driver added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -57,6 +57,8 @@ Nature of the implementation:
 - `HAL_ENABLE_MAX5395`
 - `HAL_ENABLE_MCP9600`
 - `HAL_ENABLE_MAX6675`
+- `HAL_ENABLE_EXTERNAL_ADC`
+- `HAL_ENABLE_CAN`
 - `HAL_ENABLE_GPS`
 
 This narrows the scope to the backend "core" and simplifies the first porting
@@ -76,14 +78,15 @@ stages.
 - The real ARM target now builds end-to-end (the `JH_STM32G474_HW` hardware
   paths compile) once the Arm toolchain is installed:
   - `./build_stm32_lib.sh --clean`
-- **Examples build system** - all 10 STM32G474-targeted examples
+- **Examples build system** - all 12 STM32G474-targeted examples
   (01_blink, 02_debug_helper, 03_soft_timer_table, 04_crypto, 14_uart,
-  17_pid_controller, 19_timer_ext, 20_i2c_scan, 21_adc_read, 22_gps_uart)
+  17_pid_controller, 19_timer_ext, 20_i2c_scan, 21_adc_read, 22_gps_uart,
+  23_external_adc_ads1115, 24_can_mcp2515)
   compile to ELF/BIN/HEX without errors using the unified CMake build:
   ```bash
   cmake -S examples -B build_examples_stm32 \
         -DJH_EXAMPLE_TARGET=stm32g474 \
-        -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+        -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
   cmake --build build_examples_stm32
   ```
 
@@ -121,18 +124,22 @@ The following modules are real, register-level backends under
   full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
   SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
   bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
+- `hal_can` - **MCP2515** via the shared HAL-only driver
+  (`impl/shared/mcp2515/mcp2515_driver.*`) over `hal_spi`, `hal_gpio`,
+  `hal_system` and `hal_sync`.
 - `hal_thermocouple` - **MCP9600/MCP9601** via the shared HAL I2C driver
-  (`impl/shared/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
-  GPIO bit-bang driver (`impl/shared/max6675_driver.*`). The same driver logic
+  (`impl/shared/mcp9600/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
+  GPIO bit-bang driver (`impl/shared/max6675/max6675_driver.*`). The same driver logic
   is used by STM32G474 and RP2040.
 - `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
 - `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
   transport).
+- `hal_sync` - spinlock mutex plus PRIMASK-backed critical sections on real
+  Cortex-M builds; host sanity builds keep critical sections as no-ops.
 
 ### Still placeholders (compile but use RAM-only state)
 - `hal_pwm` - stores values in array, no timer output.
 - `hal_timer` - slot management only, no hardware timer/IRQ.
-- `hal_sync` - no-op critical sections (single-core, no RTOS yet).
 
 ## Driver pool analysis - portability to STM32G474
 
@@ -154,8 +161,8 @@ validation, init and I/O sequences. **These already work on STM32** as long as
 the underlying bus HAL exists.
 
 **2. Vendor Arduino libraries** - in `src/hal/impl/arduino/drivers/`:
-`ADS1X15`, `Adafruit_BusIO/GFX/ILI9341/NeoPixel/SSD1306/ST7735_ST7789`,
-`DS3231`, `DallasTemperature`, `MCP2515`, `OneWire`, `PCF8563`.
+`Adafruit_BusIO/GFX/ILI9341/NeoPixel/SSD1306/ST7735_ST7789`,
+`DS3231`, `MCP2515`, `PCF8563`.
 **All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
 device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, ...), each
 guarded by `#if HAL_TARGET_IS_RP2040` and `#include`-ing `<Wire.h>`/`<SPI.h>`
@@ -174,35 +181,38 @@ SPI is no longer blocked at the bus layer. The first STM32 implementation is
 polling-based rather than DMA, but it is hardware-backed and matches the
 Arduino driver surface closely enough for MCP2515 and display-driver bring-up.
 MCP9600/MCP9601 and MAX6675 are handled separately by shared HAL-level drivers.
+ADS1X15/ADS1115 is also now handled by a shared HAL-level driver used by both
+RP2040 and STM32G474.
+OneWire and DS18B20 now follow the same shared HAL-level path over
+`hal_gpio` + `hal_time`.
 Default
 G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13; CS remains
 a normal GPIO owned by each driver.
 
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
-`can, display, ds18b20, eeprom, external_adc, i2c_slave, littlefs, mqtt,
-onewire, ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
+`display, eeprom, i2c_slave, littlefs, mqtt,
+ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
 **🟢 Easy - mirror the digipot pattern (rewrite vendor logic on `hal_i2c`):**
 - `hal_rtc` (PCF8563, DS3231) - plain I2C register access
-- `hal_external_adc` (ADS1115) - plain I2C
 
 We do not port the Adafruit/vendor libraries; we extract their register maps and
 write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
 
+`hal_external_adc` / ADS1115 has completed this path and now lives in
+`src/hal/impl/shared/ads1x15/ads1x15_driver.*`.
+
+`hal_onewire` and `hal_ds18b20` have completed this path and now live in
+`src/hal/impl/shared/onewire/`.
+
 **🟡 Ready for STM32 ports over the new SPI layer:**
-- `hal_can` (MCP2515) - SPI
 - `hal_display` (ILI9341/ST7735/ST7789 - SPI; SSD1306 - I2C or SPI)
 MAX6675 is already handled separately by the shared bit-bang HAL GPIO driver.
-The next small register-style SPI target should be an MCP2515 probe, then
-display bulk writes can decide whether DMA is worth adding.
-
-**🟡 OneWire (bit-bang + timing):**
-- `hal_ds18b20`, `hal_onewire` - OneWire relies on Arduino `digitalWrite` and
-  precise timing/IRQ. Feasible on `hal_gpio` + `hal_time`, but needs a careful
-  delay port. DallasTemperature sits on OneWire.
+The next register-style SPI target should be display bulk writes, then DMA can
+be evaluated if throughput needs it.
 
 **🟡 `hal_rgb_led`** (NeoPixel/WS2812) - 800 kHz critical timing; on STM32 this is
 a rewrite (PWM+DMA or SPI), not a library port.
@@ -217,24 +227,18 @@ a rewrite (PWM+DMA or SPI), not a library port.
 - `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
 
 ### Recommended order
-1. **Port one small hardware-SPI device next** (MCP2515 probe) to validate CS
-   timing, mode, and clock on real G474 hardware.
-2. **I2C quick wins** via the digipot pattern: rtc (PCF8563/DS3231),
-   external_adc (ADS1115).
-3. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
+1. **I2C quick win remaining** via the digipot pattern: rtc
+   (PCF8563/DS3231). ADS1115 is done.
+2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
    for TFT throughput.
-4. **OneWire** as a portable driver on `hal_gpio` + `hal_time` -> unblocks ds18b20.
-5. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
+3. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages
 1. Replace the remaining `impl/stm32g474` placeholders with real STM32 register code:
    - `hal_pwm` - needs TIM output compare / PWM mode on a general-purpose timer.
    - `hal_timer` - hardware timer alarms / periodic IRQ (TIM6/TIM7 or similar).
-   - `hal_sync` - PRIMASK/BASEPRI critical sections (trivial on single-core, but
-     needed before FreeRTOS).
 2. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
-3. Port first hardware-SPI device driver (MCP2515) to validate CS/mode/clock on real hardware.
-4. On-silicon validation on Nucleo-G474RE for all register-level backends.
-5. FreeRTOS integration (enables true `app_task1` parallelism on STM32).
-4. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC) on an STM32G474 board.
-5. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.
+3. On-silicon validation on Nucleo-G474RE for all register-level backends.
+4. FreeRTOS integration (enables true `app_task1` parallelism on STM32).
+5. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN) on an STM32G474 board.
+6. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.

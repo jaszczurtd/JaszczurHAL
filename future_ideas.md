@@ -116,7 +116,7 @@ Current caveats are compatibility-level rather than Arduino dependencies:
 
 ### Shared Arduino-free MAX6675 thermocouple driver
 
-**Status:** implemented in `src/hal/impl/shared/max6675_driver.*`.
+**Status:** implemented in `src/hal/impl/shared/max6675/max6675_driver.*`.
 
 The MAX6675 backend no longer uses the old Arduino `MAX6675` class,
 `Arduino.h`, `digitalWrite()`, `digitalRead()`, or Arduino timing calls. The
@@ -135,7 +135,7 @@ pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL SPI.
 
 ### Shared Arduino-free MCP9600/MCP9601 thermocouple driver
 
-**Status:** implemented in `src/hal/impl/shared/mcp9600_driver.*`.
+**Status:** implemented in `src/hal/impl/shared/mcp9600/mcp9600_driver.*`.
 
 The MCP9600/MCP9601 backend no longer uses the old Arduino
 `Adafruit_MCP9600` / `Adafruit_MCP9601` classes, `TwoWire`, `Wire`, or BusIO.

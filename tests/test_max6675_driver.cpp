@@ -1,5 +1,5 @@
 #include "utils/unity.h"
-#include "hal/impl/shared/max6675_driver.h"
+#include "hal/impl/shared/max6675/max6675_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 #include <math.h>

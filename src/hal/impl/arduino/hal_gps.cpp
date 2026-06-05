@@ -4,7 +4,7 @@
 #ifdef HAL_ENABLE_GPS
 
 /* RP2040 GPS backend: serial transport only. All NMEA parsing and the
- * hal_gps_* getters live in the shared engine (impl/shared/hal_gps_core.cpp);
+ * hal_gps_* getters live in the shared engine (impl/shared/gps/hal_gps_core.cpp);
  * this file just pumps received bytes into it.
  *
  * The transport is not fixed to SoftwareSerial - the receiver can be read over
@@ -16,7 +16,7 @@
 
 #include "../../hal_gps.h"
 #include "../../hal_serial.h"
-#include "../shared/hal_gps_core.h"
+#include "../shared/gps/hal_gps_core.h"
 
 #if defined(HAL_GPS_TRANSPORT_UART)
 #  define GPS_RP2040_UART 1
