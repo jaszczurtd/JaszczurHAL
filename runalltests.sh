@@ -2,7 +2,7 @@
 # =============================================================================
 # runalltests.sh
 #
-# Run the full JaszczurHAL quality-gate suite locally - same checks as CI.
+# Run the full JaszczurHAL quality-gate suite locally, including CI checks.
 # Safe to re-run. Exits non-zero on the first failure.
 #
 # Gates (in order):
@@ -11,7 +11,8 @@
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. STM32 host-compiler library build
+#   6. Target static-library builds (STM32 + RP2040)
+#   7. Examples build (RP2040 + STM32G474, via examples/CMakeLists.txt)
 #
 # Usage:
 #   ./runalltests.sh          # run everything
@@ -39,6 +40,20 @@ pass()  { echo -e "${GREEN}[PASS]${NC} $*"; }
 fail()  { echo -e "${RED}[FAIL]${NC} $*"; }
 header(){ echo -e "\n${BOLD}══════════════════════════════════════════════════════════════${NC}"; echo -e "${BOLD}  $*${NC}"; echo -e "${BOLD}══════════════════════════════════════════════════════════════${NC}"; }
 
+run_logged() {
+    local log_file="$1"
+    shift
+
+    if ! "$@" >"${log_file}" 2>&1; then
+        fail "Command failed: $*"
+        if [[ -s "${log_file}" ]]; then
+            echo ""
+            tail -80 "${log_file}"
+        fi
+        exit 1
+    fi
+}
+
 # ── Args ─────────────────────────────────────────────────────────────────────
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
@@ -47,7 +62,7 @@ while [[ $# -gt 0 ]]; do
         -j|--jobs) JOBS="$2"; shift 2 ;;
         -j*)       JOBS="${1#-j}"; shift ;;
         -h|--help)
-            head -22 "$0" | tail -19
+            awk 'NR >= 4 { if ($0 ~ /^# =/) exit; print }' "$0"
             exit 0
             ;;
         *) echo "Unknown option: $1"; exit 1 ;;
@@ -60,9 +75,14 @@ SECONDS=0
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 1/6: Checking required tools"
+header "Gate 1/7: Checking required tools"
 
-REQUIRED_TOOLS=(cmake g++ gcc make valgrind clang-tidy cppcheck run-clang-tidy)
+REQUIRED_TOOLS=(
+    cmake g++ gcc make
+    valgrind clang-tidy cppcheck run-clang-tidy
+    arduino-cli
+    arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib arm-none-eabi-objcopy
+)
 missing=0
 for tool in "${REQUIRED_TOOLS[@]}"; do
     if command -v "$tool" >/dev/null 2>&1; then
@@ -80,10 +100,18 @@ if [[ "$missing" -ne 0 ]]; then
 fi
 pass "All required tools present."
 
+rp2040_core="$(arduino-cli core list 2>/dev/null | grep -m1 -E '^rp2040:rp2040([[:space:]]|$)' || true)"
+if [[ -z "${rp2040_core}" ]]; then
+    fail "Arduino RP2040 core is not installed. Run ./runmefirst.sh first."
+    exit 1
+fi
+printf '  %-20s %s\n' "rp2040:rp2040" "${rp2040_core}"
+pass "Arduino RP2040 core present."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 2: Host unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 2/6: Host unit tests (build + ctest)"
+header "Gate 2/7: Host unit tests (build + ctest)"
 
 BUILD_DIR="${SCRIPT_DIR}/build_test"
 rm -rf "${BUILD_DIR}"
@@ -102,7 +130,7 @@ pass "All unit tests passed."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 3: Valgrind memcheck
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 3/6: Memory safety (Valgrind memcheck)"
+header "Gate 3/7: Memory safety (Valgrind memcheck)"
 
 info "Running tests under Valgrind..."
 ctest --test-dir "${BUILD_DIR}" -T memcheck --output-on-failure 2>&1 \
@@ -123,7 +151,7 @@ pass "No memory defects found."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 4: cppcheck (all own code)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 4/6: Static analysis - cppcheck"
+header "Gate 4/7: Static analysis - cppcheck"
 
 info "Scanning src/ (vendored code excluded)..."
 cppcheck --enable=warning,performance,portability \
@@ -140,7 +168,7 @@ pass "cppcheck: no issues found."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 5: clang-tidy (host + stm32)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 5/6: Static analysis - clang-tidy"
+header "Gate 5/7: Static analysis - clang-tidy"
 
 # Generate STM32 compile database
 BUILD_STM32="${SCRIPT_DIR}/build_stm32_host"
@@ -168,11 +196,11 @@ fi
 pass "clang-tidy: no issues found."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 6: STM32 host-compiler library build
+# GATE 6: Target static-library builds
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 6/6: STM32 host-compiler library build"
+header "Gate 6/7: Target static-library builds"
 
-info "Building libJaszczurHAL.a (STM32G474 backend, host compiler)..."
+info "Verifying libJaszczurHAL.a (STM32G474 backend, host compiler)..."
 # Already built above in gate 5 - just verify artifact exists
 if [[ -f "${BUILD_STM32}/libJaszczurHAL.a" ]]; then
     SIZE=$(stat --printf="%s" "${BUILD_STM32}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_STM32}/libJaszczurHAL.a" 2>/dev/null || echo "?")
@@ -181,6 +209,48 @@ else
     fail "libJaszczurHAL.a not found!"
     exit 1
 fi
+
+BUILD_RP2040="${SCRIPT_DIR}/build_arduino"
+info "Building libJaszczurHAL.a (RP2040 Arduino backend)..."
+run_logged /tmp/jh_rp2040_lib_build.log \
+    "${SCRIPT_DIR}/build_arduino_lib.sh" --clean --jobs "${JOBS}"
+
+if [[ -f "${BUILD_RP2040}/libJaszczurHAL.a" ]]; then
+    SIZE=$(stat --printf="%s" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || echo "?")
+    pass "RP2040 libJaszczurHAL.a built successfully (${SIZE} bytes)"
+else
+    fail "RP2040 libJaszczurHAL.a not found!"
+    exit 1
+fi
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GATE 7: Examples build
+# ═══════════════════════════════════════════════════════════════════════════════
+header "Gate 7/7: Examples build (RP2040 + STM32G474)"
+
+BUILD_EXAMPLES_RP2040="${SCRIPT_DIR}/build_examples_rp2040"
+BUILD_EXAMPLES_STM32="${SCRIPT_DIR}/build_examples_stm32g474"
+rm -rf "${BUILD_EXAMPLES_RP2040}" "${BUILD_EXAMPLES_STM32}"
+
+info "Configuring RP2040 examples..."
+run_logged /tmp/jh_examples_rp2040_configure.log \
+    cmake -S examples -B "${BUILD_EXAMPLES_RP2040}" -DJH_EXAMPLE_TARGET=rp2040
+
+info "Building RP2040 examples supported by examples/CMakeLists.txt..."
+run_logged /tmp/jh_examples_rp2040_build.log \
+    cmake --build "${BUILD_EXAMPLES_RP2040}" --parallel "${JOBS}"
+pass "RP2040 examples built successfully."
+
+info "Configuring STM32G474 examples..."
+run_logged /tmp/jh_examples_stm32g474_configure.log \
+    cmake -S examples -B "${BUILD_EXAMPLES_STM32}" \
+        -DJH_EXAMPLE_TARGET=stm32g474 \
+        -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake"
+
+info "Building STM32G474 examples supported by examples/CMakeLists.txt..."
+run_logged /tmp/jh_examples_stm32g474_build.log \
+    cmake --build "${BUILD_EXAMPLES_STM32}" --parallel "${JOBS}"
+pass "STM32G474 examples built successfully."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Summary
@@ -194,7 +264,8 @@ echo "  Unit tests:       PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
-echo "  STM32 build:      PASS"
+echo "  Target builds:    PASS (STM32 + RP2040)"
+echo "  Examples builds:  PASS (RP2040 + STM32G474)"
 echo ""
 echo "  Total time: ${SECONDS}s"
 echo ""

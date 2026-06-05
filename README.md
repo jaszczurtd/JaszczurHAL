@@ -88,7 +88,7 @@ src/
         drivers/
           stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
   utils/                   # helper modules and bundled optional utilities
-examples/                 # ready-to-run rp2040/stm32 examples
+examples/                  # ready-to-run rp2040/stm32 examples
 tests/                     # host unit tests (CMake + Unity)
 vscode-templates/          # ready-to-use VS Code project configurations
   windows/                 # Windows template (Python + Arduino CLI)
