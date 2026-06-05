@@ -16,16 +16,28 @@ hal_mutex_t hal_mutex_create(void) {
 
 void hal_mutex_lock(hal_mutex_t mutex) {
     HAL_ASSERT(mutex != NULL, "hal_mutex_lock: mutex is NULL");
+    if (mutex == NULL) {
+        return;
+    }
+
     mutex->mtx.lock();
 }
 
 void hal_mutex_unlock(hal_mutex_t mutex) {
     HAL_ASSERT(mutex != NULL, "hal_mutex_unlock: mutex is NULL");
+    if (mutex == NULL) {
+        return;
+    }
+
     mutex->mtx.unlock();
 }
 
 void hal_mutex_destroy(hal_mutex_t mutex) {
     HAL_ASSERT(mutex != NULL, "hal_mutex_destroy: mutex is NULL");
+    if (mutex == NULL) {
+        return;
+    }
+
     delete mutex;
 }
 

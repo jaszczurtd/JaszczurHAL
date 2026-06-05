@@ -805,10 +805,10 @@ const hal_config_t* hal_get_config(void);
  * @def HAL_ASSERT(cond, msg)
  * Lightweight assert for HAL resource exhaustion.
  *
- * When the condition is false the macro prints @p msg through the
- * serial debug channel.  On the real target it then enters an
- * infinite loop so the watchdog can reset the system; in mock/test
- * builds it calls @c abort().
+ * When the condition is false the macro calls @c hal_assert_fail(), whose
+ * implementation is selected by the canonical HAL target. Hardware builds
+ * print @p msg through the target debug channel and enter an infinite loop
+ * so the watchdog can reset the system; mock/test builds call @c abort().
  *
  * Define @c HAL_DISABLE_ASSERTS before including this header (or via
  * a compiler flag) to compile all HAL_ASSERTs to no-ops, removing
@@ -824,28 +824,31 @@ const hal_config_t* hal_get_config(void);
 
 #else /* asserts enabled (default) */
 
-#ifdef ARDUINO
-  /* Real target - print and hang (watchdog will fire).                */
-  #include <Arduino.h>
-  #define HAL_ASSERT(cond, msg)                                       \
-      do {                                                            \
-          if (!(cond)) {                                              \
-              Serial.print("HAL ASSERT FAIL: ");                      \
-              Serial.println(msg);                                    \
-              for (;;) { /* let watchdog bite */ }                     \
-          }                                                           \
-      } while (0)
-#else
-  /* Mock / hosted build - print to stderr and abort.                  */
-  #include <stdio.h>
-  #include <stdlib.h>
-  #define HAL_ASSERT(cond, msg)                                       \
-      do {                                                            \
-          if (!(cond)) {                                              \
-              fprintf(stderr, "HAL ASSERT FAIL: %s\n", (msg));        \
-              abort();                                                \
-          }                                                           \
-      } while (0)
+#ifndef JH_HAL_NORETURN
+#  if defined(__GNUC__) || defined(__clang__)
+#    define JH_HAL_NORETURN __attribute__((noreturn))
+#  elif defined(_MSC_VER)
+#    define JH_HAL_NORETURN __declspec(noreturn)
+#  else
+#    define JH_HAL_NORETURN
+#  endif
 #endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+JH_HAL_NORETURN void hal_assert_fail(const char *msg);
+
+#ifdef __cplusplus
+}
+#endif
+
+#define HAL_ASSERT(cond, msg)                                         \
+    do {                                                              \
+        if (!(cond)) {                                                \
+            hal_assert_fail((msg));                                   \
+        }                                                             \
+    } while (0)
 
 #endif /* HAL_DISABLE_ASSERTS */

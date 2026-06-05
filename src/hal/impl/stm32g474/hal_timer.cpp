@@ -4,6 +4,8 @@
 #include "../../hal_timer.h"
 #include "../../hal_config.h"
 
+#include <stddef.h>
+
 #ifndef HAL_TIMER_MAX_ALARMS
 #define HAL_TIMER_MAX_ALARMS 16
 #endif
