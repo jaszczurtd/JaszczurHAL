@@ -7,7 +7,7 @@ compiles all examples for a selected backend. Two backends are supported:
 
 | Backend | Toolchain | Method |
 |---------|-----------|--------|
-| **RP2040** | `arduino-cli` + `rp2040:rp2040` core | Auto-generates an `.ino` wrapper, symlinks sources, invokes `arduino-cli compile` |
+| **RP2040** | `arduino-cli` + `rp2040:rp2040` core | Auto-generates a single-core `.ino` wrapper, symlinks sources, invokes `arduino-cli compile` |
 | **STM32G474** | `arm-none-eabi-gcc` | Builds a bare-metal ELF with linker script, startup files, and all HAL sources |
 
 ### Requirements
@@ -68,7 +68,7 @@ Each example follows the same portable layout:
 ```
 NN_example_name/
 ├── app.c (or app.cpp)          ← application logic
-├── hal_project_config.h        ← feature flags + entry-point opt-in
+├── hal_project_config.h        ← feature flags + backend/module config
 └── .vscode/                    ← (optional) VS Code direct-build tasks
 ```
 
@@ -77,9 +77,8 @@ developer. The build system handles all platform boilerplate.
 
 ## Entry-Point Contract (`hal_app.h`)
 
-JaszczurHAL provides a portable entry-point mechanism. When
-`HAL_PROVIDE_APP_ENTRY` is defined, the library supplies the platform-specific
-entry point and calls your application through three functions:
+Examples expose portable application functions and let the selected build
+backend decide how to enter them:
 
 | Function | Role | Required |
 |----------|------|----------|
@@ -89,11 +88,25 @@ entry point and calls your application through three functions:
 
 ### Backend mapping
 
-| Backend | `app_start()` | `app_task0()` | `app_task1()` |
-|---------|---------------|---------------|---------------|
-| RP2040 (arduino-pico) | `setup()` | `loop()` (core 0) | `loop1()` (core 1, true parallelism) |
-| STM32G474 (bare-metal) | Before super-loop | Super-loop body | Cooperative, same loop (pending FreeRTOS) |
-| Mock (host) | Before super-loop | Super-loop body | Cooperative, same loop |
+| Backend | Entry implementation | `app_start()` | `app_task0()` | `app_task1()` |
+|---------|----------------------|---------------|---------------|---------------|
+| RP2040 examples (arduino-pico) | CMake-generated `.ino` | `setup()` | `loop()` (core 0) | Not called by default |
+| STM32G474 examples (bare-metal) | `HAL_PROVIDE_APP_ENTRY` from CMake | Before super-loop | Super-loop body | Cooperative, same loop (pending FreeRTOS) |
+| Mock/host apps | `HAL_PROVIDE_APP_ENTRY` when requested | Before super-loop | Super-loop body | Cooperative, same loop |
+
+### RP2040 `loop1()` caution
+
+On arduino-pico, defining `loop1()` is not a harmless placeholder: the core
+starts RP2040 core 1 whenever `setup1()` or `loop1()` is linked. The
+library-provided entry shim emits `loop1()` when `HAL_PROVIDE_APP_ENTRY` is
+defined, even if `app_task1()` only resolves to the weak empty default.
+
+That can silently change an existing single-core sketch into a dual-core
+program and has been seen as repeated USB disconnect/reconnect or reset-like
+behavior after upload. For RP2040 examples, prefer the generated `.ino` wrapper
+that calls only `app_start()` and `app_task0()`. Use `HAL_PROVIDE_APP_ENTRY` on
+RP2040 only when the application intentionally wants the `app_task1()` /
+`loop1()` core-1 path.
 
 ### Minimal application skeleton
 
@@ -123,8 +136,8 @@ void app_task0(void) {
 ```c
 #pragma once
 
-/* Enable the library-provided entry point (setup/loop or main). */
-#define HAL_PROVIDE_APP_ENTRY
+/* Entry point is selected by the build system:
+ * RP2040 generates setup()/loop(); STM32 defines HAL_PROVIDE_APP_ENTRY. */
 
 /* Enable additional HAL modules as needed: */
 // #define HAL_ENABLE_GPS
@@ -132,8 +145,8 @@ void app_task0(void) {
 // #define HAL_ENABLE_I2C
 ```
 
-That's it - no `main()`, no `.ino`. The same `app.c` compiles and runs on both
-RP2040 and STM32G474 without changes.
+That's it - no hand-written `main()`, no hand-written `.ino`. The same `app.c`
+compiles and runs on both RP2040 and STM32G474 without changes.
 
 ## Platform-Specific Pin Selection
 
