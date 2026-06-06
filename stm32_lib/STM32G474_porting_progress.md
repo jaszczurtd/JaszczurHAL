@@ -127,6 +127,15 @@ The following modules are real, register-level backends under
 - `hal_can` - **MCP2515** via the shared HAL-only driver
   (`impl/shared/mcp2515/mcp2515_driver.*`) over `hal_spi`, `hal_gpio`,
   `hal_system` and `hal_sync`.
+- `hal_display` - **ILI9341** plus **ST7735/ST7789/ST7796S** via shared
+  HAL-only SPI/GPIO drivers (`impl/shared/display/ili9341_driver.*`,
+  `impl/shared/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C
+  driver (`impl/shared/display/ssd1306_driver.*`). Rendering (geometry, text,
+  bitmaps) runs through the portable GFX engine (`impl/shared/display/jh_gfx.*`).
+  The whole stack lives in one shared `impl/shared/display/hal_display.cpp`
+  used by both STM32G474 and RP2040. Init, rotation, inversion, fill, bitmap
+  writes, geometry and text rendering are present; DMA/bulk-write optimization
+  remains future work.
 - `hal_thermocouple` - **MCP9600/MCP9601** via the shared HAL I2C driver
   (`impl/shared/mcp9600/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
   GPIO bit-bang driver (`impl/shared/max6675/max6675_driver.*`). The same driver logic
@@ -161,8 +170,7 @@ validation, init and I/O sequences. **These already work on STM32** as long as
 the underlying bus HAL exists.
 
 **2. Vendor Arduino libraries** - in `src/hal/impl/arduino/drivers/`:
-`Adafruit_BusIO/GFX/ILI9341/NeoPixel/SSD1306/ST7735_ST7789`,
-`DS3231`, `MCP2515`, `PCF8563`.
+`Adafruit_NeoPixel`, `DS3231`, `PCF8563`.
 **All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
 device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, ...), each
 guarded by `#if HAL_TARGET_IS_RP2040` and `#include`-ing `<Wire.h>`/`<SPI.h>`
@@ -191,7 +199,7 @@ a normal GPIO owned by each driver.
 
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
-`display, eeprom, i2c_slave, littlefs, mqtt,
+`eeprom, i2c_slave, littlefs, mqtt,
 ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
@@ -208,11 +216,11 @@ write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
 `hal_onewire` and `hal_ds18b20` have completed this path and now live in
 `src/hal/impl/shared/onewire/`.
 
-**🟡 Ready for STM32 ports over the new SPI layer:**
-- `hal_display` (ILI9341/ST7735/ST7789 - SPI; SSD1306 - I2C or SPI)
-MAX6675 is already handled separately by the shared bit-bang HAL GPIO driver.
-The next register-style SPI target should be display bulk writes, then DMA can
-be evaluated if throughput needs it.
+`hal_display` has completed this path: ILI9341, ST7735/ST7789/ST7796S (SPI) and
+SSD1306 (I2C) now share one HAL-only stack under `src/hal/impl/shared/display/`,
+used identically by STM32G474 and RP2040. MAX6675 is handled separately by the
+shared bit-bang HAL GPIO driver. The remaining display work is a bulk-write/DMA
+evaluation if TFT throughput needs it.
 
 **🟡 `hal_rgb_led`** (NeoPixel/WS2812) - 800 kHz critical timing; on STM32 this is
 a rewrite (PWM+DMA or SPI), not a library port.

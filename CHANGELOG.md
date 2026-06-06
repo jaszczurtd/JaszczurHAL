@@ -4,6 +4,38 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_display - shared Arduino-free display stack
+
+- Added `src/hal/impl/shared/display/jh_gfx.{h,cpp}` — a portable graphics
+  engine providing geometry primitives (line, circle, triangle, rounded rect),
+  bitmap rendering, and full text layout with proportional font support.
+  The rendering algorithms are adapted from the Adafruit GFX Library (BSD-2-Clause)
+  with all platform-specific dependencies removed.
+- Added `jh_gfx_font.h` (GFXfont/GFXglyph structs), `jh_gfx_glcdfont.h`
+  (built-in 5x7 font), and `shared/display/Fonts/` (proportional fonts) as
+  self-contained data headers usable by any backend.
+- Added a shared SSD1306 OLED driver (`shared/display/ssd1306_driver.{h,cpp}`)
+  built on the HAL I2C bus; rendering is delegated to the GFX engine via an
+  in-RAM framebuffer flushed by `hal_display_flush()`.
+- Replaced the two per-backend `hal_display.cpp` implementations with a single
+  shared `shared/display/hal_display.cpp`. Both RP2040 and STM32G474 now drive
+  ILI9341 / ST7735 / ST7789 / ST7796S (over the shared SPI/GPIO panel drivers)
+  and SSD1306 (over the shared I2C driver) through the same code path — no
+  Arduino dependencies remain in the display stack.
+- SSD1306 is now supported on STM32G474 (previously stubbed out).
+- Removed the vendored Adafruit display libraries from
+  `src/hal/impl/arduino/drivers/`: `Adafruit_GFX_Library`, `Adafruit_ILI9341`,
+  `Adafruit_ST7735_and_ST7789_Library`, `Adafruit_SSD1306`, and the now-unused
+  `Adafruit_BusIO`.
+- `HAL_ENABLE_SSD1306` now propagates `HAL_ENABLE_I2C`.
+- Geometry/text tests migrated from the vendored Adafruit_GFX_Library to the
+  shared `jh_gfx.cpp` and renamed `test_jh_gfx_geometry`; no Arduino stubs
+  required. Added `test_ssd1306_driver` alongside the existing
+  `test_ili9341_driver` and `test_st77xx_driver`.
+- Example `09_display_tft` now targets both RP2040 and STM32G474; added
+  `25_display_oled` (SSD1306) targeting both backends.
+- Removed `tests/arduino_gfx_stubs/` directory (no longer needed).
+
 ### hal_can - shared Arduino-free MCP2515 driver
 
 - Replaced the bundled Arduino MCP2515 backend with a shared HAL-only driver

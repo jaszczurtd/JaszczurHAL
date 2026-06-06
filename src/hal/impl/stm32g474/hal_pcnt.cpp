@@ -38,6 +38,9 @@ bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge) {
         return false;
     }
     (void)pin;   /* fixed to TIM2_CH1 = PA0 for channel 0 */
+#ifndef JH_STM32G474_HW
+    (void)edge;
+#endif
 #ifdef JH_STM32G474_HW
     /* Clock GPIOA + TIM2. */
     RCC_AHB2ENR  |= RCC_AHB2ENR_GPIOAEN;
