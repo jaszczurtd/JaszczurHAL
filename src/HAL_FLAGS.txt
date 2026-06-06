@@ -136,11 +136,16 @@ Display
   HAL_ENABLE_TFT
     SPI TFT family fasada. Requires at least one of the four drivers
     below. Propagates: DISPLAY, SPI.
-  HAL_ENABLE_ILI9341       ILI9341 driver. Propagates: TFT, DISPLAY, SPI.
-  HAL_ENABLE_ST7789        ST7789  driver. Propagates: TFT, DISPLAY, SPI.
-  HAL_ENABLE_ST7735        ST7735  driver. Propagates: TFT, DISPLAY, SPI.
-  HAL_ENABLE_ST7796S       ST7796S driver. Propagates: TFT, DISPLAY, SPI.
-  HAL_ENABLE_SSD1306       SSD1306 OLED.   Propagates: DISPLAY.
+  HAL_ENABLE_ILI9341       ILI9341 driver over the shared HAL SPI/GPIO core
+                           and GFX engine. Propagates: TFT, DISPLAY, SPI.
+  HAL_ENABLE_ST7789        ST7789  driver over the shared ST77xx HAL SPI/GPIO
+                           core and GFX engine. Propagates: TFT, DISPLAY, SPI.
+  HAL_ENABLE_ST7735        ST7735  driver over the shared ST77xx HAL SPI/GPIO
+                           core and GFX engine. Propagates: TFT, DISPLAY, SPI.
+  HAL_ENABLE_ST7796S       ST7796S driver over the shared ST77xx HAL SPI/GPIO
+                           core and GFX engine. Propagates: TFT, DISPLAY, SPI.
+  HAL_ENABLE_SSD1306       SSD1306 OLED over the shared HAL I2C driver and GFX
+                           engine. Propagates: DISPLAY, I2C.
 
 Crypto / bundled libs
   HAL_ENABLE_CRYPTO

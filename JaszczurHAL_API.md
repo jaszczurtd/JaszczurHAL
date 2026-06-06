@@ -153,13 +153,13 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
-| `HAL_ENABLE_TFT` | `hal_display.h` | `hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
-| `HAL_ENABLE_ILI9341` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ILI9341` (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7789` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7789` (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7735` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7735` (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7796S` | `hal_display.h` | `hal_display.cpp` | `Adafruit_ST7796S` (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_SSD1306` | `hal_display.h` | `hal_display.cpp` | `Adafruit_SSD1306` (propagates DISPLAY) |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
+| `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
+| `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/display/ili9341_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/display/ssd1306_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
@@ -194,7 +194,7 @@ HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_CAN         -> HAL_ENABLE_SPI
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
-HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
+HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 ```
 
 Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,
@@ -341,20 +341,18 @@ Both are integrated as HAL-internal implementation detail (not public API).
 
 | Driver folder | HAL usage | Upstream author(s) | License | License path in repo |
 |---|---|---|---|---|
-| `Adafruit_BusIO` | display transport layer | Adafruit Industries | MIT | `src/hal/impl/arduino/drivers/Adafruit_BusIO/LICENSE` |
-| `Adafruit_GFX_Library` | display base classes/fonts | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_GFX_Library/license.txt` |
-| `Adafruit_ILI9341` | TFT backend (`HAL_DISPLAY_ILI9341`) | Limor Fried (Ladyada) | license notice in sources (BSD) + README note (MIT) | `src/hal/impl/arduino/drivers/Adafruit_ILI9341/Adafruit_ILI9341.h` and `src/hal/impl/arduino/drivers/Adafruit_ILI9341/README.md` |
+| GFX engine (ported) | `hal_display` rendering (geometry, text, bitmaps) ported into `impl/shared/display/jh_gfx.*` | Limor Fried (Ladyada) + contributors (Adafruit GFX) | BSD-2-Clause (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/display/jh_gfx.h` |
+| ILI9341 driver (ported) | TFT backend (`HAL_DISPLAY_ILI9341`) ported into `impl/shared/display/ili9341_driver.*` | Limor Fried (Ladyada) (Adafruit ILI9341) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ili9341_driver.h` |
+| ST77xx driver (ported) | ST7735/ST7789/ST7796S backends ported into `impl/shared/display/st77xx_driver.*` | Limor Fried (Ladyada) (Adafruit ST7735/ST7789) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/st77xx_driver.h` |
+| SSD1306 driver (ported) | OLED backend (`HAL_ENABLE_SSD1306`) ported into `impl/shared/display/ssd1306_driver.*` | Limor Fried (Ladyada) + contributors (Adafruit SSD1306) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ssd1306_driver.h` |
 | `Adafruit_NeoPixel` | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors | LGPL | `src/hal/impl/arduino/drivers/Adafruit_NeoPixel/COPYING` |
-| `Adafruit_SSD1306` | OLED backend (`HAL_ENABLE_SSD1306`) | Limor Fried (Ladyada) + contributors | BSD | `src/hal/impl/arduino/drivers/Adafruit_SSD1306/license.txt` |
-| `Adafruit_ST7735_and_ST7789_Library` | ST7735/ST7789/ST7796S backends | Limor Fried (Ladyada) | MIT | `src/hal/impl/arduino/drivers/Adafruit_ST7735_and_ST7789_Library/README.txt` |
-| `Adafruit_Zero_DMA_Library` | SPI TFT DMA path (`Adafruit_SPITFT`) | Phil "PaintYourDragon" Burgess | MIT (+ ASF-derived `utility/dma.h`) | `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/LICENSE` and `src/hal/impl/arduino/drivers/Adafruit_Zero_DMA_Library/utility/dma.h` |
 | `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in sources + repository LICENSE | `src/hal/impl/arduino/drivers/DS3231/DS3231.h`, `src/hal/impl/arduino/drivers/DS3231/DS3231.cpp`, `src/hal/impl/arduino/drivers/DS3231/LICENSE` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/mcp2515/license.txt` and `src/hal/impl/shared/mcp2515/mcp2515_driver.h` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
 | TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps/gps_nmea_parser.cpp` |
 
-Note: `Adafruit_GFX_Library/Fonts/` includes additional per-font notices in
+Note: `impl/shared/display/Fonts/` includes additional per-font notices in
 font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 
 ### Integration changes and rationale
@@ -363,11 +361,11 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 |---|---|---|
 | Include wiring | HAL modules include bundled dependencies from local `drivers/` and `frameworks/` paths; intra-module includes were rewired to local relative paths. | Keeps third-party code encapsulated inside HAL internals and avoids global include namespace leaks. |
 | Conditional compilation | Driver `.cpp` files are wrapped with module-level `HAL_ENABLE_*` guards. | Disabled-by-default modules remove both HAL wrappers and third-party backend code from the build. |
-| SPI synchronization | Drivers using SPI transactions now integrate `hal_spi_lock`/`hal_spi_unlock` where needed (CAN, BusIO SPI, SPITFT path). | Prevents cross-thread/cross-core SPI transaction interleaving. |
+| SPI synchronization | Drivers using SPI transactions now integrate `hal_spi_lock`/`hal_spi_unlock` where needed (CAN, shared TFT panel drivers). | Prevents cross-thread/cross-core SPI transaction interleaving. |
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed Wire/Wire1 transactions and improves determinism under concurrency. |
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Wire1 support | HAL I2C APIs and driver adapters map `TwoWire*` to bus index 0/1 and support `Wire1` when present. | Allows second controller usage without bypassing HAL thread-safety. |
-| ZeroDMA bundling | `Adafruit_SPITFT` now references bundled `Adafruit_Zero_DMA_Library`; ZeroDMA code is display/TFT-guarded. | Keeps display DMA path self-contained and consistent with HAL feature flags. |
+| Shared display stack | The vendored Adafruit GFX/ILI9341/ST77xx/SSD1306/BusIO libraries were replaced by a portable in-tree display stack (`impl/shared/display/`) built only on HAL SPI/I2C/GPIO. | One Arduino-free implementation drives every backend (RP2040, STM32G474) identically and compiles out when the display module is disabled. |
 | Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
 | WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
@@ -1707,7 +1705,7 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
 // Configure dimensions, rotation, colour order. Must be called after init().
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
-// ILI9341 only: re-send extended register-init sequence (post power-on glitch fix).
+// Re-send backend register-init sequence when the selected driver supports it.
 void hal_display_soft_init(int delay_ms);
 
 bool hal_display_set_rotation(uint8_t r);
@@ -1770,9 +1768,10 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
-**impl/arduino:** Adafruit driver selected by compile-time define + `Adafruit_GFX` + `Adafruit_SSD1306`. Fonts: `FreeSansBold9pt7b`, `FreeSerif9pt7b`.
+**impl/arduino:** Adafruit driver selected by compile-time define + `Adafruit_GFX` + `Adafruit_SSD1306`. ILI9341 and ST77xx soft-init paths use shared init command tables. Fonts: `FreeSansBold9pt7b`, `FreeSerif9pt7b`.
+**impl/stm32g474:** ILI9341 and ST77xx use shared HAL SPI/GPIO drivers for init, rotation, inversion, fills, bitmap writes, and primitive geometry. Text rendering and SSD1306 display backends are not implemented yet.
 **impl/.mock:** deterministic host mock with inspectable state for tests.
-**Thread safety:** Arduino backend: thread-safe and multicore-safe. An internal `hal_mutex_t` serializes all display operations automatically. Mock backend is unsynchronized and intended for single-threaded tests.
+**Thread safety:** Arduino and STM32G474 backends serialize display operations with an internal `hal_mutex_t`. Mock backend is unsynchronized and intended for single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -3958,7 +3957,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
-| `hal_display` | `Adafruit_ILI9341` / `Adafruit_ST7789` / `Adafruit_ST7735` / `Adafruit_ST7796S` / `Adafruit_SSD1306` + `Adafruit_GFX_Library` |
+| `hal_display` | RP2040: Adafruit TFT/OLED drivers + `Adafruit_GFX_Library`; STM32G474 TFT: shared HAL SPI/GPIO cores (`impl/shared/display/ili9341_driver.*`, `st77xx_driver.*`) |
 | `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
 | `hal_i2c` | Arduino-pico `Wire.h` |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |

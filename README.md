@@ -319,14 +319,16 @@ examples, and host-test coverage.
   [ThrowTheSwitch/Unity](https://github.com/ThrowTheSwitch/Unity)
 - cJSON/cJSON_Utils are bundled and optional via HAL_ENABLE_CJSON:
   [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
+- The shared display stack (`src/hal/impl/shared/display/`) is a portable,
+  HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
+  algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
+  and the panel drivers (`ili9341_driver.*`, `st77xx_driver.*`,
+  `ssd1306_driver.*`) adapt the controller command sequences from the
+  corresponding Adafruit ILI9341 / ST7735-ST7789 / SSD1306 libraries by
+  Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
+  headers for the per-module attribution.
 - Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
-- [Adafruit_BusIO](https://github.com/adafruit/Adafruit_BusIO) - Adafruit Industries
-- [Adafruit_GFX_Library](https://github.com/adafruit/Adafruit-GFX-Library) - Limor Fried (Ladyada) for Adafruit Industries
-- [Adafruit_ILI9341](https://github.com/adafruit/Adafruit_ILI9341) - Limor Fried (Ladyada) for Adafruit Industries
 - [Adafruit_NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel) - Phil "Paint Your Dragon" Burgess (with contributions by PJRC and Michael Miller)
-- [Adafruit_SSD1306](https://github.com/adafruit/Adafruit_SSD1306) - Limor Fried (Ladyada), with contributions by Michael Gregg and Andrew Canaday
-- [Adafruit_ST7735_and_ST7789_Library](https://github.com/adafruit/Adafruit-ST7735-Library) - Limor Fried (Ladyada) for Adafruit Industries
-- [Adafruit_Zero_DMA_Library](https://github.com/adafruit/Adafruit_ZeroDMA) - Phil "PaintYourDragon" Burgess for Adafruit Industries (with ASF-derived parts from Atmel Corporation)
 - [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

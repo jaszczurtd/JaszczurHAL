@@ -26,6 +26,38 @@ add_executable(test_ads1x15_driver
 )
 target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
+add_executable(test_ili9341_driver
+    test_ili9341_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/ili9341_driver.cpp
+)
+target_link_libraries(test_ili9341_driver PRIVATE hal_mock)
+add_test(NAME test_ili9341_driver COMMAND test_ili9341_driver)
+add_executable(test_st77xx_driver
+    test_st77xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/st77xx_driver.cpp
+)
+target_compile_definitions(test_st77xx_driver PRIVATE
+    HAL_ENABLE_ST7735
+    HAL_ENABLE_ST7789
+    HAL_ENABLE_ST7796S
+)
+target_link_libraries(test_st77xx_driver PRIVATE hal_mock)
+add_test(NAME test_st77xx_driver COMMAND test_st77xx_driver)
+add_executable(test_ssd1306_driver
+    test_ssd1306_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/ssd1306_driver.cpp
+)
+target_link_libraries(test_ssd1306_driver PRIVATE hal_mock)
+add_test(NAME test_ssd1306_driver COMMAND test_ssd1306_driver)
+add_executable(test_jh_gfx_geometry
+    test_jh_gfx_geometry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/jh_gfx.cpp
+)
+target_include_directories(test_jh_gfx_geometry BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display
+)
+target_link_libraries(test_jh_gfx_geometry PRIVATE hal_mock)
+add_test(NAME test_jh_gfx_geometry COMMAND test_jh_gfx_geometry)
 add_executable(test_mcp2515_driver
     test_mcp2515_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp2515/mcp2515_driver.cpp

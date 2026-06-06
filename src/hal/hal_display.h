@@ -123,7 +123,7 @@ extern "C" {
 /* ---- Display orientation / mode ----------------------------------------- */
 
 /*
- * Rotation values accepted by Adafruit_GFX::setRotation().
+ * Rotation values accepted by the shared GFX engine (JHGfx::setRotation()).
  *
  * 0   : native orientation
  * 90  : quarter-turn clockwise
@@ -213,8 +213,9 @@ void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
  * @param height      Display height in pixels (typically 32 or 64).
  * @param i2c_addr    7-bit I2C address (for example 0x3C).
  * @param rst_pin     Reset pin, or -1 when reset is not connected.
- * @param switchvcc   SSD1306 power mode (SSD1306_SWITCHCAPVCC or SSD1306_EXTERNALVCC).
- * @param periphBegin Forwarded to Adafruit_SSD1306::begin(..., periphBegin).
+ * @param switchvcc   SSD1306 power mode (HAL_DISPLAY_VCC_SWITCHCAP or HAL_DISPLAY_VCC_EXTERNAL).
+ * @param periphBegin Retained for source compatibility; the HAL I2C bus is
+ *                    initialised lazily, so this flag has no effect.
  * @return true when initialisation succeeded.
  */
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
@@ -226,11 +227,11 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
  *
  * @param width       Display width in pixels.
  * @param height      Display height in pixels.
- * @param i2c_bus     I2C bus index (0 = Wire, 1 = Wire1).
+ * @param i2c_bus     I2C bus index (0 = primary bus, 1 = secondary bus).
  * @param i2c_addr    7-bit I2C address.
  * @param rst_pin     Reset pin, or -1 when not connected.
  * @param switchvcc   SSD1306 power mode.
- * @param periphBegin Forwarded to Adafruit_SSD1306::begin(..., periphBegin).
+ * @param periphBegin Retained for source compatibility; has no effect.
  * @return true when initialisation succeeded.
  */
 bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
@@ -255,9 +256,10 @@ bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
 /**
- * @brief ILI9341-only: send the extended register-init command sequence.
- * @param delay_ms Delay in milliseconds between commands that request it.
- *                 No-op for non-ILI9341 display types.
+ * @brief Re-send the backend register-init command sequence when available.
+ * @param delay_ms ILI9341 delay in milliseconds between commands that request
+ *                 it. ST77xx sequences carry per-command delay values.
+ *                 No-op for display types without a soft-init path.
  */
 void hal_display_soft_init(int delay_ms);
 

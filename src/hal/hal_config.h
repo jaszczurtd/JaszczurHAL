@@ -149,7 +149,7 @@
        HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT, SPI).
-       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY).
+       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY, I2C).
 
      Crypto + bundled libs:
        HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
@@ -356,6 +356,9 @@
 #ifdef HAL_ENABLE_SSD1306
   #ifndef HAL_ENABLE_DISPLAY
     #define HAL_ENABLE_DISPLAY
+  #endif
+  #ifndef HAL_ENABLE_I2C
+    #define HAL_ENABLE_I2C
   #endif
 #endif
 

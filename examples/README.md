@@ -181,7 +181,7 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 06 | ds18b20 | rp2040, stm32g474 | OneWire, DS18B20 |
 | 07 | gps | rp2040 | GPS (SoftwareSerial) |
 | 08 | thermocouple | rp2040 | MAX6675/MCP9600 |
-| 09 | display_tft | rp2040 | ILI9341/ST7789, draw7Segment |
+| 09 | display_tft | rp2040, stm32g474 | ILI9341/ST7789, draw7Segment |
 | 10 | mqtt | rp2040 (WiFi) | WiFi, MQTT |
 | 11 | wireguard | rp2040 (WiFi) | WiFi, WireGuard |
 | 12 | kv_store | rp2040 | Key-value storage |
@@ -197,3 +197,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 22 | gps_uart | rp2040, stm32g474 | GPS (UART transport) |
 | 23 | external_adc_ads1115 | rp2040, stm32g474 | I2C, ADS1115 external ADC |
 | 24 | can_mcp2515 | rp2040, stm32g474 | SPI, MCP2515 CAN |
+| 25 | display_oled | rp2040, stm32g474 | I2C, SSD1306 OLED |
