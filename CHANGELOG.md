@@ -2,7 +2,9 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [1.7.0] - 2026-06-08
+
+Next release.
 
 ### hal_pga2311 - shared PGA2311 stereo-volume module
 
