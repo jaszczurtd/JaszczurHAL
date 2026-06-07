@@ -328,6 +328,9 @@ examples, and host-test coverage.
   corresponding Adafruit ILI9341 / ST7735-ST7789 / SSD1306 libraries by
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
   headers for the per-module attribution.
+- WireGuard cryptographic primitives now live in a shared backend under
+  `src/hal/impl/shared/wireguard/crypto/` and are reused by both the WireGuard
+  integration and `hal_crypto` ChaCha20/Poly1305 helpers.
 - Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

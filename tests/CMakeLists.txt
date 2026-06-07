@@ -64,6 +64,14 @@ add_executable(test_mcp2515_driver
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
 add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
+add_executable(test_wireguard_crypto_shared
+    test_wireguard_crypto_shared.cpp
+)
+target_include_directories(test_wireguard_crypto_shared PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/wireguard/crypto
+)
+target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
+add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)

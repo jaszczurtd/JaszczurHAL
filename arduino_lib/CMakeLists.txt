@@ -82,7 +82,10 @@ parse_platform_def_file(
 
 # ── HAL implementation sources (Arduino) ─────────────────────────────────────
 file(GLOB ARDUINO_IMPL_SOURCES ${SRC}/hal/impl/arduino/*.cpp)
-file(GLOB_RECURSE ARDUINO_SHARED_SOURCES ${SRC}/hal/impl/shared/*.cpp)
+file(GLOB_RECURSE ARDUINO_SHARED_SOURCES
+    ${SRC}/hal/impl/shared/*.cpp
+    ${SRC}/hal/impl/shared/*.c
+)
 
 # ── Driver sources (third-party libraries bundled with HAL) ──────────────────
 file(GLOB_RECURSE DRIVER_SOURCES

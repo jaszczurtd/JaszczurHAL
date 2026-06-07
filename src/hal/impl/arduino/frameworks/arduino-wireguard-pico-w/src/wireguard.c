@@ -42,7 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "crypto/crypto.h"
+#include "hal/impl/shared/wireguard/crypto/crypto.h"
 #include "wg_port_pico.h"
 
 // For HMAC calculation

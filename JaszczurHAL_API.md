@@ -37,7 +37,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `gps/`, `max6675/`, `mcp2515/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`).
+- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `gps/`, `max6675/`, `mcp2515/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`) plus a shared WireGuard cryptography core in `wireguard/crypto/`.
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
@@ -992,6 +992,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_md5_hex(...)` and `hal_sha256_hex(...)` / `hal_hmac_sha256_hex(...)` output lowercase hex.
 - `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
+- ChaCha20 / Poly1305 paths are delegated to the shared `impl/shared/wireguard/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
 - SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).
@@ -4060,7 +4061,8 @@ logger-close stub plus HAL mocks.
 | `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
-| `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior and input validation |
+| `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
+| `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |

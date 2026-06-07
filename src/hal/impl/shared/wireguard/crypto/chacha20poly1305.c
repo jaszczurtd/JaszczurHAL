@@ -36,6 +36,7 @@
 #include "chacha20.h"
 #include "poly1305-donna.h"
 
+#include <limits.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include "crypto.h"
@@ -44,6 +45,16 @@
 #define POLY1305_MAC_SIZE		16
 
 static const uint8_t zero[CHACHA20_BLOCK_SIZE] = { 0 };
+
+static void chacha20_xor_stream(struct chacha20_ctx *ctx, uint8_t *dst, const uint8_t *src, size_t len) {
+	while (len > 0u) {
+		uint32_t chunk = (len > (size_t)UINT32_MAX) ? UINT32_MAX : (uint32_t)len;
+		chacha20(ctx, dst, src, chunk);
+		dst += chunk;
+		src += chunk;
+		len -= chunk;
+	}
+}
 
 // 2.6.  Generating the Poly1305 Key Using ChaCha20
 static void generate_poly1305_key(struct poly1305_context *poly1305_state, struct chacha20_ctx *chacha20_state, const uint8_t *key, uint64_t nonce) {
@@ -61,6 +72,27 @@ static void generate_poly1305_key(struct poly1305_context *poly1305_state, struc
 	poly1305_init(poly1305_state, block);
 
 	crypto_zero(&block, sizeof(block));
+}
+
+// RFC7539/IETF variant uses explicit 32-bit block counter and 96-bit nonce.
+static void generate_poly1305_key_ietf(struct poly1305_context *poly1305_state,
+						struct chacha20_ctx *chacha20_state,
+						const uint8_t key[32],
+						const uint8_t nonce[12]) {
+	uint8_t block[POLY1305_KEY_SIZE] = {0};
+
+	chacha20_init_ietf(chacha20_state, key, 0u, nonce);
+	chacha20(chacha20_state, block, block, sizeof(block));
+	poly1305_init(poly1305_state, block);
+
+	crypto_zero(&block, sizeof(block));
+}
+
+static void poly1305_pad16(struct poly1305_context *poly1305_state, size_t len) {
+	size_t rem = len & 0x0Fu;
+	if (rem != 0u) {
+		poly1305_update(poly1305_state, zero, 16u - rem);
+	}
 }
 
 // 2.8.  AEAD Construction (Encryption)
@@ -158,6 +190,117 @@ bool chacha20poly1305_decrypt(uint8_t *dst, const uint8_t *src, size_t src_len, 
 			result = true;
 		}
 	}
+	return result;
+}
+
+bool chacha20poly1305_encrypt_ietf_detached(uint8_t *ciphertext,
+						    uint8_t tag[16],
+						    const uint8_t *plaintext,
+						    size_t text_len,
+						    const uint8_t *ad,
+						    size_t ad_len,
+						    const uint8_t nonce[12],
+						    const uint8_t key[32]) {
+	struct poly1305_context poly1305_state;
+	struct chacha20_ctx chacha20_state;
+	uint8_t block[8];
+
+	if (ciphertext == NULL && text_len > 0u) {
+		return false;
+	}
+	if (plaintext == NULL && text_len > 0u) {
+		return false;
+	}
+	if (ad == NULL && ad_len > 0u) {
+		return false;
+	}
+	if (tag == NULL || nonce == NULL || key == NULL) {
+		return false;
+	}
+
+	generate_poly1305_key_ietf(&poly1305_state, &chacha20_state, key, nonce);
+
+	if (text_len > 0u) {
+		chacha20_xor_stream(&chacha20_state, ciphertext, plaintext, text_len);
+	}
+
+	if (ad_len > 0u) {
+		poly1305_update(&poly1305_state, ad, ad_len);
+	}
+	poly1305_pad16(&poly1305_state, ad_len);
+
+	if (text_len > 0u) {
+		poly1305_update(&poly1305_state, ciphertext, text_len);
+	}
+	poly1305_pad16(&poly1305_state, text_len);
+
+	U64TO8_LITTLE(block, (uint64_t)ad_len);
+	poly1305_update(&poly1305_state, block, sizeof(block));
+	U64TO8_LITTLE(block, (uint64_t)text_len);
+	poly1305_update(&poly1305_state, block, sizeof(block));
+
+	poly1305_finish(&poly1305_state, tag);
+
+	crypto_zero(&chacha20_state, sizeof(chacha20_state));
+	crypto_zero(&block, sizeof(block));
+	return true;
+}
+
+bool chacha20poly1305_decrypt_ietf_detached(uint8_t *plaintext,
+						    const uint8_t *ciphertext,
+						    size_t text_len,
+						    const uint8_t tag[16],
+						    const uint8_t *ad,
+						    size_t ad_len,
+						    const uint8_t nonce[12],
+						    const uint8_t key[32]) {
+	struct poly1305_context poly1305_state;
+	struct chacha20_ctx chacha20_state;
+	uint8_t block[8];
+	uint8_t mac[POLY1305_MAC_SIZE];
+	bool result = false;
+
+	if (plaintext == NULL && text_len > 0u) {
+		return false;
+	}
+	if (ciphertext == NULL && text_len > 0u) {
+		return false;
+	}
+	if (ad == NULL && ad_len > 0u) {
+		return false;
+	}
+	if (tag == NULL || nonce == NULL || key == NULL) {
+		return false;
+	}
+
+	generate_poly1305_key_ietf(&poly1305_state, &chacha20_state, key, nonce);
+
+	if (ad_len > 0u) {
+		poly1305_update(&poly1305_state, ad, ad_len);
+	}
+	poly1305_pad16(&poly1305_state, ad_len);
+
+	if (text_len > 0u) {
+		poly1305_update(&poly1305_state, ciphertext, text_len);
+	}
+	poly1305_pad16(&poly1305_state, text_len);
+
+	U64TO8_LITTLE(block, (uint64_t)ad_len);
+	poly1305_update(&poly1305_state, block, sizeof(block));
+	U64TO8_LITTLE(block, (uint64_t)text_len);
+	poly1305_update(&poly1305_state, block, sizeof(block));
+
+	poly1305_finish(&poly1305_state, mac);
+	if (crypto_equal(mac, tag, POLY1305_MAC_SIZE)) {
+		if (text_len > 0u) {
+			chacha20_xor_stream(&chacha20_state, plaintext, ciphertext, text_len);
+		}
+		result = true;
+	}
+
+	crypto_zero(&chacha20_state, sizeof(chacha20_state));
+	crypto_zero(&block, sizeof(block));
+	crypto_zero(&mac, sizeof(mac));
 	return result;
 }
 

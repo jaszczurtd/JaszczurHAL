@@ -81,11 +81,12 @@ static const uint32_t CHACHA20_CONSTANT_4 = 0x6b206574;
 // 3.  a += b; d ^= a; d <<<= 8;
 // 4.  c += d; b ^= c; b <<<= 7;
 
-#define QUARTERROUND(a, b, c, d)       \
-    a += b;  d ^= a;  d = ROTL32(d, 16);  \
-    c += d;  b ^= c;  b = ROTL32(b, 12);  \
-    a += b;  d ^= a;  d = ROTL32(d,  8);  \
-    c += d;  b ^= c;  b = ROTL32(b,  7)
+#define QUARTERROUND(a, b, c, d) do {                         \
+	(a) += (b);  (d) ^= (a);  (d) = ROTL32((d), 16);         \
+	(c) += (d);  (b) ^= (c);  (b) = ROTL32((b), 12);         \
+	(a) += (b);  (d) ^= (a);  (d) = ROTL32((d),  8);         \
+	(c) += (d);  (b) ^= (c);  (b) = ROTL32((b),  7);         \
+} while (0)
 
 static inline void INNER_BLOCK(uint32_t *block) {
 	QUARTERROUND(block[0], block[4], block[ 8], block[12]); // column 0
@@ -132,7 +133,7 @@ static void chacha20_block(struct chacha20_ctx *ctx, uint8_t *stream) {
 	TWENTY_ROUNDS(working_state);
 
 	for (i = 0; i < 16; ++i) {
-		U32TO8_LITTLE(stream + (4 * i), PLUS(working_state[i], ctx->state[i]));
+		U32TO8_LITTLE(stream + ((size_t)4u * (size_t)i), PLUS(working_state[i], ctx->state[i]));
 	}
 }
 
@@ -185,6 +186,29 @@ void chacha20_init(struct chacha20_ctx *ctx, const uint8_t *key, const uint64_t 
 	ctx->state[13] = 0;
 	ctx->state[14] = nonce & 0xFFFFFFFF;
 	ctx->state[15] = nonce >> 32;
+}
+
+// RFC7539/IETF ChaCha20 state initializer with 96-bit nonce and explicit counter.
+void chacha20_init_ietf(struct chacha20_ctx *ctx,
+			const uint8_t *key,
+			uint32_t counter,
+			const uint8_t nonce[12]) {
+	ctx->state[0] = CHACHA20_CONSTANT_1;
+	ctx->state[1] = CHACHA20_CONSTANT_2;
+	ctx->state[2] = CHACHA20_CONSTANT_3;
+	ctx->state[3] = CHACHA20_CONSTANT_4;
+	ctx->state[4] = U8TO32_LITTLE(key + 0);
+	ctx->state[5] = U8TO32_LITTLE(key + 4);
+	ctx->state[6] = U8TO32_LITTLE(key + 8);
+	ctx->state[7] = U8TO32_LITTLE(key + 12);
+	ctx->state[8] = U8TO32_LITTLE(key + 16);
+	ctx->state[9] = U8TO32_LITTLE(key + 20);
+	ctx->state[10] = U8TO32_LITTLE(key + 24);
+	ctx->state[11] = U8TO32_LITTLE(key + 28);
+	ctx->state[12] = counter;
+	ctx->state[13] = U8TO32_LITTLE(nonce + 0);
+	ctx->state[14] = U8TO32_LITTLE(nonce + 4);
+	ctx->state[15] = U8TO32_LITTLE(nonce + 8);
 }
 
 // 2.2. HChaCha20
