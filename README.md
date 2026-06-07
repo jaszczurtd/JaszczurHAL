@@ -107,7 +107,7 @@ pieces used by at least two hardware backends. Put there only code that:
 - can be reused without per-target `#if HAL_TARGET_IS_*` forks in that file.
 
 Shared device/engine code lives in per-driver subfolders, for example:
-`shared/ads1x15/`, `shared/digipot/`, `shared/display/`, etc.
+`shared/ads1x15/`, `shared/digipot/`, `shared/display/`, `shared/pga2311/`, etc.
 
 ## Quick start
 See [examples/README.md](examples/README.md) for the full build system guide.

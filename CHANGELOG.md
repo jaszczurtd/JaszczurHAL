@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_pga2311 - shared PGA2311 stereo-volume module
+
+- Added a new optional `HAL_ENABLE_PGA2311` module with public API in
+  `src/hal/hal_pga2311.h` and facade implementation in
+  `src/hal/hal_pga2311.cpp`.
+- Added a backend-agnostic shared transport driver in
+  `src/hal/impl/shared/pga2311/pga2311_driver.{h,cpp}` using HAL SPI/GPIO.
+- Added gain conversion helpers (dB and half-dB to raw code), raw-code writes,
+  optional hardware-mute pin support, and software mute emulation fallback.
+- Added `examples/28_pga2311` demonstrating portable PGA2311 usage on RP2040
+  and STM32G474 (SPI init, gain stepping, mute/unmute flow).
+- Wired module integration across umbrella/config/build paths:
+  `hal/hal.h`, `hal_config.h`, root/test/target CMake files,
+  `HAL_FLAGS.txt`, and API docs.
+- Added `test_hal_pga2311` host regression coverage for config validation,
+  SPI write framing, mute behavior, and gain conversion boundaries.
+
 ### hal_crypto / wireguard crypto - shared source-of-truth and regression hardening
 
 - Removed duplicate ChaCha20/Poly1305 logic from `hal_crypto.cpp` and delegated

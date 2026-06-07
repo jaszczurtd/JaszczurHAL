@@ -62,6 +62,9 @@
 #ifdef HAL_ENABLE_CAN
 #include "hal_can.h"
 #endif
+#ifdef HAL_ENABLE_PGA2311
+#include "hal_pga2311.h"
+#endif
 #ifdef HAL_ENABLE_DISPLAY
 #include "hal_display.h"
 #endif

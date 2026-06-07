@@ -136,6 +136,10 @@
        HAL_ENABLE_MAX5395       - MAX5395 backend       (propagates:
                                   DIGIPOT, I2C).
 
+     Audio volume control:
+       HAL_ENABLE_PGA2311       - PGA2311 stereo volume controller over SPI
+                                  (propagates: SPI).
+
      PWM / status:
        HAL_ENABLE_PWM_FREQ      - Frequency-controlled PWM.
        HAL_ENABLE_RGB_LED       - NeoPixel RGB status LED.
@@ -296,6 +300,13 @@
   #endif
 #endif
 
+/* SPI audio volume control. */
+#ifdef HAL_ENABLE_PGA2311
+  #ifndef HAL_ENABLE_SPI
+    #define HAL_ENABLE_SPI
+  #endif
+#endif
+
 /* 1-Wire stack. */
 #ifdef HAL_ENABLE_DS18B20
   #ifndef HAL_ENABLE_ONEWIRE
@@ -364,7 +375,8 @@
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
-   KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
+  KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, ONEWIRE, EXTERNAL_ADC,
+  PGA2311,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
@@ -504,6 +516,9 @@
   #endif
   #ifdef HAL_ENABLE_MAX5395
     #pragma message("HAL_CONFIG: HAL_ENABLE_MAX5395")
+  #endif
+  #ifdef HAL_ENABLE_PGA2311
+    #pragma message("HAL_CONFIG: HAL_ENABLE_PGA2311")
   #endif
   #ifdef HAL_ENABLE_PWM_FREQ
     #pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")
