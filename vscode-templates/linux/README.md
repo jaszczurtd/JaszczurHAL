@@ -104,19 +104,16 @@ arduino-cli core install rp2040:rp2040 \
   --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 ```
 
-JaszczurHAL and its dependencies must be visible to arduino-cli.  The
-recommended approach is to place them under `<sketchbookPath>/libraries/`:
+JaszczurHAL (and any optional, project-specific companion libraries) must be
+visible to arduino-cli. The recommended approach is to place them under
+`<sketchbookPath>/libraries/`:
 
 ```
 <sketchbookPath>/
   libraries/
     JaszczurHAL/
-    Adafruit_GFX_Library/
-    Adafruit_ILI9341/           (or Adafruit_SSD1306, depending on display)
-    Adafruit_BusIO/
-    Adafruit_NeoPixel/
-    mcp_can/                    (MCP_CAN_lib)
-    canDefinitions/             (if your project uses CAN)
+    arduino-wireguard-pico-w/   (optional; WireGuard projects)
+    PubSubClient/               (optional; MQTT projects)
     ... (other project-specific libs)
 ```
 

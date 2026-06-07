@@ -4,9 +4,45 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_rgb_led - shared portable NeoPixel driver
+
+- Replaced the bundled Arduino `Adafruit_NeoPixel` backend with a shared
+  NeoPixel core under `src/hal/impl/shared/neopixel/` (`jh_neopixel.{h,cpp}`),
+  keeping the proven buffer layout, color-order mapping, latch timing and
+  brightness scaling behavior from the upstream implementation.
+- Added RP2040 transport glue using PIO (`rp2040_pio.h`) and switched
+  `src/hal/impl/arduino/hal_rgb_led.cpp` to the shared core.
+- Added a new STM32G474 `hal_rgb_led` backend using the same shared core with
+  cycle-timed GPIO bitstream output, so `HAL_ENABLE_RGB_LED` now works on both
+  RP2040 and STM32G474.
+- Enabled `examples/18_rgb_led` for STM32G474 in addition to RP2040.
+- Removed the obsolete Arduino `drivers/Adafruit_NeoPixel` folder.
+- Moved NeoPixel attribution and license notice from README dependency list to
+  the shared driver code/location (`impl/shared/neopixel/`).
+
+### hal_rtc - shared portable DS3231 driver
+
+- Ported the DS3231 real-time clock driver from the bundled Arduino implementation to a shared HAL driver under `src/hal/impl/shared/ds3231/`.
+- The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while replacing Arduino Wire access with JaszczurHAL I2C primitives.
+- RP2040 and STM32G474 `hal_rtc` wrappers now use the shared DS3231 driver, so both targets can select `HAL_ENABLE_DS3231` through the same code path.
+- Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and a dedicated `examples/27_rtc_ds3231` sample.
+- Removed the vendored Arduino DS3231 driver from `src/hal/impl/arduino/drivers/DS3231/`.
+
+### hal_rtc - shared portable PCF8563 driver
+
+- Ported the PCF8563 I2C real-time clock driver from the bundled Arduino implementation to a shared, Arduino-free HAL driver under `src/hal/impl/shared/pcf8563/`.
+- The shared `pcf8563.{h,cpp}` implementation uses only JaszczurHAL I2C primitives, removing all Arduino Wire library dependencies while preserving full functional parity with the original.
+- RP2040 (via Arduino-pico) continues to use the shared driver through the existing `impl/arduino/hal_rtc.cpp` wrapper.
+- **STM32G474 now has full RTC support for the first time** through a new `impl/stm32g474/hal_rtc.cpp` backend using the same shared PCF8563 driver, enabling `HAL_ENABLE_RTC` and `HAL_ENABLE_PCF8563` on the STM32 platform.
+- All RTC functionality is preserved: date/time read/write, clock integrity check, alarms (minute/hour/day/weekday-independent matching), countdown timer (1/60Hz to 4096Hz), and CLKOUT output (disabled, 1Hz, 32Hz, 1024Hz, 32768Hz).
+- Removed the vendored Arduino PCF8563 driver from `src/hal/impl/arduino/drivers/PCF8563/`.
+- Added `examples/26_rtc_clock` demonstrating portable RTC usage on both RP2040 and STM32G474.
+- Updated `stm32_lib/STM32G474_porting_progress.md` to reflect RTC support now complete.
+- Full test suite and both target static-library builds pass with no warnings.
+
 ### hal_display - shared Arduino-free display stack
 
-- Added `src/hal/impl/shared/display/jh_gfx.{h,cpp}` — a portable graphics
+- Added `src/hal/impl/shared/display/jh_gfx.{h,cpp}` - a portable graphics
   engine providing geometry primitives (line, circle, triangle, rounded rect),
   bitmap rendering, and full text layout with proportional font support.
   The rendering algorithms are adapted from the Adafruit GFX Library (BSD-2-Clause)
@@ -20,7 +56,7 @@ All notable changes to this project will be documented in this file.
 - Replaced the two per-backend `hal_display.cpp` implementations with a single
   shared `shared/display/hal_display.cpp`. Both RP2040 and STM32G474 now drive
   ILI9341 / ST7735 / ST7789 / ST7796S (over the shared SPI/GPIO panel drivers)
-  and SSD1306 (over the shared I2C driver) through the same code path — no
+  and SSD1306 (over the shared I2C driver) through the same code path - no
   Arduino dependencies remain in the display stack.
 - SSD1306 is now supported on STM32G474 (previously stubbed out).
 - Removed the vendored Adafruit display libraries from

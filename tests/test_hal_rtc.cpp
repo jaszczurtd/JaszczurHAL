@@ -72,6 +72,9 @@ void test_init_ds3231_backend_returns_handle(void) {
     TEST_ASSERT_EQUAL_UINT8(in.month, out.month);
     TEST_ASSERT_EQUAL_UINT16(in.year, out.year);
 
+    float temperature_c = 0.0f;
+    TEST_ASSERT_FALSE(hal_rtc_get_temperature(rtc, &temperature_c));
+
     hal_rtc_deinit(rtc);
 }
 

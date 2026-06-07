@@ -7,9 +7,9 @@
  * @file hal_rgb_led.h
  * @brief Hardware abstraction for a single-pixel NeoPixel RGB status LED.
  *
- * Hardware implementation uses Adafruit_NeoPixel; the mock implementation
- * is a no-op stub that records the last requested colour for unit testing.
- * Project code only depends on this header - no Adafruit headers are required.
+ * Hardware implementation uses the shared NeoPixel driver under
+ * `src/hal/impl/shared/neopixel/`; the mock implementation is a no-op stub
+ * that records the last requested colour for unit testing.
  */
 
 #include <stdint.h>
@@ -32,9 +32,8 @@ typedef enum {
 /**
  * @brief Pixel colour-order / speed flags for hal_rgb_led_init_ex().
  *
- * Values intentionally mirror the matching Adafruit_NeoPixel NEO_* constants
- * so the HAL implementation can cast them directly - but project code never
- * needs to include Adafruit headers.
+ * Values intentionally mirror the historical NeoPixel NEO_* layout so existing
+ * project configuration values remain source-compatible.
  */
 typedef enum {
     HAL_RGB_LED_PIXEL_RGB_KHZ800 = 0x0006, /**< RGB byte order, 800 kHz. */

@@ -1,9 +1,19 @@
-#include "../../../../hal_config.h"
+/**
+ * @file pcf8563.cpp
+ * @brief Portable I2C RTC driver for NXP PCF8563.
+ *
+ * Implementation details based on NXP PCF8563 datasheet and algorithm
+ * patterns from embedded real-time clock driver communities. Ported
+ * to use JaszczurHAL I2C primitives for cross-platform compatibility
+ * (RP2040, STM32G474, and host/mock targets).
+ */
+
+#include "../../../hal_config.h"
 #if defined(HAL_ENABLE_RTC) && defined(HAL_ENABLE_PCF8563)
 
-#include "PCF8563.h"
+#include "pcf8563.h"
 
-#include "../../../../hal_i2c.h"
+#include "../../../hal_i2c.h"
 
 #include <string.h>
 
@@ -506,4 +516,4 @@ bool pcf8563_get_alarm(const pcf8563_t *dev, pcf8563_alarm_t *out_alarm) {
     return pcf8563_validate_alarm(out_alarm);
 }
 
-#endif /* HAL_ENABLE_RTC && !HAL_ENABLE_PCF8563 */
+#endif /* HAL_ENABLE_RTC && HAL_ENABLE_PCF8563 */

@@ -200,7 +200,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
 `eeprom, i2c_slave, littlefs, mqtt,
-ota, pwm_freq, rgb_led, rtc, swserial, udp, wifi, wireguard`.
+ota, pwm_freq, rgb_led, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -235,10 +235,8 @@ a rewrite (PWM+DMA or SPI), not a library port.
 - `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
 
 ### Recommended order
-1. **I2C quick win remaining** via the digipot pattern: rtc
-   (PCF8563/DS3231). ADS1115 is done.
-2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding
-   for TFT throughput.
+1. **I2C drivers** - Via the shared/portable HAL pattern: rtc (PCF8563/DS3231) is now **DONE**. 
+2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding for TFT throughput.
 3. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages

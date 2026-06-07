@@ -190,7 +190,7 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 15 | wifi | rp2040 (WiFi) | WiFi scan/connect |
 | 16 | littlefs | rp2040 | LittleFS |
 | 17 | pid_controller | rp2040, stm32g474 | PID controller |
-| 18 | rgb_led | rp2040 | NeoPixel/WS2812 |
+| 18 | rgb_led | rp2040, stm32g474 | NeoPixel/WS2812 |
 | 19 | timer_ext | rp2040, stm32g474 | Extended timers |
 | 20 | i2c_scan | rp2040, stm32g474 | I2C bus scan |
 | 21 | adc_read | rp2040, stm32g474 | ADC |
