@@ -393,6 +393,15 @@ bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
     return true;
 }
 
+bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c) {
+    if (!h || !out_temperature_c) {
+        return false;
+    }
+
+    *out_temperature_c = 0.0f;
+    return false;
+}
+
 bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode) {
     if (!h || !rtc_validate_clkout_mode(mode)) {
         return false;

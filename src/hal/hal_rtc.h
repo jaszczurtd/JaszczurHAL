@@ -239,6 +239,13 @@ bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask);
  */
 bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags);
 
+/**
+ * @brief Read RTC chip temperature if the selected backend supports it.
+ *
+ * DS3231 exposes an internal temperature sensor. PCF8563 does not.
+ */
+bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
+
 /** @brief Set clock output mode. */
 bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode);
 

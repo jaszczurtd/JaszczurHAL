@@ -1,9 +1,9 @@
 # JaszczurHAL - API Reference
 
 Hardware Abstraction Layer for embedded projects.
-The current primary backend is RP2040 via Arduino-pico, but the intent is to
-grow additional ports over time (for example STM32) without changing the
-application-facing HAL API.
+The primary backend is RP2040 via Arduino-pico, with STM32G474 available as a
+real bare-metal backend for core domains and an expanding shared-driver stack,
+while keeping the application-facing HAL API stable across targets.
 
 This document is the canonical, detailed API reference.
 The top-level `README.md` intentionally stays concise and links here for full behavior/contracts.
@@ -35,9 +35,9 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
-- `src/hal/impl/stm32g474/` - STM32G474 backend (host-stub today, hardware implementation in progress).
+- `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `gps/`, `max6675/`, `mcp9600/`).
+- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `gps/`, `max6675/`, `mcp2515/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`).
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
@@ -152,7 +152,7 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
-| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` | `hal_rgb_led.cpp` | Adafruit NeoPixel |
+| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/display/ili9341_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
@@ -190,7 +190,7 @@ HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
-HAL_ENABLE_GPS         -> HAL_ENABLE_SWSERIAL
+HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_CAN         -> HAL_ENABLE_SPI
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
@@ -213,7 +213,7 @@ modules you use:
 #pragma once
 #define HAL_ENABLE_WIFI
 #define HAL_ENABLE_KV            // -> propagates EEPROM
-#define HAL_ENABLE_GPS           // -> propagates SWSERIAL
+#define HAL_ENABLE_GPS           // -> auto-enables UART when no transport is selected
 #define HAL_ENABLE_MCP9600       // -> propagates THERMOCOUPLE + I2C
 #define HAL_ENABLE_UART
 #define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
@@ -345,8 +345,8 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | ILI9341 driver (ported) | TFT backend (`HAL_DISPLAY_ILI9341`) ported into `impl/shared/display/ili9341_driver.*` | Limor Fried (Ladyada) (Adafruit ILI9341) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ili9341_driver.h` |
 | ST77xx driver (ported) | ST7735/ST7789/ST7796S backends ported into `impl/shared/display/st77xx_driver.*` | Limor Fried (Ladyada) (Adafruit ST7735/ST7789) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/st77xx_driver.h` |
 | SSD1306 driver (ported) | OLED backend (`HAL_ENABLE_SSD1306`) ported into `impl/shared/display/ssd1306_driver.*` | Limor Fried (Ladyada) + contributors (Adafruit SSD1306) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ssd1306_driver.h` |
-| `Adafruit_NeoPixel` | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors | LGPL | `src/hal/impl/arduino/drivers/Adafruit_NeoPixel/COPYING` |
-| `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in sources + repository LICENSE | `src/hal/impl/arduino/drivers/DS3231/DS3231.h`, `src/hal/impl/arduino/drivers/DS3231/DS3231.cpp`, `src/hal/impl/arduino/drivers/DS3231/LICENSE` |
+| NeoPixel core (ported) | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors (Adafruit_NeoPixel) | LGPL (attribution in source headers) | `src/hal/impl/shared/neopixel/COPYING`, `src/hal/impl/shared/neopixel/jh_neopixel.h` |
+| `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in source headers | `src/hal/impl/shared/ds3231/ds3231.h`, `src/hal/impl/shared/ds3231/ds3231.cpp` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/mcp2515/license.txt` and `src/hal/impl/shared/mcp2515/mcp2515_driver.h` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
@@ -2503,9 +2503,10 @@ void hal_rgb_led_set_color(hal_rgb_led_color_t color);
 void hal_rgb_led_off(void);
 ```
 
-**impl/arduino:** `Adafruit_NeoPixel`.
+**impl/rp2040:** shared `impl/shared/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/neopixel/rp2040_pio.h`).
+**impl/stm32g474:** shared `impl/shared/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
-**Thread safety:** Arduino backend: thread-safe and multicore-safe for HAL calls. A HAL mutex serializes access to singleton state and underlying `Adafruit_NeoPixel`. Mock backend is unsynchronized and intended for single-threaded tests.
+**Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -3962,7 +3963,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_i2c` | Arduino-pico `Wire.h` |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
-| `hal_rgb_led` | `Adafruit_NeoPixel` |
+| `hal_rgb_led` | shared NeoPixel core (`impl/shared/neopixel/jh_neopixel.*`) + target transport glue |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600/mcp9600_driver.*`) |
 | `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675/max6675_driver.*`) |
 | `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/onewire/onewire_driver.*`) over HAL GPIO/time |

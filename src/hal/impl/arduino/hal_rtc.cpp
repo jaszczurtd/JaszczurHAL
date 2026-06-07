@@ -9,10 +9,10 @@
 #include "../../hal_sync.h"
 
 #ifdef HAL_ENABLE_PCF8563
-#include "drivers/PCF8563/PCF8563.h"
+#include "../shared/pcf8563/pcf8563.h"
 #endif
 #ifdef HAL_ENABLE_DS3231
-#include "drivers/DS3231/DS3231.h"
+#include "../shared/ds3231/ds3231.h"
 #include <new>
 #endif
 
@@ -361,15 +361,6 @@ static inline DS3231 *as_ds3231(hal_rtc_impl_t *h) {
     return reinterpret_cast<DS3231 *>(h->backend.ds3231_mem);
 }
 
-static TwoWire *rtc_i2c_wire(uint8_t bus) {
-#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
-    return bus == 1u ? &Wire1 : &Wire;
-#else
-    (void)bus;
-    return &Wire;
-#endif
-}
-
 static bool ds3231_probe(uint8_t i2c_bus, uint8_t i2c_addr) {
     hal_i2c_begin_transmission_bus(i2c_bus, i2c_addr);
     if (hal_i2c_write_bus(i2c_bus, 0x00u) != 1u) {
@@ -433,6 +424,15 @@ static bool rtc_set_ds3231_clkout(hal_rtc_impl_t *h, hal_rtc_clkout_mode_t mode)
         default:
             return false;
     }
+}
+
+static bool rtc_get_ds3231_temperature(hal_rtc_impl_t *h, float *out_temperature_c) {
+    if (!h || !out_temperature_c) {
+        return false;
+    }
+
+    *out_temperature_c = as_ds3231(h)->getTemperature();
+    return true;
 }
 
 static bool rtc_to_ds3231_alarm2(const hal_rtc_alarm_t *src,
@@ -628,7 +628,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
                 return NULL;
             }
 
-            new (h->backend.ds3231_mem) DS3231(*rtc_i2c_wire(ic->i2c_bus));
+            new (h->backend.ds3231_mem) DS3231(ic->i2c_bus, addr);
             if (!rtc_set_ds3231_clkout(h, HAL_RTC_CLKOUT_DISABLED)) {
                 as_ds3231(h)->~DS3231();
                 hal_mutex_destroy(h->mutex);
@@ -690,7 +690,7 @@ bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
 #ifdef HAL_ENABLE_DS3231
         case HAL_RTC_CHIP_DS3231: {
             DS3231 *rtc = as_ds3231(h);
-            DateTime now = RTClib::now(rtc->_Wire);
+            DateTime now = RTClib::now(*rtc);
 
             out_dt->second = (uint8_t)now.second();
             out_dt->minute = (uint8_t)now.minute();
@@ -936,6 +936,34 @@ bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
             ok = true;
             break;
         }
+#endif
+        default:
+            ok = false;
+            break;
+    }
+
+    hal_mutex_unlock(h->mutex);
+    return ok;
+}
+
+bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c) {
+    if (!h || !out_temperature_c) {
+        return false;
+    }
+
+    hal_mutex_lock(h->mutex);
+    bool ok = false;
+
+    switch (h->chip) {
+#ifdef HAL_ENABLE_PCF8563
+        case HAL_RTC_CHIP_PCF8563:
+            ok = false;
+            break;
+#endif
+#ifdef HAL_ENABLE_DS3231
+        case HAL_RTC_CHIP_DS3231:
+            ok = rtc_get_ds3231_temperature(h, out_temperature_c);
+            break;
 #endif
         default:
             ok = false;

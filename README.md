@@ -4,7 +4,9 @@ Author: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
 
-Today the most complete backend targets RP2040 boards through Arduino-pico (STM32G474 target is in the works), but the long-term goal is to bring more targets.
+Today the most complete backend targets RP2040 boards through Arduino-pico.
+STM32G474 is available as a real bare-metal backend for core domains and an
+expanding set of shared portable drivers; some modules are still in progress.
 
 ## Why this exists
 
@@ -104,24 +106,17 @@ pieces used by at least two hardware backends. Put there only code that:
 - has identical behavior across targets,
 - can be reused without per-target `#if HAL_TARGET_IS_*` forks in that file.
 
-Shared device/engine code lives in per-driver subfolders such as
-`shared/ads1x15/`, `shared/mcp9600/`, `shared/max6675/`, `shared/gps/`, and
-`shared/digipot/`.
-
-Do not place target-specific register access, pin/peripheral bring-up, ISR glue,
-or SDK object ownership in `shared/` - those belong to backend folders.
+Shared device/engine code lives in per-driver subfolders, for example:
+`shared/ads1x15/`, `shared/digipot/`, `shared/display/`, etc.
 
 ## Quick start
 See [examples/README.md](examples/README.md) for the full build system guide.
 
 ## Examples
 
-The `examples/` tree contains 24 small, focused applications that demonstrate
+The `examples/` tree contains a number of small, focused applications that demonstrate
 HAL modules. Each example is a portable `app.c`/`app.cpp` with a matching
-`hal_project_config.h` - no `.ino` files, no `main()`, no `setup()`/`loop()`.
-
-The latest addition is `24_can_mcp2515`, a portable CAN example built on the
-shared HAL-only MCP2515 driver.
+`hal_project_config.h`.
 
 A unified CMake build system compiles all examples for the selected backend:
 
@@ -235,6 +230,12 @@ cppcheck --enable=warning,performance,portability \
 run-clang-tidy -p build
 ```
 
+You can invoke all quality gates at once, by simply running
+```bash
+./runalltests.sh
+```
+
+
 ## VS Code Development Environment
 
 `vscode-templates/` contains ready-to-use VS Code project configurations for Arduino development on Windows and Linux/macOS:
@@ -328,7 +329,5 @@ examples, and host-test coverage.
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
   headers for the per-module attribution.
 - Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
-- [Adafruit_NeoPixel](https://github.com/adafruit/Adafruit_NeoPixel) - Phil "Paint Your Dragon" Burgess (with contributions by PJRC and Michael Miller)
-- [DS3231](https://github.com/NorthernWidget/DS3231) - Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

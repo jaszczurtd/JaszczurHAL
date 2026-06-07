@@ -44,7 +44,7 @@ run_logged() {
     local log_file="$1"
     shift
 
-    if ! "$@" >"${log_file}" 2>&1; then
+    if ! "$@" 2>&1 | tee "${log_file}"; then
         fail "Command failed: $*"
         if [[ -s "${log_file}" ]]; then
             echo ""
@@ -117,10 +117,10 @@ BUILD_DIR="${SCRIPT_DIR}/build_test"
 rm -rf "${BUILD_DIR}"
 
 info "Configuring..."
-cmake -S . -B "${BUILD_DIR}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null 2>&1
+cmake -S . -B "${BUILD_DIR}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 info "Building with ${JOBS} jobs..."
-cmake --build "${BUILD_DIR}" --parallel "${JOBS}" >/dev/null 2>&1
+cmake --build "${BUILD_DIR}" --parallel "${JOBS}"
 
 info "Running tests..."
 ctest --test-dir "${BUILD_DIR}" --output-on-failure
@@ -131,6 +131,29 @@ pass "All unit tests passed."
 # GATE 3: Valgrind memcheck
 # ═══════════════════════════════════════════════════════════════════════════════
 header "Gate 3/7: Memory safety (Valgrind memcheck)"
+
+MEMCHECK_REQUIRED_TESTS=(
+    test_max6675_driver
+    test_mcp9600_driver
+    test_ads1x15_driver
+    test_ili9341_driver
+    test_st77xx_driver
+    test_ssd1306_driver
+    test_jh_gfx_geometry
+    test_mcp2515_driver
+    test_hal_ds18b20
+    test_hal_display
+    test_hal_rtc
+)
+
+info "Verifying shared-module test coverage in CTest..."
+ctest_tests=$(ctest --test-dir "${BUILD_DIR}" -N 2>/dev/null || true)
+for test_name in "${MEMCHECK_REQUIRED_TESTS[@]}"; do
+    if ! grep -q "${test_name}" <<<"${ctest_tests}"; then
+        fail "Missing CTest registration for ${test_name}"
+        exit 1
+    fi
+done
 
 info "Running tests under Valgrind..."
 ctest --test-dir "${BUILD_DIR}" -T memcheck --output-on-failure 2>&1 \
@@ -174,22 +197,26 @@ header "Gate 5/7: Static analysis - clang-tidy"
 BUILD_STM32="${SCRIPT_DIR}/build_stm32_host"
 rm -rf "${BUILD_STM32}"
 info "Generating STM32 compile database..."
-cmake -S stm32_lib -B "${BUILD_STM32}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON >/dev/null 2>&1
-cmake --build "${BUILD_STM32}" --parallel "${JOBS}" >/dev/null 2>&1
+cmake -S stm32_lib -B "${BUILD_STM32}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+info "Building STM32 compile database..."
+cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
+pass "STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
 run-clang-tidy -p "${BUILD_DIR}" -quiet \
     '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|unity)[^/]*)\.(cpp|c)$' \
-    2>/dev/null | tee /tmp/jh_tidy_host.log
+    | tee /tmp/jh_tidy_host.log
+pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
 run-clang-tidy -p "${BUILD_STM32}" -quiet \
     '^.*/src/hal/impl/stm32g474/.*\.(cpp|c)$' \
-    2>/dev/null | tee /tmp/jh_tidy_stm32.log
+    | tee /tmp/jh_tidy_stm32.log
+pass "clang-tidy STM32 pass complete."
 
-if grep -qE ' (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null; then
+if grep -qE ':[0-9]+:[0-9]+: (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null; then
     fail "clang-tidy reported findings:"
-    grep -E ' (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null | head -20
+    grep -E ':[0-9]+:[0-9]+: (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null | head -20
     exit 1
 fi
 
