@@ -50,7 +50,7 @@
 #include "lwip/timeouts.h"
 
 #include "wireguard.h"
-#include "crypto.h"
+#include "crypto/crypto.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 

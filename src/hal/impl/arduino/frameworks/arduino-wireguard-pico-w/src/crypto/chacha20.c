@@ -39,7 +39,7 @@
 
 #include <string.h>
 #include <stdint.h>
-#include "../../crypto.h"
+#include "crypto.h"
 
 #ifndef U32V
 #define U32V(v) ((uint32_t)(v) & 0xFFFFFFFFU)

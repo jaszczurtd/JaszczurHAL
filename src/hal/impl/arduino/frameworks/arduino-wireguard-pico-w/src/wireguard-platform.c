@@ -15,7 +15,7 @@
 #include <stddef.h>
 #include <string.h>
 
-#include "crypto.h"          // for U64TO8_BIG / U32TO8_BIG
+#include "crypto/crypto.h"          // for U64TO8_BIG / U32TO8_BIG
 #include <sys/time.h>        // gettimeofday()
 
 #include "hardware/regs/rosc.h"
