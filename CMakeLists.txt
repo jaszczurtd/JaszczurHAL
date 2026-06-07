@@ -38,6 +38,12 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/impl/shared/wireguard/crypto/blake2s.c
+    ${SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
+    ${SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
+    ${SRC}/hal/impl/shared/wireguard/crypto/crypto.c
+    ${SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
+    ${SRC}/hal/impl/shared/wireguard/crypto/x25519.c
     ${SRC}/hal/hal_digipot.cpp
     ${SRC}/hal/impl/shared/digipot/digipot_mcp401x.cpp
     ${SRC}/hal/impl/shared/digipot/digipot_max5395.cpp

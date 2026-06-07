@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### hal_crypto / wireguard crypto - shared source-of-truth and regression hardening
+
+- Removed duplicate ChaCha20/Poly1305 logic from `hal_crypto.cpp` and delegated
+  HAL ChaCha20 + AEAD paths to the shared WireGuard cryptography backend under
+  `src/hal/impl/shared/wireguard/crypto/`, preserving the public HAL API.
+- Added RFC8439/IETF helper entry points in the shared backend:
+  `chacha20_init_ietf(...)`,
+  `chacha20poly1305_encrypt_ietf_detached(...)`, and
+  `chacha20poly1305_decrypt_ietf_detached(...)`.
+- Switched host/mock linkage to compile shared WireGuard crypto sources through
+  `hal_mock`, and updated `test_wireguard_crypto_shared` to link against
+  `hal_mock` to avoid duplicate symbol composition.
+- Added regression coverage for:
+  - ChaCha20 counter wraparound rejection on very large input lengths in
+    `test_hal_crypto`.
+  - shared `chacha20_init_ietf(...)` RFC8439 block-vector conformance.
+  - shared detached IETF AEAD RFC8439 vector and argument-validation paths.
+- Fixed clang-tidy warning in shared `blake2s.c` by making the index expression
+  explicitly size_t-typed for little-endian word loads.
+
 ### hal_rgb_led - shared portable NeoPixel driver
 
 - Replaced the bundled Arduino `Adafruit_NeoPixel` backend with a shared

@@ -133,7 +133,10 @@ function(_jh_add_stm32g474_example NAME)
 
     file(GLOB _stm32_impl "${G474}/*.cpp")
     file(GLOB _stm32_drivers "${G474}/drivers/*/*.cpp")
-    file(GLOB_RECURSE _stm32_shared "${SRC}/hal/impl/shared/*.cpp")
+    file(GLOB_RECURSE _stm32_shared
+        "${SRC}/hal/impl/shared/*.cpp"
+        "${SRC}/hal/impl/shared/*.c"
+    )
 
     set(_hal_common
         "${SRC}/hal/hal_config.cpp"

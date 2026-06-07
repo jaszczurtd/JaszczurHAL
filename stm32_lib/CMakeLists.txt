@@ -15,7 +15,10 @@ file(GLOB STM32_DRIVER_SOURCES ${SRC}/hal/impl/stm32g474/drivers/*/*.cpp)
 list(APPEND STM32_IMPL_SOURCES ${STM32_DRIVER_SOURCES})
 # Backend-agnostic implementations shared with the RP2040 backend
 # (e.g. the portable NMEA GPS engine + parser).
-file(GLOB_RECURSE STM32_SHARED_SOURCES ${SRC}/hal/impl/shared/*.cpp)
+file(GLOB_RECURSE STM32_SHARED_SOURCES
+    ${SRC}/hal/impl/shared/*.cpp
+    ${SRC}/hal/impl/shared/*.c
+)
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────

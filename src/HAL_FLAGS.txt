@@ -150,6 +150,7 @@ Display
 Crypto / bundled libs
   HAL_ENABLE_CRYPTO
     hal_crypto (Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20 / -Poly1305)
+    with ChaCha20/Poly1305 delegated to the shared wireguard/crypto backend.
     plus the dependent hal_sc_auth helper. Without this flag the headers
     expand to nothing and the implementation TUs produce empty objects.
     hal_serial_session keeps working - the SC_AUTH_BEGIN / SC_AUTH_PROVE
