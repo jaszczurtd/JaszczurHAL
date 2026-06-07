@@ -1,4 +1,4 @@
-#include "../../../../../hal_config.h"
+#include "../../../../../../hal_config.h"
 #if defined(HAL_ENABLE_WIREGUARD)
 
 #include "crypto.h"
