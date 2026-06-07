@@ -37,24 +37,30 @@
  *  @brief Arduino-compatible alias: set single bit in-place.
  *  @note Macro arguments may be evaluated more than once.
  */
+#if !defined(ARDUINO)
 #ifndef bitSet
 #define bitSet(var, bit)     do { (var) |=  (1u << (bit)); } while (0)
+#endif
 #endif
 
 /** @def bitClear
  *  @brief Arduino-compatible alias: clear single bit in-place.
  *  @note Macro arguments may be evaluated more than once.
  */
+#if !defined(ARDUINO)
 #ifndef bitClear
 #define bitClear(var, bit)   do { (var) &= ~(1u << (bit)); } while (0)
+#endif
 #endif
 
 /** @def bitRead
  *  @brief Arduino-compatible alias: read single bit (0/1).
  *  @note Macro arguments may be evaluated more than once.
  */
+#if !defined(ARDUINO)
 #ifndef bitRead
 #define bitRead(var, bit)    (((var) >> (bit)) & 1u)
+#endif
 #endif
 
 /** @def set_bit_v

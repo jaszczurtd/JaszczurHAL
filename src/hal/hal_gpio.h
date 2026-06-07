@@ -5,8 +5,13 @@
  * @brief Hardware abstraction for general-purpose I/O pins.
  */
 
+#include "hal_config.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+#if defined(ARDUINO) && !defined(LED_BUILTIN)
+#include <pins_arduino.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {

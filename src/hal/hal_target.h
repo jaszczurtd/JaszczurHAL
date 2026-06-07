@@ -92,6 +92,23 @@ hal_project_config.h (or via a -D flag)."
 #  define HAL_TARGET_NAME "mock"
 #endif
 
+/* ── 4b. Board-compatibility fallback for LED_BUILTIN ────────────────────
+ * Client code often expects Arduino-style LED_BUILTIN to exist. Keep any
+ * board/core-provided definition intact; only provide a fallback when the
+ * active target selected by JaszczurHAL does not define it itself. */
+#ifndef LED_BUILTIN
+#  if HAL_TARGET_IS_RP2040
+#    if !defined(ARDUINO) && defined(PIN_LED)
+#      define LED_BUILTIN PIN_LED
+#    elif !defined(ARDUINO)
+#      define LED_BUILTIN 25u
+#    endif
+#  elif HAL_TARGET_IS_STM32G474
+    /* Nucleo-G474RE LD2 = PA5, and HAL GPIO numbering is port*16 + pin. */
+#    define LED_BUILTIN 5u
+#  endif
+#endif
+
 /* ── 5. Derived: real STM32G474 hardware vs host-stub sanity build ────────
  * The STM32G474 backend is selected in both the on-target ARM build and the
  * host "does it still compile" sanity build. Only the former should emit real
