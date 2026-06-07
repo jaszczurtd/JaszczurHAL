@@ -38,6 +38,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/hal_pga2311.cpp
     ${SRC}/hal/impl/shared/wireguard/crypto/blake2s.c
     ${SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
     ${SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
@@ -47,6 +48,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_digipot.cpp
     ${SRC}/hal/impl/shared/digipot/digipot_mcp401x.cpp
     ${SRC}/hal/impl/shared/digipot/digipot_max5395.cpp
+    ${SRC}/hal/impl/shared/pga2311/pga2311_driver.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp
@@ -100,6 +102,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_EXTERNAL_ADC   # propagates HAL_ENABLE_I2C
     HAL_ENABLE_MCP401X        # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395        # second digipot backend
+    HAL_ENABLE_PGA2311        # shared SPI stereo volume controller
     HAL_ENABLE_GPS            # portable NMEA engine (transport: SWSERIAL/UART, both on below)
     HAL_ENABLE_DAC
     HAL_ENABLE_PCNT

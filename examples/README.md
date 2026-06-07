@@ -198,3 +198,6 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 23 | external_adc_ads1115 | rp2040, stm32g474 | I2C, ADS1115 external ADC |
 | 24 | can_mcp2515 | rp2040, stm32g474 | SPI, MCP2515 CAN |
 | 25 | display_oled | rp2040, stm32g474 | I2C, SSD1306 OLED |
+| 26 | rtc_clock | rp2040, stm32g474 | RTC, PCF8563 |
+| 27 | rtc_ds3231 | rp2040, stm32g474 | RTC, DS3231 |
+| 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |

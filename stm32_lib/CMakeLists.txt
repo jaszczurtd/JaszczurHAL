@@ -26,6 +26,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/hal_pga2311.cpp
     ${SRC}/hal/hal_digipot.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_timer_ext.cpp

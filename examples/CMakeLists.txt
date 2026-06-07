@@ -142,6 +142,7 @@ function(_jh_add_stm32g474_example NAME)
         "${SRC}/hal/hal_config.cpp"
         "${SRC}/hal/hal_can_util.cpp"
         "${SRC}/hal/hal_crypto.cpp"
+        "${SRC}/hal/hal_pga2311.cpp"
         "${SRC}/hal/hal_digipot.cpp"
         "${SRC}/hal/hal_kv.cpp"
         "${SRC}/hal/hal_timer_ext.cpp"
@@ -278,3 +279,4 @@ jh_example(24_can_mcp2515 TARGETS rp2040 stm32g474)
 jh_example(25_display_oled TARGETS rp2040 stm32g474)
 jh_example(26_rtc_clock TARGETS rp2040 stm32g474)
 jh_example(27_rtc_ds3231 TARGETS rp2040 stm32g474)
+jh_example(28_pga2311 TARGETS rp2040 stm32g474)

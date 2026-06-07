@@ -32,12 +32,12 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
 - `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, WiFi, UDP, WireGuard, MQTT, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/impl/arduino/` - Arduino / RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `gps/`, `max6675/`, `mcp2515/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`) plus a shared WireGuard cryptography core in `wireguard/crypto/`.
+- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `gps/`, `max6675/`, `mcp2515/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`) plus a shared WireGuard cryptography core in `wireguard/crypto/`.
 - `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` and `stm32g474_system.{h,cpp}` (stub today; mirror the RP2040 driver API).
@@ -80,7 +80,7 @@ logic from Arduino and other board-specific SDK calls:
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
-- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`
+- `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`
 - `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - `hal_time_from_components(...)` for deterministic date/time-to-epoch conversion
 - optional timestamp hook for error logging via `hal_debug_set_timestamp_hook(...)`
@@ -151,6 +151,7 @@ third-party libraries via arduino-cli.
 | `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
@@ -189,6 +190,7 @@ HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
@@ -445,7 +447,7 @@ backend together with selected utility modules.
 Covered test targets include:
 
 - `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`,
-  `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`
+  `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`, `test_hal_pga2311`
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
@@ -2796,6 +2798,82 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 
 ---
 
+## `hal_pga2311` - PGA2311 stereo volume controller  *(optional - `HAL_ENABLE_PGA2311`)*
+
+```c
+#include <hal/hal_pga2311.h>
+
+#define HAL_PGA2311_PIN_NONE            0xFFu
+#define HAL_PGA2311_MUTE_PIN_NONE       HAL_PGA2311_PIN_NONE
+#define HAL_PGA2311_SPI_DEFAULT_HZ      1000000UL
+
+#define HAL_PGA2311_CODE_MUTE           0x00u
+#define HAL_PGA2311_CODE_MIN            0x01u
+#define HAL_PGA2311_CODE_0DB            0xC0u
+#define HAL_PGA2311_CODE_MAX            0xFFu
+
+#define HAL_PGA2311_GAIN_HALF_DB_MIN   (-191)
+#define HAL_PGA2311_GAIN_HALF_DB_MAX   (63)
+
+#define HAL_PGA2311_GAIN_DB_MIN        (-95.5f)
+#define HAL_PGA2311_GAIN_DB_MAX        (31.5f)
+
+typedef enum {
+  HAL_PGA2311_MUTE_ACTIVE_LOW = 0,
+  HAL_PGA2311_MUTE_ACTIVE_HIGH = 1,
+} hal_pga2311_mute_polarity_t;
+
+typedef struct {
+  uint8_t spi_bus;
+  uint8_t cs_pin;
+  uint8_t mute_pin;
+  hal_pga2311_mute_polarity_t mute_polarity;
+  uint32_t spi_clock_hz;
+  uint8_t spi_bit_order;
+  uint8_t spi_mode;
+  bool start_muted;
+} hal_pga2311_config_t;
+
+typedef struct hal_pga2311_impl_s hal_pga2311_impl_t;
+typedef hal_pga2311_impl_t *hal_pga2311_t;
+
+hal_pga2311_config_t hal_pga2311_default_config(void);
+hal_pga2311_t hal_pga2311_init(const hal_pga2311_config_t *cfg);
+void hal_pga2311_deinit(hal_pga2311_t h);
+
+bool hal_pga2311_set_raw(hal_pga2311_t h, uint8_t left_code, uint8_t right_code);
+bool hal_pga2311_set_raw_both(hal_pga2311_t h, uint8_t code);
+bool hal_pga2311_set_gain_half_db(hal_pga2311_t h, int16_t left_half_db, int16_t right_half_db);
+bool hal_pga2311_set_gain_db(hal_pga2311_t h, float left_db, float right_db);
+bool hal_pga2311_set_gain_db_both(hal_pga2311_t h, float db);
+
+bool hal_pga2311_set_mute(hal_pga2311_t h, bool mute);
+bool hal_pga2311_is_muted(hal_pga2311_t h);
+
+bool hal_pga2311_get_target_raw(hal_pga2311_t h, uint8_t *left_code, uint8_t *right_code);
+bool hal_pga2311_get_target_gain_half_db(hal_pga2311_t h, int16_t *left_half_db, int16_t *right_half_db);
+
+bool hal_pga2311_gain_half_db_to_raw(int16_t half_db, uint8_t *out_code);
+bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
+```
+
+**Behavior notes:**
+- `HAL_ENABLE_PGA2311` auto-propagates `HAL_ENABLE_SPI` in `hal_config.h`.
+- The module does not call `hal_spi_init()`; the application owns SPI bus pin setup.
+- With `mute_pin == HAL_PGA2311_MUTE_PIN_NONE`, mute is emulated in software by
+  writing `HAL_PGA2311_CODE_MUTE` to both channels and restoring cached target
+  codes on unmute.
+- With a hardware mute pin configured, mute toggles only GPIO and does not send
+  extra SPI frames.
+
+**impl/shared:** `impl/shared/pga2311/pga2311_driver.*` (HAL SPI/GPIO transport)
+plus `hal_pga2311.cpp` facade with static handle pool + per-instance mutex.
+
+**Thread safety:** per-instance mutex serializes API calls; SPI transactions are
+wrapped in `hal_spi_lock()` / `hal_spi_unlock()`.
+
+---
+
 ## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_ENABLE_EXTERNAL_ADC`)*
 
 ```c
@@ -3970,6 +4048,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 | `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/onewire/onewire_driver.*`) over HAL GPIO/time |
 | `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
 | `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
 | `hal_littlefs` | Arduino-pico `LittleFS` |
 | `hal_udp` | Arduino-pico `WiFiUDP` |
@@ -4040,6 +4119,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
+| `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_hal_i2c` | bus0/bus1 begin/request/read flow, address capture, busy helper, lock-depth and init/deinit state coverage |
 | `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
 | `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
