@@ -33,34 +33,37 @@
 #define clr_bit(var, mask)   do { (var) &= ~(mask); } while (0)
 #endif
 
+/* In Arduino C++ builds include Arduino.h first so its native bitSet/bitClear/
+ * bitRead macros are visible and we avoid redefinition warnings. In non-Arduino
+ * or C-only builds, provide local fallbacks when the macros are still missing. */
+#if defined(ARDUINO) && defined(__cplusplus) && defined(__has_include)
+	#if __has_include(<Arduino.h>)
+		#include <Arduino.h>
+	#endif
+#endif
+
 /** @def bitSet
  *  @brief Arduino-compatible alias: set single bit in-place.
  *  @note Macro arguments may be evaluated more than once.
  */
-#if !defined(ARDUINO)
 #ifndef bitSet
 #define bitSet(var, bit)     do { (var) |=  (1u << (bit)); } while (0)
-#endif
 #endif
 
 /** @def bitClear
  *  @brief Arduino-compatible alias: clear single bit in-place.
  *  @note Macro arguments may be evaluated more than once.
  */
-#if !defined(ARDUINO)
 #ifndef bitClear
 #define bitClear(var, bit)   do { (var) &= ~(1u << (bit)); } while (0)
-#endif
 #endif
 
 /** @def bitRead
  *  @brief Arduino-compatible alias: read single bit (0/1).
  *  @note Macro arguments may be evaluated more than once.
  */
-#if !defined(ARDUINO)
 #ifndef bitRead
 #define bitRead(var, bit)    (((var) >> (bit)) & 1u)
-#endif
 #endif
 
 /** @def set_bit_v
