@@ -70,7 +70,9 @@ void test_set_raw_writes_two_byte_spi_frame_with_configured_settings(void) {
 
     TEST_ASSERT_TRUE(hal_pga2311_set_raw(h, 0x12u, 0x34u));
 
-    const uint8_t expected_tail[2] = {0x12u, 0x34u};
+    /* PGA2311 expects the RIGHT channel byte first, then LEFT: set_raw(left,
+     * right) = (0x12, 0x34) must be framed on the wire as {right, left}. */
+    const uint8_t expected_tail[2] = {0x34u, 0x12u};
     assert_spi_tail(1u, expected_tail, sizeof(expected_tail));
 
     TEST_ASSERT_EQUAL_UINT8(1u, hal_mock_spi_get_bus());
@@ -108,7 +110,8 @@ void test_gain_conversion_and_set_gain_db(void) {
     TEST_ASSERT_NOT_NULL(h);
 
     TEST_ASSERT_TRUE(hal_pga2311_set_gain_db(h, 0.0f, -95.5f));
-    const uint8_t expected_tail[2] = {HAL_PGA2311_CODE_0DB, HAL_PGA2311_CODE_MIN};
+    /* left=0 dB (CODE_0DB), right=-95.5 dB (CODE_MIN); wire order is {right, left}. */
+    const uint8_t expected_tail[2] = {HAL_PGA2311_CODE_MIN, HAL_PGA2311_CODE_0DB};
     assert_spi_tail(0u, expected_tail, sizeof(expected_tail));
 
     TEST_ASSERT_FALSE(hal_pga2311_set_gain_db(h, -96.0f, 0.0f));
@@ -145,7 +148,8 @@ void test_soft_mute_caches_and_restores_volume(void) {
 
     TEST_ASSERT_TRUE(hal_pga2311_set_mute(h, false));
     TEST_ASSERT_FALSE(hal_pga2311_is_muted(h));
-    const uint8_t unmute_tail[2] = {0x33u, 0x44u};
+    /* target left=0x33, right=0x44; restored on unmute as wire order {right, left}. */
+    const uint8_t unmute_tail[2] = {0x44u, 0x33u};
     assert_spi_tail(0u, unmute_tail, sizeof(unmute_tail));
     TEST_ASSERT_TRUE(spi_tx_len(0u) > tx_before_mute);
 

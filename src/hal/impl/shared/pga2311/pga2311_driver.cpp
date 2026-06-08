@@ -74,7 +74,9 @@ bool hal_pga2311_driver_write_codes(const hal_pga2311_config_t *cfg,
     }
 
     const uint8_t bus = normalize_spi_bus(cfg->spi_bus);
-    const uint8_t frame[2] = {left_code, right_code};
+    /* PGA2311 loads the 16-bit word MSB-first: the first byte is the RIGHT
+     * channel gain (D15-D8), the second byte is the LEFT channel (D7-D0). */
+    const uint8_t frame[2] = {right_code, left_code};
     const hal_spi_settings_t spi_settings = build_spi_settings(cfg);
 
     hal_spi_lock(bus);

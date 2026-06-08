@@ -244,7 +244,8 @@ INT8U JHMCP2515::mcp2515_init(const INT8U canIDMode, const INT8U canSpeed, const
 #if DEBUG_MODE
     hal_deb("%s", "Entering Configuration Mode Successful!");
 #endif
-    if (mcp2515_configRate(canSpeed, canClock)) {
+    res = mcp2515_configRate(canSpeed, canClock);
+    if (res != MCP2515_OK) {
 #if DEBUG_MODE
         hal_derr("%s", "Setting Baudrate Failure...");
 #endif
