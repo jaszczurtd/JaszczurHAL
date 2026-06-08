@@ -35,8 +35,9 @@ constexpr uint32_t kStackCanary = 0xC4314EA5u;
 // word at that address; route the address through an inline-asm "memory
 // operand" so the optimiser's -Warray-bounds analysis cannot reach the
 // underlying `char [1]` type.
+extern "C" char __StackLimit;
+
 inline uint32_t *stack_canary_addr(void) {
-    extern char __StackLimit;
     char *p = &__StackLimit;
     __asm__ ("" : "+r"(p));
     return reinterpret_cast<uint32_t *>(p);

@@ -3,6 +3,14 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
+/* Datasheet anchors used by these tests:
+ * - MCP401x: fixed I2C address, 7-bit wiper range (0..127), and mode limits
+ *   by device variant (MCP4017/18/19), plus W-L/W-H/divider transfer behavior.
+ * - MAX5395: valid addresses (0x28/0x29/0x2B), command set (RST, SD_CLR,
+ *   SD_H_WREG/SD_L_WREG, QP_OFF, WIPER), and charge-pump dependent wiper
+ *   resistance used in W-L/W-H conversion math.
+ */
+
 void setUp(void) {
     hal_i2c_init(0, 0, 100000);
     hal_mock_i2c_reset_write_log();
@@ -95,6 +103,70 @@ void test_mcp401x_set_resistance_voltage_divider(void) {
     uint8_t f[4];
     (void)get_frame(0, f, sizeof(f));
     TEST_ASSERT_EQUAL_UINT8(63, f[0]);
+
+    hal_digipot_deinit(h);
+}
+
+void test_mcp401x_wh_mode_on_mcp4018_inverts_wiper_and_uses_fixed_address(void) {
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MCP401X;
+    cfg.i2c_bus = 0;
+    cfg.i2c_addr = 0x55; /* should be ignored by MCP401x backend */
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH;
+    cfg.mcp401x_device = HAL_DIGIPOT_MCP4018;
+    hal_digipot_t h = hal_digipot_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    /* WH, e2e=10k, R=5000:
+     * base WL = round(((5000-150)/10000)*127) = round(61.595) = 62,
+     * WH inverts to 127-62 = 65. */
+    uint8_t expected = 65u;
+    hal_mock_i2c_inject_rx(&expected, 1);
+    hal_mock_i2c_reset_write_log();
+    TEST_ASSERT_TRUE(hal_digipot_set_resistance(h, 5000));
+
+    uint8_t f[4] = {};
+    TEST_ASSERT_EQUAL_INT(1, get_frame(0, f, sizeof(f)));
+    TEST_ASSERT_EQUAL_UINT8(65u, f[0]);
+    TEST_ASSERT_EQUAL_UINT8(0x2Fu, hal_mock_i2c_get_last_addr());
+
+    hal_digipot_deinit(h);
+}
+
+void test_mcp401x_clamps_below_wiper_resistance_to_zero_code(void) {
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MCP401X;
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL;
+    cfg.mcp401x_device = HAL_DIGIPOT_MCP4017;
+    hal_digipot_t h = hal_digipot_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    uint8_t expected = 0u;
+    hal_mock_i2c_inject_rx(&expected, 1);
+    hal_mock_i2c_reset_write_log();
+    TEST_ASSERT_TRUE(hal_digipot_set_resistance(h, 0u));
+
+    uint8_t f[4] = {};
+    TEST_ASSERT_EQUAL_INT(1, get_frame(0, f, sizeof(f)));
+    TEST_ASSERT_EQUAL_UINT8(0u, f[0]);
+
+    hal_digipot_deinit(h);
+}
+
+void test_mcp401x_readback_failure_returns_false(void) {
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MCP401X;
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL;
+    cfg.mcp401x_device = HAL_DIGIPOT_MCP4017;
+    hal_digipot_t h = hal_digipot_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    hal_mock_i2c_set_busy(true); /* request_from/read fails via busy backend path */
+    TEST_ASSERT_FALSE(hal_digipot_set_resistance(h, 5000));
+    hal_mock_i2c_set_busy(false);
 
     hal_digipot_deinit(h);
 }
@@ -259,11 +331,88 @@ void test_max5395_set_resistance_wh_inverts_wiper(void) {
     hal_digipot_deinit(h);
 }
 
+void test_max5395_variable_mode_config_read_failure_returns_false(void) {
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MAX5395;
+    cfg.i2c_addr = 0x28;
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL;
+    cfg.charge_pump_en = true;
+    hal_digipot_t h = hal_digipot_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    hal_mock_i2c_set_busy(true); /* read cmd fails */
+    hal_mock_i2c_reset_write_log();
+    TEST_ASSERT_FALSE(hal_digipot_set_resistance(h, 5000));
+    hal_mock_i2c_set_busy(false);
+
+    /* Only config-read command frame should have been attempted. */
+    TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame_count());
+    uint8_t f[4] = {};
+    TEST_ASSERT_EQUAL_INT(1, get_frame(0, f, sizeof(f)));
+    TEST_ASSERT_EQUAL_UINT8(0x80u, f[0]);
+
+    hal_digipot_deinit(h);
+}
+
+void test_max5395_wh_mode_uses_qp_off_wiper_resistance_from_config(void) {
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MAX5395;
+    cfg.i2c_addr = 0x28;
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH;
+    cfg.charge_pump_en = false;
+    hal_digipot_t h = hal_digipot_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    /* QP bit clear => wiper resistance 45 ohm.
+     * WL base: ((5000-45)/10000)*255 = 126.35 -> truncate 126.
+     * WH invert: 255 - 126 = 129. */
+    uint8_t config = 0x00u;
+    hal_mock_i2c_inject_rx(&config, 1);
+    hal_mock_i2c_reset_write_log();
+    TEST_ASSERT_TRUE(hal_digipot_set_resistance(h, 5000));
+
+    uint8_t f[4] = {};
+    TEST_ASSERT_EQUAL_INT(2, get_frame(2, f, sizeof(f)));
+    TEST_ASSERT_EQUAL_UINT8(0x00u, f[0]);
+    TEST_ASSERT_EQUAL_UINT8(129u, f[1]);
+
+    hal_digipot_deinit(h);
+}
+
+void test_public_api_guards_and_pool_limit(void) {
+    TEST_ASSERT_FALSE(hal_digipot_set_resistance(NULL, 1000));
+    TEST_ASSERT_EQUAL_UINT16(0u, hal_digipot_step_count(NULL));
+    TEST_ASSERT_EQUAL_UINT32(0u, hal_digipot_e2e_resistance(NULL));
+    TEST_ASSERT_EQUAL_INT(HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER, hal_digipot_mode(NULL));
+    hal_digipot_deinit(NULL);
+
+    hal_digipot_config_t cfg = {};
+    cfg.chip = HAL_DIGIPOT_CHIP_MCP401X;
+    cfg.e2e_resistance = 10000;
+    cfg.mode = HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL;
+    cfg.mcp401x_device = HAL_DIGIPOT_MCP4017;
+
+    hal_digipot_t hs[HAL_DIGIPOT_MAX_INSTANCES] = {};
+    for (int i = 0; i < HAL_DIGIPOT_MAX_INSTANCES; ++i) {
+        hs[i] = hal_digipot_init(&cfg);
+        TEST_ASSERT_NOT_NULL(hs[i]);
+    }
+    TEST_ASSERT_NULL(hal_digipot_init(&cfg));
+    for (int i = 0; i < HAL_DIGIPOT_MAX_INSTANCES; ++i) {
+        hal_digipot_deinit(hs[i]);
+    }
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_mcp401x_init_validation);
     RUN_TEST(test_mcp401x_set_resistance_wl);
     RUN_TEST(test_mcp401x_set_resistance_voltage_divider);
+    RUN_TEST(test_mcp401x_wh_mode_on_mcp4018_inverts_wiper_and_uses_fixed_address);
+    RUN_TEST(test_mcp401x_clamps_below_wiper_resistance_to_zero_code);
+    RUN_TEST(test_mcp401x_readback_failure_returns_false);
     RUN_TEST(test_mcp401x_resistance_above_e2e_rejected);
     RUN_TEST(test_max5395_init_sequence);
     RUN_TEST(test_max5395_init_charge_pump_off);
@@ -271,5 +420,8 @@ int main(void) {
     RUN_TEST(test_max5395_set_resistance_voltage_divider);
     RUN_TEST(test_max5395_set_resistance_wl_with_config_read);
     RUN_TEST(test_max5395_set_resistance_wh_inverts_wiper);
+    RUN_TEST(test_max5395_variable_mode_config_read_failure_returns_false);
+    RUN_TEST(test_max5395_wh_mode_uses_qp_off_wiper_resistance_from_config);
+    RUN_TEST(test_public_api_guards_and_pool_limit);
     return UNITY_END();
 }

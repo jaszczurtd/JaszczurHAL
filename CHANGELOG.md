@@ -6,6 +6,26 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### tests / shared drivers - datasheet-grounded regression expansion
+
+- Expanded host regression coverage so the current shared drivers are validated
+  against device-PDF register and bitfield semantics instead of only
+  round-trip/self-consistency paths. Added or significantly extended tests for
+  MCP2515, MAX6675, MCP9600, PGA2311, PCF8563, DS3231, DS18B20,
+  MCP401x/MAX5395 digipots, and ADS1x15.
+- Added explicit `Datasheet anchors used by these tests` comments in the main
+  driver test files so register-level expectations can be audited directly back
+  to the source PDFs under `src/datasheets/`.
+- Fixed shared MCP2515 message handling exposed by the new tests: standard
+  frames now report RTR using the correct SIDL/SRR path, DLC is clamped to
+  8 bytes, and payload staging is safe for short or null buffers.
+- Fixed shared MCP9600 ambient-resolution handling to match the datasheet
+  `DEVICE_CONFIG` bit 7 definition while preserving ADC-resolution bits.
+- Simplified `examples/01_blink` to use `LED_BUILTIN`, keeping the example on
+  the target abstraction instead of a local per-board pin override.
+- Normalized the final `runalltests.sh` summary label to the current
+  `RP2040 + STM32G474` target naming.
+
 ### hal_pga2311 - shared PGA2311 stereo-volume module
 
 - Added a new optional `HAL_ENABLE_PGA2311` module with public API in

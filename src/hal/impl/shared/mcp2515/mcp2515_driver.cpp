@@ -351,12 +351,16 @@ void JHMCP2515::mcp2515_write_canMsg(const INT8U buffer_sidh_addr) {
 }
 
 void JHMCP2515::mcp2515_read_canMsg(const INT8U buffer_sidh_addr) {
-    INT8U ctrl;
+    INT8U ctrl, sidl;
     mcp2515_read_id(buffer_sidh_addr, &m_nExtFlg, &m_nID);
     ctrl = mcp2515_readRegister((INT8U)(buffer_sidh_addr - 1));
+    sidl = mcp2515_readRegister((INT8U)(buffer_sidh_addr + MCP_SIDL));
     m_nDlc = mcp2515_readRegister((INT8U)(buffer_sidh_addr + 4));
-    m_nRtr = (ctrl & 0x08u) ? 1u : 0u;
+    m_nRtr = ((ctrl & 0x08u) || ((m_nExtFlg == 0u) && (sidl & 0x10u))) ? 1u : 0u;
     m_nDlc &= MCP_DLC_MASK;
+    if (m_nDlc > MAX_CHAR_IN_MESSAGE) {
+        m_nDlc = MAX_CHAR_IN_MESSAGE;
+    }
     mcp2515_readRegisterS((INT8U)(buffer_sidh_addr + 5), &m_nDta[0], m_nDlc);
 }
 
@@ -438,9 +442,12 @@ INT8U JHMCP2515::setMsg(INT32U id, INT8U rtr, INT8U ext, INT8U len, INT8U *pData
     m_nID = id;
     m_nRtr = rtr;
     m_nExtFlg = ext;
-    m_nDlc = len;
-    for (int i = 0; i < MAX_CHAR_IN_MESSAGE; ++i) {
-        m_nDta[i] = *(pData + i);
+    m_nDlc = (len > MAX_CHAR_IN_MESSAGE) ? MAX_CHAR_IN_MESSAGE : len;
+    for (INT8U i = 0; i < m_nDlc; ++i) {
+        m_nDta[i] = (pData != NULL) ? *(pData + i) : 0x00u;
+    }
+    for (INT8U i = m_nDlc; i < MAX_CHAR_IN_MESSAGE; ++i) {
+        m_nDta[i] = 0x00u;
     }
     return MCP2515_OK;
 }
