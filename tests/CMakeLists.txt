@@ -8,6 +8,18 @@ endfunction()
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
+add_executable(test_pcf8563_driver
+    test_pcf8563_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/pcf8563/pcf8563.cpp
+)
+target_link_libraries(test_pcf8563_driver PRIVATE hal_mock)
+add_test(NAME test_pcf8563_driver COMMAND test_pcf8563_driver)
+add_executable(test_ds3231_driver
+    test_ds3231_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ds3231/ds3231.cpp
+)
+target_link_libraries(test_ds3231_driver PRIVATE hal_mock)
+add_test(NAME test_ds3231_driver COMMAND test_ds3231_driver)
 add_executable(test_max6675_driver
     test_max6675_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/max6675/max6675_driver.cpp

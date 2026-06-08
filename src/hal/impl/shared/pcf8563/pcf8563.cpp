@@ -294,7 +294,9 @@ bool pcf8563_get_datetime(const pcf8563_t *dev, pcf8563_datetime_t *out_dt) {
     out_dt->weekday = (uint8_t)(buffer[4] & PCF8563_WEEKDAY_MASK);
     out_dt->month = pcf8563_from_bcd((uint8_t)(buffer[5] & PCF8563_MONTH_MASK));
 
-    if ((buffer[5] & PCF8563_MONTH_CENTURY) != 0u) {
+    /* PCF8563 century bit (Months/century reg, bit 7): C=0 -> 20xx, C=1 -> 19xx
+     * (NXP PCF8563 datasheet, Table 13). */
+    if ((buffer[5] & PCF8563_MONTH_CENTURY) == 0u) {
         out_dt->year = (uint16_t)(2000u + pcf8563_from_bcd(buffer[6]));
     } else {
         out_dt->year = (uint16_t)(1900u + pcf8563_from_bcd(buffer[6]));
@@ -317,10 +319,12 @@ bool pcf8563_set_datetime(const pcf8563_t *dev, const pcf8563_datetime_t *dt) {
     buffer[4] = (uint8_t)(pcf8563_to_bcd(dt->weekday) & PCF8563_WEEKDAY_MASK);
     buffer[5] = (uint8_t)(pcf8563_to_bcd(dt->month) & PCF8563_MONTH_MASK);
 
+    /* C=0 -> 20xx, C=1 -> 19xx (datasheet Table 13): leave the century bit clear
+     * for years >= 2000, set it for the 1900s. */
     if (dt->year >= 2000u) {
-        buffer[5] = (uint8_t)(buffer[5] | PCF8563_MONTH_CENTURY);
         buffer[6] = pcf8563_to_bcd((uint8_t)(dt->year - 2000u));
     } else {
+        buffer[5] = (uint8_t)(buffer[5] | PCF8563_MONTH_CENTURY);
         buffer[6] = pcf8563_to_bcd((uint8_t)(dt->year - 1900u));
     }
 
