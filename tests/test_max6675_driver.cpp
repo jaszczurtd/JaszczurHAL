@@ -27,6 +27,14 @@ static void push_raw(uint16_t raw) {
     hal_mock_gpio_push_read_sequence(MAX_MISO, bits, 16u);
 }
 
+/* MAX6675 datasheet, serial read format (Figure 1/2):
+ * D15: dummy sign bit (always 0)
+ * D14..D3: 12-bit temperature, 0.25 C/LSB
+ * D2: open-thermocouple fault (1 = fault)
+ * D1: device ID bit (0 for MAX6675)
+ * D0: tri-state
+ */
+
 void setUp(void) {
     dev = {};
     hal_mock_gpio_clear_read_sequence(MAX_MISO);
@@ -53,9 +61,38 @@ void test_raw_to_celsius_decodes_quarter_degree_steps(void) {
     TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(raw));
 }
 
+void test_raw_to_celsius_datasheet_vectors(void) {
+    struct {
+        uint16_t raw;
+        float celsius;
+    } const vectors[] = {
+        {0x0000u, 0.0f},       /* all-zero temperature field */
+        {0x0320u, 25.0f},      /* 0x064 (100) * 0.25 C */
+        {0x7FF8u, 1023.75f},   /* D14..D3 all ones: max code */
+    };
+
+    for (size_t i = 0; i < (sizeof(vectors) / sizeof(vectors[0])); ++i) {
+        TEST_ASSERT_FLOAT_WITHIN(0.001f, vectors[i].celsius,
+                                 hal_max6675_raw_to_celsius(vectors[i].raw));
+    }
+}
+
+void test_raw_to_celsius_ignores_d1_and_d0_bits(void) {
+    const uint16_t base = 0x0320u; /* 25.0 C */
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(base));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0002u)));
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0001u)));
+}
+
 void test_raw_to_celsius_returns_nan_on_open_circuit(void) {
     TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(0x0004u));
     TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(0x0004u)));
+}
+
+void test_raw_to_celsius_returns_nan_when_fault_bit_set_with_temperature(void) {
+    const uint16_t raw = (uint16_t)(0x0320u | 0x0004u);
+    TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(raw));
+    TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(raw)));
 }
 
 void test_read_raw_bitbangs_msb_first_and_restores_idle_levels(void) {
@@ -95,7 +132,10 @@ int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_init_configures_gpio_and_idle_levels);
     RUN_TEST(test_raw_to_celsius_decodes_quarter_degree_steps);
+    RUN_TEST(test_raw_to_celsius_datasheet_vectors);
+    RUN_TEST(test_raw_to_celsius_ignores_d1_and_d0_bits);
     RUN_TEST(test_raw_to_celsius_returns_nan_on_open_circuit);
+    RUN_TEST(test_raw_to_celsius_returns_nan_when_fault_bit_set_with_temperature);
     RUN_TEST(test_read_raw_bitbangs_msb_first_and_restores_idle_levels);
     RUN_TEST(test_read_celsius_uses_bitbang_raw_value);
     RUN_TEST(test_read_celsius_returns_nan_for_scripted_fault);

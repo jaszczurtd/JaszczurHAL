@@ -472,8 +472,12 @@ void hal_mcp9600_set_ambient_resolution(
         return;
     }
 
-    config &= (uint8_t)~0xC0u;
-    config |= ((uint8_t)(~(uint8_t)resolution) & 0x03u) << 6;
+    /* MCP9600 datasheet, Device Configuration register bit7:
+     * 0 = 0.0625 C, 1 = 0.25 C. Keep ADC resolution bits [6:5] untouched. */
+    config &= (uint8_t)~0x80u;
+    if (resolution == HAL_MCP9600_AMBIENT_RES_0_25) {
+        config |= 0x80u;
+    }
     (void)mcp9600_write_u8(dev, MCP9600_DEVICECONFIG, config);
 
     hal_mutex_unlock(dev->mutex);

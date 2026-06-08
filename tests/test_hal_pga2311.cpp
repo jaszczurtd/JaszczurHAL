@@ -26,6 +26,19 @@ static void assert_spi_tail(uint8_t bus, const uint8_t *tail, size_t len) {
     }
 }
 
+void test_default_config_matches_module_defaults(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+
+    TEST_ASSERT_EQUAL_UINT8(0u, cfg.spi_bus);
+    TEST_ASSERT_EQUAL_UINT8(HAL_PGA2311_PIN_NONE, cfg.cs_pin);
+    TEST_ASSERT_EQUAL_UINT8(HAL_PGA2311_MUTE_PIN_NONE, cfg.mute_pin);
+    TEST_ASSERT_EQUAL_UINT8(HAL_PGA2311_MUTE_ACTIVE_LOW, (uint8_t)cfg.mute_polarity);
+    TEST_ASSERT_EQUAL_UINT32(HAL_PGA2311_SPI_DEFAULT_HZ, cfg.spi_clock_hz);
+    TEST_ASSERT_EQUAL_UINT8(HAL_SPI_MSBFIRST, cfg.spi_bit_order);
+    TEST_ASSERT_EQUAL_UINT8(HAL_SPI_MODE0, cfg.spi_mode);
+    TEST_ASSERT_FALSE(cfg.start_muted);
+}
+
 void test_init_validation_rejects_invalid_config(void) {
     hal_pga2311_config_t cfg = hal_pga2311_default_config();
 
@@ -38,6 +51,10 @@ void test_init_validation_rejects_invalid_config(void) {
 
     cfg.mute_pin = HAL_PGA2311_MUTE_PIN_NONE;
     cfg.spi_mode = 99u;
+    TEST_ASSERT_NULL(hal_pga2311_init(&cfg));
+
+    cfg.spi_mode = HAL_SPI_MODE0;
+    cfg.spi_bit_order = 99u;
     TEST_ASSERT_NULL(hal_pga2311_init(&cfg));
 }
 
@@ -195,8 +212,121 @@ void test_start_muted_without_hw_mute_pin_writes_mute_frame(void) {
     hal_pga2311_deinit(h);
 }
 
+void test_start_muted_with_hw_mute_pin_sets_pin_without_spi_write(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+    cfg.cs_pin = 31u;
+    cfg.mute_pin = 32u;
+    cfg.start_muted = true;
+
+    hal_pga2311_t h = hal_pga2311_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_TRUE(hal_pga2311_is_muted(h));
+    TEST_ASSERT_FALSE(hal_mock_gpio_get_state(32u)); /* active-low mute asserted */
+    TEST_ASSERT_EQUAL_UINT32(0u, spi_tx_len(0u));
+
+    hal_pga2311_deinit(h);
+}
+
+void test_hw_mute_active_high_polarity_is_respected(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+    cfg.cs_pin = 33u;
+    cfg.mute_pin = 34u;
+    cfg.mute_polarity = HAL_PGA2311_MUTE_ACTIVE_HIGH;
+
+    hal_pga2311_t h = hal_pga2311_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+    TEST_ASSERT_FALSE(hal_mock_gpio_get_state(34u)); /* unmuted for active-high */
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_mute(h, true));
+    TEST_ASSERT_TRUE(hal_mock_gpio_get_state(34u));
+    TEST_ASSERT_TRUE(hal_pga2311_set_mute(h, false));
+    TEST_ASSERT_FALSE(hal_mock_gpio_get_state(34u));
+
+    hal_pga2311_deinit(h);
+}
+
+void test_set_raw_both_writes_same_code_to_both_channels(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+    cfg.cs_pin = 35u;
+
+    hal_pga2311_t h = hal_pga2311_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_raw_both(h, 0xA5u));
+    const uint8_t expected_tail[2] = {0xA5u, 0xA5u};
+    assert_spi_tail(0u, expected_tail, sizeof(expected_tail));
+
+    hal_pga2311_deinit(h);
+}
+
+void test_set_gain_half_db_and_set_gain_db_both_cover_rounding(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+    cfg.cs_pin = 36u;
+
+    hal_pga2311_t h = hal_pga2311_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_gain_half_db(h, -191, 63));
+    /* left=-95.5 dB -> 0x01, right=+31.5 dB -> 0xFF, wire order {right,left}. */
+    const uint8_t half_db_tail[2] = {0xFFu, 0x01u};
+    assert_spi_tail(0u, half_db_tail, sizeof(half_db_tail));
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_gain_db_both(h, 0.24f));
+    /* 0.24 dB rounds to 0.0 dB -> code 0xC0 on both channels. */
+    const uint8_t db_tail[2] = {HAL_PGA2311_CODE_0DB, HAL_PGA2311_CODE_0DB};
+    assert_spi_tail(0u, db_tail, sizeof(db_tail));
+
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_half_db(h, -192, 0));
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_half_db(h, 0, 64));
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_db_both(h, -96.0f));
+
+    hal_pga2311_deinit(h);
+}
+
+void test_get_target_gain_half_db_reports_cached_target_and_rejects_mute_code(void) {
+    hal_pga2311_config_t cfg = hal_pga2311_default_config();
+    cfg.cs_pin = 37u;
+
+    hal_pga2311_t h = hal_pga2311_init(&cfg);
+    TEST_ASSERT_NOT_NULL(h);
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_raw(h, HAL_PGA2311_CODE_0DB, HAL_PGA2311_CODE_MIN));
+
+    int16_t left_half_db = 0;
+    int16_t right_half_db = 0;
+    TEST_ASSERT_TRUE(hal_pga2311_get_target_gain_half_db(h, &left_half_db, &right_half_db));
+    TEST_ASSERT_EQUAL_INT16(0, left_half_db);
+    TEST_ASSERT_EQUAL_INT16(HAL_PGA2311_GAIN_HALF_DB_MIN, right_half_db);
+
+    TEST_ASSERT_TRUE(hal_pga2311_set_raw(h, HAL_PGA2311_CODE_MUTE, HAL_PGA2311_CODE_0DB));
+    TEST_ASSERT_FALSE(hal_pga2311_get_target_gain_half_db(h, &left_half_db, &right_half_db));
+
+    hal_pga2311_deinit(h);
+}
+
+void test_api_returns_false_for_invalid_handles_or_null_outputs(void) {
+    uint8_t code = 0u;
+    int16_t half_db = 0;
+    uint8_t left = 0u, right = 0u;
+
+    TEST_ASSERT_FALSE(hal_pga2311_set_raw(NULL, 0x01u, 0x02u));
+    TEST_ASSERT_FALSE(hal_pga2311_set_raw_both(NULL, 0x12u));
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_half_db(NULL, 0, 0));
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_db(NULL, 0.0f, 0.0f));
+    TEST_ASSERT_FALSE(hal_pga2311_set_gain_db_both(NULL, 0.0f));
+    TEST_ASSERT_FALSE(hal_pga2311_set_mute(NULL, true));
+    TEST_ASSERT_FALSE(hal_pga2311_get_target_raw(NULL, &left, &right));
+    TEST_ASSERT_FALSE(hal_pga2311_get_target_raw(NULL, NULL, &right));
+    TEST_ASSERT_FALSE(hal_pga2311_get_target_gain_half_db(NULL, &half_db, &half_db));
+    TEST_ASSERT_FALSE(hal_pga2311_get_target_gain_half_db(NULL, NULL, &half_db));
+
+    TEST_ASSERT_FALSE(hal_pga2311_gain_half_db_to_raw(0, NULL));
+    TEST_ASSERT_FALSE(hal_pga2311_raw_to_gain_half_db(HAL_PGA2311_CODE_0DB, NULL));
+}
+
 int main(void) {
     UNITY_BEGIN();
+    RUN_TEST(test_default_config_matches_module_defaults);
     RUN_TEST(test_init_validation_rejects_invalid_config);
     RUN_TEST(test_init_sets_gpio_defaults_for_cs_and_hw_mute);
     RUN_TEST(test_set_raw_writes_two_byte_spi_frame_with_configured_settings);
@@ -204,6 +334,12 @@ int main(void) {
     RUN_TEST(test_soft_mute_caches_and_restores_volume);
     RUN_TEST(test_hw_mute_toggles_pin_without_extra_spi_writes);
     RUN_TEST(test_start_muted_without_hw_mute_pin_writes_mute_frame);
+    RUN_TEST(test_start_muted_with_hw_mute_pin_sets_pin_without_spi_write);
+    RUN_TEST(test_hw_mute_active_high_polarity_is_respected);
+    RUN_TEST(test_set_raw_both_writes_same_code_to_both_channels);
+    RUN_TEST(test_set_gain_half_db_and_set_gain_db_both_cover_rounding);
+    RUN_TEST(test_get_target_gain_half_db_reports_cached_target_and_rejects_mute_code);
+    RUN_TEST(test_api_returns_false_for_invalid_handles_or_null_outputs);
     return UNITY_END();
 }
 
