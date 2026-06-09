@@ -20,6 +20,11 @@ void            hal_mock_gpio_clear_read_sequence(uint8_t pin);
 void            hal_mock_gpio_fire_interrupt(uint8_t pin);
 /** @brief Return the GPIO IRQ priority set via hal_gpio_set_irq_priority(). */
 hal_irq_priority_t hal_mock_gpio_get_irq_priority(void);
+/* NOTE on the "write-before-mode" antipattern: the mock faithfully models RP2040
+ * (hal_gpio_set_mode(OUTPUT) clobbers the output latch to 0, like gpio_init()).
+ * To guard a driver against it, assert the *driven level* after a drive-high,
+ * e.g. drive a pin HIGH then TEST_ASSERT_TRUE(hal_mock_gpio_get_state(pin)) -
+ * with the buggy write-then-mode order the level reads LOW. */
 
 // ── PWM ──────────────────────────────────────────────────────────────────────
 uint32_t hal_mock_pwm_get_value(uint8_t pin);

@@ -63,14 +63,18 @@ static inline void onewire_release(uint8_t pin) {
     hal_gpio_write(pin, false);
 }
 
+/* Mode MUST be set before the level. On RP2040 pinMode(OUTPUT) calls gpio_init(),
+ * which resets the output latch to 0; writing the level first lets that reset
+ * discard it, so onewire_drive_high() would actually drive LOW. Establish OUTPUT
+ * first, then drive the wanted level. */
 static inline void onewire_drive_low(uint8_t pin) {
-    hal_gpio_write(pin, false);
     hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
+    hal_gpio_write(pin, false);
 }
 
 static inline void onewire_drive_high(uint8_t pin) {
-    hal_gpio_write(pin, true);
     hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
+    hal_gpio_write(pin, true);
 }
 
 JHOneWire::JHOneWire()

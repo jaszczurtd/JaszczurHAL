@@ -4,6 +4,7 @@
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
 #include <Arduino.h>
+#include <pico/time.h>
 
 uint32_t hal_millis(void) {
     return millis();
@@ -22,7 +23,14 @@ void hal_delay_ms(uint32_t ms) {
 }
 
 void hal_delay_us(uint32_t us) {
-    delayMicroseconds(us);
+    /* busy_wait_us(), NOT delayMicroseconds(): on this core delayMicroseconds()
+     * resolves to sleep_us(), which arms a hardware timer ALARM (interrupt) and
+     * parks the core on __wfe(). Called inside a critical section (interrupts
+     * masked) - as the OneWire bit timing does - that alarm can never fire and
+     * the core deadlocks. busy_wait_us() is a pure TIMER-register poll: it is
+     * interrupt-independent and therefore safe inside hal_critical_section_*,
+     * matching the cycle-counting delayMicroseconds() the ported code assumes. */
+    busy_wait_us(us);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

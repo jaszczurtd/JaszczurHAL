@@ -102,6 +102,15 @@ add_hal_test(test_hal_serial_session)
 add_hal_test(test_hal_serial_session_vocabulary)
 add_hal_test(test_hal_swserial)
 add_hal_test(test_hal_onewire)
+# Real bit-banging driver (JHOneWire) compiled straight in, run against mock GPIO
+# so the actual reset/read/write pin sequences are covered (the public hal_onewire
+# is faked under MOCK). Guards the onewire_drive_high write-before-mode ordering.
+add_executable(test_hal_onewire_driver
+    test_hal_onewire_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/onewire/onewire_driver.cpp
+)
+target_link_libraries(test_hal_onewire_driver PRIVATE hal_mock)
+add_test(NAME test_hal_onewire_driver COMMAND test_hal_onewire_driver)
 add_hal_test(test_hal_uart)
 add_hal_test(test_hal_display)
 add_hal_test(test_hal_wifi)
