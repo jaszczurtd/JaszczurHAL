@@ -17,8 +17,31 @@ static bool           s_read_script[MOCK_GPIO_MAX_PINS][MOCK_GPIO_READ_SCRIPT_MA
 static size_t         s_read_script_len[MOCK_GPIO_MAX_PINS] = {};
 static size_t         s_read_script_pos[MOCK_GPIO_MAX_PINS] = {};
 
+/* ── "write-before-mode" antipattern: faithful latch modeling ─────────────────
+ * On RP2040, pinMode(OUTPUT) calls gpio_init(), which UNCONDITIONALLY resets the
+ * pin's output latch to 0 *before* enabling the driver - it re-inits the pin
+ * regardless of its previous mode. So code that writes a HIGH level and only
+ * then switches the pin to OUTPUT (expecting it to drive HIGH) actually drives
+ * LOW: the written value is silently discarded. Direct-register Arduino code
+ * (DIRECT_WRITE/DIRECT_MODE) never hit this, so it slips through ports - it was
+ * the OneWire onewire_drive_high() bug.
+ *
+ * We model this faithfully: set_mode(OUTPUT) clobbers the latch to 0. A pure
+ * GPIO-layer "violation counter" cannot reliably flag the bug (the offending
+ * write often happens while the pin is already OUTPUT, and a benign drive-low
+ * after a drive-high looks identical at this layer). The robust check is
+ * behavioural: drive a pin and assert the resulting level via
+ * hal_mock_gpio_get_state(). Because the mock now matches the hardware, ANY
+ * driver test that asserts pin levels catches the antipattern. */
+
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
-    if (pin < 64) s_mode[pin] = mode;
+    if (pin >= 64) return;
+    if (mode == HAL_GPIO_OUTPUT) {
+        /* Mirror gpio_init(): entering OUTPUT mode resets the latch to 0. A HIGH
+         * written before this call is therefore discarded (drives LOW). */
+        s_state[pin] = false;
+    }
+    s_mode[pin] = mode;
 }
 
 void hal_gpio_write(uint8_t pin, bool high) {

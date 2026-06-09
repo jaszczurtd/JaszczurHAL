@@ -46,6 +46,26 @@ void test_default_state_is_low(void) {
     TEST_ASSERT_FALSE(hal_gpio_read(63));
 }
 
+/* ── write-before-mode antipattern (RP2040 latch-clobber semantics) ───────────*/
+
+/* set_mode(OUTPUT) mirrors gpio_init(): it resets the output latch to 0. So the
+ * correct "drive high" is mode-then-write; mode-then-write leaves the pin HIGH. */
+void test_drive_high_mode_then_write_drives_high(void) {
+    hal_gpio_set_mode(12, HAL_GPIO_OUTPUT);
+    hal_gpio_write(12, true);
+    TEST_ASSERT_TRUE(hal_mock_gpio_get_state(12));
+}
+
+/* The bug: write HIGH, then set OUTPUT. set_mode(OUTPUT) clobbers the latch,
+ * so the pin ends up LOW - even though a HIGH was written. This is observable
+ * purely from the driven level, which is how driver tests catch the antipattern. */
+void test_write_then_set_output_clobbers_high_to_low(void) {
+    hal_gpio_set_mode(13, HAL_GPIO_OUTPUT);
+    hal_gpio_write(13, true);
+    hal_gpio_set_mode(13, HAL_GPIO_OUTPUT);  /* re-entering OUTPUT clobbers latch */
+    TEST_ASSERT_FALSE(hal_mock_gpio_get_state(13));
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_set_mode_output);
@@ -55,5 +75,7 @@ int main(void) {
     RUN_TEST(test_read_injected_high);
     RUN_TEST(test_read_injected_low);
     RUN_TEST(test_default_state_is_low);
+    RUN_TEST(test_drive_high_mode_then_write_drives_high);
+    RUN_TEST(test_write_then_set_output_clobbers_high_to_low);
     return UNITY_END();
 }
