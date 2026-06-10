@@ -7,8 +7,8 @@
  */
 
 #include "libConfig.h"
-#include <hal/hal_system.h>
 #include <hal/hal_sync.h>
+#include <hal/hal_system.h>
 #include <inttypes.h>
 #include <stddef.h>
 
@@ -21,8 +21,7 @@
  * Call begin() to configure, then call tick() periodically from your loop.
  * The registered callback fires every time the interval elapses.
  */
-class SmartTimers
-{
+class SmartTimers {
 private:
   uint32_t _time;
   uint32_t _lastTime;
@@ -35,12 +34,16 @@ public:
   /** @brief Default constructor. Keeps the timer in a safe stopped state. */
   SmartTimers() : _time(0), _lastTime(0), clb(NULL), _mutex(NULL) {}
 
+  /** @brief Destructor. Releases host/mock mutex for explicit destroy paths. */
+  ~SmartTimers();
+
   /**
    * @brief Configure the timer.
    * @param callback Function to call when the interval elapses.
-   * @param interval Timer interval in milliseconds (use SECS/MINS/HOURS macros).
+   * @param interval Timer interval in milliseconds (use SECS/MINS/HOURS
+   * macros).
    */
-  void begin(void(*callback)(void), const uint32_t);
+  void begin(void (*callback)(void), const uint32_t);
 
   /** @brief Restart the timer from the current moment. */
   void restart();

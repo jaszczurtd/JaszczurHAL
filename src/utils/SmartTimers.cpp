@@ -1,24 +1,29 @@
 #include "SmartTimers.h"
 
+SmartTimers::~SmartTimers() {
+  if (_mutex != NULL) {
+    hal_mutex_destroy(_mutex);
+    _mutex = NULL;
+  }
+}
+
 void SmartTimers::ensureMutex() {
   if (!_mutex) {
     _mutex = hal_mutex_create();
   }
 }
 
-void SmartTimers::restart()
-{
+void SmartTimers::restart() {
   ensureMutex();
   hal_mutex_lock(_mutex);
   _lastTime = hal_millis();
   hal_mutex_unlock(_mutex);
 }
 
-void SmartTimers::begin(void(*callback)(void), const uint32_t interval)
-{
+void SmartTimers::begin(void (*callback)(void), const uint32_t interval) {
   ensureMutex();
   hal_mutex_lock(_mutex);
-  clb = callback; 
+  clb = callback;
   _time = interval;
   _lastTime = hal_millis();
   hal_mutex_unlock(_mutex);
@@ -57,12 +62,10 @@ void SmartTimers::abort() {
   hal_mutex_unlock(_mutex);
 }
 
-bool SmartTimers::available()
-{
+bool SmartTimers::available() {
   ensureMutex();
   hal_mutex_lock(_mutex);
-  if (_time == 0)
-  {
+  if (_time == 0) {
     hal_mutex_unlock(_mutex);
     return false;
   }
@@ -80,12 +83,10 @@ bool SmartTimers::available()
   return result;
 }
 
-uint32_t SmartTimers::time()
-{
+uint32_t SmartTimers::time() {
   ensureMutex();
   hal_mutex_lock(_mutex);
-  if (_time == 0)
-  {
+  if (_time == 0) {
     hal_mutex_unlock(_mutex);
     return 0;
   }
@@ -104,8 +105,7 @@ uint32_t SmartTimers::time()
   return result;
 }
 
-void SmartTimers::time(const uint32_t interval)
-{
+void SmartTimers::time(const uint32_t interval) {
   ensureMutex();
   hal_mutex_lock(_mutex);
   _time = interval;
