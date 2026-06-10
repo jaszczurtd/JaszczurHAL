@@ -23,7 +23,7 @@ sudo apt-get install -y build-essential cmake git curl
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
 # See README "Continuous integration and quality gates".
-sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools
+sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools clang-format
 
 # ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
 # (build_stm32_lib.sh). The host-compiler STM32 build and the unit tests do not
@@ -39,12 +39,18 @@ fi
 arduino-cli core update-index --additional-urls "$RP2040_INDEX"
 arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" --additional-urls "$RP2040_INDEX"
 
+# Git hooks for formatting and commit-message validation.
+if [ -d "${SCRIPT_DIR}/.githooks" ]; then
+  chmod +x "${SCRIPT_DIR}/.githooks/pre-commit" "${SCRIPT_DIR}/.githooks/commit-msg"
+  git -C "${SCRIPT_DIR}" config core.hooksPath .githooks
+fi
+
 # ── Self-check: report anything still missing ────────────────────────────────
 echo
 echo "Verifying toolchain..."
 missing=0
 for tool in cmake g++ gcc make git valgrind clang-tidy cppcheck run-clang-tidy \
-            arm-none-eabi-gcc arduino-cli; do
+            clang-format arm-none-eabi-gcc arduino-cli; do
   if command -v "$tool" >/dev/null 2>&1; then
     printf '  ok       %s\n' "$tool"
   else
@@ -57,4 +63,5 @@ if [ "$missing" -ne 0 ]; then
   echo "Some tools are still missing (see above)."
   exit 1
 fi
+echo "Git hooks configured: $(git -C "${SCRIPT_DIR}" config --get core.hooksPath || echo "not configured")"
 echo "All required tools present. JaszczurHAL is ready to build and test."

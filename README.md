@@ -235,6 +235,40 @@ You can invoke all quality gates at once, by simply running
 ./runalltests.sh
 ```
 
+## Git hooks (format + commit message)
+
+Repository includes versioned hooks in `.githooks/`.
+
+- `pre-commit`:
+  - normalizes line endings to LF,
+  - removes trailing whitespace,
+  - ensures newline at end of file,
+  - replaces selected problematic characters with ASCII,
+  - runs `clang-format` on staged C/C++ files when available.
+- `commit-msg`:
+  - validates Conventional Commit style first line,
+  - enforces first-line length <= 100 chars.
+
+Install once per clone:
+
+```bash
+./runmefirst.sh
+```
+
+`runmefirst.sh` installs required tools (including `clang-format`) and configures:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Manual equivalent (without running setup script):
+
+```bash
+sudo apt-get install -y clang-format
+chmod +x .githooks/pre-commit .githooks/commit-msg
+git config core.hooksPath .githooks
+```
+
 
 ## VS Code Development Environment
 
