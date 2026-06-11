@@ -6,13 +6,15 @@
 #include <hal/hal_serial.h>
 #include <hal/hal_sync.h>
 #include <hal/hal_system.h>
+#include <hal/hal_target.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)
 #error "29_freertos_smoke requires HAL_ENABLE_FREERTOS"
 #endif
 
-#if !defined(__FREERTOS)
-#error "29_freertos_smoke requires arduino-pico FreeRTOS mode (__FREERTOS)"
+#if HAL_TARGET_IS_RP2040 && !defined(__FREERTOS)
+#error                                                                         \
+    "29_freertos_smoke on RP2040 requires arduino-pico FreeRTOS mode (__FREERTOS)"
 #endif
 
 static hal_mutex_t s_smoke_mutex;

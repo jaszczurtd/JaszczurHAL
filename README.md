@@ -188,16 +188,18 @@ FreeRTOS headers directly when their target build provides them.
   `./build_arduino_lib.sh --freertos` and
   `cmake -S examples -B build_examples_rp2040_freertos -DJH_EXAMPLE_TARGET=rp2040 -DJH_RP2040_FREERTOS=ON`.
 - STM32G474 uses a local `third_party/FreeRTOS-Kernel` integration. At this
-  stage, `HAL_ENABLE_FREERTOS` requires `<FreeRTOS.h>` and
-  `FreeRTOSConfig.h` to be available on the include path; kernel source
-  integration is planned separately.
+  stage, `HAL_ENABLE_FREERTOS` compiles an explicit Cortex-M4F kernel source
+  list, uses the target `FreeRTOSConfig.h`, and lets the FreeRTOS port own
+  SVC/PendSV/SysTick. Use `./build_stm32_lib.sh --freertos` or the
+  `stm32g474-freertos` examples preset after installing the kernel checkout.
 
-Current FreeRTOS support is still staged: RP2040 can compile a native FreeRTOS
-smoke example that includes `<FreeRTOS.h>` / `<task.h>` and exercises
-FreeRTOS-aware `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` paths. Hard
-`hal_critical_section_*` still masks interrupts for timing-sensitive code; it
-is not a scheduler lock. Module-level task-safety, lazy singleton mutexes, and
-Arduino-origin wrappers are tracked separately. See
+Current FreeRTOS support is still staged: RP2040 has FreeRTOS-aware
+`hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` paths; STM32G474 currently
+provides native FreeRTOS API availability and kernel linkage, with HAL runtime
+primitive upgrades planned for the next stage. Hard `hal_critical_section_*`
+still masks interrupts for timing-sensitive code; it is not a scheduler lock.
+Module-level task-safety, lazy singleton mutexes, and Arduino-origin wrappers
+are tracked separately. See
 [FreeRTOS_imp.md](doc/FreeRTOS_imp.md) and
 [Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md) for the staged contract.
 
@@ -279,19 +281,9 @@ You can invoke all quality gates at once, by simply running
 
 ## Git hooks (format + commit message)
 
-Repository includes versioned hooks in `.githooks/`.
+Repository includes versioned hooks in `.githooks/`: `pre-commit` and `commit-msg` (conventional commits).
 
-- `pre-commit`:
-  - normalizes line endings to LF,
-  - removes trailing whitespace,
-  - ensures newline at end of file,
-  - replaces selected problematic characters with ASCII,
-  - runs `clang-format` on staged C/C++ files when available.
-- `commit-msg`:
-  - validates Conventional Commit style first line,
-  - enforces first-line length <= 100 chars.
-
-Install once per clone:
+In order to mke it work, needs to be installed once per clone:
 
 ```bash
 ./runmefirst.sh

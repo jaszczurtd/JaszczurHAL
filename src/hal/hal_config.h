@@ -80,6 +80,9 @@
        are FreeRTOS-aware. hal_critical_section_* remains a hard, per-core
        interrupt mask for timing-sensitive code.
      - STM32G474 must have the local FreeRTOS-Kernel include path configured.
+       STM32 CMake builds compile the Cortex-M4F port, heap_4, and kernel
+       source list when FreeRTOS mode is enabled; HAL runtime primitives are
+       upgraded in later stages.
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 
 #ifdef HAL_ENABLE_FREERTOS
@@ -130,10 +133,11 @@
                                   RP2040 uses arduino-pico FreeRTOS mode
                                   (__FREERTOS) and has FreeRTOS-aware
                                   mutex/delay/idle primitives. STM32G474
-                                  requires local
-                                  FreeRTOS-Kernel + FreeRTOSConfig.h include
-                                  paths. This flag does not create a public
-                                  hal_rtos_* API.
+                                  uses a local FreeRTOS-Kernel checkout,
+                                  target FreeRTOSConfig.h, Cortex-M4F port,
+                                  heap_4, and FreeRTOS-owned SVC/PendSV/
+                                  SysTick vectors. This flag does not create
+                                  a public hal_rtos_* API.
 
      Connectivity:
        HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable
