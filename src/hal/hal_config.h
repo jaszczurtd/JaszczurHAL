@@ -14,9 +14,9 @@
  * Include this from any source that needs library configuration.
  */
 
-#include <stdint.h>
-#include "hal_target.h"      /* canonical backend/target selection */
+#include "hal_target.h" /* canonical backend/target selection */
 #include "hal_uart_config.h"
+#include <stdint.h>
 
 /* ── Application feature toggles ─────────────────────────────────────── */
 /* These were previously in libConfig.h.  Override with -D flags or edit
@@ -27,7 +27,7 @@
 #endif
 
 /* Supported EEPROM types */
-#define EEPROM_TYPE_AT24C256  1
+#define EEPROM_TYPE_AT24C256 1
 #define EEPROM_TYPE_RASPBERRY 2
 
 #ifndef HAL_EEPROM_TYPE
@@ -58,10 +58,15 @@
   path for library compilation units (for example via
   compiler.cpp.extra_flags / compiler.c.extra_flags).                    */
 #if defined(__has_include)
-  #if __has_include("hal_project_config.h")
-    #include "hal_project_config.h"
-  #endif
+#if __has_include("hal_project_config.h")
+#include "hal_project_config.h"
 #endif
+#endif
+
+/* -- Application entry opt-ins ----------------------------------------- */
+/* HAL_ENABLE_APP_TASK1 controls the optional app_task1 dispatch path when
+   HAL_PROVIDE_APP_ENTRY is enabled. On RP2040 this emits Arduino loop1(),
+   which starts the core-1 path, so it is intentionally explicit.         */
 
 /* ── Module enable flags (opt-in) ────────────────────────────────────── */
 /* JaszczurHAL uses an OPT-IN flag model: by default *nothing* beyond the
@@ -74,6 +79,11 @@
    arduino-cli library resolver.
 
    Supported module flags:
+
+     Application entry:
+       HAL_ENABLE_APP_TASK1   - Dispatch optional app_task1() from the
+                                  HAL-provided entry path. On RP2040 this
+                                  emits loop1() and starts the core-1 path.
 
      Connectivity:
        HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable
@@ -126,7 +136,8 @@
                                   HAL I2C driver (propagates: I2C).
        HAL_ENABLE_GPS           - GPS / NMEA receiver (requires a serial
                                   transport: HAL_ENABLE_UART or
-                                  HAL_ENABLE_SWSERIAL; does NOT auto-enable one).
+                                  HAL_ENABLE_SWSERIAL; does NOT auto-enable
+   one).
 
      Digital potentiometers:
        HAL_ENABLE_DIGIPOT       - generic digital-potentiometer API (requires
@@ -153,7 +164,8 @@
        HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT, SPI).
-       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY, I2C).
+       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY,
+   I2C).
 
      Crypto + bundled libs:
        HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
@@ -183,135 +195,135 @@
 /* ── Dependency propagation (enabling a child enables its parents) ──── */
 
 #ifdef HAL_ENABLE_KV
-  #ifndef HAL_ENABLE_EEPROM
-    #define HAL_ENABLE_EEPROM
-  #endif
+#ifndef HAL_ENABLE_EEPROM
+#define HAL_ENABLE_EEPROM
+#endif
 #endif
 
 #ifdef HAL_ENABLE_SDLOGGER
-  #ifndef HAL_ENABLE_EEPROM
-    #define HAL_ENABLE_EEPROM
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
-  #ifndef HAL_ENABLE_SPI
-    #define HAL_ENABLE_SPI
-  #endif
+#ifndef HAL_ENABLE_EEPROM
+#define HAL_ENABLE_EEPROM
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_TIME
-  #ifndef HAL_ENABLE_WIFI
-    #define HAL_ENABLE_WIFI
-  #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
 #endif
 
 /* WiFi-dependent network modules. */
 #ifdef HAL_ENABLE_MQTT
-  #ifndef HAL_ENABLE_WIFI
-    #define HAL_ENABLE_WIFI
-  #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_UDP
-  #ifndef HAL_ENABLE_WIFI
-    #define HAL_ENABLE_WIFI
-  #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_OTA
-  #ifndef HAL_ENABLE_WIFI
-    #define HAL_ENABLE_WIFI
-  #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_WIREGUARD
-  #ifndef HAL_ENABLE_WIFI
-    #define HAL_ENABLE_WIFI
-  #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
 #endif
 
 /* Cellular modem backends. */
 #ifdef HAL_ENABLE_A7670
-  #ifndef HAL_ENABLE_CELLULAR_MODEM
-    #define HAL_ENABLE_CELLULAR_MODEM
-  #endif
-  #ifndef HAL_ENABLE_UART
-    #define HAL_ENABLE_UART
-  #endif
+#ifndef HAL_ENABLE_CELLULAR_MODEM
+#define HAL_ENABLE_CELLULAR_MODEM
+#endif
+#ifndef HAL_ENABLE_UART
+#define HAL_ENABLE_UART
+#endif
 #endif
 
 /* I2C-dependent sensors / RTCs. */
 #ifdef HAL_ENABLE_EXTERNAL_ADC
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 #ifdef HAL_ENABLE_PCF8563
-  #ifndef HAL_ENABLE_RTC
-    #define HAL_ENABLE_RTC
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_RTC
+#define HAL_ENABLE_RTC
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 #ifdef HAL_ENABLE_DS3231
-  #ifndef HAL_ENABLE_RTC
-    #define HAL_ENABLE_RTC
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_RTC
+#define HAL_ENABLE_RTC
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 #ifdef HAL_ENABLE_MCP9600
-  #ifndef HAL_ENABLE_THERMOCOUPLE
-    #define HAL_ENABLE_THERMOCOUPLE
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_THERMOCOUPLE
+#define HAL_ENABLE_THERMOCOUPLE
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 #ifdef HAL_ENABLE_MAX6675
-  #ifndef HAL_ENABLE_THERMOCOUPLE
-    #define HAL_ENABLE_THERMOCOUPLE
-  #endif
+#ifndef HAL_ENABLE_THERMOCOUPLE
+#define HAL_ENABLE_THERMOCOUPLE
+#endif
 #endif
 
 /* I2C digital potentiometers. */
 #ifdef HAL_ENABLE_MCP401X
-  #ifndef HAL_ENABLE_DIGIPOT
-    #define HAL_ENABLE_DIGIPOT
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_DIGIPOT
+#define HAL_ENABLE_DIGIPOT
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 #ifdef HAL_ENABLE_MAX5395
-  #ifndef HAL_ENABLE_DIGIPOT
-    #define HAL_ENABLE_DIGIPOT
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_DIGIPOT
+#define HAL_ENABLE_DIGIPOT
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 /* SPI audio volume control. */
 #ifdef HAL_ENABLE_PGA2311
-  #ifndef HAL_ENABLE_SPI
-    #define HAL_ENABLE_SPI
-  #endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
 #endif
 
 /* 1-Wire stack. */
 #ifdef HAL_ENABLE_DS18B20
-  #ifndef HAL_ENABLE_ONEWIRE
-    #define HAL_ENABLE_ONEWIRE
-  #endif
+#ifndef HAL_ENABLE_ONEWIRE
+#define HAL_ENABLE_ONEWIRE
+#endif
 #endif
 
 /* GPS needs a serial transport but is not tied to a specific one: it can be
@@ -322,55 +334,55 @@
    so GPS never drags SoftwareSerial onto targets that lack it; a caller wiring
    GPS to SoftwareSerial simply enables HAL_ENABLE_SWSERIAL explicitly. */
 #ifdef HAL_ENABLE_GPS
-  #if !defined(HAL_ENABLE_UART) && !defined(HAL_ENABLE_SWSERIAL)
-    #define HAL_ENABLE_UART
-  #endif
+#if !defined(HAL_ENABLE_UART) && !defined(HAL_ENABLE_SWSERIAL)
+#define HAL_ENABLE_UART
+#endif
 #endif
 
 /* Display driver family. */
 #ifdef HAL_ENABLE_ILI9341
-  #ifndef HAL_ENABLE_TFT
-    #define HAL_ENABLE_TFT
-  #endif
+#ifndef HAL_ENABLE_TFT
+#define HAL_ENABLE_TFT
+#endif
 #endif
 #ifdef HAL_ENABLE_ST7789
-  #ifndef HAL_ENABLE_TFT
-    #define HAL_ENABLE_TFT
-  #endif
+#ifndef HAL_ENABLE_TFT
+#define HAL_ENABLE_TFT
+#endif
 #endif
 #ifdef HAL_ENABLE_ST7735
-  #ifndef HAL_ENABLE_TFT
-    #define HAL_ENABLE_TFT
-  #endif
+#ifndef HAL_ENABLE_TFT
+#define HAL_ENABLE_TFT
+#endif
 #endif
 #ifdef HAL_ENABLE_ST7796S
-  #ifndef HAL_ENABLE_TFT
-    #define HAL_ENABLE_TFT
-  #endif
+#ifndef HAL_ENABLE_TFT
+#define HAL_ENABLE_TFT
+#endif
 #endif
 
 #ifdef HAL_ENABLE_TFT
-  #ifndef HAL_ENABLE_DISPLAY
-    #define HAL_ENABLE_DISPLAY
-  #endif
-  #ifndef HAL_ENABLE_SPI
-    #define HAL_ENABLE_SPI
-  #endif
+#ifndef HAL_ENABLE_DISPLAY
+#define HAL_ENABLE_DISPLAY
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_CAN
-  #ifndef HAL_ENABLE_SPI
-    #define HAL_ENABLE_SPI
-  #endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
 #endif
 
 #ifdef HAL_ENABLE_SSD1306
-  #ifndef HAL_ENABLE_DISPLAY
-    #define HAL_ENABLE_DISPLAY
-  #endif
-  #ifndef HAL_ENABLE_I2C
-    #define HAL_ENABLE_I2C
-  #endif
+#ifndef HAL_ENABLE_DISPLAY
+#define HAL_ENABLE_DISPLAY
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
 #endif
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
@@ -382,40 +394,46 @@
    below only catch generic-API modules enabled without any backend,
    which would otherwise leave the user with a non-functional binary. */
 
-#if defined(HAL_ENABLE_RTC) && \
-    !defined(HAL_ENABLE_PCF8563) && !defined(HAL_ENABLE_DS3231)
-  #error "HAL_ENABLE_RTC requires at least one backend: HAL_ENABLE_PCF8563 or HAL_ENABLE_DS3231"
+#if defined(HAL_ENABLE_RTC) && !defined(HAL_ENABLE_PCF8563) &&                 \
+    !defined(HAL_ENABLE_DS3231)
+#error                                                                         \
+    "HAL_ENABLE_RTC requires at least one backend: HAL_ENABLE_PCF8563 or HAL_ENABLE_DS3231"
 #endif
 
-#if defined(HAL_ENABLE_CELLULAR_MODEM) && \
-    !defined(HAL_ENABLE_A7670)
-  #error "HAL_ENABLE_CELLULAR_MODEM requires at least one backend: HAL_ENABLE_A7670"
+#if defined(HAL_ENABLE_CELLULAR_MODEM) && !defined(HAL_ENABLE_A7670)
+#error                                                                         \
+    "HAL_ENABLE_CELLULAR_MODEM requires at least one backend: HAL_ENABLE_A7670"
 #endif
 
-#if defined(HAL_ENABLE_THERMOCOUPLE) && \
-    !defined(HAL_ENABLE_MCP9600) && !defined(HAL_ENABLE_MAX6675)
-  #error "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
+#if defined(HAL_ENABLE_THERMOCOUPLE) && !defined(HAL_ENABLE_MCP9600) &&        \
+    !defined(HAL_ENABLE_MAX6675)
+#error                                                                         \
+    "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
 #endif
 
-#if defined(HAL_ENABLE_DIGIPOT) && \
-    !defined(HAL_ENABLE_MCP401X) && !defined(HAL_ENABLE_MAX5395)
-  #error "HAL_ENABLE_DIGIPOT requires at least one backend: HAL_ENABLE_MCP401X or HAL_ENABLE_MAX5395"
+#if defined(HAL_ENABLE_DIGIPOT) && !defined(HAL_ENABLE_MCP401X) &&             \
+    !defined(HAL_ENABLE_MAX5395)
+#error                                                                         \
+    "HAL_ENABLE_DIGIPOT requires at least one backend: HAL_ENABLE_MCP401X or HAL_ENABLE_MAX5395"
 #endif
 
-#if defined(HAL_ENABLE_GPS) && \
-    !defined(HAL_ENABLE_SWSERIAL) && !defined(HAL_ENABLE_UART)
-  #error "HAL_ENABLE_GPS requires a serial transport: HAL_ENABLE_SWSERIAL or HAL_ENABLE_UART"
+#if defined(HAL_ENABLE_GPS) && !defined(HAL_ENABLE_SWSERIAL) &&                \
+    !defined(HAL_ENABLE_UART)
+#error                                                                         \
+    "HAL_ENABLE_GPS requires a serial transport: HAL_ENABLE_SWSERIAL or HAL_ENABLE_UART"
 #endif
 
-#if defined(HAL_ENABLE_DISPLAY) && \
-    !defined(HAL_ENABLE_TFT) && !defined(HAL_ENABLE_SSD1306)
-  #error "HAL_ENABLE_DISPLAY requires at least one backend: HAL_ENABLE_TFT or HAL_ENABLE_SSD1306"
+#if defined(HAL_ENABLE_DISPLAY) && !defined(HAL_ENABLE_TFT) &&                 \
+    !defined(HAL_ENABLE_SSD1306)
+#error                                                                         \
+    "HAL_ENABLE_DISPLAY requires at least one backend: HAL_ENABLE_TFT or HAL_ENABLE_SSD1306"
 #endif
 
-#if defined(HAL_ENABLE_TFT) && \
-    !defined(HAL_ENABLE_ILI9341) && !defined(HAL_ENABLE_ST7789) && \
-    !defined(HAL_ENABLE_ST7735)  && !defined(HAL_ENABLE_ST7796S)
-  #error "HAL_ENABLE_TFT requires at least one driver: HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S"
+#if defined(HAL_ENABLE_TFT) && !defined(HAL_ENABLE_ILI9341) &&                 \
+    !defined(HAL_ENABLE_ST7789) && !defined(HAL_ENABLE_ST7735) &&              \
+    !defined(HAL_ENABLE_ST7796S)
+#error                                                                         \
+    "HAL_ENABLE_TFT requires at least one driver: HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S"
 #endif
 
 /* ── Optional verbose flag report ───────────────────────────────────── */
@@ -424,138 +442,138 @@
    propagation. Useful for debugging "why is module X being compiled?". */
 
 #ifdef HAL_CONFIG_VERBOSE
-  #ifdef HAL_ENABLE_WIFI
-    #pragma message("HAL_CONFIG: HAL_ENABLE_WIFI")
-  #endif
-  #ifdef HAL_ENABLE_TIME
-    #pragma message("HAL_CONFIG: HAL_ENABLE_TIME")
-  #endif
-  #ifdef HAL_ENABLE_MQTT
-    #pragma message("HAL_CONFIG: HAL_ENABLE_MQTT")
-  #endif
-  #ifdef HAL_ENABLE_UDP
-    #pragma message("HAL_CONFIG: HAL_ENABLE_UDP")
-  #endif
-  #ifdef HAL_ENABLE_OTA
-    #pragma message("HAL_CONFIG: HAL_ENABLE_OTA")
-  #endif
-  #ifdef HAL_ENABLE_WIREGUARD
-    #pragma message("HAL_CONFIG: HAL_ENABLE_WIREGUARD")
-  #endif
-  #ifdef HAL_ENABLE_CELLULAR_MODEM
-    #pragma message("HAL_CONFIG: HAL_ENABLE_CELLULAR_MODEM")
-  #endif
-  #ifdef HAL_ENABLE_A7670
-    #pragma message("HAL_CONFIG: HAL_ENABLE_A7670")
-  #endif
-  #ifdef HAL_ENABLE_EEPROM
-    #pragma message("HAL_CONFIG: HAL_ENABLE_EEPROM")
-  #endif
-  #ifdef HAL_ENABLE_KV
-    #pragma message("HAL_CONFIG: HAL_ENABLE_KV")
-  #endif
-  #ifdef HAL_ENABLE_LITTLEFS
-    #pragma message("HAL_CONFIG: HAL_ENABLE_LITTLEFS")
-  #endif
-  #ifdef HAL_ENABLE_SDLOGGER
-    #pragma message("HAL_CONFIG: HAL_ENABLE_SDLOGGER")
-  #endif
-  #ifdef HAL_ENABLE_UART
-    #pragma message("HAL_CONFIG: HAL_ENABLE_UART")
-  #endif
-  #ifdef HAL_ENABLE_SWSERIAL
-    #pragma message("HAL_CONFIG: HAL_ENABLE_SWSERIAL")
-  #endif
-  #ifdef HAL_ENABLE_I2C
-    #pragma message("HAL_CONFIG: HAL_ENABLE_I2C")
-  #endif
-  #ifdef HAL_ENABLE_I2C_SLAVE
-    #pragma message("HAL_CONFIG: HAL_ENABLE_I2C_SLAVE")
-  #endif
-  #ifdef HAL_ENABLE_SPI
-    #pragma message("HAL_CONFIG: HAL_ENABLE_SPI")
-  #endif
-  #ifdef HAL_ENABLE_CAN
-    #pragma message("HAL_CONFIG: HAL_ENABLE_CAN")
-  #endif
-  #ifdef HAL_ENABLE_RTC
-    #pragma message("HAL_CONFIG: HAL_ENABLE_RTC")
-  #endif
-  #ifdef HAL_ENABLE_PCF8563
-    #pragma message("HAL_CONFIG: HAL_ENABLE_PCF8563")
-  #endif
-  #ifdef HAL_ENABLE_DS3231
-    #pragma message("HAL_CONFIG: HAL_ENABLE_DS3231")
-  #endif
-  #ifdef HAL_ENABLE_THERMOCOUPLE
-    #pragma message("HAL_CONFIG: HAL_ENABLE_THERMOCOUPLE")
-  #endif
-  #ifdef HAL_ENABLE_MCP9600
-    #pragma message("HAL_CONFIG: HAL_ENABLE_MCP9600")
-  #endif
-  #ifdef HAL_ENABLE_MAX6675
-    #pragma message("HAL_CONFIG: HAL_ENABLE_MAX6675")
-  #endif
-  #ifdef HAL_ENABLE_DS18B20
-    #pragma message("HAL_CONFIG: HAL_ENABLE_DS18B20")
-  #endif
-  #ifdef HAL_ENABLE_ONEWIRE
-    #pragma message("HAL_CONFIG: HAL_ENABLE_ONEWIRE")
-  #endif
-  #ifdef HAL_ENABLE_EXTERNAL_ADC
-    #pragma message("HAL_CONFIG: HAL_ENABLE_EXTERNAL_ADC")
-  #endif
-  #ifdef HAL_ENABLE_GPS
-    #pragma message("HAL_CONFIG: HAL_ENABLE_GPS")
-  #endif
-  #ifdef HAL_ENABLE_DIGIPOT
-    #pragma message("HAL_CONFIG: HAL_ENABLE_DIGIPOT")
-  #endif
-  #ifdef HAL_ENABLE_MCP401X
-    #pragma message("HAL_CONFIG: HAL_ENABLE_MCP401X")
-  #endif
-  #ifdef HAL_ENABLE_MAX5395
-    #pragma message("HAL_CONFIG: HAL_ENABLE_MAX5395")
-  #endif
-  #ifdef HAL_ENABLE_PGA2311
-    #pragma message("HAL_CONFIG: HAL_ENABLE_PGA2311")
-  #endif
-  #ifdef HAL_ENABLE_PWM_FREQ
-    #pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")
-  #endif
-  #ifdef HAL_ENABLE_RGB_LED
-    #pragma message("HAL_CONFIG: HAL_ENABLE_RGB_LED")
-  #endif
-  #ifdef HAL_ENABLE_DISPLAY
-    #pragma message("HAL_CONFIG: HAL_ENABLE_DISPLAY")
-  #endif
-  #ifdef HAL_ENABLE_TFT
-    #pragma message("HAL_CONFIG: HAL_ENABLE_TFT")
-  #endif
-  #ifdef HAL_ENABLE_ILI9341
-    #pragma message("HAL_CONFIG: HAL_ENABLE_ILI9341")
-  #endif
-  #ifdef HAL_ENABLE_ST7789
-    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7789")
-  #endif
-  #ifdef HAL_ENABLE_ST7735
-    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7735")
-  #endif
-  #ifdef HAL_ENABLE_ST7796S
-    #pragma message("HAL_CONFIG: HAL_ENABLE_ST7796S")
-  #endif
-  #ifdef HAL_ENABLE_SSD1306
-    #pragma message("HAL_CONFIG: HAL_ENABLE_SSD1306")
-  #endif
-  #ifdef HAL_ENABLE_CRYPTO
-    #pragma message("HAL_CONFIG: HAL_ENABLE_CRYPTO")
-  #endif
-  #ifdef HAL_ENABLE_CJSON
-    #pragma message("HAL_CONFIG: HAL_ENABLE_CJSON")
-  #endif
-  #ifdef HAL_ENABLE_UNITY
-    #pragma message("HAL_CONFIG: HAL_ENABLE_UNITY")
-  #endif
+#ifdef HAL_ENABLE_WIFI
+#pragma message("HAL_CONFIG: HAL_ENABLE_WIFI")
+#endif
+#ifdef HAL_ENABLE_TIME
+#pragma message("HAL_CONFIG: HAL_ENABLE_TIME")
+#endif
+#ifdef HAL_ENABLE_MQTT
+#pragma message("HAL_CONFIG: HAL_ENABLE_MQTT")
+#endif
+#ifdef HAL_ENABLE_UDP
+#pragma message("HAL_CONFIG: HAL_ENABLE_UDP")
+#endif
+#ifdef HAL_ENABLE_OTA
+#pragma message("HAL_CONFIG: HAL_ENABLE_OTA")
+#endif
+#ifdef HAL_ENABLE_WIREGUARD
+#pragma message("HAL_CONFIG: HAL_ENABLE_WIREGUARD")
+#endif
+#ifdef HAL_ENABLE_CELLULAR_MODEM
+#pragma message("HAL_CONFIG: HAL_ENABLE_CELLULAR_MODEM")
+#endif
+#ifdef HAL_ENABLE_A7670
+#pragma message("HAL_CONFIG: HAL_ENABLE_A7670")
+#endif
+#ifdef HAL_ENABLE_EEPROM
+#pragma message("HAL_CONFIG: HAL_ENABLE_EEPROM")
+#endif
+#ifdef HAL_ENABLE_KV
+#pragma message("HAL_CONFIG: HAL_ENABLE_KV")
+#endif
+#ifdef HAL_ENABLE_LITTLEFS
+#pragma message("HAL_CONFIG: HAL_ENABLE_LITTLEFS")
+#endif
+#ifdef HAL_ENABLE_SDLOGGER
+#pragma message("HAL_CONFIG: HAL_ENABLE_SDLOGGER")
+#endif
+#ifdef HAL_ENABLE_UART
+#pragma message("HAL_CONFIG: HAL_ENABLE_UART")
+#endif
+#ifdef HAL_ENABLE_SWSERIAL
+#pragma message("HAL_CONFIG: HAL_ENABLE_SWSERIAL")
+#endif
+#ifdef HAL_ENABLE_I2C
+#pragma message("HAL_CONFIG: HAL_ENABLE_I2C")
+#endif
+#ifdef HAL_ENABLE_I2C_SLAVE
+#pragma message("HAL_CONFIG: HAL_ENABLE_I2C_SLAVE")
+#endif
+#ifdef HAL_ENABLE_SPI
+#pragma message("HAL_CONFIG: HAL_ENABLE_SPI")
+#endif
+#ifdef HAL_ENABLE_CAN
+#pragma message("HAL_CONFIG: HAL_ENABLE_CAN")
+#endif
+#ifdef HAL_ENABLE_RTC
+#pragma message("HAL_CONFIG: HAL_ENABLE_RTC")
+#endif
+#ifdef HAL_ENABLE_PCF8563
+#pragma message("HAL_CONFIG: HAL_ENABLE_PCF8563")
+#endif
+#ifdef HAL_ENABLE_DS3231
+#pragma message("HAL_CONFIG: HAL_ENABLE_DS3231")
+#endif
+#ifdef HAL_ENABLE_THERMOCOUPLE
+#pragma message("HAL_CONFIG: HAL_ENABLE_THERMOCOUPLE")
+#endif
+#ifdef HAL_ENABLE_MCP9600
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP9600")
+#endif
+#ifdef HAL_ENABLE_MAX6675
+#pragma message("HAL_CONFIG: HAL_ENABLE_MAX6675")
+#endif
+#ifdef HAL_ENABLE_DS18B20
+#pragma message("HAL_CONFIG: HAL_ENABLE_DS18B20")
+#endif
+#ifdef HAL_ENABLE_ONEWIRE
+#pragma message("HAL_CONFIG: HAL_ENABLE_ONEWIRE")
+#endif
+#ifdef HAL_ENABLE_EXTERNAL_ADC
+#pragma message("HAL_CONFIG: HAL_ENABLE_EXTERNAL_ADC")
+#endif
+#ifdef HAL_ENABLE_GPS
+#pragma message("HAL_CONFIG: HAL_ENABLE_GPS")
+#endif
+#ifdef HAL_ENABLE_DIGIPOT
+#pragma message("HAL_CONFIG: HAL_ENABLE_DIGIPOT")
+#endif
+#ifdef HAL_ENABLE_MCP401X
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP401X")
+#endif
+#ifdef HAL_ENABLE_MAX5395
+#pragma message("HAL_CONFIG: HAL_ENABLE_MAX5395")
+#endif
+#ifdef HAL_ENABLE_PGA2311
+#pragma message("HAL_CONFIG: HAL_ENABLE_PGA2311")
+#endif
+#ifdef HAL_ENABLE_PWM_FREQ
+#pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")
+#endif
+#ifdef HAL_ENABLE_RGB_LED
+#pragma message("HAL_CONFIG: HAL_ENABLE_RGB_LED")
+#endif
+#ifdef HAL_ENABLE_DISPLAY
+#pragma message("HAL_CONFIG: HAL_ENABLE_DISPLAY")
+#endif
+#ifdef HAL_ENABLE_TFT
+#pragma message("HAL_CONFIG: HAL_ENABLE_TFT")
+#endif
+#ifdef HAL_ENABLE_ILI9341
+#pragma message("HAL_CONFIG: HAL_ENABLE_ILI9341")
+#endif
+#ifdef HAL_ENABLE_ST7789
+#pragma message("HAL_CONFIG: HAL_ENABLE_ST7789")
+#endif
+#ifdef HAL_ENABLE_ST7735
+#pragma message("HAL_CONFIG: HAL_ENABLE_ST7735")
+#endif
+#ifdef HAL_ENABLE_ST7796S
+#pragma message("HAL_CONFIG: HAL_ENABLE_ST7796S")
+#endif
+#ifdef HAL_ENABLE_SSD1306
+#pragma message("HAL_CONFIG: HAL_ENABLE_SSD1306")
+#endif
+#ifdef HAL_ENABLE_CRYPTO
+#pragma message("HAL_CONFIG: HAL_ENABLE_CRYPTO")
+#endif
+#ifdef HAL_ENABLE_CJSON
+#pragma message("HAL_CONFIG: HAL_ENABLE_CJSON")
+#endif
+#ifdef HAL_ENABLE_UNITY
+#pragma message("HAL_CONFIG: HAL_ENABLE_UNITY")
+#endif
 #endif /* HAL_CONFIG_VERBOSE */
 
 /* ── Platform-independent Arduino-compat macros ──────────────────────── */
@@ -573,7 +591,7 @@
  * source files to compile without modification.
  */
 #ifndef PROGMEM
-#define PROGMEM   /* no-op on platforms without separate flash address space */
+#define PROGMEM /* no-op on platforms without separate flash address space */
 #endif
 
 /**
@@ -585,7 +603,7 @@
  * simply returns the string pointer unchanged.
  */
 #ifndef F
-#define F(s) (s)  /* mock build: F() is a no-op identity */
+#define F(s) (s) /* mock build: F() is a no-op identity */
 #endif
 
 #endif /* !ARDUINO */
@@ -678,8 +696,8 @@
  * @def HAL_RTC_MAX_INSTANCES
  * Maximum number of simultaneous RTC handles.
  *
- * The current backend set contains PCF8563 and DS3231. Each slot stores per-instance
- * runtime state and synchronization metadata.
+ * The current backend set contains PCF8563 and DS3231. Each slot stores
+ * per-instance runtime state and synchronization metadata.
  */
 #ifndef HAL_RTC_MAX_INSTANCES
 #define HAL_RTC_MAX_INSTANCES 4
@@ -776,13 +794,13 @@
  * @endcode
  */
 typedef struct {
-    int pwm_freq_max_channels;    /**< Effective PWM-freq channel limit.  */
-    int can_max_instances;        /**< Effective CAN instance limit.      */
-    int uart_max_instances;       /**< Effective hardware UART limit.     */
-    int swserial_max_instances;   /**< Effective SoftwareSerial limit.    */
-    int mock_can_max_inst;        /**< Mock CAN instance limit.           */
-    int mock_can_buf_size;        /**< Mock CAN ring-buffer depth.        */
-    int mock_max_alarms;          /**< Mock timer alarm limit.            */
+  int pwm_freq_max_channels;  /**< Effective PWM-freq channel limit.  */
+  int can_max_instances;      /**< Effective CAN instance limit.      */
+  int uart_max_instances;     /**< Effective hardware UART limit.     */
+  int swserial_max_instances; /**< Effective SoftwareSerial limit.    */
+  int mock_can_max_inst;      /**< Mock CAN instance limit.           */
+  int mock_can_buf_size;      /**< Mock CAN ring-buffer depth.        */
+  int mock_max_alarms;        /**< Mock timer alarm limit.            */
 } hal_config_t;
 
 #ifdef __cplusplus
@@ -809,7 +827,7 @@ void hal_setup(const hal_config_t *cfg);
  * @brief Get a pointer to the active HAL configuration (read-only).
  * @return Pointer to the internal config struct.
  */
-const hal_config_t* hal_get_config(void);
+const hal_config_t *hal_get_config(void);
 
 #ifdef __cplusplus
 }
@@ -841,13 +859,13 @@ const hal_config_t* hal_get_config(void);
 #else /* asserts enabled (default) */
 
 #ifndef JH_HAL_NORETURN
-#  if defined(__GNUC__) || defined(__clang__)
-#    define JH_HAL_NORETURN __attribute__((noreturn))
-#  elif defined(_MSC_VER)
-#    define JH_HAL_NORETURN __declspec(noreturn)
-#  else
-#    define JH_HAL_NORETURN
-#  endif
+#if defined(__GNUC__) || defined(__clang__)
+#define JH_HAL_NORETURN __attribute__((noreturn))
+#elif defined(_MSC_VER)
+#define JH_HAL_NORETURN __declspec(noreturn)
+#else
+#define JH_HAL_NORETURN
+#endif
 #endif
 
 #ifdef __cplusplus
@@ -860,11 +878,11 @@ JH_HAL_NORETURN void hal_assert_fail(const char *msg);
 }
 #endif
 
-#define HAL_ASSERT(cond, msg)                                         \
-    do {                                                              \
-        if (!(cond)) {                                                \
-            hal_assert_fail((msg));                                   \
-        }                                                             \
-    } while (0)
+#define HAL_ASSERT(cond, msg)                                                  \
+  do {                                                                         \
+    if (!(cond)) {                                                             \
+      hal_assert_fail((msg));                                                  \
+    }                                                                          \
+  } while (0)
 
 #endif /* HAL_DISABLE_ASSERTS */

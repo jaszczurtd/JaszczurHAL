@@ -14,36 +14,41 @@
  *   @ref app_start  - one-time initialisation (called once before any task).
  *   @ref app_task0  - primary super-loop iteration (core 0 on RP2040).
  *
- * ── Optional ─────────────────────────────────────────────────────────────────
- *   @ref app_task1  - secondary loop (core 1 on RP2040; cooperative round-robin
- *                     with task0 on STM32 until FreeRTOS support lands).
- *                     Weak-linked: if not defined by the client, it is simply
- *                     not called (RP2040) or skipped (STM32/mock).
+ * -- Optional ----------------------------------------------------------------
+ *   @ref app_task1  - secondary loop. It is dispatched only when
+ *                     @c HAL_ENABLE_APP_TASK1 is defined. On RP2040 this emits
+ *                     Arduino @c loop1(), which starts the core-1 path.
+ *                     On STM32/mock it runs cooperatively after task0 until
+ *                     FreeRTOS support lands. If enabled but not implemented by
+ *                     the client, a weak empty default is linked.
  *
  * ── Backend mapping ──────────────────────────────────────────────────────────
  *
  *   RP2040 (Arduino-pico):
  *       setup()  -> app_start()
  *       loop()   -> app_task0()
- *       loop1()  -> app_task1()        [core 1, true parallelism]
+ *       loop1()  -> app_task1()        [only with HAL_ENABLE_APP_TASK1]
  *
  *   STM32G474 (bare-metal):
- *       main() { app_start(); for(;;) { app_task0(); app_task1(); } }
+ *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
  *       NOTE: task1 runs cooperatively in the same loop as task0.
  *             This is a TEMPORARY solution pending FreeRTOS integration.
  *
  *   Mock / host:
- *       main() { app_start(); for(;;) { app_task0(); app_task1(); } }
+ *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
  *       (useful for standalone host demo apps; unit tests provide their own
  *       main and should NOT define HAL_PROVIDE_APP_ENTRY.)
  *
  * ── How to enable ────────────────────────────────────────────────────────────
  *   Define @c HAL_PROVIDE_APP_ENTRY in your @c hal_project_config.h or pass
- *   @c -DHAL_PROVIDE_APP_ENTRY via the build system / build_*_lib.sh @c -D flag.
+ *   @c -DHAL_PROVIDE_APP_ENTRY via the build system / build_*_lib.sh @c -D
+ * flag. Define @c HAL_ENABLE_APP_TASK1 only when the application intentionally
+ * uses
+ *   @c app_task1. On RP2040 this is also the opt-in for @c loop1/core 1.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -67,12 +72,14 @@ void app_task0(void);
 /**
  * @brief Secondary application loop iteration (optional).
  *
- * On RP2040: runs on core 1 (true hardware parallelism via loop1()).
- * On STM32:  called cooperatively after app_task0() in the same super-loop
- *            (temporary; will become a FreeRTOS task).
- * On mock:   called after app_task0() in the same loop.
+ * On RP2040: runs on core 1 (true hardware parallelism via loop1()) when
+ *            @c HAL_ENABLE_APP_TASK1 is defined.
+ * On STM32:  called cooperatively after app_task0() in the same super-loop when
+ *            @c HAL_ENABLE_APP_TASK1 is defined (temporary; will become a
+ *            FreeRTOS task).
+ * On mock:   called after app_task0() in the same loop when enabled.
  *
- * Weak-linked - if not defined by the client, it is simply skipped.
+ * Weak-linked - if enabled but not defined by the client, the default is empty.
  */
 void app_task1(void);
 

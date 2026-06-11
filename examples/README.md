@@ -84,29 +84,27 @@ backend decide how to enter them:
 |----------|------|----------|
 | `app_start()` | One-time initialization (pin setup, serial begin, etc.) | **Yes** |
 | `app_task0()` | Primary super-loop iteration | **Yes** |
-| `app_task1()` | Secondary loop iteration (optional) | No (weak-linked) |
+| `app_task1()` | Secondary loop iteration | No (`HAL_ENABLE_APP_TASK1` opt-in) |
 
 ### Backend mapping
 
 | Backend | Entry implementation | `app_start()` | `app_task0()` | `app_task1()` |
 |---------|----------------------|---------------|---------------|---------------|
 | RP2040 examples (arduino-pico) | CMake-generated `.ino` | `setup()` | `loop()` (core 0) | Not called by default |
-| STM32G474 examples (bare-metal) | `HAL_PROVIDE_APP_ENTRY` from CMake | Before super-loop | Super-loop body | Cooperative, same loop (pending FreeRTOS) |
-| Mock/host apps | `HAL_PROVIDE_APP_ENTRY` when requested | Before super-loop | Super-loop body | Cooperative, same loop |
+| STM32G474 examples (bare-metal) | `HAL_PROVIDE_APP_ENTRY` from CMake | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
+| Mock/host apps | `HAL_PROVIDE_APP_ENTRY` when requested | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
 
 ### RP2040 `loop1()` caution
 
 On arduino-pico, defining `loop1()` is not a harmless placeholder: the core
 starts RP2040 core 1 whenever `setup1()` or `loop1()` is linked. The
-library-provided entry shim emits `loop1()` when `HAL_PROVIDE_APP_ENTRY` is
-defined, even if `app_task1()` only resolves to the weak empty default.
+library-provided entry shim emits `loop1()` only when both
+`HAL_PROVIDE_APP_ENTRY` and `HAL_ENABLE_APP_TASK1` are defined.
 
-That can silently change an existing single-core sketch into a dual-core
-program and has been seen as repeated USB disconnect/reconnect or reset-like
-behavior after upload. For RP2040 examples, prefer the generated `.ino` wrapper
-that calls only `app_start()` and `app_task0()`. Use `HAL_PROVIDE_APP_ENTRY` on
-RP2040 only when the application intentionally wants the `app_task1()` /
-`loop1()` core-1 path.
+This keeps single-core sketches single-core by default. For RP2040 examples,
+prefer the generated `.ino` wrapper that calls only `app_start()` and
+`app_task0()`. Define `HAL_ENABLE_APP_TASK1` only when the application
+intentionally wants the `app_task1()` / `loop1()` core-1 path.
 
 ### Minimal application skeleton
 

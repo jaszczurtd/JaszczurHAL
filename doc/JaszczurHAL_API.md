@@ -6,7 +6,8 @@ real bare-metal backend for core domains and an expanding shared-driver stack,
 while keeping the application-facing HAL API stable across targets.
 
 This document is the canonical, detailed API reference.
-The top-level `README.md` intentionally stays concise and links here for full behavior/contracts.
+The top-level [README.md](../README.md) intentionally stays concise and links
+here for full behavior/contracts.
 
 Current Arduino backend requirement: Earle Philhower Arduino core for RP2040/RP2350
 (arduino-pico): https://github.com/earlephilhower/arduino-pico
@@ -53,15 +54,16 @@ metadata.
 
 ## Documentation scope
 
-This file is the API-oriented companion to `README.md`.
+This file is the API-oriented companion to [README.md](../README.md).
 
 Recommended split of responsibilities:
 
-- `README.md`: overview, architecture, quick start, build/test entry points, practical examples
-- `JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
+- [README.md](../README.md): overview, architecture, quick start, build/test entry points, practical examples
+- `doc/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
-Where both documents touch the same topic, `README.md` should be treated as the
-short onboarding guide, while this file stays focused on reference material.
+Where both documents touch the same topic, [README.md](../README.md) should be
+treated as the short onboarding guide, while this file stays focused on
+reference material.
 
 ---
 
@@ -119,6 +121,12 @@ Modules that are not enabled cost zero code, zero RAM, and pull in no
 third-party libraries via arduino-cli.
 
 ### Available flags
+
+Application entry flags are separate from optional HAL modules:
+
+| Flag | Effect |
+|---|---|
+| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. On RP2040 this emits Arduino `loop1()`, which starts the core-1 path. Leave undefined for single-loop/single-core apps. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -424,7 +432,7 @@ This helper is implemented for both Arduino and mock backends.
 
 ## Examples
 
-For quick-start usage examples, prefer the examples in `README.md`.
+For quick-start usage examples, prefer the examples in [README.md](../README.md).
 
 Typical flows covered there:
 

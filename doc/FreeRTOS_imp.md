@@ -141,17 +141,18 @@ Desired FreeRTOS semantics:
 
 Current state to remember:
 
-- `src/hal_app_entry.cpp` maps RP2040 to Arduino `setup()`, `loop()`,
-  and `loop1()`.
+- `src/hal_app_entry.cpp` maps RP2040 to Arduino `setup()` and `loop()`.
+  It emits `loop1()` only when `HAL_ENABLE_APP_TASK1` is defined.
 - STM32 currently runs `app_task0()` and `app_task1()` cooperatively in one
-  bare-metal loop.
+  bare-metal loop only when `HAL_ENABLE_APP_TASK1` is defined.
 - RP2040 examples currently generate a `.ino` that calls only `app_start()`
   and `app_task0()`.
 - Defining `loop1()` on arduino-pico is not harmless. It starts the second
   core/task path even if the weak `app_task1()` does nothing.
 
-The `app_task1()` policy must therefore be explicit. Avoid silently starting a
-second RP2040 core/task only because a weak empty symbol exists.
+The `app_task1()` policy is therefore explicit: `HAL_ENABLE_APP_TASK1` controls
+secondary task dispatch. Avoid silently starting a second RP2040 core/task only
+because a weak empty symbol exists.
 
 ## HAL Runtime Semantics Under FreeRTOS
 
@@ -281,7 +282,7 @@ Avoid over-promising. The practical FreeRTOS contract should be:
 - Arduino-origin libraries remain suspect under preemptive scheduling and must
   be serialized or migrated to shared HAL-native drivers.
 
-## Relevant Project Rules From AGENTS.md
+## Relevant Project Rules
 
 Keep these constraints in mind during implementation:
 
@@ -291,8 +292,9 @@ Keep these constraints in mind during implementation:
 - `impl/shared` is for target-neutral logic that depends on HAL contracts and
   behaves identically across targets.
 - Treat `hal_config.h` as the source of truth for flag semantics.
-- Sync `src/HAL_FLAGS.txt`, `README.md`, and `JaszczurHAL_API.md` after adding
-  or changing `HAL_ENABLE_FREERTOS`.
+- Sync [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt), [README.md](../README.md),
+  and [JaszczurHAL_API.md](JaszczurHAL_API.md) after adding or changing
+  `HAL_ENABLE_FREERTOS`.
 - Keep optional modules optional. Guard declarations, implementation TUs,
   vendored includes, and source lists with the correct flags.
 - Avoid new Arduino dependencies in portable utilities or shared driver logic.
@@ -301,6 +303,16 @@ Keep these constraints in mind during implementation:
 - Zero tolerance for warnings in project-owned code.
 - Full local signoff is `./runalltests.sh`; for meaningful changes it should
   pass before work is considered done.
+- Hard progress rule: every completed FreeRTOS-related implementation,
+  documentation, audit, or validation step must be recorded in the "Done"
+  section of this document before the task is considered closed. Each entry
+  should include the date, the stage/P-item, the concrete outcome, and the
+  validation status.
+- Audit context rule: any agent executing a FreeRTOS-related task must read
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md) before planning or editing, and
+  must explicitly take its findings, risk IDs, module classifications, and
+  priority follow-ups into account while choosing scope, implementation order,
+  and validation.
 
 ## Implementation Plan
 
@@ -325,7 +337,8 @@ Tasks:
   - Arduino-origin wrappers that need serialization or replacement.
 - Pay special attention to lazy singleton mutex creation, static pools, shared
   bus ownership, callback context, and APIs that call blocking delays.
-- Produce a short audit table in separate file (Thread-SafetyAudit.md)
+- Produce a short audit table in separate file
+  ([Thread-SafetyAudit.md](Thread-SafetyAudit.md))
   before changing runtime behavior.
 
 Functional value:
@@ -349,8 +362,9 @@ Tasks:
 
 - Add `HAL_ENABLE_FREERTOS` to `hal_config.h` documentation/comments.
 - Add it to `src/HAL_FLAGS.txt`.
-- Add API/docs notes to `README.md`, `JaszczurHAL_API.md`, and
-  `lib_compilation.md`.
+- Add API/docs notes to [README.md](../README.md),
+  [JaszczurHAL_API.md](JaszczurHAL_API.md), and
+  [lib_compilation.md](lib_compilation.md).
 - Document that RP2040 uses arduino-pico FreeRTOS and STM32 uses local
   `FreeRTOS-Kernel`.
 - Add compile-time validation:
@@ -490,9 +504,9 @@ Tasks:
 - STM32: `hal_app_entry.cpp` should create tasks and start the scheduler when
   both `HAL_PROVIDE_APP_ENTRY` and `HAL_ENABLE_FREERTOS` are defined.
 - RP2040: preserve arduino-pico scheduler ownership. Decide whether task1 is
-  represented through `loop1()` or a HAL-created task, but avoid silently
-  starting the second path for an empty weak default.
-- Document the final `app_task1()` opt-in policy.
+  represented through `loop1()` or a HAL-created task, but keep it gated by
+  `HAL_ENABLE_APP_TASK1` so an empty weak default cannot start the second path.
+- Keep the final `app_task1()` opt-in policy documented.
 
 Functional value:
 
@@ -564,8 +578,9 @@ Validation:
 
 ## Open Questions
 
-- Should `app_task1()` require an explicit opt-in define to avoid accidental
-  RP2040 core/task startup?
+- Answered 2026-06-11: `app_task1()` dispatch requires `HAL_ENABLE_APP_TASK1`.
+  On RP2040 this gates `loop1()` emission and prevents accidental core/task
+  startup.
 - Should HAL mutexes be normal or recursive under FreeRTOS? Current code should
   be audited before choosing.
 - Should `hal_timer` remain hardware-alarm based in FreeRTOS mode, or should a
@@ -591,15 +606,6 @@ Follow-ups raised during design review, ordered by priority. Items already
 resolved are listed under "Done" for traceability.
 
 ### P0 - do before enabling the flag anywhere
-
-- **Guard the RP2040 `loop1()` emission behind an explicit opt-in define.**
-  `src/hal_app_entry.cpp` currently defines `loop1()` unconditionally. On
-  arduino-pico the mere *existence* of `loop1()` starts core 1, so the weak
-  empty `app_task1()` already spins up the second core today - even without
-  FreeRTOS. This is a current latent issue, not just a FreeRTOS one. Emit
-  `loop1()` only when the app opts in (e.g. `HAL_ENABLE_APP_TASK1`), and make
-  the same define gate task1 creation in the future FreeRTOS entry path
-  (Stage 6). Decouples accidental dual-core startup from a weak symbol.
 
 - **Make the OneWire / timing path keep the hard full-mask under FreeRTOS.**
   Guaranteed by the two-primitive decision above, but must be explicitly
@@ -635,6 +641,30 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-11: Audit context rule added. Agents working on FreeRTOS-related tasks
+  must read [Thread-SafetyAudit.md](Thread-SafetyAudit.md) and account for its
+  findings before planning or editing. Validation: markdown link audit and
+  `git diff --check` passed.
+- 2026-06-11: FreeRTOS planning documentation relocated under `doc/`:
+  [FreeRTOS_imp.md](FreeRTOS_imp.md) and
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md) now live together with the
+  other project docs. Root [README.md](../README.md) and affected cross-doc
+  links were updated. Validation: all non-README Markdown documents are under
+  `doc/`, markdown link audit and `git diff --check` passed.
+- 2026-06-11: Stage 0 thread-safety audit completed as documentation-only
+  inventory in [Thread-SafetyAudit.md](Thread-SafetyAudit.md). It classifies setup/teardown,
+  mutex-protected runtime paths, callback/ISR restrictions, Arduino-origin
+  wrappers, lazy mutex risks, and priority follow-ups before enabling
+  `HAL_ENABLE_FREERTOS`. Validation: `./runalltests.sh` passed all 7 gates.
+- 2026-06-11: P0 `app_task1()` opt-in implemented. `HAL_ENABLE_APP_TASK1` now
+  gates `loop1()` emission on RP2040 and cooperative `app_task1()` dispatch on
+  STM32/mock; docs synced in `hal_app.h`, `examples/README.md`,
+  [README.md](../README.md), [JaszczurHAL_API.md](JaszczurHAL_API.md),
+  `hal_config.h`, and `HAL_FLAGS.txt`. Validation:
+  `./runalltests.sh` passed all 7 gates.
+- 2026-06-11: Hard progress rule added. Future FreeRTOS-related completed work
+  must be recorded in this "Done" section with date, stage/P-item, outcome, and
+  validation status. Validation: `./runalltests.sh` passed all 7 gates.
 - RP2040 `hal_critical_section_*` made nesting-safe and per-core; regression
   test added on the mock backend (`tests/test_hal_critical_section.cpp`).
 - `SmartTimers` Rule of Three closed (copy ctor/assignment deleted); compile-time
