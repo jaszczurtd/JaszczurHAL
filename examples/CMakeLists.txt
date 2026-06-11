@@ -2,12 +2,15 @@ cmake_minimum_required(VERSION 3.16)
 project(JaszczurHAL_Examples NONE)
 
 set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
+
 set(JH_EXAMPLE_TARGET "rp2040" CACHE STRING "Example backend: rp2040 or stm32g474")
 set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS rp2040 stm32g474)
 
 set(JH_RP2040_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Default RP2040 Arduino FQBN")
 set(JH_RP2040_WIFI_FQBN "rp2040:rp2040:rpipicow" CACHE STRING "RP2040 WiFi-capable Arduino FQBN")
 set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build RP2040 examples with arduino-pico FreeRTOS SMP mode")
+set(JH_STM32_FREERTOS OFF CACHE BOOL "Build STM32G474 examples with local FreeRTOS-Kernel support")
 
 if(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
     enable_language(C CXX ASM)
@@ -226,11 +229,21 @@ function(_jh_add_stm32g474_example NAME)
         "${SRC}/arduino_host_stubs"
         "${G474}"
     )
+    set(_stm32_defines ${ARG_DEFINES})
+    if(JH_STM32_FREERTOS)
+        list(APPEND _stm32_defines HAL_ENABLE_FREERTOS)
+    endif()
+
     target_compile_definitions("${_target}" PRIVATE
         HAL_TARGET_STM32G474=1
         HAL_PROVIDE_APP_ENTRY=1
-        ${ARG_DEFINES}
+        ${_stm32_defines}
     )
+
+    jh_cmake_defines_contain(_stm32_has_freertos HAL_ENABLE_FREERTOS ${_stm32_defines})
+    if(_stm32_has_freertos)
+        jh_stm32g474_enable_freertos("${_target}")
+    endif()
 
     set(_arch_flags -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard)
     target_compile_options("${_target}" PRIVATE
@@ -319,6 +332,6 @@ jh_example(25_display_oled TARGETS rp2040 stm32g474)
 jh_example(26_rtc_clock TARGETS rp2040 stm32g474)
 jh_example(27_rtc_ds3231 TARGETS rp2040 stm32g474)
 jh_example(28_pga2311 TARGETS rp2040 stm32g474)
-if(JH_RP2040_FREERTOS)
-    jh_example(29_freertos_smoke TARGETS rp2040 DEFINES HAL_ENABLE_FREERTOS)
+if(JH_RP2040_FREERTOS OR JH_STM32_FREERTOS)
+    jh_example(29_freertos_smoke TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_FREERTOS)
 endif()

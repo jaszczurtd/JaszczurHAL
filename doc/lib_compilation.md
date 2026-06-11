@@ -251,6 +251,8 @@ Optional cache variables:
 | `STM32_FLOAT_ABI` | `hard` | Float ABI |
 | `EXTRA_HAL_DEFINES` | - | Semicolon-separated extra HAL definitions |
 | `HAL_PROJECT_CONFIG_DIR` | - | Directory with `hal_project_config.h` |
+| `JH_STM32_FREERTOS` | `OFF` | Compile STM32 with local FreeRTOS-Kernel support and define `HAL_ENABLE_FREERTOS` |
+| `JH_FREERTOS_KERNEL_DIR` | `third_party/FreeRTOS-Kernel` | Path to the local FreeRTOS-Kernel checkout |
 
 Example with extra modules:
 
@@ -274,10 +276,25 @@ once their STM32G474 backend exists.
 `third_party/FreeRTOS-Kernel` dependency is configured and the include path
 provides both `<FreeRTOS.h>` and a target `FreeRTOSConfig.h`.
 
-Stage 1 only adds this fail-fast validation and documentation. It does not yet
-compile the kernel source list, select the Cortex-M4F FreeRTOS port, provide
-heap integration, or hand SVC/PendSV/SysTick ownership to FreeRTOS. Those pieces
-belong to the STM32 FreeRTOS integration stage.
+The STM32 CMake integration now compiles the explicit kernel source list
+(`tasks.c`, `queue.c`, `list.c`, `timers.c`, `event_groups.c`,
+`stream_buffer.c`, `portable/GCC/ARM_CM4F/port.c`, and
+`portable/MemMang/heap_4.c`), adds the target `FreeRTOSConfig.h`, and lets the
+FreeRTOS port own SVC/PendSV/SysTick.
+
+```bash
+./build_stm32_lib.sh --clean --freertos
+```
+
+If the kernel is not under `third_party/FreeRTOS-Kernel`, pass:
+
+```bash
+./build_stm32_lib.sh --freertos --freertos-kernel /path/to/FreeRTOS-Kernel
+```
+
+This stage provides native FreeRTOS API availability and kernel linkage.
+STM32 HAL runtime primitives such as `hal_mutex_*` and `hal_delay_ms()` become
+FreeRTOS-aware in the next implementation stage.
 
 ### Linking With an STM32G474 Project
 

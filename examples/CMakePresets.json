@@ -26,6 +26,16 @@
         "JH_EXAMPLE_TARGET": "stm32g474",
         "CMAKE_TOOLCHAIN_FILE": "../stm32_lib/toolchain_stm32g474.cmake"
       }
+    },
+    {
+      "name": "stm32g474-freertos",
+      "displayName": "Examples: STM32G474 FreeRTOS",
+      "binaryDir": "../build_examples_stm32g474_freertos",
+      "cacheVariables": {
+        "JH_EXAMPLE_TARGET": "stm32g474",
+        "JH_STM32_FREERTOS": "ON",
+        "CMAKE_TOOLCHAIN_FILE": "../stm32_lib/toolchain_stm32g474.cmake"
+      }
     }
   ],
   "buildPresets": [
@@ -40,6 +50,10 @@
     {
       "name": "stm32g474",
       "configurePreset": "stm32g474"
+    },
+    {
+      "name": "stm32g474-freertos",
+      "configurePreset": "stm32g474-freertos"
     }
   ]
 }

@@ -55,6 +55,16 @@ cmake -S examples -B build_examples_stm32 \
 cmake --build build_examples_stm32
 ```
 
+### Configure + build STM32G474 FreeRTOS examples
+
+```bash
+cmake --preset stm32g474-freertos -S examples
+cmake --build build_examples_stm32g474_freertos --target 29_freertos_smoke_stm32g474
+```
+
+This requires a local `third_party/FreeRTOS-Kernel` checkout, or
+`-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`.
+
 ### Build a single example
 
 ```bash
@@ -78,6 +88,9 @@ cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
 
 cmake --preset stm32g474 -S examples
 cmake --build build_examples_stm32
+
+cmake --preset stm32g474-freertos -S examples
+cmake --build build_examples_stm32g474_freertos --target 29_freertos_smoke_stm32g474
 ```
 
 ## Application Structure
@@ -177,6 +190,8 @@ For examples that need different pins per target, use compile-time detection:
 #endif
 ```
 
+common definition `LED_BUILTIN` is also supported.
+
 ## WiFi-Capable Examples
 
 Examples 10, 11, and 15 require a WiFi-capable board. The CMake system
@@ -218,4 +233,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 26 | rtc_clock | rp2040, stm32g474 | RTC, PCF8563 |
 | 27 | rtc_ds3231 | rp2040, stm32g474 | RTC, DS3231 |
 | 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |
-| 29 | freertos_smoke | rp2040 FreeRTOS | Native FreeRTOS task + HAL mutex/delay/idle smoke |
+| 29 | freertos_smoke | rp2040 FreeRTOS, stm32g474 FreeRTOS | Native FreeRTOS task + HAL mutex/delay/idle smoke |

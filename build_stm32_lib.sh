@@ -14,6 +14,8 @@
 # Options:
 #   -p, --project-config DIR   Path to dir with hal_project_config.h
 #   -D KEY=VALUE               Extra compile definitions (repeatable)
+#   --freertos                 Build with local FreeRTOS-Kernel support
+#   --freertos-kernel PATH     Path to FreeRTOS-Kernel checkout
 #   -o, --output DIR           Output directory (default: ./build_stm32)
 #   -t, --toolchain FILE       CMake toolchain file
 #                              (default: ./stm32_lib/toolchain_stm32g474.cmake)
@@ -38,6 +40,8 @@ die()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
+FREERTOS=0
+FREERTOS_KERNEL_DIR=""
 OUTPUT_DIR="${SCRIPT_DIR}/build_stm32"
 TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake"
 CLEAN=0
@@ -47,12 +51,14 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
+        --freertos) FREERTOS=1; shift ;;
+        --freertos-kernel) FREERTOS_KERNEL_DIR="$2"; shift 2 ;;
         -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
         -t|--toolchain) TOOLCHAIN_FILE="$2"; shift 2 ;;
         --clean) CLEAN=1; shift ;;
         -j|--jobs) JOBS="$2"; shift 2 ;;
         -h|--help)
-            head -31 "$0" | tail -28
+            sed -n '3,25p' "$0"
             exit 0
             ;;
         *)
@@ -79,6 +85,24 @@ CMAKE_EXTRA_ARGS=()
 
 if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
     CMAKE_EXTRA_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
+fi
+
+if [[ ${FREERTOS} -eq 1 ]]; then
+    CMAKE_EXTRA_ARGS+=("-DJH_STM32_FREERTOS=ON")
+    has_hal_freertos=0
+    for def in "${EXTRA_DEFS[@]}"; do
+        if [[ "${def}" == "HAL_ENABLE_FREERTOS" || "${def}" == HAL_ENABLE_FREERTOS=* ]]; then
+            has_hal_freertos=1
+            break
+        fi
+    done
+    if [[ ${has_hal_freertos} -eq 0 ]]; then
+        EXTRA_DEFS+=("HAL_ENABLE_FREERTOS")
+    fi
+fi
+
+if [[ -n "${FREERTOS_KERNEL_DIR}" ]]; then
+    CMAKE_EXTRA_ARGS+=("-DJH_FREERTOS_KERNEL_DIR=${FREERTOS_KERNEL_DIR}")
 fi
 
 if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then

@@ -132,7 +132,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes, and RP2040 `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes, and RP2040 `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. STM32G474 builds use a local `FreeRTOS-Kernel` checkout plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -260,10 +260,12 @@ Target rules:
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
   available to application code and exercises `hal_mutex_*`, `hal_delay_ms()`,
   and `hal_idle()` from FreeRTOS task context.
-- STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency. Stage 1
-  validates that `<FreeRTOS.h>` and `FreeRTOSConfig.h` are visible on the
-  include path; source-list, port, heap, and vector integration are later
-  implementation stages.
+- STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency, or pass
+  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds
+  compile the explicit Cortex-M4F kernel source list, include the target
+  `FreeRTOSConfig.h`, use `heap_4.c`, and let the FreeRTOS port own
+  SVC/PendSV/SysTick. HAL runtime primitives for STM32 are upgraded in the
+  following stage.
 - Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
   Host-side FreeRTOS validation is planned through the kernel POSIX port.
 
@@ -758,7 +760,6 @@ hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_re
 #define SECS(t)     ((unsigned long)((t) * SECOND))
 #define MINS(t)     (SECS(t) * 60UL)
 #define HOURS(t)    (MINS(t) * 60UL)
-#define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 uint32_t hal_millis(void);
 uint32_t hal_micros(void);
@@ -801,6 +802,9 @@ void               hal_stack_guard_check(void);
 
 // NONULL helper macro: if pointer is null, jump to local `error:` label
 #define NONULL(x) do { if ((x) == NULL) { goto error; } } while (0)
+// COUNTOF helper macro: calculating the `C-array` size
+#define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
+
 ```
 
 **impl/arduino:** Generic Arduino/pico time calls (`millis()`, `micros()`, `time_us_64()`) stay in `hal_system.cpp`; all RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, and the UID hex formatter live in the SoC driver `src/hal/impl/arduino/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to a pico busy-wait. `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` remains a pure busy-wait for timing-sensitive paths. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.

@@ -646,6 +646,34 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-11: Stage 4 STM32 FreeRTOS kernel integration completed.
+  STM32G474 builds now have a documented local
+  `third_party/FreeRTOS-Kernel` dependency (or `JH_FREERTOS_KERNEL_DIR`
+  override), a shared CMake helper with an explicit source list for
+  `tasks.c`, `queue.c`, `list.c`, `timers.c`, `event_groups.c`,
+  `stream_buffer.c`, `portable/GCC/ARM_CM4F/port.c`, and
+  `portable/MemMang/heap_4.c`, plus STM32 include dirs for the kernel,
+  ARM_CM4F port, and target config. Added
+  `src/hal/impl/stm32g474/freertos/FreeRTOSConfig.h` with
+  `configPRIO_BITS = 4`, NVIC priority macros, malloc-failed and
+  stack-overflow hooks, and Cortex-M handler aliases so FreeRTOS owns
+  SVC/PendSV/SysTick in FreeRTOS builds. `system_stm32g474.c` no longer
+  installs/configures the HAL SysTick timebase under `HAL_ENABLE_FREERTOS`,
+  and `startup_stm32g474.c` expects the FreeRTOS port handlers instead of weak
+  default handlers in that mode. `build_stm32_lib.sh --freertos`,
+  `JH_STM32_FREERTOS`, the `stm32g474-freertos` examples preset, and
+  `examples/29_freertos_smoke` now cover the STM32 native FreeRTOS compile
+  path. Per [Thread-SafetyAudit.md](Thread-SafetyAudit.md), this stage is
+  kernel/API availability only: STM32 `hal_mutex_*`, `hal_delay_ms()`, and
+  `hal_idle()` remain Stage 5 runtime primitive work. Validation:
+  `git diff --check`, `bash -n build_stm32_lib.sh`,
+  `./build_stm32_lib.sh --help`, STM32 normal static-library configure/build,
+  normal STM32 `01_blink_stm32g474` example build, expected fail-fast configure
+  without `third_party/FreeRTOS-Kernel`, `./runalltests.sh -j4` passed all
+  7 gates, and a temporary `/tmp` FreeRTOS-Kernel checkout successfully built
+  both `./build_stm32_lib.sh --clean --freertos --freertos-kernel
+  /tmp/jh_stage4_FreeRTOS-Kernel -o /tmp/jh_stage4_build_stm32_freertos -j 4`
+  and `29_freertos_smoke_stm32g474`.
 - 2026-06-11: Stage 3 RP2040 FreeRTOS-aware HAL primitives completed.
   `hal_mutex_*` now selects a normal non-recursive FreeRTOS mutex
   (`xSemaphoreCreateMutex`) under `HAL_ENABLE_FREERTOS` + `__FREERTOS`,
