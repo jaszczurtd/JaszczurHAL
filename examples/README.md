@@ -30,6 +30,20 @@ cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
 cmake --build build_examples_rp2040
 ```
 
+### Configure + build RP2040 FreeRTOS examples
+
+```bash
+cmake -S examples -B build_examples_rp2040_freertos \
+      -DJH_EXAMPLE_TARGET=rp2040 \
+      -DJH_RP2040_FREERTOS=ON
+cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
+```
+
+This uses the arduino-pico FQBN option `os=freertos`, defines
+`HAL_ENABLE_FREERTOS`, and compiles the `29_freertos_smoke` application with
+native `<FreeRTOS.h>` / `<task.h>` includes. The normal RP2040 preset remains a
+non-FreeRTOS build.
+
 ### Configure + build all examples for STM32G474
 
 ```bash
@@ -55,10 +69,13 @@ Target names follow the pattern: `<folder_name>_<backend>`.
 
 ```bash
 cmake --preset rp2040 -S examples
-cmake --build --preset rp2040
+cmake --build build_examples_rp2040
+
+cmake --preset rp2040-freertos -S examples
+cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
 
 cmake --preset stm32g474 -S examples
-cmake --build --preset stm32g474
+cmake --build build_examples_stm32
 ```
 
 ## Application Structure
@@ -199,3 +216,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 26 | rtc_clock | rp2040, stm32g474 | RTC, PCF8563 |
 | 27 | rtc_ds3231 | rp2040, stm32g474 | RTC, DS3231 |
 | 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |
+| 29 | freertos_smoke | rp2040 FreeRTOS | Native FreeRTOS headers/tasks smoke |

@@ -7,6 +7,7 @@ set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS rp2040 stm32g474)
 
 set(JH_RP2040_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Default RP2040 Arduino FQBN")
 set(JH_RP2040_WIFI_FQBN "rp2040:rp2040:rpipicow" CACHE STRING "RP2040 WiFi-capable Arduino FQBN")
+set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build RP2040 examples with arduino-pico FreeRTOS SMP mode")
 
 if(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
     enable_language(C CXX ASM)
@@ -34,10 +35,26 @@ function(_jh_make_safe_name OUT_VAR NAME)
     set(${OUT_VAR} "${_safe}" PARENT_SCOPE)
 endfunction()
 
+function(_jh_rp2040_apply_freertos OUT_VAR FQBN)
+    if(NOT JH_RP2040_FREERTOS)
+        set(${OUT_VAR} "${FQBN}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set(_fqbn "${FQBN}")
+    if("${_fqbn}" MATCHES "(^|[,:])os=")
+        set(${OUT_VAR} "${_fqbn}" PARENT_SCOPE)
+    elseif("${_fqbn}" MATCHES "^[^:]+:[^:]+:[^:]+$")
+        set(${OUT_VAR} "${_fqbn}:os=freertos" PARENT_SCOPE)
+    else()
+        set(${OUT_VAR} "${_fqbn},os=freertos" PARENT_SCOPE)
+    endif()
+endfunction()
+
 function(_jh_add_rp2040_example NAME)
     set(options)
     set(oneValueArgs DIR FQBN)
-    set(multiValueArgs SOURCES)
+    set(multiValueArgs SOURCES DEFINES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(NOT ARG_DIR)
@@ -46,6 +63,7 @@ function(_jh_add_rp2040_example NAME)
     if(NOT ARG_FQBN)
         set(ARG_FQBN "${JH_RP2040_FQBN}")
     endif()
+    _jh_rp2040_apply_freertos(ARG_FQBN "${ARG_FQBN}")
 
     set(_example_dir "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_DIR}")
     if(NOT ARG_SOURCES)
@@ -91,6 +109,27 @@ function(_jh_add_rp2040_example NAME)
         file(CREATE_LINK "${_example_dir}/hal_project_config.h" "${_sketch_dir}/hal_project_config.h" SYMBOLIC)
     endif()
 
+    set(_rp2040_defines ${ARG_DEFINES})
+    if(JH_RP2040_FREERTOS)
+        list(APPEND _rp2040_defines HAL_ENABLE_FREERTOS)
+    endif()
+
+    set(_rp2040_extra_flags "")
+    foreach(_def IN LISTS _rp2040_defines)
+        string(APPEND _rp2040_extra_flags " -D${_def}")
+    endforeach()
+    string(STRIP "${_rp2040_extra_flags}" _rp2040_extra_flags)
+
+    set(_rp2040_build_property_args
+        --build-property "compiler.cpp.extra_flags=-I ${_sketch_dir}"
+        --build-property "compiler.c.extra_flags=-I ${_sketch_dir}"
+    )
+    if(NOT "${_rp2040_extra_flags}" STREQUAL "")
+        list(APPEND _rp2040_build_property_args
+            --build-property "build.extra_flags=${_rp2040_extra_flags}"
+        )
+    endif()
+
     add_custom_target("${_safe}_rp2040" ALL
         COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_output_dir}"
         COMMAND "${CMAKE_COMMAND}" -E make_directory "${_output_dir}"
@@ -98,8 +137,7 @@ function(_jh_add_rp2040_example NAME)
             --fqbn "${ARG_FQBN}"
             --build-path "${_output_dir}"
             --library "${JH_ROOT}"
-            --build-property "compiler.cpp.extra_flags=-I ${_sketch_dir}"
-            --build-property "compiler.c.extra_flags=-I ${_sketch_dir}"
+            ${_rp2040_build_property_args}
             "${_sketch_dir}"
         COMMENT "[RP2040] ${NAME} (${ARG_FQBN})"
         VERBATIM
@@ -242,6 +280,7 @@ function(jh_example NAME)
             DIR "${ARG_DIR}"
             FQBN "${ARG_FQBN}"
             SOURCES ${ARG_SOURCES}
+            DEFINES ${ARG_DEFINES}
         )
     elseif(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
         _jh_add_stm32g474_example("${NAME}"
@@ -280,3 +319,6 @@ jh_example(25_display_oled TARGETS rp2040 stm32g474)
 jh_example(26_rtc_clock TARGETS rp2040 stm32g474)
 jh_example(27_rtc_ds3231 TARGETS rp2040 stm32g474)
 jh_example(28_pga2311 TARGETS rp2040 stm32g474)
+if(JH_RP2040_FREERTOS)
+    jh_example(29_freertos_smoke TARGETS rp2040 DEFINES HAL_ENABLE_FREERTOS)
+endif()

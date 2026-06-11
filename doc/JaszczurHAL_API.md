@@ -132,7 +132,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make HAL runtime primitives FreeRTOS-aware. |
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake now provide opt-in FreeRTOS build modes. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make HAL runtime primitives FreeRTOS-aware. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -254,7 +254,11 @@ Target rules:
 
 - RP2040: use arduino-pico's FreeRTOS mode. The HAL validates that
   `__FREERTOS` is present and emits a clear compile-time error if a normal
-  non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`.
+  non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`. For the
+  static library, use `./build_arduino_lib.sh --freertos`; for examples, use
+  `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
+  `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
+  available to application code.
 - STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency. Stage 1
   validates that `<FreeRTOS.h>` and `FreeRTOSConfig.h` are visible on the
   include path; source-list, port, heap, and vector integration are later
@@ -262,9 +266,9 @@ Target rules:
 - Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
   Host-side FreeRTOS validation is planned through the kernel POSIX port.
 
-Thread-safety note: this flag does not by itself upgrade `hal_sync`,
-`hal_delay_ms`, timers, Arduino-origin wrappers, or lazy singleton mutexes.
-Those changes are staged separately and tracked in
+Thread-safety note: RP2040 FreeRTOS build integration does not by itself
+upgrade `hal_sync`, `hal_delay_ms`, timers, Arduino-origin wrappers, or lazy
+singleton mutexes. Those changes are staged separately and tracked in
 [FreeRTOS_imp.md](FreeRTOS_imp.md) and
 [Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 

@@ -10,6 +10,15 @@
       }
     },
     {
+      "name": "rp2040-freertos",
+      "displayName": "Examples: RP2040 FreeRTOS",
+      "binaryDir": "../build_examples_rp2040_freertos",
+      "cacheVariables": {
+        "JH_EXAMPLE_TARGET": "rp2040",
+        "JH_RP2040_FREERTOS": "ON"
+      }
+    },
+    {
       "name": "stm32g474",
       "displayName": "Examples: STM32G474",
       "binaryDir": "../build_examples_stm32g474",
@@ -23,6 +32,10 @@
     {
       "name": "rp2040",
       "configurePreset": "rp2040"
+    },
+    {
+      "name": "rp2040-freertos",
+      "configurePreset": "rp2040-freertos"
     },
     {
       "name": "stm32g474",

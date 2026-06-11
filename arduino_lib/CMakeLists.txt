@@ -80,6 +80,25 @@ parse_platform_def_file(
     CHIP_DEFS
 )
 
+# ── Optional arduino-pico OS mode --------------------------------------------
+set(ARDUINO_OS "" CACHE STRING "Arduino-pico OS option: empty/none or freertos")
+set_property(CACHE ARDUINO_OS PROPERTY STRINGS "" none freertos)
+
+set(ARDUINO_OS_DEFS "")
+set(ARDUINO_OS_INC_DIRS "")
+if("${ARDUINO_OS}" STREQUAL "freertos")
+    set(ARDUINO_FREERTOS_INCLUDE_DIR "${ARDUINO_CORE_PATH}/freertos" CACHE PATH
+        "Arduino-pico FreeRTOS wrapper include directory")
+    if(NOT EXISTS "${ARDUINO_FREERTOS_INCLUDE_DIR}/FreeRTOS.h")
+        message(FATAL_ERROR
+            "ARDUINO_OS=freertos requires ${ARDUINO_FREERTOS_INCLUDE_DIR}/FreeRTOS.h")
+    endif()
+    list(APPEND ARDUINO_OS_DEFS __FREERTOS)
+    list(APPEND ARDUINO_OS_INC_DIRS "${ARDUINO_FREERTOS_INCLUDE_DIR}")
+elseif(NOT "${ARDUINO_OS}" STREQUAL "" AND NOT "${ARDUINO_OS}" STREQUAL "none")
+    message(FATAL_ERROR "Unsupported ARDUINO_OS='${ARDUINO_OS}' (expected empty, none, or freertos)")
+endif()
+
 # ── HAL implementation sources (Arduino) ─────────────────────────────────────
 file(GLOB ARDUINO_IMPL_SOURCES ${SRC}/hal/impl/arduino/*.cpp)
 file(GLOB_RECURSE ARDUINO_SHARED_SOURCES
@@ -147,6 +166,7 @@ target_include_directories(JaszczurHAL PUBLIC
     ${CORE_INC_DIRS}
     ${PLATFORM_INC_DIRS}
     ${ARDUINO_LIB_INC_DIRS}
+    ${ARDUINO_OS_INC_DIRS}
 )
 
 # ── Compile definitions ─────────────────────────────────────────────────────
@@ -178,6 +198,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     LWIP_CHECKSUM_CTRL_PER_NETIF=1
     ${PLATFORM_DEFS}
     ${CHIP_DEFS}
+    ${ARDUINO_OS_DEFS}
 )
 
 # Extra user-supplied defines (e.g. HAL_ENABLE_WIFI, PICO_W, etc.)

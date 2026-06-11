@@ -56,13 +56,15 @@ FreeRTOS integration flag
   HAL_ENABLE_FREERTOS
     Opt in to native FreeRTOS availability. This does not add a public
     hal_rtos_* wrapper; applications include and use native FreeRTOS headers
-    directly. Stage 1 validates the selected target/provider only:
+    directly. Current validation/build support is staged by target:
 
       RP2040:
         Requires arduino-pico FreeRTOS mode so __FREERTOS is defined
         (board menu "Operating System -> FreeRTOS SMP", or an equivalent
-        FQBN option such as os=freertos). The local third_party/FreeRTOS-Kernel
-        tree is not used on RP2040 with the Arduino backend.
+        FQBN option such as os=freertos). build_arduino_lib.sh --freertos and
+        examples -DJH_RP2040_FREERTOS=ON configure this mode. The local
+        third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
+        Arduino backend.
 
       STM32G474:
         Requires the local FreeRTOS-Kernel include path to provide

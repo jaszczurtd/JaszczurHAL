@@ -16,6 +16,7 @@
 #                         (default: ~/.arduino15/packages/rp2040)
 #   -b, --board VARIANT   Board variant (default: rpipico)
 #   -c, --chip CHIP       Target chip (default: rp2040)
+#   --freertos            Build for arduino-pico FreeRTOS SMP mode
 #   -p, --project-config DIR  Path to dir with hal_project_config.h
 #   -D KEY=VALUE          Extra compile definitions (repeatable)
 #   -o, --output DIR      Output directory (default: ./build_arduino)
@@ -46,6 +47,7 @@ PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 OUTPUT_DIR="${SCRIPT_DIR}/build_arduino"
 CLEAN=0
+FREERTOS=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
 # ── Parse arguments ──────────────────────────────────────────────────────────
@@ -54,13 +56,14 @@ while [[ $# -gt 0 ]]; do
         -r|--root)         ARDUINO_ROOT="$2";        shift 2 ;;
         -b|--board)        BOARD_VARIANT="$2";        shift 2 ;;
         -c|--chip)         CHIP="$2";                 shift 2 ;;
+        --freertos)        FREERTOS=1;                shift   ;;
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D)                EXTRA_DEFS+=("$2");        shift 2 ;;
         -o|--output)       OUTPUT_DIR="$2";           shift 2 ;;
         --clean)           CLEAN=1;                   shift   ;;
         -j|--jobs)         JOBS="$2";                 shift 2 ;;
         -h|--help)
-            head -27 "$0" | tail -24
+            sed -n '3,26p' "$0"
             exit 0
             ;;
         *)
@@ -90,6 +93,9 @@ COMPILER="${TC_DIR}/bin/arm-none-eabi-g++"
 VARIANT_DIR="${CORE_DIR}/variants/${BOARD_VARIANT}"
 [[ -d "${VARIANT_DIR}" ]] || die "Board variant not found: ${VARIANT_DIR}"
 info "Board:        ${BOARD_VARIANT}"
+if [[ ${FREERTOS} -eq 1 ]]; then
+    info "OS mode:      FreeRTOS SMP"
+fi
 
 # ── Build ────────────────────────────────────────────────────────────────────
 TOOLCHAIN_FILE="${SCRIPT_DIR}/arduino_lib/toolchain_rp2040.cmake"
@@ -106,6 +112,20 @@ CMAKE_EXTRA_ARGS=()
 
 if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
     CMAKE_EXTRA_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
+fi
+
+if [[ ${FREERTOS} -eq 1 ]]; then
+    CMAKE_EXTRA_ARGS+=("-DARDUINO_OS=freertos")
+    has_hal_freertos=0
+    for def in "${EXTRA_DEFS[@]}"; do
+        if [[ "${def}" == "HAL_ENABLE_FREERTOS" || "${def}" == HAL_ENABLE_FREERTOS=* ]]; then
+            has_hal_freertos=1
+            break
+        fi
+    done
+    if [[ ${has_hal_freertos} -eq 0 ]]; then
+        EXTRA_DEFS+=("HAL_ENABLE_FREERTOS")
+    fi
 fi
 
 # Pass extra -D defines as a semicolon-separated list
