@@ -64,15 +64,19 @@ FreeRTOS integration flag
         FQBN option such as os=freertos). build_arduino_lib.sh --freertos and
         examples -DJH_RP2040_FREERTOS=ON configure this mode. The local
         third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
-        Arduino backend.
+        Arduino backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
+        hal_mutex_* uses a FreeRTOS mutex and hal_delay_ms()/hal_idle() yield
+        to the scheduler from task context. hal_critical_section_* remains a
+        hard per-core interrupt mask for timing-sensitive code.
 
       STM32G474:
         Requires the local FreeRTOS-Kernel include path to provide
         <FreeRTOS.h> and a target FreeRTOSConfig.h on the include path.
         Kernel source integration is a later implementation stage.
 
-    HAL runtime primitives are not made FreeRTOS-aware by this flag alone.
-    Module task-safety follows the staged FreeRTOS plan and audit.
+    Full module task-safety is still staged. Lazy singleton mutex creation,
+    timer callback context, and Arduino-origin wrappers follow the FreeRTOS
+    plan and thread-safety audit.
 
 
 Module enable flags

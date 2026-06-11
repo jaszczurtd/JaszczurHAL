@@ -6,7 +6,8 @@
  *
  * Provides:
  * - Millisecond / microsecond counters (@ref hal_millis, @ref hal_micros,
- *   @ref hal_micros64) and busy-wait delays.
+ *   @ref hal_micros64), millisecond delays, and timing-safe microsecond
+ *   busy-wait delays.
  * - Hardware watchdog control (@ref hal_watchdog_enable,
  *   @ref hal_watchdog_feed, @ref hal_watchdog_caused_reboot).
  * - Free-heap query and on-chip temperature sensor.
@@ -20,10 +21,10 @@
  *   - Type-conversion macros: @ref SECS, @ref MINS, @ref HOURS.
  */
 
+#include "hal_math.h"
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdbool.h>
-#include "hal_math.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -32,7 +33,7 @@ extern "C" {
 /* -- Time-conversion macros ------------------------------------------------ */
 
 #define SECONDS_IN_MINUTE 60
-#define MILIS_IN_MINUTE   60000.0
+#define MILIS_IN_MINUTE 60000.0
 
 /** @brief One second in milliseconds. */
 #define SECOND 1000UL
@@ -49,7 +50,8 @@ extern "C" {
 /**
  * @def COUNTOF(arr)
  * @brief Number of elements in a statically-allocated array.
- * @note Works only for real arrays. Passing a pointer yields an incorrect result.
+ * @note Works only for real arrays. Passing a pointer yields an incorrect
+ * result.
  */
 #ifndef COUNTOF
 #define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
@@ -61,10 +63,10 @@ extern "C" {
  * @param buf Destination buffer of at least 4 bytes.
  */
 static inline void hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
-    buf[0] = (uint8_t)(val >> 24);
-    buf[1] = (uint8_t)(val >> 16);
-    buf[2] = (uint8_t)(val >> 8);
-    buf[3] = (uint8_t)(val);
+  buf[0] = (uint8_t)(val >> 24);
+  buf[1] = (uint8_t)(val >> 16);
+  buf[2] = (uint8_t)(val >> 8);
+  buf[3] = (uint8_t)(val);
 }
 
 /**
@@ -86,7 +88,12 @@ uint32_t hal_micros(void);
 uint64_t hal_micros64(void);
 
 /**
- * @brief Busy-wait for the given number of milliseconds.
+ * @brief Delay for the given number of milliseconds.
+ *
+ * FreeRTOS-aware backends may yield/block the current task when the scheduler
+ * is running and the call is made from task context. Timing-sensitive callers
+ * that require an interrupt-independent wait should use @ref hal_delay_us.
+ *
  * @param ms Delay duration.
  */
 void hal_delay_ms(uint32_t ms);
@@ -105,7 +112,8 @@ void hal_watchdog_feed(void);
 /**
  * @brief Enable the hardware watchdog with the given timeout.
  * @param ms             Timeout in milliseconds.
- * @param pause_on_debug If true, pause the watchdog when a debugger is attached.
+ * @param pause_on_debug If true, pause the watchdog when a debugger is
+ * attached.
  */
 void hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
 
@@ -142,16 +150,16 @@ bool hal_watchdog_caused_reboot(void);
  *   triggers a reboot, which the HAL recognises on the next boot.
  */
 typedef enum {
-    HAL_RESET_REASON_UNKNOWN = 0,
-    HAL_RESET_REASON_POWER_ON,
-    HAL_RESET_REASON_RUN_PIN,
-    HAL_RESET_REASON_SOFT,
-    HAL_RESET_REASON_WATCHDOG,
-    HAL_RESET_REASON_DEBUG,
-    HAL_RESET_REASON_GLITCH,
-    HAL_RESET_REASON_BROWNOUT,
-    HAL_RESET_REASON_HARDFAULT,
-    HAL_RESET_REASON_STACK_OVERFLOW
+  HAL_RESET_REASON_UNKNOWN = 0,
+  HAL_RESET_REASON_POWER_ON,
+  HAL_RESET_REASON_RUN_PIN,
+  HAL_RESET_REASON_SOFT,
+  HAL_RESET_REASON_WATCHDOG,
+  HAL_RESET_REASON_DEBUG,
+  HAL_RESET_REASON_GLITCH,
+  HAL_RESET_REASON_BROWNOUT,
+  HAL_RESET_REASON_HARDFAULT,
+  HAL_RESET_REASON_STACK_OVERFLOW
 } hal_reset_reason_t;
 
 /**
@@ -166,10 +174,10 @@ typedef enum {
  * crashing call site via @c arm-none-eabi-addr2line.
  */
 typedef struct {
-    bool     valid; /**< true when the previous boot was preceded by a fault */
-    uint32_t pc;    /**< stacked PC (return address at fault)               */
-    uint32_t lr;    /**< stacked LR (caller return address)                  */
-    uint32_t psr;   /**< stacked xPSR                                        */
+  bool valid;   /**< true when the previous boot was preceded by a fault */
+  uint32_t pc;  /**< stacked PC (return address at fault)               */
+  uint32_t lr;  /**< stacked LR (caller return address)                  */
+  uint32_t psr; /**< stacked xPSR                                        */
 } hal_fault_info_t;
 
 /**
@@ -384,7 +392,8 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen);
 
 /**
  * @def NONULL(x)
- * @brief Guard-pointer helper that jumps to a local `error:` label when `x` is null.
+ * @brief Guard-pointer helper that jumps to a local `error:` label when `x` is
+ * null.
  *
  * Intended for compact early-exit checks in functions that use a shared
  * cleanup/error path.
@@ -408,7 +417,12 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen);
  * @note Safe to use from both C and C++ translation units.
  */
 #ifndef NONULL
-#define NONULL(x) do { if ((x) == NULL) { goto error; } } while (0)
+#define NONULL(x)                                                              \
+  do {                                                                         \
+    if ((x) == NULL) {                                                         \
+      goto error;                                                              \
+    }                                                                          \
+  } while (0)
 #endif
 
 #ifdef __cplusplus
