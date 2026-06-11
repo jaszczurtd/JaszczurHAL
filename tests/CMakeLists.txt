@@ -8,6 +8,7 @@ endfunction()
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
+add_hal_test(test_hal_critical_section)
 add_executable(test_pcf8563_driver
     test_pcf8563_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/pcf8563/pcf8563.cpp
