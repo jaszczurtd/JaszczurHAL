@@ -98,6 +98,7 @@ Script options:
 | `-r`, `--root PATH` | `~/.arduino15/packages/rp2040` | Arduino RP2040 package root |
 | `-b`, `--board VARIANT` | `rpipico` | Board variant, e.g. `rpipicow`, `rpipico2` |
 | `-c`, `--chip CHIP` | `rp2040` | Target chip: `rp2040` / `rp2350` |
+| `--freertos` | - | Build with arduino-pico FreeRTOS SMP mode and define `HAL_ENABLE_FREERTOS` |
 | `-p`, `--project-config DIR` | - | Directory containing `hal_project_config.h` |
 | `-D DEFINE` | - | Extra compile definition, e.g. `HAL_ENABLE_WIFI` or `KEY=VALUE`; repeatable |
 | `-o`, `--output DIR` | `./build_arduino` | Output directory |
@@ -122,6 +123,9 @@ Examples:
   --board rpipicow \
   -D HAL_ENABLE_WIFI
 
+# RP2040 FreeRTOS SMP mode
+./build_arduino_lib.sh --freertos
+
 # Clean rebuild into a custom directory
 ./build_arduino_lib.sh --clean -o ./my_build
 ```
@@ -133,10 +137,32 @@ already in its native FreeRTOS mode. In practice that means the core must define
 `__FREERTOS`, usually via the board menu `Operating System -> FreeRTOS SMP` or
 an equivalent FQBN option such as `os=freertos`.
 
+For the static-library helper, use:
+
+```bash
+./build_arduino_lib.sh --freertos
+```
+
+This passes `ARDUINO_OS=freertos` to CMake, defines `__FREERTOS`, makes the
+arduino-pico FreeRTOS wrapper include directory visible, and adds
+`HAL_ENABLE_FREERTOS` to the HAL compile definitions. Manual CMake users can do
+the same with:
+
+```bash
+cmake -S arduino_lib -B build_arduino_freertos \
+  -DCMAKE_TOOLCHAIN_FILE=arduino_lib/toolchain_rp2040.cmake \
+  -DARDUINO_ROOT=~/.arduino15/packages/rp2040 \
+  -DARDUINO_CHIP=rp2040 \
+  -DARDUINO_VARIANT=rpipico \
+  -DARDUINO_OS=freertos \
+  -DEXTRA_HAL_DEFINES="HAL_ENABLE_FREERTOS"
+
+cmake --build build_arduino_freertos -j$(nproc)
+```
+
 The local `third_party/FreeRTOS-Kernel` tree is not compiled for the current
 Arduino/RP2040 backend. Defining `HAL_ENABLE_FREERTOS` in a normal non-FreeRTOS
 RP2040 static-library build intentionally produces a clear compile-time error.
-Dedicated RP2040 FreeRTOS build-script support is a later implementation stage.
 
 ### Manual CMake Build
 
@@ -157,6 +183,7 @@ Useful CMake cache variables:
 | `ARDUINO_ROOT` | `~/.arduino15/packages/rp2040` | Arduino package directory |
 | `ARDUINO_CHIP` | `rp2040` | Target chip |
 | `ARDUINO_VARIANT` | `rpipico` | Board variant directory |
+| `ARDUINO_OS` | - | Arduino-pico OS option; use `freertos` to define `__FREERTOS` |
 | `BOARD_NAME` | `RASPBERRY_PI_PICO` | Arduino board macro name |
 | `ARDUINO_F_CPU` | `125000000` | CPU frequency in Hz |
 | `HAL_DISPLAY_DRIVER` | `HAL_DISPLAY_ILI9341` | TFT display driver macro |

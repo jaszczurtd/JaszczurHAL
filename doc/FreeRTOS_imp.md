@@ -642,6 +642,27 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-11: Stage 2 RP2040 build integration completed. RP2040 static-library
+  builds now have an opt-in `./build_arduino_lib.sh --freertos` mode that
+  selects arduino-pico FreeRTOS SMP, defines `HAL_ENABLE_FREERTOS`, exposes
+  `__FREERTOS`, and adds the core FreeRTOS include path without compiling any
+  local `third_party/FreeRTOS-Kernel` sources. RP2040 examples now have an
+  opt-in `JH_RP2040_FREERTOS=ON` / `rp2040-freertos` preset path that appends
+  `os=freertos` to the FQBN and compiles
+  `examples/29_freertos_smoke` with native `<FreeRTOS.h>` and `<task.h>`.
+  Documentation was synced in [README.md](../README.md),
+  [JaszczurHAL_API.md](JaszczurHAL_API.md),
+  [lib_compilation.md](lib_compilation.md), `examples/README.md`, and
+  [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt). Per
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md), this stage deliberately only
+  wires build/header availability; `hal_sync`, delay, timers, Arduino wrappers,
+  and runtime task-safety semantics remain unchanged for later stages.
+  Validation: `bash -n build_arduino_lib.sh`,
+  `./build_arduino_lib.sh --help`,
+  `./build_arduino_lib.sh --clean --freertos`,
+  `cmake --preset rp2040-freertos -S examples`,
+  `cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040`,
+  and `./runalltests.sh` passed all 7 gates.
 - 2026-06-11: Stage 1 flag and documentation skeleton completed.
   `HAL_ENABLE_FREERTOS` is now documented in `hal_config.h`,
   [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt), [README.md](../README.md),
