@@ -237,7 +237,7 @@ Edit `.vscode/keybindings.json` (create if it doesn't exist):
 
 ## Additional Resources
 
-- 📖 [JaszczurHAL API Documentation](../JaszczurHAL_API.md)
+- 📖 [JaszczurHAL API Documentation](../doc/JaszczurHAL_API.md)
 - 🔗 [Arduino CLI Documentation](https://arduino.github.io/arduino-cli/)
 - 🔗 [Raspberry Pi Pico Documentation](https://www.raspberrypi.com/documentation/microcontrollers/)
 - 🔗 [Cortex-Debug Extension](https://github.com/Marus/cortex-debug)
@@ -251,12 +251,12 @@ These templates are part of **JaszczurHAL** and follow the same license.
 
 For issues or questions:
 1. Check platform-specific README (Windows or Linux)
-2. Review JaszczurHAL_API.md for module documentation
+2. Review [doc/JaszczurHAL_API.md](../doc/JaszczurHAL_API.md) for module documentation
 3. Consult Arduino CLI and Cortex-Debug documentation
 4. Check serial monitor output for build/upload errors
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: 2026-04-10  
+**Version**: 1.0
+**Last Updated**: 2026-04-10
 **Supported Platforms**: Windows (10+), Linux (Any distribution), macOS (experimental)

@@ -148,7 +148,7 @@ JaszczurHAL modules your project uses (opt-in model):
 #define HAL_ENABLE_CJSON
 ```
 
-See `JaszczurHAL_API.md` for all available `HAL_ENABLE_*` flags.
+See [doc/JaszczurHAL_API.md](../../doc/JaszczurHAL_API.md) for all available `HAL_ENABLE_*` flags.
 
 ## IntelliSense and Code Completion
 
@@ -194,7 +194,7 @@ This regenerates `compile_commands_patched.json`.
 
 ## Additional Resources
 
-- [JaszczurHAL API Documentation](../../JaszczurHAL_API.md)
+- [JaszczurHAL API Documentation](../../doc/JaszczurHAL_API.md)
 - [Arduino CLI Documentation](https://arduino.github.io/arduino-cli/)
 - [Raspberry Pi Pico Documentation](https://www.raspberrypi.com/documentation/microcontrollers/)
 - [Cortex-Debug Extension](https://github.com/Marus/cortex-debug)
@@ -208,7 +208,7 @@ This regenerates `compile_commands_patched.json`.
 
 ---
 
-**Version**: 1.0  
-**Last Updated**: 2026-04-10  
-**Target**: Raspberry Pi Pico / RP2040+ with Arduino Core  
+**Version**: 1.0
+**Last Updated**: 2026-04-10
+**Target**: Raspberry Pi Pico / RP2040+ with Arduino Core
 **Language**: C/C++

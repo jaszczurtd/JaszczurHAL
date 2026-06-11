@@ -235,7 +235,7 @@ a rewrite (PWM+DMA or SPI), not a library port.
 - `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
 
 ### Recommended order
-1. **I2C drivers** - Via the shared/portable HAL pattern: rtc (PCF8563/DS3231) is now **DONE**. 
+1. **I2C drivers** - Via the shared/portable HAL pattern: rtc (PCF8563/DS3231) is now **DONE**.
 2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding for TFT throughput.
 3. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
 

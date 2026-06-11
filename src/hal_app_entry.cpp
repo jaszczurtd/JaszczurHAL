@@ -17,13 +17,12 @@
 
 #include "hal/hal_app.h"
 
-/* ── Weak default for app_task1 ───────────────────────────────────────────────
- * If the client does not define app_task1(), the weak stub below is linked
- * instead - it does nothing. On RP2040 loop1() simply won't run meaningful
- * code; on STM32/mock the call is effectively a no-op.
+/* -- Weak default for app_task1 ----------------------------------------------
+ * If the client enables HAL_ENABLE_APP_TASK1 but does not define app_task1(),
+ * the weak stub below is linked instead and does nothing.
  */
 extern "C" __attribute__((weak)) void app_task1(void) {
-    /* intentionally empty */
+  /* intentionally empty */
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -31,29 +30,26 @@ extern "C" __attribute__((weak)) void app_task1(void) {
  *
  * The Arduino core provides main() (in cores/rp2040/main.cpp) which calls
  * setup() once, then loop() in an infinite loop on core 0. If loop1() is
- * defined, it runs on core 1 in true hardware parallelism.
+ * defined, arduino-pico starts the core-1 path, so HAL emits loop1() only
+ * when the application explicitly defines HAL_ENABLE_APP_TASK1.
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 #if HAL_TARGET_IS_RP2040
 
 #include <Arduino.h>
 
-void setup(void) {
-    app_start();
-}
+void setup(void) { app_start(); }
 
-void loop(void) {
-    app_task0();
-}
+void loop(void) { app_task0(); }
 
-void loop1(void) {
-    app_task1();
-}
+#ifdef HAL_ENABLE_APP_TASK1
+void loop1(void) { app_task1(); }
+#endif
 
 /* ═══════════════════════════════════════════════════════════════════════════════
  * STM32G474 bare-metal backend
  *
- * No RTOS yet - both tasks run cooperatively in a single super-loop.
+ * No RTOS yet. With HAL_ENABLE_APP_TASK1, task1 runs cooperatively after task0.
  * TODO: Once FreeRTOS is integrated, app_task1() should be spawned as a
  *       separate FreeRTOS task with its own stack and priority.
  * ═══════════════════════════════════════════════════════════════════════════════
@@ -61,12 +57,14 @@ void loop1(void) {
 #elif HAL_TARGET_IS_STM32G474
 
 int main(void) {
-    app_start();
+  app_start();
 
-    for (;;) {
-        app_task0();
-        app_task1();   /* cooperative - same loop, no preemption */
-    }
+  for (;;) {
+    app_task0();
+#ifdef HAL_ENABLE_APP_TASK1
+    app_task1(); /* cooperative - same loop, no preemption */
+#endif
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -79,12 +77,14 @@ int main(void) {
 #elif HAL_TARGET_IS_MOCK
 
 int main(void) {
-    app_start();
+  app_start();
 
-    for (;;) {
-        app_task0();
-        app_task1();
-    }
+  for (;;) {
+    app_task0();
+#ifdef HAL_ENABLE_APP_TASK1
+    app_task1();
+#endif
+  }
 }
 
 #endif /* HAL_TARGET selection */

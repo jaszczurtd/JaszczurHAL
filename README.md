@@ -65,13 +65,22 @@ Utility-only includes are also available:
 - On Arduino backend, runtime HAL calls are generally multicore-safe and internally synchronized
 - As a project rule, initialization and teardown (`init/create/destroy/deinit`) should be done from one core
 - Mock backend targets deterministic single-threaded tests rather than true concurrent synchronization
-- Exact guarantees are documented per module in `JaszczurHAL_API.md`
+- Exact guarantees are documented per module in [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 
-For detailed signatures, module contracts, backend notes, and test coverage, see `JaszczurHAL_API.md`.
+For detailed signatures, module contracts, backend notes, and test coverage,
+see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Library structure
 
 ```text
+doc/
+  JaszczurHAL_API.md       # detailed API/reference
+  lib_compilation.md       # static-library build guide
+  CHANGELOG.md             # project changelog
+  FreeRTOS_imp.md          # FreeRTOS implementation plan and progress
+  Thread-SafetyAudit.md    # thread-safety audit for FreeRTOS work
+  STM32G474_porting_progress.md # STM32G474 backend status
+  future_ideas.md          # architecture roadmap and backlog
 src/
   JaszczurHAL.h            # primary public include
   HAL_FLAGS.txt            # HAL_ENABLE_* flag summary
@@ -97,7 +106,8 @@ vscode-templates/          # ready-to-use VS Code project configurations
   linux/                   # Linux/macOS template (Bash)
 ```
 
-Detailed per-file layout is maintained in `JaszczurHAL_API.md` (`## Library structure`).
+Detailed per-file layout is maintained in
+[JaszczurHAL_API.md](doc/JaszczurHAL_API.md) (`## Library structure`).
 
 Folder `src/hal/impl/shared/` is for internal, backend-agnostic implementation
 pieces used by at least two hardware backends. Put there only code that:
@@ -136,8 +146,9 @@ cmake --build build_examples_rp2040 --target 01_blink_rp2040
 ```
 
 Each example uses the portable entry-point contract (`app_start` /
-`app_task0` / `app_task1`) - the same source compiles on both backends.
-See [examples/README.md](examples/README.md) for details.
+`app_task0`, plus optional `app_task1` when `HAL_ENABLE_APP_TASK1` is defined)
+- the same source compiles on both backends. See
+[examples/README.md](examples/README.md) for details.
 
 ## Module selection (quick)
 
@@ -156,7 +167,7 @@ flags in a project-local
 For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` options,
 see:
 
-- `JaszczurHAL_API.md`
+- [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 - `src/HAL_FLAGS.txt`
 
 ## Target selection (multiplatform)
@@ -192,7 +203,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 Detailed suite coverage, mock behavior notes, and testing workflow are in
-`JaszczurHAL_API.md`.
+[JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Continuous integration and quality gates
 
@@ -309,7 +320,7 @@ See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup,
 ## Building as a static library (.a)
 
 The complete guide for compiling JaszczurHAL to a linkable static library
-(`libJaszczurHAL.a`): [lib_compilation.md](lib_compilation.md)
+(`libJaszczurHAL.a`): [lib_compilation.md](doc/lib_compilation.md)
 
 ## Changing the Arduino RP2040 core version
 
@@ -334,17 +345,21 @@ No other files need to be touched.
 
 Primary docs:
 
-- API reference: `JaszczurHAL_API.md`
-- Changelog: `CHANGELOG.md`
+- API reference: [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
+- Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: `src/HAL_FLAGS.txt`
-- Linkable static library build guide: [lib_compilation.md](lib_compilation.md)
-- VS Code setup (Windows & Linux): `vscode-templates/README.md`
-  - Windows template: `vscode-templates/windows/README.md`
-  - Linux template: `vscode-templates/linux/README.md`
+- Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
+- FreeRTOS implementation plan: [FreeRTOS_imp.md](doc/FreeRTOS_imp.md)
+- FreeRTOS thread-safety audit: [Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md)
+- STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
+- Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
+- VS Code setup (Windows & Linux): [vscode-templates/README.md](vscode-templates/README.md)
+  - Windows template: [vscode-templates/windows/README.md](vscode-templates/windows/README.md)
+  - Linux template: [vscode-templates/linux/README.md](vscode-templates/linux/README.md)
 
-`JaszczurHAL_API.md` is the canonical source for detailed API signatures,
-module semantics, multicore/thread-safety policy, driver inventory/licenses,
-examples, and host-test coverage.
+[JaszczurHAL_API.md](doc/JaszczurHAL_API.md) is the canonical source for
+detailed API signatures, module semantics, multicore/thread-safety policy,
+driver inventory/licenses, examples, and host-test coverage.
 
 ## Notes and credits
 

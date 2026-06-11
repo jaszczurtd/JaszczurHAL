@@ -41,6 +41,15 @@ tests `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and the string
 target, so unused backends cost zero code.
 
 
+Application entry flags
+-----------------------
+
+  HAL_ENABLE_APP_TASK1
+    Dispatch optional app_task1() from the HAL-provided entry path. On RP2040,
+    this emits Arduino loop1(), which starts the core-1 path. Leave it
+    undefined for single-loop/single-core applications.
+
+
 Module enable flags
 -------------------
 
