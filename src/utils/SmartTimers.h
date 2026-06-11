@@ -37,6 +37,13 @@ public:
   /** @brief Destructor. Releases host/mock mutex for explicit destroy paths. */
   ~SmartTimers();
 
+  /* Owns a raw hal_mutex_t freed in the destructor, so it must not be copied:
+   * a copy would share the handle and double-free it (Rule of Three). Timers
+   * are used as long-lived singletons, so non-copyable is the correct contract.
+   */
+  SmartTimers(const SmartTimers &) = delete;
+  SmartTimers &operator=(const SmartTimers &) = delete;
+
   /**
    * @brief Configure the timer.
    * @param callback Function to call when the interval elapses.
