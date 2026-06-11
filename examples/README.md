@@ -41,8 +41,10 @@ cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
 
 This uses the arduino-pico FQBN option `os=freertos`, defines
 `HAL_ENABLE_FREERTOS`, and compiles the `29_freertos_smoke` application with
-native `<FreeRTOS.h>` / `<task.h>` includes. The normal RP2040 preset remains a
-non-FreeRTOS build.
+native `<FreeRTOS.h>` / `<task.h>` includes. The smoke app starts a second
+FreeRTOS task, shares state through `hal_mutex_t`, and uses `hal_delay_ms()` /
+`hal_idle()` from task context. The normal RP2040 preset remains a non-FreeRTOS
+build.
 
 ### Configure + build all examples for STM32G474
 
@@ -216,4 +218,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 26 | rtc_clock | rp2040, stm32g474 | RTC, PCF8563 |
 | 27 | rtc_ds3231 | rp2040, stm32g474 | RTC, DS3231 |
 | 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |
-| 29 | freertos_smoke | rp2040 FreeRTOS | Native FreeRTOS headers/tasks smoke |
+| 29 | freertos_smoke | rp2040 FreeRTOS | Native FreeRTOS task + HAL mutex/delay/idle smoke |

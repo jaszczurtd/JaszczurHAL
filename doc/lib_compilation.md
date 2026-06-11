@@ -145,8 +145,10 @@ For the static-library helper, use:
 
 This passes `ARDUINO_OS=freertos` to CMake, defines `__FREERTOS`, makes the
 arduino-pico FreeRTOS wrapper include directory visible, and adds
-`HAL_ENABLE_FREERTOS` to the HAL compile definitions. Manual CMake users can do
-the same with:
+`HAL_ENABLE_FREERTOS` to the HAL compile definitions. In that mode the RP2040
+backend uses FreeRTOS-aware `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()`
+paths while keeping `hal_critical_section_*` as a hard per-core interrupt mask.
+Manual CMake users can do the same with:
 
 ```bash
 cmake -S arduino_lib -B build_arduino_freertos \

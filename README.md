@@ -193,8 +193,11 @@ FreeRTOS headers directly when their target build provides them.
   integration is planned separately.
 
 Current FreeRTOS support is still staged: RP2040 can compile a native FreeRTOS
-smoke example that includes `<FreeRTOS.h>` and `<task.h>`, but HAL runtime
-primitives are not yet made FreeRTOS-aware by this flag alone. See
+smoke example that includes `<FreeRTOS.h>` / `<task.h>` and exercises
+FreeRTOS-aware `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` paths. Hard
+`hal_critical_section_*` still masks interrupts for timing-sensitive code; it
+is not a scheduler lock. Module-level task-safety, lazy singleton mutexes, and
+Arduino-origin wrappers are tracked separately. See
 [FreeRTOS_imp.md](doc/FreeRTOS_imp.md) and
 [Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md) for the staged contract.
 

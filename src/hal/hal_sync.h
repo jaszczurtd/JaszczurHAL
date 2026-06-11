@@ -4,8 +4,11 @@
  * @file hal_sync.h
  * @brief Hardware abstraction for mutexes and critical sections.
  *
- * On RP2040 this wraps pico SDK mutex_t and critical_section_t.
- * Mock builds use std::mutex.
+ * On RP2040 non-FreeRTOS builds this wraps pico SDK mutex_t. In
+ * HAL_ENABLE_FREERTOS + arduino-pico __FREERTOS builds, hal_mutex_* uses a
+ * FreeRTOS mutex. Critical sections remain a hard per-core interrupt mask for
+ * timing-sensitive code; they are not a scheduler lock and are not ISR-safe
+ * mutexes. Mock builds use std::mutex.
  */
 
 typedef struct hal_mutex_impl_t hal_mutex_impl_t;
@@ -13,9 +16,8 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 extern "C" {
 #endif
 
-
 /** @brief Opaque mutex handle. */
-typedef hal_mutex_impl_t* hal_mutex_t;
+typedef hal_mutex_impl_t *hal_mutex_t;
 
 /**
  * @brief Create and initialise a new mutex.
@@ -42,14 +44,14 @@ void hal_mutex_unlock(hal_mutex_t mutex);
 void hal_mutex_destroy(hal_mutex_t mutex);
 
 /**
- * @brief Enter a global critical section (disables interrupts on RP2040).
+ * @brief Enter a hard critical section (disables interrupts on RP2040).
  *
  * Must be paired with hal_critical_section_exit().
  */
 void hal_critical_section_enter(void);
 
 /**
- * @brief Exit the global critical section (re-enables interrupts).
+ * @brief Exit the hard critical section (restores prior interrupt state).
  */
 void hal_critical_section_exit(void);
 

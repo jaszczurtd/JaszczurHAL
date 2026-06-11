@@ -173,10 +173,11 @@ It should not mean:
 
 Current state:
 
-- RP2040: `pico/mutex` plus per-core, nesting-safe `save_and_disable_interrupts()`
-  / `restore_interrupts()` critical sections.
+- RP2040: normal builds use `pico/mutex`. `HAL_ENABLE_FREERTOS + __FREERTOS`
+  builds use FreeRTOS mutexes for `hal_mutex_*`. Critical sections stay
+  per-core, nesting-safe `save_and_disable_interrupts()` /
+  `restore_interrupts()` hard interrupt masks in both modes.
 - STM32G474: spinlock-style mutex and PRIMASK-based critical sections.
-- API docs currently note that `hal_sync` is not FreeRTOS-safe.
 
 > Note on the STM32 spinlock mutex: it is NOT a practical hazard in the current
 > design. STM32G474 is single-core, and the busy-wait `__atomic_test_and_set`
@@ -628,13 +629,16 @@ resolved are listed under "Done" for traceability.
   `vTaskDelay(pdMS_TO_TICKS(ms))` only when
   `xTaskGetSchedulerState() == taskSCHEDULER_RUNNING`; otherwise fall back to the
   busy/Arduino delay (pre-scheduler init, ISR/critical context). Without the
-  gate, a delay called before `vTaskStartScheduler()` misbehaves.
+  gate, a delay called before `vTaskStartScheduler()` misbehaves. Closed for
+  RP2040 in Stage 3; STM32G474 remains later-stage work.
 
 ### P2 - decide during implementation
 
 - **Normal vs recursive HAL mutex under FreeRTOS.** Audit current call sites for
   re-entrant lock acquisition before choosing. Default to non-recursive unless an
-  audited path needs recursion; recursion hides lock-ordering bugs.
+  audited path needs recursion; recursion hides lock-ordering bugs. RP2040 Stage
+  3 uses a normal non-recursive FreeRTOS mutex, matching the previous pico mutex
+  contract.
 
 - **`hal_timer` callback context under FreeRTOS.** Keep hardware-alarm based for
   now; if a task-context timer mode is added later, document the callback context
@@ -642,6 +646,25 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-11: Stage 3 RP2040 FreeRTOS-aware HAL primitives completed.
+  `hal_mutex_*` now selects a normal non-recursive FreeRTOS mutex
+  (`xSemaphoreCreateMutex`) under `HAL_ENABLE_FREERTOS` + `__FREERTOS`,
+  rejects ISR use, and keeps the normal RP2040 build on pico `mutex_t`.
+  `hal_delay_ms()` now uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the
+  scheduler is running, the caller is in task context, and the current core is
+  outside `hal_critical_section_*`; otherwise it falls back to pico busy-wait.
+  `hal_idle()` yields in the same safe task context, and `hal_delay_us()`
+  remains interrupt-independent busy-wait. `hal_critical_section_*` was
+  deliberately kept as the existing nesting-safe, per-core hard interrupt mask,
+  not a FreeRTOS scheduler lock. `examples/29_freertos_smoke` now creates a
+  second FreeRTOS task and exercises HAL mutex/delay/idle behavior. Per
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md), TS-A03 is closed for RP2040,
+  while TS-A01 lazy singleton mutex creation, TS-A04 Arduino-origin wrappers,
+  and TS-A05 timer callback context remain module-hardening follow-ups.
+  Validation: `git diff --check`, `./build_arduino_lib.sh --clean --freertos`,
+  `cmake --preset rp2040-freertos -S examples`,
+  `cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040`,
+  and `./runalltests.sh` passed all 7 gates.
 - 2026-06-11: Stage 2 RP2040 build integration completed. RP2040 static-library
   builds now have an opt-in `./build_arduino_lib.sh --freertos` mode that
   selects arduino-pico FreeRTOS SMP, defines `HAL_ENABLE_FREERTOS`, exposes

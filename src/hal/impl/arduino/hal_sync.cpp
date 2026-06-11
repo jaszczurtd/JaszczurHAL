@@ -4,17 +4,47 @@
 #include "../../hal_sync.h"
 #include <Arduino.h>
 #include <hardware/sync.h>
-#include <pico/mutex.h>
 #include <pico/platform.h>
 
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#include <FreeRTOS.h>
+#include <semphr.h>
+#include <task.h>
+#else
+#include <pico/mutex.h>
+#endif
+
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#define JH_RP2040_HAL_SYNC_FREERTOS 1
+#else
+#define JH_RP2040_HAL_SYNC_FREERTOS 0
+#endif
+
 struct hal_mutex_impl_t {
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  SemaphoreHandle_t handle;
+#else
   mutex_t mtx;
+#endif
 };
 
 hal_mutex_t hal_mutex_create(void) {
   hal_mutex_impl_t *m = new hal_mutex_impl_t();
   HAL_ASSERT(m != NULL, "hal_mutex_create: allocation failed");
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  if (m == NULL) {
+    return NULL;
+  }
+
+  m->handle = xSemaphoreCreateMutex();
+  if (m->handle == NULL) {
+    delete m;
+    HAL_ASSERT(false, "hal_mutex_create: FreeRTOS mutex allocation failed");
+    return NULL;
+  }
+#else
   mutex_init(&m->mtx);
+#endif
   return m;
 }
 
@@ -24,7 +54,22 @@ void hal_mutex_lock(hal_mutex_t mutex) {
     return;
   }
 
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  HAL_ASSERT(!portCHECK_IF_IN_ISR(),
+             "hal_mutex_lock: FreeRTOS mutex cannot be locked from ISR");
+  if (portCHECK_IF_IN_ISR()) {
+    return;
+  }
+
+  const BaseType_t scheduler_state = xTaskGetSchedulerState();
+  const TickType_t wait_ticks =
+      (scheduler_state == taskSCHEDULER_RUNNING) ? portMAX_DELAY : 0u;
+  const BaseType_t ok = xSemaphoreTake(mutex->handle, wait_ticks);
+  HAL_ASSERT(ok == pdTRUE, "hal_mutex_lock: FreeRTOS mutex take failed");
+  (void)ok;
+#else
   mutex_enter_blocking(&mutex->mtx);
+#endif
 }
 
 void hal_mutex_unlock(hal_mutex_t mutex) {
@@ -33,7 +78,19 @@ void hal_mutex_unlock(hal_mutex_t mutex) {
     return;
   }
 
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  HAL_ASSERT(!portCHECK_IF_IN_ISR(),
+             "hal_mutex_unlock: FreeRTOS mutex cannot be unlocked from ISR");
+  if (portCHECK_IF_IN_ISR()) {
+    return;
+  }
+
+  const BaseType_t ok = xSemaphoreGive(mutex->handle);
+  HAL_ASSERT(ok == pdTRUE, "hal_mutex_unlock: FreeRTOS mutex give failed");
+  (void)ok;
+#else
   mutex_exit(&mutex->mtx);
+#endif
 }
 
 void hal_mutex_destroy(hal_mutex_t mutex) {
@@ -42,6 +99,9 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
     return;
   }
 
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  vSemaphoreDelete(mutex->handle);
+#endif
   delete mutex;
 }
 
@@ -60,6 +120,10 @@ namespace {
 volatile uint32_t s_critical_depth[2] = {0u, 0u};
 uint32_t s_saved_irq[2] = {0u, 0u};
 } // namespace
+
+extern "C" bool hal_rp2040_critical_section_active(void) {
+  return s_critical_depth[get_core_num()] > 0u;
+}
 
 void hal_critical_section_enter(void) {
   const uint32_t saved = save_and_disable_interrupts();

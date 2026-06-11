@@ -6,31 +6,66 @@
 #include <Arduino.h>
 #include <pico/time.h>
 
-uint32_t hal_millis(void) {
-    return millis();
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
+
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#define JH_RP2040_HAL_SYSTEM_FREERTOS 1
+#else
+#define JH_RP2040_HAL_SYSTEM_FREERTOS 0
+#endif
+
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
+extern "C" bool hal_rp2040_critical_section_active(void);
+
+static bool hal_freertos_can_block_current_context(void) {
+  return !portCHECK_IF_IN_ISR() && !hal_rp2040_critical_section_active() &&
+         xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
 }
 
-uint32_t hal_micros(void) {
-    return micros();
+static TickType_t hal_ms_to_ticks(uint32_t ms) {
+  TickType_t ticks = pdMS_TO_TICKS(ms);
+  if (ms > 0u && ticks == 0u) {
+    ticks = 1u;
+  }
+  return ticks;
 }
+#endif
 
-uint64_t hal_micros64(void) {
-    return time_us_64();
-}
+uint32_t hal_millis(void) { return millis(); }
+
+uint32_t hal_micros(void) { return micros(); }
+
+uint64_t hal_micros64(void) { return time_us_64(); }
 
 void hal_delay_ms(uint32_t ms) {
-    delay(ms);
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  if (hal_freertos_can_block_current_context()) {
+    if (ms == 0u) {
+      taskYIELD();
+    } else {
+      vTaskDelay(hal_ms_to_ticks(ms));
+    }
+    return;
+  }
+
+  busy_wait_ms(ms);
+#else
+  delay(ms);
+#endif
 }
 
 void hal_delay_us(uint32_t us) {
-    /* busy_wait_us(), NOT delayMicroseconds(): on this core delayMicroseconds()
-     * resolves to sleep_us(), which arms a hardware timer ALARM (interrupt) and
-     * parks the core on __wfe(). Called inside a critical section (interrupts
-     * masked) - as the OneWire bit timing does - that alarm can never fire and
-     * the core deadlocks. busy_wait_us() is a pure TIMER-register poll: it is
-     * interrupt-independent and therefore safe inside hal_critical_section_*,
-     * matching the cycle-counting delayMicroseconds() the ported code assumes. */
-    busy_wait_us(us);
+  /* busy_wait_us(), NOT delayMicroseconds(): on this core delayMicroseconds()
+   * resolves to sleep_us(), which arms a hardware timer ALARM (interrupt) and
+   * parks the core on __wfe(). Called inside a critical section (interrupts
+   * masked) - as the OneWire bit timing does - that alarm can never fire and
+   * the core deadlocks. busy_wait_us() is a pure TIMER-register poll: it is
+   * interrupt-independent and therefore safe inside hal_critical_section_*,
+   * matching the cycle-counting delayMicroseconds() the ported code assumes. */
+  busy_wait_us(us);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,46 +74,41 @@ void hal_delay_us(uint32_t us) {
 // query live in the SoC driver; this layer is pure dispatch.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void hal_watchdog_feed(void) {
-    rp2040_system_watchdog_feed();
-}
+void hal_watchdog_feed(void) { rp2040_system_watchdog_feed(); }
 
 void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
-    rp2040_system_watchdog_enable(ms, pause_on_debug);
+  rp2040_system_watchdog_enable(ms, pause_on_debug);
 }
 
 bool hal_watchdog_caused_reboot(void) {
-    return rp2040_system_watchdog_caused_reboot();
+  return rp2040_system_watchdog_caused_reboot();
 }
 
 void hal_idle(void) {
-    rp2040_system_idle();
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  if (hal_freertos_can_block_current_context()) {
+    taskYIELD();
+    return;
+  }
+#endif
+  rp2040_system_idle();
 }
 
-bool hal_in_isr(void) {
-    return rp2040_system_in_isr();
-}
+bool hal_in_isr(void) { return rp2040_system_in_isr(); }
 
-uint32_t hal_get_free_heap(void) {
-    return rp2040_system_get_free_heap();
-}
+uint32_t hal_get_free_heap(void) { return rp2040_system_get_free_heap(); }
 
-float hal_read_chip_temp(void) {
-    return rp2040_system_read_chip_temp();
-}
+float hal_read_chip_temp(void) { return rp2040_system_read_chip_temp(); }
 
-void hal_enter_bootloader(void) {
-    rp2040_system_enter_bootloader();
-}
+void hal_enter_bootloader(void) { rp2040_system_enter_bootloader(); }
 
 void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
-    rp2040_system_get_device_uid(uid);
+  rp2040_system_get_device_uid(uid);
 }
 
 bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-    return rp2040_system_get_device_uid_hex(buf, buflen);
+  return rp2040_system_get_device_uid_hex(buf, buflen);
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fault / crash diagnostics
@@ -89,51 +119,51 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen) {
 // across backends.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void hal_fault_subsystem_init(void) {
-    rp2040_fault_init();
-}
+void hal_fault_subsystem_init(void) { rp2040_fault_init(); }
 
 hal_reset_reason_t hal_get_reset_reason(void) {
-    return rp2040_fault_get_reset_reason();
+  return rp2040_fault_get_reset_reason();
 }
 
 const char *hal_reset_reason_str(hal_reset_reason_t reason) {
-    switch (reason) {
-        case HAL_RESET_REASON_POWER_ON:       return "POWER_ON";
-        case HAL_RESET_REASON_RUN_PIN:        return "RUN_PIN";
-        case HAL_RESET_REASON_SOFT:           return "SOFT";
-        case HAL_RESET_REASON_WATCHDOG:       return "WATCHDOG";
-        case HAL_RESET_REASON_DEBUG:          return "DEBUG";
-        case HAL_RESET_REASON_GLITCH:         return "GLITCH";
-        case HAL_RESET_REASON_BROWNOUT:       return "BROWNOUT";
-        case HAL_RESET_REASON_HARDFAULT:      return "HARDFAULT";
-        case HAL_RESET_REASON_STACK_OVERFLOW: return "STACK_OVERFLOW";
-        case HAL_RESET_REASON_UNKNOWN:
-        default:                              return "UNKNOWN";
-    }
+  switch (reason) {
+  case HAL_RESET_REASON_POWER_ON:
+    return "POWER_ON";
+  case HAL_RESET_REASON_RUN_PIN:
+    return "RUN_PIN";
+  case HAL_RESET_REASON_SOFT:
+    return "SOFT";
+  case HAL_RESET_REASON_WATCHDOG:
+    return "WATCHDOG";
+  case HAL_RESET_REASON_DEBUG:
+    return "DEBUG";
+  case HAL_RESET_REASON_GLITCH:
+    return "GLITCH";
+  case HAL_RESET_REASON_BROWNOUT:
+    return "BROWNOUT";
+  case HAL_RESET_REASON_HARDFAULT:
+    return "HARDFAULT";
+  case HAL_RESET_REASON_STACK_OVERFLOW:
+    return "STACK_OVERFLOW";
+  case HAL_RESET_REASON_UNKNOWN:
+  default:
+    return "UNKNOWN";
+  }
 }
 
 bool hal_get_last_fault(hal_fault_info_t *out) {
-    return rp2040_fault_get_last_fault(out);
+  return rp2040_fault_get_last_fault(out);
 }
 
-void hal_clear_last_fault(void) {
-    rp2040_fault_clear_last_fault();
-}
+void hal_clear_last_fault(void) { rp2040_fault_clear_last_fault(); }
 
 bool hal_last_boot_was_brownout(void) {
-    return rp2040_fault_brownout_suspected();
+  return rp2040_fault_brownout_suspected();
 }
 
-void hal_alive_mark(void) {
-    rp2040_fault_alive_mark();
-}
+void hal_alive_mark(void) { rp2040_fault_alive_mark(); }
 
-bool hal_stack_guard_init(void) {
-    return rp2040_fault_stack_guard_init();
-}
+bool hal_stack_guard_init(void) { return rp2040_fault_stack_guard_init(); }
 
-void hal_stack_guard_check(void) {
-    rp2040_fault_stack_guard_check();
-}
-#endif  // HAL_TARGET_IS_RP2040
+void hal_stack_guard_check(void) { rp2040_fault_stack_guard_check(); }
+#endif // HAL_TARGET_IS_RP2040

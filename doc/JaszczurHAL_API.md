@@ -132,7 +132,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake now provide opt-in FreeRTOS build modes. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make HAL runtime primitives FreeRTOS-aware. |
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes, and RP2040 `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -258,7 +258,8 @@ Target rules:
   static library, use `./build_arduino_lib.sh --freertos`; for examples, use
   `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
-  available to application code.
+  available to application code and exercises `hal_mutex_*`, `hal_delay_ms()`,
+  and `hal_idle()` from FreeRTOS task context.
 - STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency. Stage 1
   validates that `<FreeRTOS.h>` and `FreeRTOSConfig.h` are visible on the
   include path; source-list, port, heap, and vector integration are later
@@ -266,9 +267,11 @@ Target rules:
 - Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
   Host-side FreeRTOS validation is planned through the kernel POSIX port.
 
-Thread-safety note: RP2040 FreeRTOS build integration does not by itself
-upgrade `hal_sync`, `hal_delay_ms`, timers, Arduino-origin wrappers, or lazy
-singleton mutexes. Those changes are staged separately and tracked in
+Thread-safety note: RP2040 FreeRTOS mode now upgrades core mutex/delay/idle
+primitives, while hard `hal_critical_section_*` remains a per-core interrupt
+mask for timing-sensitive code. Timer callback context, lazy singleton mutex
+creation, Arduino-origin wrappers, and per-module task-safety are still staged
+separately and tracked in
 [FreeRTOS_imp.md](FreeRTOS_imp.md) and
 [Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 
@@ -800,10 +803,10 @@ void               hal_stack_guard_check(void);
 #define NONULL(x) do { if ((x) == NULL) { goto error; } } while (0)
 ```
 
-**impl/arduino:** Generic Arduino calls (`millis()`, `micros()`, `time_us_64()`, `delay()`, `delayMicroseconds()`) stay in `hal_system.cpp`; all RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, and the UID hex formatter live in the SoC driver `src/hal/impl/arduino/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. The HAL layer is pure dispatch. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
+**impl/arduino:** Generic Arduino/pico time calls (`millis()`, `micros()`, `time_us_64()`) stay in `hal_system.cpp`; all RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, and the UID hex formatter live in the SoC driver `src/hal/impl/arduino/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to a pico busy-wait. `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` remains a pure busy-wait for timing-sensitive paths. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
 **impl/stm32g474:** Host-stub backend with the same dispatch pattern as the RP2040 backend. All SoC bindings (real or planned: ChibiOS HAL `osalOsGetSystemTimeX()`, `chThdSleepMilliseconds()`, IWDG, `__WFI()`, ADC1 channel 16 for on-die temp, `UID_BASE` for the device id) live in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` behind `stm32g474_system_*` wrappers. `hal_in_isr()` reads `IPSR` on ARM targets and returns `false` on host builds (same rule as Arduino, gated by `__arm__`).
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
-**Thread safety:** Arduino backend: time/watchdog APIs are safe to call from both cores. `hal_delay_ms` / `hal_delay_us` block only the calling core and can be used concurrently. Mock backend uses shared unsynchronized state and is intended for single-threaded tests.
+**Thread safety:** Arduino backend: time/watchdog APIs are safe to call from both cores. In RP2040 FreeRTOS mode, `hal_delay_ms()` yields the calling task only in legal task context and busy-waits in pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` always blocks only the calling core. Mock backend uses shared unsynchronized state and is intended for single-threaded tests.
 **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
 **Note:** `NONULL(x)` is a null-pointer guard for functions that use a shared
 `error:` cleanup path. Uses `NULL` (safe in both C and C++ translation units).
@@ -1066,12 +1069,12 @@ void        hal_mutex_unlock(hal_mutex_t mutex);
 void        hal_mutex_destroy(hal_mutex_t mutex);
 ```
 
-**impl/arduino:** pico SDK `mutex_t` - synchronizes core0/core1.
+**impl/arduino:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
 **impl/.mock:** `std::mutex`.
-**FreeRTOS note:** Stage 1 only validates `HAL_ENABLE_FREERTOS` provider
-selection. `hal_sync` itself is not FreeRTOS-aware yet; later stages must add
-target-specific FreeRTOS mutex/semaphore paths while preserving the existing
-hard interrupt-mask critical-section contract.
+**FreeRTOS note:** RP2040 `hal_mutex_*` is FreeRTOS-aware when
+`HAL_ENABLE_FREERTOS` and arduino-pico `__FREERTOS` are both defined.
+`hal_mutex_*` remains task-context only; it is not an ISR API. Lazy singleton
+mutex creation inside individual modules is a separate module-hardening item.
 
 ### Macros (tools.h)
 
@@ -1082,16 +1085,19 @@ m_mutex_enter_blocking(name) // hal_mutex_lock(name)
 m_mutex_exit(name)           // hal_mutex_unlock(name)
 ```
 
-### Critical section (ISR-safe)
+### Critical section (hard interrupt mask)
 
 ```c
-void hal_critical_section_enter(void);  // disable interrupts
-void hal_critical_section_exit(void);   // re-enable interrupts
+void hal_critical_section_enter(void);  // save and disable interrupts
+void hal_critical_section_exit(void);   // restore prior interrupt state
 ```
 
-**impl/arduino:** `noInterrupts()` / `interrupts()` (Arduino-pico).
+**impl/arduino:** nesting-safe, per-core `save_and_disable_interrupts()` /
+`restore_interrupts()` (pico SDK), including FreeRTOS builds.
 **impl/.mock:** no-ops.
-**Note:** Not re-entrant. Use only for short, non-nested critical sections protecting ISR-shared data.
+**Note:** This is a hard full interrupt mask for short timing-sensitive or
+ISR-shared sections. It is not a FreeRTOS scheduler lock and does not serialize
+task access across RP2040 cores; use `hal_mutex_t` for task mutual exclusion.
 
 ---
 
@@ -4082,8 +4088,8 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 
 | HAL module | External dependency |
 |---|---|
-| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`) |
-| `hal_sync` | pico SDK `pico/mutex.h` |
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`); `hal_system` also uses FreeRTOS task APIs when `HAL_ENABLE_FREERTOS + __FREERTOS` are defined |
+| `hal_sync` | pico SDK `pico/mutex.h` in normal RP2040 builds; FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS + __FREERTOS` builds |
 | `hal_timer` | pico SDK alarm/time APIs (`pico/time.h`) |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |

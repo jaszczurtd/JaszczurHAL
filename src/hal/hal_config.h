@@ -71,12 +71,14 @@
 /* -- FreeRTOS opt-in ---------------------------------------------------- */
 /* HAL_ENABLE_FREERTOS is a configuration flag for native FreeRTOS support.
    It does not add a public hal_rtos_* wrapper. Applications use the native
-   FreeRTOS headers/API directly, while later HAL stages make existing HAL
-   primitives FreeRTOS-aware internally.
+   FreeRTOS headers/API directly, while HAL internals select RTOS-safe paths
+   where each target has implemented them.
 
-   Stage 1 only validates that the selected target is using the expected
-   FreeRTOS provider:
+   Current target status:
      - RP2040 must use arduino-pico's FreeRTOS mode (__FREERTOS).
+       Under that configuration, hal_mutex_*, hal_delay_ms(), and hal_idle()
+       are FreeRTOS-aware. hal_critical_section_* remains a hard, per-core
+       interrupt mask for timing-sensitive code.
      - STM32G474 must have the local FreeRTOS-Kernel include path configured.
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 
@@ -126,7 +128,9 @@
      FreeRTOS:
        HAL_ENABLE_FREERTOS    - Opt in to native FreeRTOS availability.
                                   RP2040 uses arduino-pico FreeRTOS mode
-                                  (__FREERTOS). STM32G474 requires local
+                                  (__FREERTOS) and has FreeRTOS-aware
+                                  mutex/delay/idle primitives. STM32G474
+                                  requires local
                                   FreeRTOS-Kernel + FreeRTOSConfig.h include
                                   paths. This flag does not create a public
                                   hal_rtos_* API.
