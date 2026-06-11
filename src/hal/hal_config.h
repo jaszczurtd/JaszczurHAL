@@ -46,7 +46,7 @@
  *   #define I2C_SCANNER
  *   #define RESET_EEPROM
  *   #define PICO_W     // board/core define; HAL WiFi uses HAL_ENABLE_WIFI
- *   #define FREE_RTOS
+ *   #define HAL_ENABLE_FREERTOS
  */
 
 /* ── Project-level configuration hook ────────────────────────────────── */
@@ -68,6 +68,44 @@
    HAL_PROVIDE_APP_ENTRY is enabled. On RP2040 this emits Arduino loop1(),
    which starts the core-1 path, so it is intentionally explicit.         */
 
+/* -- FreeRTOS opt-in ---------------------------------------------------- */
+/* HAL_ENABLE_FREERTOS is a configuration flag for native FreeRTOS support.
+   It does not add a public hal_rtos_* wrapper. Applications use the native
+   FreeRTOS headers/API directly, while later HAL stages make existing HAL
+   primitives FreeRTOS-aware internally.
+
+   Stage 1 only validates that the selected target is using the expected
+   FreeRTOS provider:
+     - RP2040 must use arduino-pico's FreeRTOS mode (__FREERTOS).
+     - STM32G474 must have the local FreeRTOS-Kernel include path configured.
+   No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
+
+#ifdef HAL_ENABLE_FREERTOS
+#if HAL_TARGET_IS_RP2040
+#ifndef __FREERTOS
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS on RP2040 requires arduino-pico FreeRTOS mode. Select 'Operating System -> FreeRTOS SMP' or use an FQBN option such as ':os=freertos' so __FREERTOS is defined."
+#endif
+#elif HAL_TARGET_IS_STM32G474
+#if defined(__has_include)
+#if !__has_include(<FreeRTOS.h>)
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS on STM32G474 requires the local third_party/FreeRTOS-Kernel include path to provide <FreeRTOS.h>."
+#endif
+#if !__has_include("FreeRTOSConfig.h")
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS on STM32G474 requires a target FreeRTOSConfig.h on the include path."
+#endif
+#else
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS on STM32G474 requires compiler support for __has_include so the FreeRTOS-Kernel and FreeRTOSConfig.h paths can be validated."
+#endif
+#else
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS is currently supported only for HAL_TARGET_RP2040 with arduino-pico FreeRTOS mode or HAL_TARGET_STM32G474 with a local FreeRTOS-Kernel configuration."
+#endif
+#endif
+
 /* ── Module enable flags (opt-in) ────────────────────────────────────── */
 /* JaszczurHAL uses an OPT-IN flag model: by default *nothing* beyond the
    bare core is compiled. Each module must be explicitly enabled with a
@@ -84,6 +122,14 @@
        HAL_ENABLE_APP_TASK1   - Dispatch optional app_task1() from the
                                   HAL-provided entry path. On RP2040 this
                                   emits loop1() and starts the core-1 path.
+
+     FreeRTOS:
+       HAL_ENABLE_FREERTOS    - Opt in to native FreeRTOS availability.
+                                  RP2040 uses arduino-pico FreeRTOS mode
+                                  (__FREERTOS). STM32G474 requires local
+                                  FreeRTOS-Kernel + FreeRTOSConfig.h include
+                                  paths. This flag does not create a public
+                                  hal_rtos_* API.
 
      Connectivity:
        HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable

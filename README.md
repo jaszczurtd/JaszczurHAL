@@ -170,6 +170,31 @@ see:
 - [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 - `src/HAL_FLAGS.txt`
 
+## FreeRTOS opt-in
+
+FreeRTOS support is staged behind an explicit compile-time flag:
+
+```c
+#define HAL_ENABLE_FREERTOS
+```
+
+This flag does not introduce a `hal_rtos_*` wrapper API. Applications use native
+FreeRTOS headers directly when their target build provides them.
+
+- RP2040 uses arduino-pico's own FreeRTOS mode. `HAL_ENABLE_FREERTOS` requires
+  `__FREERTOS`, selected through the Arduino-pico board option
+  `Operating System -> FreeRTOS SMP` or an equivalent FQBN option such as
+  `os=freertos`.
+- STM32G474 uses a local `third_party/FreeRTOS-Kernel` integration. At this
+  stage, `HAL_ENABLE_FREERTOS` requires `<FreeRTOS.h>` and
+  `FreeRTOSConfig.h` to be available on the include path; kernel source
+  integration is planned separately.
+
+Stage 1 is a configuration/documentation skeleton only: normal builds are
+unchanged, and HAL runtime primitives are not yet made FreeRTOS-aware by this
+flag alone. See [FreeRTOS_imp.md](doc/FreeRTOS_imp.md) and
+[Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md) for the staged contract.
+
 ## Target selection (multiplatform)
 
 Separate from the per-module flags, JaszczurHAL selects exactly one hardware

@@ -126,6 +126,18 @@ Examples:
 ./build_arduino_lib.sh --clean -o ./my_build
 ```
 
+### RP2040 FreeRTOS note
+
+`HAL_ENABLE_FREERTOS` is valid on RP2040 only when the Arduino-pico build is
+already in its native FreeRTOS mode. In practice that means the core must define
+`__FREERTOS`, usually via the board menu `Operating System -> FreeRTOS SMP` or
+an equivalent FQBN option such as `os=freertos`.
+
+The local `third_party/FreeRTOS-Kernel` tree is not compiled for the current
+Arduino/RP2040 backend. Defining `HAL_ENABLE_FREERTOS` in a normal non-FreeRTOS
+RP2040 static-library build intentionally produces a clear compile-time error.
+Dedicated RP2040 FreeRTOS build-script support is a later implementation stage.
+
 ### Manual CMake Build
 
 ```bash
@@ -226,6 +238,17 @@ The initial STM32 profile currently enables the backend pieces that exist in
 backends, MCP9600/MAX6675 thermocouple backends, ADS1115 external ADC,
 OneWire/DS18B20, and GPS over UART. Additional modules should be enabled only
 once their STM32G474 backend exists.
+
+### STM32G474 FreeRTOS note
+
+`HAL_ENABLE_FREERTOS` is valid on STM32G474 only when a local
+`third_party/FreeRTOS-Kernel` dependency is configured and the include path
+provides both `<FreeRTOS.h>` and a target `FreeRTOSConfig.h`.
+
+Stage 1 only adds this fail-fast validation and documentation. It does not yet
+compile the kernel source list, select the Cortex-M4F FreeRTOS port, provide
+heap integration, or hand SVC/PendSV/SysTick ownership to FreeRTOS. Those pieces
+belong to the STM32 FreeRTOS integration stage.
 
 ### Linking With an STM32G474 Project
 
