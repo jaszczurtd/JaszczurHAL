@@ -406,7 +406,8 @@ Functional value:
 Validation:
 
 - RP2040 normal build still passes.
-- RP2040 FreeRTOS build compiles a minimal example.
+- create a minimal FreeRTOS RP2040 example with `FreeRTOS.h` and `task.h`,
+  compile it.
 
 ### Stage 3: FreeRTOS-Aware RP2040 HAL Primitives
 
@@ -464,7 +465,7 @@ Functional value:
 Validation:
 
 - STM32 static library builds with `HAL_ENABLE_FREERTOS`.
-- A minimal STM32 example compiles with `FreeRTOS.h` and `task.h`.
+- A minimal FreeRTOS example created previously for RP2040 compiles also on STM32.
 
 ### Stage 5: STM32 HAL Primitives Under FreeRTOS
 
@@ -641,6 +642,18 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-11: Stage 1 flag and documentation skeleton completed.
+  `HAL_ENABLE_FREERTOS` is now documented in `hal_config.h`,
+  [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt), [README.md](../README.md),
+  [JaszczurHAL_API.md](JaszczurHAL_API.md), and
+  [lib_compilation.md](lib_compilation.md). Compile-time validation now rejects
+  RP2040 builds that define the flag without arduino-pico `__FREERTOS`, rejects
+  STM32G474 builds without visible `<FreeRTOS.h>` / `FreeRTOSConfig.h`, and
+  rejects unsupported targets such as mock. Per [Thread-SafetyAudit.md](Thread-SafetyAudit.md),
+  this is intentionally a configuration/documentation skeleton only: no
+  `hal_sync`, delay, timer, or runtime task-safety behavior changed. Validation:
+  explicit compile-error checks for RP2040/STM32/mock, markdown link audit,
+  `git diff --check`, and `./runalltests.sh` passed all 7 gates.
 - 2026-06-11: Audit context rule added. Agents working on FreeRTOS-related tasks
   must read [Thread-SafetyAudit.md](Thread-SafetyAudit.md) and account for its
   findings before planning or editing. Validation: markdown link audit and

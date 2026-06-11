@@ -128,6 +128,12 @@ Application entry flags are separate from optional HAL modules:
 |---|---|
 | `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. On RP2040 this emits Arduino `loop1()`, which starts the core-1 path. Leave undefined for single-loop/single-core apps. |
 
+FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
+
+| Flag | Effect |
+|---|---|
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined. STM32G474 must provide local `FreeRTOS-Kernel` headers and `FreeRTOSConfig.h` on the include path. This flag does not add a public `hal_rtos_*` API and does not by itself make HAL runtime primitives FreeRTOS-aware. |
+
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | WiFi (arduino-pico) |
@@ -231,6 +237,36 @@ modules you use:
 ```
 
 `hal_config.h` detects it via `__has_include("hal_project_config.h")`.
+
+### FreeRTOS availability flag
+
+`HAL_ENABLE_FREERTOS` is a target/runtime integration flag rather than an
+optional module flag. It is intended for projects that want to include native
+FreeRTOS headers directly:
+
+```c
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+```
+
+Target rules:
+
+- RP2040: use arduino-pico's FreeRTOS mode. The HAL validates that
+  `__FREERTOS` is present and emits a clear compile-time error if a normal
+  non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`.
+- STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency. Stage 1
+  validates that `<FreeRTOS.h>` and `FreeRTOSConfig.h` are visible on the
+  include path; source-list, port, heap, and vector integration are later
+  implementation stages.
+- Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
+  Host-side FreeRTOS validation is planned through the kernel POSIX port.
+
+Thread-safety note: this flag does not by itself upgrade `hal_sync`,
+`hal_delay_ms`, timers, Arduino-origin wrappers, or lazy singleton mutexes.
+Those changes are staged separately and tracked in
+[FreeRTOS_imp.md](FreeRTOS_imp.md) and
+[Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 
 Arduino CLI does not add the sketch directory to the include path for library
 source files, so the build command must add it explicitly:
@@ -1028,7 +1064,10 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
 
 **impl/arduino:** pico SDK `mutex_t` - synchronizes core0/core1.
 **impl/.mock:** `std::mutex`.
-**Note:** Not FreeRTOS-safe. If FreeRTOS is needed, provide `impl/freertos/hal_sync.cpp` using `xSemaphoreCreateMutex`.
+**FreeRTOS note:** Stage 1 only validates `HAL_ENABLE_FREERTOS` provider
+selection. `hal_sync` itself is not FreeRTOS-aware yet; later stages must add
+target-specific FreeRTOS mutex/semaphore paths while preserving the existing
+hard interrupt-mask critical-section contract.
 
 ### Macros (tools.h)
 

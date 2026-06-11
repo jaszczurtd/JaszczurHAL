@@ -50,6 +50,29 @@ Application entry flags
     undefined for single-loop/single-core applications.
 
 
+FreeRTOS integration flag
+-------------------------
+
+  HAL_ENABLE_FREERTOS
+    Opt in to native FreeRTOS availability. This does not add a public
+    hal_rtos_* wrapper; applications include and use native FreeRTOS headers
+    directly. Stage 1 validates the selected target/provider only:
+
+      RP2040:
+        Requires arduino-pico FreeRTOS mode so __FREERTOS is defined
+        (board menu "Operating System -> FreeRTOS SMP", or an equivalent
+        FQBN option such as os=freertos). The local third_party/FreeRTOS-Kernel
+        tree is not used on RP2040 with the Arduino backend.
+
+      STM32G474:
+        Requires the local FreeRTOS-Kernel include path to provide
+        <FreeRTOS.h> and a target FreeRTOSConfig.h on the include path.
+        Kernel source integration is a later implementation stage.
+
+    HAL runtime primitives are not made FreeRTOS-aware by this flag alone.
+    Module task-safety follows the staged FreeRTOS plan and audit.
+
+
 Module enable flags
 -------------------
 
