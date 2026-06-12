@@ -26,8 +26,8 @@ sudo apt-get install -y build-essential cmake git curl
 sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools clang-format
 
 # ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
-# (build_stm32_lib.sh). The host-compiler STM32 build and the unit tests do not
-# need it, but it is part of a complete JaszczurHAL setup.
+# (scripts/build_stm32_lib.sh). The host-compiler STM32 build and the unit
+# tests do not need it, but it is part of a complete JaszczurHAL setup.
 sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
 # Arduino/RP2040 toolchain - arduino-cli is not an apt package, so install it

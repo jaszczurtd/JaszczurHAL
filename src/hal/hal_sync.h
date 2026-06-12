@@ -4,11 +4,12 @@
  * @file hal_sync.h
  * @brief Hardware abstraction for mutexes and critical sections.
  *
- * On RP2040 non-FreeRTOS builds this wraps pico SDK mutex_t. In
- * HAL_ENABLE_FREERTOS + arduino-pico __FREERTOS builds, hal_mutex_* uses a
- * FreeRTOS mutex. Critical sections remain a hard per-core interrupt mask for
- * timing-sensitive code; they are not a scheduler lock and are not ISR-safe
- * mutexes. Mock builds use std::mutex.
+ * On RP2040 non-FreeRTOS builds this wraps pico SDK mutex_t; on STM32G474
+ * non-FreeRTOS builds it uses a single-core atomic spinlock. In supported
+ * HAL_ENABLE_FREERTOS builds, hal_mutex_* uses a FreeRTOS mutex. Critical
+ * sections remain a hard interrupt mask for timing-sensitive code; they are
+ * not a scheduler lock and are not ISR-safe mutexes. Mock builds use
+ * std::mutex.
  */
 
 typedef struct hal_mutex_impl_t hal_mutex_impl_t;

@@ -491,7 +491,70 @@ Validation:
 - STM32 FreeRTOS build;
 - smoke example with two tasks both using a small set of HAL APIs.
 
-### Stage 6: FreeRTOS Entry-Point Mode
+### Stage 6: FreeRTOS Kernel Acquisition
+
+Goal: make the STM32 FreeRTOS kernel dependency reproducible and available to
+users/CI without tracking the kernel sources in this repository.
+
+Tasks:
+
+- Add `freertos_core_version.conf` next to `arduino_core_version.conf` as the
+  single source of truth for the FreeRTOS kernel dependency:
+  - `FREERTOS_KERNEL_REPO`
+  - `FREERTOS_KERNEL_REF`
+  - optional informational `FREERTOS_KERNEL_VERSION`
+  - default `FREERTOS_KERNEL_DIR=third_party/FreeRTOS-Kernel`
+- Initially pin the STM32 kernel to the same FreeRTOS compatibility point as
+  the configured arduino-pico/RP2040 core. If the RP2040 core uses a snapshot
+  such as `V11.1.0+`, prefer an exact upstream commit/ref over a moving branch
+  and document the compatibility note in the config.
+- Add `scripts/ensure_freertos_kernel.sh` as the shared dependency helper,
+  preferably with a thin CMake wrapper, that:
+  - reads `freertos_core_version.conf`;
+  - does nothing unless `HAL_ENABLE_FREERTOS` is requested, or unless a setup
+    command explicitly forces the fetch;
+  - clones/checks out the kernel into `third_party/FreeRTOS-Kernel`;
+  - verifies the required kernel, port, and heap paths;
+  - honors `JH_FREERTOS_KERNEL_DIR` for user/CI-provided checkouts;
+  - fails with a clear diagnostic when the checkout is missing, mismatched, or
+    unavailable offline.
+- Add `third_party/FreeRTOS-Kernel/` to `.gitignore` so the fetched kernel never
+  becomes a tracked repo artifact.
+- Wire the helper into:
+  - `runmefirst.sh`;
+  - `scripts/build_stm32_lib.sh` when `--freertos` is used or
+    `EXTRA_HAL_DEFINES` contains `HAL_ENABLE_FREERTOS`;
+  - the `examples` STM32 CMake path before FreeRTOS sources/include dirs are
+    required.
+- Keep `HAL_ENABLE_FREERTOS` as the only public FreeRTOS feature flag. Do not
+  introduce `HAL_FREERTOS_ENABLED`.
+- Remove `JH_STM32_FREERTOS` as a user-facing FreeRTOS switch. Presets and
+  scripts should propagate FreeRTOS intent through
+  `EXTRA_HAL_DEFINES=HAL_ENABLE_FREERTOS`; CMake should detect that define and
+  call `jh_stm32g474_enable_freertos(...)`.
+- Run the fetch/configure step before compilation starts, because CMake needs
+  the FreeRTOS source list and include paths during configuration.
+
+Functional value:
+
+- fresh user and CI checkouts can build STM32 FreeRTOS targets without a manual
+  `git clone`, while the kernel remains outside the tracked repository;
+- the FreeRTOS kernel version is pinned in one visible place;
+- `HAL_ENABLE_FREERTOS` remains the single semantic opt-in flag across code,
+  scripts, examples, and docs.
+
+Validation:
+
+- non-FreeRTOS builds do not fetch or require `third_party/FreeRTOS-Kernel`;
+- fresh checkout with `HAL_ENABLE_FREERTOS` fetches the configured kernel and
+  builds the STM32 static library;
+- `examples` STM32 FreeRTOS smoke target builds from a clean `third_party`;
+- `JH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel` still works without touching
+  `third_party`;
+- offline/missing-kernel failure remains explicit and actionable;
+- `git status --ignored` shows the fetched kernel is ignored.
+
+### Stage 7: FreeRTOS Entry-Point Mode
 
 Goal: make `app_start`, `app_task0`, and `app_task1` transparent across targets.
 
@@ -520,7 +583,7 @@ Validation:
 - minimal dual-task example builds for both targets;
 - current non-FreeRTOS examples remain unchanged.
 
-### Stage 7: Module Audit and Hardening
+### Stage 8: Module Audit and Hardening
 
 Goal: make the thread-safety promise real module by module.
 
@@ -552,7 +615,7 @@ Validation:
 - RP2040 and STM32 example builds;
 - hardware smoke tests where available.
 
-### Stage 8: Hardware Smoke Layer
+### Stage 9: Hardware Smoke Layer
 
 Goal: verify timing and concurrency on physical boards.
 
@@ -587,11 +650,12 @@ Validation:
   be audited before choosing.
 - Should `hal_timer` remain hardware-alarm based in FreeRTOS mode, or should a
   separate task-context timer mode be added later?
-- What minimum FreeRTOS kernel version should STM32 pin? The version bundled by
-  the validated arduino-pico core should be used as a compatibility reference,
-  but STM32 should pin an explicit upstream `FreeRTOS-Kernel` release that is
-  verified with the `portable/GCC/ARM_CM4F` port and the JaszczurHAL build
-  matrix.
+- Answered/planned for Stage 6: STM32 should pin the same FreeRTOS kernel
+  compatibility point as the configured arduino-pico/RP2040 core in
+  `freertos_core_version.conf`. Prefer an exact upstream commit/ref over a
+  moving branch; if the RP2040 core exposes only a snapshot-style version such
+  as `V11.1.0+`, record the exact chosen ref and compatibility note in the
+  config.
 - How should CI validate `HAL_ENABLE_FREERTOS` without requiring hardware?
   Answer: add a host-side FreeRTOS test build using the kernel's POSIX port,
   `portable/ThirdParty/GCC/Posix`, with `portable/MemMang/heap_4.c`. It runs a
@@ -613,7 +677,7 @@ resolved are listed under "Done" for traceability.
   Guaranteed by the two-primitive decision above, but must be explicitly
   validated: confirm OneWire (and any other cycle-timed bit-bang) calls
   `hal_critical_section_*` (full mask), never the scheduler-lock. Add a
-  hardware smoke check under scheduler load (Stage 8).
+  hardware smoke check under scheduler load (Stage 9).
 
 ### P1 - prerequisite for correct FreeRTOS runtime behavior
 
@@ -623,14 +687,15 @@ resolved are listed under "Done" for traceability.
   Recommended fix, consistent with the "init = single-task" contract: create the
   mutex eagerly in the constructor / init path, before the object is shared
   across tasks - removes the race without locking the lazy path. Cheaper and
-  safer than double-checked locking.
+  safer than double-checked locking. SmartTimers was closed in Stage 5; broader
+  singleton/bus mutex cleanup remains module-hardening work.
 
 - **Gate `hal_delay_ms()` on scheduler state.** In FreeRTOS mode use
   `vTaskDelay(pdMS_TO_TICKS(ms))` only when
   `xTaskGetSchedulerState() == taskSCHEDULER_RUNNING`; otherwise fall back to the
   busy/Arduino delay (pre-scheduler init, ISR/critical context). Without the
   gate, a delay called before `vTaskStartScheduler()` misbehaves. Closed for
-  RP2040 in Stage 3; STM32G474 remains later-stage work.
+  RP2040 in Stage 3 and STM32G474 in Stage 5.
 
 ### P2 - decide during implementation
 
@@ -646,6 +711,35 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-12: Stage 5 STM32 HAL primitives under FreeRTOS completed.
+  STM32G474 `hal_mutex_*` now selects a normal non-recursive FreeRTOS mutex
+  under `HAL_ENABLE_FREERTOS`, rejects ISR lock/unlock use, and keeps the
+  non-FreeRTOS build on the existing single-core atomic spinlock.
+  `hal_critical_section_*` remains the nesting-safe PRIMASK hard full-mask and
+  exposes an internal active-state check so delay/idle can avoid blocking in
+  critical context. `hal_delay_ms()` now uses
+  `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller
+  is in task context, and the core is outside HAL critical sections; otherwise
+  it falls back to an interrupt-independent DWT cycle busy-wait. `hal_idle()`
+  yields only in the same legal task context, and `hal_delay_us()` remains a
+  DWT cycle busy-wait on hardware FreeRTOS builds. `stm32g474_systick_*()` uses
+  the normal or FromISR FreeRTOS tick getter according to IPSR context.
+  SmartTimers now creates its per-instance mutex eagerly and keeps an atomic
+  create-once fallback, closing the TS-A01 SmartTimers lazy-mutex race; broader
+  singleton/bus lazy mutex cleanup remains Stage 8/module-hardening work.
+  Documentation was synced in [Thread-SafetyAudit.md](Thread-SafetyAudit.md),
+  [JaszczurHAL_API.md](JaszczurHAL_API.md), [lib_compilation.md](lib_compilation.md),
+  [README.md](../README.md), [examples/README.md](../examples/README.md),
+  [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt), `hal_config.h`, and
+  `hal_sync.h`. Validation: `git diff --check`,
+  `bash -n scripts/build_stm32_lib.sh`, normal STM32 static-library build, and
+  `./runalltests.sh -j4` passed all 7 gates. A FreeRTOS build without
+  `third_party/FreeRTOS-Kernel` failed fast with the expected missing-kernel
+  diagnostic. A temporary `/tmp/jh_stage5_FreeRTOS-Kernel` checkout
+  successfully built
+  `./scripts/build_stm32_lib.sh --clean --freertos --freertos-kernel
+  /tmp/jh_stage5_FreeRTOS-Kernel -o /tmp/jh_stage5_build_stm32_freertos -j 4`
+  and `29_freertos_smoke_stm32g474` using the same kernel path.
 - 2026-06-11: Stage 4 STM32 FreeRTOS kernel integration completed.
   STM32G474 builds now have a documented local
   `third_party/FreeRTOS-Kernel` dependency (or `JH_FREERTOS_KERNEL_DIR`
@@ -660,18 +754,19 @@ resolved are listed under "Done" for traceability.
   SVC/PendSV/SysTick in FreeRTOS builds. `system_stm32g474.c` no longer
   installs/configures the HAL SysTick timebase under `HAL_ENABLE_FREERTOS`,
   and `startup_stm32g474.c` expects the FreeRTOS port handlers instead of weak
-  default handlers in that mode. `build_stm32_lib.sh --freertos`,
+  default handlers in that mode. `scripts/build_stm32_lib.sh --freertos`,
   `JH_STM32_FREERTOS`, the `stm32g474-freertos` examples preset, and
   `examples/29_freertos_smoke` now cover the STM32 native FreeRTOS compile
   path. Per [Thread-SafetyAudit.md](Thread-SafetyAudit.md), this stage is
   kernel/API availability only: STM32 `hal_mutex_*`, `hal_delay_ms()`, and
   `hal_idle()` remain Stage 5 runtime primitive work. Validation:
-  `git diff --check`, `bash -n build_stm32_lib.sh`,
-  `./build_stm32_lib.sh --help`, STM32 normal static-library configure/build,
+  `git diff --check`, `bash -n scripts/build_stm32_lib.sh`,
+  `./scripts/build_stm32_lib.sh --help`, STM32 normal static-library
+  configure/build,
   normal STM32 `01_blink_stm32g474` example build, expected fail-fast configure
   without `third_party/FreeRTOS-Kernel`, `./runalltests.sh -j4` passed all
   7 gates, and a temporary `/tmp` FreeRTOS-Kernel checkout successfully built
-  both `./build_stm32_lib.sh --clean --freertos --freertos-kernel
+  both `./scripts/build_stm32_lib.sh --clean --freertos --freertos-kernel
   /tmp/jh_stage4_FreeRTOS-Kernel -o /tmp/jh_stage4_build_stm32_freertos -j 4`
   and `29_freertos_smoke_stm32g474`.
 - 2026-06-11: Stage 3 RP2040 FreeRTOS-aware HAL primitives completed.
@@ -689,12 +784,13 @@ resolved are listed under "Done" for traceability.
   [Thread-SafetyAudit.md](Thread-SafetyAudit.md), TS-A03 is closed for RP2040,
   while TS-A01 lazy singleton mutex creation, TS-A04 Arduino-origin wrappers,
   and TS-A05 timer callback context remain module-hardening follow-ups.
-  Validation: `git diff --check`, `./build_arduino_lib.sh --clean --freertos`,
+  Validation: `git diff --check`,
+  `./scripts/build_arduino_lib.sh --clean --freertos`,
   `cmake --preset rp2040-freertos -S examples`,
   `cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040`,
   and `./runalltests.sh` passed all 7 gates.
 - 2026-06-11: Stage 2 RP2040 build integration completed. RP2040 static-library
-  builds now have an opt-in `./build_arduino_lib.sh --freertos` mode that
+  builds now have an opt-in `./scripts/build_arduino_lib.sh --freertos` mode that
   selects arduino-pico FreeRTOS SMP, defines `HAL_ENABLE_FREERTOS`, exposes
   `__FREERTOS`, and adds the core FreeRTOS include path without compiling any
   local `third_party/FreeRTOS-Kernel` sources. RP2040 examples now have an
@@ -708,9 +804,9 @@ resolved are listed under "Done" for traceability.
   [Thread-SafetyAudit.md](Thread-SafetyAudit.md), this stage deliberately only
   wires build/header availability; `hal_sync`, delay, timers, Arduino wrappers,
   and runtime task-safety semantics remain unchanged for later stages.
-  Validation: `bash -n build_arduino_lib.sh`,
-  `./build_arduino_lib.sh --help`,
-  `./build_arduino_lib.sh --clean --freertos`,
+  Validation: `bash -n scripts/build_arduino_lib.sh`,
+  `./scripts/build_arduino_lib.sh --help`,
+  `./scripts/build_arduino_lib.sh --clean --freertos`,
   `cmake --preset rp2040-freertos -S examples`,
   `cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040`,
   and `./runalltests.sh` passed all 7 gates.

@@ -32,7 +32,7 @@ private:
 
 public:
   /** @brief Default constructor. Keeps the timer in a safe stopped state. */
-  SmartTimers() : _time(0), _lastTime(0), clb(NULL), _mutex(NULL) {}
+  SmartTimers();
 
   /** @brief Destructor. Releases host/mock mutex for explicit destroy paths. */
   ~SmartTimers();

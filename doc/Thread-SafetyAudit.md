@@ -34,13 +34,21 @@ current core is outside `hal_critical_section_*`; otherwise it busy-waits.
 `hal_idle()` yields only in the same safe task context. STM32G474 FreeRTOS delay
 handling remains a later-stage item.
 
+Stage 5 update (2026-06-12): TS-A03 is closed for the STM32G474 backend under
+`HAL_ENABLE_FREERTOS`: `hal_delay_ms()` uses `vTaskDelay()` only when the
+scheduler is running, the caller is in task context, and the core is outside
+`hal_critical_section_*`; otherwise it uses a DWT cycle busy-wait fallback.
+`hal_idle()` yields only in the same safe task context and uses a no-op fallback
+elsewhere. `hal_delay_us()` remains a DWT cycle busy-wait on hardware FreeRTOS
+builds.
+
 ## Lazy Mutex Inventory
 
 These locations require review before a broad "FreeRTOS task-safe" claim:
 
 | Area | Lazy/eager pattern | Stage 0 disposition |
 |------|--------------------|---------------------|
-| `SmartTimers` | Per-instance `_mutex` allocated lazily by `ensureMutex()`. | Fix first: create eagerly in constructor or `begin()` before sharing; current `ensureMutex()` can race in two tasks. |
+| `SmartTimers` | Per-instance `_mutex` allocated eagerly by the constructor; `ensureMutex()` remains as an atomic create-once fallback. | Closed in Stage 5: eager construction plus atomic fallback removes the normal two-task lazy creation race before the object can be shared. |
 | `multicoreWatchdog` | `watchdogTickMutex` is created in `setupWatchdog()`, guarded by boot-time contract. | Accept if `setupWatchdog()` remains single-task before scheduler/multicore sharing. |
 | `hal_i2c`, `hal_spi` | Per-bus mutex allocated lazily in backend `*_ensure_mutex()`. | Prefer eager allocation in `*_init*()` and require bus init before runtime use; RP2040 lazy path is cross-core suspect. |
 | `hal_adc`, `hal_pwm_freq`, `hal_rgb_led`, `hal_timer` | Singleton mutex allocated lazily on first runtime use. | Move to init/start path where one exists; otherwise add a safe once primitive. |
@@ -56,10 +64,10 @@ These locations require review before a broad "FreeRTOS task-safe" claim:
 |---------------|------------------|------------------------|----------------------|-----------|
 | `hal_app_entry`, `hal_app.h` | `HAL_PROVIDE_APP_ENTRY` supplies entrypoint. `HAL_ENABLE_APP_TASK1` is explicit opt-in for secondary dispatch. | No shared state. FreeRTOS entry mode not implemented yet. | RP2040 `loop1()` starts the core-1 path; now gated. | Stage 6 creates FreeRTOS tasks using same `HAL_ENABLE_APP_TASK1` gate. |
 | `hal_sync` | Mutex create/destroy are lifecycle operations. | Non-RTOS RP2040 uses pico mutex; STM32 uses spinlock; mock uses `std::mutex`. | `hal_mutex_*` is not ISR-safe. `hal_critical_section_*` is hard full-mask and nesting-safe. | Add FreeRTOS path using priority-aware mutex/semaphore. Do not alias critical sections to `taskENTER_CRITICAL()`. |
-| `hal_system` delay/time/idle/watchdog | Watchdog enable/reset policy is setup/runtime-specific. | Time queries are safe. RP2040 FreeRTOS builds now gate `hal_delay_ms` / `hal_idle` on scheduler state, ISR state, and HAL critical-section depth; `hal_delay_us` remains busy-wait/timing-safe. | `hal_in_isr()` exists for ISR-sensitive callers. | STM32G474 still needs FreeRTOS-aware delay/idle in its later runtime stage; keep `hal_delay_us` interrupt-independent. |
+| `hal_system` delay/time/idle/watchdog | Watchdog enable/reset policy is setup/runtime-specific. | Time queries are safe. RP2040 and STM32G474 FreeRTOS builds now gate `hal_delay_ms` / `hal_idle` on scheduler state, ISR state, and HAL critical-section depth; `hal_delay_us` remains busy-wait/timing-safe. | `hal_in_isr()` exists for ISR-sensitive callers. | Keep `hal_delay_us` interrupt-independent; hardware smoke timing paths under scheduler load. |
 | `hal_gpio` / `hal_pcnt` | Pin setup and interrupt attach are setup-time. | Reads/writes are pass-through; same-pin concurrent writes need caller policy. PCNT runtime state depends on backend. | GPIO callbacks run in ISR context and must be ISR-safe. RP2040 PCNT uses GPIO edge ISR. | Document FreeRTOS ISR restrictions; no blocking HAL calls from GPIO ISR. |
 | `hal_pwm`, `hal_pwm_freq`, `hal_dac`, `hal_adc` | Init/create/destroy or global configuration remain single-task. | `hal_adc` and `hal_pwm_freq_write` are mutex-protected; simple PWM/DAC writes are backend pass-throughs. | No user callbacks. | Fix lazy singleton creation for ADC/PWM frequency before RTOS claims. |
-| `hal_timer`, `hal_timer_ext`, `hal_soft_timer` | Timer create/destroy/config remain lifecycle work. | `hal_timer`/`hal_timer_ext` use mutexes for managed state; `hal_soft_timer` inherits `SmartTimers`. | Low-level RP2040 alarms execute in interrupt-like context; `SmartTimers` callbacks run from caller's task/loop and outside the mutex. | Do not switch to FreeRTOS software timers without documenting callback context. Fix `SmartTimers` lazy mutex first. |
+| `hal_timer`, `hal_timer_ext`, `hal_soft_timer` | Timer create/destroy/config remain lifecycle work. | `hal_timer`/`hal_timer_ext` use mutexes for managed state; `hal_soft_timer` inherits `SmartTimers`. | Low-level RP2040 alarms execute in interrupt-like context; `SmartTimers` callbacks run from caller's task/loop and outside the mutex. | Do not switch to FreeRTOS software timers without documenting callback context. |
 | `hal_serial` debug output | `hal_serial_init()` should run before multitask logging. | Normal debug/print paths use mutexes; ISR path queues records without mutex/lazy init. | `hal_debug_loop()` drains from task context; no-op in ISR. | Require/eagerly perform mutex init before scheduler; preserve ISR fast path. |
 | `hal_uart`, `hal_swserial`, `hal_time` | Single-owner setup. | Currently documented not thread-safe; caller must serialize or use one owner task. | UART callbacks/transport use must not assume reentrancy. | Keep documented exception until a transport ownership model is designed. |
 | `hal_i2c` master | `hal_i2c_init*` and deinit reconfigure shared bus objects; single-task setup/teardown. | Transfer helpers are bus-mutex protected; manual begin/write/end holds the bus across transaction. | No user ISR callback in master mode. | Make per-bus mutex creation eager/safe; audit read paths that intentionally release lock after request. |
@@ -80,20 +88,20 @@ These locations require review before a broad "FreeRTOS task-safe" claim:
 | `hal_wifi`, `hal_udp`, `hal_mqtt`, `hal_ota`, `hal_wireguard` | Begin/configure/connect lifecycle should be single-task. | HAL wrappers use singleton mutexes around Arduino-origin libraries. | MQTT callbacks dispatch outside module mutex; OTA callbacks dispatch from `hal_ota_handle()`. | Treat as serialized but not fully audited third-party code. Eager mutexes; migrate long-term to HAL-native transports where possible. |
 | `hal_crypto`, `hal_bits`, `hal_math`, serialization helpers | No lifecycle. | Stateless; safe when buffers/objects are not shared unsafely by callers. | No callbacks. | No FreeRTOS-specific work expected. |
 | `pidController`, `hal_pid_controller` | Instance setup/reset single-owner. | Documented not thread-safe; callers must serialize or use one instance per task/control loop. | No callbacks. | Keep documented exception unless locking is added intentionally. |
-| `SmartTimers` | Constructor/begin configure timer. | Intended per-instance mutex protection, but current lazy `_mutex` creation is race-prone in two tasks. | Callback runs outside mutex in caller context. | Fix before using as FreeRTOS-safe foundation for `hal_soft_timer` or `multicoreWatchdog`. |
+| `SmartTimers` | Constructor eagerly creates the per-instance mutex; begin configures timer state. | Per-instance mutex serializes runtime timer state once construction succeeds. | Callback runs outside mutex in caller context. | Closed Stage 5; keep callbacks in caller context documented. |
 | `multicoreWatchdog` | `setupWatchdog()` is boot-time single-task. | Runtime update paths lock around shared `SmartTimers::tick()`. | Reboot diagnostic callback runs during setup after watchdog reboot handling. | Accept with setup-time mutex creation; inherits `SmartTimers` fix. |
 | `draw7Segment` | No own lifecycle. | Delegates to `hal_display`; safe only where display backend is safe. | No callbacks. | No separate FreeRTOS work beyond display. |
 
 ## Priority Follow-Ups (After FreeRTOS implementation done)
 
 1. Fix `SmartTimers` mutex creation by making the mutex available before the
-   object is shared across tasks.
+   object is shared across tasks. (Closed in Stage 5.)
 2. Add or choose a safe once/eager-init pattern for singleton/bus mutexes before
    claiming FreeRTOS task safety on RP2040 SMP.
 3. Implement FreeRTOS-aware `hal_sync` paths while preserving hard full-mask
-   critical sections.
+   critical sections. (Closed for RP2040 in Stage 3 and STM32G474 in Stage 5.)
 4. Gate `hal_delay_ms()` on scheduler state and context. (Closed for RP2040 in
-   Stage 3; STM32G474 remains later-stage work.)
+   Stage 3 and STM32G474 in Stage 5.)
 5. Re-audit Arduino-origin wrappers after RP2040 FreeRTOS builds compile, with
    special attention to callbacks and hidden background tasks.
 6. Preserve and hardware-test timing-sensitive OneWire/RGB/MAX6675 paths under

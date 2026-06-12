@@ -81,8 +81,10 @@
        interrupt mask for timing-sensitive code.
      - STM32G474 must have the local FreeRTOS-Kernel include path configured.
        STM32 CMake builds compile the Cortex-M4F port, heap_4, and kernel
-       source list when FreeRTOS mode is enabled; HAL runtime primitives are
-       upgraded in later stages.
+       source list when FreeRTOS mode is enabled. hal_mutex_*,
+       hal_delay_ms(), and hal_idle() are FreeRTOS-aware; hard
+       hal_critical_section_* still masks interrupts for timing-sensitive
+       code.
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 
 #ifdef HAL_ENABLE_FREERTOS
@@ -135,9 +137,10 @@
                                   mutex/delay/idle primitives. STM32G474
                                   uses a local FreeRTOS-Kernel checkout,
                                   target FreeRTOSConfig.h, Cortex-M4F port,
-                                  heap_4, and FreeRTOS-owned SVC/PendSV/
-                                  SysTick vectors. This flag does not create
-                                  a public hal_rtos_* API.
+                                  heap_4, FreeRTOS-owned SVC/PendSV/SysTick
+                                  vectors, and FreeRTOS-aware
+                                  mutex/delay/idle primitives. This flag does
+                                  not create a public hal_rtos_* API.
 
      Connectivity:
        HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable

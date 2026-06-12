@@ -73,37 +73,52 @@ see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 ## Library structure
 
 ```text
+CMakeLists.txt              # host/mock tests build
+arduino_lib/                # RP2040 Arduino-pico static-library CMake glue
+stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
+scripts/
+  build_arduino_lib.sh      # RP2040 static-library helper
+  build_stm32_lib.sh        # STM32G474 static-library helper
+  ensure_freertos_kernel.sh # planned shared FreeRTOS dependency helper
+runalltests.sh              # full local validation gate
+runmefirst.sh               # one-time local toolchain setup
 doc/
-  JaszczurHAL_API.md       # detailed API/reference
-  lib_compilation.md       # static-library build guide
-  CHANGELOG.md             # project changelog
-  FreeRTOS_imp.md          # FreeRTOS implementation plan and progress
-  Thread-SafetyAudit.md    # thread-safety audit for FreeRTOS work
+  JaszczurHAL_API.md        # detailed API/reference
+  lib_compilation.md        # static-library build guide
+  CHANGELOG.md              # project changelog
+  FreeRTOS_imp.md           # FreeRTOS implementation plan and progress
+  Thread-SafetyAudit.md     # thread-safety audit for FreeRTOS work
   STM32G474_porting_progress.md # STM32G474 backend status
-  future_ideas.md          # architecture roadmap and backlog
+  future_ideas.md           # architecture roadmap and backlog
+examples/                   # buildable example apps for RP2040 and STM32G474
 src/
-  JaszczurHAL.h            # primary public include
-  HAL_FLAGS.txt            # HAL_ENABLE_* flag summary
-  libConfig.h              # backward-compat include
-  tools.h, tools_c.h       # utility aggregators (C++ / C)
-  arduino_host_stubs/      # host-build Arduino compatibility headers
-  hal/                     # HAL headers + common wrappers + backend dispatch
+  JaszczurHAL.h             # primary public include
+  HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
+  libConfig.h               # backward-compat include
+  tools.h, tools_c.h        # utility aggregators (C++ / C)
+  arduino_host_stubs/       # host-build Arduino compatibility headers
+  datasheets/               # local reference PDFs and notes
+  hal/                      # HAL public headers + common wrappers
     impl/
-      shared/              # backend-agnostic internal engine code reused by multiple backends
-      arduino/             # Arduino/RP2040 backend
-        drivers/           # bundled third-party Arduino drivers (pico compatible)
-          rp2040/          # SoC-specific drivers (rp2040_fault, rp2040_system)
-        frameworks/        # bundled high-level integrations (WireGuard/MQTT/GPS parser/SD logger, etc)
-      .mock/               # deterministic host/test backend
-      stm32g474/           # STM32G474 backend (boot/clock/GPIO/UART/I2C/SPI/DAC/PCNT/fault real; ADC/PWM/timer in progress)
+      .mock/                # deterministic host/test backend
+      arduino/              # Arduino/RP2040 backend
+        drivers/rp2040/     # RP2040 SoC services (fault/system)
+        frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard, SD logger)
+      shared/               # target-neutral drivers/engines reused by RP2040 + STM32
+        ads1x15/ digipot/ display/ ds18b20/ ds3231/ gps/
+        max6675/ mcp2515/ mcp9600/ neopixel/ onewire/
+        pcf8563/ pga2311/ wireguard/
+      stm32g474/            # STM32G474 backend
         drivers/
-          stm32g474/       # SoC-specific drivers (stm32g474_fault, stm32g474_system)
-  utils/                   # helper modules and bundled optional utilities
-examples/                  # ready-to-run rp2040/stm32 examples
-tests/                     # host unit tests (CMake + Unity)
-vscode-templates/          # ready-to-use VS Code project configurations
-  windows/                 # Windows template (Python + Arduino CLI)
-  linux/                   # Linux/macOS template (Bash)
+          stm32g474/        # STM32G474 SoC services (fault/system)
+        freertos/           # STM32 FreeRTOSConfig and hooks
+        port/               # startup, SystemInit, linker-facing low-level glue
+  utils/                    # SmartTimers, PID, watchdog, tools, cJSON, Unity
+tests/                      # host unit tests (CMake + Unity)
+third_party/                # optional local dependencies, e.g. FreeRTOS-Kernel
+vscode-templates/           # ready-to-use VS Code project configurations
+  linux/                    # Linux/macOS template scripts and settings
+  windows/                  # Windows template scripts and settings
 ```
 
 Detailed per-file layout is maintained in
@@ -185,18 +200,18 @@ FreeRTOS headers directly when their target build provides them.
   `__FREERTOS`, selected through the Arduino-pico board option
   `Operating System -> FreeRTOS SMP` or an equivalent FQBN option such as
   `os=freertos`. The checked-in RP2040 build helpers now expose this as
-  `./build_arduino_lib.sh --freertos` and
+  `./scripts/build_arduino_lib.sh --freertos` and
   `cmake -S examples -B build_examples_rp2040_freertos -DJH_EXAMPLE_TARGET=rp2040 -DJH_RP2040_FREERTOS=ON`.
 - STM32G474 uses a local `third_party/FreeRTOS-Kernel` integration. At this
   stage, `HAL_ENABLE_FREERTOS` compiles an explicit Cortex-M4F kernel source
-  list, uses the target `FreeRTOSConfig.h`, and lets the FreeRTOS port own
-  SVC/PendSV/SysTick. Use `./build_stm32_lib.sh --freertos` or the
-  `stm32g474-freertos` examples preset after installing the kernel checkout.
+  list, uses the target `FreeRTOSConfig.h`, lets the FreeRTOS port own
+  SVC/PendSV/SysTick, and selects FreeRTOS-aware `hal_mutex_*`,
+  `hal_delay_ms()`, and `hal_idle()` paths. Use
+  `./scripts/build_stm32_lib.sh --freertos` or the `stm32g474-freertos`
+  examples preset after installing the kernel checkout.
 
-Current FreeRTOS support is still staged: RP2040 has FreeRTOS-aware
-`hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` paths; STM32G474 currently
-provides native FreeRTOS API availability and kernel linkage, with HAL runtime
-primitive upgrades planned for the next stage. Hard `hal_critical_section_*`
+Current FreeRTOS support is still staged: RP2040 and STM32G474 have
+FreeRTOS-aware core mutex/delay/idle primitives. Hard `hal_critical_section_*`
 still masks interrupts for timing-sensitive code; it is not a scheduler lock.
 Module-level task-safety, lazy singleton mutexes, and Arduino-origin wrappers
 are tracked separately. See
@@ -283,7 +298,7 @@ You can invoke all quality gates at once, by simply running
 
 Repository includes versioned hooks in `.githooks/`: `pre-commit` and `commit-msg` (conventional commits).
 
-In order to mke it work, needs to be installed once per clone:
+In order to make it work, it needs to be installed once per clone:
 
 ```bash
 ./runmefirst.sh
@@ -354,13 +369,14 @@ single file:
 arduino_core_version.conf   ← RP2040_CORE_VERSION=x.y.z
 ```
 
-All scripts (`runmefirst.sh`, `runalltests.sh`, CI workflow) source this file
-automatically. To upgrade or downgrade:
+`runmefirst.sh` and the CI workflow source this file automatically;
+`runalltests.sh` verifies that the RP2040 core is installed. To upgrade or
+downgrade:
 
 1. Edit `arduino_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
 2. Run `./runmefirst.sh` to install the new core locally.
-3. Run `./runalltests.sh` (or at minimum `./build_arduino_lib.sh`) to confirm
-   the library still compiles against the new core.
+3. Run `./runalltests.sh` (or at minimum `./scripts/build_arduino_lib.sh`) to
+   confirm the library still compiles against the new core.
 
 No other files need to be touched.
 

@@ -7,7 +7,7 @@
  *   - relocates the vector table to flash base (VTOR),
  *   - enables the FPU (CPACR),
  *   - enables the dedicated fault handlers so CFSR/HFSR are meaningful,
- *   - starts SysTick at 1 kHz to drive a real millisecond counter.
+ *   - starts SysTick at 1 kHz in non-FreeRTOS builds.
  *
  * This replaces the host-stub time source (`g_millis += ms`) with hardware
  * time, which is the single highest-leverage change: every timeout/timer in
@@ -31,6 +31,19 @@
 volatile uint32_t g_systick_ms = 0u;
 
 void SysTick_Handler(void) { g_systick_ms++; }
+#else
+static int stm32g474_system_in_isr_local(void) {
+  uint32_t ipsr;
+  __asm volatile("MRS %0, ipsr" : "=r"(ipsr));
+  return (ipsr & 0x1FFu) != 0u;
+}
+
+static TickType_t stm32g474_freertos_tick_count(void) {
+  if (stm32g474_system_in_isr_local()) {
+    return xTaskGetTickCountFromISR();
+  }
+  return xTaskGetTickCount();
+}
 #endif
 
 void SystemInit(void) {
@@ -41,6 +54,13 @@ void SystemInit(void) {
   SCB_CPACR |= SCB_CPACR_FPU_FULL;
   __asm volatile("dsb");
   __asm volatile("isb");
+
+  /* Keep a hardware cycle counter available for FreeRTOS fallback delays.
+   * SysTick belongs to the scheduler in that mode, so pre-scheduler and
+   * critical-section waits must not depend on the tick interrupt. */
+  COREDEBUG_DEMCR |= COREDEBUG_DEMCR_TRCENA;
+  DWT_CYCCNT = 0u;
+  DWT_CTRL |= DWT_CTRL_CYCCNTENA;
 
   /* Enable precise fault handlers so the exception_info module can read
    * MemManage/Bus/Usage fault status instead of everything escalating to
@@ -65,7 +85,7 @@ void SystemInit(void) {
 
 uint32_t stm32g474_systick_millis(void) {
 #ifdef HAL_ENABLE_FREERTOS
-  return (uint32_t)xTaskGetTickCount();
+  return (uint32_t)stm32g474_freertos_tick_count();
 #else
   return g_systick_ms;
 #endif
@@ -75,7 +95,7 @@ uint32_t stm32g474_systick_millis(void) {
  * down-counter (LOAD..0 over 1 ms). */
 uint32_t stm32g474_systick_micros(void) {
 #ifdef HAL_ENABLE_FREERTOS
-  return (uint32_t)xTaskGetTickCount() * 1000u;
+  return (uint32_t)stm32g474_freertos_tick_count() * 1000u;
 #else
   uint32_t ms1, ms2;
   uint32_t val;

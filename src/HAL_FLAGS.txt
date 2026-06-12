@@ -61,9 +61,9 @@ FreeRTOS integration flag
       RP2040:
         Requires arduino-pico FreeRTOS mode so __FREERTOS is defined
         (board menu "Operating System -> FreeRTOS SMP", or an equivalent
-        FQBN option such as os=freertos). build_arduino_lib.sh --freertos and
-        examples -DJH_RP2040_FREERTOS=ON configure this mode. The local
-        third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
+        FQBN option such as os=freertos). scripts/build_arduino_lib.sh
+        --freertos and examples -DJH_RP2040_FREERTOS=ON configure this mode.
+        The local third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
         Arduino backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
         hal_mutex_* uses a FreeRTOS mutex and hal_delay_ms()/hal_idle() yield
         to the scheduler from task context. hal_critical_section_* remains a
@@ -75,8 +75,11 @@ FreeRTOS integration flag
         kernel source list (tasks/queue/list/timers/event_groups/
         stream_buffer, ARM_CM4F port.c, heap_4.c), add the target
         FreeRTOSConfig.h include directory, and hand SVC/PendSV/SysTick vector
-        ownership to the FreeRTOS port. HAL runtime primitives become
-        FreeRTOS-aware in a later STM32 stage.
+        ownership to the FreeRTOS port. hal_mutex_* uses a FreeRTOS mutex,
+        hal_delay_ms() blocks with vTaskDelay() from legal task context, and
+        hal_idle() yields to the scheduler from legal task context. Fallback
+        delays remain available before the scheduler and from ISR/critical
+        contexts.
 
     Full module task-safety is still staged. Lazy singleton mutex creation,
     timer callback context, and Arduino-origin wrappers follow the FreeRTOS

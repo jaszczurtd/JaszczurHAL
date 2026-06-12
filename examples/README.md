@@ -63,7 +63,8 @@ cmake --build build_examples_stm32g474_freertos --target 29_freertos_smoke_stm32
 ```
 
 This requires a local `third_party/FreeRTOS-Kernel` checkout, or
-`-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`.
+`-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. The smoke app uses native
+FreeRTOS tasks together with HAL mutex, delay, and idle primitives on STM32G474.
 
 ### Build a single example
 
