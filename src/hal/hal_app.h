@@ -41,10 +41,10 @@
  *
  * ── How to enable ────────────────────────────────────────────────────────────
  *   Define @c HAL_PROVIDE_APP_ENTRY in your @c hal_project_config.h or pass
- *   @c -DHAL_PROVIDE_APP_ENTRY via the build system / build_*_lib.sh @c -D
- * flag. Define @c HAL_ENABLE_APP_TASK1 only when the application intentionally
- * uses
- *   @c app_task1. On RP2040 this is also the opt-in for @c loop1/core 1.
+ *   @c -DHAL_PROVIDE_APP_ENTRY via the build system, for example through a
+ *   @c scripts/build_*_lib.sh @c -D option. Define @c HAL_ENABLE_APP_TASK1
+ *   only when the application intentionally uses @c app_task1. On RP2040 this
+ *   is also the opt-in for @c loop1/core 1.
  */
 
 #include <stdbool.h>

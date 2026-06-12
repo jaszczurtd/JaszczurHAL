@@ -5,7 +5,7 @@ JaszczurHAL can be built in three different ways, depending on the target:
 | Target | Build entry | Output | Backend switch |
 |---|---|---|---|
 | Host / mock tests | repository-root CMake | `build/libhal_mock.a` + tests | `HAL_TARGET_MOCK` |
-| RP2040 / RP2350 through Arduino-pico | `arduino_lib/` or `build_arduino_lib.sh` | `build_arduino/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
+| RP2040 / RP2350 through Arduino-pico | `arduino_lib/` or `scripts/build_arduino_lib.sh` | `build_arduino/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
 | STM32G474 bare-metal | `stm32_lib/` | `build_stm32/libJaszczurHAL.a` | `HAL_TARGET_STM32G474` |
 
 The canonical target selection lives in `src/hal/hal_target.h`. Define exactly
@@ -81,7 +81,7 @@ earlephilhower Arduino-pico toolchain.
 From the repository root:
 
 ```bash
-./build_arduino_lib.sh
+./scripts/build_arduino_lib.sh
 ```
 
 The script auto-detects the latest Arduino-pico core and `pqt-gcc` toolchain
@@ -109,25 +109,25 @@ Examples:
 
 ```bash
 # Default Raspberry Pi Pico build
-./build_arduino_lib.sh
+./scripts/build_arduino_lib.sh
 
 # Project-local config plus explicit modules
-./build_arduino_lib.sh \
+./scripts/build_arduino_lib.sh \
   -p /path/to/project \
   -D HAL_ENABLE_WIFI \
   -D HAL_ENABLE_GPS \
   -D HAL_ENABLE_MCP9600
 
 # Pico W
-./build_arduino_lib.sh \
+./scripts/build_arduino_lib.sh \
   --board rpipicow \
   -D HAL_ENABLE_WIFI
 
 # RP2040 FreeRTOS SMP mode
-./build_arduino_lib.sh --freertos
+./scripts/build_arduino_lib.sh --freertos
 
 # Clean rebuild into a custom directory
-./build_arduino_lib.sh --clean -o ./my_build
+./scripts/build_arduino_lib.sh --clean -o ./my_build
 ```
 
 ### RP2040 FreeRTOS note
@@ -140,7 +140,7 @@ an equivalent FQBN option such as `os=freertos`.
 For the static-library helper, use:
 
 ```bash
-./build_arduino_lib.sh --freertos
+./scripts/build_arduino_lib.sh --freertos
 ```
 
 This passes `ARDUINO_OS=freertos` to CMake, defines `__FREERTOS`, makes the
@@ -283,18 +283,21 @@ The STM32 CMake integration now compiles the explicit kernel source list
 FreeRTOS port own SVC/PendSV/SysTick.
 
 ```bash
-./build_stm32_lib.sh --clean --freertos
+./scripts/build_stm32_lib.sh --clean --freertos
 ```
 
 If the kernel is not under `third_party/FreeRTOS-Kernel`, pass:
 
 ```bash
-./build_stm32_lib.sh --freertos --freertos-kernel /path/to/FreeRTOS-Kernel
+./scripts/build_stm32_lib.sh --freertos --freertos-kernel /path/to/FreeRTOS-Kernel
 ```
 
 This stage provides native FreeRTOS API availability and kernel linkage.
-STM32 HAL runtime primitives such as `hal_mutex_*` and `hal_delay_ms()` become
-FreeRTOS-aware in the next implementation stage.
+STM32 HAL runtime primitives such as `hal_mutex_*`, `hal_delay_ms()`, and
+`hal_idle()` are FreeRTOS-aware in task context, with fallback delays before the
+scheduler and from ISR/critical contexts. Module-level lazy singleton mutexes
+and broader task-safety claims remain tracked in
+[`Thread-SafetyAudit.md`](Thread-SafetyAudit.md).
 
 ### Linking With an STM32G474 Project
 
@@ -333,13 +336,20 @@ arduino_lib/
   CMakeLists.txt
   toolchain_rp2040.cmake
 
-build_arduino_lib.sh
-  Convenience wrapper around arduino_lib/.
-
 stm32_lib/
   CMakeLists.txt
   toolchain_stm32g474.cmake
   STM32G474RETx_FLASH.ld
+
+scripts/
+  build_arduino_lib.sh
+    Convenience wrapper around arduino_lib/.
+
+  build_stm32_lib.sh
+    Convenience wrapper around stm32_lib/.
+
+  ensure_freertos_kernel.sh
+    Planned shared helper for fetching/verifying third_party/FreeRTOS-Kernel.
 
 examples/
   portable_blink/       # one app, RP2040 + STM32G474

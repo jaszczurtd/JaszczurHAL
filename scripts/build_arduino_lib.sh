@@ -9,7 +9,7 @@
 #   - CMake >= 3.16
 #
 # Usage:
-#   ./build_arduino_lib.sh [options]
+#   ./scripts/build_arduino_lib.sh [options]
 #
 # Options:
 #   -r, --root PATH      Arduino rp2040 package root
@@ -27,6 +27,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,7 +46,7 @@ BOARD_VARIANT="rpipico"
 CHIP="rp2040"
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
-OUTPUT_DIR="${SCRIPT_DIR}/build_arduino"
+OUTPUT_DIR="${REPO_ROOT}/build_arduino"
 CLEAN=0
 FREERTOS=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -98,8 +99,8 @@ if [[ ${FREERTOS} -eq 1 ]]; then
 fi
 
 # ── Build ────────────────────────────────────────────────────────────────────
-TOOLCHAIN_FILE="${SCRIPT_DIR}/arduino_lib/toolchain_rp2040.cmake"
-CMAKE_SOURCE="${SCRIPT_DIR}/arduino_lib"
+TOOLCHAIN_FILE="${REPO_ROOT}/arduino_lib/toolchain_rp2040.cmake"
+CMAKE_SOURCE="${REPO_ROOT}/arduino_lib"
 
 if [[ ${CLEAN} -eq 1 ]] && [[ -d "${OUTPUT_DIR}" ]]; then
     info "Cleaning ${OUTPUT_DIR}"
@@ -152,7 +153,7 @@ if [[ -n "${LIB_FILE}" ]]; then
     ok "Library built: ${LIB_FILE}  (${SIZE} bytes)"
     echo ""
     info "Link with:  -L${OUTPUT_DIR} -lJaszczurHAL"
-    info "Headers in: ${SCRIPT_DIR}/src/"
+    info "Headers in: ${REPO_ROOT}/src/"
 else
     die "Library not found after build"
 fi

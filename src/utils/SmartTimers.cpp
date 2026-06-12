@@ -1,5 +1,8 @@
 #include "SmartTimers.h"
 
+SmartTimers::SmartTimers()
+    : _time(0), _lastTime(0), clb(NULL), _mutex(hal_mutex_create()) {}
+
 SmartTimers::~SmartTimers() {
   if (_mutex != NULL) {
     hal_mutex_destroy(_mutex);
@@ -8,8 +11,17 @@ SmartTimers::~SmartTimers() {
 }
 
 void SmartTimers::ensureMutex() {
-  if (!_mutex) {
-    _mutex = hal_mutex_create();
+  if (__atomic_load_n(&_mutex, __ATOMIC_ACQUIRE) == NULL) {
+    hal_mutex_t created = hal_mutex_create();
+    if (created == NULL) {
+      return;
+    }
+
+    hal_mutex_t expected = NULL;
+    if (!__atomic_compare_exchange_n(&_mutex, &expected, created, false,
+                                     __ATOMIC_RELEASE, __ATOMIC_ACQUIRE)) {
+      hal_mutex_destroy(created);
+    }
   }
 }
 

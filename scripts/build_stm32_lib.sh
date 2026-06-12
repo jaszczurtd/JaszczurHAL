@@ -9,7 +9,7 @@
 #   - CMake >= 3.16
 #
 # Usage:
-#   ./build_stm32_lib.sh [options]
+#   ./scripts/build_stm32_lib.sh [options]
 #
 # Options:
 #   -p, --project-config DIR   Path to dir with hal_project_config.h
@@ -26,6 +26,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,8 +43,8 @@ PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 FREERTOS=0
 FREERTOS_KERNEL_DIR=""
-OUTPUT_DIR="${SCRIPT_DIR}/build_stm32"
-TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake"
+OUTPUT_DIR="${REPO_ROOT}/build_stm32"
+TOOLCHAIN_FILE="${REPO_ROOT}/stm32_lib/toolchain_stm32g474.cmake"
 CLEAN=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
@@ -111,7 +112,7 @@ if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
 fi
 
 info "Configuring CMake..."
-cmake -S "${SCRIPT_DIR}/stm32_lib" -B "${OUTPUT_DIR}" \
+cmake -S "${REPO_ROOT}/stm32_lib" -B "${OUTPUT_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
     "${CMAKE_EXTRA_ARGS[@]}"
 
@@ -123,7 +124,7 @@ if [[ -n "${LIB_FILE}" ]]; then
     SIZE=$(stat --printf="%s" "${LIB_FILE}" 2>/dev/null || stat -f "%z" "${LIB_FILE}" 2>/dev/null || echo "?")
     ok "Library built: ${LIB_FILE}  (${SIZE} bytes)"
     echo ""
-    info "Headers in: ${SCRIPT_DIR}/src/"
+    info "Headers in: ${REPO_ROOT}/src/"
 else
     die "Library not found after build"
 fi

@@ -13,12 +13,13 @@ existing Arduino/RP2040 backend.
 Added files:
 - `stm32_lib/CMakeLists.txt`
 - `stm32_lib/toolchain_stm32g474.cmake`
-- `build_stm32_lib.sh`
+- `scripts/build_stm32_lib.sh`
 
 What they provide:
 - a separate CMake target `JaszczurHAL` for STM32G474,
 - a dedicated `arm-none-eabi-*` toolchain,
-- a convenient build script analogous to the existing `build_arduino_lib.sh`.
+- a convenient build script analogous to the existing
+  `scripts/build_arduino_lib.sh`.
 
 ### 2. New source backend `impl/stm32g474`
 Added files:
@@ -77,7 +78,7 @@ stages.
   - `cmake --build build_stm32_host`
 - The real ARM target now builds end-to-end (the `JH_STM32G474_HW` hardware
   paths compile) once the Arm toolchain is installed:
-  - `./build_stm32_lib.sh --clean`
+  - `./scripts/build_stm32_lib.sh --clean`
 - **Examples build system** - all 12 STM32G474-targeted examples
   (01_blink, 02_debug_helper, 03_soft_timer_table, 04_crypto, 14_uart,
   17_pid_controller, 19_timer_ext, 20_i2c_scan, 21_adc_read, 22_gps_uart,
@@ -94,13 +95,13 @@ stages.
 After installing the Arm toolchain:
 
 ```bash
-./build_stm32_lib.sh --clean
+./scripts/build_stm32_lib.sh --clean
 ```
 
 Optionally:
 
 ```bash
-./build_stm32_lib.sh --clean \
+./scripts/build_stm32_lib.sh --clean \
   -p /path/to/project \
   -D HAL_DISABLE_ASSERTS
 ```

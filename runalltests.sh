@@ -240,7 +240,7 @@ fi
 BUILD_RP2040="${SCRIPT_DIR}/build_arduino"
 info "Building libJaszczurHAL.a (RP2040 Arduino backend)..."
 run_logged /tmp/jh_rp2040_lib_build.log \
-    "${SCRIPT_DIR}/build_arduino_lib.sh" --clean --jobs "${JOBS}"
+    "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}"
 
 if [[ -f "${BUILD_RP2040}/libJaszczurHAL.a" ]]; then
     SIZE=$(stat --printf="%s" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || echo "?")
