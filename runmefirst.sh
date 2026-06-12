@@ -20,6 +20,9 @@ sudo apt-get update
 # backend links pthreads, which comes with glibc. curl fetches arduino-cli below.
 sudo apt-get install -y build-essential cmake git curl
 
+# STM32 FreeRTOS dependency - fetched only as part of this explicit setup step.
+"${SCRIPT_DIR}/scripts/ensure_freertos_kernel.sh" --force --repo-root "${SCRIPT_DIR}"
+
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
 # See README "Continuous integration and quality gates".

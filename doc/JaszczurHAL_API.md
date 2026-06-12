@@ -29,8 +29,8 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
 - `scripts/build_arduino_lib.sh` - RP2040 static-library helper.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
-- `scripts/ensure_freertos_kernel.sh` - planned shared helper for
-  fetching/verifying `third_party/FreeRTOS-Kernel`.
+- `scripts/ensure_freertos_kernel.sh` - shared helper for fetching/verifying
+  the pinned `third_party/FreeRTOS-Kernel` checkout.
 - `runalltests.sh` - full local validation gate.
 - `runmefirst.sh` - one-time local toolchain setup.
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
@@ -141,7 +141,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes. STM32G474 builds use a local `FreeRTOS-Kernel` checkout plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. On both supported targets, `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes. STM32G474 builds use a pinned `FreeRTOS-Kernel` checkout from `freertos_core_version.conf` plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. On both supported targets, `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -270,8 +270,10 @@ Target rules:
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
   available to application code and exercises `hal_mutex_*`, `hal_delay_ms()`,
   and `hal_idle()` from FreeRTOS task context.
-- STM32G474: use the local `third_party/FreeRTOS-Kernel` dependency, or pass
-  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds
+- STM32G474: use the pinned `third_party/FreeRTOS-Kernel` dependency from
+  `freertos_core_version.conf`, or pass
+  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds run
+  `scripts/ensure_freertos_kernel.sh` before adding FreeRTOS source paths,
   compile the explicit Cortex-M4F kernel source list, include the target
   `FreeRTOSConfig.h`, use `heap_4.c`, and let the FreeRTOS port own
   SVC/PendSV/SysTick. In FreeRTOS mode, STM32 `hal_mutex_*` uses FreeRTOS

@@ -14,7 +14,7 @@
 # Options:
 #   -p, --project-config DIR   Path to dir with hal_project_config.h
 #   -D KEY=VALUE               Extra compile definitions (repeatable)
-#   --freertos                 Build with local FreeRTOS-Kernel support
+#   --freertos                 Define HAL_ENABLE_FREERTOS and ensure FreeRTOS-Kernel
 #   --freertos-kernel PATH     Path to FreeRTOS-Kernel checkout
 #   -o, --output DIR           Output directory (default: ./build_stm32)
 #   -t, --toolchain FILE       CMake toolchain file
@@ -88,22 +88,29 @@ if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
     CMAKE_EXTRA_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
 fi
 
-if [[ ${FREERTOS} -eq 1 ]]; then
-    CMAKE_EXTRA_ARGS+=("-DJH_STM32_FREERTOS=ON")
-    has_hal_freertos=0
-    for def in "${EXTRA_DEFS[@]}"; do
-        if [[ "${def}" == "HAL_ENABLE_FREERTOS" || "${def}" == HAL_ENABLE_FREERTOS=* ]]; then
-            has_hal_freertos=1
-            break
-        fi
-    done
-    if [[ ${has_hal_freertos} -eq 0 ]]; then
-        EXTRA_DEFS+=("HAL_ENABLE_FREERTOS")
+has_hal_freertos=0
+for def in "${EXTRA_DEFS[@]}"; do
+    if [[ "${def}" == "HAL_ENABLE_FREERTOS" || "${def}" == HAL_ENABLE_FREERTOS=* ]]; then
+        has_hal_freertos=1
+        break
     fi
+done
+
+if [[ ${FREERTOS} -eq 1 && ${has_hal_freertos} -eq 0 ]]; then
+    EXTRA_DEFS+=("HAL_ENABLE_FREERTOS")
+    has_hal_freertos=1
 fi
 
 if [[ -n "${FREERTOS_KERNEL_DIR}" ]]; then
     CMAKE_EXTRA_ARGS+=("-DJH_FREERTOS_KERNEL_DIR=${FREERTOS_KERNEL_DIR}")
+fi
+
+if [[ ${has_hal_freertos} -eq 1 ]]; then
+    ENSURE_ARGS=(--enable --repo-root "${REPO_ROOT}")
+    if [[ -n "${FREERTOS_KERNEL_DIR}" ]]; then
+        ENSURE_ARGS+=(--kernel-dir "${FREERTOS_KERNEL_DIR}")
+    fi
+    "${REPO_ROOT}/scripts/ensure_freertos_kernel.sh" "${ENSURE_ARGS[@]}"
 fi
 
 if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then

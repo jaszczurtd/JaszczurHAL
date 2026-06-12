@@ -79,7 +79,7 @@ stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker 
 scripts/
   build_arduino_lib.sh      # RP2040 static-library helper
   build_stm32_lib.sh        # STM32G474 static-library helper
-  ensure_freertos_kernel.sh # planned shared FreeRTOS dependency helper
+  ensure_freertos_kernel.sh # pinned FreeRTOS-Kernel fetch/verify helper
 runalltests.sh              # full local validation gate
 runmefirst.sh               # one-time local toolchain setup
 doc/
@@ -202,13 +202,14 @@ FreeRTOS headers directly when their target build provides them.
   `os=freertos`. The checked-in RP2040 build helpers now expose this as
   `./scripts/build_arduino_lib.sh --freertos` and
   `cmake -S examples -B build_examples_rp2040_freertos -DJH_EXAMPLE_TARGET=rp2040 -DJH_RP2040_FREERTOS=ON`.
-- STM32G474 uses a local `third_party/FreeRTOS-Kernel` integration. At this
+- STM32G474 uses a pinned upstream `FreeRTOS-Kernel` checkout managed by
+  `freertos_core_version.conf` and `scripts/ensure_freertos_kernel.sh`. At this
   stage, `HAL_ENABLE_FREERTOS` compiles an explicit Cortex-M4F kernel source
   list, uses the target `FreeRTOSConfig.h`, lets the FreeRTOS port own
   SVC/PendSV/SysTick, and selects FreeRTOS-aware `hal_mutex_*`,
   `hal_delay_ms()`, and `hal_idle()` paths. Use
   `./scripts/build_stm32_lib.sh --freertos` or the `stm32g474-freertos`
-  examples preset after installing the kernel checkout.
+  examples preset; both run the helper before CMake needs the kernel sources.
 
 Current FreeRTOS support is still staged: RP2040 and STM32G474 have
 FreeRTOS-aware core mutex/delay/idle primitives. Hard `hal_critical_section_*`
