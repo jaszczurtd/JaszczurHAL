@@ -246,6 +246,7 @@ a rewrite (PWM+DMA or SPI), not a library port.
    - `hal_timer` - hardware timer alarms / periodic IRQ (TIM6/TIM7 or similar).
 2. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
 3. On-silicon validation on Nucleo-G474RE for all register-level backends.
-4. FreeRTOS integration (enables true `app_task1` parallelism on STM32).
+4. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
+   `app_task0`/`app_task1` task entry mode.
 5. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN) on an STM32G474 board.
 6. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.

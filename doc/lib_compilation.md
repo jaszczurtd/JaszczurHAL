@@ -307,8 +307,14 @@ or set `JH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`.
 This stage provides native FreeRTOS API availability and kernel linkage.
 STM32 HAL runtime primitives such as `hal_mutex_*`, `hal_delay_ms()`, and
 `hal_idle()` are FreeRTOS-aware in task context, with fallback delays before the
-scheduler and from ISR/critical contexts. Module-level lazy singleton mutexes
-and broader task-safety claims remain tracked in
+scheduler and from ISR/critical contexts. If `HAL_PROVIDE_APP_ENTRY` is present,
+STM32 FreeRTOS builds call `app_start()`, create `app_task0()` and optional
+`app_task1()` FreeRTOS tasks, and then start the scheduler. Override the
+HAL-provided task configuration with `HAL_FREERTOS_TASK0_STACK`,
+`HAL_FREERTOS_TASK1_STACK`, `HAL_FREERTOS_TASK0_PRIORITY`, and
+`HAL_FREERTOS_TASK1_PRIORITY`; stack values are FreeRTOS stack words.
+Module-level lazy singleton mutexes and broader task-safety claims remain
+tracked in
 [`Thread-SafetyAudit.md`](Thread-SafetyAudit.md).
 
 ### Linking With an STM32G474 Project

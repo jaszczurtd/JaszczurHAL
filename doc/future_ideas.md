@@ -185,27 +185,22 @@ code below it.
 
 ---
 
-## 1. Implement FreeRTOS support as a second priority
+## 1. Continue FreeRTOS hardening as a second priority
 
-This is a priority item. FreeRTOS support must eventually be available on both
-currently supported embedded targets: RP2040 and STM32G474.
+This remains a priority item. The initial opt-in FreeRTOS path is available on
+both currently supported embedded targets: RP2040 and STM32G474. The remaining
+work is module hardening, hardware smoke testing, and callback/context
+documentation.
 
-Start with an opt-in FreeRTOS backend, for example `HAL_ENABLE_FREERTOS`, rather
-than changing the default runtime immediately. The first milestone should prove
-that the public application contract remains stable:
+The opt-in backend uses `HAL_ENABLE_FREERTOS` rather than changing the default
+runtime. The public application contract remains stable:
 
-- `app_start()` is called once before the scheduler starts.
+- `app_start()` is called once before `app_task0()` / `app_task1()` begin.
 - `app_task0()` and `app_task1()` remain the client-facing API.
-- When FreeRTOS is enabled, `app_task0()` and `app_task1()` are run from
-  separate FreeRTOS tasks.
-
-This should replace the current STM32 cooperative compatibility path in
-`hal_app_entry.cpp`:
-
-```c
-        app_task0();
-        app_task1();   /* cooperative - same loop, no preemption */
-```
+- On STM32G474 FreeRTOS entry builds, `app_task0()` and optional `app_task1()`
+  are run from separate FreeRTOS tasks.
+- On RP2040, arduino-pico owns scheduler startup and the optional secondary
+  path remains `loop1()` gated by `HAL_ENABLE_APP_TASK1`.
 
 On RP2040, Arduino-pico already provides a FreeRTOS SMP mode. When enabled, the
 core creates a task pinned to core 0 for `setup()` / `loop()` and, if
@@ -217,16 +212,17 @@ startup and core affinity.
 RP2040 still should not be treated as a trivial "enable it in the core" change.
 FreeRTOS mode changes synchronization and scheduling semantics: other FreeRTOS
 tasks can run under the SMP scheduler, Arduino libraries may not be safe under
-preemptive multithreading, and `hal_sync` must switch to FreeRTOS primitives.
+preemptive multithreading, and module-level state still needs a per-module
+task-safety pass.
 
 The client-facing API should be 1:1 across both targets. The FreeRTOS version
 should also be kept the same for both targets. Configuration should share a
 common base, with target-specific overrides only where the FreeRTOS port,
 interrupt priorities, tick source, heap/stack setup, or startup code require it.
 
-The implementation should include a FreeRTOS-safe synchronization backend,
-especially for `hal_sync`, using FreeRTOS primitives instead of the current
-RP2040 pico SDK mutexes or STM32 bare-metal critical-section assumptions.
+The implementation includes FreeRTOS-aware synchronization for `hal_sync`;
+future work should focus on eager/safe mutex creation, owner-task patterns
+where needed, and callback context documentation.
 
 Once both targets build and run with the opt-in backend, decide whether FreeRTOS
 should become the default runtime for embedded targets.

@@ -711,6 +711,50 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-13: FreeRTOS smoke example expanded with native worker tasks.
+  `examples/29_freertos_smoke` now keeps the Stage 7 portable
+  `app_task0()` / `app_task1()` entry coverage and also creates two explicit
+  worker tasks from `app_start()` with native `xTaskCreate()`. The workers share
+  a six-element table protected by a native FreeRTOS mutex
+  (`xSemaphoreCreateMutex`, `xSemaphoreTake`, `xSemaphoreGive`); each worker
+  reads neighboring state, updates its selected slot, copies a snapshot, and
+  prints live results after releasing the mutex. The example still exercises
+  `hal_mutex_t` for HAL task heartbeat state plus `hal_delay_ms()`,
+  `hal_idle()`, and debug output from task context. Validation:
+  `git diff --check`, `29_freertos_smoke_rp2040` built under
+  `JH_RP2040_FREERTOS=ON`, and STM32 FreeRTOS
+  `29_freertos_smoke_stm32g474` built. STM32 ELF links still emit the existing
+  newlib/nosys syscall warnings from the bare-metal toolchain.
+- 2026-06-13: Stage 7 FreeRTOS entry-point mode completed.
+  STM32G474 `HAL_PROVIDE_APP_ENTRY + HAL_ENABLE_FREERTOS` now calls
+  `app_start()`, creates the `app_task0()` FreeRTOS task, creates the optional
+  `app_task1()` FreeRTOS task only when `HAL_ENABLE_APP_TASK1` is defined, and
+  then starts the scheduler. The HAL-provided STM32 task defaults are 512
+  FreeRTOS stack words and `tskIDLE_PRIORITY + 1` for both tasks, with compile
+  definition overrides through `HAL_FREERTOS_TASK0_STACK`,
+  `HAL_FREERTOS_TASK1_STACK`, `HAL_FREERTOS_TASK0_PRIORITY`, and
+  `HAL_FREERTOS_TASK1_PRIORITY`. RP2040 keeps arduino-pico scheduler ownership:
+  generated/library entry paths represent the secondary path as `loop1()` only
+  with `HAL_ENABLE_APP_TASK1`. `examples/29_freertos_smoke` now validates the
+  portable `app_task0()` / `app_task1()` contract used by the HAL entry path.
+  Documentation was synced in
+  [JaszczurHAL_API.md](JaszczurHAL_API.md), [lib_compilation.md](lib_compilation.md),
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md),
+  [STM32G474_porting_progress.md](STM32G474_porting_progress.md),
+  [future_ideas.md](future_ideas.md), [README.md](../README.md),
+  [examples/README.md](../examples/README.md), [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt),
+  `hal_config.h`, and `hal_app.h`. Per the thread-safety audit, Stage 7 changes
+  entry scheduling only; timer callback context and lazy singleton mutex
+  hardening remain Stage 8 work. Validation: `git diff --check`, RP2040
+  generated-wrapper inspection confirmed `29_freertos_smoke` emits `loop1()`
+  while `01_blink` does not, `29_freertos_smoke_rp2040` built under
+  `JH_RP2040_FREERTOS=ON`, STM32 FreeRTOS `29_freertos_smoke_stm32g474` built,
+  STM32 non-FreeRTOS `01_blink_stm32g474` built, STM32 FreeRTOS smoke built
+  with explicit task stack/priority override definitions,
+  `./scripts/build_stm32_lib.sh --clean --freertos -o
+  /tmp/jh_stage7_build_stm32_freertos -j 4` built the static library, and
+  `./runalltests.sh -j4` passed all 7 gates. STM32 ELF links still emit the
+  existing newlib/nosys syscall warnings from the bare-metal toolchain.
 - 2026-06-12: Stage 6 FreeRTOS kernel acquisition completed.
   Added `freertos_core_version.conf` as the single source of truth for the
   STM32 FreeRTOS-Kernel dependency, pinned to the exact FreeRTOS-Kernel

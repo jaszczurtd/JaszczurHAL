@@ -78,13 +78,21 @@
      - RP2040 must use arduino-pico's FreeRTOS mode (__FREERTOS).
        Under that configuration, hal_mutex_*, hal_delay_ms(), and hal_idle()
        are FreeRTOS-aware. hal_critical_section_* remains a hard, per-core
-       interrupt mask for timing-sensitive code.
+       interrupt mask for timing-sensitive code. arduino-pico still owns
+       scheduler startup; HAL maps app_task1() to loop1() only when
+       HAL_ENABLE_APP_TASK1 is defined.
      - STM32G474 must have the local FreeRTOS-Kernel include path configured.
        STM32 CMake builds compile the Cortex-M4F port, heap_4, and kernel
        source list when FreeRTOS mode is enabled. hal_mutex_*,
        hal_delay_ms(), and hal_idle() are FreeRTOS-aware; hard
        hal_critical_section_* still masks interrupts for timing-sensitive
-       code.
+       code. With HAL_PROVIDE_APP_ENTRY, app_task0() and optional app_task1()
+       are created as FreeRTOS tasks before vTaskStartScheduler().
+   HAL-provided STM32 FreeRTOS entry defaults:
+     - HAL_FREERTOS_TASK0_STACK: 512 FreeRTOS stack words
+     - HAL_FREERTOS_TASK1_STACK: 512 FreeRTOS stack words
+     - HAL_FREERTOS_TASK0_PRIORITY: tskIDLE_PRIORITY + 1
+     - HAL_FREERTOS_TASK1_PRIORITY: tskIDLE_PRIORITY + 1
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 
 #ifdef HAL_ENABLE_FREERTOS
@@ -139,8 +147,13 @@
                                   target FreeRTOSConfig.h, Cortex-M4F port,
                                   heap_4, FreeRTOS-owned SVC/PendSV/SysTick
                                   vectors, and FreeRTOS-aware
-                                  mutex/delay/idle primitives. This flag does
-                                  not create a public hal_rtos_* API.
+                                  mutex/delay/idle primitives. With
+                                  HAL_PROVIDE_APP_ENTRY, STM32 creates
+                                  app_task0() and optional app_task1() tasks;
+                                  override stack/priority with
+                                  HAL_FREERTOS_TASK{0,1}_STACK and
+                                  HAL_FREERTOS_TASK{0,1}_PRIORITY. This flag
+                                  does not create a public hal_rtos_* API.
 
      Connectivity:
        HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable

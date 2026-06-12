@@ -135,13 +135,13 @@ Application entry flags are separate from optional HAL modules:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. On RP2040 this emits Arduino `loop1()`, which starts the core-1 path. Leave undefined for single-loop/single-core apps. |
+| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. On RP2040 this emits Arduino `loop1()`, which starts the core-1 path. On STM32G474 FreeRTOS entry builds this creates the second application task. Leave undefined for single-loop/single-task apps. |
 
 FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; the RP2040 static-library script and examples CMake provide opt-in FreeRTOS build modes. STM32G474 builds use a pinned `FreeRTOS-Kernel` checkout from `freertos_core_version.conf` plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. On both supported targets, `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; arduino-pico owns scheduler startup and optional `app_task1()` dispatch remains `loop1()` gated by `HAL_ENABLE_APP_TASK1`. STM32G474 builds use a pinned `FreeRTOS-Kernel` checkout from `freertos_core_version.conf` plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. With `HAL_PROVIDE_APP_ENTRY`, STM32 calls `app_start()`, creates the `app_task0()` task and optional `app_task1()` task, then starts the scheduler. On both supported targets, `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
@@ -268,8 +268,12 @@ Target rules:
   examples, use
   `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
-  available to application code and exercises `hal_mutex_*`, `hal_delay_ms()`,
-  and `hal_idle()` from FreeRTOS task context.
+  available to application code and exercises portable `app_task0()` /
+  `app_task1()` dispatch, native `xTaskCreate()` worker tasks, a
+  mutex-protected shared table, `hal_mutex_*`, `hal_delay_ms()`, and
+  `hal_idle()` from FreeRTOS task context. arduino-pico remains responsible for
+  scheduler ownership; HAL represents the secondary path as `loop1()` only when
+  `HAL_ENABLE_APP_TASK1` is defined.
 - STM32G474: use the pinned `third_party/FreeRTOS-Kernel` dependency from
   `freertos_core_version.conf`, or pass
   `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds run
@@ -278,9 +282,21 @@ Target rules:
   `FreeRTOSConfig.h`, use `heap_4.c`, and let the FreeRTOS port own
   SVC/PendSV/SysTick. In FreeRTOS mode, STM32 `hal_mutex_*` uses FreeRTOS
   mutexes, `hal_delay_ms()` uses `vTaskDelay()` from legal task context, and
-  `hal_idle()` yields to the scheduler from legal task context.
+  `hal_idle()` yields to the scheduler from legal task context. When
+  `HAL_PROVIDE_APP_ENTRY` is also defined, HAL calls `app_start()`, creates an
+  `app_task0()` FreeRTOS task, creates `app_task1()` only when
+  `HAL_ENABLE_APP_TASK1` is defined, and then calls `vTaskStartScheduler()`.
 - Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
   Host-side FreeRTOS validation is planned through the kernel POSIX port.
+
+HAL-provided STM32 FreeRTOS entry task defaults:
+
+| Macro | Default | Unit / meaning |
+|---|---|---|
+| `HAL_FREERTOS_TASK0_STACK` | `512` | FreeRTOS stack words for `app_task0()` |
+| `HAL_FREERTOS_TASK1_STACK` | `512` | FreeRTOS stack words for `app_task1()` |
+| `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task0()` |
+| `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task1()` |
 
 Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
 mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full

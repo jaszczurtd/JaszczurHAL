@@ -46,8 +46,9 @@ Application entry flags
 
   HAL_ENABLE_APP_TASK1
     Dispatch optional app_task1() from the HAL-provided entry path. On RP2040,
-    this emits Arduino loop1(), which starts the core-1 path. Leave it
-    undefined for single-loop/single-core applications.
+    this emits Arduino loop1(), which starts the core-1 path. On STM32G474
+    FreeRTOS entry builds, this creates the second application task. Leave it
+    undefined for single-loop/single-task applications.
 
 
 FreeRTOS integration flag
@@ -67,7 +68,9 @@ FreeRTOS integration flag
         Arduino backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
         hal_mutex_* uses a FreeRTOS mutex and hal_delay_ms()/hal_idle() yield
         to the scheduler from task context. hal_critical_section_* remains a
-        hard per-core interrupt mask for timing-sensitive code.
+        hard per-core interrupt mask for timing-sensitive code. arduino-pico
+        owns scheduler startup and HAL app_task1() dispatch is represented by
+        loop1() only when HAL_ENABLE_APP_TASK1 is defined.
 
       STM32G474:
         Uses the local third_party/FreeRTOS-Kernel checkout, or the path set
@@ -82,7 +85,15 @@ FreeRTOS integration flag
         hal_delay_ms() blocks with vTaskDelay() from legal task context, and
         hal_idle() yields to the scheduler from legal task context. Fallback
         delays remain available before the scheduler and from ISR/critical
-        contexts.
+        contexts. With HAL_PROVIDE_APP_ENTRY, HAL calls app_start(), creates
+        app_task0() and optional app_task1() FreeRTOS tasks, then starts the
+        scheduler.
+
+        HAL-provided STM32 entry task defaults can be overridden with:
+          HAL_FREERTOS_TASK0_STACK      default 512 FreeRTOS stack words
+          HAL_FREERTOS_TASK1_STACK      default 512 FreeRTOS stack words
+          HAL_FREERTOS_TASK0_PRIORITY   default tskIDLE_PRIORITY + 1
+          HAL_FREERTOS_TASK1_PRIORITY   default tskIDLE_PRIORITY + 1
 
     Full module task-safety is still staged. Lazy singleton mutex creation,
     timer callback context, and Arduino-origin wrappers follow the FreeRTOS
