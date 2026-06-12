@@ -9,9 +9,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
 
-set(JH_STM32_FREERTOS OFF CACHE BOOL
-    "Build the STM32G474 static library with local FreeRTOS-Kernel support")
-
 # ── HAL implementation sources (STM32G474 skeleton) ────────────────────────
 file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
 # SoC-specific drivers under impl/stm32g474/drivers/<soc>/
@@ -98,7 +95,13 @@ if(DEFINED HAL_PROJECT_CONFIG_DIR)
     target_include_directories(JaszczurHAL PUBLIC ${HAL_PROJECT_CONFIG_DIR})
 endif()
 
-set(_jh_stm32_freertos_enabled ${JH_STM32_FREERTOS})
+if(DEFINED JH_STM32_FREERTOS)
+    message(FATAL_ERROR
+        "JH_STM32_FREERTOS has been removed as a user-facing switch. "
+        "Use -DEXTRA_HAL_DEFINES=HAL_ENABLE_FREERTOS instead.")
+endif()
+
+set(_jh_stm32_freertos_enabled FALSE)
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_extra_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})
     if(_jh_extra_has_freertos)

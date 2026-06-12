@@ -33,7 +33,7 @@
       "binaryDir": "../build_examples_stm32g474_freertos",
       "cacheVariables": {
         "JH_EXAMPLE_TARGET": "stm32g474",
-        "JH_STM32_FREERTOS": "ON",
+        "EXTRA_HAL_DEFINES": "HAL_ENABLE_FREERTOS",
         "CMAKE_TOOLCHAIN_FILE": "../stm32_lib/toolchain_stm32g474.cmake"
       }
     }

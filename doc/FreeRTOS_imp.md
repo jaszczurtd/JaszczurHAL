@@ -711,6 +711,32 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-12: Stage 6 FreeRTOS kernel acquisition completed.
+  Added `freertos_core_version.conf` as the single source of truth for the
+  STM32 FreeRTOS-Kernel dependency, pinned to the exact FreeRTOS-Kernel
+  submodule commit used by arduino-pico 5.4.0 (`V11.1.0+` compatibility point).
+  Added `scripts/ensure_freertos_kernel.sh`, which is a no-op unless FreeRTOS
+  is requested or setup forces it, fetches/verifies the checkout, honors
+  `JH_FREERTOS_KERNEL_DIR`, checks the Cortex-M4F port and `heap_4` paths, and
+  gives explicit offline/mismatch diagnostics. `third_party/FreeRTOS-Kernel/`
+  is ignored. `runmefirst.sh`, `scripts/build_stm32_lib.sh`, and the STM32
+  examples CMake path run the helper before configuration needs FreeRTOS
+  sources. `JH_STM32_FREERTOS` was removed as the user-facing switch; STM32
+  FreeRTOS intent now flows through `EXTRA_HAL_DEFINES=HAL_ENABLE_FREERTOS`.
+  Per [Thread-SafetyAudit.md](Thread-SafetyAudit.md), Stage 6 changes
+  dependency acquisition only; lazy singleton mutex hardening remains Stage 8.
+  Validation: `bash -n scripts/ensure_freertos_kernel.sh`,
+  `bash -n scripts/build_stm32_lib.sh`, `bash -n runmefirst.sh`,
+  `git diff --check`, no-op helper run without FreeRTOS intent, normal STM32
+  configure/build without FreeRTOS, default helper fetch into ignored
+  `third_party/FreeRTOS-Kernel`, `git check-ignore -v
+  third_party/FreeRTOS-Kernel`, legacy `-DJH_STM32_FREERTOS=ON` configure
+  failure with the migration diagnostic, `JH_FREERTOS_KERNEL_DIR=/tmp/...`
+  external-checkout configure, `./scripts/build_stm32_lib.sh --clean
+  --freertos -o /tmp/jh_stage6_build_stm32_freertos -j 4`,
+  `29_freertos_smoke_stm32g474` build, and `./runalltests.sh -j4` passed all
+  7 gates. STM32 ELF links still emit the existing newlib/nosys syscall
+  warnings from the bare-metal toolchain.
 - 2026-06-12: Stage 5 STM32 HAL primitives under FreeRTOS completed.
   STM32G474 `hal_mutex_*` now selects a normal non-recursive FreeRTOS mutex
   under `HAL_ENABLE_FREERTOS`, rejects ISR lock/unlock use, and keeps the

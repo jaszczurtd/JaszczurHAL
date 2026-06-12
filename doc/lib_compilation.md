@@ -251,8 +251,7 @@ Optional cache variables:
 | `STM32_FLOAT_ABI` | `hard` | Float ABI |
 | `EXTRA_HAL_DEFINES` | - | Semicolon-separated extra HAL definitions |
 | `HAL_PROJECT_CONFIG_DIR` | - | Directory with `hal_project_config.h` |
-| `JH_STM32_FREERTOS` | `OFF` | Compile STM32 with local FreeRTOS-Kernel support and define `HAL_ENABLE_FREERTOS` |
-| `JH_FREERTOS_KERNEL_DIR` | `third_party/FreeRTOS-Kernel` | Path to the local FreeRTOS-Kernel checkout |
+| `JH_FREERTOS_KERNEL_DIR` | `third_party/FreeRTOS-Kernel` from `freertos_core_version.conf` | Path to the local FreeRTOS-Kernel checkout |
 
 Example with extra modules:
 
@@ -272,9 +271,10 @@ once their STM32G474 backend exists.
 
 ### STM32G474 FreeRTOS note
 
-`HAL_ENABLE_FREERTOS` is valid on STM32G474 only when a local
-`third_party/FreeRTOS-Kernel` dependency is configured and the include path
-provides both `<FreeRTOS.h>` and a target `FreeRTOSConfig.h`.
+`HAL_ENABLE_FREERTOS` is valid on STM32G474 only when the pinned
+`FreeRTOS-Kernel` dependency is available and the include path provides both
+`<FreeRTOS.h>` and a target `FreeRTOSConfig.h`. The repo/ref/default directory
+are recorded in `freertos_core_version.conf`.
 
 The STM32 CMake integration now compiles the explicit kernel source list
 (`tasks.c`, `queue.c`, `list.c`, `timers.c`, `event_groups.c`,
@@ -286,11 +286,23 @@ FreeRTOS port own SVC/PendSV/SysTick.
 ./scripts/build_stm32_lib.sh --clean --freertos
 ```
 
+The script runs `scripts/ensure_freertos_kernel.sh` before CMake configuration,
+so a fresh checkout can fetch `third_party/FreeRTOS-Kernel` automatically. CMake
+users opt in with the public HAL flag:
+
+```bash
+cmake -S stm32_lib -B build_stm32_freertos \
+  -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake \
+  -DEXTRA_HAL_DEFINES="HAL_ENABLE_FREERTOS"
+```
+
 If the kernel is not under `third_party/FreeRTOS-Kernel`, pass:
 
 ```bash
 ./scripts/build_stm32_lib.sh --freertos --freertos-kernel /path/to/FreeRTOS-Kernel
 ```
+
+or set `JH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`.
 
 This stage provides native FreeRTOS API availability and kernel linkage.
 STM32 HAL runtime primitives such as `hal_mutex_*`, `hal_delay_ms()`, and
@@ -349,7 +361,8 @@ scripts/
     Convenience wrapper around stm32_lib/.
 
   ensure_freertos_kernel.sh
-    Planned shared helper for fetching/verifying third_party/FreeRTOS-Kernel.
+    Shared helper for fetching/verifying the pinned third_party/FreeRTOS-Kernel
+    checkout from freertos_core_version.conf.
 
 examples/
   portable_blink/       # one app, RP2040 + STM32G474

@@ -10,7 +10,13 @@ set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS rp2040 stm32g474)
 set(JH_RP2040_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Default RP2040 Arduino FQBN")
 set(JH_RP2040_WIFI_FQBN "rp2040:rp2040:rpipicow" CACHE STRING "RP2040 WiFi-capable Arduino FQBN")
 set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build RP2040 examples with arduino-pico FreeRTOS SMP mode")
-set(JH_STM32_FREERTOS OFF CACHE BOOL "Build STM32G474 examples with local FreeRTOS-Kernel support")
+set(EXTRA_HAL_DEFINES "" CACHE STRING "Semicolon-separated extra HAL compile definitions")
+
+if(DEFINED JH_STM32_FREERTOS)
+    message(FATAL_ERROR
+        "JH_STM32_FREERTOS has been removed as a user-facing switch. "
+        "Use -DEXTRA_HAL_DEFINES=HAL_ENABLE_FREERTOS instead.")
+endif()
 
 if(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
     enable_language(C CXX ASM)
@@ -113,6 +119,7 @@ function(_jh_add_rp2040_example NAME)
     endif()
 
     set(_rp2040_defines ${ARG_DEFINES})
+    list(APPEND _rp2040_defines ${EXTRA_HAL_DEFINES})
     if(JH_RP2040_FREERTOS)
         list(APPEND _rp2040_defines HAL_ENABLE_FREERTOS)
     endif()
@@ -230,9 +237,7 @@ function(_jh_add_stm32g474_example NAME)
         "${G474}"
     )
     set(_stm32_defines ${ARG_DEFINES})
-    if(JH_STM32_FREERTOS)
-        list(APPEND _stm32_defines HAL_ENABLE_FREERTOS)
-    endif()
+    list(APPEND _stm32_defines ${EXTRA_HAL_DEFINES})
 
     target_compile_definitions("${_target}" PRIVATE
         HAL_TARGET_STM32G474=1
@@ -332,6 +337,14 @@ jh_example(25_display_oled TARGETS rp2040 stm32g474)
 jh_example(26_rtc_clock TARGETS rp2040 stm32g474)
 jh_example(27_rtc_ds3231 TARGETS rp2040 stm32g474)
 jh_example(28_pga2311 TARGETS rp2040 stm32g474)
-if(JH_RP2040_FREERTOS OR JH_STM32_FREERTOS)
+set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
+if(DEFINED EXTRA_HAL_DEFINES)
+    jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})
+    if(_jh_examples_has_freertos)
+        set(_jh_examples_freertos_enabled TRUE)
+    endif()
+endif()
+
+if(_jh_examples_freertos_enabled)
     jh_example(29_freertos_smoke TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_FREERTOS)
 endif()

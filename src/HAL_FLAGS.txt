@@ -71,11 +71,14 @@ FreeRTOS integration flag
 
       STM32G474:
         Uses the local third_party/FreeRTOS-Kernel checkout, or the path set
-        with JH_FREERTOS_KERNEL_DIR. STM32 CMake builds compile an explicit
-        kernel source list (tasks/queue/list/timers/event_groups/
-        stream_buffer, ARM_CM4F port.c, heap_4.c), add the target
-        FreeRTOSConfig.h include directory, and hand SVC/PendSV/SysTick vector
-        ownership to the FreeRTOS port. hal_mutex_* uses a FreeRTOS mutex,
+        with JH_FREERTOS_KERNEL_DIR. scripts/ensure_freertos_kernel.sh reads
+        freertos_core_version.conf and fetches/verifies the pinned upstream
+        kernel ref before STM32 FreeRTOS CMake configuration needs sources.
+        STM32 CMake builds compile an explicit kernel source list
+        (tasks/queue/list/timers/event_groups/stream_buffer, ARM_CM4F port.c,
+        heap_4.c), add the target FreeRTOSConfig.h include directory, and hand
+        SVC/PendSV/SysTick vector ownership to the FreeRTOS port. hal_mutex_*
+        uses a FreeRTOS mutex,
         hal_delay_ms() blocks with vTaskDelay() from legal task context, and
         hal_idle() yields to the scheduler from legal task context. Fallback
         delays remain available before the scheduler and from ISR/critical

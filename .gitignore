@@ -16,6 +16,9 @@ install_manifest.txt
 *.o
 *.a
 
+# Fetched third-party dependencies
+third_party/FreeRTOS-Kernel/
+
 # IDE / editor
 .vscode/
 # Keep root workspace automation tracked:
@@ -42,4 +45,3 @@ compile_commands.json
 .claude/
 AGENTS.md
 .agents
-

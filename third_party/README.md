@@ -8,6 +8,15 @@ STM32G474 FreeRTOS builds expect a local upstream FreeRTOS kernel checkout at:
 third_party/FreeRTOS-Kernel/
 ```
 
+The checkout is fetched or verified by:
+
+```bash
+./scripts/ensure_freertos_kernel.sh --enable
+```
+
+The pinned repo/ref live in `../freertos_core_version.conf`; the fetched
+directory is ignored by git and should not be committed.
+
 The CMake integration uses this exact kernel layout:
 
 ```text
@@ -20,6 +29,12 @@ Projects may keep the checkout elsewhere and pass:
 
 ```bash
 -DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel
+```
+
+or set:
+
+```bash
+JH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel
 ```
 
 The RP2040 Arduino backend does not use this directory; it relies on
