@@ -7,7 +7,7 @@ compiles all examples for a selected backend. Two backends are supported:
 
 | Backend | Toolchain | Method |
 |---------|-----------|--------|
-| **RP2040** | `arduino-cli` + `rp2040:rp2040` core | Auto-generates a single-core `.ino` wrapper, symlinks sources, invokes `arduino-cli compile` |
+| **RP2040** | `arduino-cli` + `rp2040:rp2040` core | Auto-generates a `.ino` wrapper with `setup()`/`loop()` and optional `loop1()`, symlinks sources, invokes `arduino-cli compile` |
 | **STM32G474** | `arm-none-eabi-gcc` | Builds a bare-metal ELF with linker script, startup files, and all HAL sources |
 
 ### Requirements
@@ -41,10 +41,14 @@ cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
 
 This uses the arduino-pico FQBN option `os=freertos`, defines
 `HAL_ENABLE_FREERTOS`, and compiles the `29_freertos_smoke` application with
-native `<FreeRTOS.h>` / `<task.h>` includes. The smoke app starts a second
-FreeRTOS task, shares state through `hal_mutex_t`, and uses `hal_delay_ms()` /
-`hal_idle()` from task context. The normal RP2040 preset remains a non-FreeRTOS
-build.
+native `<FreeRTOS.h>` / `<task.h>` includes. The smoke app enables
+`HAL_ENABLE_APP_TASK1`, so the generated `.ino` emits `loop1()` and
+arduino-pico owns the secondary FreeRTOS/core path. It also creates two native
+FreeRTOS worker tasks with `xTaskCreate()`; both workers read and update a
+shared table protected by a FreeRTOS mutex and print live snapshots. The app
+still shares HAL task heartbeat state through `hal_mutex_t` and uses
+`hal_delay_ms()` / `hal_idle()` from task context. The normal RP2040 preset
+remains a non-FreeRTOS build.
 
 ### Configure + build all examples for STM32G474
 
@@ -66,7 +70,10 @@ This requires a local `third_party/FreeRTOS-Kernel` checkout, or
 `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. If the default checkout is
 missing, CMake runs `scripts/ensure_freertos_kernel.sh` and fetches the pinned
 kernel ref before adding FreeRTOS sources. The smoke app uses native FreeRTOS
-tasks together with HAL mutex, delay, and idle primitives on STM32G474.
+headers, while the HAL-provided STM32 entry creates the `app_task0()` and
+`app_task1()` FreeRTOS tasks and starts the scheduler. From `app_start()`, the
+smoke app also creates two worker tasks with `xTaskCreate()` to exercise a
+mutex-protected shared table workload.
 
 ### Build a single example
 
@@ -125,8 +132,9 @@ backend decide how to enter them:
 
 | Backend | Entry implementation | `app_start()` | `app_task0()` | `app_task1()` |
 |---------|----------------------|---------------|---------------|---------------|
-| RP2040 examples (arduino-pico) | CMake-generated `.ino` | `setup()` | `loop()` (core 0) | Not called by default |
+| RP2040 examples (arduino-pico) | CMake-generated `.ino` | `setup()` | `loop()` (core 0) | `loop1()` only with `HAL_ENABLE_APP_TASK1` |
 | STM32G474 examples (bare-metal) | `HAL_PROVIDE_APP_ENTRY` from CMake | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
+| STM32G474 examples (FreeRTOS) | `HAL_PROVIDE_APP_ENTRY` + `HAL_ENABLE_FREERTOS` | Before scheduler | FreeRTOS task | FreeRTOS task only with `HAL_ENABLE_APP_TASK1` |
 | Mock/host apps | `HAL_PROVIDE_APP_ENTRY` when requested | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
 
 ### RP2040 `loop1()` caution
@@ -137,8 +145,9 @@ library-provided entry shim emits `loop1()` only when both
 `HAL_PROVIDE_APP_ENTRY` and `HAL_ENABLE_APP_TASK1` are defined.
 
 This keeps single-core sketches single-core by default. For RP2040 examples,
-prefer the generated `.ino` wrapper that calls only `app_start()` and
-`app_task0()`. Define `HAL_ENABLE_APP_TASK1` only when the application
+the generated `.ino` wrapper calls only `app_start()` and `app_task0()` unless
+the example's compile definitions contain `HAL_ENABLE_APP_TASK1`. Define
+`HAL_ENABLE_APP_TASK1` only when the application
 intentionally wants the `app_task1()` / `loop1()` core-1 path.
 
 ### Minimal application skeleton
@@ -236,4 +245,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 26 | rtc_clock | rp2040, stm32g474 | RTC, PCF8563 |
 | 27 | rtc_ds3231 | rp2040, stm32g474 | RTC, DS3231 |
 | 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |
-| 29 | freertos_smoke | rp2040 FreeRTOS, stm32g474 FreeRTOS | Native FreeRTOS task + HAL mutex/delay/idle smoke |
+| 29 | freertos_smoke | rp2040 FreeRTOS, stm32g474 FreeRTOS | Portable app_task0/app_task1 plus native worker tasks, mutex-protected table, delay/idle smoke |

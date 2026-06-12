@@ -207,13 +207,19 @@ FreeRTOS headers directly when their target build provides them.
   stage, `HAL_ENABLE_FREERTOS` compiles an explicit Cortex-M4F kernel source
   list, uses the target `FreeRTOSConfig.h`, lets the FreeRTOS port own
   SVC/PendSV/SysTick, and selects FreeRTOS-aware `hal_mutex_*`,
-  `hal_delay_ms()`, and `hal_idle()` paths. Use
+  `hal_delay_ms()`, and `hal_idle()` paths. With `HAL_PROVIDE_APP_ENTRY`, STM32
+  FreeRTOS builds run `app_task0()` and optional `app_task1()` as FreeRTOS
+  tasks; stack sizes and priorities can be overridden with
+  `HAL_FREERTOS_TASK{0,1}_STACK` and `HAL_FREERTOS_TASK{0,1}_PRIORITY`. Use
   `./scripts/build_stm32_lib.sh --freertos` or the `stm32g474-freertos`
   examples preset; both run the helper before CMake needs the kernel sources.
 
 Current FreeRTOS support is still staged: RP2040 and STM32G474 have
-FreeRTOS-aware core mutex/delay/idle primitives. Hard `hal_critical_section_*`
-still masks interrupts for timing-sensitive code; it is not a scheduler lock.
+FreeRTOS-aware core mutex/delay/idle primitives and portable app entry mapping.
+RP2040 still uses arduino-pico scheduler ownership (`loop()` / optional
+`loop1()`); STM32 starts the scheduler from the HAL-provided entry. Hard
+`hal_critical_section_*` still masks interrupts for timing-sensitive code; it is
+not a scheduler lock.
 Module-level task-safety, lazy singleton mutexes, and Arduino-origin wrappers
 are tracked separately. See
 [FreeRTOS_imp.md](doc/FreeRTOS_imp.md) and

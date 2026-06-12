@@ -47,14 +47,78 @@ void loop1(void) { app_task1(); }
 #endif
 
 /* ═══════════════════════════════════════════════════════════════════════════════
- * STM32G474 bare-metal backend
+ * STM32G474 backend
  *
- * No RTOS yet. With HAL_ENABLE_APP_TASK1, task1 runs cooperatively after task0.
- * TODO: Once FreeRTOS is integrated, app_task1() should be spawned as a
- *       separate FreeRTOS task with its own stack and priority.
+ * Bare-metal builds keep the original cooperative super-loop. FreeRTOS builds
+ * call app_start(), create task0 and optional task1, then start the scheduler.
  * ═══════════════════════════════════════════════════════════════════════════════
  */
 #elif HAL_TARGET_IS_STM32G474
+
+#if defined(HAL_ENABLE_FREERTOS)
+
+#include <FreeRTOS.h>
+#include <task.h>
+
+#ifndef HAL_FREERTOS_TASK0_STACK
+#define HAL_FREERTOS_TASK0_STACK 512u
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_STACK
+#define HAL_FREERTOS_TASK1_STACK 512u
+#endif
+
+#ifndef HAL_FREERTOS_TASK0_PRIORITY
+#define HAL_FREERTOS_TASK0_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_PRIORITY
+#define HAL_FREERTOS_TASK1_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+static void hal_freertos_app_task0(void *arg) {
+  (void)arg;
+
+  for (;;) {
+    app_task0();
+  }
+}
+
+#ifdef HAL_ENABLE_APP_TASK1
+static void hal_freertos_app_task1(void *arg) {
+  (void)arg;
+
+  for (;;) {
+    app_task1();
+  }
+}
+#endif
+
+int main(void) {
+  app_start();
+
+  BaseType_t created =
+      xTaskCreate(hal_freertos_app_task0, "jh_app0",
+                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
+                  (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, nullptr);
+  HAL_ASSERT(created == pdPASS, "hal_app_entry: xTaskCreate app_task0 failed");
+
+#ifdef HAL_ENABLE_APP_TASK1
+  created =
+      xTaskCreate(hal_freertos_app_task1, "jh_app1",
+                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK1_STACK, nullptr,
+                  (UBaseType_t)HAL_FREERTOS_TASK1_PRIORITY, nullptr);
+  HAL_ASSERT(created == pdPASS, "hal_app_entry: xTaskCreate app_task1 failed");
+#endif
+
+  vTaskStartScheduler();
+  HAL_ASSERT(false, "hal_app_entry: vTaskStartScheduler returned");
+
+  for (;;) {
+  }
+}
+
+#else
 
 int main(void) {
   app_start();
@@ -66,6 +130,8 @@ int main(void) {
 #endif
   }
 }
+
+#endif /* HAL_ENABLE_FREERTOS */
 
 /* ═══════════════════════════════════════════════════════════════════════════════
  * Mock / host backend

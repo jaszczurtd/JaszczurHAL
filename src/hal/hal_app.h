@@ -18,9 +18,10 @@
  *   @ref app_task1  - secondary loop. It is dispatched only when
  *                     @c HAL_ENABLE_APP_TASK1 is defined. On RP2040 this emits
  *                     Arduino @c loop1(), which starts the core-1 path.
- *                     On STM32/mock it runs cooperatively after task0 until
- *                     FreeRTOS support lands. If enabled but not implemented by
- *                     the client, a weak empty default is linked.
+ *                     On STM32 FreeRTOS builds it runs as a second FreeRTOS
+ *                     task. On STM32 non-FreeRTOS and mock builds it runs
+ *                     cooperatively after task0. If enabled but not implemented
+ *                     by the client, a weak empty default is linked.
  *
  * ── Backend mapping ──────────────────────────────────────────────────────────
  *
@@ -32,7 +33,15 @@
  *   STM32G474 (bare-metal):
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
  *       NOTE: task1 runs cooperatively in the same loop as task0.
- *             This is a TEMPORARY solution pending FreeRTOS integration.
+ *
+ *   STM32G474 (FreeRTOS):
+ *       main() -> app_start()
+ *              -> create app_task0 task
+ *              -> create app_task1 task [only with HAL_ENABLE_APP_TASK1]
+ *              -> vTaskStartScheduler()
+ *       Task stack depths and priorities can be overridden with:
+ *       HAL_FREERTOS_TASK0_STACK, HAL_FREERTOS_TASK1_STACK,
+ *       HAL_FREERTOS_TASK0_PRIORITY, HAL_FREERTOS_TASK1_PRIORITY.
  *
  *   Mock / host:
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
@@ -74,9 +83,9 @@ void app_task0(void);
  *
  * On RP2040: runs on core 1 (true hardware parallelism via loop1()) when
  *            @c HAL_ENABLE_APP_TASK1 is defined.
- * On STM32:  called cooperatively after app_task0() in the same super-loop when
- *            @c HAL_ENABLE_APP_TASK1 is defined (temporary; will become a
- *            FreeRTOS task).
+ * On STM32:  runs as a second FreeRTOS task when @c HAL_ENABLE_FREERTOS is
+ *            defined, otherwise called cooperatively after app_task0() in the
+ *            same super-loop.
  * On mock:   called after app_task0() in the same loop when enabled.
  *
  * Weak-linked - if enabled but not defined by the client, the default is empty.
