@@ -8,9 +8,9 @@
  * Mock builds use stdio printf/puts.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +26,8 @@ extern "C" {
 #define HAL_DEBUG_PREFIX_SIZE 16
 #endif
 
-/** @brief Maximum number of independent error sources tracked by rate limiter. */
+/** @brief Maximum number of independent error sources tracked by rate limiter.
+ */
 #ifndef HAL_DEBUG_RATE_LIMIT_SOURCES_MAX
 #define HAL_DEBUG_RATE_LIMIT_SOURCES_MAX 16
 #endif
@@ -59,9 +60,10 @@ extern "C" {
  * @brief Configuration for rate-limiting repeated noncritical debug errors.
  */
 typedef struct {
-	uint16_t full_logs_limit;   /**< Number of full error logs before suppression starts. */
-	uint32_t min_gap_ms;        /**< Minimum time gap between full logs. */
-	uint32_t summary_every_ms;  /**< Interval for suppressed-count summaries. */
+  uint16_t full_logs_limit;  /**< Number of full error logs before suppression
+                                starts. */
+  uint32_t min_gap_ms;       /**< Minimum time gap between full logs. */
+  uint32_t summary_every_ms; /**< Interval for suppressed-count summaries. */
 } hal_debug_rate_limit_t;
 
 /**
@@ -70,7 +72,8 @@ typedef struct {
  * Return true and fill @p out with a null-terminated label to enable prefixing
  * log lines. Return false to print logs without timestamp.
  */
-typedef bool (*hal_debug_timestamp_hook_t)(char *out, size_t out_size, void *user);
+typedef bool (*hal_debug_timestamp_hook_t)(char *out, size_t out_size,
+                                           void *user);
 
 /**
  * @brief Return default rate-limit configuration.
@@ -132,7 +135,8 @@ int hal_serial_read(void);
  * @brief Initialise the debug output subsystem.
  *
  * If never called explicitly, the first call to hal_deb() / hal_derr()
- * triggers lazy initialisation with @ref HAL_DEBUG_DEFAULT_BAUD.
+ * triggers atomically gated lazy initialisation with
+ * @ref HAL_DEBUG_DEFAULT_BAUD.
  *
  * @param baud Baud rate for the debug serial port.
  * @param cfg  Optional rate-limit configuration for noncritical repeated
@@ -146,7 +150,8 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg);
 
 /**
  * @brief Check whether the debug subsystem has been initialised.
- * @return true if hal_debug_init() has been called (explicitly or via lazy init).
+ * @return true if hal_debug_init() has been called (explicitly or via lazy
+ * init).
  */
 bool hal_deb_is_initialized(void);
 
@@ -169,7 +174,8 @@ bool hal_debug_is_muted(void);
 
 /**
  * @brief Set the prefix prepended to every hal_deb() / hal_derr() message.
- * @param prefix Null-terminated prefix string (max HAL_DEBUG_PREFIX_SIZE-1 chars).
+ * @param prefix Null-terminated prefix string (max HAL_DEBUG_PREFIX_SIZE-1
+ * chars).
  */
 void hal_deb_set_prefix(const char *prefix);
 
@@ -191,8 +197,8 @@ void hal_derr(const char *format, ...);
  * Uses the global rate-limit config from hal_debug_init(..., cfg).
  * Suppression and summaries are tracked independently per @p source.
  *
- * @param source Caller-defined short source tag (free-form, no predefined enum),
- *               e.g. "gps", "can", "i2c". nullptr / 0 becomes "global".
+ * @param source Caller-defined short source tag (free-form, no predefined
+ * enum), e.g. "gps", "can", "i2c". nullptr / 0 becomes "global".
  * @param format printf-compatible format string.
  */
 void hal_derr_limited(const char *source, const char *format, ...);
@@ -229,9 +235,9 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
  *
  * Safe from the very first iteration of the main loop, even when no
  * hal_debug_init() / hal_deb() / hal_derr() has been called yet: the
- * function performs the same lazy init as hal_deb() on the emit path
- * and uses only zero-initialised statics on the in-ISR / muted short
- * circuits.
+ * function performs the same atomically gated lazy init as hal_deb()
+ * on the emit path and uses only zero-initialised statics on the in-ISR / muted
+ * short circuits.
  */
 void hal_debug_loop(void);
 

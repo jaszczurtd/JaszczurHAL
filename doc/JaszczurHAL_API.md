@@ -300,9 +300,10 @@ HAL-provided STM32 FreeRTOS entry task defaults:
 
 Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
 mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
-interrupt mask for timing-sensitive code. Timer callback context, lazy
-singleton mutex creation, Arduino-origin wrappers, and per-module task-safety
-are still staged separately and tracked in
+interrupt mask for timing-sensitive code. Stage 8 adds atomic create-once
+fallbacks for singleton/per-bus mutexes and hardens the RP2040 I2C-slave
+callback path. Timer callback context, Arduino-origin wrapper internals, and
+remaining per-module exceptions are tracked in
 [FreeRTOS_imp.md](FreeRTOS_imp.md) and
 [Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 
@@ -401,6 +402,11 @@ section below.  The general pattern is:
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
 - **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
 - **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
+
+Singleton and per-bus mutexes use an internal atomic create-once fallback, so
+two FreeRTOS tasks or RP2040 cores cannot publish different locks for the same
+module. Module init/begin calls still remain the preferred place to create
+those locks before normal runtime sharing.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
 must be serialized by the caller or used from a single core.
@@ -1108,8 +1114,9 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
 **FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040 when
 `HAL_ENABLE_FREERTOS` and arduino-pico `__FREERTOS` are both defined, and on
 STM32G474 when `HAL_ENABLE_FREERTOS` pulls in the local kernel. `hal_mutex_*`
-remains task-context only; it is not an ISR API. Lazy singleton mutex creation
-inside individual modules is a separate module-hardening item.
+remains task-context only; it is not an ISR API. Singleton/bus module mutexes
+use an internal atomic create-once helper where a defensive lazy fallback is
+still needed.
 
 ### Macros (tools.h)
 
@@ -1230,7 +1237,9 @@ void     hal_mock_debug_isr_restore_default_ring(void);  // restore production r
 
 `hal_deb()` and `hal_derr()` use **lazy init** - if `hal_debug_init()` has not been called
 before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAULT_BAUD`
-(default 9600, overridable via `-D`). Calling `debugInit()` is no longer mandatory.
+(default 9600, overridable via `-D`). The lazy init path is atomically gated on
+RP2040/STM32G474 so two FreeRTOS tasks do not concurrently reset the debug
+state. Calling `debugInit()` is no longer mandatory.
 
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
@@ -1253,9 +1262,10 @@ mutexes around format buffers (`s_deb_mutex`, `s_derr_mutex`) only
 protected those buffers; they could not stop two unrelated callers
 from racing the actual `Serial.write()` calls.
 
-The TX mutex is created lazily on first use (or eagerly in
-`hal_debug_init()` when called explicitly), so callers that emit
-during very early bring-up still see a valid lock. It is strictly
+The TX mutex is created through the same atomic create-once helper used by
+other singleton module locks (or eagerly in `hal_debug_init()` when called
+explicitly), so callers that emit during very early bring-up still see a valid
+lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
 the other way around, so deadlock is impossible.
 
@@ -1929,7 +1939,7 @@ void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 #define HAL_I2C_CLOCK_FAST_PLUS_HZ  1000000UL   // Fast-mode Plus, 1 MHz
 #define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL   // High-speed mode, 3.4 MHz
 
-// Init bus, set clock, start Wire/Wire1 (mutex is lazy-initialized on use)
+// Init bus, set clock, start Wire/Wire1 (also creates the per-bus mutex)
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=Wire, 1=Wire1
 void    hal_i2c_set_clock(uint32_t clock_hz);
@@ -2004,9 +2014,10 @@ void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 ```
 
-**Init behavior:** The I2C mutex is created lazily on first lock/transfer call.
-`hal_i2c_init*()` configures SDA/SCL, clock and starts `Wire`/`Wire1`, and should
-still be called during setup before normal I2C traffic. Use
+**Init behavior:** `hal_i2c_init*()` creates the per-bus mutex, configures
+SDA/SCL, clock and starts `Wire`/`Wire1`; it should still be called during setup
+before normal I2C traffic. Runtime calls keep an atomic create-once fallback for
+defensive use before init. Use
 `hal_i2c_set_clock()` / `hal_i2c_set_clock_bus()` to retune an already
 configured bus while keeping the change inside the HAL bus mutex.
 
@@ -2151,7 +2162,7 @@ uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1` in slave mode (`Wire.begin(address)`).  `onReceive` / `onRequest` callbacks handle the register-map protocol.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
-**Thread safety:** Arduino backend: `reg_write*` / `reg_read*` are thread-safe and multicore-safe (internal per-bus mutex). `init` / `deinit` must be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
+**Thread safety:** Arduino backend: `reg_write*` / `reg_read*` are thread-safe and multicore-safe for normal task/core callers. The register map is protected by a short internal lock shared with the Wire `onReceive` / `onRequest` callbacks, so those callbacks do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
 ```c
@@ -3255,10 +3266,12 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 **impl/arduino:** Arduino-pico WiFi stack (`WiFi.h`).
 **impl/.mock:** state injection via mock helpers.
 **Thread safety:** Arduino backend is thread-safe and multicore-safe for public
-HAL calls. An internal lazily initialized `hal_mutex_t` serializes access to
-the underlying `WiFi` object. The mock backend is a simple state-injection test
-double and does not provide the same synchronization guarantee for concurrent
-test-thread access.
+HAL wrapper calls. An internal singleton `hal_mutex_t` serializes access to
+the underlying `WiFi` object and is created with an atomic create-once fallback.
+The Arduino-pico WiFi/LWIP internals are still treated as serialized
+third-party code rather than a fully HAL-native audited transport. The mock
+backend is a simple state-injection test double and does not provide the same
+synchronization guarantee for concurrent test-thread access.
 
 **Mock helpers:**
 ```c
@@ -3754,7 +3767,9 @@ bool hal_kv_commit(void);
 ```
 
 **Dependencies:** `hal_eeprom`, `hal_sync`, `hal_serial`.
-**Thread safety:** Thread-safe and multicore-safe. An internal mutex (lazy-initialized via `kv_ensure_mutex()`) protects all operations. `hal_kv_init()` must be called after `hal_eeprom_init()`.
+**Thread safety:** Thread-safe and multicore-safe. An internal singleton mutex
+created with the HAL atomic create-once helper protects all operations.
+`hal_kv_init()` must be called after `hal_eeprom_init()`.
 
 **Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
 value is unchanged, avoiding unnecessary flash wear.

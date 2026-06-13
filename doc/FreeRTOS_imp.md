@@ -687,8 +687,9 @@ resolved are listed under "Done" for traceability.
   Recommended fix, consistent with the "init = single-task" contract: create the
   mutex eagerly in the constructor / init path, before the object is shared
   across tasks - removes the race without locking the lazy path. Cheaper and
-  safer than double-checked locking. SmartTimers was closed in Stage 5; broader
-  singleton/bus mutex cleanup remains module-hardening work.
+  safer than double-checked locking. SmartTimers was closed in Stage 5; the
+  broader singleton/bus mutex cleanup was closed in Stage 8 with the internal
+  atomic create-once helper and targeted module hardening.
 
 - **Gate `hal_delay_ms()` on scheduler state.** In FreeRTOS mode use
   `vTaskDelay(pdMS_TO_TICKS(ms))` only when
@@ -711,6 +712,24 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-13: Stage 8 module audit and lazy singleton/per-bus hardening completed.
+  Added the internal atomic create-once helper
+  `src/hal/impl/shared/hal_mutex_once.h` and replaced audited check-then-create
+  singleton/per-bus mutex paths across Arduino, STM32G474, shared peripheral
+  drivers, storage, networking wrappers, display/GPS/external ADC, timers, and
+  utility modules. Debug serial lazy initialization now publishes initialization
+  atomically through the debug mutex gate, and RP2040 I2C slave register access
+  now uses a backend-local `critical_section_t` with atomic state initialization
+  so Wire callbacks do not take HAL mutexes. Public headers plus
+  [Thread-SafetyAudit.md](Thread-SafetyAudit.md),
+  [JaszczurHAL_API.md](JaszczurHAL_API.md), [README.md](../README.md), and
+  [`src/HAL_FLAGS.txt`](../src/HAL_FLAGS.txt) were synced with the Stage 8
+  thread-safety contract. Validation: `git diff --check`, point build
+  `cmake --build build_examples_rp2040 --target 13_i2c_slave_rp2040 --parallel 4`,
+  and `./runalltests.sh -j4` passed all 7 gates, including RP2040 and STM32G474
+  target/example builds. During validation, the RP2040 Arduino link caught
+  `__atomic_test_and_set` use in initial lazy-init guards; the final Stage 8
+  implementation avoids that symbol on RP2040.
 - 2026-06-13: STM32G474 newlib retarget Tier 1 completed.
   The STM32 firmware runtime now has an explicit retarget tier at
   `src/hal/impl/stm32g474/port/runtime/stm32g474_syscalls.c`, linked into

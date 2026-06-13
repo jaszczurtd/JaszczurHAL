@@ -1,5 +1,6 @@
 
 #include "multicoreWatchdog.h"
+#include "../hal/impl/shared/hal_mutex_once.h"
 #include "SmartTimers.h"
 #include <hal/hal.h>
 #ifdef HAL_ENABLE_SDLOGGER
@@ -35,7 +36,7 @@ NOINIT bool _core1;
 NOINIT bool _started_b;
 
 static SmartTimers watchdogTimer;
-static volatile hal_mutex_t watchdogTickMutex = NULL;
+static hal_mutex_t watchdogTickMutex = NULL;
 static volatile bool watchdogRuntimeReady = false;
 
 static unsigned int watchdogTime = 0;
@@ -47,7 +48,7 @@ void watchdogHandle(void);
 
 static int valuesToReturn[WATCHDOG_VALUES_AMOUNT];
 
-bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
+bool setupWatchdog(void (*function)(int *values, int size), unsigned int time) {
 
   watchdogTime = time;
   watchdogRuntimeReady = false;
@@ -63,7 +64,7 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
     valuesToReturn[2] = _started_b;
     valuesToReturn[3] = _core1;
 
-    if(function != NULL) {
+    if (function != NULL) {
       function(valuesToReturn, WATCHDOG_VALUES_AMOUNT);
     }
 
@@ -81,15 +82,10 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
   _started_b = false;
 
   watchdogTimer.begin(watchdogHandle, time / 10);
-  // Idempotent: create the tick lock only once. setupWatchdog is a boot-time
-  // call, so this never leaks in production; the guard keeps a re-setup from
-  // orphaning the existing mutex. watchdogTickMutex is zero-initialised
-  // (= NULL above), NOT in the NOINIT section used by the _core*/_started_*
-  // flags, so the NULL test is sound.
-  if (watchdogTickMutex == NULL) watchdogTickMutex = hal_mutex_create();
+  (void)jh_hal_mutex_create_once(&watchdogTickMutex);
 
-  deb("Start of Watchdog with time: %ds and refresh %ds", 
-    time / SECOND, (time / 10) / SECOND);
+  deb("Start of Watchdog with time: %ds and refresh %ds", time / SECOND,
+      (time / 10) / SECOND);
 
   hal_watchdog_enable(watchdogTime, false);
   watchdogStarted = true;
@@ -99,26 +95,24 @@ bool setupWatchdog(void(*function)(int *values, int size), unsigned int time) {
   return rebooted;
 }
 
-void triggerSystemReset(void) {
-  externalReset = true;
-}
+void triggerSystemReset(void) { externalReset = true; }
 
 void watchdogHandle(void) {
 
-  if(externalReset) {
+  if (externalReset) {
     deb("CAUTION: external reset has been scheduled!");
     return;
   }
 
   core0 = false;
   core1 = false;
-  
-  if(watchdogCore0_a != watchdogCore0_b) {
+
+  if (watchdogCore0_a != watchdogCore0_b) {
     watchdogCore0_b = watchdogCore0_a;
     core0 = true;
   }
 
-  if(watchdogCore1_a != watchdogCore1_b) {
+  if (watchdogCore1_a != watchdogCore1_b) {
     watchdogCore1_b = watchdogCore1_a;
     core1 = true;
   }
@@ -126,7 +120,7 @@ void watchdogHandle(void) {
   _core0 = core0;
   _core1 = core1;
 
-  if(core0 && core1) {
+  if (core0 && core1) {
     watchdog_feed();
   }
 
@@ -134,7 +128,7 @@ void watchdogHandle(void) {
 }
 
 void updateWatchdogCore0(void) {
-  if(!watchdogRuntimeReady) {
+  if (!watchdogRuntimeReady) {
     return;
   }
 
@@ -145,7 +139,7 @@ void updateWatchdogCore0(void) {
 }
 
 void updateWatchdogCore1(void) {
-  if(!watchdogRuntimeReady) {
+  if (!watchdogRuntimeReady) {
     return;
   }
 
@@ -165,12 +159,10 @@ void setStartedCore1(void) {
   _started_b = true;
 }
 
-bool isEnvironmentStarted(void) {
-  return started_a && started_b;
-}
+bool isEnvironmentStarted(void) { return started_a && started_b; }
 
 void watchdog_feed(void) {
-  if(watchdogStarted) {
+  if (watchdogStarted) {
     hal_watchdog_feed();
   }
 }
