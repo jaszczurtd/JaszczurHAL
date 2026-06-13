@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-13 (STM32 GPIO EXTI IRQ backend added)
+Last updated: 2026-06-13 (STM32 reset reason/fault path implemented)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -113,7 +113,18 @@ The following modules are real, register-level backends under
   EXTI0..4 / EXTI9_5 / EXTI15_10, and callback dispatch from IRQ context.
   `hal_gpio_set_irq_priority()` now sets the NVIC priority for all GPIO EXTI
   IRQ groups.
-- `hal_i2c` - I2C1 master (SCL=PB8, SDA=PB9, AF4, 100 kHz, AUTOEND).
+- `hal_i2c` - I2C master on bus 0 and bus 1 with full HAL API parity:
+  - bus 0 -> I2C1, bus 1 -> I2C2,
+  - `hal_i2c_init_bus(bus, sda_pin, scl_pin, clock_hz)` now uses caller pin
+    parameters (no ignored placeholders), validates SDA/SCL AF mapping for the
+    selected controller, configures GPIO AF/open-drain/pull-up, and rejects
+    invalid pin pairs with `HAL_ASSERT`,
+  - bus clock selection now honors requested HAL clock tiers via TIMINGR
+    presets (100 kHz / 400 kHz / 1 MHz at the current 16 MHz bring-up clock),
+  - register-level transfer path (`write`, `read`, `write_read`, `is_busy`) is
+    active for both buses when initialized,
+  - `hal_i2c_bus_clear_bus()` now performs real GPIO-level 9-clock recovery and
+    STOP generation using the provided SDA/SCL pins.
 - `hal_dac` - DAC1, 12-bit (ch0 -> PA4, ch1 -> PA5).
 - `hal_pcnt` - hardware pulse counter on TIM2 (external clock mode).
 - `hal_pwm` / optional `hal_pwm_freq` - register-level TIM PWM output on
@@ -155,6 +166,16 @@ The following modules are real, register-level backends under
 - `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
 - `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
   transport).
+- `hal_system` / fault diagnostics - full reset/fault path on STM32G474:
+  - reset cause classification from `RCC->CSR` (`IWDGRSTF`, `WWDGRSTF`,
+    `SFTRSTF`, `PINRSTF`, `BORRSTF`, `LPWRRSTF`, `OBLRSTF`) with flag clear
+    via `RMVF`,
+  - retained exception-frame handoff from `exception_info` (`.noinit`) into
+    `hal_get_last_fault()` (`pc/lr/psr`), with reset reason override to
+    `HARDFAULT`,
+  - stack guard support (`hal_stack_guard_init/check`) using a canary at the
+    linker-provided stack limit and retained `STACK_OVERFLOW` marker on
+    corruption.
 - `hal_sync` - spinlock mutex plus PRIMASK-backed critical sections on real
   Cortex-M builds; host sanity builds keep critical sections as no-ops.
 
@@ -249,10 +270,9 @@ later if WS2812 throughput or interrupt latency becomes a practical issue.
 3. Remainder (storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages
-1. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
-2. On-silicon validation on Nucleo-G474RE for all register-level backends,
+1. On-silicon validation on Nucleo-G474RE for all register-level backends,
    including TIM6 timer alarm jitter/latency checks.
-3. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
+2. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
    `app_task0`/`app_task1` task entry mode.
-4. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer) on an STM32G474 board.
-5. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.
+3. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer) on an STM32G474 board.
+4. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.

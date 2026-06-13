@@ -36,6 +36,25 @@ Next release.
 - `hal_gpio_set_irq_priority()` on STM32G474 now sets NVIC priorities for all
   GPIO EXTI IRQ groups (instead of being a no-op).
 
+### hal_system (stm32g474) - full reset reason/fault path
+
+- Replaced the STM32G474 fault-diagnostics stub with a real backend in
+  `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp`.
+- Added reset-cause classification from `RCC->CSR` flags (`IWDGRSTF`,
+  `WWDGRSTF`, `SFTRSTF`, `PINRSTF`, `BORRSTF`, `LPWRRSTF`, `OBLRSTF`) and
+  reset-flag clear via `RCC_CSR_RMVF` after latching.
+- Integrated retained crash handoff from
+  `src/hal/impl/stm32g474/port/exception_info.c` into
+  `hal_get_last_fault()` / `HAL_RESET_REASON_HARDFAULT`.
+- Implemented STM32 stack-guard support:
+  `hal_stack_guard_init()` now arms a canary at the linker-provided stack
+  limit; `hal_stack_guard_check()` stores a retained overflow marker and
+  triggers system reset so the next boot reports
+  `HAL_RESET_REASON_STACK_OVERFLOW`.
+- Added host-side STM32 regression coverage (`test_stm32_hal_system`) for
+  reset-reason mapping, brownout heuristic behavior, fault-frame precedence,
+  and stack-overflow marker precedence.
+
 ### Documentation
 
 - Updated GPIO API docs with STM32 EXTI line-routing semantics, line-sharing

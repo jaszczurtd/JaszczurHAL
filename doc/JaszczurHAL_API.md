@@ -962,8 +962,7 @@ silicon (POR and BOR share one flag) - `hal_last_boot_was_brownout()` is a
 heuristic that returns true when the silicon reported POR but the retained
 alive marker survived (suggesting V<sub>DD</sub> dipped below the BOR
 threshold without losing scratch).
-**impl/stm32g474:** No-op stub backend behind the same dispatch pattern as RP2040 - `src/hal/impl/stm32g474/hal_system.cpp` forwards to `stm32g474_fault_*` thin wrappers, and the stub implementation lives in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`. A first-class STM32G474 fault driver - using `RCC->CSR` for reset reason (including real `BORRSTF` brown-out), `SCB->{CFSR,HFSR,MMFAR,BFAR}` for richer
-Cortex-M4 HardFault info, and `TAMP->BKPxR` for retained storage - is planned and will land in those files without changing the public surface.
+**impl/stm32g474:** Implemented backend behind the same dispatch pattern as RP2040: `src/hal/impl/stm32g474/hal_system.cpp` forwards to `stm32g474_fault_*` wrappers, while the SoC logic lives in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`. Reset reason is classified from `RCC->CSR` flags (`IWDGRSTF`/`WWDGRSTF`, `SFTRSTF`, `PINRSTF`, `BORRSTF`, `LPWRRSTF`, `OBLRSTF`), with reset flags cleared via `RMVF` after latching. Captured fault state is taken from the retained Cortex-M4 exception record (`exception_info` `.noinit` handoff) and surfaced through `hal_get_last_fault()` as `{pc, lr, psr}` with reset reason `HARDFAULT`. `hal_stack_guard_*` is also active on STM32G474: it places a canary at the linker-provided stack limit, stores a retained `STACK_OVERFLOW` marker on corruption, and forces a system reset so the next boot reports `HAL_RESET_REASON_STACK_OVERFLOW`.
 **impl/.mock:** All state is injectable; see the mock helpers below. The
 mock `hal_fault_subsystem_init()` does NOT reset the staged reset-reason /
 fault-info so tests can pre-populate state and observe behaviour across an

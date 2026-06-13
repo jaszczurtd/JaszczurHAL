@@ -24,6 +24,9 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);
 _Min_Heap_Size  = 0x400;
 _Min_Stack_Size = 0x800;
 
+/* Stack-guard anchor used by stm32g474_fault.cpp. */
+JH_StackLimit = ORIGIN(RAM) + LENGTH(RAM) - _Min_Stack_Size;
+
 SECTIONS
 {
     /* Interrupt vector table must sit at the very start of flash. */
