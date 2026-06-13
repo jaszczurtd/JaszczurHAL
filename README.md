@@ -87,7 +87,6 @@ doc/
   JaszczurHAL_API.md        # detailed API/reference
   lib_compilation.md        # static-library build guide
   CHANGELOG.md              # project changelog
-  FreeRTOS_imp.md           # FreeRTOS implementation plan and progress
   Thread-SafetyAudit.md     # thread-safety audit for FreeRTOS work
   STM32G474_porting_progress.md # STM32G474 backend status
   future_ideas.md           # architecture roadmap and backlog
@@ -215,16 +214,18 @@ FreeRTOS headers directly when their target build provides them.
   `./scripts/build_stm32_lib.sh --freertos` or the `stm32g474-freertos`
   examples preset; both run the helper before CMake needs the kernel sources.
 
-Current FreeRTOS support is still staged: RP2040 and STM32G474 have
-FreeRTOS-aware core mutex/delay/idle primitives, portable app entry mapping, and
-Stage 8 module hardening for singleton/per-bus mutex creation. RP2040 still
-uses arduino-pico scheduler ownership (`loop()` / optional `loop1()`); STM32
-starts the scheduler from the HAL-provided entry. Hard
+Current FreeRTOS support covers RP2040 and STM32G474 FreeRTOS-aware core
+mutex/delay/idle primitives, portable app entry mapping, singleton/per-bus mutex
+creation hardening, and the RP2040 I2C-slave callback path. RP2040 still uses
+arduino-pico scheduler ownership (`loop()` / optional `loop1()`); STM32 starts
+the scheduler from the HAL-provided entry. Hard
 `hal_critical_section_*` still masks interrupts for timing-sensitive code; it is
 not a scheduler lock. Timer callback context, Arduino-origin wrapper internals,
-and documented single-owner modules remain tracked separately. See
-[FreeRTOS_imp.md](doc/FreeRTOS_imp.md) and
-[Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md) for the staged contract.
+and documented single-owner modules are summarized in
+[Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md).
+The full `runalltests.sh` gate also enables a host-side FreeRTOS POSIX scheduler
+test so `HAL_ENABLE_FREERTOS` mutex/delay and lazy create-once behavior are
+covered in `ctest` without hardware.
 
 ## Target selection (multiplatform)
 
@@ -396,7 +397,6 @@ Primary docs:
 - Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: `src/HAL_FLAGS.txt`
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
-- FreeRTOS implementation plan: [FreeRTOS_imp.md](doc/FreeRTOS_imp.md)
 - FreeRTOS thread-safety audit: [Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
 - Architecture roadmap: [future_ideas.md](doc/future_ideas.md)

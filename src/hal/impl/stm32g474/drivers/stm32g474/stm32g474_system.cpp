@@ -11,6 +11,11 @@
 
 #include <string.h>
 
+#if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
+
 #ifdef JH_STM32G474_HW
 /* Real hardware time base lives in port/system_stm32g474.c (SysTick). */
 #include "../../port/stm32g474_regs.h"
@@ -54,11 +59,24 @@ bool g_watchdog_caused_reboot = false;
 uint32_t g_free_heap = 0u;
 float g_chip_temp_c = 0.0f;
 
+#if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
+static bool host_freertos_scheduler_has_ticks(void) {
+  return xTaskGetSchedulerState() != taskSCHEDULER_NOT_STARTED;
+}
+
+static uint32_t host_freertos_millis(void) {
+  return (uint32_t)xTaskGetTickCount();
+}
+#endif
+
 } // namespace
 
 uint32_t stm32g474_system_millis(void) {
 #ifdef JH_STM32G474_HW
   return stm32g474_systick_millis();
+#elif defined(HAL_ENABLE_FREERTOS)
+  return host_freertos_scheduler_has_ticks() ? host_freertos_millis()
+                                             : g_millis;
 #else
   return g_millis;
 #endif
@@ -67,6 +85,9 @@ uint32_t stm32g474_system_millis(void) {
 uint32_t stm32g474_system_micros(void) {
 #ifdef JH_STM32G474_HW
   return stm32g474_systick_micros();
+#elif defined(HAL_ENABLE_FREERTOS)
+  return host_freertos_scheduler_has_ticks() ? (host_freertos_millis() * 1000u)
+                                             : g_micros;
 #else
   return g_micros;
 #endif
@@ -75,6 +96,10 @@ uint32_t stm32g474_system_micros(void) {
 uint64_t stm32g474_system_micros64(void) {
 #ifdef JH_STM32G474_HW
   return (uint64_t)stm32g474_systick_micros();
+#elif defined(HAL_ENABLE_FREERTOS)
+  return host_freertos_scheduler_has_ticks()
+             ? ((uint64_t)host_freertos_millis() * 1000u)
+             : (uint64_t)g_micros;
 #else
   return (uint64_t)g_micros;
 #endif

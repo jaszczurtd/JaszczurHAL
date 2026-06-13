@@ -54,6 +54,13 @@ mutexes. The RP2040 Arduino `hal_i2c_slave` register map no longer uses
 `hal_mutex_*` inside Wire callbacks; it uses a short backend-local register-map
 lock shared by callbacks and task/core accessors.
 
+Host FreeRTOS CI update (2026-06-13): `JH_ENABLE_FREERTOS_POSIX_TESTS` adds a
+host-side FreeRTOS GCC/Posix scheduler test that runs under `ctest` and covers
+the STM32G474 host-stub `HAL_ENABLE_FREERTOS` mutex/delay path,
+`jh_hal_mutex_create_once()`, and `SmartTimers` from multiple tasks. It is a
+CI regression layer for the task-safety contract; hardware timing smoke remains
+separate.
+
 ## Lazy Mutex Inventory
 
 These locations were reviewed before a broad "FreeRTOS task-safe" claim:

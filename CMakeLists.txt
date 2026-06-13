@@ -28,6 +28,10 @@ include(CTest)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+option(JH_ENABLE_FREERTOS_POSIX_TESTS
+    "Build host FreeRTOS POSIX scheduler regression tests"
+    OFF)
+
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 
@@ -120,6 +124,81 @@ find_package(Threads REQUIRED)
 target_link_libraries(hal_mock PUBLIC Threads::Threads)
 
 target_compile_options(hal_mock PRIVATE -Wall -Wextra)
+
+# ── Host FreeRTOS POSIX test library ──────────────────────────────────────────
+if(JH_ENABLE_FREERTOS_POSIX_TESTS)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/stm32_lib/freertos_stm32g474.cmake)
+    jh_ensure_freertos_kernel()
+
+    set(JH_FREERTOS_POSIX_CONFIG_DIR
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/freertos_posix)
+    set(JH_FREERTOS_POSIX_PORT_DIR
+        ${JH_FREERTOS_KERNEL_DIR}/portable/ThirdParty/GCC/Posix)
+
+    set(FREERTOS_POSIX_KERNEL_SOURCES
+        ${JH_FREERTOS_KERNEL_DIR}/tasks.c
+        ${JH_FREERTOS_KERNEL_DIR}/queue.c
+        ${JH_FREERTOS_KERNEL_DIR}/list.c
+        ${JH_FREERTOS_KERNEL_DIR}/timers.c
+        ${JH_FREERTOS_KERNEL_DIR}/event_groups.c
+        ${JH_FREERTOS_KERNEL_DIR}/stream_buffer.c
+        ${JH_FREERTOS_KERNEL_DIR}/portable/MemMang/heap_4.c
+        ${JH_FREERTOS_POSIX_PORT_DIR}/port.c
+        ${JH_FREERTOS_POSIX_PORT_DIR}/utils/wait_for_event.c
+    )
+
+    set(FREERTOS_POSIX_REQUIRED_PATHS
+        ${JH_FREERTOS_KERNEL_DIR}/include/FreeRTOS.h
+        ${JH_FREERTOS_KERNEL_DIR}/include/task.h
+        ${JH_FREERTOS_KERNEL_DIR}/include/semphr.h
+        ${JH_FREERTOS_POSIX_PORT_DIR}/portmacro.h
+        ${JH_FREERTOS_POSIX_CONFIG_DIR}/FreeRTOSConfig.h
+        ${FREERTOS_POSIX_KERNEL_SOURCES}
+    )
+
+    foreach(_path IN LISTS FREERTOS_POSIX_REQUIRED_PATHS)
+        if(NOT EXISTS "${_path}")
+            message(FATAL_ERROR
+                "JH_ENABLE_FREERTOS_POSIX_TESTS requires a local FreeRTOS-Kernel "
+                "with the GCC/Posix port. Missing: ${_path}")
+        endif()
+    endforeach()
+
+    add_library(freertos_posix_kernel STATIC
+        ${FREERTOS_POSIX_KERNEL_SOURCES}
+    )
+    target_include_directories(freertos_posix_kernel PUBLIC
+        ${JH_FREERTOS_POSIX_CONFIG_DIR}
+        ${JH_FREERTOS_KERNEL_DIR}/include
+        ${JH_FREERTOS_POSIX_PORT_DIR}
+    )
+    target_link_libraries(freertos_posix_kernel PUBLIC Threads::Threads)
+    set_source_files_properties(${FREERTOS_POSIX_KERNEL_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-w")
+
+    add_library(hal_freertos_posix STATIC
+        ${SRC}/hal/impl/stm32g474/hal_sync.cpp
+        ${SRC}/hal/impl/stm32g474/hal_system.cpp
+        ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
+        ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
+        ${SRC}/hal/hal_config.cpp
+        ${SRC}/utils/SmartTimers.cpp
+        ${SRC}/utils/unity.c
+    )
+    target_include_directories(hal_freertos_posix PUBLIC
+        ${SRC}
+        ${SRC}/arduino_host_stubs
+    )
+    target_compile_definitions(hal_freertos_posix PUBLIC
+        HAL_TARGET_STM32G474=1
+        JH_TARGET_STM32G474=1
+        HAL_ENABLE_FREERTOS=1
+        HAL_ENABLE_UNITY
+        UNITY_INCLUDE_CONFIG_H
+    )
+    target_compile_options(hal_freertos_posix PRIVATE -Wall -Wextra)
+    target_link_libraries(hal_freertos_posix PUBLIC freertos_posix_kernel)
+endif()
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 add_subdirectory(tests)

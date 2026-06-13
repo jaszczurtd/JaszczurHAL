@@ -286,8 +286,10 @@ Target rules:
   `HAL_PROVIDE_APP_ENTRY` is also defined, HAL calls `app_start()`, creates an
   `app_task0()` FreeRTOS task, creates `app_task1()` only when
   `HAL_ENABLE_APP_TASK1` is defined, and then calls `vTaskStartScheduler()`.
-- Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the mock backend yet.
-  Host-side FreeRTOS validation is planned through the kernel POSIX port.
+- Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the normal mock backend.
+  CI uses the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` host build to compile the
+  FreeRTOS kernel GCC/Posix port, run a real scheduler as pthreads, and exercise
+  the STM32G474 host-stub `HAL_ENABLE_FREERTOS` paths in `ctest`.
 
 HAL-provided STM32 FreeRTOS entry task defaults:
 
@@ -300,11 +302,10 @@ HAL-provided STM32 FreeRTOS entry task defaults:
 
 Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
 mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
-interrupt mask for timing-sensitive code. Stage 8 adds atomic create-once
-fallbacks for singleton/per-bus mutexes and hardens the RP2040 I2C-slave
-callback path. Timer callback context, Arduino-origin wrapper internals, and
-remaining per-module exceptions are tracked in
-[FreeRTOS_imp.md](FreeRTOS_imp.md) and
+interrupt mask for timing-sensitive code. The implementation includes atomic
+create-once fallbacks for singleton/per-bus mutexes and hardens the RP2040
+I2C-slave callback path. Timer callback context, Arduino-origin wrapper
+internals, and remaining per-module exceptions are summarized in
 [Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 
 Arduino CLI does not add the sketch directory to the include path for library

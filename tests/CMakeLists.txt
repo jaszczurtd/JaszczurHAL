@@ -5,6 +5,15 @@ function(add_hal_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+function(add_hal_freertos_posix_test NAME)
+    add_executable(${NAME} ${NAME}.cpp)
+    target_link_libraries(${NAME} PRIVATE hal_freertos_posix)
+    add_test(NAME ${NAME} COMMAND ${NAME})
+    set_tests_properties(${NAME} PROPERTIES
+        LABELS "freertos_posix;no_memcheck"
+        TIMEOUT 20)
+endfunction()
+
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
@@ -134,6 +143,10 @@ add_hal_test(test_hal_crypto)
 add_hal_test(test_SmartTimers)
 add_hal_test(test_hal_soft_timer)
 add_hal_test(test_pidController)
+
+if(TARGET hal_freertos_posix)
+    add_hal_freertos_posix_test(test_freertos_posix_runtime)
+endif()
 
 # test_multicoreWatchdog: compiles multicoreWatchdog.cpp directly to validate
 # watchdog behavior on host.
