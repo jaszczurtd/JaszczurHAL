@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-05 (shared MCP2515 CAN driver added)
+Last updated: 2026-06-13 (STM32 TIM6 hal_timer backend added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -114,6 +114,15 @@ The following modules are real, register-level backends under
 - `hal_i2c` - I2C1 master (SCL=PB8, SDA=PB9, AF4, 100 kHz, AUTOEND).
 - `hal_dac` - DAC1, 12-bit (ch0 -> PA4, ch1 -> PA5).
 - `hal_pcnt` - hardware pulse counter on TIM2 (external clock mode).
+- `hal_pwm` / optional `hal_pwm_freq` - register-level TIM PWM output on
+  mapped TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels, including PA5/LD2 simple
+  PWM and frequency-controlled channels. GPIO alternate-function output for
+  `hal_pwm_freq` is deferred until the first duty write.
+- `hal_timer` - TIM6-backed 1 MHz alarm scheduler with the same low-level
+  alarm/cancel/reschedule contract used by the RP2040 backend. Long delays are
+  chunked across 16-bit TIM6 periods, callback return values can reschedule the
+  same alarm, logical pools are enforced in software, and the shared
+  `hal_timer_ext.cpp` managed-timer layer provides start/stop/pause/resume.
 - `hal_adc` - **ADC1**, single-ended, polled, one regular conversion per
   `hal_adc_read()`. The first read lazily brings ADC1 up (ADC12 clock,
   internal regulator + startup wait, single-ended calibration, enable) and
@@ -146,10 +155,6 @@ The following modules are real, register-level backends under
   transport).
 - `hal_sync` - spinlock mutex plus PRIMASK-backed critical sections on real
   Cortex-M builds; host sanity builds keep critical sections as no-ops.
-
-### Still placeholders (compile but use RAM-only state)
-- `hal_pwm` - stores values in array, no timer output.
-- `hal_timer` - slot management only, no hardware timer/IRQ.
 
 ## Driver pool analysis - portability to STM32G474
 
@@ -201,7 +206,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules with Arduino + mock impl but no `impl/stm32g474`:
 `eeprom, i2c_slave, littlefs, mqtt,
-ota, pwm_freq, rgb_led, swserial, udp, wifi, wireguard`.
+ota, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -223,8 +228,9 @@ used identically by STM32G474 and RP2040. MAX6675 is handled separately by the
 shared bit-bang HAL GPIO driver. The remaining display work is a bulk-write/DMA
 evaluation if TFT throughput needs it.
 
-**🟡 `hal_rgb_led`** (NeoPixel/WS2812) - 800 kHz critical timing; on STM32 this is
-a rewrite (PWM+DMA or SPI), not a library port.
+`hal_rgb_led` has completed the shared-NeoPixel-core path on STM32G474 using a
+cycle-timed GPIO transport. A PWM+DMA or SPI transport can still be evaluated
+later if WS2812 throughput or interrupt latency becomes a practical issue.
 
 **🔴 Not a "driver port" - different effort entirely:**
 - `hal_wifi / hal_udp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
@@ -233,20 +239,18 @@ a rewrite (PWM+DMA or SPI), not a library port.
   Effectively N/A for a bare G474.
 - `hal_littlefs / hal_eeprom / hal_ota` - STM32 flash/storage specific, not
   vendor-driver ports.
-- `hal_swserial / hal_i2c_slave / hal_pwm_freq` - STM32 peripheral work.
+- `hal_swserial / hal_i2c_slave` - STM32 peripheral work.
 
 ### Recommended order
 1. **I2C drivers** - Via the shared/portable HAL pattern: rtc (PCF8563/DS3231) is now **DONE**.
 2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding for TFT throughput.
-3. Remainder (rgb_led, storage, connectivity) - separate decisions, not pure ports.
+3. Remainder (storage, connectivity) - separate decisions, not pure ports.
 
 ## Remaining work for the next stages
-1. Replace the remaining `impl/stm32g474` placeholders with real STM32 register code:
-   - `hal_pwm` - needs TIM output compare / PWM mode on a general-purpose timer.
-   - `hal_timer` - hardware timer alarms / periodic IRQ (TIM6/TIM7 or similar).
-2. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
-3. On-silicon validation on Nucleo-G474RE for all register-level backends.
-4. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
+1. `hal_system` full implementation (watchdog, MCU UID via OTP, reboot reason via RCC->CSR).
+2. On-silicon validation on Nucleo-G474RE for all register-level backends,
+   including TIM6 timer alarm jitter/latency checks.
+3. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
    `app_task0`/`app_task1` task entry mode.
-5. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN) on an STM32G474 board.
-6. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.
+4. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer) on an STM32G474 board.
+5. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.

@@ -14,6 +14,32 @@ function(add_hal_freertos_posix_test NAME)
         TIMEOUT 20)
 endfunction()
 
+function(add_stm32_host_test NAME)
+    set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    add_executable(${NAME}
+        ${NAME}.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/hal_timer.cpp
+        ${SRC_DIR}/hal/hal_timer_ext.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/hal_sync.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/hal_system.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
+        ${SRC_DIR}/hal/hal_config.cpp
+        ${SRC_DIR}/utils/unity.c
+    )
+    target_include_directories(${NAME} PRIVATE
+        ${SRC_DIR}
+        ${SRC_DIR}/arduino_host_stubs
+    )
+    target_compile_definitions(${NAME} PRIVATE
+        HAL_TARGET_STM32G474=1
+        UNITY_INCLUDE_CONFIG_H
+        HAL_ENABLE_UNITY
+    )
+    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    add_test(NAME ${NAME} COMMAND ${NAME})
+endfunction()
+
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
@@ -97,6 +123,7 @@ add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)
+add_stm32_host_test(test_stm32_hal_timer)
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
 add_hal_test(test_hal_dac)
