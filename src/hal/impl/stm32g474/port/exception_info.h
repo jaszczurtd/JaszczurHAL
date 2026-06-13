@@ -29,22 +29,22 @@ extern "C" {
 
 /** Which fault handler captured the record. */
 typedef enum {
-    JH_FAULT_NONE = 0,
-    JH_FAULT_HARD = 1,
-    JH_FAULT_MEMMANAGE = 2,
-    JH_FAULT_BUS = 3,
-    JH_FAULT_USAGE = 4,
+  JH_FAULT_NONE = 0,
+  JH_FAULT_HARD = 1,
+  JH_FAULT_MEMMANAGE = 2,
+  JH_FAULT_BUS = 3,
+  JH_FAULT_USAGE = 4,
 } jh_fault_kind_t;
 
 /** Captured fault record (kept in .noinit, survives reset). */
 typedef struct {
-    uint32_t magic; /**< validity signature */
-    uint32_t kind;  /**< jh_fault_kind_t     */
-    /* Stacked exception frame. */
-    uint32_t r0, r1, r2, r3, r12, lr, pc, xpsr;
-    /* SCB fault status. */
-    uint32_t cfsr, hfsr, mmfar, bfar, shcsr;
-    uint32_t exc_return; /**< EXC_RETURN (LR on entry): stack/FP context info */
+  uint32_t magic; /**< validity signature */
+  uint32_t kind;  /**< jh_fault_kind_t     */
+  /* Stacked exception frame. */
+  uint32_t r0, r1, r2, r3, r12, lr, pc, xpsr;
+  /* SCB fault status. */
+  uint32_t cfsr, hfsr, mmfar, bfar, shcsr;
+  uint32_t exc_return; /**< EXC_RETURN (LR on entry): stack/FP context info */
 } jh_exception_info_t;
 
 /**
@@ -58,6 +58,16 @@ bool exception_info_report_last(void);
 /** @brief Read-only pointer to the retained record (NULL semantics via .kind).
  */
 const jh_exception_info_t *exception_info_last(void);
+
+/**
+ * @brief Consume the retained fault record without printing.
+ *
+ * Copies the retained record into @p out (when non-NULL), then clears the
+ * retained marker so the same record is not reported again.
+ *
+ * @return true when a valid retained record was consumed.
+ */
+bool exception_info_take_last(jh_exception_info_t *out);
 
 #ifdef __cplusplus
 }

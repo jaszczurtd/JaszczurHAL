@@ -28,7 +28,13 @@ typedef struct {
   uint32_t clock_hz;
   uint32_t transaction_count;
   uint32_t bus_clear_count;
+  uint8_t sda_pin;
+  uint8_t scl_pin;
   hal_mutex_t mutex;
+#ifdef JH_STM32G474_HW
+  uint32_t hw_base;
+  uint32_t hw_rcc_mask;
+#endif
 } i2c_bus_state_t;
 
 static i2c_bus_state_t s_i2c[2] = {};
@@ -44,167 +50,370 @@ static void i2c_ensure_mutex(uint8_t bus) {
   (void)jh_hal_mutex_create_once(&st->mutex);
 }
 
-/* ── Real I2C1 backend (bus 0 only): SCL=PB8, SDA=PB9, AF4, 100 kHz ─────────
- */
 #ifdef JH_STM32G474_HW
 #define I2C_TIMEOUT 200000u
 
-static void gpiob_i2c_pin(uint32_t pin) {
-  GPIO_MODER(1) =
-      (GPIO_MODER(1) & ~(0x3u << (pin * 2u))) | (GPIO_MODE_AF << (pin * 2u));
-  GPIO_OTYPER(1) |= (1u << pin);           /* open-drain */
-  GPIO_OSPEEDR(1) |= (0x3u << (pin * 2u)); /* high speed */
-  GPIO_PUPDR(1) =
-      (GPIO_PUPDR(1) & ~(0x3u << (pin * 2u))) | (GPIO_PUPD_UP << (pin * 2u));
-  const uint32_t p = pin - 8u; /* AFRH covers 8..15 */
-  GPIO_AFRH(1) =
-      (GPIO_AFRH(1) & ~(0xFu << (p * 4u))) | (4u << (p * 4u)); /* AF4 */
+/* Port-indexed pin id helper: pin = port*16 + pin_number. */
+#define JH_STM32_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
+
+enum {
+  I2C_CTRL_1 = 1u,
+  I2C_CTRL_2 = 2u,
+};
+
+typedef struct {
+  uint8_t controller;
+  bool is_sda;
+  uint8_t pin;
+  uint8_t af;
+} i2c_pin_af_t;
+
+typedef struct {
+  uint8_t controller;
+  uint32_t base;
+  uint32_t rcc_mask;
+  uint8_t default_sda_pin;
+  uint8_t default_scl_pin;
+} i2c_hw_desc_t;
+
+/* STM32G474 alternate-function routes used by this backend.
+ * All currently selected I2C routes use AF4. */
+static const i2c_pin_af_t k_i2c_pin_map[] = {
+    /* I2C1 */
+    {I2C_CTRL_1, false, JH_STM32_PIN(1u, 8u), 4u},  /* PB8  = I2C1_SCL */
+    {I2C_CTRL_1, false, JH_STM32_PIN(0u, 13u), 4u}, /* PA13 = I2C1_SCL */
+    {I2C_CTRL_1, false, JH_STM32_PIN(0u, 15u), 4u}, /* PA15 = I2C1_SCL */
+    {I2C_CTRL_1, true, JH_STM32_PIN(1u, 7u), 4u},   /* PB7  = I2C1_SDA */
+    {I2C_CTRL_1, true, JH_STM32_PIN(1u, 9u), 4u},   /* PB9  = I2C1_SDA */
+    {I2C_CTRL_1, true, JH_STM32_PIN(0u, 14u), 4u},  /* PA14 = I2C1_SDA */
+
+    /* I2C2 */
+    {I2C_CTRL_2, false, JH_STM32_PIN(0u, 9u), 4u}, /* PA9  = I2C2_SCL */
+    {I2C_CTRL_2, false, JH_STM32_PIN(2u, 4u), 4u}, /* PC4  = I2C2_SCL */
+    {I2C_CTRL_2, false, JH_STM32_PIN(5u, 6u), 4u}, /* PF6  = I2C2_SCL */
+    {I2C_CTRL_2, true, JH_STM32_PIN(0u, 8u), 4u},  /* PA8  = I2C2_SDA */
+    {I2C_CTRL_2, true, JH_STM32_PIN(5u, 0u), 4u},  /* PF0  = I2C2_SDA */
+};
+
+static const i2c_hw_desc_t k_i2c_hw_desc[2] = {
+    {/* bus 0 */
+     I2C_CTRL_1, I2C1_BASE, RCC_APB1ENR1_I2C1EN, JH_STM32_PIN(1u, 9u),
+     JH_STM32_PIN(1u, 8u)},
+    {/* bus 1 */
+     I2C_CTRL_2, I2C2_BASE, RCC_APB1ENR1_I2C2EN, JH_STM32_PIN(0u, 8u),
+     JH_STM32_PIN(0u, 9u)},
+};
+
+static inline const i2c_hw_desc_t *i2c_hw_desc_for_bus(uint8_t bus) {
+  return &k_i2c_hw_desc[i2c_bus_index(bus)];
 }
 
-static void i2c1_hw_init(void) {
-  RCC_AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
-  RCC_APB1ENR1 |= RCC_APB1ENR1_I2C1EN;
-  gpiob_i2c_pin(8u); /* PB8 = SCL */
-  gpiob_i2c_pin(9u); /* PB9 = SDA */
-  I2C1_CR1 &= ~I2C_CR1_PE;
-  I2C1_TIMINGR = I2C_TIMINGR_100K_16MHZ;
-  I2C1_CR1 |= I2C_CR1_PE;
+static inline uint32_t i2c_pin_port(uint8_t pin) {
+  return (uint32_t)(pin >> 4);
+}
+
+static inline uint32_t i2c_pin_num(uint8_t pin) {
+  return (uint32_t)(pin & 0x0Fu);
+}
+
+static inline bool i2c_pin_valid(uint8_t pin) {
+  return i2c_pin_port(pin) <= 6u;
+}
+
+static bool i2c_pin_find_af(uint8_t controller, bool is_sda, uint8_t pin,
+                            uint8_t *out_af) {
+  for (size_t i = 0u; i < (sizeof(k_i2c_pin_map) / sizeof(k_i2c_pin_map[0]));
+       ++i) {
+    const i2c_pin_af_t *m = &k_i2c_pin_map[i];
+    if (m->controller == controller && m->is_sda == is_sda && m->pin == pin) {
+      if (out_af != NULL) {
+        *out_af = m->af;
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
+static void i2c_gpio_enable_clock(uint32_t port) {
+  if (port <= 6u) {
+    RCC_AHB2ENR |= (1u << port);
+    (void)RCC_AHB2ENR;
+  }
+}
+
+static void i2c_gpio_set_af_od_pullup(uint8_t pin, uint8_t af) {
+  const uint32_t port = i2c_pin_port(pin);
+  const uint32_t n = i2c_pin_num(pin);
+  if (port > 6u) {
+    return;
+  }
+
+  i2c_gpio_enable_clock(port);
+  GPIO_MODER(port) =
+      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_AF << (n * 2u));
+  GPIO_OTYPER(port) |= (1u << n);           /* open-drain */
+  GPIO_OSPEEDR(port) |= (0x3u << (n * 2u)); /* very high speed */
+  GPIO_PUPDR(port) =
+      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_UP << (n * 2u));
+
+  if (n < 8u) {
+    GPIO_AFRL(port) =
+        (GPIO_AFRL(port) & ~(0xFu << (n * 4u))) | ((uint32_t)af << (n * 4u));
+  } else {
+    const uint32_t p = n - 8u;
+    GPIO_AFRH(port) =
+        (GPIO_AFRH(port) & ~(0xFu << (p * 4u))) | ((uint32_t)af << (p * 4u));
+  }
+}
+
+static void i2c_gpio_set_input_pullup(uint8_t pin) {
+  const uint32_t port = i2c_pin_port(pin);
+  const uint32_t n = i2c_pin_num(pin);
+  if (port > 6u) {
+    return;
+  }
+
+  i2c_gpio_enable_clock(port);
+  GPIO_MODER(port) =
+      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_INPUT << (n * 2u));
+  GPIO_OTYPER(port) |= (1u << n);
+  GPIO_PUPDR(port) =
+      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_UP << (n * 2u));
+}
+
+static void i2c_gpio_set_output_od_pullup(uint8_t pin) {
+  const uint32_t port = i2c_pin_port(pin);
+  const uint32_t n = i2c_pin_num(pin);
+  if (port > 6u) {
+    return;
+  }
+
+  i2c_gpio_enable_clock(port);
+  GPIO_MODER(port) =
+      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_OUTPUT << (n * 2u));
+  GPIO_OTYPER(port) |= (1u << n);
+  GPIO_OSPEEDR(port) |= (0x3u << (n * 2u));
+  GPIO_PUPDR(port) =
+      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_UP << (n * 2u));
+}
+
+static void i2c_gpio_write(uint8_t pin, bool high) {
+  const uint32_t port = i2c_pin_port(pin);
+  const uint32_t n = i2c_pin_num(pin);
+  if (port > 6u) {
+    return;
+  }
+  GPIO_BSRR(port) = high ? (1u << n) : (1u << (n + 16u));
+}
+
+static bool i2c_gpio_read(uint8_t pin) {
+  const uint32_t port = i2c_pin_port(pin);
+  const uint32_t n = i2c_pin_num(pin);
+  if (port > 6u) {
+    return false;
+  }
+  return (GPIO_IDR(port) & (1u << n)) != 0u;
+}
+
+static void i2c_bus_clear_delay(void) {
+  for (volatile uint32_t i = 0u; i < 80u; ++i) {
+#if defined(__arm__) || defined(__thumb__)
+    __asm volatile("nop");
+#endif
+  }
+}
+
+static uint32_t i2c_timing_from_clock(uint32_t clock_hz) {
+  if (clock_hz >= HAL_I2C_CLOCK_FAST_PLUS_HZ) {
+    return I2C_TIMINGR_1M_16MHZ;
+  }
+  if (clock_hz >= HAL_I2C_CLOCK_FAST_HZ) {
+    return I2C_TIMINGR_400K_16MHZ;
+  }
+  return I2C_TIMINGR_100K_16MHZ;
+}
+
+static void i2c_hw_apply_clock(uint32_t base, uint32_t clock_hz) {
+  I2C_CR1_REG(base) &= ~I2C_CR1_PE;
+  I2C_TIMINGR_REG(base) = i2c_timing_from_clock(clock_hz);
+  I2C_CR1_REG(base) |= I2C_CR1_PE;
+}
+
+static bool i2c_hw_configure_bus(i2c_bus_state_t *st, const i2c_hw_desc_t *desc,
+                                 uint8_t requested_sda_pin,
+                                 uint8_t requested_scl_pin) {
+  uint8_t sda_pin = requested_sda_pin;
+  uint8_t scl_pin = requested_scl_pin;
+
+  if (sda_pin == 0u) {
+    sda_pin = desc->default_sda_pin;
+  }
+  if (scl_pin == 0u) {
+    scl_pin = desc->default_scl_pin;
+  }
+
+  uint8_t sda_af = 0u;
+  uint8_t scl_af = 0u;
+  if (!i2c_pin_find_af(desc->controller, true, sda_pin, &sda_af) ||
+      !i2c_pin_find_af(desc->controller, false, scl_pin, &scl_af)) {
+    st->hw_base = 0u;
+    st->hw_rcc_mask = 0u;
+    return false;
+  }
+
+  st->sda_pin = sda_pin;
+  st->scl_pin = scl_pin;
+  st->hw_base = desc->base;
+  st->hw_rcc_mask = desc->rcc_mask;
+
+  RCC_APB1ENR1 |= st->hw_rcc_mask;
+  (void)RCC_APB1ENR1;
+
+  i2c_gpio_set_af_od_pullup(st->scl_pin, scl_af);
+  i2c_gpio_set_af_od_pullup(st->sda_pin, sda_af);
+  i2c_hw_apply_clock(st->hw_base, st->clock_hz);
+  return true;
+}
+
+static inline bool i2c_hw_ready(const i2c_bus_state_t *st) {
+  return st->initialized && st->hw_base != 0u;
 }
 
 /* Master write of @p len bytes (AUTOEND). Returns 0 ok / 2 NACK / 4 timeout. */
-static uint8_t i2c1_hw_write(uint8_t addr, const uint8_t *buf, int len) {
-  I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
-  I2C1_CR2 = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)len << 16) |
-             I2C_CR2_AUTOEND | I2C_CR2_START;
+static uint8_t i2c_hw_write(uint32_t base, uint8_t addr, const uint8_t *buf,
+                            int len) {
+  I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  I2C_CR2_REG(base) = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)len << 16) |
+                      I2C_CR2_AUTOEND | I2C_CR2_START;
   for (int i = 0; i < len; ++i) {
     uint32_t to = I2C_TIMEOUT;
-    while (!(I2C1_ISR & (I2C_ISR_TXIS | I2C_ISR_NACKF)) && to) {
+    while (!(I2C_ISR_REG(base) & (I2C_ISR_TXIS | I2C_ISR_NACKF)) && to) {
       --to;
     }
     if (to == 0u) {
       return 4u;
     }
-    if (I2C1_ISR & I2C_ISR_NACKF) {
+    if (I2C_ISR_REG(base) & I2C_ISR_NACKF) {
       break;
     }
-    I2C1_TXDR = buf[i];
+    I2C_TXDR_REG(base) = buf[i];
   }
   uint32_t to = I2C_TIMEOUT;
-  while (!(I2C1_ISR & I2C_ISR_STOPF) && to) {
+  while (!(I2C_ISR_REG(base) & I2C_ISR_STOPF) && to) {
     --to;
   }
   if (to == 0u) {
     return 4u;
   }
-  const bool nack = (I2C1_ISR & I2C_ISR_NACKF) != 0u;
-  I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+  const bool nack = (I2C_ISR_REG(base) & I2C_ISR_NACKF) != 0u;
+  I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
   return nack ? 2u : 0u;
 }
 
 /* Master read of @p len bytes (AUTOEND). Returns number of bytes received. */
-static int i2c1_hw_read(uint8_t addr, uint8_t *buf, int len) {
+static int i2c_hw_read(uint32_t base, uint8_t addr, uint8_t *buf, int len) {
   if (len <= 0) {
     return 0;
   }
-  I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
-  I2C1_CR2 = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)len << 16) |
-             I2C_CR2_RD_WRN | I2C_CR2_AUTOEND | I2C_CR2_START;
+  I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  I2C_CR2_REG(base) = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)len << 16) |
+                      I2C_CR2_RD_WRN | I2C_CR2_AUTOEND | I2C_CR2_START;
   int got = 0;
   for (int i = 0; i < len; ++i) {
     uint32_t to = I2C_TIMEOUT;
-    while (!(I2C1_ISR & (I2C_ISR_RXNE | I2C_ISR_NACKF)) && to) {
+    while (!(I2C_ISR_REG(base) & (I2C_ISR_RXNE | I2C_ISR_NACKF)) && to) {
       --to;
     }
-    if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
+    if (to == 0u || (I2C_ISR_REG(base) & I2C_ISR_NACKF)) {
       break;
     }
-    buf[i] = (uint8_t)I2C1_RXDR;
+    buf[i] = (uint8_t)I2C_RXDR_REG(base);
     ++got;
   }
   uint32_t to = I2C_TIMEOUT;
-  while (!(I2C1_ISR & I2C_ISR_STOPF) && to) {
+  while (!(I2C_ISR_REG(base) & I2C_ISR_STOPF) && to) {
     --to;
   }
-  I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+  I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
   return got;
 }
 
-static bool i2c1_hw_write_read(uint8_t addr, const uint8_t *tx, int tx_len,
-                               uint8_t *rx, int rx_len) {
+static bool i2c_hw_write_read(uint32_t base, uint8_t addr, const uint8_t *tx,
+                              int tx_len, uint8_t *rx, int rx_len) {
   if (tx_len <= 0 || rx_len < 0) {
     return false;
   }
-  I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
-  I2C1_CR2 =
+  I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  I2C_CR2_REG(base) =
       ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)tx_len << 16) | I2C_CR2_START;
   for (int i = 0; i < tx_len; ++i) {
     uint32_t to = I2C_TIMEOUT;
-    while (!(I2C1_ISR & (I2C_ISR_TXIS | I2C_ISR_NACKF)) && to) {
+    while (!(I2C_ISR_REG(base) & (I2C_ISR_TXIS | I2C_ISR_NACKF)) && to) {
       --to;
     }
-    if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
-      I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+    if (to == 0u || (I2C_ISR_REG(base) & I2C_ISR_NACKF)) {
+      I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
       return false;
     }
-    I2C1_TXDR = tx[i];
+    I2C_TXDR_REG(base) = tx[i];
   }
 
   uint32_t to = I2C_TIMEOUT;
-  while (!(I2C1_ISR & (I2C_ISR_TC | I2C_ISR_NACKF)) && to) {
+  while (!(I2C_ISR_REG(base) & (I2C_ISR_TC | I2C_ISR_NACKF)) && to) {
     --to;
   }
-  if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
-    I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  if (to == 0u || (I2C_ISR_REG(base) & I2C_ISR_NACKF)) {
+    I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
     return false;
   }
 
   if (rx_len == 0) {
-    I2C1_CR2 |= I2C_CR2_STOP;
+    I2C_CR2_REG(base) |= I2C_CR2_STOP;
     to = I2C_TIMEOUT;
-    while (!(I2C1_ISR & I2C_ISR_STOPF) && to) {
+    while (!(I2C_ISR_REG(base) & I2C_ISR_STOPF) && to) {
       --to;
     }
-    I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+    I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
     return to != 0u;
   }
 
-  I2C1_CR2 = ((uint32_t)addr << 1) | ((uint32_t)(uint8_t)rx_len << 16) |
-             I2C_CR2_RD_WRN | I2C_CR2_AUTOEND | I2C_CR2_START;
+  I2C_CR2_REG(base) = ((uint32_t)addr << 1) |
+                      ((uint32_t)(uint8_t)rx_len << 16) | I2C_CR2_RD_WRN |
+                      I2C_CR2_AUTOEND | I2C_CR2_START;
   int got = 0;
   for (int i = 0; i < rx_len; ++i) {
     to = I2C_TIMEOUT;
-    while (!(I2C1_ISR & (I2C_ISR_RXNE | I2C_ISR_NACKF)) && to) {
+    while (!(I2C_ISR_REG(base) & (I2C_ISR_RXNE | I2C_ISR_NACKF)) && to) {
       --to;
     }
-    if (to == 0u || (I2C1_ISR & I2C_ISR_NACKF)) {
+    if (to == 0u || (I2C_ISR_REG(base) & I2C_ISR_NACKF)) {
       break;
     }
-    rx[i] = (uint8_t)I2C1_RXDR;
+    rx[i] = (uint8_t)I2C_RXDR_REG(base);
     ++got;
   }
 
   to = I2C_TIMEOUT;
-  while (!(I2C1_ISR & I2C_ISR_STOPF) && to) {
+  while (!(I2C_ISR_REG(base) & I2C_ISR_STOPF) && to) {
     --to;
   }
-  I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+  I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
   return (to != 0u) && (got == rx_len);
 }
 
 /* Zero-byte probe: returns true if the device ACKs (is present). */
-static bool i2c1_hw_ack(uint8_t addr) {
-  I2C1_ICR = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
-  I2C1_CR2 = ((uint32_t)addr << 1) | I2C_CR2_AUTOEND | I2C_CR2_START;
+static bool i2c_hw_ack(uint32_t base, uint8_t addr) {
+  I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
+  I2C_CR2_REG(base) = ((uint32_t)addr << 1) | I2C_CR2_AUTOEND | I2C_CR2_START;
   uint32_t to = I2C_TIMEOUT;
-  while (!(I2C1_ISR & I2C_ISR_STOPF) && to) {
+  while (!(I2C_ISR_REG(base) & I2C_ISR_STOPF) && to) {
     --to;
   }
-  const bool nack = (I2C1_ISR & I2C_ISR_NACKF) != 0u;
-  I2C1_ICR = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
+  const bool nack = (I2C_ISR_REG(base) & I2C_ISR_NACKF) != 0u;
+  I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
   return (to != 0u) && !nack;
 }
-
-static inline bool i2c_hw_bus(uint8_t bus) { return i2c_bus_index(bus) == 0u; }
 #endif /* JH_STM32G474_HW */
 
 void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
@@ -213,9 +422,6 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
 
 void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
                       uint32_t clock_hz) {
-  (void)sda_pin; /* fixed to PB8/PB9 on the hardware backend */
-  (void)scl_pin;
-
   i2c_ensure_mutex(bus);
 
   i2c_bus_state_t *st = i2c_state(bus);
@@ -224,16 +430,25 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->tx_len = 0;
   st->cur_addr = 0u;
   st->last_error = 0u;
-  st->clock_hz = clock_hz;
+  st->clock_hz = (clock_hz == 0u) ? HAL_I2C_CLOCK_STANDARD_HZ : clock_hz;
   st->transaction_count = 0u;
   st->bus_clear_count = 0u;
-  st->initialized = true;
-
+  st->sda_pin = sda_pin;
+  st->scl_pin = scl_pin;
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus)) {
-    i2c1_hw_init(); /* clock_hz honored as standard-mode 100 kHz */
+  st->hw_base = 0u;
+  st->hw_rcc_mask = 0u;
+
+  const i2c_hw_desc_t *desc = i2c_hw_desc_for_bus(bus);
+  if (!i2c_hw_configure_bus(st, desc, sda_pin, scl_pin)) {
+    st->initialized = false;
+    HAL_ASSERT(false,
+               "hal_i2c_init_bus: invalid SDA/SCL pin mapping for selected "
+               "bus");
+    return;
   }
 #endif
+  st->initialized = true;
 }
 
 void hal_i2c_set_clock(uint32_t clock_hz) {
@@ -242,9 +457,15 @@ void hal_i2c_set_clock(uint32_t clock_hz) {
 
 void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
   i2c_ensure_mutex(bus);
-  hal_mutex_lock(i2c_state(bus)->mutex);
-  i2c_state(bus)->clock_hz = clock_hz;
-  hal_mutex_unlock(i2c_state(bus)->mutex);
+  i2c_bus_state_t *st = i2c_state(bus);
+  hal_mutex_lock(st->mutex);
+  st->clock_hz = (clock_hz == 0u) ? HAL_I2C_CLOCK_STANDARD_HZ : clock_hz;
+#ifdef JH_STM32G474_HW
+  if (i2c_hw_ready(st)) {
+    i2c_hw_apply_clock(st->hw_base, st->clock_hz);
+  }
+#endif
+  hal_mutex_unlock(st->mutex);
 }
 
 void hal_i2c_deinit(void) { hal_i2c_deinit_bus(0); }
@@ -257,9 +478,11 @@ void hal_i2c_deinit_bus(uint8_t bus) {
   st->tx_len = 0;
   st->cur_addr = 0u;
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus)) {
-    I2C1_CR1 &= ~I2C_CR1_PE;
+  if (st->hw_base != 0u) {
+    I2C_CR1_REG(st->hw_base) &= ~I2C_CR1_PE;
   }
+  st->hw_base = 0u;
+  st->hw_rcc_mask = 0u;
 #endif
 }
 
@@ -306,8 +529,10 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   i2c_bus_state_t *st = i2c_state(bus);
   uint8_t err = 0u;
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus) && st->initialized) {
-    err = i2c1_hw_write(st->cur_addr, st->tx_buf, st->tx_len);
+  if (i2c_hw_ready(st)) {
+    err = i2c_hw_write(st->hw_base, st->cur_addr, st->tx_buf, st->tx_len);
+  } else {
+    err = 4u;
   }
 #endif
   st->last_error = err;
@@ -360,12 +585,16 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   hal_i2c_lock_bus(bus);
   bool ok = true;
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus) && st->initialized) {
-    ok = i2c1_hw_write_read(address, tx, (int)tx_len, rx, (int)rx_len);
-    st->transaction_count += (rx_len > 0u) ? 2u : 1u;
+  if (!i2c_hw_ready(st)) {
     hal_i2c_unlock_bus(bus);
-    return ok;
+    return false;
   }
+
+  ok =
+      i2c_hw_write_read(st->hw_base, address, tx, (int)tx_len, rx, (int)rx_len);
+  st->transaction_count += (rx_len > 0u) ? 2u : 1u;
+  hal_i2c_unlock_bus(bus);
+  return ok;
 #endif
 
   st->cur_addr = address;
@@ -404,19 +633,19 @@ uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
 
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   i2c_bus_state_t *st = i2c_state(bus);
-  (void)address;
 
   hal_i2c_lock_bus(bus);
   /* count is uint8_t (<=255) and the rx buffer holds 255 bytes, so it always
    * fits. */
   int got = 0;
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus) && st->initialized) {
-    got = i2c1_hw_read(address, st->rx_buf, (int)count);
+  if (i2c_hw_ready(st)) {
+    got = i2c_hw_read(st->hw_base, address, st->rx_buf, (int)count);
   } else {
-    got = (int)count; /* bus 1 / host-stub: accept request */
+    got = 0;
   }
 #else
+  (void)address;
   got = (int)count;
 #endif
   st->rx_len = got;
@@ -449,12 +678,14 @@ bool hal_i2c_is_busy(uint8_t address) {
 
 bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
 #ifdef JH_STM32G474_HW
-  if (i2c_hw_bus(bus) && i2c_state(bus)->initialized) {
+  i2c_bus_state_t *st = i2c_state(bus);
+  if (i2c_hw_ready(st)) {
     hal_i2c_lock_bus(bus);
-    bool ack = i2c1_hw_ack(address);
+    bool ack = i2c_hw_ack(st->hw_base, address);
     hal_i2c_unlock_bus(bus);
     return !ack; /* busy/absent == did NOT ACK */
   }
+  return true;
 #endif
   (void)bus;
   (void)address;
@@ -474,9 +705,56 @@ void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
 }
 
 void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
+#ifdef JH_STM32G474_HW
+  i2c_bus_state_t *st = i2c_state(bus);
+  const i2c_hw_desc_t *desc = i2c_hw_desc_for_bus(bus);
+
+  uint8_t clear_sda = sda_pin;
+  uint8_t clear_scl = scl_pin;
+
+  if (clear_sda == 0u) {
+    clear_sda = (st->sda_pin != 0u) ? st->sda_pin : desc->default_sda_pin;
+  }
+  if (clear_scl == 0u) {
+    clear_scl = (st->scl_pin != 0u) ? st->scl_pin : desc->default_scl_pin;
+  }
+
+  if (!i2c_pin_valid(clear_sda) || !i2c_pin_valid(clear_scl)) {
+    HAL_ASSERT(false, "hal_i2c_bus_clear_bus: invalid pin id");
+    st->bus_clear_count++;
+    return;
+  }
+
+  i2c_gpio_set_input_pullup(clear_sda);
+  i2c_gpio_set_output_od_pullup(clear_scl);
+  i2c_gpio_write(clear_scl, true);
+  i2c_bus_clear_delay();
+
+  for (uint8_t i = 0u; i < 9u; ++i) {
+    if (i2c_gpio_read(clear_sda)) {
+      break;
+    }
+    i2c_gpio_write(clear_scl, false);
+    i2c_bus_clear_delay();
+    i2c_gpio_write(clear_scl, true);
+    i2c_bus_clear_delay();
+  }
+
+  i2c_gpio_set_output_od_pullup(clear_sda);
+  i2c_gpio_write(clear_sda, false);
+  i2c_bus_clear_delay();
+  i2c_gpio_write(clear_scl, true);
+  i2c_bus_clear_delay();
+  i2c_gpio_write(clear_sda, true);
+  i2c_bus_clear_delay();
+
+  i2c_gpio_set_input_pullup(clear_sda);
+  i2c_gpio_set_input_pullup(clear_scl);
+#else
   (void)sda_pin;
   (void)scl_pin;
-  /* GPIO-level 9-clock recovery is a follow-up on this backend. */
+#endif
+
   i2c_state(bus)->bus_clear_count++;
 }
 

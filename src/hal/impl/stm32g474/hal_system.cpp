@@ -113,8 +113,8 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen) {
 // Fault / crash diagnostics
 //
 // All architecture-specific logic lives in the STM32G474 SoC driver
-// (currently a no-op stub; planned real impl will use RCC->CSR,
-// SCB->{CFSR,HFSR,MMFAR,BFAR} and TAMP->BKPxR). The wrappers below keep
+// (RCC->CSR reset flags, retained exception_info handoff, stack guard
+// marker path). The wrappers below keep
 // the HAL surface uniform across backends. `hal_reset_reason_str` is a
 // pure mapping and stays here.
 // ─────────────────────────────────────────────────────────────────────────────

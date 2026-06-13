@@ -8,14 +8,12 @@
  * layer pure dispatch.
  *
  * @par Status
- * No-op stub. A real implementation will use:
- *   - @c RCC->CSR for the reset reason (including real @c BORRSTF
- *     brown-out detection, unlike RP2040 silicon),
- *   - @c SCB->{CFSR,HFSR,MMFAR,BFAR} for the richer Cortex-M4 HardFault
- *     info captured by a naked-ASM @c HardFault_Handler trampoline,
- *   - @c TAMP->BKP0R..BKP3R backup registers for retained storage (survive
- *     all resets except VBAT loss),
- *   - stack canary at the @c _estack / @c _Min_Stack_Size linker symbols.
+ * Implemented for the STM32G474 backend:
+ *   - reset-reason classification from @c RCC->CSR flags,
+ *   - retained fault-frame handoff from @c exception_info (captured by
+ *     HardFault/MemManage/BusFault/UsageFault handlers),
+ *   - stack-overflow marker path used by @c hal_stack_guard_check,
+ *   - alive-marker persistence used to avoid over-reporting BOR on cold boot.
  *
  * The public surface matches the RP2040 driver exactly so the HAL layer
  * is symmetrical across backends.
@@ -27,16 +25,16 @@
 extern "C" {
 #endif
 
-/** Initialise: stub returns immediately. */
+/** Initialise and latch reset/fault state for this boot. */
 void stm32g474_fault_init(void);
 
-/** Last reset reason. Stub returns @c HAL_RESET_REASON_UNKNOWN. */
+/** Last reset reason, stable after @ref stm32g474_fault_init. */
 hal_reset_reason_t stm32g474_fault_get_reset_reason(void);
 
-/** Retrieve captured HardFault info into @p out. Stub returns @c false. */
+/** Retrieve captured fault info into @p out. */
 bool stm32g474_fault_get_last_fault(hal_fault_info_t *out);
 
-/** Forget any captured HardFault info. Stub: no-op. */
+/** Forget any captured fault info. */
 void stm32g474_fault_clear_last_fault(void);
 
 /** Whether the previous boot is suspected to have been a brown-out.
@@ -48,10 +46,10 @@ bool stm32g474_fault_brownout_suspected(void);
  *  detection on STM32 makes the heuristic optional). */
 void stm32g474_fault_alive_mark(void);
 
-/** Install the stack-bottom canary. Stub returns @c false. */
+/** Install the stack-bottom canary. */
 bool stm32g474_fault_stack_guard_init(void);
 
-/** Verify the stack canary. Stub: no-op. */
+/** Verify the stack canary. On corruption triggers system reset. */
 void stm32g474_fault_stack_guard_check(void);
 
 #ifdef __cplusplus

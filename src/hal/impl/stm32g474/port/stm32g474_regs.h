@@ -25,6 +25,7 @@
 #define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
 #define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
 #define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
+#define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
 
 #define RCC_AHB2ENR_GPIOAEN (1u << 0)
 #define RCC_AHB2ENR_GPIOBEN (1u << 1)
@@ -42,6 +43,8 @@
 #define RCC_APB1ENR1_USART2EN (1u << 17)
 #define RCC_APB1ENR1_SPI2EN (1u << 14)
 #define RCC_APB1ENR1_SPI3EN (1u << 15)
+#define RCC_APB1ENR1_I2C1EN (1u << 21)
+#define RCC_APB1ENR1_I2C2EN (1u << 22)
 
 #define RCC_APB2ENR_SPI1EN (1u << 12)
 #define RCC_APB2ENR_TIM15EN (1u << 16)
@@ -51,6 +54,16 @@
 
 #define RCC_AHB2ENR_DAC1EN (1u << 16)
 #define RCC_AHB2ENR_ADC12EN (1u << 13)
+
+/* RCC_CSR reset flags (RM0440 / CMSIS stm32g474xx.h). */
+#define RCC_CSR_RMVF (1u << 23)
+#define RCC_CSR_OBLRSTF (1u << 25)
+#define RCC_CSR_PINRSTF (1u << 26)
+#define RCC_CSR_BORRSTF (1u << 27)
+#define RCC_CSR_SFTRSTF (1u << 28)
+#define RCC_CSR_IWDGRSTF (1u << 29)
+#define RCC_CSR_WWDGRSTF (1u << 30)
+#define RCC_CSR_LPWRRSTF (1u << 31)
 
 /* ── ADC1 + ADC12 common (single-channel polled regular conversions) ───────
  * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/1
@@ -184,11 +197,19 @@
 #define TIM_SMCR_SMS_EXT1 (0x7u << 0)
 #define TIM_SMCR_TS_TI1FP1 (0x5u << 4)
 
-#define RCC_APB1ENR1_I2C1EN (1u << 21)
-
 /* ── I2C1 (I2C v2 peripheral; SCL=PB8, SDA=PB9, AF4 on Nucleo-G474RE) ───────
  */
 #define I2C1_BASE 0x40005400u
+#define I2C2_BASE 0x40005800u
+
+#define I2C_CR1_REG(base) JH_REG32((base) + 0x00u)
+#define I2C_CR2_REG(base) JH_REG32((base) + 0x04u)
+#define I2C_TIMINGR_REG(base) JH_REG32((base) + 0x10u)
+#define I2C_ISR_REG(base) JH_REG32((base) + 0x18u)
+#define I2C_ICR_REG(base) JH_REG32((base) + 0x1Cu)
+#define I2C_RXDR_REG(base) JH_REG32((base) + 0x24u)
+#define I2C_TXDR_REG(base) JH_REG32((base) + 0x28u)
+
 #define I2C1_CR1 JH_REG32(I2C1_BASE + 0x00u)
 #define I2C1_CR2 JH_REG32(I2C1_BASE + 0x04u)
 #define I2C1_TIMINGR JH_REG32(I2C1_BASE + 0x10u)
@@ -196,6 +217,14 @@
 #define I2C1_ICR JH_REG32(I2C1_BASE + 0x1Cu)
 #define I2C1_RXDR JH_REG32(I2C1_BASE + 0x24u)
 #define I2C1_TXDR JH_REG32(I2C1_BASE + 0x28u)
+
+#define I2C2_CR1 JH_REG32(I2C2_BASE + 0x00u)
+#define I2C2_CR2 JH_REG32(I2C2_BASE + 0x04u)
+#define I2C2_TIMINGR JH_REG32(I2C2_BASE + 0x10u)
+#define I2C2_ISR JH_REG32(I2C2_BASE + 0x18u)
+#define I2C2_ICR JH_REG32(I2C2_BASE + 0x1Cu)
+#define I2C2_RXDR JH_REG32(I2C2_BASE + 0x24u)
+#define I2C2_TXDR JH_REG32(I2C2_BASE + 0x28u)
 
 #define I2C_CR1_PE (1u << 0)
 #define I2C_CR2_RD_WRN (1u << 10)
@@ -215,6 +244,12 @@
  * Value per STM32CubeMX / RM0440 timing tables. If the core clock is later
  * raised (PLL), this must be recomputed for the new PCLK1. */
 #define I2C_TIMINGR_100K_16MHZ 0x30420F13u
+
+/* Conservative bring-up presets for I2CCLK = 16 MHz.
+ * These keep the first STM32 backend dependency-free while still honoring
+ * HAL_I2C_CLOCK_{STANDARD,FAST,FAST_PLUS}_HZ requests. */
+#define I2C_TIMINGR_400K_16MHZ 0x1010060Cu
+#define I2C_TIMINGR_1M_16MHZ 0x00100509u
 
 /* ── SPI master (SPI1/SPI2; 8-bit full-duplex, software NSS) ─────────────── */
 #define SPI1_BASE 0x40013000u
