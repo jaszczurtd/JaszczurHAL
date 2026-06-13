@@ -27,6 +27,9 @@ void g474_debug_uart_putc(char c);
 /** Blocking write of a NUL-terminated string. */
 void g474_debug_uart_puts(const char *s);
 
+/** Return the next received byte, or -1 when no byte is currently available. */
+int g474_debug_uart_getc_nonblock(void);
+
 /** Write an unsigned 32-bit value in decimal. */
 void g474_debug_uart_put_u32(uint32_t v);
 

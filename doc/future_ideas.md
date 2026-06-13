@@ -372,17 +372,15 @@ Before doing this, verify behavior on:
 
 ---
 
-## 6. C runtime (newlib) retarget layer for STM32G474 — URGENT (STM32 parity)
+## 6. C runtime (newlib) retarget layer for STM32G474 — Tier 1 implemented
 
-> **Priority: urgent, not "future".** This is *catch-up* work, not a nice-to-have.
-> The STM32G474 backend must reach functional parity with the mature RP2040
-> backend, and right now its C runtime is a gap: there is no working `printf`/
-> stdio, no safe heap with collision detection, and no thread-safe `malloc` under
-> FreeRTOS. On RP2040 all of this comes "for free" from arduino-pico/pico-sdk; on
-> STM32 it is simply missing. Until it is filled, every STM32 feature that wants
-> formatted output, dynamic allocation (e.g. cJSON), or multi-task `malloc` is
-> either unavailable or unsafe. Treat Tier 1 below as a near-term task gating
-> further STM32 module work, ahead of the genuinely optional items (3-5).
+**Status:** Tier 1 implemented on 2026-06-13 in
+`src/hal/impl/stm32g474/port/runtime/stm32g474_syscalls.c`.
+
+This was STM32 parity catch-up work rather than a nice-to-have. RP2040 inherits
+a working C runtime from arduino-pico/pico-sdk; STM32G474 now has the matching
+project-owned baseline for `printf`/stdio output, a bounded newlib heap, and
+thread-safe newlib `malloc` under FreeRTOS task concurrency.
 
 This section captures the conclusions from the FreeRTOS audit follow-up on the
 STM32G474 firmware link warnings, the architectural analysis of where libc
@@ -406,19 +404,36 @@ These are **not** missing-symbol errors. They originate from `libnosys`
 the reference afterwards (hence the "does not take linker garbage collection
 into account" note). No `-w`-style flag can suppress a `.gnu.warning` section.
 
-### 6.2 Immediate fix (applied)
+### 6.2 Tier 1 implementation (applied)
 
-The only clean way to remove the warnings is to provide project-owned strong
+The clean way to remove the warnings is to provide project-owned strong
 definitions of those syscalls, so the linker resolves them from our object and
-never pulls the warning-carrying `libnosys` members. A minimal
-`src/hal/impl/stm32g474/port/stm32g474_syscalls.c` was added and wired into the
-STM32 example link. Result: both FreeRTOS and non-FreeRTOS STM32 builds link
-warning-clean, FreeRTOS symbols stay linked, and the tracked tree is unaffected
-(the file is part of the firmware link, not the static `.a`).
+never pulls the warning-carrying `libnosys` members. The runtime retarget file is
+now explicit:
+
+```text
+src/hal/impl/stm32g474/port/runtime/stm32g474_syscalls.c
+```
+
+Tier 1 now provides:
+
+- `_write` for stdout/stderr through `g474_debug_uart_putc`, including
+  `\n` -> `\r\n` translation;
+- `_read` for stdin through `g474_debug_uart_getc_nonblock()`;
+- `_sbrk` over linker symbols `end`, `_estack`, and `_Min_Stack_Size`, with an
+  8-byte aligned bump pointer and a static heap/stack collision guard;
+- `__malloc_lock` / `__malloc_unlock`, using `vTaskSuspendAll()` /
+  `xTaskResumeAll()` under `HAL_ENABLE_FREERTOS`;
+- UART-console semantics for `_close`, `_fstat`, `_isatty`, and `_lseek`;
+- `_exit` and `_kill` as controlled system reset requests through `SCB_AIRCR`.
+
+The runtime file is wired into STM32 firmware executable builds only. It is not
+part of `libJaszczurHAL.a`, and it is not compiled into host sanity builds.
 
 ### 6.3 Architectural conclusion: syscalls are a runtime/BSP tier, not HAL
 
-The empty stubs silence the warning but the deeper point is **layering**. libc
+The original warning-only stubs were not the full fix; the deeper point is
+**layering**. libc
 syscalls (`_write`, `_read`, `_sbrk`, `_exit`, ...) sit at the very bottom of
 the C runtime — below libc, called from `printf`, `assert`, `abort`, fault
 handlers, and *before the scheduler starts*. They form a **runtime / BSP /
@@ -456,10 +471,8 @@ lower-level link warning.
 
 Corollary on the missing layer: the bare-metal primitives already exist
 (`g474_debug_uart`, linker symbols, `SCB_AIRCR`, systick, `exception_info`).
-What is missing is a *named, delineated* runtime/retarget tier that owns syscalls
-and obeys the downward-only dependency rule. `stm32g474_syscalls.c` is the seed
-of that tier; promoting it to an explicit `port/runtime/` (or `port/retarget/`)
-folder with the rule documented is the clean structural step.
+The named runtime/retarget tier now lives under `port/runtime/` and owns
+syscalls while obeying the downward-only dependency rule.
 
 ### 6.4 Guard correctness
 
@@ -468,13 +481,11 @@ compile), not `HAL_TARGET_STM32G474`. The host "does-it-compile" build
 (`build_stm32_host`) defines `HAL_TARGET_STM32G474` but runs on glibc, which owns
 `_write`/`_sbrk`/etc.; defining ours there would clash. `JH_STM32G474_HW` is
 precisely the bare-metal marker, matching the primitive (`g474_debug_uart`) the
-tier stands on. (The currently committed stub guards on `HAL_TARGET_STM32G474` and
-is only harmless because it is excluded from the static-lib and host source
-lists — this should be tightened to `JH_STM32G474_HW`.)
+tier stands on. The implemented runtime file uses this guard.
 
-### 6.5 Functional retarget roadmap (beyond empty stubs)
+### 6.5 Functional retarget roadmap
 
-**Tier 1 — real functionality, low cost, recommended together:**
+**Tier 1 — implemented:**
 
 - `_write` (fd 1/2) -> `g474_debug_uart_putc` with `\n`->`\r\n`. Makes `printf`,
   `puts`, `fprintf(stderr, ...)` work. Shares the UART *sink* with `hal_serial`,
@@ -540,7 +551,7 @@ fault output and may interleave; synchronized application logging should use
 the primitive would only recreate the context-safety problem — synchronization
 belongs to the HAL tier, not the runtime primitive.
 
-### 6.8 Proposed structure and wiring
+### 6.8 Implemented structure and wiring
 
 ```text
 src/hal/impl/stm32g474/port/
@@ -618,8 +629,8 @@ Two strategies and what to take from each:
 | Change size | small, leaves heap_4 intact | large, replaces heap_4 |
 | License | clean (BSD-3 ST + own code) | ambiguous (Nadler) |
 
-**Recommendation:** ready-made code exists, but for the layered/minimal approach
-adopt the **ST CubeIDE *pattern* (BSD-3)**, do not vendor a module:
+**Implemented recommendation:** ready-made code exists, but the layered/minimal
+approach was implemented without vendoring a third-party module:
 - `_write`/`_read`/char-stubs/`_exit`: ST `syscalls.c` pattern, with
   `__io_putchar` -> `g474_debug_uart_putc` (stays in `port/runtime/`, downward);
 - `_sbrk`: our own over `end`/`_estack`/`_Min_Stack_Size` (better collision guard
@@ -653,17 +664,15 @@ cnoviello/uOS++ `_sbrk.c`; ARMmbed/mbed-os issue #9542.
 | Done | Digipot driver split + ops table | Medium | High | Implemented |
 | Done-ish | Central `HAL_ENABLE_*` config | Medium | Medium | Implemented, polish remains |
 | Done | Arduino-free tools layer | Low/medium | Medium/high | Implemented |
-| **Urgent** | **STM32 newlib retarget Tier 1 (`_write`/`_read`/`_sbrk`/malloc-lock) — §6** | Low | High | **STM32 parity gap**; warning fix applied, functional retarget pending |
+| Done | STM32 newlib retarget Tier 1 (`_write`/`_read`/`_sbrk`/malloc-lock) — §6 | Low | High | Implemented |
 | 1 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
 | 2 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |
 | 3 | Header-based board descriptions | Low/medium | Medium | Optional layer |
 | 4 | Linker-section/static device model | High | Low now | Backlog |
 
-Urgency note: items framed as "STM32 parity" (the newlib retarget tier in §6, and
-broadly the STM32 backend catching up to RP2040 in module/runtime coverage) rank
-ahead of the optional polish items 3-5. RP2040 inherits a working C runtime from
-arduino-pico/pico-sdk; STM32 must build the equivalent itself, so this is
-catch-up work rather than future architecture.
+STM32 parity note: the newlib retarget tier in §6 is now closed at Tier 1.
+Further STM32 backend catch-up in module/runtime coverage still ranks ahead of
+the optional polish items 3-5.
 
 The safest implementation path is still incremental: preserve the current public
 API, add tests around each behavior before refactoring dispatch, and avoid
