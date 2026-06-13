@@ -7,7 +7,7 @@
 #
 # Gates (in order):
 #   1. Tool presence check
-#   2. Host unit tests (cmake + ctest)
+#   2. Host unit tests (cmake + ctest, including FreeRTOS POSIX)
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
@@ -111,13 +111,15 @@ pass "Arduino RP2040 core present."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 2: Host unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 2/7: Host unit tests (build + ctest)"
+header "Gate 2/7: Host unit tests (build + ctest + FreeRTOS POSIX)"
 
 BUILD_DIR="${SCRIPT_DIR}/build_test"
 rm -rf "${BUILD_DIR}"
 
 info "Configuring..."
-cmake -S . -B "${BUILD_DIR}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -S . -B "${BUILD_DIR}" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+    -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
 
 info "Building with ${JOBS} jobs..."
 cmake --build "${BUILD_DIR}" --parallel "${JOBS}"
@@ -156,7 +158,7 @@ for test_name in "${MEMCHECK_REQUIRED_TESTS[@]}"; do
 done
 
 info "Running tests under Valgrind..."
-ctest --test-dir "${BUILD_DIR}" -T memcheck --output-on-failure 2>&1 \
+ctest --test-dir "${BUILD_DIR}" -T memcheck -LE no_memcheck --output-on-failure 2>&1 \
     | tee /tmp/jh_memcheck.log | grep -E '(^[0-9]|Memory|passed|failed|Defects)'
 
 # Check for defects in the memcheck output
@@ -288,6 +290,7 @@ echo -e "${GREEN}${BOLD}  ALL GATES PASSED ✓${NC}"
 echo -e "${BOLD}══════════════════════════════════════════════════════════════${NC}"
 echo ""
 echo "  Unit tests:       PASS"
+echo "  FreeRTOS POSIX:   PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"

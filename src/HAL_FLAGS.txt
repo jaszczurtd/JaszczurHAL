@@ -95,11 +95,14 @@ FreeRTOS integration flag
           HAL_FREERTOS_TASK0_PRIORITY   default tskIDLE_PRIORITY + 1
           HAL_FREERTOS_TASK1_PRIORITY   default tskIDLE_PRIORITY + 1
 
-    Full module task-safety remains conservative. Singleton/per-bus mutex
-    creation uses atomic create-once fallbacks where defensive lazy creation is
-    still needed; timer callback context, Arduino-origin wrapper internals, and
-    documented single-owner modules follow the FreeRTOS plan and thread-safety
-    audit.
+	    Full module task-safety remains conservative. Singleton/per-bus mutex
+	    creation uses atomic create-once fallbacks where defensive lazy creation is
+	    still needed; timer callback context, Arduino-origin wrapper internals, and
+	    documented single-owner modules follow the FreeRTOS plan and thread-safety
+	    audit. The normal mock backend does not support HAL_ENABLE_FREERTOS, but
+	    runalltests.sh enables the host FreeRTOS POSIX scheduler test target
+	    (JH_ENABLE_FREERTOS_POSIX_TESTS) to cover the FreeRTOS HAL mutex/delay and
+	    lazy create-once paths in ctest without hardware.
 
 
 Module enable flags
