@@ -9,7 +9,7 @@
  *   3. calls SystemInit() (clock/SysTick/FPU/fault enables), then main().
  *
  * Core exceptions are populated directly. Peripheral IRQ vectors are added as
- * drivers need them; TIM6 is used by the STM32 hal_timer backend.
+ * drivers need them; EXTI lines are used by hal_gpio and TIM6 by hal_timer.
  */
 
 #include <stdint.h>
@@ -35,6 +35,13 @@ void MemManage_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void BusFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void UsageFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void DebugMon_Handler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI0_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI1_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI2_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI3_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI4_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI9_5_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
+void EXTI15_10_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void TIM6_DACUNDER_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
 
@@ -49,6 +56,13 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #endif
 
 /* STM32G474 IRQ number per RM0440/CMSIS device headers. */
+#define STM32_IRQ_EXTI0 6u
+#define STM32_IRQ_EXTI1 7u
+#define STM32_IRQ_EXTI2 8u
+#define STM32_IRQ_EXTI3 9u
+#define STM32_IRQ_EXTI4 10u
+#define STM32_IRQ_EXTI9_5 23u
+#define STM32_IRQ_EXTI15_10 40u
 #define STM32_IRQ_TIM6_DACUNDER 54u
 
 /* Vector table: initial SP + 15 system exceptions + populated peripheral IRQs.
@@ -66,6 +80,13 @@ __attribute__((section(".isr_vector"),
     [12] = DebugMon_Handler,
     [14] = PendSV_Handler,
     [15] = SysTick_Handler,
+    [16u + STM32_IRQ_EXTI0] = EXTI0_IRQHandler,
+    [16u + STM32_IRQ_EXTI1] = EXTI1_IRQHandler,
+    [16u + STM32_IRQ_EXTI2] = EXTI2_IRQHandler,
+    [16u + STM32_IRQ_EXTI3] = EXTI3_IRQHandler,
+    [16u + STM32_IRQ_EXTI4] = EXTI4_IRQHandler,
+    [16u + STM32_IRQ_EXTI9_5] = EXTI9_5_IRQHandler,
+    [16u + STM32_IRQ_EXTI15_10] = EXTI15_10_IRQHandler,
     [16u + STM32_IRQ_TIM6_DACUNDER] = TIM6_DACUNDER_IRQHandler,
 };
 

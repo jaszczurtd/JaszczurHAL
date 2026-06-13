@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-13 (STM32 TIM6 hal_timer backend added)
+Last updated: 2026-06-13 (STM32 GPIO EXTI IRQ backend added)
 
 ## Goal
 Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
@@ -79,11 +79,8 @@ stages.
 - The real ARM target now builds end-to-end (the `JH_STM32G474_HW` hardware
   paths compile) once the Arm toolchain is installed:
   - `./scripts/build_stm32_lib.sh --clean`
-- **Examples build system** - all 12 STM32G474-targeted examples
-  (01_blink, 02_debug_helper, 03_soft_timer_table, 04_crypto, 14_uart,
-  17_pid_controller, 19_timer_ext, 20_i2c_scan, 21_adc_read, 22_gps_uart,
-  23_external_adc_ads1115, 24_can_mcp2515)
-  compile to ELF/BIN/HEX without errors using the unified CMake build:
+- **Examples build system** - STM32G474-targeted examples compile to
+  ELF/BIN/HEX without errors using the unified CMake build:
   ```bash
   cmake -S examples -B build_examples_stm32 \
         -DJH_EXAMPLE_TARGET=stm32g474 \
@@ -110,7 +107,12 @@ Optionally:
 The following modules are real, register-level backends under
 `JH_STM32G474_HW` (no longer placeholders):
 
-- `hal_gpio` - direction + digital read/write (pin id = `port*16 + pin`).
+- `hal_gpio` - direction + digital read/write + EXTI interrupt attach
+  (pin id = `port*16 + pin`). `hal_gpio_attach_interrupt()` now configures
+  SYSCFG EXTI routing, trigger edge (rising/falling/both), NVIC enable for
+  EXTI0..4 / EXTI9_5 / EXTI15_10, and callback dispatch from IRQ context.
+  `hal_gpio_set_irq_priority()` now sets the NVIC priority for all GPIO EXTI
+  IRQ groups.
 - `hal_i2c` - I2C1 master (SCL=PB8, SDA=PB9, AF4, 100 kHz, AUTOEND).
 - `hal_dac` - DAC1, 12-bit (ch0 -> PA4, ch1 -> PA5).
 - `hal_pcnt` - hardware pulse counter on TIM2 (external clock mode).

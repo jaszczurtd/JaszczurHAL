@@ -648,7 +648,8 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 
 **Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, `Serial`, or any blocking call inside it.
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
-**IRQ priority:** `hal_gpio_set_irq_priority` sets the NVIC priority of the GPIO interrupt bank. On RP2040 all GPIO pins share IO_IRQ_BANK0. Call after `hal_gpio_attach_interrupt()`. Raising priority above other peripherals (e.g. I2C) prevents their ISRs from blocking edge counting. On platforms without configurable IRQ priorities this is a no-op.
+**STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
+**IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
 
 ---
 

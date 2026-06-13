@@ -21,6 +21,28 @@ Next release.
   rescheduling, cancel, pool capacity/destruction, long-delay chunking, and
   managed timer stop/pause/resume behavior.
 
+### hal_gpio - STM32G474 EXTI/NVIC interrupt backend
+
+- Replaced the STM32G474 `hal_gpio_attach_interrupt()` no-op with a real EXTI
+  backend under `JH_STM32G474_HW`: pin-to-EXTI routing via SYSCFG, trigger
+  edge selection (rising/falling/both), pending-flag clear, IRQ unmasking, and
+  NVIC enable for `EXTI0..4`, `EXTI9_5`, `EXTI15_10`.
+- Added STM32 EXTI IRQ handlers in the GPIO backend that dispatch callbacks by
+  EXTI line from IRQ context.
+- Extended the STM32 startup vector table with EXTI entries and weak handler
+  aliases so GPIO interrupts are wired end-to-end.
+- Extended the lightweight STM32 register map with SYSCFG/EXTI registers and
+  EXTI IRQ numbers used by the new GPIO interrupt path.
+- `hal_gpio_set_irq_priority()` on STM32G474 now sets NVIC priorities for all
+  GPIO EXTI IRQ groups (instead of being a no-op).
+
+### Documentation
+
+- Updated GPIO API docs with STM32 EXTI line-routing semantics, line-sharing
+  constraints, and backend-specific IRQ-priority behavior.
+- Refreshed STM32 status docs to reflect delivered GPIO EXTI support and
+  removed stale placeholder claims.
+
 ### hal_pwm / hal_pwm_freq - STM32G474 TIM PWM backend
 
 - Added a real STM32G474 TIM output-compare/PWM backend for `hal_pwm_write()`,
