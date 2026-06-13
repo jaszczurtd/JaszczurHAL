@@ -711,6 +711,24 @@ resolved are listed under "Done" for traceability.
 
 ### Done
 
+- 2026-06-13: STM32G474 newlib retarget Tier 1 completed.
+  The STM32 firmware runtime now has an explicit retarget tier at
+  `src/hal/impl/stm32g474/port/runtime/stm32g474_syscalls.c`, linked into
+  firmware executables but not `libJaszczurHAL.a` or host builds. `_write`
+  routes stdout/stderr to `g474_debug_uart_putc()` with LF-to-CRLF translation,
+  `_read` uses the new bare-metal `g474_debug_uart_getc_nonblock()` RX
+  primitive, `_sbrk` allocates from `end` up to `_estack - _Min_Stack_Size` with
+  an 8-byte aligned bump pointer and collision guard, and
+  `__malloc_lock` / `__malloc_unlock` suspend/resume the scheduler under
+  `HAL_ENABLE_FREERTOS` so task-concurrent newlib `malloc` is serialized. The
+  retarget file also provides UART-console semantics for `_close`, `_fstat`,
+  `_isatty`, `_lseek`, and controlled reset behavior for `_exit` / `_kill`.
+  This closes the STM32 newlib/nosys warning/parity follow-up noted in earlier
+  Stage 6/7 validation entries. Validation: `git diff --check`,
+  `01_blink_stm32g474` built, `29_freertos_smoke_stm32g474` built, and
+  `arm-none-eabi-nm` confirmed the retarget object defines `_write`, `_read`,
+  `_sbrk`, `__malloc_lock`, `__malloc_unlock`, `_exit`, and `_kill`;
+  `./runalltests.sh -j4` passed all 7 gates.
 - 2026-06-13: FreeRTOS smoke example expanded with native worker tasks.
   `examples/29_freertos_smoke` now keeps the Stage 7 portable
   `app_task0()` / `app_task1()` entry coverage and also creates two explicit
@@ -723,8 +741,9 @@ resolved are listed under "Done" for traceability.
   `hal_idle()`, and debug output from task context. Validation:
   `git diff --check`, `29_freertos_smoke_rp2040` built under
   `JH_RP2040_FREERTOS=ON`, and STM32 FreeRTOS
-  `29_freertos_smoke_stm32g474` built. STM32 ELF links still emit the existing
-  newlib/nosys syscall warnings from the bare-metal toolchain.
+  `29_freertos_smoke_stm32g474` built. At the time, STM32 ELF links still
+  emitted the existing newlib/nosys syscall warnings from the bare-metal
+  toolchain; this was closed by the later STM32G474 newlib retarget entry above.
 - 2026-06-13: Stage 7 FreeRTOS entry-point mode completed.
   STM32G474 `HAL_PROVIDE_APP_ENTRY + HAL_ENABLE_FREERTOS` now calls
   `app_start()`, creates the `app_task0()` FreeRTOS task, creates the optional
@@ -753,8 +772,9 @@ resolved are listed under "Done" for traceability.
   with explicit task stack/priority override definitions,
   `./scripts/build_stm32_lib.sh --clean --freertos -o
   /tmp/jh_stage7_build_stm32_freertos -j 4` built the static library, and
-  `./runalltests.sh -j4` passed all 7 gates. STM32 ELF links still emit the
-  existing newlib/nosys syscall warnings from the bare-metal toolchain.
+  `./runalltests.sh -j4` passed all 7 gates. At the time, STM32 ELF links still
+  emitted the existing newlib/nosys syscall warnings from the bare-metal
+  toolchain; this was closed by the later STM32G474 newlib retarget entry above.
 - 2026-06-12: Stage 6 FreeRTOS kernel acquisition completed.
   Added `freertos_core_version.conf` as the single source of truth for the
   STM32 FreeRTOS-Kernel dependency, pinned to the exact FreeRTOS-Kernel
@@ -779,8 +799,9 @@ resolved are listed under "Done" for traceability.
   external-checkout configure, `./scripts/build_stm32_lib.sh --clean
   --freertos -o /tmp/jh_stage6_build_stm32_freertos -j 4`,
   `29_freertos_smoke_stm32g474` build, and `./runalltests.sh -j4` passed all
-  7 gates. STM32 ELF links still emit the existing newlib/nosys syscall
-  warnings from the bare-metal toolchain.
+  7 gates. At the time, STM32 ELF links still emitted the existing newlib/nosys
+  syscall warnings from the bare-metal toolchain; this was closed by the later
+  STM32G474 newlib retarget entry above.
 - 2026-06-12: Stage 5 STM32 HAL primitives under FreeRTOS completed.
   STM32G474 `hal_mutex_*` now selects a normal non-recursive FreeRTOS mutex
   under `HAL_ENABLE_FREERTOS`, rejects ISR lock/unlock use, and keeps the

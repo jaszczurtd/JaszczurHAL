@@ -226,7 +226,7 @@ function(_jh_add_stm32g474_example NAME)
         "${G474}/port/g474_debug_uart.c"
         "${G474}/port/exception_info.c"
         "${G474}/port/atomic_stubs_cm4.c"
-        "${G474}/port/stm32g474_syscalls.c"
+        "${G474}/port/runtime/stm32g474_syscalls.c"
         ${_stm32_impl}
         ${_stm32_drivers}
         ${_stm32_shared}
