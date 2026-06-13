@@ -372,6 +372,279 @@ Before doing this, verify behavior on:
 
 ---
 
+## 6. C runtime (newlib) retarget layer for STM32G474 — URGENT (STM32 parity)
+
+> **Priority: urgent, not "future".** This is *catch-up* work, not a nice-to-have.
+> The STM32G474 backend must reach functional parity with the mature RP2040
+> backend, and right now its C runtime is a gap: there is no working `printf`/
+> stdio, no safe heap with collision detection, and no thread-safe `malloc` under
+> FreeRTOS. On RP2040 all of this comes "for free" from arduino-pico/pico-sdk; on
+> STM32 it is simply missing. Until it is filled, every STM32 feature that wants
+> formatted output, dynamic allocation (e.g. cJSON), or multi-task `malloc` is
+> either unavailable or unsafe. Treat Tier 1 below as a near-term task gating
+> further STM32 module work, ahead of the genuinely optional items (3-5).
+
+This section captures the conclusions from the FreeRTOS audit follow-up on the
+STM32G474 firmware link warnings, the architectural analysis of where libc
+syscalls belong, the functional retarget roadmap, and a survey of ready-made code
+that could be adopted (6.9).
+
+### 6.1 Trigger and root cause
+
+Linking any STM32G474 firmware (e.g. `examples/29_freertos_smoke_stm32g474`,
+`01_blink_stm32g474`) emitted a cluster of linker warnings:
+
+```text
+warning: _getpid is not implemented and will always fail
+warning: _isatty / _kill / _lseek / _read / _write is not implemented ...
+```
+
+These are **not** missing-symbol errors. They originate from `libnosys`
+(pulled in by `--specs=nosys.specs`): its fallback syscall stubs carry
+`.gnu.warning.<symbol>` sections, so the linker emits the warning whenever
+`libc_nano` references the symbol — even though `--gc-sections` often discards
+the reference afterwards (hence the "does not take linker garbage collection
+into account" note). No `-w`-style flag can suppress a `.gnu.warning` section.
+
+### 6.2 Immediate fix (applied)
+
+The only clean way to remove the warnings is to provide project-owned strong
+definitions of those syscalls, so the linker resolves them from our object and
+never pulls the warning-carrying `libnosys` members. A minimal
+`src/hal/impl/stm32g474/port/stm32g474_syscalls.c` was added and wired into the
+STM32 example link. Result: both FreeRTOS and non-FreeRTOS STM32 builds link
+warning-clean, FreeRTOS symbols stay linked, and the tracked tree is unaffected
+(the file is part of the firmware link, not the static `.a`).
+
+### 6.3 Architectural conclusion: syscalls are a runtime/BSP tier, not HAL
+
+The empty stubs silence the warning but the deeper point is **layering**. libc
+syscalls (`_write`, `_read`, `_sbrk`, `_exit`, ...) sit at the very bottom of
+the C runtime — below libc, called from `printf`, `assert`, `abort`, fault
+handlers, and *before the scheduler starts*. They form a **runtime / BSP /
+retarget tier** whose dependencies must point **only downward** onto bare-metal
+primitives:
+
+```text
+  Application
+      |
+  libc (printf, malloc, time)
+      |   <- syscalls: _write/_read/_sbrk/_exit       (RUNTIME / retarget tier)
+      v
+  bare-metal primitives in port/ : g474_debug_uart, linker symbols,
+                                    SCB_AIRCR, systick, exception_info
+      ^
+      |   <- hal_serial / hal_debug                    (HAL tier, app-facing)
+  Application (when it wants synchronized logging)
+```
+
+Key rule: **`_write` and `hal_serial` are siblings**, both standing on the same
+bare-metal primitive (`g474_debug_uart`), neither standing on the other. Routing
+`_write` through `hal_serial_*` would invert the dependency (bottom of the stack
+calling the application-facing HAL module) and would break context-safety,
+because `hal_serial` takes a FreeRTOS `hal_mutex_t`: that asserts/blocks when
+`printf` is called from an ISR, a fault handler, a HAL critical section, or
+before `vTaskStartScheduler()`. The lowest write primitive must be callable from
+any context.
+
+Confirming evidence in-tree: `g474_debug_uart.h` already documents that it is
+"kept independent of the higher-level hal_uart/hal_serial so the fault-dump path
+has no allocation or driver dependencies", and `hal_serial.cpp` itself is a
+*consumer* of `g474_debug_uart_*`. The HAL layer wraps bare-metal upward; it must
+never become a dependency of the runtime/bare-metal tier, nor be used to patch a
+lower-level link warning.
+
+Corollary on the missing layer: the bare-metal primitives already exist
+(`g474_debug_uart`, linker symbols, `SCB_AIRCR`, systick, `exception_info`).
+What is missing is a *named, delineated* runtime/retarget tier that owns syscalls
+and obeys the downward-only dependency rule. `stm32g474_syscalls.c` is the seed
+of that tier; promoting it to an explicit `port/runtime/` (or `port/retarget/`)
+folder with the rule documented is the clean structural step.
+
+### 6.4 Guard correctness
+
+The retarget TU must be guarded by `JH_STM32G474_HW` (STM32G474 **and** an ARM
+compile), not `HAL_TARGET_STM32G474`. The host "does-it-compile" build
+(`build_stm32_host`) defines `HAL_TARGET_STM32G474` but runs on glibc, which owns
+`_write`/`_sbrk`/etc.; defining ours there would clash. `JH_STM32G474_HW` is
+precisely the bare-metal marker, matching the primitive (`g474_debug_uart`) the
+tier stands on. (The currently committed stub guards on `HAL_TARGET_STM32G474` and
+is only harmless because it is excluded from the static-lib and host source
+lists — this should be tightened to `JH_STM32G474_HW`.)
+
+### 6.5 Functional retarget roadmap (beyond empty stubs)
+
+**Tier 1 — real functionality, low cost, recommended together:**
+
+- `_write` (fd 1/2) -> `g474_debug_uart_putc` with `\n`->`\r\n`. Makes `printf`,
+  `puts`, `fprintf(stderr, ...)` work. Shares the UART *sink* with `hal_serial`,
+  not its lock.
+- `_read` (fd 0) -> a **new bare-metal** `g474_debug_uart_getc_nonblock()` added
+  to the primitive (RX/PA3 is already wired). Enables `getchar`/`scanf`. This is
+  the right way to "add a lower layer": extend the primitive downward, never
+  reach sideways/up to `hal_serial`.
+- `_sbrk` -> bump allocator over the linker symbols `end` / `_estack` /
+  `_Min_Stack_Size` (0x800), returning `-1`/`ENOMEM` on exhaustion. Needed by
+  `malloc` (e.g. cJSON) with a real heap/stack-collision guard.
+- `__malloc_lock` / `__malloc_unlock` -> `vTaskSuspendAll()` / `xTaskResumeAll()`
+  under `HAL_ENABLE_FREERTOS`. Without this, `malloc` from two tasks corrupts the
+  newlib heap. The suspend/resume pair is nestable and safe before the scheduler
+  starts; it is the canonical FreeRTOS pattern (do not port pico's mutex-based
+  lock).
+- char-device stubs `_isatty`=1 (fd 0/1/2), `_fstat`=`S_IFCHR`, `_lseek`=`ESPIPE`,
+  `_close`=0 — for a UART console these *are* the correct semantics, not empty
+  placeholders.
+- `_exit` / `_kill` -> controlled reset via `SCB_AIRCR` (`VECTKEY|SYSRESETREQ`,
+  a bare-metal register), instead of hanging.
+
+**Tier 2 — useful, decide per need:**
+
+- `_times` / `clock()` -> `stm32g474_systick_millis()` (bare-metal, clean).
+- Wall-clock `_gettimeofday` would want `hal_rtc_get_epoch()`, but `hal_rtc` is a
+  HAL module — using it would repeat the same inversion. Clean options: (a) add a
+  bare-metal RTC register accessor in `port/` and base `_gettimeofday` on it, or
+  (b) do not provide `_gettimeofday` in the runtime tier and leave wall-clock to
+  the application via `hal_rtc`. Do **not** pull `hal_rtc` into the runtime tier.
+- Per-task `errno`/stdio reentrancy: `FreeRTOSConfig.h` currently sets
+  `configUSE_NEWLIB_REENTRANT 0`, so `errno`, `strtok`, `rand`, and stdio state
+  are neither per-task nor protected. Setting it to `1` makes the GCC ARM_CM4F
+  port swap `_impure_ptr` per context switch, at a cost of ~96-150 B RAM per task.
+  A deliberate RAM-vs-correctness decision.
+
+### 6.6 What to adopt from the RP2040 / pico-sdk path
+
+Verdict: **little to nothing is portable 1:1, and RP2040 must not retarget at
+all.**
+
+- pico-sdk is not vendored in this repo (it arrives via arduino-cli, outside the
+  tree), and project rules forbid bringing SDK ownership into `impl/shared`.
+- pico-sdk's `_write`/`_sbrk`/locks are dual-core/SMP + pico-spinlock + pico
+  `stdio_driver_t` specific; stripping that machinery leaves the generic
+  libgloss/Cube pattern you would write for STM32 anyway. It is BSD-3-Clause, so
+  legally adoptable with attribution, but not worth a literal port.
+- On RP2040 you must **not** define these syscalls — arduino-pico/pico-sdk already
+  owns them; overriding causes duplicate scheduler/USB/newlib-lock symbols. There
+  is no shared syscall code across targets; only the *contract* "printf works" is
+  shared, realized per-target on its own bare-metal.
+- The one idea worth adopting later is the `stdio_driver_t` multiplexer pattern
+  (register UART/USB drivers, `_write` dispatches) — relevant only once STM32 adds
+  USB CDC; overkill for a single UART today.
+
+### 6.7 Interleaving and thread-safety, within correct layering
+
+`_write` and `hal_serial` share the **hardware sink**, not a lock.
+`g474_debug_uart_putc` is byte-atomic (poll TXE, write TDR), so the worst case is
+interleaved *lines*, not corrupted bytes. Raw `printf` is for debug/early-boot/
+fault output and may interleave; synchronized application logging should use
+`hal_derr` / `hal_serial`, which own the mutex. Pushing a blocking lock down into
+the primitive would only recreate the context-safety problem — synchronization
+belongs to the HAL tier, not the runtime primitive.
+
+### 6.8 Proposed structure and wiring
+
+```text
+src/hal/impl/stm32g474/port/
+  g474_debug_uart.{c,h}     # primitive (+ new getc_nonblock for _read)
+  stm32g474_regs.h          # primitive (SCB_AIRCR, USART)
+  system_stm32g474.c        # primitive (systick)
+  exception_info.{c,h}      # primitive (fault capture + reset)
+  runtime/
+    stm32g474_syscalls.c    # retarget tier: depends downward only, guarded by JH_STM32G474_HW
+```
+
+The runtime file is linked into the **firmware** executable (the example
+`add_executable`, and analogously any external firmware), never into the static
+`libJaszczurHAL.a` and never into the host sanity build.
+
+### 6.9 Ready-made code survey (what to adopt)
+
+Adoption is constrained by license: JaszczurHAL bundles BSD/MIT code, so adopted
+sources must be permissive (BSD/MIT/Apache), **never GPL**. The project's own
+license is not stated explicitly in `library.properties`; this should be pinned
+down before vendoring any third-party runtime code.
+
+Why "never GPL", concretely: JaszczurHAL is a library statically linked into
+arbitrary (including closed/commercial) firmware. GPL is strong copyleft, so
+incorporating GPL code would force the *entire combined work* — the library plus
+every downstream application that links it — to be released under GPL with full
+corresponding source on distribution, which defeats the purpose of a reusable
+HAL. On an MCU even LGPL is awkward, because its "allow the user to relink"
+requirement assumes dynamic linking or shipped object files, whereas everything
+here is static. This is also why the relevant ecosystem is already permissive
+(newlib/libgloss use BSD-like licenses, ST Cube is BSD-3) — so they *can* be
+linked into proprietary products. Precise rule: avoid plain GPL/LGPL **without a
+linking/runtime exception**; code under "GPL + linking exception" (e.g. the GCC
+runtime) is fine, so a "GPL" header still needs to be checked for an exception.
+
+Candidates surveyed:
+
+1. **STM32CubeIDE `syscalls.c` + `sysmem.c` — best fit, clean license.**
+   BSD-3-Clause (STMicroelectronics). `syscalls.c` defines the full stub set
+   (`_write/_read/_close/_fstat/_isatty/_lseek/_getpid/_kill/_exit/_open/...`);
+   `_write` calls a weak `__io_putchar`, i.e. the routing is left to us — which is
+   exactly our layering (`__io_putchar` -> `g474_debug_uart_putc`, downward to the
+   primitive). `sysmem.c` provides a basic `_sbrk` over `end` but **without**
+   heap/stack collision detection. Verdict: adopt the *pattern* (~30 lines), not
+   the whole files; back `__io_putchar` with our primitive.
+
+2. **Dave Nadler `heap_useNewlib_ST.c` — de-facto standard for newlib+FreeRTOS,
+   but license-ambiguous and a bigger change.** Provides `_sbrk_r/_sbrk`,
+   `__malloc_lock/unlock`, `__env_lock/unlock`, and routes `pvPortMalloc` ->
+   newlib `malloc` (one shared pool, heap_3 style); requires
+   `configUSE_NEWLIB_REENTRANT=1`. Two blockers: (a) the GitHub file header is
+   BSD-style but nadler.com states "All Rights Reserved" and the repo has no
+   LICENSE file — must be clarified before adoption; (b) it **replaces heap_4**
+   with a unified newlib pool, a larger architectural change than our plan.
+
+3. **uOS++ `_sbrk` (Liviu Ionescu; cnoviello "Mastering STM32" repo).** Has
+   proper collision detection (`_Heap_Begin`/`_Heap_Limit`, 4-byte alignment).
+   uOS++ is MIT, but the file header shows only a copyright line — confirm at the
+   source before reuse.
+
+4. **newlib `libgloss`** — the canonical reference stubs (newlib BSD-like
+   license). Good as a pattern reference, not for literal vendoring.
+
+5. **FreeRTOS itself** — only supplies the `configUSE_NEWLIB_REENTRANT` +
+   `__getreent` mechanism; it ships **no** `_sbrk`/syscalls. The community points
+   to Nadler for that.
+
+Two strategies and what to take from each:
+
+| | A. Minimal (= Tier 1, recommended) | B. Unified heap + reentrancy |
+|---|---|---|
+| Heap | heap_4 (FreeRTOS) + separate newlib `_sbrk` (cJSON/printf) | one pool: `pvPortMalloc` -> newlib `malloc` |
+| Adopt | ST `syscalls.c`/`sysmem.c` *pattern* (BSD-3) + own `__malloc_lock`=`vTaskSuspendAll` (3 lines) | Nadler `heap_useNewlib` wholesale |
+| `configUSE_NEWLIB_REENTRANT` | 0 (or 1 optionally) | **1 required** (RAM/task cost) |
+| Change size | small, leaves heap_4 intact | large, replaces heap_4 |
+| License | clean (BSD-3 ST + own code) | ambiguous (Nadler) |
+
+**Recommendation:** ready-made code exists, but for the layered/minimal approach
+adopt the **ST CubeIDE *pattern* (BSD-3)**, do not vendor a module:
+- `_write`/`_read`/char-stubs/`_exit`: ST `syscalls.c` pattern, with
+  `__io_putchar` -> `g474_debug_uart_putc` (stays in `port/runtime/`, downward);
+- `_sbrk`: our own over `end`/`_estack`/`_Min_Stack_Size` (better collision guard
+  than ST `sysmem.c`; detection pattern like uOS++);
+- `__malloc_lock`/`__malloc_unlock`: write our own (`vTaskSuspendAll`/
+  `xTaskResumeAll`) — 3 lines, zero license risk, no Nadler dependency.
+
+Consider Nadler only if a unified pool + full reentrancy is deliberately wanted,
+and only after the license is clarified. A practical research caveat (mbed-os
+#9542; Nadler): `_sbrk` collision checks against the live MSP are unreliable, and
+ST's USB stack calls `malloc` from an ISR — both argue for the **static** limit
+(`_estack - _Min_Stack_Size`) proposed here rather than a live-SP comparison.
+
+Sources: STM32CubeL4 `syscalls.c` (BSD-3-Clause); ST Community thread confirming
+`sysmem.c` is BSD-3-Clause; DRNadler/FreeRTOS_helpers `heap_useNewlib_ST.c` and
+nadler.com/embedded/newlibAndFreeRTOS.html; FreeRTOS docs on
+`configUSE_NEWLIB_REENTRANT`; MCU on Eclipse FreeRTOS+newlib articles;
+cnoviello/uOS++ `_sbrk.c`; ARMmbed/mbed-os issue #9542.
+
+**Difficulty:** low (Tier 1) / medium (Tier 2 reentrancy + bare-metal RTC)
+**Gain:** medium/high — working `printf`/stdio, a safe real heap, thread-safe
+`malloc` under FreeRTOS, and an explicit, correctly-layered runtime tier
+
+---
+
 ## Updated priority summary
 
 | Priority | Change | Difficulty | Gain | Status |
@@ -380,10 +653,17 @@ Before doing this, verify behavior on:
 | Done | Digipot driver split + ops table | Medium | High | Implemented |
 | Done-ish | Central `HAL_ENABLE_*` config | Medium | Medium | Implemented, polish remains |
 | Done | Arduino-free tools layer | Low/medium | Medium/high | Implemented |
+| **Urgent** | **STM32 newlib retarget Tier 1 (`_write`/`_read`/`_sbrk`/malloc-lock) — §6** | Low | High | **STM32 parity gap**; warning fix applied, functional retarget pending |
 | 1 | Status-returning `_ex` APIs | Medium | Medium/high | Add incrementally |
 | 2 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |
 | 3 | Header-based board descriptions | Low/medium | Medium | Optional layer |
 | 4 | Linker-section/static device model | High | Low now | Backlog |
+
+Urgency note: items framed as "STM32 parity" (the newlib retarget tier in §6, and
+broadly the STM32 backend catching up to RP2040 in module/runtime coverage) rank
+ahead of the optional polish items 3-5. RP2040 inherits a working C runtime from
+arduino-pico/pico-sdk; STM32 must build the equivalent itself, so this is
+catch-up work rather than future architecture.
 
 The safest implementation path is still incremental: preserve the current public
 API, add tests around each behavior before refactoring dispatch, and avoid
