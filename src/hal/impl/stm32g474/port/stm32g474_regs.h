@@ -47,6 +47,7 @@
 #define RCC_APB2ENR_TIM15EN (1u << 16)
 #define RCC_APB2ENR_TIM16EN (1u << 17)
 #define RCC_APB2ENR_TIM17EN (1u << 18)
+#define RCC_APB2ENR_SYSCFGEN (1u << 0)
 
 #define RCC_AHB2ENR_DAC1EN (1u << 16)
 #define RCC_AHB2ENR_ADC12EN (1u << 13)
@@ -273,6 +274,18 @@
 #define GPIO_PUPD_UP 0x1u
 #define GPIO_PUPD_DOWN 0x2u
 
+/* ── SYSCFG / EXTI (external interrupt routing) ─────────────────────────── */
+#define SYSCFG_BASE 0x40010000u
+#define SYSCFG_EXTICR(idx)                                                     \
+  JH_REG32(SYSCFG_BASE + 0x08u + ((uint32_t)(idx) * 4u))
+
+#define EXTI_BASE 0x40010400u
+#define EXTI_RTSR1 JH_REG32(EXTI_BASE + 0x00u)
+#define EXTI_FTSR1 JH_REG32(EXTI_BASE + 0x04u)
+#define EXTI_RPR1 JH_REG32(EXTI_BASE + 0x0Cu)
+#define EXTI_FPR1 JH_REG32(EXTI_BASE + 0x10u)
+#define EXTI_IMR1 JH_REG32(EXTI_BASE + 0x80u)
+
 /* ── Generic USART (v2) register accessors by peripheral base ─────────────
  * Used by the hal_uart backend for USART1 (PORT_1) and USART2 (PORT_2). The
  * debug console keeps its own dedicated USART2_* accessors below. */
@@ -322,6 +335,13 @@
 #define NVIC_IPR8(irqn) (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn)))
 
 #define TIM6_DACUNDER_IRQn 54u
+#define EXTI0_IRQn 6u
+#define EXTI1_IRQn 7u
+#define EXTI2_IRQn 8u
+#define EXTI3_IRQn 9u
+#define EXTI4_IRQn 10u
+#define EXTI9_5_IRQn 23u
+#define EXTI15_10_IRQn 40u
 #define JH_NVIC_PRIO_TIMER 0x80u
 
 /* ── DWT cycle counter (Cortex-M debug block) ────────────────────────────── */

@@ -6,7 +6,7 @@ JaszczurHAL is a hardware abstraction layer and utility library for embedded pro
 
 Today the most complete backend targets RP2040 boards through Arduino-pico.
 STM32G474 is available as a real bare-metal backend for core domains and an
-expanding set of shared portable drivers; some modules are still in progress.
+expanding set of shared portable drivers; a few modules are still in progress.
 
 ## Why this exists
 
@@ -248,8 +248,7 @@ zero code.
 The same demo source builds on both backends from a single example folder:
 [`examples/01_blink/`](examples/01_blink/) shows a portable `app.c` that
 compiles and runs on both RP2040 and STM32G474. The STM32G474 build exercises
-the real bare-metal backend (boot + SysTick time + GPIO + USART2 console +
-Cortex-M fault capture) targeting the Nucleo-G474RE.
+the real bare-metal backend targeting the Nucleo-G474RE.
 
 ## Host tests (quick)
 
