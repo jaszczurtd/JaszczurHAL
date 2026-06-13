@@ -23,8 +23,8 @@
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u
 #define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
-#define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* USART2 / SPI2 clocks  */
-#define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* USART1 / SPI1 clocks  */
+#define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
+#define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
 
 #define RCC_AHB2ENR_GPIOAEN (1u << 0)
 #define RCC_AHB2ENR_GPIOBEN (1u << 1)
@@ -34,11 +34,19 @@
 #define RCC_AHB2ENR_GPIOFEN (1u << 5)
 #define RCC_AHB2ENR_GPIOGEN (1u << 6)
 
+#define RCC_APB1ENR1_TIM2EN (1u << 0)
+#define RCC_APB1ENR1_TIM3EN (1u << 1)
+#define RCC_APB1ENR1_TIM4EN (1u << 2)
+#define RCC_APB1ENR1_TIM6EN (1u << 4)
+#define RCC_APB1ENR1_TIM7EN (1u << 5)
 #define RCC_APB1ENR1_USART2EN (1u << 17)
 #define RCC_APB1ENR1_SPI2EN (1u << 14)
 #define RCC_APB1ENR1_SPI3EN (1u << 15)
 
 #define RCC_APB2ENR_SPI1EN (1u << 12)
+#define RCC_APB2ENR_TIM15EN (1u << 16)
+#define RCC_APB2ENR_TIM16EN (1u << 17)
+#define RCC_APB2ENR_TIM17EN (1u << 18)
 
 #define RCC_AHB2ENR_DAC1EN (1u << 16)
 #define RCC_AHB2ENR_ADC12EN (1u << 13)
@@ -57,8 +65,9 @@
 #define ADC1_SMPR1 JH_REG32(ADC1_BASE + 0x14u) /* sample time, ch 0..9   */
 #define ADC1_SMPR2 JH_REG32(ADC1_BASE + 0x18u) /* sample time, ch 10..18 */
 #define ADC1_SQR1 JH_REG32(ADC1_BASE + 0x30u)  /* regular sequence       */
-#define ADC1_DR JH_REG32(ADC1_BASE + 0x40u) /* regular data (read clears EOC)  \
-                                             */
+#define ADC1_DR                                                                \
+  JH_REG32(ADC1_BASE + 0x40u) /* regular data (read clears EOC)                \
+                               */
 #define ADC12_CCR JH_REG32(ADC12_COMMON_BASE + 0x08u)
 
 #define ADC_ISR_ADRDY (1u << 0)
@@ -92,18 +101,43 @@
 /* ── DAC1 (DAC1_OUT1 = PA4, DAC1_OUT2 = PA5) ─────────────────────────────── */
 #define DAC1_BASE 0x50000800u
 #define DAC1_CR JH_REG32(DAC1_BASE + 0x00u)
-#define DAC1_DHR12R1 JH_REG32(DAC1_BASE + 0x08u) /* ch1, 12-bit right-aligned  \
-                                                  */
-#define DAC1_DHR12R2 JH_REG32(DAC1_BASE + 0x14u) /* ch2, 12-bit right-aligned  \
-                                                  */
+#define DAC1_DHR12R1                                                           \
+  JH_REG32(DAC1_BASE + 0x08u) /* ch1, 12-bit right-aligned                     \
+                               */
+#define DAC1_DHR12R2                                                           \
+  JH_REG32(DAC1_BASE + 0x14u) /* ch2, 12-bit right-aligned                     \
+                               */
 #define DAC_CR_EN1 (1u << 0)
 #define DAC_CR_EN2 (1u << 16)
-
-#define RCC_APB1ENR1_TIM2EN (1u << 0)
 
 /* ── TIM2 (32-bit GP timer; used as a pulse counter on TIM2_CH1 = PA0/AF1) ──
  */
 #define TIM2_BASE 0x40000000u
+#define TIM3_BASE 0x40000400u
+#define TIM4_BASE 0x40000800u
+#define TIM6_BASE 0x40001000u
+#define TIM7_BASE 0x40001400u
+#define TIM15_BASE 0x40014000u
+#define TIM16_BASE 0x40014400u
+#define TIM17_BASE 0x40014800u
+
+#define TIM_CR1(base) JH_REG32((base) + 0x00u)
+#define TIM_SMCR(base) JH_REG32((base) + 0x08u)
+#define TIM_DIER(base) JH_REG32((base) + 0x0Cu)
+#define TIM_SR(base) JH_REG32((base) + 0x10u)
+#define TIM_EGR(base) JH_REG32((base) + 0x14u)
+#define TIM_CCMR1_REG(base) JH_REG32((base) + 0x18u)
+#define TIM_CCMR2_REG(base) JH_REG32((base) + 0x1Cu)
+#define TIM_CCER_REG(base) JH_REG32((base) + 0x20u)
+#define TIM_CNT(base) JH_REG32((base) + 0x24u)
+#define TIM_PSC(base) JH_REG32((base) + 0x28u)
+#define TIM_ARR(base) JH_REG32((base) + 0x2Cu)
+#define TIM_CCR1(base) JH_REG32((base) + 0x34u)
+#define TIM_CCR2(base) JH_REG32((base) + 0x38u)
+#define TIM_CCR3(base) JH_REG32((base) + 0x3Cu)
+#define TIM_CCR4(base) JH_REG32((base) + 0x40u)
+#define TIM_BDTR(base) JH_REG32((base) + 0x44u)
+
 #define TIM2_CR1 JH_REG32(TIM2_BASE + 0x00u)
 #define TIM2_SMCR JH_REG32(TIM2_BASE + 0x08u) /* slave-mode / ext clock */
 #define TIM2_CCMR1 JH_REG32(TIM2_BASE + 0x18u)
@@ -111,12 +145,40 @@
 #define TIM2_CNT JH_REG32(TIM2_BASE + 0x24u)
 #define TIM2_ARR JH_REG32(TIM2_BASE + 0x2Cu)
 #define TIM_CR1_CEN (1u << 0)
+#define TIM_CR1_OPM (1u << 3)
+#define TIM_CR1_ARPE (1u << 7)
+#define TIM_DIER_UIE (1u << 0)
+#define TIM_SR_UIF (1u << 0)
+#define TIM_EGR_UG (1u << 0)
+
+#define TIM_CCMR1_CC1S_MASK (0x3u << 0)
+#define TIM_CCMR1_OC1PE (1u << 3)
+#define TIM_CCMR1_OC1M_MASK ((0x7u << 4) | (1u << 16))
+#define TIM_CCMR1_OC1M_PWM1 (0x6u << 4)
+#define TIM_CCMR1_CC2S_MASK (0x3u << 8)
+#define TIM_CCMR1_OC2PE (1u << 11)
+#define TIM_CCMR1_OC2M_MASK ((0x7u << 12) | (1u << 24))
+#define TIM_CCMR1_OC2M_PWM1 (0x6u << 12)
+
+#define TIM_CCMR2_CC3S_MASK (0x3u << 0)
+#define TIM_CCMR2_OC3PE (1u << 3)
+#define TIM_CCMR2_OC3M_MASK ((0x7u << 4) | (1u << 16))
+#define TIM_CCMR2_OC3M_PWM1 (0x6u << 4)
+#define TIM_CCMR2_CC4S_MASK (0x3u << 8)
+#define TIM_CCMR2_OC4PE (1u << 11)
+#define TIM_CCMR2_OC4M_MASK ((0x7u << 12) | (1u << 24))
+#define TIM_CCMR2_OC4M_PWM1 (0x6u << 12)
+
 /* CCMR1: CC1S = 01 -> IC1 mapped on TI1. */
 #define TIM_CCMR1_CC1S_TI1 (0x1u << 0)
 /* CCER capture-input polarity: 00 rising, 10 falling, 11 both. */
 #define TIM_CCER_CC1E (1u << 0)
 #define TIM_CCER_CC1P (1u << 1)
 #define TIM_CCER_CC1NP (1u << 3)
+#define TIM_CCER_CC2E (1u << 4)
+#define TIM_CCER_CC3E (1u << 8)
+#define TIM_CCER_CC4E (1u << 12)
+#define TIM_BDTR_MOE (1u << 15)
 /* SMCR: SMS=111 external clock mode 1; TS=101 selects TI1FP1. */
 #define TIM_SMCR_SMS_EXT1 (0x7u << 0)
 #define TIM_SMCR_TS_TI1FP1 (0x5u << 4)
@@ -253,6 +315,14 @@
 #define SYSTICK_CTRL_ENABLE (1u << 0)
 #define SYSTICK_CTRL_TICKINT (1u << 1)
 #define SYSTICK_CTRL_CLKSOURCE (1u << 2) /* processor clock */
+
+/* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
+#define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
+#define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
+#define NVIC_IPR8(irqn) (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn)))
+
+#define TIM6_DACUNDER_IRQn 54u
+#define JH_NVIC_PRIO_TIMER 0x80u
 
 /* ── DWT cycle counter (Cortex-M debug block) ────────────────────────────── */
 #define DWT_BASE 0xE0001000u

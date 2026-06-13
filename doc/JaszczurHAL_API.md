@@ -175,7 +175,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
-| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | hardware/pwm (pico SDK) |
+| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
@@ -537,6 +537,8 @@ Covered test targets include:
 
 - `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`,
   `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`, `test_hal_pga2311`
+- `test_stm32_hal_timer` validates the real STM32G474 timer backend in a
+  host-driven build, including callback rescheduling and managed timers.
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
@@ -660,11 +662,12 @@ void hal_pwm_write(uint8_t pin, uint32_t value);
 ```
 
 **impl/arduino:** `analogWriteResolution()`, `analogWrite()` (Arduino-pico).
-**Thread safety:** Each GPIO pin maps to an independent PWM hardware slice. Concurrent writes to different pins are safe. `hal_pwm_set_resolution` modifies global Arduino-pico state - call it once during init, not concurrently.
+**impl/stm32g474:** register-level TIM PWM output on mapped timer channels; default simple-PWM target frequency is 1 kHz best-effort from the current APB clock.
+**Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins to TIM channels. Channels sharing a timer also share frequency/resolution, and pins sharing the same TIM channel are not independent. Call `hal_pwm_set_resolution` during init, not concurrently with writes.
 
 ---
 
-## `hal_pwm_freq` - PWM with frequency control (pico SDK-backed)  *(optional - `HAL_ENABLE_PWM_FREQ`)*
+## `hal_pwm_freq` - PWM with frequency control  *(optional - `HAL_ENABLE_PWM_FREQ`)*
 
 Use this instead of `hal_pwm` when you need a specific PWM frequency (e.g. 160 Hz, 300 Hz).
 
@@ -688,8 +691,9 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 
 **impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
+**impl/stm32g474:** register-level TIM PWM on mapped TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level resource, so multiple channels on the same TIM share the same frequency and effective period.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
-function and slice enable are deferred until the first `hal_pwm_freq_write()` call. This
+function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
 **impl/.mock:** stores last written value; injectable via mock helpers.
 
@@ -700,7 +704,7 @@ uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 ```
 
-**Thread safety:** Arduino backend: `hal_pwm_freq_write()` is thread-safe and multicore-safe (internal mutex). `hal_pwm_freq_create()` and `hal_pwm_freq_destroy()` are not synchronized and should be called from one core during setup/teardown. Mock backend does not provide concurrent-access synchronization.
+**Thread safety:** RP2040 and STM32G474 backends protect `hal_pwm_freq_write()` with an internal mutex. `hal_pwm_freq_create()` and `hal_pwm_freq_destroy()` are not synchronized and should be called from one task/core during setup/teardown. Mock backend does not provide concurrent-access synchronization.
 
 ---
 
@@ -782,7 +786,8 @@ hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_re
 **Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
 **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
 **impl/arduino:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0` are treated as invalid and mapped to explicit result codes in `_ex`.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for scheduling/canceling and managed-timer state transitions. Alarm callbacks execute in interrupt context; keep callbacks short and non-blocking. Mock backend is deterministic for tests but not synchronized for concurrent host threads.
+**impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler. Long delays are chunked across 16-bit TIM6 periods, callback return values greater than zero reschedule the same alarm, and software pools provide the same public pool/cancel contract as RP2040.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for scheduling/canceling and managed-timer state transitions. STM32G474 protects its alarm slot scheduler with short PRIMASK critical sections; alarm callbacks execute from the TIM6 IRQ on hardware. Keep callbacks short and non-blocking. Mock backend is deterministic for tests but not synchronized for concurrent host threads.
 
 ---
 
@@ -4143,7 +4148,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 |---|---|
 | `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`) on RP2040; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
 | `hal_sync` | RP2040: pico SDK `pico/mutex.h` in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. STM32G474: atomic spinlock in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds |
-| `hal_timer` | pico SDK alarm/time APIs (`pico/time.h`) |
+| `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
@@ -4220,6 +4225,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_adc` | resolution config, inject + read |
 | `test_hal_pwm` | resolution config, write |
 | `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
+| `test_stm32_hal_timer` | real STM32G474 timer backend under host simulation: one-shot alarms, callback reschedule, cancel, pool limits/destruction, long-delay chunking, managed stop/pause/resume |
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |

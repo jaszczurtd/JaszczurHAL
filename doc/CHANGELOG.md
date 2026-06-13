@@ -6,6 +6,34 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### hal_timer - STM32G474 TIM6 alarm backend
+
+- Replaced the STM32G474 timer placeholder with a TIM6-backed 1 MHz alarm
+  scheduler under `JH_STM32G474_HW`. The backend now supports low-level
+  `hal_timer_add_alarm_us()` / cancel, callback-driven rescheduling via a
+  positive callback return value, logical alarm pools, and the shared managed
+  timer layer (`hal_timer_create/start/stop/pause/resume`).
+- Extended the STM32G474 startup vector and lightweight register map with the
+  TIM6/DAC underrun IRQ, TIM6 basic-timer registers, update interrupt bits, and
+  the minimal NVIC accessors needed by the timer backend.
+- Added `test_stm32_hal_timer`, a host-side regression test that compiles the
+  real STM32G474 timer backend and covers one-shot alarms, callback
+  rescheduling, cancel, pool capacity/destruction, long-delay chunking, and
+  managed timer stop/pause/resume behavior.
+
+### hal_pwm / hal_pwm_freq - STM32G474 TIM PWM backend
+
+- Added a real STM32G474 TIM output-compare/PWM backend for `hal_pwm_write()`,
+  replacing the previous host-style value store on hardware builds.
+- Added STM32G474 support for optional `HAL_ENABLE_PWM_FREQ` using the same
+  `hal_pwm_freq_create/write/destroy` API as RP2040. The backend configures
+  TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels, defers GPIO alternate-function
+  output until the first write, and protects frequency-PWM writes with the
+  module mutex.
+- Extended the lightweight STM32G474 register map with generic timer accessors,
+  PWM mode bits, capture/compare registers, and APB clock enables for the PWM
+  timer set.
+
 ### tests / shared drivers - datasheet-grounded regression expansion
 
 - Expanded host regression coverage so the current shared drivers are validated

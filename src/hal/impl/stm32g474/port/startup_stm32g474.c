@@ -8,9 +8,8 @@
  *   2. Reset_Handler copies .data from flash to RAM, zeroes .bss,
  *   3. calls SystemInit() (clock/SysTick/FPU/fault enables), then main().
  *
- * Only the core exceptions up to SysTick (#15) are populated; the first
- * bring-up uses no peripheral IRQs, so the table is intentionally short.
- * Peripheral IRQ vectors are added as drivers that need them land.
+ * Core exceptions are populated directly. Peripheral IRQ vectors are added as
+ * drivers need them; TIM6 is used by the STM32 hal_timer backend.
  */
 
 #include <stdint.h>
@@ -36,6 +35,8 @@ void MemManage_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void BusFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void UsageFault_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void DebugMon_Handler(void) __attribute__((weak, alias("Default_Handler")));
+void TIM6_DACUNDER_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
 
 #ifdef HAL_ENABLE_FREERTOS
 void SVC_Handler(void);
@@ -47,25 +48,25 @@ void PendSV_Handler(void) __attribute__((weak, alias("Default_Handler")));
 void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #endif
 
-/* Vector table: initial SP + 15 system exceptions. */
+/* STM32G474 IRQ number per RM0440/CMSIS device headers. */
+#define STM32_IRQ_TIM6_DACUNDER 54u
+
+/* Vector table: initial SP + 15 system exceptions + populated peripheral IRQs.
+ * Unlisted peripheral entries stay zero; only enabled IRQs must be present. */
 __attribute__((section(".isr_vector"),
                used)) void (*const g_vector_table[])(void) = {
-    (void (*)(void))(&_estack), /* 0  Initial stack pointer        */
-    Reset_Handler,              /* 1  Reset                        */
-    NMI_Handler,                /* 2  NMI                          */
-    HardFault_Handler,          /* 3  HardFault                    */
-    MemManage_Handler,          /* 4  MemManage                    */
-    BusFault_Handler,           /* 5  BusFault                     */
-    UsageFault_Handler,         /* 6  UsageFault                   */
-    0,
-    0,
-    0,
-    0,                /* 7-10 reserved                   */
-    SVC_Handler,      /* 11 SVCall                       */
-    DebugMon_Handler, /* 12 Debug monitor                */
-    0,                /* 13 reserved                     */
-    PendSV_Handler,   /* 14 PendSV                       */
-    SysTick_Handler,  /* 15 SysTick                      */
+    [0] = (void (*)(void))(&_estack), /* Initial stack pointer */
+    [1] = Reset_Handler,
+    [2] = NMI_Handler,
+    [3] = HardFault_Handler,
+    [4] = MemManage_Handler,
+    [5] = BusFault_Handler,
+    [6] = UsageFault_Handler,
+    [11] = SVC_Handler,
+    [12] = DebugMon_Handler,
+    [14] = PendSV_Handler,
+    [15] = SysTick_Handler,
+    [16u + STM32_IRQ_TIM6_DACUNDER] = TIM6_DACUNDER_IRQHandler,
 };
 
 void Reset_Handler(void) {
