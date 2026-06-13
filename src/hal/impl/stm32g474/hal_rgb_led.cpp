@@ -6,6 +6,7 @@
 #include "../../hal_gpio.h"
 #include "../../hal_rgb_led.h"
 #include "../../hal_sync.h"
+#include "../shared/hal_mutex_once.h"
 #include "../shared/neopixel/jh_neopixel.h"
 
 #ifdef JH_STM32G474_HW
@@ -19,180 +20,190 @@ static uint8_t s_brightness = 30;
 static hal_mutex_t s_rgb_mutex = nullptr;
 
 #ifdef JH_STM32G474_HW
-#define STM32_DEMCR       (*(volatile uint32_t *)0xE000EDFCu)
-#define STM32_DWT_CTRL    (*(volatile uint32_t *)0xE0001000u)
-#define STM32_DWT_CYCCNT  (*(volatile uint32_t *)0xE0001004u)
+#define STM32_DEMCR (*(volatile uint32_t *)0xE000EDFCu)
+#define STM32_DWT_CTRL (*(volatile uint32_t *)0xE0001000u)
+#define STM32_DWT_CYCCNT (*(volatile uint32_t *)0xE0001004u)
 #define STM32_DEMCR_TRCENA (1u << 24)
 #define STM32_DWT_CYCCNTENA (1u << 0)
 
 static inline void stm32_cycles_enable(void) {
-    STM32_DEMCR |= STM32_DEMCR_TRCENA;
-    STM32_DWT_CTRL |= STM32_DWT_CYCCNTENA;
+  STM32_DEMCR |= STM32_DEMCR_TRCENA;
+  STM32_DWT_CTRL |= STM32_DWT_CYCCNTENA;
 }
 
 static inline void stm32_wait_until(uint32_t target) {
-    while ((int32_t)(STM32_DWT_CYCCNT - target) < 0) {
-    }
+  while ((int32_t)(STM32_DWT_CYCCNT - target) < 0) {
+  }
 }
 #endif
 
 static void rgb_ensure_mutex(void) {
-    if (!s_rgb_mutex) {
-        hal_critical_section_enter();
-        if (!s_rgb_mutex) {
-            s_rgb_mutex = hal_mutex_create();
-        }
-        hal_critical_section_exit();
-    }
+  (void)jh_hal_mutex_create_once(&s_rgb_mutex);
 }
 
 static inline void rgb_lock(void) {
-    rgb_ensure_mutex();
-    hal_mutex_lock(s_rgb_mutex);
+  rgb_ensure_mutex();
+  hal_mutex_lock(s_rgb_mutex);
 }
 
 static inline void rgb_unlock(void) {
-    rgb_ensure_mutex();
-    hal_mutex_unlock(s_rgb_mutex);
+  rgb_ensure_mutex();
+  hal_mutex_unlock(s_rgb_mutex);
 }
 
-static bool stm32_write_pixels(const uint8_t *pixels,
-                               uint32_t num_bytes,
-                               bool is800khz,
-                               uint8_t pin,
-                               void *user) {
-    (void)user;
-    if (!pixels || num_bytes == 0u) {
-        return true;
-    }
+static bool stm32_write_pixels(const uint8_t *pixels, uint32_t num_bytes,
+                               bool is800khz, uint8_t pin, void *user) {
+  (void)user;
+  if (!pixels || num_bytes == 0u) {
+    return true;
+  }
 
 #ifdef JH_STM32G474_HW
-    if (!is800khz) {
-        return false;
+  if (!is800khz) {
+    return false;
+  }
+
+  const uint32_t port = (uint32_t)(pin >> 4);
+  const uint32_t pin_num = (uint32_t)(pin & 0x0Fu);
+  if (port > 6u) {
+    return false;
+  }
+
+  volatile uint32_t *const bsrr = &GPIO_BSRR(port);
+  const uint32_t set_mask = (1u << pin_num);
+  const uint32_t clr_mask = (1u << (pin_num + 16u));
+
+  stm32_cycles_enable();
+
+  /* WS2812B timings @16 MHz (62.5 ns/cycle):
+   * T0H=0.35 us -> 6 cycles, T1H=0.8 us -> 13 cycles, total=1.25 us -> 20.
+   */
+  const uint32_t bit_cycles = JH_G474_CORE_CLOCK_HZ / 800000u;
+  const uint32_t t0h_cycles =
+      ((JH_G474_CORE_CLOCK_HZ * 35u) + 50000000u) / 100000000u;
+  const uint32_t t1h_cycles =
+      ((JH_G474_CORE_CLOCK_HZ * 80u) + 50000000u) / 100000000u;
+
+  if (bit_cycles == 0u || t0h_cycles == 0u || t1h_cycles == 0u) {
+    return false;
+  }
+  if (!(t0h_cycles < t1h_cycles && t1h_cycles < bit_cycles)) {
+    return false;
+  }
+
+  hal_critical_section_enter();
+
+  uint32_t start = STM32_DWT_CYCCNT;
+  for (uint32_t i = 0; i < num_bytes; ++i) {
+    uint8_t value = pixels[i];
+    for (uint8_t mask = 0x80u; mask != 0u; mask >>= 1u) {
+      const uint32_t bit_start = start;
+      *bsrr = set_mask;
+      const uint32_t high_until =
+          bit_start + ((value & mask) ? t1h_cycles : t0h_cycles);
+      stm32_wait_until(high_until);
+      *bsrr = clr_mask;
+      const uint32_t bit_until = bit_start + bit_cycles;
+      stm32_wait_until(bit_until);
+      start = bit_until;
     }
+  }
 
-    const uint32_t port = (uint32_t)(pin >> 4);
-    const uint32_t pin_num = (uint32_t)(pin & 0x0Fu);
-    if (port > 6u) {
-        return false;
-    }
-
-    volatile uint32_t *const bsrr = &GPIO_BSRR(port);
-    const uint32_t set_mask = (1u << pin_num);
-    const uint32_t clr_mask = (1u << (pin_num + 16u));
-
-    stm32_cycles_enable();
-
-    /* WS2812B timings @16 MHz (62.5 ns/cycle):
-     * T0H=0.35 us -> 6 cycles, T1H=0.8 us -> 13 cycles, total=1.25 us -> 20.
-     */
-    const uint32_t bit_cycles = JH_G474_CORE_CLOCK_HZ / 800000u;
-    const uint32_t t0h_cycles = ((JH_G474_CORE_CLOCK_HZ * 35u) + 50000000u) / 100000000u;
-    const uint32_t t1h_cycles = ((JH_G474_CORE_CLOCK_HZ * 80u) + 50000000u) / 100000000u;
-
-    if (bit_cycles == 0u || t0h_cycles == 0u || t1h_cycles == 0u) {
-        return false;
-    }
-    if (!(t0h_cycles < t1h_cycles && t1h_cycles < bit_cycles)) {
-        return false;
-    }
-
-    hal_critical_section_enter();
-
-    uint32_t start = STM32_DWT_CYCCNT;
-    for (uint32_t i = 0; i < num_bytes; ++i) {
-        uint8_t value = pixels[i];
-        for (uint8_t mask = 0x80u; mask != 0u; mask >>= 1u) {
-            const uint32_t bit_start = start;
-            *bsrr = set_mask;
-            const uint32_t high_until = bit_start + ((value & mask) ? t1h_cycles : t0h_cycles);
-            stm32_wait_until(high_until);
-            *bsrr = clr_mask;
-            const uint32_t bit_until = bit_start + bit_cycles;
-            stm32_wait_until(bit_until);
-            start = bit_until;
-        }
-    }
-
-    hal_critical_section_exit();
-    return true;
+  hal_critical_section_exit();
+  return true;
 #else
-    (void)is800khz;
-    (void)pin;
-    return true;
+  (void)is800khz;
+  (void)pin;
+  return true;
 #endif
 }
 
-static void s_init_with_type(uint8_t pin, uint8_t num_pixels, uint16_t neo_type) {
-    if (s_strip_ready) {
-        jh_neopixel_deinit(&s_strip);
-        s_strip_ready = false;
-    }
+static void s_init_with_type(uint8_t pin, uint8_t num_pixels,
+                             uint16_t neo_type) {
+  if (s_strip_ready) {
+    jh_neopixel_deinit(&s_strip);
+    s_strip_ready = false;
+  }
 
-    if (!jh_neopixel_init(&s_strip, num_pixels, pin, neo_type)) {
-        return;
-    }
+  if (!jh_neopixel_init(&s_strip, num_pixels, pin, neo_type)) {
+    return;
+  }
 
-    hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
-    hal_gpio_write(pin, false);
-    s_strip_ready = true;
-    s_last_color = -1;
+  hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
+  hal_gpio_write(pin, false);
+  s_strip_ready = true;
+  s_last_color = -1;
 }
 
 void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels) {
-    rgb_lock();
-    s_init_with_type(pin, num_pixels, HAL_RGB_LED_PIXEL_RGB_KHZ800);
-    rgb_unlock();
+  rgb_lock();
+  s_init_with_type(pin, num_pixels, HAL_RGB_LED_PIXEL_RGB_KHZ800);
+  rgb_unlock();
 }
 
 void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
                          hal_rgb_led_pixel_type_t pixel_type) {
-    rgb_lock();
-    s_init_with_type(pin, num_pixels, (uint16_t)pixel_type);
-    rgb_unlock();
+  rgb_lock();
+  s_init_with_type(pin, num_pixels, (uint16_t)pixel_type);
+  rgb_unlock();
 }
 
 void hal_rgb_led_set_brightness(uint8_t brightness) {
-    rgb_lock();
-    s_brightness = (brightness < 1u) ? 1u : brightness;
-    s_last_color = -1;
-    rgb_unlock();
+  rgb_lock();
+  s_brightness = (brightness < 1u) ? 1u : brightness;
+  s_last_color = -1;
+  rgb_unlock();
 }
 
-void hal_rgb_led_off(void) {
-    hal_rgb_led_set_color(HAL_RGB_LED_NONE);
-}
+void hal_rgb_led_off(void) { hal_rgb_led_set_color(HAL_RGB_LED_NONE); }
 
 void hal_rgb_led_set_color(hal_rgb_led_color_t color) {
-    rgb_lock();
-    if (!s_strip_ready) {
-        rgb_unlock();
-        return;
-    }
-    if ((int)color == s_last_color) {
-        rgb_unlock();
-        return;
-    }
-    s_last_color = (int)color;
-
-    uint8_t r = 0u;
-    uint8_t g = 0u;
-    uint8_t b = 0u;
-    const uint8_t br = s_brightness;
-
-    switch (color) {
-        case HAL_RGB_LED_RED:    r = br; break;
-        case HAL_RGB_LED_GREEN:  g = br; break;
-        case HAL_RGB_LED_BLUE:   b = br; break;
-        case HAL_RGB_LED_YELLOW: r = br; g = br; break;
-        case HAL_RGB_LED_WHITE:  r = br; g = br; b = br; break;
-        case HAL_RGB_LED_PURPLE: r = br; b = br; break;
-        default: break;
-    }
-
-    jh_neopixel_set_pixel_color_packed(&s_strip, 0u, jh_neopixel_color(r, g, b));
-    (void)jh_neopixel_show(&s_strip, stm32_write_pixels, nullptr);
+  rgb_lock();
+  if (!s_strip_ready) {
     rgb_unlock();
+    return;
+  }
+  if ((int)color == s_last_color) {
+    rgb_unlock();
+    return;
+  }
+  s_last_color = (int)color;
+
+  uint8_t r = 0u;
+  uint8_t g = 0u;
+  uint8_t b = 0u;
+  const uint8_t br = s_brightness;
+
+  switch (color) {
+  case HAL_RGB_LED_RED:
+    r = br;
+    break;
+  case HAL_RGB_LED_GREEN:
+    g = br;
+    break;
+  case HAL_RGB_LED_BLUE:
+    b = br;
+    break;
+  case HAL_RGB_LED_YELLOW:
+    r = br;
+    g = br;
+    break;
+  case HAL_RGB_LED_WHITE:
+    r = br;
+    g = br;
+    b = br;
+    break;
+  case HAL_RGB_LED_PURPLE:
+    r = br;
+    b = br;
+    break;
+  default:
+    break;
+  }
+
+  jh_neopixel_set_pixel_color_packed(&s_strip, 0u, jh_neopixel_color(r, g, b));
+  (void)jh_neopixel_show(&s_strip, stm32_write_pixels, nullptr);
+  rgb_unlock();
 }
 
 #endif /* HAL_ENABLE_RGB_LED */

@@ -32,17 +32,18 @@ extern "C" {
  *     hal_i2c_lock() and hal_i2c_unlock() to guard the whole sequence
  *     explicitly.
  *
- * Mutex lifecycle: the internal mutex is created lazily on first use
- * (for example by hal_i2c_lock() or the first transfer call), not only
- * by hal_i2c_init().
+ * Mutex lifecycle: hal_i2c_init()/hal_i2c_init_bus() creates the per-bus
+ * mutex early in normal use. Runtime calls keep an atomic create-once fallback
+ * for defensive use before init, so two FreeRTOS tasks/RP2040 cores cannot
+ * accidentally create different locks for the same bus.
  *
  * Init order: hal_i2c_init()/hal_i2c_init_bus() is still required to
  * configure pins, clock and start Wire/Wire1 before real bus traffic.
  */
 
-#include <stdint.h>
-#include <stddef.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 /** @brief I2C standard-mode clock: 100 kHz. */
 #define HAL_I2C_CLOCK_STANDARD_HZ 100000UL
@@ -75,7 +76,8 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
  * @param scl_pin  SCL pin number.
  * @param clock_hz Bus clock frequency in Hz.
  */
-void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
+void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                      uint32_t clock_hz);
 
 /**
  * @brief Change the clock of the default I2C controller after init.
@@ -162,7 +164,8 @@ size_t hal_i2c_write_bus(uint8_t bus, uint8_t data);
 uint8_t hal_i2c_end_transmission(void);
 
 /**
- * @brief One-shot "beginTransmission + write one byte + endTransmission" helper.
+ * @brief One-shot "beginTransmission + write one byte + endTransmission"
+ * helper.
  *
  * Wraps the three-step sequence most commonly used to push a single register
  * pointer or configuration byte to an I2C slave. The internal I2C mutex is
@@ -185,10 +188,12 @@ uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
  * @param outWriteOk Optional pointer; see hal_i2c_write_byte(). May be NULL.
  * @return hal_i2c_end_transmission_bus() status.
  */
-uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data, bool *outWriteOk);
+uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
+                               bool *outWriteOk);
 
 /**
- * @brief One-shot "request 1 byte + read" helper, symmetric to hal_i2c_write_byte().
+ * @brief One-shot "request 1 byte + read" helper, symmetric to
+ * hal_i2c_write_byte().
  *
  * Requests a single byte from @p address and returns it. The internal I2C
  * mutex is held across the full request+read sequence, making this helper
@@ -226,21 +231,14 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk);
  * @param rx_len  Number of bytes to read.
  * @return true when both phases complete and exactly @p rx_len bytes are read.
  */
-bool hal_i2c_write_read(uint8_t address,
-                        const uint8_t *tx,
-                        size_t tx_len,
-                        uint8_t *rx,
-                        size_t rx_len);
+bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
+                        uint8_t *rx, size_t rx_len);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_write_read().
  */
-bool hal_i2c_write_read_bus(uint8_t bus,
-                            uint8_t address,
-                            const uint8_t *tx,
-                            size_t tx_len,
-                            uint8_t *rx,
-                            size_t rx_len);
+bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
+                            size_t tx_len, uint8_t *rx, size_t rx_len);
 
 /**
  * @brief Flush selected bus transmission and release its mutex.
@@ -354,7 +352,6 @@ void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
  * @param scl_pin SCL pin number.
  */
 void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
-
 
 #endif /* HAL_ENABLE_I2C */
 #ifdef __cplusplus

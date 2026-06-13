@@ -7,6 +7,7 @@
 #include "../../hal_mqtt.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
+#include "../shared/hal_mutex_once.h"
 #include "frameworks/PubSubClient/src/PubSubClient.h"
 
 #include <WiFiClient.h>
@@ -35,336 +36,338 @@ static void *s_user_callback_user = NULL;
 // hal_mqtt_loop() one message at a time with the user callback invoked
 // outside the module mutex.
 typedef struct {
-    char     topic[HAL_MQTT_TOPIC_BUF_SIZE];
-    uint8_t  payload[HAL_MQTT_PAYLOAD_BUF_SIZE];
-    uint16_t length;
+  char topic[HAL_MQTT_TOPIC_BUF_SIZE];
+  uint8_t payload[HAL_MQTT_PAYLOAD_BUF_SIZE];
+  uint16_t length;
 } hal_mqtt_rx_slot_t;
 
 static hal_mqtt_rx_slot_t s_rx_queue[HAL_MQTT_RX_QUEUE_DEPTH];
-static uint8_t  s_rx_head = 0;          // next slot to read
-static uint8_t  s_rx_tail = 0;          // next slot to write
-static uint8_t  s_rx_count = 0;
+static uint8_t s_rx_head = 0; // next slot to read
+static uint8_t s_rx_tail = 0; // next slot to write
+static uint8_t s_rx_count = 0;
 static uint32_t s_rx_overflow_count = 0;
 
 static inline void mqtt_ensure_mutex(void) {
-    if (s_mqtt_mutex == NULL) {
-        hal_critical_section_enter();
-        if (s_mqtt_mutex == NULL) {
-            s_mqtt_mutex = hal_mutex_create();
-        }
-        hal_critical_section_exit();
-    }
+  (void)jh_hal_mutex_create_once(&s_mqtt_mutex);
 }
 
-static bool validate_non_empty(const char *value, const char *fn, const char *name) {
-    if (!value || value[0] == '\0') {
-        hal_derr("%s: %s is NULL/empty", fn, name);
-        return false;
-    }
-    return true;
+static bool validate_non_empty(const char *value, const char *fn,
+                               const char *name) {
+  if (!value || value[0] == '\0') {
+    hal_derr("%s: %s is NULL/empty", fn, name);
+    return false;
+  }
+  return true;
 }
 
-static void mqtt_internal_callback(char *topic, uint8_t *payload, unsigned int length) {
-    const char *safe_topic = topic ? topic : "";
-    const size_t topic_len = strnlen(safe_topic, HAL_MQTT_TOPIC_BUF_SIZE - 1u);
+static void mqtt_internal_callback(char *topic, uint8_t *payload,
+                                   unsigned int length) {
+  const char *safe_topic = topic ? topic : "";
+  const size_t topic_len = strnlen(safe_topic, HAL_MQTT_TOPIC_BUF_SIZE - 1u);
 
-    uint16_t copy_len = (uint16_t)length;
-    if (copy_len > HAL_MQTT_PAYLOAD_BUF_SIZE) {
-        hal_derr("mqtt_internal_callback: payload length %u exceeds buffer size, truncating",
+  uint16_t copy_len = (uint16_t)length;
+  if (copy_len > HAL_MQTT_PAYLOAD_BUF_SIZE) {
+    hal_derr("mqtt_internal_callback: payload length %u exceeds buffer size, "
+             "truncating",
              (unsigned)length);
-        copy_len = HAL_MQTT_PAYLOAD_BUF_SIZE;
-    }
+    copy_len = HAL_MQTT_PAYLOAD_BUF_SIZE;
+  }
 
-    if (s_rx_count >= HAL_MQTT_RX_QUEUE_DEPTH) {
-        // Queue full: drop newest (preserve earliest message ordering) and log.
-        s_rx_overflow_count++;
-        hal_derr("mqtt_internal_callback: RX queue full (depth=%u), dropping topic='%s' (overflow=%lu)",
-             (unsigned)HAL_MQTT_RX_QUEUE_DEPTH,
-             safe_topic,
+  if (s_rx_count >= HAL_MQTT_RX_QUEUE_DEPTH) {
+    // Queue full: drop newest (preserve earliest message ordering) and log.
+    s_rx_overflow_count++;
+    hal_derr("mqtt_internal_callback: RX queue full (depth=%u), dropping "
+             "topic='%s' (overflow=%lu)",
+             (unsigned)HAL_MQTT_RX_QUEUE_DEPTH, safe_topic,
              (unsigned long)s_rx_overflow_count);
-        return;
-    }
+    return;
+  }
 
-    hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_tail];
-    memcpy(slot->topic, safe_topic, topic_len);
-    slot->topic[topic_len] = '\0';
+  hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_tail];
+  memcpy(slot->topic, safe_topic, topic_len);
+  slot->topic[topic_len] = '\0';
 
-    if (payload && copy_len > 0u) {
-        memcpy(slot->payload, payload, copy_len);
-    }
-    slot->length = copy_len;
+  if (payload && copy_len > 0u) {
+    memcpy(slot->payload, payload, copy_len);
+  }
+  slot->length = copy_len;
 
-    s_rx_tail = (uint8_t)((s_rx_tail + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
-    s_rx_count++;
+  s_rx_tail = (uint8_t)((s_rx_tail + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
+  s_rx_count++;
 }
 
 static inline void mqtt_bind_callback(void) {
-    s_client.setCallback(mqtt_internal_callback);
+  s_client.setCallback(mqtt_internal_callback);
 }
 
 bool hal_mqtt_set_server(const char *host, uint16_t port) {
-    if (!validate_non_empty(host, "hal_mqtt_set_server", "host")) {
-        return false;
-    }
+  if (!validate_non_empty(host, "hal_mqtt_set_server", "host")) {
+    return false;
+  }
 
-    if(port <= 0 || port > 65535) {
-        hal_derr("hal_mqtt_set_server: invalid broker port: %d", port);
-        return false;
-    }
+  if (port <= 0 || port > 65535) {
+    hal_derr("hal_mqtt_set_server: invalid broker port: %d", port);
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    snprintf(s_server_host, sizeof(s_server_host), "%s", host);
-    s_client.setServer(s_server_host, port);
-    mqtt_bind_callback();
-    s_server_configured = true;
+  snprintf(s_server_host, sizeof(s_server_host), "%s", host);
+  s_client.setServer(s_server_host, port);
+  mqtt_bind_callback();
+  s_server_configured = true;
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return true;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return true;
 }
 
 bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    s_user_callback = callback;
-    s_user_callback_user = user;
-    mqtt_bind_callback();
+  s_user_callback = callback;
+  s_user_callback_user = user;
+  mqtt_bind_callback();
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return true;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return true;
 }
 
 bool hal_mqtt_set_keepalive(uint16_t keepalive_s) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    s_client.setKeepAlive(keepalive_s);
+  s_client.setKeepAlive(keepalive_s);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return true;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return true;
 }
 
 bool hal_mqtt_set_socket_timeout(uint16_t timeout_s) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    s_client.setSocketTimeout(timeout_s);
-    s_wifi_client.setTimeout((unsigned long)timeout_s * 1000UL);
+  s_client.setSocketTimeout(timeout_s);
+  s_wifi_client.setTimeout((unsigned long)timeout_s * 1000UL);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return true;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return true;
 }
 
 bool hal_mqtt_set_buffer_size(uint16_t size) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool ok = s_client.setBufferSize(size);
+  const bool ok = s_client.setBufferSize(size);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    if (!ok) {
-        hal_derr("hal_mqtt_set_buffer_size: setBufferSize(%u) failed", (unsigned)size);
-    }
-    return ok;
+  hal_mutex_unlock(s_mqtt_mutex);
+  if (!ok) {
+    hal_derr("hal_mqtt_set_buffer_size: setBufferSize(%u) failed",
+             (unsigned)size);
+  }
+  return ok;
 }
 
 uint16_t hal_mqtt_get_buffer_size(void) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const uint16_t size = s_client.getBufferSize();
+  const uint16_t size = s_client.getBufferSize();
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return size;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return size;
 }
 
 bool hal_mqtt_connect(const char *client_id) {
-    if (!validate_non_empty(client_id, "hal_mqtt_connect", "client_id")) {
-        return false;
-    }
+  if (!validate_non_empty(client_id, "hal_mqtt_connect", "client_id")) {
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    if (!s_server_configured) {
-        hal_mutex_unlock(s_mqtt_mutex);
-        hal_derr("hal_mqtt_connect: server is not configured");
-        return false;
-    }
-
-    mqtt_bind_callback();
-    const bool ok = s_client.connect(client_id);
-
+  if (!s_server_configured) {
     hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+    hal_derr("hal_mqtt_connect: server is not configured");
+    return false;
+  }
+
+  mqtt_bind_callback();
+  const bool ok = s_client.connect(client_id);
+
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
-bool hal_mqtt_connect_auth(const char *client_id, const char *user, const char *pass) {
-    if (!validate_non_empty(client_id, "hal_mqtt_connect_auth", "client_id")) {
-        return false;
-    }
-    if (!validate_non_empty(user, "hal_mqtt_connect_auth", "user")) {
-        return false;
-    }
+bool hal_mqtt_connect_auth(const char *client_id, const char *user,
+                           const char *pass) {
+  if (!validate_non_empty(client_id, "hal_mqtt_connect_auth", "client_id")) {
+    return false;
+  }
+  if (!validate_non_empty(user, "hal_mqtt_connect_auth", "user")) {
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    if (!s_server_configured) {
-        hal_mutex_unlock(s_mqtt_mutex);
-        hal_derr("hal_mqtt_connect_auth: server is not configured");
-        return false;
-    }
-
-    mqtt_bind_callback();
-    const bool ok = s_client.connect(client_id, user, pass);
-
+  if (!s_server_configured) {
     hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+    hal_derr("hal_mqtt_connect_auth: server is not configured");
+    return false;
+  }
+
+  mqtt_bind_callback();
+  const bool ok = s_client.connect(client_id, user, pass);
+
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
 void hal_mqtt_disconnect(void) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    s_client.disconnect();
+  s_client.disconnect();
 
-    hal_mutex_unlock(s_mqtt_mutex);
+  hal_mutex_unlock(s_mqtt_mutex);
 }
 
 bool hal_mqtt_connected(void) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool connected = s_client.connected();
+  const bool connected = s_client.connected();
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return connected;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return connected;
 }
 
 int hal_mqtt_state(void) {
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const int state = s_client.state();
+  const int state = s_client.state();
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return state;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return state;
 }
 
 bool hal_mqtt_loop(void) {
-    mqtt_ensure_mutex();
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
+
+  mqtt_bind_callback();
+  const bool ok = s_client.loop();
+
+  hal_mqtt_message_callback_t callback = s_user_callback;
+  void *callback_user = s_user_callback_user;
+
+  hal_mutex_unlock(s_mqtt_mutex);
+
+  // Drain the inbound queue one message at a time. The user callback is
+  // invoked OUTSIDE the module mutex so it may safely re-enter publish/
+  // subscribe operations.
+  while (true) {
+    char topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
+    uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
+    uint16_t payload_len = 0;
+    bool has_message = false;
+
     hal_mutex_lock(s_mqtt_mutex);
-
-    mqtt_bind_callback();
-    const bool ok = s_client.loop();
-
-    hal_mqtt_message_callback_t callback = s_user_callback;
-    void *callback_user = s_user_callback_user;
-
+    if (s_rx_count > 0u) {
+      hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_head];
+      snprintf(topic_copy, sizeof(topic_copy), "%s", slot->topic);
+      payload_len = slot->length;
+      if (payload_len > 0u) {
+        memcpy(payload_copy, slot->payload, payload_len);
+      }
+      s_rx_head = (uint8_t)((s_rx_head + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
+      s_rx_count--;
+      has_message = true;
+    }
     hal_mutex_unlock(s_mqtt_mutex);
 
-    // Drain the inbound queue one message at a time. The user callback is
-    // invoked OUTSIDE the module mutex so it may safely re-enter publish/
-    // subscribe operations.
-    while (true) {
-        char    topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
-        uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
-        uint16_t payload_len = 0;
-        bool has_message = false;
-
-        hal_mutex_lock(s_mqtt_mutex);
-        if (s_rx_count > 0u) {
-            hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_head];
-            snprintf(topic_copy, sizeof(topic_copy), "%s", slot->topic);
-            payload_len = slot->length;
-            if (payload_len > 0u) {
-                memcpy(payload_copy, slot->payload, payload_len);
-            }
-            s_rx_head = (uint8_t)((s_rx_head + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
-            s_rx_count--;
-            has_message = true;
-        }
-        hal_mutex_unlock(s_mqtt_mutex);
-
-        if (!has_message) break;
-        if (callback) {
-            callback(topic_copy, payload_copy, payload_len, callback_user);
-        }
+    if (!has_message)
+      break;
+    if (callback) {
+      callback(topic_copy, payload_copy, payload_len, callback_user);
     }
+  }
 
-    return ok;
+  return ok;
 }
 
-bool hal_mqtt_publish(const char *topic, const uint8_t *payload, uint16_t payload_len, bool retained) {
-    if (!validate_non_empty(topic, "hal_mqtt_publish", "topic")) {
-        return false;
-    }
-    if (payload_len > 0u && payload == NULL) {
-        hal_derr("hal_mqtt_publish: payload is NULL while payload_len > 0");
-        return false;
-    }
+bool hal_mqtt_publish(const char *topic, const uint8_t *payload,
+                      uint16_t payload_len, bool retained) {
+  if (!validate_non_empty(topic, "hal_mqtt_publish", "topic")) {
+    return false;
+  }
+  if (payload_len > 0u && payload == NULL) {
+    hal_derr("hal_mqtt_publish: payload is NULL while payload_len > 0");
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool ok = s_client.publish(topic, payload, payload_len, retained);
+  const bool ok = s_client.publish(topic, payload, payload_len, retained);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
-bool hal_mqtt_publish_str(const char *topic, const char *payload, bool retained) {
-    if (!validate_non_empty(topic, "hal_mqtt_publish_str", "topic")) {
-        return false;
-    }
-    if (!payload) {
-        hal_derr("hal_mqtt_publish_str: payload is NULL");
-        return false;
-    }
+bool hal_mqtt_publish_str(const char *topic, const char *payload,
+                          bool retained) {
+  if (!validate_non_empty(topic, "hal_mqtt_publish_str", "topic")) {
+    return false;
+  }
+  if (!payload) {
+    hal_derr("hal_mqtt_publish_str: payload is NULL");
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool ok = s_client.publish(topic, payload, retained);
+  const bool ok = s_client.publish(topic, payload, retained);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
 bool hal_mqtt_subscribe(const char *topic, uint8_t qos) {
-    if (!validate_non_empty(topic, "hal_mqtt_subscribe", "topic")) {
-        return false;
-    }
-    if (qos > 1u) {
-        hal_derr("hal_mqtt_subscribe: qos must be 0 or 1");
-        return false;
-    }
+  if (!validate_non_empty(topic, "hal_mqtt_subscribe", "topic")) {
+    return false;
+  }
+  if (qos > 1u) {
+    hal_derr("hal_mqtt_subscribe: qos must be 0 or 1");
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool ok = s_client.subscribe(topic, qos);
+  const bool ok = s_client.subscribe(topic, qos);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
 bool hal_mqtt_unsubscribe(const char *topic) {
-    if (!validate_non_empty(topic, "hal_mqtt_unsubscribe", "topic")) {
-        return false;
-    }
+  if (!validate_non_empty(topic, "hal_mqtt_unsubscribe", "topic")) {
+    return false;
+  }
 
-    mqtt_ensure_mutex();
-    hal_mutex_lock(s_mqtt_mutex);
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
 
-    const bool ok = s_client.unsubscribe(topic);
+  const bool ok = s_client.unsubscribe(topic);
 
-    hal_mutex_unlock(s_mqtt_mutex);
-    return ok;
+  hal_mutex_unlock(s_mqtt_mutex);
+  return ok;
 }
 
 #endif /* HAL_ENABLE_MQTT */
-#endif  // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP2040

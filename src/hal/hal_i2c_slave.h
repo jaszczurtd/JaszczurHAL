@@ -17,9 +17,10 @@ extern "C" {
  *
  * Thread-safety (Arduino backend):
  *   - hal_i2c_slave_init() must be called from one core only (setup).
- *   - hal_i2c_slave_reg_write*() use an internal per-bus mutex and are
- *     safe to call from any core or context (ISR-safe on RP2040).
- *   - hal_i2c_slave_reg_read*() likewise acquire the mutex.
+ *   - hal_i2c_slave_reg_write*() and hal_i2c_slave_reg_read*() use an
+ *     internal short register-map lock shared with the Wire callbacks, so
+ *     they are safe to call from normal task/core context. The Wire
+ *     onReceive/onRequest callbacks do not take HAL mutexes.
  *   - hal_i2c_slave_deinit() must be called from one core only.
  *
  * Two I2C controllers are supported via bus-index APIs:
