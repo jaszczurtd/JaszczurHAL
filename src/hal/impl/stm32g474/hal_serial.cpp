@@ -267,6 +267,8 @@ void hal_serial_begin(uint32_t baud) {
 #endif
 }
 
+void hal_serial_set_flush(bool enabled) { (void)enabled; }
+
 void hal_serial_print(const char *s) {
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);

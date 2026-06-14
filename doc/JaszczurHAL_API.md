@@ -1172,6 +1172,7 @@ typedef struct {
 } hal_debug_rate_limit_t;
 
 void hal_serial_begin(uint32_t baud);
+void hal_serial_set_flush(bool enabled);
 void hal_serial_print(const char *s);
 void hal_serial_println(const char *s);
 int  hal_serial_available(void);   // bytes waiting in RX buffer
@@ -1275,8 +1276,10 @@ lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
 the other way around, so deadlock is impossible.
 
-On the Arduino backend, the mutex window additionally includes a
-`Serial.flush()` after every `Serial.print/println`. RP2040 +
+On the Arduino backend, the mutex window can additionally include a
+`Serial.flush()` after every `Serial.print/println`. This is disabled
+by default and can be changed at runtime with
+`hal_serial_set_flush(bool enabled)`. RP2040 +
 TinyUSB CDC `Serial.println(s)` returns as soon as the bytes are
 copied into the CDC ring buffer, NOT when they have been delivered
 to the USB host. Without flush, the next emitter took the mutex and
@@ -1284,10 +1287,14 @@ started writing fresh bytes into a FIFO that still held tail bytes
 of the previous frame; the TinyUSB ring-pointer race in that
 overlap produced single-byte drops mid-frame
 (`buid`/`defaut`/`efault` etc.). Flushing inside the mutex makes
-"only one frame in flight" the structural invariant. STM32G474 and
-mock backends use plain `printf`, which line-buffers to stdout /
-debug UART without the CDC ring-buffer hazard, so they keep the
-mutex but skip the flush.
+"only one frame in flight" the structural invariant.
+
+Some embedded applications prefer forward progress over strict debug-console
+delivery when the USB host is slow, disconnected, or wedged. Calling
+`hal_serial_set_flush(false)` skips the Arduino backend's blocking
+`Serial.flush()` while preserving the TX mutex. STM32G474 and mock backends
+accept the same setter for portable code, but have no blocking USB CDC flush
+to skip.
 
 Limiter implementation details:
 - source matching uses `hash + source string` (collision-safe lookup)
@@ -2414,8 +2421,9 @@ the application watchdog alive across long modem bring-up sequences.
 High-level driver for SimCom A76xx-family modems (A7670E/SA/G, A7672E/S,
 A7608, ...). Built on top of `hal_modem_at`. Provides power control,
 boot synchronisation, SIM/network bring-up, PDP attach, network-time
-retrieval, coarse cellular location retrieval (LBS), and a full MQTT client (**publish and subscribe**) on top of
-the `CMQTT*` command family.
+retrieval, coarse cellular location retrieval (LBS), GNSS fix retrieval, and
+a full MQTT client (**publish and subscribe**) on top of the `CMQTT*`
+command family.
 
 ```c
 #include <hal/hal_simcom_a76xx.h>
@@ -2451,6 +2459,21 @@ typedef struct {
   int   accuracy_m;   // -1 when modem reply omits accuracy
   float speed_kmh;    // HAL-estimated from consecutive fixes, -1 when unavailable
 } hal_simcom_a76xx_cell_location_t;
+
+typedef struct {
+  double latitude_deg;
+  double longitude_deg;
+  double altitude_m;      // -1 when unavailable
+  double speed_kmh;       // -1 when unavailable
+  double course_deg;      // -1 when unavailable
+  double hdop;            // -1 when unavailable
+  double pdop;            // -1 when unavailable
+  double vdop;            // -1 when unavailable
+  int    satellites_used; // -1 when unavailable
+  int    satellites_view; // -1 when unavailable
+  int    fix_mode;        // modem-specific status, -1 when unavailable
+  char   utc[24];         // modem UTC text, or empty
+} hal_simcom_a76xx_gnss_location_t;
 
 typedef struct {
     bool        enabled;
@@ -2523,6 +2546,13 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a
 hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(hal_simcom_a76xx_t h,
                                                              hal_simcom_a76xx_cell_location_t *out_location,
                                                              uint32_t timeout_ms);
+void hal_simcom_a76xx_gnss_location_init(hal_simcom_a76xx_gnss_location_t *loc);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
+                                                         uint32_t timeout_ms);
+bool hal_simcom_a76xx_gnss_is_powered(hal_simcom_a76xx_t h);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(hal_simcom_a76xx_t h,
+                                                             hal_simcom_a76xx_gnss_location_t *out_location,
+                                                             uint32_t timeout_ms);
 
 /* MQTT */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
@@ -2548,6 +2578,14 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(hal_simcom_
 int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
+
+GNSS helpers normalise common SimCom response variants:
+`+CGNSSINFO`, `+CGNSINF` and `+CGPSINFO`. `hal_simcom_a76xx_get_gnss_location()`
+ensures GNSS is powered first, then queries the fix. It returns
+`HAL_SIMCOM_A76XX_NOT_READY` when the modem responds successfully but has no
+fix yet, for example `+CGNSSINFO: ,,,,,,,,`. For the A7670E
+`+CGNSSINFO: <fix>,<sat_count>,...` shape, the single satellite count is
+reported as both `satellites_used` and `satellites_view`.
 
 **MQTT subscribe pipeline:** incoming messages arrive as a four-URC
 sequence (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` /

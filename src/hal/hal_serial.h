@@ -108,6 +108,21 @@ void hal_debug_set_timestamp_hook(hal_debug_timestamp_hook_t hook, void *user);
 void hal_serial_begin(uint32_t baud);
 
 /**
+ * @brief Enable or disable flushing after serial writes.
+ *
+ * The Arduino/RP2040 backend defaults to enabled and calls Serial.flush()
+ * after hal_serial_print() / hal_serial_println() to keep USB CDC frames
+ * strictly ordered. Disable it in applications where blocking on the USB host
+ * is more harmful than possible CDC byte drops during heavy concurrent output.
+ *
+ * Backends without a blocking flush still accept the setting for portable
+ * code, but it has no transport effect there.
+ *
+ * @param enabled true to flush after writes, false to skip flush.
+ */
+void hal_serial_set_flush(bool enabled);
+
+/**
  * @brief Print a string to the serial console (no newline).
  * @param s Null-terminated string.
  */

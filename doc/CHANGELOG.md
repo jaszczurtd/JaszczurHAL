@@ -573,6 +573,30 @@ Next release.
 - Added unit tests in `test_hal_simcom_a76xx` covering success,
   non-zero modem status parsing, and invalid arguments.
 
+### hal_simcom_a76xx - GNSS API
+
+- New public type `hal_simcom_a76xx_gnss_location_t` plus helpers:
+  `hal_simcom_a76xx_gnss_location_init()`,
+  `hal_simcom_a76xx_gnss_power_on()`,
+  `hal_simcom_a76xx_gnss_is_powered()`, and
+  `hal_simcom_a76xx_get_gnss_location()`.
+- The GNSS helper tries common SimCom response variants:
+  `AT+CGNSSINFO`, `AT+CGNSINF`, and `AT+CGPSINFO`, normalising
+  coordinates, speed, course, altitude, DOP values, satellites and UTC
+  into one structure.
+- For the A7670E `+CGNSSINFO` shape observed in the field
+  (`<fix>,<sat_count>,...,<lat>,N,<lon>,E,...`), the parsed satellite
+  count is exposed as both `satellites_used` and `satellites_view`
+  instead of leaving `satellites_used = -1`.
+- GNSS power-on tries common firmware command variants:
+  `AT+CGNSSPWR=1`, `AT+CGNSSPWR=1,1`, `AT+CGNSPWR=1`,
+  `AT+CGPS=1,1`, and `AT+CGPS=1`.
+- Empty fix responses such as `+CGNSSINFO: ,,,,,,,,` return
+  `HAL_SIMCOM_A76XX_NOT_READY`, allowing applications to distinguish
+  "no fix yet" from command/parse failures.
+- Added unit tests for GNSS initialisation, power-on, no-fix handling,
+  `+CGNSSINFO`, `+CGNSINF`, `+CGPSINFO`, fallback order and invalid args.
+
 ### hal_simcom_a76xx - `+CLBS` parser tolerates fragmented URC
 
 - **Bug fix.** Some A7670 firmware builds split the `+CLBS:` URC across
@@ -805,6 +829,10 @@ Next release.
 
 ### hal_serial / hal_system - ISR-safe debug logging
 
+- New public API `hal_serial_set_flush(bool enabled)` controls whether
+  `hal_serial_print()` / `hal_serial_println()` flush after each write.
+  Arduino/RP2040 keeps the previous behavior by default (`enabled=false`).
+  STM32G474 and mock backends accept the setting as a portable no-op.
 - ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
   `hal_derr_limited()` may now be called from interrupt context. The
   callers detect ISR context via the new `hal_in_isr()` (ARM Cortex-M

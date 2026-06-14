@@ -27,6 +27,7 @@ static hal_mutex_t s_rl_mutex = NULL;
 static hal_mutex_t s_tx_mutex = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
+static volatile bool s_serial_flush_enabled = false;
 static hal_debug_rate_limit_t s_rate_limit_cfg = {5u, 1000u, 30000u};
 static hal_debug_timestamp_hook_t s_timestamp_hook = NULL;
 static void *s_timestamp_user = NULL;
@@ -264,22 +265,30 @@ static void hal_serial_ensure_tx_mutex(void) {
 
 void hal_serial_begin(uint32_t baud) { Serial.begin(baud); }
 
-/* `Serial.flush()` waits until the TX FIFO has actually been drained
- * to the USB host. We need this **inside** the TX mutex window: on
- * RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes into the
- * USB CDC ring buffer and returns immediately. Without flush, a
+void hal_serial_set_flush(bool enabled) {
+  __atomic_store_n(&s_serial_flush_enabled, enabled, __ATOMIC_RELEASE);
+}
+
+static inline bool hal_serial_should_flush(void) {
+  return __atomic_load_n(&s_serial_flush_enabled, __ATOMIC_ACQUIRE);
+}
+
+/* When enabled, `Serial.flush()` waits until the TX FIFO has actually
+ * been drained to the USB host. Keep it **inside** the TX mutex window:
+ * on RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes into
+ * the USB CDC ring buffer and returns immediately. Without flush, a
  * follow-up `hal_serial_println` (from the session helper or from
- * `hal_deb` on the other core) takes the mutex and starts writing
- * fresh bytes into a FIFO that still contains tail bytes of the
- * previous frame. The TinyUSB ring-pointer race in that overlap is
- * what produced the single-byte drops observed in the field
- * (`buid` / `defaut` / `efault` etc.). Flushing before unlock keeps
- * exactly one frame in flight at a time. */
+ * `hal_deb` on the other core) can start writing fresh bytes into a FIFO
+ * that still contains tail bytes of the previous frame. Disabling this
+ * avoids host-side USB stalls blocking application progress, at the cost
+ * of reintroducing that CDC overlap risk during heavy concurrent output. */
 void hal_serial_print(const char *s) {
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
   Serial.print(s);
-  Serial.flush();
+  if (hal_serial_should_flush()) {
+    Serial.flush();
+  }
   hal_mutex_unlock(s_tx_mutex);
 }
 
@@ -287,7 +296,9 @@ void hal_serial_println(const char *s) {
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
   Serial.println(s);
-  Serial.flush();
+  if (hal_serial_should_flush()) {
+    Serial.flush();
+  }
   hal_mutex_unlock(s_tx_mutex);
 }
 
