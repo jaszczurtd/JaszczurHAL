@@ -103,6 +103,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MCP9600        # propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
+    HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
     HAL_ENABLE_EXTERNAL_ADC   # propagates HAL_ENABLE_I2C
     HAL_ENABLE_MCP401X        # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395        # second digipot backend

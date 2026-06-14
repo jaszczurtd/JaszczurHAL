@@ -168,6 +168,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/ds18b20/hal_ds18b20.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
+| `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/onewire/hal_onewire.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/ads1x15/ads1x15_driver.h` | `impl/shared/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
 | `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
@@ -209,6 +210,7 @@ HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
+HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
@@ -240,6 +242,7 @@ modules you use:
 #define HAL_ENABLE_KV            // -> propagates EEPROM
 #define HAL_ENABLE_GPS           // -> auto-enables UART when no transport is selected
 #define HAL_ENABLE_MCP9600       // -> propagates THERMOCOUPLE + I2C
+#define HAL_ENABLE_BH1750        // -> propagates I2C
 #define HAL_ENABLE_UART
 #define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
 #define HAL_ENABLE_PWM_FREQ
@@ -335,6 +338,7 @@ arduino-cli compile \
 -DHAL_ENABLE_UART \
 -DHAL_ENABLE_SWSERIAL \
 -DHAL_ENABLE_I2C \
+-DHAL_ENABLE_BH1750 \
 -DHAL_ENABLE_EXTERNAL_ADC \
 -DHAL_ENABLE_PWM_FREQ" \
   --build-path .build \
@@ -423,7 +427,8 @@ unless explicitly stated otherwise.
 
 ## Drivers and frameworks
 
-Bundled low-level drivers live under `src/hal/impl/arduino/drivers/`.
+Bundled or ported low-level drivers live under `src/hal/impl/arduino/drivers/`
+or `src/hal/impl/shared/`.
 Bundled high-level integration frameworks live under
 `src/hal/impl/arduino/frameworks/`.
 Both are integrated as HAL-internal implementation detail (not public API).
@@ -539,7 +544,7 @@ Covered test targets include:
   `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`, `test_hal_pga2311`
 - `test_stm32_hal_timer` validates the real STM32G474 timer backend in a
   host-driven build, including callback rescheduling and managed timers.
-- `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
+- `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_bh1750_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
 - `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
 - `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_sdlogger`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
@@ -1998,6 +2003,12 @@ bool    hal_i2c_write_read_bus(uint8_t bus, uint8_t address,
                                const uint8_t *tx, size_t tx_len,
                                uint8_t *rx, size_t rx_len);
 
+// Direct read helper for sensors that expose current data without a register
+// pointer phase. Holds the bus mutex across request+copy.
+bool    hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
+bool    hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address,
+                               uint8_t *rx, size_t rx_len);
+
 // Request + read (acquires/releases mutex around the request; read is unlocked)
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // returns bytes received
 int     hal_i2c_available(void);    // bytes in receive buffer
@@ -2821,6 +2832,46 @@ void     hal_mock_ds18b20_set_presence(hal_ds18b20_t h, bool present);
 void     hal_mock_ds18b20_set_crc_ok(hal_ds18b20_t h, bool ok);
 uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 ```
+
+---
+
+## `hal_bh1750` - BH1750 ambient-light sensor  *(optional - `HAL_ENABLE_BH1750`)*
+
+```c
+#include <hal/hal_bh1750.h>
+
+#define HAL_BH1750_I2C_ADDR_LOW      0x23u
+#define HAL_BH1750_I2C_ADDR_HIGH     0x5Cu
+#define HAL_BH1750_I2C_ADDR_DEFAULT  HAL_BH1750_I2C_ADDR_HIGH
+
+typedef struct {
+  uint8_t i2c_bus;   // 0 = default controller, 1 = second controller
+  uint8_t i2c_addr;  // 7-bit BH1750 address
+} hal_bh1750_config_t;
+
+typedef struct {
+  hal_bh1750_config_t cfg;
+  bool initialized;
+  hal_mutex_t mutex;
+} hal_bh1750_t;
+
+hal_bh1750_config_t hal_bh1750_default_config(void);
+bool  hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg);
+void  hal_bh1750_deinit(hal_bh1750_t *dev);
+float hal_bh1750_light(hal_bh1750_t *dev);
+```
+
+`hal_bh1750_init()` sends command `0x10` (continuous H-resolution mode), waits
+180 ms for the first measurement, and returns true only when the device ACKs
+the command. `hal_bh1750_light()` reads exactly two bytes and returns lux as
+`raw / 1.2f`; it returns `-1.0f` on an incomplete read.
+
+**impl/shared:** `impl/shared/bh1750/hal_bh1750.cpp` is used by RP2040,
+STM32G474, and mock tests. The default address is `0x5C` to preserve the source
+driver constructor default; boards with ADDR tied low should set `0x23`.
+**Thread safety:** per-instance mutex serializes driver calls; I2C byte reads
+use `hal_i2c_read_bytes_bus()` so request and sample copy stay inside the bus
+mutex.
 
 ---
 
@@ -4274,13 +4325,14 @@ logger-close stub plus HAL mocks.
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
 | `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
-| `test_hal_i2c` | bus0/bus1 begin/request/read flow, address capture, busy helper, lock-depth and init/deinit state coverage |
+| `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
 | `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
 | `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
+| `test_bh1750_driver` | Shared BH1750 init command, first-measurement delay, I2C bus routing and two-byte lux decode |
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |

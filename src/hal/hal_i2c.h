@@ -241,6 +241,27 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
                             size_t tx_len, uint8_t *rx, size_t rx_len);
 
 /**
+ * @brief Read bytes from an I2C device without a preceding register write.
+ *
+ * Requests @p rx_len bytes from @p address and copies them into @p rx while
+ * holding the internal I2C bus mutex. This matches sensors whose current data
+ * register is read directly after address+read, without a register pointer
+ * phase.
+ *
+ * @param address 7-bit I2C slave address.
+ * @param rx      Destination buffer.
+ * @param rx_len  Number of bytes to read.
+ * @return true when exactly @p rx_len bytes are read.
+ */
+bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
+
+/**
+ * @brief Bus-selecting variant of hal_i2c_read_bytes().
+ */
+bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
+                            size_t rx_len);
+
+/**
  * @brief Flush selected bus transmission and release its mutex.
  * @param bus I2C controller index (0 = Wire, 1 = Wire1).
  * @return 0 on success, non-zero error code on failure.

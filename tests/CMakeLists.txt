@@ -68,6 +68,12 @@ add_executable(test_mcp9600_driver
 )
 target_link_libraries(test_mcp9600_driver PRIVATE hal_mock)
 add_test(NAME test_mcp9600_driver COMMAND test_mcp9600_driver)
+add_executable(test_bh1750_driver
+    test_bh1750_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/bh1750/hal_bh1750.cpp
+)
+target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
+add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
 add_executable(test_ads1x15_driver
     test_ads1x15_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ads1x15/ads1x15_driver.cpp

@@ -82,6 +82,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_MAX5395   # second digipot backend
     HAL_ENABLE_MCP9600   # shared MCP9600/MCP9601 thermocouple backend over HAL I2C
     HAL_ENABLE_MAX6675   # shared MAX6675 thermocouple backend over HAL GPIO
+    HAL_ENABLE_BH1750    # shared BH1750 ambient-light sensor over HAL I2C
     HAL_ENABLE_EXTERNAL_ADC  # shared ADS1X15/ADS1115 backend over HAL I2C
     HAL_ENABLE_DS18B20   # shared DS18B20 backend over HAL GPIO OneWire
     HAL_ENABLE_GPS       # portable NMEA engine; transport = UART on this target
