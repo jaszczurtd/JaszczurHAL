@@ -4,12 +4,12 @@
 
 #ifdef HAL_ENABLE_A7670
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#include "hal_uart.h"
 #include "hal_modem_at.h"
+#include "hal_uart.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -42,12 +42,14 @@ extern "C" {
  * @brief Result of a SimCom A76xx driver operation.
  */
 typedef enum {
-    HAL_SIMCOM_A76XX_OK = 0,
-    HAL_SIMCOM_A76XX_ERROR,         /**< Modem replied ERROR / CME ERROR / CMS ERROR. */
-    HAL_SIMCOM_A76XX_TIMEOUT,       /**< Expected state not reached in time. */
-    HAL_SIMCOM_A76XX_INVALID_ARG,   /**< NULL handle, bad pointer, oversize field, etc. */
-    HAL_SIMCOM_A76XX_NOT_READY,     /**< Pre-condition violated (e.g. publish before MQTT connect). */
-    HAL_SIMCOM_A76XX_PARSE          /**< Modem response could not be parsed. */
+  HAL_SIMCOM_A76XX_OK = 0,
+  HAL_SIMCOM_A76XX_ERROR,   /**< Modem replied ERROR / CME ERROR / CMS ERROR. */
+  HAL_SIMCOM_A76XX_TIMEOUT, /**< Expected state not reached in time. */
+  HAL_SIMCOM_A76XX_INVALID_ARG, /**< NULL handle, bad pointer, oversize field,
+                                   etc. */
+  HAL_SIMCOM_A76XX_NOT_READY,   /**< Pre-condition violated (e.g. publish before
+                                   MQTT connect). */
+  HAL_SIMCOM_A76XX_PARSE        /**< Modem response could not be parsed. */
 } hal_simcom_a76xx_result_t;
 
 typedef struct hal_simcom_a76xx_impl_s hal_simcom_a76xx_impl_t;
@@ -61,60 +63,60 @@ typedef hal_simcom_a76xx_impl_t *hal_simcom_a76xx_t;
  * is built around them.
  */
 typedef struct {
-    /** UART previously created and begun by the caller. Must not be NULL. */
-    hal_uart_t uart;
+  /** UART previously created and begun by the caller. Must not be NULL. */
+  hal_uart_t uart;
 
-    /**
-     * GPIO pin used to drive the modem's power-control input. Pulled
-     * LOW for pulse_ms by hal_simcom_a76xx_power_toggle(), then back
-     * HIGH (waveform: idle HIGH -> active-LOW pulse -> HIGH).
-     *
-     * Typical wiring:
-     *   - SimCom PWRKEY through a transistor (active-low pulse toggles
-     *     the module's internal PMU on/off),
-     *   - relay coil / load switch whose ENABLE matches the same
-     *     polarity (HIGH = powered, LOW = unpowered) - in that case
-     *     a power_toggle() becomes a physical power-cycle.
-     *
-     * Set to -1 to disable the in-driver power control. Choose -1
-     * when:
-     *   - running unit tests with a UART script,
-     *   - the board's power-control signal has the OPPOSITE polarity
-     *     (HIGH-active enable), or
-     *   - the application gates modem power in a more complex way
-     *     (sequencing rails, sibling MCU, etc.) and prefers to do its
-     *     own power-cycle / hard-reset sequence.
-     *
-     * When -1, power_toggle()/hard_reset() below become no-ops and
-     * the application is fully responsible for any physical power
-     * management.
-     */
-    int pwr_pin;
+  /**
+   * GPIO pin used to drive the modem's power-control input. Pulled
+   * LOW for pulse_ms by hal_simcom_a76xx_power_toggle(), then back
+   * HIGH (waveform: idle HIGH -> active-LOW pulse -> HIGH).
+   *
+   * Typical wiring:
+   *   - SimCom PWRKEY through a transistor (active-low pulse toggles
+   *     the module's internal PMU on/off),
+   *   - relay coil / load switch whose ENABLE matches the same
+   *     polarity (HIGH = powered, LOW = unpowered) - in that case
+   *     a power_toggle() becomes a physical power-cycle.
+   *
+   * Set to -1 to disable the in-driver power control. Choose -1
+   * when:
+   *   - running unit tests with a UART script,
+   *   - the board's power-control signal has the OPPOSITE polarity
+   *     (HIGH-active enable), or
+   *   - the application gates modem power in a more complex way
+   *     (sequencing rails, sibling MCU, etc.) and prefers to do its
+   *     own power-cycle / hard-reset sequence.
+   *
+   * When -1, power_toggle()/hard_reset() below become no-ops and
+   * the application is fully responsible for any physical power
+   * management.
+   */
+  int pwr_pin;
 
-    /**
-     * Caller-owned scratch buffer used by the underlying AT engine.
-     * Must outlive the handle. Recommended size: 1024 bytes (the
-     * MQTT-RX URC reassembly needs room for topic + payload of the
-     * incoming message).
-     */
-    char *rx_buf;
-    size_t rx_buf_size;
+  /**
+   * Caller-owned scratch buffer used by the underlying AT engine.
+   * Must outlive the handle. Recommended size: 1024 bytes (the
+   * MQTT-RX URC reassembly needs room for topic + payload of the
+   * incoming message).
+   */
+  char *rx_buf;
+  size_t rx_buf_size;
 
-    /**
-     * Default per-AT-command timeout (ms). Used internally when the
-     * driver issues short commands such as ATE0, CPIN?, CCLK?.
-     * Typical: 2000 ms.
-     */
-    uint32_t default_at_timeout_ms;
+  /**
+   * Default per-AT-command timeout (ms). Used internally when the
+   * driver issues short commands such as ATE0, CPIN?, CCLK?.
+   * Typical: 2000 ms.
+   */
+  uint32_t default_at_timeout_ms;
 } hal_simcom_a76xx_config_t;
 
 /**
  * @brief APN credentials passed to hal_simcom_a76xx_attach_pdp().
  */
 typedef struct {
-    const char *apn;       /**< APN name. Must not be NULL or empty. */
-    const char *user;      /**< Optional CHAP/PAP user, or NULL. */
-    const char *password;  /**< Optional CHAP/PAP password, or NULL. */
+  const char *apn;      /**< APN name. Must not be NULL or empty. */
+  const char *user;     /**< Optional CHAP/PAP user, or NULL. */
+  const char *password; /**< Optional CHAP/PAP password, or NULL. */
 } hal_simcom_a76xx_apn_t;
 
 /**
@@ -125,11 +127,39 @@ typedef struct {
  * operator support.
  */
 typedef struct {
-    float latitude_deg;   /**< Latitude in decimal degrees. */
-    float longitude_deg;  /**< Longitude in decimal degrees. */
-    int   accuracy_m;     /**< Estimated radius in meters, or -1 when omitted by modem reply. */
-    float speed_kmh;      /**< HAL-estimated speed from consecutive fixes; -1 when unavailable. */
+  float latitude_deg;  /**< Latitude in decimal degrees. */
+  float longitude_deg; /**< Longitude in decimal degrees. */
+  int accuracy_m;  /**< Estimated radius in meters, or -1 when omitted by modem
+                      reply. */
+  float speed_kmh; /**< HAL-estimated speed from consecutive fixes; -1 when
+                      unavailable. */
 } hal_simcom_a76xx_cell_location_t;
+
+/**
+ * @brief GNSS location resolved by the modem's built-in receiver.
+ *
+ * Values are normalised across common SimCom GNSS response variants
+ * (@c +CGNSSINFO, @c +CGNSINF and @c +CGPSINFO). Coordinates are decimal
+ * degrees. Optional numeric fields use -1 when omitted by the modem. In the
+ * A7670E @c +CGNSSINFO format, the single satellite count after fix mode is
+ * mirrored to both satellite fields because the modem does not distinguish
+ * "used" and "in view" in that response.
+ */
+typedef struct {
+  double latitude_deg;  /**< Latitude in decimal degrees. */
+  double longitude_deg; /**< Longitude in decimal degrees. */
+  double altitude_m;    /**< Altitude in meters, or -1 when unavailable. */
+  double speed_kmh;     /**< Speed in km/h, or -1 when unavailable. */
+  double
+      course_deg; /**< Course over ground in degrees, or -1 when unavailable. */
+  double hdop;    /**< Horizontal dilution of precision, or -1. */
+  double pdop;    /**< Position dilution of precision, or -1. */
+  double vdop;    /**< Vertical dilution of precision, or -1. */
+  int satellites_used; /**< Satellites used for fix, or -1. */
+  int satellites_view; /**< Satellites in view, or -1. */
+  int fix_mode;        /**< Modem-specific fix mode/status, or -1. */
+  char utc[24];        /**< UTC text from modem when available, else empty. */
+} hal_simcom_a76xx_gnss_location_t;
 
 /**
  * @brief SSL/TLS profile for MQTT connections.
@@ -137,28 +167,30 @@ typedef struct {
  * Applied via AT+CSSLCFG before AT+CMQTTSSLCFG.
  */
 typedef struct {
-    bool enabled;              /**< Enable SSL/TLS for the MQTT connection. */
-    int ssl_context_id;        /**< 0..1, default 0 (SimCom limit). */
-    const char *ca_cert_name;  /**< Name of the CA cert previously uploaded with AT+CCERTDOWN, or NULL. */
-    bool ignore_local_time;    /**< Skip cert expiry check if modem clock is unset. */
-    bool enable_sni;           /**< Send TLS SNI extension. */
-    int sslversion;            /**< 0..4 (default 4 = TLS 1.2). */
-    int authmode;              /**< 0..3 (default 1 = server only). */
+  bool enabled;             /**< Enable SSL/TLS for the MQTT connection. */
+  int ssl_context_id;       /**< 0..1, default 0 (SimCom limit). */
+  const char *ca_cert_name; /**< Name of the CA cert previously uploaded with
+                               AT+CCERTDOWN, or NULL. */
+  bool
+      ignore_local_time; /**< Skip cert expiry check if modem clock is unset. */
+  bool enable_sni;       /**< Send TLS SNI extension. */
+  int sslversion;        /**< 0..4 (default 4 = TLS 1.2). */
+  int authmode;          /**< 0..3 (default 1 = server only). */
 } hal_simcom_a76xx_ssl_config_t;
 
 /**
  * @brief Configuration for hal_simcom_a76xx_mqtt_connect().
  */
 typedef struct {
-    const char *broker_host;  /**< Hostname or IP literal. Must not be NULL. */
-    uint16_t broker_port;     /**< TCP port (typically 1883 / 8883). */
-    const char *client_id;    /**< MQTT client identifier. Must not be NULL. */
-    const char *username;     /**< Optional MQTT username, or NULL. */
-    const char *password;     /**< Optional MQTT password, or NULL. */
-    uint16_t keepalive_s;     /**< Keep-alive interval in seconds. */
-    bool clean_session;       /**< clean-session flag. */
-    int client_index;         /**< CMQTT client index, 0..1 (SimCom limit). */
-    hal_simcom_a76xx_ssl_config_t ssl;
+  const char *broker_host; /**< Hostname or IP literal. Must not be NULL. */
+  uint16_t broker_port;    /**< TCP port (typically 1883 / 8883). */
+  const char *client_id;   /**< MQTT client identifier. Must not be NULL. */
+  const char *username;    /**< Optional MQTT username, or NULL. */
+  const char *password;    /**< Optional MQTT password, or NULL. */
+  uint16_t keepalive_s;    /**< Keep-alive interval in seconds. */
+  bool clean_session;      /**< clean-session flag. */
+  int client_index;        /**< CMQTT client index, 0..1 (SimCom limit). */
+  hal_simcom_a76xx_ssl_config_t ssl;
 } hal_simcom_a76xx_mqtt_config_t;
 
 /**
@@ -171,7 +203,8 @@ typedef struct {
  *
  * @param client_index  CMQTT client index that received the message.
  * @param topic         NUL-terminated topic string.
- * @param payload       Payload bytes (NOT NUL-terminated; payload_len gives the length).
+ * @param payload       Payload bytes (NOT NUL-terminated; payload_len gives the
+ * length).
  * @param payload_len   Number of payload bytes.
  * @param user          Opaque user pointer registered alongside the callback.
  */
@@ -191,7 +224,8 @@ typedef void (*hal_simcom_a76xx_mqtt_message_cb_t)(int client_index,
  * @param cfg Configuration. Must not be NULL. uart / rx_buf must be valid.
  * @return Handle on success, NULL on invalid arguments or pool exhaustion.
  */
-hal_simcom_a76xx_t hal_simcom_a76xx_create(const hal_simcom_a76xx_config_t *cfg);
+hal_simcom_a76xx_t
+hal_simcom_a76xx_create(const hal_simcom_a76xx_config_t *cfg);
 
 /**
  * @brief Release the driver handle and the underlying AT engine.
@@ -274,16 +308,18 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
  * @brief Poll AT+CREG? until the modem is registered to a network
  *        (home or roaming).
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_network_registered(hal_simcom_a76xx_t h,
-                                                                    uint32_t timeout_ms);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_wait_network_registered(hal_simcom_a76xx_t h,
+                                         uint32_t timeout_ms);
 
 /**
  * @brief Configure APN and activate PDP context #1.
  *
  * Issues AT+CGDCONT=1,"IP","<apn>" followed by AT+CGACT=1,1.
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
-                                                      const hal_simcom_a76xx_apn_t *apn);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
+                            const hal_simcom_a76xx_apn_t *apn);
 
 /**
  * @brief Query the modem RTC (AT+CCLK?) and format the result as ISO 8601
@@ -295,9 +331,9 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
  * @return HAL_SIMCOM_A76XX_OK on success, HAL_SIMCOM_A76XX_PARSE if the
  *         modem reply could not be decoded (e.g. RTC not yet synced).
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a76xx_t h,
-                                                                     char *out,
-                                                                     size_t out_size);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a76xx_t h, char *out,
+                                          size_t out_size);
 
 /**
  * @brief Query coarse cellular location (LBS) via AT+CLBS.
@@ -317,9 +353,51 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a
  *         HAL_SIMCOM_A76XX_PARSE when reply is present but malformed,
  *         or a mapped modem error/timeout result otherwise.
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(hal_simcom_a76xx_t h,
-                                                             hal_simcom_a76xx_cell_location_t *out_location,
-                                                             uint32_t timeout_ms);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(
+    hal_simcom_a76xx_t h, hal_simcom_a76xx_cell_location_t *out_location,
+    uint32_t timeout_ms);
+
+/**
+ * @brief Initialise a GNSS location structure with sentinel defaults.
+ *
+ * Numeric optional fields are set to -1, coordinates to 0, and utc to empty.
+ */
+void hal_simcom_a76xx_gnss_location_init(hal_simcom_a76xx_gnss_location_t *loc);
+
+/**
+ * @brief Power on the modem's GNSS receiver.
+ *
+ * Tries the common A76xx command variants in order:
+ * @c AT+CGNSSPWR=1, @c AT+CGNSSPWR=1,1, @c AT+CGNSPWR=1,
+ * @c AT+CGPS=1,1, @c AT+CGPS=1.
+ *
+ * @param h          Handle.
+ * @param timeout_ms Per-command timeout in ms (0 = driver default).
+ * @return HAL_SIMCOM_A76XX_OK when one variant succeeds; mapped modem
+ *         error/timeout otherwise. A handle remembers a successful power-on.
+ */
+hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
+                                                         uint32_t timeout_ms);
+
+/**
+ * @brief Return whether GNSS has been powered on successfully for this handle.
+ */
+bool hal_simcom_a76xx_gnss_is_powered(hal_simcom_a76xx_t h);
+
+/**
+ * @brief Query the modem GNSS fix.
+ *
+ * Ensures GNSS is powered, then tries @c AT+CGNSSINFO, @c AT+CGNSINF and
+ * @c AT+CGPSINFO. Returns @c HAL_SIMCOM_A76XX_NOT_READY when the modem
+ * responds but has no fix yet.
+ *
+ * @param h            Handle.
+ * @param out_location Destination for parsed fix data.
+ * @param timeout_ms   Per-query timeout in ms (0 = driver default).
+ */
+hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(
+    hal_simcom_a76xx_t h, hal_simcom_a76xx_gnss_location_t *out_location,
+    uint32_t timeout_ms);
 
 /**
  * @brief Return the underlying AT engine handle for advanced/raw use.
@@ -343,8 +421,9 @@ hal_modem_at_t hal_simcom_a76xx_get_at(hal_simcom_a76xx_t h);
  * +CMQTTRXSTART / RXTOPIC / RXPAYLOAD / RXEND family so that
  * hal_simcom_a76xx_mqtt_poll() can reassemble incoming messages.
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
-                                                        const hal_simcom_a76xx_mqtt_config_t *cfg);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
+                              const hal_simcom_a76xx_mqtt_config_t *cfg);
 
 /**
  * @brief Disconnect the named CMQTT client and release its slot.
@@ -357,12 +436,10 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_disconnect(hal_simcom_a76xx_t h,
  *
  * @param qos  0..2.
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_publish(hal_simcom_a76xx_t h,
-                                                        int client_index,
-                                                        const char *topic,
-                                                        const void *payload,
-                                                        size_t payload_len,
-                                                        int qos);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_mqtt_publish(hal_simcom_a76xx_t h, int client_index,
+                              const char *topic, const void *payload,
+                              size_t payload_len, int qos);
 
 /**
  * @brief Subscribe to a topic filter.
@@ -382,9 +459,9 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_subscribe(hal_simcom_a76xx_t h,
 /**
  * @brief Cancel a previous subscription using AT+CMQTTUNSUB.
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_unsubscribe(hal_simcom_a76xx_t h,
-                                                            int client_index,
-                                                            const char *topic);
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_mqtt_unsubscribe(hal_simcom_a76xx_t h, int client_index,
+                                  const char *topic);
 
 /**
  * @brief Install / remove the callback that receives reassembled
@@ -393,9 +470,8 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_unsubscribe(hal_simcom_a76xx_t h
  * Passing cb == NULL disables delivery (incoming messages are still
  * consumed off the UART; they just have nowhere to go).
  */
-hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(hal_simcom_a76xx_t h,
-                                                                     hal_simcom_a76xx_mqtt_message_cb_t cb,
-                                                                     void *user);
+hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(
+    hal_simcom_a76xx_t h, hal_simcom_a76xx_mqtt_message_cb_t cb, void *user);
 
 /**
  * @brief Drain pending CMQTT RX URCs, dispatching complete messages
