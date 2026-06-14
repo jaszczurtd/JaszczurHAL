@@ -12,10 +12,10 @@
 
 #pragma once
 
+#include "hal_bits.h"
 #include "hal_config.h"
 #include "hal_gpio.h"
 #include "hal_math.h"
-#include "hal_bits.h"
 #ifdef HAL_ENABLE_CRYPTO
 #include "hal_crypto.h"
 #endif
@@ -30,13 +30,13 @@
 #ifdef HAL_ENABLE_PCNT
 #include "hal_pcnt.h"
 #endif
-#include "hal_timer.h"
-#include "hal_soft_timer.h"
 #include "hal_pid_controller.h"
-#include "hal_system.h"
-#include "hal_sync.h"
 #include "hal_serial.h"
 #include "hal_serial_session.h"
+#include "hal_soft_timer.h"
+#include "hal_sync.h"
+#include "hal_system.h"
+#include "hal_timer.h"
 #ifdef HAL_ENABLE_UART
 #include "hal_uart.h"
 #endif
@@ -106,6 +106,9 @@
 #endif
 #ifdef HAL_ENABLE_DS18B20
 #include "hal_ds18b20.h"
+#endif
+#ifdef HAL_ENABLE_BH1750
+#include "hal_bh1750.h"
 #endif
 #ifdef HAL_ENABLE_GPS
 #include "hal_gps.h"

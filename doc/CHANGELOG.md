@@ -6,6 +6,21 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### hal_bh1750 - shared BH1750 ambient-light driver
+
+- Added `HAL_ENABLE_BH1750` with public `hal_bh1750_*` API and a shared HAL I2C
+  implementation for RP2040, STM32G474 and host tests.
+- Preserved the proven ArtronShop_BH1750 behavior: continuous H-resolution mode
+  command `0x10`, 180 ms first-measurement delay, exact two-byte sample read and
+  raw/1.2 lux conversion.
+- Added `hal_i2c_read_bytes()` / `_bus()` for direct sensor reads without a
+  preceding register-pointer write, keeping request and sample copy inside the
+  I2C bus mutex.
+- Added `examples/30_bh1750_light`, API/flag/example documentation, and host
+  regression coverage in `test_bh1750_driver` plus `test_hal_i2c`.
+- Removed the old `src/hal/impl/arduino/drivers/ArtronShop_BH1750` import after
+  moving the driver behavior into the shared HAL implementation.
+
 ### hal_timer - STM32G474 TIM6 alarm backend
 
 - Replaced the STM32G474 timer placeholder with a TIM6-backed 1 MHz alarm

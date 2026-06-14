@@ -627,6 +627,45 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   return ok;
 }
 
+bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
+  return hal_i2c_read_bytes_bus(0, address, rx, rx_len);
+}
+
+bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
+                            size_t rx_len) {
+  if ((rx_len > 0u && rx == NULL) || rx_len > 255u) {
+    return false;
+  }
+  if (rx_len == 0u) {
+    return true;
+  }
+
+  i2c_bus_state_t *st = i2c_state(bus);
+  hal_i2c_lock_bus(bus);
+  bool ok = true;
+#ifdef JH_STM32G474_HW
+  if (!i2c_hw_ready(st)) {
+    hal_i2c_unlock_bus(bus);
+    return false;
+  }
+
+  int got = i2c_hw_read(st->hw_base, address, rx, (int)rx_len);
+  st->rx_len = 0;
+  st->rx_pos = 0;
+  st->transaction_count++;
+  hal_i2c_unlock_bus(bus);
+  return got == (int)rx_len;
+#else
+  (void)address;
+  memset(rx, 0, rx_len);
+  st->rx_len = 0;
+  st->rx_pos = 0;
+  st->transaction_count++;
+#endif
+  hal_i2c_unlock_bus(bus);
+  return ok;
+}
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
   return hal_i2c_request_from_bus(0, address, count);
 }
