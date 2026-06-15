@@ -38,6 +38,16 @@ function(_jh_list_contains OUT_VAR ITEM)
     set(${OUT_VAR} ${_found} PARENT_SCOPE)
 endfunction()
 
+function(_jh_extract_define_value OUT_VAR KEY)
+    set(_value "")
+    foreach(_def IN LISTS ARGN)
+        if("${_def}" MATCHES "^${KEY}=(.+)$")
+            set(_value "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
+endfunction()
+
 function(_jh_make_safe_name OUT_VAR NAME)
     string(REPLACE "-" "_" _safe "${NAME}")
     string(REPLACE "." "_" _safe "${_safe}")
@@ -95,6 +105,8 @@ function(_jh_add_rp2040_example NAME)
     if(JH_RP2040_FREERTOS)
         list(APPEND _rp2040_defines HAL_ENABLE_FREERTOS)
     endif()
+    _jh_extract_define_value(_rp2040_stack_size HAL_RP2040_STACK_SIZE ${_rp2040_defines})
+    _jh_extract_define_value(_rp2040_core1_stack_size HAL_RP2040_CORE1_STACK_SIZE ${_rp2040_defines})
     jh_cmake_defines_contain(_rp2040_has_app_task1 HAL_ENABLE_APP_TASK1 ${_rp2040_defines})
 
     file(WRITE "${_sketch_dir}/${_safe}.ino"
@@ -137,6 +149,12 @@ function(_jh_add_rp2040_example NAME)
     foreach(_def IN LISTS _rp2040_defines)
         string(APPEND _rp2040_extra_flags " -D${_def}")
     endforeach()
+    if(NOT "${_rp2040_stack_size}" STREQUAL "")
+        string(APPEND _rp2040_extra_flags " -DPICO_STACK_SIZE=${_rp2040_stack_size}")
+    endif()
+    if(NOT "${_rp2040_core1_stack_size}" STREQUAL "")
+        string(APPEND _rp2040_extra_flags " -DPICO_CORE1_STACK_SIZE=${_rp2040_core1_stack_size}")
+    endif()
     string(STRIP "${_rp2040_extra_flags}" _rp2040_extra_flags)
 
     set(_rp2040_build_property_args
@@ -248,6 +266,7 @@ function(_jh_add_stm32g474_example NAME)
     )
     set(_stm32_defines ${ARG_DEFINES})
     list(APPEND _stm32_defines ${EXTRA_HAL_DEFINES})
+    _jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_stm32_defines})
 
     target_compile_definitions("${_target}" PRIVATE
         HAL_TARGET_STM32G474=1
@@ -279,6 +298,11 @@ function(_jh_add_stm32g474_example NAME)
         --specs=nano.specs
         --specs=nosys.specs
     )
+    if(NOT "${_stm32_main_stack_size}" STREQUAL "")
+        target_link_options("${_target}" PRIVATE
+            "-Wl,--defsym=HAL_STM32_MIN_STACK_SIZE=${_stm32_main_stack_size}"
+        )
+    endif()
 
     add_custom_command(TARGET "${_target}" POST_BUILD
         COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:${_target}>" "${CMAKE_CURRENT_BINARY_DIR}/${_safe}_stm32g474.bin"

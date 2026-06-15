@@ -4,21 +4,24 @@ Author: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
 
-Today the most complete backend targets RP2040 boards through Arduino-pico.
-STM32G474 is available as a real bare-metal backend for core domains and an
-expanding set of shared portable drivers; a few modules are still in progress.
+The most complete backend currently targets RP2040/2350 boards through Arduino-Pico. STM32G474 is also supported as a real, fast bare-metal backend, with only a small number of modules still in progress. ESP32 is next in line.
 
 ## Why this exists
 
-Typical embedded projects start as quick written code and later become harder to evolve because hardware access is mixed with business logic.
+Many embedded projects start as quickly written code and become increasingly difficult to evolve over time, especially when hardware access is tightly coupled with application logic or when drivers are bound to a specific hardware target.
 
 JaszczurHAL introduces a practical boundary:
 
 - application layer: portable logic,
-- HAL layer: one place for hardware/API details,
-- mock layer: deterministic host testing.
+- HAL layer: consistent, portable APIs, that keep hardware details separate from application logic,
+- Optional modules controlled by compile-time `HAL_ENABLE_*` flags (opt-in)
+- Optional connectivity/security/storage stack for connected firmware projects
+- Utility toolkit for common embedded patterns (timers, PID, watchdog, helpers)
+- mock layer: deterministic host-side testing,
+- reusable, thread-safe drivers shared across supported hardware targets,
+- fully functional FreeRTOS support (V11.1.0).
 
-This reduces lock-in to one runtime and makes migration to other SDKs much easier.
+This reduces lock-in to one runtime and makes migration from other SDKs much easier.
 
 ## Public include
 
@@ -44,31 +47,21 @@ Utility-only includes are also available:
 #include <tools_c.h>  // C-compatible utility API
 ```
 
-## What you get (high-level)
-
-- Hardware abstraction layer for common embedded peripherals and system services
-- Consistent, portable APIs that keep hardware details separate from application logic
-- Optional modules controlled by compile-time `HAL_ENABLE_*` flags (opt-in)
-- Built-in mock backend for deterministic host/unit testing
-- Utility toolkit for common embedded patterns (timers, PID, watchdog, helpers)
-- Optional connectivity/security/storage stack for connected firmware projects
-
-## Supported modules and drivers (overview)
+## Supported modules (quick overview)
 
 - Core HAL domains: GPIO, ADC, DAC, PWM, pulse counter (PCNT), timers, system, synchronization, serial I/O
-- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM, key-value storage, and SD logging
-- Connected domains (opt-in): WiFi, NTP/system time, UDP, WireGuard, MQTT, OTA, LittleFS, crypto/auth helpers, cellular modem (SimCom A76xx via AT, including coarse cell-based location)
+- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM, key-value storage, SD logging (and many more),
+- Connected domains (opt-in): WiFi, MQTT, OTA updates, LittleFS, crypto/authentication helpers, Wireguard, and cellular modem support for SimCom A76xx modules via AT commands, including GNSS and cell-based location,
 - Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 
 ## Thread safety (overview)
 
-- On Arduino backend, runtime HAL calls are generally multicore-safe and internally synchronized
-- As a project rule, initialization and teardown (`init/create/destroy/deinit`) should be done from one core
-- Singleton and per-bus locks use atomic create-once fallbacks where defensive lazy creation remains possible
-- Mock backend targets deterministic single-threaded tests rather than true concurrent synchronization
-- Exact guarantees are documented per module in [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
+- Across all targets, thread safety is treated as a core design principle. Only a few modules intentionally deviate from this rule where enforcing thread safety would be impractical or unnatural,
+- Initialization and teardown paths (`init` / `create` / `destroy` / `deinit`) are intentionally treated as single-core operations,
+- Singleton and per-bus locks are initialized atomically on first use using defensive lazy mutex creation,
+- The mock backend is intended for deterministic single-threaded tests rather than validating true concurrent synchronization, but FreeRTOS POSIX-based tests are also available through the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` flag. `runalltests.sh` gate demostrates this in practice: it enables a host-side FreeRTOS POSIX scheduler test so `HAL_ENABLE_FREERTOS`, mutex/delay and lazy create-once behavior are covered in `ctest` without hardware.
 
-For detailed signatures, module contracts, backend notes, and test coverage,
+For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
 see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Library structure
@@ -121,17 +114,14 @@ vscode-templates/           # ready-to-use VS Code project configurations
   windows/                  # Windows template scripts and settings
 ```
 
-Detailed per-file layout is maintained in
-[JaszczurHAL_API.md](doc/JaszczurHAL_API.md) (`## Library structure`).
+The `src/hal/impl/shared/` folder contains internal, backend-agnostic implementation code reused by at least two hardware backends.
+This code:
 
-Folder `src/hal/impl/shared/` is for internal, backend-agnostic implementation
-pieces used by at least two hardware backends. Put there only code that:
+- depends only on HAL-level contracts,
+- behaves identically across supported targets,
+- avoids per-target `#if HAL_TARGET_IS_*` branches inside the shared implementation file.
 
-- depends on HAL contracts,
-- has identical behavior across targets,
-- can be reused without per-target `#if HAL_TARGET_IS_*` forks in that file.
-
-Shared device/engine code lives in per-driver subfolders, for example:
+Shared device and engine implementations are organized into per-driver/framework subfolders, for example:
 `shared/ads1x15/`, `shared/digipot/`, `shared/display/`, `shared/pga2311/`, etc.
 
 ## Quick start
@@ -159,16 +149,19 @@ cmake --build build_examples_stm32
 # Single example
 cmake --build build_examples_rp2040 --target 01_blink_rp2040
 ```
-
 Each example uses the portable entry-point contract (`app_start` /
-`app_task0`, plus optional `app_task1` when `HAL_ENABLE_APP_TASK1` is defined)
-- the same source compiles on both backends. See
-[examples/README.md](examples/README.md) for details.
+`app_task0`, plus optional `app_task1`
+
+The `app_task1` pattern (when `HAL_ENABLE_APP_TASK1` is defined) comes from RP2040/2350 nature - a dual-core execution.
+STM32G474 supports the same application structure as well, but maps it to cooperative `app_task0` / `app_task1` calls.
+
+When FreeRTOS is enabled, all targets gain full multithreading with consistent behavior. In that configuration, the `app_task1` pattern can simply be replaced by regular FreeRTOS tasks.
+
+The vast majority of examples build for all supported targets and provide the same behavior across them. On STM32, the few remaining exceptions come from temporary gaps in module support, such as Wi-Fi See [examples/README.md](examples/README.md) for details.
 
 ## Module selection (quick)
 
-JaszczurHAL uses an OPT-IN flag model: by default no optional module is
-compiled. To enable the modules your project uses, define `HAL_ENABLE_*`
+JaszczurHAL uses an OPT-IN flag model: by default no optional module is compiled. To enable the modules your project uses, define `HAL_ENABLE_*`
 flags in a project-local
 `hal_project_config.h`:
 
@@ -193,39 +186,12 @@ FreeRTOS support is staged behind an explicit compile-time flag:
 #define HAL_ENABLE_FREERTOS
 ```
 
-This flag does not introduce a `hal_rtos_*` wrapper API. Applications use native
-FreeRTOS headers directly when their target build provides them.
+For FreeRTOS, there is no any `hal_rtos_*` wrapper API. Applications on RP2040/2350/STM32 just use native FreeRTOS headers and API directly.
 
-- RP2040 uses arduino-pico's own FreeRTOS mode. `HAL_ENABLE_FREERTOS` requires
-  `__FREERTOS`, selected through the Arduino-pico board option
-  `Operating System -> FreeRTOS SMP` or an equivalent FQBN option such as
-  `os=freertos`. The checked-in RP2040 build helpers now expose this as
-  `./scripts/build_arduino_lib.sh --freertos` and
-  `cmake -S examples -B build_examples_rp2040_freertos -DJH_EXAMPLE_TARGET=rp2040 -DJH_RP2040_FREERTOS=ON`.
-- STM32G474 uses a pinned upstream `FreeRTOS-Kernel` checkout managed by
-  `freertos_core_version.conf` and `scripts/ensure_freertos_kernel.sh`. At this
-  stage, `HAL_ENABLE_FREERTOS` compiles an explicit Cortex-M4F kernel source
-  list, uses the target `FreeRTOSConfig.h`, lets the FreeRTOS port own
-  SVC/PendSV/SysTick, and selects FreeRTOS-aware `hal_mutex_*`,
-  `hal_delay_ms()`, and `hal_idle()` paths. With `HAL_PROVIDE_APP_ENTRY`, STM32
-  FreeRTOS builds run `app_task0()` and optional `app_task1()` as FreeRTOS
-  tasks; stack sizes and priorities can be overridden with
-  `HAL_FREERTOS_TASK{0,1}_STACK` and `HAL_FREERTOS_TASK{0,1}_PRIORITY`. Use
-  `./scripts/build_stm32_lib.sh --freertos` or the `stm32g474-freertos`
-  examples preset; both run the helper before CMake needs the kernel sources.
+On RP2040/RP2350, JaszczurHAL uses the FreeRTOS mode provided by Arduino-Pico.
+On STM32G474, JaszczurHAL uses an integrated upstream FreeRTOS-Kernel checkout and provides FreeRTOS-aware implementations of mutexes, delays, idle handling, and optional application task startup.
 
-Current FreeRTOS support covers RP2040 and STM32G474 FreeRTOS-aware core
-mutex/delay/idle primitives, portable app entry mapping, singleton/per-bus mutex
-creation hardening, and the RP2040 I2C-slave callback path. RP2040 still uses
-arduino-pico scheduler ownership (`loop()` / optional `loop1()`); STM32 starts
-the scheduler from the HAL-provided entry. Hard
-`hal_critical_section_*` still masks interrupts for timing-sensitive code; it is
-not a scheduler lock. Timer callback context, Arduino-origin wrapper internals,
-and documented single-owner modules are summarized in
-[Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md).
-The full `runalltests.sh` gate also enables a host-side FreeRTOS POSIX scheduler
-test so `HAL_ENABLE_FREERTOS` mutex/delay and lazy create-once behavior are
-covered in `ctest` without hardware.
+Applications remain isolated from implementation differences below the FreeRTOS/JaszczurHAL API layer.
 
 ## Target selection (multiplatform)
 
@@ -234,21 +200,15 @@ backend through a single canonical switch (`src/hal/hal_target.h`). Define one
 of the following in `hal_project_config.h` (or via `-D`):
 
 ```c
-#define HAL_TARGET_RP2040      // Raspberry Pi RP2040 / arduino-pico
-#define HAL_TARGET_STM32G474   // STM32G474 (bare-metal backend)
+#define HAL_TARGET_RP2040      // Raspberry Pi RP2040/2350
+#define HAL_TARGET_STM32G474   // STM32G474
 #define HAL_TARGET_MOCK        // host unit-test / simulation backend
 ```
 
 If you define none, the target is **auto-detected** from the toolchain, so
 existing RP2040/Arduino projects need no change. Selecting two targets - or a
 bare-metal ARM build with no detectable target - is a compile-time `#error`.
-Backend files compile only for their selected target, so unused backends cost
-zero code.
-
-The same demo source builds on both backends from a single example folder:
-[`examples/01_blink/`](examples/01_blink/) shows a portable `app.c` that
-compiles and runs on both RP2040 and STM32G474. The STM32G474 build exercises
-the real bare-metal backend targeting the Nucleo-G474RE.
+Backend files compile only for their selected target, so unused backends cost zero code.
 
 ## Host tests (quick)
 
@@ -264,8 +224,7 @@ Detailed suite coverage, mock behavior notes, and testing workflow are in
 ## Continuous integration and quality gates
 
 Every push and pull request to `main` runs the CI workflow
-(`.github/workflows/ci.yml`). It builds the library and exercises several
-layers of checks:
+(`.github/workflows/ci.yml`). It builds the library and exercises several layers of checks:
 
 - **Host unit tests** - the suite runs against the deterministic mock backend
   (CMake + Unity).
@@ -283,8 +242,7 @@ layers of checks:
   third-party libraries are excluded from both.
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
-`tests/cppcheck-suppressions.txt`, and `tests/valgrind.supp`. The same checks
-can be run locally:
+`tests/cppcheck-suppressions.txt`, and `tests/valgrind.supp`. The same checks can be run locally:
 
 ```bash
 # memory safety (requires valgrind)
@@ -326,33 +284,34 @@ chmod +x .githooks/pre-commit .githooks/commit-msg
 git config core.hooksPath .githooks
 ```
 
-
 ## VS Code Development Environment
 
-`vscode-templates/` contains ready-to-use VS Code project configurations for Arduino development on Windows and Linux/macOS:
+`vscode-templates/` contains ready-to-use VS Code project configurations, and scripts.
+
+But please note: the primary development environment for this library is Linux, preferably a Debian-like distribution. Most scripts and configuration helpers are primarily targeted at that platform.
 
 ### Features
 
-- One-key build, upload, and debugging
-- Persistent serial monitor (auto-reconnect on device replug)
-- Cortex-Debug live debugging with breakpoints
-- IntelliSense with full RP2040/RP2350 API
-- Support for 6+ Raspberry Pi Pico variants
+- One-key build, upload, and debug workflow
+- Raspberry Pi Debug Probe support for RP2040/RP2350, including breakpoints and source-level inspection
+- Persistent serial monitor with automatic reconnect after device replug
+- Cortex-Debug integration for live sessions
+- IntelliSense with full RP2040/RP2350 API support
+- Support for multiple Raspberry Pi Pico variants
 - UF2 bootloader upload mode
-- Board selection with custom clock/optimization settings
+- Board selection with custom clock and optimization settings
 
 ### Platform-Specific Templates
 
-- **[Linux/macOS](vscode-templates/linux/)** - Bash-based build and deployment scripts
+- **[Linux/macOS](vscode-templates/linux/)** - Fully functional bash-based build and deployment scripts
   - Lightweight bash implementation
   - Compatible with standard GNU toolchains
-  - Same feature set as Windows (build, upload, debug, monitor)
 
-- **[Windows](vscode-templates/windows/)** - Complete setup with Python build orchestration, Arduino CLI integration, debugging, and serial monitor
-  - Python-based build system for cross-platform consistency
-  - Smart serial monitor with auto-reconnection (VID:PID aware)
-  - Interactive board/options selector
-  - Cortex-Debug integration for live debugging
+- **[Windows](vscode-templates/windows/)** - nearly complete RP2040 development setup with Python-based build orchestration, Arduino CLI integration, debug support, and serial monitoring
+  - Python-based build flow for cross-platform consistency
+  - VID:PID-aware serial monitor with automatic reconnect
+  - Interactive board and build option selector
+  - Cortex-Debug integration for live debug sessions
 
 Quick Start:
 
@@ -370,21 +329,18 @@ The complete guide for compiling JaszczurHAL to a linkable static library
 
 ## Changing the Arduino RP2040 core version
 
-The pinned version of the `earlephilhower/arduino-pico` core is defined in a
-single file:
+The pinned version of the `earlephilhower/arduino-pico` core is defined in a single file:
 
 ```text
 arduino_core_version.conf   ← RP2040_CORE_VERSION=x.y.z
 ```
 
 `runmefirst.sh` and the CI workflow source this file automatically;
-`runalltests.sh` verifies that the RP2040 core is installed. To upgrade or
-downgrade:
+`runalltests.sh` verifies that the RP2040 core is installed. To upgrade or downgrade:
 
 1. Edit `arduino_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
 2. Run `./runmefirst.sh` to install the new core locally.
-3. Run `./runalltests.sh` (or at minimum `./scripts/build_arduino_lib.sh`) to
-   confirm the library still compiles against the new core.
+3. Run `./runalltests.sh` (or at minimum `./scripts/build_arduino_lib.sh`) to confirm the library still compiles against the new core.
 
 No other files need to be touched.
 
@@ -403,9 +359,6 @@ Primary docs:
   - Windows template: [vscode-templates/windows/README.md](vscode-templates/windows/README.md)
   - Linux template: [vscode-templates/linux/README.md](vscode-templates/linux/README.md)
 
-[JaszczurHAL_API.md](doc/JaszczurHAL_API.md) is the canonical source for
-detailed API signatures, module semantics, multicore/thread-safety policy,
-driver inventory/licenses, examples, and host-test coverage.
 
 ## Notes and credits
 

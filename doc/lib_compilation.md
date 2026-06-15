@@ -1,5 +1,7 @@
 # JaszczurHAL Library Compilation
 
+> **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
+
 JaszczurHAL can be built in three different ways, depending on the target:
 
 | Target | Build entry | Output | Backend switch |

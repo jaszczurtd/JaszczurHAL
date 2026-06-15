@@ -18,7 +18,7 @@ extern "C" {
 
 /** @brief Internal buffer size for hal_deb() / hal_derr() formatted output. */
 #ifndef HAL_DEBUG_BUF_SIZE
-#define HAL_DEBUG_BUF_SIZE 512
+#define HAL_DEBUG_BUF_SIZE 1024
 #endif
 
 /** @brief Maximum length of the debug prefix string. */

@@ -1,0 +1,185 @@
+# Build dependencies and unit tests
+
+> **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
+
+## Dependencies (hardware build)
+
+| HAL module | External dependency |
+|---|---|
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`) on RP2040; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
+| `hal_sync` | RP2040: pico SDK `pico/mutex.h` in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. STM32G474: atomic spinlock in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds |
+| `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
+| `hal_soft_timer` | internal `SmartTimers` utility |
+| `hal_pid_controller` | internal `pidController` utility |
+| `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
+| `hal_display` | Shared Arduino-free display stack (`impl/shared/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
+| `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
+| `hal_i2c` | Arduino-pico `Wire.h` |
+| `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
+| `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
+| `hal_rgb_led` | shared NeoPixel core (`impl/shared/neopixel/jh_neopixel.*`) + target transport glue |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675/max6675_driver.*`) |
+| `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/onewire/onewire_driver.*`) over HAL GPIO/time |
+| `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
+| `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
+| `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
+| `hal_littlefs` | Arduino-pico `LittleFS` |
+| `hal_udp` | Arduino-pico `WiFiUDP` |
+| `hal_wireguard` | bundled `arduino-wireguard-pico-w` + Arduino-pico WiFi/lwIP stack |
+| `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
+| `hal_ota` | Arduino-pico `ArduinoOTA` |
+| `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
+| `hal_kv` | internal `hal_eeprom` + `hal_sync` |
+| `hal_sdlogger` | Arduino-pico `SD.h` / `SPI.h` in `impl/arduino/frameworks/sdlogger` |
+| `tools` | HAL APIs |
+| `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
+
+## Dependencies (mock / PC build)
+
+All `impl/.mock/` files depend only on: `<cstdio>`, `<cstring>`, `<mutex>`, `<queue>`, `<stdarg.h>`.
+No Arduino SDK, no pico SDK required.
+
+---
+
+## Unit tests
+
+### Requirements
+
+- CMake ≥ 3.16
+- GCC / Clang with C++17
+
+### Build and run
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Debug
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+### Quick start scripts
+
+Two convenience scripts in the repository root simplify local development:
+
+**`runmefirst.sh`** — One-time toolchain setup
+```bash
+./runmefirst.sh
+```
+Configures your local environment for the first time:
+- Installs git hooks (pre-commit and commit-msg from `.githooks/`)
+- Verifies/downloads FreeRTOS-Kernel if needed
+- Sets up build directories and initial CMake configuration
+- Run this once when cloning the repository or after environment changes
+
+**`runalltests.sh`** — Full validation gate
+```bash
+./runalltests.sh
+```
+Runs the complete test suite for all targets:
+- Builds and runs host/mock tests (`build/` + ctest)
+- Builds RP2040 Arduino-pico static library (`build_arduino/`)
+- Builds STM32G474 bare-metal static library (`build_stm32/`)
+- Builds example projects for RP2040, STM32G474, and variants (with/without FreeRTOS)
+- Verifies compilation succeeded and logs capture any warnings/errors
+
+This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
+
+---
+
+### How it works
+
+The CMake build at the project root compiles a static library `hal_mock` from:
+
+- all `src/hal/impl/.mock/*.cpp` stubs,
+- `src/hal/hal_config.cpp`,
+- `src/hal/hal_can_util.cpp`,
+- `src/utils/SmartTimers.cpp`, `src/utils/pidController.cpp`,
+- `src/utils/unity.c` (Unity framework).
+
+Each test executable in `tests/` links against `hal_mock` only - no Arduino
+headers, no pico SDK, no hardware.
+
+`tools.cpp` is covered by `test_tools` using HAL mocks.
+`multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
+logger-close stub plus HAL mocks.
+`utils/draw7Segment.cpp` has no platform dependencies
+(pure `const char*` + `hal_display`).
+
+### Test suites
+
+| Suite | What it covers |
+|---|---|
+| `test_hal_gpio` | pin modes, read/write, level injection |
+| `test_hal_adc` | resolution config, inject + read |
+| `test_hal_pwm` | resolution config, write |
+| `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
+| `test_stm32_hal_timer` | real STM32G474 timer backend under host simulation: one-shot alarms, callback reschedule, cancel, pool limits/destruction, long-delay chunking, managed stop/pause/resume |
+| `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
+| `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
+| `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
+| `test_hal_eeprom` | byte/int write–read, `commit` flag |
+| `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
+| `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
+| `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
+| `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
+| `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
+| `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
+| `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
+| `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
+| `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
+| `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
+| `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
+| `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
+| `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
+| `test_bh1750_driver` | Shared BH1750 init command, first-measurement delay, I2C bus routing and two-byte lux decode |
+| `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
+| `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
+| `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
+| `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
+| `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
+| `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
+| `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, missing-path remove semantics, input validation |
+| `test_hal_sdlogger` | EEPROM-backed file numbering, buffered log flush/close, crash-report formatting, SD/open failure paths |
+| `test_hal_udp` | begin/parse/read flow, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
+| `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
+| `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
+| `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
+| `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
+| `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
+| `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
+| `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |
+| `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |
+| `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
+| `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
+| `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
+| `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
+
+### Adding a new test suite
+
+1. Create `tests/test_<name>.cpp` with Unity `setUp`, `tearDown`, and `RUN_TEST` calls.
+2. Add `add_hal_test(test_<name>)` to `tests/CMakeLists.txt`.
+    For suites that compile extra sources (for example `test_tools` and
+    `test_multicoreWatchdog`), create a dedicated `add_executable(...)` entry.
+3. Rebuild: `cmake --build build && ctest --test-dir build`.
+
+### Mock time control
+
+SmartTimers and PIDController depend on `hal_millis()`.
+The mock clock starts at 0 and is driven by:
+
+```cpp
+hal_mock_set_millis(uint32_t ms);     // set absolute time
+hal_mock_advance_millis(uint32_t ms); // advance relative to now
+hal_mock_timer_advance_us(uint64_t us); // fires pending hal_timer alarms
+```
+
+**Important:** `SmartTimers` uses `_lastTime == 0` as an "uninitialized" sentinel.
+Start mock time at a non-zero value (e.g. `hal_mock_set_millis(1000)`) before
+calling `SmartTimers::begin()` to avoid the guard triggering in tests.
+
+---
+
+*Back to [JaszczurHAL API Reference](../JaszczurHAL_API.md)*
+
+*Next: [Multicore safety, drivers, migration](04_multicore_drivers_migration.md)*

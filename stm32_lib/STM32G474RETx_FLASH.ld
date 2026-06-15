@@ -22,7 +22,12 @@ _estack = ORIGIN(RAM) + LENGTH(RAM);
 
 /* Minimum heap/stack kept free (sanity guard for the linker). */
 _Min_Heap_Size  = 0x400;
-_Min_Stack_Size = 0x800;
+/*
+ * Default minimum stack reserve is 0x800 bytes.
+ * Can be overridden at link time with:
+ *   -Wl,--defsym=HAL_STM32_MIN_STACK_SIZE=<bytes>
+ */
+_Min_Stack_Size = DEFINED(HAL_STM32_MIN_STACK_SIZE) ? HAL_STM32_MIN_STACK_SIZE : 0x800;
 
 /* Stack-guard anchor used by stm32g474_fault.cpp. */
 JH_StackLimit = ORIGIN(RAM) + LENGTH(RAM) - _Min_Stack_Size;
