@@ -1,0 +1,521 @@
+# Storage
+
+> **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
+
+Covers: `hal_eeprom`, `hal_kv`, `hal_littlefs`, `hal_sdlogger`.
+
+## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_ENABLE_EEPROM`)*
+
+Single API that works with both the RP2040 internal flash-backed EEPROM and the
+external AT24C256 I2C EEPROM.  The back-end is selected at runtime in
+`hal_eeprom_init()`.
+
+```c
+#include <hal/hal_eeprom.h>
+
+typedef enum {
+    HAL_EEPROM_AT24C256 = 1, // External AT24C256 I2C EEPROM - 32 KB, address 0x50
+    HAL_EEPROM_RP2040   = 2, // RP2040 internal flash-backed EEPROM emulation
+} hal_eeprom_type_t;
+
+// Initialise EEPROM. Call before any other hal_eeprom_* function.
+// size:     used only for HAL_EEPROM_RP2040 (passed to EEPROM.begin());
+//           ignored for HAL_EEPROM_AT24C256 (always 32768 bytes).
+// i2c_addr: 7-bit I2C address of the AT24C256 chip; ignored for RP2040.
+//           Pass 0 to use the default EEPROM_I2C_ADDRESS (0x50 from hal_config.h).
+void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
+
+// Byte-level access
+void    hal_eeprom_write_byte(uint16_t addr, uint8_t val);
+uint8_t hal_eeprom_read_byte(uint16_t addr);
+
+// 32-bit integer access (little-endian, 4 bytes starting at addr)
+void    hal_eeprom_write_int(uint16_t addr, int32_t val);
+int32_t hal_eeprom_read_int(uint16_t addr);
+
+// Batched byte access under one internal lock.
+void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
+void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
+
+// Flush buffered writes to non-volatile storage.
+// HAL_EEPROM_RP2040: calls EEPROM.commit().
+// HAL_EEPROM_AT24C256: no-op.
+void hal_eeprom_commit(void);
+
+// Zero-fill entire EEPROM (slow - do not use in time-critical code).
+void hal_eeprom_reset(void);
+
+// Return EEPROM size in bytes.
+uint16_t hal_eeprom_size(void);
+```
+
+**Integer byte order:** `hal_eeprom_write_int` / `hal_eeprom_read_int` use
+**little-endian** order (LSB at the lowest address).
+
+**Commit semantics:** For `HAL_EEPROM_RP2040`, `hal_eeprom_write_byte`,
+`hal_eeprom_write_int`, and `hal_eeprom_write_bytes` only update the RAM buffer
+- call `hal_eeprom_commit()` once after a group of writes to persist them to
+flash.  For `HAL_EEPROM_AT24C256`
+each byte write is committed immediately to the chip; `hal_eeprom_commit()` is
+a no-op.
+
+**impl/arduino:** `HAL_EEPROM_RP2040` uses `<EEPROM.h>` (Arduino-pico).
+`HAL_EEPROM_AT24C256` drives the chip via `hal_i2c_*` primitives with
+write-cycle polling and watchdog feeding.  The AT24C256 I2C address is
+`EEPROM_I2C_ADDRESS` (default `0x50`, defined in `hal_config.h`).
+**impl/.mock:** in-memory byte array (`MOCK_EEPROM_BUF_SIZE`, default 32768).
+**Thread safety:** Thread-safe and multicore-safe for both back-ends. `HAL_EEPROM_AT24C256` operations are protected by the `hal_i2c` bus mutex. `HAL_EEPROM_RP2040` operations are protected by a dedicated internal mutex. `hal_eeprom_init()` must be called from one core only.
+
+### Mock helpers
+
+```c
+#include <hal/impl/.mock/hal_mock.h>
+
+// Read a byte directly from the mock backing store.
+uint8_t           hal_mock_eeprom_get_byte(uint16_t addr);
+// Return the type set by hal_eeprom_init().
+hal_eeprom_type_t hal_mock_eeprom_get_type(void);
+// True if hal_eeprom_commit() was called since the last reset.
+bool              hal_mock_eeprom_was_committed(void);
+// Clear the committed flag (re-arm the check).
+void              hal_mock_eeprom_clear_committed_flag(void);
+// Return number of byte writes since last reset/counter clear.
+uint32_t          hal_mock_eeprom_get_write_count(void);
+// Clear the byte-write counter.
+void              hal_mock_eeprom_clear_write_count(void);
+// Reset all mock state to defaults (zeroed memory, no type, not committed).
+void              hal_mock_eeprom_reset(void);
+```
+
+**Usage example:**
+```c
+// RP2040 internal EEPROM (i2c_addr ignored - pass 0):
+hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+hal_eeprom_write_int(0, my_value);
+hal_eeprom_commit();
+
+// AT24C256 at default address 0x50 (I2C must already be initialised via hal_i2c_init):
+hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0);            // 0 -> use EEPROM_I2C_ADDRESS
+// or with an explicit address (e.g. A0 pin tied high -> 0x51):
+hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0x51);
+hal_eeprom_write_byte(0, 0xAB);
+// no commit needed for AT24C256
+```
+
+**Example: write and read configuration data**
+```c
+#include <hal/hal_eeprom.h>
+
+void example_eeprom(void) {
+    // Initialize RP2040 EEPROM (512 bytes)
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+
+    // Write multiple values at different addresses
+    hal_eeprom_write_int(0, 12345);           // Store int at offset 0 (4 bytes)
+    hal_eeprom_write_byte(4, 0x42);           // Store byte at offset 4
+
+    // For structured data, use byte array writes
+    uint8_t config_data[16] = {
+        0x01, 0x02, 0x03, 0x04,
+        0x05, 0x06, 0x07, 0x08,
+        0xFF, 0xFE, 0xFD, 0xFC,
+        0x00, 0x00, 0x00, 0x00
+    };
+    hal_eeprom_write_bytes(8, config_data, sizeof(config_data));
+
+    // Commit all writes to flash at once
+    hal_eeprom_commit();
+
+    // Read back the values
+    int32_t stored_int = hal_eeprom_read_int(0);
+    uint8_t stored_byte = hal_eeprom_read_byte(4);
+
+    uint8_t read_buffer[16];
+    hal_eeprom_read_bytes(8, read_buffer, sizeof(read_buffer));
+
+    hal_deb("Int: %ld, Byte: 0x%02x", stored_int, stored_byte);
+}
+```
+
+---
+
+
+## `hal_kv` - Key-value storage on EEPROM  *(optional - `HAL_ENABLE_KV`)*
+
+Thread-safe append-only KV/record storage on top of `hal_eeprom`.
+Uses dual-bank layout with CRC16-protected headers and records.
+Automatic garbage-collection (GC) compacts live records into the alternate bank
+when the active bank runs out of space.
+
+```c
+#include <hal/hal_kv.h>
+
+typedef struct {
+    uint32_t generation;       // bank generation counter
+    uint16_t used_bytes;       // bytes used in active bank
+    uint16_t capacity_bytes;   // single-bank capacity
+    uint16_t key_count;        // number of live keys
+    uint32_t next_sequence;    // next record sequence number
+} hal_kv_stats_t;
+
+bool hal_kv_init(uint16_t base_addr, uint16_t size_bytes);
+bool hal_kv_set_u32(uint16_t key, uint32_t value);
+bool hal_kv_get_u32(uint16_t key, uint32_t *out_value);
+bool hal_kv_set_blob(uint16_t key, const uint8_t *data, uint16_t len);
+bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *out_len);
+bool hal_kv_delete(uint16_t key);
+bool hal_kv_gc(void);
+bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
+void hal_kv_set_auto_commit(bool enabled);
+bool hal_kv_commit(void);
+```
+
+**Dependencies:** `hal_eeprom`, `hal_sync`, `hal_serial`.
+**Thread safety:** Thread-safe and multicore-safe. An internal singleton mutex
+created with the HAL atomic create-once helper protects all operations.
+`hal_kv_init()` must be called after `hal_eeprom_init()`.
+
+**Deduplication:** `hal_kv_set_u32` / `hal_kv_set_blob` skip the EEPROM write when the
+value is unchanged, avoiding unnecessary flash wear.
+
+**Commit policy:** auto-commit is enabled by default (historical behavior).
+Use `hal_kv_set_auto_commit(false)` to defer physical EEPROM/flash commit and
+coalesce multiple writes, then flush once with `hal_kv_commit()`.
+
+**Example: key-value storage with integers and blobs**
+```c
+#include <hal/hal_kv.h>
+#include <hal/hal_eeprom.h>
+#include <string.h>
+
+void example_kv(void) {
+    // Initialize EEPROM first, then KV store
+    hal_eeprom_init(HAL_EEPROM_RP2040, 4096, 0);
+
+    // KV storage uses dual-bank layout starting at address 0, 2KB per bank
+    hal_kv_init(0, 4096);
+
+    // Store a 32-bit unsigned integer with key 1
+    hal_kv_set_u32(1, 42);
+    hal_deb("Stored: key=1, value=42");
+
+    // Store multiple integers
+    hal_kv_set_u32(2, 1000);
+    hal_kv_set_u32(3, 999999);
+
+    // Retrieve a value
+    uint32_t retrieved = 0;
+    if (hal_kv_get_u32(1, &retrieved)) {
+        hal_deb("Retrieved: key=1, value=%lu", retrieved);
+    }
+
+    // Store binary data (blob) - e.g., device MAC address or config
+    uint8_t mac_address[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01};
+    hal_kv_set_blob(10, mac_address, sizeof(mac_address));
+
+    // Retrieve blob data
+    uint8_t retrieved_mac[6];
+    uint16_t retrieved_len = 0;
+    if (hal_kv_get_blob(10, retrieved_mac, sizeof(retrieved_mac), &retrieved_len)) {
+        hal_deb("Retrieved MAC: %02x:%02x:%02x:%02x:%02x:%02x",
+                retrieved_mac[0], retrieved_mac[1], retrieved_mac[2],
+                retrieved_mac[3], retrieved_mac[4], retrieved_mac[5]);
+    }
+
+    // Store configuration string as blob
+    const char *config = "ssid=MyNetwork&pass=pwd123";
+    hal_kv_set_blob(11, (const uint8_t *)config, strlen(config));
+
+    // Retrieve configuration string
+    char config_buf[128];
+    uint16_t config_len = 0;
+    if (hal_kv_get_blob(11, (uint8_t *)config_buf, sizeof(config_buf), &config_len)) {
+        config_buf[config_len] = '\0';  // null-terminate
+        hal_deb("Retrieved config: %s", config_buf);
+    }
+
+    // Delete a key
+    hal_kv_delete(2);
+
+    // Get statistics
+    hal_kv_stats_t stats;
+    if (hal_kv_get_stats(&stats)) {
+        hal_deb("KV stats: %d keys, %d/%d bytes used, gen=%lu",
+                stats.key_count, stats.used_bytes, stats.capacity_bytes,
+                stats.generation);
+    }
+
+    // Manual commit (if auto-commit was disabled)
+    hal_kv_set_auto_commit(false);
+    hal_kv_set_u32(100, 111);
+    hal_kv_set_u32(101, 222);
+    hal_kv_commit();  // Flush both writes at once
+    hal_kv_set_auto_commit(true);
+}
+```
+
+---
+
+
+## `hal_littlefs` - LittleFS lifecycle helpers  *(opt-in - `HAL_ENABLE_LITTLEFS`)*
+
+Thread-safe wrapper for LittleFS mount/format and lightweight path helpers.
+
+```c
+#include <hal/hal_littlefs.h>
+
+bool   hal_littlefs_begin(void);
+void   hal_littlefs_end(void);
+bool   hal_littlefs_format(void);
+bool   hal_littlefs_is_mounted(void);
+bool   hal_littlefs_exists(const char *path);
+bool   hal_littlefs_remove(const char *path);
+size_t hal_littlefs_total_bytes(void);
+size_t hal_littlefs_used_bytes(void);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_LITTLEFS` is defined.
+- `hal_littlefs_begin()` mounts the filesystem; `hal_littlefs_end()` unmounts it.
+- `hal_littlefs_format()` formats the LittleFS partition.
+- When `hal_littlefs_format()` fails, mounted/path/stat state is left unchanged.
+- Path helpers require mounted filesystem and validate non-empty paths.
+
+**Example: write and read files with LittleFS**
+```c
+#include <hal/hal_littlefs.h>
+#include <stdio.h>
+
+void example_littlefs(void) {
+    // Mount the LittleFS filesystem
+    if (!hal_littlefs_begin()) {
+        hal_derr("LittleFS mount failed!");
+        return;
+    }
+
+    hal_deb("LittleFS mounted: %zu/%zu bytes used",
+            hal_littlefs_used_bytes(), hal_littlefs_total_bytes());
+
+    // Write file using standard C fopen/fprintf (LittleFS is mounted as root)
+    FILE *f = fopen("/data.txt", "w");
+    if (f) {
+        fprintf(f, "Hello from LittleFS!\n");
+        fprintf(f, "Time: 12345 ms\n");
+        fclose(f);
+        hal_deb("File /data.txt written");
+    }
+
+    // Check if file exists
+    if (hal_littlefs_exists("/data.txt")) {
+        hal_deb("/data.txt exists");
+    }
+
+    // Read file back
+    f = fopen("/data.txt", "r");
+    if (f) {
+        char line[128];
+        while (fgets(line, sizeof(line), f)) {
+            hal_deb("Read: %s", line);
+        }
+        fclose(f);
+    }
+
+    // Write binary data
+    FILE *fb = fopen("/sensor_log.bin", "wb");
+    if (fb) {
+        uint8_t sensor_data[8] = {
+            0x01, 0x02, 0x03, 0x04,
+            0x05, 0x06, 0x07, 0x08
+        };
+        fwrite(sensor_data, 1, sizeof(sensor_data), fb);
+        fclose(fb);
+        hal_deb("Binary file /sensor_log.bin written");
+    }
+
+    // Delete a file
+    if (hal_littlefs_remove("/sensor_log.bin")) {
+        hal_deb("/sensor_log.bin deleted");
+    }
+
+    // Get filesystem stats
+    hal_deb("LittleFS: total=%zu, used=%zu, free=%zu bytes",
+            hal_littlefs_total_bytes(),
+            hal_littlefs_used_bytes(),
+            hal_littlefs_total_bytes() - hal_littlefs_used_bytes());
+
+    // Unmount when done
+    hal_littlefs_end();
+}
+```
+
+---
+**impl/.mock:** deterministic test double with injectable mount/format result,
+path presence, and volume size stats.
+**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+
+**Mock helpers:**
+```c
+void hal_mock_littlefs_reset(void);
+void hal_mock_littlefs_set_begin_result(bool result);
+void hal_mock_littlefs_set_format_result(bool result);
+void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
+void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
+void hal_mock_littlefs_set_exists(const char *path, bool exists);
+```
+
+---
+
+## `hal_sdlogger` - SD-card logger  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
+
+Periodic SD-card logger plus crash-report logger. The module stores log/crash
+file counters in `hal_eeprom`, so enabling it propagates `HAL_ENABLE_EEPROM`
+and, for the current Arduino EEPROM backend, `HAL_ENABLE_I2C`.
+
+```c
+#include <hal/hal_sdlogger.h>
+
+int  hal_sdlogger_get_log_number(void);
+int  hal_sdlogger_get_crash_number(void);
+bool hal_sdlogger_init(int cs);
+bool hal_sdlogger_crash_init(const char *add_to_name, int cs);
+bool hal_sdlogger_is_initialized(void);
+bool hal_sdlogger_crash_is_initialized(void);
+void hal_sdlogger_append(const char *data);
+void hal_sdlogger_crash_append(const char *data);
+void hal_sdlogger_close(void);
+void hal_sdlogger_crash_close(void);
+void hal_sdlogger_crash_report(const char *format, ...);
+```
+
+**Configuration defaults:**
+
+```c
+HAL_SDLOGGER_WRITE_INTERVAL_MS  2000u
+HAL_SDLOGGER_EEPROM_LOGGER_ADDR 0u
+HAL_SDLOGGER_EEPROM_CRASH_ADDR  4u
+HAL_SDLOGGER_EEPROM_FIRST_ADDR  8u
+HAL_SDLOGGER_LOG_BUFFER_SIZE    2048u
+HAL_SDLOGGER_NAME_BUFFER_SIZE   128u
+```
+
+**Behavior notes:**
+- `hal_sdlogger_init(cs)` opens `logN.txt` and increments the EEPROM log counter.
+- `hal_sdlogger_append()` buffers lines and flushes every
+  `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` flushes leftovers.
+- `hal_sdlogger_crash_init(add_to_name, cs)` opens `watchdogN.txt` or
+  `watchdogN(<add_to_name>).txt` and writes the corresponding log filename.
+- `hal_sdlogger_crash_append()` and `hal_sdlogger_crash_report()` flush crash
+  entries immediately.
+
+**Example: SD card periodic logging**
+```c
+#include <hal/hal_sdlogger.h>
+#include <hal/hal_eeprom.h>
+
+void setup_sd_logging(void) {
+    // Initialize EEPROM (SD logger stores counters there)
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+
+    // Initialize SD card logger with CS pin 10
+    int cs_pin = 10;
+    if (hal_sdlogger_init(cs_pin)) {
+        hal_deb("SD logger initialized, log number: %d", hal_sdlogger_get_log_number());
+    } else {
+        hal_derr("SD logger init failed!");
+        return;
+    }
+}
+
+void loop_with_logging(void) {
+    static uint32_t last_log_ms = 0;
+    uint32_t now_ms = hal_millis();
+
+    // Log every 2 seconds (HAL_SDLOGGER_WRITE_INTERVAL_MS)
+    if (now_ms - last_log_ms > 2000) {
+        last_log_ms = now_ms;
+
+        // Read some sensor data
+        float temperature = read_temperature();
+        int humidity = read_humidity();
+
+        // Append to log file (buffered, flushed periodically)
+        static char log_line[128];
+        snprintf(log_line, sizeof(log_line), "[%lu] T=%.1f°C, H=%d%%\n",
+                 now_ms, temperature, humidity);
+        hal_sdlogger_append(log_line);
+    }
+}
+
+void shutdown_logging(void) {
+    // Flush any remaining buffered data to SD card
+    hal_sdlogger_close();
+    hal_deb("Log file closed");
+}
+```
+
+**Example: SD card crash logger**
+```c
+#include <hal/hal_sdlogger.h>
+#include <hal/hal_eeprom.h>
+
+void setup_crash_logging(void) {
+    // Initialize EEPROM and crash logger
+    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+
+    int cs_pin = 10;
+    // Create watchdogN_boot.txt file (add "boot" to filename)
+    if (hal_sdlogger_crash_init("boot", cs_pin)) {
+        hal_deb("Crash logger initialized, crash log number: %d",
+                hal_sdlogger_get_crash_number());
+    }
+}
+
+void on_critical_error(const char *error_msg) {
+    // Log crash report immediately (not buffered)
+    hal_sdlogger_crash_report("[CRITICAL] Error: %s, Free heap: %lu\n",
+                              error_msg, hal_get_free_heap());
+
+    // Append additional debug info
+    hal_sdlogger_crash_append("[CRITICAL] Stack trace would go here\n");
+
+    // Flush and close the crash file
+    hal_sdlogger_crash_close();
+}
+
+void watchdog_reboot_handler(void) {
+    hal_sdlogger_crash_report("[WATCHDOG] System reboot triggered\n");
+    hal_sdlogger_crash_close();
+}
+```
+
+---
+`impl/arduino/frameworks/sdlogger`.
+**impl/.mock:** deterministic test double with injectable SD/open results,
+captured filenames/content, flush counts, and close flags.
+**Thread safety:** Arduino backend serializes public calls with a singleton
+`hal_mutex_t`; init/close should still be treated as single-core lifecycle work.
+
+**Mock helpers:**
+```c
+void        hal_mock_sdlogger_reset(void);
+void        hal_mock_sdlogger_set_sd_begin_result(bool result);
+void        hal_mock_sdlogger_set_log_open_result(bool result);
+void        hal_mock_sdlogger_set_crash_open_result(bool result);
+const char *hal_mock_sdlogger_log_filename(void);
+const char *hal_mock_sdlogger_crash_filename(void);
+const char *hal_mock_sdlogger_log_content(void);
+const char *hal_mock_sdlogger_crash_content(void);
+uint32_t    hal_mock_sdlogger_log_flush_count(void);
+uint32_t    hal_mock_sdlogger_crash_flush_count(void);
+uint32_t    hal_mock_sdlogger_sd_begin_count(void);
+bool        hal_mock_sdlogger_log_was_closed(void);
+bool        hal_mock_sdlogger_crash_was_closed(void);
+```
+
+---
+
+
+---
+
+*Next: [Network connectivity](15_connectivity.md)*

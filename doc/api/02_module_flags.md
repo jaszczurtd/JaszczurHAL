@@ -1,0 +1,283 @@
+# Module flags and configuration
+
+> **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
+
+## Selective module inclusion (`HAL_ENABLE_*`)
+
+JaszczurHAL uses an **opt-in** model: by default *no* optional module is
+compiled. To use a module, define its `HAL_ENABLE_<MODULE>` flag (in
+`hal_project_config.h` or via `-D`). Enabling a flag pulls in:
+
+* the **API declarations** in the corresponding header (otherwise the file
+  compiles to an empty translation unit and calls to its functions raise a
+  clear compile-time error);
+* the **implementation** .cpp (and the bundled third-party drivers it
+  depends on - all `#include`s are gated);
+* the entry in the **umbrella header** `hal/hal.h`.
+
+Modules that are not enabled cost zero code, zero RAM, and pull in no
+third-party libraries via arduino-cli.
+
+### Available flags
+
+Application entry flags are separate from optional HAL modules:
+
+| Flag | Effect |
+|---|---|
+| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. On RP2040 this emits Arduino `loop1()`, which starts the core-1 path. On STM32G474 FreeRTOS entry builds this creates the second application task. Leave undefined for single-loop/single-task apps. |
+
+FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
+
+| Flag | Effect |
+|---|---|
+| `HAL_ENABLE_FREERTOS` | Enables native FreeRTOS availability checks for the selected target. RP2040 must be built in arduino-pico FreeRTOS mode so `__FREERTOS` is defined; arduino-pico owns scheduler startup and optional `app_task1()` dispatch remains `loop1()` gated by `HAL_ENABLE_APP_TASK1`. STM32G474 builds use a pinned `FreeRTOS-Kernel` checkout from `freertos_core_version.conf` plus the target `FreeRTOSConfig.h`, explicit Cortex-M4F kernel source list, `heap_4.c`, and FreeRTOS-owned SVC/PendSV/SysTick vectors. With `HAL_PROVIDE_APP_ENTRY`, STM32 calls `app_start()`, creates the `app_task0()` task and optional `app_task1()` task, then starts the scheduler. On both supported targets, `hal_mutex_*`, `hal_delay_ms()`, and `hal_idle()` select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
+
+| Flag | Header | Impl | 3rd-party deps pulled in |
+|---|---|---|---|
+| `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | WiFi (arduino-pico) |
+| `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates WIFI) |
+| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
+| `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
+| `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
+| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
+| `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
+| `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS |
+| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C + SPI) |
+| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
+| `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
+| `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
+| `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
+| `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
+| `HAL_ENABLE_CAN` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | `hal_can.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | shared Arduino-free MCP2515 driver (propagates SPI) |
+| `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
+| `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
+| `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
+| `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
+| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
+| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/ds18b20/hal_ds18b20.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
+| `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
+| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/onewire/hal_onewire.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
+| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/ads1x15/ads1x15_driver.h` | `impl/shared/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
+| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
+| `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
+| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
+| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
+| `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
+| `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/display/ili9341_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/display/ssd1306_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
+| `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
+| `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
+| `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
+| `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | `utils/cJSON.c`, `utils/cJSON_Utils.c` | bundled cJSON |
+| `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
+
+### Opt-out flag
+
+| Flag | Effect |
+|---|---|
+| `HAL_DISABLE_ASSERTS` | Compiles every `HAL_ASSERT()` to a no-op. Asserts are ON by default. Mirrors the standard `NDEBUG` convention. |
+
+### Dependency propagation (hal\_config.h)
+
+Enabling a leaf module automatically enables every module it requires:
+
+```
+HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
+HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C, HAL_ENABLE_SPI
+HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
+HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
+HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
+HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
+HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
+HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
+HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
+HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
+HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
+HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
+HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
+HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
+HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
+HAL_ENABLE_CAN         -> HAL_ENABLE_SPI
+HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
+HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
+```
+
+Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,
+`HAL_ENABLE_DISPLAY`, `HAL_ENABLE_TFT`, `HAL_ENABLE_CELLULAR_MODEM`)
+emit a compile-time `#error` if enabled without any backend.
+
+You only need to enable the **leaf** module you actually use; everything
+upstream is pulled in for you.
+
+### Passing flags - recommended: `hal_project_config.h`
+
+Create `hal_project_config.h` in your sketch directory and enable the
+modules you use:
+
+```c
+#pragma once
+#define HAL_ENABLE_WIFI
+#define HAL_ENABLE_KV            // -> propagates EEPROM
+#define HAL_ENABLE_GPS           // -> auto-enables UART when no transport is selected
+#define HAL_ENABLE_MCP9600       // -> propagates THERMOCOUPLE + I2C
+#define HAL_ENABLE_BH1750        // -> propagates I2C
+#define HAL_ENABLE_UART
+#define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
+#define HAL_ENABLE_PWM_FREQ
+```
+
+`hal_config.h` detects it via `__has_include("hal_project_config.h")`.
+
+### FreeRTOS availability flag
+
+`HAL_ENABLE_FREERTOS` is a target/runtime integration flag rather than an
+optional module flag. It is intended for projects that want to include native
+FreeRTOS headers directly:
+
+```c
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+```
+
+Target rules:
+
+- RP2040: use arduino-pico's FreeRTOS mode. The HAL validates that
+  `__FREERTOS` is present and emits a clear compile-time error if a normal
+  non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`. For the
+  static library, use `./scripts/build_arduino_lib.sh --freertos`; for
+  examples, use
+  `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
+  `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
+  available to application code and exercises portable `app_task0()` /
+  `app_task1()` dispatch, native `xTaskCreate()` worker tasks, a
+  mutex-protected shared table, `hal_mutex_*`, `hal_delay_ms()`, and
+  `hal_idle()` from FreeRTOS task context. arduino-pico remains responsible for
+  scheduler ownership; HAL represents the secondary path as `loop1()` only when
+  `HAL_ENABLE_APP_TASK1` is defined.
+- STM32G474: use the pinned `third_party/FreeRTOS-Kernel` dependency from
+  `freertos_core_version.conf`, or pass
+  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds run
+  `scripts/ensure_freertos_kernel.sh` before adding FreeRTOS source paths,
+  compile the explicit Cortex-M4F kernel source list, include the target
+  `FreeRTOSConfig.h`, use `heap_4.c`, and let the FreeRTOS port own
+  SVC/PendSV/SysTick. In FreeRTOS mode, STM32 `hal_mutex_*` uses FreeRTOS
+  mutexes, `hal_delay_ms()` uses `vTaskDelay()` from legal task context, and
+  `hal_idle()` yields to the scheduler from legal task context. When
+  `HAL_PROVIDE_APP_ENTRY` is also defined, HAL calls `app_start()`, creates an
+  `app_task0()` FreeRTOS task, creates `app_task1()` only when
+  `HAL_ENABLE_APP_TASK1` is defined, and then calls `vTaskStartScheduler()`.
+- Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the normal mock backend.
+  CI uses the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` host build to compile the
+  FreeRTOS kernel GCC/Posix port, run a real scheduler as pthreads, and exercise
+  the STM32G474 host-stub `HAL_ENABLE_FREERTOS` paths in `ctest`.
+
+HAL-provided STM32 FreeRTOS entry task defaults:
+
+| Macro | Default | Unit / meaning |
+|---|---|---|
+| `HAL_FREERTOS_TASK0_STACK` | `512` | FreeRTOS stack words for `app_task0()` |
+| `HAL_FREERTOS_TASK1_STACK` | `512` | FreeRTOS stack words for `app_task1()` |
+| `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task0()` |
+| `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task1()` |
+
+Platform stack-size overrides:
+
+| Macro | Default | Unit / meaning |
+|---|---|---|
+| `HAL_STM32_MAIN_STACK_SIZE` | `0x800` | Bytes reserved as STM32 `_Min_Stack_Size` (linker reserve between heap and top-of-RAM stack) |
+| `HAL_RP2040_STACK_SIZE` | `0x800` | Bytes mapped to `PICO_STACK_SIZE` (core0 stack reservation in Arduino-pico/Pico SDK linker flow) |
+| `HAL_RP2040_CORE1_STACK_SIZE` | `HAL_RP2040_STACK_SIZE` / `0x800` | Bytes mapped to `PICO_CORE1_STACK_SIZE` (core1 stack reservation) |
+
+Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
+mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
+interrupt mask for timing-sensitive code. The implementation includes atomic
+create-once fallbacks for singleton/per-bus mutexes and hardens the RP2040
+I2C-slave callback path. Timer callback context, Arduino-origin wrapper
+internals, and remaining per-module exceptions are summarized in
+[Thread-SafetyAudit.md](Thread-SafetyAudit.md).
+
+Arduino CLI does not add the sketch directory to the include path for library
+source files, so the build command must add it explicitly:
+
+```bash
+arduino-cli compile \
+  --fqbn rp2040:rp2040:rpipico \
+  --build-property "compiler.cpp.extra_flags=-I '/path/to/sketch'" \
+  --build-property "compiler.c.extra_flags=-I '/path/to/sketch'" \
+  --build-path .build \
+  --warnings all .
+```
+
+In VS Code tasks, use `${workspaceFolder}` for the path.
+
+### Alternative: `-D` flags on the command line
+
+```bash
+arduino-cli compile \
+  --fqbn rp2040:rp2040:rpipico \
+  --build-property "build.extra_flags=\
+-DHAL_ENABLE_WIFI \
+-DHAL_ENABLE_EEPROM \
+-DHAL_ENABLE_GPS \
+-DHAL_ENABLE_THERMOCOUPLE \
+-DHAL_ENABLE_UART \
+-DHAL_ENABLE_SWSERIAL \
+-DHAL_ENABLE_I2C \
+-DHAL_ENABLE_BH1750 \
+-DHAL_ENABLE_EXTERNAL_ADC \
+-DHAL_ENABLE_PWM_FREQ" \
+  --build-path .build \
+  --warnings all .
+```
+
+### Core modules (no disable flag)
+
+| Module | Purpose |
+|---|---|
+| `hal_gpio` | GPIO read / write / interrupts |
+| `hal_adc` | On-chip ADC |
+| `hal_pwm` | Basic analogWrite PWM |
+| `hal_timer` | Low-level one-shot alarms plus managed timers (periodic/one-shot create/start/stop/pause/resume/query) |
+| `hal_system` | millis / delay / watchdog / idle + type-independent `hal_constrain` / `hal_map` + `COUNTOF(arr)` |
+| `hal_bits` | bit helpers (`is_set`, `set_bit`, `bitSet`, volatile register ops) |
+| `hal_sync` | Mutexes, critical sections |
+| `hal_serial` | Debug serial output |
+| `hal_spi` | SPI bus init |
+| `hal_math` | type-independent `hal_constrain` / `hal_map` macros |
+
+`hal_crypto` is opt-in via `HAL_ENABLE_CRYPTO` (it is not part of the always-on core set).
+
+### Note about `library.properties:depends`
+
+`library.properties` currently does **not** declare `depends=`.
+Optional Arduino drivers used by HAL modules are vendored in
+`src/hal/impl/arduino/drivers/`.
+
+Actual compiled dependencies are controlled by the module set:
+
+- enabled modules (`HAL_ENABLE_*`) pull in their third-party backends
+- modules left disabled (the default) compile out both declarations and
+  implementation details
+
+\* `HAL_ENABLE_TIME` enables NTP/local-time APIs;
+`hal_time_from_components(...)` remains available unconditionally as a pure
+conversion helper with no network dependency.
+
+---
+
+
+---
+
+*Next: [Multicore safety, drivers, migration guide](03_build_tests.md)*

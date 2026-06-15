@@ -1,13 +1,13 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-13 (STM32 reset reason/fault path implemented)
+Last updated: 2026-06-15 (audit aligned with current repo state)
 
 ## Goal
-Provide a new `STM32G474` target skeleton for JaszczurHAL with no dependency on
-the Arduino layer, so the STM32 backend can be developed in parallel with the
-existing Arduino/RP2040 backend.
+Provide and harden a non-Arduino `STM32G474` target for JaszczurHAL so the
+STM32 backend reaches practical parity with the existing Arduino/RP2040 paths
+where the hardware model is compatible.
 
-## Delivered scope ("2)" - skeleton)
+## Delivered scope (foundational bring-up)
 
 ### 1. New static-library build path for STM32
 Added files:
@@ -41,13 +41,16 @@ Added files:
 - `src/hal/impl/stm32g474/drivers/stm32g474/` (SoC-specific fault and system drivers)
 
 Nature of the implementation:
-- a minimal, safe skeleton for the later switch to STM32 HAL/LL,
+- a project-owned register-level STM32G474 backend with shared-driver reuse
+  where possible,
 - no dependency on Arduino libraries (non-Arduino builds use local compatibility
   headers where Arduino-origin drivers need common types),
-- core modules are moving from placeholders to register-level G474 backends,
+- core modules that used to be placeholders now have real STM32G474 backends
+  for GPIO, timer, PWM, ADC, I2C, SPI, UART, serial/debug, RTC, RGB LED,
+  thermocouples, display transport, and fault/reset diagnostics,
 - the code carries TODO markers wherever the STM32 wiring should ultimately go.
 
-### 3. Default STM32 feature profile (initial)
+### 3. Default STM32 feature profile
 `stm32_lib/CMakeLists.txt` enables by default:
 - `HAL_ENABLE_I2C`
 - `HAL_ENABLE_SPI`
@@ -58,12 +61,15 @@ Nature of the implementation:
 - `HAL_ENABLE_MAX5395`
 - `HAL_ENABLE_MCP9600`
 - `HAL_ENABLE_MAX6675`
+- `HAL_ENABLE_BH1750`
 - `HAL_ENABLE_EXTERNAL_ADC`
+- `HAL_ENABLE_DS18B20`
 - `HAL_ENABLE_CAN`
 - `HAL_ENABLE_GPS`
 
-This narrows the scope to the backend "core" and simplifies the first porting
-stages.
+This is still a conservative default profile: it enables the bus/core pieces
+plus the shared HAL-level drivers that are already known to build on STM32G474.
+Other modules remain opt-in through project config or `EXTRA_HAL_DEFINES`.
 
 ## Validation
 
@@ -227,17 +233,16 @@ G474 pins: bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13; CS remains
 a normal GPIO owned by each driver.
 
 ### Module gap on STM32
-Modules with Arduino + mock impl but no `impl/stm32g474`:
-`eeprom, i2c_slave, littlefs, mqtt,
+Modules still missing a real STM32G474 backend, or still blocked by a missing
+STM32 storage/transport layer:
+`eeprom, i2c_slave, kv, littlefs, mqtt,
 ota, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
-**🟢 Easy - mirror the digipot pattern (rewrite vendor logic on `hal_i2c`):**
-- `hal_rtc` (PCF8563, DS3231) - plain I2C register access
-
-We do not port the Adafruit/vendor libraries; we extract their register maps and
-write a portable driver on `hal_i2c`. Low risk, existing coverage in `tests/`.
+The shared-driver migration has already covered the highest-value portable
+device classes: RTC, external ADC, OneWire/DS18B20, display, RGB LED,
+thermocouples, CAN/MCP2515, digipot, BH1750, and PGA2311.
 
 `hal_external_adc` / ADS1115 has completed this path and now lives in
 `src/hal/impl/shared/ads1x15/ads1x15_driver.*`.
@@ -255,6 +260,10 @@ evaluation if TFT throughput needs it.
 cycle-timed GPIO transport. A PWM+DMA or SPI transport can still be evaluated
 later if WS2812 throughput or interrupt latency becomes a practical issue.
 
+`hal_rtc` has also completed this path: both PCF8563 and DS3231 now run through
+shared HAL I2C drivers with STM32G474 and RP2040 wrappers using the same device
+logic.
+
 **🔴 Not a "driver port" - different effort entirely:**
 - `hal_wifi / hal_udp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
   PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio -> not a port
@@ -262,17 +271,33 @@ later if WS2812 throughput or interrupt latency becomes a practical issue.
   Effectively N/A for a bare G474.
 - `hal_littlefs / hal_eeprom / hal_ota` - STM32 flash/storage specific, not
   vendor-driver ports.
+- `hal_kv` depends on `hal_eeprom`, so it is blocked until a real STM32 storage
+  backend exists.
 - `hal_swserial / hal_i2c_slave` - STM32 peripheral work.
 
 ### Recommended order
-1. **I2C drivers** - Via the shared/portable HAL pattern: rtc (PCF8563/DS3231) is now **DONE**.
-2. **Display bulk-write path** over SPI, then decide whether DMA is worth adding for TFT throughput.
-3. Remainder (storage, connectivity) - separate decisions, not pure ports.
+1. **On-silicon validation first** - confirm the delivered register-level
+  backends on Nucleo-G474RE, especially GPIO IRQ routing, TIM6 alarm jitter,
+  PWM channel mapping, SPI/I2C pin-map validation, RTC wiring, and RGB LED
+  timing margins.
+2. **Widen STM32-targeted regression coverage** - add focused tests for the
+  STM32-specific backends beyond `hal_system` and `hal_timer`, especially
+  GPIO IRQ, PWM, I2C, SPI, CAN, and RTC integration seams.
+3. **Storage and peripheral gaps** - decide and implement the missing
+  STM32-native layers for `hal_eeprom`/`hal_kv`/`hal_littlefs`, plus any real
+  need for `hal_i2c_slave` or `hal_swserial`.
+4. **Optional performance follow-up** - evaluate display bulk-write and DMA
+  paths only if measured TFT throughput or CPU cost justifies the added
+  backend complexity.
 
 ## Remaining work for the next stages
 1. On-silicon validation on Nucleo-G474RE for all register-level backends,
    including TIM6 timer alarm jitter/latency checks.
 2. FreeRTOS hardware/runtime validation and module hardening after the Stage 7
    `app_task0`/`app_task1` task entry mode.
-3. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer) on an STM32G474 board.
-4. Gradually unlock further modules (`HAL_ENABLE_*`) as the port progresses.
+3. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer/RTC/display) on an
+  STM32G474 board.
+4. Expand STM32-targeted regression coverage beyond the current `hal_system`
+  and `hal_timer` focused tests.
+5. Gradually unlock further modules (`HAL_ENABLE_*`) where the missing STM32
+  storage/transport/backend work is actually complete.
