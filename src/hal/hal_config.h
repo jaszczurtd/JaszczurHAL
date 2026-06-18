@@ -281,6 +281,13 @@
                                   compiled out and the session never
                                   enters the authenticated state.
        HAL_ENABLE_CJSON         - bundled cJSON / cJSON_Utils sources.
+       HAL_ENABLE_PNG           - bundled LodePNG memory-based PNG encoder /
+                                  decoder. JaszczurHAL disables LodePNG disk
+                                  helpers and C++ std wrapper by default; define
+                                  HAL_LODEPNG_ENABLE_DISK or
+                                  HAL_LODEPNG_ENABLE_CPP to opt them back in.
+       HAL_ENABLE_PNG_AS_BASE64 - Base64-encoded PNG helpers in tools
+                                  (propagates: CRYPTO, PNG).
 
      Test framework:
        HAL_ENABLE_UNITY         - bundled Unity framework. Typically
@@ -311,6 +318,15 @@
 #endif
 #ifndef HAL_ENABLE_SPI
 #define HAL_ENABLE_SPI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_PNG_AS_BASE64
+#ifndef HAL_ENABLE_CRYPTO
+#define HAL_ENABLE_CRYPTO
+#endif
+#ifndef HAL_ENABLE_PNG
+#define HAL_ENABLE_PNG
 #endif
 #endif
 
@@ -512,7 +528,8 @@
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
   KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
   ONEWIRE, EXTERNAL_ADC, PGA2311,
-   TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
+   TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
+   PNG_AS_BASE64) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
    which would otherwise leave the user with a non-functional binary. */
@@ -705,6 +722,12 @@
 #endif
 #ifdef HAL_ENABLE_CJSON
 #pragma message("HAL_CONFIG: HAL_ENABLE_CJSON")
+#endif
+#ifdef HAL_ENABLE_PNG
+#pragma message("HAL_CONFIG: HAL_ENABLE_PNG")
+#endif
+#ifdef HAL_ENABLE_PNG_AS_BASE64
+#pragma message("HAL_CONFIG: HAL_ENABLE_PNG_AS_BASE64")
 #endif
 #ifdef HAL_ENABLE_UNITY
 #pragma message("HAL_CONFIG: HAL_ENABLE_UNITY")

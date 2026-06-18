@@ -233,6 +233,7 @@ function(_jh_add_stm32g474_example NAME)
         "${SRC}/utils/draw7Segment.cpp"
         "${SRC}/utils/cJSON.c"
         "${SRC}/utils/cJSON_Utils.c"
+        "${SRC}/utils/lodepng.cpp"
     )
 
     _jh_make_safe_name(_safe "${NAME}")
@@ -376,6 +377,9 @@ jh_example(31_hd44780 TARGETS rp2040 stm32g474)
 jh_example(32_tsc2007_touch TARGETS rp2040 stm32g474)
 jh_example(33_stmpe610_touch TARGETS rp2040 stm32g474)
 jh_example(34_irsmall_decoder TARGETS rp2040 stm32g474)
+jh_example(35_cJSON TARGETS rp2040 stm32g474)
+jh_example(36_lodePNG TARGETS rp2040 stm32g474)
+jh_example(37_lodePNG_ili9341_base64 TARGETS rp2040 stm32g474)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

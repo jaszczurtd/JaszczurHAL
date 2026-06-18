@@ -81,7 +81,9 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
-| `HAL_ENABLE_CJSON` | `src/tools.h` aggregator | `utils/cJSON.c`, `utils/cJSON_Utils.c` | bundled cJSON |
+| `HAL_ENABLE_CJSON` | `utils/cJSON.h`, `utils/cJSON_Utils.h` (`tools.h` from C++) | `utils/cJSON.c`, `utils/cJSON_Utils.c` | bundled cJSON |
+| `HAL_ENABLE_PNG` | `utils/lodepng.h` (`tools.h` from C++) | `utils/lodepng.cpp` | bundled LodePNG memory-based PNG encoder/decoder |
+| `HAL_ENABLE_PNG_AS_BASE64` | `utils/tools_api.h` helpers + `utils/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `utils/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
 | `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
 
 ### Opt-out flag
@@ -117,6 +119,7 @@ HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_CAN         -> HAL_ENABLE_SPI
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
+HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 ```
 
 Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,

@@ -184,7 +184,7 @@ cppcheck --enable=warning,performance,portability \
     --suppressions-list=tests/cppcheck-suppressions.txt \
     -i src/hal/impl/arduino/drivers \
     -i src/hal/impl/arduino/frameworks \
-    -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c -i src/utils/unity.c \
+    -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c -i src/utils/lodepng.cpp -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src
 
@@ -206,7 +206,7 @@ pass "STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
 run-clang-tidy -p "${BUILD_DIR}" -quiet \
-    '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|unity)[^/]*)\.(cpp|c)$' \
+    '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
     | tee /tmp/jh_tidy_host.log
 pass "clang-tidy host pass complete."
 

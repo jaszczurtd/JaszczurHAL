@@ -1,8 +1,9 @@
 # clang-tidy configuration for JaszczurHAL.
 #
 # Scope: bug-finding on the project's OWN code. Vendored libraries
-# (src/hal/impl/arduino/drivers, .../frameworks, src/utils/cJSON*) are excluded
-# at invocation time and via HeaderFilterRegex below.
+# (src/hal/impl/arduino/drivers, .../frameworks, src/utils/cJSON*,
+# src/utils/lodepng*) are excluded at invocation time and via HeaderFilterRegex
+# below.
 #
 # Philosophy: enable the static analyzer and bug-prone families; disable the
 # opinionated style/modernize noise that does not fit a portable embedded C/C++
@@ -38,7 +39,7 @@ Checks: >
   -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling
 
 # Only diagnose headers under our own tree; never vendored or system headers.
-HeaderFilterRegex: 'src/(hal|utils)/(?!impl/arduino/(drivers|frameworks)|cJSON).*'
+HeaderFilterRegex: 'src/(hal|utils)/(?!impl/arduino/(drivers|frameworks)|cJSON|lodepng).*'
 
 # First-cut gate: report findings but do not yet hard-fail on every check.
 # (CI decides pass/fail; see ci.yml.) Leave empty here so the policy lives in

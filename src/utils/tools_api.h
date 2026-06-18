@@ -14,6 +14,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "hal/hal_config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,11 +49,11 @@ void setDebugPrefixWithColon(const char *moduleName);
 /** @brief Legacy alias for @ref hal_deb_set_prefix. */
 #define setDebugPrefix hal_deb_set_prefix
 /** @brief Legacy alias for @ref hal_deb. */
-#define deb            hal_deb
+#define deb hal_deb
 /** @brief Legacy alias for @ref hal_derr. */
-#define derr           hal_derr
+#define derr hal_derr
 /** @brief Legacy alias for @ref hal_derr_limited. */
-#define derr_limited   hal_derr_limited
+#define derr_limited hal_derr_limited
 /** @} */
 
 /** @name Numeric and signal helpers */
@@ -87,14 +89,19 @@ int getMinimumFrom(int *table, int size);
 /** @brief Return midpoint between min and max array values. */
 int getHalfwayBetweenMinMax(int *array, int n);
 /** @brief Floating-point map helper. */
-float mapfloat(float x, float in_min, float in_max, float out_min, float out_max);
+float mapfloat(float x, float in_min, float in_max, float out_min,
+               float out_max);
 /** @brief Bit-cast float to uint32_t (type punning via memcpy). */
 static inline uint32_t float_to_u32(float f) {
-  uint32_t u; memcpy(&u, &f, sizeof(u)); return u;
+  uint32_t u;
+  memcpy(&u, &f, sizeof(u));
+  return u;
 }
 /** @brief Bit-cast uint32_t back to float (type punning via memcpy). */
 static inline float u32_to_float(uint32_t u) {
-  float f; memcpy(&f, &u, sizeof(f)); return f;
+  float f;
+  memcpy(&f, &u, sizeof(f));
+  return f;
 }
 /** @} */
 
@@ -131,7 +138,8 @@ float roundfWithPrecisionTo(float value, int precision);
 /** @brief Print integer as binary with size metadata to provided buffer. */
 char *printBinaryAndSize(int number, char *buf, size_t bufSize);
 /** @brief Concatenate two strings into destination buffer with size check. */
-bool concatStrings(char* dest, size_t destSize, const char* src1, const char* src2);
+bool concatStrings(char *dest, size_t destSize, const char *src1,
+                   const char *src2);
 /** @brief Validate zero-terminated string length/content. */
 bool isValidString(const char *s, int maxBufSize);
 /** @brief Convert two hex characters into one byte value. */
@@ -158,6 +166,85 @@ void hal_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
 void hal_pack_field(uint8_t *buf, const char *str, int width);
 /** @brief Convert 24-bit RGB to RGB565. */
 unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
+/**
+ * @brief Convert RGB888 pixel buffer to RGB565.
+ *
+ * @param rgb Input buffer with 3 bytes per pixel: R, G, B.
+ * @param rgb565 Output buffer with @p pixelCount RGB565 pixels.
+ * @param pixelCount Number of pixels to convert.
+ * @return true on success, false when a required pointer is NULL.
+ */
+bool rgb888ToRgb565(const unsigned char *rgb, unsigned short *rgb565,
+                    size_t pixelCount);
+/**
+ * @brief Convert RGBA8888 pixel buffer to RGB565.
+ *
+ * @param rgba Input buffer with 4 bytes per pixel: R, G, B, A. Alpha is
+ * ignored.
+ * @param rgb565 Output buffer with @p pixelCount RGB565 pixels.
+ * @param pixelCount Number of pixels to convert.
+ * @return true on success, false when a required pointer is NULL.
+ */
+bool rgba8888ToRgb565(const unsigned char *rgba, unsigned short *rgb565,
+                      size_t pixelCount);
+#ifdef HAL_ENABLE_PNG_AS_BASE64
+/**
+ * @brief Return exact decoded PNG byte count for a Base64 PNG string.
+ *
+ * This validates Base64 syntax and padding using the HAL Base64 decoder without
+ * writing decoded bytes. Use the returned size to allocate the @p pngWork
+ * buffer passed to the other Base64 PNG helpers.
+ *
+ * @param base64 Base64 text containing PNG bytes.
+ * @param base64Len Number of Base64 characters in @p base64.
+ * @param pngSize Output decoded PNG byte count.
+ * @return true on success, false on invalid args or invalid Base64.
+ */
+bool pngBase64DecodedSize(const char *base64, size_t base64Len,
+                          size_t *pngSize);
+/**
+ * @brief Decode a Base64-encoded PNG from memory to RGBA8888.
+ *
+ * @param rgba Output pointer allocated by LodePNG; free with free().
+ * @param width Output image width in pixels.
+ * @param height Output image height in pixels.
+ * @param base64 Base64 text containing PNG bytes.
+ * @param base64Len Number of Base64 characters in @p base64.
+ * @param pngWork Caller-provided work buffer for decoded PNG bytes.
+ * @param pngWorkSize Size of @p pngWork in bytes.
+ * @param pngError Optional: receives LodePNG error code, or 0 when PNG decode
+ * was not reached.
+ * @return true on success, false on invalid args, invalid Base64, too-small
+ * buffers, or PNG error.
+ */
+bool pngBase64Decode32(unsigned char **rgba, unsigned *width, unsigned *height,
+                       const char *base64, size_t base64Len, uint8_t *pngWork,
+                       size_t pngWorkSize, unsigned *pngError);
+/**
+ * @brief Decode a Base64-encoded PNG from memory directly to RGB565.
+ *
+ * The PNG is decoded through LodePNG's RGBA8888 output path and then converted
+ * with @ref rgba8888ToRgb565. Alpha is ignored.
+ *
+ * @param base64 Base64 text containing PNG bytes.
+ * @param base64Len Number of Base64 characters in @p base64.
+ * @param pngWork Caller-provided work buffer for decoded PNG bytes.
+ * @param pngWorkSize Size of @p pngWork in bytes.
+ * @param rgb565 Output RGB565 pixel buffer.
+ * @param rgb565Pixels Capacity of @p rgb565 in pixels.
+ * @param width Output image width in pixels.
+ * @param height Output image height in pixels.
+ * @param pngError Optional: receives LodePNG error code, or 0 when PNG decode
+ * was not reached.
+ * @return true on success, false on invalid args, invalid Base64, too-small
+ * buffers, or PNG error.
+ */
+bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
+                           uint8_t *pngWork, size_t pngWorkSize,
+                           unsigned short *rgb565, size_t rgb565Pixels,
+                           unsigned *width, unsigned *height,
+                           unsigned *pngError);
+#endif
 /** @brief Format MAC address to string buffer. */
 const char *macToString(uint8_t mac[6], char *buf, size_t bufSize);
 /** @brief Convert WiFi encryption enum to human-readable string. */

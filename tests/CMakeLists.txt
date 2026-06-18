@@ -202,6 +202,12 @@ add_hal_test(test_hal_gps)
 add_hal_test(test_hal_system)
 add_hal_test(test_hal_bits)
 add_hal_test(test_hal_crypto)
+add_executable(test_lodepng
+    test_lodepng.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
+)
+target_link_libraries(test_lodepng PRIVATE hal_mock)
+add_test(NAME test_lodepng COMMAND test_lodepng)
 add_hal_test(test_SmartTimers)
 add_hal_test(test_hal_soft_timer)
 add_hal_test(test_pidController)

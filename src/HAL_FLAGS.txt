@@ -245,6 +245,12 @@ Crypto / bundled libs
     authenticated state.
   HAL_ENABLE_CJSON
     Bundled cJSON / cJSON_Utils sources.
+  HAL_ENABLE_PNG
+    Bundled LodePNG memory-based PNG encoder/decoder. JaszczurHAL disables
+    LodePNG disk helpers and the C++ std wrapper by default; define
+    HAL_LODEPNG_ENABLE_DISK or HAL_LODEPNG_ENABLE_CPP to opt them back in.
+  HAL_ENABLE_PNG_AS_BASE64
+    Base64-encoded PNG helpers in tools. Propagates: CRYPTO, PNG.
 
 Test framework
   HAL_ENABLE_UNITY
@@ -299,6 +305,7 @@ HAL_ENABLE_ST7789      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7735      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7796S     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
+HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_PNG
 
 
 Consistency checks (compile-time #error)
