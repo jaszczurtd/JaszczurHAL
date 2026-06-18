@@ -176,12 +176,11 @@ hal_irsmall_decoder_irq_mode(hal_irsmall_protocol_t protocol) {
   }
 }
 
+/* Publishers run in ISR context; the consumer (irsmall_take_data) reads the
+ * shared data under a critical section, so no extra guard is needed here. */
 static void irsmall_publish(hal_irsmall_decoder_t *dev, uint16_t addr,
                             uint8_t cmd, uint8_t ext, bool key_held,
                             uint8_t bits) {
-  if (dev->copying_data) {
-    return;
-  }
   dev->data.protocol = dev->cfg.protocol;
   dev->data.addr = addr;
   dev->data.cmd = cmd;
@@ -192,9 +191,6 @@ static void irsmall_publish(hal_irsmall_decoder_t *dev, uint16_t addr,
 }
 
 static void irsmall_publish_held(hal_irsmall_decoder_t *dev) {
-  if (dev->copying_data) {
-    return;
-  }
   dev->data.key_held = true;
   dev->data_available = true;
 }
@@ -516,7 +512,6 @@ static void irsmall_decode_sirc_multi(hal_irsmall_decoder_t *dev,
         if (fsm->bit_count == fsm->first_bit_count) {
           if (signal == fsm->first_code) {
             irsmall_decode_sirc_multi_frame(dev, fsm->bit_count, signal);
-            dev->data.key_held = false;
             fsm->possibly_held = true;
           }
           fsm->repeat_count = 0u;
@@ -693,7 +688,7 @@ static void irsmall_decode_samsung32(hal_irsmall_decoder_t *dev,
 static void irsmall_decode_edge(hal_irsmall_decoder_t *dev) {
   const uint32_t now = hal_micros();
   const uint32_t duration = now - dev->previous_time;
-  dev->previous_time = hal_micros();
+  dev->previous_time = now;
 
   switch (dev->cfg.protocol) {
   case HAL_IRSMALL_PROTOCOL_NEC:
@@ -815,7 +810,6 @@ bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
   dev->initialized = true;
   dev->enabled = true;
   dev->data_available = false;
-  dev->copying_data = false;
   dev->state = 0u;
   dev->previous_time = UINT32_MAX;
   dev->slot_index = (uint8_t)slot;
@@ -851,7 +845,6 @@ void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev) {
   dev->initialized = false;
   dev->enabled = false;
   dev->data_available = false;
-  dev->copying_data = false;
   dev->state = 0u;
   hal_mutex_unlock(mutex);
 
@@ -903,22 +896,28 @@ void hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev) {
 static bool irsmall_take_data(hal_irsmall_decoder_t *dev,
                               hal_irsmall_decoder_data_t *out) {
   irsmall_check_timeout(dev);
-  if (!dev->data_available) {
-    return false;
-  }
 
-  dev->copying_data = true;
-  if (out != NULL) {
-    out->protocol = dev->data.protocol;
-    out->addr = dev->data.addr;
-    out->cmd = dev->data.cmd;
-    out->ext = dev->data.ext;
-    out->key_held = dev->data.key_held;
-    out->bits = dev->data.bits;
+  /* The decoded frame is shared with the GPIO ISR. Reading data_available and
+   * copying the multi-field struct must be atomic with respect to the ISR's
+   * publish, otherwise a preempting ISR can interleave a new frame between our
+   * field reads and produce a torn result (e.g. new addr with old cmd). */
+  bool had_data = false;
+  hal_critical_section_enter();
+  if (dev->data_available) {
+    had_data = true;
+    if (out != NULL) {
+      out->protocol = dev->data.protocol;
+      out->addr = dev->data.addr;
+      out->cmd = dev->data.cmd;
+      out->ext = dev->data.ext;
+      out->key_held = dev->data.key_held;
+      out->bits = dev->data.bits;
+    }
+    dev->data_available = false;
   }
-  dev->data_available = false;
-  dev->copying_data = false;
-  return true;
+  hal_critical_section_exit();
+
+  return had_data;
 }
 
 bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
