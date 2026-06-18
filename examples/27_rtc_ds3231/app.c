@@ -19,9 +19,9 @@
 #include <hal/hal_app.h>
 #include <hal/hal_i2c.h>
 #include <hal/hal_rtc.h>
-#include <hal/hal_serial.h>
 #include <hal/hal_sync.h>
 #include <hal/hal_system.h>
+#include <tools_c.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -35,10 +35,10 @@ static void print_datetime(const hal_rtc_datetime_t *dt) {
     return;
   }
 
-  hal_deb("  [%04u-%02u-%02u %02u:%02u:%02u] DOW:%u CK:%s\r\n",
-          (unsigned)dt->year, (unsigned)dt->month, (unsigned)dt->day,
-          (unsigned)dt->hour, (unsigned)dt->minute, (unsigned)dt->second,
-          (unsigned)dt->weekday, dt->clock_integrity ? "OK" : "FAIL");
+  deb("  [%04u-%02u-%02u %02u:%02u:%02u] DOW:%u CK:%s\r\n", (unsigned)dt->year,
+      (unsigned)dt->month, (unsigned)dt->day, (unsigned)dt->hour,
+      (unsigned)dt->minute, (unsigned)dt->second, (unsigned)dt->weekday,
+      dt->clock_integrity ? "OK" : "FAIL");
 }
 
 static void print_temperature(void) {
@@ -48,9 +48,9 @@ static void print_temperature(void) {
 
   float temperature_c = 0.0f;
   if (hal_rtc_get_temperature(g_rtc, &temperature_c)) {
-    hal_deb("DS3231 temperature: %.2f C\r\n", (double)temperature_c);
+    deb("DS3231 temperature: %.2f C\r\n", (double)temperature_c);
   } else {
-    hal_deb("DS3231 temperature unavailable\r\n");
+    deb("DS3231 temperature unavailable\r\n");
   }
 }
 
@@ -59,31 +59,31 @@ static void test_epoch_conversion(void) {
     return;
   }
 
-  hal_deb("\r\n=== Epoch Conversion Test ===\r\n");
+  deb("\r\n=== Epoch Conversion Test ===\r\n");
 
   uint64_t epoch_in = 0;
   if (!hal_rtc_get_epoch(g_rtc, &epoch_in)) {
-    hal_derr("hal_rtc_get_epoch failed");
+    derr("hal_rtc_get_epoch failed");
     return;
   }
 
-  hal_deb("Current epoch: %llu\r\n", (unsigned long long)epoch_in);
+  deb("Current epoch: %llu\r\n", (unsigned long long)epoch_in);
 
   uint64_t epoch_out = epoch_in + 3600ull;
   if (!hal_rtc_set_epoch(g_rtc, epoch_out)) {
-    hal_derr("hal_rtc_set_epoch failed");
+    derr("hal_rtc_set_epoch failed");
     return;
   }
 
   uint64_t epoch_verify = 0;
   if (!hal_rtc_get_epoch(g_rtc, &epoch_verify)) {
-    hal_derr("hal_rtc_get_epoch failed");
+    derr("hal_rtc_get_epoch failed");
     return;
   }
 
-  hal_deb("After +3600s: %llu (expected ~%llu, diff=%lld)\r\n",
-          (unsigned long long)epoch_verify, (unsigned long long)epoch_out,
-          (long long)(epoch_verify - epoch_out));
+  deb("After +3600s: %llu (expected ~%llu, diff=%lld)\r\n",
+      (unsigned long long)epoch_verify, (unsigned long long)epoch_out,
+      (long long)(epoch_verify - epoch_out));
 
   hal_rtc_set_epoch(g_rtc, epoch_in);
 }
@@ -93,15 +93,15 @@ static void test_alarm_setup(void) {
     return;
   }
 
-  hal_deb("\r\n=== Alarm Setup Test ===\r\n");
+  deb("\r\n=== Alarm Setup Test ===\r\n");
 
   hal_rtc_datetime_t now = {0};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
-    hal_derr("hal_rtc_get_datetime failed");
+    derr("hal_rtc_get_datetime failed");
     return;
   }
 
-  hal_deb("Current time:\r\n");
+  deb("Current time:\r\n");
   print_datetime(&now);
 
   uint8_t alarm_minute = (uint8_t)((now.minute + 1u) % 60u);
@@ -112,12 +112,12 @@ static void test_alarm_setup(void) {
                            .weekday_enabled = false};
 
   if (!hal_rtc_set_alarm(g_rtc, &alarm)) {
-    hal_derr("hal_rtc_set_alarm failed");
+    derr("hal_rtc_set_alarm failed");
     return;
   }
 
-  hal_deb("Alarm set for minute=%u (in ~%us)\r\n", (unsigned)alarm_minute,
-          (unsigned)(60u - now.second));
+  deb("Alarm set for minute=%u (in ~%us)\r\n", (unsigned)alarm_minute,
+      (unsigned)(60u - now.second));
 }
 
 static void test_clkout(void) {
@@ -125,30 +125,30 @@ static void test_clkout(void) {
     return;
   }
 
-  hal_deb("\r\n=== CLKOUT Test ===\r\n");
+  deb("\r\n=== CLKOUT Test ===\r\n");
 
   if (!hal_rtc_set_clkout_mode(g_rtc, HAL_RTC_CLKOUT_1_HZ)) {
-    hal_derr("hal_rtc_set_clkout_mode failed");
+    derr("hal_rtc_set_clkout_mode failed");
     return;
   }
 
-  hal_deb("CLKOUT set to 1 Hz\r\n");
+  deb("CLKOUT set to 1 Hz\r\n");
 
   hal_rtc_clkout_mode_t mode = 0;
   if (!hal_rtc_get_clkout_mode(g_rtc, &mode)) {
-    hal_derr("hal_rtc_get_clkout_mode failed");
+    derr("hal_rtc_get_clkout_mode failed");
     return;
   }
 
-  hal_deb("CLKOUT mode readback: %u\r\n", (unsigned)mode);
+  deb("CLKOUT mode readback: %u\r\n", (unsigned)mode);
   hal_rtc_set_clkout_mode(g_rtc, HAL_RTC_CLKOUT_DISABLED);
 }
 
 void app_start(void) {
-  hal_debug_init(115200, 0);
+  debugInit();
 
-  hal_deb("\r\n=== RTC DS3231 Example ===\r\n");
-  hal_deb("Platform: %s\r\n", HAL_TARGET_NAME);
+  deb("\r\n=== RTC DS3231 Example ===\r\n");
+  deb("Platform: %s\r\n", HAL_TARGET_NAME);
 
   hal_i2c_init(25u, 24u, HAL_I2C_CLOCK_FAST_HZ);
 
@@ -164,13 +164,13 @@ void app_start(void) {
 
   g_rtc = hal_rtc_init(&cfg);
   if (!g_rtc) {
-    hal_derr("hal_rtc_init failed");
+    derr("hal_rtc_init failed");
     return;
   }
 
   hal_rtc_datetime_t now = {0};
   if (hal_rtc_get_datetime(g_rtc, &now)) {
-    hal_deb("Initial RTC value:\r\n");
+    deb("Initial RTC value:\r\n");
     print_datetime(&now);
     test_epoch_conversion();
     print_temperature();
@@ -200,7 +200,7 @@ void app_task0(void) {
     return;
   }
 
-  hal_deb("RTC: %04u-%02u-%02u %02u:%02u:%02u\r\n", (unsigned)now.year,
-          (unsigned)now.month, (unsigned)now.day, (unsigned)now.hour,
-          (unsigned)now.minute, (unsigned)now.second);
+  deb("RTC: %04u-%02u-%02u %02u:%02u:%02u\r\n", (unsigned)now.year,
+      (unsigned)now.month, (unsigned)now.day, (unsigned)now.hour,
+      (unsigned)now.minute, (unsigned)now.second);
 }

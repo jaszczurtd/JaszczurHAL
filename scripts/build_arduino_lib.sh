@@ -19,7 +19,7 @@
 #   --freertos            Build for arduino-pico FreeRTOS SMP mode
 #   -p, --project-config DIR  Path to dir with hal_project_config.h
 #   -D KEY=VALUE          Extra compile definitions (repeatable)
-#   -o, --output DIR      Output directory (default: ./build_arduino)
+#   -o, --output DIR      Output directory (default: ./build_rp2040)
 #   --clean               Remove build directory before building
 #   -j, --jobs N          Parallel jobs (default: nproc)
 #   -h, --help            Show this help
@@ -46,7 +46,7 @@ BOARD_VARIANT="rpipico"
 CHIP="rp2040"
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
-OUTPUT_DIR="${REPO_ROOT}/build_arduino"
+OUTPUT_DIR="${REPO_ROOT}/build_rp2040"
 CLEAN=0
 FREERTOS=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -99,8 +99,16 @@ if [[ ${FREERTOS} -eq 1 ]]; then
 fi
 
 # ── Build ────────────────────────────────────────────────────────────────────
-TOOLCHAIN_FILE="${REPO_ROOT}/arduino_lib/toolchain_rp2040.cmake"
-CMAKE_SOURCE="${REPO_ROOT}/arduino_lib"
+TOOLCHAIN_FILE="${REPO_ROOT}/rp2040_lib/toolchain_rp2040.cmake"
+CMAKE_SOURCE="${REPO_ROOT}/rp2040_lib"
+CACHE_FILE="${OUTPUT_DIR}/CMakeCache.txt"
+
+if [[ ${CLEAN} -eq 0 ]] && [[ -f "${CACHE_FILE}" ]]; then
+    CACHED_SOURCE=$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' "${CACHE_FILE}" | tail -1)
+    if [[ -n "${CACHED_SOURCE}" ]] && [[ "${CACHED_SOURCE}" != "${CMAKE_SOURCE}" ]]; then
+        die "Build directory was configured for ${CACHED_SOURCE}.\n  Re-run with --clean or choose a different -o output directory."
+    fi
+fi
 
 if [[ ${CLEAN} -eq 1 ]] && [[ -d "${OUTPUT_DIR}" ]]; then
     info "Cleaning ${OUTPUT_DIR}"

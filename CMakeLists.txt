@@ -104,6 +104,9 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
     HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
+    HAL_ENABLE_TSC2007        # shared TSC2007 touch controller over HAL I2C
+    HAL_ENABLE_STMPE610       # shared STMPE610 touch controller over HAL I2C/SPI
+    HAL_ENABLE_IRSMALL_DECODER # shared IR receiver decoder over HAL GPIO interrupts
     HAL_ENABLE_EXTERNAL_ADC   # propagates HAL_ENABLE_I2C
     HAL_ENABLE_MCP401X        # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395        # second digipot backend
@@ -113,6 +116,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_PCNT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED
+    HAL_ENABLE_HD44780        # shared HD44780 character LCD over HAL GPIO
     HAL_ENABLE_ILI9341        # propagates HAL_ENABLE_TFT + HAL_ENABLE_DISPLAY
     HAL_ENABLE_SSD1306        # OLED backend
     HAL_ENABLE_CRYPTO

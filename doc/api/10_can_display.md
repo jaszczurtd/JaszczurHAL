@@ -2,7 +2,7 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_can`, `hal_display`.
+Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 
 ## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`)*
 
@@ -67,6 +67,53 @@ fresh data is sent on the next timer tick anyway) one-shot has no practical down
 is transparent to the receiver. When the bus is healthy and all receivers are present, one-shot behaviour is
 identical to normal mode: the first attempt succeeds and no retry is needed. `hal_can_send()` failure due to
 missing ACK is logged via `hal_derr_limited("can", ...)` to avoid serial flooding.
+
+---
+
+## `hal_hd44780` - HD44780 character LCD  *(optional - `HAL_ENABLE_HD44780`)*
+
+Parallel character LCD driver for HD44780-compatible modules. It supports the
+same 4-bit and 8-bit GPIO transfer modes as the original LiquidCrystal library,
+including optional `RW`, custom CGRAM characters, cursor/display control,
+scrolling, autoscroll and row-offset overrides.
+
+```cpp
+#include <hal/hal_hd44780.h>
+
+// 4-bit mode, RW tied to GND:
+HD44780 lcd(rs_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
+
+// 4-bit mode with RW pin:
+HD44780 lcd_rw(rs_pin, rw_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
+
+// 8-bit mode:
+HD44780 lcd8(rs_pin, enable_pin,
+             d0_pin, d1_pin, d2_pin, d3_pin,
+             d4_pin, d5_pin, d6_pin, d7_pin);
+
+lcd.begin(16, 2);
+lcd.clear();
+lcd.print("JaszczurHAL");
+lcd.setCursor(0, 1);
+lcd.print(hal_millis() / 1000u);
+
+uint8_t glyph[8] = {0x00, 0x04, 0x0E, 0x15, 0x04, 0x04, 0x04, 0x00};
+lcd.createChar(0, glyph);
+lcd.write((uint8_t)0);
+```
+
+**impl/shared:** `impl/shared/hd44780/hd44780.*`, reused by RP2040,
+STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
+instance `hal_mutex_t`.
+**Display class scope:** This is a character LCD driver, not the bitmap
+`hal_display` facade. Use `hal_display` for SPI TFT/OLED graphics.
+**Timing:** The init, clear/home, enable-pulse and command-settle delays match
+the proven HD44780 sequence: 50 ms power-on wait, 4.5 ms/150 us init retries,
+2 ms clear/home delay and 1/1/100 us enable pulse phases.
+**Thread safety:** Public methods serialize each `HD44780` instance with a HAL
+mutex, so multicore and FreeRTOS tasks cannot interleave command/data GPIO
+sequences for the same display. Calls are not ISR-safe because `hal_mutex_lock`
+is not ISR-safe.
 
 ---
 

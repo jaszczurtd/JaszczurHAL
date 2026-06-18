@@ -74,6 +74,34 @@ add_executable(test_bh1750_driver
 )
 target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
 add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
+add_executable(test_hd44780_driver
+    test_hd44780_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/hd44780/hd44780.cpp
+)
+target_compile_definitions(test_hd44780_driver PRIVATE HAL_ENABLE_HD44780)
+target_link_libraries(test_hd44780_driver PRIVATE hal_mock)
+add_test(NAME test_hd44780_driver COMMAND test_hd44780_driver)
+add_executable(test_tsc2007_driver
+    test_tsc2007_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/tsc2007/tsc2007.cpp
+)
+target_compile_definitions(test_tsc2007_driver PRIVATE HAL_ENABLE_TSC2007)
+target_link_libraries(test_tsc2007_driver PRIVATE hal_mock)
+add_test(NAME test_tsc2007_driver COMMAND test_tsc2007_driver)
+add_executable(test_stmpe610_driver
+    test_stmpe610_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/stmpe610/stmpe610.cpp
+)
+target_compile_definitions(test_stmpe610_driver PRIVATE HAL_ENABLE_STMPE610)
+target_link_libraries(test_stmpe610_driver PRIVATE hal_mock)
+add_test(NAME test_stmpe610_driver COMMAND test_stmpe610_driver)
+add_executable(test_irsmall_decoder_driver
+    test_irsmall_decoder_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/irsmall_decoder/irsmall_decoder.cpp
+)
+target_compile_definitions(test_irsmall_decoder_driver PRIVATE HAL_ENABLE_IRSMALL_DECODER)
+target_link_libraries(test_irsmall_decoder_driver PRIVATE hal_mock)
+add_test(NAME test_irsmall_decoder_driver COMMAND test_irsmall_decoder_driver)
 add_executable(test_ads1x15_driver
     test_ads1x15_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ads1x15/ads1x15_driver.cpp

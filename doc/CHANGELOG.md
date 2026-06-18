@@ -6,6 +6,97 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### build - RP2040 static-library paths
+
+- Renamed the default RP2040 static-library build directory from
+  `build_arduino/` to `build_rp2040/` in the helper script, full test runner
+  and current build documentation.
+- Renamed the RP2040 static-library CMake glue folder from `arduino_lib/` to
+  `rp2040_lib/`; Arduino-pico toolchain naming remains unchanged where it
+  refers to the actual core/API.
+- Renamed the pinned Arduino-pico core version file from
+  `arduino_core_version.conf` to `rp2040_core_version.conf`.
+
+### hal_irsmall_decoder - shared IR receiver decoder
+
+- Added `HAL_ENABLE_IRSMALL_DECODER` with public `hal_irsmall_decoder_*` API
+  and a shared HAL implementation for RP2040, STM32G474 and host tests.
+- Preserved the IRsmallDecoder protocol behavior for NEC, NEC extended, RC5,
+  Sony SIRC 12/15/20-bit, Sony SIRC triple-frame, Samsung 20-bit and Samsung
+  32-bit receivers, including timing thresholds, repeat suppression and
+  `key_held` reporting.
+- Replaced the shared RC5 frame decoder with the transition-table logic from
+  the existing RP2040-tested `RC5` driver while keeping the shared
+  `key_held` reporting semantics.
+- Public driver calls serialize each decoder instance with a HAL mutex created
+  through the shared create-once helper; ISR-shared timeout/reset paths use
+  short critical sections for multicore/FreeRTOS-safe access.
+- Added `hal_gpio_detach_interrupt()` for GPIO interrupt users and covered it
+  in the mock GPIO tests.
+- Added `examples/34_irsmall_decoder`, module/API docs, origin license context
+  in the shared driver folder and host regression coverage in
+  `test_irsmall_decoder_driver`.
+- Removed the old `src/hal/impl/arduino/drivers/IRsmallDecoder` import after
+  moving the driver behavior into the shared HAL implementation.
+
+### hal_stmpe610 - shared STMPE610 resistive touch driver
+
+- Added `HAL_ENABLE_STMPE610` with public `hal_stmpe610_*` API and a shared
+  HAL implementation for RP2040, STM32G474 and host tests.
+- Preserved the source STMPE610 behavior: chip-ID probe, hardware-SPI mode-1
+  fallback, reset/setup register sequence, FIFO data decode, touch status,
+  buffer-size helpers and interrupt-status clear after FIFO drain.
+- Public driver calls serialize each controller instance with a HAL mutex
+  created through the shared create-once helper for multicore/FreeRTOS-safe
+  first use; hardware SPI transactions also lock the HAL SPI bus.
+- Added I2C, hardware-SPI and soft-SPI transport coverage in
+  `test_stmpe610_driver`, plus `examples/33_stmpe610_touch`, module/API docs,
+  and origin license context in the shared driver folder.
+- Removed the old `src/hal/impl/arduino/drivers/Adafruit_STMPE610` import after
+  moving the driver behavior into the shared HAL implementation.
+
+### examples - debug logging cleanup
+
+- Refactored examples to initialise the debug backend through `debugInit()` and
+  print console text through the `deb`/`derr` macros from tools.
+- Set `HAL_DEBUG_DEFAULT_BAUD` to 115200 in example configs so the new
+  `debugInit()` calls preserve the previous console baud rate.
+
+### hal_hd44780 - shared HD44780 character LCD driver
+
+- Added `HAL_ENABLE_HD44780` with a shared `HD44780` class under
+  `src/hal/impl/shared/hd44780/`, usable from RP2040, STM32G474 and host
+  tests through HAL GPIO, system-timing and synchronization primitives.
+- Preserved the established HD44780 control flow from the Arduino
+  LiquidCrystal driver: 4-bit/8-bit init retries, high-nibble-first transfers,
+  row-offset defaults, display/cursor/blink/autoscroll commands, CGRAM writes,
+  and command settle delays.
+- Added `src/hal/hal_hd44780.h`, module flag docs, API docs,
+  `examples/31_hd44780`, and host regression coverage in
+  `test_hd44780_driver`.
+- Public driver calls now serialize each display instance with a HAL mutex so
+  multicore/FreeRTOS tasks cannot interleave command/data GPIO sequences.
+- Moved origin attribution/license context into the shared driver location and
+  removed the old `src/hal/impl/arduino/drivers/LiquidCrystal` vendor folder
+  after moving the driver behavior into the HAL implementation.
+
+### hal_tsc2007 - shared TSC2007 resistive touch driver
+
+- Added `HAL_ENABLE_TSC2007` with public `hal_tsc2007_*` API and a shared HAL
+  I2C implementation for RP2040, STM32G474 and host tests.
+- Preserved the source TSC2007 behavior: command-byte layout, 500 us
+  conversion wait, 12-bit reply decode, Z1/Z2 pressure reads, duplicate X/Y
+  stability filter, invalid `4095` coordinate rejection and final power-down
+  command.
+- Public driver calls serialize each controller instance with a HAL mutex
+  created through the shared create-once helper for multicore/FreeRTOS-safe
+  first use.
+- Added `examples/32_tsc2007_touch`, module/API docs, origin license context in
+  the shared driver folder and host regression coverage in
+  `test_tsc2007_driver`.
+- Removed the old `src/hal/impl/arduino/drivers/Adafruit_TSC2007` import after
+  moving the driver behavior into the shared HAL implementation.
+
 ### hal_bh1750 - shared BH1750 ambient-light driver
 
 - Added `HAL_ENABLE_BH1750` with public `hal_bh1750_*` API and a shared HAL I2C
@@ -546,7 +637,7 @@ Next release.
   guards across all backend files (arduino / .mock / stm32g474) with explicit
   `#if HAL_TARGET_IS_*` guards. Unused backends compile to nothing.
 - Wired the switch into `hal_config.h` and the build configs
-  (`CMakeLists.txt` -> MOCK, `arduino_lib` -> RP2040, `stm32_lib` -> STM32G474).
+  (`CMakeLists.txt` -> MOCK, `rp2040_lib` -> RP2040, `stm32_lib` -> STM32G474).
   Documented in `src/HAL_FLAGS.txt`.
 
 ### stm32g474 - first real (non-stub) backend bring-up
@@ -1007,7 +1098,7 @@ Next release.
   defines (now redundant - modules are off by default in the opt-in
   model); the STM32G474 skeleton now enables only `HAL_ENABLE_I2C` and
   `HAL_ENABLE_UART` that its current backend actually implements.
-- `arduino_lib/CMakeLists.txt` and `stm32_lib/CMakeLists.txt`: the Unity
+- `rp2040_lib/CMakeLists.txt` and `stm32_lib/CMakeLists.txt`: the Unity
   inclusion check flipped from `if(NOT HAL_DISABLE_UNITY)` to
   `if(HAL_ENABLE_UNITY)`.
 - Root `CMakeLists.txt`: the host-test `hal_mock` target now enables the

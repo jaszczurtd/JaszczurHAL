@@ -242,7 +242,7 @@ architectures=rp2040,esp32
 ### Arduino static library build
 
 - Add `scripts/build_esp32_lib.sh` and `esp32_lib/CMakeLists.txt` analogous to
-  the RP2040 script and `arduino_lib/CMakeLists.txt`.
+  the RP2040 script and `rp2040_lib/CMakeLists.txt`.
 - The ESP32 Arduino toolchain is `xtensa-esp32-elf-gcc` (or
   `xtensa-esp32s2-elf-gcc` / `riscv32-esp-elf-gcc` for S2/C3) bundled under
   `~/.arduino15/packages/esp32/`.

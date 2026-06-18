@@ -8,6 +8,7 @@
 #include <hal/hal_sync.h>
 #include <hal/hal_system.h>
 #include <hal/hal_target.h>
+#include <tools_c.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)
 #error "29_freertos_smoke requires HAL_ENABLE_FREERTOS"
@@ -79,14 +80,14 @@ static void smoke_table_worker(void *arg) {
 
       xSemaphoreGive(s_table_mutex);
 
-      hal_deb("29_freertos_smoke: %s slot=%lu read=%lu neighbor=%lu write=%lu "
-              "sum=%lu table=[%lu,%lu,%lu,%lu,%lu,%lu] updates=[%lu,%lu]",
-              cfg->name, (unsigned long)slot, (unsigned long)before,
-              (unsigned long)neighbor, (unsigned long)after, (unsigned long)sum,
-              (unsigned long)snapshot[0], (unsigned long)snapshot[1],
-              (unsigned long)snapshot[2], (unsigned long)snapshot[3],
-              (unsigned long)snapshot[4], (unsigned long)snapshot[5],
-              (unsigned long)updates_a, (unsigned long)updates_b);
+      deb("29_freertos_smoke: %s slot=%lu read=%lu neighbor=%lu write=%lu "
+          "sum=%lu table=[%lu,%lu,%lu,%lu,%lu,%lu] updates=[%lu,%lu]",
+          cfg->name, (unsigned long)slot, (unsigned long)before,
+          (unsigned long)neighbor, (unsigned long)after, (unsigned long)sum,
+          (unsigned long)snapshot[0], (unsigned long)snapshot[1],
+          (unsigned long)snapshot[2], (unsigned long)snapshot[3],
+          (unsigned long)snapshot[4], (unsigned long)snapshot[5],
+          (unsigned long)updates_a, (unsigned long)updates_b);
     }
 
     ++iteration;
@@ -95,18 +96,18 @@ static void smoke_table_worker(void *arg) {
 }
 
 void app_start(void) {
-  hal_debug_init(115200, 0);
+  debugInit();
   hal_gpio_set_mode(LED_BUILTIN, HAL_GPIO_OUTPUT);
 
   s_smoke_mutex = hal_mutex_create();
   if (s_smoke_mutex == NULL) {
-    hal_derr("29_freertos_smoke: mutex allocation failed");
+    derr("29_freertos_smoke: mutex allocation failed");
     return;
   }
 
   s_table_mutex = xSemaphoreCreateMutex();
   if (s_table_mutex == NULL) {
-    hal_derr("29_freertos_smoke: table mutex allocation failed");
+    derr("29_freertos_smoke: table mutex allocation failed");
     return;
   }
 
@@ -114,18 +115,18 @@ void app_start(void) {
       xTaskCreate(smoke_table_worker, "jh_tbl_a", 768, (void *)&s_worker_a,
                   tskIDLE_PRIORITY + 1, NULL);
   if (created != pdPASS) {
-    hal_derr("29_freertos_smoke: xTaskCreate worker_a failed");
+    derr("29_freertos_smoke: xTaskCreate worker_a failed");
     return;
   }
 
   created = xTaskCreate(smoke_table_worker, "jh_tbl_b", 768,
                         (void *)&s_worker_b, tskIDLE_PRIORITY + 1, NULL);
   if (created != pdPASS) {
-    hal_derr("29_freertos_smoke: xTaskCreate worker_b failed");
+    derr("29_freertos_smoke: xTaskCreate worker_b failed");
     return;
   }
 
-  hal_deb("29_freertos_smoke: started two FreeRTOS table workers");
+  deb("29_freertos_smoke: started two FreeRTOS table workers");
 }
 
 void app_task0(void) {

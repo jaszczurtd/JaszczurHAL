@@ -25,7 +25,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 ## Library structure
 
 - `CMakeLists.txt` - repository-root host/mock tests build.
-- `arduino_lib/` - RP2040 Arduino-pico static-library CMake glue.
+- `rp2040_lib/` - RP2040 Arduino-pico static-library CMake glue.
 - `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
 - `scripts/build_arduino_lib.sh` - RP2040 static-library helper.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.

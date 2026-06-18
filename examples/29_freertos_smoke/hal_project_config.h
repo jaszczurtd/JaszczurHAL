@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef HAL_DEBUG_DEFAULT_BAUD
+#define HAL_DEBUG_DEFAULT_BAUD 115200u
+#endif
+
 #ifndef HAL_ENABLE_FREERTOS
 #define HAL_ENABLE_FREERTOS
 #endif

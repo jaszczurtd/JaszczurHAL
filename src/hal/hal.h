@@ -68,6 +68,9 @@
 #ifdef HAL_ENABLE_DISPLAY
 #include "hal_display.h"
 #endif
+#ifdef HAL_ENABLE_HD44780
+#include "hal_hd44780.h"
+#endif
 #ifdef HAL_ENABLE_WIFI
 #include "hal_wifi.h"
 #endif
@@ -109,6 +112,15 @@
 #endif
 #ifdef HAL_ENABLE_BH1750
 #include "hal_bh1750.h"
+#endif
+#ifdef HAL_ENABLE_TSC2007
+#include "hal_tsc2007.h"
+#endif
+#ifdef HAL_ENABLE_STMPE610
+#include "hal_stmpe610.h"
+#endif
+#ifdef HAL_ENABLE_IRSMALL_DECODER
+#include "hal_irsmall_decoder.h"
 #endif
 #ifdef HAL_ENABLE_GPS
 #include "hal_gps.h"

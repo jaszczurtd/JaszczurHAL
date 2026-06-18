@@ -19,9 +19,9 @@
 #include <hal/hal_app.h>
 #include <hal/hal_i2c.h>
 #include <hal/hal_rtc.h>
-#include <hal/hal_serial.h>
 #include <hal/hal_sync.h>
 #include <hal/hal_system.h>
+#include <tools_c.h>
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -41,10 +41,10 @@ static void print_datetime(const hal_rtc_datetime_t *dt) {
     return;
   }
 
-  hal_deb("  [%04u-%02u-%02u %02u:%02u:%02u] DOW:%u CK:%s\r\n",
-          (unsigned)dt->year, (unsigned)dt->month, (unsigned)dt->day,
-          (unsigned)dt->hour, (unsigned)dt->minute, (unsigned)dt->second,
-          (unsigned)dt->weekday, dt->clock_integrity ? "OK" : "FAIL");
+  deb("  [%04u-%02u-%02u %02u:%02u:%02u] DOW:%u CK:%s\r\n", (unsigned)dt->year,
+      (unsigned)dt->month, (unsigned)dt->day, (unsigned)dt->hour,
+      (unsigned)dt->minute, (unsigned)dt->second, (unsigned)dt->weekday,
+      dt->clock_integrity ? "OK" : "FAIL");
 }
 
 /**
@@ -55,34 +55,34 @@ static void test_epoch_conversion(void) {
     return;
   }
 
-  hal_deb("\r\n=== Epoch Conversion Test ===\r\n");
+  deb("\r\n=== Epoch Conversion Test ===\r\n");
 
   /* Read current time as epoch */
   uint64_t epoch_in = 0;
   if (!hal_rtc_get_epoch(g_rtc, &epoch_in)) {
-    hal_derr("hal_rtc_get_epoch failed");
+    derr("hal_rtc_get_epoch failed");
     return;
   }
 
-  hal_deb("Current epoch: %llu\r\n", (unsigned long long)epoch_in);
+  deb("Current epoch: %llu\r\n", (unsigned long long)epoch_in);
 
   /* Add 3600 seconds (1 hour) and write back */
   uint64_t epoch_out = epoch_in + 3600ull;
   if (!hal_rtc_set_epoch(g_rtc, epoch_out)) {
-    hal_derr("hal_rtc_set_epoch failed");
+    derr("hal_rtc_set_epoch failed");
     return;
   }
 
   /* Read back to verify */
   uint64_t epoch_verify = 0;
   if (!hal_rtc_get_epoch(g_rtc, &epoch_verify)) {
-    hal_derr("hal_rtc_get_epoch failed");
+    derr("hal_rtc_get_epoch failed");
     return;
   }
 
-  hal_deb("After +3600s: %llu (expected ~%llu, diff=%lld)\r\n",
-          (unsigned long long)epoch_verify, (unsigned long long)epoch_out,
-          (long long)(epoch_verify - epoch_out));
+  deb("After +3600s: %llu (expected ~%llu, diff=%lld)\r\n",
+      (unsigned long long)epoch_verify, (unsigned long long)epoch_out,
+      (long long)(epoch_verify - epoch_out));
 
   /* Restore original time */
   hal_rtc_set_epoch(g_rtc, epoch_in);
@@ -96,16 +96,16 @@ static void test_alarm_setup(void) {
     return;
   }
 
-  hal_deb("\r\n=== Alarm Setup Test ===\r\n");
+  deb("\r\n=== Alarm Setup Test ===\r\n");
 
   /* Read current time */
   hal_rtc_datetime_t now = {0};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
-    hal_derr("hal_rtc_get_datetime failed");
+    derr("hal_rtc_get_datetime failed");
     return;
   }
 
-  hal_deb("Current time:\r\n");
+  deb("Current time:\r\n");
   print_datetime(&now);
 
   /* Set alarm for 1 minute from now (minute-match only) */
@@ -117,22 +117,22 @@ static void test_alarm_setup(void) {
                            .weekday_enabled = false};
 
   if (!hal_rtc_set_alarm(g_rtc, &alarm)) {
-    hal_derr("hal_rtc_set_alarm failed");
+    derr("hal_rtc_set_alarm failed");
     return;
   }
 
-  hal_deb("Alarm set for minute=%u (in ~%us)\r\n", (unsigned)alarm_minute,
-          (unsigned)(60u - now.second));
+  deb("Alarm set for minute=%u (in ~%us)\r\n", (unsigned)alarm_minute,
+      (unsigned)(60u - now.second));
 
   /* Read back and verify */
   hal_rtc_alarm_t alarm_read = {0};
   if (!hal_rtc_get_alarm(g_rtc, &alarm_read)) {
-    hal_derr("hal_rtc_get_alarm failed");
+    derr("hal_rtc_get_alarm failed");
     return;
   }
 
-  hal_deb("Alarm readback: min_enabled=%d min=%u\r\n",
-          alarm_read.minute_enabled, alarm_read.minute);
+  deb("Alarm readback: min_enabled=%d min=%u\r\n", alarm_read.minute_enabled,
+      alarm_read.minute);
 }
 
 /**
@@ -143,26 +143,26 @@ static void test_timer_setup(void) {
     return;
   }
 
-  hal_deb("\r\n=== Timer Setup Test ===\r\n");
+  deb("\r\n=== Timer Setup Test ===\r\n");
 
   /* Set timer to 1 Hz, count down from 5 (5 second timeout) */
   if (!hal_rtc_set_timer(g_rtc, HAL_RTC_TIMER_1_HZ, 5u)) {
-    hal_derr("hal_rtc_set_timer failed");
+    derr("hal_rtc_set_timer failed");
     return;
   }
 
-  hal_deb("Timer set: 1 Hz, count=5 (expires in ~5s)\r\n");
+  deb("Timer set: 1 Hz, count=5 (expires in ~5s)\r\n");
 
   /* Read back */
   hal_rtc_timer_clock_t timer_clock = 0;
   uint8_t timer_count = 0;
   if (!hal_rtc_get_timer(g_rtc, &timer_clock, &timer_count)) {
-    hal_derr("hal_rtc_get_timer failed");
+    derr("hal_rtc_get_timer failed");
     return;
   }
 
-  hal_deb("Timer readback: clock=%u count=%u\r\n", (unsigned)timer_clock,
-          (unsigned)timer_count);
+  deb("Timer readback: clock=%u count=%u\r\n", (unsigned)timer_clock,
+      (unsigned)timer_count);
 }
 
 /**
@@ -173,24 +173,24 @@ static void test_clkout(void) {
     return;
   }
 
-  hal_deb("\r\n=== CLKOUT Test ===\r\n");
+  deb("\r\n=== CLKOUT Test ===\r\n");
 
   /* Enable 1 Hz output on CLKOUT pin */
   if (!hal_rtc_set_clkout_mode(g_rtc, HAL_RTC_CLKOUT_1_HZ)) {
-    hal_derr("hal_rtc_set_clkout_mode failed");
+    derr("hal_rtc_set_clkout_mode failed");
     return;
   }
 
-  hal_deb("CLKOUT set to 1 Hz\r\n");
+  deb("CLKOUT set to 1 Hz\r\n");
 
   /* Verify */
   hal_rtc_clkout_mode_t mode = 0;
   if (!hal_rtc_get_clkout_mode(g_rtc, &mode)) {
-    hal_derr("hal_rtc_get_clkout_mode failed");
+    derr("hal_rtc_get_clkout_mode failed");
     return;
   }
 
-  hal_deb("CLKOUT mode readback: %u\r\n", (unsigned)mode);
+  deb("CLKOUT mode readback: %u\r\n", (unsigned)mode);
 
   /* Disable after test */
   hal_rtc_set_clkout_mode(g_rtc, HAL_RTC_CLKOUT_DISABLED);
@@ -201,10 +201,10 @@ static void test_clkout(void) {
  */
 void app_start(void) {
   /* Initialize debug serial */
-  hal_debug_init(115200, 0);
+  debugInit();
 
-  hal_deb("\r\n=== RTC Clock Example ===\r\n");
-  hal_deb("Platform: %s\r\n", HAL_TARGET_NAME);
+  deb("\r\n=== RTC Clock Example ===\r\n");
+  deb("Platform: %s\r\n", HAL_TARGET_NAME);
 
   /* Configure I2C (bus 0, typical pins) */
   /* Note: Pin configuration is platform-specific via hal_i2c_init_bus */
@@ -220,23 +220,23 @@ void app_start(void) {
 
   g_rtc = hal_rtc_init(&cfg);
   if (!g_rtc) {
-    hal_derr("Failed to initialize RTC");
+    derr("Failed to initialize RTC");
     return;
   }
 
-  hal_deb("RTC initialized successfully\r\n");
+  deb("RTC initialized successfully\r\n");
 
   /* Read and display current time */
   hal_rtc_datetime_t now = {0};
   if (hal_rtc_get_datetime(g_rtc, &now)) {
-    hal_deb("Current time:\r\n");
+    deb("Current time:\r\n");
     print_datetime(&now);
 
     /* Check clock integrity */
     bool ok = false;
     if (hal_rtc_get_clock_integrity(g_rtc, &ok)) {
-      hal_deb("Clock integrity: %s\r\n",
-              ok ? "OK" : "FAIL - consider setting time");
+      deb("Clock integrity: %s\r\n",
+          ok ? "OK" : "FAIL - consider setting time");
     }
 
     /* If clock not OK, set a default time (2025-01-01 12:00:00) */
@@ -250,14 +250,14 @@ void app_start(void) {
                                          .weekday = 3, /* Wednesday */
                                          .clock_integrity = true};
       if (hal_rtc_set_datetime(g_rtc, &default_time)) {
-        hal_deb("Set default time to 2025-01-01 12:00:00\r\n");
+        deb("Set default time to 2025-01-01 12:00:00\r\n");
       }
     }
   } else {
-    hal_derr("Failed to read RTC");
+    derr("Failed to read RTC");
   }
 
-  hal_deb("\nStarting main loop - press Ctrl+C to exit\r\n");
+  deb("\nStarting main loop - press Ctrl+C to exit\r\n");
 }
 
 /**
@@ -281,7 +281,7 @@ void app_task0(void) {
   if (hal_rtc_get_epoch(g_rtc, &current_epoch)) {
     /* Print every 10 seconds */
     if ((current_epoch - g_last_print_epoch) >= 10u) {
-      hal_deb("\r\nTime update:\r\n");
+      deb("\r\nTime update:\r\n");
       print_datetime(&now);
 
       /* Cycle through tests every ~60s */

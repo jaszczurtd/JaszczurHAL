@@ -8,10 +8,24 @@
 #include <time.h>
 
 // ── GPIO ─────────────────────────────────────────────────────────────────────
+typedef enum {
+  HAL_MOCK_GPIO_EVENT_SET_MODE = 0,
+  HAL_MOCK_GPIO_EVENT_WRITE = 1,
+} hal_mock_gpio_event_type_t;
+
+typedef struct {
+  hal_mock_gpio_event_type_t type;
+  uint8_t pin;
+  int value;
+} hal_mock_gpio_event_t;
+
 bool hal_mock_gpio_get_state(uint8_t pin);
 bool hal_mock_gpio_is_output(uint8_t pin);
 hal_gpio_mode_t hal_mock_gpio_get_mode(uint8_t pin);
 void hal_mock_gpio_inject_level(uint8_t pin, bool high);
+void hal_mock_gpio_trace_reset(void);
+size_t hal_mock_gpio_trace_count(void);
+bool hal_mock_gpio_trace_get(size_t index, hal_mock_gpio_event_t *out_event);
 /** @brief Script successive levels returned by hal_gpio_read() for a pin. */
 void hal_mock_gpio_push_read_sequence(uint8_t pin, const bool *levels,
                                       size_t len);
@@ -38,6 +52,10 @@ bool hal_mock_irq_enabled(void);
 /** @brief Reset critical-section depth/interrupt model to defaults (depth 0,
  *         interrupts enabled). Call in setUp() for test isolation. */
 void hal_mock_critical_section_reset(void);
+void hal_mock_mutex_stats_reset(void);
+uint32_t hal_mock_mutex_lock_count(void);
+uint32_t hal_mock_mutex_unlock_count(void);
+uint32_t hal_mock_mutex_max_depth(void);
 
 // ── PWM ──────────────────────────────────────────────────────────────────────
 uint32_t hal_mock_pwm_get_value(uint8_t pin);

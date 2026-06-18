@@ -6,6 +6,13 @@
 #include <mutex>
 #include <stdint.h>
 
+namespace {
+uint32_t s_mutex_lock_count = 0u;
+uint32_t s_mutex_unlock_count = 0u;
+uint32_t s_mutex_depth = 0u;
+uint32_t s_mutex_max_depth = 0u;
+} // namespace
+
 struct hal_mutex_impl_t {
   std::mutex mtx;
 };
@@ -23,6 +30,11 @@ void hal_mutex_lock(hal_mutex_t mutex) {
   }
 
   mutex->mtx.lock();
+  s_mutex_lock_count++;
+  s_mutex_depth++;
+  if (s_mutex_depth > s_mutex_max_depth) {
+    s_mutex_max_depth = s_mutex_depth;
+  }
 }
 
 void hal_mutex_unlock(hal_mutex_t mutex) {
@@ -31,6 +43,10 @@ void hal_mutex_unlock(hal_mutex_t mutex) {
     return;
   }
 
+  s_mutex_unlock_count++;
+  if (s_mutex_depth > 0u) {
+    s_mutex_depth--;
+  }
   mutex->mtx.unlock();
 }
 
@@ -82,4 +98,17 @@ void hal_mock_critical_section_reset(void) {
   s_irq_enabled = true;
   s_saved_irq = true;
 }
+
+void hal_mock_mutex_stats_reset(void) {
+  s_mutex_lock_count = 0u;
+  s_mutex_unlock_count = 0u;
+  s_mutex_depth = 0u;
+  s_mutex_max_depth = 0u;
+}
+
+uint32_t hal_mock_mutex_lock_count(void) { return s_mutex_lock_count; }
+
+uint32_t hal_mock_mutex_unlock_count(void) { return s_mutex_unlock_count; }
+
+uint32_t hal_mock_mutex_max_depth(void) { return s_mutex_max_depth; }
 #endif // HAL_TARGET_IS_MOCK

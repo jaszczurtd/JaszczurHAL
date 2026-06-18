@@ -58,6 +58,9 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/ds18b20/hal_ds18b20.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
 | `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
+| `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
+| `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
+| `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `impl/shared/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
 | `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/onewire/hal_onewire.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/ads1x15/ads1x15_driver.h` | `impl/shared/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
 | `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
@@ -67,6 +70,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
+| `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/hd44780/hd44780.h` | `impl/shared/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/display/ili9341_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
@@ -100,6 +104,8 @@ HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
+HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C + HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
@@ -132,6 +138,10 @@ modules you use:
 #define HAL_ENABLE_GPS           // -> auto-enables UART when no transport is selected
 #define HAL_ENABLE_MCP9600       // -> propagates THERMOCOUPLE + I2C
 #define HAL_ENABLE_BH1750        // -> propagates I2C
+#define HAL_ENABLE_TSC2007       // -> propagates I2C
+#define HAL_ENABLE_STMPE610      // -> propagates I2C + SPI
+#define HAL_ENABLE_IRSMALL_DECODER
+#define HAL_ENABLE_HD44780 // HD44780-compatible character LCD over GPIO
 #define HAL_ENABLE_UART
 #define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
 #define HAL_ENABLE_PWM_FREQ

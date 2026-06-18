@@ -17,8 +17,8 @@
 #include <hal/hal_app.h>
 #include <hal/hal_display.h>
 #include <hal/hal_i2c.h>
-#include <hal/hal_serial.h>
 #include <hal/hal_system.h>
+#include <tools.h>
 
 static const int OLED_WIDTH = 128;
 static const int OLED_HEIGHT = 64;
@@ -59,20 +59,20 @@ static void drawCounter(uint16_t value) {
 }
 
 void app_start(void) {
-  hal_debug_init(115200, NULL);
+  debugInit();
 
   hal_i2c_init(25u, 24u, HAL_I2C_CLOCK_FAST_HZ);
 
   if (!hal_display_init_ssd1306_i2c(OLED_WIDTH, OLED_HEIGHT, OLED_I2C_ADDR,
                                     OLED_RST_PIN, HAL_DISPLAY_VCC_SWITCHCAP,
                                     true)) {
-    hal_derr("SSD1306 init failed");
+    derr("SSD1306 init failed");
     return;
   }
   if (!hal_display_configure(OLED_WIDTH, OLED_HEIGHT, HAL_DISPLAY_ROTATION(0),
                              HAL_DISPLAY_INVERT_OFF,
                              HAL_DISPLAY_COLOR_ORDER_RGB)) {
-    hal_derr("display configure failed");
+    derr("display configure failed");
     return;
   }
 

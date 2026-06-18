@@ -7,9 +7,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Single source of truth for Arduino RP2040 core version ────────────────────
-# shellcheck source=arduino_core_version.conf
-source "${SCRIPT_DIR}/arduino_core_version.conf"
+# ── Single source of truth for RP2040 Arduino core version ────────────────────
+# shellcheck source=rp2040_core_version.conf
+source "${SCRIPT_DIR}/rp2040_core_version.conf"
 
 RP2040_INDEX="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
 

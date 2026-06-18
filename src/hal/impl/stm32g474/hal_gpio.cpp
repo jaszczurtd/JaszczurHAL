@@ -186,6 +186,20 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
   exti_enable_irq(exti_irqn_for_line(line));
 }
 
+void hal_gpio_detach_interrupt(uint8_t pin) {
+  const uint32_t line = pin_num(pin);
+  if (line > 15u) {
+    return;
+  }
+
+  const uint32_t mask = exti_line_mask(line);
+  EXTI_IMR1 &= ~mask;
+  EXTI_RTSR1 &= ~mask;
+  EXTI_FTSR1 &= ~mask;
+  exti_clear_pending(mask);
+  s_exti_callback[line] = nullptr;
+}
+
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
   if (priority > HAL_IRQ_PRIORITY_LOW) {
     priority = HAL_IRQ_PRIORITY_DEFAULT;
@@ -230,6 +244,12 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
   if (pin < 128u) {
     s_callback[pin] = callback;
     s_irq_mode[pin] = mode;
+  }
+}
+
+void hal_gpio_detach_interrupt(uint8_t pin) {
+  if (pin < 128u) {
+    s_callback[pin] = nullptr;
   }
 }
 

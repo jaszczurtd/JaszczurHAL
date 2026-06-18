@@ -68,7 +68,7 @@ see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ```text
 CMakeLists.txt              # host/mock tests build
-arduino_lib/                # RP2040 Arduino-pico static-library CMake glue
+rp2040_lib/                 # RP2040 Arduino-pico static-library CMake glue
 stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
 scripts/
   build_arduino_lib.sh      # RP2040 static-library helper
@@ -327,18 +327,18 @@ See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup,
 The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`): [lib_compilation.md](doc/lib_compilation.md)
 
-## Changing the Arduino RP2040 core version
+## Changing the RP2040 Arduino core version
 
 The pinned version of the `earlephilhower/arduino-pico` core is defined in a single file:
 
 ```text
-arduino_core_version.conf   ← RP2040_CORE_VERSION=x.y.z
+rp2040_core_version.conf    ← RP2040_CORE_VERSION=x.y.z
 ```
 
 `runmefirst.sh` and the CI workflow source this file automatically;
 `runalltests.sh` verifies that the RP2040 core is installed. To upgrade or downgrade:
 
-1. Edit `arduino_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
+1. Edit `rp2040_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
 2. Run `./runmefirst.sh` to install the new core locally.
 3. Run `./runalltests.sh` (or at minimum `./scripts/build_arduino_lib.sh`) to confirm the library still compiles against the new core.
 
