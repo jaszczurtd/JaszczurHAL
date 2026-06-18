@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(JaszczurHAL_Arduino C CXX)
+project(JaszczurHAL_RP2040 C CXX)
 
 set(CMAKE_C_STANDARD 17)
 set(CMAKE_CXX_STANDARD 17)
@@ -52,8 +52,8 @@ parse_platform_inc_file(
 # ── Arduino platform libraries (Wire, SPI, EEPROM, WiFi, ...) ─────────────────
 # arduino-cli resolves these on the fly; we include all of them so that HAL
 # modules can find <Wire.h>, <SPI.h>, etc.
-file(GLOB _arduino_lib_dirs "${ARDUINO_PLATFORM_DIR}/libraries/*/src")
-set(ARDUINO_LIB_INC_DIRS ${_arduino_lib_dirs})
+file(GLOB _arduino_platform_lib_dirs "${ARDUINO_PLATFORM_DIR}/libraries/*/src")
+set(ARDUINO_LIB_INC_DIRS ${_arduino_platform_lib_dirs})
 
 # ── Collect defines from platform def files ──────────────────────────────────
 function(parse_platform_def_file FILEPATH OUT_VAR)

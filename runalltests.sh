@@ -239,7 +239,7 @@ else
     exit 1
 fi
 
-BUILD_RP2040="${SCRIPT_DIR}/build_arduino"
+BUILD_RP2040="${SCRIPT_DIR}/build_rp2040"
 info "Building libJaszczurHAL.a (RP2040 Arduino backend)..."
 run_logged /tmp/jh_rp2040_lib_build.log \
     "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}"

@@ -13,6 +13,10 @@
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
 | `hal_display` | Shared Arduino-free display stack (`impl/shared/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
+| `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/hd44780/hd44780.*`) over HAL GPIO/system timing |
+| `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
+| `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
+| `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
 | `hal_i2c` | Arduino-pico `Wire.h` |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
@@ -78,7 +82,7 @@ Configures your local environment for the first time:
 ```
 Runs the complete test suite for all targets:
 - Builds and runs host/mock tests (`build/` + ctest)
-- Builds RP2040 Arduino-pico static library (`build_arduino/`)
+- Builds RP2040 Arduino-pico static library (`build_rp2040/`)
 - Builds STM32G474 bare-metal static library (`build_stm32/`)
 - Builds example projects for RP2040, STM32G474, and variants (with/without FreeRTOS)
 - Verifies compilation succeeded and logs capture any warnings/errors
@@ -110,7 +114,7 @@ logger-close stub plus HAL mocks.
 
 | Suite | What it covers |
 |---|---|
-| `test_hal_gpio` | pin modes, read/write, level injection |
+| `test_hal_gpio` | pin modes, read/write, level injection, interrupt attach/detach |
 | `test_hal_adc` | resolution config, inject + read |
 | `test_hal_pwm` | resolution config, write |
 | `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
@@ -125,6 +129,7 @@ logger-close stub plus HAL mocks.
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
 | `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
+| `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
 | `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
 | `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
@@ -133,6 +138,9 @@ logger-close stub plus HAL mocks.
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
 | `test_bh1750_driver` | Shared BH1750 init command, first-measurement delay, I2C bus routing and two-byte lux decode |
+| `test_hd44780_driver` | Shared HD44780 GPIO init, 4-bit/8-bit command framing, cursor row offsets, CGRAM writes, print/write path and instance-mutex coverage |
+| `test_tsc2007_driver` | Shared TSC2007 command-byte layout, 12-bit reply decode, touch-read sequence, stability rejection, bus routing and instance-mutex coverage |
+| `test_stmpe610_driver` | Shared STMPE610 setup sequence, chip-ID probing, I2C/SPI/register transactions, FIFO decode, soft-SPI bit-bang path and instance-mutex coverage |
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |

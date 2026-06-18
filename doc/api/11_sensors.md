@@ -2,7 +2,7 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_bh1750`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
+Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_bh1750`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
 
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
@@ -192,6 +192,218 @@ driver constructor default; boards with ADDR tied low should set `0x23`.
 **Thread safety:** per-instance mutex serializes driver calls; I2C byte reads
 use `hal_i2c_read_bytes_bus()` so request and sample copy stay inside the bus
 mutex.
+
+---
+
+## `hal_tsc2007` - TSC2007 resistive touch controller  *(optional - `HAL_ENABLE_TSC2007`)*
+
+```c
+#include <hal/hal_tsc2007.h>
+
+#define HAL_TSC2007_I2C_ADDR_DEFAULT      0x48u
+#define HAL_TSC2007_TOUCH_INVALID         4095u
+#define HAL_TSC2007_STABILITY_THRESHOLD   100u
+
+typedef struct {
+  uint8_t i2c_bus;   // 0 = default controller, 1 = second controller
+  uint8_t i2c_addr;  // 7-bit TSC2007 address
+} hal_tsc2007_config_t;
+
+typedef struct {
+  int16_t x;
+  int16_t y;
+  int16_t z;         // Z1 pressure sample
+} hal_tsc2007_point_t;
+
+typedef struct {
+  hal_tsc2007_config_t cfg;
+  bool initialized;
+  hal_mutex_t mutex;
+} hal_tsc2007_t;
+
+hal_tsc2007_config_t hal_tsc2007_default_config(void);
+bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg);
+void hal_tsc2007_deinit(hal_tsc2007_t *dev);
+
+uint16_t hal_tsc2007_command(hal_tsc2007_t *dev,
+                             hal_tsc2007_function_t func,
+                             hal_tsc2007_power_t pwr,
+                             hal_tsc2007_resolution_t res);
+
+bool hal_tsc2007_read_touch(hal_tsc2007_t *dev, uint16_t *x, uint16_t *y,
+                            uint16_t *z1, uint16_t *z2);
+hal_tsc2007_point_t hal_tsc2007_get_point(hal_tsc2007_t *dev);
+```
+
+`hal_tsc2007_init()` probes the 7-bit address and sends the same initial
+`MEASURE_TEMP0` / `POWERDOWN_IRQON` / 12-bit command as the source driver.
+`hal_tsc2007_command()` builds the command byte as `(function << 4) |
+(power << 2) | (resolution << 1)`, waits 500 us, reads exactly two bytes and
+returns the 12-bit value decoded from the upper reply bits. Failed command
+transactions return `0`, matching the source behavior.
+
+`hal_tsc2007_read_touch()` performs the established sequence:
+`Z1`, `Z2`, `X`, `Y`, duplicate `X`, duplicate `Y`, then `MEASURE_TEMP0` with
+power-down. The X/Y sample is accepted only when the duplicate measurements are
+within `HAL_TSC2007_STABILITY_THRESHOLD` and neither accepted coordinate equals
+`HAL_TSC2007_TOUCH_INVALID`. `hal_tsc2007_get_point()` returns `{x, y, z1}` or
+`{0, 0, 0}` when the sample is rejected.
+
+**impl/shared:** `impl/shared/tsc2007/tsc2007.cpp` is used by RP2040,
+STM32G474, and mock tests over HAL I2C and HAL system timing.
+**Thread safety:** per-instance mutex serializes public driver calls and is
+created with the shared create-once helper, so first access is safe under
+FreeRTOS/RP2040 multicore. `hal_tsc2007_deinit()` should not run concurrently
+with other operations on the same instance.
+
+---
+
+## `hal_stmpe610` - STMPE610 resistive touch controller  *(optional - `HAL_ENABLE_STMPE610`)*
+
+```c
+#include <hal/hal_stmpe610.h>
+
+#define HAL_STMPE610_I2C_ADDR_DEFAULT 0x41u
+#define HAL_STMPE610_CHIP_ID          0x0811u
+#define HAL_STMPE610_SPI_CLOCK_HZ     1000000ul
+
+typedef enum {
+  HAL_STMPE610_TRANSPORT_I2C,
+  HAL_STMPE610_TRANSPORT_SPI,
+  HAL_STMPE610_TRANSPORT_SOFT_SPI,
+} hal_stmpe610_transport_t;
+
+typedef struct {
+  hal_stmpe610_transport_t transport;
+  uint8_t i2c_bus;
+  uint8_t i2c_addr;
+  uint8_t spi_bus;
+  uint8_t cs_pin;
+  uint8_t mosi_pin;
+  uint8_t miso_pin;
+  uint8_t sck_pin;
+} hal_stmpe610_config_t;
+
+typedef struct {
+  int16_t x;
+  int16_t y;
+  int16_t z;
+} hal_stmpe610_point_t;
+
+hal_stmpe610_config_t hal_stmpe610_default_config(void);
+hal_stmpe610_config_t hal_stmpe610_i2c_config(uint8_t bus, uint8_t addr);
+hal_stmpe610_config_t hal_stmpe610_spi_config(uint8_t bus, uint8_t cs_pin);
+hal_stmpe610_config_t hal_stmpe610_soft_spi_config(uint8_t cs_pin,
+                                                   uint8_t mosi_pin,
+                                                   uint8_t miso_pin,
+                                                   uint8_t sck_pin);
+
+bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg);
+void hal_stmpe610_deinit(hal_stmpe610_t *dev);
+
+bool hal_stmpe610_touched(hal_stmpe610_t *dev);
+bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev);
+uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev);
+void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
+                            uint8_t *z);
+hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev);
+
+uint8_t hal_stmpe610_read_register8(hal_stmpe610_t *dev, uint8_t reg);
+uint16_t hal_stmpe610_read_register16(hal_stmpe610_t *dev, uint8_t reg);
+void hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
+                                  uint8_t value);
+```
+
+`hal_stmpe610_init()` probes chip ID `0x0811`, keeps the original hardware-SPI
+mode-1 fallback when mode 0 does not answer, then runs the established
+touch-controller setup sequence: soft reset, 10 ms wait, register flush reads,
+TSC enable, touch interrupt enable, ADC/TSC timing setup, FIFO threshold/reset,
+50 mA drive current and interrupt-status clear.
+
+`hal_stmpe610_read_data()` reads four bytes from the FIFO data port and decodes
+12-bit X/Y plus 8-bit pressure. `hal_stmpe610_get_point()` drains the FIFO,
+returns the last sample, and clears interrupt status when the FIFO is empty.
+The I2C 16-bit register read path is dispatched only through I2C; this avoids
+the fall-through transport bug present in the source import.
+
+**impl/shared:** `impl/shared/stmpe610/stmpe610.cpp` is used by RP2040,
+STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI
+uses HAL SPI transactions plus a caller-provided CS pin; soft SPI bit-bangs
+MSB-first over HAL GPIO.
+**Thread safety:** per-instance mutex serializes public driver calls and is
+created with the shared create-once helper, so first access is safe under
+FreeRTOS/RP2040 multicore. Hardware SPI transactions additionally lock the HAL
+SPI bus while CS is asserted. `hal_stmpe610_deinit()` should not run
+concurrently with other operations on the same instance.
+
+---
+
+## `hal_irsmall_decoder` - IR receiver decoder  *(optional - `HAL_ENABLE_IRSMALL_DECODER`)*
+
+```c
+#include <hal/hal_irsmall_decoder.h>
+
+typedef enum {
+  HAL_IRSMALL_PROTOCOL_NEC,
+  HAL_IRSMALL_PROTOCOL_NECX,
+  HAL_IRSMALL_PROTOCOL_RC5,
+  HAL_IRSMALL_PROTOCOL_SIRC12,
+  HAL_IRSMALL_PROTOCOL_SIRC15,
+  HAL_IRSMALL_PROTOCOL_SIRC20,
+  HAL_IRSMALL_PROTOCOL_SIRC,
+  HAL_IRSMALL_PROTOCOL_SAMSUNG,
+  HAL_IRSMALL_PROTOCOL_SAMSUNG32,
+} hal_irsmall_protocol_t;
+
+typedef struct {
+  hal_irsmall_protocol_t protocol;
+  uint8_t input_pin;
+  bool timeout_enabled;
+  hal_irq_priority_t irq_priority;
+} hal_irsmall_decoder_config_t;
+
+typedef struct {
+  hal_irsmall_protocol_t protocol;
+  uint16_t addr;
+  uint8_t cmd;
+  uint8_t ext;
+  bool key_held;
+  uint8_t bits;
+} hal_irsmall_decoder_data_t;
+
+hal_irsmall_decoder_config_t
+hal_irsmall_decoder_default_config(uint8_t input_pin,
+                                   hal_irsmall_protocol_t protocol);
+
+bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
+                              const hal_irsmall_decoder_config_t *cfg);
+void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev);
+void hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev);
+void hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev);
+void hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev);
+bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
+                                        hal_irsmall_decoder_data_t *out);
+bool hal_irsmall_decoder_has_data(hal_irsmall_decoder_t *dev);
+```
+
+`hal_irsmall_decoder_init()` configures the input as pull-up, attaches a GPIO
+interrupt with the edge mode used by the selected protocol, and uses
+`hal_micros()` intervals to decode NEC, NEC extended, RC5, Sony SIRC
+12/15/20-bit, Sony SIRC triple-frame, Samsung 20-bit, and Samsung 32-bit
+frames. `hal_irsmall_decoder_data_available()` copies and clears one decoded
+frame; `hal_irsmall_decoder_has_data()` clears pending data without copying it.
+
+**impl/shared:** `impl/shared/irsmall_decoder/irsmall_decoder.cpp` is used by
+RP2040, STM32G474, and mock tests over HAL GPIO interrupts and HAL system
+timing. The shared implementation keeps the source timing thresholds and repeat
+suppression behavior; NEC extended address bytes are assembled explicitly to
+avoid type-punned reads. The RC5 frame decoder uses the transition-table state
+machine from the existing RP2040-tested `RC5` driver, with shared
+`key_held` reporting applied after a valid frame is decoded.
+**Thread safety:** public calls are serialized by an instance mutex created
+with the shared create-once helper. ISR-shared timestamp/state reads use short
+critical sections for timeout/reset paths. Up to
+`HAL_IRSMALL_DECODER_MAX_INSTANCES` instances can be attached at once.
 
 ---
 

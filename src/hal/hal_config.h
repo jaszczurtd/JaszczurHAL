@@ -211,6 +211,12 @@
                                   (propagates: ONEWIRE).
        HAL_ENABLE_BH1750        - shared BH1750 ambient-light sensor over
                                   HAL I2C (propagates: I2C).
+       HAL_ENABLE_TSC2007       - shared TSC2007 resistive touch controller
+                                  over HAL I2C (propagates: I2C).
+       HAL_ENABLE_STMPE610      - shared STMPE610 resistive touch controller
+                                  over HAL I2C/SPI (propagates: I2C, SPI).
+       HAL_ENABLE_IRSMALL_DECODER - shared IRsmallDecoder-compatible infrared
+                                  receiver decoder over HAL GPIO interrupts.
        HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper.
        HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC via shared ADS1X15
                                   HAL I2C driver (propagates: I2C).
@@ -238,6 +244,8 @@
      Display (fasada + backend):
        HAL_ENABLE_DISPLAY       - generic display API (requires at least
                                   one backend: TFT or SSD1306).
+       HAL_ENABLE_HD44780 - HD44780-compatible parallel character LCD
+                                  driver over HAL GPIO/system timing.
        HAL_ENABLE_TFT           - SPI TFT family (requires at least one
                                   driver below; propagates: DISPLAY, SPI).
        HAL_ENABLE_ILI9341       - ILI9341 TFT driver (propagates: TFT, SPI).
@@ -343,6 +351,21 @@
 #ifdef HAL_ENABLE_BH1750
 #ifndef HAL_ENABLE_I2C
 #define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_TSC2007
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_STMPE610
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
 #endif
 #endif
 
@@ -473,8 +496,8 @@
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
-  KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, BH1750, ONEWIRE,
-  EXTERNAL_ADC, PGA2311,
+  KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
+  ONEWIRE, EXTERNAL_ADC, PGA2311,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
@@ -605,6 +628,15 @@
 #endif
 #ifdef HAL_ENABLE_BH1750
 #pragma message("HAL_CONFIG: HAL_ENABLE_BH1750")
+#endif
+#ifdef HAL_ENABLE_TSC2007
+#pragma message("HAL_CONFIG: HAL_ENABLE_TSC2007")
+#endif
+#ifdef HAL_ENABLE_STMPE610
+#pragma message("HAL_CONFIG: HAL_ENABLE_STMPE610")
+#endif
+#ifdef HAL_ENABLE_IRSMALL_DECODER
+#pragma message("HAL_CONFIG: HAL_ENABLE_IRSMALL_DECODER")
 #endif
 #ifdef HAL_ENABLE_ONEWIRE
 #pragma message("HAL_CONFIG: HAL_ENABLE_ONEWIRE")

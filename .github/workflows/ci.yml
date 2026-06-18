@@ -206,7 +206,7 @@ jobs:
 
       - name: Install Arduino RP2040 core
         run: |
-          source arduino_core_version.conf
+          source rp2040_core_version.conf
           arduino-cli core update-index \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
           arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
@@ -215,7 +215,7 @@ jobs:
       - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
         run: |
           ./scripts/build_arduino_lib.sh --clean ${{ matrix.flags }}
-          test -f build_arduino/libJaszczurHAL.a
+          test -f build_rp2040/libJaszczurHAL.a
 
   # ── Examples build gate ────────────────────────────────────────────────────
   # Compile all examples through examples/CMakeLists.txt. That file is the
@@ -236,7 +236,7 @@ jobs:
 
       - name: Install Arduino RP2040 core
         run: |
-          source arduino_core_version.conf
+          source rp2040_core_version.conf
           arduino-cli core update-index \
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
           arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \

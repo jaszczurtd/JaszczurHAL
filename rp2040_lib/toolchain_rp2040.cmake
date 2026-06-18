@@ -2,9 +2,9 @@
 # CMake toolchain file for cross-compiling JaszczurHAL to RP2040 (Arduino)
 #
 # Usage:
-#   cmake -DCMAKE_TOOLCHAIN_FILE=../arduino_lib/toolchain_rp2040.cmake \
+#   cmake -DCMAKE_TOOLCHAIN_FILE=../rp2040_lib/toolchain_rp2040.cmake \
 #         -DARDUINO_ROOT=~/.arduino15/packages/rp2040 \
-#         ../arduino_lib
+#         ../rp2040_lib
 #
 # The only required variable is ARDUINO_ROOT (base of the rp2040 package).
 # All other paths are auto-detected from the installed Arduino core version

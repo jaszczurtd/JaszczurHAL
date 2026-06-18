@@ -1,8 +1,8 @@
 #include <hal/hal_app.h>
-#include <hal/hal_serial.h>
 #include <hal/hal_system.h>
 #include <hal/hal_wifi.h>
 #include <hal/hal_wireguard.h>
+#include <tools_c.h>
 
 static const char *WIFI_SSID = "your-ssid";
 static const char *WIFI_PASSWORD = "your-password";
@@ -22,68 +22,62 @@ static uint32_t last_tunnel_check_ms = 0;
 static bool tunnel_started = false;
 
 static void connectWifi(void) {
-    if (hal_wifi_is_connected()) {
-        return;
-    }
+  if (hal_wifi_is_connected()) {
+    return;
+  }
 
-    const uint32_t now = hal_millis();
-    if (now - last_wifi_check_ms < 5000u) {
-        return;
-    }
-    last_wifi_check_ms = now;
+  const uint32_t now = hal_millis();
+  if (now - last_wifi_check_ms < 5000u) {
+    return;
+  }
+  last_wifi_check_ms = now;
 
-    hal_deb("WiFi: connecting to %s", WIFI_SSID);
-    hal_wifi_set_mode(HAL_WIFI_MODE_STA);
-    hal_wifi_set_hostname("jaszczurhal-wg");
-    hal_wifi_begin_station(WIFI_SSID, WIFI_PASSWORD, true);
+  deb("WiFi: connecting to %s", WIFI_SSID);
+  hal_wifi_set_mode(HAL_WIFI_MODE_STA);
+  hal_wifi_set_hostname("jaszczurhal-wg");
+  hal_wifi_begin_station(WIFI_SSID, WIFI_PASSWORD, true);
 }
 
 static void startWireGuard(void) {
-    if (!hal_wifi_is_connected() || tunnel_started) {
-        return;
-    }
+  if (!hal_wifi_is_connected() || tunnel_started) {
+    return;
+  }
 
-    tunnel_started = hal_wireguard_begin_advanced_text(WG_LOCAL_IP,
-                                                       WG_PRIVATE_KEY,
-                                                       WG_PEER_HOST,
-                                                       WG_PEER_PUBLIC_KEY,
-                                                       WG_PEER_PORT,
-                                                       WG_ALLOWED_IP,
-                                                       WG_ALLOWED_MASK);
-    if (tunnel_started) {
-        hal_deb("WireGuard: tunnel started");
-    } else {
-        hal_derr("WireGuard: begin failed");
-    }
+  tunnel_started = hal_wireguard_begin_advanced_text(
+      WG_LOCAL_IP, WG_PRIVATE_KEY, WG_PEER_HOST, WG_PEER_PUBLIC_KEY,
+      WG_PEER_PORT, WG_ALLOWED_IP, WG_ALLOWED_MASK);
+  if (tunnel_started) {
+    deb("WireGuard: tunnel started");
+  } else {
+    derr("WireGuard: begin failed");
+  }
 }
 
 static void serviceWireGuard(void) {
-    if (!tunnel_started) {
-        return;
-    }
+  if (!tunnel_started) {
+    return;
+  }
 
-    const uint32_t now = hal_millis();
-    if (now - last_tunnel_check_ms < 5000u) {
-        return;
-    }
-    last_tunnel_check_ms = now;
+  const uint32_t now = hal_millis();
+  if (now - last_tunnel_check_ms < 5000u) {
+    return;
+  }
+  last_tunnel_check_ms = now;
 
-    char endpoint_ip[HAL_WIREGUARD_IP_STR_LEN] = {0};
-    uint16_t endpoint_port = 0;
-    if (hal_wireguard_peer_up(endpoint_ip, sizeof(endpoint_ip), &endpoint_port)) {
-        hal_deb("WireGuard: peer up via %s:%u", endpoint_ip, endpoint_port);
-    } else {
-        hal_deb("WireGuard: peer not up, kicking handshake");
-        hal_wireguard_kick_handshake_text(WG_PROBE_IP, WG_PROBE_PORT, 5000u);
-    }
+  char endpoint_ip[HAL_WIREGUARD_IP_STR_LEN] = {0};
+  uint16_t endpoint_port = 0;
+  if (hal_wireguard_peer_up(endpoint_ip, sizeof(endpoint_ip), &endpoint_port)) {
+    deb("WireGuard: peer up via %s:%u", endpoint_ip, endpoint_port);
+  } else {
+    deb("WireGuard: peer not up, kicking handshake");
+    hal_wireguard_kick_handshake_text(WG_PROBE_IP, WG_PROBE_PORT, 5000u);
+  }
 }
 
-void app_start(void) {
-    hal_debug_init(115200, NULL);
-}
+void app_start(void) { debugInit(); }
 
 void app_task0(void) {
-    connectWifi();
-    startWireGuard();
-    serviceWireGuard();
+  connectWifi();
+  startWireGuard();
+  serviceWireGuard();
 }

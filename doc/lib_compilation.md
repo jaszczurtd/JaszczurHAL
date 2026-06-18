@@ -7,7 +7,7 @@ JaszczurHAL can be built in three different ways, depending on the target:
 | Target | Build entry | Output | Backend switch |
 |---|---|---|---|
 | Host / mock tests | repository-root CMake | `build/libhal_mock.a` + tests | `HAL_TARGET_MOCK` |
-| RP2040 / RP2350 through Arduino-pico | `arduino_lib/` or `scripts/build_arduino_lib.sh` | `build_arduino/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
+| RP2040 / RP2350 through Arduino-pico | `rp2040_lib/` or `scripts/build_arduino_lib.sh` | `build_rp2040/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
 | STM32G474 bare-metal | `stm32_lib/` | `build_stm32/libJaszczurHAL.a` | `HAL_TARGET_STM32G474` |
 
 The canonical target selection lives in `src/hal/hal_target.h`. Define exactly
@@ -90,7 +90,7 @@ The script auto-detects the latest Arduino-pico core and `pqt-gcc` toolchain
 under `~/.arduino15/packages/rp2040/`. The output is:
 
 ```text
-build_arduino/libJaszczurHAL.a
+build_rp2040/libJaszczurHAL.a
 ```
 
 Script options:
@@ -103,7 +103,7 @@ Script options:
 | `--freertos` | - | Build with arduino-pico FreeRTOS SMP mode and define `HAL_ENABLE_FREERTOS` |
 | `-p`, `--project-config DIR` | - | Directory containing `hal_project_config.h` |
 | `-D DEFINE` | - | Extra compile definition, e.g. `HAL_ENABLE_WIFI` or `KEY=VALUE`; repeatable |
-| `-o`, `--output DIR` | `./build_arduino` | Output directory |
+| `-o`, `--output DIR` | `./build_rp2040` | Output directory |
 | `--clean` | - | Remove build directory before building |
 | `-j`, `--jobs N` | `nproc` | Parallel build jobs |
 
@@ -153,15 +153,15 @@ paths while keeping `hal_critical_section_*` as a hard per-core interrupt mask.
 Manual CMake users can do the same with:
 
 ```bash
-cmake -S arduino_lib -B build_arduino_freertos \
-  -DCMAKE_TOOLCHAIN_FILE=arduino_lib/toolchain_rp2040.cmake \
+cmake -S rp2040_lib -B build_rp2040_freertos \
+  -DCMAKE_TOOLCHAIN_FILE=rp2040_lib/toolchain_rp2040.cmake \
   -DARDUINO_ROOT=~/.arduino15/packages/rp2040 \
   -DARDUINO_CHIP=rp2040 \
   -DARDUINO_VARIANT=rpipico \
   -DARDUINO_OS=freertos \
   -DEXTRA_HAL_DEFINES="HAL_ENABLE_FREERTOS"
 
-cmake --build build_arduino_freertos -j$(nproc)
+cmake --build build_rp2040_freertos -j$(nproc)
 ```
 
 The local `third_party/FreeRTOS-Kernel` tree is not compiled for the current
@@ -171,13 +171,13 @@ RP2040 static-library build intentionally produces a clear compile-time error.
 ### Manual CMake Build
 
 ```bash
-cmake -S arduino_lib -B build_arduino \
-  -DCMAKE_TOOLCHAIN_FILE=arduino_lib/toolchain_rp2040.cmake \
+cmake -S rp2040_lib -B build_rp2040 \
+  -DCMAKE_TOOLCHAIN_FILE=rp2040_lib/toolchain_rp2040.cmake \
   -DARDUINO_ROOT=~/.arduino15/packages/rp2040 \
   -DARDUINO_CHIP=rp2040 \
   -DARDUINO_VARIANT=rpipico
 
-cmake --build build_arduino -j$(nproc)
+cmake --build build_rp2040 -j$(nproc)
 ```
 
 Useful CMake cache variables:
@@ -201,7 +201,7 @@ arm-none-eabi-g++ \
   -march=armv6-m -mcpu=cortex-m0plus -mthumb \
   -I /path/to/JaszczurHAL/src \
   main.cpp \
-  -L ./build_arduino -lJaszczurHAL \
+  -L ./build_rp2040 -lJaszczurHAL \
   -o firmware.elf
 ```
 
@@ -352,7 +352,7 @@ paths needed for flashable ELF/BIN/HEX outputs.
 CMakeLists.txt
   Host/mock test build; creates libhal_mock.a and tests.
 
-arduino_lib/
+rp2040_lib/
   CMakeLists.txt
   toolchain_rp2040.cmake
 
@@ -363,7 +363,7 @@ stm32_lib/
 
 scripts/
   build_arduino_lib.sh
-    Convenience wrapper around arduino_lib/.
+    Convenience wrapper around rp2040_lib/.
 
   build_stm32_lib.sh
     Convenience wrapper around stm32_lib/.

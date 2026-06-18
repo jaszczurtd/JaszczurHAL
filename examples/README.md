@@ -247,3 +247,7 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 28 | pga2311 | rp2040, stm32g474 | SPI, PGA2311 stereo volume |
 | 29 | freertos_smoke | rp2040 FreeRTOS, stm32g474 FreeRTOS | Portable app_task0/app_task1 plus native worker tasks, mutex-protected table, delay/idle smoke |
 | 30 | bh1750_light | rp2040, stm32g474 | I2C, BH1750 ambient-light sensor |
+| 31 | hd44780 | rp2040, stm32g474 | GPIO, HD44780 character LCD |
+| 32 | tsc2007_touch | rp2040, stm32g474 | I2C, TSC2007 resistive touch controller |
+| 33 | stmpe610_touch | rp2040, stm32g474 | I2C, STMPE610 resistive touch controller |
+| 34 | irsmall_decoder | rp2040, stm32g474 | GPIO interrupts, IRsmallDecoder receiver |

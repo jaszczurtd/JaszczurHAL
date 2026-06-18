@@ -71,6 +71,12 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
                                hal_gpio_irq_mode_t mode);
 
 /**
+ * @brief Detach the interrupt handler from a GPIO pin.
+ * @param pin Pin number.
+ */
+void hal_gpio_detach_interrupt(uint8_t pin);
+
+/**
  * @brief Set the NVIC priority of the GPIO interrupt bank.
  *
  * On RP2040 all GPIO pins share a single IRQ (IO_IRQ_BANK0).

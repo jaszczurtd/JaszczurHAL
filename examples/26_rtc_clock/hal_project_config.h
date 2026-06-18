@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef HAL_DEBUG_DEFAULT_BAUD
+#define HAL_DEBUG_DEFAULT_BAUD 115200u
+#endif
+
 /**
  * @file hal_project_config.h
  * @brief RTC Clock example configuration.
@@ -11,7 +15,8 @@
 #define HAL_ENABLE_PCF8563
 #define HAL_ENABLE_SERIAL
 
-/* Optional: Use custom I2C address if your hardware differs from default 0x51 */
+/* Optional: Use custom I2C address if your hardware differs from default 0x51
+ */
 /* #define HAL_RTC_PCF8563_DEFAULT_I2C_ADDR 0x51 */
 
 /* Optional: Configure I2C clock speed (default 100kHz via HAL) */

@@ -23,6 +23,7 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode);
 void hal_gpio_write(uint8_t pin, bool high);
 bool hal_gpio_read(uint8_t pin);
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode);
+void hal_gpio_detach_interrupt(uint8_t pin);
 
 typedef enum {
     HAL_IRQ_PRIORITY_HIGHEST = 0,
@@ -38,6 +39,7 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
 **STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
 **IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
+**Interrupt detach:** `hal_gpio_detach_interrupt` removes the registered callback and masks the pin/EXTI source where the backend supports hardware interrupt masking.
 
 ---
 

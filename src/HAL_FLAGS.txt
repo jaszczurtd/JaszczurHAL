@@ -172,6 +172,13 @@ Sensors
   HAL_ENABLE_DS18B20       Shared DS18B20 1-Wire temperature. Propagates: ONEWIRE.
   HAL_ENABLE_BH1750        Shared BH1750 ambient-light sensor over HAL I2C.
                            Propagates: I2C.
+  HAL_ENABLE_TSC2007       Shared TSC2007 resistive touch controller over HAL I2C.
+                           Propagates: I2C.
+  HAL_ENABLE_STMPE610      Shared STMPE610 resistive touch controller over HAL
+                           I2C/SPI. Propagates: I2C, SPI.
+  HAL_ENABLE_IRSMALL_DECODER
+                           Shared IR receiver decoder over HAL GPIO
+                           interrupts and system timing.
   HAL_ENABLE_ONEWIRE       Shared generic 1-Wire bus API wrapper.
   HAL_ENABLE_EXTERNAL_ADC  ADS1115 external ADC via shared ADS1X15 HAL I2C driver.
                            Propagates: I2C.
@@ -209,6 +216,8 @@ Counters
                            via a GPIO edge interrupt (ISR-rate limited).
 
 Display
+  HAL_ENABLE_HD44780 HD44780-compatible parallel character LCD driver
+                           over HAL GPIO/system timing.
   HAL_ENABLE_DISPLAY
     Generic display API. Requires at least one of TFT or SSD1306.
   HAL_ENABLE_TFT
@@ -273,6 +282,8 @@ HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM, HAL_ENABLE_UART
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
+HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C, HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE, HAL_ENABLE_I2C
