@@ -236,6 +236,19 @@ void  remove_non_ascii(const char *input, char *output, size_t outputSize);  // 
 void  hal_pack_field_pad(uint8_t *buf, const char *str, int width, uint8_t pad);
 void  hal_pack_field(uint8_t *buf, const char *str, int width); // zero padding
 unsigned short rgbToRgb565(unsigned char r, unsigned char g, unsigned char b);
+bool rgb888ToRgb565(const unsigned char *rgb, unsigned short *rgb565, size_t pixelCount);
+bool rgba8888ToRgb565(const unsigned char *rgba, unsigned short *rgb565, size_t pixelCount); // ignores alpha
+bool pngBase64DecodedSize(const char *base64, size_t base64Len,
+                          size_t *pngSize); // requires HAL_ENABLE_PNG_AS_BASE64
+bool pngBase64Decode32(unsigned char **rgba, unsigned *width, unsigned *height,
+                       const char *base64, size_t base64Len,
+                       uint8_t *pngWork, size_t pngWorkSize,
+                       unsigned *pngError); // requires HAL_ENABLE_PNG_AS_BASE64
+bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
+                           uint8_t *pngWork, size_t pngWorkSize,
+                           unsigned short *rgb565, size_t rgb565Pixels,
+                           unsigned *width, unsigned *height,
+                           unsigned *pngError); // requires HAL_ENABLE_PNG_AS_BASE64
 const char *macToString(uint8_t mac[6], char *buf, size_t bufSize);
 const char *encToString(uint8_t enc);       // HAL WiFi encryption label
 bool  scanNetworks(const char *networkToFind);  // requires HAL_ENABLE_WIFI

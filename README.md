@@ -100,7 +100,7 @@ src/
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
         ads1x15/ digipot/ display/ ds18b20/ ds3231/ gps/
         max6675/ mcp2515/ mcp9600/ neopixel/ onewire/
-        pcf8563/ pga2311/ wireguard/
+        pcf8563/ pga2311/ wireguard/ (and many more)
       stm32g474/            # STM32G474 backend
         drivers/
           stm32g474/        # STM32G474 SoC services (fault/system)
@@ -368,6 +368,8 @@ Primary docs:
   [ThrowTheSwitch/Unity](https://github.com/ThrowTheSwitch/Unity)
 - cJSON/cJSON_Utils are bundled and optional via HAL_ENABLE_CJSON:
   [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
+- LodePNG is bundled and optional via HAL_ENABLE_PNG:
+  [lvandeve/lodepng](https://github.com/lvandeve/lodepng) by Lode Vandevenne
 - The shared display stack (`src/hal/impl/shared/display/`) is a portable,
   HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
   algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),

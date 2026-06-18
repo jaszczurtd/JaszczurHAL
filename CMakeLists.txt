@@ -60,6 +60,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/utils/SmartTimers.cpp
     ${SRC}/utils/pidController.cpp
+    ${SRC}/utils/lodepng.cpp
 )
 
 # ── hal_mock static library ───────────────────────────────────────────────────
@@ -121,6 +122,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_SSD1306        # OLED backend
     HAL_ENABLE_CRYPTO
     HAL_ENABLE_CJSON
+    HAL_ENABLE_PNG
+    HAL_ENABLE_PNG_AS_BASE64
     HAL_ENABLE_UNITY
 )
 

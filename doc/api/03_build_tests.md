@@ -104,11 +104,98 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 Each test executable in `tests/` links against `hal_mock` only - no Arduino
 headers, no pico SDK, no hardware.
 
+The bundled Unity test framework lives in:
+
+- `src/utils/unity.c`
+- `src/utils/unity.h`
+- `src/utils/unity_internals.h`
+- `src/utils/unity_config.h`
+
+The host CMake build compiles `src/utils/unity.c` into `hal_mock` and enables
+`HAL_ENABLE_UNITY` plus `UNITY_INCLUDE_CONFIG_H`. Test sources include
+`"utils/unity.h"` and use the repository-local `unity_config.h`; no external
+Unity package is fetched or required. Outside the test/support build, Unity is
+inactive unless `HAL_ENABLE_UNITY` is explicitly enabled.
+
 `tools.cpp` is covered by `test_tools` using HAL mocks.
 `multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
 logger-close stub plus HAL mocks.
 `utils/draw7Segment.cpp` has no platform dependencies
 (pure `const char*` + `hal_display`).
+
+### Unity examples
+
+Minimal test file:
+
+```cpp
+#include "utils/unity.h"
+
+void setUp(void) {}
+void tearDown(void) {}
+
+void test_adds_numbers(void) {
+    TEST_ASSERT_EQUAL_INT(4, 2 + 2);
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_adds_numbers);
+    return UNITY_END();
+}
+```
+
+Test using HAL mocks:
+
+```cpp
+#include "utils/unity.h"
+#include "hal/hal_system.h"
+#include "hal/impl/.mock/hal_mock.h"
+
+void setUp(void) {
+    hal_mock_set_millis(0);
+}
+
+void tearDown(void) {}
+
+void test_delay_ms_updates_mock_time(void) {
+    hal_delay_ms(10);
+
+    TEST_ASSERT_EQUAL_UINT32(10, hal_millis());
+    TEST_ASSERT_EQUAL_UINT32(10000, hal_micros());
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_delay_ms_updates_mock_time);
+    return UNITY_END();
+}
+```
+
+Simple CMake registration:
+
+```cmake
+add_hal_test(test_my_module)
+```
+
+This expects `tests/test_my_module.cpp` and links it with `hal_mock`.
+
+When a test needs additional implementation files, create a dedicated target:
+
+```cmake
+add_executable(test_my_driver
+    test_my_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/my_driver/my_driver.cpp
+)
+target_link_libraries(test_my_driver PRIVATE hal_mock)
+add_test(NAME test_my_driver COMMAND test_my_driver)
+```
+
+Run only the new suite:
+
+```bash
+cmake --build build --target test_my_module
+ctest --test-dir build -R test_my_module --output-on-failure
+```
 
 ### Test suites
 
@@ -165,7 +252,8 @@ logger-close stub plus HAL mocks.
 
 ### Adding a new test suite
 
-1. Create `tests/test_<name>.cpp` with Unity `setUp`, `tearDown`, and `RUN_TEST` calls.
+1. Create `tests/test_<name>.cpp` with `#include "utils/unity.h"`, Unity
+   `setUp`, `tearDown`, `UNITY_BEGIN`, `RUN_TEST`, and `UNITY_END` calls.
 2. Add `add_hal_test(test_<name>)` to `tests/CMakeLists.txt`.
     For suites that compile extra sources (for example `test_tools` and
     `test_multicoreWatchdog`), create a dedicated `add_executable(...)` entry.

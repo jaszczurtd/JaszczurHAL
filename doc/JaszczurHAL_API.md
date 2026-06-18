@@ -52,7 +52,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
 - `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`) and Arduino-specific framework-style helpers such as `sdlogger`.
-- `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, and bundled Unity sources.
+- `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, optional `LodePNG`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
 default include in project code. `hal/hal.h` remains available as a HAL-only
@@ -149,6 +149,8 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
 | 15 | [Network connectivity](api/15_connectivity.md) | `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time` (NTP/local time) |
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
+| 17 | [cJSON](api/17_cJSON.md) | Bundled `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
+| 18 | [LodePNG](api/18_LodePNG.md) | Bundled `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 
 ---
 
@@ -161,6 +163,8 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_bits` | [Timers and system](api/06_timers_system.md) |
 | `hal_can` | [CAN and display](api/10_can_display.md) |
 | `hal_crypto` | [Cryptography](api/07_crypto.md) |
+| `cJSON` / `cJSON_Utils` | [cJSON](api/17_cJSON.md) |
+| `LodePNG` | [LodePNG](api/18_LodePNG.md) |
 | `hal_digipot` | [Module flags](api/02_module_flags.md) (flag table) |
 | `hal_display` | [CAN and display](api/10_can_display.md) |
 | `hal_ds18b20` | [Sensors](api/11_sensors.md) |

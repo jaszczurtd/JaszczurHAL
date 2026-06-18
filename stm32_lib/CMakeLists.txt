@@ -43,6 +43,7 @@ set(UTIL_SOURCES
     ${SRC}/utils/draw7Segment.cpp
     ${SRC}/utils/cJSON.c
     ${SRC}/utils/cJSON_Utils.c
+    ${SRC}/utils/lodepng.cpp
 )
 
 # Unity is opt-in: enable it via -DHAL_ENABLE_UNITY=ON when configuring.
