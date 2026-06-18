@@ -78,7 +78,6 @@ typedef struct {
   volatile bool initialized;
   volatile bool enabled;
   volatile bool data_available;
-  volatile bool copying_data;
   volatile uint8_t state;
   volatile uint32_t previous_time;
   uint8_t slot_index;

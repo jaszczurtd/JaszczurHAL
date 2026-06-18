@@ -181,6 +181,9 @@ public:
   size_t print(unsigned int value);
   size_t print(long value);
   size_t print(unsigned long value);
+  // println variants emit the argument (if any) and then move the cursor to
+  // column 0 of the next row, wrapping back to the first row past the bottom
+  // line. Unlike a serial Print, no CR/LF bytes are written to the display.
   size_t println();
   size_t println(const char *str);
   size_t println(char c);
@@ -198,6 +201,7 @@ private:
   void clearUnlocked();
   void homeUnlocked();
   void setRowOffsetsUnlocked(int row0, int row1, int row2, int row3);
+  void setCursorUnlocked(uint8_t col, uint8_t row);
   void commandUnlocked(uint8_t value);
   size_t writeByteUnlocked(uint8_t value);
   size_t writeBufferUnlocked(const uint8_t *buffer, size_t size);
@@ -225,6 +229,7 @@ private:
 
   uint8_t _numlines;
   uint8_t _row_offsets[4];
+  uint8_t _currow; // tracks the active row so println() can advance lines
 };
 
 #endif /* __cplusplus */

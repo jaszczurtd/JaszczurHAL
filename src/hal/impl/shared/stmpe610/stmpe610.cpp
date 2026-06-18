@@ -231,24 +231,12 @@ static uint8_t stmpe610_read8_unlocked(hal_stmpe610_t *dev, uint8_t reg) {
 }
 
 static uint16_t stmpe610_read16_unlocked(hal_stmpe610_t *dev, uint8_t reg) {
-  if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_I2C) {
-    uint8_t data[2] = {0u, 0u};
-    const uint8_t addr = reg;
-
-    if (!hal_i2c_write_read_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr, &addr, 1u,
-                                data, sizeof(data))) {
-      return 0u;
-    }
-
-    return (uint16_t)(((uint16_t)data[0] << 8u) | data[1]);
-  }
-
-  stmpe610_spi_begin(dev);
-  stmpe610_spi_out(dev, (uint8_t)(0x80u | reg));
-  stmpe610_spi_out(dev, 0u);
-  const uint8_t high = stmpe610_spi_in(dev);
-  const uint8_t low = stmpe610_spi_in(dev);
-  stmpe610_spi_end(dev);
+  /* The STMPE610 does not auto-increment the register address within a single
+   * SPI frame, so a 16-bit value must be read as two independent 8-bit reads
+   * of `reg` (high byte) and `reg + 1` (low byte). This matches the reference
+   * driver and works identically for I2C and SPI transports. */
+  const uint8_t high = stmpe610_read8_unlocked(dev, reg);
+  const uint8_t low = stmpe610_read8_unlocked(dev, (uint8_t)(reg + 1u));
 
   return (uint16_t)(((uint16_t)high << 8u) | low);
 }

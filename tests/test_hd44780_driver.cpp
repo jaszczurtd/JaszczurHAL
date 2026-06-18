@@ -200,6 +200,34 @@ void test_print_string_and_number_use_lcd_write_path(void) {
   TEST_ASSERT_EQUAL_HEX8('2', bytes[3].data);
 }
 
+void test_println_advances_to_next_line_without_control_bytes(void) {
+  HD44780 lcd(LCD_RS, LCD_EN, kData4[0], kData4[1], kData4[2], kData4[3]);
+  lcd.begin(16u, 2u);
+  hal_mock_gpio_trace_reset();
+
+  lcd.println("A");
+
+  /* Expect the glyph 'A' followed by a cursor move to row 1, col 0
+   * (LCD_SETDDRAMADDR | 0x40 == 0xC0) -- never the CR/LF control bytes. */
+  lcd_bus_sample_t bytes[4] = {};
+  TEST_ASSERT_EQUAL_UINT32(2u, capture_4bit_bytes(bytes, COUNTOF(bytes)));
+  TEST_ASSERT_TRUE(bytes[0].rs);
+  TEST_ASSERT_EQUAL_HEX8('A', bytes[0].data);
+  TEST_ASSERT_FALSE(bytes[1].rs);
+  TEST_ASSERT_EQUAL_HEX8(0xC0u, bytes[1].data);
+  TEST_ASSERT_NOT_EQUAL_HEX8(0x0Du, bytes[0].data);
+  TEST_ASSERT_NOT_EQUAL_HEX8(0x0Au, bytes[0].data);
+
+  /* A second println wraps from the last row back to row 0 (0x80). */
+  hal_mock_gpio_trace_reset();
+  lcd.println("B");
+  TEST_ASSERT_EQUAL_UINT32(2u, capture_4bit_bytes(bytes, COUNTOF(bytes)));
+  TEST_ASSERT_TRUE(bytes[0].rs);
+  TEST_ASSERT_EQUAL_HEX8('B', bytes[0].data);
+  TEST_ASSERT_FALSE(bytes[1].rs);
+  TEST_ASSERT_EQUAL_HEX8(0x80u, bytes[1].data);
+}
+
 void test_multibyte_operations_take_one_instance_mutex(void) {
   HD44780 lcd(LCD_RS, LCD_EN, kData4[0], kData4[1], kData4[2], kData4[3]);
 
@@ -227,6 +255,7 @@ int main(void) {
   RUN_TEST(test_set_cursor_uses_original_row_offsets);
   RUN_TEST(test_create_char_masks_location_and_writes_eight_rows);
   RUN_TEST(test_print_string_and_number_use_lcd_write_path);
+  RUN_TEST(test_println_advances_to_next_line_without_control_bytes);
   RUN_TEST(test_multibyte_operations_take_one_instance_mutex);
   return UNITY_END();
 }

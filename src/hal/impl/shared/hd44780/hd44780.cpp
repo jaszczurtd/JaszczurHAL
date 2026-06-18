@@ -36,7 +36,7 @@ HD44780::HD44780(uint8_t rs, uint8_t rw, uint8_t enable, uint8_t d0, uint8_t d1,
     : _mutex(NULL), _rs_pin(0u), _rw_pin(HD44780_NO_PIN), _enable_pin(0u),
       _data_pins{0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u}, _displayfunction(0u),
       _displaycontrol(0u), _displaymode(0u), _initialized(0u), _numlines(0u),
-      _row_offsets{0u, 0u, 0u, 0u} {
+      _row_offsets{0u, 0u, 0u, 0u}, _currow(0u) {
   init(0, rs, rw, enable, d0, d1, d2, d3, d4, d5, d6, d7);
 }
 
@@ -49,7 +49,7 @@ HD44780::HD44780(uint8_t rs, uint8_t rw, uint8_t enable, uint8_t d0, uint8_t d1,
     : _mutex(NULL), _rs_pin(0u), _rw_pin(HD44780_NO_PIN), _enable_pin(0u),
       _data_pins{0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u}, _displayfunction(0u),
       _displaycontrol(0u), _displaymode(0u), _initialized(0u), _numlines(0u),
-      _row_offsets{0u, 0u, 0u, 0u} {
+      _row_offsets{0u, 0u, 0u, 0u}, _currow(0u) {
   init(1, rs, rw, enable, d0, d1, d2, d3, 0, 0, 0, 0);
 }
 
@@ -225,6 +225,7 @@ void HD44780::clear() {
 void HD44780::clearUnlocked() {
   commandUnlocked(LCD_CLEARDISPLAY);
   hal_delay_us(2000u);
+  _currow = 0u; // clear returns the cursor to the home position
 }
 
 void HD44780::home() {
@@ -238,13 +239,18 @@ void HD44780::home() {
 void HD44780::homeUnlocked() {
   commandUnlocked(LCD_RETURNHOME);
   hal_delay_us(2000u);
+  _currow = 0u; // home returns the cursor to the home position
 }
 
 void HD44780::setCursor(uint8_t col, uint8_t row) {
   if (!lock()) {
     return;
   }
+  setCursorUnlocked(col, row);
+  unlock();
+}
 
+void HD44780::setCursorUnlocked(uint8_t col, uint8_t row) {
   const size_t max_lines = sizeof(_row_offsets) / sizeof(*_row_offsets);
   if (row >= max_lines) {
     row = (uint8_t)(max_lines - 1u);
@@ -254,7 +260,7 @@ void HD44780::setCursor(uint8_t col, uint8_t row) {
   }
 
   commandUnlocked((uint8_t)(LCD_SETDDRAMADDR | (col + _row_offsets[row])));
-  unlock();
+  _currow = row;
 }
 
 void HD44780::noDisplay() {
@@ -521,8 +527,15 @@ size_t HD44780::println() {
 }
 
 size_t HD44780::printlnUnlocked() {
-  size_t written = writeByteUnlocked((uint8_t)'\r');
-  return written + writeByteUnlocked((uint8_t)'\n');
+  // A character LCD has no notion of CR/LF; writing those control bytes would
+  // render garbage glyphs into DDRAM. Instead, move the cursor to column 0 of
+  // the next row, wrapping back to the first row past the bottom line.
+  uint8_t next_row = (uint8_t)(_currow + 1u);
+  if (next_row >= _numlines) {
+    next_row = 0u;
+  }
+  setCursorUnlocked(0u, next_row);
+  return 0u;
 }
 
 size_t HD44780::println(const char *str) {
