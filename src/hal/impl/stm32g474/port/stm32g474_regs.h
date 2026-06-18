@@ -65,6 +65,41 @@
 #define RCC_CSR_WWDGRSTF (1u << 30)
 #define RCC_CSR_LPWRRSTF (1u << 31)
 
+/* ── FLASH controller (main flash erase/program) ────────────────────────── */
+#define FLASH_BASE 0x40022000u
+#define FLASH_ACR JH_REG32(FLASH_BASE + 0x00u)
+#define FLASH_KEYR JH_REG32(FLASH_BASE + 0x08u)
+#define FLASH_SR JH_REG32(FLASH_BASE + 0x10u)
+#define FLASH_CR JH_REG32(FLASH_BASE + 0x14u)
+
+#define FLASH_KEY1 0x45670123u
+#define FLASH_KEY2 0xCDEF89ABu
+
+#define FLASH_SR_EOP (1u << 0)
+#define FLASH_SR_OPERR (1u << 1)
+#define FLASH_SR_PROGERR (1u << 3)
+#define FLASH_SR_WRPERR (1u << 4)
+#define FLASH_SR_PGAERR (1u << 5)
+#define FLASH_SR_SIZERR (1u << 6)
+#define FLASH_SR_PGSERR (1u << 7)
+#define FLASH_SR_MISERR (1u << 8)
+#define FLASH_SR_FASTERR (1u << 9)
+#define FLASH_SR_RDERR (1u << 14)
+#define FLASH_SR_OPTVERR (1u << 15)
+#define FLASH_SR_BSY (1u << 16)
+#define FLASH_SR_ERRORS                                                        \
+  (FLASH_SR_OPERR | FLASH_SR_PROGERR | FLASH_SR_WRPERR | FLASH_SR_PGAERR |     \
+   FLASH_SR_SIZERR | FLASH_SR_PGSERR | FLASH_SR_MISERR | FLASH_SR_FASTERR |    \
+   FLASH_SR_RDERR | FLASH_SR_OPTVERR)
+
+#define FLASH_CR_PG (1u << 0)
+#define FLASH_CR_PER (1u << 1)
+#define FLASH_CR_PNB_POS 3u
+#define FLASH_CR_PNB_MASK (0xFFu << FLASH_CR_PNB_POS)
+#define FLASH_CR_BKER (1u << 11)
+#define FLASH_CR_STRT (1u << 16)
+#define FLASH_CR_LOCK (1u << 31)
+
 /* ── ADC1 + ADC12 common (single-channel polled regular conversions) ───────
  * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/1
  * (CKMODE=01) so the HSI16 bring-up clock yields a 16 MHz ADC clock, in spec.

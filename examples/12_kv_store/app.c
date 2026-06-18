@@ -26,7 +26,7 @@ static void printStats(void) {
 }
 
 static void initKvStore(void) {
-  hal_eeprom_init(HAL_EEPROM_RP2040, EEPROM_SIZE_BYTES, 0);
+  hal_eeprom_init(HAL_EEPROM_FLASH, EEPROM_SIZE_BYTES, 0);
   if (!hal_kv_init(KV_BASE_ADDR, KV_SIZE_BYTES)) {
     derr("KV: init failed");
     return;

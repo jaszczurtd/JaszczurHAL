@@ -6,22 +6,39 @@ Covers: `hal_eeprom`, `hal_kv`, `hal_littlefs`, `hal_sdlogger`.
 
 ## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_ENABLE_EEPROM`)*
 
-Single API that works with both the RP2040 internal flash-backed EEPROM and the
-external AT24C256 I2C EEPROM.  The back-end is selected at runtime in
-`hal_eeprom_init()`.
+Single API for persistent byte-addressable storage. The back-end is selected at
+runtime in `hal_eeprom_init()`.
+
+For portable application code, prefer `HAL_EEPROM_FLASH`: it means "use the
+target-native internal flash EEPROM emulation". Existing RP2040 code that uses
+`HAL_EEPROM_RP2040` remains valid.
+
+| Back-end selector | RP2040 / RP2350 Arduino-pico | STM32G474 |
+|---|---|---|
+| `HAL_EEPROM_FLASH` | Internal flash-backed EEPROM via Arduino `EEPROM` | Internal STM32 flash reservation |
+| `HAL_EEPROM_RP2040` | Same as RP2040 internal flash; kept for compatibility | Accepted as a compatibility alias for target-native flash |
+| `HAL_EEPROM_STM32_FLASH` | STM32-specific selector; use `HAL_EEPROM_FLASH` for portable code | STM32 internal flash reservation |
+| `HAL_EEPROM_AT24C256` | External AT24C256 over HAL I2C | External AT24C256 over HAL I2C |
+
+Both RP2040 and STM32G474 can therefore use either their own internal flash or
+an external AT24C256 chip through the same `hal_eeprom_*` API. `hal_kv` sits on
+top of whichever EEPROM back-end was selected.
 
 ```c
 #include <hal/hal_eeprom.h>
 
 typedef enum {
-    HAL_EEPROM_AT24C256 = 1, // External AT24C256 I2C EEPROM - 32 KB, address 0x50
-    HAL_EEPROM_RP2040   = 2, // RP2040 internal flash-backed EEPROM emulation
+    HAL_EEPROM_DEFAULT     = 0, // Target default persistent storage
+    HAL_EEPROM_AT24C256    = 1, // External AT24C256 I2C EEPROM - 32 KB
+    HAL_EEPROM_RP2040      = 2, // RP2040 internal flash-backed EEPROM emulation
+    HAL_EEPROM_STM32_FLASH = 3, // STM32G474 internal flash-backed EEPROM emulation
+    HAL_EEPROM_FLASH       = 4, // Target-native internal flash EEPROM
 } hal_eeprom_type_t;
 
 // Initialise EEPROM. Call before any other hal_eeprom_* function.
-// size:     used only for HAL_EEPROM_RP2040 (passed to EEPROM.begin());
-//           ignored for HAL_EEPROM_AT24C256 (always 32768 bytes).
-// i2c_addr: 7-bit I2C address of the AT24C256 chip; ignored for RP2040.
+// size:     used for flash-backed EEPROM; pass 0 to use the whole target
+//           reservation. Ignored for HAL_EEPROM_AT24C256 (always 32768 bytes).
+// i2c_addr: 7-bit I2C address of the AT24C256 chip; ignored for flash.
 //           Pass 0 to use the default EEPROM_I2C_ADDRESS (0x50 from hal_config.h).
 void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
 
@@ -38,7 +55,7 @@ void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
 void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
 
 // Flush buffered writes to non-volatile storage.
-// HAL_EEPROM_RP2040: calls EEPROM.commit().
+// HAL_EEPROM_FLASH / native flash: flushes the RAM mirror to flash.
 // HAL_EEPROM_AT24C256: no-op.
 void hal_eeprom_commit(void);
 
@@ -52,19 +69,35 @@ uint16_t hal_eeprom_size(void);
 **Integer byte order:** `hal_eeprom_write_int` / `hal_eeprom_read_int` use
 **little-endian** order (LSB at the lowest address).
 
-**Commit semantics:** For `HAL_EEPROM_RP2040`, `hal_eeprom_write_byte`,
-`hal_eeprom_write_int`, and `hal_eeprom_write_bytes` only update the RAM buffer
-- call `hal_eeprom_commit()` once after a group of writes to persist them to
-flash.  For `HAL_EEPROM_AT24C256`
-each byte write is committed immediately to the chip; `hal_eeprom_commit()` is
-a no-op.
+**Commit semantics:** For flash-backed back-ends, `hal_eeprom_write_byte`,
+`hal_eeprom_write_int`, and `hal_eeprom_write_bytes` update a RAM buffer first.
+Call `hal_eeprom_commit()` once after a group of writes to persist them to
+flash. For `HAL_EEPROM_AT24C256`, each byte write is committed immediately to
+the chip; `hal_eeprom_commit()` is a no-op.
 
-**impl/arduino:** `HAL_EEPROM_RP2040` uses `<EEPROM.h>` (Arduino-pico).
-`HAL_EEPROM_AT24C256` drives the chip via `hal_i2c_*` primitives with
-write-cycle polling and watchdog feeding.  The AT24C256 I2C address is
-`EEPROM_I2C_ADDRESS` (default `0x50`, defined in `hal_config.h`).
+**RP2040 implementation:** `HAL_EEPROM_FLASH` and `HAL_EEPROM_RP2040` use
+`<EEPROM.h>` from Arduino-pico.
+
+**STM32G474 implementation:** `HAL_EEPROM_FLASH`,
+`HAL_EEPROM_STM32_FLASH`, and the compatibility alias `HAL_EEPROM_RP2040` use
+the last pages of internal flash reserved by the STM32 linker script. The
+default reservation is `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bytes, with
+`HAL_STM32_FLASH_PAGE_SIZE = 2048` bytes. This reduces the flash available for
+application code by 4 KB. If the reservation size is changed, keep the compile
+definition and linker symbol in sync, and use a multiple of the STM32 flash page
+size.
+
+**AT24C256 implementation:** `HAL_EEPROM_AT24C256` drives the external chip via
+`hal_i2c_*` primitives with write-cycle polling and watchdog feeding. The
+AT24C256 I2C address is `EEPROM_I2C_ADDRESS` (default `0x50`, defined in
+`hal_config.h`), unless an explicit address is passed to `hal_eeprom_init()`.
+
 **impl/.mock:** in-memory byte array (`MOCK_EEPROM_BUF_SIZE`, default 32768).
-**Thread safety:** Thread-safe and multicore-safe for both back-ends. `HAL_EEPROM_AT24C256` operations are protected by the `hal_i2c` bus mutex. `HAL_EEPROM_RP2040` operations are protected by a dedicated internal mutex. `hal_eeprom_init()` must be called from one core only.
+
+**Thread safety:** Thread-safe and multicore-safe for both back-end families.
+`HAL_EEPROM_AT24C256` operations are protected by the `hal_i2c` bus mutex.
+Flash-backed operations are protected by a dedicated internal mutex.
+`hal_eeprom_init()` must be called from one core only.
 
 ### Mock helpers
 
@@ -89,8 +122,9 @@ void              hal_mock_eeprom_reset(void);
 
 **Usage example:**
 ```c
-// RP2040 internal EEPROM (i2c_addr ignored - pass 0):
-hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+// Target-native internal flash EEPROM:
+// RP2040 -> Arduino-pico EEPROM; STM32G474 -> reserved internal flash pages.
+hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 hal_eeprom_write_int(0, my_value);
 hal_eeprom_commit();
 
@@ -107,8 +141,8 @@ hal_eeprom_write_byte(0, 0xAB);
 #include <hal/hal_eeprom.h>
 
 void example_eeprom(void) {
-    // Initialize RP2040 EEPROM (512 bytes)
-    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+    // Initialize target-native flash EEPROM (512 bytes)
+    hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
     // Write multiple values at different addresses
     hal_eeprom_write_int(0, 12345);           // Store int at offset 0 (4 bytes)
@@ -123,7 +157,7 @@ void example_eeprom(void) {
     };
     hal_eeprom_write_bytes(8, config_data, sizeof(config_data));
 
-    // Commit all writes to flash at once
+    // Commit all buffered flash writes at once
     hal_eeprom_commit();
 
     // Read back the values
@@ -190,7 +224,7 @@ coalesce multiple writes, then flush once with `hal_kv_commit()`.
 
 void example_kv(void) {
     // Initialize EEPROM first, then KV store
-    hal_eeprom_init(HAL_EEPROM_RP2040, 4096, 0);
+    hal_eeprom_init(HAL_EEPROM_FLASH, 4096, 0);
 
     // KV storage uses dual-bank layout starting at address 0, 2KB per bank
     hal_kv_init(0, 4096);
@@ -415,7 +449,7 @@ HAL_SDLOGGER_NAME_BUFFER_SIZE   128u
 
 void setup_sd_logging(void) {
     // Initialize EEPROM (SD logger stores counters there)
-    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+    hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
     // Initialize SD card logger with CS pin 10
     int cs_pin = 10;
@@ -461,7 +495,7 @@ void shutdown_logging(void) {
 
 void setup_crash_logging(void) {
     // Initialize EEPROM and crash logger
-    hal_eeprom_init(HAL_EEPROM_RP2040, 512, 0);
+    hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
     int cs_pin = 10;
     // Create watchdogN_boot.txt file (add "boot" to filename)

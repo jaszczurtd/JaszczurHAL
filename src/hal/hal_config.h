@@ -29,9 +29,15 @@
 /* Supported EEPROM types */
 #define EEPROM_TYPE_AT24C256 1
 #define EEPROM_TYPE_RASPBERRY 2
+#define EEPROM_TYPE_STM32_FLASH 3
+#define EEPROM_TYPE_FLASH 4
 
 #ifndef HAL_EEPROM_TYPE
+#if HAL_TARGET_IS_STM32G474
+#define HAL_EEPROM_TYPE EEPROM_TYPE_STM32_FLASH
+#else
 #define HAL_EEPROM_TYPE EEPROM_TYPE_AT24C256
+#endif
 #endif
 
 #if HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256
@@ -40,6 +46,14 @@
 
 #ifndef EEPROM_I2C_ADDRESS
 #define EEPROM_I2C_ADDRESS 0x50
+#endif
+
+#ifndef HAL_STM32_FLASH_PAGE_SIZE
+#define HAL_STM32_FLASH_PAGE_SIZE 2048u
+#endif
+
+#ifndef HAL_STM32_FLASH_EEPROM_SIZE
+#define HAL_STM32_FLASH_EEPROM_SIZE 4096u
 #endif
 
 /* Uncomment (or define via -D) to enable optional features:
@@ -180,7 +194,7 @@
                                   UART).
 
      Storage:
-       HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / RP2040 flash).
+       HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / target flash).
        HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
        HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
        HAL_ENABLE_SDLOGGER      - SD-card logger/crash logger
