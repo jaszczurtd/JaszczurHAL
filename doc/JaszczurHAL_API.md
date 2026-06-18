@@ -61,6 +61,18 @@ metadata.
 
 ---
 
+## Memory maps
+
+Target-specific memory layout notes live next to the build glue for each
+backend:
+
+- [RP2040 memory map](../rp2040_lib/MEMORY_MAP.md) - arduino-pico generated
+  linker layout, flash/FS/EEPROM markers, SRAM regions, and stack overrides.
+- [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) - bare-metal linker
+  regions, reserved flash EEPROM/KV pages, RAM sections, heap, and stack.
+
+---
+
 ## Documentation scope
 
 This file is the API-oriented companion to [README.md](../README.md).
@@ -134,7 +146,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_bh1750` (ambient light), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 — power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_pga2311` (stereo volume controller), `hal_math` (constrain, map, roundToN) |
-| 14 | [Storage](api/14_storage.md) | `hal_eeprom` (RP2040 flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
+| 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
 | 15 | [Network connectivity](api/15_connectivity.md) | `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time` (NTP/local time) |
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
 

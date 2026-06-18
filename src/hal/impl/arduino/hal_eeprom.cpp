@@ -24,6 +24,13 @@ static void eeprom_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_eeprom_mutex);
 }
 
+static hal_eeprom_type_t normalize_type(hal_eeprom_type_t type) {
+  if (type == HAL_EEPROM_DEFAULT || type == HAL_EEPROM_FLASH) {
+    return HAL_EEPROM_RP2040;
+  }
+  return type;
+}
+
 /* ── AT24C256 helpers ───────────────────────────────────────────────────── */
 
 static void at24_write_byte(uint16_t addr, uint8_t val) {
@@ -57,8 +64,8 @@ static uint8_t at24_read_byte(uint16_t addr) {
 
 void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr) {
   eeprom_ensure_mutex();
-  s_type = type;
-  if (type == HAL_EEPROM_RP2040) {
+  s_type = normalize_type(type);
+  if (s_type == HAL_EEPROM_RP2040) {
     s_size = size;
     EEPROM.begin(size);
   } else {

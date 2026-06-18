@@ -139,7 +139,7 @@ Connectivity
 
 Storage
   HAL_ENABLE_EEPROM
-    EEPROM (AT24C256 / RP2040 flash).
+    EEPROM (AT24C256 / target flash).
   HAL_ENABLE_KV
     Key-value store. Propagates: EEPROM.
   HAL_ENABLE_LITTLEFS

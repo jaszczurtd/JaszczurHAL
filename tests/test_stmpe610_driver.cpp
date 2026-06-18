@@ -150,6 +150,28 @@ void test_i2c_register_access_uses_expected_frames(void) {
   TEST_ASSERT_TRUE(find_i2c_frame(0u, HAL_STMPE610_REG_INT_STA, 0xFFu));
 }
 
+void test_i2c_read16_reads_two_adjacent_registers(void) {
+  const uint8_t rx[] = {0x12u, 0x34u};
+  uint8_t frame[2] = {0u, 0u};
+
+  inject_i2c_init_success(0u);
+  TEST_ASSERT_TRUE(hal_stmpe610_init(&dev, NULL));
+
+  hal_mock_i2c_reset_write_log_bus(0u);
+  hal_mock_i2c_inject_rx_bus(0u, rx, sizeof(rx));
+  TEST_ASSERT_EQUAL_UINT16(
+      0x1234u, hal_stmpe610_read_register16(&dev, HAL_STMPE610_REG_TSC_DATA_X));
+
+  TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_write_frame_count_bus(0u));
+  TEST_ASSERT_EQUAL_INT(
+      1, hal_mock_i2c_get_write_frame_bus(0u, 0, frame, (int)sizeof(frame)));
+  TEST_ASSERT_EQUAL_UINT8(HAL_STMPE610_REG_TSC_DATA_X, frame[0]);
+  TEST_ASSERT_EQUAL_INT(
+      1, hal_mock_i2c_get_write_frame_bus(0u, 1, frame, (int)sizeof(frame)));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(HAL_STMPE610_REG_TSC_DATA_X + 1u),
+                          frame[0]);
+}
+
 void test_read_data_decodes_fifo_bytes(void) {
   uint16_t x = 0u;
   uint16_t y = 0u;
@@ -269,6 +291,36 @@ void test_spi_register_access_transfers_reference_sequence(void) {
   TEST_ASSERT_EQUAL_UINT8(0xFFu, tx[1]);
 }
 
+void test_spi_read16_uses_two_independent_read_frames(void) {
+  const hal_stmpe610_config_t cfg = hal_stmpe610_spi_config(0u, 10u);
+  uint8_t rx[6];
+  uint8_t tx[8];
+  size_t len = 0u;
+
+  inject_spi_init_success(0u);
+  TEST_ASSERT_TRUE(hal_stmpe610_init(&dev, &cfg));
+
+  append_spi_read(rx, &len, 0x12u);
+  append_spi_read(rx, &len, 0x34u);
+  hal_mock_spi_reset();
+  hal_mock_spi_push_rx(0u, rx, len);
+
+  TEST_ASSERT_EQUAL_UINT16(
+      0x1234u, hal_stmpe610_read_register16(&dev, HAL_STMPE610_REG_TSC_DATA_X));
+
+  TEST_ASSERT_EQUAL_size_t(6u, hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
+  TEST_ASSERT_EQUAL_UINT8((uint8_t)(0x80u | HAL_STMPE610_REG_TSC_DATA_X),
+                          tx[0]);
+  TEST_ASSERT_EQUAL_UINT8(0u, tx[1]);
+  TEST_ASSERT_EQUAL_UINT8(0u, tx[2]);
+  TEST_ASSERT_EQUAL_UINT8(
+      (uint8_t)(0x80u | (uint8_t)(HAL_STMPE610_REG_TSC_DATA_X + 1u)), tx[3]);
+  TEST_ASSERT_EQUAL_UINT8(0u, tx[4]);
+  TEST_ASSERT_EQUAL_UINT8(0u, tx[5]);
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0u));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_spi_get_lock_depth(0u));
+}
+
 void test_soft_spi_init_uses_gpio_bitbang_path(void) {
   const hal_stmpe610_config_t cfg =
       hal_stmpe610_soft_spi_config(10u, 11u, 12u, 13u);
@@ -291,12 +343,14 @@ int main(void) {
   RUN_TEST(test_i2c_init_runs_reference_setup_sequence);
   RUN_TEST(test_i2c_init_rejects_wrong_chip_id);
   RUN_TEST(test_i2c_register_access_uses_expected_frames);
+  RUN_TEST(test_i2c_read16_reads_two_adjacent_registers);
   RUN_TEST(test_read_data_decodes_fifo_bytes);
   RUN_TEST(test_get_point_drains_fifo_and_clears_interrupts);
   RUN_TEST(test_get_point_locks_driver_once);
   RUN_TEST(test_spi_init_uses_mode0_and_chip_select);
   RUN_TEST(test_spi_init_falls_back_to_mode1_on_version_probe);
   RUN_TEST(test_spi_register_access_transfers_reference_sequence);
+  RUN_TEST(test_spi_read16_uses_two_independent_read_frames);
   RUN_TEST(test_soft_spi_init_uses_gpio_bitbang_path);
   return UNITY_END();
 }

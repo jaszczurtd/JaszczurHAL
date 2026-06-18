@@ -40,7 +40,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
-| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | EEPROM, Wire (AT24C256) |
+| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; EEPROM/Wire when AT24C256 is selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C + SPI) |

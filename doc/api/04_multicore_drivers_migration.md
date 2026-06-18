@@ -225,7 +225,7 @@ ctest --test-dir build --output-on-failure
 | `map(x, ...)` | `hal_map(x, in_min, in_max, out_min, out_max)` (type-independent macro from `hal/hal_system.h` / `hal/hal_math.h`) |
 | `min(a, b)` | `hal_min(a, b)` (macro, in `hal/hal_config.h`) |
 | `max(a, b)` | `hal_max(a, b)` (macro, in `hal/hal_config.h`) |
-| `EEPROM.begin(size)` | `hal_eeprom_init(HAL_EEPROM_RP2040, size)` |
+| `EEPROM.begin(size)` | `hal_eeprom_init(HAL_EEPROM_FLASH, size, 0)` |
 | `EEPROM.read(addr)` | `hal_eeprom_read_byte(addr)` |
 | `EEPROM.write(addr, val)` | `hal_eeprom_write_byte(addr, val)` |
 | `EEPROM.commit()` | `hal_eeprom_commit()` |
