@@ -7,4 +7,6 @@
 /* Entry point is selected by the build system:
  * RP2040 generates setup()/loop(); STM32 defines HAL_PROVIDE_APP_ENTRY. */
 
+#ifndef HAL_ENABLE_LITTLEFS
 #define HAL_ENABLE_LITTLEFS
+#endif

@@ -10,8 +10,11 @@ void app_start(void) {
   debugInit();
 
   if (!hal_littlefs_begin()) {
-    derr("LittleFS mount failed");
-    return;
+    derr("LittleFS mount failed, formatting");
+    if (!hal_littlefs_format() || !hal_littlefs_begin()) {
+      derr("LittleFS unavailable");
+      return;
+    }
   }
 
   deb("LittleFS mounted: total=%lu used=%lu",

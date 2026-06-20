@@ -56,6 +56,10 @@
 #define HAL_STM32_FLASH_EEPROM_SIZE 4096u
 #endif
 
+#ifndef HAL_STM32_FLASH_LITTLEFS_SIZE
+#define HAL_STM32_FLASH_LITTLEFS_SIZE 0u
+#endif
+
 /* Uncomment (or define via -D) to enable optional features:
  *   #define I2C_SCANNER
  *   #define RESET_EEPROM

@@ -29,7 +29,7 @@
 | `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/ads1x15/ads1x15_driver.*`) |
 | `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
-| `hal_littlefs` | Arduino-pico `LittleFS` |
+| `hal_littlefs` | Arduino-pico `LittleFS` on RP2040; upstream littlefs + STM32 internal flash partition on STM32G474 |
 | `hal_udp` | Arduino-pico `WiFiUDP` |
 | `hal_wireguard` | bundled `arduino-wireguard-pico-w` + Arduino-pico WiFi/lwIP stack |
 | `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |

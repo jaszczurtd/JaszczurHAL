@@ -87,6 +87,10 @@ application code by 4 KB. If the reservation size is changed, keep the compile
 definition and linker symbol in sync, and use a multiple of the STM32 flash page
 size.
 
+The STM32 linker also supports a separate LittleFS reservation before EEPROM.
+Keep `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE`
+non-overlapping; EEPROM/KV and LittleFS do not share pages.
+
 **AT24C256 implementation:** `HAL_EEPROM_AT24C256` drives the external chip via
 `hal_i2c_*` primitives with write-cycle polling and watchdog feeding. The
 AT24C256 I2C address is `EEPROM_I2C_ADDRESS` (default `0x50`, defined in
@@ -314,70 +318,47 @@ size_t hal_littlefs_used_bytes(void);
 - `hal_littlefs_format()` formats the LittleFS partition.
 - When `hal_littlefs_format()` fails, mounted/path/stat state is left unchanged.
 - Path helpers require mounted filesystem and validate non-empty paths.
+- The public HAL API currently exposes lifecycle, path removal/existence and
+  size stats only. It does not provide portable file open/read/write wrappers.
 
-**Example: write and read files with LittleFS**
+**RP2040 implementation:** uses Arduino-pico `LittleFS`.
+
+**STM32G474 implementation:** uses the upstream littlefs C core under
+`src/hal/impl/stm32g474/drivers/littlefs/` and the internal STM32 flash
+reservation exposed by the linker script. `HAL_STM32_FLASH_LITTLEFS_SIZE`
+controls the reservation size and must be a multiple of
+`HAL_STM32_FLASH_PAGE_SIZE` (2048 bytes). The size may be zero when the backend
+is compiled but not used; mounting then fails safely. The STM32 CMake helpers
+reserve 64 KB automatically when `HAL_ENABLE_LITTLEFS` is passed through their
+define lists and no explicit size is provided.
+
+LittleFS erase block size is one STM32 flash page; program granularity is one
+STM32 doubleword (8 bytes). `hal_littlefs_total_bytes()` reports the reserved
+partition size after mount. `hal_littlefs_used_bytes()` reports allocated
+littlefs blocks multiplied by the flash page size.
+
+**Example: mount, format-on-first-use, inspect and remove a path**
 ```c
 #include <hal/hal_littlefs.h>
-#include <stdio.h>
+#include <tools_c.h>
 
 void example_littlefs(void) {
-    // Mount the LittleFS filesystem
     if (!hal_littlefs_begin()) {
-        hal_derr("LittleFS mount failed!");
-        return;
-    }
-
-    hal_deb("LittleFS mounted: %zu/%zu bytes used",
-            hal_littlefs_used_bytes(), hal_littlefs_total_bytes());
-
-    // Write file using standard C fopen/fprintf (LittleFS is mounted as root)
-    FILE *f = fopen("/data.txt", "w");
-    if (f) {
-        fprintf(f, "Hello from LittleFS!\n");
-        fprintf(f, "Time: 12345 ms\n");
-        fclose(f);
-        hal_deb("File /data.txt written");
-    }
-
-    // Check if file exists
-    if (hal_littlefs_exists("/data.txt")) {
-        hal_deb("/data.txt exists");
-    }
-
-    // Read file back
-    f = fopen("/data.txt", "r");
-    if (f) {
-        char line[128];
-        while (fgets(line, sizeof(line), f)) {
-            hal_deb("Read: %s", line);
+        derr("LittleFS mount failed; formatting");
+        if (!hal_littlefs_format() || !hal_littlefs_begin()) {
+            derr("LittleFS unavailable");
+            return;
         }
-        fclose(f);
     }
 
-    // Write binary data
-    FILE *fb = fopen("/sensor_log.bin", "wb");
-    if (fb) {
-        uint8_t sensor_data[8] = {
-            0x01, 0x02, 0x03, 0x04,
-            0x05, 0x06, 0x07, 0x08
-        };
-        fwrite(sensor_data, 1, sizeof(sensor_data), fb);
-        fclose(fb);
-        hal_deb("Binary file /sensor_log.bin written");
+    deb("LittleFS mounted: %lu/%lu bytes used",
+        (unsigned long)hal_littlefs_used_bytes(),
+        (unsigned long)hal_littlefs_total_bytes());
+
+    if (hal_littlefs_exists("/data.txt")) {
+        (void)hal_littlefs_remove("/data.txt");
     }
 
-    // Delete a file
-    if (hal_littlefs_remove("/sensor_log.bin")) {
-        hal_deb("/sensor_log.bin deleted");
-    }
-
-    // Get filesystem stats
-    hal_deb("LittleFS: total=%zu, used=%zu, free=%zu bytes",
-            hal_littlefs_total_bytes(),
-            hal_littlefs_used_bytes(),
-            hal_littlefs_total_bytes() - hal_littlefs_used_bytes());
-
-    // Unmount when done
     hal_littlefs_end();
 }
 ```
@@ -385,7 +366,7 @@ void example_littlefs(void) {
 ---
 **impl/.mock:** deterministic test double with injectable mount/format result,
 path presence, and volume size stats.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 and STM32G474 backends are thread-safe for public
 APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
 
 **Mock helpers:**

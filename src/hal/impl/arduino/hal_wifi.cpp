@@ -8,6 +8,7 @@
 #include "../../hal_wifi.h"
 #include "../shared/hal_mutex_once.h"
 #include <WiFi.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -29,6 +30,37 @@ static bool validate_out(char *out, size_t out_size, const char *fn) {
     return false;
   }
   return true;
+}
+
+static bool checked_snprintf(char *out, size_t out_size, const char *fn,
+                             const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  int written = vsnprintf(out, out_size, format, args);
+  va_end(args);
+
+  if (written < 0) {
+    hal_derr("%s: snprintf failed", fn);
+    return false;
+  }
+  if ((size_t)written >= out_size) {
+    hal_derr("%s: output buffer too small", fn);
+    return false;
+  }
+  return true;
+}
+
+static bool format_ipv4(char *out, size_t out_size, const char *fn,
+                        const IPAddress &ip) {
+  return checked_snprintf(out, out_size, fn, "%u.%u.%u.%u", (unsigned)ip[0],
+                          (unsigned)ip[1], (unsigned)ip[2], (unsigned)ip[3]);
+}
+
+static bool format_mac(char *out, size_t out_size, const char *fn,
+                       const uint8_t mac[6]) {
+  return checked_snprintf(out, out_size, fn, "%02X:%02X:%02X:%02X:%02X:%02X",
+                          (unsigned)mac[0], (unsigned)mac[1], (unsigned)mac[2],
+                          (unsigned)mac[3], (unsigned)mac[4], (unsigned)mac[5]);
 }
 
 static hal_wifi_encryption_t map_encryption(uint8_t enc) {
@@ -181,14 +213,10 @@ bool hal_wifi_get_local_ip(char *out, size_t out_size) {
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
-  String ip = WiFi.localIP().toString();
+  IPAddress ip = WiFi.localIP();
   hal_mutex_unlock(s_wifi_mutex);
 
-  if (snprintf(out, out_size, "%s", ip.c_str()) < 0) {
-    hal_derr("hal_wifi_get_local_ip: snprintf failed");
-    return false;
-  }
-  return true;
+  return format_ipv4(out, out_size, "hal_wifi_get_local_ip", ip);
 }
 
 bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
@@ -197,30 +225,23 @@ bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
-  String ip = WiFi.dnsIP().toString();
+  IPAddress ip = WiFi.dnsIP();
   hal_mutex_unlock(s_wifi_mutex);
 
-  if (snprintf(out, out_size, "%s", ip.c_str()) < 0) {
-    hal_derr("hal_wifi_get_dns_ip: snprintf failed");
-    return false;
-  }
-  return true;
+  return format_ipv4(out, out_size, "hal_wifi_get_dns_ip", ip);
 }
 
 bool hal_wifi_get_mac(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_mac"))
     return false;
 
+  uint8_t mac[6] = {0};
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
-  String mac = WiFi.macAddress();
+  WiFi.macAddress(mac);
   hal_mutex_unlock(s_wifi_mutex);
 
-  if (snprintf(out, out_size, "%s", mac.c_str()) < 0) {
-    hal_derr("hal_wifi_get_mac: snprintf failed");
-    return false;
-  }
-  return true;
+  return format_mac(out, out_size, "hal_wifi_get_mac", mac);
 }
 
 int hal_wifi_ping(const char *host_or_ip) {
@@ -270,14 +291,15 @@ bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
     return false;
   }
 
-  String ssid = WiFi.SSID((int)index);
-  snprintf(out->ssid, sizeof(out->ssid), "%s", ssid.c_str());
+  bool ssid_ok =
+      checked_snprintf(out->ssid, sizeof(out->ssid), "hal_wifi_get_scan_result",
+                       "%s", WiFi.SSID((int)index).c_str());
   WiFi.BSSID((int)index, out->bssid);
   out->encryption = map_encryption((uint8_t)WiFi.encryptionType((int)index));
   out->channel = (int32_t)WiFi.channel((int)index);
   out->rssi = (int32_t)WiFi.RSSI((int)index);
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return ssid_ok;
 }
 
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {

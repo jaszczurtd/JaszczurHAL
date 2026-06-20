@@ -332,6 +332,21 @@ arm-none-eabi-g++ \
   -o firmware.elf
 ```
 
+When enabling `HAL_ENABLE_LITTLEFS` on STM32G474, reserve a LittleFS flash
+partition in both the C/C++ compile definitions and linker symbols. The
+checked-in STM32 CMake helpers do this automatically with a 64 KB default when
+`HAL_ENABLE_LITTLEFS` is present in their define list. Manual builds should add
+matching options, for example:
+
+```bash
+-DHAL_ENABLE_LITTLEFS \
+-DHAL_STM32_FLASH_LITTLEFS_SIZE=65536u \
+-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=65536
+```
+
+The reservation sits before the EEPROM/KV flash pages and reduces the space
+available for application code.
+
 For complete firmware examples, prefer the checked-in STM32 build scripts:
 
 ```text

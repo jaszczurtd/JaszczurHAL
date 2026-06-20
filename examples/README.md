@@ -228,11 +228,11 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 09 | display_tft | rp2040, stm32g474 | ILI9341/ST7789, draw7Segment |
 | 10 | mqtt | rp2040 (WiFi) | WiFi, MQTT |
 | 11 | wireguard | rp2040 (WiFi) | WiFi, WireGuard |
-| 12 | kv_store | rp2040 | Key-value storage |
+| 12 | kv_store | rp2040, stm32g474 | Key-value storage |
 | 13 | i2c_slave | rp2040 | I2C slave |
 | 14 | uart | rp2040, stm32g474 | UART |
 | 15 | wifi | rp2040 (WiFi) | WiFi scan/connect |
-| 16 | littlefs | rp2040 | LittleFS |
+| 16 | littlefs | rp2040, stm32g474 | LittleFS |
 | 17 | pid_controller | rp2040, stm32g474 | PID controller |
 | 18 | rgb_led | rp2040, stm32g474 | NeoPixel/WS2812 |
 | 19 | timer_ext | rp2040, stm32g474 | Extended timers |
