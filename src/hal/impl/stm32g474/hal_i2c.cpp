@@ -10,6 +10,11 @@
 
 #include <string.h>
 
+#if defined(HAL_ENABLE_FREERTOS)
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
+
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_regs.h"
 #endif
@@ -31,6 +36,8 @@ typedef struct {
   uint8_t sda_pin;
   uint8_t scl_pin;
   hal_mutex_t mutex;
+  uintptr_t lock_owner;
+  uint32_t lock_depth;
 #ifdef JH_STM32G474_HW
   uint32_t hw_base;
   uint32_t hw_rcc_mask;
@@ -48,6 +55,52 @@ static inline i2c_bus_state_t *i2c_state(uint8_t bus) {
 static void i2c_ensure_mutex(uint8_t bus) {
   i2c_bus_state_t *st = i2c_state(bus);
   (void)jh_hal_mutex_create_once(&st->mutex);
+}
+
+static uintptr_t i2c_current_owner_token(void) {
+#if defined(HAL_ENABLE_FREERTOS)
+  TaskHandle_t task = xTaskGetCurrentTaskHandle();
+  return (task != NULL) ? (uintptr_t)task : 1u;
+#else
+  return 1u;
+#endif
+}
+
+static void i2c_lock_state(i2c_bus_state_t *st) {
+  const uintptr_t owner = i2c_current_owner_token();
+  if ((st->lock_depth > 0u) && (st->lock_owner == owner)) {
+    st->lock_depth++;
+    return;
+  }
+
+  hal_mutex_lock(st->mutex);
+  st->lock_owner = owner;
+  st->lock_depth = 1u;
+}
+
+static void i2c_unlock_state(i2c_bus_state_t *st) {
+  const uintptr_t owner = i2c_current_owner_token();
+  HAL_ASSERT((st->lock_depth > 0u) && (st->lock_owner == owner),
+             "hal_i2c_unlock: bus is not locked by this context");
+  if ((st->lock_depth == 0u) || (st->lock_owner != owner)) {
+    return;
+  }
+
+  st->lock_depth--;
+  if (st->lock_depth == 0u) {
+    st->lock_owner = 0u;
+    hal_mutex_unlock(st->mutex);
+  }
+}
+
+static void i2c_lock_bus(uint8_t bus) {
+  i2c_ensure_mutex(bus);
+  i2c_lock_state(i2c_state(bus));
+}
+
+static void i2c_unlock_bus(uint8_t bus) {
+  i2c_ensure_mutex(bus);
+  i2c_unlock_state(i2c_state(bus));
 }
 
 #ifdef JH_STM32G474_HW
@@ -435,6 +488,9 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->bus_clear_count = 0u;
   st->sda_pin = sda_pin;
   st->scl_pin = scl_pin;
+  if (st->lock_depth == 0u) {
+    st->lock_owner = 0u;
+  }
 #ifdef JH_STM32G474_HW
   st->hw_base = 0u;
   st->hw_rcc_mask = 0u;
@@ -458,14 +514,14 @@ void hal_i2c_set_clock(uint32_t clock_hz) {
 void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
   i2c_ensure_mutex(bus);
   i2c_bus_state_t *st = i2c_state(bus);
-  hal_mutex_lock(st->mutex);
+  i2c_lock_state(st);
   st->clock_hz = (clock_hz == 0u) ? HAL_I2C_CLOCK_STANDARD_HZ : clock_hz;
 #ifdef JH_STM32G474_HW
   if (i2c_hw_ready(st)) {
     i2c_hw_apply_clock(st->hw_base, st->clock_hz);
   }
 #endif
-  hal_mutex_unlock(st->mutex);
+  i2c_unlock_state(st);
 }
 
 void hal_i2c_deinit(void) { hal_i2c_deinit_bus(0); }
@@ -488,24 +544,18 @@ void hal_i2c_deinit_bus(uint8_t bus) {
 
 void hal_i2c_lock(void) { hal_i2c_lock_bus(0); }
 
-void hal_i2c_lock_bus(uint8_t bus) {
-  i2c_ensure_mutex(bus);
-  hal_mutex_lock(i2c_state(bus)->mutex);
-}
+void hal_i2c_lock_bus(uint8_t bus) { i2c_lock_bus(bus); }
 
 void hal_i2c_unlock(void) { hal_i2c_unlock_bus(0); }
 
-void hal_i2c_unlock_bus(uint8_t bus) {
-  i2c_ensure_mutex(bus);
-  hal_mutex_unlock(i2c_state(bus)->mutex);
-}
+void hal_i2c_unlock_bus(uint8_t bus) { i2c_unlock_bus(bus); }
 
 void hal_i2c_begin_transmission(uint8_t address) {
   hal_i2c_begin_transmission_bus(0, address);
 }
 
 void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
-  hal_i2c_lock_bus(bus);
+  i2c_lock_bus(bus);
   i2c_state(bus)->cur_addr = address;
   i2c_state(bus)->tx_len = 0;
 }
@@ -538,7 +588,7 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   st->last_error = err;
   st->tx_len = 0;
   st->transaction_count++;
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return err;
 }
 
@@ -582,18 +632,18 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   }
 
   i2c_bus_state_t *st = i2c_state(bus);
-  hal_i2c_lock_bus(bus);
+  i2c_lock_bus(bus);
   bool ok = true;
 #ifdef JH_STM32G474_HW
   if (!i2c_hw_ready(st)) {
-    hal_i2c_unlock_bus(bus);
+    i2c_unlock_bus(bus);
     return false;
   }
 
   ok =
       i2c_hw_write_read(st->hw_base, address, tx, (int)tx_len, rx, (int)rx_len);
   st->transaction_count += (rx_len > 0u) ? 2u : 1u;
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return ok;
 #endif
 
@@ -623,7 +673,7 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
     st->transaction_count++;
   }
 
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return ok;
 }
 
@@ -641,11 +691,11 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
   }
 
   i2c_bus_state_t *st = i2c_state(bus);
-  hal_i2c_lock_bus(bus);
+  i2c_lock_bus(bus);
   bool ok = true;
 #ifdef JH_STM32G474_HW
   if (!i2c_hw_ready(st)) {
-    hal_i2c_unlock_bus(bus);
+    i2c_unlock_bus(bus);
     return false;
   }
 
@@ -653,7 +703,7 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
   st->rx_len = 0;
   st->rx_pos = 0;
   st->transaction_count++;
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return got == (int)rx_len;
 #else
   (void)address;
@@ -662,7 +712,7 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
   st->rx_pos = 0;
   st->transaction_count++;
 #endif
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return ok;
 }
 
@@ -673,7 +723,7 @@ uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   i2c_bus_state_t *st = i2c_state(bus);
 
-  hal_i2c_lock_bus(bus);
+  i2c_lock_bus(bus);
   /* count is uint8_t (<=255) and the rx buffer holds 255 bytes, so it always
    * fits. */
   int got = 0;
@@ -690,7 +740,7 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   st->rx_len = got;
   st->rx_pos = 0;
   st->transaction_count++;
-  hal_i2c_unlock_bus(bus);
+  i2c_unlock_bus(bus);
   return (uint8_t)got;
 }
 
@@ -719,9 +769,9 @@ bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
 #ifdef JH_STM32G474_HW
   i2c_bus_state_t *st = i2c_state(bus);
   if (i2c_hw_ready(st)) {
-    hal_i2c_lock_bus(bus);
+    i2c_lock_bus(bus);
     bool ack = i2c_hw_ack(st->hw_base, address);
-    hal_i2c_unlock_bus(bus);
+    i2c_unlock_bus(bus);
     return !ack; /* busy/absent == did NOT ACK */
   }
   return true;

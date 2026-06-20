@@ -639,10 +639,27 @@ void hal_mock_i2c_inject_rx_bus(uint8_t bus, const uint8_t *data, int len);
 uint8_t hal_mock_i2c_get_last_addr(void);
 /** @brief Return the last transmission address for selected I2C mock bus. */
 uint8_t hal_mock_i2c_get_last_addr_bus(uint8_t bus);
-/** @brief Return the current lock depth for selected I2C mock bus. */
+/** @brief Return the current logical/reentrant lock depth for selected I2C mock
+ * bus. */
 int hal_mock_i2c_get_lock_depth_bus(uint8_t bus);
-/** @brief Return lock depth for default I2C bus (0 = Wire). */
+/** @brief Return logical/reentrant lock depth for default I2C bus (0 = Wire).
+ */
 int hal_mock_i2c_get_lock_depth(void);
+/** @brief Return the modeled physical mutex depth for selected I2C mock bus
+ * (0 or 1). */
+int hal_mock_i2c_get_mutex_depth_bus(uint8_t bus);
+/** @brief Return the modeled physical mutex depth for default I2C bus. */
+int hal_mock_i2c_get_mutex_depth(void);
+/** @brief Return modeled physical mutex take count for selected I2C mock bus.
+ */
+uint32_t hal_mock_i2c_get_mutex_take_count_bus(uint8_t bus);
+/** @brief Return modeled physical mutex take count for default I2C bus. */
+uint32_t hal_mock_i2c_get_mutex_take_count(void);
+/** @brief Return modeled physical mutex give count for selected I2C mock bus.
+ */
+uint32_t hal_mock_i2c_get_mutex_give_count_bus(uint8_t bus);
+/** @brief Return modeled physical mutex give count for default I2C bus. */
+uint32_t hal_mock_i2c_get_mutex_give_count(void);
 /** @brief Return lock depth observed at the byte-read point inside
  * hal_i2c_read_byte_bus(). */
 int hal_mock_i2c_get_read_byte_lock_depth_bus(uint8_t bus);

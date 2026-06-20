@@ -100,7 +100,9 @@ void test_manual_lock_unlock_tracks_depth_per_bus(void) {
   hal_i2c_lock_bus(1);
 
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth_bus(0));
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth_bus(0));
   TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_lock_depth_bus(1));
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth_bus(1));
 
   hal_i2c_unlock_bus(1);
   hal_i2c_unlock();
@@ -108,19 +110,72 @@ void test_manual_lock_unlock_tracks_depth_per_bus(void) {
   hal_i2c_unlock_bus(1); // underflow-safe no-op
 
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(0));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth_bus(0));
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(1));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth_bus(1));
 }
 
 void test_transmission_calls_balance_lock_depth(void) {
   hal_i2c_begin_transmission(0x3C);
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth_bus(0));
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth_bus(0));
   TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_end_transmission());
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(0));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth_bus(0));
 
   hal_i2c_begin_transmission_bus(1, 0x52);
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth_bus(1));
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth_bus(1));
   TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_end_transmission_bus(1));
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(1));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth_bus(1));
+}
+
+void test_manual_lock_can_wrap_transmission_without_recursive_mutex_take(void) {
+  hal_i2c_lock();
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  hal_i2c_begin_transmission(0x50);
+  TEST_ASSERT_EQUAL_UINT8(0x50, hal_mock_i2c_get_last_addr());
+  TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  TEST_ASSERT_EQUAL_UINT(1, hal_i2c_write(0xAB));
+  TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_end_transmission());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  hal_i2c_unlock();
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth());
+}
+
+void test_manual_lock_wrapped_transmission_takes_physical_mutex_only_once(
+    void) {
+  TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_mutex_give_count());
+
+  hal_i2c_lock();
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_mutex_give_count());
+
+  hal_i2c_begin_transmission(0x50);
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  TEST_ASSERT_EQUAL_UINT(1, hal_i2c_write(0xAB));
+  TEST_ASSERT_EQUAL_UINT8(0, hal_i2c_end_transmission());
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_UINT32(0, hal_mock_i2c_get_mutex_give_count());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  hal_i2c_unlock();
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_mutex_give_count());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth());
 }
 
 void test_request_from_balances_lock_depth(void) {
@@ -134,6 +189,48 @@ void test_request_from_balances_lock_depth(void) {
 
   TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_request_from_bus(1, 0x49, 1));
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth_bus(1));
+}
+
+void test_manual_lock_can_wrap_request_from_without_releasing_outer_lock(void) {
+  const uint8_t rx[] = {0x10, 0x20};
+  hal_mock_i2c_inject_rx(rx, 2);
+
+  hal_i2c_lock();
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  TEST_ASSERT_EQUAL_UINT8(2, hal_i2c_request_from(0x48, 2));
+  TEST_ASSERT_EQUAL_INT(2, hal_i2c_available());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  hal_i2c_unlock();
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth());
+}
+
+void test_manual_lock_wrapped_request_from_does_not_unlock_outer_mutex(void) {
+  const uint8_t rx[] = {0x5A};
+  hal_mock_i2c_inject_rx(rx, 1);
+
+  hal_i2c_lock();
+  const uint32_t takes_after_outer_lock = hal_mock_i2c_get_mutex_take_count();
+  const uint32_t gives_after_outer_lock = hal_mock_i2c_get_mutex_give_count();
+
+  TEST_ASSERT_EQUAL_UINT8(1, hal_i2c_request_from(0x48, 1));
+  TEST_ASSERT_EQUAL_UINT32(takes_after_outer_lock,
+                           hal_mock_i2c_get_mutex_take_count());
+  TEST_ASSERT_EQUAL_UINT32(gives_after_outer_lock,
+                           hal_mock_i2c_get_mutex_give_count());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_mutex_depth());
+
+  TEST_ASSERT_EQUAL_INT(0x5A, hal_i2c_read());
+  hal_i2c_unlock();
+  TEST_ASSERT_EQUAL_UINT32(gives_after_outer_lock + 1u,
+                           hal_mock_i2c_get_mutex_give_count());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_mutex_depth());
 }
 
 void test_deinit_marks_bus_uninitialized(void) {
@@ -417,7 +514,12 @@ int main(void) {
   RUN_TEST(test_set_clock_bus_keeps_buses_independent);
   RUN_TEST(test_manual_lock_unlock_tracks_depth_per_bus);
   RUN_TEST(test_transmission_calls_balance_lock_depth);
+  RUN_TEST(test_manual_lock_can_wrap_transmission_without_recursive_mutex_take);
+  RUN_TEST(
+      test_manual_lock_wrapped_transmission_takes_physical_mutex_only_once);
   RUN_TEST(test_request_from_balances_lock_depth);
+  RUN_TEST(test_manual_lock_can_wrap_request_from_without_releasing_outer_lock);
+  RUN_TEST(test_manual_lock_wrapped_request_from_does_not_unlock_outer_mutex);
   RUN_TEST(test_deinit_marks_bus_uninitialized);
   RUN_TEST(test_transaction_count_starts_at_zero);
   RUN_TEST(test_transaction_count_increments_on_write);
