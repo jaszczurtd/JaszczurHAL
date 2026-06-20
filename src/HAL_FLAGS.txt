@@ -143,7 +143,8 @@ Storage
   HAL_ENABLE_KV
     Key-value store. Propagates: EEPROM.
   HAL_ENABLE_LITTLEFS
-    LittleFS lifecycle and basic filesystem helpers.
+    LittleFS lifecycle and basic filesystem helpers. On STM32G474 this uses
+    an internal flash partition controlled by HAL_STM32_FLASH_LITTLEFS_SIZE.
   HAL_ENABLE_SDLOGGER
     SD-card logger and crash-report logger. Propagates: EEPROM, I2C, SPI.
 

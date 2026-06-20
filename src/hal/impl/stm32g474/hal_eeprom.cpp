@@ -10,7 +10,7 @@
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
 #include "../shared/hal_mutex_once.h"
-#include "port/stm32g474_regs.h"
+#include "drivers/stm32g474/stm32g474_flash.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -20,9 +20,6 @@ extern const uint8_t __hal_stm32_eeprom_flash_start[];
 extern const uint8_t __hal_stm32_eeprom_flash_end[];
 }
 
-static constexpr uintptr_t STM32_FLASH_BASE_ADDR = 0x08000000u;
-static constexpr uint32_t STM32_FLASH_BANK_SIZE = 256u * 1024u;
-static constexpr uint32_t STM32_FLASH_TIMEOUT = 2000000u;
 static constexpr uint16_t AT24C256_SIZE = 32768u;
 
 static uint8_t s_flash_mirror[HAL_STM32_FLASH_EEPROM_SIZE];
@@ -99,105 +96,19 @@ static uint8_t at24_read_byte(uint16_t addr) {
   return 0u;
 }
 
-/* ── STM32 flash helpers ────────────────────────────────────────────────── */
-
-static bool flash_wait_ready(void) {
-  uint32_t timeout = STM32_FLASH_TIMEOUT;
-  while ((FLASH_SR & FLASH_SR_BSY) != 0u) {
-    if (timeout-- == 0u) {
-      return false;
-    }
-  }
-
-  const uint32_t sr = FLASH_SR;
-  if ((sr & FLASH_SR_ERRORS) != 0u) {
-    FLASH_SR = FLASH_SR_ERRORS;
-    return false;
-  }
-  if ((sr & FLASH_SR_EOP) != 0u) {
-    FLASH_SR = FLASH_SR_EOP;
-  }
-  return true;
-}
-
-static bool flash_unlock(void) {
-  if ((FLASH_CR & FLASH_CR_LOCK) == 0u) {
-    return true;
-  }
-
-  FLASH_KEYR = FLASH_KEY1;
-  FLASH_KEYR = FLASH_KEY2;
-  return (FLASH_CR & FLASH_CR_LOCK) == 0u;
-}
-
-static void flash_lock(void) { FLASH_CR |= FLASH_CR_LOCK; }
-
-static uint32_t flash_page_number(uintptr_t address, bool *bank2) {
-  uint32_t offset = (uint32_t)(address - STM32_FLASH_BASE_ADDR);
-  *bank2 = offset >= STM32_FLASH_BANK_SIZE;
-  if (*bank2) {
-    offset -= STM32_FLASH_BANK_SIZE;
-  }
-  return offset / HAL_STM32_FLASH_PAGE_SIZE;
-}
-
-static bool flash_erase_page(uintptr_t address) {
-  if (!flash_wait_ready()) {
-    return false;
-  }
-
-  FLASH_SR = FLASH_SR_ERRORS | FLASH_SR_EOP;
-
-  bool bank2 = false;
-  const uint32_t page = flash_page_number(address, &bank2);
-  uint32_t cr = FLASH_CR;
-  cr &= ~(FLASH_CR_PNB_MASK | FLASH_CR_BKER | FLASH_CR_PG);
-  cr |= FLASH_CR_PER | ((page << FLASH_CR_PNB_POS) & FLASH_CR_PNB_MASK);
-  if (bank2) {
-    cr |= FLASH_CR_BKER;
-  }
-
-  FLASH_CR = cr;
-  FLASH_CR |= FLASH_CR_STRT;
-  const bool ok = flash_wait_ready();
-  FLASH_CR &= ~(FLASH_CR_PER | FLASH_CR_PNB_MASK | FLASH_CR_BKER);
-  return ok;
-}
-
-static bool flash_program_doubleword(uintptr_t address, const uint8_t *data) {
-  if (!flash_wait_ready()) {
-    return false;
-  }
-
-  FLASH_SR = FLASH_SR_ERRORS | FLASH_SR_EOP;
-  FLASH_CR |= FLASH_CR_PG;
-
-  volatile uint32_t *dst = (volatile uint32_t *)address;
-  uint32_t low = 0u;
-  uint32_t high = 0u;
-  memcpy(&low, data, sizeof(low));
-  memcpy(&high, data + sizeof(low), sizeof(high));
-  dst[0] = low;
-  dst[1] = high;
-
-  const bool ok = flash_wait_ready();
-  FLASH_CR &= ~FLASH_CR_PG;
-  return ok;
-}
-
 static bool flash_commit_mirror(void) {
   if (s_flash_reserved_size == 0u ||
       s_flash_reserved_size > sizeof(s_flash_mirror)) {
     return false;
   }
-  if (!flash_unlock()) {
+  if (!jh_stm32g474_flash_unlock()) {
     return false;
   }
 
   bool ok = true;
   for (uint32_t off = 0u; off < s_flash_reserved_size;
        off += HAL_STM32_FLASH_PAGE_SIZE) {
-    if (!flash_erase_page(s_flash_start + off)) {
+    if (!jh_stm32g474_flash_erase_page(s_flash_start + off)) {
       ok = false;
       break;
     }
@@ -215,14 +126,15 @@ static bool flash_commit_mirror(void) {
     if (all_erased) {
       continue;
     }
-    if (!flash_program_doubleword(s_flash_start + off, &s_flash_mirror[off])) {
+    if (!jh_stm32g474_flash_program_doubleword(s_flash_start + off,
+                                               &s_flash_mirror[off])) {
       ok = false;
       break;
     }
     hal_watchdog_feed();
   }
 
-  flash_lock();
+  jh_stm32g474_flash_lock();
   return ok;
 }
 

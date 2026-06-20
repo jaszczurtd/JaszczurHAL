@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### hal_littlefs - STM32G474 internal-flash backend
+
+- Added a real STM32G474 `hal_littlefs` backend using upstream littlefs v2 and
+  a dedicated internal-flash partition before the existing EEPROM/KV pages.
+- Added linker symbols and validation for `HAL_STM32_FLASH_LITTLEFS_SIZE`.
+  STM32 CMake builds reserve 64 KB automatically when `HAL_ENABLE_LITTLEFS` is
+  enabled through their define lists and no explicit size is provided.
+- Extracted common STM32G474 flash erase/program helpers so EEPROM/KV and
+  LittleFS use the same register-level flash primitive layer.
+- Enabled `examples/16_littlefs` for both RP2040 and STM32G474 and documented
+  the STM32 partitioning requirements.
+
 ### build - RP2040 static-library paths
 
 - Renamed the default RP2040 static-library build directory from

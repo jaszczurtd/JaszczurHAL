@@ -235,8 +235,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules still missing a real STM32G474 backend, or still blocked by a missing
 STM32 storage/transport layer:
-`eeprom, i2c_slave, kv, littlefs, mqtt,
-ota, swserial, udp, wifi, wireguard`.
+`i2c_slave, mqtt, ota, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -269,10 +268,7 @@ logic.
   PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio -> not a port
   but a different transport (e.g. via the already-portable SIMCom modem).
   Effectively N/A for a bare G474.
-- `hal_littlefs / hal_eeprom / hal_ota` - STM32 flash/storage specific, not
-  vendor-driver ports.
-- `hal_kv` depends on `hal_eeprom`, so it is blocked until a real STM32 storage
-  backend exists.
+- `hal_ota` - STM32 flash/update specific, not a vendor-driver port.
 - `hal_swserial / hal_i2c_slave` - STM32 peripheral work.
 
 ### Recommended order
@@ -283,9 +279,9 @@ logic.
 2. **Widen STM32-targeted regression coverage** - add focused tests for the
   STM32-specific backends beyond `hal_system` and `hal_timer`, especially
   GPIO IRQ, PWM, I2C, SPI, CAN, and RTC integration seams.
-3. **Storage and peripheral gaps** - decide and implement the missing
-  STM32-native layers for `hal_eeprom`/`hal_kv`/`hal_littlefs`, plus any real
-  need for `hal_i2c_slave` or `hal_swserial`.
+3. **Remaining peripheral gaps** - decide whether STM32G474 needs
+  `hal_i2c_slave` or `hal_swserial`, and define a separate OTA/update strategy
+  if firmware updates become part of the target requirements.
 4. **Optional performance follow-up** - evaluate display bulk-write and DMA
   paths only if measured TFT throughput or CPU cost justifies the added
   backend complexity.

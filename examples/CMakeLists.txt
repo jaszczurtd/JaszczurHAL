@@ -212,6 +212,10 @@ function(_jh_add_stm32g474_example NAME)
         "${SRC}/hal/impl/shared/*.cpp"
         "${SRC}/hal/impl/shared/*.c"
     )
+    set(_stm32_littlefs_sources
+        "${G474}/drivers/littlefs/lfs.c"
+        "${G474}/drivers/littlefs/lfs_util.c"
+    )
 
     set(_hal_common
         "${SRC}/hal/hal_config.cpp"
@@ -248,6 +252,7 @@ function(_jh_add_stm32g474_example NAME)
         "${G474}/port/runtime/stm32g474_syscalls.c"
         ${_stm32_impl}
         ${_stm32_drivers}
+        ${_stm32_littlefs_sources}
         ${_stm32_shared}
         ${_hal_common}
         ${_utils}
@@ -264,10 +269,20 @@ function(_jh_add_stm32g474_example NAME)
         "${SRC}/hal"
         "${SRC}/arduino_host_stubs"
         "${G474}"
+        "${G474}/drivers/littlefs"
     )
     set(_stm32_defines ${ARG_DEFINES})
     list(APPEND _stm32_defines ${EXTRA_HAL_DEFINES})
     _jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_stm32_defines})
+    jh_cmake_defines_contain(_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_stm32_defines})
+    _jh_extract_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_stm32_defines})
+    if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
+        list(APPEND _stm32_defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
+        set(_stm32_littlefs_size "65536")
+    endif()
+    if(NOT "${_stm32_littlefs_size}" STREQUAL "")
+        string(REGEX REPLACE "[uUlL]+$" "" _stm32_littlefs_size "${_stm32_littlefs_size}")
+    endif()
 
     target_compile_definitions("${_target}" PRIVATE
         HAL_TARGET_STM32G474=1
@@ -291,6 +306,9 @@ function(_jh_add_stm32g474_example NAME)
         $<$<COMPILE_LANGUAGE:C>:-ffreestanding>
         $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>
     )
+    set_source_files_properties(${_stm32_littlefs_sources} PROPERTIES
+        COMPILE_OPTIONS "-w"
+    )
     target_link_options("${_target}" PRIVATE
         ${_arch_flags}
         "-T${LDSCRIPT}"
@@ -302,6 +320,11 @@ function(_jh_add_stm32g474_example NAME)
     if(NOT "${_stm32_main_stack_size}" STREQUAL "")
         target_link_options("${_target}" PRIVATE
             "-Wl,--defsym=HAL_STM32_MIN_STACK_SIZE=${_stm32_main_stack_size}"
+        )
+    endif()
+    if(NOT "${_stm32_littlefs_size}" STREQUAL "")
+        target_link_options("${_target}" PRIVATE
+            "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_stm32_littlefs_size}"
         )
     endif()
 
@@ -359,7 +382,7 @@ jh_example(12_kv_store TARGETS rp2040 stm32g474)
 jh_example(13_i2c_slave TARGETS rp2040)
 jh_example(14_uart TARGETS rp2040 stm32g474)
 jh_example(15_wifi TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(16_littlefs TARGETS rp2040)
+jh_example(16_littlefs TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_LITTLEFS)
 jh_example(17_pid_controller TARGETS rp2040 stm32g474)
 jh_example(18_rgb_led TARGETS rp2040 stm32g474)
 jh_example(19_timer_ext TARGETS rp2040 stm32g474)

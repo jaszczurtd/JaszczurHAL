@@ -21,6 +21,11 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.c
 )
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
+set(STM32_LITTLEFS_SOURCES
+    ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs.c
+    ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs_util.c
+)
+list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES
@@ -57,10 +62,37 @@ add_library(JaszczurHAL STATIC
     ${UTIL_SOURCES}
 )
 
+set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-w"
+)
+
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
     ${SRC}/arduino_host_stubs
+    ${SRC}/hal/impl/stm32g474/drivers/littlefs
 )
+
+set(_jh_extra_hal_defines)
+if(DEFINED EXTRA_HAL_DEFINES)
+    set(_jh_extra_hal_defines ${EXTRA_HAL_DEFINES})
+endif()
+
+jh_cmake_defines_contain(_jh_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_jh_extra_hal_defines})
+jh_cmake_defines_contain(_jh_stm32_has_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_jh_extra_hal_defines})
+set(_jh_stm32_littlefs_link_size "")
+if(_jh_stm32_has_littlefs)
+    if(NOT _jh_stm32_has_littlefs_size)
+        list(APPEND _jh_extra_hal_defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
+        set(_jh_stm32_littlefs_link_size "65536")
+    else()
+        foreach(_def IN LISTS _jh_extra_hal_defines)
+            if("${_def}" MATCHES "^HAL_STM32_FLASH_LITTLEFS_SIZE=(.+)$")
+                set(_jh_stm32_littlefs_link_size "${CMAKE_MATCH_1}")
+                string(REGEX REPLACE "[uUlL]+$" "" _jh_stm32_littlefs_link_size "${_jh_stm32_littlefs_link_size}")
+            endif()
+        endforeach()
+    endif()
+endif()
 
 # Default STM32G474 profile for the initial skeleton backend.
 #
@@ -93,8 +125,8 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_HD44780  # shared HD44780 character LCD over HAL GPIO
 )
 
-if(DEFINED EXTRA_HAL_DEFINES)
-    target_compile_definitions(JaszczurHAL PUBLIC ${EXTRA_HAL_DEFINES})
+if(_jh_extra_hal_defines)
+    target_compile_definitions(JaszczurHAL PUBLIC ${_jh_extra_hal_defines})
 endif()
 
 if(DEFINED HAL_PROJECT_CONFIG_DIR)
@@ -117,6 +149,12 @@ endif()
 
 if(_jh_stm32_freertos_enabled)
     jh_stm32g474_enable_freertos(JaszczurHAL)
+endif()
+
+if(NOT "${_jh_stm32_littlefs_link_size}" STREQUAL "")
+    target_link_options(JaszczurHAL PUBLIC
+        "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_jh_stm32_littlefs_link_size}"
+    )
 endif()
 
 set(_common_flags

@@ -2,9 +2,10 @@
  * Linker script for STM32G474RE (Nucleo-G474RE) bare-metal bring-up.
  *
  *   Flash : 512 KB @ 0x08000000
- *           The last HAL_STM32_FLASH_EEPROM_SIZE bytes are reserved for the
- *           STM32 flash-backed hal_eeprom/hal_kv store and are not available
- *           to application code.
+ *           The last flash bytes can be reserved for STM32 flash-backed
+ *           storage and are not available to application code:
+ *             - HAL_STM32_FLASH_LITTLEFS_SIZE for hal_littlefs
+ *             - HAL_STM32_FLASH_EEPROM_SIZE for hal_eeprom/hal_kv
  *   RAM   : 96  KB @ 0x20000000 (SRAM1+SRAM2; CCM at 0x10000000 not used here
  *           to keep the first step conservative and universally correct)
  *
@@ -15,22 +16,32 @@
 ENTRY(Reset_Handler)
 
 HAL_STM32_FLASH_SIZE = DEFINED(HAL_STM32_FLASH_SIZE) ? HAL_STM32_FLASH_SIZE : 512K;
+HAL_STM32_FLASH_LITTLEFS_SIZE = DEFINED(HAL_STM32_FLASH_LITTLEFS_SIZE) ? HAL_STM32_FLASH_LITTLEFS_SIZE : 0K;
 HAL_STM32_FLASH_EEPROM_SIZE = DEFINED(HAL_STM32_FLASH_EEPROM_SIZE) ? HAL_STM32_FLASH_EEPROM_SIZE : 4K;
 HAL_STM32_FLASH_PAGE_SIZE = DEFINED(HAL_STM32_FLASH_PAGE_SIZE) ? HAL_STM32_FLASH_PAGE_SIZE : 2K;
 
 MEMORY
 {
-    FLASH (rx)          : ORIGIN = 0x08000000, LENGTH = HAL_STM32_FLASH_SIZE - HAL_STM32_FLASH_EEPROM_SIZE
+    FLASH (rx)          : ORIGIN = 0x08000000, LENGTH = HAL_STM32_FLASH_SIZE - HAL_STM32_FLASH_LITTLEFS_SIZE - HAL_STM32_FLASH_EEPROM_SIZE
+    HAL_LITTLEFS_FLASH (r): ORIGIN = 0x08000000 + HAL_STM32_FLASH_SIZE - HAL_STM32_FLASH_EEPROM_SIZE - HAL_STM32_FLASH_LITTLEFS_SIZE,
+                          LENGTH = HAL_STM32_FLASH_LITTLEFS_SIZE
     HAL_EEPROM_FLASH (r): ORIGIN = 0x08000000 + HAL_STM32_FLASH_SIZE - HAL_STM32_FLASH_EEPROM_SIZE,
                           LENGTH = HAL_STM32_FLASH_EEPROM_SIZE
     RAM   (xrw)         : ORIGIN = 0x20000000, LENGTH = 96K
 }
 
+ASSERT(HAL_STM32_FLASH_LITTLEFS_SIZE == 0 ||
+       HAL_STM32_FLASH_LITTLEFS_SIZE >= (2 * HAL_STM32_FLASH_PAGE_SIZE),
+       "HAL_STM32_FLASH_LITTLEFS_SIZE must reserve zero or at least two flash pages");
+ASSERT((HAL_STM32_FLASH_LITTLEFS_SIZE % HAL_STM32_FLASH_PAGE_SIZE) == 0,
+       "HAL_STM32_FLASH_LITTLEFS_SIZE must be a multiple of HAL_STM32_FLASH_PAGE_SIZE");
 ASSERT(HAL_STM32_FLASH_EEPROM_SIZE >= HAL_STM32_FLASH_PAGE_SIZE,
        "HAL_STM32_FLASH_EEPROM_SIZE must reserve at least one flash page");
 ASSERT((HAL_STM32_FLASH_EEPROM_SIZE % HAL_STM32_FLASH_PAGE_SIZE) == 0,
        "HAL_STM32_FLASH_EEPROM_SIZE must be a multiple of HAL_STM32_FLASH_PAGE_SIZE");
 
+PROVIDE(__hal_stm32_littlefs_flash_start = ORIGIN(HAL_LITTLEFS_FLASH));
+PROVIDE(__hal_stm32_littlefs_flash_end = ORIGIN(HAL_LITTLEFS_FLASH) + LENGTH(HAL_LITTLEFS_FLASH));
 PROVIDE(__hal_stm32_eeprom_flash_start = ORIGIN(HAL_EEPROM_FLASH));
 PROVIDE(__hal_stm32_eeprom_flash_end = ORIGIN(HAL_EEPROM_FLASH) + LENGTH(HAL_EEPROM_FLASH));
 

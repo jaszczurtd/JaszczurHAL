@@ -23,6 +23,7 @@ Defaults:
 | Symbol | Default | Meaning |
 |---|---:|---|
 | `HAL_STM32_FLASH_SIZE` | `512K` | Total internal flash size |
+| `HAL_STM32_FLASH_LITTLEFS_SIZE` | `0K` | Flash reserved for `hal_littlefs` |
 | `HAL_STM32_FLASH_EEPROM_SIZE` | `4K` | Flash reserved for `hal_eeprom` / `hal_kv` |
 | `HAL_STM32_FLASH_PAGE_SIZE` | `2K` | STM32G474 flash page size used by the backend |
 
@@ -31,12 +32,21 @@ Effective default map:
 | Region | Address Range | Size | Contents |
 |---|---:|---:|---|
 | `FLASH` | `0x08000000` - `0x0807F000` | 508 KB | Vector table, code, rodata, `.data` initializers |
+| `HAL_LITTLEFS_FLASH` | empty by default | 0 KB | Optional LittleFS reservation |
 | `HAL_EEPROM_FLASH` | `0x0807F000` - `0x08080000` | 4 KB | Flash-backed EEPROM / KV reservation |
 
-The EEPROM reservation is the last 4 KB of flash, currently two 2 KB pages.
+The EEPROM reservation is the last 4 KB of flash, currently two 2 KB pages. By
+default no flash is reserved for LittleFS, so enabling `HAL_ENABLE_LITTLEFS`
+must be paired with a non-zero `HAL_STM32_FLASH_LITTLEFS_SIZE` at compile and
+link time. The STM32 CMake helpers automatically reserve 64 KB when
+`HAL_ENABLE_LITTLEFS` is passed through `EXTRA_HAL_DEFINES` and no explicit
+LittleFS size is provided.
+
 The linker exports:
 
 ```ld
+__hal_stm32_littlefs_flash_start = 0x0807F000
+__hal_stm32_littlefs_flash_end   = 0x0807F000
 __hal_stm32_eeprom_flash_start = 0x0807F000
 __hal_stm32_eeprom_flash_end   = 0x08080000
 ```
@@ -45,9 +55,19 @@ __hal_stm32_eeprom_flash_end   = 0x08080000
 reserved pages. Application code is linked only into `FLASH`, so the EEPROM
 pages are not available for normal `.text` / `.rodata`.
 
-If `HAL_STM32_FLASH_EEPROM_SIZE` is changed, keep the C compile definition and
-the linker value in sync. The size must be at least one page and must be a
-multiple of `HAL_STM32_FLASH_PAGE_SIZE`; the linker asserts both constraints.
+If `HAL_STM32_FLASH_EEPROM_SIZE` or `HAL_STM32_FLASH_LITTLEFS_SIZE` is changed,
+keep the C compile definition and linker value in sync. EEPROM size must be at
+least one page. LittleFS size may be zero, or at least two pages. Both sizes
+must be multiples of `HAL_STM32_FLASH_PAGE_SIZE`; the linker asserts these
+constraints.
+
+Example map with `HAL_STM32_FLASH_LITTLEFS_SIZE = 64K`:
+
+| Region | Address Range | Size | Contents |
+|---|---:|---:|---|
+| `FLASH` | `0x08000000` - `0x0806F000` | 444 KB | Application firmware |
+| `HAL_LITTLEFS_FLASH` | `0x0806F000` - `0x0807F000` | 64 KB | LittleFS blocks |
+| `HAL_EEPROM_FLASH` | `0x0807F000` - `0x08080000` | 4 KB | EEPROM / KV |
 
 ## RAM Layout
 
@@ -86,6 +106,7 @@ which overrides the linker default for `_Min_Stack_Size`.
 
 | HAL selector | Storage location |
 |---|---|
+| `HAL_LITTLEFS_FLASH` | Optional LittleFS linker region before EEPROM/KV |
 | `HAL_EEPROM_FLASH` | `HAL_EEPROM_FLASH` linker region at the end of internal flash |
 | `HAL_EEPROM_STM32_FLASH` | same as `HAL_EEPROM_FLASH` |
 | `HAL_EEPROM_RP2040` | accepted as a compatibility alias for target-native flash |
@@ -93,7 +114,9 @@ which overrides the linker default for `_Min_Stack_Size`.
 
 `hal_kv` stores records on top of whichever `hal_eeprom` backend was selected.
 With the default STM32 flash backend, KV data lives in the last 4 KB of internal
-flash.
+flash. With the STM32 LittleFS backend, LittleFS uses the optional internal
+flash reservation immediately before the EEPROM/KV reservation. The two regions
+must not overlap.
 
 ## Linker Sections
 
@@ -118,5 +141,7 @@ heap         -> RAM, grows upward from end/_end
 stack        -> RAM, grows downward from _estack
 ```
 
-There is currently no STM32 LittleFS region. File-system support for STM32 would
-need a separate flash partitioning decision or an external storage backend.
+STM32 LittleFS is opt-in. `HAL_ENABLE_LITTLEFS` compiles the backend, but a
+non-zero `HAL_STM32_FLASH_LITTLEFS_SIZE` is still required for a usable
+filesystem. The examples and `stm32_lib` CMake helpers reserve 64 KB
+automatically when LittleFS is enabled through their define lists.
