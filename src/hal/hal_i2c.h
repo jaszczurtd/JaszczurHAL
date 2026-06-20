@@ -21,16 +21,18 @@ extern "C" {
  *
  * The legacy no-bus APIs are preserved and operate on bus 0.
  *
- * Thread-safety: the HAL owns an internal mutex.
- *   - hal_i2c_begin_transmission() acquires the mutex.
- *   - hal_i2c_end_transmission()   releases the mutex.
- *   - hal_i2c_request_from()       acquires and releases the mutex
+ * Thread-safety: the HAL owns an internal per-bus mutex.
+ *   - hal_i2c_begin_transmission() acquires the bus guard.
+ *   - hal_i2c_end_transmission()   releases the begin-transmission guard.
+ *   - hal_i2c_request_from()       acquires and releases the bus guard
  *     around the transfer; the received bytes remain in the Wire
  *     buffer and can be read with hal_i2c_available() / hal_i2c_read()
  *     without holding the lock.
  *   - For multi-step device-driver sequences that must be atomic, use
  *     hal_i2c_lock() and hal_i2c_unlock() to guard the whole sequence
- *     explicitly.
+ *     explicitly. HAL I2C calls made by the same execution context inside
+ *     that manual lock reuse it instead of taking the platform mutex again;
+ *     nested end/request helpers do not release the caller's outer lock.
  *
  * Mutex lifecycle: hal_i2c_init()/hal_i2c_init_bus() creates the per-bus
  * mutex early in normal use. Runtime calls keep an atomic create-once fallback
@@ -107,7 +109,10 @@ void hal_i2c_deinit_bus(uint8_t bus);
  * @brief Acquire the I2C bus mutex.
  *
  * Use this together with hal_i2c_unlock() when a driver needs to guard a
- * larger multi-step I2C sequence.
+ * larger multi-step I2C sequence. Calls such as
+ * hal_i2c_begin_transmission(), hal_i2c_request_from() and
+ * hal_i2c_write_read() may be used inside the guarded section; they will not
+ * recursively take the underlying platform mutex or release this outer lock.
  *
  */
 void hal_i2c_lock(void);
@@ -130,13 +135,18 @@ void hal_i2c_unlock(void);
 void hal_i2c_unlock_bus(uint8_t bus);
 
 /**
- * @brief Acquire the mutex and begin a transmission to the given address.
+ * @brief Acquire the bus guard and begin a transmission to the given address.
+ *
+ * If the current execution context already owns the bus via hal_i2c_lock(),
+ * this reuses that guarded section. Pair with hal_i2c_end_transmission(),
+ * which releases only this begin/end nesting level.
+ *
  * @param address 7-bit I2C device address.
  */
 void hal_i2c_begin_transmission(uint8_t address);
 
 /**
- * @brief Acquire the selected bus mutex and begin transmission to address.
+ * @brief Acquire the selected bus guard and begin transmission to address.
  * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
  * @param address 7-bit I2C device address.
  */
@@ -158,7 +168,11 @@ size_t hal_i2c_write(uint8_t data);
 size_t hal_i2c_write_bus(uint8_t bus, uint8_t data);
 
 /**
- * @brief Flush the transmission buffer to the bus and release the mutex.
+ * @brief Flush the transmission buffer to the bus and release the begin guard.
+ *
+ * When called inside an outer hal_i2c_lock() section, the outer lock remains
+ * held after this function returns.
+ *
  * @return 0 on success, non-zero error code on failure.
  */
 uint8_t hal_i2c_end_transmission(void);
@@ -170,7 +184,8 @@ uint8_t hal_i2c_end_transmission(void);
  * Wraps the three-step sequence most commonly used to push a single register
  * pointer or configuration byte to an I2C slave. The internal I2C mutex is
  * acquired by begin and released by end, so the helper is safe to call from
- * cooperating threads without any extra locking.
+ * cooperating threads without any extra locking. If called inside an explicit
+ * hal_i2c_lock() section, it reuses that outer lock.
  *
  * @param address    7-bit I2C slave address.
  * @param data       Byte to transmit.
@@ -262,14 +277,19 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
                             size_t rx_len);
 
 /**
- * @brief Flush selected bus transmission and release its mutex.
+ * @brief Flush selected bus transmission and release its begin guard.
  * @param bus I2C controller index (0 = Wire, 1 = Wire1).
  * @return 0 on success, non-zero error code on failure.
  */
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 
 /**
- * @brief Request bytes from an I2C device (acquires and releases the mutex).
+ * @brief Request bytes from an I2C device (guards the transfer).
+ *
+ * If the current execution context already owns the bus via hal_i2c_lock(),
+ * this function preserves that outer lock and releases only its own nesting
+ * level.
+ *
  * @param address 7-bit I2C device address.
  * @param count   Number of bytes to request.
  * @return Number of bytes received.

@@ -7,9 +7,18 @@
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
 #include <Wire.h>
+#include <pico/platform.h>
+#include <stdint.h>
+
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#include <FreeRTOS.h>
+#include <task.h>
+#endif
 
 static hal_mutex_t s_i2c_mutex[2] = {NULL, NULL};
 static volatile uint32_t s_i2c_transaction_count[2] = {0, 0};
+static volatile uintptr_t s_i2c_lock_owner[2] = {0u, 0u};
+static volatile uint32_t s_i2c_lock_depth[2] = {0u, 0u};
 
 static inline uint8_t i2c_bus_index(uint8_t bus) { return bus == 1 ? 1 : 0; }
 
@@ -25,6 +34,45 @@ static TwoWire *i2c_bus_wire(uint8_t bus) {
 static void i2c_ensure_mutex(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
   (void)jh_hal_mutex_create_once(&s_i2c_mutex[idx]);
+}
+
+static uintptr_t i2c_current_owner_token(void) {
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+  TaskHandle_t task = xTaskGetCurrentTaskHandle();
+  return (task != NULL) ? (uintptr_t)task
+                        : (UINTPTR_MAX - (uintptr_t)get_core_num());
+#else
+  return (uintptr_t)(get_core_num() + 1u);
+#endif
+}
+
+static void i2c_lock_idx(uint8_t idx) {
+  i2c_ensure_mutex(idx);
+  const uintptr_t owner = i2c_current_owner_token();
+  if ((s_i2c_lock_depth[idx] > 0u) && (s_i2c_lock_owner[idx] == owner)) {
+    s_i2c_lock_depth[idx]++;
+    return;
+  }
+
+  hal_mutex_lock(s_i2c_mutex[idx]);
+  s_i2c_lock_owner[idx] = owner;
+  s_i2c_lock_depth[idx] = 1u;
+}
+
+static void i2c_unlock_idx(uint8_t idx) {
+  i2c_ensure_mutex(idx);
+  const uintptr_t owner = i2c_current_owner_token();
+  HAL_ASSERT((s_i2c_lock_depth[idx] > 0u) && (s_i2c_lock_owner[idx] == owner),
+             "hal_i2c_unlock: bus is not locked by this context");
+  if ((s_i2c_lock_depth[idx] == 0u) || (s_i2c_lock_owner[idx] != owner)) {
+    return;
+  }
+
+  s_i2c_lock_depth[idx]--;
+  if (s_i2c_lock_depth[idx] == 0u) {
+    s_i2c_lock_owner[idx] = 0u;
+    hal_mutex_unlock(s_i2c_mutex[idx]);
+  }
 }
 
 void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
@@ -50,9 +98,9 @@ void hal_i2c_set_clock(uint32_t clock_hz) {
 void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
   i2c_bus_wire(idx)->setClock(clock_hz);
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
 }
 
 void hal_i2c_deinit(void) { hal_i2c_deinit_bus(0); }
@@ -66,16 +114,14 @@ void hal_i2c_lock(void) { hal_i2c_lock_bus(0); }
 
 void hal_i2c_lock_bus(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
 }
 
 void hal_i2c_unlock(void) { hal_i2c_unlock_bus(0); }
 
 void hal_i2c_unlock_bus(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
 }
 
 void hal_i2c_begin_transmission(uint8_t address) {
@@ -84,8 +130,7 @@ void hal_i2c_begin_transmission(uint8_t address) {
 
 void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
   i2c_bus_wire(idx)->beginTransmission(address);
 }
 
@@ -101,10 +146,9 @@ uint8_t hal_i2c_end_transmission(void) {
 
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
   uint8_t result = i2c_bus_wire(idx)->endTransmission();
   s_i2c_transaction_count[idx]++;
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
   return result;
 }
 
@@ -128,19 +172,18 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
 
   uint8_t received = i2c_bus_wire(idx)->requestFrom(address, (uint8_t)1);
   s_i2c_transaction_count[idx]++;
   if (received != 1) {
     if (outReadOk != NULL)
       *outReadOk = false;
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+    i2c_unlock_idx(idx);
     return 0;
   }
   int raw = i2c_bus_wire(idx)->read();
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
   if (raw < 0) {
     if (outReadOk != NULL)
       *outReadOk = false;
@@ -164,14 +207,13 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   }
 
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
 
   TwoWire *wire = i2c_bus_wire(idx);
   wire->beginTransmission(address);
   for (size_t i = 0; i < tx_len; ++i) {
     if (wire->write(tx[i]) != 1u) {
-      hal_mutex_unlock(s_i2c_mutex[idx]);
+      i2c_unlock_idx(idx);
       return false;
     }
   }
@@ -180,12 +222,12 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   uint8_t end_result = wire->endTransmission(needs_read ? false : true);
   s_i2c_transaction_count[idx]++;
   if (end_result != 0u) {
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+    i2c_unlock_idx(idx);
     return false;
   }
 
   if (!needs_read) {
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+    i2c_unlock_idx(idx);
     return true;
   }
 
@@ -195,24 +237,24 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
     while (wire->available()) {
       (void)wire->read();
     }
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+    i2c_unlock_idx(idx);
     return false;
   }
 
   for (size_t i = 0; i < rx_len; ++i) {
     if (!wire->available()) {
-      hal_mutex_unlock(s_i2c_mutex[idx]);
+      i2c_unlock_idx(idx);
       return false;
     }
     int raw = wire->read();
     if (raw < 0) {
-      hal_mutex_unlock(s_i2c_mutex[idx]);
+      i2c_unlock_idx(idx);
       return false;
     }
     rx[i] = (uint8_t)raw;
   }
 
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
   return true;
 }
 
@@ -230,8 +272,7 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
   }
 
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
 
   TwoWire *wire = i2c_bus_wire(idx);
   uint8_t received = wire->requestFrom(address, (uint8_t)rx_len);
@@ -240,24 +281,24 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
     while (wire->available()) {
       (void)wire->read();
     }
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+    i2c_unlock_idx(idx);
     return false;
   }
 
   for (size_t i = 0; i < rx_len; ++i) {
     if (!wire->available()) {
-      hal_mutex_unlock(s_i2c_mutex[idx]);
+      i2c_unlock_idx(idx);
       return false;
     }
     int raw = wire->read();
     if (raw < 0) {
-      hal_mutex_unlock(s_i2c_mutex[idx]);
+      i2c_unlock_idx(idx);
       return false;
     }
     rx[i] = (uint8_t)raw;
   }
 
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
   return true;
 }
 
@@ -267,11 +308,10 @@ uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
 
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_ensure_mutex(idx);
-  hal_mutex_lock(s_i2c_mutex[idx]);
+  i2c_lock_idx(idx);
   uint8_t received = i2c_bus_wire(idx)->requestFrom(address, count);
   s_i2c_transaction_count[idx]++;
-  hal_mutex_unlock(s_i2c_mutex[idx]);
+  i2c_unlock_idx(idx);
   return received;
 }
 

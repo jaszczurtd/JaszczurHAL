@@ -26,6 +26,9 @@ typedef struct {
   bool initialized;
   uint32_t clock_hz;
   int lock_depth;
+  int mutex_depth;
+  uint32_t mutex_take_count;
+  uint32_t mutex_give_count;
   int read_byte_lock_depth_at_read;
   uint32_t transaction_count;
   uint32_t bus_clear_count;
@@ -73,6 +76,9 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->rx_len = 0;
   st->rx_pos = 0;
   st->lock_depth = 0;
+  st->mutex_depth = 0;
+  st->mutex_take_count = 0;
+  st->mutex_give_count = 0;
   st->read_byte_lock_depth_at_read = 0;
   st->transaction_count = 0;
   st->bus_clear_count = 0;
@@ -94,6 +100,9 @@ void hal_i2c_deinit_bus(uint8_t bus) {
   mock_i2c_bus_state_t *st = i2c_state(bus);
   st->initialized = false;
   st->lock_depth = 0;
+  st->mutex_depth = 0;
+  st->mutex_take_count = 0;
+  st->mutex_give_count = 0;
   st->read_byte_lock_depth_at_read = 0;
   st->rx_script_len = 0;
   st->rx_script_pos = 0;
@@ -109,12 +118,23 @@ void hal_i2c_lock(void) { hal_i2c_lock_bus(0); }
 
 void hal_i2c_unlock(void) { hal_i2c_unlock_bus(0); }
 
-void hal_i2c_lock_bus(uint8_t bus) { i2c_state(bus)->lock_depth++; }
+void hal_i2c_lock_bus(uint8_t bus) {
+  mock_i2c_bus_state_t *st = i2c_state(bus);
+  if (st->lock_depth == 0) {
+    st->mutex_depth = 1;
+    st->mutex_take_count++;
+  }
+  st->lock_depth++;
+}
 
 void hal_i2c_unlock_bus(uint8_t bus) {
   mock_i2c_bus_state_t *st = i2c_state(bus);
   if (st->lock_depth > 0) {
     st->lock_depth--;
+    if (st->lock_depth == 0) {
+      st->mutex_depth = 0;
+      st->mutex_give_count++;
+    }
   }
 }
 
@@ -341,6 +361,30 @@ int hal_mock_i2c_get_lock_depth_bus(uint8_t bus) {
 
 int hal_mock_i2c_get_lock_depth(void) {
   return hal_mock_i2c_get_lock_depth_bus(0);
+}
+
+int hal_mock_i2c_get_mutex_depth_bus(uint8_t bus) {
+  return i2c_state(bus)->mutex_depth;
+}
+
+int hal_mock_i2c_get_mutex_depth(void) {
+  return hal_mock_i2c_get_mutex_depth_bus(0);
+}
+
+uint32_t hal_mock_i2c_get_mutex_take_count_bus(uint8_t bus) {
+  return i2c_state(bus)->mutex_take_count;
+}
+
+uint32_t hal_mock_i2c_get_mutex_take_count(void) {
+  return hal_mock_i2c_get_mutex_take_count_bus(0);
+}
+
+uint32_t hal_mock_i2c_get_mutex_give_count_bus(uint8_t bus) {
+  return i2c_state(bus)->mutex_give_count;
+}
+
+uint32_t hal_mock_i2c_get_mutex_give_count(void) {
+  return hal_mock_i2c_get_mutex_give_count_bus(0);
 }
 
 int hal_mock_i2c_get_read_byte_lock_depth_bus(uint8_t bus) {
