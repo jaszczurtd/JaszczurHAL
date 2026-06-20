@@ -3648,7 +3648,8 @@ static lfs_soff_t lfs_file_seek_(lfs_t *lfs, lfs_file_t *file, lfs_soff_t off,
   // if we're only reading and our new offset is still in the file's cache
   // we can avoid flushing and needing to reread the data
   if ((file->flags & LFS_F_READING) && file->off != lfs->cfg->block_size) {
-    int oindex = lfs_ctz_index(lfs, &(lfs_off_t){file->pos});
+    lfs_off_t opos = file->pos;
+    int oindex = lfs_ctz_index(lfs, &opos);
     lfs_off_t noff = npos;
     int nindex = lfs_ctz_index(lfs, &noff);
     if (oindex == nindex && noff >= file->cache.off &&
@@ -3840,6 +3841,7 @@ static int lfs_remove_(lfs_t *lfs, const char *path) {
     // commit (if predecessor is child)
     dir.type = 0;
     dir.id = 0;
+    // cppcheck-suppress autoVariables
     lfs->mlist = &dir;
   }
 
@@ -3962,6 +3964,7 @@ static int lfs_rename_(lfs_t *lfs, const char *oldpath, const char *newpath) {
     // commit (if predecessor is child)
     prevdir.type = 0;
     prevdir.id = 0;
+    // cppcheck-suppress autoVariables
     lfs->mlist = &prevdir;
   }
 
@@ -4661,6 +4664,7 @@ int lfs_fs_traverse_(lfs_t *lfs, int (*cb)(void *data, lfs_block_t block),
         }
       } else if (includeorphans && lfs_tag_type3(tag) == LFS_TYPE_DIRSTRUCT) {
         for (int i = 0; i < 2; i++) {
+          // cppcheck-suppress objectIndex
           err = cb(data, (&ctz.head)[i]);
           if (err) {
             return err;
