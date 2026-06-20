@@ -50,6 +50,14 @@ static bool checked_snprintf(char *out, size_t out_size, const char *fn,
   return true;
 }
 
+static const char *wifi_ssid_c_str(const char *ssid) {
+  return ssid ? ssid : "";
+}
+
+template <typename T> static const char *wifi_ssid_c_str(const T &ssid) {
+  return ssid.c_str();
+}
+
 static bool format_ipv4(char *out, size_t out_size, const char *fn,
                         const IPAddress &ip) {
   return checked_snprintf(out, out_size, fn, "%u.%u.%u.%u", (unsigned)ip[0],
@@ -293,7 +301,7 @@ bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
 
   bool ssid_ok =
       checked_snprintf(out->ssid, sizeof(out->ssid), "hal_wifi_get_scan_result",
-                       "%s", WiFi.SSID((int)index).c_str());
+                       "%s", wifi_ssid_c_str(WiFi.SSID((int)index)));
   WiFi.BSSID((int)index, out->bssid);
   out->encryption = map_encryption((uint8_t)WiFi.encryptionType((int)index));
   out->channel = (int32_t)WiFi.channel((int)index);
