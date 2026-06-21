@@ -81,7 +81,8 @@ bool jh_stm32g474_flash_program_doubleword(uintptr_t address,
   FLASH_SR = FLASH_SR_ERRORS | FLASH_SR_EOP;
   FLASH_CR |= FLASH_CR_PG;
 
-  volatile uint32_t *dst = (volatile uint32_t *)address;
+  volatile uint32_t *dst =
+      (volatile uint32_t *)address; // NOLINT(performance-no-int-to-ptr)
   uint32_t low = 0u;
   uint32_t high = 0u;
   __builtin_memcpy(&low, data, sizeof(low));

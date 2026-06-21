@@ -18,7 +18,8 @@
 
 #include <stdint.h>
 
-#define JH_REG32(addr) (*(volatile uint32_t *)(addr))
+#define JH_REG32(addr)                                                         \
+  (*(volatile uint32_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u

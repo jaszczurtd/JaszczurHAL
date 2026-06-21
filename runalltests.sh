@@ -212,7 +212,7 @@ pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
 run-clang-tidy -p "${BUILD_STM32}" -quiet \
-    '^.*/src/hal/impl/stm32g474/.*\.(cpp|c)$' \
+    '^.*/src/hal/impl/stm32g474/(?!drivers/littlefs/).*\.(cpp|c)$' \
     | tee /tmp/jh_tidy_stm32.log
 pass "clang-tidy STM32 pass complete."
 
