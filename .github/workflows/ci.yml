@@ -100,7 +100,7 @@ jobs:
             '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
             | tee tidy_host.log
           run-clang-tidy -p build_stm32 -quiet \
-            '^.*/src/hal/impl/stm32g474/.*\.(cpp|c)$' \
+            '^.*/src/hal/impl/stm32g474/(?!drivers/littlefs/).*\.(cpp|c)$' \
             | tee tidy_stm32.log
           if grep -qE ' (warning|error):' tidy_host.log tidy_stm32.log; then
             echo "::error::clang-tidy reported findings (see logs above)"
