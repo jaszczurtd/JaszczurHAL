@@ -15,6 +15,8 @@
 
 static hal_mutex_t s_littlefs_mutex = NULL;
 static bool s_littlefs_mounted = false;
+static hal_littlefs_progress_callback_t s_progress_callback = NULL;
+static void *s_progress_ctx = NULL;
 
 static inline void littlefs_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_littlefs_mutex);
@@ -27,6 +29,15 @@ static bool validate_non_empty(const char *value, const char *fn,
     return false;
   }
   return true;
+}
+
+void hal_littlefs_set_progress_callback(
+    hal_littlefs_progress_callback_t callback, void *ctx) {
+  littlefs_ensure_mutex();
+  hal_mutex_lock(s_littlefs_mutex);
+  s_progress_callback = callback;
+  s_progress_ctx = ctx;
+  hal_mutex_unlock(s_littlefs_mutex);
 }
 
 bool hal_littlefs_begin(void) {
@@ -60,7 +71,13 @@ bool hal_littlefs_format(void) {
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
 
+  if (s_progress_callback != NULL) {
+    s_progress_callback(s_progress_ctx);
+  }
   const bool ok = LittleFS.format();
+  if (s_progress_callback != NULL) {
+    s_progress_callback(s_progress_ctx);
+  }
   if (ok) {
     s_littlefs_mounted = false;
   }

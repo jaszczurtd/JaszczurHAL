@@ -457,6 +457,7 @@ void test_read_bytes_copies_exact_rx_sequence_atomically(void) {
 
   TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, out, 3);
   TEST_ASSERT_EQUAL_UINT32(before + 1, hal_i2c_get_transaction_count());
+  TEST_ASSERT_TRUE(hal_mock_i2c_get_read_byte_lock_depth() > 0);
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
 }
 
@@ -491,6 +492,7 @@ void test_write_read_writes_register_and_consumes_rx_sequence(void) {
   TEST_ASSERT_EQUAL_UINT8(0xAA, out[0]);
   TEST_ASSERT_EQUAL_UINT8(0xBB, out[1]);
   TEST_ASSERT_EQUAL_UINT32(before + 2, hal_i2c_get_transaction_count());
+  TEST_ASSERT_TRUE(hal_mock_i2c_get_read_byte_lock_depth() > 0);
 
   uint8_t frame[4] = {};
   TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame_count());

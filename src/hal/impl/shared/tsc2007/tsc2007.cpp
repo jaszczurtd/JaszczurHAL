@@ -22,8 +22,6 @@
 
 #define TSC2007_CONVERSION_DELAY_US 500u
 
-static uint8_t tsc2007_bus(uint8_t bus) { return (bus == 1u) ? 1u : 0u; }
-
 static bool tsc2007_ensure_mutex(hal_tsc2007_t *dev) {
   return (dev != NULL) && (jh_hal_mutex_create_once(&dev->mutex) != NULL);
 }
@@ -81,7 +79,6 @@ bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg) {
 
   hal_tsc2007_config_t effective =
       (cfg != NULL) ? *cfg : hal_tsc2007_default_config();
-  effective.i2c_bus = tsc2007_bus(effective.i2c_bus);
 
   hal_mutex_lock(dev->mutex);
 

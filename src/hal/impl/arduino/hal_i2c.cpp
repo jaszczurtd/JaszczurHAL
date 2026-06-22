@@ -20,7 +20,10 @@ static volatile uint32_t s_i2c_transaction_count[2] = {0, 0};
 static volatile uintptr_t s_i2c_lock_owner[2] = {0u, 0u};
 static volatile uint32_t s_i2c_lock_depth[2] = {0u, 0u};
 
-static inline uint8_t i2c_bus_index(uint8_t bus) { return bus == 1 ? 1 : 0; }
+static inline uint8_t i2c_bus_index(uint8_t bus) {
+  HAL_ASSERT(bus <= 1u, "hal_i2c: invalid bus index");
+  return (bus <= 1u) ? bus : 0u;
+}
 
 static TwoWire *i2c_bus_wire(uint8_t bus) {
 #if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)

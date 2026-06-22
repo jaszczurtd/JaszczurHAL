@@ -72,8 +72,8 @@ uint16_t hal_eeprom_size(void);
 **Commit semantics:** For flash-backed back-ends, `hal_eeprom_write_byte`,
 `hal_eeprom_write_int`, and `hal_eeprom_write_bytes` update a RAM buffer first.
 Call `hal_eeprom_commit()` once after a group of writes to persist them to
-flash. For `HAL_EEPROM_AT24C256`, each byte write is committed immediately to
-the chip; `hal_eeprom_commit()` is a no-op.
+flash. For `HAL_EEPROM_AT24C256`, writes are committed synchronously to the
+chip in page-sized chunks; `hal_eeprom_commit()` is a no-op.
 
 **RP2040 implementation:** `HAL_EEPROM_FLASH` and `HAL_EEPROM_RP2040` use
 `<EEPROM.h>` from Arduino-pico.
@@ -92,9 +92,17 @@ Keep `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE`
 non-overlapping; EEPROM/KV and LittleFS do not share pages.
 
 **AT24C256 implementation:** `HAL_EEPROM_AT24C256` drives the external chip via
-`hal_i2c_*` primitives with write-cycle polling and watchdog feeding. The
-AT24C256 I2C address is `EEPROM_I2C_ADDRESS` (default `0x50`, defined in
-`hal_config.h`), unless an explicit address is passed to `hal_eeprom_init()`.
+`hal_i2c_*` primitives with write-cycle polling. Writes are split on 64-byte
+page boundaries and ACK-polled with a bounded timeout
+(`HAL_AT24C256_WRITE_TIMEOUT_US`, default 20000 us). Out-of-range writes are
+clipped; out-of-range reads return zero-filled bytes. The AT24C256 I2C address
+is `EEPROM_I2C_ADDRESS` (default `0x50`, defined in `hal_config.h`), unless an
+explicit address is passed to `hal_eeprom_init()`.
+
+**Long operation progress:** EEPROM never feeds the watchdog implicitly. Use
+`hal_eeprom_set_progress_callback()` before long writes, reset, or flash commit
+operations if the application wants to feed its own watchdog or report
+progress. A full AT24C256 reset touches 512 pages and can take seconds.
 
 **impl/.mock:** in-memory byte array (`MOCK_EEPROM_BUF_SIZE`, default 32768).
 
@@ -336,6 +344,11 @@ LittleFS erase block size is one STM32 flash page; program granularity is one
 STM32 doubleword (8 bytes). `hal_littlefs_total_bytes()` reports the reserved
 partition size after mount. `hal_littlefs_used_bytes()` reports allocated
 littlefs blocks multiplied by the flash page size.
+
+LittleFS never feeds the watchdog implicitly. Use
+`hal_littlefs_set_progress_callback()` before long operations such as format or
+large garbage-collection/write bursts if the application wants to feed its own
+watchdog or report progress.
 
 **Example: mount, format-on-first-use, inspect and remove a path**
 ```c

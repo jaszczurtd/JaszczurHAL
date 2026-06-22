@@ -29,6 +29,9 @@ void     hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size
 void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 ```
 
+Only bus values 0 and 1 are supported. Other values are programmer errors and
+trigger `HAL_ASSERT` in checked builds.
+
 **impl/arduino:** Arduino-pico `SPI` / `SPI1`; transfers delegate to the core SPI objects.
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
@@ -100,7 +103,9 @@ bool    hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
 bool    hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address,
                                uint8_t *rx, size_t rx_len);
 
-// Request + read (acquires/releases mutex around the request; read is unlocked)
+// Legacy Wire-style receive-buffer API. Not an atomic read sequence unless
+// the caller wraps request+available/read in hal_i2c_lock()/hal_i2c_unlock().
+// Prefer hal_i2c_read_bytes(_bus) or hal_i2c_write_read(_bus) in drivers.
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // returns bytes received
 int     hal_i2c_available(void);    // bytes in receive buffer
 int     hal_i2c_read(void);         // one byte, or -1 if empty
@@ -128,6 +133,9 @@ bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 ```
+
+Only bus values 0 and 1 are supported. Other values are programmer errors and
+trigger `HAL_ASSERT` in checked builds.
 
 **Init behavior:** `hal_i2c_init*()` creates the per-bus mutex, configures
 SDA/SCL, clock and starts `Wire`/`Wire1`; it should still be called during setup
@@ -269,6 +277,9 @@ uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
 uint32_t hal_i2c_slave_get_transaction_count(void);
 uint32_t hal_i2c_slave_get_transaction_count_bus(uint8_t bus);
 ```
+
+Only bus values 0 and 1 are supported. Other values are programmer errors and
+trigger `HAL_ASSERT` in checked builds.
 
 **Register map protocol (I2C):**
 1. Master writes: `[reg_address]` - sets the register pointer

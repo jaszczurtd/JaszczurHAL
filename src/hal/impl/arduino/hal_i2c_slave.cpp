@@ -25,7 +25,10 @@ static i2c_slave_state_t s_slave[2];
 
 enum { SLAVE_LOCK_UNINIT = 0u, SLAVE_LOCK_INITING = 1u, SLAVE_LOCK_READY = 2u };
 
-static inline uint8_t slave_bus_index(uint8_t bus) { return bus == 1 ? 1 : 0; }
+static inline uint8_t slave_bus_index(uint8_t bus) {
+  HAL_ASSERT(bus <= 1u, "hal_i2c_slave: invalid bus index");
+  return (bus <= 1u) ? bus : 0u;
+}
 
 static TwoWire *slave_bus_wire(uint8_t bus) {
 #if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)

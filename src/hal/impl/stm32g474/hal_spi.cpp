@@ -1,6 +1,7 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
+#include "../../hal_config.h"
 #include "../../hal_spi.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
@@ -27,7 +28,10 @@ typedef struct {
 
 static hal_spi_bus_state_t s_spi[2] = {};
 
-static inline uint8_t spi_bus_index(uint8_t bus) { return bus == 1u ? 1u : 0u; }
+static inline uint8_t spi_bus_index(uint8_t bus) {
+  HAL_ASSERT(bus <= 1u, "hal_spi: invalid bus index");
+  return (bus <= 1u) ? bus : 0u;
+}
 
 static inline hal_spi_bus_state_t *spi_state(uint8_t bus) {
   return &s_spi[spi_bus_index(bus)];

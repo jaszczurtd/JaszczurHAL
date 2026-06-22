@@ -20,6 +20,23 @@ static size_t s_read_script_pos[MOCK_GPIO_MAX_PINS] = {};
 static hal_mock_gpio_event_t s_trace[MOCK_GPIO_TRACE_MAX] = {};
 static size_t s_trace_count = 0u;
 
+static bool gpio_pin_valid(uint8_t pin) { return pin < MOCK_GPIO_MAX_PINS; }
+
+static bool gpio_mode_valid(hal_gpio_mode_t mode) {
+  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
+}
+
+static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
+  return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
+}
+
+static bool gpio_mode_is_output(hal_gpio_mode_t mode) {
+  return mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
+         mode == HAL_GPIO_OUTPUT_HIGH || mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||
+         mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW ||
+         mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
+}
+
 static void hal_mock_gpio_trace_push(hal_mock_gpio_event_type_t type,
                                      uint8_t pin, int value) {
   if (s_trace_count >= MOCK_GPIO_TRACE_MAX) {
@@ -49,26 +66,40 @@ static void hal_mock_gpio_trace_push(hal_mock_gpio_event_type_t type,
  * driver test that asserts pin levels catches the antipattern. */
 
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
-  if (pin >= 64)
+  if (!gpio_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
     return;
-  if (mode == HAL_GPIO_OUTPUT) {
+  }
+  if (!gpio_mode_valid(mode)) {
+    HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
+    return;
+  }
+  if (mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
+      mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW) {
     /* Mirror gpio_init(): entering OUTPUT mode resets the latch to 0. A HIGH
      * written before this call is therefore discarded (drives LOW). */
     s_state[pin] = false;
+  } else if (mode == HAL_GPIO_OUTPUT_HIGH ||
+             mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||
+             mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH) {
+    s_state[pin] = true;
   }
   s_mode[pin] = mode;
   hal_mock_gpio_trace_push(HAL_MOCK_GPIO_EVENT_SET_MODE, pin, (int)mode);
 }
 
 void hal_gpio_write(uint8_t pin, bool high) {
-  if (pin < 64) {
-    s_state[pin] = high;
-    hal_mock_gpio_trace_push(HAL_MOCK_GPIO_EVENT_WRITE, pin, high ? 1 : 0);
+  if (!gpio_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_write: invalid pin");
+    return;
   }
+  s_state[pin] = high;
+  hal_mock_gpio_trace_push(HAL_MOCK_GPIO_EVENT_WRITE, pin, high ? 1 : 0);
 }
 
 bool hal_gpio_read(uint8_t pin) {
-  if (pin >= MOCK_GPIO_MAX_PINS) {
+  if (!gpio_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_read: invalid pin");
     return false;
   }
   if (s_read_script_pos[pin] < s_read_script_len[pin]) {
@@ -79,16 +110,28 @@ bool hal_gpio_read(uint8_t pin) {
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
                                hal_gpio_irq_mode_t mode) {
-  if (pin < 64) {
-    s_callback[pin] = callback;
-    s_irq_mode[pin] = mode;
+  if (!gpio_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid pin");
+    return;
   }
+  if (callback == NULL) {
+    HAL_ASSERT(false, "hal_gpio_attach_interrupt: callback is NULL");
+    return;
+  }
+  if (!gpio_irq_mode_valid(mode)) {
+    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid IRQ mode");
+    return;
+  }
+  s_callback[pin] = callback;
+  s_irq_mode[pin] = mode;
 }
 
 void hal_gpio_detach_interrupt(uint8_t pin) {
-  if (pin < 64) {
-    s_callback[pin] = NULL;
+  if (!gpio_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_detach_interrupt: invalid pin");
+    return;
   }
+  s_callback[pin] = NULL;
 }
 
 static hal_irq_priority_t s_gpio_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
@@ -101,19 +144,19 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
 // ──────────────────────────────────────────────────────────────
 
 bool hal_mock_gpio_get_state(uint8_t pin) {
-  return (pin < 64) ? s_state[pin] : false;
+  return gpio_pin_valid(pin) ? s_state[pin] : false;
 }
 
 bool hal_mock_gpio_is_output(uint8_t pin) {
-  return (pin < 64) ? (s_mode[pin] == HAL_GPIO_OUTPUT) : false;
+  return gpio_pin_valid(pin) ? gpio_mode_is_output(s_mode[pin]) : false;
 }
 
 hal_gpio_mode_t hal_mock_gpio_get_mode(uint8_t pin) {
-  return (pin < 64) ? s_mode[pin] : HAL_GPIO_INPUT;
+  return gpio_pin_valid(pin) ? s_mode[pin] : HAL_GPIO_INPUT;
 }
 
 void hal_mock_gpio_inject_level(uint8_t pin, bool high) {
-  if (pin < 64)
+  if (gpio_pin_valid(pin))
     s_state[pin] = high;
 }
 
@@ -131,7 +174,7 @@ bool hal_mock_gpio_trace_get(size_t index, hal_mock_gpio_event_t *out_event) {
 
 void hal_mock_gpio_push_read_sequence(uint8_t pin, const bool *levels,
                                       size_t len) {
-  if (pin >= MOCK_GPIO_MAX_PINS) {
+  if (!gpio_pin_valid(pin)) {
     return;
   }
   s_read_script_len[pin] = 0u;
@@ -147,14 +190,14 @@ void hal_mock_gpio_push_read_sequence(uint8_t pin, const bool *levels,
 }
 
 void hal_mock_gpio_clear_read_sequence(uint8_t pin) {
-  if (pin < MOCK_GPIO_MAX_PINS) {
+  if (gpio_pin_valid(pin)) {
     s_read_script_len[pin] = 0u;
     s_read_script_pos[pin] = 0u;
   }
 }
 
 void hal_mock_gpio_fire_interrupt(uint8_t pin) {
-  if (pin < 64 && s_callback[pin]) {
+  if (gpio_pin_valid(pin) && s_callback[pin]) {
     s_callback[pin]();
   }
 }

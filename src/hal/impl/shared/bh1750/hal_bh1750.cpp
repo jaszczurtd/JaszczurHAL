@@ -22,8 +22,6 @@
 #define BH1750_CMD_CONTINUOUS_H_RESOLUTION 0x10u
 #define BH1750_FIRST_MEASUREMENT_DELAY_MS 180u
 
-static uint8_t bh1750_bus(uint8_t bus) { return (bus == 1u) ? 1u : 0u; }
-
 static bool bh1750_valid(hal_bh1750_t *dev) {
   return (dev != NULL) && (dev->mutex != NULL);
 }
@@ -43,7 +41,6 @@ bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg) {
 
   hal_bh1750_config_t effective =
       (cfg != NULL) ? *cfg : hal_bh1750_default_config();
-  effective.i2c_bus = bh1750_bus(effective.i2c_bus);
 
   dev->cfg = effective;
   dev->initialized = false;
