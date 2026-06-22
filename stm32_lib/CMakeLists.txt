@@ -100,14 +100,14 @@ endif()
 # system-time pieces and shared HAL-level drivers that the STM32 backend
 # currently provides are
 # enabled here. Application projects can enable extra modules via
-# EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_CAN) once their
+# EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_MCP2515) once their
 # STM32G474 backend lands.
 target_compile_definitions(JaszczurHAL PUBLIC
     HAL_TARGET_STM32G474=1   # canonical backend selection (see src/hal/hal_target.h)
     JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     HAL_ENABLE_I2C
     HAL_ENABLE_SPI
-    HAL_ENABLE_CAN
+    HAL_ENABLE_MCP2515
     HAL_ENABLE_UART
     HAL_ENABLE_DAC
     HAL_ENABLE_PCNT

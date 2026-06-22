@@ -9,11 +9,11 @@ extern "C" {
 
 /**
  * @file hal_can.h
- * @brief Hardware abstraction for MCP2515-based CAN bus communication.
+ * @brief Hardware abstraction for CAN bus communication.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /** @brief Maximum CAN data payload length in bytes. */
 #define HAL_CAN_MAX_DATA_LEN 8
@@ -21,22 +21,55 @@ extern "C" {
 /**
  * @brief Opaque handle for a CAN bus channel.
  *
- * One handle per physical MCP2515 chip (CS pin).
+ * One handle per physical CAN controller/backend instance.
  * Use hal_can_create() to obtain a handle; hal_can_destroy() to release it.
  */
 typedef struct hal_can_impl_s hal_can_impl_t;
 typedef hal_can_impl_t *hal_can_t;
 
+/** @brief CAN backend selector. */
+typedef enum {
+  /** External Microchip MCP2515 controller over HAL SPI. */
+  HAL_CAN_BACKEND_MCP2515 = 0
+} hal_can_backend_t;
+
+/** @brief MCP2515-specific backend configuration. */
+typedef struct {
+  uint8_t spi_bus;        /**< HAL SPI bus index. */
+  uint8_t cs_pin;         /**< SPI chip-select pin for the MCP2515. */
+  uint32_t bitrate_hz;    /**< CAN bitrate, e.g. 500000. */
+  uint32_t oscillator_hz; /**< MCP2515 crystal frequency: 8000000, 16000000, or
+                             20000000. */
+  bool one_shot_tx;       /**< Enable one-shot TX mode after init. */
+  bool sleep_wakeup;      /**< Enable wake-up interrupt support in MCP2515. */
+} hal_can_mcp2515_config_t;
+
+/** @brief CAN channel configuration. */
+typedef struct {
+  hal_can_backend_t backend;
+  union {
+    hal_can_mcp2515_config_t mcp2515;
+  };
+} hal_can_config_t;
+
 /**
- * @brief Create and initialise a CAN channel on the given CS pin at 500 kbps / 8 MHz.
- * @param cs_pin SPI chip-select pin for the MCP2515.
- * @return Handle on success, NULL on failure (chip not responding or pool exhausted).
+ * @brief Return default CAN config: MCP2515 on SPI bus 0, CS pin 0,
+ *        500 kbps, 8 MHz oscillator, one-shot TX enabled.
  */
-hal_can_t hal_can_create(uint8_t cs_pin);
+hal_can_config_t hal_can_default_config(void);
+
+/**
+ * @brief Create and initialise a CAN channel from config.
+ * @param cfg CAN backend configuration. NULL uses hal_can_default_config().
+ * @return Handle on success, NULL on failure (chip not responding or pool
+ * exhausted).
+ */
+hal_can_t hal_can_create(const hal_can_config_t *cfg);
 
 /**
  * @brief Release all resources associated with the CAN handle.
- * @param h Handle obtained from hal_can_create(). Must not be used after this call.
+ * @param h Handle obtained from hal_can_create(). Must not be used after this
+ * call.
  */
 void hal_can_destroy(hal_can_t h);
 
@@ -55,7 +88,8 @@ bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
  * @param h    CAN handle.
  * @param[out] id   Received message identifier.
  * @param[out] len  Received payload length.
- * @param[out] data Buffer for payload (must be at least HAL_CAN_MAX_DATA_LEN bytes).
+ * @param[out] data Buffer for payload (must be at least HAL_CAN_MAX_DATA_LEN
+ * bytes).
  * @return true if a frame was available, false if the RX buffer was empty
  *         or if any output pointer is NULL.
  */
@@ -86,8 +120,10 @@ bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
 /** @brief Sentinel value indicating no interrupt pin should be configured. */
 #define HAL_CAN_NO_INT_PIN 0xFF
 
-/** @brief Callback invoked by hal_can_process_all() for each valid received frame. */
-typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data);
+/** @brief Callback invoked by hal_can_process_all() for each valid received
+ * frame. */
+typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len,
+                                   const uint8_t *data);
 
 /**
  * @brief Drain all pending frames, invoking a callback for each valid one.
@@ -102,24 +138,25 @@ typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data
 int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
 
 /**
- * @brief Create a CAN channel with automatic retry and optional interrupt setup.
+ * @brief Create a CAN channel with automatic retry and optional interrupt
+ * setup.
  *
  * Attempts to initialise the MCP2515 up to (@p max_retries + 1) times,
  * with a ~1 s delay between attempts.  On success, optionally configures
  * the interrupt pin and attaches @p isr on falling edge.
  *
- * @param cs_pin       SPI chip-select pin for the MCP2515.
+ * @param cfg          CAN backend configuration. NULL uses
+ * hal_can_default_config().
  * @param int_pin      MCP2515 interrupt GPIO, or HAL_CAN_NO_INT_PIN to skip.
  * @param isr          ISR for falling edge on @p int_pin (may be NULL).
- * @param max_retries  Number of additional attempts after the first (0 = try once).
+ * @param max_retries  Number of additional attempts after the first (0 = try
+ * once).
  * @param retry_idle   Called between retries (e.g. feed watchdog), or NULL.
  * @return Valid handle on success, NULL if all attempts failed.
  */
-hal_can_t hal_can_create_with_retry(uint8_t cs_pin,
-                                     uint8_t int_pin,
-                                     void (*isr)(void),
-                                     int max_retries,
-                                     void (*retry_idle)(void));
+hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
+                                    uint8_t int_pin, void (*isr)(void),
+                                    int max_retries, void (*retry_idle)(void));
 
 /**
  * @brief Encode temperature in °C as a signed int8 CAN payload byte.

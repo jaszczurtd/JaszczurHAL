@@ -64,7 +64,7 @@ Nature of the implementation:
 - `HAL_ENABLE_BH1750`
 - `HAL_ENABLE_EXTERNAL_ADC`
 - `HAL_ENABLE_DS18B20`
-- `HAL_ENABLE_CAN`
+- `HAL_ENABLE_MCP2515`
 - `HAL_ENABLE_GPS`
 
 This is still a conservative default profile: it enables the bus/core pieces
@@ -153,9 +153,11 @@ The following modules are real, register-level backends under
   full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
   SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
   bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
-- `hal_can` - **MCP2515** via the shared HAL-only driver
-  (`impl/shared/mcp2515/mcp2515_driver.*`) over `hal_spi`, `hal_gpio`,
-  `hal_system` and `hal_sync`.
+- `hal_can` - generic CAN facade with the **MCP2515** backend enabled through
+  `HAL_ENABLE_MCP2515`. Target `hal_can.cpp` owns handle lifetime/dispatch and
+  delegates MCP2515 operations to `impl/shared/mcp2515/hal_can_mcp2515.*` and
+  the HAL-only register/SPI driver (`mcp2515_driver.*`) over `hal_spi`,
+  `hal_gpio`, `hal_system` and `hal_sync`.
 - `hal_display` - **ILI9341** plus **ST7735/ST7789/ST7796S** via shared
   HAL-only SPI/GPIO drivers (`impl/shared/display/ili9341_driver.*`,
   `impl/shared/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C

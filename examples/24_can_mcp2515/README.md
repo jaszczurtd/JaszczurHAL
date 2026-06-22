@@ -9,6 +9,8 @@ What it does:
 - polls RX and prints any received frames to serial output
 
 This example uses polling only. No interrupt pin is required.
+It enables the MCP2515 backend with `HAL_ENABLE_MCP2515`, which pulls in the
+generic CAN facade and SPI dependency.
 
 ## Wiring
 

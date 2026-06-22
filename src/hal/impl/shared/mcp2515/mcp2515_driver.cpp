@@ -2,7 +2,7 @@
 #if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "../../../hal_config.h"
-#if defined(HAL_ENABLE_CAN) && defined(HAL_ENABLE_SPI)
+#if defined(HAL_ENABLE_MCP2515) && defined(HAL_ENABLE_SPI)
 
 #include "mcp2515_driver.h"
 
@@ -784,5 +784,5 @@ INT8U JHMCP2515::getGPI(void) {
   return (INT8U)((mcp2515_readRegister(MCP_TXRTSCTRL) & MCP_BxRTS_MASK) >> 3);
 }
 
-#endif /* HAL_ENABLE_CAN && HAL_ENABLE_SPI */
+#endif /* HAL_ENABLE_MCP2515 && HAL_ENABLE_SPI */
 #endif /* supported target */

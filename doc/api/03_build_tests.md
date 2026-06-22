@@ -11,7 +11,7 @@
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
-| `hal_can` | shared Arduino-free MCP2515 driver (`impl/shared/mcp2515/mcp2515_driver.*`) |
+| `hal_can` | generic CAN facade plus the MCP2515 backend in current tests (`impl/shared/mcp2515/hal_can_mcp2515.*`, `mcp2515_driver.*`) |
 | `hal_display` | Shared Arduino-free display stack (`impl/shared/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
 | `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/hd44780/hd44780.*`) over HAL GPIO/system timing |
 | `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
