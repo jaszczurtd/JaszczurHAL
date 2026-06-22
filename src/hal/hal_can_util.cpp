@@ -89,6 +89,70 @@ uint8_t hal_can_bytes_to_dlc(uint8_t bytes) {
   return HAL_CAN_DLC_INVALID;
 }
 
+bool hal_can_validate_frame(const hal_can_frame_t *frame) {
+  if (!frame) {
+    return false;
+  }
+  const uint8_t supported_flags = HAL_CAN_FRAME_EXTENDED | HAL_CAN_FRAME_RTR |
+                                  HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS |
+                                  HAL_CAN_FRAME_ESI;
+  if ((frame->flags & (uint8_t)~supported_flags) != 0u) {
+    return false;
+  }
+  if ((frame->flags & (HAL_CAN_FRAME_BRS | HAL_CAN_FRAME_ESI)) != 0u &&
+      (frame->flags & HAL_CAN_FRAME_FD) == 0u) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_FD) != 0u &&
+      (frame->flags & HAL_CAN_FRAME_RTR) != 0u) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u) {
+    if (frame->id > HAL_CAN_EXT_ID_MASK) {
+      return false;
+    }
+  } else if (frame->id > HAL_CAN_STD_ID_MASK) {
+    return false;
+  }
+  if (frame->dlc > 15u) {
+    return false;
+  }
+  if (hal_can_dlc_to_bytes(frame->dlc) != frame->len) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_FD) == 0u &&
+      frame->len > HAL_CAN_MAX_DATA_LEN) {
+    return false;
+  }
+  return frame->len <= HAL_CAN_FD_MAX_DATA_LEN;
+}
+
+bool hal_can_validate_filter(const hal_can_filter_t *filter) {
+  if (!filter) {
+    return false;
+  }
+  if ((filter->flags & ~HAL_CAN_FILTER_EXTENDED) != 0u) {
+    return false;
+  }
+  const uint32_t id_mask = (filter->flags & HAL_CAN_FILTER_EXTENDED) != 0u
+                               ? HAL_CAN_EXT_ID_MASK
+                               : HAL_CAN_STD_ID_MASK;
+  return filter->id <= id_mask && filter->mask <= id_mask;
+}
+
+bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
+                                  const hal_can_filter_t *filter) {
+  if (!hal_can_validate_frame(frame) || !hal_can_validate_filter(filter)) {
+    return false;
+  }
+  const bool frame_ext = (frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u;
+  const bool filter_ext = (filter->flags & HAL_CAN_FILTER_EXTENDED) != 0u;
+  if (frame_ext != filter_ext) {
+    return false;
+  }
+  return (frame->id & filter->mask) == (filter->id & filter->mask);
+}
+
 uint8_t hal_can_encode_temp_i8(float temp_c) {
   int32_t value = (int32_t)temp_c;
 

@@ -24,6 +24,15 @@ extern "C" {
 /** @brief Invalid DLC sentinel returned by hal_can_bytes_to_dlc(). */
 #define HAL_CAN_DLC_INVALID 0xFFu
 
+/** @brief Standard 11-bit CAN identifier mask. */
+#define HAL_CAN_STD_ID_MASK 0x7FFu
+
+/** @brief Extended 29-bit CAN identifier mask. */
+#define HAL_CAN_EXT_ID_MASK 0x1FFFFFFFu
+
+/** @brief Number of hardware acceptance filters exposed by MCP2515. */
+#define HAL_CAN_MAX_FILTERS 6u
+
 /** @brief CAN frame flags used by hal_can_frame_t. */
 enum {
   HAL_CAN_FRAME_EXTENDED = 0x01u, /**< 29-bit CAN identifier. */
@@ -41,6 +50,45 @@ typedef struct {
   uint8_t flags; /**< Bitwise OR of HAL_CAN_FRAME_* flags. */
   uint8_t data[HAL_CAN_FD_MAX_DATA_LEN]; /**< Payload bytes. */
 } hal_can_frame_t;
+
+/** @brief CAN filter flags used by hal_can_filter_t. */
+enum {
+  HAL_CAN_FILTER_EXTENDED = 0x01u /**< Match 29-bit CAN identifiers. */
+};
+
+/** @brief Backend-agnostic CAN acceptance filter. */
+typedef struct {
+  uint32_t id;   /**< Filter ID before mask application. */
+  uint32_t mask; /**< 1 bits participate in matching, 0 bits are ignored. */
+  uint8_t flags; /**< Bitwise OR of HAL_CAN_FILTER_* flags. */
+} hal_can_filter_t;
+
+/** @brief CAN controller operating mode flags. */
+typedef uint32_t hal_can_mode_t;
+
+enum {
+  HAL_CAN_MODE_NORMAL = 0x00u,
+  HAL_CAN_MODE_LOOPBACK = 0x01u,
+  HAL_CAN_MODE_LISTEN_ONLY = 0x02u,
+  HAL_CAN_MODE_FD = 0x04u,
+  HAL_CAN_MODE_ONE_SHOT = 0x08u,
+  HAL_CAN_MODE_SLEEP = 0x10u
+};
+
+/** @brief CAN controller state. */
+typedef enum {
+  HAL_CAN_STATE_ERROR_ACTIVE = 0,
+  HAL_CAN_STATE_ERROR_WARNING,
+  HAL_CAN_STATE_ERROR_PASSIVE,
+  HAL_CAN_STATE_BUS_OFF,
+  HAL_CAN_STATE_STOPPED
+} hal_can_state_t;
+
+/** @brief CAN controller error counters. */
+typedef struct {
+  uint8_t tx; /**< Transmit error counter. */
+  uint8_t rx; /**< Receive error counter. */
+} hal_can_error_counters_t;
 
 /**
  * @brief Opaque handle for a CAN bus channel.
@@ -142,6 +190,38 @@ bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
 bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
 /**
+ * @brief Start the CAN controller.
+ *
+ * A newly created channel is started by default for compatibility with the
+ * legacy send/receive API. Calling this after @ref hal_can_stop reapplies the
+ * stored controller mode.
+ */
+bool hal_can_start(hal_can_t h);
+
+/** @brief Stop the CAN controller and put the backend in a non-participating
+ * state. */
+bool hal_can_stop(hal_can_t h);
+
+/**
+ * @brief Set controller mode flags.
+ *
+ * MCP2515 supports NORMAL, LOOPBACK, LISTEN_ONLY, SLEEP, and ONE_SHOT. It does
+ * not support HAL_CAN_MODE_FD. Only one operating mode among LOOPBACK,
+ * LISTEN_ONLY, and SLEEP may be selected at once; no such flag means NORMAL.
+ */
+bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
+
+/** @brief Return the currently configured controller mode. */
+bool hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
+
+/** @brief Read the current controller state. */
+bool hal_can_get_state(hal_can_t h, hal_can_state_t *state);
+
+/** @brief Read the current transmit/receive error counters. */
+bool hal_can_get_error_counters(hal_can_t h,
+                                hal_can_error_counters_t *counters);
+
+/**
  * @brief Check if at least one frame is waiting in the RX buffer.
  * @param h CAN handle.
  * @return true if data is available.
@@ -162,6 +242,16 @@ bool hal_can_available(hal_can_t h);
  * @return true on success, false if filter programming failed.
  */
 bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
+
+/**
+ * @brief Configure one static acceptance-filter slot.
+ *
+ * MCP2515 exposes six filter slots. Slots 0-1 share mask group 0; slots 2-5
+ * share mask group 1. Updating one slot updates the shared group mask used by
+ * sibling slots in the same MCP2515 group.
+ */
+bool hal_can_set_filter(hal_can_t h, uint8_t index,
+                        const hal_can_filter_t *filter);
 
 /** @brief Sentinel value indicating no interrupt pin should be configured. */
 #define HAL_CAN_NO_INT_PIN 0xFF
@@ -194,6 +284,16 @@ uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
  * @return HAL_CAN_DLC_INVALID for payloads larger than 64 bytes.
  */
 uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
+
+/** @brief Return true when a frame has a valid ID/DLC/flag combination. */
+bool hal_can_validate_frame(const hal_can_frame_t *frame);
+
+/** @brief Return true when a filter has a valid ID/mask/flag combination. */
+bool hal_can_validate_filter(const hal_can_filter_t *filter);
+
+/** @brief Return true when @p frame matches @p filter. */
+bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
+                                  const hal_can_filter_t *filter);
 
 /**
  * @brief Create a CAN channel with automatic retry and optional interrupt
