@@ -47,7 +47,7 @@ void app_task0(void) {
     return;
   }
 
-  uint8_t payload[8] = {0};
+  uint8_t payload[8] = {};
   payload[0] = (uint8_t)(s_counter & 0xFFu);
   payload[1] = (uint8_t)((s_counter >> 8) & 0xFFu);
 
@@ -60,7 +60,7 @@ void app_task0(void) {
   while (hal_can_available(s_can)) {
     uint32_t id = 0u;
     uint8_t len = 0u;
-    uint8_t rx[HAL_CAN_MAX_DATA_LEN] = {0};
+    uint8_t rx[HAL_CAN_MAX_DATA_LEN] = {};
     if (!hal_can_receive(s_can, &id, &len, rx)) {
       break;
     }

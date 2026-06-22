@@ -43,7 +43,7 @@ void app_task0(void) {
   if (now - last_tx_ms >= 2000u) {
     last_tx_ms = now;
 
-    char line[48] = {0};
+    char line[48] = {};
     snprintf(line, sizeof(line), "uart line %lu",
              (unsigned long)line_counter++);
     hal_uart_println(uart, line);

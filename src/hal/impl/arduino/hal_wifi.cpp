@@ -243,7 +243,7 @@ bool hal_wifi_get_mac(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_mac"))
     return false;
 
-  uint8_t mac[6] = {0};
+  uint8_t mac[6] = {};
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   WiFi.macAddress(mac);

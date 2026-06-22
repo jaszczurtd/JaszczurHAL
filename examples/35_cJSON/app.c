@@ -74,7 +74,7 @@ void app_start(void) {
   debugInit();
   hal_deb_set_prefix("CJSON");
 
-  example_config_t cfg = {0};
+  example_config_t cfg = {};
   if (parse_config(kConfigJson, &cfg)) {
     print_status_json(&cfg);
   }

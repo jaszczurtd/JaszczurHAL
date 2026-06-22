@@ -18,7 +18,7 @@ void app_start(void) {
   debugInit();
 
 #if defined(HAL_ENABLE_MCP9600)
-  hal_thermocouple_config_t mcp_cfg = {0};
+  hal_thermocouple_config_t mcp_cfg = {};
   mcp_cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
   mcp_cfg.bus.i2c.sda_pin = 4;
   mcp_cfg.bus.i2c.scl_pin = 5;
@@ -36,7 +36,7 @@ void app_start(void) {
 #endif
 
 #if defined(HAL_ENABLE_MAX6675)
-  hal_thermocouple_config_t max_cfg = {0};
+  hal_thermocouple_config_t max_cfg = {};
   max_cfg.chip = HAL_THERMOCOUPLE_CHIP_MAX6675;
   max_cfg.bus.spi.sclk_pin = 18;
   max_cfg.bus.spi.cs_pin = 17;

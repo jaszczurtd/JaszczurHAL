@@ -159,7 +159,7 @@ byte DS3231::bcdToDec(byte val) {
 }
 
 DateTime RTClib::now(DS3231 &rtc) {
-  byte buffer[7] = {0};
+  byte buffer[7] = {};
   if (!rtc.readBytes(0x00u, buffer, 7u)) {
     return DateTime(2000u, 1u, 1u, 0u, 0u, 0u);
   }

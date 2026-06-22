@@ -95,7 +95,7 @@ static void test_alarm_setup(void) {
 
   deb("\r\n=== Alarm Setup Test ===\r\n");
 
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
     derr("hal_rtc_get_datetime failed");
     return;
@@ -168,7 +168,7 @@ void app_start(void) {
     return;
   }
 
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (hal_rtc_get_datetime(g_rtc, &now)) {
     deb("Initial RTC value:\r\n");
     print_datetime(&now);
@@ -195,7 +195,7 @@ void app_task0(void) {
   }
   g_last_print_epoch = now_epoch;
 
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
     return;
   }
