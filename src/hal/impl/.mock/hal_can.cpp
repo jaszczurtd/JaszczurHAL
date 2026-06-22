@@ -6,16 +6,10 @@
 #include "hal_mock.h"
 #include <string.h>
 
-struct CanFrame {
-  uint32_t id;
-  uint8_t len;
-  uint8_t data[HAL_CAN_MAX_DATA_LEN];
-};
-
 struct hal_can_impl_s {
-  CanFrame rx[MOCK_CAN_BUF_SIZE];
+  hal_can_frame_t rx[MOCK_CAN_BUF_SIZE];
   int rx_head, rx_tail, rx_count;
-  CanFrame tx[MOCK_CAN_BUF_SIZE];
+  hal_can_frame_t tx[MOCK_CAN_BUF_SIZE];
   int tx_head, tx_tail, tx_count;
   int in_use;
   hal_mutex_t mutex;
@@ -23,7 +17,8 @@ struct hal_can_impl_s {
 
 static hal_can_impl_t s_pool[MOCK_CAN_MAX_INST];
 
-static int ring_push(CanFrame *buf, int *tail, int *count, const CanFrame *f) {
+static int ring_push(hal_can_frame_t *buf, int *tail, int *count,
+                     const hal_can_frame_t *f) {
   const int cap = hal_get_config()->mock_can_buf_size;
   if (*count >= cap)
     return -1;
@@ -33,7 +28,8 @@ static int ring_push(CanFrame *buf, int *tail, int *count, const CanFrame *f) {
   return 0;
 }
 
-static int ring_pop(CanFrame *buf, int *head, int *count, CanFrame *out) {
+static int ring_pop(hal_can_frame_t *buf, int *head, int *count,
+                    hal_can_frame_t *out) {
   const int cap = hal_get_config()->mock_can_buf_size;
   if (*count <= 0)
     return -1;
@@ -93,9 +89,10 @@ bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data) {
     return false;
   const uint8_t safe_len =
       len < HAL_CAN_MAX_DATA_LEN ? len : HAL_CAN_MAX_DATA_LEN;
-  CanFrame f;
+  hal_can_frame_t f = {};
   f.id = id;
   f.len = safe_len;
+  f.dlc = safe_len;
   if (safe_len > 0) {
     memcpy(f.data, data, safe_len);
   }
@@ -105,20 +102,66 @@ bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data) {
   return ok;
 }
 
+bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame) {
+  if (!h || !frame) {
+    return false;
+  }
+  if ((frame->flags & (HAL_CAN_FRAME_BRS | HAL_CAN_FRAME_ESI)) != 0u &&
+      (frame->flags & HAL_CAN_FRAME_FD) == 0u) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u) {
+    if (frame->id > 0x1FFFFFFFu) {
+      return false;
+    }
+  } else if (frame->id > 0x7FFu) {
+    return false;
+  }
+  if (frame->dlc > 15u) {
+    return false;
+  }
+  uint8_t expected_len = hal_can_dlc_to_bytes(frame->dlc);
+  if (expected_len != frame->len || frame->len > HAL_CAN_FD_MAX_DATA_LEN) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_FD) == 0u &&
+      frame->len > HAL_CAN_MAX_DATA_LEN) {
+    return false;
+  }
+
+  hal_mutex_lock(h->mutex);
+  bool ok = ring_push(h->tx, &h->tx_tail, &h->tx_count, frame) == 0;
+  hal_mutex_unlock(h->mutex);
+  return ok;
+}
+
 bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data) {
   if (!h || !id || !len || !data)
     return false;
   hal_mutex_lock(h->mutex);
-  CanFrame f;
+  hal_can_frame_t f;
   bool ok = ring_pop(h->rx, &h->rx_head, &h->rx_count, &f) == 0;
   hal_mutex_unlock(h->mutex);
   if (!ok)
     return false;
+  if ((f.flags & HAL_CAN_FRAME_FD) != 0u || f.len > HAL_CAN_MAX_DATA_LEN) {
+    return false;
+  }
   *id = f.id;
   *len = f.len;
   memcpy(data, f.data,
          f.len < HAL_CAN_MAX_DATA_LEN ? f.len : HAL_CAN_MAX_DATA_LEN);
   return true;
+}
+
+bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame) {
+  if (!h || !frame) {
+    return false;
+  }
+  hal_mutex_lock(h->mutex);
+  bool ok = ring_pop(h->rx, &h->rx_head, &h->rx_count, frame) == 0;
+  hal_mutex_unlock(h->mutex);
+  return ok;
 }
 
 bool hal_can_available(hal_can_t h) {
@@ -146,9 +189,10 @@ void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len,
     return;
   const uint8_t safe_len =
       len < HAL_CAN_MAX_DATA_LEN ? len : HAL_CAN_MAX_DATA_LEN;
-  CanFrame f;
+  hal_can_frame_t f = {};
   f.id = id;
   f.len = safe_len;
+  f.dlc = safe_len;
   if (safe_len > 0) {
     memcpy(f.data, data, safe_len);
   }
@@ -165,7 +209,7 @@ bool hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
   if (!h || !id || !len || !data)
     return false;
   hal_mutex_lock(h->mutex);
-  CanFrame f;
+  hal_can_frame_t f;
   bool ok = ring_pop(h->tx, &h->tx_head, &h->tx_count, &f) == 0;
   hal_mutex_unlock(h->mutex);
   if (!ok)
@@ -175,6 +219,28 @@ bool hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
   memcpy(data, f.data,
          f.len < HAL_CAN_MAX_DATA_LEN ? f.len : HAL_CAN_MAX_DATA_LEN);
   return true;
+}
+
+void hal_mock_can_inject_frame(hal_can_t h, const hal_can_frame_t *frame) {
+  if (!h || !frame) {
+    return;
+  }
+  hal_mutex_lock(h->mutex);
+  int ok = ring_push(h->rx, &h->rx_tail, &h->rx_count, frame);
+  hal_mutex_unlock(h->mutex);
+  HAL_ASSERT(
+      ok == 0,
+      "hal_mock_can_inject_frame: RX ring full - increase MOCK_CAN_BUF_SIZE");
+}
+
+bool hal_mock_can_get_sent_frame(hal_can_t h, hal_can_frame_t *frame) {
+  if (!h || !frame) {
+    return false;
+  }
+  hal_mutex_lock(h->mutex);
+  bool ok = ring_pop(h->tx, &h->tx_head, &h->tx_count, frame) == 0;
+  hal_mutex_unlock(h->mutex);
+  return ok;
 }
 
 void hal_mock_can_reset(hal_can_t h) {

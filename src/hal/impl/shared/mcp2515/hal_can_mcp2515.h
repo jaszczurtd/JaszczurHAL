@@ -12,3 +12,5 @@ bool hal_can_mcp2515_receive(JHMCP2515 *mcp, uint32_t *id, uint8_t *len,
 bool hal_can_mcp2515_available(JHMCP2515 *mcp);
 bool hal_can_mcp2515_set_std_filters(JHMCP2515 *mcp, uint32_t id0,
                                      uint32_t id1);
+bool hal_can_mcp2515_send_frame(JHMCP2515 *mcp, const hal_can_frame_t *frame);
+bool hal_can_mcp2515_receive_frame(JHMCP2515 *mcp, hal_can_frame_t *frame);
