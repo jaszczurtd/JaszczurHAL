@@ -85,6 +85,33 @@ static bool can_mcp2515_map_clock(uint32_t oscillator_hz, uint8_t *out_clock) {
   return true;
 }
 
+static bool can_mcp2515_mode_valid(hal_can_mode_t mode) {
+  const hal_can_mode_t supported = HAL_CAN_MODE_LOOPBACK |
+                                   HAL_CAN_MODE_LISTEN_ONLY |
+                                   HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_SLEEP;
+  if ((mode & ~supported) != 0u) {
+    return false;
+  }
+  uint8_t ops = 0u;
+  ops += (mode & HAL_CAN_MODE_LOOPBACK) != 0u ? 1u : 0u;
+  ops += (mode & HAL_CAN_MODE_LISTEN_ONLY) != 0u ? 1u : 0u;
+  ops += (mode & HAL_CAN_MODE_SLEEP) != 0u ? 1u : 0u;
+  return ops <= 1u;
+}
+
+static uint8_t can_mcp2515_op_mode(hal_can_mode_t mode) {
+  if ((mode & HAL_CAN_MODE_SLEEP) != 0u) {
+    return MCP_SLEEP;
+  }
+  if ((mode & HAL_CAN_MODE_LISTEN_ONLY) != 0u) {
+    return MCP_LISTENONLY;
+  }
+  if ((mode & HAL_CAN_MODE_LOOPBACK) != 0u) {
+    return MCP_LOOPBACK;
+  }
+  return MCP_NORMAL;
+}
+
 bool hal_can_mcp2515_init(JHMCP2515 *mcp, const hal_can_mcp2515_config_t *cfg) {
   if (!mcp || !cfg) {
     return false;
@@ -145,7 +172,7 @@ bool hal_can_mcp2515_send(JHMCP2515 *mcp, uint32_t id, uint8_t len,
 }
 
 static bool can_mcp2515_validate_classic_frame(const hal_can_frame_t *frame) {
-  if (!frame) {
+  if (!hal_can_validate_frame(frame)) {
     return false;
   }
   if (frame->flags &
@@ -153,15 +180,7 @@ static bool can_mcp2515_validate_classic_frame(const hal_can_frame_t *frame) {
     hal_derr_limited("can", "MCP2515 does not support CAN FD frames");
     return false;
   }
-  if (frame->len > HAL_CAN_MAX_DATA_LEN || frame->dlc != frame->len) {
-    hal_derr_limited("can", "invalid classic CAN DLC/length: %u/%u",
-                     (unsigned)frame->dlc, (unsigned)frame->len);
-    return false;
-  }
-  if ((frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u) {
-    return frame->id <= 0x1FFFFFFFu;
-  }
-  return frame->id <= 0x7FFu;
+  return true;
 }
 
 bool hal_can_mcp2515_send_frame(JHMCP2515 *mcp, const hal_can_frame_t *frame) {
@@ -270,6 +289,84 @@ bool hal_can_mcp2515_set_std_filters(JHMCP2515 *mcp, uint32_t id0,
   ok = ok && (mcp->init_Filt(4, 0, fid0) == CAN_OK);
   ok = ok && (mcp->init_Filt(5, 0, fid1) == CAN_OK);
   return ok;
+}
+
+bool hal_can_mcp2515_set_filter(JHMCP2515 *mcp, uint8_t index,
+                                const hal_can_filter_t *filter) {
+  if (!mcp || index >= HAL_CAN_MAX_FILTERS ||
+      !hal_can_validate_filter(filter)) {
+    return false;
+  }
+
+  const bool ext = (filter->flags & HAL_CAN_FILTER_EXTENDED) != 0u;
+  const uint8_t ext_flag = ext ? 1u : 0u;
+  const uint8_t mask_num = index < 2u ? 0u : 1u;
+  const uint32_t id = ext ? (filter->id & HAL_CAN_EXT_ID_MASK)
+                          : ((filter->id & HAL_CAN_STD_ID_MASK) << 16);
+  const uint32_t mask = ext ? (filter->mask & HAL_CAN_EXT_ID_MASK)
+                            : ((filter->mask & HAL_CAN_STD_ID_MASK) << 16);
+
+  bool ok = mcp->init_Mask(mask_num, ext_flag, mask) == CAN_OK;
+  ok = ok && (mcp->init_Filt(index, ext_flag, id) == CAN_OK);
+  return ok;
+}
+
+bool hal_can_mcp2515_set_mode(JHMCP2515 *mcp, hal_can_mode_t mode) {
+  if (!mcp || !can_mcp2515_mode_valid(mode)) {
+    return false;
+  }
+  bool ok = true;
+  if ((mode & HAL_CAN_MODE_ONE_SHOT) != 0u) {
+    ok = ok && (mcp->enOneShotTX() == CAN_OK);
+  } else {
+    ok = ok && (mcp->disOneShotTX() == CAN_OK);
+  }
+  ok = ok && (mcp->setMode(can_mcp2515_op_mode(mode)) == CAN_OK);
+  return ok;
+}
+
+bool hal_can_mcp2515_start(JHMCP2515 *mcp, hal_can_mode_t mode) {
+  return hal_can_mcp2515_set_mode(mcp, mode);
+}
+
+bool hal_can_mcp2515_stop(JHMCP2515 *mcp) {
+  if (!mcp) {
+    return false;
+  }
+  (void)mcp->abortTX();
+  return mcp->setMode(MODE_CONFIG) == CAN_OK;
+}
+
+bool hal_can_mcp2515_get_state(JHMCP2515 *mcp, bool started,
+                               hal_can_state_t *state) {
+  if (!mcp || !state) {
+    return false;
+  }
+  if (!started) {
+    *state = HAL_CAN_STATE_STOPPED;
+    return true;
+  }
+  const uint8_t eflg = mcp->getError();
+  if ((eflg & MCP_EFLG_TXBO) != 0u) {
+    *state = HAL_CAN_STATE_BUS_OFF;
+  } else if ((eflg & (MCP_EFLG_RXEP | MCP_EFLG_TXEP)) != 0u) {
+    *state = HAL_CAN_STATE_ERROR_PASSIVE;
+  } else if ((eflg & MCP_EFLG_EWARN) != 0u) {
+    *state = HAL_CAN_STATE_ERROR_WARNING;
+  } else {
+    *state = HAL_CAN_STATE_ERROR_ACTIVE;
+  }
+  return true;
+}
+
+bool hal_can_mcp2515_get_error_counters(JHMCP2515 *mcp,
+                                        hal_can_error_counters_t *counters) {
+  if (!mcp || !counters) {
+    return false;
+  }
+  counters->tx = mcp->errorCountTX();
+  counters->rx = mcp->errorCountRX();
+  return true;
 }
 
 #endif /* HAL_ENABLE_CAN && HAL_ENABLE_MCP2515 */

@@ -12,6 +12,9 @@ Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 #define HAL_CAN_MAX_DATA_LEN 8
 #define HAL_CAN_FD_MAX_DATA_LEN 64
 #define HAL_CAN_DLC_INVALID 0xFFu
+#define HAL_CAN_STD_ID_MASK 0x7FFu
+#define HAL_CAN_EXT_ID_MASK 0x1FFFFFFFu
+#define HAL_CAN_MAX_FILTERS 6u
 #define HAL_CAN_NO_INT_PIN   0xFF
 
 // Opaque handle - one per physical CAN controller/backend instance
@@ -37,6 +40,40 @@ typedef struct {
     uint8_t flags;
     uint8_t data[HAL_CAN_FD_MAX_DATA_LEN];
 } hal_can_frame_t;
+
+enum {
+    HAL_CAN_FILTER_EXTENDED = 0x01u
+};
+
+typedef struct {
+    uint32_t id;
+    uint32_t mask;
+    uint8_t flags;
+} hal_can_filter_t;
+
+typedef uint32_t hal_can_mode_t;
+
+enum {
+    HAL_CAN_MODE_NORMAL      = 0x00u,
+    HAL_CAN_MODE_LOOPBACK    = 0x01u,
+    HAL_CAN_MODE_LISTEN_ONLY = 0x02u,
+    HAL_CAN_MODE_FD          = 0x04u,
+    HAL_CAN_MODE_ONE_SHOT    = 0x08u,
+    HAL_CAN_MODE_SLEEP       = 0x10u
+};
+
+typedef enum {
+    HAL_CAN_STATE_ERROR_ACTIVE = 0,
+    HAL_CAN_STATE_ERROR_WARNING,
+    HAL_CAN_STATE_ERROR_PASSIVE,
+    HAL_CAN_STATE_BUS_OFF,
+    HAL_CAN_STATE_STOPPED
+} hal_can_state_t;
+
+typedef struct {
+    uint8_t tx;
+    uint8_t rx;
+} hal_can_error_counters_t;
 
 typedef struct {
     uint8_t spi_bus;
@@ -77,6 +114,17 @@ bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
 // Read the next available CAN/CAN FD frame.
 bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
+// Start/stop and controller modes. New handles are started by default.
+bool hal_can_start(hal_can_t h);
+bool hal_can_stop(hal_can_t h);
+bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
+bool hal_can_get_mode(hal_can_t h, hal_can_mode_t *mode);
+
+// Controller state and diagnostics.
+bool hal_can_get_state(hal_can_t h, hal_can_state_t *state);
+bool hal_can_get_error_counters(hal_can_t h,
+                                hal_can_error_counters_t *counters);
+
 // Non-blocking check: true if at least one frame is waiting
 bool hal_can_available(hal_can_t h);
 
@@ -84,6 +132,10 @@ bool hal_can_available(hal_can_t h);
 // Non-matching IDs are dropped by MCP2515 before entering RX buffers.
 // Returns false if MCP2515 mask/filter programming fails.
 bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
+
+// Configure one acceptance-filter slot with id/mask/flags.
+bool hal_can_set_filter(hal_can_t h, uint8_t index,
+                        const hal_can_filter_t *filter);
 
 // Retry-friendly create helper with optional IRQ pin setup.
 hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
@@ -99,6 +151,10 @@ int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
 // CAN FD length and returns HAL_CAN_DLC_INVALID for >64 bytes.
 uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
 uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
+bool hal_can_validate_frame(const hal_can_frame_t *frame);
+bool hal_can_validate_filter(const hal_can_filter_t *filter);
+bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
+                                  const hal_can_filter_t *filter);
 
 // Encode temperature in °C as signed int8 CAN payload byte.
 // Truncates toward zero, saturates to [-128, 127], returns two's complement byte.
@@ -114,6 +170,8 @@ register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`.
 `HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade flag that requires a backend.
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
 **CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`, `hal_can_receive_frame()`, and the DLC helpers are backend-agnostic and prepared for native CAN FD controllers. MCP2515 is a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`, `HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and `HAL_CAN_FRAME_RTR` for remote frames.
+**Modes and diagnostics:** New handles are started by default. `hal_can_stop()` puts MCP2515 into configuration mode and aborts pending TX; `hal_can_start()` reapplies the stored mode. MCP2515 supports normal, loopback, listen-only, sleep and one-shot mode flags; `HAL_CAN_MODE_FD` is reserved for future native CAN FD backends and is rejected by MCP2515. `hal_can_get_state()` maps MCP2515 `EFLG` into error-active/warning/passive/bus-off/stopped, and `hal_can_get_error_counters()` reads TEC/REC.
+**Filters:** `hal_can_set_filter()` programs one id/mask slot. MCP2515 exposes six slots: 0-1 share mask group 0, and 2-5 share mask group 1, so updating one slot also updates the mask used by sibling slots in that group. `hal_can_set_std_filters()` remains a convenience helper for two exact 11-bit IDs.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
 `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.

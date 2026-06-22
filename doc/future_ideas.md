@@ -353,6 +353,14 @@ Current MCP2515 backend-selector status:
   IDs and RTR, and explicitly rejects FD/BRS/ESI frames as unsupported by the
   hardware;
 - done: mock CAN supports CAN FD frames for API and future-backend tests;
+- done: `hal_can_filter_t` plus static `hal_can_set_filter()` id/mask slots,
+  with the old two-standard-ID helper kept as a convenience wrapper;
+- done: `hal_can_mode_t`, `hal_can_set_mode()`, `hal_can_start()`, and
+  `hal_can_stop()` for normal, loopback, listen-only, sleep, and one-shot MCP2515
+  operation;
+- done: `hal_can_state_t` and `hal_can_error_counters_t`, mapped from MCP2515
+  `EFLG`, `TEC`, and `REC` using the same state ordering as Zephyr's driver;
+- done: shared frame/filter validation plus `hal_can_frame_matches_filter()`;
 - not done: any backend other than MCP2515;
 - not done: a real native STM32G474 FDCAN implementation.
 
@@ -380,30 +388,24 @@ Recommended JaszczurHAL API evolution:
 
 - treat the current config-based create API as stage 1 of the CAN backend
   split;
-- continue the richer frame/filter API as stage 2:
-  `hal_can_filter_t`, `hal_can_mode_t`, `hal_can_state_t`,
-  `hal_can_error_counters_t`;
+- continue the richer frame/filter API as stage 2 only where a future backend
+  needs features beyond the current static filter/mode/state surface;
 - keep `hal_can_send()` and `hal_can_receive()` as compatibility wrappers for
   classic 8-byte data frames;
-- add `hal_can_add_filter()` / `hal_can_remove_filter()` or a simpler static
-  filter API;
-- add `hal_can_get_state()` and `hal_can_get_error_counters()`;
-- add `hal_can_set_mode()`, `hal_can_start()`, and `hal_can_stop()` when the
-  backend can support them;
-- add helpers: `hal_can_frame_matches_filter()` and shared frame ID
-  validation.
+- consider callback-style `hal_can_add_filter()` / `hal_can_remove_filter()`
+  only if an interrupt-driven RX path needs owned filter registrations;
+- consider state-change callbacks once interrupt-driven error handling exists.
 
 MCP2515 backend improvements suggested by Zephyr:
 
 - keep MCP2515 as a normal backend behind `hal_can_config_t`, not as the public
   API shape;
 - done: support extended 29-bit IDs and RTR frames in the public HAL frame API;
-- expose listen-only, loopback, one-shot, and sleep/normal modes;
-- expose MCP2515 error state and TX/RX error counters already present in the
-  shared driver;
-- replace `hal_can_set_std_filters(id0, id1)` over time with mask/filter
-  primitives;
-- keep the old function as a convenience wrapper.
+- done: expose listen-only, loopback, one-shot, sleep, and normal modes;
+- done: expose MCP2515 error state and TX/RX error counters already present in
+  the shared driver;
+- done: add mask/filter primitives while keeping
+  `hal_can_set_std_filters(id0, id1)` as a convenience wrapper.
 
 STM32G474 native FDCAN direction:
 

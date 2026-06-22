@@ -155,6 +155,56 @@ void test_dlc_helpers_cover_classic_and_fd_lengths(void) {
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_DLC_INVALID, hal_can_bytes_to_dlc(65));
 }
 
+void test_frame_validation_rejects_invalid_id_flags_and_lengths(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x7FFu;
+  frame.dlc = 8;
+  frame.len = 8;
+  TEST_ASSERT_TRUE(hal_can_validate_frame(&frame));
+
+  frame.id = 0x800u;
+  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+
+  frame.id = 0x1FFFFFFFu;
+  frame.flags = HAL_CAN_FRAME_EXTENDED;
+  TEST_ASSERT_TRUE(hal_can_validate_frame(&frame));
+
+  frame.flags = HAL_CAN_FRAME_BRS;
+  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+
+  frame.flags = 0x80u;
+  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+
+  frame.flags = HAL_CAN_FRAME_FD | HAL_CAN_FRAME_RTR;
+  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+
+  frame.flags = HAL_CAN_FRAME_FD;
+  frame.dlc = 9;
+  frame.len = 11;
+  TEST_ASSERT_FALSE(hal_can_validate_frame(&frame));
+}
+
+void test_filter_validation_and_frame_matching(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x123u;
+  frame.dlc = 2;
+  frame.len = 2;
+
+  hal_can_filter_t filter = {0x120u, 0x7F0u, 0u};
+  TEST_ASSERT_TRUE(hal_can_validate_filter(&filter));
+  TEST_ASSERT_TRUE(hal_can_frame_matches_filter(&frame, &filter));
+
+  filter.id = 0x130u;
+  TEST_ASSERT_FALSE(hal_can_frame_matches_filter(&frame, &filter));
+
+  filter.id = 0x123u;
+  filter.flags = HAL_CAN_FILTER_EXTENDED;
+  TEST_ASSERT_FALSE(hal_can_frame_matches_filter(&frame, &filter));
+
+  filter.id = 0x20000000u;
+  TEST_ASSERT_FALSE(hal_can_validate_filter(&filter));
+}
+
 void test_send_frame_stores_extended_rtr_frame(void) {
   hal_can_frame_t frame = {};
   frame.id = 0x1ABCDEFu;
@@ -230,6 +280,93 @@ void test_legacy_receive_rejects_fd_frame(void) {
 void test_set_std_filters_validates_handle(void) {
   TEST_ASSERT_TRUE(hal_can_set_std_filters(can, 0x7E0, 0x7DF));
   TEST_ASSERT_FALSE(hal_can_set_std_filters(nullptr, 0x7E0, 0x7DF));
+}
+
+void test_static_filter_accepts_matching_frames_only(void) {
+  hal_can_filter_t filter = {0x120u, 0x7F0u, 0u};
+  TEST_ASSERT_TRUE(hal_can_set_filter(can, 0u, &filter));
+  TEST_ASSERT_FALSE(hal_can_set_filter(can, HAL_CAN_MAX_FILTERS, &filter));
+
+  uint8_t payload[] = {0x42};
+  hal_mock_can_inject(can, 0x130u, 1u, payload);
+  TEST_ASSERT_FALSE(hal_can_available(can));
+
+  hal_mock_can_inject(can, 0x123u, 1u, payload);
+  TEST_ASSERT_TRUE(hal_can_available(can));
+
+  uint32_t id;
+  uint8_t len;
+  uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
+  TEST_ASSERT_TRUE(hal_can_receive(can, &id, &len, buf));
+  TEST_ASSERT_EQUAL_HEX32(0x123u, id);
+  TEST_ASSERT_EQUAL_UINT8(1u, len);
+  TEST_ASSERT_EQUAL_HEX8(0x42u, buf[0]);
+}
+
+void test_extended_filter_matches_only_extended_frames(void) {
+  hal_can_filter_t filter = {0x1ABCDE0u, 0x1FFFFFF0u, HAL_CAN_FILTER_EXTENDED};
+  TEST_ASSERT_TRUE(hal_can_set_filter(can, 2u, &filter));
+
+  hal_can_frame_t frame = {};
+  frame.id = 0x5E0u;
+  frame.dlc = 1;
+  frame.len = 1;
+  frame.data[0] = 0x11u;
+  hal_mock_can_inject_frame(can, &frame);
+  TEST_ASSERT_FALSE(hal_can_available(can));
+
+  frame.id = 0x1ABCDE3u;
+  frame.flags = HAL_CAN_FRAME_EXTENDED;
+  hal_mock_can_inject_frame(can, &frame);
+  TEST_ASSERT_TRUE(hal_can_available(can));
+}
+
+void test_start_stop_and_modes_control_send_path(void) {
+  hal_can_mode_t mode = 0xFFFFFFFFu;
+  TEST_ASSERT_TRUE(hal_can_get_mode(can, &mode));
+  TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_ONE_SHOT, mode);
+
+  TEST_ASSERT_TRUE(
+      hal_can_set_mode(can, HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_ONE_SHOT));
+  TEST_ASSERT_TRUE(hal_can_get_mode(can, &mode));
+  TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_ONE_SHOT, mode);
+
+  TEST_ASSERT_FALSE(
+      hal_can_set_mode(can, HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_LISTEN_ONLY));
+  TEST_ASSERT_FALSE(hal_can_set_mode(can, HAL_CAN_MODE_FD));
+
+  uint8_t payload[] = {0x01};
+  TEST_ASSERT_TRUE(hal_can_stop(can));
+  TEST_ASSERT_FALSE(hal_can_send(can, 0x123u, 1u, payload));
+
+  hal_can_state_t state = HAL_CAN_STATE_ERROR_ACTIVE;
+  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL(HAL_CAN_STATE_STOPPED, state);
+
+  TEST_ASSERT_TRUE(hal_can_start(can));
+  TEST_ASSERT_TRUE(hal_can_send(can, 0x123u, 1u, payload));
+
+  TEST_ASSERT_TRUE(hal_can_set_mode(can, HAL_CAN_MODE_SLEEP));
+  TEST_ASSERT_FALSE(hal_can_send(can, 0x123u, 1u, payload));
+}
+
+void test_state_and_error_counters_are_reported(void) {
+  hal_can_state_t state = HAL_CAN_STATE_STOPPED;
+  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL(HAL_CAN_STATE_ERROR_ACTIVE, state);
+
+  hal_mock_can_set_state(can, HAL_CAN_STATE_ERROR_PASSIVE);
+  TEST_ASSERT_TRUE(hal_can_get_state(can, &state));
+  TEST_ASSERT_EQUAL(HAL_CAN_STATE_ERROR_PASSIVE, state);
+
+  hal_mock_can_set_error_counters(can, 17u, 23u);
+  hal_can_error_counters_t counters = {};
+  TEST_ASSERT_TRUE(hal_can_get_error_counters(can, &counters));
+  TEST_ASSERT_EQUAL_UINT8(17u, counters.tx);
+  TEST_ASSERT_EQUAL_UINT8(23u, counters.rx);
+
+  TEST_ASSERT_FALSE(hal_can_get_state(nullptr, &state));
+  TEST_ASSERT_FALSE(hal_can_get_error_counters(can, nullptr));
 }
 
 void test_encode_temp_i8_positive_values(void) {
@@ -337,11 +474,17 @@ int main(void) {
   RUN_TEST(test_send_null_data_with_nonzero_len_returns_false);
   RUN_TEST(test_send_clamps_payload_len_to_max);
   RUN_TEST(test_dlc_helpers_cover_classic_and_fd_lengths);
+  RUN_TEST(test_frame_validation_rejects_invalid_id_flags_and_lengths);
+  RUN_TEST(test_filter_validation_and_frame_matching);
   RUN_TEST(test_send_frame_stores_extended_rtr_frame);
   RUN_TEST(test_send_receive_can_fd_frame_via_mock_frame_api);
   RUN_TEST(test_send_frame_rejects_invalid_fd_shape);
   RUN_TEST(test_legacy_receive_rejects_fd_frame);
   RUN_TEST(test_set_std_filters_validates_handle);
+  RUN_TEST(test_static_filter_accepts_matching_frames_only);
+  RUN_TEST(test_extended_filter_matches_only_extended_frames);
+  RUN_TEST(test_start_stop_and_modes_control_send_path);
+  RUN_TEST(test_state_and_error_counters_are_reported);
   RUN_TEST(test_encode_temp_i8_positive_values);
   RUN_TEST(test_encode_temp_i8_negative_values);
   RUN_TEST(test_encode_temp_i8_boundary_values);
