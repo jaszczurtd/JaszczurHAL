@@ -144,6 +144,51 @@ bool hal_can_mcp2515_send(JHMCP2515 *mcp, uint32_t id, uint8_t len,
   return ok;
 }
 
+static bool can_mcp2515_validate_classic_frame(const hal_can_frame_t *frame) {
+  if (!frame) {
+    return false;
+  }
+  if (frame->flags &
+      (HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS | HAL_CAN_FRAME_ESI)) {
+    hal_derr_limited("can", "MCP2515 does not support CAN FD frames");
+    return false;
+  }
+  if (frame->len > HAL_CAN_MAX_DATA_LEN || frame->dlc != frame->len) {
+    hal_derr_limited("can", "invalid classic CAN DLC/length: %u/%u",
+                     (unsigned)frame->dlc, (unsigned)frame->len);
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_EXTENDED) != 0u) {
+    return frame->id <= 0x1FFFFFFFu;
+  }
+  return frame->id <= 0x7FFu;
+}
+
+bool hal_can_mcp2515_send_frame(JHMCP2515 *mcp, const hal_can_frame_t *frame) {
+  if (!mcp || !can_mcp2515_validate_classic_frame(frame)) {
+    return false;
+  }
+
+  uint32_t id = frame->id;
+  if (frame->flags & HAL_CAN_FRAME_EXTENDED) {
+    id |= CAN_IS_EXTENDED;
+  }
+  if (frame->flags & HAL_CAN_FRAME_RTR) {
+    id |= CAN_IS_REMOTE_REQUEST;
+  }
+
+  uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
+  if ((frame->flags & HAL_CAN_FRAME_RTR) == 0u && frame->len > 0u) {
+    memcpy(buf, frame->data, frame->len);
+  }
+
+  bool ok = mcp->sendMsgBuf(id, frame->len, buf) == CAN_OK;
+  if (!ok) {
+    hal_derr_limited("can", "send frame failed for id=%u", (unsigned)frame->id);
+  }
+  return ok;
+}
+
 bool hal_can_mcp2515_receive(JHMCP2515 *mcp, uint32_t *id, uint8_t *len,
                              uint8_t *data) {
   if (!mcp || !id || !len || !data) {
@@ -164,6 +209,42 @@ bool hal_can_mcp2515_receive(JHMCP2515 *mcp, uint32_t *id, uint8_t *len,
   *len = msg_len;
   memcpy(data, buf,
          msg_len < HAL_CAN_MAX_DATA_LEN ? msg_len : HAL_CAN_MAX_DATA_LEN);
+  return true;
+}
+
+bool hal_can_mcp2515_receive_frame(JHMCP2515 *mcp, hal_can_frame_t *frame) {
+  if (!mcp || !frame) {
+    return false;
+  }
+  if (mcp->checkReceive() != CAN_MSGAVAIL) {
+    return false;
+  }
+
+  uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
+  uint8_t ext = 0u;
+  uint8_t msg_len = 0u;
+  uint32_t msg_id = 0u;
+  bool ok = mcp->readMsgBuf(&msg_id, &ext, &msg_len, buf) == CAN_OK;
+  if (!ok) {
+    return false;
+  }
+
+  memset(frame, 0, sizeof(*frame));
+  frame->flags = 0u;
+  if ((msg_id & CAN_IS_EXTENDED) != 0u || ext != 0u) {
+    frame->flags |= HAL_CAN_FRAME_EXTENDED;
+    msg_id &= ~CAN_IS_EXTENDED;
+  }
+  if ((msg_id & CAN_IS_REMOTE_REQUEST) != 0u) {
+    frame->flags |= HAL_CAN_FRAME_RTR;
+    msg_id &= ~CAN_IS_REMOTE_REQUEST;
+  }
+  frame->id = msg_id;
+  frame->len = msg_len < HAL_CAN_MAX_DATA_LEN ? msg_len : HAL_CAN_MAX_DATA_LEN;
+  frame->dlc = frame->len;
+  if (frame->len > 0u) {
+    memcpy(frame->data, buf, frame->len);
+  }
   return true;
 }
 

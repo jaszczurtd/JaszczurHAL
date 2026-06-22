@@ -139,6 +139,94 @@ void test_send_clamps_payload_len_to_max(void) {
   TEST_ASSERT_EQUAL_HEX8(0x08, buf[7]);
 }
 
+void test_dlc_helpers_cover_classic_and_fd_lengths(void) {
+  TEST_ASSERT_EQUAL_UINT8(0, hal_can_dlc_to_bytes(0));
+  TEST_ASSERT_EQUAL_UINT8(8, hal_can_dlc_to_bytes(8));
+  TEST_ASSERT_EQUAL_UINT8(12, hal_can_dlc_to_bytes(9));
+  TEST_ASSERT_EQUAL_UINT8(64, hal_can_dlc_to_bytes(15));
+  TEST_ASSERT_EQUAL_UINT8(0, hal_can_dlc_to_bytes(16));
+
+  TEST_ASSERT_EQUAL_UINT8(0, hal_can_bytes_to_dlc(0));
+  TEST_ASSERT_EQUAL_UINT8(8, hal_can_bytes_to_dlc(8));
+  TEST_ASSERT_EQUAL_UINT8(9, hal_can_bytes_to_dlc(9));
+  TEST_ASSERT_EQUAL_UINT8(9, hal_can_bytes_to_dlc(12));
+  TEST_ASSERT_EQUAL_UINT8(10, hal_can_bytes_to_dlc(13));
+  TEST_ASSERT_EQUAL_UINT8(15, hal_can_bytes_to_dlc(64));
+  TEST_ASSERT_EQUAL_UINT8(HAL_CAN_DLC_INVALID, hal_can_bytes_to_dlc(65));
+}
+
+void test_send_frame_stores_extended_rtr_frame(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x1ABCDEFu;
+  frame.flags = HAL_CAN_FRAME_EXTENDED | HAL_CAN_FRAME_RTR;
+  frame.dlc = 4;
+  frame.len = 4;
+
+  TEST_ASSERT_TRUE(hal_can_send_frame(can, &frame));
+
+  hal_can_frame_t sent = {};
+  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(can, &sent));
+  TEST_ASSERT_EQUAL_HEX32(frame.id, sent.id);
+  TEST_ASSERT_EQUAL_UINT8(frame.flags, sent.flags);
+  TEST_ASSERT_EQUAL_UINT8(4, sent.dlc);
+  TEST_ASSERT_EQUAL_UINT8(4, sent.len);
+}
+
+void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x123u;
+  frame.flags = HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS;
+  frame.len = 64;
+  frame.dlc = hal_can_bytes_to_dlc(frame.len);
+  for (uint8_t i = 0; i < frame.len; i++) {
+    frame.data[i] = i;
+  }
+
+  TEST_ASSERT_TRUE(hal_can_send_frame(can, &frame));
+  hal_can_frame_t sent = {};
+  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(can, &sent));
+  TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, sent.flags);
+  TEST_ASSERT_EQUAL_UINT8(15, sent.dlc);
+  TEST_ASSERT_EQUAL_UINT8(64, sent.len);
+  TEST_ASSERT_EQUAL_UINT8(63, sent.data[63]);
+
+  hal_mock_can_inject_frame(can, &frame);
+  hal_can_frame_t rx = {};
+  TEST_ASSERT_TRUE(hal_can_receive_frame(can, &rx));
+  TEST_ASSERT_EQUAL_HEX32(0x123u, rx.id);
+  TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, rx.flags);
+  TEST_ASSERT_EQUAL_UINT8(64, rx.len);
+  TEST_ASSERT_EQUAL_UINT8(42, rx.data[42]);
+}
+
+void test_send_frame_rejects_invalid_fd_shape(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x123u;
+  frame.flags = HAL_CAN_FRAME_BRS;
+  frame.dlc = 9;
+  frame.len = 12;
+  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
+
+  frame.flags = HAL_CAN_FRAME_FD;
+  frame.dlc = 9;
+  frame.len = 11;
+  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
+}
+
+void test_legacy_receive_rejects_fd_frame(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x123u;
+  frame.flags = HAL_CAN_FRAME_FD;
+  frame.dlc = 9;
+  frame.len = 12;
+  hal_mock_can_inject_frame(can, &frame);
+
+  uint32_t id;
+  uint8_t len;
+  uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
+  TEST_ASSERT_FALSE(hal_can_receive(can, &id, &len, buf));
+}
+
 void test_set_std_filters_validates_handle(void) {
   TEST_ASSERT_TRUE(hal_can_set_std_filters(can, 0x7E0, 0x7DF));
   TEST_ASSERT_FALSE(hal_can_set_std_filters(nullptr, 0x7E0, 0x7DF));
@@ -248,6 +336,11 @@ int main(void) {
   RUN_TEST(test_send_null_handle_returns_false);
   RUN_TEST(test_send_null_data_with_nonzero_len_returns_false);
   RUN_TEST(test_send_clamps_payload_len_to_max);
+  RUN_TEST(test_dlc_helpers_cover_classic_and_fd_lengths);
+  RUN_TEST(test_send_frame_stores_extended_rtr_frame);
+  RUN_TEST(test_send_receive_can_fd_frame_via_mock_frame_api);
+  RUN_TEST(test_send_frame_rejects_invalid_fd_shape);
+  RUN_TEST(test_legacy_receive_rejects_fd_frame);
   RUN_TEST(test_set_std_filters_validates_handle);
   RUN_TEST(test_encode_temp_i8_positive_values);
   RUN_TEST(test_encode_temp_i8_negative_values);

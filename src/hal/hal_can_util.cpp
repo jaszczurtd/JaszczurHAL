@@ -52,6 +52,43 @@ int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb) {
   return count;
 }
 
+uint8_t hal_can_dlc_to_bytes(uint8_t dlc) {
+  static const uint8_t fd_lengths[16] = {0, 1,  2,  3,  4,  5,  6,  7,
+                                         8, 12, 16, 20, 24, 32, 48, 64};
+  if (dlc >= (uint8_t)(sizeof(fd_lengths) / sizeof(fd_lengths[0]))) {
+    return 0;
+  }
+  return fd_lengths[dlc];
+}
+
+uint8_t hal_can_bytes_to_dlc(uint8_t bytes) {
+  if (bytes <= 8u) {
+    return bytes;
+  }
+  if (bytes <= 12u) {
+    return 9u;
+  }
+  if (bytes <= 16u) {
+    return 10u;
+  }
+  if (bytes <= 20u) {
+    return 11u;
+  }
+  if (bytes <= 24u) {
+    return 12u;
+  }
+  if (bytes <= 32u) {
+    return 13u;
+  }
+  if (bytes <= 48u) {
+    return 14u;
+  }
+  if (bytes <= 64u) {
+    return 15u;
+  }
+  return HAL_CAN_DLC_INVALID;
+}
+
 uint8_t hal_can_encode_temp_i8(float temp_c) {
   int32_t value = (int32_t)temp_c;
 

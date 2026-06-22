@@ -322,10 +322,14 @@ The compile-time backend flag is `HAL_ENABLE_MCP2515`, which propagates both
 SPI.
 
 The compatibility surface still supports `id + len + data`, polling receive, a
-simple two-standard-ID filter helper, and retry/interrupt setup helpers. Both
-the Arduino-style and STM32G474 backends currently wrap the shared MCP2515
-driver; the STM32G474 backend does not yet use the MCU's native FDCAN
-peripheral.
+simple two-standard-ID filter helper, and retry/interrupt setup helpers. A
+backend-agnostic frame API is now in place through `hal_can_frame_t`,
+`hal_can_send_frame()`, and `hal_can_receive_frame()`. It carries classic CAN
+and CAN FD shape information (`dlc`, decoded payload length, extended ID, RTR,
+FD, BRS, and ESI flags), while the legacy helpers remain classic 8-byte
+convenience wrappers. Both the Arduino-style and STM32G474 backends currently
+wrap the shared MCP2515 driver; the STM32G474 backend does not yet use the
+MCU's native FDCAN peripheral.
 
 Current MCP2515 backend-selector status:
 
@@ -340,6 +344,15 @@ Current MCP2515 backend-selector status:
   the public facade/dispatcher;
 - done: bitrate and oscillator mapping for the MCP2515 driver constants;
 - done: one-shot TX and sleep-wakeup moved from hardcoded behavior to config;
+- done: common `hal_can_frame_t` and frame send/receive APIs for classic CAN
+  plus future CAN FD backends;
+- done: public frame flags for extended ID, RTR, CAN FD, BRS, and ESI;
+- done: CAN/CAN FD DLC conversion helpers (`hal_can_dlc_to_bytes()` and
+  `hal_can_bytes_to_dlc()`);
+- done: MCP2515 accepts the new frame API for classic CAN, including extended
+  IDs and RTR, and explicitly rejects FD/BRS/ESI frames as unsupported by the
+  hardware;
+- done: mock CAN supports CAN FD frames for API and future-backend tests;
 - not done: any backend other than MCP2515;
 - not done: a real native STM32G474 FDCAN implementation.
 
@@ -367,26 +380,24 @@ Recommended JaszczurHAL API evolution:
 
 - treat the current config-based create API as stage 1 of the CAN backend
   split;
-- add a richer frame/filter API as stage 2:
-  `hal_can_frame_t`, `hal_can_filter_t`, `hal_can_mode_t`,
-  `hal_can_state_t`, `hal_can_error_counters_t`;
+- continue the richer frame/filter API as stage 2:
+  `hal_can_filter_t`, `hal_can_mode_t`, `hal_can_state_t`,
+  `hal_can_error_counters_t`;
 - keep `hal_can_send()` and `hal_can_receive()` as compatibility wrappers for
   classic 8-byte data frames;
-- add `hal_can_send_frame()` and `hal_can_receive_frame()`;
 - add `hal_can_add_filter()` / `hal_can_remove_filter()` or a simpler static
   filter API;
 - add `hal_can_get_state()` and `hal_can_get_error_counters()`;
 - add `hal_can_set_mode()`, `hal_can_start()`, and `hal_can_stop()` when the
   backend can support them;
-- add helpers:
-  `hal_can_dlc_to_bytes()`, `hal_can_bytes_to_dlc()`,
-  `hal_can_frame_matches_filter()`, and frame ID validation.
+- add helpers: `hal_can_frame_matches_filter()` and shared frame ID
+  validation.
 
 MCP2515 backend improvements suggested by Zephyr:
 
 - keep MCP2515 as a normal backend behind `hal_can_config_t`, not as the public
   API shape;
-- support extended 29-bit IDs and RTR frames in the public HAL API;
+- done: support extended 29-bit IDs and RTR frames in the public HAL frame API;
 - expose listen-only, loopback, one-shot, and sleep/normal modes;
 - expose MCP2515 error state and TX/RX error counters already present in the
   shared driver;

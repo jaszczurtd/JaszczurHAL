@@ -125,6 +125,27 @@ bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data) {
   return ok;
 }
 
+bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame) {
+  if (!h || !h->in_use) {
+    hal_derr_limited("can", "send_frame called with NULL handle");
+    return false;
+  }
+  if (!frame) {
+    hal_derr_limited("can", "send_frame called with NULL frame");
+    return false;
+  }
+
+  hal_mutex_lock(h->mutex);
+  bool ok = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    ok = hal_can_mcp2515_send_frame(as_mcp2515(h), frame);
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return ok;
+}
+
 bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data) {
   if (!h || !h->in_use) {
     hal_derr_limited("can", "receive called with NULL handle");
@@ -140,6 +161,27 @@ bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data) {
 #ifdef HAL_ENABLE_MCP2515
   if (h->backend == HAL_CAN_BACKEND_MCP2515) {
     ok = hal_can_mcp2515_receive(as_mcp2515(h), id, len, data);
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return ok;
+}
+
+bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame) {
+  if (!h || !h->in_use) {
+    hal_derr_limited("can", "receive_frame called with NULL handle");
+    return false;
+  }
+  if (!frame) {
+    hal_derr_limited("can", "receive_frame called with NULL frame");
+    return false;
+  }
+
+  hal_mutex_lock(h->mutex);
+  bool ok = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    ok = hal_can_mcp2515_receive_frame(as_mcp2515(h), frame);
   }
 #endif
   hal_mutex_unlock(h->mutex);

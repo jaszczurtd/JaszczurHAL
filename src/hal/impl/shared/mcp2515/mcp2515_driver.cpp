@@ -675,10 +675,14 @@ INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U ext, INT8U len, INT8U *buf) {
 INT8U JHMCP2515::sendMsgBuf(INT32U id, INT8U len, INT8U *buf) {
   JHMCP2515Guard guard(*this);
   INT8U ext = 0, rtr = 0;
-  if ((id & CAN_IS_EXTENDED) == CAN_IS_EXTENDED)
+  if ((id & CAN_IS_EXTENDED) == CAN_IS_EXTENDED) {
     ext = 1;
-  if ((id & CAN_IS_REMOTE_REQUEST) == CAN_IS_REMOTE_REQUEST)
+    id &= ~CAN_IS_EXTENDED;
+  }
+  if ((id & CAN_IS_REMOTE_REQUEST) == CAN_IS_REMOTE_REQUEST) {
     rtr = 1;
+    id &= ~CAN_IS_REMOTE_REQUEST;
+  }
   setMsg(id, rtr, ext, len, buf);
   return sendMsg();
 }

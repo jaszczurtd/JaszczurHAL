@@ -10,6 +10,8 @@ Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 #include <hal/hal_can.h>
 
 #define HAL_CAN_MAX_DATA_LEN 8
+#define HAL_CAN_FD_MAX_DATA_LEN 64
+#define HAL_CAN_DLC_INVALID 0xFFu
 #define HAL_CAN_NO_INT_PIN   0xFF
 
 // Opaque handle - one per physical CAN controller/backend instance
@@ -19,6 +21,22 @@ typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data
 typedef enum {
     HAL_CAN_BACKEND_MCP2515 = 0
 } hal_can_backend_t;
+
+enum {
+    HAL_CAN_FRAME_EXTENDED = 0x01u,
+    HAL_CAN_FRAME_RTR      = 0x02u,
+    HAL_CAN_FRAME_FD       = 0x04u,
+    HAL_CAN_FRAME_BRS      = 0x08u,
+    HAL_CAN_FRAME_ESI      = 0x10u
+};
+
+typedef struct {
+    uint32_t id;
+    uint8_t dlc;
+    uint8_t len;
+    uint8_t flags;
+    uint8_t data[HAL_CAN_FD_MAX_DATA_LEN];
+} hal_can_frame_t;
 
 typedef struct {
     uint8_t spi_bus;
@@ -50,8 +68,14 @@ void hal_can_destroy(hal_can_t h);
 // Send a CAN frame
 bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
 
+// Send a CAN/CAN FD frame. MCP2515 accepts only classic CAN frames.
+bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
+
 // Read the next available frame (returns false if no frame ready)
 bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
+
+// Read the next available CAN/CAN FD frame.
+bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
 // Non-blocking check: true if at least one frame is waiting
 bool hal_can_available(hal_can_t h);
@@ -71,6 +95,11 @@ hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
 // Drain pending RX frames and invoke callback for each valid one.
 int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
 
+// CAN/CAN FD DLC helpers. bytes_to_dlc() rounds up to the next representable
+// CAN FD length and returns HAL_CAN_DLC_INVALID for >64 bytes.
+uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
+uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
+
 // Encode temperature in °C as signed int8 CAN payload byte.
 // Truncates toward zero, saturates to [-128, 127], returns two's complement byte.
 uint8_t hal_can_encode_temp_i8(float temp_c);
@@ -84,6 +113,7 @@ register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`.
 `HAL_CAN_BACKEND_MCP2515`. Enable `HAL_ENABLE_MCP2515` to pull in the CAN facade plus SPI dependency. Plain
 `HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade flag that requires a backend.
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
+**CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`, `hal_can_receive_frame()`, and the DLC helpers are backend-agnostic and prepared for native CAN FD controllers. MCP2515 is a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`, `HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and `HAL_CAN_FRAME_RTR` for remote frames.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
 `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.

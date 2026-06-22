@@ -169,6 +169,8 @@ void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len,
                          const uint8_t *data);
 bool hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
                            uint8_t *data);
+void hal_mock_can_inject_frame(hal_can_t h, const hal_can_frame_t *frame);
+bool hal_mock_can_get_sent_frame(hal_can_t h, hal_can_frame_t *frame);
 void hal_mock_can_reset(hal_can_t h);
 
 // ── ADC ──────────────────────────────────────────────────────────────────────

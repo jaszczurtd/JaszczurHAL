@@ -15,8 +15,32 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-/** @brief Maximum CAN data payload length in bytes. */
+/** @brief Maximum classic CAN data payload length in bytes. */
 #define HAL_CAN_MAX_DATA_LEN 8
+
+/** @brief Maximum CAN FD data payload length in bytes. */
+#define HAL_CAN_FD_MAX_DATA_LEN 64
+
+/** @brief Invalid DLC sentinel returned by hal_can_bytes_to_dlc(). */
+#define HAL_CAN_DLC_INVALID 0xFFu
+
+/** @brief CAN frame flags used by hal_can_frame_t. */
+enum {
+  HAL_CAN_FRAME_EXTENDED = 0x01u, /**< 29-bit CAN identifier. */
+  HAL_CAN_FRAME_RTR = 0x02u,      /**< Remote-transmission-request frame. */
+  HAL_CAN_FRAME_FD = 0x04u,       /**< CAN FD frame. */
+  HAL_CAN_FRAME_BRS = 0x08u,      /**< CAN FD bitrate-switch flag. */
+  HAL_CAN_FRAME_ESI = 0x10u       /**< CAN FD error-state-indicator flag. */
+};
+
+/** @brief Backend-agnostic CAN/CAN FD frame container. */
+typedef struct {
+  uint32_t id;   /**< 11-bit standard ID or 29-bit extended ID. */
+  uint8_t dlc;   /**< Raw CAN DLC value: 0..8 classic, 0..15 CAN FD. */
+  uint8_t len;   /**< Payload byte count after DLC decoding. */
+  uint8_t flags; /**< Bitwise OR of HAL_CAN_FRAME_* flags. */
+  uint8_t data[HAL_CAN_FD_MAX_DATA_LEN]; /**< Payload bytes. */
+} hal_can_frame_t;
 
 /**
  * @brief Opaque handle for a CAN bus channel.
@@ -84,6 +108,20 @@ void hal_can_destroy(hal_can_t h);
 bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
 
 /**
+ * @brief Send a CAN or CAN FD frame.
+ *
+ * Backends that only support classic CAN, such as MCP2515, reject frames with
+ * @ref HAL_CAN_FRAME_FD, @ref HAL_CAN_FRAME_BRS, or @ref HAL_CAN_FRAME_ESI.
+ * Classic compatibility wrappers call this with a standard 11-bit data frame.
+ *
+ * @param h CAN handle.
+ * @param frame Frame to transmit.
+ * @return true on success, false if validation fails, the backend lacks the
+ *         requested frame capability, or transmission fails.
+ */
+bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
+
+/**
  * @brief Read the next available CAN frame.
  * @param h    CAN handle.
  * @param[out] id   Received message identifier.
@@ -94,6 +132,14 @@ bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
  *         or if any output pointer is NULL.
  */
 bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data);
+
+/**
+ * @brief Read the next available CAN or CAN FD frame.
+ * @param h CAN handle.
+ * @param[out] frame Destination frame.
+ * @return true if a frame was available, false otherwise.
+ */
+bool hal_can_receive_frame(hal_can_t h, hal_can_frame_t *frame);
 
 /**
  * @brief Check if at least one frame is waiting in the RX buffer.
@@ -136,6 +182,18 @@ typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len,
  * @return    Number of frames delivered to @p cb.
  */
 int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
+
+/**
+ * @brief Convert a CAN/CAN FD DLC value to payload byte count.
+ * @return 0 for invalid DLC values greater than 15.
+ */
+uint8_t hal_can_dlc_to_bytes(uint8_t dlc);
+
+/**
+ * @brief Convert payload byte count to the smallest CAN/CAN FD DLC.
+ * @return HAL_CAN_DLC_INVALID for payloads larger than 64 bytes.
+ */
+uint8_t hal_can_bytes_to_dlc(uint8_t bytes);
 
 /**
  * @brief Create a CAN channel with automatic retry and optional interrupt
