@@ -142,7 +142,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` — Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
 | 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (debug output, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi`, `hal_i2c` (master, one-shot helpers, bus-clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
-| 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (MCP2515, one-shot TX, filters), `hal_display` (ILI9341, ST77xx, SSD1306, GFX primitives, text, fonts) |
+| 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN, currently MCP2515 with one-shot TX and filters), `hal_display` (ILI9341, ST77xx, SSD1306, GFX primitives, text, fonts) |
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_bh1750` (ambient light), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 — power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_pga2311` (stereo volume controller), `hal_math` (constrain, map, roundToN) |

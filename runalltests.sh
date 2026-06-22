@@ -11,7 +11,7 @@
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. Target static-library builds (STM32 + RP2040)
+#   6. Target static-library builds (STM32 + RP2040 flag matrix)
 #   7. Examples build (RP2040 + STM32G474, via examples/CMakeLists.txt)
 #
 # Usage:
@@ -252,6 +252,75 @@ else
     exit 1
 fi
 
+info "Building RP2040 Arduino flag matrix..."
+ARDUINO_FLAG_PROFILES=(empty-core typical-set all-enabled)
+for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
+    flags=()
+    case "${profile}" in
+        empty-core)
+            ;;
+        typical-set)
+            flags=(
+                -D HAL_ENABLE_WIFI
+                -D HAL_ENABLE_MQTT
+                -D HAL_ENABLE_KV
+                -D HAL_ENABLE_PCF8563
+                -D HAL_ENABLE_MCP9600
+                -D HAL_ENABLE_DS18B20
+                -D HAL_ENABLE_GPS
+                -D HAL_ENABLE_ILI9341
+                -D HAL_ENABLE_PWM_FREQ
+            )
+            ;;
+        all-enabled)
+            flags=(
+                -D HAL_ENABLE_WIFI
+                -D HAL_ENABLE_TIME
+                -D HAL_ENABLE_MQTT
+                -D HAL_ENABLE_UDP
+                -D HAL_ENABLE_OTA
+                -D HAL_ENABLE_WIREGUARD
+                -D HAL_ENABLE_EEPROM
+                -D HAL_ENABLE_KV
+                -D HAL_ENABLE_LITTLEFS
+                -D HAL_ENABLE_UART
+                -D HAL_ENABLE_SWSERIAL
+                -D HAL_ENABLE_I2C
+                -D HAL_ENABLE_I2C_SLAVE
+                -D HAL_ENABLE_MCP2515
+                -D HAL_ENABLE_PCF8563
+                -D HAL_ENABLE_DS3231
+                -D HAL_ENABLE_MCP9600
+                -D HAL_ENABLE_MAX6675
+                -D HAL_ENABLE_DS18B20
+                -D HAL_ENABLE_ONEWIRE
+                -D HAL_ENABLE_EXTERNAL_ADC
+                -D HAL_ENABLE_GPS
+                -D HAL_ENABLE_DAC
+                -D HAL_ENABLE_PCNT
+                -D HAL_ENABLE_PWM_FREQ
+                -D HAL_ENABLE_RGB_LED
+                -D HAL_ENABLE_ILI9341
+                -D HAL_ENABLE_SSD1306
+                -D HAL_ENABLE_CRYPTO
+                -D HAL_ENABLE_CJSON
+            )
+            ;;
+    esac
+
+    matrix_build_dir="${SCRIPT_DIR}/build_rp2040_${profile//-/_}"
+    info "Building RP2040 flag profile: ${profile}"
+    run_logged "/tmp/jh_rp2040_lib_${profile}.log" \
+        "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}" \
+            --output "${matrix_build_dir}" "${flags[@]}"
+
+    if [[ ! -f "${matrix_build_dir}/libJaszczurHAL.a" ]]; then
+        fail "RP2040 flag profile ${profile} did not produce libJaszczurHAL.a"
+        exit 1
+    fi
+done
+pass "RP2040 Arduino flag matrix built successfully."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 7: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -294,7 +363,7 @@ echo "  FreeRTOS POSIX:   PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
-echo "  Target builds:    PASS (RP2040 + STM32G474)"
+echo "  Target builds:    PASS (RP2040 flag matrix + STM32G474)"
 echo "  Examples builds:  PASS (RP2040 + STM32G474)"
 echo ""
 echo "  Total time: ${SECONDS}s"

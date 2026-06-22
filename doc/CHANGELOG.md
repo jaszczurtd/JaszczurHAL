@@ -6,6 +6,24 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### hal_can - backend-selectable CAN API
+
+- Changed the public CAN creation API to use `hal_can_config_t`, with
+  `HAL_CAN_BACKEND_MCP2515` as the first backend selector and compatibility
+  helpers kept around the existing `hal_can_send()` / `hal_can_receive()`
+  classic 8-byte frame surface.
+- Split compile-time flags so `HAL_ENABLE_CAN` is now the generic CAN facade
+  and `HAL_ENABLE_MCP2515` is the backend flag that propagates both
+  `HAL_ENABLE_CAN` and `HAL_ENABLE_SPI`.
+- Moved MCP2515 defaults into the MCP2515 backend area and kept
+  `hal_can_util.cpp` for backend-neutral helpers such as retry creation,
+  queue draining and small payload encoding.
+- Refactored RP2040 and STM32G474 `hal_can.cpp` to stay as the HAL facade and
+  dispatch through shared MCP2515 backend operations under
+  `impl/shared/mcp2515/hal_can_mcp2515.*`.
+- Updated the MCP2515 CAN example, module flag documentation, CAN API docs and
+  host tests for backend-selection config.
+
 ### hal_littlefs - STM32G474 internal-flash backend
 
 - Added a real STM32G474 `hal_littlefs` backend using upstream littlefs v2 and

@@ -32,8 +32,10 @@ void app_start(void) {
   deb("Initialising SPI bus and MCP2515 on CS pin...");
 
   hal_spi_init(0u, EXAMPLE_SPI_MISO, EXAMPLE_SPI_MOSI, EXAMPLE_SPI_SCK);
-  s_can = hal_can_create_with_retry(EXAMPLE_CAN_CS, HAL_CAN_NO_INT_PIN, NULL, 2,
-                                    NULL);
+  hal_can_config_t can_cfg = hal_can_default_config();
+  can_cfg.mcp2515.cs_pin = EXAMPLE_CAN_CS;
+  s_can =
+      hal_can_create_with_retry(&can_cfg, HAL_CAN_NO_INT_PIN, NULL, 2, NULL);
   if (s_can) {
     deb("MCP2515 init OK");
   } else {

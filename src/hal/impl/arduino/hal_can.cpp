@@ -4,146 +4,175 @@
 #ifdef HAL_ENABLE_CAN
 
 #include "../../hal_can.h"
-#include "../../hal_config.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#include "../shared/mcp2515/mcp2515_driver.h"
-#include <string.h>
+#ifdef HAL_ENABLE_MCP2515
+#include "../shared/mcp2515/hal_can_mcp2515.h"
+#endif
+
 #include <new>
 
 struct hal_can_impl_s {
-    JHMCP2515   *mcp;
-    int          in_use;
-    hal_mutex_t  mutex;
+  hal_can_backend_t backend;
+  bool in_use;
+  hal_mutex_t mutex;
+  union {
+    uint8_t dummy;
+#ifdef HAL_ENABLE_MCP2515
+    alignas(JHMCP2515) uint8_t mcp2515_mem[sizeof(JHMCP2515)];
+#endif
+  } storage;
 };
 
 static hal_can_impl_t s_pool[HAL_CAN_MAX_INSTANCES];
-static uint8_t s_mcp_mem[HAL_CAN_MAX_INSTANCES][sizeof(JHMCP2515)]
-    __attribute__((aligned(__alignof__(JHMCP2515))));
 
-hal_can_t hal_can_create(uint8_t cs_pin) {
-    hal_critical_section_enter();
-    int slot = -1;
-    for (int i = 0; i < hal_get_config()->can_max_instances; i++) {
-        if (!s_pool[i].in_use) { slot = i; s_pool[slot].in_use = 1; break; }
-    }
-    hal_critical_section_exit();
+#ifdef HAL_ENABLE_MCP2515
+static inline JHMCP2515 *as_mcp2515(hal_can_impl_t *h) {
+  return reinterpret_cast<JHMCP2515 *>(h->storage.mcp2515_mem);
+}
+#endif
 
-    if (slot < 0) {
-        HAL_ASSERT(0, "hal_can: pool exhausted – increase HAL_CAN_MAX_INSTANCES");
-        return NULL;
-    }
+static void release_slot(hal_can_impl_t *h) {
+  if (!h) {
+    return;
+  }
+  if (h->mutex) {
+    hal_mutex_destroy(h->mutex);
+    h->mutex = NULL;
+  }
+  h->in_use = false;
+}
 
-    hal_can_impl_t *h = &s_pool[slot];
-    h->mutex = hal_mutex_create();
-    h->mcp   = new(s_mcp_mem[slot]) JHMCP2515(cs_pin, 0u);
-    if (h->mcp->begin(MCP_ANY, CAN_500KBPS, MCP_8MHZ) != CAN_OK) {
-        h->mcp->~JHMCP2515();
-        hal_mutex_destroy(h->mutex);
-        h->mutex  = NULL;
-        h->in_use = 0;
-        return NULL;
+hal_can_t hal_can_create(const hal_can_config_t *cfg) {
+  hal_can_config_t effective = cfg ? *cfg : hal_can_default_config();
+
+  const int max_instances =
+      hal_get_config()->can_max_instances < HAL_CAN_MAX_INSTANCES
+          ? hal_get_config()->can_max_instances
+          : HAL_CAN_MAX_INSTANCES;
+  hal_critical_section_enter();
+  int slot = -1;
+  for (int i = 0; i < max_instances; i++) {
+    if (!s_pool[i].in_use) {
+      slot = i;
+      s_pool[i].in_use = true;
+      break;
     }
-    h->mcp->setMode(MCP_NORMAL);
-    h->mcp->enOneShotTX();
-    h->mcp->setSleepWakeup(1);
+  }
+  hal_critical_section_exit();
+
+  if (slot < 0) {
+    HAL_ASSERT(0, "hal_can: pool exhausted - increase HAL_CAN_MAX_INSTANCES");
+    return NULL;
+  }
+
+  hal_can_impl_t *h = &s_pool[slot];
+  h->backend = effective.backend;
+  h->mutex = hal_mutex_create();
+
+#ifdef HAL_ENABLE_MCP2515
+  if (effective.backend == HAL_CAN_BACKEND_MCP2515) {
+    JHMCP2515 *mcp = new (h->storage.mcp2515_mem)
+        JHMCP2515(effective.mcp2515.cs_pin, effective.mcp2515.spi_bus);
+    if (!hal_can_mcp2515_init(mcp, &effective.mcp2515)) {
+      hal_can_mcp2515_deinit(mcp);
+      release_slot(h);
+      return NULL;
+    }
     return h;
+  }
+#endif
+
+  hal_derr_limited("can", "unsupported CAN backend %d", (int)effective.backend);
+  release_slot(h);
+  return NULL;
 }
 
 void hal_can_destroy(hal_can_t h) {
-    if (!h) return;
-    hal_mutex_t m = h->mutex;
-    if (m) {
-        hal_mutex_lock(m);
-    }
-    if (h->mcp) {
-        h->mcp->~JHMCP2515();
-        h->mcp = NULL;
-    }
-    h->in_use = 0;
-    if (m) {
-        hal_mutex_unlock(m);
-        hal_mutex_destroy(m);
-    }
-    h->mutex = NULL;
+  if (!h)
+    return;
+  hal_mutex_t m = h->mutex;
+  if (m) {
+    hal_mutex_lock(m);
+  }
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    hal_can_mcp2515_deinit(as_mcp2515(h));
+  }
+#endif
+  h->in_use = false;
+  h->mutex = NULL;
+  if (m) {
+    hal_mutex_unlock(m);
+    hal_mutex_destroy(m);
+  }
 }
 
 bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data) {
-    if (!h || !h->in_use) {
-        hal_derr_limited("can", "send called with NULL handle");
-        return false;
-    }
-    if (len > 0 && data == NULL) {
-        hal_derr_limited("can", "send called with NULL data pointer and len=%u", (unsigned)len);
-        return false;
-    }
-    uint8_t buf[HAL_CAN_MAX_DATA_LEN];
-    uint8_t safe_len = len <= HAL_CAN_MAX_DATA_LEN ? len : HAL_CAN_MAX_DATA_LEN;
-    if (safe_len > 0) {
-        memcpy(buf, data, safe_len);
-    }
-    hal_mutex_lock(h->mutex);
-    bool ok = h->mcp->sendMsgBuf(id, safe_len, buf) == CAN_OK;
-    hal_mutex_unlock(h->mutex);
-    if(!ok){
-        hal_derr_limited("can", "send failed for id=%u", (unsigned)id);
-    }
-    return ok;
+  if (!h || !h->in_use) {
+    hal_derr_limited("can", "send called with NULL handle");
+    return false;
+  }
+
+  hal_mutex_lock(h->mutex);
+  bool ok = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    ok = hal_can_mcp2515_send(as_mcp2515(h), id, len, data);
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return ok;
 }
 
 bool hal_can_receive(hal_can_t h, uint32_t *id, uint8_t *len, uint8_t *data) {
-    if (!h || !h->in_use) {
-        hal_derr_limited("can", "receive called with NULL handle");
-        return false;
-    }
-    if (!id || !len || !data) {
-        hal_derr_limited("can", "receive called with NULL output pointer(s)");
-        return false;
-    }
-    hal_mutex_lock(h->mutex);
-    if (h->mcp->checkReceive() != CAN_MSGAVAIL) {
-        hal_mutex_unlock(h->mutex);
-        return false;
-    }
-    uint8_t buf[HAL_CAN_MAX_DATA_LEN] = {};
-    uint8_t msg_len = 0;
-    uint32_t msg_id = 0;
-    bool ok = h->mcp->readMsgBuf(&msg_id, &msg_len, buf) == CAN_OK;
-    hal_mutex_unlock(h->mutex);
-    if (!ok) return false;
-    *id  = msg_id;
-    *len = msg_len;
-    memcpy(data, buf, msg_len < HAL_CAN_MAX_DATA_LEN ? msg_len : HAL_CAN_MAX_DATA_LEN);
-    return true;
+  if (!h || !h->in_use) {
+    hal_derr_limited("can", "receive called with NULL handle");
+    return false;
+  }
+  if (!id || !len || !data) {
+    hal_derr_limited("can", "receive called with NULL output pointer(s)");
+    return false;
+  }
+
+  hal_mutex_lock(h->mutex);
+  bool ok = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    ok = hal_can_mcp2515_receive(as_mcp2515(h), id, len, data);
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return ok;
 }
 
 bool hal_can_available(hal_can_t h) {
-    if (!h || !h->in_use) return false;
-    hal_mutex_lock(h->mutex);
-    bool v = h->mcp->checkReceive() == CAN_MSGAVAIL;
-    hal_mutex_unlock(h->mutex);
-    return v;
+  if (!h || !h->in_use)
+    return false;
+  hal_mutex_lock(h->mutex);
+  bool available = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    available = hal_can_mcp2515_available(as_mcp2515(h));
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return available;
 }
 
 bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1) {
-    if (!h || !h->in_use) return false;
-    hal_mutex_lock(h->mutex);
-    // MCP_CAN library expects standard IDs left-shifted by 16 with ext=0.
-    uint32_t mask = 0x07FF0000UL;           // match all 11 bits
-    uint32_t fid0 = (id0 & 0x7FFU) << 16;
-    uint32_t fid1 = (id1 & 0x7FFU) << 16;
-    bool ok = true;
-    ok = ok && (h->mcp->init_Mask(0, 0, mask) == CAN_OK); // buffer-0 group
-    ok = ok && (h->mcp->init_Mask(1, 0, mask) == CAN_OK); // buffer-1 group
-    ok = ok && (h->mcp->init_Filt(0, 0, fid0) == CAN_OK); // RXB0 filter 0
-    ok = ok && (h->mcp->init_Filt(1, 0, fid1) == CAN_OK); // RXB0 filter 1
-    ok = ok && (h->mcp->init_Filt(2, 0, fid0) == CAN_OK); // RXB1 filter 2
-    ok = ok && (h->mcp->init_Filt(3, 0, fid1) == CAN_OK); // RXB1 filter 3
-    ok = ok && (h->mcp->init_Filt(4, 0, fid0) == CAN_OK); // RXB1 filter 4
-    ok = ok && (h->mcp->init_Filt(5, 0, fid1) == CAN_OK); // RXB1 filter 5
-    hal_mutex_unlock(h->mutex);
-    return ok;
+  if (!h || !h->in_use)
+    return false;
+  hal_mutex_lock(h->mutex);
+  bool ok = false;
+#ifdef HAL_ENABLE_MCP2515
+  if (h->backend == HAL_CAN_BACKEND_MCP2515) {
+    ok = hal_can_mcp2515_set_std_filters(as_mcp2515(h), id0, id1);
+  }
+#endif
+  hal_mutex_unlock(h->mutex);
+  return ok;
 }
 
 #endif /* HAL_ENABLE_CAN */
-#endif  // HAL_TARGET_IS_RP2040
+#endif /* HAL_TARGET_IS_RP2040 */

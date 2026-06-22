@@ -222,7 +222,9 @@
        HAL_ENABLE_I2C           - I2C master (Wire).
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
        HAL_ENABLE_SPI           - SPI master (Arduino-compatible SPIClass).
-       HAL_ENABLE_CAN           - MCP2515 CAN bus (propagates: SPI).
+       HAL_ENABLE_CAN           - generic CAN API facade.
+       HAL_ENABLE_MCP2515       - MCP2515 CAN backend
+                                  (propagates: CAN, SPI).
 
      Time-of-day:
        HAL_ENABLE_RTC           - generic RTC API (requires at least one
@@ -525,7 +527,10 @@
 #endif
 #endif
 
-#ifdef HAL_ENABLE_CAN
+#ifdef HAL_ENABLE_MCP2515
+#ifndef HAL_ENABLE_CAN
+#define HAL_ENABLE_CAN
+#endif
 #ifndef HAL_ENABLE_SPI
 #define HAL_ENABLE_SPI
 #endif
@@ -542,7 +547,7 @@
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
-  KV, SDLOGGER, GPS, CAN, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
+  KV, SDLOGGER, GPS, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
   ONEWIRE, EXTERNAL_ADC, PGA2311,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
    PNG_AS_BASE64) do
@@ -565,6 +570,10 @@
     !defined(HAL_ENABLE_MAX6675)
 #error                                                                         \
     "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
+#endif
+
+#if defined(HAL_ENABLE_CAN) && !defined(HAL_ENABLE_MCP2515)
+#error "HAL_ENABLE_CAN requires at least one backend: HAL_ENABLE_MCP2515"
 #endif
 
 #if defined(HAL_ENABLE_DIGIPOT) && !defined(HAL_ENABLE_MCP401X) &&             \
@@ -651,6 +660,9 @@
 #endif
 #ifdef HAL_ENABLE_CAN
 #pragma message("HAL_CONFIG: HAL_ENABLE_CAN")
+#endif
+#ifdef HAL_ENABLE_MCP2515
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP2515")
 #endif
 #ifdef HAL_ENABLE_RTC
 #pragma message("HAL_CONFIG: HAL_ENABLE_RTC")

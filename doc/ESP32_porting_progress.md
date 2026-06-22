@@ -136,7 +136,7 @@ compile as-is under Arduino-ESP32:
 | File | Used Arduino API |
 |---|---|
 | `hal_adc.cpp` | `analogRead` |
-| `hal_can.cpp` | `hal_spi` / MCP2515 shared driver |
+| `hal_can.cpp` | generic CAN facade + `hal_spi` / MCP2515 shared backend |
 | `hal_dac.cpp` | (`dacWrite` on ESP32 - minor edit needed) |
 | `hal_eeprom.cpp` | `EEPROM`, `hal_i2c` |
 | `hal_gps.cpp` | `hal_uart` / `hal_swserial` |
@@ -347,7 +347,8 @@ All 46 guard sites in `src/hal/impl/shared/`:
 
 1. `hal_wireguard` — evaluate and bundle an ESP32 WireGuard Arduino library.
 2. `hal_sdlogger` — SD library is identical under Arduino-ESP32.
-3. `hal_can` — MCP2515 shared driver works; only SPI init differs.
+3. `hal_can` — facade/dispatch should stay target-local; MCP2515 shared
+   backend works once SPI init and `HAL_ENABLE_MCP2515` are wired.
 4. `hal_display` — shared display driver works; SPI/GPIO init differs.
 
 ---

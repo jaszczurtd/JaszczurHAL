@@ -142,9 +142,9 @@ jobs:
   #                  once (KV->EEPROM, MQTT->WIFI, PCF8563->RTC+I2C,
   #                  GPS->SWSERIAL, MCP9600->THERMOCOUPLE+I2C,
   #                  DS18B20->ONEWIRE, ILI9341->TFT->DISPLAY).
-  #   all-enabled  - every HAL_ENABLE_* flag set explicitly. Validates
-  #                  that no two backends collide and that all
-  #                  consistency #error checks stay satisfied.
+  #   all-enabled  - every concrete HAL_ENABLE_* module/backend flag set
+  #                  explicitly. Validates that no two backends collide
+  #                  and that all consistency #error checks stay satisfied.
   arduino-flag-matrix:
     runs-on: ubuntu-latest
     needs: [test, stm32-build]
@@ -180,7 +180,7 @@ jobs:
               -D HAL_ENABLE_SWSERIAL
               -D HAL_ENABLE_I2C
               -D HAL_ENABLE_I2C_SLAVE
-              -D HAL_ENABLE_CAN
+              -D HAL_ENABLE_MCP2515
               -D HAL_ENABLE_PCF8563
               -D HAL_ENABLE_DS3231
               -D HAL_ENABLE_MCP9600

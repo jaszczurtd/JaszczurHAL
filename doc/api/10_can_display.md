@@ -4,7 +4,7 @@
 
 Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 
-## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`)*
+## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`, backend currently `HAL_ENABLE_MCP2515`)*
 
 ```c
 #include <hal/hal_can.h>
@@ -12,13 +12,37 @@ Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 #define HAL_CAN_MAX_DATA_LEN 8
 #define HAL_CAN_NO_INT_PIN   0xFF
 
-// Opaque handle - one per MCP2515 chip (CS pin)
+// Opaque handle - one per physical CAN controller/backend instance
 typedef hal_can_impl_t *hal_can_t;
 typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data);
 
-// Create and init a CAN channel at 500 kbps / 8 MHz crystal
+typedef enum {
+    HAL_CAN_BACKEND_MCP2515 = 0
+} hal_can_backend_t;
+
+typedef struct {
+    uint8_t spi_bus;
+    uint8_t cs_pin;
+    uint32_t bitrate_hz;
+    uint32_t oscillator_hz;
+    bool one_shot_tx;
+    bool sleep_wakeup;
+} hal_can_mcp2515_config_t;
+
+typedef struct {
+    hal_can_backend_t backend;
+    union {
+        hal_can_mcp2515_config_t mcp2515;
+    };
+} hal_can_config_t;
+
+// Default: MCP2515, SPI bus 0, CS pin 0, 500 kbps / 8 MHz crystal,
+// one-shot TX and sleep wake-up enabled.
+hal_can_config_t hal_can_default_config(void);
+
+// Create and init a CAN channel from config. NULL uses default config.
 // Returns NULL on failure (chip not responding or pool exhausted)
-hal_can_t hal_can_create(uint8_t cs_pin);
+hal_can_t hal_can_create(const hal_can_config_t *cfg);
 
 // Release all resources; handle must not be used after this call
 void hal_can_destroy(hal_can_t h);
@@ -38,7 +62,7 @@ bool hal_can_available(hal_can_t h);
 bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
 
 // Retry-friendly create helper with optional IRQ pin setup.
-hal_can_t hal_can_create_with_retry(uint8_t cs_pin,
+hal_can_t hal_can_create_with_retry(const hal_can_config_t *cfg,
                                     uint8_t int_pin,
                                     void (*isr)(void),
                                     int max_retries,
@@ -52,14 +76,20 @@ int hal_can_process_all(hal_can_t h, hal_can_frame_cb_t cb);
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-**impl/shared:** Arduino-free MCP2515 driver in `impl/shared/mcp2515/mcp2515_driver.*`, reused by RP2040 and STM32G474 wrappers.
+**impl/shared:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
+mutexing and backend dispatch. MCP2515-specific operations live in
+`impl/shared/mcp2515/hal_can_mcp2515.*`, backed by the Arduino-free MCP2515
+register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`.
+**Backend selection:** The CAN API now takes `hal_can_config_t`. The only implemented backend is currently
+`HAL_CAN_BACKEND_MCP2515`. Enable `HAL_ENABLE_MCP2515` to pull in the CAN facade plus SPI dependency. Plain
+`HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade flag that requires a backend.
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
 `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.
 
-**One-shot TX mode:** `hal_can_create()` enables MCP2515 one-shot mode (`CANCTRL.OSM = 1`) immediately after
-initialisation. In one-shot mode, when a transmitted frame receives no ACK (e.g. no other node on the bus),
+**One-shot TX mode:** `hal_can_create()` enables MCP2515 one-shot mode (`CANCTRL.OSM = 1`) by default
+after initialisation. It can be disabled through `cfg.mcp2515.one_shot_tx`. In one-shot mode, when a transmitted frame receives no ACK (e.g. no other node on the bus),
 the hardware frees the TX buffer immediately instead of retransmitting indefinitely. This prevents TX buffer
 starvation: without one-shot, just 3 consecutive un-ACK'd frames permanently block all 3 TX buffers, making
 every subsequent `hal_can_send()` fail with `CAN_GETTXBFTIMEOUT`. For periodic broadcast applications (where
