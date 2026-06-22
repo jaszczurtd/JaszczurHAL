@@ -99,7 +99,7 @@ static void test_alarm_setup(void) {
   deb("\r\n=== Alarm Setup Test ===\r\n");
 
   /* Read current time */
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
     derr("hal_rtc_get_datetime failed");
     return;
@@ -125,7 +125,7 @@ static void test_alarm_setup(void) {
       (unsigned)(60u - now.second));
 
   /* Read back and verify */
-  hal_rtc_alarm_t alarm_read = {0};
+  hal_rtc_alarm_t alarm_read = {};
   if (!hal_rtc_get_alarm(g_rtc, &alarm_read)) {
     derr("hal_rtc_get_alarm failed");
     return;
@@ -227,7 +227,7 @@ void app_start(void) {
   deb("RTC initialized successfully\r\n");
 
   /* Read and display current time */
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (hal_rtc_get_datetime(g_rtc, &now)) {
     deb("Current time:\r\n");
     print_datetime(&now);
@@ -270,7 +270,7 @@ void app_task0(void) {
   }
 
   /* Get current time */
-  hal_rtc_datetime_t now = {0};
+  hal_rtc_datetime_t now = {};
   if (!hal_rtc_get_datetime(g_rtc, &now)) {
     hal_delay_ms(1000);
     return;

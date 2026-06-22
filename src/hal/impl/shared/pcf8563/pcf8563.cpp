@@ -252,7 +252,7 @@ bool pcf8563_get_datetime(const pcf8563_t *dev, pcf8563_datetime_t *out_dt) {
     return false;
   }
 
-  uint8_t buffer[7] = {0};
+  uint8_t buffer[7] = {};
   if (!pcf8563_read_regs(dev, PCF8563_REG_SECONDS, buffer,
                          (uint8_t)sizeof(buffer))) {
     return false;
@@ -284,7 +284,7 @@ bool pcf8563_set_datetime(const pcf8563_t *dev, const pcf8563_datetime_t *dt) {
     return false;
   }
 
-  uint8_t buffer[7] = {0};
+  uint8_t buffer[7] = {};
 
   buffer[0] = (uint8_t)(pcf8563_to_bcd(dt->second) & PCF8563_SECONDS_MASK);
   buffer[1] = (uint8_t)(pcf8563_to_bcd(dt->minute) & PCF8563_MINUTES_MASK);
@@ -428,7 +428,7 @@ bool pcf8563_get_timer(const pcf8563_t *dev,
     return false;
   }
 
-  uint8_t buffer[2] = {0};
+  uint8_t buffer[2] = {};
   if (!pcf8563_read_regs(dev, PCF8563_REG_TIMER_CONTROL, buffer,
                          (uint8_t)sizeof(buffer))) {
     return false;
@@ -449,7 +449,7 @@ bool pcf8563_set_alarm(const pcf8563_t *dev, const pcf8563_alarm_t *alarm) {
     return false;
   }
 
-  uint8_t buffer[4] = {0};
+  uint8_t buffer[4] = {};
 
   buffer[0] =
       alarm->minute_enabled
@@ -475,7 +475,7 @@ bool pcf8563_get_alarm(const pcf8563_t *dev, pcf8563_alarm_t *out_alarm) {
     return false;
   }
 
-  uint8_t buffer[4] = {0};
+  uint8_t buffer[4] = {};
   if (!pcf8563_read_regs(dev, PCF8563_REG_ALARM_MINUTE, buffer,
                          (uint8_t)sizeof(buffer))) {
     return false;

@@ -38,7 +38,7 @@ static void drawStaticLayout(void) {
 }
 
 static void drawCounter(uint16_t value) {
-  char value_text[8] = {0};
+  char value_text[8] = {};
   hal_display_prepare_text(value_text, sizeof(value_text), "%03u",
                            value % 1000u);
 

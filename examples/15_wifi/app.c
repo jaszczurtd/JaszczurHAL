@@ -38,8 +38,8 @@ static void printWifiStatus(void) {
     return;
   }
 
-  char ip[32] = {0};
-  char mac[32] = {0};
+  char ip[32] = {};
+  char mac[32] = {};
   hal_wifi_get_local_ip(ip, sizeof(ip));
   hal_wifi_get_mac(mac, sizeof(mac));
 

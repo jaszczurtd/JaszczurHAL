@@ -47,7 +47,7 @@ static void drawStaticLayout(void) {
 }
 
 static void drawCounter(uint16_t value) {
-  char text[12] = {0};
+  char text[12] = {};
   hal_display_prepare_text(text, sizeof(text), "%u", value);
 
   /* Clear just the counter field, then redraw it. */

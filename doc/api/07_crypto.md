@@ -113,7 +113,7 @@ void example_base64(void) {
 
     // Encode: calculate buffer size and encode
     size_t encoded_max = hal_base64_encoded_len(plain_len);
-    char encoded[64] = {0};
+    char encoded[64] = {};
     size_t encoded_len = 0;
 
     if (hal_base64_encode((const uint8_t *)plain, plain_len,
@@ -122,7 +122,7 @@ void example_base64(void) {
     }
 
     // Decode: convert back to plaintext
-    uint8_t decoded[64] = {0};
+    uint8_t decoded[64] = {};
     size_t decoded_len = 0;
 
     if (hal_base64_decode(encoded, encoded_len,

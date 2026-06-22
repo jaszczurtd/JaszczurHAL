@@ -17,7 +17,7 @@
 void debugInit(void) { hal_debug_init(HAL_DEBUG_DEFAULT_BAUD); }
 
 void setDebugPrefixWithColon(const char *moduleName) {
-  char prefix[HAL_DEBUG_PREFIX_SIZE] = {0};
+  char prefix[HAL_DEBUG_PREFIX_SIZE] = {};
   size_t prefixLen = 0;
 
   if (moduleName == NULL) {

@@ -38,7 +38,7 @@ static void demo_lodepng_memory_api(void) {
   deb("decoded width=%u height=%u pixels_match=%u\r\n", width, height,
       same_pixels ? 1u : 0u);
 
-  unsigned short rgb565[4] = {0};
+  unsigned short rgb565[4] = {};
   if (rgba8888ToRgb565(decoded, rgb565, 4u)) {
     deb("rgb565 first=0x%04X last=0x%04X\r\n", (unsigned)rgb565[0],
         (unsigned)rgb565[3]);
@@ -65,7 +65,7 @@ static void demo_lodepng_memory_api(void) {
         derr("base64 decode32 failed png_error=%u\r\n", png_error);
       }
 
-      unsigned short base64_rgb565[4] = {0};
+      unsigned short base64_rgb565[4] = {};
       if (pngBase64DecodeRgb565(base64_png, base64_len, png_work, png_size,
                                 base64_rgb565, 4u, &b64_width, &b64_height,
                                 &png_error)) {

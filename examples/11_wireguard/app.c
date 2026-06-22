@@ -64,7 +64,7 @@ static void serviceWireGuard(void) {
   }
   last_tunnel_check_ms = now;
 
-  char endpoint_ip[HAL_WIREGUARD_IP_STR_LEN] = {0};
+  char endpoint_ip[HAL_WIREGUARD_IP_STR_LEN] = {};
   uint16_t endpoint_port = 0;
   if (hal_wireguard_peer_up(endpoint_ip, sizeof(endpoint_ip), &endpoint_port)) {
     deb("WireGuard: peer up via %s:%u", endpoint_ip, endpoint_port);

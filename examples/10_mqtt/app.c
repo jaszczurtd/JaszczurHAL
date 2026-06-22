@@ -23,7 +23,7 @@ static void onMqttMessage(const char *topic, const uint8_t *payload,
                           uint16_t length, void *user) {
   (void)user;
 
-  char text[96] = {0};
+  char text[96] = {};
   const uint16_t copy_len =
       length < (sizeof(text) - 1u) ? length : (uint16_t)(sizeof(text) - 1u);
   for (uint16_t i = 0; i < copy_len; ++i) {
@@ -81,7 +81,7 @@ static void publishTelemetry(void) {
   }
   last_publish_ms = now;
 
-  char payload[80] = {0};
+  char payload[80] = {};
   snprintf(payload, sizeof(payload), "{\"counter\":%lu,\"rssi\":%ld}",
            (unsigned long)publish_counter++, (long)hal_wifi_rssi());
 

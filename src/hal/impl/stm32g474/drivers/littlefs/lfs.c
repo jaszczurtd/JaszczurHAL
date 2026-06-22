@@ -890,7 +890,7 @@ static int lfs_dir_traverse(
   // iterate over directory and attrs
   lfs_tag_t tag;
   const void *buffer;
-  struct lfs_diskoff disk = {0};
+  struct lfs_diskoff disk = {};
   while (true) {
     {
       if (off + lfs_tag_dsize(ptag) < dir->off) {
@@ -1988,7 +1988,7 @@ static int lfs_dir_compact(lfs_t *lfs, lfs_mdir_t *dir,
       }
 
       // bring over gstate?
-      lfs_gstate_t delta = {0};
+      lfs_gstate_t delta = {};
       if (!relocated) {
         lfs_gstate_xor(&delta, &lfs->gdisk);
         lfs_gstate_xor(&delta, &lfs->gstate);
@@ -2030,7 +2030,7 @@ static int lfs_dir_compact(lfs_t *lfs, lfs_mdir_t *dir,
       dir->off = commit.off;
       dir->etag = commit.ptag;
       // update gstate
-      lfs->gdelta = (lfs_gstate_t){0};
+      lfs->gdelta = (lfs_gstate_t){};
       if (!relocated) {
         lfs->gdisk = lfs->gstate;
       }
@@ -2234,7 +2234,7 @@ static int lfs_dir_relocatingcommit(lfs_t *lfs, lfs_mdir_t *dir,
     }
 
     // commit any global diffs if we have any
-    lfs_gstate_t delta = {0};
+    lfs_gstate_t delta = {};
     lfs_gstate_xor(&delta, &lfs->gstate);
     lfs_gstate_xor(&delta, &lfs->gdisk);
     lfs_gstate_xor(&delta, &lfs->gdelta);
@@ -2272,7 +2272,7 @@ static int lfs_dir_relocatingcommit(lfs_t *lfs, lfs_mdir_t *dir,
     dir->etag = commit.ptag;
     // and update gstate
     lfs->gdisk = lfs->gstate;
-    lfs->gdelta = (lfs_gstate_t){0};
+    lfs->gdelta = (lfs_gstate_t){};
 
     goto fixmlist;
   }
@@ -3165,7 +3165,7 @@ cleanup:
 #ifndef LFS_NO_MALLOC
 static int lfs_file_open_(lfs_t *lfs, lfs_file_t *file, const char *path,
                           int flags) {
-  static const struct lfs_file_config defaults = {0};
+  static const struct lfs_file_config defaults = {};
   int err = lfs_file_opencfg_(lfs, file, path, flags, &defaults);
   return err;
 }
@@ -3517,7 +3517,7 @@ static lfs_ssize_t lfs_file_flushedwrite(lfs_t *lfs, lfs_file_t *file,
           // find out which block we're extending from
           int err = lfs_ctz_find(lfs, NULL, &file->cache, file->ctz.head,
                                  file->ctz.size, file->pos - 1, &file->block,
-                                 &(lfs_off_t){0});
+                                 &(lfs_off_t){});
           if (err) {
             file->flags |= LFS_F_ERRED;
             return err;
@@ -3603,7 +3603,7 @@ static lfs_ssize_t lfs_file_write_(lfs_t *lfs, lfs_file_t *file,
     file->pos = file->ctz.size;
 
     while (file->pos < pos) {
-      lfs_ssize_t res = lfs_file_flushedwrite(lfs, file, &(uint8_t){0}, 1);
+      lfs_ssize_t res = lfs_file_flushedwrite(lfs, file, &(uint8_t){}, 1);
       if (res < 0) {
         return res;
       }
@@ -3715,7 +3715,7 @@ static int lfs_file_truncate_(lfs_t *lfs, lfs_file_t *file, lfs_off_t size) {
       // lookup new head in ctz skip list
       err =
           lfs_ctz_find(lfs, NULL, &file->cache, file->ctz.head, file->ctz.size,
-                       size - 1, &file->block, &(lfs_off_t){0});
+                       size - 1, &file->block, &(lfs_off_t){});
       if (err) {
         return err;
       }
@@ -3736,7 +3736,7 @@ static int lfs_file_truncate_(lfs_t *lfs, lfs_file_t *file, lfs_off_t size) {
 
     // fill with zeros
     while (file->pos < size) {
-      res = lfs_file_write_(lfs, file, &(uint8_t){0}, 1);
+      res = lfs_file_write_(lfs, file, &(uint8_t){}, 1);
       if (res < 0) {
         return (int)res;
       }
@@ -4277,9 +4277,9 @@ static int lfs_init(lfs_t *lfs, const struct lfs_config *cfg) {
   lfs->root[1] = LFS_BLOCK_NULL;
   lfs->mlist = NULL;
   lfs->seed = 0;
-  lfs->gdisk = (lfs_gstate_t){0};
-  lfs->gstate = (lfs_gstate_t){0};
-  lfs->gdelta = (lfs_gstate_t){0};
+  lfs->gdisk = (lfs_gstate_t){};
+  lfs->gstate = (lfs_gstate_t){};
+  lfs->gdelta = (lfs_gstate_t){};
 #ifdef LFS_MIGRATE
   lfs->lfs1 = NULL;
 #endif
@@ -5056,7 +5056,7 @@ static int lfs_fs_mkconsistent_(lfs_t *lfs) {
   }
 
   // do we have any pending gstate?
-  lfs_gstate_t delta = {0};
+  lfs_gstate_t delta = {};
   lfs_gstate_xor(&delta, &lfs->gdisk);
   lfs_gstate_xor(&delta, &lfs->gstate);
   if (!lfs_gstate_iszero(&delta)) {

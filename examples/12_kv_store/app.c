@@ -48,7 +48,7 @@ static void initKvStore(void) {
 
   deb("KV: boot_count=%lu", (unsigned long)boot_count);
 
-  uint8_t name_buf[32] = {0};
+  uint8_t name_buf[32] = {};
   uint16_t name_len = 0;
   if (hal_kv_get_blob(KEY_DEVICE_NAME, name_buf, sizeof(name_buf), &name_len)) {
     deb("KV: device_name=%s len=%u", (const char *)name_buf, name_len);

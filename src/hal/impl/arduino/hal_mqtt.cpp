@@ -14,9 +14,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#define HAL_MQTT_HOST_BUF_SIZE 128u
-#define HAL_MQTT_TOPIC_BUF_SIZE 128u
-#define HAL_MQTT_PAYLOAD_BUF_SIZE 512u
+#define HAL_MQTT_HOST_BUF_SIZE 256u
+#define HAL_MQTT_TOPIC_BUF_SIZE 512u
+#define HAL_MQTT_PAYLOAD_BUF_SIZE 2048u
 #define HAL_MQTT_RX_QUEUE_DEPTH 8u
 
 static WiFiClient s_wifi_client;
@@ -24,7 +24,7 @@ static PubSubClient s_client(s_wifi_client);
 
 static hal_mutex_t s_mqtt_mutex = NULL;
 static bool s_server_configured = false;
-static char s_server_host[HAL_MQTT_HOST_BUF_SIZE] = {0};
+static char s_server_host[HAL_MQTT_HOST_BUF_SIZE] = {};
 
 static hal_mqtt_message_callback_t s_user_callback = NULL;
 static void *s_user_callback_user = NULL;
@@ -270,8 +270,8 @@ bool hal_mqtt_loop(void) {
   // invoked OUTSIDE the module mutex so it may safely re-enter publish/
   // subscribe operations.
   while (true) {
-    char topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {0};
-    uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {0};
+    char topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {};
+    uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {};
     uint16_t payload_len = 0;
     bool has_message = false;
 
