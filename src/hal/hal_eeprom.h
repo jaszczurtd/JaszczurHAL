@@ -35,8 +35,8 @@
  * For flash-backed EEPROM back-ends each hal_eeprom_write_byte() buffers the
  * value in RAM; call hal_eeprom_commit() once after a group of writes to flush
  * the buffer to flash.
- * For HAL_EEPROM_AT24C256 writes go straight to the chip; hal_eeprom_commit()
- * is a no-op.
+ * For HAL_EEPROM_AT24C256 writes go straight to the chip in page-sized chunks;
+ * hal_eeprom_commit() is a no-op.
  *
  * ## Thread safety
  *
@@ -49,6 +49,14 @@
  */
 
 #include <stdint.h>
+
+/**
+ * @brief Optional callback invoked during long EEPROM operations.
+ *
+ * The callback runs from inside the EEPROM critical section. Keep it short:
+ * feed an application-owned watchdog, update a counter, or set a flag.
+ */
+typedef void (*hal_eeprom_progress_callback_t)(void *ctx);
 
 /**
  * @brief Supported EEPROM back-ends.
@@ -83,13 +91,25 @@ extern "C" {
 void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
 
 /**
+ * @brief Register an optional callback for long EEPROM operations.
+ *
+ * Passing NULL disables progress notifications. HAL never feeds the watchdog
+ * implicitly; applications that intentionally allow long EEPROM operations may
+ * call hal_watchdog_feed() from this callback.
+ *
+ * Configure this before starting concurrent EEPROM access.
+ */
+void hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
+                                      void *ctx);
+
+/**
  * @brief Write one byte to EEPROM.
  *
  * For flash-backed EEPROM the change is buffered in RAM until
  * hal_eeprom_commit() is called.
- * For HAL_EEPROM_AT24C256 the byte is written immediately to the chip
- * (the function waits for the internal write cycle to complete before
- * returning).
+ * For HAL_EEPROM_AT24C256 the byte is written immediately to the chip and the
+ * function waits for the internal write cycle to complete, up to
+ * HAL_AT24C256_WRITE_TIMEOUT_US.
  *
  * @param addr EEPROM address.
  * @param val  Byte value to store.
@@ -130,8 +150,8 @@ int32_t hal_eeprom_read_int(uint16_t addr);
  * mutex per byte.
  *
  * For flash-backed EEPROM the data is buffered until hal_eeprom_commit() is
- * called. For HAL_EEPROM_AT24C256 every byte is committed to the chip
- * synchronously (the function feeds the watchdog while it waits).
+ * called. For HAL_EEPROM_AT24C256 the data is committed synchronously in
+ * writes that do not cross AT24 page boundaries.
  *
  * @param addr EEPROM start address.
  * @param data Source buffer (must contain at least @p len bytes).
@@ -167,7 +187,7 @@ void hal_eeprom_commit(void);
  * @brief Zero-fill the entire EEPROM.
  *
  * For flash-backed EEPROM: writes 0 to every byte then commits to flash.
- * For HAL_EEPROM_AT24C256: writes 0 to every byte (with watchdog feeding).
+ * For HAL_EEPROM_AT24C256: writes 0 to every byte in page-sized chunks.
  *
  * @warning This is a slow operation - avoid calling it in time-critical paths.
  */

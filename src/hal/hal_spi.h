@@ -13,6 +13,7 @@
  * Two SPI controllers are supported via the @p bus parameter:
  *   - bus 0 -> SPI  (default controller; STM32G474 hardware SPI1)
  *   - bus 1 -> SPI1 (second Arduino-compatible object; STM32G474 hardware SPI2)
+ * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  */
 
 #include <stddef.h>
@@ -36,9 +37,10 @@ extern "C" {
 #define HAL_SPI_MODE3 3u
 
 typedef struct {
-    uint32_t clock_hz;   /**< Target bus clock in Hz. 0 selects HAL_SPI_CLOCK_DEFAULT_HZ. */
-    uint8_t bit_order;   /**< HAL_SPI_MSBFIRST or HAL_SPI_LSBFIRST. */
-    uint8_t data_mode;   /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
+  uint32_t clock_hz; /**< Target bus clock in Hz. 0 selects
+                        HAL_SPI_CLOCK_DEFAULT_HZ. */
+  uint8_t bit_order; /**< HAL_SPI_MSBFIRST or HAL_SPI_LSBFIRST. */
+  uint8_t data_mode; /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
 } hal_spi_settings_t;
 
 /**
@@ -134,7 +136,8 @@ void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
  * @param rx Optional receive buffer.
  * @param len Number of bytes to transfer.
  */
-void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size_t len);
+void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
+                           size_t len);
 
 /**
  * @brief Write a byte buffer, discarding received bytes.

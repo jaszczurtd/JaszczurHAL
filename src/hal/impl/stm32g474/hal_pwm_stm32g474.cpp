@@ -284,6 +284,10 @@ bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
   return true;
 }
 
+bool jh_stm32_pwm_pin_supported(uint8_t pin) {
+  return find_pin(pin) != nullptr;
+}
+
 bool jh_stm32_pwm_prepare_frequency_pin(uint8_t pin, uint32_t frequency_hz,
                                         uint32_t requested_period_ticks,
                                         jh_stm32_pwm_channel_desc *out,

@@ -18,16 +18,20 @@ extern "C" {
  * Two I2C controllers are supported via bus-index APIs:
  *   - bus 0 -> Wire  (default controller)
  *   - bus 1 -> Wire1 (second controller, when available)
+ * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  *
  * The legacy no-bus APIs are preserved and operate on bus 0.
  *
  * Thread-safety: the HAL owns an internal per-bus mutex.
  *   - hal_i2c_begin_transmission() acquires the bus guard.
  *   - hal_i2c_end_transmission()   releases the begin-transmission guard.
- *   - hal_i2c_request_from()       acquires and releases the bus guard
- *     around the transfer; the received bytes remain in the Wire
- *     buffer and can be read with hal_i2c_available() / hal_i2c_read()
- *     without holding the lock.
+ *   - hal_i2c_write_read(), hal_i2c_read_bytes() and
+ *     hal_i2c_read_byte() hold the bus guard across request+buffer drain and
+ *     are the preferred read APIs for thread-safe drivers.
+ *   - hal_i2c_request_from(), hal_i2c_available() and hal_i2c_read() are
+ *     legacy Wire-style buffer APIs. They are not an atomic read sequence
+ *     unless the caller wraps the full request/available/read sequence in
+ *     hal_i2c_lock() / hal_i2c_unlock().
  *   - For multi-step device-driver sequences that must be atomic, use
  *     hal_i2c_lock() and hal_i2c_unlock() to guard the whole sequence
  *     explicitly. HAL I2C calls made by the same execution context inside
@@ -215,9 +219,9 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
  * atomic with respect to other HAL I2C operations on the same bus.
  *
  * @param address   7-bit I2C slave address.
- * @param outReadOk Optional pointer. Receives true when request_from returned
- *                  exactly one byte AND hal_i2c_read() returned a value >= 0.
- *                  Receives false on any failure. May be NULL.
+ * @param outReadOk Optional pointer. Receives true when the atomic request
+ *                  and byte copy completed successfully. Receives false on
+ *                  any failure. May be NULL.
  * @return The byte read, or 0 when the transaction failed (inspect @p outReadOk
  *         to distinguish a valid 0x00 from a failure).
  */
@@ -284,11 +288,13 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 
 /**
- * @brief Request bytes from an I2C device (guards the transfer).
+ * @brief Legacy Wire-style request into the backend receive buffer.
  *
- * If the current execution context already owns the bus via hal_i2c_lock(),
- * this function preserves that outer lock and releases only its own nesting
- * level.
+ * This guards only the physical request transaction. The bytes remain in the
+ * backend receive buffer and later hal_i2c_available()/hal_i2c_read() calls are
+ * not atomic with the request unless the caller wraps the full sequence in
+ * hal_i2c_lock()/hal_i2c_unlock(). Prefer hal_i2c_read_bytes() or
+ * hal_i2c_write_read() in new thread-safe code.
  *
  * @param address 7-bit I2C device address.
  * @param count   Number of bytes to request.
@@ -297,7 +303,7 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);
 
 /**
- * @brief Request bytes from a device on the selected bus.
+ * @brief Bus-selecting variant of the legacy Wire-style request API.
  * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
  * @param address 7-bit I2C device address.
  * @param count   Number of bytes to request.
@@ -306,26 +312,26 @@ uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count);
 
 /**
- * @brief Return the number of bytes available in the receive buffer.
+ * @brief Return bytes available in the legacy receive buffer.
  * @return Byte count.
  */
 int hal_i2c_available(void);
 
 /**
- * @brief Return bytes available in the receive buffer of selected bus.
+ * @brief Return bytes available in the legacy receive buffer of selected bus.
  * @param bus I2C controller index (0 = Wire, 1 = Wire1).
  * @return Byte count.
  */
 int hal_i2c_available_bus(uint8_t bus);
 
 /**
- * @brief Read one byte from the receive buffer.
+ * @brief Read one byte from the legacy receive buffer.
  * @return Byte value, or -1 if none available.
  */
 int hal_i2c_read(void);
 
 /**
- * @brief Read one byte from the selected bus receive buffer.
+ * @brief Read one byte from the selected bus legacy receive buffer.
  * @param bus I2C controller index (0 = Wire, 1 = Wire1).
  * @return Byte value, or -1 if none available.
  */

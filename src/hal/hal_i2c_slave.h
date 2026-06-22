@@ -26,6 +26,7 @@ extern "C" {
  * Two I2C controllers are supported via bus-index APIs:
  *   - bus 0 -> Wire  (default controller)
  *   - bus 1 -> Wire1 (second controller, when available)
+ * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  *
  * Register map size is fixed at compile time (HAL_I2C_SLAVE_REG_MAP_SIZE,
  * default 32 bytes). Override in hal_project_config.h if needed.

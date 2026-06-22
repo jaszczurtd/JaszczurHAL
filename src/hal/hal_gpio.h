@@ -19,9 +19,17 @@ extern "C" {
 
 /** @brief GPIO pin direction / pull-up modes. */
 typedef enum {
-  HAL_GPIO_INPUT = 0,        /**< Input without pull resistor. */
-  HAL_GPIO_OUTPUT = 1,       /**< Output. */
-  HAL_GPIO_INPUT_PULLUP = 2, /**< Input with internal pull-up. */
+  HAL_GPIO_INPUT = 0,          /**< Input without pull resistor. */
+  HAL_GPIO_OUTPUT = 1,         /**< Push-pull output, initial low. */
+  HAL_GPIO_INPUT_PULLUP = 2,   /**< Input with internal pull-up. */
+  HAL_GPIO_INPUT_PULLDOWN = 3, /**< Input with internal pull-down. */
+  HAL_GPIO_OUTPUT_LOW = 4,     /**< Push-pull output, initial low. */
+  HAL_GPIO_OUTPUT_HIGH = 5,    /**< Push-pull output, initial high. */
+  HAL_GPIO_OUTPUT_OPEN_DRAIN =
+      6, /**< Open-drain output, released/high initial state. */
+  HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW = 7, /**< Open-drain output, initial low. */
+  HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH =
+      8, /**< Open-drain output, released/high initial state. */
 } hal_gpio_mode_t;
 
 /** @brief Interrupt trigger edge modes. */

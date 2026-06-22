@@ -7,7 +7,6 @@
 #include "../../hal_littlefs.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
-#include "../../hal_system.h"
 #include "../shared/hal_mutex_once.h"
 #include "drivers/littlefs/lfs.h"
 #include "drivers/stm32g474/stm32g474_flash.h"
@@ -36,9 +35,17 @@ static uint32_t s_flash_size = 0u;
 static bool s_cfg_ready = false;
 static bool s_littlefs_mounted = false;
 static hal_mutex_t s_littlefs_mutex = NULL;
+static hal_littlefs_progress_callback_t s_progress_callback = NULL;
+static void *s_progress_ctx = NULL;
 
 static void littlefs_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_littlefs_mutex);
+}
+
+static void notify_progress(void) {
+  if (s_progress_callback != NULL) {
+    s_progress_callback(s_progress_ctx);
+  }
 }
 
 static bool validate_non_empty(const char *value, const char *fn,
@@ -95,7 +102,7 @@ static int stm32_lfs_prog(const struct lfs_config *c, lfs_block_t block,
       ok = false;
       break;
     }
-    hal_watchdog_feed();
+    notify_progress();
   }
 
   jh_stm32g474_flash_lock();
@@ -115,7 +122,7 @@ static int stm32_lfs_erase(const struct lfs_config *c, lfs_block_t block) {
 
   const bool ok = jh_stm32g474_flash_erase_page(address);
   jh_stm32g474_flash_lock();
-  hal_watchdog_feed();
+  notify_progress();
   return ok ? LFS_ERR_OK : LFS_ERR_IO;
 }
 
@@ -152,6 +159,15 @@ static bool littlefs_prepare_config(void) {
   s_cfg_ready = true;
 
   return s_lfs_cfg.block_count > 0u;
+}
+
+void hal_littlefs_set_progress_callback(
+    hal_littlefs_progress_callback_t callback, void *ctx) {
+  littlefs_ensure_mutex();
+  hal_mutex_lock(s_littlefs_mutex);
+  s_progress_callback = callback;
+  s_progress_ctx = ctx;
+  hal_mutex_unlock(s_littlefs_mutex);
 }
 
 bool hal_littlefs_begin(void) {

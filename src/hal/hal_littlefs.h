@@ -16,6 +16,18 @@ extern "C" {
 #include <stdbool.h>
 #include <stddef.h>
 
+/**
+ * @brief Optional callback invoked during long filesystem flash operations.
+ *
+ * The callback runs while the LittleFS mutex is held. Keep it short: feed an
+ * application-owned watchdog, update a counter, or set a flag.
+ */
+typedef void (*hal_littlefs_progress_callback_t)(void *ctx);
+
+/** @brief Register an optional callback for long LittleFS operations. */
+void hal_littlefs_set_progress_callback(
+    hal_littlefs_progress_callback_t callback, void *ctx);
+
 /** @brief Mount LittleFS.
  *  @return true on successful mount.
  */

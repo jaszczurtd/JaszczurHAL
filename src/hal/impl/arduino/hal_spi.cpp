@@ -1,5 +1,6 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_RP2040
+#include "../../hal_config.h"
 #include "../../hal_spi.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
@@ -8,7 +9,10 @@
 static hal_mutex_t s_spi_mutex[2] = {NULL, NULL};
 static bool s_spi_initialized[2] = {false, false};
 
-static inline uint8_t spi_bus_index(uint8_t bus) { return bus == 1 ? 1 : 0; }
+static inline uint8_t spi_bus_index(uint8_t bus) {
+  HAL_ASSERT(bus <= 1u, "hal_spi: invalid bus index");
+  return (bus <= 1u) ? bus : 0u;
+}
 
 static inline SPIClassRP2040 &spi_object(uint8_t bus) {
   return spi_bus_index(bus) == 1 ? SPI1 : SPI;
@@ -76,7 +80,10 @@ void hal_spi_begin_transaction(uint8_t bus,
   spi_object(idx).beginTransaction(spi_make_settings(settings));
 }
 
-void hal_spi_end_transaction(uint8_t bus) { spi_object(bus).endTransaction(); }
+void hal_spi_end_transaction(uint8_t bus) {
+  uint8_t idx = spi_bus_index(bus);
+  spi_object(idx).endTransaction();
+}
 
 uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
   uint8_t idx = spi_bus_index(bus);
@@ -88,14 +95,16 @@ uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
 }
 
 uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {
-  return spi_object(bus).transfer16(data);
+  uint8_t idx = spi_bus_index(bus);
+  return spi_object(idx).transfer16(data);
 }
 
 void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
   if (buffer == nullptr || len == 0u) {
     return;
   }
-  spi_object(bus).transfer(buffer, len);
+  uint8_t idx = spi_bus_index(bus);
+  spi_object(idx).transfer(buffer, len);
 }
 
 void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
@@ -103,7 +112,8 @@ void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
   if (len == 0u) {
     return;
   }
-  SPIClassRP2040 &spi = spi_object(bus);
+  uint8_t idx = spi_bus_index(bus);
+  SPIClassRP2040 &spi = spi_object(idx);
   for (size_t i = 0; i < len; ++i) {
     const uint8_t out = tx ? tx[i] : 0xFFu;
     const uint8_t in = spi.transfer(out);

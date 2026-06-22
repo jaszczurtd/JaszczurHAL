@@ -46,7 +46,10 @@ typedef struct {
 
 static i2c_bus_state_t s_i2c[2] = {};
 
-static inline uint8_t i2c_bus_index(uint8_t bus) { return bus == 1u ? 1u : 0u; }
+static inline uint8_t i2c_bus_index(uint8_t bus) {
+  HAL_ASSERT(bus <= 1u, "hal_i2c: invalid bus index");
+  return (bus <= 1u) ? bus : 0u;
+}
 
 static inline i2c_bus_state_t *i2c_state(uint8_t bus) {
   return &s_i2c[i2c_bus_index(bus)];
@@ -611,12 +614,12 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
 }
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
-  uint8_t got = hal_i2c_request_from_bus(bus, address, 1u);
-  int v = hal_i2c_read_bus(bus);
+  uint8_t value = 0u;
+  const bool ok = hal_i2c_read_bytes_bus(bus, address, &value, 1u);
   if (outReadOk != NULL) {
-    *outReadOk = (got == 1u) && (v >= 0);
+    *outReadOk = ok;
   }
-  return (v >= 0) ? (uint8_t)v : 0u;
+  return ok ? value : 0u;
 }
 
 bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,

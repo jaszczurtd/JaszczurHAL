@@ -2,7 +2,17 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
+static uint32_t s_progress_calls = 0u;
+static void *s_progress_ctx = NULL;
+
+static void progress_callback(void *ctx) {
+  s_progress_calls++;
+  s_progress_ctx = ctx;
+}
+
 void setUp(void) {
+  s_progress_calls = 0u;
+  s_progress_ctx = NULL;
   hal_mock_eeprom_reset();
   hal_eeprom_init(HAL_EEPROM_AT24C256, 0, 0x50);
 }
@@ -46,6 +56,17 @@ void test_commit_sets_flag(void) {
   TEST_ASSERT_TRUE(hal_mock_eeprom_was_committed());
 }
 
+void test_progress_callback_runs_on_long_operations(void) {
+  uint32_t marker = 0x1234u;
+
+  hal_eeprom_set_progress_callback(progress_callback, &marker);
+  hal_eeprom_commit();
+  hal_eeprom_reset();
+
+  TEST_ASSERT_EQUAL_UINT32(2u, s_progress_calls);
+  TEST_ASSERT_EQUAL_PTR(&marker, s_progress_ctx);
+}
+
 void test_clear_committed_flag(void) {
   hal_eeprom_commit();
   hal_mock_eeprom_clear_committed_flag();
@@ -54,6 +75,40 @@ void test_clear_committed_flag(void) {
 
 void test_unwritten_address_is_zero(void) {
   TEST_ASSERT_EQUAL_UINT8(0, hal_eeprom_read_byte(100));
+}
+
+void test_write_bytes_clips_at_end_without_wraparound(void) {
+  const uint16_t last = (uint16_t)(hal_eeprom_size() - 1u);
+  const uint8_t data[] = {0x11u, 0x22u, 0x33u};
+
+  hal_eeprom_write_byte(0, 0xAAu);
+  hal_eeprom_write_bytes(last, data, sizeof(data));
+
+  TEST_ASSERT_EQUAL_UINT8(0x11u, hal_eeprom_read_byte(last));
+  TEST_ASSERT_EQUAL_UINT8(0xAAu, hal_eeprom_read_byte(0));
+}
+
+void test_read_bytes_pads_out_of_range_tail_with_zero(void) {
+  const uint16_t last = (uint16_t)(hal_eeprom_size() - 1u);
+  uint8_t out[] = {0xAAu, 0xBBu, 0xCCu};
+
+  hal_eeprom_write_byte(last, 0x5Au);
+  hal_eeprom_read_bytes(last, out, sizeof(out));
+
+  TEST_ASSERT_EQUAL_UINT8(0x5Au, out[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x00u, out[1]);
+  TEST_ASSERT_EQUAL_UINT8(0x00u, out[2]);
+}
+
+void test_write_int_at_end_does_not_wraparound(void) {
+  const uint16_t last = (uint16_t)(hal_eeprom_size() - 1u);
+
+  hal_eeprom_write_byte(0, 0x44u);
+  hal_eeprom_write_int(last, 0x11223355);
+
+  TEST_ASSERT_EQUAL_UINT8(0x55u, hal_eeprom_read_byte(last));
+  TEST_ASSERT_EQUAL_UINT8(0x44u, hal_eeprom_read_byte(0));
+  TEST_ASSERT_EQUAL_INT32(0x55, hal_eeprom_read_int(last));
 }
 
 int main(void) {
@@ -65,7 +120,11 @@ int main(void) {
   RUN_TEST(test_write_read_int);
   RUN_TEST(test_mock_get_byte_matches_read);
   RUN_TEST(test_commit_sets_flag);
+  RUN_TEST(test_progress_callback_runs_on_long_operations);
   RUN_TEST(test_clear_committed_flag);
   RUN_TEST(test_unwritten_address_is_zero);
+  RUN_TEST(test_write_bytes_clips_at_end_without_wraparound);
+  RUN_TEST(test_read_bytes_pads_out_of_range_tail_with_zero);
+  RUN_TEST(test_write_int_at_end_does_not_wraparound);
   return UNITY_END();
 }

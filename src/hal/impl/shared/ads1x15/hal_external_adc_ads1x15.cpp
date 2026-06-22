@@ -33,7 +33,7 @@ void hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range) {
   ext_adc_ensure_mutex();
   hal_mutex_lock(s_ext_adc_mutex);
 
-  s_i2c_bus = (i2c_bus == 1u) ? 1u : 0u;
+  s_i2c_bus = i2c_bus;
   s_adc_range = adc_range;
   s_ads = new (s_ads_storage) ADS1115(address, s_i2c_bus);
 
