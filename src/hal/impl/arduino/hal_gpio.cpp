@@ -1,6 +1,10 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_gpio.h"
+#if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
+#include <Arduino.h>
+#include <cyw43_wrappers.h>
+#endif
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
 #include <pico/platform.h>
@@ -9,6 +13,37 @@ static bool s_open_drain_mode[256] = {};
 static void (*s_gpio_callbacks[256])(void) = {};
 
 static bool rp2040_pin_valid(uint8_t pin) { return pin < NUM_BANK0_GPIOS; }
+
+static bool rp2040_cyw43_pin_valid(uint8_t pin) {
+#if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
+  return pin == (uint8_t)LED_BUILTIN && pin >= 64u;
+#else
+  (void)pin;
+  return false;
+#endif
+}
+
+static bool rp2040_hal_pin_valid(uint8_t pin) {
+  return rp2040_pin_valid(pin) || rp2040_cyw43_pin_valid(pin);
+}
+
+static void cyw43_gpio_write(uint8_t pin, bool high) {
+#if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
+  cyw43_digitalWrite((pin_size_t)pin, high ? HIGH : LOW);
+#else
+  (void)pin;
+  (void)high;
+#endif
+}
+
+static bool cyw43_gpio_read(uint8_t pin) {
+#if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
+  return cyw43_digitalRead((pin_size_t)pin) == HIGH;
+#else
+  (void)pin;
+  return false;
+#endif
+}
 
 static bool gpio_mode_valid(hal_gpio_mode_t mode) {
   return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
@@ -75,13 +110,36 @@ static void gpio_irq_dispatch(uint gpio, uint32_t events) {
 }
 
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
-  if (!rp2040_pin_valid(pin)) {
+  if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
     return;
   }
   if (!gpio_mode_valid(mode)) {
     HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
     return;
+  }
+
+  if (rp2040_cyw43_pin_valid(pin)) {
+    switch (mode) {
+    case HAL_GPIO_OUTPUT:
+    case HAL_GPIO_OUTPUT_LOW:
+      cyw43_gpio_write(pin, false);
+      return;
+    case HAL_GPIO_OUTPUT_HIGH:
+      cyw43_gpio_write(pin, true);
+      return;
+    case HAL_GPIO_OUTPUT_OPEN_DRAIN:
+    case HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW:
+    case HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH:
+      HAL_ASSERT(false, "hal_gpio_set_mode: open-drain unsupported on CYW43");
+      return;
+    case HAL_GPIO_INPUT:
+    case HAL_GPIO_INPUT_PULLUP:
+    case HAL_GPIO_INPUT_PULLDOWN:
+    default:
+      HAL_ASSERT(false, "hal_gpio_set_mode: input unsupported on CYW43");
+      return;
+    }
   }
 
   s_open_drain_mode[pin] = false;
@@ -122,8 +180,12 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
 }
 
 void hal_gpio_write(uint8_t pin, bool high) {
-  if (!rp2040_pin_valid(pin)) {
+  if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_write: invalid pin");
+    return;
+  }
+  if (rp2040_cyw43_pin_valid(pin)) {
+    cyw43_gpio_write(pin, high);
     return;
   }
   if (s_open_drain_mode[pin]) {
@@ -134,17 +196,24 @@ void hal_gpio_write(uint8_t pin, bool high) {
 }
 
 bool hal_gpio_read(uint8_t pin) {
-  if (!rp2040_pin_valid(pin)) {
+  if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_read: invalid pin");
     return false;
+  }
+  if (rp2040_cyw43_pin_valid(pin)) {
+    return cyw43_gpio_read(pin);
   }
   return gpio_get(pin);
 }
 
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
                                hal_gpio_irq_mode_t mode) {
-  if (!rp2040_pin_valid(pin)) {
+  if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid pin");
+    return;
+  }
+  if (rp2040_cyw43_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_attach_interrupt: unsupported on CYW43");
     return;
   }
   if (callback == nullptr) {
@@ -163,8 +232,12 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
 }
 
 void hal_gpio_detach_interrupt(uint8_t pin) {
-  if (!rp2040_pin_valid(pin)) {
+  if (!rp2040_hal_pin_valid(pin)) {
     HAL_ASSERT(false, "hal_gpio_detach_interrupt: invalid pin");
+    return;
+  }
+  if (rp2040_cyw43_pin_valid(pin)) {
+    HAL_ASSERT(false, "hal_gpio_detach_interrupt: unsupported on CYW43");
     return;
   }
   gpio_set_irq_enabled(pin, gpio_all_irq_events(), false);
