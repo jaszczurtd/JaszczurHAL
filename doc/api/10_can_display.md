@@ -4,7 +4,7 @@
 
 Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 
-## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`, backend currently `HAL_ENABLE_MCP2515`)*
+## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`, backends `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
 
 ```c
 #include <hal/hal_can.h>
@@ -22,7 +22,9 @@ typedef hal_can_impl_t *hal_can_t;
 typedef void (*hal_can_frame_cb_t)(uint32_t id, uint8_t len, const uint8_t *data);
 
 typedef enum {
-    HAL_CAN_BACKEND_MCP2515 = 0
+    HAL_CAN_BACKEND_MCP2515 = 0,
+    HAL_CAN_BACKEND_MCP251XFD = 1,
+    HAL_CAN_BACKEND_STM32G474_FDCAN = 2
 } hal_can_backend_t;
 
 enum {
@@ -85,14 +87,40 @@ typedef struct {
 } hal_can_mcp2515_config_t;
 
 typedef struct {
+    uint8_t spi_bus;
+    uint8_t cs_pin;
+    uint32_t arbitration_bitrate_hz;
+    uint32_t data_bitrate_hz;
+    uint32_t oscillator_hz;
+    uint32_t spi_clock_hz;
+    bool enable_fd;
+    bool one_shot_tx;
+    bool sleep_wakeup;
+} hal_can_mcp251xfd_config_t;
+
+typedef struct {
+    uint8_t rx_pin;
+    uint8_t tx_pin;
+    uint32_t arbitration_bitrate_hz;
+    uint32_t data_bitrate_hz;
+    bool enable_fd;
+    bool one_shot_tx;
+} hal_can_stm32g474_fdcan_config_t;
+
+typedef struct {
     hal_can_backend_t backend;
     union {
         hal_can_mcp2515_config_t mcp2515;
+        hal_can_mcp251xfd_config_t mcp251xfd;
+        hal_can_stm32g474_fdcan_config_t stm32g474_fdcan;
     };
 } hal_can_config_t;
 
-// Default: MCP2515, SPI bus 0, CS pin 0, 500 kbps / 8 MHz crystal,
-// one-shot TX and sleep wake-up enabled.
+// Default depends on enabled backends. If several are enabled, MCP2515 owns
+// the compatibility default, followed by MCP251XFD, then STM32G474 FDCAN.
+// MCP2515: SPI bus 0, CS pin 0, 500 kbps / 8 MHz crystal.
+// MCP251XFD: SPI bus 0, CS pin 0, 500 kbit/s arbitration, 2 Mbit/s data.
+// STM32G474 FDCAN: PA11/PA12, 500 kbit/s arbitration, 2 Mbit/s data.
 hal_can_config_t hal_can_default_config(void);
 
 // Create and init a CAN channel from config. NULL uses default config.
@@ -105,7 +133,8 @@ void hal_can_destroy(hal_can_t h);
 // Send a CAN frame
 bool hal_can_send(hal_can_t h, uint32_t id, uint8_t len, const uint8_t *data);
 
-// Send a CAN/CAN FD frame. MCP2515 accepts only classic CAN frames.
+// Send a CAN/CAN FD frame. MCP2515 accepts only classic CAN frames;
+// MCP251XFD and STM32G474 FDCAN accept CAN FD when enable_fd=true.
 bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame);
 
 // Read the next available frame (returns false if no frame ready)
@@ -129,8 +158,8 @@ bool hal_can_get_error_counters(hal_can_t h,
 bool hal_can_available(hal_can_t h);
 
 // Configure hardware RX filters for two accepted standard 11-bit IDs.
-// Non-matching IDs are dropped by MCP2515 before entering RX buffers.
-// Returns false if MCP2515 mask/filter programming fails.
+// Non-matching IDs are dropped by backends with hardware filter support.
+// Returns false if backend mask/filter programming fails.
 bool hal_can_set_std_filters(hal_can_t h, uint32_t id0, uint32_t id1);
 
 // Configure one acceptance-filter slot with id/mask/flags.
@@ -164,14 +193,42 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
 **impl/shared:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
 mutexing and backend dispatch. MCP2515-specific operations live in
 `impl/shared/mcp2515/hal_can_mcp2515.*`, backed by the Arduino-free MCP2515
-register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`.
-**Backend selection:** The CAN API now takes `hal_can_config_t`. The only implemented backend is currently
-`HAL_CAN_BACKEND_MCP2515`. Enable `HAL_ENABLE_MCP2515` to pull in the CAN facade plus SPI dependency. Plain
-`HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade flag that requires a backend.
+register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`. MCP251XFD
+operations live in `impl/shared/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
+HAL-only polling register/SPI driver in `impl/shared/mcp251xfd/mcp251xfd_driver.*`.
+STM32G474 native FDCAN operations live in
+`impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
+the fixed STM32G4 message RAM layout directly.
+**Backend selection:** The CAN API takes `hal_can_config_t`. Enable
+`HAL_ENABLE_MCP2515` for the classic MCP2515 backend or
+`HAL_ENABLE_MCP251XFD` for MCP2517FD/MCP2518FD CAN FD support. Both external
+controller flags pull in the CAN facade plus SPI dependency. Enable
+`HAL_ENABLE_STM32G474_FDCAN` for native FDCAN1 on STM32G474; this flag pulls in
+only the CAN facade and is compile-time rejected on other targets. Plain
+`HAL_ENABLE_CAN` no longer propagates SPI by itself and is treated as a facade
+flag that requires a backend.
 **Thread safety:** Thread-safe and multicore-safe. Each channel has a per-instance `hal_mutex_t`. `hal_can_receive()` holds the lock across the availability check and frame read, eliminating TOCTOU races.
-**CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`, `hal_can_receive_frame()`, and the DLC helpers are backend-agnostic and prepared for native CAN FD controllers. MCP2515 is a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`, `HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and `HAL_CAN_FRAME_RTR` for remote frames.
-**Modes and diagnostics:** New handles are started by default. `hal_can_stop()` puts MCP2515 into configuration mode and aborts pending TX; `hal_can_start()` reapplies the stored mode. MCP2515 supports normal, loopback, listen-only, sleep and one-shot mode flags; `HAL_CAN_MODE_FD` is reserved for future native CAN FD backends and is rejected by MCP2515. `hal_can_get_state()` maps MCP2515 `EFLG` into error-active/warning/passive/bus-off/stopped, and `hal_can_get_error_counters()` reads TEC/REC.
-**Filters:** `hal_can_set_filter()` programs one id/mask slot. MCP2515 exposes six slots: 0-1 share mask group 0, and 2-5 share mask group 1, so updating one slot also updates the mask used by sibling slots in that group. `hal_can_set_std_filters()` remains a convenience helper for two exact 11-bit IDs.
+**CAN FD API:** `hal_can_frame_t`, `hal_can_send_frame()`,
+`hal_can_receive_frame()`, and the DLC helpers are backend-agnostic. MCP2515 is
+a classic CAN 2.0 controller, so it rejects frames with `HAL_CAN_FRAME_FD`,
+`HAL_CAN_FRAME_BRS`, or `HAL_CAN_FRAME_ESI`. MCP251XFD accepts CAN FD frames
+when `cfg.mcp251xfd.enable_fd=true`; STM32G474 FDCAN accepts them when
+`cfg.stm32g474_fdcan.enable_fd=true`. Set `HAL_CAN_MODE_FD` for FD/mixed
+operation on FD-capable handles. Use `HAL_CAN_FRAME_EXTENDED` for 29-bit IDs and
+`HAL_CAN_FRAME_RTR` for remote frames.
+**Modes and diagnostics:** New handles are started by default.
+`hal_can_stop()` puts the controller into a non-participating/configuration
+mode and `hal_can_start()` reapplies the stored mode. MCP2515 supports normal,
+loopback, listen-only, sleep and one-shot mode flags. MCP251XFD also supports
+`HAL_CAN_MODE_FD` on FD-capable handles; STM32G474 FDCAN supports FD, loopback,
+listen-only, one-shot and sleep/configuration transitions through CCCR/TEST.
+State/error-counter APIs map backend controller registers into
+`hal_can_state_t` and `hal_can_error_counters_t`.
+**Filters:** `hal_can_set_filter()` programs one id/mask slot. The public API
+exposes six portable filter slots. MCP2515 maps them onto its six hardware
+filters; MCP251XFD and STM32G474 FDCAN map them onto the first six hardware
+filter objects routed to RX FIFO 0. `hal_can_set_std_filters()` remains a
+convenience helper for two exact 11-bit IDs.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.
 `hal_can_encode_temp_i8()` is a small shared wire-format helper for signed 1-byte temperature fields on CAN frames. It truncates the float input toward zero, saturates to `int8_t` range, and returns the matching two's complement payload byte.

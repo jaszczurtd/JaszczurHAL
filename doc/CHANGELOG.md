@@ -21,8 +21,17 @@ Next release.
 - Refactored RP2040 and STM32G474 `hal_can.cpp` to stay as the HAL facade and
   dispatch through shared MCP2515 backend operations under
   `impl/shared/mcp2515/hal_can_mcp2515.*`.
-- Updated the MCP2515 CAN example, module flag documentation, CAN API docs and
-  host tests for backend-selection config.
+- Added the `HAL_ENABLE_MCP251XFD` backend flag, `HAL_CAN_BACKEND_MCP251XFD`
+  selector and MCP2517FD/MCP2518FD polling backend under
+  `impl/shared/mcp251xfd/`, preserving the existing classic CAN API while
+  enabling CAN FD through `hal_can_frame_t`.
+- Added the STM32G474-only `HAL_ENABLE_STM32G474_FDCAN` backend flag,
+  `HAL_CAN_BACKEND_STM32G474_FDCAN` selector and native FDCAN1 register backend
+  with fixed message RAM layout, classic/FD frame TX/RX, mode, diagnostics and
+  filter support based on the Zephyr STM32 FDCAN driver model.
+- Updated the MCP2515 CAN example, added a STM32G474 native FDCAN example, and
+  refreshed module flag documentation, CAN API docs and host tests for
+  backend-selection config.
 
 ### hal_littlefs - STM32G474 internal-flash backend
 

@@ -254,3 +254,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 35 | cJSON | rp2040, stm32g474 | Bundled cJSON parser/generator |
 | 36 | lodePNG | rp2040, stm32g474 | Bundled LodePNG memory PNG encode/decode, Base64 helpers, RGB565 conversion |
 | 37 | lodePNG_ili9341_base64 | rp2040, stm32g474 | Base64 PNG asset, dimension validation, RGB565 draw on ILI9341 |
+| 38 | stm32g474_fdcan_native | stm32g474 | Native FDCAN1 CAN FD TX/RX |

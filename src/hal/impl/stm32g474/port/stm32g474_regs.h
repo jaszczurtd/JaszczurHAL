@@ -46,6 +46,7 @@
 #define RCC_APB1ENR1_SPI3EN (1u << 15)
 #define RCC_APB1ENR1_I2C1EN (1u << 21)
 #define RCC_APB1ENR1_I2C2EN (1u << 22)
+#define RCC_APB1ENR1_FDCANEN (1u << 25)
 
 #define RCC_APB2ENR_SPI1EN (1u << 12)
 #define RCC_APB2ENR_TIM15EN (1u << 16)
@@ -344,6 +345,86 @@
 #define GPIO_PUPD_NONE 0x0u
 #define GPIO_PUPD_UP 0x1u
 #define GPIO_PUPD_DOWN 0x2u
+
+/* ── FDCAN1 (STM32G474 native Bosch M_CAN-derived controller) ───────────── */
+#define FDCAN1_BASE 0x40006400u
+#define FDCAN_SRAM_BASE 0x4000AC00u
+
+#define FDCAN_REG(base, off) JH_REG32((base) + (off))
+#define FDCAN_DBTP(base) FDCAN_REG((base), 0x00Cu)
+#define FDCAN_TEST(base) FDCAN_REG((base), 0x010u)
+#define FDCAN_CCCR(base) FDCAN_REG((base), 0x018u)
+#define FDCAN_NBTP(base) FDCAN_REG((base), 0x01Cu)
+#define FDCAN_ECR(base) FDCAN_REG((base), 0x040u)
+#define FDCAN_PSR(base) FDCAN_REG((base), 0x044u)
+#define FDCAN_TDCR(base) FDCAN_REG((base), 0x048u)
+#define FDCAN_IR(base) FDCAN_REG((base), 0x050u)
+#define FDCAN_IE(base) FDCAN_REG((base), 0x054u)
+#define FDCAN_RXGFC(base) FDCAN_REG((base), 0x080u)
+#define FDCAN_SIDFC(base) FDCAN_REG((base), 0x084u)
+#define FDCAN_XIDFC(base) FDCAN_REG((base), 0x088u)
+#define FDCAN_XIDAM(base) FDCAN_REG((base), 0x090u)
+#define FDCAN_RXF0C(base) FDCAN_REG((base), 0x0A0u)
+#define FDCAN_RXF0S(base) FDCAN_REG((base), 0x0A4u)
+#define FDCAN_RXF0A(base) FDCAN_REG((base), 0x0A8u)
+#define FDCAN_RXF1C(base) FDCAN_REG((base), 0x0B0u)
+#define FDCAN_RXESC(base) FDCAN_REG((base), 0x0BCu)
+#define FDCAN_TXBC(base) FDCAN_REG((base), 0x0C0u)
+#define FDCAN_TXFQS(base) FDCAN_REG((base), 0x0C4u)
+#define FDCAN_TXESC(base) FDCAN_REG((base), 0x0C8u)
+#define FDCAN_TXBRP(base) FDCAN_REG((base), 0x0CCu)
+#define FDCAN_TXBAR(base) FDCAN_REG((base), 0x0D0u)
+#define FDCAN_TXBCR(base) FDCAN_REG((base), 0x0D4u)
+#define FDCAN_TXBTO(base) FDCAN_REG((base), 0x0D8u)
+#define FDCAN_TXBCF(base) FDCAN_REG((base), 0x0DCu)
+#define FDCAN_TXEFC(base) FDCAN_REG((base), 0x0F0u)
+
+#define FDCAN_CCCR_INIT (1u << 0)
+#define FDCAN_CCCR_CCE (1u << 1)
+#define FDCAN_CCCR_ASM (1u << 2)
+#define FDCAN_CCCR_CSR (1u << 4)
+#define FDCAN_CCCR_MON (1u << 5)
+#define FDCAN_CCCR_DAR (1u << 6)
+#define FDCAN_CCCR_TEST (1u << 7)
+#define FDCAN_CCCR_FDOE (1u << 8)
+#define FDCAN_CCCR_BRSE (1u << 9)
+
+#define FDCAN_TEST_LBCK (1u << 4)
+#define FDCAN_IR_ALL 0xFFFFFFFFu
+#define FDCAN_PSR_EP (1u << 5)
+#define FDCAN_PSR_EW (1u << 6)
+#define FDCAN_PSR_BO (1u << 7)
+#define FDCAN_ECR_TEC_MASK 0xFFu
+#define FDCAN_ECR_REC_MASK (0x7Fu << 8)
+
+#define FDCAN_TXBC_TFQM (1u << 30)
+#define FDCAN_ELEM_SIZE_64 7u
+#define FDCAN_RXF0S_F0FL_MASK 0x0Fu
+#define FDCAN_RXF0S_F0GI_MASK (0x3u << 8)
+#define FDCAN_RXF0S_F0GI_POS 8u
+#define FDCAN_RXF0A_F0AI_MASK 0x7u
+
+#define FDCAN_MRAM_STD_FILTER_WORDS 28u
+#define FDCAN_MRAM_EXT_FILTER_WORDS (8u * 2u)
+#define FDCAN_MRAM_RX_FIFO0_ELEMS 3u
+#define FDCAN_MRAM_RX_FIFO1_ELEMS 3u
+#define FDCAN_MRAM_TX_EVENT_ELEMS 3u
+#define FDCAN_MRAM_TX_BUF_ELEMS 3u
+#define FDCAN_MRAM_ELEM_WORDS_64 18u
+
+#define FDCAN_MRAM_STD_FILTER_WORD 0u
+#define FDCAN_MRAM_EXT_FILTER_WORD                                             \
+  (FDCAN_MRAM_STD_FILTER_WORD + FDCAN_MRAM_STD_FILTER_WORDS)
+#define FDCAN_MRAM_RX0_WORD                                                    \
+  (FDCAN_MRAM_EXT_FILTER_WORD + FDCAN_MRAM_EXT_FILTER_WORDS)
+#define FDCAN_MRAM_RX1_WORD                                                    \
+  (FDCAN_MRAM_RX0_WORD + (FDCAN_MRAM_RX_FIFO0_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
+#define FDCAN_MRAM_TX_EVENT_WORD                                               \
+  (FDCAN_MRAM_RX1_WORD + (FDCAN_MRAM_RX_FIFO1_ELEMS * FDCAN_MRAM_ELEM_WORDS_64))
+#define FDCAN_MRAM_TX_BUF_WORD                                                 \
+  (FDCAN_MRAM_TX_EVENT_WORD + (FDCAN_MRAM_TX_EVENT_ELEMS * 2u))
+
+#define FDCAN_POLL_TIMEOUT 200000u
 
 /* ── SYSCFG / EXTI (external interrupt routing) ─────────────────────────── */
 #define SYSCFG_BASE 0x40010000u

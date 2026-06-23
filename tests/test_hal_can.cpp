@@ -21,6 +21,21 @@ static void test_can_frame_cb(uint32_t id, uint8_t len, const uint8_t *data) {
 
 static void test_retry_idle_cb(void) { s_retry_idle_calls++; }
 
+static hal_can_config_t test_mcp251xfd_config(void) {
+  hal_can_config_t cfg = {};
+  cfg.backend = HAL_CAN_BACKEND_MCP251XFD;
+  cfg.mcp251xfd.spi_bus = 0u;
+  cfg.mcp251xfd.cs_pin = 10u;
+  cfg.mcp251xfd.arbitration_bitrate_hz = 500000u;
+  cfg.mcp251xfd.data_bitrate_hz = 2000000u;
+  cfg.mcp251xfd.oscillator_hz = 40000000u;
+  cfg.mcp251xfd.spi_clock_hz = 10000000u;
+  cfg.mcp251xfd.enable_fd = true;
+  cfg.mcp251xfd.one_shot_tx = true;
+  cfg.mcp251xfd.sleep_wakeup = true;
+  return cfg;
+}
+
 void setUp(void) {
   hal_can_config_t cfg = hal_can_default_config();
   can = hal_can_create(&cfg);
@@ -50,6 +65,18 @@ void test_default_config_selects_mcp2515_backend(void) {
   TEST_ASSERT_EQUAL_UINT32(8000000, cfg.mcp2515.oscillator_hz);
   TEST_ASSERT_TRUE(cfg.mcp2515.one_shot_tx);
   TEST_ASSERT_TRUE(cfg.mcp2515.sleep_wakeup);
+}
+
+void test_mcp251xfd_config_can_create_fd_capable_handle(void) {
+  hal_can_config_t cfg = test_mcp251xfd_config();
+  hal_can_t h = hal_can_create(&cfg);
+
+  TEST_ASSERT_NOT_NULL(h);
+  hal_can_mode_t mode = HAL_CAN_MODE_NORMAL;
+  TEST_ASSERT_TRUE(hal_can_get_mode(h, &mode));
+  TEST_ASSERT_EQUAL_UINT32(HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_FD, mode);
+  TEST_ASSERT_TRUE(hal_can_set_mode(h, HAL_CAN_MODE_FD));
+  hal_can_destroy(h);
 }
 
 void test_create_rejects_unsupported_backend(void) {
@@ -223,6 +250,10 @@ void test_send_frame_stores_extended_rtr_frame(void) {
 }
 
 void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
+  hal_can_config_t cfg = test_mcp251xfd_config();
+  hal_can_t fd_can = hal_can_create(&cfg);
+  TEST_ASSERT_NOT_NULL(fd_can);
+
   hal_can_frame_t frame = {};
   frame.id = 0x123u;
   frame.flags = HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS;
@@ -232,21 +263,32 @@ void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
     frame.data[i] = i;
   }
 
-  TEST_ASSERT_TRUE(hal_can_send_frame(can, &frame));
+  TEST_ASSERT_TRUE(hal_can_send_frame(fd_can, &frame));
   hal_can_frame_t sent = {};
-  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(can, &sent));
+  TEST_ASSERT_TRUE(hal_mock_can_get_sent_frame(fd_can, &sent));
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, sent.flags);
   TEST_ASSERT_EQUAL_UINT8(15, sent.dlc);
   TEST_ASSERT_EQUAL_UINT8(64, sent.len);
   TEST_ASSERT_EQUAL_UINT8(63, sent.data[63]);
 
-  hal_mock_can_inject_frame(can, &frame);
+  hal_mock_can_inject_frame(fd_can, &frame);
   hal_can_frame_t rx = {};
-  TEST_ASSERT_TRUE(hal_can_receive_frame(can, &rx));
+  TEST_ASSERT_TRUE(hal_can_receive_frame(fd_can, &rx));
   TEST_ASSERT_EQUAL_HEX32(0x123u, rx.id);
   TEST_ASSERT_EQUAL_UINT8(HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS, rx.flags);
   TEST_ASSERT_EQUAL_UINT8(64, rx.len);
   TEST_ASSERT_EQUAL_UINT8(42, rx.data[42]);
+  hal_can_destroy(fd_can);
+}
+
+void test_mcp2515_rejects_can_fd_frame(void) {
+  hal_can_frame_t frame = {};
+  frame.id = 0x123u;
+  frame.flags = HAL_CAN_FRAME_FD;
+  frame.len = 12u;
+  frame.dlc = hal_can_bytes_to_dlc(frame.len);
+
+  TEST_ASSERT_FALSE(hal_can_send_frame(can, &frame));
 }
 
 void test_send_frame_rejects_invalid_fd_shape(void) {
@@ -464,6 +506,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_create_returns_valid_handle);
   RUN_TEST(test_default_config_selects_mcp2515_backend);
+  RUN_TEST(test_mcp251xfd_config_can_create_fd_capable_handle);
   RUN_TEST(test_create_rejects_unsupported_backend);
   RUN_TEST(test_send_stores_frame);
   RUN_TEST(test_receive_injected_frame);
@@ -478,6 +521,7 @@ int main(void) {
   RUN_TEST(test_filter_validation_and_frame_matching);
   RUN_TEST(test_send_frame_stores_extended_rtr_frame);
   RUN_TEST(test_send_receive_can_fd_frame_via_mock_frame_api);
+  RUN_TEST(test_mcp2515_rejects_can_fd_frame);
   RUN_TEST(test_send_frame_rejects_invalid_fd_shape);
   RUN_TEST(test_legacy_receive_rejects_fd_frame);
   RUN_TEST(test_set_std_filters_validates_handle);

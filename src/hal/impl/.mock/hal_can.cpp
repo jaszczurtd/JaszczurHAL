@@ -13,6 +13,8 @@ struct hal_can_impl_s {
   int tx_head, tx_tail, tx_count;
   int in_use;
   bool started;
+  hal_can_backend_t backend;
+  bool fd_capable;
   hal_can_mode_t mode;
   hal_can_state_t state;
   hal_can_error_counters_t counters;
@@ -45,10 +47,12 @@ static int ring_pop(hal_can_frame_t *buf, int *head, int *count,
   return 0;
 }
 
-static bool mode_valid(hal_can_mode_t mode) {
-  const hal_can_mode_t supported = HAL_CAN_MODE_LOOPBACK |
-                                   HAL_CAN_MODE_LISTEN_ONLY |
-                                   HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_SLEEP;
+static bool mode_valid(const hal_can_impl_t *h, hal_can_mode_t mode) {
+  hal_can_mode_t supported = HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_LISTEN_ONLY |
+                             HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_SLEEP;
+  if (h && h->backend == HAL_CAN_BACKEND_MCP251XFD && h->fd_capable) {
+    supported |= HAL_CAN_MODE_FD;
+  }
   if ((mode & ~supported) != 0u) {
     return false;
   }
@@ -76,7 +80,8 @@ static bool filters_accept(const hal_can_impl_t *h,
 
 hal_can_t hal_can_create(const hal_can_config_t *cfg) {
   hal_can_config_t effective = cfg ? *cfg : hal_can_default_config();
-  if (effective.backend != HAL_CAN_BACKEND_MCP2515) {
+  if (effective.backend != HAL_CAN_BACKEND_MCP2515 &&
+      effective.backend != HAL_CAN_BACKEND_MCP251XFD) {
     return NULL;
   }
 
@@ -99,8 +104,18 @@ hal_can_t hal_can_create(const hal_can_config_t *cfg) {
   memset(h, 0, sizeof(*h));
   h->in_use = 1;
   h->started = true;
-  h->mode = effective.mcp2515.one_shot_tx ? HAL_CAN_MODE_ONE_SHOT
-                                          : HAL_CAN_MODE_NORMAL;
+  h->backend = effective.backend;
+  if (effective.backend == HAL_CAN_BACKEND_MCP251XFD) {
+    h->fd_capable = effective.mcp251xfd.enable_fd;
+    h->mode =
+        (effective.mcp251xfd.one_shot_tx ? HAL_CAN_MODE_ONE_SHOT
+                                         : HAL_CAN_MODE_NORMAL) |
+        (effective.mcp251xfd.enable_fd ? HAL_CAN_MODE_FD : HAL_CAN_MODE_NORMAL);
+  } else {
+    h->fd_capable = false;
+    h->mode = effective.mcp2515.one_shot_tx ? HAL_CAN_MODE_ONE_SHOT
+                                            : HAL_CAN_MODE_NORMAL;
+  }
   h->state = HAL_CAN_STATE_ERROR_ACTIVE;
   h->mutex = hal_mutex_create();
   return h;
@@ -150,6 +165,10 @@ bool hal_can_send_frame(hal_can_t h, const hal_can_frame_t *frame) {
   }
   if (!h->started || (h->mode & HAL_CAN_MODE_SLEEP) != 0u ||
       h->state == HAL_CAN_STATE_BUS_OFF || !hal_can_validate_frame(frame)) {
+    return false;
+  }
+  if ((frame->flags & HAL_CAN_FRAME_FD) != 0u &&
+      (h->backend != HAL_CAN_BACKEND_MCP251XFD || !h->fd_capable)) {
     return false;
   }
 
@@ -243,7 +262,7 @@ bool hal_can_stop(hal_can_t h) {
 }
 
 bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode) {
-  if (!h || !mode_valid(mode)) {
+  if (!h || !mode_valid(h, mode)) {
     return false;
   }
   hal_mutex_lock(h->mutex);
