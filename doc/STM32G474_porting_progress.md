@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-15 (audit aligned with current repo state)
+Last updated: 2026-06-23 (audit aligned with current repo state)
 
 ## Goal
 Provide and harden a non-Arduino `STM32G474` target for JaszczurHAL so the
@@ -53,6 +53,7 @@ Nature of the implementation:
 ### 3. Default STM32 feature profile
 `stm32_lib/CMakeLists.txt` enables by default:
 - `HAL_ENABLE_I2C`
+- `HAL_ENABLE_I2C_SLAVE`
 - `HAL_ENABLE_SPI`
 - `HAL_ENABLE_UART`
 - `HAL_ENABLE_DAC`
@@ -62,12 +63,16 @@ Nature of the implementation:
 - `HAL_ENABLE_MCP9600`
 - `HAL_ENABLE_MAX6675`
 - `HAL_ENABLE_BH1750`
+- `HAL_ENABLE_TSC2007`
+- `HAL_ENABLE_STMPE610`
+- `HAL_ENABLE_IRSMALL_DECODER`
 - `HAL_ENABLE_EXTERNAL_ADC`
 - `HAL_ENABLE_DS18B20`
 - `HAL_ENABLE_MCP2515`
 - `HAL_ENABLE_MCP251XFD`
 - `HAL_ENABLE_STM32G474_FDCAN`
 - `HAL_ENABLE_GPS`
+- `HAL_ENABLE_HD44780`
 
 This is still a conservative default profile: it enables the bus/core pieces
 plus the shared HAL-level drivers that are already known to build on STM32G474.
@@ -133,6 +138,16 @@ The following modules are real, register-level backends under
     active for both buses when initialized,
   - `hal_i2c_bus_clear_bus()` now performs real GPIO-level 9-clock recovery and
     STOP generation using the provided SDA/SCL pins.
+- `hal_i2c_slave` - I2C target/slave register-map backend on bus 0 and bus 1:
+  - bus 0 -> I2C1, bus 1 -> I2C2,
+  - uses the same SDA/SCL AF mapping and default pins as the I2C master backend,
+  - configures conservative 100 kHz/16 MHz `TIMINGR` fields for slave-mode
+    data setup/hold timing,
+  - clears `OA1EN` before writing a new own address during re-init,
+  - configures own-address match, RX/TX/ADDR/STOP/NACK/error interrupts, and
+    serves the standard `HAL_I2C_SLAVE_REG_MAP_SIZE` register-map protocol,
+  - flushes TXDR on NACK/STOP so an unconsumed transmit byte cannot leak into
+    the next master read.
 - `hal_dac` - DAC1, 12-bit (ch0 -> PA4, ch1 -> PA5).
 - `hal_pcnt` - hardware pulse counter on TIM2 (external clock mode).
 - `hal_pwm` / optional `hal_pwm_freq` - register-level TIM PWM output on
@@ -221,7 +236,7 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 
 | Bus  | STM32G474 status | Consequence |
 |------|------------------|-------------|
-| I2C  | Full Wire-style API (`begin_transmission`/`write`/`end`/`request_from`/`read`) in `impl/stm32g474/hal_i2c.cpp` | I2C device drivers are portable today |
+| I2C  | Full master Wire-style API in `impl/stm32g474/hal_i2c.cpp`; slave/target register-map API in `impl/stm32g474/hal_i2c_slave.cpp` | I2C device drivers are portable today; STM32 can also expose a simple I2C target register map |
 | SPI  | **Hardware SPI1/SPI2** with Arduino-style transaction + transfer API; non-Arduino builds provide `<SPI.h>` (`SPIClass`/`SPISettings`) backed by `hal_spi_*` | SPI device drivers can now be ported behind the HAL / Arduino-compatible shim |
 | UART | USART1 hardware (TX/RX, configurable baud) - used as GPS transport | UART-based peripherals are portable today |
 
@@ -240,7 +255,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules still missing a real STM32G474 backend, or still blocked by a missing
 STM32 storage/transport layer:
-`i2c_slave, mqtt, ota, swserial, udp, wifi, wireguard`.
+`mqtt, ota, swserial, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -274,7 +289,7 @@ logic.
   but a different transport (e.g. via the already-portable SIMCom modem).
   Effectively N/A for a bare G474.
 - `hal_ota` - STM32 flash/update specific, not a vendor-driver port.
-- `hal_swserial / hal_i2c_slave` - STM32 peripheral work.
+- `hal_swserial` - STM32 peripheral/timer work.
 
 ### Recommended order
 1. **On-silicon validation first** - confirm the delivered register-level
@@ -285,8 +300,8 @@ logic.
   STM32-specific backends beyond `hal_system` and `hal_timer`, especially
   GPIO IRQ, PWM, I2C, SPI, CAN, and RTC integration seams.
 3. **Remaining peripheral gaps** - decide whether STM32G474 needs
-  `hal_i2c_slave` or `hal_swserial`, and define a separate OTA/update strategy
-  if firmware updates become part of the target requirements.
+  `hal_swserial`, and define a separate OTA/update strategy if firmware
+  updates become part of the target requirements.
 4. **Optional performance follow-up** - evaluate display bulk-write and DMA
   paths only if measured TFT throughput or CPU cost justifies the added
   backend complexity.

@@ -2,7 +2,7 @@
 
 Current status after the initial FreeRTOS hardening pass.
 
-Date: 2026-06-15
+Date: 2026-06-23
 
 ## Scope
 
@@ -31,7 +31,7 @@ Implemented background, removed from the active risk list:
    RP2040 and STM32G474 FreeRTOS builds;
 - singleton/per-bus lazy mutex publication is hardened through
    `jh_hal_mutex_create_once()` across the audited modules;
-- `hal_i2c_slave` no longer takes HAL mutexes from Wire callbacks;
+- `hal_i2c_slave` no longer takes HAL mutexes from backend callbacks/IRQs;
 - host-side `JH_ENABLE_FREERTOS_POSIX_TESTS` exists as a CI regression layer
    for the FreeRTOS mutex/delay/create-once contract.
 
@@ -52,7 +52,7 @@ The modules and areas that still need explicit care are:
 | `hal_timer`, `hal_timer_ext`, `hal_soft_timer`, `SmartTimers` | Callback context is mixed: ISR/alarm-style on low-level paths, caller/task context on higher-level paths. | FreeRTOS timer work must not silently change callback expectations. |
 | `hal_uart`, `hal_swserial`, `hal_gps` transport ownership | Still effectively single-owner unless the application imposes a stronger transport model. | Reentrancy and shared-port ownership are not solved by mutexes alone. |
 | `hal_i2c` / `hal_spi` | Bus locking exists, but multi-step transactions still depend on disciplined caller/driver lock coverage. | Releasing or skipping the bus lock at the wrong boundary can reintroduce races under multitask use. |
-| `hal_i2c_slave` | Backend-local register-map lock avoids HAL mutex use in callbacks, but hardware behavior still needs smoke validation. | Callback safety is improved, but final confidence still depends on on-target behavior. |
+| `hal_i2c_slave` | Backend-local register-map lock avoids HAL mutex use in callbacks/IRQs, but hardware behavior still needs smoke validation. | Callback/IRQ safety is improved, but final confidence still depends on on-target behavior. |
 | `hal_littlefs`, `hal_sdlogger` | Serialized wrappers around storage/file paths, with fault/reset-sensitive usage patterns. | Long blocking calls and crash/logging paths are still conservative by design. |
 | `hal_display` | Drawing is serialized, but long transactions can block other tasks. | Large TFT/OLED updates may create visible latency or contention. |
 | `hal_onewire`, `hal_ds18b20`, `hal_thermocouple`/MAX6675, `hal_rgb_led` | Bit-bang/timing-critical paths still rely on busy waits and/or hard critical sections. | These paths need on-hardware validation under scheduler load, not just structural locking. |

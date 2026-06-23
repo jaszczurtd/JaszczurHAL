@@ -540,7 +540,7 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 // adc_range: LSB size in millivolts (e.g. 0.1875 for ±6.144 V full-scale).
 //            Stored internally for hal_ext_adc_read_scaled().
 void    hal_ext_adc_init(uint8_t address, float adc_range);
-void    hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range); // i2c_bus: 0=Wire, 1=Wire1
+void    hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range); // i2c_bus: 0=default, 1=second controller
 
 // Read raw signed 16-bit value from channel 0–3.
 // Sets gain to 0 (±6.144 V) before each conversion; blocks until result ready.

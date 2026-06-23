@@ -14,18 +14,23 @@ extern "C" {
  * The device exposes an internal register map over I2C. A remote master
  * writes a one-byte register address, then reads N bytes starting from
  * that register. The slave auto-increments the pointer on each byte.
+ * The register pointer intentionally survives STOP conditions, so a later
+ * bare read continues from the last position unless the master first writes
+ * a new register address. This matches common register-map device behavior.
  *
- * Thread-safety (Arduino backend):
- *   - hal_i2c_slave_init() must be called from one core only (setup).
+ * Thread-safety:
+ *   - hal_i2c_slave_init*() and hal_i2c_slave_deinit*() must be serialized by
+ *     the application.
  *   - hal_i2c_slave_reg_write*() and hal_i2c_slave_reg_read*() use an
- *     internal short register-map lock shared with the Wire callbacks, so
- *     they are safe to call from normal task/core context. The Wire
- *     onReceive/onRequest callbacks do not take HAL mutexes.
- *   - hal_i2c_slave_deinit() must be called from one core only.
+ *     internal short register-map lock shared with backend bus handlers, so
+ *     they are safe to call from normal task/core context.
+ *   - backend bus handlers may run from callbacks or interrupt context
+ *     (for example Arduino Wire callbacks or STM32 I2C EV/ER IRQs) and do not
+ *     take HAL mutexes.
  *
  * Two I2C controllers are supported via bus-index APIs:
- *   - bus 0 -> Wire  (default controller)
- *   - bus 1 -> Wire1 (second controller, when available)
+ *   - bus 0 -> default I2C controller
+ *   - bus 1 -> second I2C controller, when available
  * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  *
  * Register map size is fixed at compile time (HAL_I2C_SLAVE_REG_MAP_SIZE,
@@ -46,7 +51,7 @@ void hal_i2c_slave_init(uint8_t sda_pin, uint8_t scl_pin, uint8_t address);
 
 /**
  * @brief Initialise I2C peripheral mode on a specific bus.
- * @param bus      Bus index: 0 = Wire, 1 = Wire1.
+ * @param bus      Bus index: 0 = default controller, 1 = second controller.
  * @param sda_pin  SDA GPIO pin number.
  * @param scl_pin  SCL GPIO pin number.
  * @param address  7-bit I2C slave address.
@@ -110,8 +115,9 @@ uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
  * @brief Return the number of completed I2C transactions (master reads
  *        and writes) since initialisation.
  *
- * Incremented inside the Wire onReceive / onRequest callbacks, so the
- * counter reflects actual bus activity initiated by an external master.
+ * Incremented by the backend bus handler after completed master-initiated
+ * reads and writes. Depending on the backend, this handler may be an Arduino
+ * Wire callback, a hardware ISR, or a mock event path.
  * The value wraps at UINT32_MAX.
  *
  * Thread-safe: uses atomic access; callable from any core or context.

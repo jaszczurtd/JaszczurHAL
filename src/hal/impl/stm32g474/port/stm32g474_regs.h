@@ -264,18 +264,36 @@
 #define I2C2_TXDR JH_REG32(I2C2_BASE + 0x28u)
 
 #define I2C_CR1_PE (1u << 0)
+#define I2C_CR1_TXIE (1u << 1)
+#define I2C_CR1_RXIE (1u << 2)
+#define I2C_CR1_ADDRIE (1u << 3)
+#define I2C_CR1_NACKIE (1u << 4)
+#define I2C_CR1_STOPIE (1u << 5)
+#define I2C_CR1_ERRIE (1u << 7)
+#define I2C_OAR1_REG(base) JH_REG32((base) + 0x08u)
+#define I2C_OAR1_OA1EN (1u << 15)
 #define I2C_CR2_RD_WRN (1u << 10)
 #define I2C_CR2_START (1u << 13)
 #define I2C_CR2_STOP (1u << 14)
 #define I2C_CR2_AUTOEND (1u << 25)
+#define I2C_ISR_TXE (1u << 0)
 #define I2C_ISR_TXIS (1u << 1)
 #define I2C_ISR_RXNE (1u << 2)
+#define I2C_ISR_ADDR (1u << 3)
 #define I2C_ISR_NACKF (1u << 4)
 #define I2C_ISR_STOPF (1u << 5)
 #define I2C_ISR_TC (1u << 6)
+#define I2C_ISR_BERR (1u << 8)
+#define I2C_ISR_ARLO (1u << 9)
+#define I2C_ISR_OVR (1u << 10)
 #define I2C_ISR_BUSY (1u << 15)
+#define I2C_ISR_DIR (1u << 16)
+#define I2C_ICR_ADDRCF (1u << 3)
 #define I2C_ICR_NACKCF (1u << 4)
 #define I2C_ICR_STOPCF (1u << 5)
+#define I2C_ICR_BERRCF (1u << 8)
+#define I2C_ICR_ARLOCF (1u << 9)
+#define I2C_ICR_OVRCF (1u << 10)
 
 /* TIMINGR for I2CCLK = 16 MHz (HSI16 / PCLK1 default), standard mode 100 kHz.
  * Value per STM32CubeMX / RM0440 timing tables. If the core clock is later
@@ -487,6 +505,10 @@
 #define NVIC_IPR8(irqn) (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn)))
 
 #define TIM6_DACUNDER_IRQn 54u
+#define I2C1_EV_IRQn 31u
+#define I2C1_ER_IRQn 32u
+#define I2C2_EV_IRQn 33u
+#define I2C2_ER_IRQn 34u
 #define EXTI0_IRQn 6u
 #define EXTI1_IRQn 7u
 #define EXTI2_IRQn 8u
