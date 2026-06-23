@@ -65,6 +65,8 @@ Nature of the implementation:
 - `HAL_ENABLE_EXTERNAL_ADC`
 - `HAL_ENABLE_DS18B20`
 - `HAL_ENABLE_MCP2515`
+- `HAL_ENABLE_MCP251XFD`
+- `HAL_ENABLE_STM32G474_FDCAN`
 - `HAL_ENABLE_GPS`
 
 This is still a conservative default profile: it enables the bus/core pieces
@@ -153,11 +155,12 @@ The following modules are real, register-level backends under
   full-duplex), Arduino-style transaction API, AF5 pin setup, software NSS,
   SPI modes 0-3, MSB/LSB order, clock prescaler selection. Default pins:
   bus 0 -> SPI1 PA6/PA7/PA5, bus 1 -> SPI2 PB14/PB15/PB13.
-- `hal_can` - generic CAN facade with the **MCP2515** backend enabled through
-  `HAL_ENABLE_MCP2515`. Target `hal_can.cpp` owns handle lifetime/dispatch and
-  delegates MCP2515 operations to `impl/shared/mcp2515/hal_can_mcp2515.*` and
-  the HAL-only register/SPI driver (`mcp2515_driver.*`) over `hal_spi`,
-  `hal_gpio`, `hal_system` and `hal_sync`.
+- `hal_can` - generic CAN facade with backend selection. `HAL_ENABLE_MCP2515`
+  enables classic CAN over the shared MCP2515 HAL-SPI backend;
+  `HAL_ENABLE_MCP251XFD` enables external MCP2517FD/MCP2518FD CAN FD over SPI;
+  `HAL_ENABLE_STM32G474_FDCAN` enables the native FDCAN1 register backend with
+  fixed Message RAM layout, RX FIFO0, TX buffers, filters, modes and
+  state/error counters. Target `hal_can.cpp` owns handle lifetime/dispatch.
 - `hal_display` - **ILI9341** plus **ST7735/ST7789/ST7796S** via shared
   HAL-only SPI/GPIO drivers (`impl/shared/display/ili9341_driver.*`,
   `impl/shared/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C
@@ -224,7 +227,7 @@ device logic as portable `src/hal/` drivers (the digipot pattern).
 
 SPI is no longer blocked at the bus layer. The first STM32 implementation is
 polling-based rather than DMA, but it is hardware-backed and matches the
-Arduino driver surface closely enough for MCP2515 and display-driver bring-up.
+Arduino driver surface closely enough for the shared SPI CAN/display drivers.
 MCP9600/MCP9601 and MAX6675 are handled separately by shared HAL-level drivers.
 ADS1X15/ADS1115 is also now handled by a shared HAL-level driver used by both
 RP2040 and STM32G474.
@@ -243,7 +246,7 @@ STM32 storage/transport layer:
 
 The shared-driver migration has already covered the highest-value portable
 device classes: RTC, external ADC, OneWire/DS18B20, display, RGB LED,
-thermocouples, CAN/MCP2515, digipot, BH1750, and PGA2311.
+thermocouples, CAN/MCP2515, CAN FD/MCP251XFD, digipot, BH1750, and PGA2311.
 
 `hal_external_adc` / ADS1115 has completed this path and now lives in
 `src/hal/impl/shared/ads1x15/ads1x15_driver.*`.

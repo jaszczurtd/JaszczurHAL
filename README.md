@@ -99,7 +99,7 @@ src/
         frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard, SD logger)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
         ads1x15/ digipot/ display/ ds18b20/ ds3231/ gps/
-        max6675/ mcp2515/ mcp9600/ neopixel/ onewire/
+        max6675/ mcp2515/ mcp251xfd/ mcp9600/ neopixel/ onewire/
         pcf8563/ pga2311/ wireguard/ (and many more)
       stm32g474/            # STM32G474 backend
         drivers/
@@ -122,7 +122,8 @@ This code:
 - avoids per-target `#if HAL_TARGET_IS_*` branches inside the shared implementation file.
 
 Shared device and engine implementations are organized into per-driver/framework subfolders, for example:
-`shared/ads1x15/`, `shared/digipot/`, `shared/display/`, `shared/pga2311/`, etc.
+`shared/ads1x15/`, `shared/digipot/`, `shared/display/`,
+`shared/mcp2515/`, `shared/mcp251xfd/`, `shared/pga2311/`, etc.
 
 ## Quick start
 See [examples/README.md](examples/README.md) for the full build system guide.

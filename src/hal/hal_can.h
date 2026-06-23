@@ -30,7 +30,8 @@ extern "C" {
 /** @brief Extended 29-bit CAN identifier mask. */
 #define HAL_CAN_EXT_ID_MASK 0x1FFFFFFFu
 
-/** @brief Number of hardware acceptance filters exposed by MCP2515. */
+/** @brief Minimum number of hardware acceptance filters exposed by CAN
+ * backends. */
 #define HAL_CAN_MAX_FILTERS 6u
 
 /** @brief CAN frame flags used by hal_can_frame_t. */
@@ -102,7 +103,11 @@ typedef hal_can_impl_t *hal_can_t;
 /** @brief CAN backend selector. */
 typedef enum {
   /** External Microchip MCP2515 controller over HAL SPI. */
-  HAL_CAN_BACKEND_MCP2515 = 0
+  HAL_CAN_BACKEND_MCP2515 = 0,
+  /** External Microchip MCP2517FD/MCP2518FD controller over HAL SPI. */
+  HAL_CAN_BACKEND_MCP251XFD = 1,
+  /** Native STM32G474 FDCAN1 controller. */
+  HAL_CAN_BACKEND_STM32G474_FDCAN = 2
 } hal_can_backend_t;
 
 /** @brief MCP2515-specific backend configuration. */
@@ -116,17 +121,47 @@ typedef struct {
   bool sleep_wakeup;      /**< Enable wake-up interrupt support in MCP2515. */
 } hal_can_mcp2515_config_t;
 
+/** @brief MCP251XFD-specific backend configuration. */
+typedef struct {
+  uint8_t spi_bus; /**< HAL SPI bus index. */
+  uint8_t cs_pin;  /**< SPI chip-select pin for the MCP251XFD. */
+  uint32_t arbitration_bitrate_hz; /**< Nominal/arbitration bitrate. */
+  uint32_t data_bitrate_hz;        /**< CAN FD data bitrate; 0 selects
+                                      arbitration_bitrate_hz. */
+  uint32_t oscillator_hz;          /**< MCP251XFD crystal frequency. */
+  uint32_t
+      spi_clock_hz;  /**< SPI bus clock; 0 selects a conservative default. */
+  bool enable_fd;    /**< Allow CAN FD frames on this channel. */
+  bool one_shot_tx;  /**< Use one-shot TX attempts. */
+  bool sleep_wakeup; /**< Enable wake-up interrupt support where available. */
+} hal_can_mcp251xfd_config_t;
+
+/** @brief STM32G474 native FDCAN backend configuration. */
+typedef struct {
+  uint8_t rx_pin; /**< FDCAN RX pin; default example uses PA11. */
+  uint8_t tx_pin; /**< FDCAN TX pin; default example uses PA12. */
+  uint32_t arbitration_bitrate_hz; /**< Nominal/arbitration bitrate. */
+  uint32_t data_bitrate_hz;        /**< CAN FD data bitrate; 0 selects
+                                      arbitration_bitrate_hz. */
+  bool enable_fd;                  /**< Allow CAN FD frames on this channel. */
+  bool one_shot_tx;                /**< Disable automatic retransmission. */
+} hal_can_stm32g474_fdcan_config_t;
+
 /** @brief CAN channel configuration. */
 typedef struct {
   hal_can_backend_t backend;
   union {
     hal_can_mcp2515_config_t mcp2515;
+    hal_can_mcp251xfd_config_t mcp251xfd;
+    hal_can_stm32g474_fdcan_config_t stm32g474_fdcan;
   };
 } hal_can_config_t;
 
 /**
- * @brief Return default CAN config: MCP2515 on SPI bus 0, CS pin 0,
- *        500 kbps, 8 MHz oscillator, one-shot TX enabled.
+ * @brief Return the default CAN config for the enabled backend set.
+ *
+ * If multiple backends are enabled, MCP2515 owns the compatibility default,
+ * followed by MCP251XFD, then STM32G474 native FDCAN.
  */
 hal_can_config_t hal_can_default_config(void);
 
@@ -206,8 +241,10 @@ bool hal_can_stop(hal_can_t h);
  * @brief Set controller mode flags.
  *
  * MCP2515 supports NORMAL, LOOPBACK, LISTEN_ONLY, SLEEP, and ONE_SHOT. It does
- * not support HAL_CAN_MODE_FD. Only one operating mode among LOOPBACK,
- * LISTEN_ONLY, and SLEEP may be selected at once; no such flag means NORMAL.
+ * not support HAL_CAN_MODE_FD. MCP251XFD and STM32G474 FDCAN support
+ * HAL_CAN_MODE_FD when created with their enable_fd option. Only one operating
+ * mode among LOOPBACK, LISTEN_ONLY, and SLEEP may be selected at once; no such
+ * flag means NORMAL.
  */
 bool hal_can_set_mode(hal_can_t h, hal_can_mode_t mode);
 

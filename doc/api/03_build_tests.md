@@ -11,7 +11,7 @@
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
-| `hal_can` | generic CAN facade plus the MCP2515 backend in current tests (`impl/shared/mcp2515/hal_can_mcp2515.*`, `mcp2515_driver.*`) |
+| `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/mcp2515/*`), MCP251XFD (`impl/shared/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
 | `hal_display` | Shared Arduino-free display stack (`impl/shared/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
 | `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/hd44780/hd44780.*`) over HAL GPIO/system timing |
 | `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
@@ -220,7 +220,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
 | `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
 | `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
-| `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
+| `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |

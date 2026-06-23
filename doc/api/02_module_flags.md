@@ -51,6 +51,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generic CAN API facade; requires at least one backend |
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp2515/hal_can_mcp2515.cpp` + `impl/shared/mcp2515/hal_can_mcp2515_config.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | Shared Arduino-free MCP2515 CAN backend (propagates CAN + SPI) |
+| `HAL_ENABLE_MCP251XFD` | `hal_can.h` + `impl/shared/mcp251xfd/mcp251xfd_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp251xfd/hal_can_mcp251xfd.cpp` + `impl/shared/mcp251xfd/hal_can_mcp251xfd_config.cpp` + `impl/shared/mcp251xfd/mcp251xfd_driver.cpp` | Shared MCP2517FD/MCP2518FD CAN FD backend (propagates CAN + SPI) |
+| `HAL_ENABLE_STM32G474_FDCAN` | `hal_can.h` | `impl/stm32g474/hal_can.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan_config.cpp` | Native STM32G474 FDCAN1 CAN FD backend (propagates CAN; compile-time rejected outside STM32G474) |
 | `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
@@ -118,6 +120,8 @@ HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_MCP2515     -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
+HAL_ENABLE_MCP251XFD   -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
+HAL_ENABLE_STM32G474_FDCAN -> HAL_ENABLE_CAN (STM32G474 only)
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG

@@ -19,6 +19,7 @@ install_manifest.txt
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/
 zephyr
+doc/zephyr_driver_candidates.md
 
 # IDE / editor
 .vscode/

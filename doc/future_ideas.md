@@ -308,66 +308,59 @@ Less useful for JaszczurHAL/STM32 startup work:
 
 ---
 
-### CAN API and STM32G474 native FDCAN direction
+### CAN API and CAN FD follow-up work
 
-The current public CAN API is intentionally small, but it now has the first
-backend-selection seam in place. `hal_can_create()` and
-`hal_can_create_with_retry()` take `hal_can_config_t`, with
-`HAL_CAN_BACKEND_MCP2515` as the only implemented backend for now. The MCP2515
-config carries `spi_bus`, `cs_pin`, `bitrate_hz`, `oscillator_hz`,
-`one_shot_tx`, and `sleep_wakeup`, so call sites no longer bake MCP2515
-construction details directly into the create function signature.
-The compile-time backend flag is `HAL_ENABLE_MCP2515`, which propagates both
-`HAL_ENABLE_CAN` and `HAL_ENABLE_SPI`; the CAN facade itself no longer pulls in
-SPI.
+The public CAN API has moved from an MCP2515-shaped interface to a
+backend-selected facade. `hal_can_create()` and `hal_can_create_with_retry()`
+take `hal_can_config_t`; the backend selector currently covers:
+
+- `HAL_CAN_BACKEND_MCP2515` through `HAL_ENABLE_MCP2515` for classic CAN over
+  SPI;
+- `HAL_CAN_BACKEND_MCP251XFD` through `HAL_ENABLE_MCP251XFD` for external
+  MCP2517FD/MCP2518FD CAN FD over SPI;
+- `HAL_CAN_BACKEND_STM32G474_FDCAN` through
+  `HAL_ENABLE_STM32G474_FDCAN` for native STM32G474 FDCAN1.
+
+The external Microchip backend flags propagate `HAL_ENABLE_CAN` and
+`HAL_ENABLE_SPI`. The STM32G474-native backend propagates only
+`HAL_ENABLE_CAN` and is compile-time rejected on non-STM32G474 targets. Plain
+`HAL_ENABLE_CAN` remains only the facade flag and requires one backend.
 
 The compatibility surface still supports `id + len + data`, polling receive, a
-simple two-standard-ID filter helper, and retry/interrupt setup helpers. A
-backend-agnostic frame API is now in place through `hal_can_frame_t`,
-`hal_can_send_frame()`, and `hal_can_receive_frame()`. It carries classic CAN
-and CAN FD shape information (`dlc`, decoded payload length, extended ID, RTR,
-FD, BRS, and ESI flags), while the legacy helpers remain classic 8-byte
-convenience wrappers. Both the Arduino-style and STM32G474 backends currently
-wrap the shared MCP2515 driver; the STM32G474 backend does not yet use the
-MCU's native FDCAN peripheral.
+simple two-standard-ID filter helper, and retry/interrupt setup helpers. The
+backend-agnostic CAN/CAN FD frame API is in place through `hal_can_frame_t`,
+`hal_can_send_frame()`, and `hal_can_receive_frame()`. It carries DLC, decoded
+payload length, extended ID, RTR, FD, BRS, and ESI flags, while the legacy
+helpers remain classic 8-byte convenience wrappers. MCP2515 explicitly rejects
+FD/BRS/ESI frames; MCP251XFD and STM32G474 FDCAN accept CAN FD when their
+`enable_fd` config option is set and `HAL_CAN_MODE_FD` is used.
 
-Current MCP2515 backend-selector status:
+Current CAN backend status:
 
-- done: `hal_can_backend_t`, `hal_can_mcp2515_config_t`, `hal_can_config_t`;
-- done: default config helper for 500 kbps / 8 MHz MCP2515 on SPI bus 0;
-- done: RP2040/Arduino, STM32G474, and mock implementations accept config;
-- done: `HAL_ENABLE_MCP2515` owns the SPI dependency instead of
-  `HAL_ENABLE_CAN`;
-- done: MCP2515 default config moved into the MCP2515 backend area;
-- done: MCP2515-specific init/send/receive/filter operations moved into
-  `impl/shared/mcp2515/hal_can_mcp2515.cpp`, while target `hal_can.cpp` remains
-  the public facade/dispatcher;
-- done: bitrate and oscillator mapping for the MCP2515 driver constants;
-- done: one-shot TX and sleep-wakeup moved from hardcoded behavior to config;
-- done: common `hal_can_frame_t` and frame send/receive APIs for classic CAN
-  plus future CAN FD backends;
-- done: public frame flags for extended ID, RTR, CAN FD, BRS, and ESI;
-- done: CAN/CAN FD DLC conversion helpers (`hal_can_dlc_to_bytes()` and
-  `hal_can_bytes_to_dlc()`);
-- done: MCP2515 accepts the new frame API for classic CAN, including extended
-  IDs and RTR, and explicitly rejects FD/BRS/ESI frames as unsupported by the
-  hardware;
-- done: mock CAN supports CAN FD frames for API and future-backend tests;
-- done: `hal_can_filter_t` plus static `hal_can_set_filter()` id/mask slots,
-  with the old two-standard-ID helper kept as a convenience wrapper;
-- done: `hal_can_mode_t`, `hal_can_set_mode()`, `hal_can_start()`, and
-  `hal_can_stop()` for normal, loopback, listen-only, sleep, and one-shot MCP2515
-  operation;
-- done: `hal_can_state_t` and `hal_can_error_counters_t`, mapped from MCP2515
-  `EFLG`, `TEC`, and `REC` using the same state ordering as Zephyr's driver;
-- done: shared frame/filter validation plus `hal_can_frame_matches_filter()`;
-- not done: any backend other than MCP2515;
-- not done: a real native STM32G474 FDCAN implementation.
+- done: `hal_can_backend_t`, per-backend config structs and `hal_can_config_t`;
+- done: backend-specific default config helpers, selected only when one backend
+  owns the build;
+- done: RP2040/Arduino, STM32G474 and mock implementations accept config;
+- done: MCP2515 moved behind `impl/shared/mcp2515/hal_can_mcp2515.*`, backed by
+  the HAL-only SPI/register driver;
+- done: MCP251XFD implemented under `impl/shared/mcp251xfd/` as a polling
+  HAL-SPI CAN FD backend;
+- done: STM32G474 native FDCAN1 implemented under
+  `impl/stm32g474/hal_can_stm32g474_fdcan.*` with fixed Message RAM layout,
+  RX FIFO0, TX buffers, modes, filters and diagnostics;
+- done: public frame flags, DLC conversion helpers, frame/filter validation,
+  `hal_can_frame_matches_filter()`, state and error-counter API;
+- done: static `hal_can_set_filter()` id/mask slots plus
+  `hal_can_set_std_filters()` as the compatibility helper;
+- not done: interrupt-driven RX/TX completion path;
+- not done: callback-style dynamic filter ownership;
+- not done: transceiver enable/standby abstraction;
+- not done: hardware bus validation for the first STM32G474 FDCAN revision.
 
-Zephyr's CAN subsystem is useful in two ways:
+Zephyr's CAN subsystem remains useful in two ways:
 
-1. As a model for a richer common CAN API.
-2. As a guide for a future native STM32G474 FDCAN backend.
+1. As a regression checklist for the richer common CAN API.
+2. As a reference for future interrupt, timing and transceiver work.
 
 Useful common API concepts from `zephyr/include/zephyr/drivers/can.h`:
 
@@ -384,51 +377,18 @@ Useful common API concepts from `zephyr/include/zephyr/drivers/can.h`:
 - start/stop semantics.
 - bitrate and timing calculation.
 
-Recommended JaszczurHAL API evolution:
+Recommended JaszczurHAL API evolution from here:
 
-- treat the current config-based create API as stage 1 of the CAN backend
-  split;
-- continue the richer frame/filter API as stage 2 only where a future backend
-  needs features beyond the current static filter/mode/state surface;
 - keep `hal_can_send()` and `hal_can_receive()` as compatibility wrappers for
   classic 8-byte data frames;
 - consider callback-style `hal_can_add_filter()` / `hal_can_remove_filter()`
   only if an interrupt-driven RX path needs owned filter registrations;
 - consider state-change callbacks once interrupt-driven error handling exists.
 
-MCP2515 backend improvements suggested by Zephyr:
-
-- keep MCP2515 as a normal backend behind `hal_can_config_t`, not as the public
-  API shape;
-- done: support extended 29-bit IDs and RTR frames in the public HAL frame API;
-- done: expose listen-only, loopback, one-shot, sleep, and normal modes;
-- done: expose MCP2515 error state and TX/RX error counters already present in
-  the shared driver;
-- done: add mask/filter primitives while keeping
-  `hal_can_set_std_filters(id0, id1)` as a convenience wrapper.
-
-STM32G474 native FDCAN direction:
-
-- add a new backend enum value, likely `HAL_CAN_BACKEND_STM32_FDCAN`, only when
-  the first usable native implementation exists;
-- add a `hal_can_stm32_fdcan_config_t` branch to `hal_can_config_t` for FDCAN
-  instance, RX/TX pins or AF mapping policy, nominal bitrate, mode, and
-  transceiver-control options;
-- Zephyr's `can_stm32_fdcan.c` describes the STM32G4 FDCAN mapping relative to
-  Bosch M_CAN and cites the STM32G4 reference manual behavior;
-- Zephyr's shared `can_mcan.c` shows the core flow for start/stop, timing,
-  filters, TX, RX FIFO handling, interrupts, bus-off recovery, and error
-  counters;
-- a JaszczurHAL port should not copy the full Zephyr stack, but can use it as a
-  checklist and register-behavior reference;
-- first useful native backend target: classic CAN, nominal bitrate, RX FIFO0,
-  TX FIFO/queue, standard and extended filters, state/error counters;
-- CAN FD support can be a second stage.
-
 Also useful:
 
 - `can_loopback.c` is a good reference for a stronger mock/loopback backend
-  with filters and state.
+  with filters, FD shape and state.
 - `transceiver/can_transceiver_gpio.c` is a small, portable idea for handling
   external transceiver enable/standby pins.
 - `can_shell.c` is useful as a reference for human-readable CAN frame printing
@@ -438,11 +398,11 @@ Less useful initially:
 
 - PCI/Linux/vendor-specific drivers such as Kvaser, native Linux, NXP, Nordic,
   Renesas, and Numaker unless those exact targets become goals.
-- `mcp251xfd` and `tcan4x5x` are interesting only if external CAN FD over SPI
+- `tcan4x5x` remains interesting if a second external CAN FD-over-SPI backend
   becomes a hardware goal.
 
-**Difficulty:** medium for API/helpers, high for native STM32G474 FDCAN
-**Gain:** high for diagnostics, portability, and STM32G474 capability
+**Difficulty:** medium for interrupt/filter/transceiver polish
+**Gain:** high for diagnostics, portability and production readiness
 
 ---
 
@@ -453,7 +413,7 @@ Less useful initially:
 | 0 | Move Arduino-backed drivers into shared HAL implementations | Medium | High | In progress |
 | 1 | Continue FreeRTOS hardening (module-level + hardware validation) | Medium | High | In progress |
 | 2 | Status-returning `_ex` APIs (partial coverage; extend to digipot) | Medium | Medium/high | Add incrementally |
-| 3 | CAN API v2 and STM32G474 native FDCAN direction | Medium/high | High | Started: backend config in place, MCP2515 only |
+| 3 | CAN API v2 follow-up: interrupts, transceiver control, hardware validation | Medium | High | Core backend split and CAN FD backends implemented |
 | 4 | STM32 WiFi via offloaded modules (`eswifi` / `esp_at`) | Medium/high | High | Backlog |
 | 5 | ADP5360 shared I2C PMIC driver | Medium | Medium/high | Backlog |
 | 6 | Polish legacy utility API after Arduino decoupling | Low/medium | Medium | Add incrementally |

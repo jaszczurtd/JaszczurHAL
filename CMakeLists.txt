@@ -42,6 +42,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/impl/shared/mcp2515/hal_can_mcp2515_config.cpp
+    ${SRC}/hal/impl/shared/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_pga2311.cpp
     ${SRC}/hal/impl/shared/wireguard/crypto/blake2s.c
@@ -100,6 +101,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_I2C_SLAVE
     HAL_ENABLE_SPI
     HAL_ENABLE_MCP2515       # propagates HAL_ENABLE_CAN + HAL_ENABLE_SPI
+    HAL_ENABLE_MCP251XFD     # second CAN backend with CAN FD support
     HAL_ENABLE_PCF8563        # propagates HAL_ENABLE_RTC + HAL_ENABLE_I2C
     HAL_ENABLE_DS3231         # second RTC backend
     HAL_ENABLE_MCP9600        # propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C

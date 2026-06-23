@@ -224,7 +224,9 @@
        HAL_ENABLE_SPI           - SPI master (Arduino-compatible SPIClass).
        HAL_ENABLE_CAN           - generic CAN API facade.
        HAL_ENABLE_MCP2515       - MCP2515 CAN backend
-                                  (propagates: CAN, SPI).
+       HAL_ENABLE_MCP251XFD     - MCP2517FD/MCP2518FD CAN FD backend
+       HAL_ENABLE_STM32G474_FDCAN - native STM32G474 FDCAN backend
+                                  (propagates: CAN; STM32G474 only).
 
      Time-of-day:
        HAL_ENABLE_RTC           - generic RTC API (requires at least one
@@ -536,6 +538,21 @@
 #endif
 #endif
 
+#ifdef HAL_ENABLE_MCP251XFD
+#ifndef HAL_ENABLE_CAN
+#define HAL_ENABLE_CAN
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_STM32G474_FDCAN
+#ifndef HAL_ENABLE_CAN
+#define HAL_ENABLE_CAN
+#endif
+#endif
+
 #ifdef HAL_ENABLE_SSD1306
 #ifndef HAL_ENABLE_DISPLAY
 #define HAL_ENABLE_DISPLAY
@@ -572,8 +589,14 @@
     "HAL_ENABLE_THERMOCOUPLE requires at least one backend: HAL_ENABLE_MCP9600 or HAL_ENABLE_MAX6675"
 #endif
 
-#if defined(HAL_ENABLE_CAN) && !defined(HAL_ENABLE_MCP2515)
-#error "HAL_ENABLE_CAN requires at least one backend: HAL_ENABLE_MCP2515"
+#if defined(HAL_ENABLE_STM32G474_FDCAN) && !HAL_TARGET_IS_STM32G474
+#error "HAL_ENABLE_STM32G474_FDCAN is only valid with HAL_TARGET_STM32G474"
+#endif
+
+#if defined(HAL_ENABLE_CAN) && !defined(HAL_ENABLE_MCP2515) &&                 \
+    !defined(HAL_ENABLE_MCP251XFD) && !defined(HAL_ENABLE_STM32G474_FDCAN)
+#error                                                                         \
+    "HAL_ENABLE_CAN requires at least one backend: HAL_ENABLE_MCP2515, HAL_ENABLE_MCP251XFD, or HAL_ENABLE_STM32G474_FDCAN"
 #endif
 
 #if defined(HAL_ENABLE_DIGIPOT) && !defined(HAL_ENABLE_MCP401X) &&             \
@@ -663,6 +686,12 @@
 #endif
 #ifdef HAL_ENABLE_MCP2515
 #pragma message("HAL_CONFIG: HAL_ENABLE_MCP2515")
+#endif
+#ifdef HAL_ENABLE_MCP251XFD
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP251XFD")
+#endif
+#ifdef HAL_ENABLE_STM32G474_FDCAN
+#pragma message("HAL_CONFIG: HAL_ENABLE_STM32G474_FDCAN")
 #endif
 #ifdef HAL_ENABLE_RTC
 #pragma message("HAL_CONFIG: HAL_ENABLE_RTC")
@@ -852,8 +881,8 @@
 
 /**
  * @def HAL_CAN_MAX_INSTANCES
- * Maximum number of MCP2515 CAN-bus interfaces.  One instance per
- * physical chip (CS pin).  Typical boards use 1–2 chips.
+ * Maximum number of CAN-bus controller interfaces. One instance per physical
+ * controller, whether it is native or attached over SPI.
  */
 #ifndef HAL_CAN_MAX_INSTANCES
 #define HAL_CAN_MAX_INSTANCES 2
