@@ -46,8 +46,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
-| `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | Wire (master) |
-| `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | Wire (slave/target) |
+| `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
+| `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generic CAN API facade; requires at least one backend |
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp2515/hal_can_mcp2515.cpp` + `impl/shared/mcp2515/hal_can_mcp2515_config.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | Shared Arduino-free MCP2515 CAN backend (propagates CAN + SPI) |

@@ -51,15 +51,17 @@ trigger `HAL_ASSERT` in checked builds.
 #define HAL_I2C_CLOCK_FAST_PLUS_HZ  1000000UL   // Fast-mode Plus, 1 MHz
 #define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL   // High-speed mode, 3.4 MHz
 
-// Init bus, set clock, start Wire/Wire1 (also creates the per-bus mutex)
+// Init bus, set clock, and start the selected backend controller
+// (also creates the per-bus mutex).
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
-void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=Wire, 1=Wire1
+void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=default, 1=second controller
 void    hal_i2c_set_clock(uint32_t clock_hz);
 void    hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
 void    hal_i2c_deinit(void);
 void    hal_i2c_deinit_bus(uint8_t bus);
 
-// Manual lock/unlock - use when wrapping a third-party library that calls Wire directly
+// Manual lock/unlock - use when wrapping a third-party library that calls the
+// backend-native bus object directly.
 void    hal_i2c_lock(void);
 void    hal_i2c_unlock(void);
 void    hal_i2c_lock_bus(uint8_t bus);
@@ -128,7 +130,7 @@ bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 // Toggles SCL up to 9 times at GPIO level to release a slave holding SDA
 // low (e.g. after master reset mid-transaction), then generates a STOP
 // condition.  Leaves SDA/SCL as inputs with pull-ups.
-// Must be called BEFORE hal_i2c_init() - the bus is not usable for Wire
+// Must be called BEFORE hal_i2c_init() - the bus is not usable for normal I2C
 // transactions during this procedure.
 void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
@@ -138,9 +140,9 @@ Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
 
 **Init behavior:** `hal_i2c_init*()` creates the per-bus mutex, configures
-SDA/SCL, clock and starts `Wire`/`Wire1`; it should still be called during setup
-before normal I2C traffic. Runtime calls keep an atomic create-once fallback for
-defensive use before init. Use
+SDA/SCL, clock and starts the backend controller; it should still be called
+during setup before normal I2C traffic. Runtime calls keep an atomic create-once
+fallback for defensive use before init. Use
 `hal_i2c_set_clock()` / `hal_i2c_set_clock_bus()` to retune an already
 configured bus while keeping the change inside the HAL bus mutex.
 
@@ -159,8 +161,9 @@ be verified on the target platform.
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
+**impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers via 16 MHz TIMINGR presets, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear before init.
 **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
-**Thread safety:** Arduino backend: transfer APIs are thread-safe and multicore-safe. An internal per-bus `hal_mutex_t` serializes transactions; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around third-party `Wire` calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and should be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
+**Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
 ```c
@@ -236,6 +239,9 @@ mutex in addition, since the HAL mutex is released at each `end_transmission`.
 Exposes a fixed-size register map over I2C slave mode. A remote master writes
 a one-byte register pointer, then reads N bytes starting from that address.
 The register pointer auto-increments on each byte read.
+The pointer intentionally survives STOP conditions, so a later bare read
+continues from the last position unless the master first writes a new register
+address. This mirrors common register-map peripherals.
 
 This is independent of the I2C master module (`hal_i2c`) - both can be
 disabled/enabled separately, but they cannot share the same bus simultaneously.
@@ -287,8 +293,9 @@ trigger `HAL_ASSERT` in checked builds.
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
 **impl/arduino:** Arduino-pico `Wire.h` / `Wire1` in slave mode (`Wire.begin(address)`).  `onReceive` / `onRequest` callbacks handle the register-map protocol.
+**impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
-**Thread safety:** Arduino backend: `reg_write*` / `reg_read*` are thread-safe and multicore-safe for normal task/core callers. The register map is protected by a short internal lock shared with the Wire `onReceive` / `onRequest` callbacks, so those callbacks do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be called from one core during setup/teardown. Mock backend does not synchronize concurrent access.
+**Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
 ```c

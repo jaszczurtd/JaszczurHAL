@@ -106,6 +106,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_TARGET_STM32G474=1   # canonical backend selection (see src/hal/hal_target.h)
     JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     HAL_ENABLE_I2C
+    HAL_ENABLE_I2C_SLAVE
     HAL_ENABLE_SPI
     HAL_ENABLE_MCP2515
     HAL_ENABLE_UART
