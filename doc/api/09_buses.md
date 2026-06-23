@@ -51,6 +51,12 @@ trigger `HAL_ASSERT` in checked builds.
 #define HAL_I2C_CLOCK_FAST_PLUS_HZ  1000000UL   // Fast-mode Plus, 1 MHz
 #define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL   // High-speed mode, 3.4 MHz
 
+// Common I2C transaction result constants:
+#define HAL_I2C_RESULT_OK           0u
+#define HAL_I2C_ERROR_GENERIC       2u
+#define HAL_I2C_ERROR_OTHER         3u
+#define HAL_I2C_ERROR_TIMEOUT       4u
+
 // Init bus, set clock, and start the selected backend controller
 // (also creates the per-bus mutex).
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
@@ -160,7 +166,7 @@ be verified on the target platform.
 **Reference:** NXP UM10204, "I2C-bus specification and user manual", defines
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
-**impl/arduino:** Arduino-pico `Wire.h` / `Wire1`; per-bus mutex guards all transactions. `hal_i2c_bus_clear()` uses native Arduino GPIO primitives (`pinMode`, `digitalWrite`, `digitalRead`, `delayMicroseconds`).
+**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery without Arduino primitives.
 **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers via 16 MHz TIMINGR presets, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear before init.
 **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
@@ -292,7 +298,7 @@ trigger `HAL_ASSERT` in checked builds.
 2. Master reads N bytes - slave responds with `regs[ptr], regs[ptr+1], ...`
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
-**impl/arduino:** Arduino-pico `Wire.h` / `Wire1` in slave mode (`Wire.begin(address)`).  `onReceive` / `onRequest` callbacks handle the register-map protocol.
+**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol without Arduino `Wire`.
 **impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.

@@ -6,8 +6,12 @@
 #include "../../hal_i2c.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
-#include <Wire.h>
+
+#include <hardware/gpio.h>
+#include <hardware/i2c.h>
+#include <pico/error.h>
 #include <pico/platform.h>
+#include <pico/time.h>
 #include <stdint.h>
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
@@ -15,28 +19,45 @@
 #include <task.h>
 #endif
 
-static hal_mutex_t s_i2c_mutex[2] = {NULL, NULL};
-static volatile uint32_t s_i2c_transaction_count[2] = {0, 0};
-static volatile uintptr_t s_i2c_lock_owner[2] = {0u, 0u};
-static volatile uint32_t s_i2c_lock_depth[2] = {0u, 0u};
+#define RP2040_I2C_BUF_SIZE 255u
+#define RP2040_I2C_TIMEOUT_US 100000u
+
+typedef struct {
+  uint8_t rx_buf[RP2040_I2C_BUF_SIZE];
+  size_t rx_len;
+  size_t rx_pos;
+  uint8_t tx_buf[RP2040_I2C_BUF_SIZE];
+  size_t tx_len;
+  uint8_t cur_addr;
+  uint8_t sda_pin;
+  uint8_t scl_pin;
+  uint32_t clock_hz;
+  uint32_t actual_clock_hz;
+  bool initialized;
+  hal_mutex_t mutex;
+  volatile uintptr_t lock_owner;
+  volatile uint32_t lock_depth;
+  volatile uint32_t transaction_count;
+} i2c_bus_state_t;
+
+static i2c_bus_state_t s_i2c[2] = {};
 
 static inline uint8_t i2c_bus_index(uint8_t bus) {
   HAL_ASSERT(bus <= 1u, "hal_i2c: invalid bus index");
   return (bus <= 1u) ? bus : 0u;
 }
 
-static TwoWire *i2c_bus_wire(uint8_t bus) {
-#if defined(WIRE_INTERFACES_COUNT) && (WIRE_INTERFACES_COUNT > 1)
-  return i2c_bus_index(bus) == 1 ? &Wire1 : &Wire;
-#else
-  (void)bus;
-  return &Wire;
-#endif
+static inline i2c_inst_t *i2c_bus_hw(uint8_t bus) {
+  return i2c_bus_index(bus) == 1u ? i2c1 : i2c0;
+}
+
+static inline i2c_bus_state_t *i2c_state(uint8_t bus) {
+  return &s_i2c[i2c_bus_index(bus)];
 }
 
 static void i2c_ensure_mutex(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  (void)jh_hal_mutex_create_once(&s_i2c_mutex[idx]);
+  (void)jh_hal_mutex_create_once(&s_i2c[idx].mutex);
 }
 
 static uintptr_t i2c_current_owner_token(void) {
@@ -52,30 +73,87 @@ static uintptr_t i2c_current_owner_token(void) {
 static void i2c_lock_idx(uint8_t idx) {
   i2c_ensure_mutex(idx);
   const uintptr_t owner = i2c_current_owner_token();
-  if ((s_i2c_lock_depth[idx] > 0u) && (s_i2c_lock_owner[idx] == owner)) {
-    s_i2c_lock_depth[idx]++;
+  if ((s_i2c[idx].lock_depth > 0u) && (s_i2c[idx].lock_owner == owner)) {
+    s_i2c[idx].lock_depth++;
     return;
   }
 
-  hal_mutex_lock(s_i2c_mutex[idx]);
-  s_i2c_lock_owner[idx] = owner;
-  s_i2c_lock_depth[idx] = 1u;
+  hal_mutex_lock(s_i2c[idx].mutex);
+  s_i2c[idx].lock_owner = owner;
+  s_i2c[idx].lock_depth = 1u;
 }
 
 static void i2c_unlock_idx(uint8_t idx) {
   i2c_ensure_mutex(idx);
   const uintptr_t owner = i2c_current_owner_token();
-  HAL_ASSERT((s_i2c_lock_depth[idx] > 0u) && (s_i2c_lock_owner[idx] == owner),
+  HAL_ASSERT((s_i2c[idx].lock_depth > 0u) && (s_i2c[idx].lock_owner == owner),
              "hal_i2c_unlock: bus is not locked by this context");
-  if ((s_i2c_lock_depth[idx] == 0u) || (s_i2c_lock_owner[idx] != owner)) {
+  if ((s_i2c[idx].lock_depth == 0u) || (s_i2c[idx].lock_owner != owner)) {
     return;
   }
 
-  s_i2c_lock_depth[idx]--;
-  if (s_i2c_lock_depth[idx] == 0u) {
-    s_i2c_lock_owner[idx] = 0u;
-    hal_mutex_unlock(s_i2c_mutex[idx]);
+  s_i2c[idx].lock_depth--;
+  if (s_i2c[idx].lock_depth == 0u) {
+    s_i2c[idx].lock_owner = 0u;
+    hal_mutex_unlock(s_i2c[idx].mutex);
   }
+}
+
+static uint32_t i2c_normalize_clock(uint32_t clock_hz) {
+  if (clock_hz == 0u) {
+    return HAL_I2C_CLOCK_STANDARD_HZ;
+  }
+  if (clock_hz > HAL_I2C_CLOCK_FAST_PLUS_HZ) {
+    return HAL_I2C_CLOCK_FAST_PLUS_HZ;
+  }
+  return clock_hz;
+}
+
+static void i2c_hw_configure_pins(uint8_t sda_pin, uint8_t scl_pin) {
+  gpio_set_function(sda_pin, GPIO_FUNC_I2C);
+  gpio_set_function(scl_pin, GPIO_FUNC_I2C);
+  gpio_pull_up(sda_pin);
+  gpio_pull_up(scl_pin);
+}
+
+static void i2c_hw_init_bus(uint8_t idx) {
+  i2c_bus_state_t *st = &s_i2c[idx];
+  i2c_hw_configure_pins(st->sda_pin, st->scl_pin);
+  st->actual_clock_hz = i2c_init(i2c_bus_hw(idx), st->clock_hz);
+}
+
+static bool i2c_ensure_initialized(uint8_t idx) {
+  if (!s_i2c[idx].initialized) {
+    HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
+    return false;
+  }
+  return true;
+}
+
+static uint8_t i2c_result_from_write_rc(int rc, size_t expected_len) {
+  if (rc == (int)expected_len) {
+    return HAL_I2C_RESULT_OK;
+  }
+  if (rc == PICO_ERROR_TIMEOUT) {
+    return HAL_I2C_ERROR_TIMEOUT;
+  }
+  if (rc == PICO_ERROR_GENERIC) {
+    return HAL_I2C_ERROR_GENERIC;
+  }
+  return HAL_I2C_ERROR_OTHER;
+}
+
+static uint8_t i2c_probe_read(uint8_t idx, uint8_t address) {
+  uint8_t dummy = 0u;
+  int rc = i2c_read_timeout_us(i2c_bus_hw(idx), address, &dummy, 1u, false,
+                               RP2040_I2C_TIMEOUT_US);
+  if (rc == 1) {
+    return HAL_I2C_RESULT_OK;
+  }
+  if (rc == PICO_ERROR_TIMEOUT) {
+    return HAL_I2C_ERROR_TIMEOUT;
+  }
+  return HAL_I2C_ERROR_GENERIC;
 }
 
 void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
@@ -86,12 +164,23 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
                       uint32_t clock_hz) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_ensure_mutex(idx);
-  s_i2c_transaction_count[idx] = 0;
-  TwoWire *wire = i2c_bus_wire(bus);
-  wire->setSDA(sda_pin);
-  wire->setSCL(scl_pin);
-  wire->setClock(clock_hz);
-  wire->begin();
+
+  i2c_bus_state_t *st = &s_i2c[idx];
+  st->rx_len = 0u;
+  st->rx_pos = 0u;
+  st->tx_len = 0u;
+  st->cur_addr = 0u;
+  st->sda_pin = sda_pin;
+  st->scl_pin = scl_pin;
+  st->clock_hz = i2c_normalize_clock(clock_hz);
+  st->actual_clock_hz = 0u;
+  __atomic_store_n(&st->transaction_count, 0u, __ATOMIC_RELEASE);
+  if (st->lock_depth == 0u) {
+    st->lock_owner = 0u;
+  }
+
+  i2c_hw_init_bus(idx);
+  st->initialized = true;
 }
 
 void hal_i2c_set_clock(uint32_t clock_hz) {
@@ -102,7 +191,11 @@ void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_ensure_mutex(idx);
   i2c_lock_idx(idx);
-  i2c_bus_wire(idx)->setClock(clock_hz);
+  i2c_bus_state_t *st = &s_i2c[idx];
+  st->clock_hz = i2c_normalize_clock(clock_hz);
+  if (st->initialized) {
+    st->actual_clock_hz = i2c_set_baudrate(i2c_bus_hw(idx), st->clock_hz);
+  }
   i2c_unlock_idx(idx);
 }
 
@@ -110,7 +203,12 @@ void hal_i2c_deinit(void) { hal_i2c_deinit_bus(0); }
 
 void hal_i2c_deinit_bus(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  i2c_bus_wire(idx)->end();
+  i2c_deinit(i2c_bus_hw(idx));
+  s_i2c[idx].initialized = false;
+  s_i2c[idx].rx_len = 0u;
+  s_i2c[idx].rx_pos = 0u;
+  s_i2c[idx].tx_len = 0u;
+  s_i2c[idx].cur_addr = 0u;
 }
 
 void hal_i2c_lock(void) { hal_i2c_lock_bus(0); }
@@ -134,13 +232,20 @@ void hal_i2c_begin_transmission(uint8_t address) {
 void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address) {
   uint8_t idx = i2c_bus_index(bus);
   i2c_lock_idx(idx);
-  i2c_bus_wire(idx)->beginTransmission(address);
+  (void)i2c_ensure_initialized(idx);
+  s_i2c[idx].cur_addr = address;
+  s_i2c[idx].tx_len = 0u;
 }
 
 size_t hal_i2c_write(uint8_t data) { return hal_i2c_write_bus(0, data); }
 
 size_t hal_i2c_write_bus(uint8_t bus, uint8_t data) {
-  return i2c_bus_wire(bus)->write(data);
+  i2c_bus_state_t *st = i2c_state(bus);
+  if (st->tx_len >= RP2040_I2C_BUF_SIZE) {
+    return 0u;
+  }
+  st->tx_buf[st->tx_len++] = data;
+  return 1u;
 }
 
 uint8_t hal_i2c_end_transmission(void) {
@@ -149,8 +254,19 @@ uint8_t hal_i2c_end_transmission(void) {
 
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   uint8_t idx = i2c_bus_index(bus);
-  uint8_t result = i2c_bus_wire(idx)->endTransmission();
-  s_i2c_transaction_count[idx]++;
+  i2c_bus_state_t *st = &s_i2c[idx];
+  uint8_t result = HAL_I2C_ERROR_TIMEOUT;
+  if (st->initialized) {
+    if (st->tx_len == 0u) {
+      result = i2c_probe_read(idx, st->cur_addr);
+    } else {
+      int rc = i2c_write_timeout_us(i2c_bus_hw(idx), st->cur_addr, st->tx_buf,
+                                    st->tx_len, false, RP2040_I2C_TIMEOUT_US);
+      result = i2c_result_from_write_rc(rc, st->tx_len);
+    }
+  }
+  st->tx_len = 0u;
+  __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
   return result;
 }
@@ -164,7 +280,7 @@ uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
   hal_i2c_begin_transmission_bus(bus, address);
   size_t written = hal_i2c_write_bus(bus, data);
   if (outWriteOk != NULL) {
-    *outWriteOk = (written == 1);
+    *outWriteOk = (written == 1u);
   }
   return hal_i2c_end_transmission_bus(bus);
 }
@@ -174,27 +290,12 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
 }
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
-  uint8_t idx = i2c_bus_index(bus);
-  i2c_lock_idx(idx);
-
-  uint8_t received = i2c_bus_wire(idx)->requestFrom(address, (uint8_t)1);
-  s_i2c_transaction_count[idx]++;
-  if (received != 1) {
-    if (outReadOk != NULL)
-      *outReadOk = false;
-    i2c_unlock_idx(idx);
-    return 0;
+  uint8_t value = 0u;
+  bool ok = hal_i2c_read_bytes_bus(bus, address, &value, 1u);
+  if (outReadOk != NULL) {
+    *outReadOk = ok;
   }
-  int raw = i2c_bus_wire(idx)->read();
-  i2c_unlock_idx(idx);
-  if (raw < 0) {
-    if (outReadOk != NULL)
-      *outReadOk = false;
-    return 0;
-  }
-  if (outReadOk != NULL)
-    *outReadOk = true;
-  return (uint8_t)raw;
+  return ok ? value : 0u;
 }
 
 bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
@@ -205,60 +306,34 @@ bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
 bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
                             size_t tx_len, uint8_t *rx, size_t rx_len) {
   if ((tx_len > 0u && tx == NULL) || (rx_len > 0u && rx == NULL) ||
-      tx_len > 255u || rx_len > 255u) {
+      tx_len > RP2040_I2C_BUF_SIZE || rx_len > RP2040_I2C_BUF_SIZE) {
     return false;
+  }
+  if (tx_len == 0u) {
+    return hal_i2c_read_bytes_bus(bus, address, rx, rx_len);
   }
 
   uint8_t idx = i2c_bus_index(bus);
   i2c_lock_idx(idx);
-
-  TwoWire *wire = i2c_bus_wire(idx);
-  wire->beginTransmission(address);
-  for (size_t i = 0; i < tx_len; ++i) {
-    if (wire->write(tx[i]) != 1u) {
-      i2c_unlock_idx(idx);
-      return false;
-    }
-  }
-
-  const bool needs_read = rx_len > 0u;
-  uint8_t end_result = wire->endTransmission(needs_read ? false : true);
-  s_i2c_transaction_count[idx]++;
-  if (end_result != 0u) {
+  if (!i2c_ensure_initialized(idx)) {
     i2c_unlock_idx(idx);
     return false;
   }
 
-  if (!needs_read) {
-    i2c_unlock_idx(idx);
-    return true;
-  }
+  int written = i2c_write_timeout_us(i2c_bus_hw(idx), address, tx, tx_len,
+                                     rx_len > 0u, RP2040_I2C_TIMEOUT_US);
+  bool ok = written == (int)tx_len;
+  __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
 
-  uint8_t received = wire->requestFrom(address, (uint8_t)rx_len);
-  s_i2c_transaction_count[idx]++;
-  if (received != (uint8_t)rx_len) {
-    while (wire->available()) {
-      (void)wire->read();
-    }
-    i2c_unlock_idx(idx);
-    return false;
-  }
-
-  for (size_t i = 0; i < rx_len; ++i) {
-    if (!wire->available()) {
-      i2c_unlock_idx(idx);
-      return false;
-    }
-    int raw = wire->read();
-    if (raw < 0) {
-      i2c_unlock_idx(idx);
-      return false;
-    }
-    rx[i] = (uint8_t)raw;
+  if (ok && rx_len > 0u) {
+    int got = i2c_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
+                                  RP2040_I2C_TIMEOUT_US);
+    ok = got == (int)rx_len;
+    __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
   }
 
   i2c_unlock_idx(idx);
-  return true;
+  return ok;
 }
 
 bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
@@ -267,7 +342,7 @@ bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
 
 bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
                             size_t rx_len) {
-  if ((rx_len > 0u && rx == NULL) || rx_len > 255u) {
+  if ((rx_len > 0u && rx == NULL) || rx_len > RP2040_I2C_BUF_SIZE) {
     return false;
   }
   if (rx_len == 0u) {
@@ -276,33 +351,17 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
 
   uint8_t idx = i2c_bus_index(bus);
   i2c_lock_idx(idx);
-
-  TwoWire *wire = i2c_bus_wire(idx);
-  uint8_t received = wire->requestFrom(address, (uint8_t)rx_len);
-  s_i2c_transaction_count[idx]++;
-  if (received != (uint8_t)rx_len) {
-    while (wire->available()) {
-      (void)wire->read();
-    }
+  if (!i2c_ensure_initialized(idx)) {
     i2c_unlock_idx(idx);
     return false;
   }
-
-  for (size_t i = 0; i < rx_len; ++i) {
-    if (!wire->available()) {
-      i2c_unlock_idx(idx);
-      return false;
-    }
-    int raw = wire->read();
-    if (raw < 0) {
-      i2c_unlock_idx(idx);
-      return false;
-    }
-    rx[i] = (uint8_t)raw;
-  }
-
+  int got = i2c_read_timeout_us(i2c_bus_hw(idx), address, rx, rx_len, false,
+                                RP2040_I2C_TIMEOUT_US);
+  s_i2c[idx].rx_len = 0u;
+  s_i2c[idx].rx_pos = 0u;
+  __atomic_fetch_add(&s_i2c[idx].transaction_count, 1u, __ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
-  return true;
+  return got == (int)rx_len;
 }
 
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
@@ -311,22 +370,44 @@ uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
 
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   uint8_t idx = i2c_bus_index(bus);
+  i2c_bus_state_t *st = &s_i2c[idx];
   i2c_lock_idx(idx);
-  uint8_t received = i2c_bus_wire(idx)->requestFrom(address, count);
-  s_i2c_transaction_count[idx]++;
+  if (!i2c_ensure_initialized(idx)) {
+    i2c_unlock_idx(idx);
+    return 0u;
+  }
+
+  int got = 0;
+  if (count > 0u) {
+    got = i2c_read_timeout_us(i2c_bus_hw(idx), address, st->rx_buf, count,
+                              false, RP2040_I2C_TIMEOUT_US);
+    if (got < 0) {
+      got = 0;
+    }
+  }
+  st->rx_len = (size_t)got;
+  st->rx_pos = 0u;
+  __atomic_fetch_add(&st->transaction_count, 1u, __ATOMIC_RELAXED);
   i2c_unlock_idx(idx);
-  return received;
+  return (uint8_t)got;
 }
 
 int hal_i2c_available(void) { return hal_i2c_available_bus(0); }
 
 int hal_i2c_available_bus(uint8_t bus) {
-  return i2c_bus_wire(bus)->available();
+  i2c_bus_state_t *st = i2c_state(bus);
+  return (st->rx_pos < st->rx_len) ? (int)(st->rx_len - st->rx_pos) : 0;
 }
 
 int hal_i2c_read(void) { return hal_i2c_read_bus(0); }
 
-int hal_i2c_read_bus(uint8_t bus) { return i2c_bus_wire(bus)->read(); }
+int hal_i2c_read_bus(uint8_t bus) {
+  i2c_bus_state_t *st = i2c_state(bus);
+  if (st->rx_pos >= st->rx_len) {
+    return -1;
+  }
+  return st->rx_buf[st->rx_pos++];
+}
 
 bool hal_i2c_is_busy(uint8_t address) {
   return hal_i2c_is_busy_bus(0, address);
@@ -334,7 +415,7 @@ bool hal_i2c_is_busy(uint8_t address) {
 
 bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
   hal_i2c_begin_transmission_bus(bus, address);
-  return hal_i2c_end_transmission_bus(bus) != 0;
+  return hal_i2c_end_transmission_bus(bus) != 0u;
 }
 
 uint32_t hal_i2c_get_transaction_count(void) {
@@ -342,7 +423,8 @@ uint32_t hal_i2c_get_transaction_count(void) {
 }
 
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
-  return s_i2c_transaction_count[i2c_bus_index(bus)];
+  return __atomic_load_n(&s_i2c[i2c_bus_index(bus)].transaction_count,
+                         __ATOMIC_ACQUIRE);
 }
 
 void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
@@ -352,35 +434,37 @@ void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
 void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
   (void)bus;
 
-  // SDA as input (read), SCL as output (clock)
-  pinMode(sda_pin, INPUT_PULLUP);
-  pinMode(scl_pin, OUTPUT);
-  digitalWrite(scl_pin, HIGH);
-  delayMicroseconds(5);
+  gpio_init(sda_pin);
+  gpio_init(scl_pin);
+  gpio_set_dir(sda_pin, GPIO_IN);
+  gpio_pull_up(sda_pin);
+  gpio_set_dir(scl_pin, GPIO_OUT);
+  gpio_put(scl_pin, true);
+  gpio_pull_up(scl_pin);
+  busy_wait_us(5u);
 
-  // Toggle SCL up to 9 times to release a stuck slave
-  for (uint8_t i = 0; i < 9; i++) {
-    if (digitalRead(sda_pin)) {
-      break; // SDA released
+  for (uint8_t i = 0u; i < 9u; ++i) {
+    if (gpio_get(sda_pin)) {
+      break;
     }
-    digitalWrite(scl_pin, LOW);
-    delayMicroseconds(5);
-    digitalWrite(scl_pin, HIGH);
-    delayMicroseconds(5);
+    gpio_put(scl_pin, false);
+    busy_wait_us(5u);
+    gpio_put(scl_pin, true);
+    busy_wait_us(5u);
   }
 
-  // Generate STOP condition: SDA low -> SCL high -> SDA high
-  pinMode(sda_pin, OUTPUT);
-  digitalWrite(sda_pin, LOW);
-  delayMicroseconds(5);
-  digitalWrite(scl_pin, HIGH);
-  delayMicroseconds(5);
-  digitalWrite(sda_pin, HIGH);
-  delayMicroseconds(5);
+  gpio_set_dir(sda_pin, GPIO_OUT);
+  gpio_put(sda_pin, false);
+  busy_wait_us(5u);
+  gpio_put(scl_pin, true);
+  busy_wait_us(5u);
+  gpio_put(sda_pin, true);
+  busy_wait_us(5u);
 
-  // Return pins to input - hal_i2c_init will reconfigure for I2C
-  pinMode(sda_pin, INPUT_PULLUP);
-  pinMode(scl_pin, INPUT_PULLUP);
+  gpio_set_dir(sda_pin, GPIO_IN);
+  gpio_pull_up(sda_pin);
+  gpio_set_dir(scl_pin, GPIO_IN);
+  gpio_pull_up(scl_pin);
 }
 
 #endif /* HAL_ENABLE_I2C */

@@ -63,6 +63,18 @@ extern "C" {
 /** @brief I2C high-speed mode clock: 3.4 MHz. */
 #define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL
 
+/** @brief I2C transaction completed successfully. */
+#define HAL_I2C_RESULT_OK 0u
+
+/** @brief I2C transaction failed with a generic bus/device error. */
+#define HAL_I2C_ERROR_GENERIC 2u
+
+/** @brief I2C transaction failed with a non-specific backend error. */
+#define HAL_I2C_ERROR_OTHER 3u
+
+/** @brief I2C transaction timed out. */
+#define HAL_I2C_ERROR_TIMEOUT 4u
+
 /**
  * @brief Configure I2C pins, start the bus in controller (master) mode,
  *        and initialise the internal thread-safety mutex.

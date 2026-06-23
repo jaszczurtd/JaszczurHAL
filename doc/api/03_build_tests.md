@@ -17,8 +17,8 @@
 | `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
 | `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
 | `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
-| `hal_spi` | Arduino-pico `SPI.h` / `SPI1` |
-| `hal_i2c` | Arduino-pico `Wire.h` |
+| `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
+| `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | shared NeoPixel core (`impl/shared/neopixel/jh_neopixel.*`) + target transport glue |
