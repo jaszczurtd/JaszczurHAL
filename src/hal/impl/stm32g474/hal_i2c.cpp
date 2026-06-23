@@ -336,7 +336,7 @@ static inline bool i2c_hw_ready(const i2c_bus_state_t *st) {
   return st->initialized && st->hw_base != 0u;
 }
 
-/* Master write of @p len bytes (AUTOEND). Returns 0 ok / 2 NACK / 4 timeout. */
+/* Master write of @p len bytes (AUTOEND). Returns HAL_I2C_* status. */
 static uint8_t i2c_hw_write(uint32_t base, uint8_t addr, const uint8_t *buf,
                             int len) {
   I2C_ICR_REG(base) = I2C_ICR_NACKCF | I2C_ICR_STOPCF;
@@ -348,7 +348,7 @@ static uint8_t i2c_hw_write(uint32_t base, uint8_t addr, const uint8_t *buf,
       --to;
     }
     if (to == 0u) {
-      return 4u;
+      return HAL_I2C_ERROR_TIMEOUT;
     }
     if (I2C_ISR_REG(base) & I2C_ISR_NACKF) {
       break;
@@ -360,11 +360,11 @@ static uint8_t i2c_hw_write(uint32_t base, uint8_t addr, const uint8_t *buf,
     --to;
   }
   if (to == 0u) {
-    return 4u;
+    return HAL_I2C_ERROR_TIMEOUT;
   }
   const bool nack = (I2C_ISR_REG(base) & I2C_ISR_NACKF) != 0u;
   I2C_ICR_REG(base) = I2C_ICR_STOPCF | I2C_ICR_NACKCF;
-  return nack ? 2u : 0u;
+  return nack ? HAL_I2C_ERROR_GENERIC : HAL_I2C_RESULT_OK;
 }
 
 /* Master read of @p len bytes (AUTOEND). Returns number of bytes received. */
@@ -580,12 +580,12 @@ uint8_t hal_i2c_end_transmission(void) {
 
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   i2c_bus_state_t *st = i2c_state(bus);
-  uint8_t err = 0u;
+  uint8_t err = HAL_I2C_RESULT_OK;
 #ifdef JH_STM32G474_HW
   if (i2c_hw_ready(st)) {
     err = i2c_hw_write(st->hw_base, st->cur_addr, st->tx_buf, st->tx_len);
   } else {
-    err = 4u;
+    err = HAL_I2C_ERROR_TIMEOUT;
   }
 #endif
   st->last_error = err;

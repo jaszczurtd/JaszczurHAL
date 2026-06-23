@@ -24,9 +24,9 @@ extern "C" {
  *   - hal_i2c_slave_reg_write*() and hal_i2c_slave_reg_read*() use an
  *     internal short register-map lock shared with backend bus handlers, so
  *     they are safe to call from normal task/core context.
- *   - backend bus handlers may run from callbacks or interrupt context
- *     (for example Arduino Wire callbacks or STM32 I2C EV/ER IRQs) and do not
- *     take HAL mutexes.
+ *   - backend bus handlers may run from hardware IRQ/callback context
+ *     (for example RP2040 I2C IRQs or STM32 I2C EV/ER IRQs) and do not take
+ *     HAL mutexes.
  *
  * Two I2C controllers are supported via bus-index APIs:
  *   - bus 0 -> default I2C controller
@@ -116,8 +116,8 @@ uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
  *        and writes) since initialisation.
  *
  * Incremented by the backend bus handler after completed master-initiated
- * reads and writes. Depending on the backend, this handler may be an Arduino
- * Wire callback, a hardware ISR, or a mock event path.
+ * reads and writes. Depending on the backend, this handler may be a hardware
+ * ISR/callback or a mock event path.
  * The value wraps at UINT32_MAX.
  *
  * Thread-safe: uses atomic access; callable from any core or context.
