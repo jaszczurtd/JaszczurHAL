@@ -66,7 +66,7 @@ ctest --test-dir build --output-on-failure
 
 Two convenience scripts in the repository root simplify local development:
 
-**`runmefirst.sh`** — One-time toolchain setup
+**`runmefirst.sh`** - One-time toolchain setup
 ```bash
 ./runmefirst.sh
 ```
@@ -76,7 +76,7 @@ Configures your local environment for the first time:
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes
 
-**`runalltests.sh`** — Full validation gate
+**`runalltests.sh`** - Full validation gate
 ```bash
 ./runalltests.sh
 ```
@@ -209,7 +209,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
-| `test_hal_eeprom` | byte/int write–read, `commit` flag |
+| `test_hal_eeprom` | byte/int write-read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |

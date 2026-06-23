@@ -25,14 +25,14 @@ extern "C" {
 /**
  * @brief Initialise the ADS1115 and associate it with an I2C address.
  * @param address   7-bit I2C address of the ADS1115.
- * @param adc_range LSB size in millivolts (e.g. 0.1875 for ±6.144 V full-scale).
- *                  Stored internally and used by hal_ext_adc_read_scaled().
+ * @param adc_range LSB size in millivolts (e.g. 0.1875 for ±6.144 V
+ * full-scale). Stored internally and used by hal_ext_adc_read_scaled().
  */
 void hal_ext_adc_init(uint8_t address, float adc_range);
 
 /**
  * @brief Initialise ADS1115 on selected I2C controller.
- * @param i2c_bus   I2C controller index (0 = Wire, 1 = Wire1).
+ * @param i2c_bus   I2C controller index (0 = default, 1 = second controller).
  * @param address   7-bit I2C address of the ADS1115.
  * @param adc_range LSB size in millivolts.
  */
@@ -44,7 +44,7 @@ void hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range);
  * Gain is set to 0 (±6.144 V full-scale) before each conversion.
  * The call blocks until the result is available.
  *
- * @param channel ADS1115 input channel (0–3).
+ * @param channel ADS1115 input channel (0-3).
  * @return Raw signed 16-bit ADC result.
  * @note Returns 0 on invalid channel or ADS1X15 communication/timeout errors.
  */
@@ -57,11 +57,10 @@ int16_t hal_ext_adc_read(uint8_t channel);
  * without any further conversion. Use this when the caller still needs to
  * apply project-specific corrections (e.g. voltage divider, Steinhart-Hart).
  *
- * @param channel ADS1115 input channel (0–3).
+ * @param channel ADS1115 input channel (0-3).
  * @return Scaled value.
  */
 float hal_ext_adc_read_scaled(uint8_t channel);
-
 
 #endif /* HAL_ENABLE_EXTERNAL_ADC */
 #ifdef __cplusplus

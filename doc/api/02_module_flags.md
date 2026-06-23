@@ -40,7 +40,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
-| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; EEPROM/Wire when AT24C256 is selected |
+| `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/arduino/frameworks/sdlogger/hal_sdlogger_arduino.cpp` | SD + SPI (propagates EEPROM + I2C + SPI) |
@@ -48,7 +48,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |
-| `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master / Arduino-compatible SPIClass |
+| `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master/controller with SPIClass-compatible shim where needed |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generic CAN API facade; requires at least one backend |
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp2515/hal_can_mcp2515.cpp` + `impl/shared/mcp2515/hal_can_mcp2515_config.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | Shared Arduino-free MCP2515 CAN backend (propagates CAN + SPI) |
 | `HAL_ENABLE_MCP251XFD` | `hal_can.h` + `impl/shared/mcp251xfd/mcp251xfd_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp251xfd/hal_can_mcp251xfd.cpp` + `impl/shared/mcp251xfd/hal_can_mcp251xfd_config.cpp` + `impl/shared/mcp251xfd/mcp251xfd_driver.cpp` | Shared MCP2517FD/MCP2518FD CAN FD backend (propagates CAN + SPI) |
@@ -280,8 +280,10 @@ arduino-cli compile \
 ### Note about `library.properties:depends`
 
 `library.properties` currently does **not** declare `depends=`.
-Optional Arduino drivers used by HAL modules are vendored in
-`src/hal/impl/arduino/drivers/`.
+Optional third-party integrations used by HAL modules are encapsulated under
+`src/hal/impl/arduino/frameworks/`; target-specific RP2040 helpers live under
+`src/hal/impl/arduino/drivers/rp2040/`. Portable device drivers live under
+`src/hal/impl/shared/`.
 
 Actual compiled dependencies are controlled by the module set:
 

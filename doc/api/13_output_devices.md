@@ -1,4 +1,4 @@
-# Output devices — RGB LED, PGA2311 volume, math helpers
+# Output devices - RGB LED, PGA2311 volume, math helpers
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 

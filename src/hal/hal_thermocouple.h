@@ -12,12 +12,13 @@
  *                    configurable ADC resolution, hardware IIR filter,
  *                    4-channel programmable alerts, sleep mode.
  *   - MAX6675 (shared SPI bit-bang over HAL GPIO): K-type only,
- *                              12-bit hot-junction read, open-circuit detection.
+ *                              12-bit hot-junction read, open-circuit
+ * detection.
  *
  * Backend selection (compile-time, opt-in):
  *   HAL_ENABLE_MCP9600  - enable the shared MCP9600/MCP9601 backend
- *                          (propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C).
- *   HAL_ENABLE_MAX6675  - enable the shared MAX6675 backend
+ *                          (propagates HAL_ENABLE_THERMOCOUPLE +
+ * HAL_ENABLE_I2C). HAL_ENABLE_MAX6675  - enable the shared MAX6675 backend
  *                          (propagates HAL_ENABLE_THERMOCOUPLE).
  *   Both flags may be enabled simultaneously; chip selection is then
  *   made per-handle via @ref hal_thermocouple_config_t::chip.
@@ -35,9 +36,9 @@
  * hal_thermocouple_deinit().
  */
 
-#include <stdint.h>
+#include <math.h> /* NAN */
 #include <stdbool.h>
-#include <math.h>   /* NAN */
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,8 +55,8 @@ extern "C" {
 
 /** @brief Supported thermocouple amplifier chips. */
 typedef enum {
-    HAL_THERMOCOUPLE_CHIP_MCP9600,  /**< MCP9600 / MCP9601 via I2C.        */
-    HAL_THERMOCOUPLE_CHIP_MAX6675,  /**< MAX6675 via HAL GPIO bit-bang SPI. */
+  HAL_THERMOCOUPLE_CHIP_MCP9600, /**< MCP9600 / MCP9601 via I2C.        */
+  HAL_THERMOCOUPLE_CHIP_MAX6675, /**< MAX6675 via HAL GPIO bit-bang SPI. */
 } hal_thermocouple_chip_t;
 
 /* ── Bus configuration ───────────────────────────────────────────────────── */
@@ -63,20 +64,20 @@ typedef enum {
 #ifdef HAL_ENABLE_MCP9600
 /** @brief I2C bus parameters for MCP9600. */
 typedef struct {
-    uint8_t  sda_pin;   /**< SDA GPIO pin.                                  */
-    uint8_t  scl_pin;   /**< SCL GPIO pin.                                  */
-    uint32_t clock_hz;  /**< Bus speed in Hz (MCP9600 supports up to 100 kHz). */
-    uint8_t  i2c_bus;   /**< I2C bus index: 0 = Wire, 1 = Wire1.            */
-    uint8_t  i2c_addr;  /**< 7-bit I2C address (default 0x67).              */
+  uint8_t sda_pin;   /**< SDA GPIO pin.                                  */
+  uint8_t scl_pin;   /**< SCL GPIO pin.                                  */
+  uint32_t clock_hz; /**< Bus speed in Hz (MCP9600 supports up to 100 kHz). */
+  uint8_t i2c_bus;   /**< I2C bus index: 0 = default, 1 = second.        */
+  uint8_t i2c_addr;  /**< 7-bit I2C address (default 0x67).              */
 } hal_thermocouple_i2c_cfg_t;
 #endif /* HAL_ENABLE_MCP9600 */
 
 #ifdef HAL_ENABLE_MAX6675
 /** @brief SPI bit-bang parameters for MAX6675. */
 typedef struct {
-    uint8_t sclk_pin;   /**< Clock pin.                                     */
-    uint8_t cs_pin;     /**< Chip-select (active-low).                      */
-    uint8_t miso_pin;   /**< Data-out from sensor (MISO).                   */
+  uint8_t sclk_pin; /**< Clock pin.                                     */
+  uint8_t cs_pin;   /**< Chip-select (active-low).                      */
+  uint8_t miso_pin; /**< Data-out from sensor (MISO).                   */
 } hal_thermocouple_spi_cfg_t;
 #endif /* HAL_ENABLE_MAX6675 */
 
@@ -88,22 +89,22 @@ typedef struct {
  *   - bus.spi  for HAL_THERMOCOUPLE_CHIP_MAX6675
  */
 typedef struct {
-    hal_thermocouple_chip_t chip;   /**< Which chip to drive.               */
-    union {
+  hal_thermocouple_chip_t chip; /**< Which chip to drive.               */
+  union {
 #ifdef HAL_ENABLE_MCP9600
-        hal_thermocouple_i2c_cfg_t i2c;  /**< Used for MCP9600.             */
+    hal_thermocouple_i2c_cfg_t i2c; /**< Used for MCP9600.             */
 #endif
 #ifdef HAL_ENABLE_MAX6675
-        hal_thermocouple_spi_cfg_t spi;  /**< Used for MAX6675.             */
+    hal_thermocouple_spi_cfg_t spi; /**< Used for MAX6675.             */
 #endif
-    } bus;
+  } bus;
 } hal_thermocouple_config_t;
 
 /* ── Opaque handle ───────────────────────────────────────────────────────── */
 
 /** @brief Opaque thermocouple instance handle.  NULL = invalid. */
-typedef struct hal_thermocouple_impl_s  hal_thermocouple_impl_t;
-typedef       hal_thermocouple_impl_t  *hal_thermocouple_t;
+typedef struct hal_thermocouple_impl_s hal_thermocouple_impl_t;
+typedef hal_thermocouple_impl_t *hal_thermocouple_t;
 
 /* ── Enumerations ────────────────────────────────────────────────────────── */
 
@@ -116,14 +117,14 @@ typedef       hal_thermocouple_impl_t  *hal_thermocouple_t;
  * print an unsupported-function error.
  */
 typedef enum {
-    HAL_THERMOCOUPLE_TYPE_K = 0,
-    HAL_THERMOCOUPLE_TYPE_J,
-    HAL_THERMOCOUPLE_TYPE_T,
-    HAL_THERMOCOUPLE_TYPE_N,
-    HAL_THERMOCOUPLE_TYPE_S,
-    HAL_THERMOCOUPLE_TYPE_E,
-    HAL_THERMOCOUPLE_TYPE_B,
-    HAL_THERMOCOUPLE_TYPE_R,
+  HAL_THERMOCOUPLE_TYPE_K = 0,
+  HAL_THERMOCOUPLE_TYPE_J,
+  HAL_THERMOCOUPLE_TYPE_T,
+  HAL_THERMOCOUPLE_TYPE_N,
+  HAL_THERMOCOUPLE_TYPE_S,
+  HAL_THERMOCOUPLE_TYPE_E,
+  HAL_THERMOCOUPLE_TYPE_B,
+  HAL_THERMOCOUPLE_TYPE_R,
 } hal_thermocouple_type_t;
 
 #ifdef HAL_ENABLE_MCP9600
@@ -134,33 +135,33 @@ typedef enum {
  * conversion time.
  */
 typedef enum {
-    HAL_THERMOCOUPLE_ADC_RES_18 = 0,  /**< 18-bit, ~320 ms/conversion.     */
-    HAL_THERMOCOUPLE_ADC_RES_16,      /**< 16-bit, ~80 ms/conversion.      */
-    HAL_THERMOCOUPLE_ADC_RES_14,      /**< 14-bit, ~20 ms/conversion.      */
-    HAL_THERMOCOUPLE_ADC_RES_12,      /**< 12-bit, ~5 ms/conversion.       */
+  HAL_THERMOCOUPLE_ADC_RES_18 = 0, /**< 18-bit, ~320 ms/conversion.     */
+  HAL_THERMOCOUPLE_ADC_RES_16,     /**< 16-bit, ~80 ms/conversion.      */
+  HAL_THERMOCOUPLE_ADC_RES_14,     /**< 14-bit, ~20 ms/conversion.      */
+  HAL_THERMOCOUPLE_ADC_RES_12,     /**< 12-bit, ~5 ms/conversion.       */
 } hal_thermocouple_adc_res_t;
 
 /**
  * @brief Cold-junction (ambient) ADC resolution (MCP9600 only).
  */
 typedef enum {
-    HAL_THERMOCOUPLE_AMBIENT_RES_0_25    = 0,  /**< 0.25 °C per LSB.       */
-    HAL_THERMOCOUPLE_AMBIENT_RES_0_125,         /**< 0.125 °C per LSB.      */
-    HAL_THERMOCOUPLE_AMBIENT_RES_0_0625,        /**< 0.0625 °C per LSB.     */
-    HAL_THERMOCOUPLE_AMBIENT_RES_0_03125,       /**< 0.03125 °C per LSB.    */
+  HAL_THERMOCOUPLE_AMBIENT_RES_0_25 = 0, /**< 0.25 °C per LSB.       */
+  HAL_THERMOCOUPLE_AMBIENT_RES_0_125,    /**< 0.125 °C per LSB.      */
+  HAL_THERMOCOUPLE_AMBIENT_RES_0_0625,   /**< 0.0625 °C per LSB.     */
+  HAL_THERMOCOUPLE_AMBIENT_RES_0_03125,  /**< 0.03125 °C per LSB.    */
 } hal_thermocouple_ambient_res_t;
 
 /**
  * @brief Alert channel configuration (MCP9600 only, channels 1-4).
  */
 typedef struct {
-    float temperature;           /**< Trigger temperature in °C.            */
-    bool  rising;                /**< true = alert on rise; false = on fall.*/
-    bool  alert_cold_junction;   /**< true = monitor cold junction;
-                                      false = hot junction (default).       */
-    bool  active_high;           /**< Output polarity when alert fires.     */
-    bool  interrupt_mode;        /**< true = latch until cleared;
-                                      false = comparator (self-clearing).   */
+  float temperature;        /**< Trigger temperature in °C.            */
+  bool rising;              /**< true = alert on rise; false = on fall.*/
+  bool alert_cold_junction; /**< true = monitor cold junction;
+                                 false = hot junction (default).       */
+  bool active_high;         /**< Output polarity when alert fires.     */
+  bool interrupt_mode;      /**< true = latch until cleared;
+                                 false = comparator (self-clearing).   */
 } hal_thermocouple_alert_cfg_t;
 #endif /* HAL_ENABLE_MCP9600 */
 
@@ -172,7 +173,7 @@ typedef struct {
  * For MCP9600: calls hal_i2c_init() internally, then verifies the chip via
  * its device-ID register.  Two sensors on the same I2C bus are supported -
  * call hal_thermocouple_init() for each; repeated hal_i2c_init() calls with
- * identical parameters are idempotent on Arduino-pico.
+ * identical parameters are idempotent on RP2040 and STM32G474 backends.
  *
  * For MAX6675: configures the bit-bang SPI GPIO pins through the shared,
  * Arduino-free MAX6675 driver.
@@ -236,7 +237,8 @@ int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h);
  * @param h     Valid handle.
  * @param type  Desired wire type.
  */
-void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t type);
+void hal_thermocouple_set_type(hal_thermocouple_t h,
+                               hal_thermocouple_type_t type);
 #endif /* HAL_ENABLE_MCP9600 */
 
 /**
@@ -280,7 +282,7 @@ uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
  * @param res  Desired ADC resolution.
  */
 void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
-                                          hal_thermocouple_adc_res_t res);
+                                         hal_thermocouple_adc_res_t res);
 
 /**
  * @brief Get the current hot-junction ADC conversion resolution.
@@ -291,7 +293,8 @@ void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
  * @return Current ADC resolution, or HAL_THERMOCOUPLE_ADC_RES_12 if
  *         unsupported.
  */
-hal_thermocouple_adc_res_t hal_thermocouple_get_adc_resolution(hal_thermocouple_t h);
+hal_thermocouple_adc_res_t
+hal_thermocouple_get_adc_resolution(hal_thermocouple_t h);
 
 /**
  * @brief Set the cold-junction (ambient) ADC resolution.
@@ -301,8 +304,8 @@ hal_thermocouple_adc_res_t hal_thermocouple_get_adc_resolution(hal_thermocouple_
  * @param h    Valid handle.
  * @param res  Desired ambient resolution.
  */
-void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
-                                              hal_thermocouple_ambient_res_t res);
+void hal_thermocouple_set_ambient_resolution(
+    hal_thermocouple_t h, hal_thermocouple_ambient_res_t res);
 
 /**
  * @brief Enable or put the sensor into sleep / low-power mode.
@@ -334,13 +337,13 @@ bool hal_thermocouple_is_enabled(hal_thermocouple_t h);
  * @p cfg may be NULL.
  *
  * @param h          Valid handle.
- * @param alert_num  Alert channel number (1–4).
+ * @param alert_num  Alert channel number (1-4).
  * @param enabled    true to enable this alert channel.
  * @param cfg        Alert parameters (must be non-NULL when @p enabled).
  */
 void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
-                                 bool enabled,
-                                 const hal_thermocouple_alert_cfg_t *cfg);
+                                bool enabled,
+                                const hal_thermocouple_alert_cfg_t *cfg);
 
 /**
  * @brief Read back the configured trigger temperature of an alert channel.
@@ -348,7 +351,7 @@ void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
  * MCP9600 only.
  *
  * @param h          Valid handle.
- * @param alert_num  Alert channel number (1–4).
+ * @param alert_num  Alert channel number (1-4).
  * @return Trigger temperature in °C, or NAN if unsupported / invalid channel.
  */
 float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);

@@ -4,15 +4,16 @@
  * @file hal_spi.h
  * @brief Hardware abstraction for SPI bus initialisation, transactions and I/O.
  *
- * Wraps platform-specific pin assignment and bus startup so that project
- * code is decoupled from the Arduino SPI object and can be tested on a PC
- * using the mock implementation.  The API mirrors the parts of Arduino's SPI
- * layer that device drivers commonly use: SPISettings, begin/endTransaction,
- * byte/word transfer and in-place/buffer transfer.
+ * Wraps platform-specific pin assignment and bus startup so that project code
+ * is decoupled from backend-specific SPI peripherals and can be tested on a PC
+ * using the mock implementation. The API remains source-compatible with the
+ * common SPIClass idioms used by device drivers: SPISettings-style
+ * settings, begin/endTransaction, byte/word transfer and in-place/buffer
+ * transfer.
  *
  * Two SPI controllers are supported via the @p bus parameter:
- *   - bus 0 -> SPI  (default controller; STM32G474 hardware SPI1)
- *   - bus 1 -> SPI1 (second Arduino-compatible object; STM32G474 hardware SPI2)
+ *   - bus 0 -> default hardware controller (RP2040 SPI0, STM32G474 SPI1)
+ *   - bus 1 -> second hardware controller (RP2040 SPI1, STM32G474 SPI2)
  * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  */
 
@@ -23,14 +24,14 @@
 extern "C" {
 #endif
 
-/** @brief Default SPI clock used by Arduino SPISettings(): 4 MHz. */
+/** @brief Default SPI clock used when settings request clock 0: 4 MHz. */
 #define HAL_SPI_CLOCK_DEFAULT_HZ 4000000UL
 
-/** @brief Bit order values matching Arduino's LSBFIRST / MSBFIRST. */
+/** @brief Bit order values matching LSBFIRST / MSBFIRST semantics. */
 #define HAL_SPI_LSBFIRST 0u
 #define HAL_SPI_MSBFIRST 1u
 
-/** @brief SPI mode values matching Arduino's SPI_MODE0..SPI_MODE3. */
+/** @brief SPI mode values matching SPI_MODE0..SPI_MODE3 semantics. */
 #define HAL_SPI_MODE0 0u
 #define HAL_SPI_MODE1 1u
 #define HAL_SPI_MODE2 2u
@@ -61,8 +62,8 @@ void hal_spi_deinit(uint8_t bus);
 /**
  * @brief Acquire the mutex for the selected SPI controller.
  *
- * Use this to guard multi-step interactions with drivers that access `SPI`
- * directly (for example MCP2515).
+ * Use this to guard multi-step interactions with drivers sharing the same SPI
+ * controller (for example MCP2515).
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  */
@@ -77,19 +78,19 @@ void hal_spi_unlock(uint8_t bus);
 /**
  * @brief Apply transaction settings to the selected SPI controller.
  *
- * This mirrors Arduino SPIClass::beginTransaction(): it configures clock,
+ * Follows SPIClass-compatible beginTransaction semantics: it configures clock,
  * bit order and SPI mode, but does not acquire the HAL mutex. Code that needs
  * cross-driver exclusion should still use hal_spi_lock()/hal_spi_unlock().
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
- * @param settings Transaction settings, or NULL for Arduino defaults.
+ * @param settings Transaction settings, or NULL for HAL defaults.
  */
 void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
 
 /**
  * @brief Finish a transaction on the selected SPI controller.
  *
- * This mirrors Arduino SPIClass::endTransaction(): it waits for pending
+ * Follows SPIClass-compatible endTransaction semantics: it waits for pending
  * hardware transfer completion where the backend can observe it, but does not
  * release the HAL mutex.
  *
@@ -108,8 +109,8 @@ uint8_t hal_spi_transfer(uint8_t bus, uint8_t data);
 /**
  * @brief Full-duplex transfer of one 16-bit word.
  *
- * The byte order follows the active bit-order setting, matching Arduino's
- * transfer16() behavior.
+ * The byte order follows the active bit-order setting, matching the
+ * SPIClass-compatible transfer16() behavior.
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  * @param data Word to transmit.
