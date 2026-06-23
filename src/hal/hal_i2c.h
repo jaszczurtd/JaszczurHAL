@@ -12,12 +12,12 @@ extern "C" {
  * @brief Hardware abstraction for I2C bus.
  *
  * Wraps platform-specific pin assignment, bus startup and transfer
- * primitives so that project code is decoupled from the Arduino Wire
- * object and can be tested on a PC using a mock implementation.
+ * primitives so that project code is decoupled from backend-specific I2C
+ * peripherals and can be tested on a PC using a mock implementation.
  *
  * Two I2C controllers are supported via bus-index APIs:
- *   - bus 0 -> Wire  (default controller)
- *   - bus 1 -> Wire1 (second controller, when available)
+ *   - bus 0 -> default hardware controller (RP2040 I2C0, STM32G474 I2C1)
+ *   - bus 1 -> second hardware controller (RP2040 I2C1, STM32G474 I2C2)
  * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  *
  * The legacy no-bus APIs are preserved and operate on bus 0.
@@ -29,7 +29,7 @@ extern "C" {
  *     hal_i2c_read_byte() hold the bus guard across request+buffer drain and
  *     are the preferred read APIs for thread-safe drivers.
  *   - hal_i2c_request_from(), hal_i2c_available() and hal_i2c_read() are
- *     legacy Wire-style buffer APIs. They are not an atomic read sequence
+ *     legacy buffered receive APIs. They are not an atomic read sequence
  *     unless the caller wraps the full request/available/read sequence in
  *     hal_i2c_lock() / hal_i2c_unlock().
  *   - For multi-step device-driver sequences that must be atomic, use
@@ -44,7 +44,8 @@ extern "C" {
  * accidentally create different locks for the same bus.
  *
  * Init order: hal_i2c_init()/hal_i2c_init_bus() is still required to
- * configure pins, clock and start Wire/Wire1 before real bus traffic.
+ * configure pins, clock and start the selected hardware controller before real
+ * bus traffic.
  */
 
 #include <stdbool.h>
@@ -89,7 +90,7 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 
 /**
  * @brief Configure pins and start the selected I2C controller.
- * @param bus      I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus      I2C controller index (0 = default, 1 = second controller).
  * @param sda_pin  SDA pin number.
  * @param scl_pin  SCL pin number.
  * @param clock_hz Bus clock frequency in Hz.
@@ -105,7 +106,7 @@ void hal_i2c_set_clock(uint32_t clock_hz);
 
 /**
  * @brief Change the clock of the selected I2C controller after init.
- * @param bus      I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus      I2C controller index (0 = default, 1 = second controller).
  * @param clock_hz Bus clock frequency in Hz.
  */
 void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
@@ -117,7 +118,7 @@ void hal_i2c_deinit(void);
 
 /**
  * @brief Stop the selected I2C controller.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  */
 void hal_i2c_deinit_bus(uint8_t bus);
 
@@ -135,7 +136,7 @@ void hal_i2c_lock(void);
 
 /**
  * @brief Acquire the mutex for the selected I2C controller.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  */
 void hal_i2c_lock_bus(uint8_t bus);
 
@@ -146,7 +147,7 @@ void hal_i2c_unlock(void);
 
 /**
  * @brief Release the mutex for the selected I2C controller.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  */
 void hal_i2c_unlock_bus(uint8_t bus);
 
@@ -163,7 +164,7 @@ void hal_i2c_begin_transmission(uint8_t address);
 
 /**
  * @brief Acquire the selected bus guard and begin transmission to address.
- * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus     I2C controller index (0 = default, 1 = second controller).
  * @param address 7-bit I2C device address.
  */
 void hal_i2c_begin_transmission_bus(uint8_t bus, uint8_t address);
@@ -177,7 +178,7 @@ size_t hal_i2c_write(uint8_t data);
 
 /**
  * @brief Write one byte to the selected bus transmission buffer.
- * @param bus  I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus  I2C controller index (0 = default, 1 = second controller).
  * @param data Byte to send.
  * @return Number of bytes queued (1 on success, 0 on failure).
  */
@@ -213,7 +214,7 @@ uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_write_byte().
- * @param bus        I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus        I2C controller index (0 = default, 1 = second controller).
  * @param address    7-bit I2C slave address.
  * @param data       Byte to transmit.
  * @param outWriteOk Optional pointer; see hal_i2c_write_byte(). May be NULL.
@@ -241,7 +242,7 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk);
 
 /**
  * @brief Bus-selecting variant of hal_i2c_read_byte().
- * @param bus       I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus       I2C controller index (0 = default, 1 = second controller).
  * @param address   7-bit I2C slave address.
  * @param outReadOk Optional pointer; see hal_i2c_read_byte(). May be NULL.
  * @return The byte read, or 0 when the transaction failed.
@@ -294,13 +295,13 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
 
 /**
  * @brief Flush selected bus transmission and release its begin guard.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  * @return 0 on success, non-zero error code on failure.
  */
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 
 /**
- * @brief Legacy Wire-style request into the backend receive buffer.
+ * @brief Legacy request into the backend receive buffer.
  *
  * This guards only the physical request transaction. The bytes remain in the
  * backend receive buffer and later hal_i2c_available()/hal_i2c_read() calls are
@@ -315,8 +316,8 @@ uint8_t hal_i2c_end_transmission_bus(uint8_t bus);
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);
 
 /**
- * @brief Bus-selecting variant of the legacy Wire-style request API.
- * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
+ * @brief Bus-selecting variant of the legacy buffered receive API.
+ * @param bus     I2C controller index (0 = default, 1 = second controller).
  * @param address 7-bit I2C device address.
  * @param count   Number of bytes to request.
  * @return Number of bytes received.
@@ -331,7 +332,7 @@ int hal_i2c_available(void);
 
 /**
  * @brief Return bytes available in the legacy receive buffer of selected bus.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  * @return Byte count.
  */
 int hal_i2c_available_bus(uint8_t bus);
@@ -344,7 +345,7 @@ int hal_i2c_read(void);
 
 /**
  * @brief Read one byte from the selected bus legacy receive buffer.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  * @return Byte value, or -1 if none available.
  */
 int hal_i2c_read_bus(uint8_t bus);
@@ -367,7 +368,7 @@ bool hal_i2c_is_busy(uint8_t address);
 
 /**
  * @brief Probe device ACK state on the selected I2C controller.
- * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus     I2C controller index (0 = default, 1 = second controller).
  * @param address 7-bit I2C address to probe.
  * @return true if the device did NOT ACK (busy / absent), false otherwise.
  */
@@ -385,7 +386,7 @@ uint32_t hal_i2c_get_transaction_count(void);
 
 /**
  * @brief Return the transaction count for a specific I2C bus.
- * @param bus I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus I2C controller index (0 = default, 1 = second controller).
  */
 uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
 
@@ -397,7 +398,7 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
  * generates a STOP condition.  Leaves SDA/SCL as inputs with pull-ups.
  *
  * Must be called @b before hal_i2c_init() - the bus is not usable for
- * Wire transactions during this procedure.
+ * I2C transactions during this procedure.
  *
  * @param sda_pin  SDA pin number.
  * @param scl_pin  SCL pin number.
@@ -406,7 +407,7 @@ void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 
 /**
  * @brief Perform a bus clear on the specified I2C controller pins.
- * @param bus     I2C controller index (0 = Wire, 1 = Wire1).
+ * @param bus     I2C controller index (0 = default, 1 = second controller).
  * @param sda_pin SDA pin number.
  * @param scl_pin SCL pin number.
  */

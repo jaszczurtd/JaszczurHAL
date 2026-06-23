@@ -18,7 +18,7 @@ void hal_spi_deinit(uint8_t bus);
 void hal_spi_lock(uint8_t bus);
 void hal_spi_unlock(uint8_t bus);
 
-// Arduino-compatible transaction settings and transfer primitives.
+// SPISettings-compatible transaction settings and transfer primitives.
 hal_spi_settings_t settings = {4000000u, HAL_SPI_MSBFIRST, HAL_SPI_MODE0};
 void     hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
 void     hal_spi_end_transaction(uint8_t bus);
@@ -32,11 +32,11 @@ void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
 
-**impl/arduino:** Arduino-pico `SPI` / `SPI1`; transfers delegate to the core SPI objects.
+**impl/arduino / RP2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing; the HAL keeps the SPIClass-compatible transaction surface while driving the hardware directly.
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
 **Arduino compatibility:** non-Arduino builds expose a local `<SPI.h>` with `SPISettings`, `SPIClass`, `SPI`, and `SPI1`; methods delegate to `hal_spi_*`.
-**Thread safety:** `hal_spi_begin_transaction()` mirrors Arduino and does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
+**Thread safety:** `hal_spi_begin_transaction()` follows SPIClass-compatible semantics and does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
 
 ---
 
@@ -111,7 +111,7 @@ bool    hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len);
 bool    hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address,
                                uint8_t *rx, size_t rx_len);
 
-// Legacy Wire-style receive-buffer API. Not an atomic read sequence unless
+// Legacy buffered receive API. Not an atomic read sequence unless
 // the caller wraps request+available/read in hal_i2c_lock()/hal_i2c_unlock().
 // Prefer hal_i2c_read_bytes(_bus) or hal_i2c_write_read(_bus) in drivers.
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count);  // returns bytes received
@@ -166,9 +166,9 @@ be verified on the target platform.
 **Reference:** NXP UM10204, "I2C-bus specification and user manual", defines
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery without Arduino primitives.
+**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function.
 **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers via 16 MHz TIMINGR presets, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear before init.
-**impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns 2 (NACK) when the mock busy flag is set, 0 otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
+**impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -298,7 +298,7 @@ trigger `HAL_ASSERT` in checked builds.
 2. Master reads N bytes - slave responds with `regs[ptr], regs[ptr+1], ...`
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol without Arduino `Wire`.
+**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
 **impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.

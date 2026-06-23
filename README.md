@@ -23,6 +23,21 @@ JaszczurHAL introduces a practical boundary:
 
 This reduces lock-in to one runtime and makes migration from other SDKs much easier.
 
+## Is this used by anything real?
+
+Yes - by several of my more demanding projects.
+
+The most visible example of JaszczurHAL in practice is the Fiesta project: https://github.com/jaszczurtd/Fiesta
+
+It is my private retrofit/automotive-kind project built from several tightly integrated modules. The ECU module is probably the most demanding one: it uses JaszczurHAL for VP37 injection pump control, CAN communication with the rest of the system, OBD diagnostics, and other low-level functionality.
+
+There are also smaller (but not trivial) projects, for example:
+
+* https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker
+* https://github.com/jaszczurtd/lights-timer
+
+Even these simpler projects exercise important parts of the library, including WireGuard-related cryptographic components, MQTT-based cloud connectivity, and GPS/LTE telemetry.
+
 ## Public include
 
 Use:

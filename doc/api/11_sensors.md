@@ -77,7 +77,7 @@ void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h, hal_thermocou
 void hal_thermocouple_enable(hal_thermocouple_t h, bool enable);  // false = sleep (MCP9600 only)
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h);           // MAX6675 always returns true
 
-// Alert channels 1–4 (MCP9600 only)
+// Alert channels 1-4 (MCP9600 only)
 typedef struct {
     float temperature; bool rising; bool alert_cold_junction;
     bool active_high;  bool interrupt_mode;
@@ -431,7 +431,7 @@ typedef struct {
   uint8_t  sda_pin;
   uint8_t  scl_pin;
   uint32_t clock_hz;
-  uint8_t  i2c_bus;   // 0 = Wire, 1 = Wire1
+  uint8_t  i2c_bus;   // 0 = default, 1 = second controller
   uint8_t  i2c_addr;  // 0 = backend default (0x51 PCF8563, 0x68 DS3231)
 } hal_rtc_i2c_cfg_t;
 
@@ -507,16 +507,16 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 ```
 
-**impl/arduino:**
+**impl/arduino + impl/stm32g474:**
 - PCF8563 backend: direct register access over `hal_i2c` (date-time,
   clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
   interrupt enable mask and read-clear event flags).
-- DS3231 backend: vendored `DS3231` library integration with date-time,
+- DS3231 backend: shared portable DS3231 driver over `hal_i2c` with date-time,
   clock integrity via OSF/`oscillatorCheck()`, alarm/IRQ mapping using Alarm2,
   and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
   Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
 **impl/.mock:** in-memory state model with deterministic behavior for unit tests.
-**Thread safety:** Arduino backend: per-handle mutex serializes runtime API calls;
+**Thread safety:** Hardware backends: per-handle mutex serializes runtime API calls;
 I2C traffic is additionally protected by the `hal_i2c` bus mutex. Create/destroy
 should follow the project-wide single-core init/deinit policy. Mock backend is
 for deterministic single-threaded tests.
@@ -542,7 +542,7 @@ void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 void    hal_ext_adc_init(uint8_t address, float adc_range);
 void    hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range); // i2c_bus: 0=default, 1=second controller
 
-// Read raw signed 16-bit value from channel 0–3.
+// Read raw signed 16-bit value from channel 0-3.
 // Sets gain to 0 (±6.144 V) before each conversion; blocks until result ready.
 int16_t hal_ext_adc_read(uint8_t channel);
 

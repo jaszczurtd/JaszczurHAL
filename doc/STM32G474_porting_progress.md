@@ -224,19 +224,17 @@ pattern: the public module owns handles/locking/dispatch, while chip drivers own
 validation, init and I/O sequences. **These already work on STM32** as long as
 the underlying bus HAL exists.
 
-**2. Vendor Arduino libraries** - in `src/hal/impl/arduino/drivers/`:
-`Adafruit_NeoPixel`, `DS3231`, `PCF8563`.
-**All depend on `Arduino.h` / `Wire` / `SPI`.** They are wrapped by the Arduino
-device-HALs (`hal_thermocouple.cpp`, `hal_rtc.cpp`, `hal_can.cpp`, ...), each
-guarded by `#if HAL_TARGET_IS_RP2040` and `#include`-ing `<Wire.h>`/`<SPI.h>`
-directly. **These cannot be ported 1:1** - the realistic path is to rewrite the
-device logic as portable `src/hal/` drivers (the digipot pattern).
+**2. Former vendor Arduino libraries.** The old Arduino `Wire`/`SPI`-bound
+device libraries have been replaced by shared HAL-level drivers for RTC,
+display, thermocouple, OneWire/DS18B20, external ADC, RGB LED, CAN over SPI and
+related devices. These modules now follow the same portable pattern as
+`hal_digipot`: public facade plus shared chip logic over HAL SPI/I2C/GPIO.
 
 ### Deciding factor: bus state on STM32
 
 | Bus  | STM32G474 status | Consequence |
 |------|------------------|-------------|
-| I2C  | Full master Wire-style API in `impl/stm32g474/hal_i2c.cpp`; slave/target register-map API in `impl/stm32g474/hal_i2c_slave.cpp` | I2C device drivers are portable today; STM32 can also expose a simple I2C target register map |
+| I2C  | Full master/controller API in `impl/stm32g474/hal_i2c.cpp`; slave/target register-map API in `impl/stm32g474/hal_i2c_slave.cpp` | I2C device drivers are portable today; STM32 can also expose a simple I2C target register map |
 | SPI  | **Hardware SPI1/SPI2** with Arduino-style transaction + transfer API; non-Arduino builds provide `<SPI.h>` (`SPIClass`/`SPISettings`) backed by `hal_spi_*` | SPI device drivers can now be ported behind the HAL / Arduino-compatible shim |
 | UART | USART1 hardware (TX/RX, configurable baud) - used as GPS transport | UART-based peripherals are portable today |
 

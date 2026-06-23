@@ -1708,8 +1708,9 @@ Next release.
   `hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin)` - I2C bus clear
   procedure per I2C specification §3.1.16: toggles SCL up to 9 times
   at GPIO level to release a slave holding SDA low, then generates a
-  STOP condition. Must be called before `hal_i2c_init()`.
-  Arduino implementation uses native Arduino GPIO primitives.
+	  STOP condition. Must be called before `hal_i2c_init()`.
+	  Hardware backends perform the recovery at GPIO level before returning
+	  the pins to their I2C alternate function.
 - Mock: `hal_mock_i2c_get_bus_clear_count()` /
   `hal_mock_i2c_get_bus_clear_count_bus(bus)` - return the number of
   `hal_i2c_bus_clear()` calls since the last `hal_i2c_init()`.
@@ -1718,7 +1719,7 @@ Next release.
 - `hal_serial_available()` - return the number of bytes available for
   reading from the serial port (wraps `Serial.available()`).
 - `hal_serial_read()` - read one byte from the serial port; returns
-  0–255 or -1 when empty (wraps `Serial.read()`).
+  0-255 or -1 when empty (wraps `Serial.read()`).
 - `float_to_u32()` / `u32_to_float()` - `static inline` bitcast helpers
   (float ↔ uint32_t via memcpy) in `tools_api.h`.
 - Mock: `hal_mock_serial_inject_rx(data, len)` - inject bytes into the
@@ -1728,8 +1729,8 @@ Next release.
 - `hal_i2c_slave_get_transaction_count()` and
   `hal_i2c_slave_get_transaction_count_bus(uint8_t bus)` - return the
   number of completed I2C bus transactions (master reads and writes)
-  since initialisation. Incremented inside the Wire `onReceive` /
-  `onRequest` callbacks, so the counter reflects genuine bus activity.
+	  since initialisation. Incremented from the backend slave receive/read
+	  event path, so the counter reflects genuine bus activity.
   Resets to 0 on `hal_i2c_slave_init*()`. Wraps at `UINT32_MAX`.
   Thread-safe (atomic access).
 - `hal_i2c_get_transaction_count()` and

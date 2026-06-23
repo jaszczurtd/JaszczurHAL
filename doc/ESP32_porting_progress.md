@@ -1,6 +1,6 @@
 # ESP32 Porting Progress
 
-Last updated: 2026-06-15 (initial feasibility analysis; no code changes yet)
+Last updated: 2026-06-23 (refreshed after RP2040 native SPI/I2C backends)
 
 ## Goal
 
@@ -16,10 +16,10 @@ implementation plan.
 The library must grow a fourth compile-time target (`HAL_TARGET_ESP32`) with its
 own backend folder analogous to `src/hal/impl/stm32g474/` or
 `src/hal/impl/arduino/`. The recommended carrier is **Arduino-ESP32** (the
-official Espressif Arduino core), which gives the same `Wire`, `SPI`,
-`Serial`, `WiFiUDP`, `ArduinoOTA` surface used by the RP2040 backend, making
-approximately half the existing Arduino backend files reusable with only
-header-guard changes.
+official Espressif Arduino core), which gives the same `Serial`, `WiFiUDP`,
+`ArduinoOTA` and networking surface used by the current RP2040 connectivity
+backend. SPI/I2C need dedicated ESP32 implementations because the RP2040
+backends now use native Pico SDK peripherals.
 
 ---
 
@@ -127,8 +127,9 @@ All modules in `src/hal/` whose implementation is solely in `src/hal/hal_*.cpp`
 
 ### Arduino backend files that port with header-guard changes only
 
-The following files under `src/hal/impl/arduino/` use only standard Arduino
-APIs (`Wire`, `SPI`, `Serial`, `WiFi`, `WiFiUDP`, `ArduinoOTA`). Their only
+The following files under `src/hal/impl/arduino/` use only portable Arduino
+APIs (`Serial`, `WiFi`, `WiFiUDP`, `ArduinoOTA`) or already go through HAL
+bus abstractions. Their only
 RP2040 dependency is the `#if HAL_TARGET_IS_RP2040` outer guard. Once ESP32 is
 added to that guard (or each file gains a sibling in `esp32_arduino/`), they
 compile as-is under Arduino-ESP32:
@@ -140,7 +141,6 @@ compile as-is under Arduino-ESP32:
 | `hal_dac.cpp` | (`dacWrite` on ESP32 - minor edit needed) |
 | `hal_eeprom.cpp` | `EEPROM`, `hal_i2c` |
 | `hal_gps.cpp` | `hal_uart` / `hal_swserial` |
-| `hal_i2c.cpp` | `Wire` |
 | `hal_littlefs.cpp` | `LittleFS` (available in Arduino-ESP32) |
 | `hal_mqtt.cpp` | `PubSubClient` |
 | `hal_ota.cpp` | `ArduinoOTA` |
@@ -155,13 +155,13 @@ compile as-is under Arduino-ESP32:
 | `hal_wifi.cpp` | `WiFi` |
 | `hal_wireguard.cpp` | WireGuard library (Pico W version - needs ESP32 equivalent) |
 
-Estimated count: ~18 files need only guard extension or minor API adaptation.
+Estimated count: ~17 files need only guard extension or minor API adaptation.
 
 ---
 
 ## What requires new implementation for ESP32
 
-### Hard RP2040 SDK dependencies — must be rewritten
+### Hard RP2040 SDK dependencies - must be rewritten
 
 The following files use Raspberry Pi Pico SDK headers or APIs that have no
 equivalent on ESP32 and cannot be conditionally compiled:
@@ -172,22 +172,24 @@ equivalent on ESP32 and cannot be conditionally compiled:
 | `hal_system.cpp` | `pico/time.h` (`time_us_64`, `busy_wait_us`, `busy_wait_ms`) | `esp_timer_get_time()`, `ets_delay_us()`, `esp_rom_delay_us()` |
 | `hal_timer.cpp` | `pico/time.h` (`alarm_pool_create`, `alarm_pool_add_alarm_in_us`, `hardware_alarm_claim_unused`) | `esp_timer_create` / `esp_timer_start_once` |
 | `hal_gpio.cpp` | `hardware/irq.h` (`PICO_DEFAULT_IRQ_PRIORITY`), `irq_set_priority` | `gpio_install_isr_service`, `esp_intr_alloc`, `GPIO_IS_VALID_GPIO` |
+| `hal_i2c.cpp` | `hardware/i2c.h`, `hardware/gpio.h`, `pico/time.h` | Arduino-ESP32 `Wire`/`Wire1` or ESP-IDF I2C master driver behind the HAL API |
+| `hal_spi.cpp` | `hardware/spi.h`, `hardware/gpio.h` | Arduino-ESP32 `SPIClass` or ESP-IDF SPI master driver behind the HAL API |
 | `hal_pwm_freq.cpp` | `hardware/clocks.h`, `hardware/pwm.h` (`pwm_gpio_to_slice_num`, `pwm_init`, `pwm_set_gpio_level`) | LEDC peripheral (`ledc_timer_config`, `ledc_channel_config`, `ledc_set_duty`) |
 | `hal_rgb_led.cpp` | PIO machine (`pio_claim_free_sm_and_add_program_for_gpio_range`, `ws2812_program_init`, `pio_sm_put_blocking`) | RMT peripheral (`rmt_new_tx_channel`, `rmt_transmit`) or `Adafruit_NeoPixel` |
-| `hal_pcnt.cpp` | GPIO interrupt ISR trampolines (RP2040 approach — functional but not using PCNT hardware) | ESP32 PCNT peripheral (`pcnt_unit_config`, `pcnt_channel_config`) or interrupt-based fallback |
+| `hal_pcnt.cpp` | GPIO interrupt ISR trampolines (RP2040 approach - functional but not using PCNT hardware) | ESP32 PCNT peripheral (`pcnt_unit_config`, `pcnt_channel_config`) or interrupt-based fallback |
 | `hal_i2c_slave.cpp` | `pico/critical_section.h` | IDF I2C slave driver |
 | `drivers/rp2040/rp2040_system.cpp` | `pico/bootrom.h`, `pico/stdlib.h`, `pico/unique_id.h`, `hardware/watchdog.h` | `esp_efuse_mac_get_default`, `esp_restart`, IDF watchdog |
 | `drivers/rp2040/rp2040_fault.cpp` | `pico/stdlib.h`, `hardware/watchdog.h`, `hardware/structs/watchdog.h` | IDF `esp_task_wdt`, `esp_reset_reason` |
 
-**Count: 11 files require new ESP32 implementations.** These would live as
+**Count: 12 files require new ESP32 implementations.** These would live as
 `src/hal/impl/esp32_arduino/` plus `src/hal/impl/esp32_arduino/drivers/esp32/`.
 
 ### SPI backend
 
-`hal_spi.cpp` uses `SPIClassRP2040` (arduino-pico-specific class). Arduino-ESP32
-uses the standard `SPIClass`. The replacement is straightforward: replace
-`SPIClassRP2040&` with `SPIClass&` and initialise from the platform `SPI` /
-`SPI1` singletons. No logic changes needed.
+`hal_spi.cpp` now uses native Pico SDK `hardware/spi.h`, so the ESP32 port is no
+longer a `SPIClassRP2040` -> `SPIClass` rename. The ESP32 backend should either
+wrap Arduino-ESP32 `SPIClass` objects or use the ESP-IDF SPI master driver while
+preserving the public HAL transaction semantics.
 
 ### WireGuard
 
@@ -269,7 +271,7 @@ All 46 occurrences of `HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474` in
 
 ## Phased implementation plan
 
-### Phase 1 — Scaffolding (no logic, just compiles)
+### Phase 1 - Scaffolding (no logic, just compiles)
 
 1. Extend `hal_target.h` with `HAL_TARGET_ESP32`.
 2. Extend `hal_config.h` FreeRTOS guard.
@@ -282,56 +284,57 @@ All 46 occurrences of `HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474` in
 
 **Deliverable:** ESP32 firmware compiles (empty stubs). All existing tests stay green.
 
-### Phase 2 — Core HAL (MVP hardware bring-up)
+### Phase 2 - Core HAL (MVP hardware bring-up)
 
 Priority order based on dependency chain:
 
-1. `hal_system` — `hal_millis`, `hal_micros`, `hal_delay_ms`, `hal_delay_us`,
+1. `hal_system` - `hal_millis`, `hal_micros`, `hal_delay_ms`, `hal_delay_us`,
    `hal_in_isr`, `hal_get_free_heap`, watchdog (IDF `esp_task_wdt`), reset
    reason (`esp_reset_reason`), device UID (`esp_efuse_mac_get_default`).
-2. `hal_sync` — `hal_mutex_*` (FreeRTOS `xSemaphoreCreateMutex`),
+2. `hal_sync` - `hal_mutex_*` (FreeRTOS `xSemaphoreCreateMutex`),
    `hal_critical_section_*` (`portENTER_CRITICAL` / `portEXIT_CRITICAL`).
-3. `hal_gpio` — `pinMode`, `digitalWrite`, `digitalRead`, `attachInterrupt`;
+3. `hal_gpio` - `pinMode`, `digitalWrite`, `digitalRead`, `attachInterrupt`;
    IRQ priority via `esp_intr_alloc` priority parameter.
-4. `hal_serial` — `Serial.print/println/read/available` (identical to RP2040).
-5. `hal_uart` — `HardwareSerial` UART1/UART2 (identical to RP2040 file).
-6. `hal_adc` — `analogRead` (identical to RP2040 file).
-7. `hal_i2c` — `Wire.begin/beginTransmission/write/endTransmission/requestFrom/read`
-   (identical to RP2040 file with guard change).
-8. `hal_spi` — replace `SPIClassRP2040` with `SPIClass` (minimal change).
-9. `hal_timer` — `esp_timer_create` / `esp_timer_start_once` /
+4. `hal_serial` - `Serial.print/println/read/available` (identical to RP2040).
+5. `hal_uart` - `HardwareSerial` UART1/UART2 (identical to RP2040 file).
+6. `hal_adc` - `analogRead` (identical to RP2040 file).
+7. `hal_i2c` - ESP32 I2C master backend using Arduino `Wire`/`Wire1` or the
+   ESP-IDF I2C driver; must preserve HAL lock and repeated-start semantics.
+8. `hal_spi` - ESP32 SPI master backend using Arduino `SPIClass` or the ESP-IDF
+   SPI master driver; must preserve HAL transaction semantics.
+9. `hal_timer` - `esp_timer_create` / `esp_timer_start_once` /
    `esp_timer_stop` / `esp_timer_delete` in place of pico alarm pool.
 
 **Deliverable:** GPIO blink, debug serial, I2C scan, SPI device examples run on ESP32.
 
-### Phase 3 — Connectivity stack
+### Phase 3 - Connectivity stack
 
-1. `hal_wifi` — `WiFi.h` (Arduino-ESP32; API is identical to Pico W, guard
+1. `hal_wifi` - `WiFi.h` (Arduino-ESP32; API is identical to Pico W, guard
    change only).
-2. `hal_udp` — `WiFiUDP` (identical; guard change only).
-3. `hal_mqtt` — PubSubClient (identical; guard change only).
-4. `hal_ota` — `ArduinoOTA` (identical; guard change only).
-5. `hal_time` — `configTime` + `getLocalTime` (identical; guard change only).
+2. `hal_udp` - `WiFiUDP` (identical; guard change only).
+3. `hal_mqtt` - PubSubClient (identical; guard change only).
+4. `hal_ota` - `ArduinoOTA` (identical; guard change only).
+5. `hal_time` - `configTime` + `getLocalTime` (identical; guard change only).
 
 **Deliverable:** WiFi, MQTT, OTA, NTP examples run on ESP32.
 
-### Phase 4 — Remaining Arduino-portable modules
+### Phase 4 - Remaining Arduino-portable modules
 
-1. `hal_pwm` — `analogWrite` or LEDC (`ledcSetup`, `ledcAttachPin`, `ledcWrite`).
-2. `hal_pwm_freq` — LEDC timer (`ledc_timer_config`, `ledc_channel_config`).
-3. `hal_rgb_led` — RMT peripheral or `Adafruit_NeoPixel` for ESP32.
-4. `hal_pcnt` — ESP32 PCNT hardware peripheral (dedicated hardware, better
+1. `hal_pwm` - `analogWrite` or LEDC (`ledcSetup`, `ledcAttachPin`, `ledcWrite`).
+2. `hal_pwm_freq` - LEDC timer (`ledc_timer_config`, `ledc_channel_config`).
+3. `hal_rgb_led` - RMT peripheral or `Adafruit_NeoPixel` for ESP32.
+4. `hal_pcnt` - ESP32 PCNT hardware peripheral (dedicated hardware, better
    than RP2040's interrupt-based approach).
-5. `hal_swserial` — `SoftwareSerial` (Arduino-ESP32 provides it; guard change).
-6. `hal_eeprom` — Arduino-ESP32 `EEPROM.h` (emulated in flash, identical API).
-7. `hal_littlefs` — `LittleFS.h` (available in Arduino-ESP32; guard change).
-8. `hal_gps` — `hal_uart`/`hal_swserial` transport (identical; guard change).
-9. `hal_dac` — `dacWrite(pin, value)` for GPIO25/GPIO26 (real 8-bit DAC).
-10. `hal_rtc` — shared DS3231/PCF8563 drivers over ESP32 `hal_i2c` (identical).
-11. `hal_thermocouple` — shared MCP9600/MAX6675 drivers (identical).
-12. `hal_i2c_slave` — IDF I2C slave driver (full rewrite needed).
+5. `hal_swserial` - `SoftwareSerial` (Arduino-ESP32 provides it; guard change).
+6. `hal_eeprom` - Arduino-ESP32 `EEPROM.h` (emulated in flash, identical API).
+7. `hal_littlefs` - `LittleFS.h` (available in Arduino-ESP32; guard change).
+8. `hal_gps` - `hal_uart`/`hal_swserial` transport (identical; guard change).
+9. `hal_dac` - `dacWrite(pin, value)` for GPIO25/GPIO26 (real 8-bit DAC).
+10. `hal_rtc` - shared DS3231/PCF8563 drivers over ESP32 `hal_i2c` (identical).
+11. `hal_thermocouple` - shared MCP9600/MAX6675 drivers (identical).
+12. `hal_i2c_slave` - IDF I2C slave driver (full rewrite needed).
 
-### Phase 5 — Shared driver guard widening
+### Phase 5 - Shared driver guard widening
 
 All 46 guard sites in `src/hal/impl/shared/`:
 
@@ -343,14 +346,14 @@ All 46 guard sites in `src/hal/impl/shared/`:
      HAL_TARGET_IS_ESP32  || HAL_TARGET_IS_MOCK)
 ```
 
-### Phase 6 — WireGuard, SDLOG, advanced modules
+### Phase 6 - WireGuard, SDLOG, advanced modules
 
-1. `hal_wireguard` — evaluate and bundle an ESP32 WireGuard Arduino library.
-2. `hal_sdlogger` — SD library is identical under Arduino-ESP32.
-3. `hal_can` — facade/dispatch should stay target-local; the shared MCP2515 and
+1. `hal_wireguard` - evaluate and bundle an ESP32 WireGuard Arduino library.
+2. `hal_sdlogger` - SD library is identical under Arduino-ESP32.
+3. `hal_can` - facade/dispatch should stay target-local; the shared MCP2515 and
    MCP251XFD backends should work once ESP32 SPI/GPIO init and backend flags
    are wired. STM32G474 FDCAN remains target-specific.
-4. `hal_display` — shared display driver works; SPI/GPIO init differs.
+4. `hal_display` - shared display driver works; SPI/GPIO init differs.
 
 ---
 
@@ -366,12 +369,12 @@ All 46 guard sites in `src/hal/impl/shared/`:
 | `hal_serial` | Low | Guard change only |
 | `hal_uart` | Low | Guard change only |
 | `hal_adc` | Low | Guard change only |
-| `hal_i2c` | Low | Guard change only |
-| `hal_spi` | Low | `SPIClassRP2040` → `SPIClass` |
+| `hal_i2c` | Medium | New ESP32 I2C backend; RP2040 implementation is Pico SDK-native |
+| `hal_spi` | Medium | New ESP32 SPI backend; RP2040 implementation is Pico SDK-native |
 | `hal_timer` | Medium-High | Full rewrite using `esp_timer` API |
 | `hal_pwm` | Low | `analogWrite` or LEDC |
 | `hal_pwm_freq` | Medium | LEDC timer/channel config differs from pico PWM slice |
-| `hal_rgb_led` | Medium | PIO → RMT or NeoPixel library |
+| `hal_rgb_led` | Medium | PIO -> RMT or NeoPixel library |
 | `hal_pcnt` | Medium | ESP32 has dedicated PCNT HW (better than RP2040 approach) |
 | `hal_wifi` | Low | Guard change only |
 | `hal_udp` | Low | Guard change only |
@@ -523,8 +526,9 @@ scripts/
 | Device UID | `pico_get_unique_board_id` | `esp_efuse_mac_get_default` |
 | Reset reason | `watchdog_hw->scratch[0]` retained | `esp_reset_reason()` |
 | DAC | Not present | 8-bit DAC on GPIO25/GPIO26 |
+| I2C master | `hardware/i2c.h` | Arduino `Wire`/`Wire1` or ESP-IDF I2C master |
 | I2C slave | `pico/critical_section.h` | IDF I2C slave driver |
-| SPI class | `SPIClassRP2040` | `SPIClass` (standard Arduino) |
+| SPI master | `hardware/spi.h` | Arduino `SPIClass` or ESP-IDF SPI master |
 | WiFi/network | arduino-pico lwIP | WiFi.h (Arduino-ESP32 / ESP-IDF lwIP) |
 | Flash FS | LittleFS with flat offset | LittleFS with partition table |
 | WireGuard library | arduino-wireguard-pico-w | WireGuard-ESP32 (evaluate) |

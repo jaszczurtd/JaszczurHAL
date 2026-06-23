@@ -219,9 +219,9 @@
      Buses:
        HAL_ENABLE_UART          - Hardware UART (SerialUART).
        HAL_ENABLE_SWSERIAL      - SoftwareSerial.
-       HAL_ENABLE_I2C           - I2C master (Wire).
+       HAL_ENABLE_I2C           - I2C master/controller.
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
-       HAL_ENABLE_SPI           - SPI master (Arduino-compatible SPIClass).
+       HAL_ENABLE_SPI           - SPI master/controller.
        HAL_ENABLE_CAN           - generic CAN API facade.
        HAL_ENABLE_MCP2515       - MCP2515 CAN backend
        HAL_ENABLE_MCP251XFD     - MCP2517FD/MCP2518FD CAN FD backend

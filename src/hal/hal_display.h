@@ -25,9 +25,9 @@
  * stay independent. Enabling HAL_ENABLE_DISPLAY alone (without a TFT
  * driver or SSD1306) triggers a compile-time #error from hal_config.h.
  *
- * TFT drivers are selected at compile time (ignored when HAL_ENABLE_TFT is unset):
- * Define exactly one of the following before including this header (or in
- * the build system):
+ * TFT drivers are selected at compile time (ignored when HAL_ENABLE_TFT is
+ * unset): Define exactly one of the following before including this header (or
+ * in the build system):
  *
  *   HAL_DISPLAY_ILI9341  - 240×320
  *   HAL_DISPLAY_ST7789   - variable size (pass w/h to hal_display_configure)
@@ -36,14 +36,14 @@
  *   HAL_DISPLAY_ST7796S  - 320×480 typical, BGR colour order
  *
  * Per-driver exclusion flags (from hal_config.h):
- *   HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S
+ *   HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 /
+ * HAL_ENABLE_ST7796S
  *
  * There is no implicit TFT default driver. The project must explicitly define
  * exactly one HAL_DISPLAY_* macro when TFT backend is enabled.
  *
- * SSD1306 is initialized through the dedicated I2C helper (requires HAL_ENABLE_SSD1306
- * to be undefined):
- *   hal_display_init_ssd1306_i2c(...)
+ * SSD1306 is initialized through the dedicated I2C helper (requires
+ * HAL_ENABLE_SSD1306 to be undefined): hal_display_init_ssd1306_i2c(...)
  *
  * Typical usage:
  *   hal_display_init(CS, DC, RST);
@@ -51,26 +51,27 @@
  *   // draw ...
  */
 
-#include <stdint.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
-#include <stdarg.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #ifdef HAL_ENABLE_TFT
-#if (((defined(HAL_DISPLAY_ILI9341) ? 1 : 0) + \
-      (defined(HAL_DISPLAY_ST7789)  ? 1 : 0) + \
-      (defined(HAL_DISPLAY_ST7735)  ? 1 : 0) + \
+#if (((defined(HAL_DISPLAY_ILI9341) ? 1 : 0) +                                 \
+      (defined(HAL_DISPLAY_ST7789) ? 1 : 0) +                                  \
+      (defined(HAL_DISPLAY_ST7735) ? 1 : 0) +                                  \
       (defined(HAL_DISPLAY_ST7796S) ? 1 : 0)) > 1)
 #error "Define exactly one HAL_DISPLAY_* macro (multiple selected)."
 #endif
 
-#if !defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISPLAY_ST7789) && \
+#if !defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISPLAY_ST7789) &&           \
     !defined(HAL_DISPLAY_ST7735) && !defined(HAL_DISPLAY_ST7796S)
-#error "No TFT driver selected. Define one HAL_DISPLAY_* macro or unset HAL_ENABLE_TFT."
+#error                                                                         \
+    "No TFT driver selected. Define one HAL_DISPLAY_* macro or unset HAL_ENABLE_TFT."
 #endif
 
 #if defined(HAL_DISPLAY_ILI9341) && !defined(HAL_ENABLE_ILI9341)
@@ -98,15 +99,15 @@ extern "C" {
  */
 
 #ifndef HAL_COLOR_BLACK
-#define HAL_COLOR_BLACK   0x0000
-#define HAL_COLOR_WHITE   0xFFFF
-#define HAL_COLOR_RED     0xF800
-#define HAL_COLOR_GREEN   0x07E0
-#define HAL_COLOR_BLUE    0x001F
-#define HAL_COLOR_ORANGE  0xFD20
-#define HAL_COLOR_PURPLE  0x780F
-#define HAL_COLOR_YELLOW  0xFFE0
-#define HAL_COLOR_CYAN    0x07FF
+#define HAL_COLOR_BLACK 0x0000
+#define HAL_COLOR_WHITE 0xFFFF
+#define HAL_COLOR_RED 0xF800
+#define HAL_COLOR_GREEN 0x07E0
+#define HAL_COLOR_BLUE 0x001F
+#define HAL_COLOR_ORANGE 0xFD20
+#define HAL_COLOR_PURPLE 0x780F
+#define HAL_COLOR_YELLOW 0xFFE0
+#define HAL_COLOR_CYAN 0x07FF
 #endif
 
 #ifndef HAL_COLOR
@@ -131,10 +132,10 @@ extern "C" {
  * 270 : quarter-turn counter-clockwise
  */
 typedef enum {
-    HAL_DISPLAY_ROTATION_0   = 0,
-    HAL_DISPLAY_ROTATION_90  = 1,
-    HAL_DISPLAY_ROTATION_180 = 2,
-    HAL_DISPLAY_ROTATION_270 = 3,
+  HAL_DISPLAY_ROTATION_0 = 0,
+  HAL_DISPLAY_ROTATION_90 = 1,
+  HAL_DISPLAY_ROTATION_180 = 2,
+  HAL_DISPLAY_ROTATION_270 = 3,
 } hal_display_rotation_t;
 
 /*
@@ -143,20 +144,19 @@ typedef enum {
  * Invalid input falls back to HAL_DISPLAY_ROTATION_0 to keep behavior safe.
  * Prefer compile-time literals (0, 90, 180, 270) for readability.
  */
-#define HAL_DISPLAY_ROTATION(deg) \
-    ((uint8_t)( \
-        ((deg) == 0)   ? HAL_DISPLAY_ROTATION_0 : \
-        ((deg) == 90)  ? HAL_DISPLAY_ROTATION_90 : \
-        ((deg) == 180) ? HAL_DISPLAY_ROTATION_180 : \
-        ((deg) == 270) ? HAL_DISPLAY_ROTATION_270 : \
-                        HAL_DISPLAY_ROTATION_0))
+#define HAL_DISPLAY_ROTATION(deg)                                              \
+  ((uint8_t)(((deg) == 0)     ? HAL_DISPLAY_ROTATION_0                         \
+             : ((deg) == 90)  ? HAL_DISPLAY_ROTATION_90                        \
+             : ((deg) == 180) ? HAL_DISPLAY_ROTATION_180                       \
+             : ((deg) == 270) ? HAL_DISPLAY_ROTATION_270                       \
+                              : HAL_DISPLAY_ROTATION_0))
 
 /*
  * Inversion flags used by hal_display_configure(..., invert, ...).
  * ON means logical color inversion performed by the display controller.
  */
 #define HAL_DISPLAY_INVERT_OFF false
-#define HAL_DISPLAY_INVERT_ON  true
+#define HAL_DISPLAY_INVERT_ON true
 
 /*
  * Color-order flags used by hal_display_configure(..., bgr).
@@ -169,15 +169,15 @@ typedef enum {
 /* ---- SSD1306 power mode ------------------------------------------------- */
 
 #ifndef HAL_DISPLAY_VCC_EXTERNAL
-#define HAL_DISPLAY_VCC_EXTERNAL  0x01
+#define HAL_DISPLAY_VCC_EXTERNAL 0x01
 #define HAL_DISPLAY_VCC_SWITCHCAP 0x02
 #endif
 
 /** @brief Available font identifiers. */
 typedef enum {
-    HAL_FONT_DEFAULT = 0,        /**< Built-in default font. */
-    HAL_FONT_SANS_BOLD_9PT,      /**< FreeSansBold 9pt. */
-    HAL_FONT_SERIF_9PT,          /**< FreeSerif 9pt. */
+  HAL_FONT_DEFAULT = 0,   /**< Built-in default font. */
+  HAL_FONT_SANS_BOLD_9PT, /**< FreeSansBold 9pt. */
+  HAL_FONT_SERIF_9PT,     /**< FreeSerif 9pt. */
 } hal_font_id_t;
 
 /* ---- Init / control ---- */
@@ -205,15 +205,16 @@ void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
  *
  * Only available when HAL_ENABLE_SSD1306 is defined.
  *
- * This helper is intended for monochrome SSD1306 modules that use Wire.
- * The I2C peripheral should be configured before calling this function
+ * This helper is intended for monochrome SSD1306 modules connected over HAL
+ * I2C. The I2C peripheral should be configured before calling this function
  * (for example via hal_i2c_init()).
  *
  * @param width       Display width in pixels (typically 128).
  * @param height      Display height in pixels (typically 32 or 64).
  * @param i2c_addr    7-bit I2C address (for example 0x3C).
  * @param rst_pin     Reset pin, or -1 when reset is not connected.
- * @param switchvcc   SSD1306 power mode (HAL_DISPLAY_VCC_SWITCHCAP or HAL_DISPLAY_VCC_EXTERNAL).
+ * @param switchvcc   SSD1306 power mode (HAL_DISPLAY_VCC_SWITCHCAP or
+ * HAL_DISPLAY_VCC_EXTERNAL).
  * @param periphBegin Retained for source compatibility; the HAL I2C bus is
  *                    initialised lazily, so this flag has no effect.
  * @return true when initialisation succeeded.
@@ -249,11 +250,12 @@ bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
  *
  * @param width    Logical width in pixels (before rotation is applied).
  * @param height   Logical height in pixels (before rotation is applied).
- * @param rotation Screen rotation 0–3.
+ * @param rotation Screen rotation 0-3.
  * @param invert   true to invert display colours.
  * @param bgr      true to use BGR colour order (required for ST7796S).
  */
-bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
+bool hal_display_configure(int width, int height, uint8_t rotation, bool invert,
+                           bool bgr);
 
 /**
  * @brief Re-send the backend register-init command sequence when available.
@@ -310,8 +312,8 @@ bool hal_display_flush(void);
  * @param background RGB565 background color.
  * @param data       Pointer to RGB565 bitmap data.
  */
-bool hal_display_draw_image(int x, int y, int w, int h,
-                            uint16_t background, uint16_t *data);
+bool hal_display_draw_image(int x, int y, int w, int h, uint16_t background,
+                            uint16_t *data);
 
 /* ---- Geometry ---- */
 
@@ -354,7 +356,8 @@ bool hal_display_draw_circle(int x, int y, int r, uint16_t color);
  * @param r    Corner radius.
  * @param color RGB565 colour.
  */
-bool hal_display_fill_round_rect(int x, int y, int w, int h, int r, uint16_t color);
+bool hal_display_fill_round_rect(int x, int y, int w, int h, int r,
+                                 uint16_t color);
 
 /**
  * @brief Draw a line between two points.
@@ -426,7 +429,8 @@ bool hal_display_print_at(int x, int y, const char *s);
  * @param line_height Line height in pixels.
  * @param bg_color Background color.
  */
-bool hal_display_clear_text_line(int line_index, int line_height, uint16_t bg_color);
+bool hal_display_clear_text_line(int line_index, int line_height,
+                                 uint16_t bg_color);
 
 /**
  * @brief Print text in a line grid with optional clear.
@@ -438,7 +442,8 @@ bool hal_display_clear_text_line(int line_index, int line_height, uint16_t bg_co
  * @param bg_color Background color used when clear_first is true.
  */
 bool hal_display_print_line(int line_index, int line_height, const char *text,
-                            bool clear_first, uint16_t fg_color, uint16_t bg_color);
+                            bool clear_first, uint16_t fg_color,
+                            uint16_t bg_color);
 
 /**
  * @brief Draw centered text using current display dimensions.
@@ -490,7 +495,8 @@ bool hal_display_set_default_font(void);
  * @param x,y   Cursor position.
  * @param color RGB565 color.
  */
-bool hal_display_set_default_font_with_pos_and_color(int x, int y, uint16_t color);
+bool hal_display_set_default_font_with_pos_and_color(int x, int y,
+                                                     uint16_t color);
 
 /**
  * @brief Apply text size 1 and given color.

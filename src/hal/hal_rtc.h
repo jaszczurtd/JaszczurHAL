@@ -46,17 +46,17 @@ extern "C" {
 
 /** @brief Supported RTC backends. */
 typedef enum {
-    HAL_RTC_CHIP_PCF8563 = 0, /**< PCF8563 over I2C. */
-    HAL_RTC_CHIP_DS3231,      /**< DS3231 over I2C.  */
+  HAL_RTC_CHIP_PCF8563 = 0, /**< PCF8563 over I2C. */
+  HAL_RTC_CHIP_DS3231,      /**< DS3231 over I2C.  */
 } hal_rtc_chip_t;
 
 /** @brief I2C bus parameters used by I2C RTC backends (PCF8563 / DS3231). */
 typedef struct {
-    uint8_t  sda_pin;   /**< SDA GPIO pin. */
-    uint8_t  scl_pin;   /**< SCL GPIO pin. */
-    uint32_t clock_hz;  /**< I2C bus speed in Hz (for example 100000 or 400000). */
-    uint8_t  i2c_bus;   /**< I2C bus index: 0 = Wire, 1 = Wire1. */
-    uint8_t  i2c_addr;  /**< 7-bit I2C address (0 = backend default address). */
+  uint8_t sda_pin;   /**< SDA GPIO pin. */
+  uint8_t scl_pin;   /**< SCL GPIO pin. */
+  uint32_t clock_hz; /**< I2C bus speed in Hz (for example 100000 or 400000). */
+  uint8_t i2c_bus;   /**< I2C bus index: 0 = default, 1 = second. */
+  uint8_t i2c_addr;  /**< 7-bit I2C address (0 = backend default address). */
 } hal_rtc_i2c_cfg_t;
 
 /**
@@ -65,10 +65,11 @@ typedef struct {
  * Set @ref chip to select backend, then fill matching union member.
  */
 typedef struct {
-    hal_rtc_chip_t chip;
-    union {
-        hal_rtc_i2c_cfg_t i2c; /**< Used for HAL_RTC_CHIP_PCF8563 and HAL_RTC_CHIP_DS3231. */
-    } bus;
+  hal_rtc_chip_t chip;
+  union {
+    hal_rtc_i2c_cfg_t
+        i2c; /**< Used for HAL_RTC_CHIP_PCF8563 and HAL_RTC_CHIP_DS3231. */
+  } bus;
 } hal_rtc_config_t;
 
 /** @brief Opaque RTC handle. */
@@ -91,14 +92,14 @@ typedef hal_rtc_impl_t *hal_rtc_t;
  * whether the backend reported valid oscillator/time integrity.
  */
 typedef struct {
-    uint8_t  second;
-    uint8_t  minute;
-    uint8_t  hour;
-    uint8_t  day;
-    uint8_t  weekday;
-    uint8_t  month;
-    uint16_t year;
-    bool     clock_integrity;
+  uint8_t second;
+  uint8_t minute;
+  uint8_t hour;
+  uint8_t day;
+  uint8_t weekday;
+  uint8_t month;
+  uint16_t year;
+  bool clock_integrity;
 } hal_rtc_datetime_t;
 
 /** @brief Generic RTC event flag: alarm condition occurred. */
@@ -107,26 +108,26 @@ typedef struct {
 #define HAL_RTC_FLAG_TIMER (1u << 1)
 
 /** @brief Generic RTC interrupt-enable bit: alarm interrupt. */
-#define HAL_RTC_IRQ_ALARM  (1u << 0)
+#define HAL_RTC_IRQ_ALARM (1u << 0)
 /** @brief Generic RTC interrupt-enable bit: timer interrupt. */
-#define HAL_RTC_IRQ_TIMER  (1u << 1)
+#define HAL_RTC_IRQ_TIMER (1u << 1)
 
 /** @brief Clock output mode. */
 typedef enum {
-    HAL_RTC_CLKOUT_DISABLED = 0,
-    HAL_RTC_CLKOUT_1_HZ,
-    HAL_RTC_CLKOUT_32_HZ,
-    HAL_RTC_CLKOUT_1024_HZ,
-    HAL_RTC_CLKOUT_32768_HZ,
+  HAL_RTC_CLKOUT_DISABLED = 0,
+  HAL_RTC_CLKOUT_1_HZ,
+  HAL_RTC_CLKOUT_32_HZ,
+  HAL_RTC_CLKOUT_1024_HZ,
+  HAL_RTC_CLKOUT_32768_HZ,
 } hal_rtc_clkout_mode_t;
 
 /** @brief RTC timer clock source / divider. */
 typedef enum {
-    HAL_RTC_TIMER_DISABLED = 0,
-    HAL_RTC_TIMER_1_60_HZ,
-    HAL_RTC_TIMER_1_HZ,
-    HAL_RTC_TIMER_64_HZ,
-    HAL_RTC_TIMER_4096_HZ,
+  HAL_RTC_TIMER_DISABLED = 0,
+  HAL_RTC_TIMER_1_60_HZ,
+  HAL_RTC_TIMER_1_HZ,
+  HAL_RTC_TIMER_64_HZ,
+  HAL_RTC_TIMER_4096_HZ,
 } hal_rtc_timer_clock_t;
 
 /**
@@ -136,14 +137,14 @@ typedef enum {
  * Disabled fields are treated as "don't care" match.
  */
 typedef struct {
-    bool    minute_enabled;
-    uint8_t minute;   /**< 0..59 when enabled. */
-    bool    hour_enabled;
-    uint8_t hour;     /**< 0..23 when enabled. */
-    bool    day_enabled;
-    uint8_t day;      /**< 1..31 when enabled. */
-    bool    weekday_enabled;
-    uint8_t weekday;  /**< 0..6 when enabled. */
+  bool minute_enabled;
+  uint8_t minute; /**< 0..59 when enabled. */
+  bool hour_enabled;
+  uint8_t hour; /**< 0..23 when enabled. */
+  bool day_enabled;
+  uint8_t day; /**< 1..31 when enabled. */
+  bool weekday_enabled;
+  uint8_t weekday; /**< 0..6 when enabled. */
 } hal_rtc_alarm_t;
 
 /**
@@ -152,7 +153,8 @@ typedef struct {
  * For I2C backends this configures the I2C bus and probes the device.
  *
  * @param cfg Backend configuration.
- * @return Handle on success, NULL on invalid config/probe failure/pool exhaustion.
+ * @return Handle on success, NULL on invalid config/probe failure/pool
+ * exhaustion.
  */
 hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg);
 
@@ -209,7 +211,8 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
  * @brief Read RTC clock-integrity status.
  *
  * For PCF8563 this maps to the VL (voltage-low) status bit in seconds register.
- * For DS3231 this maps to the OSF (oscillator-stop) status via oscillatorCheck().
+ * For DS3231 this maps to the OSF (oscillator-stop) status via
+ * oscillatorCheck().
  *
  * @param h      Valid handle.
  * @param out_ok Output: true when integrity is OK.
@@ -259,12 +262,14 @@ bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode);
  * @param timer_clock  Timer source/divider.
  * @param count        Timer register value.
  */
-bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock, uint8_t count);
+bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock,
+                       uint8_t count);
 
 /**
  * @brief Read RTC timer source and countdown value.
  */
-bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint8_t *out_count);
+bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock,
+                       uint8_t *out_count);
 
 /** @brief Configure RTC alarm match fields. */
 bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);

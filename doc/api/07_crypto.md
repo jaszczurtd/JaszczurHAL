@@ -1,4 +1,4 @@
-# Cryptography — `hal_crypto`
+# Cryptography - `hal_crypto`
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 

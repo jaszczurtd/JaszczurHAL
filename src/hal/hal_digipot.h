@@ -36,8 +36,8 @@
  * HAL_DIGIPOT_MAX_INSTANCES (default 4, override via -D flag).
  */
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -54,15 +54,15 @@ extern "C" {
 
 /** @brief Supported digital-potentiometer chips. */
 typedef enum {
-    HAL_DIGIPOT_CHIP_MCP401X,  /**< Microchip MCP4017/4018/4019 via I2C. */
-    HAL_DIGIPOT_CHIP_MAX5395,  /**< Maxim MAX5395 via I2C.               */
+  HAL_DIGIPOT_CHIP_MCP401X, /**< Microchip MCP4017/4018/4019 via I2C. */
+  HAL_DIGIPOT_CHIP_MAX5395, /**< Maxim MAX5395 via I2C.               */
 } hal_digipot_chip_t;
 
 /** @brief MCP401x device variant (decides which modes are legal). */
 typedef enum {
-    HAL_DIGIPOT_MCP4017,  /**< Variable resistor (W-L) only.            */
-    HAL_DIGIPOT_MCP4018,  /**< Voltage divider and both variable modes. */
-    HAL_DIGIPOT_MCP4019,  /**< Variable resistor (W-L) only.            */
+  HAL_DIGIPOT_MCP4017, /**< Variable resistor (W-L) only.            */
+  HAL_DIGIPOT_MCP4018, /**< Voltage divider and both variable modes. */
+  HAL_DIGIPOT_MCP4019, /**< Variable resistor (W-L) only.            */
 } hal_digipot_mcp401x_device_t;
 
 /* ── Operation mode ──────────────────────────────────────────────────────── */
@@ -75,9 +75,9 @@ typedef enum {
  * the wiper (W) and either the low (W-L) or high (W-H) terminal.
  */
 typedef enum {
-    HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER,       /**< W..L tap of a divider.       */
-    HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL,  /**< Rheostat between W and L.     */
-    HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH,  /**< Rheostat between W and H.     */
+  HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER,      /**< W..L tap of a divider.       */
+  HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WL, /**< Rheostat between W and L.     */
+  HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH, /**< Rheostat between W and H.     */
 } hal_digipot_mode_t;
 
 /* ── Configuration descriptor ────────────────────────────────────────────── */
@@ -89,28 +89,28 @@ typedef enum {
  * for their respective @ref chip value.
  */
 typedef struct {
-    hal_digipot_chip_t chip;            /**< Which chip to drive.             */
-    uint8_t            i2c_bus;         /**< I2C controller index (0 = Wire). */
-    uint8_t            i2c_addr;        /**< 7-bit address. MCP401x: 0x2F;
-                                             MAX5395: 0x28 / 0x29 / 0x2B.     */
-    uint32_t           e2e_resistance;  /**< End-to-end resistance in Ohms.
-                                             MCP401x: 5k/10k/50k/100k;
-                                             MAX5395: 10k/50k/100k.           */
-    hal_digipot_mode_t mode;            /**< Operation mode.                  */
+  hal_digipot_chip_t chip; /**< Which chip to drive.             */
+  uint8_t i2c_bus;         /**< I2C controller index (0 = default). */
+  uint8_t i2c_addr;        /**< 7-bit address. MCP401x: 0x2F;
+                                MAX5395: 0x28 / 0x29 / 0x2B.     */
+  uint32_t e2e_resistance; /**< End-to-end resistance in Ohms.
+                                MCP401x: 5k/10k/50k/100k;
+                                MAX5395: 10k/50k/100k.           */
+  hal_digipot_mode_t mode; /**< Operation mode.                  */
 
-    /* MCP401x-only: */
-    hal_digipot_mcp401x_device_t mcp401x_device; /**< MCP4017/4018/4019.     */
+  /* MCP401x-only: */
+  hal_digipot_mcp401x_device_t mcp401x_device; /**< MCP4017/4018/4019.     */
 
-    /* MAX5395-only: */
-    bool charge_pump_en;                /**< Keep the on-chip charge pump on
-                                             (lower wiper resistance).        */
+  /* MAX5395-only: */
+  bool charge_pump_en; /**< Keep the on-chip charge pump on
+                            (lower wiper resistance).        */
 } hal_digipot_config_t;
 
 /* ── Opaque handle ───────────────────────────────────────────────────────── */
 
 /** @brief Opaque digital-potentiometer instance handle. NULL = invalid. */
-typedef struct hal_digipot_impl_s  hal_digipot_impl_t;
-typedef       hal_digipot_impl_t  *hal_digipot_t;
+typedef struct hal_digipot_impl_s hal_digipot_impl_t;
+typedef hal_digipot_impl_t *hal_digipot_t;
 
 /* ── API ─────────────────────────────────────────────────────────────────── */
 
@@ -150,7 +150,8 @@ void hal_digipot_deinit(hal_digipot_t h);
 bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms);
 
 /**
- * @brief Number of resistive steps (taps - 1): 127 for MCP401x, 255 for MAX5395.
+ * @brief Number of resistive steps (taps - 1): 127 for MCP401x, 255 for
+ * MAX5395.
  * @param h  Valid handle.
  * @return Step count, or 0 for an invalid handle.
  */
