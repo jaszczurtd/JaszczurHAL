@@ -27,8 +27,6 @@ static bool s_crash_initialized = false;
 static bool s_sd_started = false;
 static File s_log_file;
 static File s_crash_file;
-static const hal_spi_settings_t s_spi_settings = {1000000u, HAL_SPI_MSBFIRST,
-                                                  HAL_SPI_MODE1};
 static unsigned long s_last_write_time = 0;
 static char s_log_buffer[HAL_SDLOGGER_LOG_BUFFER_SIZE];
 static int s_log_buf_pos = 0;
@@ -37,15 +35,9 @@ static void sdlogger_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_sdlogger_mutex);
 }
 
-static void sdlogger_spi_begin(void) {
-  hal_spi_lock(HAL_SDLOGGER_SPI_BUS);
-  hal_spi_begin_transaction(HAL_SDLOGGER_SPI_BUS, &s_spi_settings);
-}
+static void sdlogger_spi_begin(void) { hal_spi_lock(HAL_SDLOGGER_SPI_BUS); }
 
-static void sdlogger_spi_end(void) {
-  hal_spi_end_transaction(HAL_SDLOGGER_SPI_BUS);
-  hal_spi_unlock(HAL_SDLOGGER_SPI_BUS);
-}
+static void sdlogger_spi_end(void) { hal_spi_unlock(HAL_SDLOGGER_SPI_BUS); }
 
 static bool ensure_sd_started_locked(int cs) {
   if (!s_sd_started) {
