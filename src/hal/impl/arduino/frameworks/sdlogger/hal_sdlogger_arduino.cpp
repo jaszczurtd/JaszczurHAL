@@ -7,15 +7,19 @@
 #include "../../../../hal_eeprom.h"
 #include "../../../../hal_sdlogger.h"
 #include "../../../../hal_serial.h"
+#include "../../../../hal_spi.h"
 #include "../../../../hal_sync.h"
 #include "../../../../hal_system.h"
 #include "../../../shared/hal_mutex_once.h"
 
 #include <SD.h>
-#include <SPI.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifndef HAL_SDLOGGER_SPI_BUS
+#define HAL_SDLOGGER_SPI_BUS 0u
+#endif
 
 static hal_mutex_t s_sdlogger_mutex = NULL;
 static bool s_log_initialized = false;
@@ -23,13 +27,24 @@ static bool s_crash_initialized = false;
 static bool s_sd_started = false;
 static File s_log_file;
 static File s_crash_file;
-static SPISettings s_spi_settings(1000000, MSBFIRST, SPI_MODE1);
+static const hal_spi_settings_t s_spi_settings = {1000000u, HAL_SPI_MSBFIRST,
+                                                  HAL_SPI_MODE1};
 static unsigned long s_last_write_time = 0;
 static char s_log_buffer[HAL_SDLOGGER_LOG_BUFFER_SIZE];
 static int s_log_buf_pos = 0;
 
 static void sdlogger_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_sdlogger_mutex);
+}
+
+static void sdlogger_spi_begin(void) {
+  hal_spi_lock(HAL_SDLOGGER_SPI_BUS);
+  hal_spi_begin_transaction(HAL_SDLOGGER_SPI_BUS, &s_spi_settings);
+}
+
+static void sdlogger_spi_end(void) {
+  hal_spi_end_transaction(HAL_SDLOGGER_SPI_BUS);
+  hal_spi_unlock(HAL_SDLOGGER_SPI_BUS);
 }
 
 static bool ensure_sd_started_locked(int cs) {
@@ -72,10 +87,10 @@ bool hal_sdlogger_init(int cs) {
   sdlogger_ensure_mutex();
   hal_mutex_lock(s_sdlogger_mutex);
 
-  SPI.beginTransaction(s_spi_settings);
+  sdlogger_spi_begin();
   if (!ensure_sd_started_locked(cs)) {
     s_log_initialized = false;
-    SPI.endTransaction();
+    sdlogger_spi_end();
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_init: SD card mount failed");
     return false;
@@ -84,7 +99,7 @@ bool hal_sdlogger_init(int cs) {
   s_log_file = SD.open(name, FILE_WRITE);
   s_log_initialized = (bool)s_log_file;
   if (!s_log_initialized) {
-    SPI.endTransaction();
+    sdlogger_spi_end();
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_init: log file open failed");
     return false;
@@ -92,7 +107,7 @@ bool hal_sdlogger_init(int cs) {
 
   clear_log_buffer_locked();
   s_last_write_time = hal_millis();
-  SPI.endTransaction();
+  sdlogger_spi_end();
   hal_mutex_unlock(s_sdlogger_mutex);
   return true;
 }
@@ -126,9 +141,9 @@ void hal_sdlogger_append(const char *data) {
   const unsigned long now = hal_millis();
   if (now - s_last_write_time >= HAL_SDLOGGER_WRITE_INTERVAL_MS) {
     s_last_write_time = now;
-    SPI.beginTransaction(s_spi_settings);
+    sdlogger_spi_begin();
     flush_log_buffer_locked();
-    SPI.endTransaction();
+    sdlogger_spi_end();
   }
 
   hal_mutex_unlock(s_sdlogger_mutex);
@@ -140,10 +155,10 @@ void hal_sdlogger_close(void) {
 
   if (s_log_initialized) {
     s_log_initialized = false;
-    SPI.beginTransaction(s_spi_settings);
+    sdlogger_spi_begin();
     flush_log_buffer_locked();
     s_log_file.close();
-    SPI.endTransaction();
+    sdlogger_spi_end();
   }
 
   hal_mutex_unlock(s_sdlogger_mutex);
@@ -165,10 +180,10 @@ bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
   sdlogger_ensure_mutex();
   hal_mutex_lock(s_sdlogger_mutex);
 
-  SPI.beginTransaction(s_spi_settings);
+  sdlogger_spi_begin();
   if (!ensure_sd_started_locked(cs)) {
     s_crash_initialized = false;
-    SPI.endTransaction();
+    sdlogger_spi_end();
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_crash_init: SD card mount failed");
     return false;
@@ -177,12 +192,12 @@ bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
   s_crash_file = SD.open(name, FILE_WRITE);
   s_crash_initialized = (bool)s_crash_file;
   if (!s_crash_initialized) {
-    SPI.endTransaction();
+    sdlogger_spi_end();
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_crash_init: crash file open failed");
     return false;
   }
-  SPI.endTransaction();
+  sdlogger_spi_end();
   hal_mutex_unlock(s_sdlogger_mutex);
 
   char line[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
@@ -209,10 +224,10 @@ void hal_sdlogger_crash_append(const char *data) {
     return;
   }
 
-  SPI.beginTransaction(s_spi_settings);
+  sdlogger_spi_begin();
   s_crash_file.println((data != NULL) ? data : "");
   s_crash_file.flush();
-  SPI.endTransaction();
+  sdlogger_spi_end();
 
   hal_mutex_unlock(s_sdlogger_mutex);
 }
@@ -223,10 +238,10 @@ void hal_sdlogger_crash_close(void) {
 
   if (s_crash_initialized) {
     s_crash_initialized = false;
-    SPI.beginTransaction(s_spi_settings);
+    sdlogger_spi_begin();
     s_crash_file.flush();
     s_crash_file.close();
-    SPI.endTransaction();
+    sdlogger_spi_end();
   }
 
   hal_mutex_unlock(s_sdlogger_mutex);
