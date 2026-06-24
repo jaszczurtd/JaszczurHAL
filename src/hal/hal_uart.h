@@ -11,10 +11,10 @@
  * swapped in application code with minimal changes.
  */
 
+#include "hal_uart_config.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "hal_uart_config.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,9 +22,19 @@ extern "C" {
 
 /** @brief Available hardware UART ports on the RP2040. */
 typedef enum {
-    HAL_UART_PORT_1 = 1,
-    HAL_UART_PORT_2 = 2,
+  HAL_UART_PORT_1 = 1,
+  HAL_UART_PORT_2 = 2,
 } hal_uart_port_t;
+
+typedef struct {
+  uint32_t rx_overrun;
+  /** Framing errors; STM32 noise errors are counted here too. */
+  uint32_t rx_framing;
+  uint32_t rx_parity;
+  /** Explicit break condition when the backend exposes a break flag. */
+  uint32_t rx_break;
+  uint32_t rx_buffer_overflow;
+} hal_uart_error_counters_t;
 
 /** @brief Opaque handle for a hardware UART instance. */
 typedef struct hal_uart_impl_s hal_uart_impl_t;
@@ -37,16 +47,17 @@ typedef hal_uart_impl_t *hal_uart_t;
  * @param tx_pin GPIO pin for TX.
  * @return Opaque handle, or NULL on failure / pool exhaustion.
  */
-hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin, uint8_t tx_pin);
+hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
+                           uint8_t tx_pin);
 
 /**
- * @brief Reassign the RX pin (Arduino: calls SerialUART::setRX).
+ * @brief Reassign the RX pin.
  * @return true on success.
  */
 bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin);
 
 /**
- * @brief Reassign the TX pin (Arduino: calls SerialUART::setTX).
+ * @brief Reassign the TX pin.
  * @return true on success.
  */
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
@@ -60,7 +71,7 @@ void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
 /** @brief Return the number of bytes available in the receive buffer. */
 int hal_uart_available(hal_uart_t h);
 
-/** @brief Read one byte (0–255) or return -1 if empty. */
+/** @brief Read one byte (0-255) or return -1 if empty. */
 int hal_uart_read(hal_uart_t h);
 
 /**
@@ -74,6 +85,15 @@ size_t hal_uart_println(hal_uart_t h, const char *s);
 
 /** @brief Flush the transmit buffer, blocking until all bytes are sent. */
 void hal_uart_flush(hal_uart_t h);
+
+/**
+ * @brief Copy cumulative RX error counters.
+ *
+ * Counters are reset by hal_uart_begin().
+ * @return true when counters were copied.
+ */
+bool hal_uart_get_error_counters(hal_uart_t h,
+                                 hal_uart_error_counters_t *counters);
 
 /** @brief Release resources. The handle must not be used after this call. */
 void hal_uart_destroy(hal_uart_t h);

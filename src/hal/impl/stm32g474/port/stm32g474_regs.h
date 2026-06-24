@@ -468,10 +468,18 @@
 
 #define USART_CR1_RE_BIT (1u << 2)
 #define USART_CR1_TE_BIT (1u << 3)
-#define USART_ISR_RXNE_F (1u << 5)
+#define USART_ISR_PE_F (1u << 0)
+#define USART_ISR_FE_F (1u << 1)
+#define USART_ISR_NE_F (1u << 2)
 #define USART_ISR_ORE_F (1u << 3)
+#define USART_ISR_RXNE_F (1u << 5)
+#define USART_ISR_LBDF_F (1u << 8)
 #define USART_ISR_TXE_F (1u << 7)
+#define USART_ICR_PECF_F (1u << 0)
+#define USART_ICR_FECF_F (1u << 1)
+#define USART_ICR_NECF_F (1u << 2)
 #define USART_ICR_ORECF_F (1u << 3)
+#define USART_ICR_LBDCF_F (1u << 8)
 
 #define USART1_BASE 0x40013800u
 #define RCC_APB2ENR_USART1EN (1u << 14)

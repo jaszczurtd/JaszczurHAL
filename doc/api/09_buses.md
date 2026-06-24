@@ -382,6 +382,16 @@ typedef enum {
 
 typedef hal_uart_impl_t *hal_uart_t;
 
+typedef struct {
+    uint32_t rx_overrun;
+    // Framing errors; STM32 noise errors are counted here too.
+    uint32_t rx_framing;
+    uint32_t rx_parity;
+    // Explicit break condition when the backend exposes a break flag.
+    uint32_t rx_break;
+    uint32_t rx_buffer_overflow;
+} hal_uart_error_counters_t;
+
 hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin, uint8_t tx_pin);
 bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin);
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
@@ -391,11 +401,15 @@ int  hal_uart_read(hal_uart_t h);
 size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len);
 size_t hal_uart_println(hal_uart_t h, const char *s);
 void hal_uart_flush(hal_uart_t h);       // block until TX complete
+bool hal_uart_get_error_counters(hal_uart_t h,
+                                 hal_uart_error_counters_t *counters);
 void hal_uart_destroy(hal_uart_t h);
 ```
 
-**impl/rp2040:** RP2040 Arduino-pico `Serial1` / `Serial2`.
+**impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
+**impl/stm32g474:** register-level USART1/USART2, polled RX drain; counts ORE, PE, FE, NE, and explicit LIN-break flags when reported by USART_ISR.
 **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
+**Error counters:** cumulative since `hal_uart_begin()`; mock reset also clears them.
 **Thread safety:** Not thread-safe. All calls must be serialized by the caller.
 
 **Mock helpers:**
