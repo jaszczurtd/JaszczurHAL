@@ -139,21 +139,23 @@ Connectivity
 
 Storage
   HAL_ENABLE_EEPROM
-    EEPROM (AT24C256 / target flash).
+    EEPROM (AT24C256 / target flash). AT24C256 propagates: I2C.
   HAL_ENABLE_KV
     Key-value store. Propagates: EEPROM.
   HAL_ENABLE_LITTLEFS
     LittleFS lifecycle and basic filesystem helpers. On STM32G474 this uses
     an internal flash partition controlled by HAL_STM32_FLASH_LITTLEFS_SIZE.
+  HAL_ENABLE_FAT
+    FatFs core plus shared SD-over-SPI disk I/O and file helpers.
   HAL_ENABLE_SDLOGGER
-    SD-card logger and crash-report logger. Propagates: EEPROM, I2C, SPI.
+    SD-card logger and crash-report logger. Propagates: FAT, EEPROM, SPI.
 
 Buses
   HAL_ENABLE_UART          Hardware UART (SerialUART).
   HAL_ENABLE_SWSERIAL      SoftwareSerial.
   HAL_ENABLE_I2C           I2C master (Wire).
   HAL_ENABLE_I2C_SLAVE     I2C slave / target mode with register map.
-  HAL_ENABLE_SPI           SPI master (Arduino-compatible SPIClass).
+  HAL_ENABLE_SPI           SPI master/controller.
   HAL_ENABLE_CAN           Generic CAN API facade.
   HAL_ENABLE_MCP2515       MCP2515 CAN backend. Propagates: CAN, SPI.
   HAL_ENABLE_MCP251XFD     MCP2517FD/MCP2518FD CAN FD backend. Propagates: CAN, SPI.
@@ -285,7 +287,8 @@ Dependency graph (auto-propagation)
 -----------------------------------
 
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
-HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_EEPROM, HAL_ENABLE_I2C, HAL_ENABLE_SPI
+HAL_ENABLE_EEPROM      -> HAL_ENABLE_I2C when HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256
+HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT, HAL_ENABLE_EEPROM, HAL_ENABLE_SPI
 HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI

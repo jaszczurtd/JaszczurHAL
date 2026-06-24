@@ -8,9 +8,9 @@
  * @file hal_sdlogger.h
  * @brief SD-card logger and crash-report logger.
  *
- * This module keeps the public logger API in HAL while target-specific file
- * handling lives in the selected backend. The Arduino/RP2040 backend uses
- * SD.h/SPI.h internally; public headers do not expose those types.
+ * This module keeps the public logger API in HAL while shared FatFs file
+ * handling provides the SD-over-SPI storage backend for RP2040 and STM32.
+ * Public headers do not expose FatFs or target-specific file types.
  */
 
 #include <stdbool.h>
@@ -59,7 +59,7 @@ bool hal_sdlogger_init(int cs);
 
 /**
  * @brief Initialise the crash-report logger.
- * @param add_to_name Optional suffix embedded in the crash-report filename.
+ * @param add_to_name Optional crash tag written into the crash-report file.
  * @param cs SD card chip-select pin.
  * @return true when the SD card and crash-report file are ready.
  */

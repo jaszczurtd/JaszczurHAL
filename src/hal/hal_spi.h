@@ -6,10 +6,9 @@
  *
  * Wraps platform-specific pin assignment and bus startup so that project code
  * is decoupled from backend-specific SPI peripherals and can be tested on a PC
- * using the mock implementation. The API remains source-compatible with the
- * common SPIClass idioms used by device drivers: SPISettings-style
- * settings, begin/endTransaction, byte/word transfer and in-place/buffer
- * transfer.
+ * using the mock implementation. The API keeps the common transaction concepts
+ * used by SPI device drivers: explicit settings, begin/end transaction,
+ * byte/word transfer and in-place/buffer transfer.
  *
  * Two SPI controllers are supported via the @p bus parameter:
  *   - bus 0 -> default hardware controller (RP2040 SPI0, STM32G474 SPI1)
@@ -78,7 +77,7 @@ void hal_spi_unlock(uint8_t bus);
 /**
  * @brief Apply transaction settings to the selected SPI controller.
  *
- * Follows SPIClass-compatible beginTransaction semantics: it configures clock,
+ * Configures transaction clock,
  * bit order and SPI mode, but does not acquire the HAL mutex. Code that needs
  * cross-driver exclusion should still use hal_spi_lock()/hal_spi_unlock().
  *
@@ -90,9 +89,8 @@ void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
 /**
  * @brief Finish a transaction on the selected SPI controller.
  *
- * Follows SPIClass-compatible endTransaction semantics: it waits for pending
- * hardware transfer completion where the backend can observe it, but does not
- * release the HAL mutex.
+ * Waits for pending hardware transfer completion where the backend can observe
+ * it, but does not release the HAL mutex.
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  */
@@ -110,7 +108,7 @@ uint8_t hal_spi_transfer(uint8_t bus, uint8_t data);
  * @brief Full-duplex transfer of one 16-bit word.
  *
  * The byte order follows the active bit-order setting, matching the
- * SPIClass-compatible transfer16() behavior.
+ * configured bit-order behavior.
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  * @param data Word to transmit.

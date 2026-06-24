@@ -397,8 +397,9 @@ void hal_mock_littlefs_set_exists(const char *path, bool exists);
 ## `hal_sdlogger` - SD-card logger  *(opt-in - `HAL_ENABLE_SDLOGGER`)*
 
 Periodic SD-card logger plus crash-report logger. The module stores log/crash
-file counters in `hal_eeprom`, so enabling it propagates `HAL_ENABLE_EEPROM`
-and, for the current Arduino EEPROM backend, `HAL_ENABLE_I2C`.
+file counters in `hal_eeprom` and writes files through the shared FatFs
+SD-over-SPI layer, so enabling it propagates `HAL_ENABLE_FAT`,
+`HAL_ENABLE_EEPROM`, and `HAL_ENABLE_SPI`.
 
 ```c
 #include <hal/hal_sdlogger.h>
@@ -425,28 +426,41 @@ HAL_SDLOGGER_EEPROM_CRASH_ADDR  4u
 HAL_SDLOGGER_EEPROM_FIRST_ADDR  8u
 HAL_SDLOGGER_LOG_BUFFER_SIZE    2048u
 HAL_SDLOGGER_NAME_BUFFER_SIZE   128u
+HAL_SDLOGGER_SPI_BUS            0u
 ```
 
 **Behavior notes:**
-- `hal_sdlogger_init(cs)` opens `logN.txt` and increments the EEPROM log counter.
+- The application must initialise the selected SPI bus pins with
+  `hal_spi_init()` before calling `hal_sdlogger_init()` or
+  `hal_sdlogger_crash_init()`.
+- `hal_sdlogger_init(cs)` opens `logNNNNN.txt` and increments the EEPROM log
+  counter.
 - `hal_sdlogger_append()` buffers lines and flushes every
   `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` flushes leftovers.
-- `hal_sdlogger_crash_init(add_to_name, cs)` opens `watchdogN.txt` or
-  `watchdogN(<add_to_name>).txt` and writes the corresponding log filename.
+- `hal_sdlogger_crash_init(add_to_name, cs)` opens `wdNNNNNN.txt` and writes
+  the optional crash tag plus the corresponding log filename into the report.
+  Generated filenames intentionally stay in FatFs 8.3 form because LFN is
+  disabled.
+- SD logger counters are advanced only after the SD card is mounted and the
+  target file is opened successfully.
 - `hal_sdlogger_crash_append()` and `hal_sdlogger_crash_report()` flush crash
   entries immediately.
+
+Buildable example: `examples/39_sdlogger`.
 
 **Example: SD card periodic logging**
 ```c
 #include <hal/hal_sdlogger.h>
 #include <hal/hal_eeprom.h>
+#include <hal/hal_spi.h>
 
 void setup_sd_logging(void) {
     // Initialize EEPROM (SD logger stores counters there)
     hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
-    // Initialize SD card logger with CS pin 10
-    int cs_pin = 10;
+    // Initialize SPI bus 0 and SD card logger with CS pin 17
+    hal_spi_init(0, 16, 19, 18);
+    int cs_pin = 17;
     if (hal_sdlogger_init(cs_pin)) {
         hal_deb("SD logger initialized, log number: %d", hal_sdlogger_get_log_number());
     } else {
@@ -486,13 +500,15 @@ void shutdown_logging(void) {
 ```c
 #include <hal/hal_sdlogger.h>
 #include <hal/hal_eeprom.h>
+#include <hal/hal_spi.h>
 
 void setup_crash_logging(void) {
     // Initialize EEPROM and crash logger
     hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 
-    int cs_pin = 10;
-    // Create watchdogN_boot.txt file (add "boot" to filename)
+    hal_spi_init(0, 16, 19, 18);
+    int cs_pin = 17;
+    // Create wdNNNNNN.txt and write "boot" as a crash tag inside it.
     if (hal_sdlogger_crash_init("boot", cs_pin)) {
         hal_deb("Crash logger initialized, crash log number: %d",
                 hal_sdlogger_get_crash_number());
@@ -518,10 +534,11 @@ void watchdog_reboot_handler(void) {
 ```
 
 ---
-`impl/arduino/frameworks/sdlogger`.
+**impl/shared/filesystem:** FatFs-backed SD file helpers and the portable
+SD logger implementation used by RP2040 and STM32G474.
 **impl/.mock:** deterministic test double with injectable SD/open results,
 captured filenames/content, flush counts, and close flags.
-**Thread safety:** Arduino backend serializes public calls with a singleton
+**Thread safety:** shared backend serializes public calls with a singleton
 `hal_mutex_t`; init/close should still be treated as single-core lifecycle work.
 
 **Mock helpers:**

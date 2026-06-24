@@ -68,7 +68,6 @@ set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
 
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
-    ${SRC}/arduino_host_stubs
     ${SRC}/hal/impl/stm32g474/drivers/littlefs
 )
 

@@ -40,6 +40,7 @@
 #include "lwip/arch.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
+#include "lwip/opt.h"
 
 /*
  * This header is included from both C and C++ sources.

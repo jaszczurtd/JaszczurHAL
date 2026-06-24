@@ -143,6 +143,7 @@ MEMCHECK_REQUIRED_TESTS=(
     test_ssd1306_driver
     test_jh_gfx_geometry
     test_mcp2515_driver
+    test_ff16_memdisk
     test_hal_ds18b20
     test_hal_display
     test_hal_rtc
@@ -205,8 +206,10 @@ cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
 pass "STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
+# FatFs core files are upstream C sources; keep our filesystem glue under tidy
+# while avoiding local rewrites of vendored ff.c/ffsystem.c/ffunicode.c.
 run-clang-tidy -p "${BUILD_DIR}" -quiet \
-    '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
+    '^.*/src/(?!hal/impl/shared/filesystem/ff16/(ff|ffsystem|ffunicode)\.c$)(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
     | tee /tmp/jh_tidy_host.log
 pass "clang-tidy host pass complete."
 
@@ -253,7 +256,7 @@ else
 fi
 
 info "Building RP2040 Arduino flag matrix..."
-ARDUINO_FLAG_PROFILES=(empty-core typical-set all-enabled)
+ARDUINO_FLAG_PROFILES=(empty-core typical-set sdlogger all-enabled)
 for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
     flags=()
     case "${profile}" in
@@ -272,6 +275,11 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_PWM_FREQ
             )
             ;;
+        sdlogger)
+            flags=(
+                -D HAL_ENABLE_SDLOGGER
+            )
+            ;;
         all-enabled)
             flags=(
                 -D HAL_ENABLE_WIFI
@@ -283,6 +291,8 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_EEPROM
                 -D HAL_ENABLE_KV
                 -D HAL_ENABLE_LITTLEFS
+                -D HAL_ENABLE_FAT
+                -D HAL_ENABLE_SDLOGGER
                 -D HAL_ENABLE_UART
                 -D HAL_ENABLE_SWSERIAL
                 -D HAL_ENABLE_I2C

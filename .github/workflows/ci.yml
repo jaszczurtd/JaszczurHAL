@@ -97,7 +97,7 @@ jobs:
       - name: "clang-tidy (portable HAL + shared + stm32 backend)"
         run: |
           run-clang-tidy -p build -quiet \
-            '^.*/src/(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
+            '^.*/src/(?!hal/impl/shared/filesystem/ff16/(ff|ffsystem|ffunicode)\.c$)(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
             | tee tidy_host.log
           run-clang-tidy -p build_stm32 -quiet \
             '^.*/src/hal/impl/stm32g474/(?!drivers/littlefs/).*\.(cpp|c)$' \
