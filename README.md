@@ -111,15 +111,19 @@ src/
         drivers/rp2040/     # RP2040 SoC services (fault/system)
         frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        ads1x15/ digipot/ display/ ds18b20/ ds3231/ filesystem/ gps/
-        max6675/ mcp2515/ mcp251xfd/ mcp9600/ neopixel/ onewire/
-        pcf8563/ pga2311/ wireguard/ (and many more)
+        drivers/            # hardware-oriented drivers: sensors, buses, displays
+          ads1x15/ bh1750/ digipot/ display/ ds18b20/ ds3231/ hd44780/
+          max6675/ mcp2515/ mcp251xfd/ mcp9600/ neopixel/ onewire/
+          pcf8563/ pga2311/ stmpe610/ tsc2007/
+        frameworks/         # reusable engines/stacks and bundled portable libs
+          cjson/ filesystem/ gps/ irsmall_decoder/ jpeg/ lodepng/
+          smart_timers/ wireguard/
       stm32g474/            # STM32G474 backend
         drivers/
           stm32g474/        # STM32G474 SoC services (fault/system)
         freertos/           # STM32 FreeRTOSConfig and hooks
         port/               # startup, SystemInit, linker-facing low-level glue
-  utils/                    # SmartTimers, PID, watchdog, tools, cJSON, Unity
+  utils/                    # tools, PID, watchdog, draw helpers, Unity
 tests/                      # host unit tests (CMake + Unity)
 third_party/                # optional local dependencies, e.g. FreeRTOS-Kernel
 vscode-templates/           # ready-to-use VS Code project configurations
@@ -134,9 +138,13 @@ This code:
 - behaves identically across supported targets,
 - avoids per-target `#if HAL_TARGET_IS_*` branches inside the shared implementation file.
 
-Shared device and engine implementations are organized into per-driver/framework subfolders, for example:
-`shared/ads1x15/`, `shared/digipot/`, `shared/display/`,
-`shared/mcp2515/`, `shared/mcp251xfd/`, `shared/pga2311/`, etc.
+Shared implementations are split by role:
+
+- `shared/drivers/` contains hardware-oriented reusable drivers, for example
+  `ads1x15/`, `digipot/`, `display/`, `mcp2515/`, `mcp251xfd/`,
+  `pga2311/`, and sensor/display backends.
+- `shared/frameworks/` contains larger reusable engines or protocol stacks,
+  for example `filesystem/`, `gps/`, `irsmall_decoder/`, and `wireguard/`.
 
 ## Quick start
 See [examples/README.md](examples/README.md) for the full build system guide.
@@ -256,7 +264,9 @@ Every push and pull request to `main` runs the CI workflow
   third-party libraries are excluded from both.
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
-`tests/cppcheck-suppressions.txt`, and `tests/valgrind.supp`. The same checks can be run locally:
+`tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
+`scripts/clang_tidy_files.py` (the clang-tidy include/exclude file lists). The
+same checks can be run locally:
 
 ```bash
 # memory safety (requires valgrind)
@@ -383,7 +393,7 @@ Primary docs:
   [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
 - LodePNG is bundled and optional via HAL_ENABLE_PNG:
   [lvandeve/lodepng](https://github.com/lvandeve/lodepng) by Lode Vandevenne
-- The shared display stack (`src/hal/impl/shared/display/`) is a portable,
+- The shared display stack (`src/hal/impl/shared/drivers/display/`) is a portable,
   HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
   algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
   and the panel drivers (`ili9341_driver.*`, `st77xx_driver.*`,
@@ -392,7 +402,7 @@ Primary docs:
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
   headers for the per-module attribution.
 - WireGuard cryptographic primitives now live in a shared backend under
-  `src/hal/impl/shared/wireguard/crypto/` and are reused by both the WireGuard
+  `src/hal/impl/shared/frameworks/wireguard/crypto/` and are reused by both the WireGuard
   integration and `hal_crypto` ChaCha20/Poly1305 helpers.
 - Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/rp2040/drivers/ and src/hal/impl/rp2040/frameworks/):
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)

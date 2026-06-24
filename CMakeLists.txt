@@ -41,28 +41,32 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
-    ${SRC}/hal/impl/shared/mcp2515/hal_can_mcp2515_config.cpp
-    ${SRC}/hal/impl/shared/mcp251xfd/mcp251xfd_driver.cpp
+    ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
+    ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_pga2311.cpp
-    ${SRC}/hal/impl/shared/wireguard/crypto/blake2s.c
-    ${SRC}/hal/impl/shared/wireguard/crypto/chacha20.c
-    ${SRC}/hal/impl/shared/wireguard/crypto/chacha20poly1305.c
-    ${SRC}/hal/impl/shared/wireguard/crypto/crypto.c
-    ${SRC}/hal/impl/shared/wireguard/crypto/poly1305-donna.c
-    ${SRC}/hal/impl/shared/wireguard/crypto/x25519.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/blake2s.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/crypto.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c
+    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/x25519.c
     ${SRC}/hal/hal_digipot.cpp
-    ${SRC}/hal/impl/shared/digipot/digipot_mcp401x.cpp
-    ${SRC}/hal/impl/shared/digipot/digipot_max5395.cpp
-    ${SRC}/hal/impl/shared/pga2311/pga2311_driver.cpp
+    ${SRC}/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp
+    ${SRC}/hal/impl/shared/drivers/digipot/digipot_max5395.cpp
+    ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp
     ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
-    ${SRC}/utils/SmartTimers.cpp
+    ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
     ${SRC}/utils/pidController.cpp
-    ${SRC}/utils/lodepng.cpp
+    ${SRC}/hal/impl/shared/frameworks/cjson/cJSON.c
+    ${SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c
+    ${SRC}/hal/impl/shared/frameworks/lodepng/lodepng.cpp
+    ${SRC}/hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp
+    ${SRC}/hal/impl/shared/frameworks/jpeg/picojpeg.c
 )
 
 # ── hal_mock static library ───────────────────────────────────────────────────
@@ -77,7 +81,7 @@ target_include_directories(hal_mock PUBLIC
 )
 
 target_compile_definitions(hal_mock PUBLIC
-    HAL_TARGET_MOCK         # canonical backend selection (see src/hal/hal_target.h)
+    HAL_TARGET_MOCK         # base backend selection (see src/hal/hal_target.h)
     UNITY_INCLUDE_CONFIG_H  # use the project's unity_config.h
     HAL_DISPLAY_ILI9341     # explicit TFT driver choice for host tests
     # Opt-in modules: host tests exercise the full HAL surface, so we
@@ -127,6 +131,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_CJSON
     HAL_ENABLE_PNG
     HAL_ENABLE_PNG_AS_BASE64
+    HAL_ENABLE_JPEG
+    HAL_ENABLE_JPEG_AS_BASE64
     HAL_ENABLE_UNITY
 )
 
@@ -193,7 +199,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
         ${SRC}/hal/hal_config.cpp
-        ${SRC}/utils/SmartTimers.cpp
+        ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
         ${SRC}/utils/unity.c
     )
     target_include_directories(hal_freertos_posix PUBLIC

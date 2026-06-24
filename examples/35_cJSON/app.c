@@ -1,8 +1,8 @@
 #include <hal/hal_app.h>
 #include <hal/hal_system.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
 #include <tools_c.h>
-#include <utils/cJSON.h>
-#include <utils/cJSON_Utils.h>
 
 #include <stdbool.h>
 #include <stdint.h>

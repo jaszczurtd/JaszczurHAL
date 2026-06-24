@@ -4,7 +4,7 @@ Reads a live NMEA GPS receiver on a **Nucleo-G474RE** and prints the decoded
 fix. This is the STM32 counterpart of the RP2040 `07_gps` sketch (which is an
 Arduino `.ino`); it is built with the bare-metal `stm32_lib` toolchain.
 
-- Parsing is the shared portable engine (`impl/shared/gps/gps_nmea_parser.cpp` +
+- Parsing is the shared portable engine (`impl/shared/frameworks/gps/gps_nmea_parser.cpp` +
   `hal_gps_core.cpp`).
 - Transport: **USART1** (`hal_uart`, polled), GPS at **9600 8N1**.
 - Console: USART2 / ST-Link Virtual COM Port @ **115200 8N1**.

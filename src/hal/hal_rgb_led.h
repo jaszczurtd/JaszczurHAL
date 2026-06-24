@@ -8,8 +8,8 @@
  * @brief Hardware abstraction for a single-pixel NeoPixel RGB status LED.
  *
  * Hardware implementation uses the shared NeoPixel driver under
- * `src/hal/impl/shared/neopixel/`; the mock implementation is a no-op stub
- * that records the last requested colour for unit testing.
+ * `src/hal/impl/shared/drivers/neopixel/`; the mock implementation is a no-op
+ * stub that records the last requested colour for unit testing.
  */
 
 #include <stdint.h>
@@ -20,13 +20,13 @@ extern "C" {
 
 /** @brief Colour constants for the onboard status LED. */
 typedef enum {
-    HAL_RGB_LED_NONE   = 0,
-    HAL_RGB_LED_RED    = 1,
-    HAL_RGB_LED_GREEN  = 2,
-    HAL_RGB_LED_YELLOW = 3,
-    HAL_RGB_LED_WHITE  = 4,
-    HAL_RGB_LED_BLUE   = 5,
-    HAL_RGB_LED_PURPLE = 6,
+  HAL_RGB_LED_NONE = 0,
+  HAL_RGB_LED_RED = 1,
+  HAL_RGB_LED_GREEN = 2,
+  HAL_RGB_LED_YELLOW = 3,
+  HAL_RGB_LED_WHITE = 4,
+  HAL_RGB_LED_BLUE = 5,
+  HAL_RGB_LED_PURPLE = 6,
 } hal_rgb_led_color_t;
 
 /**
@@ -36,9 +36,10 @@ typedef enum {
  * project configuration values remain source-compatible.
  */
 typedef enum {
-    HAL_RGB_LED_PIXEL_RGB_KHZ800 = 0x0006, /**< RGB byte order, 800 kHz. */
-    HAL_RGB_LED_PIXEL_GRB_KHZ800 = 0x0052, /**< GRB byte order, 800 kHz (WS2812B, e.g. RP2040-Zero). */
-    HAL_RGB_LED_PIXEL_RGBW_KHZ800 = 0x0018, /**< RGBW byte order, 800 kHz. */
+  HAL_RGB_LED_PIXEL_RGB_KHZ800 = 0x0006, /**< RGB byte order, 800 kHz. */
+  HAL_RGB_LED_PIXEL_GRB_KHZ800 =
+      0x0052, /**< GRB byte order, 800 kHz (WS2812B, e.g. RP2040-Zero). */
+  HAL_RGB_LED_PIXEL_RGBW_KHZ800 = 0x0018, /**< RGBW byte order, 800 kHz. */
 } hal_rgb_led_pixel_type_t;
 
 /**
@@ -77,7 +78,8 @@ void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
 void hal_rgb_led_set_brightness(uint8_t brightness);
 
 /**
- * @brief Turn the LED off (equivalent to hal_rgb_led_set_color(HAL_RGB_LED_NONE)).
+ * @brief Turn the LED off (equivalent to
+ * hal_rgb_led_set_color(HAL_RGB_LED_NONE)).
  */
 void hal_rgb_led_off(void);
 

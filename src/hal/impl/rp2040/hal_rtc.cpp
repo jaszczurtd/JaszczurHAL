@@ -9,10 +9,10 @@
 #include "../../hal_sync.h"
 
 #ifdef HAL_ENABLE_PCF8563
-#include "../shared/pcf8563/pcf8563.h"
+#include "../shared/drivers/pcf8563/pcf8563.h"
 #endif
 #ifdef HAL_ENABLE_DS3231
-#include "../shared/ds3231/ds3231.h"
+#include "../shared/drivers/ds3231/ds3231.h"
 #include <new>
 #endif
 

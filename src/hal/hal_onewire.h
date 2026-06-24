@@ -12,7 +12,7 @@ extern "C" {
  * @brief Thread-safe HAL wrapper for OneWire bus operations.
  *
  * This module wraps the shared Arduino-free OneWire driver placed under
- * src/hal/impl/shared/onewire and exposes a platform-neutral API for
+ * src/hal/impl/shared/drivers/onewire and exposes a platform-neutral API for
  * hardware and host-mock builds.
  *
  * Thread-safety model:

@@ -25,8 +25,8 @@
  *   HAL_ENABLE_DIGIPOT alone (without a backend) is a compile-time #error.
  *
  * Portability: this module is backend-agnostic. The public facade delegates to
- * shared chip drivers under impl/shared/digipot/, and the chip logic runs
- * unchanged on every target that provides hal_i2c - proven on RP2040 and
+ * shared chip drivers under impl/shared/drivers/digipot/, and the chip logic
+ * runs unchanged on every target that provides hal_i2c - proven on RP2040 and
  * STM32G474.
  *
  * Thread-safety: each instance carries its own mutex and every transaction

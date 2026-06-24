@@ -5,12 +5,12 @@
  * @brief HD44780-compatible parallel character LCD driver.
  *
  * Enable with HAL_ENABLE_HD44780 and include this header from C++ application
- * code. The implementation lives in impl/shared/hd44780 and uses JaszczurHAL
- * GPIO, system timing and synchronization primitives.
+ * code. The implementation lives in impl/shared/drivers/hd44780 and uses
+ * JaszczurHAL GPIO, system timing and synchronization primitives.
  */
 
 #include "hal_config.h"
 
 #ifdef HAL_ENABLE_HD44780
-#include "impl/shared/hd44780/hd44780.h"
+#include "impl/shared/drivers/hd44780/hd44780.h"
 #endif

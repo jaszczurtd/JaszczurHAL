@@ -3,7 +3,7 @@
 
 #include <new>
 
-#include <utils/SmartTimers.h>
+#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>
 
 struct hal_soft_timer_impl_s {
   SmartTimers timer;
@@ -17,9 +17,7 @@ hal_soft_timer_t hal_soft_timer_create(void) {
   return new (std::nothrow) hal_soft_timer_impl_s();
 }
 
-void hal_soft_timer_destroy(hal_soft_timer_t timer) {
-  delete timer;
-}
+void hal_soft_timer_destroy(hal_soft_timer_t timer) { delete timer; }
 
 bool hal_soft_timer_begin(hal_soft_timer_t timer,
                           hal_soft_timer_callback_t callback,
@@ -72,8 +70,7 @@ void hal_soft_timer_abort(hal_soft_timer_t timer) {
 }
 
 bool hal_soft_timer_setup_table(const hal_soft_timer_table_entry_t *table,
-                                uint32_t count,
-                                void (*idle_cb)(void),
+                                uint32_t count, void (*idle_cb)(void),
                                 uint32_t delay_ms) {
   if (table == nullptr) {
     hal_derr("hal_soft_timer_setup_table: table is NULL");
@@ -90,8 +87,7 @@ bool hal_soft_timer_setup_table(const hal_soft_timer_table_entry_t *table,
     if (*table[i].timer == nullptr) {
       *table[i].timer = hal_soft_timer_create();
     }
-    (void)hal_soft_timer_begin(*table[i].timer,
-                               table[i].callback,
+    (void)hal_soft_timer_begin(*table[i].timer, table[i].callback,
                                table[i].intervalMs);
     if (delay_ms > 0u && i < count - 1u) {
       extern void hal_delay_ms(uint32_t ms);

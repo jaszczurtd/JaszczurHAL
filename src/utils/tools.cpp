@@ -11,7 +11,11 @@
 #include <stdlib.h>
 
 #ifdef HAL_ENABLE_PNG_AS_BASE64
-#include "lodepng.h"
+#include "hal/impl/shared/frameworks/lodepng/lodepng.h"
+#endif
+
+#ifdef HAL_ENABLE_JPEG
+#include "hal/impl/shared/frameworks/jpeg/JPEGDecoder.h"
 #endif
 
 void debugInit(void) { hal_debug_init(HAL_DEBUG_DEFAULT_BAUD); }
@@ -473,7 +477,7 @@ bool rgba8888ToRgb565(const unsigned char *rgba, unsigned short *rgb565,
   return true;
 }
 
-#ifdef HAL_ENABLE_PNG_AS_BASE64
+#if defined(HAL_ENABLE_PNG_AS_BASE64) || defined(HAL_ENABLE_JPEG)
 static bool hal_tools_mul_size(size_t a, size_t b, size_t *out) {
   if (out == NULL) {
     return false;
@@ -487,7 +491,9 @@ static bool hal_tools_mul_size(size_t a, size_t b, size_t *out) {
   *out = a * b;
   return true;
 }
+#endif
 
+#ifdef HAL_ENABLE_PNG_AS_BASE64
 bool pngBase64DecodedSize(const char *base64, size_t base64Len,
                           size_t *pngSize) {
   if (pngSize != NULL) {
@@ -582,6 +588,108 @@ bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
 
   free(rgba);
   return ok;
+}
+#endif
+
+#ifdef HAL_ENABLE_JPEG
+bool jpegDecodeRgb565(const uint8_t *jpeg, size_t jpegSize,
+                      unsigned short *rgb565, size_t rgb565Pixels,
+                      unsigned *width, unsigned *height) {
+  if (width != NULL) {
+    *width = 0u;
+  }
+  if (height != NULL) {
+    *height = 0u;
+  }
+
+  if (jpeg == NULL || jpegSize == 0u || jpegSize > UINT32_MAX ||
+      rgb565 == NULL || width == NULL || height == NULL) {
+    return false;
+  }
+
+  if (JpegDec.decodeArray(jpeg, (uint32_t)jpegSize) != 1) {
+    JpegDec.abort();
+    return false;
+  }
+
+  size_t pixels = 0u;
+  if (!hal_tools_mul_size((size_t)JpegDec.width, (size_t)JpegDec.height,
+                          &pixels) ||
+      pixels > rgb565Pixels) {
+    JpegDec.abort();
+    return false;
+  }
+
+  *width = (unsigned)JpegDec.width;
+  *height = (unsigned)JpegDec.height;
+
+  while (JpegDec.available()) {
+    if (JpegDec.read() != 1) {
+      JpegDec.abort();
+      return false;
+    }
+
+    const int mcu_x0 = JpegDec.MCUx * JpegDec.MCUWidth;
+    const int mcu_y0 = JpegDec.MCUy * JpegDec.MCUHeight;
+    for (int y = 0; y < JpegDec.MCUHeight; ++y) {
+      const int dst_y = mcu_y0 + y;
+      if (dst_y >= JpegDec.height) {
+        break;
+      }
+      for (int x = 0; x < JpegDec.MCUWidth; ++x) {
+        const int dst_x = mcu_x0 + x;
+        if (dst_x >= JpegDec.width) {
+          break;
+        }
+        rgb565[((size_t)dst_y * (size_t)JpegDec.width) + (size_t)dst_x] =
+            JpegDec.pImage[((size_t)y * (size_t)JpegDec.MCUWidth) + (size_t)x];
+      }
+    }
+  }
+
+  JpegDec.abort();
+  return true;
+}
+#endif
+
+#ifdef HAL_ENABLE_JPEG_AS_BASE64
+bool jpegBase64DecodedSize(const char *base64, size_t base64Len,
+                           size_t *jpegSize) {
+  if (jpegSize != NULL) {
+    *jpegSize = 0u;
+  }
+
+  if (jpegSize == NULL || (base64 == NULL && base64Len != 0u)) {
+    return false;
+  }
+
+  return hal_base64_decode(base64, base64Len, NULL, 0u, jpegSize);
+}
+
+bool jpegBase64DecodeRgb565(const char *base64, size_t base64Len,
+                            uint8_t *jpegWork, size_t jpegWorkSize,
+                            unsigned short *rgb565, size_t rgb565Pixels,
+                            unsigned *width, unsigned *height) {
+  if (width != NULL) {
+    *width = 0u;
+  }
+  if (height != NULL) {
+    *height = 0u;
+  }
+
+  if (base64 == NULL || jpegWork == NULL || rgb565 == NULL || width == NULL ||
+      height == NULL) {
+    return false;
+  }
+
+  size_t jpegSize = 0u;
+  if (!hal_base64_decode(base64, base64Len, jpegWork, jpegWorkSize,
+                         &jpegSize)) {
+    return false;
+  }
+
+  return jpegDecodeRgb565(jpegWork, jpegSize, rgb565, rgb565Pixels, width,
+                          height);
 }
 #endif
 

@@ -177,17 +177,17 @@ The following modules are real, register-level backends under
   fixed Message RAM layout, RX FIFO0, TX buffers, filters, modes and
   state/error counters. Target `hal_can.cpp` owns handle lifetime/dispatch.
 - `hal_display` - **ILI9341** plus **ST7735/ST7789/ST7796S** via shared
-  HAL-only SPI/GPIO drivers (`impl/shared/display/ili9341_driver.*`,
-  `impl/shared/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C
-  driver (`impl/shared/display/ssd1306_driver.*`). Rendering (geometry, text,
-  bitmaps) runs through the portable GFX engine (`impl/shared/display/jh_gfx.*`).
-  The whole stack lives in one shared `impl/shared/display/hal_display.cpp`
+  HAL-only SPI/GPIO drivers (`impl/shared/drivers/display/ili9341_driver.*`,
+  `impl/shared/drivers/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C
+  driver (`impl/shared/drivers/display/ssd1306_driver.*`). Rendering (geometry, text,
+  bitmaps) runs through the portable GFX engine (`impl/shared/drivers/display/jh_gfx.*`).
+  The whole stack lives in one shared `impl/shared/drivers/display/hal_display.cpp`
   used by both STM32G474 and RP2040. Init, rotation, inversion, fill, bitmap
   writes, geometry and text rendering are present; DMA/bulk-write optimization
   remains future work.
 - `hal_thermocouple` - **MCP9600/MCP9601** via the shared HAL I2C driver
-  (`impl/shared/mcp9600/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
-  GPIO bit-bang driver (`impl/shared/max6675/max6675_driver.*`). The same driver logic
+  (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) and **MAX6675** via the shared Arduino-free
+  GPIO bit-bang driver (`impl/shared/drivers/max6675/max6675_driver.*`). The same driver logic
   is used by STM32G474 and RP2040.
 - `hal_serial` - debug USART2 (ST-Link VCP) for `hal_debug_*` output.
 - `hal_uart` - USART1 hardware UART (TX/RX, configurable baud, used as GPS
@@ -219,7 +219,7 @@ HAL's own API (`hal_i2c`, `hal_serial`, `hal_sync`):
 `hal_digipot`, `hal_crypto`, `hal_kv`, `hal_modem_at`, `hal_simcom_a76xx`,
 `hal_pid_controller`, `hal_soft_timer`, `hal_config`.
 
-`src/hal/hal_digipot.cpp` plus `src/hal/impl/shared/digipot/` is the reference
+`src/hal/hal_digipot.cpp` plus `src/hal/impl/shared/drivers/digipot/` is the reference
 pattern: the public module owns handles/locking/dispatch, while chip drivers own
 validation, init and I/O sequences. **These already work on STM32** as long as
 the underlying bus HAL exists.
@@ -262,13 +262,13 @@ device classes: RTC, external ADC, OneWire/DS18B20, display, RGB LED,
 thermocouples, CAN/MCP2515, CAN FD/MCP251XFD, digipot, BH1750, and PGA2311.
 
 `hal_external_adc` / ADS1115 has completed this path and now lives in
-`src/hal/impl/shared/ads1x15/ads1x15_driver.*`.
+`src/hal/impl/shared/drivers/ads1x15/ads1x15_driver.*`.
 
 `hal_onewire` and `hal_ds18b20` have completed this path and now live in
-`src/hal/impl/shared/onewire/`.
+`src/hal/impl/shared/drivers/onewire/`.
 
 `hal_display` has completed this path: ILI9341, ST7735/ST7789/ST7796S (SPI) and
-SSD1306 (I2C) now share one HAL-only stack under `src/hal/impl/shared/display/`,
+SSD1306 (I2C) now share one HAL-only stack under `src/hal/impl/shared/drivers/display/`,
 used identically by STM32G474 and RP2040. MAX6675 is handled separately by the
 shared bit-bang HAL GPIO driver. The remaining display work is a bulk-write/DMA
 evaluation if TFT throughput needs it.

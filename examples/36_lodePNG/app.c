@@ -1,7 +1,7 @@
 #include <hal/hal_app.h>
 #include <hal/hal_system.h>
+#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
 #include <tools_c.h>
-#include <utils/lodepng.h>
 
 #include <stdlib.h>
 #include <string.h>

@@ -1,5 +1,5 @@
 #include "hal/impl/.mock/hal_mock.h"
-#include "utils/SmartTimers.h"
+#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
 #include "utils/unity.h"
 #include <type_traits>
 

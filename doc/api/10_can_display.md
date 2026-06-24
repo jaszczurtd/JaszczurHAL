@@ -192,10 +192,10 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
 
 **impl/shared:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
 mutexing and backend dispatch. MCP2515-specific operations live in
-`impl/shared/mcp2515/hal_can_mcp2515.*`, backed by the Arduino-free MCP2515
-register/SPI driver in `impl/shared/mcp2515/mcp2515_driver.*`. MCP251XFD
-operations live in `impl/shared/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
-HAL-only polling register/SPI driver in `impl/shared/mcp251xfd/mcp251xfd_driver.*`.
+`impl/shared/drivers/mcp2515/hal_can_mcp2515.*`, backed by the Arduino-free MCP2515
+register/SPI driver in `impl/shared/drivers/mcp2515/mcp2515_driver.*`. MCP251XFD
+operations live in `impl/shared/drivers/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
+HAL-only polling register/SPI driver in `impl/shared/drivers/mcp251xfd/mcp251xfd_driver.*`.
 STM32G474 native FDCAN operations live in
 `impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
 the fixed STM32G4 message RAM layout directly.
@@ -277,7 +277,7 @@ lcd.createChar(0, glyph);
 lcd.write((uint8_t)0);
 ```
 
-**impl/shared:** `impl/shared/hd44780/hd44780.*`, reused by RP2040,
+**impl/shared:** `impl/shared/drivers/hd44780/hd44780.*`, reused by RP2040,
 STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
 instance `hal_mutex_t`.
 **Display class scope:** This is a character LCD driver, not the bitmap

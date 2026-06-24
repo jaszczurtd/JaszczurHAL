@@ -1,7 +1,7 @@
 #include "hal/hal_sync.h"
 #include "hal/hal_system.h"
+#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
 #include "hal/impl/shared/hal_mutex_once.h"
-#include "utils/SmartTimers.h"
 #include "utils/unity.h"
 
 #include <FreeRTOS.h>

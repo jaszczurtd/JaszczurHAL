@@ -11,23 +11,23 @@
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
-| `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/mcp2515/*`), MCP251XFD (`impl/shared/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
-| `hal_display` | Shared Arduino-free display stack (`impl/shared/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
-| `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/hd44780/hd44780.*`) over HAL GPIO/system timing |
-| `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
-| `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
-| `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
+| `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/drivers/mcp2515/*`), MCP251XFD (`impl/shared/drivers/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
+| `hal_display` | Shared Arduino-free display stack (`impl/shared/drivers/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
+| `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/drivers/hd44780/hd44780.*`) over HAL GPIO/system timing |
+| `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/drivers/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
+| `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/drivers/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
+| `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
-| `hal_rgb_led` | shared NeoPixel core (`impl/shared/neopixel/jh_neopixel.*`) + target transport glue |
-| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/mcp9600/mcp9600_driver.*`) |
-| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/max6675/max6675_driver.*`) |
-| `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/onewire/onewire_driver.*`) over HAL GPIO/time |
-| `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
-| `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/ads1x15/ads1x15_driver.*`) |
-| `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
+| `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/drivers/max6675/max6675_driver.*`) |
+| `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/drivers/onewire/onewire_driver.*`) over HAL GPIO/time |
+| `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/drivers/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
+| `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/drivers/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/drivers/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
 | `hal_littlefs` | Arduino-pico `LittleFS` on RP2040; upstream littlefs + STM32 internal flash partition on STM32G474 |
 | `hal_udp` | Arduino-pico `WiFiUDP` |
@@ -36,7 +36,7 @@
 | `hal_ota` | Arduino-pico `ArduinoOTA` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
-| `hal_sdlogger` | shared FatFs file layer in `impl/shared/filesystem/` |
+| `hal_sdlogger` | shared FatFs file layer in `impl/shared/frameworks/filesystem/` |
 | `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 
@@ -98,7 +98,7 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 - all `src/hal/impl/.mock/*.cpp` stubs,
 - `src/hal/hal_config.cpp`,
 - `src/hal/hal_can_util.cpp`,
-- `src/utils/SmartTimers.cpp`, `src/utils/pidController.cpp`,
+- `src/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp`, `src/utils/pidController.cpp`,
 - `src/utils/unity.c` (Unity framework).
 
 Each test executable in `tests/` links against `hal_mock` only - no Arduino
@@ -184,7 +184,7 @@ When a test needs additional implementation files, create a dedicated target:
 ```cmake
 add_executable(test_my_driver
     test_my_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/my_driver/my_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/my_driver/my_driver.cpp
 )
 target_link_libraries(test_my_driver PRIVATE hal_mock)
 add_test(NAME test_my_driver COMMAND test_my_driver)

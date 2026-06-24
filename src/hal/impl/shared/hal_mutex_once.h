@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../hal_sync.h"
+#include "hal/hal_sync.h"
 
 #include <stddef.h>
 

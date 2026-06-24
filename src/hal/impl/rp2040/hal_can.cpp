@@ -7,10 +7,10 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #ifdef HAL_ENABLE_MCP2515
-#include "../shared/mcp2515/hal_can_mcp2515.h"
+#include "../shared/drivers/mcp2515/hal_can_mcp2515.h"
 #endif
 #ifdef HAL_ENABLE_MCP251XFD
-#include "../shared/mcp251xfd/hal_can_mcp251xfd.h"
+#include "../shared/drivers/mcp251xfd/hal_can_mcp251xfd.h"
 #endif
 
 #include <new>

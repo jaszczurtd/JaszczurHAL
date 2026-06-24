@@ -67,77 +67,77 @@ add_hal_test(test_hal_thermocouple)
 add_hal_test(test_hal_critical_section)
 add_executable(test_pcf8563_driver
     test_pcf8563_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/pcf8563/pcf8563.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp
 )
 target_link_libraries(test_pcf8563_driver PRIVATE hal_mock)
 add_test(NAME test_pcf8563_driver COMMAND test_pcf8563_driver)
 add_executable(test_ds3231_driver
     test_ds3231_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ds3231/ds3231.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ds3231/ds3231.cpp
 )
 target_link_libraries(test_ds3231_driver PRIVATE hal_mock)
 add_test(NAME test_ds3231_driver COMMAND test_ds3231_driver)
 add_executable(test_max6675_driver
     test_max6675_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/max6675/max6675_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/max6675/max6675_driver.cpp
 )
 target_link_libraries(test_max6675_driver PRIVATE hal_mock)
 add_test(NAME test_max6675_driver COMMAND test_max6675_driver)
 add_executable(test_mcp9600_driver
     test_mcp9600_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp9600/mcp9600_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mcp9600/mcp9600_driver.cpp
 )
 target_link_libraries(test_mcp9600_driver PRIVATE hal_mock)
 add_test(NAME test_mcp9600_driver COMMAND test_mcp9600_driver)
 add_executable(test_bh1750_driver
     test_bh1750_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/bh1750/hal_bh1750.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/bh1750/hal_bh1750.cpp
 )
 target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
 add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
 add_executable(test_hd44780_driver
     test_hd44780_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/hd44780/hd44780.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/hd44780/hd44780.cpp
 )
 target_compile_definitions(test_hd44780_driver PRIVATE HAL_ENABLE_HD44780)
 target_link_libraries(test_hd44780_driver PRIVATE hal_mock)
 add_test(NAME test_hd44780_driver COMMAND test_hd44780_driver)
 add_executable(test_tsc2007_driver
     test_tsc2007_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/tsc2007/tsc2007.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/tsc2007/tsc2007.cpp
 )
 target_compile_definitions(test_tsc2007_driver PRIVATE HAL_ENABLE_TSC2007)
 target_link_libraries(test_tsc2007_driver PRIVATE hal_mock)
 add_test(NAME test_tsc2007_driver COMMAND test_tsc2007_driver)
 add_executable(test_stmpe610_driver
     test_stmpe610_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/stmpe610/stmpe610.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/stmpe610/stmpe610.cpp
 )
 target_compile_definitions(test_stmpe610_driver PRIVATE HAL_ENABLE_STMPE610)
 target_link_libraries(test_stmpe610_driver PRIVATE hal_mock)
 add_test(NAME test_stmpe610_driver COMMAND test_stmpe610_driver)
 add_executable(test_irsmall_decoder_driver
     test_irsmall_decoder_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/irsmall_decoder/irsmall_decoder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp
 )
 target_compile_definitions(test_irsmall_decoder_driver PRIVATE HAL_ENABLE_IRSMALL_DECODER)
 target_link_libraries(test_irsmall_decoder_driver PRIVATE hal_mock)
 add_test(NAME test_irsmall_decoder_driver COMMAND test_irsmall_decoder_driver)
 add_executable(test_ads1x15_driver
     test_ads1x15_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/ads1x15/ads1x15_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ads1x15/ads1x15_driver.cpp
 )
 target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
 add_executable(test_ili9341_driver
     test_ili9341_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/ili9341_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ili9341_driver.cpp
 )
 target_link_libraries(test_ili9341_driver PRIVATE hal_mock)
 add_test(NAME test_ili9341_driver COMMAND test_ili9341_driver)
 add_executable(test_st77xx_driver
     test_st77xx_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/st77xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st77xx_driver.cpp
 )
 target_compile_definitions(test_st77xx_driver PRIVATE
     HAL_ENABLE_ST7735
@@ -148,22 +148,22 @@ target_link_libraries(test_st77xx_driver PRIVATE hal_mock)
 add_test(NAME test_st77xx_driver COMMAND test_st77xx_driver)
 add_executable(test_ssd1306_driver
     test_ssd1306_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/ssd1306_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd1306_driver.cpp
 )
 target_link_libraries(test_ssd1306_driver PRIVATE hal_mock)
 add_test(NAME test_ssd1306_driver COMMAND test_ssd1306_driver)
 add_executable(test_jh_gfx_geometry
     test_jh_gfx_geometry.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display/jh_gfx.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
 )
 target_include_directories(test_jh_gfx_geometry BEFORE PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/display
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display
 )
 target_link_libraries(test_jh_gfx_geometry PRIVATE hal_mock)
 add_test(NAME test_jh_gfx_geometry COMMAND test_jh_gfx_geometry)
 add_executable(test_mcp2515_driver
     test_mcp2515_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/mcp2515/mcp2515_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mcp2515/mcp2515_driver.cpp
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
 add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
@@ -171,13 +171,13 @@ add_executable(test_wireguard_crypto_shared
     test_wireguard_crypto_shared.cpp
 )
 target_include_directories(test_wireguard_crypto_shared PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/wireguard/crypto
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/crypto
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/filesystem/ff16/ff.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/filesystem/ff16/ff.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_ff16_memdisk PRIVATE
@@ -217,7 +217,7 @@ add_hal_test(test_hal_onewire)
 # is faked under MOCK). Guards the onewire_drive_high write-before-mode ordering.
 add_executable(test_hal_onewire_driver
     test_hal_onewire_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/onewire/onewire_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/onewire/onewire_driver.cpp
 )
 target_link_libraries(test_hal_onewire_driver PRIVATE hal_mock)
 add_test(NAME test_hal_onewire_driver COMMAND test_hal_onewire_driver)
@@ -255,6 +255,12 @@ add_hal_test(test_hal_gps)
 add_hal_test(test_hal_system)
 add_hal_test(test_hal_bits)
 add_hal_test(test_hal_crypto)
+add_executable(test_jpeg
+    test_jpeg.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
+)
+target_link_libraries(test_jpeg PRIVATE hal_mock)
+add_test(NAME test_jpeg COMMAND test_jpeg)
 add_executable(test_lodepng
     test_lodepng.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
@@ -283,7 +289,7 @@ add_test(NAME test_multicoreWatchdog COMMAND test_multicoreWatchdog)
 # test and feed real sentences through it.
 add_executable(test_gps_nmea_parser
     test_gps_nmea_parser.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/gps/gps_nmea_parser.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_gps_nmea_parser PRIVATE hal_mock)

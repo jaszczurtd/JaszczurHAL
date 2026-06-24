@@ -6,9 +6,9 @@
 #include "../../hal_gpio.h"
 #include "../../hal_rgb_led.h"
 #include "../../hal_sync.h"
+#include "../shared/drivers/neopixel/jh_neopixel.h"
+#include "../shared/drivers/neopixel/rp2040_pio.h"
 #include "../shared/hal_mutex_once.h"
-#include "../shared/neopixel/jh_neopixel.h"
-#include "../shared/neopixel/rp2040_pio.h"
 
 struct rgb_rp2040_transport_t {
   PIO pio;

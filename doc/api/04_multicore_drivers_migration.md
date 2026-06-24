@@ -59,18 +59,18 @@ Both are integrated as HAL-internal implementation detail (not public API).
 
 | Driver folder | HAL usage | Upstream author(s) | License | License path in repo |
 |---|---|---|---|---|
-| GFX engine (ported) | `hal_display` rendering (geometry, text, bitmaps) ported into `impl/shared/display/jh_gfx.*` | Limor Fried (Ladyada) + contributors (Adafruit GFX) | BSD-2-Clause (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/display/jh_gfx.h` |
-| ILI9341 driver (ported) | TFT backend (`HAL_DISPLAY_ILI9341`) ported into `impl/shared/display/ili9341_driver.*` | Limor Fried (Ladyada) (Adafruit ILI9341) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ili9341_driver.h` |
-| ST77xx driver (ported) | ST7735/ST7789/ST7796S backends ported into `impl/shared/display/st77xx_driver.*` | Limor Fried (Ladyada) (Adafruit ST7735/ST7789) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/st77xx_driver.h` |
-| SSD1306 driver (ported) | OLED backend (`HAL_ENABLE_SSD1306`) ported into `impl/shared/display/ssd1306_driver.*` | Limor Fried (Ladyada) + contributors (Adafruit SSD1306) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/display/ssd1306_driver.h` |
-| NeoPixel core (ported) | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors (Adafruit_NeoPixel) | LGPL (attribution in source headers) | `src/hal/impl/shared/neopixel/COPYING`, `src/hal/impl/shared/neopixel/jh_neopixel.h` |
-| `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in source headers | `src/hal/impl/shared/ds3231/ds3231.h`, `src/hal/impl/shared/ds3231/ds3231.cpp` |
-| `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/mcp2515/license.txt` and `src/hal/impl/shared/mcp2515/mcp2515_driver.h` |
+| GFX engine (ported) | `hal_display` rendering (geometry, text, bitmaps) ported into `impl/shared/drivers/display/jh_gfx.*` | Limor Fried (Ladyada) + contributors (Adafruit GFX) | BSD-2-Clause (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/drivers/display/jh_gfx.h` |
+| ILI9341 driver (ported) | TFT backend (`HAL_DISPLAY_ILI9341`) ported into `impl/shared/drivers/display/ili9341_driver.*` | Limor Fried (Ladyada) (Adafruit ILI9341) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/drivers/display/ili9341_driver.h` |
+| ST77xx driver (ported) | ST7735/ST7789/ST7796S backends ported into `impl/shared/drivers/display/st77xx_driver.*` | Limor Fried (Ladyada) (Adafruit ST7735/ST7789) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/drivers/display/st77xx_driver.h` |
+| SSD1306 driver (ported) | OLED backend (`HAL_ENABLE_SSD1306`) ported into `impl/shared/drivers/display/ssd1306_driver.*` | Limor Fried (Ladyada) + contributors (Adafruit SSD1306) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/drivers/display/ssd1306_driver.h` |
+| NeoPixel core (ported) | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors (Adafruit_NeoPixel) | LGPL (attribution in source headers) | `src/hal/impl/shared/drivers/neopixel/COPYING`, `src/hal/impl/shared/drivers/neopixel/jh_neopixel.h` |
+| `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in source headers | `src/hal/impl/shared/drivers/ds3231/ds3231.h`, `src/hal/impl/shared/drivers/ds3231/ds3231.cpp` |
+| `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/drivers/mcp2515/license.txt` and `src/hal/impl/shared/drivers/mcp2515/mcp2515_driver.h` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/rp2040/frameworks/PubSubClient/LICENSE.txt` |
-| TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps/gps_nmea_parser.cpp` |
+| TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp` |
 
-Note: `impl/shared/display/Fonts/` includes additional per-font notices in
+Note: `impl/shared/drivers/display/Fonts/` includes additional per-font notices in
 font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 
 ### Integration changes and rationale
@@ -83,8 +83,8 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | I2C synchronization | Drivers doing I2C traffic integrate `hal_i2c_lock_bus`/`hal_i2c_unlock_bus` and bus mapping where needed. | Prevents mixed bus-0/bus-1 transactions and improves determinism under concurrency. |
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Second I2C controller support | HAL I2C APIs and driver adapters use bus index 0/1 for the target's first and second hardware controllers. | Allows second controller usage without bypassing HAL thread-safety. |
-| Shared display stack | The vendored Adafruit GFX/ILI9341/ST77xx/SSD1306/BusIO libraries were replaced by a portable in-tree display stack (`impl/shared/display/`) built only on HAL SPI/I2C/GPIO. | One Arduino-free implementation drives every backend (RP2040, STM32G474) identically and compiles out when the display module is disabled. |
-| Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
+| Shared display stack | The vendored Adafruit GFX/ILI9341/ST77xx/SSD1306/BusIO libraries were replaced by a portable in-tree display stack (`impl/shared/drivers/display/`) built only on HAL SPI/I2C/GPIO. | One Arduino-free implementation drives every backend (RP2040, STM32G474) identically and compiles out when the display module is disabled. |
+| Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | No Arduino dependency, so the parser runs on RP2040 and STM32G474 alike; compiles out with the GPS module disabled. |
 | WiFiUDP wrapper | `hal_udp` wraps Arduino-pico `WiFiUDP` and is compile-gated by `HAL_ENABLE_UDP`. | UDP support stays opt-in and adds zero code size when disabled. |
 | WireGuard bundling | `hal_wireguard` uses bundled `arduino-wireguard-pico-w` sources copied from the local sibling repository and gated by `HAL_ENABLE_WIREGUARD`. | Keeps WireGuard integration deterministic and fully local/offline while preserving opt-in code size. |
 | PubSubClient bundling | `hal_mqtt` uses bundled PubSubClient source gated by `HAL_ENABLE_MQTT` in the driver translation unit. | MQTT support is opt-in and adds zero code size when disabled. |

@@ -232,12 +232,8 @@ function(_jh_add_stm32g474_example NAME)
 
     set(_utils
         "${SRC}/utils/tools.cpp"
-        "${SRC}/utils/SmartTimers.cpp"
         "${SRC}/utils/pidController.cpp"
         "${SRC}/utils/draw7Segment.cpp"
-        "${SRC}/utils/cJSON.c"
-        "${SRC}/utils/cJSON_Utils.c"
-        "${SRC}/utils/lodepng.cpp"
     )
 
     _jh_make_safe_name(_safe "${NAME}")
@@ -406,6 +402,8 @@ jh_example(36_lodePNG TARGETS rp2040 stm32g474)
 jh_example(37_lodePNG_ili9341_base64 TARGETS rp2040 stm32g474)
 jh_example(38_stm32g474_fdcan_native TARGETS stm32g474)
 jh_example(39_sdlogger TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_SDLOGGER)
+jh_example(40_jpeg TARGETS rp2040 stm32g474)
+jh_example(41_jpeg_ili931_base64 TARGETS rp2040 stm32g474)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

@@ -9,6 +9,8 @@ struct wireguard_handshake;
  * - Avoid pulling in ESP-IDF / FreeRTOS dependencies.
  */
 
+#include <lwip/opt.h>
+
 #include <Arduino.h>
 
 #include "../../../../../hal_serial.h"

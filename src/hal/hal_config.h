@@ -310,6 +310,12 @@
                                   HAL_LODEPNG_ENABLE_CPP to opt them back in.
        HAL_ENABLE_PNG_AS_BASE64 - Base64-encoded PNG helpers in tools
                                   (propagates: CRYPTO, PNG).
+       HAL_ENABLE_JPEG          - bundled JPEGDecoder/picojpeg memory-based
+                                  baseline JPEG decoder. SD/LittleFS backends
+                                  are disabled in the default HAL utility
+                                  profile.
+       HAL_ENABLE_JPEG_AS_BASE64 - Base64-encoded JPEG helpers in tools
+                                  (propagates: CRYPTO, JPEG).
 
      Test framework:
        HAL_ENABLE_UNITY         - bundled Unity framework. Typically
@@ -355,6 +361,15 @@
 #endif
 #ifndef HAL_ENABLE_PNG
 #define HAL_ENABLE_PNG
+#endif
+#endif
+
+#ifdef HAL_ENABLE_JPEG_AS_BASE64
+#ifndef HAL_ENABLE_CRYPTO
+#define HAL_ENABLE_CRYPTO
+#endif
+#ifndef HAL_ENABLE_JPEG
+#define HAL_ENABLE_JPEG
 #endif
 #endif
 
@@ -575,7 +590,7 @@
   KV, SDLOGGER, GPS, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
   ONEWIRE, EXTERNAL_ADC, PGA2311,
    TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
-   PNG_AS_BASE64) do
+   PNG_AS_BASE64, JPEG, JPEG_AS_BASE64) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
    which would otherwise leave the user with a non-functional binary. */
@@ -796,6 +811,12 @@
 #endif
 #ifdef HAL_ENABLE_PNG_AS_BASE64
 #pragma message("HAL_CONFIG: HAL_ENABLE_PNG_AS_BASE64")
+#endif
+#ifdef HAL_ENABLE_JPEG
+#pragma message("HAL_CONFIG: HAL_ENABLE_JPEG")
+#endif
+#ifdef HAL_ENABLE_JPEG_AS_BASE64
+#pragma message("HAL_CONFIG: HAL_ENABLE_JPEG_AS_BASE64")
 #endif
 #ifdef HAL_ENABLE_UNITY
 #pragma message("HAL_CONFIG: HAL_ENABLE_UNITY")

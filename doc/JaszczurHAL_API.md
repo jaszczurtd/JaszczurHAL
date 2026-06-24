@@ -5,7 +5,7 @@ The primary backend is RP2040 via Arduino-pico, with STM32G474 available as a
 real bare-metal backend for core domains and an expanding shared-driver stack,
 while keeping the application-facing HAL API stable across targets.
 
-This document is the canonical, detailed API reference.
+This document is the established, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
 here for full behavior/contracts.
 
@@ -46,12 +46,12 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/rp2040/` - RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `filesystem/`, `gps/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`) plus a shared WireGuard cryptography core in `wireguard/crypto/`.
+- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, etc.). Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/crypto/`).
 - `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
 - `src/hal/impl/rp2040/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
-- `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, optional `LodePNG`, and bundled Unity sources.
+- `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
 default include in project code. `hal/hal.h` remains available as a HAL-only

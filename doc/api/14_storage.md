@@ -534,7 +534,7 @@ void watchdog_reboot_handler(void) {
 ```
 
 ---
-**impl/shared/filesystem:** FatFs-backed SD file helpers and the portable
+**impl/shared/frameworks/filesystem:** FatFs-backed SD file helpers and the portable
 SD logger implementation used by RP2040 and STM32G474.
 **impl/.mock:** deterministic test double with injectable SD/open results,
 captured filenames/content, flush counts, and close flags.

@@ -46,11 +46,12 @@
 #include "lwip/ip.h"
 #include "lwip/mem.h"
 #include "lwip/netif.h"
+#include "lwip/opt.h"
 #include "lwip/sys.h"
 #include "lwip/timeouts.h"
 #include "lwip/udp.h"
 
-#include "hal/impl/shared/wireguard/crypto/crypto.h"
+#include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
 #include "wireguard.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
@@ -90,8 +91,8 @@ static bool wireguardif_can_send_initiation(struct wireguard_peer *peer) {
 }
 
 // static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q,
-// struct wireguard_peer *peer) { 	struct wireguard_device *device = (struct
-// wireguard_device *)netif->state;
+// struct wireguard_peer *peer) { 	struct wireguard_device *device =
+// (struct wireguard_device *)netif->state;
 // 	// Send to last know port, not the connect port
 // 	//TODO: Support DSCP and ECN - lwip requires this set on PCB globally,
 // not per packet 	return udp_sendto_if(device->udp_pcb, q, &peer->ip,
@@ -825,15 +826,15 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
 // static err_t wireguard_start_handshake(struct netif *netif, struct
 // wireguard_peer *peer) { 	struct wireguard_device *device = (struct
-// wireguard_device *)netif->state; 	err_t result; 	struct pbuf *pbuf; 	struct
-// message_handshake_initiation msg;
+// wireguard_device *)netif->state; 	err_t result; 	struct pbuf *pbuf;
+// struct message_handshake_initiation msg;
 
 // 	pbuf = wireguardif_initiate_handshake(device, peer, &msg, &result);
 // 	if (pbuf) {
 // 		result = wireguardif_peer_output(netif, pbuf, peer);
 // 		log_i(TAG "start handshake %08x,%d - %d", WG_IP4_U32(&peer->ip),
-// peer->port, result); 		pbuf_free(pbuf); 		peer->send_handshake = false;
-// 		peer->last_initiation_tx = wireguard_sys_now();
+// peer->port, result); 		pbuf_free(pbuf);
+// peer->send_handshake = false; 		peer->last_initiation_tx = wireguard_sys_now();
 // 		memcpy(peer->handshake_mac1, msg.mac1, WIREGUARD_COOKIE_LEN);
 // 		peer->handshake_mac1_valid = true;
 // 	}
@@ -1039,8 +1040,10 @@ err_t wireguardif_add_peer(struct netif *netif, struct wireguardif_peer *p,
 // 		} else if (peer->curr_keypair.valid &&
 // !peer->curr_keypair.initiator &&
 // wireguard_expired(peer->curr_keypair.keypair_millis, REJECT_AFTER_TIME -
-// peer->keepalive_interval)) { 			result = true; 		} else if
-// (!peer->curr_keypair.valid && peer->active) { 			result = true;
+// peer->keepalive_interval)) { 			result = true;
+// } else if
+// (!peer->curr_keypair.valid && peer->active) { 			result =
+// true;
 // 		}
 // 	}
 // 	return result;
