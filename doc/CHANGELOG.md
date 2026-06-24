@@ -6,6 +6,30 @@ All notable changes to this project will be documented in this file.
 
 Next release.
 
+### hal_serial - native RP2040 CDC and streamed debug output
+
+- Reworked the RP2040 `hal_serial` backend to write through the native
+  TinyUSB CDC transport owned by the RP2040 core USB stack instead of the
+  Arduino `Serial.print()` / `Serial.println()` path, while keeping the public
+  `hal_serial_*`, `hal_deb`, `hal_derr` and `hal_derr_limited` API unchanged.
+- `hal_serial_set_flush(false)` is now the RP2040 default. The backend still
+  serializes every emitter with the shared TX mutex and kicks the CDC FIFO in
+  the write loop; enabling flush adds an extra TinyUSB CDC flush/task poll before
+  releasing the mutex.
+- Replaced task-context `hal_deb()`, `hal_derr()` and full-message
+  `hal_derr_limited()` formatting buffers with a shared streaming formatter.
+  `HAL_DEBUG_BUF_SIZE` no longer caps normal debug/error log length; it remains
+  a legacy sizing knob for mock capture/RX helpers. ISR-deferred records remain
+  intentionally bounded by `HAL_DEBUG_ISR_TEXT_MAX`.
+- Updated RP2040, STM32G474 and mock serial backends to emit prefixes,
+  timestamps, source tags and formatted payload fragments under the same TX
+  mutex, preserving line-level serialization without whole-line staging buffers.
+- Added host coverage for the shared debug formatter, including output longer
+  than `HAL_DEBUG_BUF_SIZE` and common printf-style conversions.
+- Refreshed the serial/debug API documentation, build/test dependency notes and
+  feature overview to describe TinyUSB CDC, optional flush semantics and streamed
+  debug formatting.
+
 ### hal_can - backend-selectable CAN API
 
 - Changed the public CAN creation API to use `hal_can_config_t`, with
@@ -978,10 +1002,11 @@ Next release.
 
 ### hal_serial / hal_system - ISR-safe debug logging
 
-- New public API `hal_serial_set_flush(bool enabled)` controls whether
-  `hal_serial_print()` / `hal_serial_println()` flush after each write.
-  Arduino/RP2040 keeps the previous behavior by default (`enabled=false`).
-  STM32G474 and mock backends accept the setting as a portable no-op.
+- New public API `hal_serial_set_flush(bool enabled)` controls the optional
+  backend flush step after `hal_serial_print()` / `hal_serial_println()`.
+  RP2040 defaults to `enabled=false`; setting it to `true` adds an extra USB CDC
+  flush/task poll before releasing the TX mutex. STM32G474 and mock backends
+  accept the setting as a portable no-op.
 - ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
   `hal_derr_limited()` may now be called from interrupt context. The
   callers detect ISR context via the new `hal_in_isr()` (ARM Cortex-M
@@ -1326,56 +1351,42 @@ Next release.
 - Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
   `JaszczurHAL_API.md`).
 
-## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialised + flushed TX on hal_serial)
+## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialized TX on hal_serial)
 
 ### Added
 - New private TX mutex (`s_tx_mutex`) inside every `hal_serial.cpp`
-  backend (Arduino, STM32G474, mock). `hal_serial_print` and
+  backend (RP2040, STM32G474, mock). `hal_serial_print` and
   `hal_serial_println` now lock it for the duration of the underlying
-  `Serial.print/println` (Arduino) / `printf` (STM32 / mock) call.
-- Arduino backend additionally calls `Serial.flush()` *inside* the
-  mutex window after every `Serial.print/println`. Required because
-  on RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes
-  into the CDC ring buffer and returns immediately - without flush,
-  a follow-up emitter takes the mutex and starts writing fresh
-  bytes into a FIFO that still contains tail bytes of the previous
-  frame, and the TinyUSB ring-pointer race in that overlap was the
-  source of the single-byte drops observed in the field
-  (`buid`/`defaut`/`efault` mid-frame). With flush, exactly one
-  frame is in flight at a time.
+  debug-console write path.
+- `hal_serial_set_flush(bool enabled)` exposes a portable flush knob. On
+  RP2040 it can request an extra USB CDC flush/task poll before the TX mutex is
+  released; STM32G474 and mock accept the setting as a no-op.
 
 ### Changed
 - Single point of serialization for the TX path. Previously each of
   `hal_deb`, `hal_derr`, `hal_derr_limited` and
   `hal_serial_session_println` ran its own per-function mutex (or
-  none) and only protected its own format buffer; the actual
-  underlying `Serial.println(s)` (which on the Arduino `Print` API
-  is two distinct `write()`s - the string, then `"\r\n"`) was
-  unprotected. On dual-core RP2040 this allowed core 1 `hal_deb` to
-  splice bytes in the middle of a framed session reply being emitted
-  by core 0 (or vice-versa). The mutex closes the API-level race;
-  the flush closes the ring-buffer-level race underneath it.
+  none) while the actual transport write path was not shared across all
+  emitters. On dual-core RP2040 this allowed core 1 `hal_deb` to splice bytes
+  in the middle of a framed session reply being emitted by core 0 (or
+  vice-versa). The TX mutex closes that API-level race.
 - The new TX mutex is acquired at the `hal_serial_print/println`
   boundary, so every caller (debug helpers, session helper, direct
   uses) goes through the same gate. The existing per-function
-  mutexes remain in place to protect their format buffers; the new
-  lock is strictly nested inside them and never leads to deadlock
-  because the outer mutexes never wrap each other.
+  mutexes remain in place to serialize debug helper state; the new lock is
+  strictly nested inside them and never leads to deadlock because the outer
+  mutexes never wrap each other.
 - The TX mutex is lazy-created via a small `ensure_tx_mutex` helper
   so callers that emit before `hal_debug_init` (very early bring-up,
   test fixtures) still see a valid lock.
-- STM32G474 / mock backends keep the mutex but DO NOT flush - they
-  use plain `printf`, which already drains line-buffered to stdout
-  / debug UART without the USB CDC ring-buffer hazard.
+- STM32G474 / mock backends keep the mutex but have no USB CDC flush to perform.
 
 ### Migration
 - Source-compatible: no API changes.
-- Throughput note: Arduino `hal_serial_println` now blocks until the
-  CDC TX FIFO is drained (typically sub-millisecond for ~200-byte
-  frames at 12 Mbps USB). Callers that previously fired multiple
-  short println()s back-to-back will now serialise them on the
-  USB transfer rate; this is the intended trade-off and matches
-  the wire contract that no two emitters ever share the bus.
+- Throughput note: every emitter now serializes on the shared TX mutex. On
+  RP2040, the optional flush knob may add extra USB CDC polling before the mutex
+  is released; leaving it disabled keeps the default path focused on forward
+  progress while preserving message-boundary serialization.
 - Multi-core projects that previously serialised TX with their own
   global mutex can drop it; double-locking the same critical section
   is harmless but redundant.
@@ -1721,9 +1732,9 @@ Next release.
 - Tests: 3 new I2C bus clear tests (count, reset-on-init, bus
   independence). Total I2C test count: 17.
 - `hal_serial_available()` - return the number of bytes available for
-  reading from the serial port (wraps `Serial.available()`).
-- `hal_serial_read()` - read one byte from the serial port; returns
-  0-255 or -1 when empty (wraps `Serial.read()`).
+  reading from the backend serial RX path.
+- `hal_serial_read()` - read one byte from the backend serial RX path; returns
+  0-255 or -1 when empty.
 - `float_to_u32()` / `u32_to_float()` - `static inline` bitcast helpers
   (float ↔ uint32_t via memcpy) in `tools_api.h`.
 - Mock: `hal_mock_serial_inject_rx(data, len)` - inject bytes into the

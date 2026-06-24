@@ -3,27 +3,33 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
+#include "../shared/hal_debug_format.h"
 #include "../shared/hal_mutex_once.h"
-#include <Arduino.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "../../hal_config.h"
 
+#ifndef NO_USB
+#include <pico/time.h>
+#include <tusb.h>
+#if !defined(USE_TINYUSB)
+#include "CoreMutex.h"
+#include "USB.h"
+#endif
+#endif
+
 static char s_prefix[HAL_DEBUG_PREFIX_SIZE] = {};
-static char s_deb_buf[HAL_DEBUG_BUF_SIZE] = {};
-static char s_derr_buf[HAL_DEBUG_BUF_SIZE] = {};
 static hal_mutex_t s_deb_mutex = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex = NULL;
-/* Single global lock around the underlying Serial TX path. Without this,
+/* Single global lock around the underlying USB CDC TX path. Without this,
  * `hal_deb` (lock = s_deb_mutex), `hal_derr` (lock = s_derr_mutex) and
  * `hal_serial_session_println` (no lock) can interleave their bytes on
- * dual-core RP2040: each only protects its own format buffer, not the
- * actual `Serial.println(s)` call that runs as two separate `write()`s
- * (the string, then "\r\n"). The single-byte CDC drops observed in the
- * field were that interleave. */
+ * dual-core RP2040: each debug helper serializes its own state, but only
+ * this lock protects the shared CDC write path. The single-byte CDC drops
+ * observed in the field were that interleave. */
 static hal_mutex_t s_tx_mutex = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
@@ -52,7 +58,7 @@ static hal_error_slot_t s_overflow_slot = {};
 //                 is true. Format into a stack buffer, push to ring, return.
 // Consumer (task): hal_debug_loop() drains records, applies the same prefix
 //                  / ERROR! markup the non-ISR path would, and emits them
-//                  through the regular mutex-protected Serial output.
+//                  through the regular mutex-protected CDC output.
 // Overflow: producer drops the new record and increments s_isr_dropped;
 //           the next drain emits one summary line and clears the counter.
 
@@ -158,16 +164,6 @@ static bool isr_enqueue_derr_limited(uint32_t ts_us, const char *source,
   return isr_ring_push(HAL_ISR_REC_DERR, ts_us, buf);
 }
 
-#ifndef HAL_DEBUG_COLOR_ERRORS
-#define HAL_DEBUG_COLOR_ERRORS 1
-#endif
-
-#if HAL_DEBUG_COLOR_ERRORS
-#define HAL_ERR_PREFIX "\x1b[1;31mERROR!\x1b[0m "
-#else
-#define HAL_ERR_PREFIX "ERROR! "
-#endif
-
 static hal_debug_rate_limit_t
 sanitize_rate_cfg(const hal_debug_rate_limit_t *cfg) {
   hal_debug_rate_limit_t def = hal_debug_rate_limit_defaults();
@@ -263,7 +259,102 @@ static void hal_serial_ensure_tx_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_tx_mutex);
 }
 
-void hal_serial_begin(uint32_t baud) { Serial.begin(baud); }
+#ifndef NO_USB
+
+#define HAL_SERIAL_USB_WRITE_TIMEOUT_US 1000000ULL
+
+#if !defined(USE_TINYUSB)
+#define HAL_SERIAL_USB_LOCK_GUARD(name) CoreMutex name(&USB.mutex, false)
+#define HAL_SERIAL_USB_LOCK_OK(name) ((bool)(name))
+#else
+#define HAL_SERIAL_USB_LOCK_GUARD(name) bool name = true
+#define HAL_SERIAL_USB_LOCK_OK(name) (name)
+#endif
+
+static inline bool hal_serial_usb_inited(void) { return tud_inited(); }
+
+static inline void hal_serial_usb_task_locked(void) {
+  if (hal_serial_usb_inited()) {
+    tud_task();
+  }
+}
+
+static inline bool hal_serial_usb_connected_locked(void) {
+  return hal_serial_usb_inited() && tud_cdc_connected();
+}
+
+static void hal_serial_usb_flush_locked(void) {
+  if (!hal_serial_usb_inited()) {
+    return;
+  }
+
+  (void)tud_cdc_write_flush();
+  tud_task();
+}
+
+static size_t hal_serial_usb_write_locked(const char *buf, size_t length) {
+  if (buf == NULL || length == 0u || !hal_serial_usb_inited()) {
+    return 0u;
+  }
+
+  if (tud_suspended()) {
+    (void)tud_remote_wakeup();
+  }
+
+  size_t written_total = 0u;
+  uint64_t last_available_time = time_us_64();
+
+  if (hal_serial_usb_connected_locked()) {
+    while (written_total < length) {
+      hal_serial_usb_task_locked();
+
+      if (!hal_serial_usb_connected_locked()) {
+        break;
+      }
+
+      uint32_t available = tud_cdc_write_available();
+      uint32_t remaining = (uint32_t)(length - written_total);
+      uint32_t chunk = (remaining < available) ? remaining : available;
+
+      if (chunk > 0u) {
+        uint32_t written = tud_cdc_write(buf + written_total, chunk);
+        hal_serial_usb_flush_locked();
+
+        if (written > 0u) {
+          written_total += written;
+          last_available_time = time_us_64();
+          continue;
+        }
+      } else {
+        hal_serial_usb_flush_locked();
+      }
+
+      if (!hal_serial_usb_connected_locked() ||
+          (!tud_cdc_write_available() &&
+           time_us_64() >
+               last_available_time + HAL_SERIAL_USB_WRITE_TIMEOUT_US)) {
+        break;
+      }
+    }
+  }
+
+  hal_serial_usb_task_locked();
+  return written_total;
+}
+
+#endif /* NO_USB */
+
+void hal_serial_begin(uint32_t baud) {
+  (void)baud;
+#ifndef NO_USB
+  if (hal_serial_usb_inited()) {
+    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
+    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
+      hal_serial_usb_task_locked();
+    }
+  }
+#endif
+}
 
 void hal_serial_set_flush(bool enabled) {
   __atomic_store_n(&s_serial_flush_enabled, enabled, __ATOMIC_RELEASE);
@@ -273,38 +364,115 @@ static inline bool hal_serial_should_flush(void) {
   return __atomic_load_n(&s_serial_flush_enabled, __ATOMIC_ACQUIRE);
 }
 
-/* When enabled, `Serial.flush()` waits until the TX FIFO has actually
- * been drained to the USB host. Keep it **inside** the TX mutex window:
- * on RP2040 + TinyUSB CDC, `Serial.println(s)` only copies bytes into
- * the USB CDC ring buffer and returns immediately. Without flush, a
- * follow-up `hal_serial_println` (from the session helper or from
- * `hal_deb` on the other core) can start writing fresh bytes into a FIFO
- * that still contains tail bytes of the previous frame. Disabling this
- * avoids host-side USB stalls blocking application progress, at the cost
- * of reintroducing that CDC overlap risk during heavy concurrent output. */
+static void hal_serial_write_locked(const char *data, size_t len) {
+#ifndef NO_USB
+  if (data == NULL || len == 0u || !hal_serial_usb_inited()) {
+    return;
+  }
+
+  HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
+  if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
+    (void)hal_serial_usb_write_locked(data, len);
+  }
+#else
+  (void)data;
+  (void)len;
+#endif
+}
+
+static void hal_serial_flush_tx_locked(void) {
+#ifndef NO_USB
+  if (!hal_serial_usb_inited()) {
+    return;
+  }
+
+  HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
+  if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
+    hal_serial_usb_flush_locked();
+  }
+#endif
+}
+
+static void hal_serial_finish_line_locked(void) {
+  hal_serial_write_locked("\r\n", 2u);
+  if (hal_serial_should_flush()) {
+    hal_serial_flush_tx_locked();
+  }
+}
+
+static void hal_debug_stream_write(void *ctx, const char *data, size_t len) {
+  (void)ctx;
+  hal_serial_write_locked(data, len);
+}
+
+/* Keep CDC writes inside the TX mutex window: every HAL emitter shares this
+ * path, so message boundaries cannot interleave even when debug/session output
+ * comes from different cores. The TinyUSB write loop still kicks the CDC FIFO
+ * to start short USB packets; hal_serial_set_flush(true) adds one extra flush
+ * and USB task poll before releasing the mutex. */
 void hal_serial_print(const char *s) {
+  const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  Serial.print(s);
+  hal_serial_write_locked(text, strlen(text));
   if (hal_serial_should_flush()) {
-    Serial.flush();
+    hal_serial_flush_tx_locked();
   }
   hal_mutex_unlock(s_tx_mutex);
 }
 
 void hal_serial_println(const char *s) {
+  const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  Serial.println(s);
-  if (hal_serial_should_flush()) {
-    Serial.flush();
-  }
+  hal_serial_write_locked(text, strlen(text));
+  hal_serial_finish_line_locked();
   hal_mutex_unlock(s_tx_mutex);
 }
 
-int hal_serial_available(void) { return Serial.available(); }
+int hal_serial_available(void) {
+#ifndef NO_USB
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  int available = 0;
 
-int hal_serial_read(void) { return Serial.read(); }
+  if (hal_serial_usb_inited()) {
+    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
+    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
+      hal_serial_usb_task_locked();
+      available = (int)tud_cdc_available();
+    }
+  }
+
+  hal_mutex_unlock(s_tx_mutex);
+  return available;
+#else
+  return 0;
+#endif
+}
+
+int hal_serial_read(void) {
+#ifndef NO_USB
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  int value = -1;
+
+  if (hal_serial_usb_inited()) {
+    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
+    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
+      hal_serial_usb_task_locked();
+      if (tud_cdc_available()) {
+        value = (int)tud_cdc_read_char();
+      }
+    }
+  }
+
+  hal_mutex_unlock(s_tx_mutex);
+  return value;
+#else
+  return -1;
+#endif
+}
 
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void) {
   hal_debug_rate_limit_t cfg = {5u, 1000u, 30000u};
@@ -371,21 +539,17 @@ void hal_deb(const char *format, ...) {
 
   hal_debug_ensure_init();
   hal_mutex_lock(s_deb_mutex);
+
   va_list args;
   va_start(args, format);
-  memset(s_deb_buf, 0, sizeof(s_deb_buf));
-  size_t used = 0;
-  if (strlen(s_prefix) > 0) {
-    int n = snprintf(s_deb_buf, sizeof(s_deb_buf), "%s ", s_prefix);
-    if (n > 0) {
-      used = (size_t)n;
-      if (used >= sizeof(s_deb_buf))
-        used = sizeof(s_deb_buf) - 1;
-    }
-  }
-  vsnprintf(s_deb_buf + used, sizeof(s_deb_buf) - used, format, args);
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  hal_debug_format_write_deb_prefix(hal_debug_stream_write, NULL, s_prefix);
+  hal_debug_vformat(hal_debug_stream_write, NULL, format, args);
+  hal_serial_finish_line_locked();
+  hal_mutex_unlock(s_tx_mutex);
   va_end(args);
-  hal_serial_println(s_deb_buf);
+
   hal_mutex_unlock(s_deb_mutex);
 }
 
@@ -406,33 +570,24 @@ void hal_derr(const char *format, ...) {
 
   hal_debug_ensure_init();
   hal_mutex_lock(s_derr_mutex);
+
+  char ts[32] = {};
+  const char *timestamp = NULL;
+  if (s_timestamp_hook != NULL &&
+      s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
+    timestamp = ts;
+  }
+
   va_list args;
   va_start(args, format);
-  memset(s_derr_buf, 0, sizeof(s_derr_buf));
-  const char *error = HAL_ERR_PREFIX;
-  size_t len = 0;
-  if (s_timestamp_hook != NULL) {
-    char ts[32] = {};
-    if (s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
-      int n = snprintf(s_derr_buf, sizeof(s_derr_buf), "[%s] %s", ts, error);
-      if (n > 0) {
-        len = (size_t)n;
-        if (len >= sizeof(s_derr_buf)) {
-          len = sizeof(s_derr_buf) - 1;
-        }
-      }
-    }
-  }
-  if (len == 0) {
-    // Bounded: error is caller-supplied and may exceed s_derr_buf.
-    // snprintf truncates safely; len = strlen(s_derr_buf) stays <= sizeof-1,
-    // so the vsnprintf size computation below cannot underflow.
-    snprintf(s_derr_buf, sizeof(s_derr_buf), "%s", error);
-    len = strlen(s_derr_buf);
-  }
-  vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1 - len, format, args);
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  hal_debug_format_write_error_prefix(hal_debug_stream_write, NULL, timestamp);
+  hal_debug_vformat(hal_debug_stream_write, NULL, format, args);
+  hal_serial_finish_line_locked();
+  hal_mutex_unlock(s_tx_mutex);
   va_end(args);
-  hal_serial_println(s_derr_buf);
+
   hal_mutex_unlock(s_derr_mutex);
 }
 
@@ -465,13 +620,29 @@ void hal_derr_limited(const char *source, const char *format, ...) {
        (now - slot->last_full_ms) >= s_rate_limit_cfg.min_gap_ms);
 
   if (can_emit_full) {
-    char msg[HAL_DEBUG_BUF_SIZE] = {};
+    hal_mutex_lock(s_derr_mutex);
+
+    char ts[32] = {};
+    const char *timestamp = NULL;
+    if (s_timestamp_hook != NULL &&
+        s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
+      timestamp = ts;
+    }
+
     va_list args;
     va_start(args, format);
-    vsnprintf(msg, sizeof(msg), format, args);
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
+    hal_debug_format_write_error_prefix(hal_debug_stream_write, NULL,
+                                        timestamp);
+    hal_debug_format_write_source_prefix(hal_debug_stream_write, NULL,
+                                         slot->source);
+    hal_debug_vformat(hal_debug_stream_write, NULL, format, args);
+    hal_serial_finish_line_locked();
+    hal_mutex_unlock(s_tx_mutex);
     va_end(args);
 
-    hal_derr("[%s] %s", slot->source[0] ? slot->source : "global", msg);
+    hal_mutex_unlock(s_derr_mutex);
     slot->full_printed++;
     slot->last_full_ms = now;
     hal_mutex_unlock(s_rl_mutex);
@@ -547,8 +718,8 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len,
 
 void hal_debug_loop(void) {
   /* Calling drain from ISR is unsupported: the consumer side takes
-   * the TX mutex and blocks on Serial.flush(), so it must run from
-   * task context. Silently bail out so the caller cannot deadlock. */
+   * the TX mutex and may block while pushing CDC output, so it must run
+   * from task context. Silently bail out so the caller cannot deadlock. */
   if (hal_in_isr()) {
     return;
   }
@@ -568,26 +739,25 @@ void hal_debug_loop(void) {
   hal_debug_ensure_init();
 
   hal_isr_rec_t rec;
-  char line[HAL_DEBUG_BUF_SIZE];
   while (isr_ring_pop(&rec)) {
-    if (rec.level == HAL_ISR_REC_DERR) {
-      snprintf(line, sizeof line, "%s[ISR ts=%lu] %s", HAL_ERR_PREFIX,
-               (unsigned long)rec.ts_us, rec.text);
-    } else if (s_prefix[0] != '\0') {
-      snprintf(line, sizeof line, "%s [ISR ts=%lu] %s", s_prefix,
-               (unsigned long)rec.ts_us, rec.text);
-    } else {
-      snprintf(line, sizeof line, "[ISR ts=%lu] %s", (unsigned long)rec.ts_us,
-               rec.text);
-    }
-    hal_serial_println(line);
+    char ts[16];
+    snprintf(ts, sizeof ts, "%lu", (unsigned long)rec.ts_us);
+
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
+    hal_debug_format_write_isr_prefix(hal_debug_stream_write, NULL,
+                                      rec.level == HAL_ISR_REC_DERR, s_prefix,
+                                      ts);
+    hal_debug_format_write_cstr(hal_debug_stream_write, NULL, rec.text);
+    hal_serial_finish_line_locked();
+    hal_mutex_unlock(s_tx_mutex);
   }
 
   const uint32_t dropped = isr_ring_consume_dropped();
   if (dropped > 0u) {
     char drop_line[96];
     snprintf(drop_line, sizeof drop_line,
-             "%s[ISR] dropped %lu debug message(s)", HAL_ERR_PREFIX,
+             "%s[ISR] dropped %lu debug message(s)", HAL_DEBUG_ERROR_PREFIX,
              (unsigned long)dropped);
     hal_serial_println(drop_line);
   }

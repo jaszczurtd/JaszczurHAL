@@ -111,8 +111,8 @@ bool consume_alarm_flag(void) {
 ```c
 #include <hal/hal_serial.h>
 
-// Configurable buffer sizes (define before including if needed):
-// #define HAL_DEBUG_BUF_SIZE    1024
+// Configurable debug sizing knobs (define before including if needed):
+// #define HAL_DEBUG_BUF_SIZE    1024   // legacy mock capture/RX helper buffer
 // #define HAL_DEBUG_PREFIX_SIZE  16
 // #define HAL_DEBUG_DEFAULT_BAUD 9600   // used by lazy init
 // #define HAL_DEBUG_RATE_LIMIT_SOURCES_MAX 16
@@ -141,7 +141,7 @@ void hal_debug_init(uint32_t baud, const hal_debug_rate_limit_t *cfg = 0);
 
 bool hal_deb_is_initialized(void);        // query init state
 void hal_deb_set_prefix(const char *prefix);
-void hal_deb(const char *format, ...);    // printf-style, thread-safe, with prefix
+void hal_deb(const char *format, ...);    // printf-style, streamed, thread-safe
 void hal_derr(const char *format, ...);   // same but prefixes "ERROR! "
 void hal_derr_limited(const char *source, const char *format, ...);
 // source is caller-defined free-form tag (e.g. "gps", "can"); 0 -> "global"
@@ -150,6 +150,27 @@ void hal_deb_hex(const char *prefix, const uint8_t *buf, int len, int maxBytes);
 
 void hal_debug_loop(void);  // drain ISR-deferred debug records (call from main loop)
 ```
+
+### Task-context debug formatting
+
+In task context, `hal_deb()`, `hal_derr()` and the full-message path of
+`hal_derr_limited()` no longer build the whole formatted log line in a fixed
+`HAL_DEBUG_BUF_SIZE` buffer. Target backends stream the output directly into
+the mutex-protected serial writer:
+
+- literal spans and `%s` payloads are emitted in chunks without a whole-line
+  staging buffer
+- numeric, floating-point and pointer conversions use a small per-conversion
+  local buffer, with a temporary exact-size fallback only when a single
+  conversion does not fit
+- prefixes (`hal_deb_set_prefix()`, `ERROR!`, timestamps and rate-limit source
+  tags) are emitted as separate stream fragments under the same TX mutex, so a
+  logical log line still cannot interleave with another serial emitter
+
+`HAL_DEBUG_BUF_SIZE` is therefore not a task-log length limit anymore. It
+remains a compatibility sizing knob for mock capture/RX helpers. ISR-deferred
+records are intentionally still bounded by `HAL_DEBUG_ISR_TEXT_MAX`, because
+the ISR path must not allocate, lock or touch the serial transport.
 
 ### ISR-deferred debug logging
 
@@ -209,9 +230,10 @@ error source tag (`source`) so errors from different modules do not suppress eac
 ### TX serialization (R1.8)
 
 `hal_serial_print()` and `hal_serial_println()` take a single global TX
-mutex around the underlying `Serial.print/println` (Arduino) /
-`printf` (STM32 / mock) call. This serialises every emitter that ever
-reaches the wire - the debug helpers (`hal_deb`, `hal_derr`,
+mutex around the underlying debug-console write path. On RP2040 that path
+writes directly to TinyUSB CDC; STM32 / mock builds use their respective
+stdio-style backends. This serialises every emitter that ever reaches the
+wire - the debug helpers (`hal_deb`, `hal_derr`,
 `hal_derr_limited`), the framed session helper
 (`hal_serial_session_println`), and any direct caller - against each
 other.
@@ -220,9 +242,9 @@ Without this lock, on dual-core RP2040 a `hal_deb` from core 1 could
 interleave its bytes mid-frame with a session reply being emitted by
 core 0, producing single-byte CDC drops that broke `$SC,...*<crc>`
 CRCs and forced the host to retry every command. The per-function
-mutexes around format buffers (`s_deb_mutex`, `s_derr_mutex`) only
-protected those buffers; they could not stop two unrelated callers
-from racing the actual `Serial.write()` calls.
+mutexes (`s_deb_mutex`, `s_derr_mutex`) serialize debug helper state, but
+they do not by themselves stop unrelated callers from racing the actual
+transport writes.
 
 The TX mutex is created through the same atomic create-once helper used by
 other singleton module locks (or eagerly in `hal_debug_init()` when called
@@ -231,25 +253,19 @@ lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
 the other way around, so deadlock is impossible.
 
-On the RP2040 backend, the mutex window can additionally include a
-`Serial.flush()` after every `Serial.print/println`. This is disabled
-by default and can be changed at runtime with
-`hal_serial_set_flush(bool enabled)`. RP2040 +
-TinyUSB CDC `Serial.println(s)` returns as soon as the bytes are
-copied into the CDC ring buffer, NOT when they have been delivered
-to the USB host. Without flush, the next emitter took the mutex and
-started writing fresh bytes into a FIFO that still held tail bytes
-of the previous frame; the TinyUSB ring-pointer race in that
-overlap produced single-byte drops mid-frame
-(`buid`/`defaut`/`efault` etc.). Flushing inside the mutex makes
-"only one frame in flight" the structural invariant.
+On the RP2040 backend, the mutex window can additionally include an
+extra TinyUSB CDC flush/task poll after every `hal_serial_print()` /
+`hal_serial_println()`. This is disabled by default and can be changed
+at runtime with `hal_serial_set_flush(bool enabled)`. The RP2040 write
+loop still kicks the CDC FIFO internally so short packets are actually
+started; the optional flush is the compatibility knob for applications
+that want an extra transport poll before the TX mutex is released.
 
-Some embedded applications prefer forward progress over strict debug-console
-delivery when the USB host is slow, disconnected, or wedged. Calling
-`hal_serial_set_flush(false)` skips the RP2040 backend's blocking
-`Serial.flush()` while preserving the TX mutex. STM32G474 and mock backends
-accept the same setter for portable code, but have no blocking USB CDC flush
-to skip.
+Leaving `hal_serial_set_flush(false)` keeps the RP2040 backend on its default
+path and avoids the optional extra poll/flush while preserving the TX mutex.
+It does not bypass the write loop's bounded retry when the CDC FIFO is full.
+STM32G474 and mock backends accept the same setter for portable code, but have
+no USB CDC flush to perform.
 
 Limiter implementation details:
 - source matching uses `hash + source string` (collision-safe lookup)
@@ -271,7 +287,9 @@ void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwar
 `setDebugPrefixWithColon(...)` truncates the module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
-**impl/rp2040:** Arduino `Serial`.
+**impl/rp2040:** TinyUSB CDC transport owned by the RP2040 core USB stack.
+**impl/stm32g474:** USART2 debug UART on hardware builds; stdio in host-style
+builds.
 **impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
 RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 `hal_serial_available()` / `hal_serial_read()`.
@@ -301,7 +319,8 @@ void debug_setup(void) {
 
   hal_debug_init(115200, &cfg);
   hal_deb_set_prefix("net");
-  hal_serial_set_flush(true);
+  // Optional on RP2040 when an extra USB CDC flush/task poll is desired:
+  // hal_serial_set_flush(true);
   hal_deb("debug channel ready");
 }
 ```

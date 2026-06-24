@@ -213,6 +213,7 @@ ctest --test-dir build --output-on-failure
 | `Serial.begin(baud)` | `hal_serial_begin(baud)` / `hal_debug_init(baud)` |
 | `Serial.print(s)` | `hal_serial_print(s)` |
 | `Serial.println(s)` | `hal_serial_println(s)` |
+| `Serial.flush()` after every write | `hal_serial_set_flush(true)` when an extra RP2040 USB CDC flush/task poll is explicitly wanted; default is `false` |
 | `Serial.available()` | `hal_serial_available()` |
 | `Serial.read()` | `hal_serial_read()` |
 | `deb(fmt, ...)` | `hal_deb(fmt, ...)` - macro alias still available via tools.h |

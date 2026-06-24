@@ -41,6 +41,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
+    ${SRC}/hal/impl/shared/hal_debug_format.cpp
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp

@@ -248,7 +248,7 @@ Every push and pull request to `main` runs the CI workflow
 
 - **Host unit tests** - the suite runs against the deterministic mock backend
   (CMake + Unity).
-- **Compile gates** - the Arduino/RP2040 static library is built across
+- **Compile gates** - the RP2040/Arduino-pico static library is built across
   `HAL_ENABLE_*` flag profiles and all examples are compiled, while the
   STM32G474 backend is built with the host compiler to catch backend
   regressions.

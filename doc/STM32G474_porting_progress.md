@@ -4,7 +4,7 @@ Last updated: 2026-06-23 (audit aligned with current repo state)
 
 ## Goal
 Provide and harden a non-Arduino `STM32G474` target for JaszczurHAL so the
-STM32 backend reaches practical parity with the existing Arduino/RP2040 paths
+STM32 backend reaches practical parity with the existing RP2040/Arduino-pico paths
 where the hardware model is compatible.
 
 ## Delivered scope (foundational bring-up)

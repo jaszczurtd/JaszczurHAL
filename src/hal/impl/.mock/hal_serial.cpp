@@ -4,21 +4,20 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
+#include "../shared/hal_debug_format.h"
 #include "hal_mock.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 static char s_prefix[HAL_DEBUG_PREFIX_SIZE] = {};
-static char s_deb_buf[HAL_DEBUG_BUF_SIZE] = {};
-static char s_derr_buf[HAL_DEBUG_BUF_SIZE] = {};
 static char s_last_serial_line[HAL_DEBUG_BUF_SIZE] = {};
 static char s_last_deb_line[HAL_DEBUG_BUF_SIZE] = {};
 static hal_mutex_t s_deb_mutex = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex = NULL;
-/* Global lock around the underlying TX path - mirrors the Arduino
- * impl. See arduino/hal_serial.cpp for the full rationale. */
+/* Global lock around the underlying TX path - mirrors the hardware
+ * backends so tests exercise the same message-boundary behaviour. */
 static hal_mutex_t s_tx_mutex = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
@@ -155,16 +154,6 @@ static bool isr_enqueue_derr_limited(uint32_t ts_us, const char *source,
   return isr_ring_push(HAL_ISR_REC_DERR, ts_us, buf);
 }
 
-#ifndef HAL_DEBUG_COLOR_ERRORS
-#define HAL_DEBUG_COLOR_ERRORS 1
-#endif
-
-#if HAL_DEBUG_COLOR_ERRORS
-#define HAL_ERR_PREFIX "\x1b[1;31mERROR!\x1b[0m "
-#else
-#define HAL_ERR_PREFIX "ERROR! "
-#endif
-
 static hal_debug_rate_limit_t
 sanitize_rate_cfg(const hal_debug_rate_limit_t *cfg) {
   hal_debug_rate_limit_t def = hal_debug_rate_limit_defaults();
@@ -259,21 +248,68 @@ void hal_serial_begin(uint32_t baud) { (void)baud; }
 
 void hal_serial_set_flush(bool enabled) { s_serial_flush_enabled = enabled; }
 
+static void mock_capture_clear(char *dst, size_t dst_size) {
+  if (dst_size > 0u) {
+    dst[0] = '\0';
+  }
+}
+
+static void mock_capture_append(char *dst, size_t dst_size, const char *data,
+                                size_t len) {
+  if (dst_size == 0u || data == NULL || len == 0u) {
+    return;
+  }
+
+  size_t used = strlen(dst);
+  if (used >= dst_size - 1u) {
+    return;
+  }
+
+  size_t room = dst_size - 1u - used;
+  size_t copy_len = len < room ? len : room;
+  memcpy(dst + used, data, copy_len);
+  dst[used + copy_len] = '\0';
+}
+
+static void hal_serial_write_locked(const char *data, size_t len) {
+  if (data == NULL || len == 0u) {
+    return;
+  }
+
+  fwrite(data, 1u, len, stdout);
+  mock_capture_append(s_last_serial_line, sizeof(s_last_serial_line), data,
+                      len);
+}
+
+static void hal_serial_finish_line_locked(void) { fputc('\n', stdout); }
+
+typedef struct {
+  bool capture_deb;
+} mock_debug_write_ctx_t;
+
+static void hal_debug_stream_write(void *ctx, const char *data, size_t len) {
+  mock_debug_write_ctx_t *debug_ctx = (mock_debug_write_ctx_t *)ctx;
+  hal_serial_write_locked(data, len);
+  if (debug_ctx != NULL && debug_ctx->capture_deb) {
+    mock_capture_append(s_last_deb_line, sizeof(s_last_deb_line), data, len);
+  }
+}
+
 void hal_serial_print(const char *s) {
+  const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  printf("%s", s);
-  strncat(s_last_serial_line, s,
-          sizeof(s_last_serial_line) - strlen(s_last_serial_line) - 1);
+  hal_serial_write_locked(text, strlen(text));
   hal_mutex_unlock(s_tx_mutex);
 }
 
 void hal_serial_println(const char *s) {
+  const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  printf("%s\n", s);
-  strncpy(s_last_serial_line, s, sizeof(s_last_serial_line) - 1);
-  s_last_serial_line[sizeof(s_last_serial_line) - 1] = '\0';
+  mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
+  hal_serial_write_locked(text, strlen(text));
+  hal_serial_finish_line_locked();
   hal_mutex_unlock(s_tx_mutex);
 }
 
@@ -356,22 +392,22 @@ void hal_deb(const char *format, ...) {
 
   hal_debug_ensure_init();
   hal_mutex_lock(s_deb_mutex);
+
+  mock_debug_write_ctx_t write_ctx = {true};
+  mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
+  mock_capture_clear(s_last_deb_line, sizeof(s_last_deb_line));
+
   va_list args;
   va_start(args, format);
-  memset(s_deb_buf, 0, sizeof(s_deb_buf));
-  size_t used = 0;
-  if (strlen(s_prefix) > 0) {
-    int n = snprintf(s_deb_buf, sizeof(s_deb_buf), "%s ", s_prefix);
-    if (n > 0) {
-      used = (size_t)n;
-      if (used >= sizeof(s_deb_buf))
-        used = sizeof(s_deb_buf) - 1;
-    }
-  }
-  vsnprintf(s_deb_buf + used, sizeof(s_deb_buf) - used, format, args);
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  hal_debug_format_write_deb_prefix(hal_debug_stream_write, &write_ctx,
+                                    s_prefix);
+  hal_debug_vformat(hal_debug_stream_write, &write_ctx, format, args);
+  hal_serial_finish_line_locked();
+  hal_mutex_unlock(s_tx_mutex);
   va_end(args);
-  printf("%s\n", s_deb_buf);
-  snprintf(s_last_deb_line, sizeof(s_last_deb_line), "%s", s_deb_buf);
+
   hal_mutex_unlock(s_deb_mutex);
 }
 
@@ -392,33 +428,28 @@ void hal_derr(const char *format, ...) {
 
   hal_debug_ensure_init();
   hal_mutex_lock(s_derr_mutex);
+
+  char ts[32] = {};
+  const char *timestamp = NULL;
+  if (s_timestamp_hook != NULL &&
+      s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
+    timestamp = ts;
+  }
+
+  mock_debug_write_ctx_t write_ctx = {false};
+  mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
+
   va_list args;
   va_start(args, format);
-  memset(s_derr_buf, 0, sizeof(s_derr_buf));
-  const char *error = HAL_ERR_PREFIX;
-  size_t len = 0;
-  if (s_timestamp_hook != NULL) {
-    char ts[32] = {};
-    if (s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
-      int n = snprintf(s_derr_buf, sizeof(s_derr_buf), "[%s] %s", ts, error);
-      if (n > 0) {
-        len = (size_t)n;
-        if (len >= sizeof(s_derr_buf)) {
-          len = sizeof(s_derr_buf) - 1;
-        }
-      }
-    }
-  }
-  if (len == 0) {
-    // Bounded: error is caller-supplied and may exceed s_derr_buf.
-    // snprintf truncates safely; len = strlen(s_derr_buf) stays <= sizeof-1,
-    // so the vsnprintf size computation below cannot underflow.
-    snprintf(s_derr_buf, sizeof(s_derr_buf), "%s", error);
-    len = strlen(s_derr_buf);
-  }
-  vsnprintf(s_derr_buf + len, sizeof(s_derr_buf) - 1 - len, format, args);
+  hal_serial_ensure_tx_mutex();
+  hal_mutex_lock(s_tx_mutex);
+  hal_debug_format_write_error_prefix(hal_debug_stream_write, &write_ctx,
+                                      timestamp);
+  hal_debug_vformat(hal_debug_stream_write, &write_ctx, format, args);
+  hal_serial_finish_line_locked();
+  hal_mutex_unlock(s_tx_mutex);
   va_end(args);
-  hal_serial_println(s_derr_buf);
+
   hal_mutex_unlock(s_derr_mutex);
 }
 
@@ -451,13 +482,32 @@ void hal_derr_limited(const char *source, const char *format, ...) {
        (now - slot->last_full_ms) >= s_rate_limit_cfg.min_gap_ms);
 
   if (can_emit_full) {
-    char msg[HAL_DEBUG_BUF_SIZE] = {};
+    hal_mutex_lock(s_derr_mutex);
+
+    char ts[32] = {};
+    const char *timestamp = NULL;
+    if (s_timestamp_hook != NULL &&
+        s_timestamp_hook(ts, sizeof(ts), s_timestamp_user) && ts[0] != '\0') {
+      timestamp = ts;
+    }
+
+    mock_debug_write_ctx_t write_ctx = {false};
+    mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
+
     va_list args;
     va_start(args, format);
-    vsnprintf(msg, sizeof(msg), format, args);
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
+    hal_debug_format_write_error_prefix(hal_debug_stream_write, &write_ctx,
+                                        timestamp);
+    hal_debug_format_write_source_prefix(hal_debug_stream_write, &write_ctx,
+                                         slot->source);
+    hal_debug_vformat(hal_debug_stream_write, &write_ctx, format, args);
+    hal_serial_finish_line_locked();
+    hal_mutex_unlock(s_tx_mutex);
     va_end(args);
 
-    hal_derr("[%s] %s", slot->source[0] ? slot->source : "global", msg);
+    hal_mutex_unlock(s_derr_mutex);
     slot->full_printed++;
     slot->last_full_ms = now;
     hal_mutex_unlock(s_rl_mutex);
@@ -625,35 +675,31 @@ void hal_debug_loop(void) {
   hal_debug_ensure_init();
 
   hal_isr_rec_t rec;
-  char line[HAL_DEBUG_BUF_SIZE];
   while (isr_ring_pop(&rec)) {
-    if (rec.level == HAL_ISR_REC_DERR) {
-      snprintf(line, sizeof line, "%s[ISR ts=%lu] %s", HAL_ERR_PREFIX,
-               (unsigned long)rec.ts_us, rec.text);
-      hal_serial_println(line);
-    } else {
-      if (s_prefix[0] != '\0') {
-        snprintf(line, sizeof line, "%s [ISR ts=%lu] %s", s_prefix,
-                 (unsigned long)rec.ts_us, rec.text);
-      } else {
-        snprintf(line, sizeof line, "[ISR ts=%lu] %s", (unsigned long)rec.ts_us,
-                 rec.text);
-      }
-      /* Mirror hal_deb()'s behavior so the mock's last-deb-line
-       * capture reflects drained ISR records too. */
-      hal_mutex_lock(s_deb_mutex);
-      printf("%s\n", line);
-      snprintf(s_last_deb_line, sizeof s_last_deb_line, "%s", line);
-      snprintf(s_last_serial_line, sizeof s_last_serial_line, "%s", line);
-      hal_mutex_unlock(s_deb_mutex);
+    char ts[16];
+    snprintf(ts, sizeof ts, "%lu", (unsigned long)rec.ts_us);
+
+    mock_debug_write_ctx_t write_ctx = {rec.level != HAL_ISR_REC_DERR};
+    mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
+    if (write_ctx.capture_deb) {
+      mock_capture_clear(s_last_deb_line, sizeof(s_last_deb_line));
     }
+
+    hal_serial_ensure_tx_mutex();
+    hal_mutex_lock(s_tx_mutex);
+    hal_debug_format_write_isr_prefix(hal_debug_stream_write, &write_ctx,
+                                      rec.level == HAL_ISR_REC_DERR, s_prefix,
+                                      ts);
+    hal_debug_format_write_cstr(hal_debug_stream_write, &write_ctx, rec.text);
+    hal_serial_finish_line_locked();
+    hal_mutex_unlock(s_tx_mutex);
   }
 
   const uint32_t dropped = isr_ring_consume_dropped();
   if (dropped > 0u) {
     char drop_line[96];
     snprintf(drop_line, sizeof drop_line,
-             "%s[ISR] dropped %lu debug message(s)", HAL_ERR_PREFIX,
+             "%s[ISR] dropped %lu debug message(s)", HAL_DEBUG_ERROR_PREFIX,
              (unsigned long)dropped);
     hal_serial_println(drop_line);
   }

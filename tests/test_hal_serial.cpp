@@ -1,10 +1,13 @@
 #include "hal/hal_serial.h"
 #include "hal/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/impl/shared/hal_debug_format.h"
 #include "utils/unity.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static bool fixed_ts_hook(char *out, size_t out_size, void *user) {
   (void)user;
@@ -24,6 +27,102 @@ static bool tracking_ts_hook(char *out, size_t out_size, void *user) {
   }
   snprintf(out, out_size, "TS");
   return true;
+}
+
+typedef struct {
+  char *data;
+  size_t size;
+  size_t len;
+} capture_buffer_t;
+
+static void capture_write(void *ctx, const char *data, size_t len) {
+  capture_buffer_t *capture = (capture_buffer_t *)ctx;
+  if (!capture || !capture->data || capture->size == 0u || !data || len == 0u) {
+    return;
+  }
+
+  size_t room = capture->size - 1u - capture->len;
+  size_t copy_len = len < room ? len : room;
+  memcpy(capture->data + capture->len, data, copy_len);
+  capture->len += copy_len;
+  capture->data[capture->len] = '\0';
+}
+
+static void capture_format(capture_buffer_t *capture, const char *format, ...) {
+  va_list args;
+  va_start(args, format);
+  hal_debug_vformat(capture_write, capture, format, args);
+  va_end(args);
+}
+
+typedef struct {
+  FILE *tmp;
+  int saved_fd;
+} stdout_capture_t;
+
+static bool stdout_capture_begin(stdout_capture_t *capture) {
+  if (capture == NULL) {
+    return false;
+  }
+
+  capture->tmp = tmpfile();
+  capture->saved_fd = -1;
+  if (capture->tmp == NULL) {
+    return false;
+  }
+
+  fflush(stdout);
+  capture->saved_fd = dup(fileno(stdout));
+  if (capture->saved_fd < 0) {
+    fclose(capture->tmp);
+    capture->tmp = NULL;
+    return false;
+  }
+
+  if (dup2(fileno(capture->tmp), fileno(stdout)) < 0) {
+    dup2(capture->saved_fd, fileno(stdout));
+    close(capture->saved_fd);
+    fclose(capture->tmp);
+    capture->tmp = NULL;
+    capture->saved_fd = -1;
+    return false;
+  }
+
+  return true;
+}
+
+static size_t stdout_capture_end(stdout_capture_t *capture, char *out,
+                                 size_t out_size) {
+  if (out != NULL && out_size > 0u) {
+    out[0] = '\0';
+  }
+  if (capture == NULL || capture->tmp == NULL || capture->saved_fd < 0) {
+    return 0u;
+  }
+
+  fflush(stdout);
+  dup2(capture->saved_fd, fileno(stdout));
+  close(capture->saved_fd);
+  capture->saved_fd = -1;
+
+  size_t n = 0u;
+  if (out != NULL && out_size > 0u) {
+    rewind(capture->tmp);
+    n = fread(out, 1u, out_size - 1u, capture->tmp);
+    out[n] = '\0';
+  }
+
+  fclose(capture->tmp);
+  capture->tmp = NULL;
+  return n;
+}
+
+static void fill_payload(char *payload, size_t size, char ch) {
+  if (payload == NULL || size == 0u) {
+    return;
+  }
+  memset(payload, ch, size - 1u);
+  payload[size - 1u] = '\0';
 }
 
 void setUp(void) {
@@ -46,6 +145,23 @@ void tearDown(void) {
 void test_println_captured(void) {
   hal_serial_println("hello");
   TEST_ASSERT_EQUAL_STRING("hello", hal_mock_serial_last_line());
+}
+
+void test_print_appends_and_println_starts_new_captured_line(void) {
+  hal_serial_print("hel");
+  hal_serial_print("lo");
+  TEST_ASSERT_EQUAL_STRING("hello", hal_mock_serial_last_line());
+
+  hal_serial_println("fresh");
+  TEST_ASSERT_EQUAL_STRING("fresh", hal_mock_serial_last_line());
+}
+
+void test_serial_null_strings_are_treated_as_empty(void) {
+  hal_serial_print(NULL);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+
+  hal_serial_println(NULL);
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
 }
 
 void test_serial_set_flush_is_portable_noop_on_mock(void) {
@@ -107,6 +223,94 @@ void test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output(
   TEST_ASSERT_FALSE(hal_debug_is_muted());
   hal_deb("after unmute");
   TEST_ASSERT_EQUAL_STRING("after unmute", hal_mock_deb_last_line());
+}
+
+void test_debug_formatter_streams_beyond_hal_debug_buf_size(void) {
+  char payload[HAL_DEBUG_BUF_SIZE + 257u];
+  memset(payload, 'A', sizeof(payload) - 1u);
+  payload[sizeof(payload) - 1u] = '\0';
+
+  char out[sizeof(payload) + 32u];
+  capture_buffer_t capture = {out, sizeof(out), 0u};
+  out[0] = '\0';
+
+  capture_format(&capture, "prefix:%s:suffix", payload);
+
+  TEST_ASSERT_EQUAL_size_t(
+      strlen("prefix:") + strlen(payload) + strlen(":suffix"), capture.len);
+  TEST_ASSERT_NOT_NULL(strstr(out, "prefix:"));
+  TEST_ASSERT_NOT_NULL(strstr(out, ":suffix"));
+}
+
+void test_debug_formatter_handles_common_printf_conversions(void) {
+  char out[128];
+  capture_buffer_t capture = {out, sizeof(out), 0u};
+  out[0] = '\0';
+
+  capture_format(&capture, "n=%d hex=%04x str=%8.3s dyn=%*.*s ch=%c pct=%%",
+                 -42, 0x2a, "abcdef", 6, 2, "wxyz", 'Z');
+
+  TEST_ASSERT_EQUAL_STRING("n=-42 hex=002a str=     abc dyn=    wx ch=Z pct=%",
+                           out);
+}
+
+void test_hal_deb_streams_payload_beyond_mock_capture_buffer(void) {
+  char payload[HAL_DEBUG_BUF_SIZE + 257u];
+  fill_payload(payload, sizeof(payload), 'B');
+
+  char out[sizeof(payload) + 96u];
+  stdout_capture_t capture;
+  TEST_ASSERT_TRUE(stdout_capture_begin(&capture));
+  hal_deb("begin:%s:tail", payload);
+  size_t n = stdout_capture_end(&capture, out, sizeof(out));
+
+  TEST_ASSERT_TRUE(n > HAL_DEBUG_BUF_SIZE);
+  TEST_ASSERT_NOT_NULL(strstr(out, "begin:"));
+  TEST_ASSERT_NOT_NULL(strstr(out, ":tail\n"));
+  TEST_ASSERT_EQUAL_size_t(HAL_DEBUG_BUF_SIZE - 1u,
+                           strlen(hal_mock_deb_last_line()));
+  TEST_ASSERT_NULL(strstr(hal_mock_deb_last_line(), ":tail"));
+}
+
+void test_hal_derr_streams_payload_beyond_mock_capture_buffer(void) {
+  char payload[HAL_DEBUG_BUF_SIZE + 257u];
+  fill_payload(payload, sizeof(payload), 'E');
+
+  char out[sizeof(payload) + 160u];
+  stdout_capture_t capture;
+  hal_debug_set_timestamp_hook(fixed_ts_hook, NULL);
+  TEST_ASSERT_TRUE(stdout_capture_begin(&capture));
+  hal_derr("err:%s:tail", payload);
+  size_t n = stdout_capture_end(&capture, out, sizeof(out));
+
+  TEST_ASSERT_TRUE(n > HAL_DEBUG_BUF_SIZE);
+  TEST_ASSERT_NOT_NULL(strstr(out, "[T+1.234s]"));
+  TEST_ASSERT_NOT_NULL(strstr(out, "ERROR!"));
+  TEST_ASSERT_NOT_NULL(strstr(out, "err:"));
+  TEST_ASSERT_NOT_NULL(strstr(out, ":tail\n"));
+  TEST_ASSERT_EQUAL_size_t(HAL_DEBUG_BUF_SIZE - 1u,
+                           strlen(hal_mock_serial_last_line()));
+  TEST_ASSERT_NULL(strstr(hal_mock_serial_last_line(), ":tail"));
+}
+
+void test_hal_derr_limited_streams_full_log_beyond_mock_capture_buffer(void) {
+  char payload[HAL_DEBUG_BUF_SIZE + 257u];
+  fill_payload(payload, sizeof(payload), 'L');
+
+  char out[sizeof(payload) + 160u];
+  stdout_capture_t capture;
+  TEST_ASSERT_TRUE(stdout_capture_begin(&capture));
+  hal_derr_limited("serial-long", "limited:%s:tail", payload);
+  size_t n = stdout_capture_end(&capture, out, sizeof(out));
+
+  TEST_ASSERT_TRUE(n > HAL_DEBUG_BUF_SIZE);
+  TEST_ASSERT_NOT_NULL(strstr(out, "ERROR!"));
+  TEST_ASSERT_NOT_NULL(strstr(out, "[serial-long]"));
+  TEST_ASSERT_NOT_NULL(strstr(out, "limited:"));
+  TEST_ASSERT_NOT_NULL(strstr(out, ":tail\n"));
+  TEST_ASSERT_EQUAL_size_t(HAL_DEBUG_BUF_SIZE - 1u,
+                           strlen(hal_mock_serial_last_line()));
+  TEST_ASSERT_NULL(strstr(hal_mock_serial_last_line(), ":tail"));
 }
 
 // ── ISR-deferred debug ring tests ────────────────────────────────────────────
@@ -490,6 +694,8 @@ void test_mixed_isr_and_non_isr_calls_keep_ring_isolated(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_println_captured);
+  RUN_TEST(test_print_appends_and_println_starts_new_captured_line);
+  RUN_TEST(test_serial_null_strings_are_treated_as_empty);
   RUN_TEST(test_serial_set_flush_is_portable_noop_on_mock);
   RUN_TEST(test_println_overwrites_previous);
   RUN_TEST(test_reset_clears_last_line);
@@ -498,6 +704,11 @@ int main(void) {
   RUN_TEST(test_derr_with_timestamp_hook);
   RUN_TEST(
       test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output);
+  RUN_TEST(test_debug_formatter_streams_beyond_hal_debug_buf_size);
+  RUN_TEST(test_debug_formatter_handles_common_printf_conversions);
+  RUN_TEST(test_hal_deb_streams_payload_beyond_mock_capture_buffer);
+  RUN_TEST(test_hal_derr_streams_payload_beyond_mock_capture_buffer);
+  RUN_TEST(test_hal_derr_limited_streams_full_log_beyond_mock_capture_buffer);
 
   /* ISR-deferred debug ring */
   RUN_TEST(test_in_isr_mock_default_is_false);
