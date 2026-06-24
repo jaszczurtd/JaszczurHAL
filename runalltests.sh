@@ -177,6 +177,7 @@ MEMCHECK_REQUIRED_TESTS=(
     test_jh_gfx_geometry
     test_mcp2515_driver
     test_ff16_memdisk
+    test_hal_serial
     test_hal_ds18b20
     test_hal_display
     test_hal_rtc

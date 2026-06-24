@@ -139,7 +139,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_pwm_freq`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (debug output, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
+| 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi`, `hal_i2c` (master, one-shot helpers, bus-clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (ILI9341, ST77xx, SSD1306, GFX primitives, text, fonts) |
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_bh1750` (ambient light), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |

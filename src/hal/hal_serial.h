@@ -2,9 +2,9 @@
 
 /**
  * @file hal_serial.h
- * @brief Hardware abstraction for serial (UART) console I/O and debug logging.
+ * @brief Hardware abstraction for serial console I/O and debug logging.
  *
- * On Arduino targets the implementation uses Serial.print/println.
+ * Target backends route this API to the active debug console transport.
  * Mock builds use stdio printf/puts.
  */
 
@@ -16,7 +16,13 @@
 extern "C" {
 #endif
 
-/** @brief Internal buffer size for hal_deb() / hal_derr() formatted output. */
+/**
+ * @brief Legacy debug buffer size used by bounded mock capture/RX helpers.
+ *
+ * Task-level hal_deb() / hal_derr() output is streamed by target backends and
+ * is not capped by this value. ISR-deferred records remain bounded separately
+ * by @ref HAL_DEBUG_ISR_TEXT_MAX.
+ */
 #ifndef HAL_DEBUG_BUF_SIZE
 #define HAL_DEBUG_BUF_SIZE 1024
 #endif
@@ -110,13 +116,12 @@ void hal_serial_begin(uint32_t baud);
 /**
  * @brief Enable or disable flushing after serial writes.
  *
- * The RP2040 backend defaults to enabled and calls Serial.flush()
- * after hal_serial_print() / hal_serial_println() to keep USB CDC frames
- * strictly ordered. Disable it in applications where blocking on the USB host
- * is more harmful than possible CDC byte drops during heavy concurrent output.
+ * The RP2040 backend defaults to disabled. When enabled, it performs an
+ * additional USB CDC flush/task poll after hal_serial_print() /
+ * hal_serial_println() while still holding the backend TX mutex.
  *
- * Backends without a blocking flush still accept the setting for portable
- * code, but it has no transport effect there.
+ * Backends without a USB CDC flush still accept the setting for portable code,
+ * but it has no transport effect there.
  *
  * @param enabled true to flush after writes, false to skip flush.
  */

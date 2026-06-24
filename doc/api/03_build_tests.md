@@ -6,7 +6,8 @@
 
 | HAL module | External dependency |
 |---|---|
-| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system`, `hal_serial` | Arduino-pico core (`Arduino.h`) on RP2040; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Arduino-pico core (`Arduino.h`) on RP2040; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
+| `hal_serial` | RP2040: TinyUSB CDC / pico SDK headers provided by the arduino-pico toolchain, with a native HAL transport instead of Arduino `Serial.print()`. STM32G474: debug UART / stdio backend. Mock: stdio capture helpers. |
 | `hal_sync` | RP2040: pico SDK `pico/mutex.h` in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. STM32G474: atomic spinlock in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds |
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
@@ -210,7 +211,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
-| `test_hal_serial` | `println` capture, `deb` capture, `reset`, RX inject + `available`/`read` |
+| `test_hal_serial` | `println` capture, `deb`/`derr` capture, streamed debug formatter coverage beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred log ring behavior, mute semantics, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
