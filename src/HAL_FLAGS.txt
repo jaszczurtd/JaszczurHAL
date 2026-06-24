@@ -65,7 +65,7 @@ FreeRTOS integration flag
         FQBN option such as os=freertos). scripts/build_arduino_lib.sh
         --freertos and examples -DJH_RP2040_FREERTOS=ON configure this mode.
         The local third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
-        Arduino backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
+        RP2040 backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
         hal_mutex_* uses a FreeRTOS mutex and hal_delay_ms()/hal_idle() yield
         to the scheduler from task context. hal_critical_section_* remains a
         hard per-core interrupt mask for timing-sensitive code. arduino-pico

@@ -14,9 +14,9 @@ struct wireguard_handshake;
 #include "../../../../../hal_serial.h"
 #include "../../../../../hal_system.h"
 
-#include <lwip/netif.h>
-#include <lwip/ip4_addr.h>
 #include <lwip/inet.h>
+#include <lwip/ip4_addr.h>
+#include <lwip/netif.h>
 
 // ---- Logging (ESP-IDF style -> JaszczurHAL serial backend) ----
 #ifndef TAG
@@ -40,7 +40,6 @@ struct wireguard_handshake;
 #endif
 
 #define ESP_LOGV(tag, fmt, ...) hal_deb("[V] %s: " fmt, tag, ##__VA_ARGS__)
-
 
 // ---- Minimal FreeRTOS compatibility (used by original code) ----
 #ifndef pdMS_TO_TICKS
@@ -67,11 +66,11 @@ struct wireguard_handshake;
 #if __has_include("pico/cyw43_arch.h")
 #include "pico/cyw43_arch.h"
 static inline struct netif *tcpip_adapter_get_netif(int /*ifx*/) {
-    // cyw43_state.netif is the lwIP netif for STA mode.
-    return &cyw43_state.netif[CYW43_ITF_STA];
+  // cyw43_state.netif is the lwIP netif for STA mode.
+  return &cyw43_state.netif[CYW43_ITF_STA];
 }
 #else
 static inline struct netif *tcpip_adapter_get_netif(int /*ifx*/) {
-    return NULL;
+  return NULL;
 }
 #endif

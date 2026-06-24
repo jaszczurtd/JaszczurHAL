@@ -17,7 +17,7 @@ extern "C" {
  *
  * Thread-safety model:
  * - Every public operation is protected by an internal handle mutex.
- * - Arduino backend additionally serializes hardware-timing-critical
+ * - RP2040 backend additionally serializes hardware-timing-critical
  *   driver calls through a shared internal bus mutex.
  */
 
@@ -78,7 +78,8 @@ void hal_onewire_write(hal_onewire_t h, uint8_t value, bool power);
  * @param power Keep line powered after write when true.
  * @return Number of bytes written (0 on invalid args/handle).
  */
-size_t hal_onewire_write_bytes(hal_onewire_t h, const uint8_t *data, uint16_t len, bool power);
+size_t hal_onewire_write_bytes(hal_onewire_t h, const uint8_t *data,
+                               uint16_t len, bool power);
 
 /**
  * @brief Read one byte from the bus.
@@ -154,10 +155,8 @@ uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len);
  * @param crc          Optional starting CRC value (usually 0).
  * @return true when CRC matches.
  */
-bool hal_onewire_check_crc16(const uint8_t *data,
-                             uint16_t len,
-                             const uint8_t inverted_crc[2],
-                             uint16_t crc);
+bool hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
+                             const uint8_t inverted_crc[2], uint16_t crc);
 
 /**
  * @brief Compute Dallas/Maxim 16-bit CRC.

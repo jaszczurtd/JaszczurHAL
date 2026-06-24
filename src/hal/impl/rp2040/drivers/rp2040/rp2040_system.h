@@ -18,20 +18,22 @@
  * scratch marker -- cannot lose the information.
  */
 
-#include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** @brief Feed (kick) the RP2040 hardware watchdog. Wraps @c watchdog_update(). */
+/** @brief Feed (kick) the RP2040 hardware watchdog. Wraps @c watchdog_update().
+ */
 void rp2040_system_watchdog_feed(void);
 
 /** @brief Arm the RP2040 hardware watchdog with the given timeout.
  *  @param ms             Timeout in milliseconds.
- *  @param pause_on_debug If true, pause watchdog while a debugger is attached. */
+ *  @param pause_on_debug If true, pause watchdog while a debugger is attached.
+ */
 void rp2040_system_watchdog_enable(uint32_t ms, bool pause_on_debug);
 
 /** @brief Returns true iff the previous boot was a genuine watchdog
@@ -53,11 +55,12 @@ void rp2040_system_idle(void);
 /** @brief Free heap, in bytes. Wraps @c rp2040.getFreeHeap(). */
 uint32_t rp2040_system_get_free_heap(void);
 
-/** @brief On-die temperature, in °C (±2 °C typical). Wraps @c analogReadTemp(). */
+/** @brief On-die temperature, in °C (±2 °C typical). Wraps @c analogReadTemp().
+ */
 float rp2040_system_read_chip_temp(void);
 
-/** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not return.
- *  Wraps @c reset_usb_boot(0, 0). */
+/** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not
+ * return. Wraps @c reset_usb_boot(0, 0). */
 void rp2040_system_enter_bootloader(void) __attribute__((noreturn));
 
 /** @brief Fill @p uid (exactly 8 bytes) with the QSPI flash unique id.

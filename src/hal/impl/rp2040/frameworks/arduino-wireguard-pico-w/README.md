@@ -77,7 +77,7 @@ bool time_synchro(const char *tz, char *dest, int dest_size) {
     localtime_r(&now, &tm_now);
 
     strftime(dest, dest_size, "%Y-%m-%d %H:%M:%S", &tm_now);
-  }  
+  }
   return true;
 }
 
@@ -92,7 +92,7 @@ void setup() {
   //local time synchro
   char buftime[32];
   if(time_synchro("CET-1CEST,M3.5.0/2,M10.5.0/3", buftime, sizeof(buftime))) {
-    Serial.printf("time: %s\n", buftime);    
+    Serial.printf("time: %s\n", buftime);
   } else {
     Serial.printf("NTP sync failed. check WiFi/DNS/UDP 123.\n");
   }
@@ -148,12 +148,12 @@ void loop() {
 - This port is currently focused on **Pico(2) W + lwIP**. Other RP2040/2350 network stacks are not covered.
 - The netif mapping assumes a **single active WiFi STA interface** (typical for Pico W).
 - If you run multiple netifs or unusual routing, you may need to adjust the `tcpip_adapter_get_netif()` shim.
-- WireGuard does not “connect” like TCP; the handshake typically starts when the stack needs to send traffic. Test by sending UDP/TCP traffic through the tunnel to an allowed destination.
+- WireGuard does not "connect" like TCP; the handshake typically starts when the stack needs to send traffic. Test by sending UDP/TCP traffic through the tunnel to an allowed destination.
 
 ## Files of interest (port layer)
 
-- `src/wg_port_pico.h` – Pico W / lwIP compatibility glue (ESP-IDF replacements)
-- `src/wireguard-platform.c` – platform init and helpers used by the core WireGuard implementation
+- `src/wg_port_pico.h` - Pico W / lwIP compatibility glue (ESP-IDF replacements)
+- `src/wireguard-platform.c` - platform init and helpers used by the core WireGuard implementation
 
 ## License
 

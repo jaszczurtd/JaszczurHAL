@@ -24,7 +24,7 @@ static hal_mutex_t s_deb_mutex = NULL;
 static hal_mutex_t s_derr_mutex = NULL;
 static hal_mutex_t s_rl_mutex = NULL;
 /* Global lock around the underlying TX path - mirrors the Arduino
- * impl. See arduino/hal_serial.cpp for the full rationale. */
+ * impl. See rp2040/hal_serial.cpp for the full rationale. */
 static hal_mutex_t s_tx_mutex = NULL;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;

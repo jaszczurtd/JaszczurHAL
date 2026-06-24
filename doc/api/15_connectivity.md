@@ -57,9 +57,9 @@ bool    hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 ```
 
-**impl/arduino:** Arduino-pico WiFi stack (`WiFi.h`).
+**impl/rp2040:** Arduino-pico WiFi stack (`WiFi.h`).
 **impl/.mock:** state injection via mock helpers.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
 HAL wrapper calls. An internal singleton `hal_mutex_t` serializes access to
 the underlying `WiFi` object and is created with an atomic create-once fallback.
 The Arduino-pico WiFi/LWIP internals are still treated as serialized
@@ -140,9 +140,9 @@ bool hal_ota_is_started(void);
 - Callback handlers can be replaced or unregistered by passing `NULL`.
 - Re-entering `hal_ota_begin()` clears queued mock/driver events before processing.
 
-**impl/arduino:** Arduino-pico `ArduinoOTA` backend.
+**impl/rp2040:** Arduino-pico `ArduinoOTA` backend.
 **impl/.mock:** deterministic event-injection test double.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
 APIs. A singleton `hal_mutex_t` serializes all wrapper calls and callback
 dispatch is performed outside that lock.
 
@@ -199,10 +199,10 @@ bool     hal_udp_end_packet(void);
   datagram opened by `hal_udp_begin_packet*()`.
 - `hal_udp_stop()` clears cached remote endpoint and active packet-send context.
 
-**impl/arduino:** Arduino-pico `WiFiUDP` backend.
+**impl/rp2040:** Arduino-pico `WiFiUDP` backend.
 **impl/.mock:** deterministic stateful test double with injected inbound packet,
 captured outbound packet metadata and payload.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
 APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
 
 **Mock helpers:**
@@ -294,10 +294,10 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
-**impl/arduino:** bundled `arduino-wireguard-pico-w` driver.
+**impl/rp2040:** bundled `arduino-wireguard-pico-w` driver.
 **impl/.mock:** deterministic stateful test double with captured configuration,
 peer endpoint injection and handshake-trigger observability.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
 APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
 
 **Mock helpers:**
@@ -357,16 +357,16 @@ bool hal_mqtt_unsubscribe(const char *topic);
 
 **Behavior notes:**
 - Module is available only when `HAL_ENABLE_MQTT` is defined.
-- Current Arduino backend uses `WiFiClient` + bundled `PubSubClient`.
+- Current RP2040 backend uses `WiFiClient` + bundled `PubSubClient`.
 - `hal_mqtt_loop()` must be polled regularly to drive keepalive and receive
   inbound publishes.
 - Inbound messages are copied to an internal buffer and delivered from
   `hal_mqtt_loop()` after releasing the internal mutex.
 
-**impl/arduino:** bundled `PubSubClient` (`frameworks/PubSubClient`) over `WiFiClient`.
+**impl/rp2040:** bundled `PubSubClient` (`frameworks/PubSubClient`) over `WiFiClient`.
 **impl/.mock:** deterministic stateful test double with injectable connect result,
 loop result and inbound messages.
-**Thread safety:** Arduino backend is thread-safe and multicore-safe for public
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
 APIs. A singleton `hal_mutex_t` serializes all MQTT client calls.
 
 **Mock helpers:**
@@ -405,7 +405,7 @@ bool     hal_time_get_local(struct tm *out_tm);
 bool     hal_time_format_local(char *out, size_t out_size, const char *format);
 ```
 
-**impl/arduino:** `configTime()` / `time()` / `localtime_r()` (Arduino-pico / lwIP SNTP).
+**impl/rp2040:** `configTime()` / `time()` / `localtime_r()` (Arduino-pico / lwIP SNTP).
 **impl/.mock:** state injection via mock helpers.
 **Thread safety:** Not thread-safe. Serialize all calls from the caller side.
 

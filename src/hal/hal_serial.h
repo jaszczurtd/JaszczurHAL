@@ -110,7 +110,7 @@ void hal_serial_begin(uint32_t baud);
 /**
  * @brief Enable or disable flushing after serial writes.
  *
- * The Arduino/RP2040 backend defaults to enabled and calls Serial.flush()
+ * The RP2040 backend defaults to enabled and calls Serial.flush()
  * after hal_serial_print() / hal_serial_println() to keep USB CDC frames
  * strictly ordered. Disable it in applications where blocking on the USB host
  * is more harmful than possible CDC byte drops during heavy concurrent output.
@@ -142,7 +142,7 @@ int hal_serial_available(void);
 
 /**
  * @brief Read one byte from the serial port.
- * @return The first byte of incoming data (0–255), or -1 if nothing available.
+ * @return The first byte of incoming data (0-255), or -1 if nothing available.
  */
 int hal_serial_read(void);
 

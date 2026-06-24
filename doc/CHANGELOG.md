@@ -75,7 +75,7 @@ Next release.
 - Added `examples/34_irsmall_decoder`, module/API docs, origin license context
   in the shared driver folder and host regression coverage in
   `test_irsmall_decoder_driver`.
-- Removed the old `src/hal/impl/arduino/drivers/IRsmallDecoder` import after
+- Removed the old `src/hal/impl/rp2040/drivers/IRsmallDecoder` import after
   moving the driver behavior into the shared HAL implementation.
 
 ### hal_stmpe610 - shared STMPE610 resistive touch driver
@@ -91,7 +91,7 @@ Next release.
 - Added I2C, hardware-SPI and soft-SPI transport coverage in
   `test_stmpe610_driver`, plus `examples/33_stmpe610_touch`, module/API docs,
   and origin license context in the shared driver folder.
-- Removed the old `src/hal/impl/arduino/drivers/Adafruit_STMPE610` import after
+- Removed the old `src/hal/impl/rp2040/drivers/Adafruit_STMPE610` import after
   moving the driver behavior into the shared HAL implementation.
 
 ### examples - debug logging cleanup
@@ -116,7 +116,7 @@ Next release.
 - Public driver calls now serialize each display instance with a HAL mutex so
   multicore/FreeRTOS tasks cannot interleave command/data GPIO sequences.
 - Moved origin attribution/license context into the shared driver location and
-  removed the old `src/hal/impl/arduino/drivers/LiquidCrystal` vendor folder
+  removed the old `src/hal/impl/rp2040/drivers/LiquidCrystal` vendor folder
   after moving the driver behavior into the HAL implementation.
 
 ### hal_tsc2007 - shared TSC2007 resistive touch driver
@@ -133,7 +133,7 @@ Next release.
 - Added `examples/32_tsc2007_touch`, module/API docs, origin license context in
   the shared driver folder and host regression coverage in
   `test_tsc2007_driver`.
-- Removed the old `src/hal/impl/arduino/drivers/Adafruit_TSC2007` import after
+- Removed the old `src/hal/impl/rp2040/drivers/Adafruit_TSC2007` import after
   moving the driver behavior into the shared HAL implementation.
 
 ### hal_bh1750 - shared BH1750 ambient-light driver
@@ -148,7 +148,7 @@ Next release.
   I2C bus mutex.
 - Added `examples/30_bh1750_light`, API/flag/example documentation, and host
   regression coverage in `test_bh1750_driver` plus `test_hal_i2c`.
-- Removed the old `src/hal/impl/arduino/drivers/ArtronShop_BH1750` import after
+- Removed the old `src/hal/impl/rp2040/drivers/ArtronShop_BH1750` import after
   moving the driver behavior into the shared HAL implementation.
 
 ### hal_timer - STM32G474 TIM6 alarm backend
@@ -284,7 +284,7 @@ Next release.
   keeping the proven buffer layout, color-order mapping, latch timing and
   brightness scaling behavior from the upstream implementation.
 - Added RP2040 transport glue using PIO (`rp2040_pio.h`) and switched
-  `src/hal/impl/arduino/hal_rgb_led.cpp` to the shared core.
+  `src/hal/impl/rp2040/hal_rgb_led.cpp` to the shared core.
 - Added a new STM32G474 `hal_rgb_led` backend using the same shared core with
   cycle-timed GPIO bitstream output, so `HAL_ENABLE_RGB_LED` now works on both
   RP2040 and STM32G474.
@@ -299,16 +299,16 @@ Next release.
 - The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while replacing Arduino Wire access with JaszczurHAL I2C primitives.
 - RP2040 and STM32G474 `hal_rtc` wrappers now use the shared DS3231 driver, so both targets can select `HAL_ENABLE_DS3231` through the same code path.
 - Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and a dedicated `examples/27_rtc_ds3231` sample.
-- Removed the vendored Arduino DS3231 driver from `src/hal/impl/arduino/drivers/DS3231/`.
+- Removed the vendored Arduino DS3231 driver from `src/hal/impl/rp2040/drivers/DS3231/`.
 
 ### hal_rtc - shared portable PCF8563 driver
 
 - Ported the PCF8563 I2C real-time clock driver from the bundled Arduino implementation to a shared, Arduino-free HAL driver under `src/hal/impl/shared/pcf8563/`.
 - The shared `pcf8563.{h,cpp}` implementation uses only JaszczurHAL I2C primitives, removing all Arduino Wire library dependencies while preserving full functional parity with the original.
-- RP2040 (via Arduino-pico) continues to use the shared driver through the existing `impl/arduino/hal_rtc.cpp` wrapper.
+- RP2040 (via Arduino-pico) continues to use the shared driver through the existing `impl/rp2040/hal_rtc.cpp` wrapper.
 - **STM32G474 now has full RTC support for the first time** through a new `impl/stm32g474/hal_rtc.cpp` backend using the same shared PCF8563 driver, enabling `HAL_ENABLE_RTC` and `HAL_ENABLE_PCF8563` on the STM32 platform.
 - All RTC functionality is preserved: date/time read/write, clock integrity check, alarms (minute/hour/day/weekday-independent matching), countdown timer (1/60Hz to 4096Hz), and CLKOUT output (disabled, 1Hz, 32Hz, 1024Hz, 32768Hz).
-- Removed the vendored Arduino PCF8563 driver from `src/hal/impl/arduino/drivers/PCF8563/`.
+- Removed the vendored Arduino PCF8563 driver from `src/hal/impl/rp2040/drivers/PCF8563/`.
 - Added `examples/26_rtc_clock` demonstrating portable RTC usage on both RP2040 and STM32G474.
 - Updated `stm32_lib/STM32G474_porting_progress.md` to reflect RTC support now complete.
 - Full test suite and both target static-library builds pass with no warnings.
@@ -333,7 +333,7 @@ Next release.
   Arduino dependencies remain in the display stack.
 - SSD1306 is now supported on STM32G474 (previously stubbed out).
 - Removed the vendored Adafruit display libraries from
-  `src/hal/impl/arduino/drivers/`: `Adafruit_GFX_Library`, `Adafruit_ILI9341`,
+  `src/hal/impl/rp2040/drivers/`: `Adafruit_GFX_Library`, `Adafruit_ILI9341`,
   `Adafruit_ST7735_and_ST7789_Library`, `Adafruit_SSD1306`, and the now-unused
   `Adafruit_BusIO`.
 - `HAL_ENABLE_SSD1306` now propagates `HAL_ENABLE_I2C`.
@@ -390,7 +390,7 @@ Next release.
   with host test coverage in `test_hal_onewire`.
 - Enabled `examples/06_ds18b20` for STM32G474 as well as RP2040.
 - Removed obsolete Arduino `drivers/OneWire`, `drivers/DallasTemperature`,
-  `impl/arduino/hal_onewire.cpp` and `impl/arduino/hal_ds18b20.cpp`. Upstream
+  `impl/rp2040/hal_onewire.cpp` and `impl/rp2040/hal_ds18b20.cpp`. Upstream
   OneWire attribution and MIT notice now live in the shared driver source
   instead of README/docs dependency inventories.
 
@@ -900,7 +900,7 @@ Next release.
   - `hal_stack_guard_init()` / `hal_stack_guard_check()` - install and
     verify a stack-bottom canary at `__StackLimit`; on corruption the
     backend records a synthetic `STACK_OVERFLOW` fault and reboots.
-- All three backends (`impl/arduino`, `impl/.mock`, `impl/stm32g474`)
+- All three backends (`impl/rp2040`, `impl/.mock`, `impl/stm32g474`)
   implement the API surface. STM32G474 backend currently provides no-op
   stubs (returning `UNKNOWN` / `false`); a first-class STM32G474 fault
   driver is planned.
@@ -923,15 +923,15 @@ Next release.
 ### hal_system / drivers - RP2040 SoC driver extraction
 
 - All RP2040-specific fault-diagnostics logic moved out of
-  `src/hal/impl/arduino/hal_system.cpp` into a dedicated SoC driver at
-  `src/hal/impl/arduino/drivers/rp2040/rp2040_fault.{h,cpp}`. The HAL
+  `src/hal/impl/rp2040/hal_system.cpp` into a dedicated SoC driver at
+  `src/hal/impl/rp2040/drivers/rp2040/rp2040_fault.{h,cpp}`. The HAL
   layer now contains only thin wrappers calling `rp2040_fault_*`.
 - All remaining RP2040 / pico-sdk bindings (`watchdog_*`,
   `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`,
   `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR`
   read backing `hal_in_isr()`, and the UID hex formatter moved out of
-  `src/hal/impl/arduino/hal_system.cpp` into a new SoC driver at
-  `src/hal/impl/arduino/drivers/rp2040/rp2040_system.{h,cpp}`. The HAL
+  `src/hal/impl/rp2040/hal_system.cpp` into a new SoC driver at
+  `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. The HAL
   file is now a pure dispatch surface containing only Arduino-generic
   calls (`millis/micros/delay`) plus thin wrappers calling
   `rp2040_system_*` / `rp2040_fault_*`.

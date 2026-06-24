@@ -281,8 +281,8 @@ arduino-cli compile \
 
 `library.properties` currently does **not** declare `depends=`.
 Optional third-party integrations used by HAL modules are encapsulated under
-`src/hal/impl/arduino/frameworks/`; target-specific RP2040 helpers live under
-`src/hal/impl/arduino/drivers/rp2040/`. Portable device drivers live under
+`src/hal/impl/rp2040/frameworks/`; target-specific RP2040 helpers live under
+`src/hal/impl/rp2040/drivers/rp2040/`. Portable device drivers live under
 `src/hal/impl/shared/`.
 
 Actual compiled dependencies are controlled by the module set:

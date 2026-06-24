@@ -15,7 +15,7 @@ void        hal_mutex_unlock(hal_mutex_t mutex);
 void        hal_mutex_destroy(hal_mutex_t mutex);
 ```
 
-**impl/arduino:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
+**impl/rp2040:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
 **impl/stm32g474:** single-core atomic spinlock in non-FreeRTOS builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS` builds. Both are non-recursive.
 **impl/.mock:** `std::mutex`.
 **FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040 when
@@ -41,7 +41,7 @@ void hal_critical_section_enter(void);  // save and disable interrupts
 void hal_critical_section_exit(void);   // restore prior interrupt state
 ```
 
-**impl/arduino:** nesting-safe, per-core `save_and_disable_interrupts()` /
+**impl/rp2040:** nesting-safe, per-core `save_and_disable_interrupts()` /
 `restore_interrupts()` (pico SDK), including FreeRTOS builds.
 **impl/stm32g474:** nesting-safe PRIMASK full interrupt mask, including
 FreeRTOS builds.
@@ -231,7 +231,7 @@ lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
 the other way around, so deadlock is impossible.
 
-On the Arduino backend, the mutex window can additionally include a
+On the RP2040 backend, the mutex window can additionally include a
 `Serial.flush()` after every `Serial.print/println`. This is disabled
 by default and can be changed at runtime with
 `hal_serial_set_flush(bool enabled)`. RP2040 +
@@ -246,7 +246,7 @@ overlap produced single-byte drops mid-frame
 
 Some embedded applications prefer forward progress over strict debug-console
 delivery when the USB host is slow, disconnected, or wedged. Calling
-`hal_serial_set_flush(false)` skips the Arduino backend's blocking
+`hal_serial_set_flush(false)` skips the RP2040 backend's blocking
 `Serial.flush()` while preserving the TX mutex. STM32G474 and mock backends
 accept the same setter for portable code, but have no blocking USB CDC flush
 to skip.
@@ -271,7 +271,7 @@ void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwar
 `setDebugPrefixWithColon(...)` truncates the module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
-**impl/arduino:** Arduino `Serial`.
+**impl/rp2040:** Arduino `Serial`.
 **impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
 RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
 `hal_serial_available()` / `hal_serial_read()`.

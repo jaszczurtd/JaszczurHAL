@@ -32,7 +32,7 @@ void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing.
+**impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing.
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
 **Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
@@ -165,7 +165,7 @@ be verified on the target platform.
 **Reference:** NXP UM10204, "I2C-bus specification and user manual", defines
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function.
+**impl/rp2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function.
 **impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers via 16 MHz TIMINGR presets, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear before init.
 **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
@@ -297,7 +297,7 @@ trigger `HAL_ASSERT` in checked builds.
 2. Master reads N bytes - slave responds with `regs[ptr], regs[ptr+1], ...`
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
+**impl/rp2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
 **impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
@@ -357,7 +357,7 @@ void hal_swserial_flush(hal_swserial_t h);       // block until TX complete
 void hal_swserial_destroy(hal_swserial_t h);
 ```
 
-**impl/arduino:** `SoftwareSerial` (Arduino-pico).
+**impl/rp2040:** `SoftwareSerial` (Arduino-pico).
 **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
 **Thread safety:** Not thread-safe. All calls must be made from the same core that created the handle.
 
@@ -394,7 +394,7 @@ void hal_uart_flush(hal_uart_t h);       // block until TX complete
 void hal_uart_destroy(hal_uart_t h);
 ```
 
-**impl/arduino:** RP2040 Arduino-pico `Serial1` / `Serial2`.
+**impl/rp2040:** RP2040 Arduino-pico `Serial1` / `Serial2`.
 **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
 **Thread safety:** Not thread-safe. All calls must be serialized by the caller.
 
@@ -453,7 +453,7 @@ bool     hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
 uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc);
 ```
 
-**impl/arduino + impl/stm32g474:** Both delegate to the same shared driver. The
+**impl/rp2040 + impl/stm32g474:** Both delegate to the same shared driver. The
 driver uses HAL GPIO input/output switching, `hal_delay_us()` slot timing and
 HAL critical sections around timing-sensitive sub-slots. An external 1-Wire
 pull-up is still expected, matching the original OneWire electrical model.

@@ -5,7 +5,7 @@ Simple backlog of future architecture and implementation work.
 - Move Arduino-backed drivers into shared HAL implementations.
   - Treat this as the highest-priority architecture cleanup.
   - Move reusable protocol logic to `src/hal/impl/shared/`.
-  - Keep only target-specific glue in `src/hal/impl/arduino/` and
+  - Keep only target-specific glue in `src/hal/impl/rp2040/` and
     `src/hal/impl/stm32g474/`.
   - Avoid new Arduino-library dependencies in portable drivers.
   - Use HAL primitives for I/O, time, logging, memory policy and
