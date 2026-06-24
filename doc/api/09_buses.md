@@ -32,11 +32,10 @@ void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
 
-**impl/arduino / RP2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing; the HAL keeps the SPIClass-compatible transaction surface while driving the hardware directly.
+**impl/arduino / RP2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing.
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
-**Arduino compatibility:** non-Arduino builds expose a local `<SPI.h>` with `SPISettings`, `SPIClass`, `SPI`, and `SPI1`; methods delegate to `hal_spi_*`.
-**Thread safety:** `hal_spi_begin_transaction()` follows SPIClass-compatible semantics and does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
+**Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
 
 ---
 

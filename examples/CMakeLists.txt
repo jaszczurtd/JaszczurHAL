@@ -267,7 +267,6 @@ function(_jh_add_stm32g474_example NAME)
         "${_example_dir}"
         "${SRC}"
         "${SRC}/hal"
-        "${SRC}/arduino_host_stubs"
         "${G474}"
         "${G474}/drivers/littlefs"
     )
@@ -347,7 +346,9 @@ function(jh_example NAME)
 
     _jh_list_contains(_supports_target "${JH_EXAMPLE_TARGET}" ${ARG_TARGETS})
     if(NOT _supports_target)
-        message(STATUS "[${JH_EXAMPLE_TARGET}] skip ${NAME}: not supported by current backend")
+        string(REPLACE ";" ", " _declared_targets "${ARG_TARGETS}")
+        message(STATUS
+            "[${JH_EXAMPLE_TARGET}] skip ${NAME}: example declares target(s): ${_declared_targets}")
         return()
     endif()
 
@@ -374,12 +375,12 @@ jh_example(04_crypto TARGETS rp2040 stm32g474)
 jh_example(05_modem_A7670E TARGETS rp2040)
 jh_example(06_ds18b20 TARGETS rp2040 stm32g474)
 jh_example(07_gps TARGETS rp2040)
-jh_example(08_thermocouple TARGETS rp2040)
+jh_example(08_thermocouple TARGETS rp2040 stm32g474)
 jh_example(09_display_tft TARGETS rp2040 stm32g474)
 jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 jh_example(11_wireguard TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 jh_example(12_kv_store TARGETS rp2040 stm32g474)
-jh_example(13_i2c_slave TARGETS rp2040)
+jh_example(13_i2c_slave TARGETS rp2040 stm32g474)
 jh_example(14_uart TARGETS rp2040 stm32g474)
 jh_example(15_wifi TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 jh_example(16_littlefs TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_LITTLEFS)
@@ -404,6 +405,7 @@ jh_example(35_cJSON TARGETS rp2040 stm32g474)
 jh_example(36_lodePNG TARGETS rp2040 stm32g474)
 jh_example(37_lodePNG_ili9341_base64 TARGETS rp2040 stm32g474)
 jh_example(38_stm32g474_fdcan_native TARGETS stm32g474)
+jh_example(39_sdlogger TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_SDLOGGER)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

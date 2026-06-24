@@ -77,6 +77,8 @@ static void notify_progress(void) {
 
 /* ── AT24C256 helpers ───────────────────────────────────────────────────── */
 
+#ifdef HAL_ENABLE_I2C
+
 static bool at24_wait_ready(void) {
   uint32_t waited_us = 0u;
   while (hal_i2c_is_busy(s_i2c_addr)) {
@@ -145,6 +147,25 @@ static bool at24_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
   }
   return true;
 }
+
+#else
+
+static bool at24_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len) {
+  (void)addr;
+  (void)data;
+  (void)len;
+  return false;
+}
+
+static bool at24_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
+  (void)addr;
+  if (out != NULL && len > 0u) {
+    memset(out, 0, len);
+  }
+  return false;
+}
+
+#endif /* HAL_ENABLE_I2C */
 
 static bool flash_commit_mirror(void) {
   if (s_flash_reserved_size == 0u ||

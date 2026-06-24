@@ -74,7 +74,6 @@ add_library(hal_mock STATIC
 
 target_include_directories(hal_mock PUBLIC
     ${SRC}
-    ${SRC}/arduino_host_stubs
 )
 
 target_compile_definitions(hal_mock PUBLIC
@@ -94,6 +93,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_EEPROM
     HAL_ENABLE_KV
     HAL_ENABLE_LITTLEFS
+    HAL_ENABLE_FAT
     HAL_ENABLE_SDLOGGER
     HAL_ENABLE_UART
     HAL_ENABLE_SWSERIAL
@@ -198,7 +198,6 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
     )
     target_include_directories(hal_freertos_posix PUBLIC
         ${SRC}
-        ${SRC}/arduino_host_stubs
     )
     target_compile_definitions(hal_freertos_posix PUBLIC
         HAL_TARGET_STM32G474=1

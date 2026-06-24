@@ -224,12 +224,12 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 05 | modem_A7670E | rp2040 | AT modem, SIMCom |
 | 06 | ds18b20 | rp2040, stm32g474 | OneWire, DS18B20 |
 | 07 | gps | rp2040 | GPS (SoftwareSerial) |
-| 08 | thermocouple | rp2040 | MAX6675/MCP9600 |
+| 08 | thermocouple | rp2040, stm32g474 | MAX6675/MCP9600 |
 | 09 | display_tft | rp2040, stm32g474 | ILI9341/ST7789, draw7Segment |
 | 10 | mqtt | rp2040 (WiFi) | WiFi, MQTT |
 | 11 | wireguard | rp2040 (WiFi) | WiFi, WireGuard |
 | 12 | kv_store | rp2040, stm32g474 | Key-value storage |
-| 13 | i2c_slave | rp2040 | I2C slave |
+| 13 | i2c_slave | rp2040, stm32g474 | I2C slave |
 | 14 | uart | rp2040, stm32g474 | UART |
 | 15 | wifi | rp2040 (WiFi) | WiFi scan/connect |
 | 16 | littlefs | rp2040, stm32g474 | LittleFS |
@@ -255,3 +255,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 36 | lodePNG | rp2040, stm32g474 | Bundled LodePNG memory PNG encode/decode, Base64 helpers, RGB565 conversion |
 | 37 | lodePNG_ili9341_base64 | rp2040, stm32g474 | Base64 PNG asset, dimension validation, RGB565 draw on ILI9341 |
 | 38 | stm32g474_fdcan_native | stm32g474 | Native FDCAN1 CAN FD TX/RX |
+| 39 | sdlogger | rp2040, stm32g474 | SPI SD card, shared FatFs, EEPROM-backed log/crash counters |

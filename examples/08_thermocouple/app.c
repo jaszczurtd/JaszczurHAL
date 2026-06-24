@@ -1,8 +1,24 @@
 #include <hal/hal_app.h>
 #include <hal/hal_i2c.h>
 #include <hal/hal_system.h>
+#include <hal/hal_target.h>
 #include <hal/hal_thermocouple.h>
 #include <tools_c.h>
+
+#if HAL_TARGET_IS_STM32G474
+#define EXAMPLE_PIN(port, pin) ((uint8_t)(((port) * 16u) + (pin)))
+#define MCP9600_SDA_PIN EXAMPLE_PIN(1u, 9u)  /* PB9  = I2C1_SDA */
+#define MCP9600_SCL_PIN EXAMPLE_PIN(1u, 8u)  /* PB8  = I2C1_SCL */
+#define MAX6675_SCLK_PIN EXAMPLE_PIN(0u, 5u) /* PA5 */
+#define MAX6675_CS_PIN EXAMPLE_PIN(0u, 4u)   /* PA4 */
+#define MAX6675_MISO_PIN EXAMPLE_PIN(0u, 6u) /* PA6 */
+#else
+#define MCP9600_SDA_PIN 4u
+#define MCP9600_SCL_PIN 5u
+#define MAX6675_SCLK_PIN 18u
+#define MAX6675_CS_PIN 17u
+#define MAX6675_MISO_PIN 16u
+#endif
 
 #if defined(HAL_ENABLE_MCP9600)
 static hal_thermocouple_t mcp9600 = NULL;
@@ -20,8 +36,8 @@ void app_start(void) {
 #if defined(HAL_ENABLE_MCP9600)
   hal_thermocouple_config_t mcp_cfg = {};
   mcp_cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
-  mcp_cfg.bus.i2c.sda_pin = 4;
-  mcp_cfg.bus.i2c.scl_pin = 5;
+  mcp_cfg.bus.i2c.sda_pin = MCP9600_SDA_PIN;
+  mcp_cfg.bus.i2c.scl_pin = MCP9600_SCL_PIN;
   mcp_cfg.bus.i2c.clock_hz = HAL_I2C_CLOCK_STANDARD_HZ;
   mcp_cfg.bus.i2c.i2c_bus = 0;
   mcp_cfg.bus.i2c.i2c_addr = 0x67;
@@ -38,9 +54,9 @@ void app_start(void) {
 #if defined(HAL_ENABLE_MAX6675)
   hal_thermocouple_config_t max_cfg = {};
   max_cfg.chip = HAL_THERMOCOUPLE_CHIP_MAX6675;
-  max_cfg.bus.spi.sclk_pin = 18;
-  max_cfg.bus.spi.cs_pin = 17;
-  max_cfg.bus.spi.miso_pin = 16;
+  max_cfg.bus.spi.sclk_pin = MAX6675_SCLK_PIN;
+  max_cfg.bus.spi.cs_pin = MAX6675_CS_PIN;
+  max_cfg.bus.spi.miso_pin = MAX6675_MISO_PIN;
 
   max6675 = hal_thermocouple_init(&max_cfg);
   if (!max6675) {

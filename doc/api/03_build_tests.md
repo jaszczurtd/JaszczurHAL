@@ -36,7 +36,7 @@
 | `hal_ota` | Arduino-pico `ArduinoOTA` |
 | `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
-| `hal_sdlogger` | Arduino-pico `SD.h` / `SPI.h` in `impl/arduino/frameworks/sdlogger` |
+| `hal_sdlogger` | shared FatFs file layer in `impl/shared/filesystem/` |
 | `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 

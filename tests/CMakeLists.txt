@@ -29,7 +29,6 @@ function(add_stm32_host_test NAME)
     )
     target_include_directories(${NAME} PRIVATE
         ${SRC_DIR}
-        ${SRC_DIR}/arduino_host_stubs
     )
     target_compile_definitions(${NAME} PRIVATE
         HAL_TARGET_STM32G474=1
@@ -51,7 +50,6 @@ function(add_stm32_i2c_slave_host_test NAME)
     )
     target_include_directories(${NAME} PRIVATE
         ${SRC_DIR}
-        ${SRC_DIR}/arduino_host_stubs
     )
     target_compile_definitions(${NAME} PRIVATE
         HAL_TARGET_STM32G474=1
@@ -177,6 +175,22 @@ target_include_directories(test_wireguard_crypto_shared PRIVATE
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
+add_executable(test_ff16_memdisk
+    test_ff16_memdisk.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/filesystem/ff16/ff.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_ff16_memdisk PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_ff16_memdisk PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_FAT
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_ff16_memdisk PRIVATE -Wall -Wextra)
+add_test(NAME test_ff16_memdisk COMMAND test_ff16_memdisk)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)
@@ -212,6 +226,21 @@ add_hal_test(test_hal_display)
 add_hal_test(test_hal_wifi)
 add_hal_test(test_hal_littlefs)
 add_hal_test(test_hal_sdlogger)
+add_executable(test_hal_config_storage_flags
+    test_hal_config_storage_flags.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_hal_config_storage_flags PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_hal_config_storage_flags PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SDLOGGER
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_hal_config_storage_flags PRIVATE -Wall -Wextra)
+add_test(NAME test_hal_config_storage_flags COMMAND test_hal_config_storage_flags)
 add_hal_test(test_hal_udp)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)

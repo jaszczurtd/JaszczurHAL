@@ -95,7 +95,6 @@ doc/
   JaszczurHAL_API.md        # detailed API/reference
   lib_compilation.md        # static-library build guide
   CHANGELOG.md              # project changelog
-  Thread-SafetyAudit.md     # thread-safety audit for FreeRTOS work
   STM32G474_porting_progress.md # STM32G474 backend status
   future_ideas.md           # architecture roadmap and backlog
 examples/                   # buildable example apps for RP2040 and STM32G474
@@ -104,16 +103,15 @@ src/
   HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
   libConfig.h               # backward-compat include
   tools.h, tools_c.h        # utility aggregators (C++ / C)
-  arduino_host_stubs/       # host-build Arduino compatibility headers
   datasheets/               # local reference PDFs and notes
   hal/                      # HAL public headers + common wrappers
     impl/
       .mock/                # deterministic host/test backend
       arduino/              # Arduino/RP2040 backend
         drivers/rp2040/     # RP2040 SoC services (fault/system)
-        frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard, SD logger)
+        frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        ads1x15/ digipot/ display/ ds18b20/ ds3231/ gps/
+        ads1x15/ digipot/ display/ ds18b20/ ds3231/ filesystem/ gps/
         max6675/ mcp2515/ mcp251xfd/ mcp9600/ neopixel/ onewire/
         pcf8563/ pga2311/ wireguard/ (and many more)
       stm32g474/            # STM32G474 backend
@@ -368,7 +366,6 @@ Primary docs:
 - Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: `src/HAL_FLAGS.txt`
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
-- FreeRTOS thread-safety audit: [Thread-SafetyAudit.md](doc/Thread-SafetyAudit.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
 - Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
 - VS Code setup (Windows & Linux): [vscode-templates/README.md](vscode-templates/README.md)

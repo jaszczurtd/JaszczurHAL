@@ -518,10 +518,11 @@ Next release.
   scan results are exposed by `hal_wifi_scan_networks()` /
   `hal_wifi_get_scan_result()` with mock coverage.
 - Legacy SD/crash logger helpers were moved out of `tools` into the new
-  opt-in `hal_sdlogger` module (`HAL_ENABLE_SDLOGGER`). The Arduino `SD.h` /
-  `SPI.h` implementation now lives under
-  `impl/arduino/frameworks/sdlogger`, with a deterministic mock backend and
-  `test_hal_sdlogger` coverage.
+  opt-in `hal_sdlogger` module (`HAL_ENABLE_SDLOGGER`). The shared FatFs
+  implementation now lives under `impl/shared/filesystem/`, with a
+  deterministic mock backend and `test_hal_sdlogger` coverage.
+- Added `examples/39_sdlogger` for RP2040 and STM32G474, demonstrating SPI SD
+  card setup, EEPROM-backed log/crash counters and FatFs 8.3 log filenames.
 - `tools` declarations no longer expose Arduino-only public types such as
   `String`, `File`, or `SPISettings`; the remaining utilities use portable C
   types and HAL APIs.

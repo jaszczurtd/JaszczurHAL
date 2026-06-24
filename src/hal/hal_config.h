@@ -213,8 +213,10 @@
        HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / target flash).
        HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
        HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
+       HAL_ENABLE_FAT           - FatFs core + shared SD-over-SPI disk I/O
+                                  and file helpers.
        HAL_ENABLE_SDLOGGER      - SD-card logger/crash logger
-                                  (propagates: EEPROM, I2C, SPI).
+                                  (propagates: FAT, EEPROM, SPI).
 
      Buses:
        HAL_ENABLE_UART          - Hardware UART (SerialUART).
@@ -330,14 +332,20 @@
 #endif
 
 #ifdef HAL_ENABLE_SDLOGGER
+#ifndef HAL_ENABLE_FAT
+#define HAL_ENABLE_FAT
+#endif
 #ifndef HAL_ENABLE_EEPROM
 #define HAL_ENABLE_EEPROM
 #endif
-#ifndef HAL_ENABLE_I2C
-#define HAL_ENABLE_I2C
-#endif
 #ifndef HAL_ENABLE_SPI
 #define HAL_ENABLE_SPI
+#endif
+#endif
+
+#if defined(HAL_ENABLE_EEPROM) && (HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256)
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
 #endif
 #endif
 
@@ -662,6 +670,9 @@
 #endif
 #ifdef HAL_ENABLE_LITTLEFS
 #pragma message("HAL_CONFIG: HAL_ENABLE_LITTLEFS")
+#endif
+#ifdef HAL_ENABLE_FAT
+#pragma message("HAL_CONFIG: HAL_ENABLE_FAT")
 #endif
 #ifdef HAL_ENABLE_SDLOGGER
 #pragma message("HAL_CONFIG: HAL_ENABLE_SDLOGGER")
