@@ -14,16 +14,16 @@
 #include "libConfig.h"
 #include <hal/hal.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
-#include <ctype.h>
 
 #ifdef HAL_ENABLE_UNITY
 #include "unity.h"
 #endif
-#include "SmartTimers.h"
+#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
 
-#include "tools_common_defs.h"
 #include "tools_api.h"
+#include "tools_common_defs.h"
 
 #endif

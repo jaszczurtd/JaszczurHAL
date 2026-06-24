@@ -259,6 +259,11 @@ Crypto / bundled libs
     HAL_LODEPNG_ENABLE_DISK or HAL_LODEPNG_ENABLE_CPP to opt them back in.
   HAL_ENABLE_PNG_AS_BASE64
     Base64-encoded PNG helpers in tools. Propagates: CRYPTO, PNG.
+  HAL_ENABLE_JPEG
+    Bundled JPEGDecoder/picojpeg memory-based baseline JPEG decoder.
+    JaszczurHAL keeps SD/LittleFS backends disabled in this utility profile.
+  HAL_ENABLE_JPEG_AS_BASE64
+    Base64-encoded JPEG helpers in tools. Propagates: CRYPTO, JPEG.
 
 Test framework
   HAL_ENABLE_UNITY
@@ -317,6 +322,7 @@ HAL_ENABLE_ST7735      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7796S     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_PNG
+HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_JPEG
 
 
 Consistency checks (compile-time #error)

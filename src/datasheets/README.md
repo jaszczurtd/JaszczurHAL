@@ -15,8 +15,8 @@ bugs that the existing test suite did **not** catch:
 
 - **PGA2311** sent the SPI volume word as `{left, right}`; the chip latches the
   **right** channel byte first (`{right, left}`) - channels were swapped.
-- **PCF8563** treated the century bit as `C=1 → 20xx`; the NXP datasheet
-  (Table 13) defines `C=0 → 20xx, C=1 → 19xx` - inverted in both read and write.
+- **PCF8563** treated the century bit as `C=1 -> 20xx`; the NXP datasheet
+  (Table 13) defines `C=0 -> 20xx, C=1 -> 19xx` - inverted in both read and write.
 
 Both passed CI because the tests were **self-consistent round-trips**: they set
 a value through the driver and read it back through the same driver. A driver
@@ -41,7 +41,7 @@ datasheet-derived facts, not against the driver's own output:
 2. **Read path** - inject **known raw register bytes** (`hal_mock_i2c_inject_rx`)
    and assert the decoded value. The injected bytes are a worked datasheet
    example.
-3. **Round-trip** (set → get through the same driver) is allowed only as an
+3. **Round-trip** (set -> get through the same driver) is allowed only as an
    *additional* check, **never** as the only test for a register encoding.
 
 Pattern: small golden-vector tables with a datasheet citation, e.g.
@@ -74,9 +74,9 @@ the same way `test_mcp9600_driver` / `test_pcf8563_driver` do.
 | DS18B20 | (~) scratchpad sign-extend known-answer vectors | Tier 3 |
 | digipot | (ok) already wire-level | `test_hal_digipot` (reference pattern) |
 
-Process guard worth adding: a CI check that every `src/hal/impl/shared/*/`
-driver directory has a corresponding `tests/` file, so a driver with zero host
-coverage can't slip in unnoticed.
+Process guard worth adding: a CI check that every datasheet-backed driver
+directory under `src/hal/impl/shared/drivers/` has a corresponding `tests/`
+file, so a driver with zero host coverage can't slip in unnoticed.
 
 ## Naming
 

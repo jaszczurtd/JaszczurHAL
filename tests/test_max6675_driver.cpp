@@ -1,30 +1,30 @@
-#include "utils/unity.h"
-#include "hal/impl/shared/max6675/max6675_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/impl/shared/drivers/max6675/max6675_driver.h"
+#include "utils/unity.h"
 
 #include <math.h>
 #include <stdint.h>
 
 #define MAX_SCLK 2u
-#define MAX_CS   3u
+#define MAX_CS 3u
 #define MAX_MISO 4u
 
 static hal_max6675_t dev;
 
 static hal_max6675_config_t cfg(void) {
-    hal_max6675_config_t c = {};
-    c.sclk_pin = MAX_SCLK;
-    c.cs_pin = MAX_CS;
-    c.miso_pin = MAX_MISO;
-    return c;
+  hal_max6675_config_t c = {};
+  c.sclk_pin = MAX_SCLK;
+  c.cs_pin = MAX_CS;
+  c.miso_pin = MAX_MISO;
+  return c;
 }
 
 static void push_raw(uint16_t raw) {
-    bool bits[16] = {};
-    for (int bit = 15; bit >= 0; --bit) {
-        bits[15 - bit] = ((raw >> bit) & 0x1u) != 0u;
-    }
-    hal_mock_gpio_push_read_sequence(MAX_MISO, bits, 16u);
+  bool bits[16] = {};
+  for (int bit = 15; bit >= 0; --bit) {
+    bits[15 - bit] = ((raw >> bit) & 0x1u) != 0u;
+  }
+  hal_mock_gpio_push_read_sequence(MAX_MISO, bits, 16u);
 }
 
 /* MAX6675 datasheet, serial read format (Figure 1/2):
@@ -36,109 +36,109 @@ static void push_raw(uint16_t raw) {
  */
 
 void setUp(void) {
-    dev = {};
-    hal_mock_gpio_clear_read_sequence(MAX_MISO);
+  dev = {};
+  hal_mock_gpio_clear_read_sequence(MAX_MISO);
 }
 
-void tearDown(void) {
-    hal_mock_gpio_clear_read_sequence(MAX_MISO);
-}
+void tearDown(void) { hal_mock_gpio_clear_read_sequence(MAX_MISO); }
 
 void test_init_configures_gpio_and_idle_levels(void) {
-    hal_max6675_config_t c = cfg();
+  hal_max6675_config_t c = cfg();
 
-    TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
-    TEST_ASSERT_EQUAL_INT(HAL_GPIO_OUTPUT, hal_mock_gpio_get_mode(MAX_CS));
-    TEST_ASSERT_EQUAL_INT(HAL_GPIO_OUTPUT, hal_mock_gpio_get_mode(MAX_SCLK));
-    TEST_ASSERT_EQUAL_INT(HAL_GPIO_INPUT, hal_mock_gpio_get_mode(MAX_MISO));
-    TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_CS));
-    hal_max6675_deinit(&dev);
+  TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
+  TEST_ASSERT_EQUAL_INT(HAL_GPIO_OUTPUT, hal_mock_gpio_get_mode(MAX_CS));
+  TEST_ASSERT_EQUAL_INT(HAL_GPIO_OUTPUT, hal_mock_gpio_get_mode(MAX_SCLK));
+  TEST_ASSERT_EQUAL_INT(HAL_GPIO_INPUT, hal_mock_gpio_get_mode(MAX_MISO));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_CS));
+  hal_max6675_deinit(&dev);
 }
 
 void test_raw_to_celsius_decodes_quarter_degree_steps(void) {
-    const uint16_t raw = (uint16_t)(100u << 3); /* 100 * 0.25 C = 25.0 C */
+  const uint16_t raw = (uint16_t)(100u << 3); /* 100 * 0.25 C = 25.0 C */
 
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(raw));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(raw));
 }
 
 void test_raw_to_celsius_datasheet_vectors(void) {
-    struct {
-        uint16_t raw;
-        float celsius;
-    } const vectors[] = {
-        {0x0000u, 0.0f},       /* all-zero temperature field */
-        {0x0320u, 25.0f},      /* 0x064 (100) * 0.25 C */
-        {0x7FF8u, 1023.75f},   /* D14..D3 all ones: max code */
-    };
+  struct {
+    uint16_t raw;
+    float celsius;
+  } const vectors[] = {
+      {0x0000u, 0.0f},     /* all-zero temperature field */
+      {0x0320u, 25.0f},    /* 0x064 (100) * 0.25 C */
+      {0x7FF8u, 1023.75f}, /* D14..D3 all ones: max code */
+  };
 
-    for (size_t i = 0; i < (sizeof(vectors) / sizeof(vectors[0])); ++i) {
-        TEST_ASSERT_FLOAT_WITHIN(0.001f, vectors[i].celsius,
-                                 hal_max6675_raw_to_celsius(vectors[i].raw));
-    }
+  for (size_t i = 0; i < (sizeof(vectors) / sizeof(vectors[0])); ++i) {
+    TEST_ASSERT_FLOAT_WITHIN(0.001f, vectors[i].celsius,
+                             hal_max6675_raw_to_celsius(vectors[i].raw));
+  }
 }
 
 void test_raw_to_celsius_ignores_d1_and_d0_bits(void) {
-    const uint16_t base = 0x0320u; /* 25.0 C */
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(base));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0002u)));
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0001u)));
+  const uint16_t base = 0x0320u; /* 25.0 C */
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_raw_to_celsius(base));
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0002u)));
+  TEST_ASSERT_FLOAT_WITHIN(
+      0.001f, 25.0f, hal_max6675_raw_to_celsius((uint16_t)(base | 0x0001u)));
 }
 
 void test_raw_to_celsius_returns_nan_on_open_circuit(void) {
-    TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(0x0004u));
-    TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(0x0004u)));
+  TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(0x0004u));
+  TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(0x0004u)));
 }
 
 void test_raw_to_celsius_returns_nan_when_fault_bit_set_with_temperature(void) {
-    const uint16_t raw = (uint16_t)(0x0320u | 0x0004u);
-    TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(raw));
-    TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(raw)));
+  const uint16_t raw = (uint16_t)(0x0320u | 0x0004u);
+  TEST_ASSERT_TRUE(hal_max6675_raw_has_fault(raw));
+  TEST_ASSERT_TRUE(isnan(hal_max6675_raw_to_celsius(raw)));
 }
 
 void test_read_raw_bitbangs_msb_first_and_restores_idle_levels(void) {
-    hal_max6675_config_t c = cfg();
-    TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
+  hal_max6675_config_t c = cfg();
+  TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
 
-    push_raw(0x0320u);
-    TEST_ASSERT_EQUAL_HEX16(0x0320u, hal_max6675_read_raw(&dev));
-    TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_CS));
-    TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_SCLK));
-    hal_max6675_deinit(&dev);
+  push_raw(0x0320u);
+  TEST_ASSERT_EQUAL_HEX16(0x0320u, hal_max6675_read_raw(&dev));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_CS));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(MAX_SCLK));
+  hal_max6675_deinit(&dev);
 }
 
 void test_read_celsius_uses_bitbang_raw_value(void) {
-    hal_max6675_config_t c = cfg();
-    TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
+  hal_max6675_config_t c = cfg();
+  TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
 
-    push_raw(0x0320u);
-    TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_read_celsius(&dev));
-    hal_max6675_deinit(&dev);
+  push_raw(0x0320u);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 25.0f, hal_max6675_read_celsius(&dev));
+  hal_max6675_deinit(&dev);
 }
 
 void test_read_celsius_returns_nan_for_scripted_fault(void) {
-    hal_max6675_config_t c = cfg();
-    TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
+  hal_max6675_config_t c = cfg();
+  TEST_ASSERT_TRUE(hal_max6675_init(&dev, &c));
 
-    push_raw(0x0004u);
-    TEST_ASSERT_TRUE(isnan(hal_max6675_read_celsius(&dev)));
-    hal_max6675_deinit(&dev);
+  push_raw(0x0004u);
+  TEST_ASSERT_TRUE(isnan(hal_max6675_read_celsius(&dev)));
+  hal_max6675_deinit(&dev);
 }
 
 void test_read_celsius_returns_nan_for_null_device(void) {
-    TEST_ASSERT_TRUE(isnan(hal_max6675_read_celsius(nullptr)));
+  TEST_ASSERT_TRUE(isnan(hal_max6675_read_celsius(nullptr)));
 }
 
 int main(void) {
-    UNITY_BEGIN();
-    RUN_TEST(test_init_configures_gpio_and_idle_levels);
-    RUN_TEST(test_raw_to_celsius_decodes_quarter_degree_steps);
-    RUN_TEST(test_raw_to_celsius_datasheet_vectors);
-    RUN_TEST(test_raw_to_celsius_ignores_d1_and_d0_bits);
-    RUN_TEST(test_raw_to_celsius_returns_nan_on_open_circuit);
-    RUN_TEST(test_raw_to_celsius_returns_nan_when_fault_bit_set_with_temperature);
-    RUN_TEST(test_read_raw_bitbangs_msb_first_and_restores_idle_levels);
-    RUN_TEST(test_read_celsius_uses_bitbang_raw_value);
-    RUN_TEST(test_read_celsius_returns_nan_for_scripted_fault);
-    RUN_TEST(test_read_celsius_returns_nan_for_null_device);
-    return UNITY_END();
+  UNITY_BEGIN();
+  RUN_TEST(test_init_configures_gpio_and_idle_levels);
+  RUN_TEST(test_raw_to_celsius_decodes_quarter_degree_steps);
+  RUN_TEST(test_raw_to_celsius_datasheet_vectors);
+  RUN_TEST(test_raw_to_celsius_ignores_d1_and_d0_bits);
+  RUN_TEST(test_raw_to_celsius_returns_nan_on_open_circuit);
+  RUN_TEST(test_raw_to_celsius_returns_nan_when_fault_bit_set_with_temperature);
+  RUN_TEST(test_read_raw_bitbangs_msb_first_and_restores_idle_levels);
+  RUN_TEST(test_read_celsius_uses_bitbang_raw_value);
+  RUN_TEST(test_read_celsius_returns_nan_for_scripted_fault);
+  RUN_TEST(test_read_celsius_returns_nan_for_null_device);
+  return UNITY_END();
 }

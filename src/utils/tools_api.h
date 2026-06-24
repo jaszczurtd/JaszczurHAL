@@ -245,6 +245,60 @@ bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
                            unsigned *width, unsigned *height,
                            unsigned *pngError);
 #endif
+#ifdef HAL_ENABLE_JPEG
+/**
+ * @brief Decode JPEG bytes from memory directly to RGB565.
+ *
+ * Uses the bundled JPEGDecoder/picojpeg array path. Progressive JPEG files are
+ * not supported by picojpeg.
+ *
+ * @param jpeg Input JPEG byte buffer.
+ * @param jpegSize Size of @p jpeg in bytes.
+ * @param rgb565 Output RGB565 pixel buffer.
+ * @param rgb565Pixels Capacity of @p rgb565 in pixels.
+ * @param width Output image width in pixels.
+ * @param height Output image height in pixels.
+ * @return true on success, false on invalid args, unsupported JPEG, decode
+ * error, or too-small output buffer.
+ */
+bool jpegDecodeRgb565(const uint8_t *jpeg, size_t jpegSize,
+                      unsigned short *rgb565, size_t rgb565Pixels,
+                      unsigned *width, unsigned *height);
+#endif
+#ifdef HAL_ENABLE_JPEG_AS_BASE64
+/**
+ * @brief Return exact decoded JPEG byte count for a Base64 JPEG string.
+ *
+ * This validates Base64 syntax and padding using the HAL Base64 decoder without
+ * writing decoded bytes. Use the returned size to allocate the @p jpegWork
+ * buffer passed to @ref jpegBase64DecodeRgb565.
+ *
+ * @param base64 Base64 text containing JPEG bytes.
+ * @param base64Len Number of Base64 characters in @p base64.
+ * @param jpegSize Output decoded JPEG byte count.
+ * @return true on success, false on invalid args or invalid Base64.
+ */
+bool jpegBase64DecodedSize(const char *base64, size_t base64Len,
+                           size_t *jpegSize);
+/**
+ * @brief Decode a Base64-encoded JPEG from memory directly to RGB565.
+ *
+ * @param base64 Base64 text containing JPEG bytes.
+ * @param base64Len Number of Base64 characters in @p base64.
+ * @param jpegWork Caller-provided work buffer for decoded JPEG bytes.
+ * @param jpegWorkSize Size of @p jpegWork in bytes.
+ * @param rgb565 Output RGB565 pixel buffer.
+ * @param rgb565Pixels Capacity of @p rgb565 in pixels.
+ * @param width Output image width in pixels.
+ * @param height Output image height in pixels.
+ * @return true on success, false on invalid args, invalid Base64, too-small
+ * buffers, unsupported JPEG, or decode error.
+ */
+bool jpegBase64DecodeRgb565(const char *base64, size_t base64Len,
+                            uint8_t *jpegWork, size_t jpegWorkSize,
+                            unsigned short *rgb565, size_t rgb565Pixels,
+                            unsigned *width, unsigned *height);
+#endif
 /** @brief Format MAC address to string buffer. */
 const char *macToString(uint8_t mac[6], char *buf, size_t bufSize);
 /** @brief Convert WiFi encryption enum to human-readable string. */

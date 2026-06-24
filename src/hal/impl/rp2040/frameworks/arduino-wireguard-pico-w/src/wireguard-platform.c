@@ -15,8 +15,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hal/impl/shared/wireguard/crypto/crypto.h" // for U64TO8_BIG / U32TO8_BIG
-#include <sys/time.h>                                // gettimeofday()
+#include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h" // for U64TO8_BIG / U32TO8_BIG
+#include <sys/time.h> // gettimeofday()
 
 #include "hardware/regs/addressmap.h"
 #include "hardware/regs/rosc.h"

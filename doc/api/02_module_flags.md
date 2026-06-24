@@ -43,50 +43,52 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
-| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/shared/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
+| `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/shared/frameworks/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |
 | `HAL_ENABLE_SPI` | `hal_spi.h` | `hal_spi.cpp` | SPI master/controller |
 | `HAL_ENABLE_CAN` | `hal_can.h` | `hal_can.cpp` + `hal_can_util.cpp` | Generic CAN API facade; requires at least one backend |
-| `HAL_ENABLE_MCP2515` | `hal_can.h` + `impl/shared/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp2515/hal_can_mcp2515.cpp` + `impl/shared/mcp2515/hal_can_mcp2515_config.cpp` + `impl/shared/mcp2515/mcp2515_driver.cpp` | Shared Arduino-free MCP2515 CAN backend (propagates CAN + SPI) |
-| `HAL_ENABLE_MCP251XFD` | `hal_can.h` + `impl/shared/mcp251xfd/mcp251xfd_driver.h` | target `hal_can.cpp` facade + `impl/shared/mcp251xfd/hal_can_mcp251xfd.cpp` + `impl/shared/mcp251xfd/hal_can_mcp251xfd_config.cpp` + `impl/shared/mcp251xfd/mcp251xfd_driver.cpp` | Shared MCP2517FD/MCP2518FD CAN FD backend (propagates CAN + SPI) |
+| `HAL_ENABLE_MCP2515` | `hal_can.h` + `impl/shared/drivers/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `impl/shared/drivers/mcp2515/hal_can_mcp2515.cpp` + `impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp` + `impl/shared/drivers/mcp2515/mcp2515_driver.cpp` | Shared Arduino-free MCP2515 CAN backend (propagates CAN + SPI) |
+| `HAL_ENABLE_MCP251XFD` | `hal_can.h` + `impl/shared/drivers/mcp251xfd/mcp251xfd_driver.h` | target `hal_can.cpp` facade + `impl/shared/drivers/mcp251xfd/hal_can_mcp251xfd.cpp` + `impl/shared/drivers/mcp251xfd/hal_can_mcp251xfd_config.cpp` + `impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp` | Shared MCP2517FD/MCP2518FD CAN FD backend (propagates CAN + SPI) |
 | `HAL_ENABLE_STM32G474_FDCAN` | `hal_can.h` | `impl/stm32g474/hal_can.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan_config.cpp` | Native STM32G474 FDCAN1 CAN FD backend (propagates CAN; compile-time rejected outside STM32G474) |
 | `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
-| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
-| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
-| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/ds18b20/hal_ds18b20.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
-| `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
-| `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
-| `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
-| `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `impl/shared/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
-| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/onewire/onewire_driver.h` | `impl/shared/onewire/hal_onewire.cpp` + `impl/shared/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
-| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/ads1x15/ads1x15_driver.h` | `impl/shared/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
-| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
-| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
-| `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
-| `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
-| `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
+| `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/drivers/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/drivers/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
+| `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/drivers/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/drivers/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
+| `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/ds18b20/hal_ds18b20.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
+| `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/drivers/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
+| `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/drivers/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
+| `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/drivers/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
+| `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
+| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/onewire/hal_onewire.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
+| `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/drivers/ads1x15/ads1x15_driver.h` | `impl/shared/drivers/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/drivers/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
+| `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/frameworks/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
+| `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
+| `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
+| `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/drivers/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/drivers/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
-| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
-| `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/hd44780/hd44780.h` | `impl/shared/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
-| `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
-| `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/display/ili9341_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/display/st77xx_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/display/ssd1306_driver.h` | `impl/shared/display/hal_display.cpp` + `impl/shared/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
+| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/drivers/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/drivers/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
+| `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/drivers/hd44780/hd44780.h` | `impl/shared/drivers/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
+| `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
+| `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/drivers/display/ili9341_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/drivers/display/ssd1306_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
-| `HAL_ENABLE_CJSON` | `utils/cJSON.h`, `utils/cJSON_Utils.h` (`tools.h` from C++) | `utils/cJSON.c`, `utils/cJSON_Utils.c` | bundled cJSON |
-| `HAL_ENABLE_PNG` | `utils/lodepng.h` (`tools.h` from C++) | `utils/lodepng.cpp` | bundled LodePNG memory-based PNG encoder/decoder |
-| `HAL_ENABLE_PNG_AS_BASE64` | `utils/tools_api.h` helpers + `utils/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `utils/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
+| `HAL_ENABLE_CJSON` | `hal/impl/shared/frameworks/cjson/cJSON.h`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/cjson/cJSON.c`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.c` | bundled cJSON |
+| `HAL_ENABLE_PNG` | `hal/impl/shared/frameworks/lodepng/lodepng.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/lodepng/lodepng.cpp` | bundled LodePNG memory-based PNG encoder/decoder |
+| `HAL_ENABLE_PNG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/impl/shared/frameworks/lodepng/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/impl/shared/frameworks/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
+| `HAL_ENABLE_JPEG` | `hal/impl/shared/frameworks/jpeg/JPEGDecoder.h`, `hal/impl/shared/frameworks/jpeg/picojpeg.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp`, `hal/impl/shared/frameworks/jpeg/picojpeg.c` | bundled baseline JPEG decoder |
+| `HAL_ENABLE_JPEG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/impl/shared/frameworks/jpeg/JPEGDecoder.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp` + `hal/impl/shared/frameworks/jpeg/picojpeg.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
 | `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
 
 ### Opt-out flag
@@ -125,6 +127,7 @@ HAL_ENABLE_STM32G474_FDCAN -> HAL_ENABLE_CAN (STM32G474 only)
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
+HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
 
 Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,
@@ -283,7 +286,8 @@ arduino-cli compile \
 Optional third-party integrations used by HAL modules are encapsulated under
 `src/hal/impl/rp2040/frameworks/`; target-specific RP2040 helpers live under
 `src/hal/impl/rp2040/drivers/rp2040/`. Portable device drivers live under
-`src/hal/impl/shared/`.
+`src/hal/impl/shared/`, with hardware-oriented modules under
+`shared/drivers/` and reusable engines/stacks under `shared/frameworks/`.
 
 Actual compiled dependencies are controlled by the module set:
 

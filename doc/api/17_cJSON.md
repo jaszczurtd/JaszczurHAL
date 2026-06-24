@@ -4,10 +4,10 @@
 
 Covers: bundled `cJSON` and `cJSON_Utils` enabled by `HAL_ENABLE_CJSON`.
 
-`cJSON` is a small C JSON parser/generator bundled in `src/utils/`. It is not a
-HAL wrapper and does not abstract hardware. JaszczurHAL only gates the upstream
-headers/sources behind `HAL_ENABLE_CJSON` and makes them available through the
-normal include path.
+`cJSON` is a small C JSON parser/generator bundled in
+`src/hal/impl/shared/frameworks/cjson/`. It is not a HAL wrapper and does not
+abstract hardware. JaszczurHAL only gates the upstream headers/sources behind
+`HAL_ENABLE_CJSON` and makes them available through the normal include path.
 
 Bundled version: `cJSON` 1.7.18.
 
@@ -24,7 +24,7 @@ Enable the module in `hal_project_config.h` or with a compiler definition:
 #define HAL_ENABLE_CJSON
 ```
 
-The source files are part of the normal utility source list, but their contents
+The source files are part of the shared framework source list, but their contents
 compile to nothing unless `HAL_ENABLE_CJSON` is defined. The public headers are
 also guarded, so code that uses `cJSON_*` symbols must be compiled with the same
 flag.
@@ -34,8 +34,8 @@ flag.
 Direct include, safe from both C and C++:
 
 ```c
-#include <utils/cJSON.h>
-#include <utils/cJSON_Utils.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
 ```
 
 For C++ files that already use the utility aggregator, `tools.h` also exposes
@@ -45,11 +45,11 @@ cJSON when `HAL_ENABLE_CJSON` is defined:
 #include <tools.h>
 ```
 
-`tools.h` includes C++ utility classes, so prefer the direct `utils/` includes
+`tools.h` includes C++ utility classes, so prefer the direct framework includes
 from `.c` files. `tools_c.h` does not re-export cJSON.
 
 `JaszczurHAL.h` includes the HAL umbrella, not the utility aggregator, so include
-the `utils/` headers, or `tools.h` from C++ files, where cJSON is used directly.
+the framework headers, or `tools.h` from C++ files, where cJSON is used directly.
 
 ## API Surface
 
@@ -117,7 +117,7 @@ Important shared/global state:
 ## Example: Parse Configuration
 
 ```c
-#include <utils/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
 #include <hal/hal_serial.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -172,7 +172,7 @@ Use `cJSON_PrintPreallocated()` when the output has a bounded size and you want
 to avoid allocating a print buffer.
 
 ```c
-#include <utils/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
 #include <hal/hal_serial.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -223,7 +223,7 @@ This pattern works well with `cJSON_Add*ToObject()` helpers and
 `cJSON_PrintUnformatted()`, because both return pointers that must be checked.
 
 ```c
-#include <utils/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
 #include <hal/hal_system.h>
 #include <stdbool.h>
 
@@ -265,8 +265,8 @@ creating the tree or printing the final JSON.
 ## Example: JSON Pointer And Merge Patch
 
 ```c
-#include <utils/cJSON.h>
-#include <utils/cJSON_Utils.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON.h>
+#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
 #include <stdbool.h>
 
 static bool update_uart_config(cJSON **root_inout) {
@@ -335,4 +335,5 @@ module:
 
 The bundled cJSON/cJSON_Utils sources are from upstream `cJSON`, authored by
 Dave Gamble and contributors, and distributed under the MIT license. See the
-source headers in `src/utils/` and the top-level README third-party notices.
+source headers in `src/hal/impl/shared/frameworks/cjson/` and the top-level
+README third-party notices.

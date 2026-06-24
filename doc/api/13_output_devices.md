@@ -60,8 +60,8 @@ void hal_rgb_led_set_color(hal_rgb_led_color_t color);
 void hal_rgb_led_off(void);
 ```
 
-**impl/rp2040:** shared `impl/shared/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** shared `impl/shared/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
+**impl/rp2040:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/drivers/neopixel/rp2040_pio.h`).
+**impl/stm32g474:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
 **Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
 
@@ -116,8 +116,8 @@ void hal_rgb_led_set_color(hal_rgb_led_color_t color);
 void hal_rgb_led_off(void);
 ```
 
-**impl/rp2040:** shared `impl/shared/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** shared `impl/shared/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
+**impl/rp2040:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/drivers/neopixel/rp2040_pio.h`).
+**impl/stm32g474:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
 **Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
 
@@ -203,7 +203,7 @@ bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 - With a hardware mute pin configured, mute toggles only GPIO and does not send
   extra SPI frames.
 
-**impl/shared:** `impl/shared/pga2311/pga2311_driver.*` (HAL SPI/GPIO transport)
+**impl/shared:** `impl/shared/drivers/pga2311/pga2311_driver.*` (HAL SPI/GPIO transport)
 plus `hal_pga2311.cpp` facade with static handle pool + per-instance mutex.
 
 **Thread safety:** per-instance mutex serializes API calls; SPI transactions are

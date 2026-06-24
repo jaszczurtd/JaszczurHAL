@@ -6,9 +6,9 @@
 #include <string.h>
 
 extern "C" {
-#include "hal/impl/shared/wireguard/crypto/chacha20.h"
-#include "hal/impl/shared/wireguard/crypto/chacha20poly1305.h"
-#include "hal/impl/shared/wireguard/crypto/crypto.h"
+#include "hal/impl/shared/frameworks/wireguard/crypto/chacha20.h"
+#include "hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.h"
+#include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
 }
 
 namespace {

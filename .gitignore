@@ -15,6 +15,7 @@ install_manifest.txt
 # Compiled objects and archives
 *.o
 *.a
+*__pycache__*
 
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/

@@ -6,8 +6,8 @@
 #include "../../hal_gpio.h"
 #include "../../hal_rgb_led.h"
 #include "../../hal_sync.h"
+#include "../shared/drivers/neopixel/jh_neopixel.h"
 #include "../shared/hal_mutex_once.h"
-#include "../shared/neopixel/jh_neopixel.h"
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_regs.h"

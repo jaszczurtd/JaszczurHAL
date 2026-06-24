@@ -66,7 +66,7 @@ jobs:
   # Tool configs live in .clang-tidy and tests/cppcheck-suppressions.txt. Pinned
   # to the analyzers shipped on ubuntu-latest (clang-tidy 18, cppcheck 2.13) so
   # CI and local runs agree. Vendored code excluded: arduino drivers/frameworks,
-  # cJSON, LodePNG, Unity.
+  # cJSON, JPEGDecoder/picojpeg, LodePNG, Unity.
   static-analysis:
     runs-on: ubuntu-latest
     needs: test
@@ -87,20 +87,28 @@ jobs:
           cppcheck --enable=warning,performance,portability \
             --inline-suppr \
             --suppressions-list=tests/cppcheck-suppressions.txt \
-            -i src/hal/impl/arduino/drivers \
-            -i src/hal/impl/arduino/frameworks \
-            -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c \
-            -i src/utils/lodepng.cpp -i src/utils/unity.c \
+            -i src/hal/impl/rp2040/drivers \
+            -i src/hal/impl/rp2040/frameworks \
+            -i src/hal/impl/shared/frameworks/cjson \
+            -i src/hal/impl/shared/frameworks/jpeg \
+            -i src/hal/impl/shared/frameworks/lodepng \
+            -i src/utils/unity.c \
             --error-exitcode=1 --quiet \
             src
 
       - name: "clang-tidy (portable HAL + shared + stm32 backend)"
         run: |
-          run-clang-tidy -p build -quiet \
-            '^.*/src/(?!hal/impl/shared/filesystem/ff16/(ff|ffsystem|ffunicode)\.c$)(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
+          mapfile -t TIDY_HOST_FILES < <(
+            scripts/clang_tidy_files.py --build-dir build --repo-root "$PWD" --profile host
+          )
+          test "${#TIDY_HOST_FILES[@]}" -gt 0
+          run-clang-tidy -p build -quiet "${TIDY_HOST_FILES[@]}" \
             | tee tidy_host.log
-          run-clang-tidy -p build_stm32 -quiet \
-            '^.*/src/hal/impl/stm32g474/(?!drivers/littlefs/).*\.(cpp|c)$' \
+          mapfile -t TIDY_STM32_FILES < <(
+            scripts/clang_tidy_files.py --build-dir build_stm32 --repo-root "$PWD" --profile stm32
+          )
+          test "${#TIDY_STM32_FILES[@]}" -gt 0
+          run-clang-tidy -p build_stm32 -quiet "${TIDY_STM32_FILES[@]}" \
             | tee tidy_stm32.log
           if grep -qE ' (warning|error):' tidy_host.log tidy_stm32.log; then
             echo "::error::clang-tidy reported findings (see logs above)"

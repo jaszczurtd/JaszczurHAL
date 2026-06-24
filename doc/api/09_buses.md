@@ -418,7 +418,7 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 
 Thread-safe wrapper for one 1-Wire bus bound to a single GPIO pin. Hardware
 builds use the shared Arduino-free bit-bang driver in
-`src/hal/impl/shared/onewire/`; the mock backend keeps deterministic scripted
+`src/hal/impl/shared/drivers/onewire/`; the mock backend keeps deterministic scripted
 responses for host tests.
 
 ```c

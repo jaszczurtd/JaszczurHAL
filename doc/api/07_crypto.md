@@ -89,7 +89,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_md5_hex(...)` and `hal_sha256_hex(...)` / `hal_hmac_sha256_hex(...)` output lowercase hex.
 - `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
-- ChaCha20 / Poly1305 paths are delegated to the shared `impl/shared/wireguard/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
+- ChaCha20 / Poly1305 paths are delegated to the shared `impl/shared/frameworks/wireguard/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
 - SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).

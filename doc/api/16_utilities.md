@@ -155,12 +155,14 @@ void loop(void) {
 
 ## Higher-level utilities (tools.h / tools.cpp)
 
-Physical location: `src/utils/*`.
+Physical location: core utility helpers live in `src/utils/*`; shared framework
+utilities such as SmartTimers live under `src/hal/impl/shared/frameworks/*`.
 
 Recommended include options:
 - `#include <tools.h>` (aggregator include in `src/`)
 - `#include <tools_c.h>` (C-compatible utility declarations from `src/`)
-- direct include from `utils/`, for example `#include <utils/SmartTimers.h>`
+- direct include from the component path, for example
+  `#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>`
 
 Utilities depend on HAL internally.
 
@@ -262,7 +264,7 @@ void  i2cScanner(void);
 ## SmartTimers
 
 ```c
-#include <utils/SmartTimers.h>
+#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>
 
 SmartTimers timer;
 
@@ -292,12 +294,12 @@ timer.abort();
 ```
 
 **Note:** `SECOND`, `SECS()`, `MINS()`, `HOURS()` macros are defined in `hal/hal_system.h`
-(included automatically by `utils/SmartTimers.h`).
+(included automatically by `hal/impl/shared/frameworks/smart_timers/SmartTimers.h`).
 **Thread safety:** Thread-safe and multicore-safe after construction. Each instance eagerly creates a per-instance `hal_mutex_t` that serializes all method calls. Callbacks passed to `begin()` are invoked outside the mutex to prevent deadlock.
 
 **Example: multi-timer table**
 ```c
-#include <utils/SmartTimers.h>
+#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>
 
 SmartTimers heartbeat_timer;
 SmartTimers status_timer;

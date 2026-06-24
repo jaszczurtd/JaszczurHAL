@@ -11,7 +11,7 @@
  * the buggy write-then-mode order the line reads LOW and these tests fail.
  */
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/onewire/onewire_driver.h"
+#include "hal/impl/shared/drivers/onewire/onewire_driver.h"
 #include "utils/unity.h"
 
 #if (defined(HAL_TARGET_IS_MOCK) && HAL_TARGET_IS_MOCK) &&                     \

@@ -15,7 +15,7 @@
 
 #include "hal/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/ds3231/ds3231.h"
+#include "hal/impl/shared/drivers/ds3231/ds3231.h"
 #include "utils/unity.h"
 
 #include <math.h>

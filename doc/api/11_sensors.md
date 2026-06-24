@@ -136,7 +136,7 @@ bool          hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fres
 ```
 
 **impl/rp2040 + impl/stm32g474:** Both use the shared Arduino-free
-`src/hal/impl/shared/onewire/` implementation. The backend performs DS18B20
+`src/hal/impl/shared/drivers/onewire/` implementation. The backend performs DS18B20
 presence/address probing, scratchpad CRC verification, resolution writes,
 non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
 over the shared 1-Wire bit-bang transport.
@@ -186,7 +186,7 @@ float hal_bh1750_light(hal_bh1750_t *dev);
 the command. `hal_bh1750_light()` reads exactly two bytes and returns lux as
 `raw / 1.2f`; it returns `-1.0f` on an incomplete read.
 
-**impl/shared:** `impl/shared/bh1750/hal_bh1750.cpp` is used by RP2040,
+**impl/shared:** `impl/shared/drivers/bh1750/hal_bh1750.cpp` is used by RP2040,
 STM32G474, and mock tests. The default address is `0x5C` to preserve the source
 driver constructor default; boards with ADDR tied low should set `0x23`.
 **Thread safety:** per-instance mutex serializes driver calls; I2C byte reads
@@ -249,7 +249,7 @@ within `HAL_TSC2007_STABILITY_THRESHOLD` and neither accepted coordinate equals
 `HAL_TSC2007_TOUCH_INVALID`. `hal_tsc2007_get_point()` returns `{x, y, z1}` or
 `{0, 0, 0}` when the sample is rejected.
 
-**impl/shared:** `impl/shared/tsc2007/tsc2007.cpp` is used by RP2040,
+**impl/shared:** `impl/shared/drivers/tsc2007/tsc2007.cpp` is used by RP2040,
 STM32G474, and mock tests over HAL I2C and HAL system timing.
 **Thread safety:** per-instance mutex serializes public driver calls and is
 created with the shared create-once helper, so first access is safe under
@@ -326,7 +326,7 @@ returns the last sample, and clears interrupt status when the FIFO is empty.
 The I2C 16-bit register read path is dispatched only through I2C; this avoids
 the fall-through transport bug present in the source import.
 
-**impl/shared:** `impl/shared/stmpe610/stmpe610.cpp` is used by RP2040,
+**impl/shared:** `impl/shared/drivers/stmpe610/stmpe610.cpp` is used by RP2040,
 STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI
 uses HAL SPI transactions plus a caller-provided CS pin; soft SPI bit-bangs
 MSB-first over HAL GPIO.
@@ -393,7 +393,7 @@ interrupt with the edge mode used by the selected protocol, and uses
 frames. `hal_irsmall_decoder_data_available()` copies and clears one decoded
 frame; `hal_irsmall_decoder_has_data()` clears pending data without copying it.
 
-**impl/shared:** `impl/shared/irsmall_decoder/irsmall_decoder.cpp` is used by
+**impl/shared:** `impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp` is used by
 RP2040, STM32G474, and mock tests over HAL GPIO interrupts and HAL system
 timing. The shared implementation keeps the source timing thresholds and repeat
 suppression behavior; NEC extended address bytes are assembled explicitly to
@@ -622,8 +622,8 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
-**Engine:** the portable NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`) wrapped
-by a shared facade (`impl/shared/gps/hal_gps_core.cpp`) - used by both hardware
+**Engine:** the portable NMEA parser (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`) wrapped
+by a shared facade (`impl/shared/frameworks/gps/hal_gps_core.cpp`) - used by both hardware
 backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
 **impl/rp2040 (RP2040):** transport only - SoftwareSerial (default) or UART,
 selected at compile time. `hal_gps_update()` must be polled every loop iteration.

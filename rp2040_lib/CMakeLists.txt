@@ -136,10 +136,7 @@ set(UTIL_SOURCES
     ${SRC}/utils/tools.cpp
     ${SRC}/utils/multicoreWatchdog.cpp
     ${SRC}/utils/draw7Segment.cpp
-    ${SRC}/utils/SmartTimers.cpp
     ${SRC}/utils/pidController.cpp
-    ${SRC}/utils/cJSON.c
-    ${SRC}/utils/cJSON_Utils.c
 )
 
 # Unity is opt-in: enable it via -DHAL_ENABLE_UNITY=ON when configuring.

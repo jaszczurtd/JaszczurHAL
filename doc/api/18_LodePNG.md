@@ -5,10 +5,11 @@
 Covers: bundled `LodePNG` enabled by `HAL_ENABLE_PNG` and Base64 PNG helpers
 enabled by `HAL_ENABLE_PNG_AS_BASE64`.
 
-`LodePNG` is a standalone PNG encoder/decoder bundled in `src/utils/`. It is
-not a HAL wrapper and does not abstract hardware. JaszczurHAL only gates the
-upstream header/source behind `HAL_ENABLE_PNG` and exposes the memory-based API
-through the normal include path.
+`LodePNG` is a standalone PNG encoder/decoder bundled in
+`src/hal/impl/shared/frameworks/lodepng/`. It is not a HAL wrapper and does not
+abstract hardware. JaszczurHAL only gates the upstream header/source behind
+`HAL_ENABLE_PNG` and exposes the memory-based API through the normal include
+path.
 
 Bundled version: `LodePNG` 20260119.
 
@@ -36,7 +37,7 @@ For Base64-encoded PNG assets, enable the helper flag instead:
 `HAL_ENABLE_PNG_AS_BASE64` propagates both `HAL_ENABLE_CRYPTO` and
 `HAL_ENABLE_PNG`, so the Base64 decoder and LodePNG are compiled together.
 
-The source file is part of the normal utility source list, but its contents
+The source file is part of the shared framework source list, but its contents
 compile to nothing unless `HAL_ENABLE_PNG` is defined. The public header is also
 guarded, so code that uses `lodepng_*` symbols must be compiled with the same
 flag.
@@ -46,7 +47,7 @@ flag.
 Direct include, safe from both C and C++:
 
 ```c
-#include <utils/lodepng.h>
+#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
 ```
 
 For C++ files that already use the utility aggregator, `tools.h` also exposes
@@ -69,7 +70,7 @@ By default JaszczurHAL keeps the upstream memory-based C API and disables:
 
 If an application really needs those upstream optional sections, define
 `HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP` before including
-`utils/lodepng.h`.
+`hal/impl/shared/frameworks/lodepng/lodepng.h`.
 
 The usual upstream `LODEPNG_NO_COMPILE_*` flags still work for further trimming,
 for example disabling the encoder or decoder in a tightly constrained build.
@@ -112,7 +113,7 @@ Rules that matter most:
 
 ```c
 #include <tools_c.h>
-#include <utils/lodepng.h>
+#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
 #include <stdbool.h>
 #include <stdlib.h>
 

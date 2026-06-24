@@ -13,6 +13,37 @@ source "${SCRIPT_DIR}/rp2040_core_version.conf"
 
 RP2040_INDEX="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
 
+clean_build_artifacts() {
+  local candidate
+  local cleaned=0
+  local build_dirs=(
+    "${SCRIPT_DIR}/build"
+  )
+
+  for candidate in "${SCRIPT_DIR}"/build_*; do
+    [ -d "${candidate}" ] && build_dirs+=("${candidate}")
+  done
+
+  for candidate in "${build_dirs[@]}"; do
+    [ -d "${candidate}" ] || continue
+    case "${candidate}" in
+      "${SCRIPT_DIR}/build"|"${SCRIPT_DIR}/build_"*) ;;
+      *) continue ;;
+    esac
+
+    rm -rf -- "${candidate}"
+    cleaned=$((cleaned + 1))
+  done
+
+  if [ "${cleaned}" -eq 0 ]; then
+    echo "No existing build artifact directories to remove."
+  else
+    echo "Removed ${cleaned} build artifact directories."
+  fi
+}
+
+clean_build_artifacts
+
 sudo apt-get update
 
 # Core build + host-test toolchain (required: without these `cmake -B build`

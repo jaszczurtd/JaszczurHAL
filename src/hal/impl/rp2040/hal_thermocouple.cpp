@@ -8,10 +8,10 @@
 #include "../../hal_sync.h"
 #include "../../hal_thermocouple.h"
 #ifdef HAL_ENABLE_MCP9600
-#include "../shared/mcp9600/mcp9600_driver.h"
+#include "../shared/drivers/mcp9600/mcp9600_driver.h"
 #endif
 #ifdef HAL_ENABLE_MAX6675
-#include "../shared/max6675/max6675_driver.h"
+#include "../shared/drivers/max6675/max6675_driver.h"
 #endif
 #include <math.h>
 #include <new>

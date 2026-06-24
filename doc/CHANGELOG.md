@@ -20,10 +20,10 @@ Next release.
   queue draining and small payload encoding.
 - Refactored RP2040 and STM32G474 `hal_can.cpp` to stay as the HAL facade and
   dispatch through shared MCP2515 backend operations under
-  `impl/shared/mcp2515/hal_can_mcp2515.*`.
+  `impl/shared/drivers/mcp2515/hal_can_mcp2515.*`.
 - Added the `HAL_ENABLE_MCP251XFD` backend flag, `HAL_CAN_BACKEND_MCP251XFD`
   selector and MCP2517FD/MCP2518FD polling backend under
-  `impl/shared/mcp251xfd/`, preserving the existing classic CAN API while
+  `impl/shared/drivers/mcp251xfd/`, preserving the existing classic CAN API while
   enabling CAN FD through `hal_can_frame_t`.
 - Added the STM32G474-only `HAL_ENABLE_STM32G474_FDCAN` backend flag,
   `HAL_CAN_BACKEND_STM32G474_FDCAN` selector and native FDCAN1 register backend
@@ -104,7 +104,7 @@ Next release.
 ### hal_hd44780 - shared HD44780 character LCD driver
 
 - Added `HAL_ENABLE_HD44780` with a shared `HD44780` class under
-  `src/hal/impl/shared/hd44780/`, usable from RP2040, STM32G474 and host
+  `src/hal/impl/shared/drivers/hd44780/`, usable from RP2040, STM32G474 and host
   tests through HAL GPIO, system-timing and synchronization primitives.
 - Preserved the established HD44780 control flow from the Arduino
   LiquidCrystal driver: 4-bit/8-bit init retries, high-nibble-first transfers,
@@ -246,7 +246,7 @@ Next release.
   `src/hal/hal_pga2311.h` and facade implementation in
   `src/hal/hal_pga2311.cpp`.
 - Added a backend-agnostic shared transport driver in
-  `src/hal/impl/shared/pga2311/pga2311_driver.{h,cpp}` using HAL SPI/GPIO.
+  `src/hal/impl/shared/drivers/pga2311/pga2311_driver.{h,cpp}` using HAL SPI/GPIO.
 - Added gain conversion helpers (dB and half-dB to raw code), raw-code writes,
   optional hardware-mute pin support, and software mute emulation fallback.
 - Added `examples/28_pga2311` demonstrating portable PGA2311 usage on RP2040
@@ -261,7 +261,7 @@ Next release.
 
 - Removed duplicate ChaCha20/Poly1305 logic from `hal_crypto.cpp` and delegated
   HAL ChaCha20 + AEAD paths to the shared WireGuard cryptography backend under
-  `src/hal/impl/shared/wireguard/crypto/`, preserving the public HAL API.
+  `src/hal/impl/shared/frameworks/wireguard/crypto/`, preserving the public HAL API.
 - Added RFC8439/IETF helper entry points in the shared backend:
   `chacha20_init_ietf(...)`,
   `chacha20poly1305_encrypt_ietf_detached(...)`, and
@@ -280,7 +280,7 @@ Next release.
 ### hal_rgb_led - shared portable NeoPixel driver
 
 - Replaced the bundled Arduino `Adafruit_NeoPixel` backend with a shared
-  NeoPixel core under `src/hal/impl/shared/neopixel/` (`jh_neopixel.{h,cpp}`),
+  NeoPixel core under `src/hal/impl/shared/drivers/neopixel/` (`jh_neopixel.{h,cpp}`),
   keeping the proven buffer layout, color-order mapping, latch timing and
   brightness scaling behavior from the upstream implementation.
 - Added RP2040 transport glue using PIO (`rp2040_pio.h`) and switched
@@ -291,11 +291,11 @@ Next release.
 - Enabled `examples/18_rgb_led` for STM32G474 in addition to RP2040.
 - Removed the obsolete Arduino `drivers/Adafruit_NeoPixel` folder.
 - Moved NeoPixel attribution and license notice from README dependency list to
-  the shared driver code/location (`impl/shared/neopixel/`).
+  the shared driver code/location (`impl/shared/drivers/neopixel/`).
 
 ### hal_rtc - shared portable DS3231 driver
 
-- Ported the DS3231 real-time clock driver from the bundled Arduino implementation to a shared HAL driver under `src/hal/impl/shared/ds3231/`.
+- Ported the DS3231 real-time clock driver from the bundled Arduino implementation to a shared HAL driver under `src/hal/impl/shared/drivers/ds3231/`.
 - The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while replacing Arduino Wire access with JaszczurHAL I2C primitives.
 - RP2040 and STM32G474 `hal_rtc` wrappers now use the shared DS3231 driver, so both targets can select `HAL_ENABLE_DS3231` through the same code path.
 - Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and a dedicated `examples/27_rtc_ds3231` sample.
@@ -303,7 +303,7 @@ Next release.
 
 ### hal_rtc - shared portable PCF8563 driver
 
-- Ported the PCF8563 I2C real-time clock driver from the bundled Arduino implementation to a shared, Arduino-free HAL driver under `src/hal/impl/shared/pcf8563/`.
+- Ported the PCF8563 I2C real-time clock driver from the bundled Arduino implementation to a shared, Arduino-free HAL driver under `src/hal/impl/shared/drivers/pcf8563/`.
 - The shared `pcf8563.{h,cpp}` implementation uses only JaszczurHAL I2C primitives, removing all Arduino Wire library dependencies while preserving full functional parity with the original.
 - RP2040 (via Arduino-pico) continues to use the shared driver through the existing `impl/rp2040/hal_rtc.cpp` wrapper.
 - **STM32G474 now has full RTC support for the first time** through a new `impl/stm32g474/hal_rtc.cpp` backend using the same shared PCF8563 driver, enabling `HAL_ENABLE_RTC` and `HAL_ENABLE_PCF8563` on the STM32 platform.
@@ -315,19 +315,19 @@ Next release.
 
 ### hal_display - shared Arduino-free display stack
 
-- Added `src/hal/impl/shared/display/jh_gfx.{h,cpp}` - a portable graphics
+- Added `src/hal/impl/shared/drivers/display/jh_gfx.{h,cpp}` - a portable graphics
   engine providing geometry primitives (line, circle, triangle, rounded rect),
   bitmap rendering, and full text layout with proportional font support.
   The rendering algorithms are adapted from the Adafruit GFX Library (BSD-2-Clause)
   with all platform-specific dependencies removed.
 - Added `jh_gfx_font.h` (GFXfont/GFXglyph structs), `jh_gfx_glcdfont.h`
-  (built-in 5x7 font), and `shared/display/Fonts/` (proportional fonts) as
+  (built-in 5x7 font), and `shared/drivers/display/Fonts/` (proportional fonts) as
   self-contained data headers usable by any backend.
-- Added a shared SSD1306 OLED driver (`shared/display/ssd1306_driver.{h,cpp}`)
+- Added a shared SSD1306 OLED driver (`shared/drivers/display/ssd1306_driver.{h,cpp}`)
   built on the HAL I2C bus; rendering is delegated to the GFX engine via an
   in-RAM framebuffer flushed by `hal_display_flush()`.
 - Replaced the two per-backend `hal_display.cpp` implementations with a single
-  shared `shared/display/hal_display.cpp`. Both RP2040 and STM32G474 now drive
+  shared `shared/drivers/display/hal_display.cpp`. Both RP2040 and STM32G474 now drive
   ILI9341 / ST7735 / ST7789 / ST7796S (over the shared SPI/GPIO panel drivers)
   and SSD1306 (over the shared I2C driver) through the same code path - no
   Arduino dependencies remain in the display stack.
@@ -348,7 +348,7 @@ Next release.
 ### hal_can - shared Arduino-free MCP2515 driver
 
 - Replaced the bundled Arduino MCP2515 backend with a shared HAL-only driver
-  under `src/hal/impl/shared/mcp2515/`, built on JaszczurHAL SPI, GPIO,
+  under `src/hal/impl/shared/drivers/mcp2515/`, built on JaszczurHAL SPI, GPIO,
   timing and synchronization primitives only.
 - RP2040 and STM32G474 `hal_can` wrappers now both delegate to the same shared
   MCP2515 register/SPI engine, preserving the proven upstream control flow for
@@ -368,11 +368,13 @@ Next release.
 
 - Replaced the bundled Arduino `OneWire` transport and `DallasTemperature`
   dependency with shared Arduino-free code under
-  `src/hal/impl/shared/onewire/`, built only on JaszczurHAL GPIO, timing and
+  `src/hal/impl/shared/drivers/onewire/`, built only on JaszczurHAL GPIO, timing and
   synchronization primitives.
-- Separated DS18B20 implementation into a dedicated `src/hal/impl/shared/ds18b20/`
-  submodule while keeping OneWire driver in `src/hal/impl/shared/onewire/`.
-  This follows the per-driver subfolder convention (digipot, gps, mcp9600, max6675, ads1x15).
+- Separated DS18B20 implementation into a dedicated `src/hal/impl/shared/drivers/ds18b20/`
+  submodule while keeping OneWire driver in `src/hal/impl/shared/drivers/onewire/`.
+  This follows the shared implementation subfolder convention (hardware
+  drivers such as digipot, mcp9600, max6675 and ads1x15; reusable engines such
+  as gps).
 - RP2040 and STM32G474 now both use the same shared `hal_onewire`
   implementation. `hal_ds18b20` also moved to shared code on the same
   low-level driver, so the STM32G474 default static-library profile now
@@ -397,7 +399,7 @@ Next release.
 ### hal_external_adc - shared ADS1X15/ADS1115 driver
 
 - Replaced the bundled Arduino `ADS1X15` backend with a shared Arduino-free
-  driver (`src/hal/impl/shared/ads1x15/ads1x15_driver.*`) that uses only JaszczurHAL
+  driver (`src/hal/impl/shared/drivers/ads1x15/ads1x15_driver.*`) that uses only JaszczurHAL
   I2C, timing and idle primitives.
 - RP2040 and STM32G474 now both use the same shared ADS1115 implementation
   through `hal_external_adc`; the STM32G474 default static-library profile now
@@ -413,15 +415,15 @@ Next release.
 - Removed the obsolete Arduino `drivers/ADS1X15` folder. The MIT notice and
   upstream attribution now live in the shared driver source instead of
   README/docs dependency inventories.
-- Reorganized shared driver files into per-driver subfolders:
-  `shared/ads1x15/`, `shared/gps/`, `shared/max6675/` and
-  `shared/mcp9600/`, matching the existing `shared/digipot/` layout.
+- Reorganized shared implementation files into per-module subfolders:
+  `shared/drivers/ads1x15/`, `shared/frameworks/gps/`, `shared/drivers/max6675/` and
+  `shared/drivers/mcp9600/`, matching the existing `shared/drivers/digipot/` layout.
 
 ### hal_thermocouple - shared MCP9600/MCP9601 driver
 
 - Replaced the bundled Arduino `Adafruit_MCP9600` / `Adafruit_MCP9601`
   backend with a shared Arduino-free driver
-  (`src/hal/impl/shared/mcp9600/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
+  (`src/hal/impl/shared/drivers/mcp9600/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
   synchronization primitives.
 - RP2040 and STM32G474 `hal_thermocouple` wrappers now both delegate MCP9600 /
   MCP9601 operations to the same shared driver. The STM32G474 default profile
@@ -443,10 +445,10 @@ Next release.
 
 - Split the digipot chip logic out of `src/hal/hal_digipot.cpp` into shared
   target-neutral drivers:
-  `src/hal/impl/shared/digipot/digipot_mcp401x.cpp` and
-  `src/hal/impl/shared/digipot/digipot_max5395.cpp`.
+  `src/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp` and
+  `src/hal/impl/shared/drivers/digipot/digipot_max5395.cpp`.
 - Added the internal `hal_digipot_ops_t` contract
-  (`impl/shared/digipot/hal_digipot_ops.h`). `hal_digipot.cpp` now owns only the
+  (`impl/shared/drivers/digipot/hal_digipot_ops.h`). `hal_digipot.cpp` now owns only the
   public handle pool, per-instance mutex, backend selection and ops dispatch,
   matching the portable-driver shape used by `hal_thermocouple`.
 - Preserved the existing working MCP401x and MAX5395 behaviour, including
@@ -454,13 +456,14 @@ Next release.
   MAX5395 reset/charge-pump/shutdown handling, and integer-only wiper
   calculations.
 - Updated CMake/shared-source globs and clang-tidy source selection so nested
-  shared drivers under `impl/shared/*/` are built and checked by RP2040,
+  shared implementations under `impl/shared/drivers/` and
+  `impl/shared/frameworks/` are built and checked by RP2040,
   STM32G474 and host/mock targets.
 
 ### hal_thermocouple / MAX6675 - shared Arduino-free driver
 
 - Replaced the Arduino `MAX6675` class backend with a shared in-tree driver
-  (`src/hal/impl/shared/max6675/max6675_driver.*`) built only on JaszczurHAL GPIO and
+  (`src/hal/impl/shared/drivers/max6675/max6675_driver.*`) built only on JaszczurHAL GPIO and
   delay primitives. The RP2040 thermocouple wrapper now delegates MAX6675 reads
   to this shared driver instead of including `Arduino.h` / `digitalRead()` /
   `digitalWrite()` through the old bundled library.
@@ -519,7 +522,7 @@ Next release.
   `hal_wifi_get_scan_result()` with mock coverage.
 - Legacy SD/crash logger helpers were moved out of `tools` into the new
   opt-in `hal_sdlogger` module (`HAL_ENABLE_SDLOGGER`). The shared FatFs
-  implementation now lives under `impl/shared/filesystem/`, with a
+  implementation now lives under `impl/shared/frameworks/filesystem/`, with a
   deterministic mock backend and `test_hal_sdlogger` coverage.
 - Added `examples/39_sdlogger` for RP2040 and STM32G474, demonstrating SPI SD
   card setup, EEPROM-backed log/crash counters and FatFs 8.3 log filenames.
@@ -533,8 +536,8 @@ Next release.
 ### hal_gps - portable NMEA engine + STM32G474 support + richer fix data
 
 - The GPS parser is now a dependency-free, in-tree NMEA engine
-  (`impl/shared/gps/gps_nmea_parser.cpp`) wrapped by a shared facade
-  (`impl/shared/gps/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
+  (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`) wrapped by a shared facade
+  (`impl/shared/frameworks/gps/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
   is ported from TinyGPS++ (no longer linked, no Arduino/`millis()`
   dependency); GSA / GSV / GST decoding follows the minmea-kind GNSS parser.
   Position age is stamped via `hal_millis()` in the facade.
@@ -557,7 +560,7 @@ Next release.
   portable parser has its own host test (`test_gps_nmea_parser`) that feeds real
   sentences (computed checksums) and asserts the decoded fields and mappings.
 - NMEA numeric helpers `from_hex`, `parse_decimal`, `parse_degrees` were moved
-  from `impl/shared/gps/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
+  from `impl/shared/frameworks/gps/gps_nmea_parser.cpp` to shared utilities (`utils/tools.cpp`
   + `utils/tools_api.h`) and covered by `test_tools` unit tests.
 
 ### hal_digipot - I2C digital potentiometers (multiplatform, opt-in)

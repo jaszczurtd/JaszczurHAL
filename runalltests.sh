@@ -54,6 +54,35 @@ run_logged() {
     fi
 }
 
+clean_build_artifacts() {
+    local candidate
+    local cleaned=0
+    local build_dirs=(
+        "${SCRIPT_DIR}/build"
+    )
+
+    for candidate in "${SCRIPT_DIR}"/build_*; do
+        [[ -d "${candidate}" ]] && build_dirs+=("${candidate}")
+    done
+
+    for candidate in "${build_dirs[@]}"; do
+        [[ -d "${candidate}" ]] || continue
+        case "${candidate}" in
+            "${SCRIPT_DIR}/build"|"${SCRIPT_DIR}/build_"*) ;;
+            *) continue ;;
+        esac
+
+        rm -rf -- "${candidate}"
+        cleaned=$((cleaned + 1))
+    done
+
+    if [[ "${cleaned}" -eq 0 ]]; then
+        info "No existing build artifact directories to remove."
+    else
+        info "Removed ${cleaned} build artifact directories."
+    fi
+}
+
 # ── Args ─────────────────────────────────────────────────────────────────────
 JOBS="$(nproc 2>/dev/null || echo 4)"
 
@@ -71,6 +100,10 @@ done
 
 # ── Track timing ─────────────────────────────────────────────────────────────
 SECONDS=0
+
+# ── Clean start ──────────────────────────────────────────────────────────────
+header "Clean start: removing build artifacts"
+clean_build_artifacts
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
@@ -185,7 +218,10 @@ cppcheck --enable=warning,performance,portability \
     --suppressions-list=tests/cppcheck-suppressions.txt \
     -i src/hal/impl/rp2040/drivers \
     -i src/hal/impl/rp2040/frameworks \
-    -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c -i src/utils/lodepng.cpp -i src/utils/unity.c \
+    -i src/hal/impl/shared/frameworks/cjson \
+    -i src/hal/impl/shared/frameworks/jpeg \
+    -i src/hal/impl/shared/frameworks/lodepng \
+    -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src
 
@@ -206,16 +242,26 @@ cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
 pass "STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
-# FatFs core files are upstream C sources; keep our filesystem glue under tidy
-# while avoiding local rewrites of vendored ff.c/ffsystem.c/ffunicode.c.
-run-clang-tidy -p "${BUILD_DIR}" -quiet \
-    '^.*/src/(?!hal/impl/shared/filesystem/ff16/(ff|ffsystem|ffunicode)\.c$)(hal/hal_[^/]*|hal/impl/shared/.*|utils/(?!cJSON|lodepng|unity)[^/]*)\.(cpp|c)$' \
+mapfile -t TIDY_HOST_FILES < <(
+    scripts/clang_tidy_files.py --build-dir "${BUILD_DIR}" --repo-root "${SCRIPT_DIR}" --profile host
+)
+if [[ "${#TIDY_HOST_FILES[@]}" -eq 0 ]]; then
+    fail "clang-tidy host file list is empty"
+    exit 1
+fi
+run-clang-tidy -p "${BUILD_DIR}" -quiet "${TIDY_HOST_FILES[@]}" \
     | tee /tmp/jh_tidy_host.log
 pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
-run-clang-tidy -p "${BUILD_STM32}" -quiet \
-    '^.*/src/hal/impl/stm32g474/(?!drivers/littlefs/).*\.(cpp|c)$' \
+mapfile -t TIDY_STM32_FILES < <(
+    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32}" --repo-root "${SCRIPT_DIR}" --profile stm32
+)
+if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then
+    fail "clang-tidy STM32 file list is empty"
+    exit 1
+fi
+run-clang-tidy -p "${BUILD_STM32}" -quiet "${TIDY_STM32_FILES[@]}" \
     | tee /tmp/jh_tidy_stm32.log
 pass "clang-tidy STM32 pass complete."
 
