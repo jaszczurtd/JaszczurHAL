@@ -44,7 +44,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `impl/shared/frameworks/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
-| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | SerialUART |
+| `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | `hal_swserial.cpp` | SoftwareSerial |
 | `HAL_ENABLE_I2C` | `hal_i2c.h` | `hal_i2c.cpp` | I2C master/controller bus |
 | `HAL_ENABLE_I2C_SLAVE` | `hal_i2c_slave.h` | `hal_i2c_slave.cpp` | I2C slave/target register-map mode |

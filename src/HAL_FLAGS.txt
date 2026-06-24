@@ -151,7 +151,7 @@ Storage
     SD-card logger and crash-report logger. Propagates: FAT, EEPROM, SPI.
 
 Buses
-  HAL_ENABLE_UART          Hardware UART (SerialUART).
+  HAL_ENABLE_UART          Hardware UART.
   HAL_ENABLE_SWSERIAL      SoftwareSerial.
   HAL_ENABLE_I2C           I2C master (Wire).
   HAL_ENABLE_I2C_SLAVE     I2C slave / target mode with register map.

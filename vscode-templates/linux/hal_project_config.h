@@ -40,7 +40,7 @@
 // #define HAL_ENABLE_LITTLEFS        /* LittleFS helpers                   */
 
 /* ── Buses ────────────────────────────────────────────────────────────── */
-// #define HAL_ENABLE_UART            /* Hardware UART (SerialUART)         */
+// #define HAL_ENABLE_UART            /* Hardware UART                      */
 // #define HAL_ENABLE_SWSERIAL        /* SoftwareSerial                     */
 // #define HAL_ENABLE_I2C             /* I2C master (Wire)                  */
 // #define HAL_ENABLE_I2C_SLAVE       /* I2C slave / target                 */

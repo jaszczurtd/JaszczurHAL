@@ -219,7 +219,7 @@
                                   (propagates: FAT, EEPROM, SPI).
 
      Buses:
-       HAL_ENABLE_UART          - Hardware UART (SerialUART).
+       HAL_ENABLE_UART          - Hardware UART.
        HAL_ENABLE_SWSERIAL      - SoftwareSerial.
        HAL_ENABLE_I2C           - I2C master/controller.
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
