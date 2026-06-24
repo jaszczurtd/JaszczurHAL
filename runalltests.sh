@@ -183,8 +183,8 @@ info "Scanning src/ (vendored code excluded)..."
 cppcheck --enable=warning,performance,portability \
     --inline-suppr \
     --suppressions-list=tests/cppcheck-suppressions.txt \
-    -i src/hal/impl/arduino/drivers \
-    -i src/hal/impl/arduino/frameworks \
+    -i src/hal/impl/rp2040/drivers \
+    -i src/hal/impl/rp2040/frameworks \
     -i src/utils/cJSON.c -i src/utils/cJSON_Utils.c -i src/utils/lodepng.cpp -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src
@@ -243,7 +243,7 @@ else
 fi
 
 BUILD_RP2040="${SCRIPT_DIR}/build_rp2040"
-info "Building libJaszczurHAL.a (RP2040 Arduino backend)..."
+info "Building libJaszczurHAL.a (RP2040 backend)..."
 run_logged /tmp/jh_rp2040_lib_build.log \
     "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}"
 
@@ -255,7 +255,7 @@ else
     exit 1
 fi
 
-info "Building RP2040 Arduino flag matrix..."
+info "Building RP2040 flag matrix..."
 ARDUINO_FLAG_PROFILES=(empty-core typical-set sdlogger all-enabled)
 for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
     flags=()
@@ -329,7 +329,7 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
         exit 1
     fi
 done
-pass "RP2040 Arduino flag matrix built successfully."
+pass "RP2040 flag matrix built successfully."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 7: Examples build

@@ -72,6 +72,8 @@ static void release_slot(hal_can_impl_t *h) {
 
 static bool mode_supported_for_backend(hal_can_backend_t backend,
                                        bool fd_enabled, hal_can_mode_t mode) {
+  (void)backend;
+  (void)fd_enabled;
   hal_can_mode_t supported = HAL_CAN_MODE_LOOPBACK | HAL_CAN_MODE_LISTEN_ONLY |
                              HAL_CAN_MODE_ONE_SHOT | HAL_CAN_MODE_SLEEP;
 #ifdef HAL_ENABLE_MCP251XFD

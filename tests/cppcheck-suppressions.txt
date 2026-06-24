@@ -9,7 +9,7 @@
 # positive for this canonical startup idiom.
 comparePointers:src/hal/impl/stm32g474/port/startup_stm32g474.c
 
-# hal_mutex_impl_t is defined separately in each backend (.mock / arduino /
+# hal_mutex_impl_t is defined separately in each backend (.mock / rp2040 /
 # stm32g474). The backends are mutually exclusive at build time (one HAL_TARGET
 # per binary), so the ODR is never actually violated; cppcheck flags it only
 # because it analyses all backends together.

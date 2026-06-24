@@ -107,7 +107,7 @@ src/
   hal/                      # HAL public headers + common wrappers
     impl/
       .mock/                # deterministic host/test backend
-      arduino/              # Arduino/RP2040 backend
+      rp2040/               # RP2040 backend
         drivers/rp2040/     # RP2040 SoC services (fault/system)
         frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
@@ -250,7 +250,7 @@ Every push and pull request to `main` runs the CI workflow
   (`ctest -T memcheck`) to catch leaks, use-after-free, and invalid/uninitialised
   reads. This covers the portable logic and the mock backend.
 - **Static analysis** - `clang-tidy` and `cppcheck` analyse the project's own
-  code. cppcheck parses standalone, so it also reaches the Arduino backend
+  code. cppcheck parses standalone, so it also reaches the RP2040 backend
   adapters that never run on the host; clang-tidy covers the host-compilable
   production code (portable HAL, shared engine, STM32 backend). Bundled
   third-party libraries are excluded from both.
@@ -394,6 +394,6 @@ Primary docs:
 - WireGuard cryptographic primitives now live in a shared backend under
   `src/hal/impl/shared/wireguard/crypto/` and are reused by both the WireGuard
   integration and `hal_crypto` ChaCha20/Poly1305 helpers.
-- Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/arduino/drivers/ and src/hal/impl/arduino/frameworks/):
+- Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/rp2040/drivers/ and src/hal/impl/rp2040/frameworks/):
 - [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
 - [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary

@@ -3,7 +3,7 @@
 #
 # Usage:
 #   cmake -S stm32_lib -B build_stm32 \
-#         -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake
+#         -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
 #
 # Optional cache variables:
 #   ARM_GCC_PREFIX   (default: arm-none-eabi)

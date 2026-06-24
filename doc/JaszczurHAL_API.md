@@ -9,7 +9,7 @@ This document is the canonical, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
 here for full behavior/contracts.
 
-Current Arduino backend requirement: Earle Philhower Arduino core for RP2040/RP2350
+Current RP2040 backend requirement: Earle Philhower Arduino core for RP2040/RP2350
 (arduino-pico): https://github.com/earlephilhower/arduino-pico
 Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 
@@ -43,14 +43,14 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
-- `src/hal/impl/arduino/` - Arduino / RP2040 backend.
+- `src/hal/impl/rp2040/` - RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
 - `src/hal/impl/shared/` - internal backend-agnostic engines/helpers reused by multiple hardware backends, grouped into per-driver folders (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `filesystem/`, `gps/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`) plus a shared WireGuard cryptography core in `wireguard/crypto/`.
-- `src/hal/impl/arduino/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
-- `src/hal/impl/arduino/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
+- `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
+- `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
-- `src/hal/impl/arduino/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
+- `src/hal/impl/rp2040/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
 - `src/utils/` - higher-level utilities: `tools`, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment`, optional `cJSON`, optional `LodePNG`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the

@@ -538,13 +538,13 @@ void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeig
 int get7SegStringWidth(const char* str, int digitWidth, float thickness);
 ```
 
-**Supported characters:** `0`–`9`, hex `A`–`F`, space, `+`, `-`, `.`, `:`, `%`, `^`.
+**Supported characters:** `0`-`9`, hex `A`-`F`, space, `+`, `-`, `.`, `:`, `%`, `^`.
 
 Characters have proportional widths: `1` and space are narrower, `^` slightly wider.
 
 **Dependencies:** `hal_display.h` only. No Arduino SDK, no platform-specific types - `const char*` throughout.
 
-**Thread safety:** Thread-safe when `hal_display` is thread-safe (Arduino backend). Delegates all drawing to `hal_display_*` functions which are mutex-protected.
+**Thread safety:** Thread-safe when `hal_display` is thread-safe (RP2040 backend). Delegates all drawing to `hal_display_*` functions which are mutex-protected.
 
 **Example: digital clock display**
 ```c

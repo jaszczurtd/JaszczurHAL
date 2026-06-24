@@ -19,7 +19,7 @@ establish internal state.  They are **not** protected by mutexes because:
 - adding mutex overhead to init paths provides no practical benefit when the
   documented contract is respected.
 
-### Runtime: multicore-safe (Arduino backend)
+### Runtime: multicore-safe (RP2040 backend)
 
 After initialisation, most HAL runtime APIs are multicore-safe on the Arduino
 backend.  Each module documents its thread-safety guarantee in the per-module
@@ -42,17 +42,17 @@ must be serialized by the caller or used from a single core.
 
 Mock implementations (`impl/.mock/`) are designed for deterministic single-threaded
 unit tests and do **not** provide real cross-thread synchronization.  Thread-safety
-guarantees listed in per-module sections apply to the **Arduino backend only**
+guarantees listed in per-module sections apply to the **RP2040 backend only**
 unless explicitly stated otherwise.
 
 ---
 
 ## Drivers and frameworks
 
-Bundled or ported low-level drivers live under `src/hal/impl/arduino/drivers/`
+Bundled or ported low-level drivers live under `src/hal/impl/rp2040/drivers/`
 or `src/hal/impl/shared/`.
 Bundled high-level integration frameworks live under
-`src/hal/impl/arduino/frameworks/`.
+`src/hal/impl/rp2040/frameworks/`.
 Both are integrated as HAL-internal implementation detail (not public API).
 
 ### Inventory, authors and license paths
@@ -66,8 +66,8 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | NeoPixel core (ported) | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors (Adafruit_NeoPixel) | LGPL (attribution in source headers) | `src/hal/impl/shared/neopixel/COPYING`, `src/hal/impl/shared/neopixel/jh_neopixel.h` |
 | `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in source headers | `src/hal/impl/shared/ds3231/ds3231.h`, `src/hal/impl/shared/ds3231/ds3231.cpp` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/mcp2515/license.txt` and `src/hal/impl/shared/mcp2515/mcp2515_driver.h` |
-| `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/arduino/frameworks/arduino-wireguard-pico-w/LICENSE` |
-| `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/arduino/frameworks/PubSubClient/LICENSE.txt` |
+| `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/LICENSE` |
+| `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/rp2040/frameworks/PubSubClient/LICENSE.txt` |
 | TinyGPS++ (ported) | `hal_gps` NMEA parsing logic ported into `gps_nmea_parser` | Mikal Hart | LGPL-2.1+ (attribution in source headers; library no longer bundled/linked) | `src/hal/impl/shared/gps/gps_nmea_parser.cpp` |
 
 Note: `impl/shared/display/Fonts/` includes additional per-font notices in

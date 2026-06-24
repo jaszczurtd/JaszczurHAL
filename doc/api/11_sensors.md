@@ -90,7 +90,7 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status register
 ```
 
-**impl/arduino:** MCP9600/MCP9601 and MAX6675 delegate to shared Arduino-free drivers.
+**impl/rp2040:** MCP9600/MCP9601 and MAX6675 delegate to shared Arduino-free drivers.
 **impl/stm32g474:** MCP9600/MCP9601 and MAX6675 delegate to the same shared drivers as RP2040.
 **Thread safety:** Thread-safe and multicore-safe. Each instance has its own per-instance `hal_mutex_t`. All read, configuration, and deinit operations are protected under this mutex.
 
@@ -135,7 +135,7 @@ bool          hal_ds18b20_is_busy(hal_ds18b20_t h);
 bool          hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
 ```
 
-**impl/arduino + impl/stm32g474:** Both use the shared Arduino-free
+**impl/rp2040 + impl/stm32g474:** Both use the shared Arduino-free
 `src/hal/impl/shared/onewire/` implementation. The backend performs DS18B20
 presence/address probing, scratchpad CRC verification, resolution writes,
 non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
@@ -507,7 +507,7 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 ```
 
-**impl/arduino + impl/stm32g474:**
+**impl/rp2040 + impl/stm32g474:**
 - PCF8563 backend: direct register access over `hal_i2c` (date-time,
   clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
   interrupt enable mask and read-clear event flags).
@@ -625,7 +625,7 @@ int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buf
 **Engine:** the portable NMEA parser (`impl/shared/gps/gps_nmea_parser.cpp`) wrapped
 by a shared facade (`impl/shared/gps/hal_gps_core.cpp`) - used by both hardware
 backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
-**impl/arduino (RP2040):** transport only - SoftwareSerial (default) or UART,
+**impl/rp2040 (RP2040):** transport only - SoftwareSerial (default) or UART,
 selected at compile time. `hal_gps_update()` must be polled every loop iteration.
 **impl/stm32g474:** transport only - hardware UART (USART1 by default).
 **impl/.mock:** internal state struct; inject helpers set values directly.

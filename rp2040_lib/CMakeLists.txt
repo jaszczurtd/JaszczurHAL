@@ -99,23 +99,23 @@ elseif(NOT "${ARDUINO_OS}" STREQUAL "" AND NOT "${ARDUINO_OS}" STREQUAL "none")
     message(FATAL_ERROR "Unsupported ARDUINO_OS='${ARDUINO_OS}' (expected empty, none, or freertos)")
 endif()
 
-# ── HAL implementation sources (Arduino) ─────────────────────────────────────
-file(GLOB ARDUINO_IMPL_SOURCES ${SRC}/hal/impl/arduino/*.cpp)
-file(GLOB_RECURSE ARDUINO_SHARED_SOURCES
+# ── HAL implementation sources (RP2040) ──────────────────────────────────────
+file(GLOB RP2040_IMPL_SOURCES ${SRC}/hal/impl/rp2040/*.cpp)
+file(GLOB_RECURSE RP2040_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.cpp
     ${SRC}/hal/impl/shared/*.c
 )
 
 # ── Driver sources (third-party libraries bundled with HAL) ──────────────────
 file(GLOB_RECURSE DRIVER_SOURCES
-    ${SRC}/hal/impl/arduino/drivers/*.cpp
-    ${SRC}/hal/impl/arduino/drivers/*.c
+    ${SRC}/hal/impl/rp2040/drivers/*.cpp
+    ${SRC}/hal/impl/rp2040/drivers/*.c
 )
 
 # ── Framework sources (bundled high-level integrations) ──────────────────────
 file(GLOB_RECURSE FRAMEWORK_SOURCES
-    ${SRC}/hal/impl/arduino/frameworks/*.cpp
-    ${SRC}/hal/impl/arduino/frameworks/*.c
+    ${SRC}/hal/impl/rp2040/frameworks/*.cpp
+    ${SRC}/hal/impl/rp2040/frameworks/*.c
 )
 
 # ── Common HAL sources (not implementation-specific) ─────────────────────────
@@ -149,8 +149,8 @@ endif()
 
 # ── Static library target ────────────────────────────────────────────────────
 add_library(JaszczurHAL STATIC
-    ${ARDUINO_IMPL_SOURCES}
-    ${ARDUINO_SHARED_SOURCES}
+    ${RP2040_IMPL_SOURCES}
+    ${RP2040_SHARED_SOURCES}
     ${DRIVER_SOURCES}
     ${FRAMEWORK_SOURCES}
     ${HAL_COMMON_SOURCES}

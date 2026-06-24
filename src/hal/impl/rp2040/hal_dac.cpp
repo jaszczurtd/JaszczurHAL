@@ -16,14 +16,21 @@
  * intentionally not presented as a DAC.)
  */
 
-bool hal_dac_is_supported(void)        { return false; }
-uint8_t hal_dac_resolution_bits(void)  { return 0u; }
-uint16_t hal_dac_max_value(void)       { return 0u; }
-bool hal_dac_init(uint8_t channel)     { (void)channel; return false; }
-void hal_dac_write(uint8_t channel, uint16_t value) { (void)channel; (void)value; }
+bool hal_dac_is_supported(void) { return false; }
+uint8_t hal_dac_resolution_bits(void) { return 0u; }
+uint16_t hal_dac_max_value(void) { return 0u; }
+bool hal_dac_init(uint8_t channel) {
+  (void)channel;
+  return false;
+}
+void hal_dac_write(uint8_t channel, uint16_t value) {
+  (void)channel;
+  (void)value;
+}
 void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
-    (void)channel; (void)millivolts;
+  (void)channel;
+  (void)millivolts;
 }
 
-#endif  // HAL_ENABLE_DAC
-#endif  // HAL_TARGET_IS_RP2040
+#endif // HAL_ENABLE_DAC
+#endif // HAL_TARGET_IS_RP2040

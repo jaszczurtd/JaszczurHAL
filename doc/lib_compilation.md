@@ -165,7 +165,7 @@ cmake --build build_rp2040_freertos -j$(nproc)
 ```
 
 The local `third_party/FreeRTOS-Kernel` tree is not compiled for the current
-Arduino/RP2040 backend. Defining `HAL_ENABLE_FREERTOS` in a normal non-FreeRTOS
+RP2040 backend. Defining `HAL_ENABLE_FREERTOS` in a normal non-FreeRTOS
 RP2040 static-library build intentionally produces a clear compile-time error.
 
 ### Manual CMake Build
@@ -295,7 +295,7 @@ users opt in with the public HAL flag:
 
 ```bash
 cmake -S stm32_lib -B build_stm32_freertos \
-  -DCMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake \
+  -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake" \
   -DEXTRA_HAL_DEFINES="HAL_ENABLE_FREERTOS"
 ```
 

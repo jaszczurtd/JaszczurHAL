@@ -435,7 +435,7 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
-**impl/arduino / RP2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use shared HAL SPI/GPIO drivers; SSD1306 uses the shared HAL I2C driver; geometry, bitmap, and text rendering run through the shared `jh_gfx` engine.
+**impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use shared HAL SPI/GPIO drivers; SSD1306 uses the shared HAL I2C driver; geometry, bitmap, and text rendering run through the shared `jh_gfx` engine.
 **impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
 **impl/.mock:** deterministic host mock with inspectable state for tests.
 **Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. Mock backend is unsynchronized and intended for single-threaded tests.

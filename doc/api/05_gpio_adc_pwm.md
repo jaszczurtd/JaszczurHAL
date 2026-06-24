@@ -71,7 +71,7 @@ It does not guarantee a caller-selected frequency or independent channel
 allocation. Use `hal_pwm_freq` when frequency, period/wrap value and channel
 lifetime matter.
 
-**impl/arduino:** `analogWriteResolution()`, `analogWrite()` (Arduino-pico);
+**impl/rp2040:** `analogWriteResolution()`, `analogWrite()` (Arduino-pico);
 PWM frequency and slice sharing follow the Arduino core.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
 default simple-PWM target frequency is 1 kHz best-effort from the current APB
@@ -105,7 +105,7 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
 
-**impl/arduino:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
+**impl/rp2040:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
 **impl/stm32g474:** register-level TIM PWM on mapped TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level resource, so multiple channels on the same TIM share the same frequency and effective period.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
@@ -133,7 +133,7 @@ void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);
 ```
 
-**impl/arduino:** `analogReadResolution()`, `analogRead()` (Arduino-pico).
+**impl/rp2040:** `analogReadResolution()`, `analogRead()` (Arduino-pico).
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
 

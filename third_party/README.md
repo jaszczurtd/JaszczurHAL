@@ -37,5 +37,5 @@ or set:
 JH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel
 ```
 
-The RP2040 Arduino backend does not use this directory; it relies on
+The RP2040 backend does not use this directory; it relies on
 arduino-pico's built-in FreeRTOS mode instead.
