@@ -150,6 +150,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
 | 17 | [cJSON](api/17_cJSON.md) | Bundled `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Bundled `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
+| 19 | [JPEG](api/19_JPEG.md) | Bundled `JPEGDecoder` / `picojpeg`, include patterns, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 
 ---
 
@@ -164,6 +165,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_crypto` | [Cryptography](api/07_crypto.md) |
 | `cJSON` / `cJSON_Utils` | [cJSON](api/17_cJSON.md) |
 | `LodePNG` | [LodePNG](api/18_LodePNG.md) |
+| `JPEGDecoder` / `picojpeg` | [JPEG](api/19_JPEG.md) |
 | `hal_digipot` | [Module flags](api/02_module_flags.md) (flag table) |
 | `hal_display` | [CAN and display](api/10_can_display.md) |
 | `hal_ds18b20` | [Sensors](api/11_sensors.md) |
