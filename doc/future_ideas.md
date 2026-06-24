@@ -2,23 +2,7 @@
 
 Simple backlog of future architecture and implementation work.
 
-- Move Arduino-backed drivers into shared HAL implementations.
-  - Treat this as the highest-priority architecture cleanup.
-  - Move reusable protocol logic to `src/hal/impl/shared/`.
-  - Keep only target-specific glue in `src/hal/impl/rp2040/` and
-    `src/hal/impl/stm32g474/`.
-  - Avoid new Arduino-library dependencies in portable drivers.
-  - Use HAL primitives for I/O, time, logging, memory policy and
-    synchronization.
-  - Target end state: RP2040 and STM32G474 share driver logic wherever the
-    protocol is the same.
-
 - Continue FreeRTOS hardening.
-  - Keep FreeRTOS opt-in through `HAL_ENABLE_FREERTOS` for now.
-  - Preserve the public app contract: `app_start()`, `app_task0()`,
-    optional `app_task1()`.
-  - Keep the client-facing API aligned across RP2040 and STM32G474.
-  - Keep the FreeRTOS version aligned across embedded targets where practical.
   - Harden module-level synchronization and ownership.
   - Document callback contexts, task contexts and ISR/task boundaries.
   - Run hardware smoke tests before considering FreeRTOS as a default runtime.
@@ -31,8 +15,6 @@ Simple backlog of future architecture and implementation work.
   - Good first candidates: digipot init and set-resistance paths.
 
 - Continue CAN API v2 follow-up work.
-  - Keep `hal_can_send()` and `hal_can_receive()` as classic CAN compatibility
-    wrappers.
   - Add interrupt-driven RX/TX completion paths.
   - Consider callback-style filter ownership only when interrupts need it.
   - Add transceiver enable/standby abstraction.
@@ -91,8 +73,11 @@ Simple backlog of future architecture and implementation work.
     mutexes and compatibility wrappers.
 
 - Continue STM32 backend catch-up.
+  - Focus on modules that still lack real STM32G474 backends:
+    `mqtt`, `ota`, `swserial`, `udp`, `wifi` and `wireguard`.
   - Keep module/runtime coverage work ahead of optional polish.
-  - Prioritize portable HAL-level drivers over Arduino wrappers.
+  - Prefer portable HAL-level drivers over Arduino wrappers for any new device
+    work.
   - Keep register access, startup, IRQ glue, SDK ownership, pin/peripheral
     bring-up and DMA in backend folders.
 

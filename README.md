@@ -23,6 +23,11 @@ JaszczurHAL introduces a practical boundary:
 
 This reduces lock-in to one runtime and makes migration from other SDKs much easier.
 
+## Supported modules (quick overview)
+
+See [features.md](doc/features.md) for a compact inventory of supported
+functionality and source links.
+
 ## Is this used by anything real?
 
 Yes - by several of my more demanding projects.
@@ -61,13 +66,6 @@ Utility-only includes are also available:
 ```c
 #include <tools_c.h>  // C-compatible utility API
 ```
-
-## Supported modules (quick overview)
-
-- Core HAL domains: GPIO, ADC, DAC, PWM, pulse counter (PCNT), timers, system, synchronization, serial I/O
-- Peripheral domains: SPI/I2C/UART, CAN, displays, RGB LEDs, thermocouples, digital temperature sensors, RTC, GPS, external ADC, EEPROM, key-value storage, SD logging (and many more),
-- Connected domains (opt-in): WiFi, MQTT, OTA updates, LittleFS, crypto/authentication helpers, Wireguard, and cellular modem support for SimCom A76xx modules via AT commands, including GNSS and cell-based location,
-- Third-party drivers/frameworks are bundled inside the library and compiled only when related modules are enabled
 
 ## Thread safety (overview)
 
