@@ -84,7 +84,7 @@ CMakeLists.txt              # host/mock tests build
 rp2040_lib/                 # RP2040 Arduino-pico static-library CMake glue
 stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
 scripts/
-  build_arduino_lib.sh      # RP2040 static-library helper
+  build_rp2040_lib.sh       # RP2040 static-library helper
   build_stm32_lib.sh        # STM32G474 static-library helper
   ensure_freertos_kernel.sh # pinned FreeRTOS-Kernel fetch/verify helper
 runalltests.sh              # full local validation gate
@@ -362,7 +362,7 @@ rp2040_core_version.conf    ← RP2040_CORE_VERSION=x.y.z
 
 1. Edit `rp2040_core_version.conf` - change the `RP2040_CORE_VERSION=` line.
 2. Run `./runmefirst.sh` to install the new core locally.
-3. Run `./runalltests.sh` (or at minimum `./scripts/build_arduino_lib.sh`) to confirm the library still compiles against the new core.
+3. Run `./runalltests.sh` (or at minimum `./scripts/build_rp2040_lib.sh`) to confirm the library still compiles against the new core.
 
 No other files need to be touched.
 

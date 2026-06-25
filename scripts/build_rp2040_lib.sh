@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# build_arduino_lib.sh
+# build_rp2040_lib.sh
 #
 # Build JaszczurHAL as a linkable static library (.a) for Arduino RP2040.
 #
@@ -9,7 +9,7 @@
 #   - CMake >= 3.16
 #
 # Usage:
-#   ./scripts/build_arduino_lib.sh [options]
+#   ./scripts/build_rp2040_lib.sh [options]
 #
 # Options:
 #   -r, --root PATH      Arduino rp2040 package root

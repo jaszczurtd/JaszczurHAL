@@ -223,7 +223,7 @@ jobs:
 
       - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
         run: |
-          ./scripts/build_arduino_lib.sh --clean ${{ matrix.flags }}
+          ./scripts/build_rp2040_lib.sh --clean ${{ matrix.flags }}
           test -f build_rp2040/libJaszczurHAL.a
 
   # ── Examples build gate ────────────────────────────────────────────────────

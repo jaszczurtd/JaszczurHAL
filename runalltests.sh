@@ -292,7 +292,7 @@ fi
 BUILD_RP2040="${SCRIPT_DIR}/build_rp2040"
 info "Building libJaszczurHAL.a (RP2040 backend)..."
 run_logged /tmp/jh_rp2040_lib_build.log \
-    "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}"
+    "${SCRIPT_DIR}/scripts/build_rp2040_lib.sh" --clean --jobs "${JOBS}"
 
 if [[ -f "${BUILD_RP2040}/libJaszczurHAL.a" ]]; then
     SIZE=$(stat --printf="%s" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || echo "?")
@@ -368,7 +368,7 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
     matrix_build_dir="${SCRIPT_DIR}/build_rp2040_${profile//-/_}"
     info "Building RP2040 flag profile: ${profile}"
     run_logged "/tmp/jh_rp2040_lib_${profile}.log" \
-        "${SCRIPT_DIR}/scripts/build_arduino_lib.sh" --clean --jobs "${JOBS}" \
+        "${SCRIPT_DIR}/scripts/build_rp2040_lib.sh" --clean --jobs "${JOBS}" \
             --output "${matrix_build_dir}" "${flags[@]}"
 
     if [[ ! -f "${matrix_build_dir}/libJaszczurHAL.a" ]]; then

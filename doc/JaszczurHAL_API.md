@@ -27,7 +27,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `CMakeLists.txt` - repository-root host/mock tests build.
 - `rp2040_lib/` - RP2040 Arduino-pico static-library CMake glue.
 - `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
-- `scripts/build_arduino_lib.sh` - RP2040 static-library helper.
+- `scripts/build_rp2040_lib.sh` - RP2040 static-library helper.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
 - `scripts/ensure_freertos_kernel.sh` - shared helper for fetching/verifying
   the pinned `third_party/FreeRTOS-Kernel` checkout.

@@ -138,14 +138,12 @@ void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);
 ```
 
-Default resolution is 12 bits on STM32G474 and mock. On RP2040 the default is
-10 bits for compatibility with the Arduino-pico `analogRead()` behavior used by
-older JaszczurHAL releases.
+Default resolution is 12 bits (consistent across the RP2040, STM32G474 and mock
+backends).
 
 **impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
 `adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
-the 12-bit hardware sample is shifted to the configured resolution, matching the
-former Arduino-pico backend semantics.
+the 12-bit hardware sample is rescaled to the configured resolution.
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
 

@@ -7,7 +7,7 @@ JaszczurHAL can be built in three different ways, depending on the target:
 | Target | Build entry | Output | Backend switch |
 |---|---|---|---|
 | Host / mock tests | repository-root CMake | `build/libhal_mock.a` + tests | `HAL_TARGET_MOCK` |
-| RP2040 / RP2350 through Arduino-pico | `rp2040_lib/` or `scripts/build_arduino_lib.sh` | `build_rp2040/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
+| RP2040 / RP2350 through Arduino-pico | `rp2040_lib/` or `scripts/build_rp2040_lib.sh` | `build_rp2040/libJaszczurHAL.a` | `HAL_TARGET_RP2040` |
 | STM32G474 bare-metal | `stm32_lib/` | `build_stm32/libJaszczurHAL.a` | `HAL_TARGET_STM32G474` |
 
 The canonical target selection lives in `src/hal/hal_target.h`. Define exactly
@@ -83,7 +83,7 @@ earlephilhower Arduino-pico toolchain.
 From the repository root:
 
 ```bash
-./scripts/build_arduino_lib.sh
+./scripts/build_rp2040_lib.sh
 ```
 
 The script auto-detects the latest Arduino-pico core and `pqt-gcc` toolchain
@@ -111,25 +111,25 @@ Examples:
 
 ```bash
 # Default Raspberry Pi Pico build
-./scripts/build_arduino_lib.sh
+./scripts/build_rp2040_lib.sh
 
 # Project-local config plus explicit modules
-./scripts/build_arduino_lib.sh \
+./scripts/build_rp2040_lib.sh \
   -p /path/to/project \
   -D HAL_ENABLE_WIFI \
   -D HAL_ENABLE_GPS \
   -D HAL_ENABLE_MCP9600
 
 # Pico W
-./scripts/build_arduino_lib.sh \
+./scripts/build_rp2040_lib.sh \
   --board rpipicow \
   -D HAL_ENABLE_WIFI
 
 # RP2040 FreeRTOS SMP mode
-./scripts/build_arduino_lib.sh --freertos
+./scripts/build_rp2040_lib.sh --freertos
 
 # Clean rebuild into a custom directory
-./scripts/build_arduino_lib.sh --clean -o ./my_build
+./scripts/build_rp2040_lib.sh --clean -o ./my_build
 ```
 
 ### RP2040 FreeRTOS note
@@ -142,7 +142,7 @@ an equivalent FQBN option such as `os=freertos`.
 For the static-library helper, use:
 
 ```bash
-./scripts/build_arduino_lib.sh --freertos
+./scripts/build_rp2040_lib.sh --freertos
 ```
 
 This passes `ARDUINO_OS=freertos` to CMake, defines `__FREERTOS`, makes the
@@ -388,7 +388,7 @@ stm32_lib/
   STM32G474RETx_FLASH.ld
 
 scripts/
-  build_arduino_lib.sh
+  build_rp2040_lib.sh
     Convenience wrapper around rp2040_lib/.
 
   build_stm32_lib.sh

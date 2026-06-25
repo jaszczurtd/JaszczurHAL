@@ -19,7 +19,7 @@ What they provide:
 - a separate CMake target `JaszczurHAL` for STM32G474,
 - a dedicated `arm-none-eabi-*` toolchain,
 - a convenient build script analogous to the existing
-  `scripts/build_arduino_lib.sh`.
+  `scripts/build_rp2040_lib.sh`.
 
 ### 2. New source backend `impl/stm32g474`
 Added files:
