@@ -400,6 +400,13 @@ static void hal_serial_finish_line_locked(void) {
   }
 }
 
+extern "C" void hal_rp2040_serial_write_assert_fail(const char *text) {
+  const char *safe = text ? text : "(null)";
+  hal_serial_write_locked("HAL ASSERT FAIL: ", strlen("HAL ASSERT FAIL: "));
+  hal_serial_write_locked(safe, strlen(safe));
+  hal_serial_finish_line_locked();
+}
+
 static void hal_debug_stream_write(void *ctx, const char *data, size_t len) {
   (void)ctx;
   hal_serial_write_locked(data, len);

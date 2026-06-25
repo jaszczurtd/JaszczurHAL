@@ -3,7 +3,6 @@
 #include "../../hal_system.h"
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
-#include <Arduino.h>
 #include <pico/time.h>
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
@@ -17,9 +16,9 @@
 #define JH_RP2040_HAL_SYSTEM_FREERTOS 0
 #endif
 
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
 extern "C" bool hal_rp2040_critical_section_active(void);
 
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
 static bool hal_freertos_can_block_current_context(void) {
   return !portCHECK_IF_IN_ISR() && !hal_rp2040_critical_section_active() &&
          xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
@@ -34,9 +33,13 @@ static TickType_t hal_ms_to_ticks(uint32_t ms) {
 }
 #endif
 
-uint32_t hal_millis(void) { return millis(); }
+static bool hal_rp2040_can_sleep_current_context(void) {
+  return !rp2040_system_in_isr() && !hal_rp2040_critical_section_active();
+}
 
-uint32_t hal_micros(void) { return micros(); }
+uint32_t hal_millis(void) { return to_ms_since_boot(get_absolute_time()); }
+
+uint32_t hal_micros(void) { return (uint32_t)time_us_64(); }
 
 uint64_t hal_micros64(void) { return time_us_64(); }
 
@@ -50,11 +53,12 @@ void hal_delay_ms(uint32_t ms) {
     }
     return;
   }
-
-  busy_wait_ms(ms);
-#else
-  delay(ms);
 #endif
+  if (hal_rp2040_can_sleep_current_context()) {
+    sleep_ms(ms);
+  } else {
+    busy_wait_ms(ms);
+  }
 }
 
 void hal_delay_us(uint32_t us) {
