@@ -505,6 +505,13 @@ bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint
 
 bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
+
+// Unix epoch helpers (seconds since 1970-01-01 UTC)
+bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch);
+bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
+
+// On-die temperature (DS3231 only; PCF8563 returns false)
+bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
 ```
 
 **impl/rp2040 + impl/stm32g474:**
@@ -603,6 +610,18 @@ double hal_gps_longitude(void);  // degrees, negative = west
 
 // Speed
 double hal_gps_speed_kmph(void); // ground speed in km/h; 0.0 when no fix
+
+// Extended fix data (from GGA/GSA/GSV sentences)
+double   hal_gps_altitude_m(void);              // altitude above MSL, metres
+double   hal_gps_course_deg(void);              // course over ground, degrees
+uint32_t hal_gps_satellites_used(void);         // satellites used in the fix
+uint8_t  hal_gps_satellites_in_view(void);      // satellites in view
+double   hal_gps_hdop(void);                    // horizontal dilution of precision
+double   hal_gps_vdop(void);                    // vertical dilution of precision
+double   hal_gps_pdop(void);                    // position dilution of precision
+uint8_t  hal_gps_fix_quality(void);             // GGA fix-quality indicator
+uint8_t  hal_gps_fix_mode(void);                // GSA fix mode (1=none,2=2D,3=3D)
+double   hal_gps_horizontal_accuracy_m(void);   // estimated horizontal accuracy, metres
 
 // UTC date
 int hal_gps_date_year(void);   // four-digit year

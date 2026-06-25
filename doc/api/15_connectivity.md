@@ -134,7 +134,7 @@ bool hal_ota_is_started(void);
 
 **Behavior notes:**
 - Module is available only when `HAL_ENABLE_OTA` is defined.
-- Requires WiFi support (`HAL_ENABLE_WIFI` must be unset).
+- Requires WiFi support: enabling `HAL_ENABLE_OTA` automatically defines `HAL_ENABLE_WIFI`.
 - `hal_ota_begin()` initializes OTA service and registers internal event hooks.
 - `hal_ota_handle()` polls OTA transport and dispatches queued events to user callbacks.
 - Callback handlers can be replaced or unregistered by passing `NULL`.

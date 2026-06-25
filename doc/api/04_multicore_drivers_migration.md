@@ -21,9 +21,9 @@ establish internal state.  They are **not** protected by mutexes because:
 
 ### Runtime: multicore-safe (RP2040 backend)
 
-After initialisation, most HAL runtime APIs are multicore-safe on the Arduino
-backend.  Each module documents its thread-safety guarantee in the per-module
-section below.  The general pattern is:
+After initialisation, most HAL runtime APIs are multicore-safe on the RP2040
+backend (dual-core core0/core1).  Each module documents its thread-safety
+guarantee in the per-module section below.  The general pattern is:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
@@ -134,7 +134,7 @@ Validation:
 - returns `0` for out-of-range values (year < 1970, invalid month/day/time)
 - supports leap-year rules (including century exceptions)
 
-This helper is implemented for both Arduino and mock backends.
+This helper is implemented for the RP2040, STM32G474 and mock backends.
 
 ---
 

@@ -53,63 +53,7 @@ void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels, hal_rgb_led_pixel_type
 // Set brightness [1, 255]; default is 30. Takes effect on next set_color() call.
 void hal_rgb_led_set_brightness(uint8_t brightness);
 
-// Set colour. Repeated calls with the same colour are suppressed (no SPI traffic).
-void hal_rgb_led_set_color(hal_rgb_led_color_t color);
-
-// Turn LED off (equivalent to set_color(HAL_RGB_LED_NONE))
-void hal_rgb_led_off(void);
-```
-
-**impl/rp2040:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/drivers/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
-**impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
-**Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
-
-**Mock helpers:**
-```c
-bool                hal_mock_rgb_led_is_initialized(void);
-hal_rgb_led_color_t hal_mock_rgb_led_get_color(void);
-uint8_t             hal_mock_rgb_led_get_brightness(void);
-hal_rgb_led_pixel_type_t hal_mock_rgb_led_get_pixel_type(void);
-uint8_t             hal_mock_rgb_led_get_pin(void);
-uint8_t             hal_mock_rgb_led_get_num_pixels(void);
-void                hal_mock_rgb_led_reset(void);
-```
-
----
-
-
-## `hal_rgb_led` - NeoPixel status LED  *(optional - `HAL_ENABLE_RGB_LED`)*
-
-```c
-#include <hal/hal_rgb_led.h>
-
-typedef enum {
-    HAL_RGB_LED_NONE   = 0,
-    HAL_RGB_LED_RED    = 1,
-    HAL_RGB_LED_GREEN  = 2,
-    HAL_RGB_LED_YELLOW = 3,
-    HAL_RGB_LED_WHITE  = 4,
-    HAL_RGB_LED_BLUE   = 5,
-    HAL_RGB_LED_PURPLE = 6,
-} hal_rgb_led_color_t;
-
-typedef enum {
-    HAL_RGB_LED_PIXEL_RGB_KHZ800  = 0x0006,  // RGB byte order, 800 kHz
-    HAL_RGB_LED_PIXEL_GRB_KHZ800  = 0x0052,  // GRB byte order, 800 kHz (WS2812B, RP2040-Zero)
-    HAL_RGB_LED_PIXEL_RGBW_KHZ800 = 0x0018,  // RGBW byte order, 800 kHz
-} hal_rgb_led_pixel_type_t;
-
-// Init with default RGB byte order
-void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
-
-// Init with explicit pixel type (use HAL_RGB_LED_PIXEL_GRB_KHZ800 for WS2812B)
-void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels, hal_rgb_led_pixel_type_t pixel_type);
-
-// Set brightness [1, 255]; default is 30. Takes effect on next set_color() call.
-void hal_rgb_led_set_brightness(uint8_t brightness);
-
-// Set colour. Repeated calls with the same colour are suppressed (no SPI traffic).
+// Set colour. Repeated calls with the same colour are suppressed (no LED transport traffic).
 void hal_rgb_led_set_color(hal_rgb_led_color_t color);
 
 // Turn LED off (equivalent to set_color(HAL_RGB_LED_NONE))

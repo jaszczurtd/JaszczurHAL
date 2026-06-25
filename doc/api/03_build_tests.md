@@ -81,12 +81,16 @@ Configures your local environment for the first time:
 ```bash
 ./runalltests.sh
 ```
-Runs the complete test suite for all targets:
-- Builds and runs host/mock tests (`build/` + ctest)
-- Builds RP2040 Arduino-pico static library (`build_rp2040/`)
-- Builds STM32G474 bare-metal static library (`build_stm32/`)
-- Builds example projects for RP2040, STM32G474, and variants (with/without FreeRTOS)
-- Verifies compilation succeeded and logs capture any warnings/errors
+Runs the complete quality-gate suite (7 gates, in order):
+1. Tool-presence check
+2. Host/mock unit tests (`build_test/` + ctest, incl. FreeRTOS POSIX)
+3. Memory safety (Valgrind memcheck on `MEMCHECK_REQUIRED_TESTS`)
+4. Static analysis: cppcheck
+5. Static analysis: clang-tidy (host + STM32 compile databases; `build_stm32_host/`)
+6. Target static-library builds (STM32G474 + RP2040 flag matrix)
+7. Examples build (RP2040 + STM32G474, via `examples/CMakeLists.txt`)
+
+Exits non-zero on the first failure; logs capture any warnings/errors.
 
 This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
 
@@ -97,10 +101,16 @@ This is the **recommended pre-commit validation** and **CI/CD test gate**. Run b
 The CMake build at the project root compiles a static library `hal_mock` from:
 
 - all `src/hal/impl/.mock/*.cpp` stubs,
-- `src/hal/hal_config.cpp`,
-- `src/hal/hal_can_util.cpp`,
-- `src/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp`, `src/utils/pidController.cpp`,
+- the backend-neutral HAL sources in `UTIL_SOURCES` (see `CMakeLists.txt`):
+  `hal_config.cpp`, `hal_can_util.cpp`, `hal_debug_format.cpp`, `hal_crypto.cpp`,
+  `hal_kv.cpp`, `hal_modem_at.cpp`, `hal_simcom_a76xx.cpp`, `hal_timer_ext.cpp`,
+  `hal_soft_timer.cpp`, `hal_digipot.cpp`, `hal_pga2311.cpp`, plus the shared
+  drivers (mcp2515/mcp251xfd/digipot/pga2311) and shared frameworks
+  (wireguard crypto, smart_timers, cJSON, lodepng, jpeg) and `pidController.cpp`,
 - `src/utils/unity.c` (Unity framework).
+
+The exact list is the `UTIL_SOURCES` set in `CMakeLists.txt` - treat that as the
+source of truth.
 
 Each test executable in `tests/` links against `hal_mock` only - no Arduino
 headers, no pico SDK, no hardware.
