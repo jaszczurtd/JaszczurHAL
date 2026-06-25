@@ -40,9 +40,24 @@ static uint32_t max_value_for_resolution(void) {
   return (1u << s_resolution_bits) - 1u;
 }
 
-static float pwm_clkdiv_for_wrap(uint32_t wrap) {
+static uint32_t pwm_effective_scale_for_max(uint32_t max_value) {
+  uint32_t scale = max_value;
+  while (((clock_get_hz(clk_sys) / ((float)scale * kDefaultPwmFrequencyHz)) >
+          255.0f) &&
+         (scale < 32768u)) {
+    scale *= 2u;
+  }
+  while (((clock_get_hz(clk_sys) / ((float)scale * kDefaultPwmFrequencyHz)) <
+          1.0f) &&
+         (scale >= 6u)) {
+    scale /= 2u;
+  }
+  return scale;
+}
+
+static float pwm_clkdiv_for_scale(uint32_t scale) {
   float clkdiv =
-      clock_get_hz(clk_sys) / ((float)kDefaultPwmFrequencyHz * (wrap + 1u));
+      clock_get_hz(clk_sys) / ((float)kDefaultPwmFrequencyHz * scale);
   if (clkdiv < 1.0f) {
     clkdiv = 1.0f;
   } else if (clkdiv > 255.0f) {
@@ -60,7 +75,7 @@ static void pwm_configure_slice(uint slice, uint32_t wrap) {
   }
 
   pwm_config c = pwm_get_default_config();
-  pwm_config_set_clkdiv(&c, pwm_clkdiv_for_wrap(wrap));
+  pwm_config_set_clkdiv(&c, pwm_clkdiv_for_scale(wrap + 1u));
   pwm_config_set_wrap(&c, (uint16_t)wrap);
   pwm_init(slice, &c, s_slice_configured[slice]);
 
@@ -91,12 +106,17 @@ void hal_pwm_write(uint8_t pin, uint32_t value) {
   hal_mutex_lock(s_pwm_mutex);
 
   const uint slice = pwm_gpio_to_slice_num(pin);
-  const uint32_t wrap = max_value;
+  const uint32_t effective_scale = pwm_effective_scale_for_max(max_value);
+  const uint32_t wrap = effective_scale - 1u;
   pwm_configure_slice(slice, wrap);
 
-  uint32_t level = value;
-  if (value >= max_value && s_resolution_bits < 16u) {
-    level = max_value + 1u;
+  uint32_t level = 0u;
+  if (max_value > 0u) {
+    level = (uint32_t)(((uint64_t)value * effective_scale + (max_value / 2u)) /
+                       max_value);
+    if (level > effective_scale) {
+      level = effective_scale;
+    }
   }
 
   pwm_set_gpio_level(pin, (uint16_t)level);

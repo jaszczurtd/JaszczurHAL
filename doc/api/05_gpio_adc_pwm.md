@@ -72,11 +72,11 @@ allocation. Use `hal_pwm_freq` when frequency, period/wrap value and channel
 lifetime matter. Default resolution is 8 bits.
 
 **impl/rp2040:** native pico-sdk `hardware/pwm.h` (`pwm_init`, `pwm_config_set_wrap`,
-`pwm_set_gpio_level`, `pwm_set_enabled`). The duty resolution sets the slice wrap
-(`2^bits - 1`); the target frequency is a fixed ~1 kHz best-effort derived from
-`clk_sys`, but because `clkdiv` saturates at 255 the effective frequency rises at
-low resolutions (e.g. ~1.9 kHz at 8-bit, ~1.0 kHz at 16-bit). Two GPIOs on the
-same hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
+`pwm_set_gpio_level`, `pwm_set_enabled`). The public duty range stays
+`0..2^bits-1`; internally the backend may increase the slice wrap at low
+resolutions to preserve the Arduino-pico-compatible ~1 kHz default frequency
+when `clkdiv` would otherwise exceed the hardware limit. Two GPIOs on the same
+hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
 duty. Use `hal_pwm_freq` when exact frequency matters.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
 default simple-PWM target frequency is 1 kHz best-effort from the current APB
@@ -138,11 +138,14 @@ void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);
 ```
 
-Default resolution is 12 bits (consistent with the STM32G474 and mock backends).
+Default resolution is 12 bits on STM32G474 and mock. On RP2040 the default is
+10 bits for compatibility with the Arduino-pico `analogRead()` behavior used by
+older JaszczurHAL releases.
 
 **impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
 `adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
-the 12-bit hardware sample is rescaled to the configured resolution.
+the 12-bit hardware sample is shifted to the configured resolution, matching the
+former Arduino-pico backend semantics.
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
 
