@@ -16,6 +16,7 @@
 #include "hal_config.h"
 #include "hal_gpio.h"
 #include "hal_math.h"
+#include "hal_net.h"
 #ifdef HAL_ENABLE_CRYPTO
 #include "hal_crypto.h"
 #endif
@@ -82,6 +83,9 @@
 #endif
 #ifdef HAL_ENABLE_UDP
 #include "hal_udp.h"
+#endif
+#ifdef HAL_ENABLE_TCP
+#include "hal_tcp.h"
 #endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include "hal_wireguard.h"

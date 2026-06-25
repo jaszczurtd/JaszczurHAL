@@ -2,7 +2,68 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`.
+Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_wireguard`, `hal_mqtt`,
+`hal_ota`, `hal_time`, and the optional `HAL_ENABLE_BSD_SOCKETS` compatibility
+adapter. Shared network types live in `hal_net.h`.
+
+## Shared network types
+
+`hal_net.h` contains plain C value types shared by handle-based UDP, TCP, and
+BSD/POSIX compatibility layers. The endpoint/status types have no backend
+dependency. The optional IPv4 resolver is available when WiFi support is
+enabled, because real targets may need the network stack for DNS.
+
+```c
+#include <hal/hal_net.h>
+
+#define HAL_NET_IPV4_ADDR_LEN 4u
+#define HAL_NET_TIMEOUT_FOREVER UINT32_MAX
+
+typedef enum {
+  HAL_NET_AF_UNSPEC = 0,
+  HAL_NET_AF_INET = 2
+} hal_net_family_t;
+
+typedef struct {
+  hal_net_family_t family;
+  uint8_t addr[HAL_NET_IPV4_ADDR_LEN];
+  uint16_t port;
+} hal_net_endpoint_t;
+
+typedef enum {
+  HAL_NET_OK = 0,
+  HAL_NET_ERR_INVALID,
+  HAL_NET_ERR_UNSUPPORTED,
+  HAL_NET_ERR_NO_MEMORY,
+  HAL_NET_ERR_NOT_CONNECTED,
+  HAL_NET_ERR_TIMEOUT,
+  HAL_NET_ERR_WOULD_BLOCK,
+  HAL_NET_ERR_BACKEND
+} hal_net_status_t;
+
+#ifdef HAL_ENABLE_WIFI
+bool hal_net_resolve_ipv4(const char *host_or_ip,
+                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
+#endif
+```
+
+Endpoint IPv4 octets are stored in network byte order. The `port` field is in
+host byte order; POSIX adapters perform their own `htons()` / `ntohs()`
+translation at the API boundary.
+
+**Resolver notes:**
+- `hal_net_resolve_ipv4(...)` accepts a dotted IPv4 literal or hostname and
+  writes four IPv4 octets. The caller keeps the transport port separately.
+- The mock backend resolves IPv4 literals, `localhost`, and test entries added
+  with `hal_mock_net_set_dns_entry(...)`.
+- The RP2040 backend resolves IPv4 literals locally and uses
+  Arduino-pico `WiFi.hostByName()` for hostnames.
+
+**Mock resolver helpers:**
+```c
+void hal_mock_net_reset(void);
+bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
+```
 
 ## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
 
@@ -164,13 +225,32 @@ uint32_t    hal_mock_ota_get_handle_count(void);
 
 ## `hal_udp` - UDP datagrams  *(opt-in - `HAL_ENABLE_UDP`)*
 
-Thread-safe wrapper around Arduino-pico `WiFiUDP` for single-socket datagram
-receive/send flows.
+Handle-based UDP transport API for independent datagram sockets. The original
+single-socket `hal_udp_*` API remains available as a compatibility wrapper on a
+default UDP handle.
 
 ```c
 #include <hal/hal_udp.h>
 
 #define HAL_UDP_IP_STR_LEN 16u
+
+typedef struct hal_udp_socket_impl_t *hal_udp_socket_t;
+
+hal_udp_socket_t hal_udp_socket_open(void);
+bool hal_udp_socket_bind(hal_udp_socket_t socket,
+                         const hal_net_endpoint_t *local);
+int  hal_udp_socket_sendto(hal_udp_socket_t socket,
+                           const void *data,
+                           size_t len,
+                           const hal_net_endpoint_t *remote);
+int  hal_udp_socket_recvfrom(hal_udp_socket_t socket,
+                             void *buffer,
+                             size_t max_len,
+                             hal_net_endpoint_t *remote,
+                             uint32_t timeout_ms);
+bool hal_udp_socket_can_recv(hal_udp_socket_t socket);
+bool hal_udp_socket_can_send(hal_udp_socket_t socket);
+void hal_udp_socket_close(hal_udp_socket_t socket);
 
 bool hal_udp_begin(uint16_t local_port);
 void hal_udp_stop(void);
@@ -190,7 +270,19 @@ bool     hal_udp_end_packet(void);
 
 **Behavior notes:**
 - Module is available only when `HAL_ENABLE_UDP` is defined.
-- `hal_udp_begin(...)` opens one UDP socket bound to a local port.
+- `hal_udp_socket_open()` allocates a socket from
+  `HAL_UDP_SOCKET_MAX_INSTANCES`; close unused sockets with
+  `hal_udp_socket_close()`.
+- `hal_udp_socket_bind(...)` binds an IPv4 local endpoint. The address family
+  must be `HAL_NET_AF_INET` and the port must be non-zero.
+- `hal_udp_socket_sendto(...)` sends one datagram to an IPv4 endpoint and
+  returns the accepted byte count or `<0` on error.
+- `hal_udp_socket_recvfrom(...)` reads from one bound socket. `timeout_ms == 0`
+  is an immediate poll; `HAL_NET_TIMEOUT_FOREVER` requests a blocking wait.
+- `hal_udp_socket_can_recv(...)` and `hal_udp_socket_can_send(...)` are
+  non-consuming readiness probes for compatibility layers such as BSD
+  `select()`.
+- `hal_udp_begin(...)` opens/binds the legacy default UDP socket.
 - `hal_udp_parse_packet()` returns packet size, `0` when no packet is available.
 - `hal_udp_remote_ip(...)` and `hal_udp_remote_port()` expose sender endpoint
   captured from the last successful `hal_udp_parse_packet()`.
@@ -199,11 +291,12 @@ bool     hal_udp_end_packet(void);
   datagram opened by `hal_udp_begin_packet*()`.
 - `hal_udp_stop()` clears cached remote endpoint and active packet-send context.
 
-**impl/rp2040:** Arduino-pico `WiFiUDP` backend.
-**impl/.mock:** deterministic stateful test double with injected inbound packet,
-captured outbound packet metadata and payload.
+**impl/rp2040:** Arduino-pico `WiFiUDP` backend with a static socket pool.
+**impl/.mock:** deterministic multi-socket test double with injected inbound
+packets, captured outbound packet metadata and payload.
 **Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
-APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+APIs. A singleton `hal_mutex_t` serializes access to the static UDP pool and
+the underlying `WiFiUDP` instances.
 
 **Mock helpers:**
 ```c
@@ -212,14 +305,217 @@ void        hal_mock_udp_inject_packet(const char *remote_ip,
                                        uint16_t remote_port,
                                        const uint8_t *payload,
                                        uint16_t len);
+void        hal_mock_udp_inject_packet_to(hal_udp_socket_t socket,
+                                          const char *remote_ip,
+                                          uint16_t remote_port,
+                                          const uint8_t *payload,
+                                          uint16_t len);
 void        hal_mock_udp_set_end_packet_result(bool result);
+void        hal_mock_udp_set_end_packet_result_for(hal_udp_socket_t socket,
+                                                   bool result);
 uint16_t    hal_mock_udp_get_local_port(void);
+uint16_t    hal_mock_udp_get_local_port_for(hal_udp_socket_t socket);
 const char *hal_mock_udp_get_last_begin_packet_host(void);
 uint16_t    hal_mock_udp_get_last_begin_packet_port(void);
 const uint8_t *hal_mock_udp_get_last_tx_payload(void);
+const uint8_t *hal_mock_udp_get_last_tx_payload_for(hal_udp_socket_t socket);
 uint16_t    hal_mock_udp_get_last_tx_len(void);
+uint16_t    hal_mock_udp_get_last_tx_len_for(hal_udp_socket_t socket);
+bool        hal_mock_udp_get_last_tx_remote_for(hal_udp_socket_t socket,
+                                                hal_net_endpoint_t *out);
 bool        hal_mock_udp_was_end_packet_called(void);
 ```
+
+---
+
+## `hal_tcp` - TCP sockets and listeners  *(opt-in - `HAL_ENABLE_TCP`)*
+
+Handle-based TCP transport API for outbound stream connections and inbound
+listener/server sockets.
+
+```c
+#include <hal/hal_tcp.h>
+
+typedef struct hal_tcp_socket_impl_t *hal_tcp_socket_t;
+typedef struct hal_tcp_listener_impl_t *hal_tcp_listener_t;
+
+hal_tcp_socket_t hal_tcp_socket_open(void);
+bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
+                            const hal_net_endpoint_t *remote,
+                            uint32_t timeout_ms);
+int  hal_tcp_socket_send(hal_tcp_socket_t socket,
+                         const void *data,
+                         size_t len);
+int  hal_tcp_socket_recv(hal_tcp_socket_t socket,
+                         void *buffer,
+                         size_t max_len,
+                         uint32_t timeout_ms);
+bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket);
+bool hal_tcp_socket_can_send(hal_tcp_socket_t socket);
+bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket);
+void hal_tcp_socket_shutdown(hal_tcp_socket_t socket);
+void hal_tcp_socket_close(hal_tcp_socket_t socket);
+
+hal_tcp_listener_t hal_tcp_listener_open(void);
+bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
+                           const hal_net_endpoint_t *local);
+bool hal_tcp_listener_listen(hal_tcp_listener_t listener, uint8_t backlog);
+hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
+                                         hal_net_endpoint_t *remote,
+                                         uint32_t timeout_ms);
+bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener);
+void hal_tcp_listener_close(hal_tcp_listener_t listener);
+```
+
+**Behavior notes:**
+- Module is available only when `HAL_ENABLE_TCP` is defined.
+- `hal_tcp_socket_open()` allocates a client socket from
+  `HAL_TCP_SOCKET_MAX_INSTANCES`; close unused sockets with
+  `hal_tcp_socket_close()`.
+- `hal_tcp_socket_connect(...)` connects to an IPv4 endpoint. The address
+  family must be `HAL_NET_AF_INET` and the port must be non-zero.
+- `timeout_ms == 0` means an immediate/non-blocking receive poll.
+  `HAL_NET_TIMEOUT_FOREVER` requests a blocking receive without a fixed
+  deadline.
+- `hal_tcp_socket_send(...)` returns the accepted byte count or `<0` on error.
+- `hal_tcp_socket_recv(...)` returns bytes read, `0` on timeout/no data/peer
+  close, or `<0` for invalid handles/arguments.
+- `hal_tcp_socket_can_recv(...)` and `hal_tcp_socket_can_send(...)` are
+  non-consuming readiness probes for compatibility layers such as BSD
+  `select()`.
+- `hal_tcp_socket_shutdown(...)` stops I/O but keeps the handle allocated.
+- `hal_tcp_socket_close(...)` stops the backend client and returns the handle
+  to the static pool.
+- `hal_tcp_listener_open()` allocates a listener from
+  `HAL_TCP_LISTENER_MAX_INSTANCES`; close unused listeners with
+  `hal_tcp_listener_close()`.
+- `hal_tcp_listener_bind(...)` binds an IPv4 local endpoint. The address family
+  must be `HAL_NET_AF_INET` and the port must be non-zero.
+- `hal_tcp_listener_listen(...)` starts accepting clients with a non-zero
+  backlog. The portable mock caps pending clients at
+  `HAL_TCP_LISTENER_BACKLOG_MAX`; real backends may apply their own platform
+  limit.
+- `hal_tcp_listener_accept(...)` returns a connected `hal_tcp_socket_t` from
+  the normal TCP socket pool. `timeout_ms == 0` polls immediately and
+  `HAL_NET_TIMEOUT_FOREVER` requests a blocking wait.
+- `hal_tcp_listener_can_accept(...)` probes pending-client readiness without
+  consuming the accepted socket.
+- `hal_tcp_listener_close(...)` stops only the listener. Already accepted
+  client sockets remain independent and must be closed separately.
+
+**impl/rp2040:** Arduino-pico `WiFiClient`/`WiFiServer` backend with static
+socket and listener pools.
+**impl/.mock:** deterministic client/listener test double with scripted
+connect result, injected RX bytes, captured TX payload, captured remote
+endpoint and per-listener pending-client queues.
+**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
+APIs. A singleton `hal_mutex_t` serializes access to the static TCP pools and
+the underlying `WiFiClient`/`WiFiServer` instances.
+
+**Mock helpers:**
+```c
+void        hal_mock_tcp_reset(void);
+void        hal_mock_tcp_set_connect_result(bool result);
+void        hal_mock_tcp_inject_rx(hal_tcp_socket_t socket,
+                                   const uint8_t *payload,
+                                   uint16_t len);
+const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket);
+uint16_t    hal_mock_tcp_get_last_tx_len(hal_tcp_socket_t socket);
+bool        hal_mock_tcp_get_remote_endpoint(hal_tcp_socket_t socket,
+                                             hal_net_endpoint_t *out);
+bool        hal_mock_tcp_listener_inject_client(hal_tcp_listener_t listener,
+                                                const hal_net_endpoint_t *remote);
+uint16_t    hal_mock_tcp_listener_get_local_port(hal_tcp_listener_t listener);
+uint8_t     hal_mock_tcp_listener_get_backlog(hal_tcp_listener_t listener);
+uint8_t     hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener);
+```
+
+---
+
+## BSD sockets adapter  *(opt-in - `HAL_ENABLE_BSD_SOCKETS`)*
+
+Minimal IPv4 BSD/POSIX compatibility layer over `hal_udp` and `hal_tcp`.
+Enabling it automatically enables UDP, TCP and WiFi.
+
+```c
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
+#include <fcntl.h>
+#include <sys/select.h>
+#include <unistd.h>
+
+int socket(int domain, int type, int protocol);
+int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+int listen(int sockfd, int backlog);
+int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen);
+ssize_t send(int sockfd, const void *buf, size_t len, int flags);
+ssize_t recv(int sockfd, void *buf, size_t len, int flags);
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+               const struct sockaddr *dest_addr, socklen_t addrlen);
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+                 struct sockaddr *src_addr, socklen_t *addrlen);
+int setsockopt(int sockfd, int level, int optname,
+               const void *optval, socklen_t optlen);
+int shutdown(int sockfd, int how);
+int fcntl(int fd, int cmd, ...);
+int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
+           struct timeval *timeout);
+int close(int fd);
+ssize_t read(int fd, void *buf, size_t count);
+ssize_t write(int fd, const void *buf, size_t count);
+
+uint16_t htons(uint16_t hostshort);
+uint16_t ntohs(uint16_t netshort);
+uint32_t htonl(uint32_t hostlong);
+uint32_t ntohl(uint32_t netlong);
+in_addr_t inet_addr(const char *cp);
+int inet_pton(int af, const char *src, void *dst);
+const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
+
+struct addrinfo;
+int getaddrinfo(const char *node, const char *service,
+                const struct addrinfo *hints, struct addrinfo **res);
+void freeaddrinfo(struct addrinfo *res);
+const char *gai_strerror(int errcode);
+```
+
+**MVP scope:** `AF_INET`, `SOCK_STREAM`, `SOCK_DGRAM`, TCP/UDP protocols,
+`sockaddr_in`, byte-order helpers, IPv4 text/binary conversion, and one-result
+IPv4 `getaddrinfo()`. Descriptor values start at `HAL_BSD_SOCKET_FD_BASE` and
+are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
+
+**Behavior notes:**
+- `socket(AF_INET, SOCK_DGRAM, 0/IPPROTO_UDP)` maps to
+  `hal_udp_socket_open()`.
+- `socket(AF_INET, SOCK_STREAM, 0/IPPROTO_TCP)` maps to
+  `hal_tcp_socket_open()`.
+- UDP `sendto()` auto-binds to an ephemeral local port when the socket was not
+  explicitly bound.
+- TCP `bind()` stages the local endpoint; `listen()` converts the descriptor to
+  a HAL TCP listener. Accepted clients receive separate socket descriptors.
+- `getaddrinfo(...)` resolves IPv4 literals or hostnames through
+  `hal_net_resolve_ipv4(...)`. `service` must be numeric. Supported hint flags
+  are `AI_PASSIVE`, `AI_CANONNAME`, `AI_NUMERICHOST`, `AI_NUMERICSERV` and
+  `AI_ADDRCONFIG`; IPv6 remains outside the adapter.
+- `setsockopt(...)` accepts `SOL_SOCKET` + `SO_REUSEADDR`/`SO_REUSEPORT` as
+  compatibility options. Other options fail with `ENOPROTOOPT`.
+- Blocking calls use `HAL_NET_TIMEOUT_FOREVER`. `fcntl(F_SETFL, O_NONBLOCK)`
+  makes `accept()`, `recv()`/`read()` and `recvfrom()` use immediate HAL polls;
+  `MSG_DONTWAIT` does the same per call for `recv`, `recvfrom`, `send` and
+  `sendto`.
+- Minimal `select()` supports read/write readiness for HAL socket descriptors.
+  `exceptfds` is accepted and cleared; `poll()` remains outside this stage.
+- Unsupported flags/operations fail with `errno`.
+
+**impl/shared:** fd-table adapter, IPv4 conversion helpers and minimal
+`netdb.h` resolver glue.
+**impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
+`test_bsd_sockets_c_compile` verifies simple C TCP/UDP client/server shapes,
+`getaddrinfo()` and `setsockopt()` compile and link against the compatibility
+headers.
 
 ---
 

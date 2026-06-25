@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.7.0] - 2026-06-25
+## [1.7.0] - 2026-06-26
 
 Next release.
 
@@ -27,6 +27,64 @@ Next release.
   `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
   `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
   `HAL_ENABLE_WIREGUARD`.
+
+### hal_udp - handle-based UDP sockets
+
+- Added `hal_udp_socket_t` and the handle-based
+  `hal_udp_socket_open/bind/sendto/recvfrom/close` API using shared
+  `hal_net_endpoint_t` IPv4 endpoints.
+- Reworked the mock UDP backend to model multiple independent sockets with
+  separate bind ports, RX queues and TX captures.
+- Reworked the RP2040 UDP backend from one global `WiFiUDP` instance to a
+  static `WiFiUDP` pool sized by `HAL_UDP_SOCKET_MAX_INSTANCES`.
+- Kept the legacy `hal_udp_*` API source-compatible as a default-socket wrapper,
+  including explicit-host `hal_udp_begin_packet(...)` behavior.
+
+### hal_tcp - TCP sockets and listeners
+
+- Added opt-in `HAL_ENABLE_TCP`, public `hal_tcp.h`, and the handle-based
+  `hal_tcp_socket_open/connect/send/recv/is_connected/shutdown/close` API using
+  shared `hal_net_endpoint_t` IPv4 endpoints.
+- Added a deterministic mock TCP client backend with scripted connect result,
+  injected RX bytes, captured TX payload and closed-socket error coverage.
+- Added an RP2040 backend backed by a static pool of Arduino-pico `WiFiClient`
+  instances, with connect/recv timeout handling and serialized access through
+  the HAL mutex layer.
+- Added `hal_tcp_listener_t` and
+  `hal_tcp_listener_open/bind/listen/accept/close` for inbound TCP servers.
+- Added mock listener queues with backlog coverage and RP2040 listener support
+  backed by Arduino-pico `WiFiServer`; accepted sockets remain independent when
+  the listener is closed.
+
+### BSD sockets compatibility adapter
+
+- Added opt-in `HAL_ENABLE_BSD_SOCKETS`, which propagates UDP/TCP/WiFi and
+  provides minimal IPv4 compatibility headers:
+  `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`,
+  `sys/select.h` and `unistd.h`.
+- Added fd-table based mapping from POSIX-style `int` descriptors to
+  `hal_udp_socket_t`, `hal_tcp_socket_t` and `hal_tcp_listener_t`.
+- Implemented MVP calls for `socket`, `bind`, `listen`, `accept`, `connect`,
+  `send`, `recv`, `sendto`, `recvfrom`, `shutdown`, `close`, `read`, `write`
+  plus byte-order and IPv4 text/binary helpers.
+- Added minimal nonblocking support with `fcntl(F_SETFL, O_NONBLOCK)`,
+  `MSG_DONTWAIT` for send/receive calls and `select()` read/write readiness
+  over HAL socket descriptors.
+- Added minimal `netdb.h` support with `getaddrinfo()`, `freeaddrinfo()` and
+  `gai_strerror()` for IPv4 hostname/literal resolution through the shared
+  HAL resolver contract.
+- Added `hal_net_resolve_ipv4()` plus mock DNS entries and an RP2040
+  `WiFi.hostByName()` backend path so simple TCP/UDP clients can connect by
+  hostname while keeping HAL transport endpoints numeric.
+- Added basic `setsockopt()` compatibility for `SOL_SOCKET` +
+  `SO_REUSEADDR`/`SO_REUSEPORT`, with unsupported options reported through
+  `ENOPROTOOPT`.
+- Updated BSD sockets TCP/UDP client examples to resolve
+  `BSD_EXAMPLE_SERVER_HOST` with `getaddrinfo()`, while preserving
+  `BSD_EXAMPLE_SERVER_IP` as the default host alias.
+- Added host/mock coverage for sockaddr translation, errno paths, TCP/UDP data
+  flow, hostname resolution, `EAI_*` paths, `setsockopt()` and a C compile
+  smoke test for simple TCP/UDP client/server shapes.
 
 ### hal_serial - native RP2040 CDC and streamed debug output
 
@@ -275,7 +333,7 @@ Next release.
   MCP401x/MAX5395 digipots, and ADS1x15.
 - Added explicit `Datasheet anchors used by these tests` comments in the main
   driver test files so register-level expectations can be audited directly back
-  to the source PDFs under `src/datasheets/`.
+  to the source PDFs under `doc/datasheets/`.
 - Fixed shared MCP2515 message handling exposed by the new tests: standard
   frames now report RTR using the correct SIDL/SRR path, DLC is clamped to
   8 bytes, and payload staging is safe for short or null buffers.

@@ -10,17 +10,17 @@
  */
 
 #ifdef __cplusplus
-#include "utils/tools.h"
 #include "utils/multicoreWatchdog.h"
+#include "utils/tools.h"
 #else
 
+#include <math.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <math.h>
 
 #include <libConfig.h>
 
@@ -38,10 +38,10 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #include <hal/hal_pwm_freq.h>
 #endif
 #include <hal/hal_adc.h>
-#include <hal/hal_timer.h>
-#include <hal/hal_soft_timer.h>
 #include <hal/hal_pid_controller.h>
+#include <hal/hal_soft_timer.h>
 #include <hal/hal_system.h>
+#include <hal/hal_timer.h>
 #ifdef HAL_ENABLE_CRYPTO
 #include <hal/hal_crypto.h>
 #endif
@@ -60,11 +60,14 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #ifdef HAL_ENABLE_UDP
 #include <hal/hal_udp.h>
 #endif
+#ifdef HAL_ENABLE_TCP
+#include <hal/hal_tcp.h>
+#endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include <hal/hal_wireguard.h>
 #endif
-#include <hal/hal_sync.h>
 #include <hal/hal_spi.h>
+#include <hal/hal_sync.h>
 #ifdef HAL_ENABLE_I2C
 #include <hal/hal_i2c.h>
 #endif
@@ -84,8 +87,8 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #include <hal/hal_kv.h>
 #endif
 
-#include "utils/tools_common_defs.h"
-#include "utils/tools_api.h"
 #include "utils/multicoreWatchdog.h"
+#include "utils/tools_api.h"
+#include "utils/tools_common_defs.h"
 
 #endif /* __cplusplus */

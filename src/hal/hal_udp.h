@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
+#include "hal_net.h"
 
 #ifdef HAL_ENABLE_UDP
 
@@ -10,9 +11,12 @@ extern "C" {
 
 /**
  * @file hal_udp.h
- * @brief Thread-safe UDP helper wrapper based on WiFiUDP.
+ * @brief UDP transport API.
  *
  * This module is opt-in and is compiled only when HAL_ENABLE_UDP is defined.
+ * New code should prefer the handle-based `hal_udp_socket_*` API, which can
+ * model multiple independent UDP sockets. The older `hal_udp_*` functions are
+ * kept as a source-compatible single-socket wrapper.
  */
 
 #include <stdbool.h>
@@ -20,6 +24,76 @@ extern "C" {
 #include <stdint.h>
 
 #define HAL_UDP_IP_STR_LEN 16u
+
+/** @brief Opaque UDP socket handle. */
+typedef struct hal_udp_socket_impl_t *hal_udp_socket_t;
+
+/**
+ * @brief Allocate a UDP socket from the backend pool.
+ * @return Socket handle, or NULL when no socket slot is available.
+ */
+hal_udp_socket_t hal_udp_socket_open(void);
+
+/**
+ * @brief Bind a UDP socket to a local IPv4 endpoint.
+ * @param socket Socket handle returned by @ref hal_udp_socket_open.
+ * @param local Local IPv4 endpoint. The port must be non-zero.
+ * @return true when the socket was bound.
+ */
+bool hal_udp_socket_bind(hal_udp_socket_t socket,
+                         const hal_net_endpoint_t *local);
+
+/**
+ * @brief Send one UDP datagram to a remote IPv4 endpoint.
+ * @param socket Bound UDP socket handle.
+ * @param data Payload bytes. May be NULL only when @p len is zero.
+ * @param len Payload length in bytes.
+ * @param remote Remote IPv4 endpoint. The port must be non-zero.
+ * @return Number of bytes accepted for transmission, or <0 on error.
+ */
+int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
+                          const hal_net_endpoint_t *remote);
+
+/**
+ * @brief Receive one UDP datagram from a bound socket.
+ * @param socket Bound UDP socket handle.
+ * @param buffer Destination buffer. May be NULL only when @p max_len is zero.
+ * @param max_len Destination buffer size in bytes.
+ * @param remote Optional output endpoint for the sender.
+ * @param timeout_ms Timeout in milliseconds. Use 0 for a non-blocking poll and
+ *        @ref HAL_NET_TIMEOUT_FOREVER to wait without a fixed deadline.
+ * @return Number of bytes read, 0 when no datagram is available before the
+ *         timeout, or <0 on error.
+ */
+int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
+                            size_t max_len, hal_net_endpoint_t *remote,
+                            uint32_t timeout_ms);
+
+/**
+ * @brief Check whether a bound UDP socket has a datagram ready to read.
+ *
+ * This is a non-consuming readiness probe used by compatibility layers such as
+ * BSD `select()`. It never blocks.
+ * @param socket UDP socket handle.
+ * @return true when a subsequent receive can complete immediately.
+ */
+bool hal_udp_socket_can_recv(hal_udp_socket_t socket);
+
+/**
+ * @brief Check whether a UDP socket can send immediately.
+ *
+ * This is a non-blocking readiness probe for compatibility layers. The socket
+ * must be valid and bound for the HAL-level send API.
+ * @param socket UDP socket handle.
+ * @return true when a subsequent send can be attempted immediately.
+ */
+bool hal_udp_socket_can_send(hal_udp_socket_t socket);
+
+/**
+ * @brief Close a UDP socket and return its slot to the backend pool.
+ * @param socket Socket handle. Passing NULL is ignored.
+ */
+void hal_udp_socket_close(hal_udp_socket_t socket);
 
 /**
  * @brief Open UDP socket on local port.

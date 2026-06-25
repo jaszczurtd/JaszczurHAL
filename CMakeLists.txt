@@ -41,6 +41,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
+    ${SRC}/hal/impl/shared/hal_bsd_sockets.cpp
     ${SRC}/hal/impl/shared/hal_debug_format.cpp
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
@@ -92,6 +93,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP
+    HAL_ENABLE_TCP            # handle-based TCP client/listener transport
+    HAL_ENABLE_BSD_SOCKETS    # minimal POSIX/BSD socket adapter
     HAL_ENABLE_OTA
     HAL_ENABLE_WIREGUARD
     HAL_ENABLE_A7670          # propagates HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART

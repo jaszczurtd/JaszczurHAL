@@ -329,6 +329,10 @@ bool hal_mock_wifi_set_scan_result(size_t index, const char *ssid,
                                    hal_wifi_encryption_t encryption,
                                    const uint8_t bssid[HAL_WIFI_BSSID_LEN],
                                    int32_t channel, int32_t rssi);
+/** @brief Reset mock hostname resolver entries. */
+void hal_mock_net_reset(void);
+/** @brief Add or replace a mock DNS resolver entry. */
+bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
 
 // ── SD logger ───────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_SDLOGGER
@@ -386,20 +390,77 @@ void hal_mock_udp_reset(void);
 /** @brief Inject one inbound UDP datagram for hal_udp_parse_packet/read. */
 void hal_mock_udp_inject_packet(const char *remote_ip, uint16_t remote_port,
                                 const uint8_t *payload, uint16_t len);
+/** @brief Inject one inbound UDP datagram into a specific UDP socket. */
+void hal_mock_udp_inject_packet_to(hal_udp_socket_t socket,
+                                   const char *remote_ip, uint16_t remote_port,
+                                   const uint8_t *payload, uint16_t len);
 /** @brief Control result returned by hal_udp_end_packet() (default: true). */
 void hal_mock_udp_set_end_packet_result(bool result);
+/** @brief Control end-packet result for a specific mock UDP socket. */
+void hal_mock_udp_set_end_packet_result_for(hal_udp_socket_t socket,
+                                            bool result);
 /** @brief Return local port set by hal_udp_begin(). */
 uint16_t hal_mock_udp_get_local_port(void);
+/** @brief Return local port bound on a specific mock UDP socket. */
+uint16_t hal_mock_udp_get_local_port_for(hal_udp_socket_t socket);
 /** @brief Return destination host captured by hal_udp_begin_packet*(). */
 const char *hal_mock_udp_get_last_begin_packet_host(void);
 /** @brief Return destination port captured by hal_udp_begin_packet*(). */
 uint16_t hal_mock_udp_get_last_begin_packet_port(void);
 /** @brief Return payload captured from hal_udp_write*(). */
 const uint8_t *hal_mock_udp_get_last_tx_payload(void);
+/** @brief Return payload captured from a specific mock UDP socket. */
+const uint8_t *hal_mock_udp_get_last_tx_payload_for(hal_udp_socket_t socket);
 /** @brief Return payload length captured from hal_udp_write*(). */
 uint16_t hal_mock_udp_get_last_tx_len(void);
+/** @brief Return payload length captured from a specific mock UDP socket. */
+uint16_t hal_mock_udp_get_last_tx_len_for(hal_udp_socket_t socket);
+/** @brief Return last remote endpoint used by hal_udp_socket_sendto(). */
+bool hal_mock_udp_get_last_tx_remote_for(hal_udp_socket_t socket,
+                                         hal_net_endpoint_t *out);
 /** @brief Return whether hal_udp_end_packet() was called. */
 bool hal_mock_udp_was_end_packet_called(void);
+#endif
+
+// ── TCP ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_TCP
+#include "../../hal_tcp.h"
+/** @brief Reset all mock TCP client state to defaults. */
+void hal_mock_tcp_reset(void);
+/** @brief Control result returned by hal_tcp_socket_connect() (default: true).
+ */
+void hal_mock_tcp_set_connect_result(bool result);
+/** @brief Inject inbound bytes into a specific mock TCP socket. */
+void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
+                            uint16_t len);
+/** @brief Return payload captured from a specific mock TCP socket. */
+const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket);
+/** @brief Return captured payload length for a specific mock TCP socket. */
+uint16_t hal_mock_tcp_get_last_tx_len(hal_tcp_socket_t socket);
+/** @brief Return the remote endpoint used by hal_tcp_socket_connect(). */
+bool hal_mock_tcp_get_remote_endpoint(hal_tcp_socket_t socket,
+                                      hal_net_endpoint_t *out);
+/** @brief Inject one pending inbound client into a mock TCP listener. */
+bool hal_mock_tcp_listener_inject_client(hal_tcp_listener_t listener,
+                                         const hal_net_endpoint_t *remote);
+/** @brief Return the local port bound on a specific mock TCP listener. */
+uint16_t hal_mock_tcp_listener_get_local_port(hal_tcp_listener_t listener);
+/** @brief Return the effective backlog set on a specific mock TCP listener. */
+uint8_t hal_mock_tcp_listener_get_backlog(hal_tcp_listener_t listener);
+/** @brief Return number of pending clients queued on a mock TCP listener. */
+uint8_t hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener);
+#endif
+
+// ── BSD sockets adapter ─────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_BSD_SOCKETS
+/** @brief Reset BSD socket fd table state used by host tests. */
+void hal_mock_bsd_sockets_reset(void);
+/** @brief Return the UDP HAL handle currently mapped to a BSD fd. */
+hal_udp_socket_t hal_mock_bsd_socket_get_udp_handle(int fd);
+/** @brief Return the TCP socket HAL handle currently mapped to a BSD fd. */
+hal_tcp_socket_t hal_mock_bsd_socket_get_tcp_handle(int fd);
+/** @brief Return the TCP listener HAL handle currently mapped to a BSD fd. */
+hal_tcp_listener_t hal_mock_bsd_socket_get_tcp_listener(int fd);
 #endif
 
 // ── WireGuard ───────────────────────────────────────────────────────────────
@@ -738,9 +799,9 @@ int hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf,
 
 // ── External ADC (ADS1115) ───────────────────────────────────────────────────
 
-/** @brief Inject a raw 16-bit ADC result for the given channel (0–3). */
+/** @brief Inject a raw 16-bit ADC result for the given channel (0-3). */
 void hal_mock_ext_adc_inject_raw(uint8_t channel, int16_t value);
-/** @brief Inject a pre-scaled float result for the given channel (0–3). */
+/** @brief Inject a pre-scaled float result for the given channel (0-3). */
 void hal_mock_ext_adc_inject_scaled(uint8_t channel, float value);
 /** @brief Return the adc_range value set by hal_ext_adc_init(). */
 float hal_mock_ext_adc_get_range(void);

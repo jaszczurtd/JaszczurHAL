@@ -206,7 +206,7 @@ common definition `LED_BUILTIN` is also supported.
 
 ## WiFi-Capable Examples
 
-Examples 10, 11, and 15 require a WiFi-capable board. The CMake system
+Examples 10, 11, 15, and 42 require a WiFi-capable board. The CMake system
 automatically selects the `rpipicow` FQBN for these:
 
 ```
@@ -258,3 +258,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 39 | sdlogger | rp2040, stm32g474 | SPI SD card, shared FatFs, EEPROM-backed log/crash counters |
 | 40 | jpeg | rp2040, stm32g474 | Bundled JPEGDecoder/picojpeg baseline JPEG decode, Base64 helpers, RGB565 output |
 | 41 | jpeg_ili931_base64 | rp2040, stm32g474 | Base64 JPEG asset, RGB565 draw on ILI9341 |
+| 42 | bsd_sockets_tcp_udp | rp2040 (WiFi) | BSD/POSIX socket compatibility examples: TCP server/client and UDP server/client, including `getaddrinfo()` hostname resolution |

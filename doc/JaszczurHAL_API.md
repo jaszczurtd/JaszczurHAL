@@ -146,7 +146,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 - power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_pga2311` (stereo volume controller), `hal_math` (constrain, map, roundToN) |
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
-| 15 | [Network connectivity](api/15_connectivity.md) | `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time` (NTP/local time) |
+| 15 | [Network connectivity](api/15_connectivity.md) | `hal_wifi`, `hal_udp`, `hal_tcp`, BSD sockets adapter with IPv4 `getaddrinfo()`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time` (NTP/local time) |
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
 | 17 | [cJSON](api/17_cJSON.md) | Bundled `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Bundled `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
@@ -202,6 +202,8 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_timer` | [Timers and system](api/06_timers_system.md) |
 | `hal_uart` | [Communication buses](api/09_buses.md) |
 | `hal_udp` | [Network connectivity](api/15_connectivity.md) |
+| `hal_tcp` | [Network connectivity](api/15_connectivity.md) |
+| BSD sockets adapter | [Network connectivity](api/15_connectivity.md) |
 | `hal_wifi` | [Network connectivity](api/15_connectivity.md) |
 | `hal_wireguard` | [Network connectivity](api/15_connectivity.md) |
 | `multicoreWatchdog` | [Utilities](api/16_utilities.md) |
