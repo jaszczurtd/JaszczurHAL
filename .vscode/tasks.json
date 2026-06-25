@@ -2,6 +2,120 @@
     "version": "2.0.0",
     "tasks": [
         {
+            "label": "Build RP2040",
+            "detail": "Ctrl+Shift+1 - compile RP2040 static library",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/build_rp2040_lib.sh",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Build STM32",
+            "detail": "Ctrl+Shift+2 - compile STM32G474 static library",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/build_stm32_lib.sh",
+            "group": "build",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": {
+                "owner": "cpp",
+                "fileLocation": [
+                    "autoDetect",
+                    "${workspaceFolder}"
+                ],
+                "pattern": {
+                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
+                    "file": 1,
+                    "line": 2,
+                    "column": 3,
+                    "severity": 4,
+                    "message": 5
+                }
+            }
+        },
+        {
+            "label": "Refresh IntelliSense RP2040",
+            "detail": "Ctrl+Shift+4 - regenerate RP2040 compile_commands.json and select it for C/C++ IntelliSense",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/vscode_refresh_intellisense.sh",
+            "args": [
+                "rp2040"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Refresh IntelliSense STM32",
+            "detail": "Ctrl+Shift+5 - regenerate STM32 compile_commands.json and select it for C/C++ IntelliSense",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/vscode_refresh_intellisense.sh",
+            "args": [
+                "stm32"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Clear Build Artifacts",
+            "detail": "Ctrl+Shift+7 - remove build, build_* and .build directories",
+            "type": "shell",
+            "command": "${workspaceFolder}/scripts/vscode_clear_build_artifacts.sh",
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Install git hooks",
             "type": "shell",
             "command": "chmod +x .githooks/pre-commit .githooks/commit-msg && git config core.hooksPath .githooks",

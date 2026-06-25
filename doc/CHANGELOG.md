@@ -18,10 +18,11 @@ Next release.
   (`hal_assert_fail`) now writes through the native serial backend instead of
   `Serial.print()`.
 - Ported the RP2040 `hal_adc` and `hal_pwm` backends to native `hardware/adc.h`
-  and `hardware/pwm.h` (no `analogRead`/`analogWrite`). RP2040 ADC keeps the
-  Arduino-pico-compatible 10-bit default and shift-based scaling; PWM uses
-  hardware slices with an Arduino-pico-compatible ~1 kHz best-effort default
-  frequency derived from `clk_sys`.
+  and `hardware/pwm.h` (no `analogRead`/`analogWrite`). ADC default resolution
+  is 12 bits (consistent with STM32G474/mock), with the 12-bit hardware sample
+  rescaled to the configured resolution; PWM uses hardware slices with an
+  Arduino-pico-compatible ~1 kHz best-effort default frequency derived from
+  `clk_sys`.
 - Made the optional Arduino-based RP2040 frameworks opt-in at build time:
   `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
   `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under

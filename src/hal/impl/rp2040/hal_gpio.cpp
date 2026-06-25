@@ -2,8 +2,7 @@
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_gpio.h"
 #if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
-#include <Arduino.h>
-#include <cyw43_wrappers.h>
+#include "drivers/rp2040/rp2040_cyw43.h"
 #endif
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
@@ -27,9 +26,19 @@ static bool rp2040_hal_pin_valid(uint8_t pin) {
   return rp2040_pin_valid(pin) || rp2040_cyw43_pin_valid(pin);
 }
 
+static void cyw43_gpio_set_output(uint8_t pin, bool high) {
+#if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
+  hal_cyw43_pinMode(pin, HAL_CYW43_PIN_OUTPUT);
+  hal_cyw43_digitalWrite(pin, high);
+#else
+  (void)pin;
+  (void)high;
+#endif
+}
+
 static void cyw43_gpio_write(uint8_t pin, bool high) {
 #if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
-  cyw43_digitalWrite((pin_size_t)pin, high ? HIGH : LOW);
+  hal_cyw43_digitalWrite(pin, high);
 #else
   (void)pin;
   (void)high;
@@ -38,7 +47,7 @@ static void cyw43_gpio_write(uint8_t pin, bool high) {
 
 static bool cyw43_gpio_read(uint8_t pin) {
 #if defined(PICO_CYW43_SUPPORTED) && defined(LED_BUILTIN)
-  return cyw43_digitalRead((pin_size_t)pin) == HIGH;
+  return hal_cyw43_digitalRead(pin);
 #else
   (void)pin;
   return false;
@@ -123,10 +132,10 @@ void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
     switch (mode) {
     case HAL_GPIO_OUTPUT:
     case HAL_GPIO_OUTPUT_LOW:
-      cyw43_gpio_write(pin, false);
+      cyw43_gpio_set_output(pin, false);
       return;
     case HAL_GPIO_OUTPUT_HIGH:
-      cyw43_gpio_write(pin, true);
+      cyw43_gpio_set_output(pin, true);
       return;
     case HAL_GPIO_OUTPUT_OPEN_DRAIN:
     case HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW:

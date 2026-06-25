@@ -177,7 +177,7 @@ Target rules:
 - RP2040: use arduino-pico's FreeRTOS mode. The HAL validates that
   `__FREERTOS` is present and emits a clear compile-time error if a normal
   non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`. For the
-  static library, use `./scripts/build_arduino_lib.sh --freertos`; for
+  static library, use `./scripts/build_rp2040_lib.sh --freertos`; for
   examples, use
   `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
