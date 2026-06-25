@@ -99,6 +99,34 @@ elseif(NOT "${ARDUINO_OS}" STREQUAL "" AND NOT "${ARDUINO_OS}" STREQUAL "none")
     message(FATAL_ERROR "Unsupported ARDUINO_OS='${ARDUINO_OS}' (expected empty, none, or freertos)")
 endif()
 
+function(jh_hal_define_enabled OUT_VAR DEFINE_NAME)
+    set(_enabled FALSE)
+    if(DEFINED ${DEFINE_NAME})
+        set(_enabled TRUE)
+    endif()
+    if(DEFINED EXTRA_HAL_DEFINES)
+        foreach(_def IN LISTS EXTRA_HAL_DEFINES)
+            if("${_def}" STREQUAL "${DEFINE_NAME}" OR "${_def}" MATCHES "^${DEFINE_NAME}=")
+                set(_enabled TRUE)
+            endif()
+        endforeach()
+    endif()
+    if(DEFINED HAL_PROJECT_CONFIG_DIR)
+        foreach(_config_dir IN LISTS HAL_PROJECT_CONFIG_DIR)
+            set(_config_file "${_config_dir}/hal_project_config.h")
+            if(EXISTS "${_config_file}")
+                file(STRINGS "${_config_file}" _config_hits
+                    REGEX "^[ \t]*#[ \t]*define[ \t]+${DEFINE_NAME}([ \t(]|$)"
+                )
+                if(_config_hits)
+                    set(_enabled TRUE)
+                endif()
+            endif()
+        endforeach()
+    endif()
+    set(${OUT_VAR} ${_enabled} PARENT_SCOPE)
+endfunction()
+
 # ── HAL implementation sources (RP2040) ──────────────────────────────────────
 file(GLOB RP2040_IMPL_SOURCES ${SRC}/hal/impl/rp2040/*.cpp)
 file(GLOB_RECURSE RP2040_SHARED_SOURCES
@@ -113,10 +141,25 @@ file(GLOB_RECURSE DRIVER_SOURCES
 )
 
 # ── Framework sources (bundled high-level integrations) ──────────────────────
-file(GLOB_RECURSE FRAMEWORK_SOURCES
-    ${SRC}/hal/impl/rp2040/frameworks/*.cpp
-    ${SRC}/hal/impl/rp2040/frameworks/*.c
-)
+set(FRAMEWORK_SOURCES)
+jh_hal_define_enabled(JH_RP2040_ENABLE_MQTT HAL_ENABLE_MQTT)
+jh_hal_define_enabled(JH_RP2040_ENABLE_WIREGUARD HAL_ENABLE_WIREGUARD)
+
+if(JH_RP2040_ENABLE_MQTT)
+    file(GLOB_RECURSE RP2040_PUBSUBCLIENT_SOURCES
+        ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/*.cpp
+        ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/*.c
+    )
+    list(APPEND FRAMEWORK_SOURCES ${RP2040_PUBSUBCLIENT_SOURCES})
+endif()
+
+if(JH_RP2040_ENABLE_WIREGUARD)
+    file(GLOB_RECURSE RP2040_WIREGUARD_SOURCES
+        ${SRC}/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/*.cpp
+        ${SRC}/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/*.c
+    )
+    list(APPEND FRAMEWORK_SOURCES ${RP2040_WIREGUARD_SOURCES})
+endif()
 
 # ── Common HAL sources (not implementation-specific) ─────────────────────────
 set(HAL_COMMON_SOURCES
