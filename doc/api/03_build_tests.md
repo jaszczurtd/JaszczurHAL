@@ -245,9 +245,13 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
+| `test_hal_net` | shared endpoint/status shape, network limits, IPv4 literal/localhost/mock-DNS resolver behavior |
 | `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, missing-path remove semantics, input validation |
 | `test_hal_sdlogger` | EEPROM-backed file numbering, buffered log flush/close, crash-report formatting, SD/open failure paths |
-| `test_hal_udp` | begin/parse/read flow, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
+| `test_hal_udp` | begin/parse/read flow, handle-based multi-socket bind/RX/TX separation, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
+| `test_hal_tcp` | TCP client connect/send/recv/shutdown/close, listener bind/listen/accept, backlog/pool limits, readiness probes and accepted-socket independence |
+| `test_bsd_sockets` | BSD/POSIX adapter fd mapping, sockaddr translation, errno/EAI paths, TCP/UDP flow, nonblocking mode, `select()`, `getaddrinfo()` and `setsockopt()` |
+| `test_bsd_sockets_c_compile` | C compile/link smoke test for socket headers, `netdb.h`, TCP/UDP client/server shapes, `fcntl()`, `select()`, `getaddrinfo()` and `setsockopt()` |
 | `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |

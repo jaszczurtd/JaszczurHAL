@@ -333,6 +333,7 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_TIME
                 -D HAL_ENABLE_MQTT
                 -D HAL_ENABLE_UDP
+                -D HAL_ENABLE_TCP
                 -D HAL_ENABLE_OTA
                 -D HAL_ENABLE_WIREGUARD
                 -D HAL_ENABLE_EEPROM

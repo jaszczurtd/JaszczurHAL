@@ -46,7 +46,9 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | MCP2517FD/MCP2518FD CAN FD | Shared SPI CAN FD backend. | [mcp251xfd driver](../src/hal/impl/shared/drivers/mcp251xfd/) |
 | STM32G474 native FDCAN | Native STM32G474 FDCAN backend. | [STM32 FDCAN backend](../src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp) |
 | WiFi | WiFi-capable RP2040/Pico W style connectivity surface. | [hal_wifi.h](../src/hal/hal_wifi.h) |
-| UDP | Thread-safe UDP wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
+| UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
+| TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP2040 backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |
+| BSD sockets adapter | Minimal IPv4 `sys/socket.h` / `netinet/in.h` / `arpa/inet.h` / `netdb.h` compatibility layer over HAL UDP/TCP handles, including `getaddrinfo()`, `setsockopt()`, `O_NONBLOCK`, `MSG_DONTWAIT` and `select()` readiness. | [socket.h](../src/sys/socket.h), [netdb.h](../src/netdb.h) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
 | OTA | ArduinoOTA-oriented update integration. | [hal_ota.h](../src/hal/hal_ota.h) |
 | NTP / time-of-day sync | Network time helpers for connected builds. | [hal_time.h](../src/hal/hal_time.h) |
@@ -117,4 +119,4 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
 | Porting/status notes | Target-specific progress notes and architecture roadmap. | [STM32G474 progress](STM32G474_porting_progress.md), [future ideas](future_ideas.md) |
-| Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](../src/datasheets/) |
+| Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

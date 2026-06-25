@@ -94,6 +94,7 @@ doc/
   lib_compilation.md        # static-library build guide
   CHANGELOG.md              # project changelog
   STM32G474_porting_progress.md # STM32G474 backend status
+  datasheets/               # local reference PDFs and notes
   future_ideas.md           # architecture roadmap and backlog
 examples/                   # buildable example apps for RP2040 and STM32G474
 src/
@@ -101,21 +102,15 @@ src/
   HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
   libConfig.h               # backward-compat include
   tools.h, tools_c.h        # utility aggregators (C++ / C)
-  datasheets/               # local reference PDFs and notes
   hal/                      # HAL public headers + common wrappers
     impl/
       .mock/                # deterministic host/test backend
       rp2040/               # RP2040 backend
         drivers/rp2040/     # RP2040 SoC services (fault/system)
-        frameworks/         # Arduino-origin integrations (PubSubClient, WireGuard)
+        frameworks/         # Arduino-origin integrations (frameworks & drivers)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
         drivers/            # hardware-oriented drivers: sensors, buses, displays
-          ads1x15/ bh1750/ digipot/ display/ ds18b20/ ds3231/ hd44780/
-          max6675/ mcp2515/ mcp251xfd/ mcp9600/ neopixel/ onewire/
-          pcf8563/ pga2311/ stmpe610/ tsc2007/
         frameworks/         # reusable engines/stacks and bundled portable libs
-          cjson/ filesystem/ gps/ irsmall_decoder/ jpeg/ lodepng/
-          smart_timers/ wireguard/
       stm32g474/            # STM32G474 backend
         drivers/
           stm32g474/        # STM32G474 SoC services (fault/system)

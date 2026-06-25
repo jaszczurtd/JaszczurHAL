@@ -404,6 +404,34 @@ jh_example(38_stm32g474_fdcan_native TARGETS stm32g474)
 jh_example(39_sdlogger TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_SDLOGGER)
 jh_example(40_jpeg TARGETS rp2040 stm32g474)
 jh_example(41_jpeg_ili931_base64 TARGETS rp2040 stm32g474)
+jh_example(42_bsd_sockets_tcp_server
+    DIR 42_bsd_sockets_tcp_udp
+    SOURCES
+        42_bsd_sockets_tcp_udp/tcp_server.c
+        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
+    TARGETS rp2040
+    FQBN "${JH_RP2040_WIFI_FQBN}")
+jh_example(42_bsd_sockets_tcp_client
+    DIR 42_bsd_sockets_tcp_udp
+    SOURCES
+        42_bsd_sockets_tcp_udp/tcp_client.c
+        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
+    TARGETS rp2040
+    FQBN "${JH_RP2040_WIFI_FQBN}")
+jh_example(42_bsd_sockets_udp_server
+    DIR 42_bsd_sockets_tcp_udp
+    SOURCES
+        42_bsd_sockets_tcp_udp/udp_server.c
+        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
+    TARGETS rp2040
+    FQBN "${JH_RP2040_WIFI_FQBN}")
+jh_example(42_bsd_sockets_udp_client
+    DIR 42_bsd_sockets_tcp_udp
+    SOURCES
+        42_bsd_sockets_tcp_udp/udp_client.c
+        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
+    TARGETS rp2040
+    FQBN "${JH_RP2040_WIFI_FQBN}")
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

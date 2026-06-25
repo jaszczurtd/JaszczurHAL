@@ -1,4 +1,4 @@
-# src/datasheets
+# doc/datasheets
 
 Reference datasheets (PDF) for the chips that JaszczurHAL drives, plus the
 testing methodology those datasheets exist to support.

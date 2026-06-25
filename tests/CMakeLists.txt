@@ -226,6 +226,7 @@ add_hal_test(test_hal_display)
 add_hal_test(test_hal_wifi)
 add_hal_test(test_hal_littlefs)
 add_hal_test(test_hal_sdlogger)
+add_hal_test(test_hal_net)
 add_executable(test_hal_config_storage_flags
     test_hal_config_storage_flags.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
@@ -242,6 +243,13 @@ target_compile_definitions(test_hal_config_storage_flags PRIVATE
 target_compile_options(test_hal_config_storage_flags PRIVATE -Wall -Wextra)
 add_test(NAME test_hal_config_storage_flags COMMAND test_hal_config_storage_flags)
 add_hal_test(test_hal_udp)
+add_hal_test(test_hal_tcp)
+add_hal_test(test_bsd_sockets)
+add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
+target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)
+set_target_properties(test_bsd_sockets_c_compile PROPERTIES
+    LINKER_LANGUAGE CXX)
+add_test(NAME test_bsd_sockets_c_compile COMMAND test_bsd_sockets_c_compile)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)
 add_hal_test(test_hal_modem_at)

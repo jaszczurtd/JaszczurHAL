@@ -199,6 +199,10 @@
        HAL_ENABLE_TIME          - NTP / system time (propagates: WIFI).
        HAL_ENABLE_MQTT          - PubSubClient wrapper (propagates: WIFI).
        HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).
+       HAL_ENABLE_TCP           - TCP client/listener transport
+                                  (propagates: WIFI).
+       HAL_ENABLE_BSD_SOCKETS   - minimal POSIX/BSD socket adapter
+                                  (propagates: UDP, TCP, WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
        HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI).
        HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
@@ -386,7 +390,22 @@
 #endif
 #endif
 
+#ifdef HAL_ENABLE_BSD_SOCKETS
+#ifndef HAL_ENABLE_UDP
+#define HAL_ENABLE_UDP
+#endif
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#endif
+
 #ifdef HAL_ENABLE_UDP
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_TCP
 #ifndef HAL_ENABLE_WIFI
 #define HAL_ENABLE_WIFI
 #endif
@@ -589,7 +608,7 @@
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
   KV, SDLOGGER, GPS, PWM_FREQ, RGB_LED, DS18B20, BH1750, TSC2007, STMPE610,
   ONEWIRE, EXTERNAL_ADC, PGA2311,
-   TIME, UNITY, MQTT, UDP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
+   TIME, UNITY, MQTT, UDP, TCP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
    PNG_AS_BASE64, JPEG, JPEG_AS_BASE64) do
    NOT need such checks - they can be enabled on their own. The checks
    below only catch generic-API modules enabled without any backend,
@@ -664,6 +683,12 @@
 #endif
 #ifdef HAL_ENABLE_UDP
 #pragma message("HAL_CONFIG: HAL_ENABLE_UDP")
+#endif
+#ifdef HAL_ENABLE_TCP
+#pragma message("HAL_CONFIG: HAL_ENABLE_TCP")
+#endif
+#ifdef HAL_ENABLE_BSD_SOCKETS
+#pragma message("HAL_CONFIG: HAL_ENABLE_BSD_SOCKETS")
 #endif
 #ifdef HAL_ENABLE_OTA
 #pragma message("HAL_CONFIG: HAL_ENABLE_OTA")
@@ -918,6 +943,61 @@
  */
 #ifndef HAL_CAN_MAX_INSTANCES
 #define HAL_CAN_MAX_INSTANCES 2
+#endif
+
+/**
+ * @def HAL_UDP_SOCKET_MAX_INSTANCES
+ * Maximum number of handle-based UDP sockets.
+ * The legacy single-socket hal_udp_* API uses one default socket from this
+ * pool.
+ */
+#ifndef HAL_UDP_SOCKET_MAX_INSTANCES
+#define HAL_UDP_SOCKET_MAX_INSTANCES 4u
+#endif
+
+/**
+ * @def HAL_TCP_SOCKET_MAX_INSTANCES
+ * Maximum number of TCP client socket handles.
+ */
+#ifndef HAL_TCP_SOCKET_MAX_INSTANCES
+#define HAL_TCP_SOCKET_MAX_INSTANCES 4u
+#endif
+
+/**
+ * @def HAL_TCP_LISTENER_MAX_INSTANCES
+ * Maximum number of TCP listener/server handles.
+ */
+#ifndef HAL_TCP_LISTENER_MAX_INSTANCES
+#define HAL_TCP_LISTENER_MAX_INSTANCES 2u
+#endif
+
+/**
+ * @def HAL_TCP_LISTENER_BACKLOG_MAX
+ * Maximum pending-connection backlog stored by the portable TCP listener
+ * layer. Backends may also impose their own platform limit.
+ */
+#ifndef HAL_TCP_LISTENER_BACKLOG_MAX
+#define HAL_TCP_LISTENER_BACKLOG_MAX 5u
+#endif
+#if HAL_TCP_LISTENER_BACKLOG_MAX < 1u
+#error "HAL_TCP_LISTENER_BACKLOG_MAX must be at least 1"
+#endif
+
+/**
+ * @def HAL_BSD_SOCKET_MAX_FDS
+ * Maximum number of file descriptors reserved for the BSD socket adapter.
+ */
+#ifndef HAL_BSD_SOCKET_MAX_FDS
+#define HAL_BSD_SOCKET_MAX_FDS 8u
+#endif
+
+/**
+ * @def HAL_BSD_SOCKET_FD_BASE
+ * First descriptor number used by the BSD socket adapter. Keeping socket
+ * descriptors away from 0, 1, and 2 avoids collisions with standard streams.
+ */
+#ifndef HAL_BSD_SOCKET_FD_BASE
+#define HAL_BSD_SOCKET_FD_BASE 64
 #endif
 
 /**
