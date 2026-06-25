@@ -117,7 +117,7 @@ bool consume_alarm_flag(void) {
 // #define HAL_DEBUG_DEFAULT_BAUD 9600   // used by lazy init
 // #define HAL_DEBUG_RATE_LIMIT_SOURCES_MAX 16
 // #define HAL_DEBUG_RATE_LIMIT_SOURCE_NAME_MAX 24
-// #define HAL_DEBUG_ISR_SLOT_COUNT 16u  // SPSC ring slots for ISR-deferred logs (>= 2)
+// #define HAL_DEBUG_ISR_SLOT_COUNT 64u  // SPSC ring slots for ISR-deferred logs (>= 2)
 // #define HAL_DEBUG_ISR_TEXT_MAX  160u  // per-record payload (incl. NUL terminator)
 
 typedef struct {
@@ -180,7 +180,7 @@ the hot path do **no** mutex acquisition, **no** lazy init, **no**
 timestamp hook, **no** rate-limiter table lookup, and **no** UART I/O.
 The formatted payload is enqueued into a per-backend single-producer /
 single-consumer (SPSC) lock-free ring (`HAL_DEBUG_ISR_SLOT_COUNT`
-slots × `HAL_DEBUG_ISR_TEXT_MAX` bytes each, default 16 × 160 B) using
+slots × `HAL_DEBUG_ISR_TEXT_MAX` bytes each, default 64 × 160 B) using
 release/acquire atomics. For `hal_derr_limited()` the `[source]` tag
 is baked into the queued text up front, since the global rate-limiter
 is bypassed in ISR context.

@@ -224,10 +224,11 @@ loopback, listen-only, sleep and one-shot mode flags. MCP251XFD also supports
 listen-only, one-shot and sleep/configuration transitions through CCCR/TEST.
 State/error-counter APIs map backend controller registers into
 `hal_can_state_t` and `hal_can_error_counters_t`.
-**Filters:** `hal_can_set_filter()` programs one id/mask slot. The public API
-exposes six portable filter slots. MCP2515 maps them onto its six hardware
-filters; MCP251XFD and STM32G474 FDCAN map them onto the first six hardware
-filter objects routed to RX FIFO 0. `hal_can_set_std_filters()` remains a
+**Filters:** `hal_can_set_filter()` programs one id/mask slot. `HAL_CAN_MAX_FILTERS`
+(6) is the *minimum* number of hardware acceptance filters every backend
+guarantees, so it is the portable slot count to rely on. MCP2515 maps them onto
+its six hardware filters; MCP251XFD and STM32G474 FDCAN map them onto the first
+six hardware filter objects routed to RX FIFO 0 (and may have more in hardware). `hal_can_set_std_filters()` remains a
 convenience helper for two exact 11-bit IDs.
 `hal_can_create_with_retry()` retries init up to `max_retries + 1` attempts and can auto-attach an IRQ handler when `int_pin != HAL_CAN_NO_INT_PIN`.
 `hal_can_process_all()` repeatedly calls `hal_can_receive()` and forwards only frames with `id != 0` and `len > 0`.

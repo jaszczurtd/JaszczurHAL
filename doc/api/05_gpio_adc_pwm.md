@@ -44,7 +44,7 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 **Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, `Serial`, or any blocking call inside it.
 **Validation:** Invalid GPIO modes, invalid IRQ modes, invalid pins and NULL interrupt callbacks trigger `HAL_ASSERT` in checked builds and return without configuring hardware.
 **Output initial state:** `HAL_GPIO_OUTPUT_LOW/HIGH` and `HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW/HIGH` make the intended initial latch state explicit. `HAL_GPIO_OUTPUT` remains compatible and means push-pull output with initial low.
-**Open drain:** On STM32G474 this maps to hardware open-drain. On RP2040 Arduino it is emulated by driving LOW for `false` and releasing the pin as input for `true`.
+**Open drain:** On STM32G474 this maps to hardware open-drain. On RP2040 (native pico-sdk) it is emulated by driving LOW for `false` and releasing the pin as input (high-Z) for `true`.
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
 **STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
 **IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
@@ -52,7 +52,7 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 
 ---
 
-## `hal_pwm` - PWM (simple, Arduino-level)
+## `hal_pwm` - PWM
 
 ```c
 #include <hal/hal_pwm.h>
@@ -69,10 +69,15 @@ are ignored. Use `hal_pwm_is_pin_supported()` before dynamic pin selection.
 
 It does not guarantee a caller-selected frequency or independent channel
 allocation. Use `hal_pwm_freq` when frequency, period/wrap value and channel
-lifetime matter.
+lifetime matter. Default resolution is 8 bits.
 
-**impl/rp2040:** `analogWriteResolution()`, `analogWrite()` (Arduino-pico);
-PWM frequency and slice sharing follow the Arduino core.
+**impl/rp2040:** native pico-sdk `hardware/pwm.h` (`pwm_init`, `pwm_config_set_wrap`,
+`pwm_set_gpio_level`, `pwm_set_enabled`). The duty resolution sets the slice wrap
+(`2^bits - 1`); the target frequency is a fixed ~1 kHz best-effort derived from
+`clk_sys`, but because `clkdiv` saturates at 255 the effective frequency rises at
+low resolutions (e.g. ~1.9 kHz at 8-bit, ~1.0 kHz at 16-bit). Two GPIOs on the
+same hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
+duty. Use `hal_pwm_freq` when exact frequency matters.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
 default simple-PWM target frequency is 1 kHz best-effort from the current APB
 clock.
@@ -133,7 +138,11 @@ void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);
 ```
 
-**impl/rp2040:** `analogReadResolution()`, `analogRead()` (Arduino-pico).
+Default resolution is 12 bits (consistent with the STM32G474 and mock backends).
+
+**impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
+`adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
+the 12-bit hardware sample is rescaled to the configured resolution.
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
 

@@ -266,11 +266,15 @@ cmake --build build_stm32 -j$(nproc)
 ```
 
 The initial STM32 profile currently enables the backend pieces that exist in
-`stm32_lib/CMakeLists.txt`, including I2C, SPI, UART, DAC, PCNT, digipot
-backends, MCP9600/MAX6675 thermocouple backends, ADS1115 external ADC,
-OneWire/DS18B20, MCP2515/MCP251XFD external CAN, native STM32G474 FDCAN, and
-GPS over UART. Additional modules should be enabled only once their STM32G474
-backend exists.
+`stm32_lib/CMakeLists.txt`: I2C, I2C-slave, SPI, UART, DAC, PCNT, the
+MCP401X/MAX5395 digipot backends, MCP9600/MAX6675 thermocouple backends,
+BH1750 ambient-light, TSC2007 and STMPE610 touch controllers, the IR small
+decoder, ADS1115 external ADC, OneWire/DS18B20, the MCP2515 external CAN
+backend, GPS over UART, and the HD44780 character LCD. Other CAN backends are
+**not** default: MCP251XFD (`HAL_ENABLE_MCP251XFD`) and native STM32G474 FDCAN
+(`HAL_ENABLE_STM32G474_FDCAN`) must be added via `-DEXTRA_HAL_DEFINES` as shown
+above. Additional modules should be enabled only once their STM32G474 backend
+exists.
 
 ### STM32G474 FreeRTOS note
 
@@ -348,17 +352,23 @@ matching options, for example:
 The reservation sits before the EEPROM/KV flash pages and reduces the space
 available for application code.
 
-For complete firmware examples, prefer the checked-in STM32 build scripts:
+For complete firmware examples, use the unified example build in
+`examples/CMakeLists.txt`, which wires in the startup files, linker script,
+target definitions, and HAL include paths needed for flashable outputs. Select
+the backend with `-DJH_EXAMPLE_TARGET`:
 
-```text
-examples/portable_blink/g474/build.sh
-examples/g474_i2c_scan/build.sh
-examples/g474_adc_read/build.sh
-examples/g474_gps/build.sh
+```bash
+# STM32G474 example firmware
+cmake -S examples -B build_examples_stm32g474 -DJH_EXAMPLE_TARGET=stm32g474
+cmake --build build_examples_stm32g474 -j$(nproc)
+
+# RP2040 example firmware
+cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
+cmake --build build_examples_rp2040 -j$(nproc)
 ```
 
-They include startup files, linker script, target definitions, and HAL include
-paths needed for flashable ELF/BIN/HEX outputs.
+Examples are the numbered directories under `examples/` (e.g. `01_blink`,
+`38_stm32g474_fdcan_native`). `runalltests.sh` builds them as gate 7.
 
 ---
 
@@ -389,6 +399,6 @@ scripts/
     checkout from freertos_core_version.conf.
 
 examples/
-  portable_blink/       # one app, RP2040 + STM32G474
-  g474_*                # STM32G474 hardware-verification examples
+  CMakeLists.txt        # unified example build; -DJH_EXAMPLE_TARGET=rp2040|stm32g474
+  01_blink/ ... 41_*/     # numbered, self-contained example apps
 ```

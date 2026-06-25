@@ -2,9 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.7.0] - 2026-06-08
+## [1.7.0] - 2026-06-25
 
 Next release.
+
+### RP2040 backend - native pico-sdk migration (decouple from Arduino)
+
+- Migrated the RP2040 `hal_uart` backend to the native pico-sdk hardware UART
+  instead of the Arduino `Serial1`/`SerialPIO` path.
+- Decoupled `hal_system` from Arduino as a cornerstone change: `hal_millis()`
+  now uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/
+  `hal_micros64()` use `time_us_64()`, and `hal_delay_ms()` selects pico
+  `sleep_ms()` (interrupts enabled) or `busy_wait_ms()` (ISR / HAL-critical
+  context) - no Arduino `millis()`/`micros()`/`delay()`. The RP2040 assert path
+  (`hal_assert_fail`) now writes through the native serial backend instead of
+  `Serial.print()`.
+- Ported the RP2040 `hal_adc` and `hal_pwm` backends to native `hardware/adc.h`
+  and `hardware/pwm.h` (no `analogRead`/`analogWrite`). ADC default resolution
+  is 12 bits (matching STM32G474/mock); PWM uses hardware slices with an
+  ~1 kHz best-effort default frequency derived from `clk_sys`.
+- Made the optional Arduino-based RP2040 frameworks opt-in at build time:
+  `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
+  `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
+  `HAL_ENABLE_WIREGUARD`.
 
 ### hal_serial - native RP2040 CDC and streamed debug output
 
