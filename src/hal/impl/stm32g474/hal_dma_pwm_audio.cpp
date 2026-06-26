@@ -27,6 +27,7 @@ struct hal_dma_pwm_audio_impl_s {
   const uint8_t *adc_pins;
   uint8_t adc_count;
   volatile uint16_t *adc_buffer;
+  bool adc_dma_configured;
   hal_dma_pwm_audio_buffer_cb_t cb;
   void *user;
 };
@@ -37,6 +38,8 @@ static hal_dma_pwm_audio_impl_t s_pool[HAL_DMA_PWM_AUDIO_MAX_CHANNELS];
 static hal_dma_pwm_audio_impl_t *s_irq_audio = nullptr;
 static constexpr uint8_t kPwmDmaChannel = 0u; /* DMA1 Channel1 */
 static constexpr uint8_t kAdcDmaChannel = 1u; /* DMA1 Channel2 */
+static constexpr uint32_t kAdcDmaCfgrMask =
+    ADC_CFGR_DMAEN | ADC_CFGR_DMACFG | ADC_CFGR_OVRMOD | ADC_CFGR_CONT;
 
 static uint32_t adc1_channel_for_pin(uint8_t pin) {
   switch (pin) {
@@ -175,8 +178,8 @@ static bool configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
   stop_adc_conversion();
   configure_adc_sequence(audio->adc_pins, audio->adc_count, channels);
 
-  ADC1_CFGR = (ADC1_CFGR & ~ADC_CFGR_RES_MASK) | ADC_CFGR_DMAEN |
-              ADC_CFGR_DMACFG | ADC_CFGR_OVRMOD | ADC_CFGR_CONT;
+  ADC1_CFGR =
+      (ADC1_CFGR & ~(ADC_CFGR_RES_MASK | kAdcDmaCfgrMask)) | kAdcDmaCfgrMask;
 
   DMA_CCR(DMA1_BASE, kAdcDmaChannel) &= ~DMA_CCR_EN;
   DMAMUX_CCR(kAdcDmaChannel) = DMA_REQUEST_ADC1 & DMAMUX_CCR_DMAREQ_ID_MASK;
@@ -190,8 +193,34 @@ static bool configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
   DMA_CCR(DMA1_BASE, kAdcDmaChannel) |= DMA_CCR_EN;
 
   ADC1_ISR = ADC_ISR_EOC;
-  ADC1_CR |= ADC_CR_ADSTART;
+  audio->adc_dma_configured = true;
   return true;
+}
+
+static bool start_adc_dma_conversion(hal_dma_pwm_audio_impl_t *audio) {
+  if (audio->adc_count == 0u) {
+    return true;
+  }
+  if (!audio->adc_dma_configured && !configure_adc_dma(audio)) {
+    return false;
+  }
+  if ((ADC1_CR & ADC_CR_ADSTART) == 0u) {
+    ADC1_ISR = ADC_ISR_EOC;
+    ADC1_CR |= ADC_CR_ADSTART;
+  }
+  return true;
+}
+
+static void release_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
+  stop_adc_conversion();
+  DMA_CCR(DMA1_BASE, kAdcDmaChannel) &= ~DMA_CCR_EN;
+  DMAMUX_CCR(kAdcDmaChannel) = 0u;
+  DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kAdcDmaChannel);
+  ADC1_CFGR &= ~kAdcDmaCfgrMask;
+  ADC1_ISR = ADC_ISR_EOC;
+  if (audio != nullptr) {
+    audio->adc_dma_configured = false;
+  }
 }
 
 static bool configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio) {
@@ -252,19 +281,6 @@ extern "C" void DMA1_Channel1_IRQHandler(void) {
 }
 #endif /* JH_STM32G474_HW */
 
-static uint16_t blend_fraction(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  const int32_t delta = (int32_t)y - (int32_t)x;
-  const int32_t frac = (int32_t)(mu_scaled & 0xFFu);
-  int32_t value = (int32_t)x + ((delta * frac) >> 8);
-  if (value < 0) {
-    return 0u;
-  }
-  if (value > 65535) {
-    return 65535u;
-  }
-  return (uint16_t)value;
-}
-
 bool hal_dma_pwm_audio_supported(void) { return true; }
 
 hal_dma_pwm_audio_t
@@ -315,7 +331,12 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
   RCC_AHB1ENR |= RCC_AHB1ENR_DMA1EN | RCC_AHB1ENR_DMAMUX1EN;
   (void)RCC_AHB1ENR;
 
-  if (!configure_adc_dma(audio) || !configure_pwm_dma(audio)) {
+  if (!configure_adc_dma(audio)) {
+    audio->in_use = false;
+    return nullptr;
+  }
+  if (!configure_pwm_dma(audio)) {
+    release_adc_dma(audio);
     audio->in_use = false;
     return nullptr;
   }
@@ -331,6 +352,9 @@ bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio) {
   }
 
 #ifdef JH_STM32G474_HW
+  if (!start_adc_dma_conversion(audio)) {
+    return false;
+  }
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, true);
@@ -350,8 +374,7 @@ void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
 #ifdef JH_STM32G474_HW
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, false);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) &= ~DMA_CCR_EN;
-  DMA_CCR(DMA1_BASE, kAdcDmaChannel) &= ~DMA_CCR_EN;
-  stop_adc_conversion();
+  release_adc_dma(audio);
   jh_stm32_pwm_release_output(&audio->pwm);
 #endif
 
@@ -380,6 +403,9 @@ void hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
   }
 
 #ifdef JH_STM32G474_HW
+  if (!start_adc_dma_conversion(audio)) {
+    return;
+  }
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
   jh_stm32_pwm_set_update_dma_request(&audio->pwm, true);
@@ -410,14 +436,6 @@ bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio) {
 
 bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio) {
   return audio != nullptr && audio->in_use && audio->paused;
-}
-
-uint16_t hal_dma_interpolate0(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
-}
-
-uint16_t hal_dma_interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
 }
 
 #endif /* HAL_ENABLE_DMA_PWM_AUDIO */

@@ -209,19 +209,6 @@ static void configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
                         &audio->adc_write_addr, 1u, false);
 }
 
-static uint16_t blend_fraction(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  const int32_t delta = (int32_t)y - (int32_t)x;
-  const int32_t frac = (int32_t)(mu_scaled & 0xFFu);
-  int32_t value = (int32_t)x + ((delta * frac) >> 8);
-  if (value < 0) {
-    return 0u;
-  }
-  if (value > 65535) {
-    return 65535u;
-  }
-  return (uint16_t)value;
-}
-
 bool hal_dma_pwm_audio_supported(void) { return true; }
 
 hal_dma_pwm_audio_t
@@ -357,14 +344,6 @@ bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio) {
 
 bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio) {
   return audio != nullptr && audio->in_use && audio->paused;
-}
-
-uint16_t hal_dma_interpolate0(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
-}
-
-uint16_t hal_dma_interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
 }
 
 #endif /* HAL_ENABLE_DMA_PWM_AUDIO */

@@ -20,6 +20,8 @@ bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
 
 bool jh_stm32_pwm_pin_supported(uint8_t pin);
 
+uint32_t jh_stm32_pwm_source_clock_hz(uint8_t pin);
+
 bool jh_stm32_pwm_prepare_frequency_pin(uint8_t pin, uint32_t frequency_hz,
                                         uint32_t requested_period_ticks,
                                         jh_stm32_pwm_channel_desc *out,

@@ -79,8 +79,10 @@ when `clkdiv` would otherwise exceed the hardware limit. Two GPIOs on the same
 hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
 duty. Use `hal_pwm_freq` when exact frequency matters.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
-default simple-PWM target frequency is 1 kHz best-effort from the current APB
-clock.
+default simple-PWM target frequency is 1 kHz best-effort from the current TIM
+clock. The STM32G474 PWM backend currently assumes APB prescaler == 1, so TIMx
+clock == `JH_G474_PCLK1_HZ` / `JH_G474_PCLK2_HZ`; if a future clock tree adds
+an APB divider, the STM32 timer x2 clock rule must be reflected in the backend.
 **Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins
 to TIM channels. Channels sharing a timer also share frequency/resolution, and
 pins sharing the same TIM channel are not independent. Call
@@ -115,7 +117,13 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 
 **impl/rp2040:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
-**impl/stm32g474:** register-level TIM PWM on mapped TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level resource, so multiple channels on the same TIM share the same frequency and effective period.
+**impl/stm32g474:** register-level TIM PWM on mapped
+TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level
+resource, so multiple channels on the same TIM share the same frequency and
+effective period. The reported source clock follows the same APB prescaler == 1
+assumption as `hal_pwm`; this keeps DACless sample-rate reporting consistent
+with the timer programming, but must be revisited if APB prescalers are
+introduced.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
 function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
@@ -153,7 +161,7 @@ public:
     using BlockCallback  = void (*)(void *, uint16_t *);
 
     explicit DAClessAudio(const DAClessConfig &cfg = DAClessConfig());
-    void begin();
+    bool begin();
     void service();
     void mute();
     void unmute();
@@ -167,7 +175,6 @@ public:
 };
 
 uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
-uint16_t interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled);
 ```
 
 `HAL_ENABLE_DACLESS` propagates `HAL_ENABLE_DMA_PWM_AUDIO` and `HAL_ENABLE_PWM_FREQ`.
@@ -184,11 +191,17 @@ sample/control DMA flow. STM32G474 uses TIM update DMA into the active CCR
 register, circular half-transfer/transfer-complete callbacks for the two audio
 halves, and an ADC1 circular DMA scan for the configured ADC pins.
 
+`begin()` returns `true` when the PWM/DMA backend was created and started.
+When it returns `false`, the instance remains stopped and muted; this can happen
+when the target backend has exhausted a fixed hardware resource.
+
 Set `cfg.useDma = false` to use the cooperative path: call `service()`
 frequently from `app_task0()` or a FreeRTOS task. It writes due samples through
 `hal_pwm_freq_write()`, refills the finished buffer through the block callback
 when present, otherwise through the sample callback, otherwise with midpoint
-silence. Callbacks are invoked outside the instance mutex, so they may read
+silence. If `service()` is called late, polling playback catches up by at most
+`DACLESS_MAX_POLLING_CATCHUP_SAMPLES` samples before resynchronising to current
+time. Callbacks are invoked outside the instance mutex, so they may read
 `getADC()` without deadlocking.
 
 Default ADC pins are GPIO 26..29 on RP2040/mock and PA0..PA3 on STM32G474

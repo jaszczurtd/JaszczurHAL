@@ -53,8 +53,19 @@ void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio);
 
-uint16_t hal_dma_interpolate0(uint16_t x, uint16_t y, uint16_t mu_scaled);
-uint16_t hal_dma_interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled);
+static inline uint16_t hal_dma_interpolate(uint16_t x, uint16_t y,
+                                           uint16_t mu_scaled) {
+  const int32_t delta = (int32_t)y - (int32_t)x;
+  const int32_t frac = (int32_t)(mu_scaled & 0xFFu);
+  int32_t value = (int32_t)x + ((delta * frac) >> 8);
+  if (value < 0) {
+    return 0u;
+  }
+  if (value > 65535) {
+    return 65535u;
+  }
+  return (uint16_t)value;
+}
 
 #endif /* HAL_ENABLE_DMA_PWM_AUDIO */
 

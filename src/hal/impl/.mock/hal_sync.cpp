@@ -66,11 +66,13 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
  * no real interrupts on the host. */
 namespace {
 uint32_t s_critical_depth = 0u;
+uint32_t s_critical_enter_count = 0u;
 bool s_irq_enabled = true;
 bool s_saved_irq = true;
 } // namespace
 
 void hal_critical_section_enter(void) {
+  ++s_critical_enter_count;
   if (s_critical_depth == 0u) {
     s_saved_irq = s_irq_enabled;
     s_irq_enabled = false;
@@ -91,10 +93,13 @@ void hal_critical_section_exit(void) {
 
 uint32_t hal_mock_critical_depth(void) { return s_critical_depth; }
 
+uint32_t hal_mock_critical_enter_count(void) { return s_critical_enter_count; }
+
 bool hal_mock_irq_enabled(void) { return s_irq_enabled; }
 
 void hal_mock_critical_section_reset(void) {
   s_critical_depth = 0u;
+  s_critical_enter_count = 0u;
   s_irq_enabled = true;
   s_saved_irq = true;
 }

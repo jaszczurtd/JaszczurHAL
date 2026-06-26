@@ -199,6 +199,22 @@ add_hal_test(test_hal_timer)
 add_stm32_host_test(test_stm32_hal_timer)
 add_stm32_host_test(test_stm32_hal_system)
 add_stm32_i2c_slave_host_test(test_stm32_hal_i2c_slave)
+add_executable(test_stm32_pwm_clock
+    test_stm32_pwm_clock.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_stm32_pwm_clock PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_stm32_pwm_clock PRIVATE
+    HAL_TARGET_STM32G474=1
+    HAL_ENABLE_PWM_FREQ
+    UNITY_INCLUDE_CONFIG_H
+    HAL_ENABLE_UNITY
+)
+target_compile_options(test_stm32_pwm_clock PRIVATE -Wall -Wextra)
+add_test(NAME test_stm32_pwm_clock COMMAND test_stm32_pwm_clock)
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
 add_hal_test(test_hal_dac)

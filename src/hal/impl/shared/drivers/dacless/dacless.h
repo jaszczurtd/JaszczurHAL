@@ -38,6 +38,10 @@
 #define DACLESS_MAX_INSTANCES 4u
 #endif
 
+#ifndef DACLESS_MAX_POLLING_CATCHUP_SAMPLES
+#define DACLESS_MAX_POLLING_CATCHUP_SAMPLES 64u
+#endif
+
 #ifndef DACLESS_DEFAULT_PWM_PIN
 #define DACLESS_DEFAULT_PWM_PIN 6u
 #endif
@@ -76,7 +80,7 @@ public:
   DAClessAudio(const DAClessAudio &) = delete;
   DAClessAudio &operator=(const DAClessAudio &) = delete;
 
-  void begin();
+  bool begin();
   void service();
   void mute();
   void unmute();
@@ -103,17 +107,26 @@ public:
 #endif
 
 private:
+  struct CallbackSnapshot {
+    SampleCallback sample_cb;
+    BlockCallback block_cb;
+    void *user;
+  };
+
   bool ensureMutex() const;
   bool lock() const;
   void unlock() const;
 
   static DAClessConfig normalizeConfig(const DAClessConfig &cfg);
-  static uint32_t sourceClockHz();
+  static uint32_t sourceClockHz(uint8_t pin);
   static uint16_t maxSampleValueForBits(uint16_t bits);
   static uint16_t midpointForBits(uint16_t bits);
   static uint32_t periodTicksForBits(uint16_t bits);
-  static uint32_t sampleRateIntForBits(uint16_t bits);
+  static uint32_t sampleRateIntForBits(uint16_t bits, uint8_t pin);
   static uint64_t samplePeriodQ16ForRate(uint32_t sample_rate_hz);
+  static uint64_t clampPollingCatchupQ16(uint64_t now_q16,
+                                         uint64_t next_due_q16,
+                                         uint64_t sample_period_q16);
 
   void registerInstance();
   void unregisterInstance();
@@ -121,8 +134,12 @@ private:
   bool isCompatibilityOwnerUnlocked() const;
 
   void fillSilenceUnlocked();
+  void markBeginFailedUnlocked();
   void sampleAdcUnlocked();
   void prepareFinishedBuffer(uint16_t *buffer);
+  bool claimDmaBufferUnlocked(uint16_t *buffer, CallbackSnapshot &snapshot);
+  void finishCallbackUnlocked();
+  CallbackSnapshot callbackSnapshotUnlocked() const;
   void writeCurrentSampleUnlocked();
   void fillBufferWithCallback(uint16_t *buffer, SampleCallback sample_cb,
                               BlockCallback block_cb, void *user);
@@ -165,7 +182,6 @@ private:
 };
 
 uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
-uint16_t interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled);
 
 extern float audio_rate;
 extern volatile uint16_t *out_buf_ptr;

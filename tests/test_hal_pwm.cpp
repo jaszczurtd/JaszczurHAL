@@ -1,4 +1,5 @@
 #include "hal/hal_pwm.h"
+#include "hal/hal_pwm_freq.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
@@ -45,6 +46,8 @@ void test_write_multiple_pins_independent(void) {
   TEST_ASSERT_EQUAL_UINT32(20, hal_mock_pwm_get_value(1));
 }
 
+void test_pwm_freq_write_null_is_noop(void) { hal_pwm_freq_write(NULL, 123); }
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_resolution);
@@ -54,5 +57,6 @@ int main(void) {
   RUN_TEST(test_write_clamps_to_resolution_max);
   RUN_TEST(test_write_zero);
   RUN_TEST(test_write_multiple_pins_independent);
+  RUN_TEST(test_pwm_freq_write_null_is_noop);
   return UNITY_END();
 }
