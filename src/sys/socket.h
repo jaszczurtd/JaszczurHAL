@@ -8,6 +8,10 @@
  * Enable it with HAL_ENABLE_BSD_SOCKETS.
  */
 
+#include "../hal/hal_config.h"
+
+#ifdef HAL_ENABLE_BSD_SOCKETS
+
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -91,3 +95,5 @@ int shutdown(int sockfd, int how);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_BSD_SOCKETS */

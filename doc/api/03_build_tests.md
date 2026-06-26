@@ -102,7 +102,7 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 
 - all `src/hal/impl/.mock/*.cpp` stubs,
 - the backend-neutral HAL sources in `UTIL_SOURCES` (see `CMakeLists.txt`):
-  `hal_config.cpp`, `hal_can_util.cpp`, `hal_debug_format.cpp`, `hal_crypto.cpp`,
+  `hal_config.cpp`, `hal_can_util.cpp`, `compat/debug_format/hal_debug_format.cpp`, `hal_crypto.cpp`,
   `hal_kv.cpp`, `hal_modem_at.cpp`, `hal_simcom_a76xx.cpp`, `hal_timer_ext.cpp`,
   `hal_soft_timer.cpp`, `hal_digipot.cpp`, `hal_pga2311.cpp`, plus the shared
   drivers (mcp2515/mcp251xfd/digipot/pga2311) and shared frameworks

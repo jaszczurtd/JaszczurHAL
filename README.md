@@ -81,7 +81,10 @@ see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ```text
 CMakeLists.txt              # host/mock tests build
+library.properties          # Arduino library metadata
 rp2040_lib/                 # RP2040 Arduino-pico static-library CMake glue
+  MEMORY_MAP.md             # RP2040/RP2350 static-library memory-map notes
+  toolchain_rp2040.cmake    # Arduino-pico CMake toolchain file
 stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
 scripts/
   build_rp2040_lib.sh       # RP2040 static-library helper
@@ -91,33 +94,43 @@ runalltests.sh              # full local validation gate
 runmefirst.sh               # one-time local toolchain setup
 doc/
   JaszczurHAL_API.md        # detailed API/reference
+  api/                      # split API chapters included by the main reference
+  HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
   lib_compilation.md        # static-library build guide
+  features.md               # high-level feature matrix
   CHANGELOG.md              # project changelog
   STM32G474_porting_progress.md # STM32G474 backend status
+  ESP32_porting_progress.md # ESP32 backend notes / future porting track
   datasheets/               # local reference PDFs and notes
   future_ideas.md           # architecture roadmap and backlog
 examples/                   # buildable example apps for RP2040 and STM32G474
 src/
   JaszczurHAL.h             # primary public include
-  HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
+  hal_app_entry.cpp         # optional portable app entry wrapper
   libConfig.h               # backward-compat include
   tools.h, tools_c.h        # utility aggregators (C++ / C)
+  arpa/, netinet/, sys/     # host/embedded socket compatibility headers
   hal/                      # HAL public headers + common wrappers
+    hal_target.h            # canonical backend selection
+    hal_config.h            # feature flags, dependency propagation, project hook
     impl/
       .mock/                # deterministic host/test backend
       rp2040/               # RP2040 backend
         drivers/rp2040/     # RP2040 SoC services (fault/system)
         frameworks/         # Arduino-origin integrations (frameworks & drivers)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
+        compat/             # portable compatibility shims, e.g. BSD sockets/debug format
         drivers/            # hardware-oriented drivers: sensors, buses, displays
         frameworks/         # reusable engines/stacks and bundled portable libs
       stm32g474/            # STM32G474 backend
         drivers/
+          littlefs/         # STM32 LittleFS backend support
           stm32g474/        # STM32G474 SoC services (fault/system)
         freertos/           # STM32 FreeRTOSConfig and hooks
         port/               # startup, SystemInit, linker-facing low-level glue
   utils/                    # tools, PID, watchdog, draw helpers, Unity
 tests/                      # host unit tests (CMake + Unity)
+  freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
 third_party/                # optional local dependencies, e.g. FreeRTOS-Kernel
 vscode-templates/           # ready-to-use VS Code project configurations
   linux/                    # Linux/macOS template scripts and settings
@@ -191,7 +204,7 @@ For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` o
 see:
 
 - [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
-- `src/HAL_FLAGS.txt`
+- `doc/HAL_FLAGS.txt`
 
 ## FreeRTOS opt-in
 
@@ -367,7 +380,7 @@ Primary docs:
 
 - API reference: [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 - Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
-- Build-time flags summary: `src/HAL_FLAGS.txt`
+- Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
 - Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
@@ -382,10 +395,6 @@ Primary docs:
   (fork of [garthoff/Timers](https://github.com/garthoff/Timers)).
 - Unity test framework sources are bundled in src/:
   [ThrowTheSwitch/Unity](https://github.com/ThrowTheSwitch/Unity)
-- cJSON/cJSON_Utils are bundled and optional via HAL_ENABLE_CJSON:
-  [DaveGamble/cJSON](https://github.com/DaveGamble/cJSON)
-- LodePNG is bundled and optional via HAL_ENABLE_PNG:
-  [lvandeve/lodepng](https://github.com/lvandeve/lodepng) by Lode Vandevenne
 - The shared display stack (`src/hal/impl/shared/drivers/display/`) is a portable,
   HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
   algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
@@ -394,9 +403,25 @@ Primary docs:
   corresponding Adafruit ILI9341 / ST7735-ST7789 / SSD1306 libraries by
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
   headers for the per-module attribution.
-- WireGuard cryptographic primitives now live in a shared backend under
-  `src/hal/impl/shared/frameworks/wireguard/crypto/` and are reused by both the WireGuard
-  integration and `hal_crypto` ChaCha20/Poly1305 helpers.
-- Bundled dependency authors (from upstream LICENSE/README files in src/hal/impl/rp2040/drivers/ and src/hal/impl/rp2040/frameworks/):
-- [arduino-wireguard-pico-w](https://github.com/jaszczurtd/arduino-wireguard-pico-w) - Kenta Ida (original WireGuard-ESP32 API), Daniel Hope (upstream WireGuard core), Marcin Kielesiński (RP2040/Pico W port)
-- [PubSubClient](https://github.com/knolleary/pubsubclient) - Nick O'Leary
+- Bundled, ported, or locally adapted third-party components:
+  [cJSON / cJSON_Utils](src/hal/impl/shared/frameworks/cjson/),
+  [LodePNG](src/hal/impl/shared/frameworks/lodepng/),
+  [JPEGDecoder / picojpeg](src/hal/impl/shared/frameworks/jpeg/),
+  [FatFs](src/hal/impl/shared/frameworks/filesystem/ff16/),
+  [FreeRTOS-Kernel](third_party/FreeRTOS-Kernel/),
+  [PubSubClient](src/hal/impl/rp2040/frameworks/PubSubClient/),
+  [arduino-wireguard-pico-w](src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/),
+  [WireGuard crypto core](src/hal/impl/shared/frameworks/wireguard/crypto/),
+  [littlefs](src/hal/impl/stm32g474/drivers/littlefs/),
+  [LiquidCrystal / HD44780](src/hal/impl/shared/drivers/hd44780/),
+  [Seeed/Loovee MCP_CAN / MCP2515](src/hal/impl/shared/drivers/mcp2515/),
+  [MCP251XFD](src/hal/impl/shared/drivers/mcp251xfd/),
+  [Adafruit NeoPixel](src/hal/impl/shared/drivers/neopixel/),
+  [Adafruit STMPE610](src/hal/impl/shared/drivers/stmpe610/),
+  [Adafruit TSC2007](src/hal/impl/shared/drivers/tsc2007/),
+  [Paul Stoffregen OneWire](src/hal/impl/shared/drivers/onewire/),
+  [Adafruit MAX6675](src/hal/impl/shared/drivers/max6675/),
+  [Adafruit MCP9600](src/hal/impl/shared/drivers/mcp9600/),
+  [ArtronShop BH1750](src/hal/impl/shared/drivers/bh1750/),
+  [Eric Ayars / JeeLabs / RTClib-style DS3231](src/hal/impl/shared/drivers/ds3231/),
+  [IRsmallDecoder / RC5 decoder attribution](src/hal/impl/shared/frameworks/irsmall_decoder/).

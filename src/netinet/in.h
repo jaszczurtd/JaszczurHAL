@@ -5,6 +5,10 @@
  * @brief Minimal IPv4 socket address definitions for JaszczurHAL BSD sockets.
  */
 
+#include "../hal/hal_config.h"
+
+#ifdef HAL_ENABLE_BSD_SOCKETS
+
 #include <stdint.h>
 #include <sys/socket.h>
 
@@ -85,3 +89,5 @@ static inline uint32_t ntohl(uint32_t netlong) { return htonl(netlong); }
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_BSD_SOCKETS */
