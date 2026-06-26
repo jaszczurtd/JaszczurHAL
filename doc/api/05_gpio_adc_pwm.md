@@ -106,6 +106,9 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
 // Write value in [0, resolution] - values outside range are clamped automatically
 void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 
+// Stop output without releasing the channel; the next write starts it again
+void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch);
+
 // Free resources
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
@@ -123,9 +126,79 @@ prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-
 int      hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
+bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 ```
 
-**Thread safety:** RP2040 and STM32G474 backends protect `hal_pwm_freq_write()` with an internal mutex. `hal_pwm_freq_create()` and `hal_pwm_freq_destroy()` are not synchronized and should be called from one task/core during setup/teardown. Mock backend does not provide concurrent-access synchronization.
+**Thread safety:** RP2040 and STM32G474 backends protect `hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` and `hal_pwm_freq_destroy()` with an internal mutex. Callers still own channel handle lifetime and must not use a handle after `hal_pwm_freq_destroy()`. Mock backend does not provide concurrent-access synchronization.
+
+---
+
+## `DAClessAudio` - PWM audio engine  *(optional - `HAL_ENABLE_DACLESS`)*
+
+```cpp
+#include <hal/hal_dacless.h>
+
+struct DAClessConfig {
+    uint8_t  pinPWM;      // default 6
+    uint16_t pwmBits;     // default 12
+    uint16_t blockSize;   // default 128, capped by DACLESS_MAX_BLOCK_SIZE
+    uint8_t  nAdcInputs;  // capped by DACLESS_MAX_ADC_INPUTS
+    bool     useDma;      // default true; set false for cooperative service()
+    uint8_t  adcPins[DACLESS_MAX_ADC_INPUTS];
+};
+
+class DAClessAudio {
+public:
+    using SampleCallback = uint16_t (*)(void *);
+    using BlockCallback  = void (*)(void *, uint16_t *);
+
+    explicit DAClessAudio(const DAClessConfig &cfg = DAClessConfig());
+    void begin();
+    void service();
+    void mute();
+    void unmute();
+    void setSampleCallback(SampleCallback cb, void *userdata = nullptr);
+    void setBlockCallback(BlockCallback cb, void *userdata = nullptr);
+    uint16_t getADC(uint8_t channel) const;
+    float getSampleRate() const;
+    const volatile uint16_t *getOutBufPtr() const;
+    const volatile uint16_t *getAdcBuffer() const;
+    bool isDmaActive() const;
+};
+
+uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled);
+uint16_t interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled);
+```
+
+`HAL_ENABLE_DACLESS` propagates `HAL_ENABLE_DMA_PWM_AUDIO` and `HAL_ENABLE_PWM_FREQ`.
+The shared driver is modeled after Brian Varren's DACless engine and preserves
+the configuration, double-buffered block flow, sample/block callbacks, ADC
+result buffer, compatibility globals (`audio_rate`, `out_buf_ptr`,
+`adc_results_buf`) and RP2040 8-bit blend-fraction interpolation helper
+semantics.
+
+The default path (`cfg.useDma = true`) uses `hal_dma_pwm_audio` to feed PWM
+from double-buffered DMA and to keep the ADC result buffer refreshed. RP2040
+mirrors the original chained channel-A/channel-B PWM DMA plus ADC
+sample/control DMA flow. STM32G474 uses TIM update DMA into the active CCR
+register, circular half-transfer/transfer-complete callbacks for the two audio
+halves, and an ADC1 circular DMA scan for the configured ADC pins.
+
+Set `cfg.useDma = false` to use the cooperative path: call `service()`
+frequently from `app_task0()` or a FreeRTOS task. It writes due samples through
+`hal_pwm_freq_write()`, refills the finished buffer through the block callback
+when present, otherwise through the sample callback, otherwise with midpoint
+silence. Callbacks are invoked outside the instance mutex, so they may read
+`getADC()` without deadlocking.
+
+Default ADC pins are GPIO 26..29 on RP2040/mock and PA0..PA3 on STM32G474
+(`port * 16 + pin`). Override `cfg.adcPins[]` for custom wiring.
+
+**Thread safety:** Public methods serialize instance state with a per-instance
+HAL mutex created via `jh_hal_mutex_create_once`. DMA buffer callbacks run from
+the backend DMA interrupt and do not take the instance mutex. Callback
+registration, `begin()`, `service()`, `mute()`, `unmute()` and `getADC()` are
+safe to call from normal task/core context. Do not call `service()` from an ISR.
 
 ---
 

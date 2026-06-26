@@ -266,7 +266,8 @@ cmake --build build_stm32 -j$(nproc)
 ```
 
 The initial STM32 profile currently enables the backend pieces that exist in
-`stm32_lib/CMakeLists.txt`: I2C, I2C-slave, SPI, UART, DAC, PCNT, the
+`stm32_lib/CMakeLists.txt`: I2C, I2C-slave, SPI, UART, DAC, DMA-backed DACless,
+PCNT, the
 MCP401X/MAX5395 digipot backends, MCP9600/MAX6675 thermocouple backends,
 BH1750 ambient-light, TSC2007 and STMPE610 touch controllers, the IR small
 decoder, ADS1115 external ADC, OneWire/DS18B20, the MCP2515 external CAN

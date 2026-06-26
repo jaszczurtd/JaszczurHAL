@@ -136,7 +136,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS flag, stack-size overrides, core modules, `library.properties` note |
 | 3 | [Build dependencies and unit tests](api/03_build_tests.md) | Hardware and mock/PC dependency tables, ctest build/run instructions, full test-suite inventory, how to add a new test suite, mock time control |
 | 4 | [Multicore safety, drivers, migration](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, migration table from Arduino/pico SDK |
-| 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_pwm_freq`, `hal_adc` |
+| 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
 | 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
@@ -184,7 +184,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_ota` | [Network connectivity](api/15_connectivity.md) |
 | `hal_pga2311` | [Output devices](api/13_output_devices.md) |
 | `hal_pid_controller` | [Utilities](api/16_utilities.md) |
-| `hal_pwm` / `hal_pwm_freq` | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) |
+| `hal_pwm` / `hal_pwm_freq` / `hal_dacless` | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) |
 | `hal_rgb_led` | [Output devices](api/13_output_devices.md) |
 | `hal_rtc` | [Sensors](api/11_sensors.md) |
 | `hal_sc_auth` | [Sync, serial, framing](api/08_sync_serial.md) |

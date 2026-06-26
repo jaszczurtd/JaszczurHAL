@@ -14,9 +14,10 @@ extern "C" {
  * Use this instead of analogWrite() when you need precise control of PWM
  * frequency and resolution. Each channel wraps one pico SDK PWM slice.
  *
- * Thread safety: hal_pwm_freq_write() is protected by an internal mutex.
- * hal_pwm_freq_create() and hal_pwm_freq_destroy() must be called from
- * one core only.
+ * Thread safety: hal_pwm_freq_create(), hal_pwm_freq_write(),
+ * hal_pwm_freq_stop() and hal_pwm_freq_destroy() are protected by an internal
+ * mutex. Callers still own channel handle lifetime and must not use a handle
+ * after hal_pwm_freq_destroy().
  */
 
 #include <stdint.h>
@@ -37,8 +38,7 @@ typedef hal_pwm_freq_channel_impl_t *hal_pwm_freq_channel_t;
  * @param resolution   Wrap value (e.g. 2047 for 11-bit).
  * @return Opaque handle, or NULL on failure / pool exhaustion.
  */
-hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
-                                           uint32_t frequency_hz,
+hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
                                            uint32_t resolution);
 
 /**
@@ -49,11 +49,19 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
 void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 
 /**
+ * @brief Stop PWM output for a channel without releasing its configuration.
+ *
+ * A later hal_pwm_freq_write() restarts output with the supplied duty value.
+ *
+ * @param ch Handle from hal_pwm_freq_create().
+ */
+void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch);
+
+/**
  * @brief Release the PWM channel resources.
  * @param ch Handle to release. Must not be used after this call.
  */
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
-
 
 #endif /* HAL_ENABLE_PWM_FREQ */
 #ifdef __cplusplus

@@ -129,6 +129,7 @@ add_executable(test_ads1x15_driver
 )
 target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
+add_hal_test(test_dacless_driver)
 add_executable(test_ili9341_driver
     test_ili9341_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ili9341_driver.cpp
@@ -201,6 +202,7 @@ add_stm32_i2c_slave_host_test(test_stm32_hal_i2c_slave)
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
 add_hal_test(test_hal_dac)
+add_hal_test(test_hal_dma_pwm_audio)
 add_hal_test(test_hal_digipot)
 add_hal_test(test_hal_pga2311)
 add_hal_test(test_hal_pcnt)

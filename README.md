@@ -414,6 +414,7 @@ Primary docs:
   [WireGuard crypto core](src/hal/impl/shared/frameworks/wireguard/crypto/),
   [littlefs](src/hal/impl/stm32g474/drivers/littlefs/),
   [LiquidCrystal / HD44780](src/hal/impl/shared/drivers/hd44780/),
+  [Brian Varren DACless](src/hal/impl/shared/drivers/dacless/),
   [Seeed/Loovee MCP_CAN / MCP2515](src/hal/impl/shared/drivers/mcp2515/),
   [MCP251XFD](src/hal/impl/shared/drivers/mcp251xfd/),
   [Adafruit NeoPixel](src/hal/impl/shared/drivers/neopixel/),

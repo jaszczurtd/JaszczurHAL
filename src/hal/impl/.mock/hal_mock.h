@@ -66,6 +66,17 @@ uint8_t hal_mock_pwm_get_resolution(void);
 int hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
+bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+
+// ── DMA PWM-audio ───────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_DMA_PWM_AUDIO
+#include "../../hal_dma_pwm_audio.h"
+void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
+                                     uint8_t buffer_index);
+uint32_t hal_mock_dma_pwm_audio_completion_count(hal_dma_pwm_audio_t audio);
+uint8_t hal_mock_dma_pwm_audio_get_pin(hal_dma_pwm_audio_t audio);
+uint16_t hal_mock_dma_pwm_audio_get_idle_value(hal_dma_pwm_audio_t audio);
+#endif
 
 // ── DAC ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_DAC

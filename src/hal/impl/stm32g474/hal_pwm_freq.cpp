@@ -32,6 +32,7 @@ static hal_pwm_freq_channel_impl_t s_pool[HAL_PWM_FREQ_MAX_CHANNELS];
 hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
                                            uint32_t resolution) {
   pwm_ensure_mutex();
+  hal_mutex_lock(pwm_mutex);
 
   hal_pwm_freq_channel_impl_t *cfg = NULL;
   for (int i = 0; i < hal_get_config()->pwm_freq_max_channels; i++) {
@@ -40,10 +41,11 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
       break;
     }
   }
-  HAL_ASSERT(
-      cfg != NULL,
-      "hal_pwm_freq: pool exhausted - increase HAL_PWM_FREQ_MAX_CHANNELS");
   if (!cfg) {
+    hal_mutex_unlock(pwm_mutex);
+    HAL_ASSERT(
+        cfg != NULL,
+        "hal_pwm_freq: pool exhausted - increase HAL_PWM_FREQ_MAX_CHANNELS");
     return NULL;
   }
 
@@ -51,12 +53,14 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
   if (!jh_stm32_pwm_prepare_frequency_pin(pin, frequency_hz, resolution,
                                           &cfg->pwm, &cfg->left_shift,
                                           &cfg->right_shift)) {
+    hal_mutex_unlock(pwm_mutex);
     return NULL;
   }
 
   cfg->in_use = 1;
   cfg->requested_period_ticks = resolution;
   cfg->started = 0;
+  hal_mutex_unlock(pwm_mutex);
   return cfg;
 }
 
@@ -99,12 +103,27 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value) {
   hal_mutex_unlock(pwm_mutex);
 }
 
+void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch) {
+  if (!ch) {
+    return;
+  }
+  pwm_ensure_mutex();
+  hal_mutex_lock(pwm_mutex);
+  jh_stm32_pwm_release_output(&ch->pwm);
+  ch->started = 0;
+  hal_mutex_unlock(pwm_mutex);
+}
+
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch) {
   if (!ch) {
     return;
   }
+  pwm_ensure_mutex();
+  hal_mutex_lock(pwm_mutex);
   jh_stm32_pwm_release_output(&ch->pwm);
+  ch->started = 0;
   ch->in_use = 0;
+  hal_mutex_unlock(pwm_mutex);
 }
 
 #endif /* HAL_ENABLE_PWM_FREQ */
