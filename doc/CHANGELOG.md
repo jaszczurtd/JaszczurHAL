@@ -28,6 +28,20 @@ Next release.
   `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
   `HAL_ENABLE_WIREGUARD`.
 
+### hal_dht - shared DHT11/DHT22 GPIO driver
+
+- Added opt-in `HAL_ENABLE_DHT`, public `hal_dht.h`, and a shared
+  `impl/shared/drivers/dht/hal_dht.cpp` backend for DHT11/DHT22 temperature and
+  humidity sensors on RP2040, STM32G474 and mock builds.
+- Ported the Bonezegei DHT timing/readout flow to HAL GPIO, timing,
+  critical-section and mutex primitives, including per-handle locking and a
+  singleton pool mutex created with `jh_hal_mutex_create_once`.
+- Added host coverage in `test_hal_dht` for successful frames, checksum
+  failures, response failures, cached sample getters and critical-section
+  restoration.
+- Added `examples/43_dht_temperature_humidity`, feature/API docs, module flag
+  docs and credits; removed the old RP2040-local Bonezegei DHT driver folders.
+
 ### hal_udp - handle-based UDP sockets
 
 - Added `hal_udp_socket_t` and the handle-based

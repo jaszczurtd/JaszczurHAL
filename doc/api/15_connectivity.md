@@ -290,6 +290,8 @@ bool     hal_udp_end_packet(void);
 - `hal_udp_write(...)` / `hal_udp_write_str(...)` append payload bytes to the
   datagram opened by `hal_udp_begin_packet*()`.
 - `hal_udp_stop()` clears cached remote endpoint and active packet-send context.
+- When `hal_wireguard` is active, datagrams to destinations covered by the
+  WireGuard route/AllowedIPs are carried through the encrypted tunnel.
 
 **impl/rp2040:** Arduino-pico `WiFiUDP` backend with a static socket pool.
 **impl/.mock:** deterministic multi-socket test double with injected inbound
@@ -402,6 +404,8 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
   consuming the accepted socket.
 - `hal_tcp_listener_close(...)` stops only the listener. Already accepted
   client sockets remain independent and must be closed separately.
+- When `hal_wireguard` is active, connections to destinations covered by the
+  WireGuard route/AllowedIPs are carried through the encrypted tunnel.
 
 **impl/rp2040:** Arduino-pico `WiFiClient`/`WiFiServer` backend with static
 socket and listener pools.
@@ -496,6 +500,11 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   `hal_udp_socket_open()`.
 - `socket(AF_INET, SOCK_STREAM, 0/IPPROTO_TCP)` maps to
   `hal_tcp_socket_open()`.
+- The adapter inherits normal `hal_udp`/`hal_tcp` routing. When
+  `hal_wireguard` is active, traffic to destinations covered by the WireGuard
+  route/AllowedIPs is carried through the encrypted tunnel. This is network-layer
+  tunneling and does not replace TLS sockets, which provide end-to-end
+  application/session-layer encryption.
 - UDP `sendto()` auto-binds to an ephemeral local port when the socket was not
   explicitly bound.
 - UDP `connect()` stores a default peer endpoint and auto-binds if needed.

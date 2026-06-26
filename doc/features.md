@@ -77,6 +77,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | MCP9600/MCP9601 | Shared I2C thermocouple amplifier driver. | [mcp9600 driver](../src/hal/impl/shared/drivers/mcp9600/) |
 | MAX6675 | Shared GPIO bit-banged thermocouple converter driver. | [max6675 driver](../src/hal/impl/shared/drivers/max6675/) |
 | DS18B20 | Shared 1-Wire digital temperature sensor support. | [hal_ds18b20.h](../src/hal/hal_ds18b20.h), [ds18b20 driver](../src/hal/impl/shared/drivers/ds18b20/) |
+| DHT11/DHT22 | Shared GPIO temperature and humidity sensor driver. | [hal_dht.h](../src/hal/hal_dht.h), [dht driver](../src/hal/impl/shared/drivers/dht/) |
 | 1-Wire bus | Generic shared 1-Wire bus wrapper/driver. | [hal_onewire.h](../src/hal/hal_onewire.h), [onewire driver](../src/hal/impl/shared/drivers/onewire/) |
 | BH1750 | Shared I2C ambient-light sensor driver. | [hal_bh1750.h](../src/hal/hal_bh1750.h), [bh1750 driver](../src/hal/impl/shared/drivers/bh1750/) |
 | ADS1X15 / ADS1115 | Shared external ADC driver over I2C. | [hal_external_adc.h](../src/hal/hal_external_adc.h), [ads1x15 driver](../src/hal/impl/shared/drivers/ads1x15/) |

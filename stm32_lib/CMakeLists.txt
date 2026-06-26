@@ -117,6 +117,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_IRSMALL_DECODER  # shared IR receiver decoder over HAL GPIO interrupts
     HAL_ENABLE_EXTERNAL_ADC  # shared ADS1X15/ADS1115 backend over HAL I2C
     HAL_ENABLE_DS18B20   # shared DS18B20 backend over HAL GPIO OneWire
+    HAL_ENABLE_DHT       # shared DHT11/DHT22 GPIO temperature/humidity driver
     HAL_ENABLE_GPS       # portable NMEA engine; transport = UART on this target
     HAL_ENABLE_HD44780  # shared HD44780 character LCD over HAL GPIO
 )

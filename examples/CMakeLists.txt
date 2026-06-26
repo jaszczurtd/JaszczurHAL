@@ -432,6 +432,7 @@ jh_example(42_bsd_sockets_udp_client
         42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
     TARGETS rp2040
     FQBN "${JH_RP2040_WIFI_FQBN}")
+jh_example(43_dht_temperature_humidity TARGETS rp2040 stm32g474)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

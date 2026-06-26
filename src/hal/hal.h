@@ -114,6 +114,9 @@
 #ifdef HAL_ENABLE_DS18B20
 #include "hal_ds18b20.h"
 #endif
+#ifdef HAL_ENABLE_DHT
+#include "hal_dht.h"
+#endif
 #ifdef HAL_ENABLE_BH1750
 #include "hal_bh1750.h"
 #endif

@@ -420,6 +420,7 @@ Primary docs:
   [Adafruit STMPE610](src/hal/impl/shared/drivers/stmpe610/),
   [Adafruit TSC2007](src/hal/impl/shared/drivers/tsc2007/),
   [Paul Stoffregen OneWire](src/hal/impl/shared/drivers/onewire/),
+  [Bonezegei DHT11/DHT22 by Bonezegei (Jofel Batutay)](src/hal/impl/shared/drivers/dht/),
   [Adafruit MAX6675](src/hal/impl/shared/drivers/max6675/),
   [Adafruit MCP9600](src/hal/impl/shared/drivers/mcp9600/),
   [ArtronShop BH1750](src/hal/impl/shared/drivers/bh1750/),
