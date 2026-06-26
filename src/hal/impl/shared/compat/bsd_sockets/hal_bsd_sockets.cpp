@@ -89,8 +89,13 @@ typedef struct {
   hal_tcp_socket_t tcp_socket;
   hal_tcp_listener_t tcp_listener;
   hal_net_endpoint_t local_endpoint;
+  hal_net_endpoint_t remote_endpoint;
+  uint32_t recv_timeout_ms;
+  uint32_t send_timeout_ms;
   int status_flags;
+  int last_error;
   bool has_local_endpoint;
+  bool has_remote_endpoint;
   bool udp_bound;
   bool reuse_addr;
   bool tcp_was_connected;
@@ -120,6 +125,9 @@ static void clear_entry(hal_bsd_fd_entry_t *entry) {
   memset(entry, 0, sizeof(*entry));
   entry->kind = HAL_BSD_FD_UNUSED;
   entry->local_endpoint.family = HAL_NET_AF_UNSPEC;
+  entry->remote_endpoint.family = HAL_NET_AF_UNSPEC;
+  entry->recv_timeout_ms = HAL_NET_TIMEOUT_FOREVER;
+  entry->send_timeout_ms = HAL_NET_TIMEOUT_FOREVER;
 }
 
 static bool is_fd_in_range(int fd) {
@@ -250,14 +258,63 @@ static bool entry_is_nonblocking(const hal_bsd_fd_entry_t *entry) {
   return entry && ((entry->status_flags & O_NONBLOCK) != 0);
 }
 
-/* Compute an I/O timeout from a non-blocking flag captured under the fd-table
- * lock. Used by the blocking I/O paths so the lock can be released before the
- * underlying transport call instead of being held across it. */
-static uint32_t io_timeout_value(bool nonblocking, int message_flags) {
+static void entry_set_error(hal_bsd_fd_entry_t *entry, int error) {
+  if (entry) {
+    entry->last_error = error;
+  }
+}
+
+/* Compute an I/O timeout from non-blocking and configured timeout state
+ * captured under the fd-table lock. Used by blocking I/O paths so the lock can
+ * be released before the underlying transport call instead of being held across
+ * it. */
+static uint32_t io_timeout_value(bool nonblocking, int message_flags,
+                                 uint32_t configured_timeout_ms) {
   if (nonblocking || message_flags_request_nonblocking(message_flags)) {
     return 0u;
   }
-  return HAL_NET_TIMEOUT_FOREVER;
+  return configured_timeout_ms;
+}
+
+/* Compute an operation timeout from state captured under the fd-table lock. */
+static uint32_t operation_timeout_value(bool nonblocking,
+                                        uint32_t configured_timeout_ms) {
+  return nonblocking ? 0u : configured_timeout_ms;
+}
+
+static bool timeval_to_timeout_ms(const struct timeval *timeout,
+                                  uint32_t *timeout_ms, bool *forever);
+
+static bool timeout_ms_to_timeval(uint32_t timeout_ms, void *optval,
+                                  socklen_t *optlen) {
+  if (!optval || !optlen || *optlen < (socklen_t)sizeof(struct timeval)) {
+    errno = EINVAL;
+    return false;
+  }
+
+  struct timeval timeout = {};
+  if (timeout_ms != HAL_NET_TIMEOUT_FOREVER) {
+    timeout.tv_sec = (long)(timeout_ms / 1000u);
+    timeout.tv_usec = (long)((timeout_ms % 1000u) * 1000u);
+  }
+
+  memcpy(optval, &timeout, sizeof(timeout));
+  *optlen = (socklen_t)sizeof(timeout);
+  return true;
+}
+
+static bool sockopt_timeval_to_timeout_ms(const void *optval, socklen_t optlen,
+                                          uint32_t *timeout_ms) {
+  if (!optval || !timeout_ms || optlen < (socklen_t)sizeof(struct timeval)) {
+    errno = EINVAL;
+    return false;
+  }
+
+  struct timeval timeout = {};
+  memcpy(&timeout, optval, sizeof(timeout));
+
+  bool forever = false;
+  return timeval_to_timeout_ms(&timeout, timeout_ms, &forever);
 }
 
 static uint16_t next_ephemeral_udp_port(void) {
@@ -753,6 +810,7 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   if (entry->kind == HAL_BSD_FD_UDP) {
     if (!hal_udp_socket_bind(entry->udp, &endpoint)) {
       errno = EIO;
+      entry_set_error(entry, errno);
       fd_table_unlock();
       return -1;
     }
@@ -804,6 +862,7 @@ int listen(int sockfd, int backlog) {
       !hal_tcp_listener_listen(listener, (uint8_t)backlog)) {
     hal_tcp_listener_close(listener);
     errno = EIO;
+    entry_set_error(entry, errno);
     fd_table_unlock();
     return -1;
   }
@@ -854,6 +913,10 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   hal_bsd_fd_entry_t *accepted_entry = &s_fd_table[fd_to_index(accepted_fd)];
   accepted_entry->kind = HAL_BSD_FD_TCP_SOCKET;
   accepted_entry->tcp_socket = accepted;
+  accepted_entry->local_endpoint = entry->local_endpoint;
+  accepted_entry->remote_endpoint = remote;
+  accepted_entry->has_local_endpoint = entry->has_local_endpoint;
+  accepted_entry->has_remote_endpoint = true;
   accepted_entry->tcp_was_connected = true;
 
   if (!write_sockaddr_from_endpoint(&remote, addr, addrlen)) {
@@ -883,6 +946,20 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
     fd_table_unlock();
     return -1;
   }
+  if (entry->kind == HAL_BSD_FD_UDP) {
+    if (!ensure_udp_bound(entry)) {
+      entry_set_error(entry, errno);
+      fd_table_unlock();
+      return -1;
+    }
+
+    entry->remote_endpoint = endpoint;
+    entry->has_remote_endpoint = true;
+    entry_set_error(entry, 0);
+    fd_table_unlock();
+    return 0;
+  }
+
   if (entry->kind != HAL_BSD_FD_TCP_SOCKET) {
     errno = EOPNOTSUPP;
     fd_table_unlock();
@@ -891,11 +968,19 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   hal_tcp_socket_t tcp_socket = entry->tcp_socket;
   const bool nonblocking = entry_is_nonblocking(entry);
+  const uint32_t connect_timeout_ms =
+      operation_timeout_value(nonblocking, entry->send_timeout_ms);
   fd_table_unlock();
 
-  const uint32_t timeout_ms = nonblocking ? 0u : HAL_NET_TIMEOUT_FOREVER;
-  if (!hal_tcp_socket_connect(tcp_socket, &endpoint, timeout_ms)) {
+  if (!hal_tcp_socket_connect(tcp_socket, &endpoint, connect_timeout_ms)) {
     errno = nonblocking ? EINPROGRESS : ECONNREFUSED;
+    fd_table_lock();
+    hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+    if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
+        failed->tcp_socket == tcp_socket) {
+      entry_set_error(failed, errno);
+    }
+    fd_table_unlock();
     return -1;
   }
 
@@ -905,7 +990,10 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   hal_bsd_fd_entry_t *current = entry_for_fd(sockfd);
   if (current && current->kind == HAL_BSD_FD_TCP_SOCKET &&
       current->tcp_socket == tcp_socket) {
+    current->remote_endpoint = endpoint;
+    current->has_remote_endpoint = true;
     current->tcp_was_connected = true;
+    entry_set_error(current, 0);
   }
   fd_table_unlock();
   return 0;
@@ -926,6 +1014,32 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
     fd_table_unlock();
     return -1;
   }
+  if (entry->kind == HAL_BSD_FD_UDP) {
+    if (!entry->udp_bound || !entry->has_remote_endpoint) {
+      errno = ENOTCONN;
+      entry_set_error(entry, errno);
+      fd_table_unlock();
+      return -1;
+    }
+
+    hal_udp_socket_t udp = entry->udp;
+    const hal_net_endpoint_t remote = entry->remote_endpoint;
+    fd_table_unlock();
+
+    const int sent = hal_udp_socket_sendto(udp, buf, len, &remote);
+    if (sent < 0) {
+      errno = EIO;
+      fd_table_lock();
+      hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+      if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
+        entry_set_error(failed, errno);
+      }
+      fd_table_unlock();
+      return -1;
+    }
+    return (ssize_t)sent;
+  }
+
   if (entry->kind != HAL_BSD_FD_TCP_SOCKET) {
     errno = EOPNOTSUPP;
     fd_table_unlock();
@@ -938,6 +1052,13 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   const int sent = hal_tcp_socket_send(tcp_socket, buf, len);
   if (sent < 0) {
     errno = ENOTCONN;
+    fd_table_lock();
+    hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+    if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
+        failed->tcp_socket == tcp_socket) {
+      entry_set_error(failed, errno);
+    }
+    fd_table_unlock();
     return -1;
   }
   return (ssize_t)sent;
@@ -958,6 +1079,43 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
     fd_table_unlock();
     return -1;
   }
+  if (entry->kind == HAL_BSD_FD_UDP) {
+    if (!entry->udp_bound || !entry->has_remote_endpoint) {
+      errno = ENOTCONN;
+      entry_set_error(entry, errno);
+      fd_table_unlock();
+      return -1;
+    }
+
+    if (len == 0u) {
+      fd_table_unlock();
+      return 0;
+    }
+
+    hal_udp_socket_t udp = entry->udp;
+    const uint32_t timeout_ms = io_timeout_value(entry_is_nonblocking(entry),
+                                                 flags, entry->recv_timeout_ms);
+    fd_table_unlock();
+
+    const int received =
+        hal_udp_socket_recvfrom(udp, buf, len, NULL, timeout_ms);
+    if (received < 0) {
+      errno = EIO;
+      fd_table_lock();
+      hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+      if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
+        entry_set_error(failed, errno);
+      }
+      fd_table_unlock();
+      return -1;
+    }
+    if (received == 0 && timeout_ms == 0u) {
+      errno = EAGAIN;
+      return -1;
+    }
+    return (ssize_t)received;
+  }
+
   if (entry->kind != HAL_BSD_FD_TCP_SOCKET) {
     errno = EOPNOTSUPP;
     fd_table_unlock();
@@ -970,13 +1128,20 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
   }
 
   hal_tcp_socket_t tcp_socket = entry->tcp_socket;
-  const uint32_t timeout_ms =
-      io_timeout_value(entry_is_nonblocking(entry), flags);
+  const uint32_t timeout_ms = io_timeout_value(entry_is_nonblocking(entry),
+                                               flags, entry->recv_timeout_ms);
   fd_table_unlock();
 
   const int received = hal_tcp_socket_recv(tcp_socket, buf, len, timeout_ms);
   if (received < 0) {
     errno = ENOTCONN;
+    fd_table_lock();
+    hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+    if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
+        failed->tcp_socket == tcp_socket) {
+      entry_set_error(failed, errno);
+    }
+    fd_table_unlock();
     return -1;
   }
   if (received == 0 && timeout_ms == 0u &&
@@ -1028,6 +1193,12 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
   const int sent = hal_udp_socket_sendto(udp, buf, len, &remote);
   if (sent < 0) {
     errno = EIO;
+    fd_table_lock();
+    hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
+    if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
+      entry_set_error(failed, errno);
+    }
+    fd_table_unlock();
     return -1;
   }
   return (ssize_t)sent;
@@ -1070,8 +1241,8 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
   }
 
   hal_udp_socket_t udp = entry->udp;
-  const uint32_t timeout_ms =
-      io_timeout_value(entry_is_nonblocking(entry), flags);
+  const uint32_t timeout_ms = io_timeout_value(entry_is_nonblocking(entry),
+                                               flags, entry->recv_timeout_ms);
   fd_table_unlock();
 
   hal_net_endpoint_t remote = {};
@@ -1105,16 +1276,31 @@ int setsockopt(int sockfd, int level, int optname, const void *optval,
     fd_table_unlock();
     return -1;
   }
-  if (!optval || optlen < (socklen_t)sizeof(int)) {
+  if (!optval || (optname != SO_RCVTIMEO && optname != SO_SNDTIMEO &&
+                  optlen < (socklen_t)sizeof(int))) {
     errno = EINVAL;
     fd_table_unlock();
     return -1;
   }
 
-  int value = 0;
-  memcpy(&value, optval, sizeof(value));
   if (optname == SO_REUSEADDR || optname == SO_REUSEPORT) {
+    int value = 0;
+    memcpy(&value, optval, sizeof(value));
     entry->reuse_addr = value != 0;
+    fd_table_unlock();
+    return 0;
+  }
+  if (optname == SO_RCVTIMEO || optname == SO_SNDTIMEO) {
+    uint32_t timeout_ms = HAL_NET_TIMEOUT_FOREVER;
+    if (!sockopt_timeval_to_timeout_ms(optval, optlen, &timeout_ms)) {
+      fd_table_unlock();
+      return -1;
+    }
+    if (optname == SO_RCVTIMEO) {
+      entry->recv_timeout_ms = timeout_ms;
+    } else {
+      entry->send_timeout_ms = timeout_ms;
+    }
     fd_table_unlock();
     return 0;
   }
@@ -1122,6 +1308,93 @@ int setsockopt(int sockfd, int level, int optname, const void *optval,
   errno = ENOPROTOOPT;
   fd_table_unlock();
   return -1;
+}
+
+int getsockopt(int sockfd, int level, int optname, void *optval,
+               socklen_t *optlen) {
+  fd_table_lock();
+  hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
+  if (!entry) {
+    fd_table_unlock();
+    return -1;
+  }
+  if (level != SOL_SOCKET) {
+    errno = ENOPROTOOPT;
+    fd_table_unlock();
+    return -1;
+  }
+
+  if (optname == SO_ERROR || optname == SO_REUSEADDR ||
+      optname == SO_REUSEPORT) {
+    if (!optval || !optlen || *optlen < (socklen_t)sizeof(int)) {
+      errno = EINVAL;
+      fd_table_unlock();
+      return -1;
+    }
+
+    int value = 0;
+    if (optname == SO_ERROR) {
+      value = entry->last_error;
+      entry->last_error = 0;
+    } else {
+      value = entry->reuse_addr ? 1 : 0;
+    }
+
+    memcpy(optval, &value, sizeof(value));
+    *optlen = (socklen_t)sizeof(value);
+    fd_table_unlock();
+    return 0;
+  }
+
+  if (optname == SO_RCVTIMEO || optname == SO_SNDTIMEO) {
+    const uint32_t timeout_ms = optname == SO_RCVTIMEO ? entry->recv_timeout_ms
+                                                       : entry->send_timeout_ms;
+    const bool ok = timeout_ms_to_timeval(timeout_ms, optval, optlen);
+    fd_table_unlock();
+    return ok ? 0 : -1;
+  }
+
+  errno = ENOPROTOOPT;
+  fd_table_unlock();
+  return -1;
+}
+
+int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+  fd_table_lock();
+  hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
+  if (!entry) {
+    fd_table_unlock();
+    return -1;
+  }
+
+  hal_net_endpoint_t local = entry->local_endpoint;
+  if (!entry->has_local_endpoint) {
+    memset(&local, 0, sizeof(local));
+    local.family = HAL_NET_AF_INET;
+  }
+
+  const bool ok = write_sockaddr_from_endpoint(&local, addr, addrlen);
+  fd_table_unlock();
+  return ok ? 0 : -1;
+}
+
+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
+  fd_table_lock();
+  hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
+  if (!entry) {
+    fd_table_unlock();
+    return -1;
+  }
+  if (!entry->has_remote_endpoint) {
+    errno = ENOTCONN;
+    fd_table_unlock();
+    return -1;
+  }
+
+  const hal_net_endpoint_t remote = entry->remote_endpoint;
+  const bool ok = write_sockaddr_from_endpoint(&remote, addr, addrlen);
+  fd_table_unlock();
+  return ok ? 0 : -1;
 }
 
 static bool timeval_to_timeout_ms(const struct timeval *timeout,

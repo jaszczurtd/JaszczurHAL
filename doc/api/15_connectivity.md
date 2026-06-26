@@ -459,6 +459,10 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
                  struct sockaddr *src_addr, socklen_t *addrlen);
 int setsockopt(int sockfd, int level, int optname,
                const void *optval, socklen_t optlen);
+int getsockopt(int sockfd, int level, int optname,
+               void *optval, socklen_t *optlen);
+int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int shutdown(int sockfd, int how);
 int fcntl(int fd, int cmd, ...);
 int select(int nfds, fd_set *readfds, fd_set *writefds, fd_set *exceptfds,
@@ -494,20 +498,47 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   `hal_tcp_socket_open()`.
 - UDP `sendto()` auto-binds to an ephemeral local port when the socket was not
   explicitly bound.
+- UDP `connect()` stores a default peer endpoint and auto-binds if needed.
+  After that, `send()`/`write()` transmit datagrams to that peer, while
+  `recv()`/`read()` receive datagrams without returning a source address. Unlike
+  POSIX connected UDP, the adapter does not filter incoming datagrams by that
+  peer; it accepts the next datagram delivered by the HAL UDP socket.
 - TCP `bind()` stages the local endpoint; `listen()` converts the descriptor to
   a HAL TCP listener. Accepted clients receive separate socket descriptors.
 - `getaddrinfo(...)` resolves IPv4 literals or hostnames through
   `hal_net_resolve_ipv4(...)`. `service` must be numeric. Supported hint flags
   are `AI_PASSIVE`, `AI_CANONNAME`, `AI_NUMERICHOST`, `AI_NUMERICSERV` and
   `AI_ADDRCONFIG`; IPv6 remains outside the adapter.
-- `setsockopt(...)` accepts `SOL_SOCKET` + `SO_REUSEADDR`/`SO_REUSEPORT` as
-  compatibility options. Other options fail with `ENOPROTOOPT`.
-- Blocking calls use `HAL_NET_TIMEOUT_FOREVER`. `fcntl(F_SETFL, O_NONBLOCK)`
-  makes `accept()`, `recv()`/`read()` and `recvfrom()` use immediate HAL polls;
-  `MSG_DONTWAIT` does the same per call for `recv`, `recvfrom`, `send` and
-  `sendto`.
+- `setsockopt(...)` accepts `SOL_SOCKET` + `SO_REUSEADDR`/`SO_REUSEPORT`,
+  `SO_RCVTIMEO` and `SO_SNDTIMEO`. `getsockopt(...)` reports those values and
+  `SO_ERROR`; reading `SO_ERROR` clears the stored adapter error. Timeout
+  options are stored with millisecond resolution, so sub-millisecond `timeval`
+  values may round up when read back.
+- `getsockname(...)` reports the local endpoint known to the adapter. TCP
+  clients that did not explicitly `bind()` may report `0.0.0.0:0` because the
+  HAL TCP contract does not expose the backend-assigned local port.
+- `getpeername(...)` reports the connected TCP or UDP peer, including TCP
+  sockets returned by `accept()`. It fails with `ENOTCONN` before a peer is
+  known.
+- Blocking calls use `HAL_NET_TIMEOUT_FOREVER` by default. `SO_RCVTIMEO` affects
+  `accept()`, `recv()`/`read()` and `recvfrom()`; `SO_SNDTIMEO` affects
+  `connect()` timeout selection. `fcntl(F_SETFL, O_NONBLOCK)` makes
+  `accept()`, `connect()`, `recv()`/`read()` and `recvfrom()` use immediate HAL
+  polls; `MSG_DONTWAIT` does the same per call for `recv`, `recvfrom`, `send`
+  and `sendto`.
 - Minimal `select()` supports read/write readiness for HAL socket descriptors.
   `exceptfds` is accepted and cleared; `poll()` remains outside this stage.
+- Non-blocking TCP `connect()` is best-effort, not a full POSIX pending-connect
+  state machine. The adapter performs one immediate HAL connect attempt. If it
+  succeeds, the descriptor becomes writable and `SO_ERROR` is zero. If it does
+  not complete immediately, `connect()` returns `-1`/`EINPROGRESS` and stores
+  `EINPROGRESS` in `SO_ERROR`, but no background connect remains pending; retry
+  `connect()` later or use blocking/timeout-based connect.
+- Closing a descriptor from another task while a blocking `connect()`,
+  `accept()`, `recv()` or `recvfrom()` is waiting is not an async cancellation
+  contract. The adapter releases its fd-table lock while waiting and
+  re-validates descriptors after the backend call returns, but callers that need
+  cancellable waits should use `O_NONBLOCK` plus `select()` polling.
 - Unsupported flags/operations fail with `errno`.
 
 **impl/shared:** fd-table adapter, IPv4 conversion helpers and minimal

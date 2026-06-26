@@ -65,8 +65,17 @@ typedef uint32_t socklen_t;
 #ifndef SO_REUSEADDR
 #define SO_REUSEADDR 2
 #endif
+#ifndef SO_ERROR
+#define SO_ERROR 4
+#endif
 #ifndef SO_KEEPALIVE
 #define SO_KEEPALIVE 9
+#endif
+#ifndef SO_SNDTIMEO
+#define SO_SNDTIMEO 21
+#endif
+#ifndef SO_RCVTIMEO
+#define SO_RCVTIMEO 20
 #endif
 #ifndef SO_REUSEPORT
 #define SO_REUSEPORT 15
@@ -90,6 +99,10 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
                  struct sockaddr *src_addr, socklen_t *addrlen);
 int setsockopt(int sockfd, int level, int optname, const void *optval,
                socklen_t optlen);
+int getsockopt(int sockfd, int level, int optname, void *optval,
+               socklen_t *optlen);
+int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
+int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen);
 int shutdown(int sockfd, int how);
 
 #ifdef __cplusplus
