@@ -57,6 +57,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_max5395.cpp
     ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
+    ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
     ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
@@ -127,6 +128,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_PGA2311        # shared SPI stereo volume controller
     HAL_ENABLE_GPS            # portable NMEA engine (transport: SWSERIAL/UART, both on below)
     HAL_ENABLE_DAC
+    HAL_ENABLE_DACLESS       # shared DACless PWM-audio driver
+    HAL_ENABLE_DMA_PWM_AUDIO
     HAL_ENABLE_PCNT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED

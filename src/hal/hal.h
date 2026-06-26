@@ -28,6 +28,12 @@
 #ifdef HAL_ENABLE_DAC
 #include "hal_dac.h"
 #endif
+#ifdef HAL_ENABLE_DACLESS
+#include "hal_dacless.h"
+#endif
+#ifdef HAL_ENABLE_DMA_PWM_AUDIO
+#include "hal_dma_pwm_audio.h"
+#endif
 #ifdef HAL_ENABLE_PCNT
 #include "hal_pcnt.h"
 #endif

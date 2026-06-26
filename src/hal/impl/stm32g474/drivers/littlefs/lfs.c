@@ -5,6 +5,8 @@
  * Copyright (c) 2017, Arm Limited. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#if defined(HAL_TARGET_STM32G474) || defined(STM32G474xx) || defined(STM32G4)
+
 #include "lfs.h"
 #include "lfs_util.h"
 
@@ -6440,3 +6442,5 @@ int lfs_migrate(lfs_t *lfs, const struct lfs_config *cfg) {
   return err;
 }
 #endif
+
+#endif /* HAL_TARGET_STM32G474 || STM32G474xx || STM32G4 */

@@ -100,6 +100,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | MCP4017/4018/4019 | Shared I2C digital potentiometer backend. | [digipot drivers](../src/hal/impl/shared/drivers/digipot/) |
 | MAX5395 | Shared I2C digital potentiometer backend. | [digipot drivers](../src/hal/impl/shared/drivers/digipot/) |
 | PGA2311 audio volume | Shared SPI/GPIO stereo volume controller driver. | [hal_pga2311.h](../src/hal/hal_pga2311.h), [pga2311 driver](../src/hal/impl/shared/drivers/pga2311/) |
+| DACless PWM audio | Shared PWM-audio engine with DMA and polling paths, block/sample callbacks and ADC sampling. | [hal_dacless.h](../src/hal/hal_dacless.h), [hal_dma_pwm_audio.h](../src/hal/hal_dma_pwm_audio.h), [dacless driver](../src/hal/impl/shared/drivers/dacless/) |
 
 ## Crypto, media and bundled libraries
 

@@ -15,6 +15,8 @@
 | `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/drivers/mcp2515/*`), MCP251XFD (`impl/shared/drivers/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
 | `hal_display` | Shared Arduino-free display stack (`impl/shared/drivers/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
 | `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/drivers/hd44780/hd44780.*`) over HAL GPIO/system timing |
+| `hal_dma_pwm_audio` | timer-paced PWM-audio DMA helper used by DACless on RP2040, STM32G474 and mock |
+| `hal_dacless` | shared DACless PWM-audio engine (`impl/shared/drivers/dacless/dacless.*`) over HAL DMA/PWM-freq, ADC, timing and synchronization |
 | `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/drivers/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
 | `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/drivers/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
 | `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
@@ -238,6 +240,8 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
 | `test_bh1750_driver` | Shared BH1750 init command, first-measurement delay, I2C bus routing and two-byte lux decode |
 | `test_hd44780_driver` | Shared HD44780 GPIO init, 4-bit/8-bit command framing, cursor row offsets, CGRAM writes, print/write path and instance-mutex coverage |
+| `test_hal_dma_pwm_audio` | Mock DMA PWM-audio lifecycle, callback dispatch, pause/resume and interpolation coverage |
+| `test_dacless_driver` | Shared DACless config normalization, DMA and polling sample/block callback refill flow, ADC buffer, mute/unmute, interpolation helpers and mutex coverage |
 | `test_tsc2007_driver` | Shared TSC2007 command-byte layout, 12-bit reply decode, touch-read sequence, stability rejection, bus routing and instance-mutex coverage |
 | `test_stmpe610_driver` | Shared STMPE610 setup sequence, chip-ID probing, I2C/SPI/register transactions, FIFO decode, soft-SPI bit-bang path and instance-mutex coverage |
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |

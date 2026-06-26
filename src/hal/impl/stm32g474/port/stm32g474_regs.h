@@ -23,10 +23,15 @@
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u
+#define RCC_AHB1ENR JH_REG32(RCC_BASE + 0x48u)  /* DMA / DMAMUX clocks   */
 #define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
 #define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
 #define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
 #define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
+
+#define RCC_AHB1ENR_DMA1EN (1u << 0)
+#define RCC_AHB1ENR_DMA2EN (1u << 1)
+#define RCC_AHB1ENR_DMAMUX1EN (1u << 2)
 
 #define RCC_AHB2ENR_GPIOAEN (1u << 0)
 #define RCC_AHB2ENR_GPIOBEN (1u << 1)
@@ -125,18 +130,28 @@
 #define ADC_ISR_EOC (1u << 2)
 
 #define ADC_CR_ADEN (1u << 0)
+#define ADC_CR_ADDIS (1u << 1)
 #define ADC_CR_ADSTART (1u << 2)
+#define ADC_CR_ADSTP (1u << 4)
 #define ADC_CR_ADVREGEN (1u << 28)
 #define ADC_CR_DEEPPWD (1u << 29)
 #define ADC_CR_ADCALDIF (1u << 30)
 #define ADC_CR_ADCAL (1u << 31)
 
 /* CFGR RES field [4:3]: 00 = 12-bit, 01 = 10-bit, 10 = 8-bit, 11 = 6-bit. */
+#define ADC_CFGR_DMAEN (1u << 0)
+#define ADC_CFGR_DMACFG (1u << 1)
 #define ADC_CFGR_RES_POS 3u
 #define ADC_CFGR_RES_MASK (0x3u << ADC_CFGR_RES_POS)
+#define ADC_CFGR_OVRMOD (1u << 12)
+#define ADC_CFGR_CONT (1u << 13)
 
-/* SQR1: SQ1 (first/only channel) sits at [10:6]; L (length-1) stays 0. */
+/* SQR1: L (sequence length-1) [3:0], then SQ1..SQ4. */
+#define ADC_SQR1_L_MASK 0xFu
 #define ADC_SQR1_SQ1_POS 6u
+#define ADC_SQR1_SQ2_POS 12u
+#define ADC_SQR1_SQ3_POS 18u
+#define ADC_SQR1_SQ4_POS 24u
 
 /* Common CCR CKMODE [17:16]: 01 = synchronous HCLK/1. */
 #define ADC_CCR_CKMODE_MASK (0x3u << 16)
@@ -148,6 +163,49 @@
 
 /* Busy-poll bound for one conversion (matches the I2C backend's style). */
 #define ADC_POLL_TIMEOUT 200000u
+
+/* ── DMA1 + DMAMUX1 (minimal Channel1 memory-to-peripheral support) ─────── */
+#define DMA1_BASE 0x40020000u
+#define DMAMUX1_BASE 0x40020800u
+
+#define DMA_ISR(base) JH_REG32((base) + 0x00u)
+#define DMA_IFCR(base) JH_REG32((base) + 0x04u)
+#define DMA_CCR(base, ch) JH_REG32((base) + 0x08u + ((uint32_t)(ch) * 0x14u))
+#define DMA_CNDTR(base, ch) JH_REG32((base) + 0x0Cu + ((uint32_t)(ch) * 0x14u))
+#define DMA_CPAR(base, ch) JH_REG32((base) + 0x10u + ((uint32_t)(ch) * 0x14u))
+#define DMA_CMAR(base, ch) JH_REG32((base) + 0x14u + ((uint32_t)(ch) * 0x14u))
+#define DMAMUX_CCR(ch) JH_REG32(DMAMUX1_BASE + ((uint32_t)(ch) * 4u))
+
+#define DMA_CCR_EN (1u << 0)
+#define DMA_CCR_TCIE (1u << 1)
+#define DMA_CCR_HTIE (1u << 2)
+#define DMA_CCR_TEIE (1u << 3)
+#define DMA_CCR_DIR (1u << 4)
+#define DMA_CCR_CIRC (1u << 5)
+#define DMA_CCR_PINC (1u << 6)
+#define DMA_CCR_MINC (1u << 7)
+#define DMA_CCR_PSIZE_16 (1u << 8)
+#define DMA_CCR_MSIZE_16 (1u << 10)
+#define DMA_CCR_PL_HIGH (2u << 12)
+
+#define DMA_FLAG_GIF(ch) (1u << ((uint32_t)(ch) * 4u))
+#define DMA_FLAG_TCIF(ch) (1u << (((uint32_t)(ch) * 4u) + 1u))
+#define DMA_FLAG_HTIF(ch) (1u << (((uint32_t)(ch) * 4u) + 2u))
+#define DMA_FLAG_TEIF(ch) (1u << (((uint32_t)(ch) * 4u) + 3u))
+#define DMA_IFCR_CLEAR_ALL(ch)                                                 \
+  (DMA_FLAG_GIF(ch) | DMA_FLAG_TCIF(ch) | DMA_FLAG_HTIF(ch) | DMA_FLAG_TEIF(ch))
+
+#define DMAMUX_CCR_DMAREQ_ID_MASK 0x7Fu
+
+/* Values from ST stm32g4xx_hal_dma.h for STM32G4 DMAMUX1 timer update
+ * requests plus ADC1. */
+#define DMA_REQUEST_ADC1 5u
+#define DMA_REQUEST_TIM2_UP 60u
+#define DMA_REQUEST_TIM3_UP 65u
+#define DMA_REQUEST_TIM4_UP 71u
+#define DMA_REQUEST_TIM15_UP 79u
+#define DMA_REQUEST_TIM16_UP 83u
+#define DMA_REQUEST_TIM17_UP 85u
 
 /* ── DAC1 (DAC1_OUT1 = PA4, DAC1_OUT2 = PA5) ─────────────────────────────── */
 #define DAC1_BASE 0x50000800u
@@ -199,6 +257,7 @@
 #define TIM_CR1_OPM (1u << 3)
 #define TIM_CR1_ARPE (1u << 7)
 #define TIM_DIER_UIE (1u << 0)
+#define TIM_DIER_UDE (1u << 8)
 #define TIM_SR_UIF (1u << 0)
 #define TIM_EGR_UG (1u << 0)
 
@@ -513,6 +572,7 @@
 #define NVIC_IPR8(irqn) (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn)))
 
 #define TIM6_DACUNDER_IRQn 54u
+#define DMA1_Channel1_IRQn 11u
 #define I2C1_EV_IRQn 31u
 #define I2C1_ER_IRQn 32u
 #define I2C2_EV_IRQn 33u

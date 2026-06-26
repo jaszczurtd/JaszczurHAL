@@ -383,4 +383,69 @@ void jh_stm32_pwm_release_output(const jh_stm32_pwm_channel_desc *ch) {
 #endif
 }
 
+uint32_t jh_stm32_pwm_compare_address(const jh_stm32_pwm_channel_desc *ch) {
+  if (!ch || !ch->valid) {
+    return 0u;
+  }
+
+#ifdef JH_STM32G474_HW
+  const TimerHw &timer = kTimerHw[ch->timer];
+  if (ch->channel == 1u) {
+    return timer.base + 0x34u;
+  }
+  if (ch->channel == 2u) {
+    return timer.base + 0x38u;
+  }
+  if (ch->channel == 3u) {
+    return timer.base + 0x3Cu;
+  }
+  if (ch->channel == 4u) {
+    return timer.base + 0x40u;
+  }
+#endif
+
+  return 0u;
+}
+
+uint32_t jh_stm32_pwm_timer_dma_request(const jh_stm32_pwm_channel_desc *ch) {
+  if (!ch || !ch->valid) {
+    return 0u;
+  }
+
+  switch (ch->timer) {
+  case PWM_TIMER_TIM2:
+    return DMA_REQUEST_TIM2_UP;
+  case PWM_TIMER_TIM3:
+    return DMA_REQUEST_TIM3_UP;
+  case PWM_TIMER_TIM4:
+    return DMA_REQUEST_TIM4_UP;
+  case PWM_TIMER_TIM15:
+    return DMA_REQUEST_TIM15_UP;
+  case PWM_TIMER_TIM16:
+    return DMA_REQUEST_TIM16_UP;
+  case PWM_TIMER_TIM17:
+    return DMA_REQUEST_TIM17_UP;
+  default:
+    return 0u;
+  }
+}
+
+void jh_stm32_pwm_set_update_dma_request(const jh_stm32_pwm_channel_desc *ch,
+                                         bool enabled) {
+  if (!ch || !ch->valid) {
+    return;
+  }
+
+#ifdef JH_STM32G474_HW
+  const TimerHw &timer = kTimerHw[ch->timer];
+  if (enabled) {
+    TIM_DIER(timer.base) |= TIM_DIER_UDE;
+  } else {
+    TIM_DIER(timer.base) &= ~TIM_DIER_UDE;
+  }
+#else
+  (void)enabled;
+#endif
+}
+
 #endif // HAL_TARGET_IS_STM32G474

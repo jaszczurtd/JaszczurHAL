@@ -433,6 +433,11 @@ jh_example(42_bsd_sockets_udp_client
     TARGETS rp2040
     FQBN "${JH_RP2040_WIFI_FQBN}")
 jh_example(43_dht_temperature_humidity TARGETS rp2040 stm32g474)
+jh_example(44_dacless_audio TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_DACLESS)
+jh_example(44_dacless_audio_polling
+    DIR 44_dacless_audio
+    TARGETS rp2040 stm32g474
+    DEFINES HAL_ENABLE_DACLESS DACLESS_EXAMPLE_USE_DMA=0)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

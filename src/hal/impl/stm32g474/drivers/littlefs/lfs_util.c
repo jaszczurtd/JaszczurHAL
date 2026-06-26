@@ -5,6 +5,8 @@
  * Copyright (c) 2017, Arm Limited. All rights reserved.
  * SPDX-License-Identifier: BSD-3-Clause
  */
+#if defined(HAL_TARGET_STM32G474) || defined(STM32G474xx) || defined(STM32G4)
+
 #include "lfs_util.h"
 
 // Only compile if user does not provide custom config
@@ -32,3 +34,5 @@ uint32_t lfs_crc(uint32_t crc, const void *buffer, size_t size) {
 #endif
 
 #endif
+
+#endif /* HAL_TARGET_STM32G474 || STM32G474xx || STM32G4 */

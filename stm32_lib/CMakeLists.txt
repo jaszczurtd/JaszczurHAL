@@ -106,6 +106,7 @@ target_compile_definitions(JaszczurHAL PUBLIC
     HAL_ENABLE_MCP2515
     HAL_ENABLE_UART
     HAL_ENABLE_DAC
+    HAL_ENABLE_DACLESS   # shared DACless PWM-audio engine over HAL DMA/PWM/ADC
     HAL_ENABLE_PCNT
     HAL_ENABLE_MCP401X   # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395   # second digipot backend

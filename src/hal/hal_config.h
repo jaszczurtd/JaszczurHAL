@@ -277,6 +277,13 @@
        HAL_ENABLE_PGA2311       - PGA2311 stereo volume controller over SPI
                                   (propagates: SPI).
 
+     PWM audio:
+       HAL_ENABLE_DACLESS       - DACless PWM-audio engine with block/sample
+                                  callbacks and ADC sampling (propagates:
+                                  DMA_PWM_AUDIO, PWM_FREQ).
+       HAL_ENABLE_DMA_PWM_AUDIO - Narrow DMA helper API for timer-paced
+                                  PWM-audio buffers.
+
      PWM / status:
        HAL_ENABLE_PWM_FREQ      - Frequency-controlled PWM.
        HAL_ENABLE_RGB_LED       - NeoPixel RGB status LED.
@@ -520,6 +527,16 @@
 #endif
 #endif
 
+/* PWM audio engine. */
+#ifdef HAL_ENABLE_DACLESS
+#ifndef HAL_ENABLE_DMA_PWM_AUDIO
+#define HAL_ENABLE_DMA_PWM_AUDIO
+#endif
+#ifndef HAL_ENABLE_PWM_FREQ
+#define HAL_ENABLE_PWM_FREQ
+#endif
+#endif
+
 /* 1-Wire stack. */
 #ifdef HAL_ENABLE_DS18B20
 #ifndef HAL_ENABLE_ONEWIRE
@@ -606,12 +623,11 @@
 
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
-  KV, SDLOGGER, GPS, PWM_FREQ, RGB_LED, DS18B20, DHT, BH1750, TSC2007, STMPE610,
-  ONEWIRE, EXTERNAL_ADC, PGA2311,
-   TIME, UNITY, MQTT, UDP, TCP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG,
-   PNG_AS_BASE64, JPEG, JPEG_AS_BASE64) do
-   NOT need such checks - they can be enabled on their own. The checks
-   below only catch generic-API modules enabled without any backend,
+  KV, SDLOGGER, GPS, DACLESS, DMA_PWM_AUDIO, PWM_FREQ, RGB_LED, DS18B20, DHT,
+  BH1750, TSC2007, STMPE610, ONEWIRE, EXTERNAL_ADC, PGA2311, TIME, UNITY, MQTT,
+  UDP, TCP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG, PNG_AS_BASE64, JPEG,
+  JPEG_AS_BASE64) do NOT need such checks - they can be enabled on their own.
+  The checks below only catch generic-API modules enabled without any backend,
    which would otherwise leave the user with a non-functional binary. */
 
 #if defined(HAL_ENABLE_RTC) && !defined(HAL_ENABLE_PCF8563) &&                 \
@@ -801,6 +817,12 @@
 #ifdef HAL_ENABLE_PGA2311
 #pragma message("HAL_CONFIG: HAL_ENABLE_PGA2311")
 #endif
+#ifdef HAL_ENABLE_DACLESS
+#pragma message("HAL_CONFIG: HAL_ENABLE_DACLESS")
+#endif
+#ifdef HAL_ENABLE_DMA_PWM_AUDIO
+#pragma message("HAL_CONFIG: HAL_ENABLE_DMA_PWM_AUDIO")
+#endif
 #ifdef HAL_ENABLE_PWM_FREQ
 #pragma message("HAL_CONFIG: HAL_ENABLE_PWM_FREQ")
 #endif
@@ -937,6 +959,14 @@
  */
 #ifndef HAL_PWM_FREQ_MAX_CHANNELS
 #define HAL_PWM_FREQ_MAX_CHANNELS 8
+#endif
+
+/**
+ * @def HAL_DMA_PWM_AUDIO_MAX_CHANNELS
+ * Maximum number of timer-paced PWM-audio DMA handles.
+ */
+#ifndef HAL_DMA_PWM_AUDIO_MAX_CHANNELS
+#define HAL_DMA_PWM_AUDIO_MAX_CHANNELS 4
 #endif
 
 /**

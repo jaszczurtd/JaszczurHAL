@@ -260,3 +260,5 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 41 | jpeg_ili931_base64 | rp2040, stm32g474 | Base64 JPEG asset, RGB565 draw on ILI9341 |
 | 42 | bsd_sockets_tcp_udp | rp2040 (WiFi) | BSD/POSIX socket compatibility examples: TCP server/client and UDP server/client, including `getaddrinfo()` hostname resolution |
 | 43 | dht_temperature_humidity | rp2040, stm32g474 | GPIO, DHT11/DHT22 temperature and humidity |
+| 44 | dacless_audio | rp2040, stm32g474 | DACless PWM audio DMA path, block callback, ADC-controlled phase increment |
+| 44 | dacless_audio_polling | rp2040, stm32g474 | Same DACless example with `cfg.useDma=false` polling path |

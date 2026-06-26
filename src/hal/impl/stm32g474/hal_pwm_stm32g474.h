@@ -33,4 +33,11 @@ void jh_stm32_pwm_start_output(const jh_stm32_pwm_channel_desc *ch);
 
 void jh_stm32_pwm_release_output(const jh_stm32_pwm_channel_desc *ch);
 
+uint32_t jh_stm32_pwm_compare_address(const jh_stm32_pwm_channel_desc *ch);
+
+uint32_t jh_stm32_pwm_timer_dma_request(const jh_stm32_pwm_channel_desc *ch);
+
+void jh_stm32_pwm_set_update_dma_request(const jh_stm32_pwm_channel_desc *ch,
+                                         bool enabled);
+
 #endif // HAL_TARGET_IS_STM32G474

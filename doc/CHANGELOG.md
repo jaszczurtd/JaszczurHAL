@@ -42,6 +42,31 @@ Next release.
 - Added `examples/43_dht_temperature_humidity`, feature/API docs, module flag
   docs and credits; removed the old RP2040-local Bonezegei DHT driver folders.
 
+### hal_dacless - shared DACless PWM-audio driver
+
+- Moved the DACless driver into `src/hal/impl/shared/drivers/dacless/` with
+  `HAL_ENABLE_DACLESS` and public `hal_dacless.h`, making it available to
+  RP2040, STM32G474 and mock builds through JaszczurHAL DMA/PWM-freq, ADC,
+  timing and synchronization primitives.
+- Added `HAL_ENABLE_DMA_PWM_AUDIO` and `hal_dma_pwm_audio.h` as a narrow timer-paced
+  PWM-audio DMA helper. The RP2040 backend preserves the original DACless
+  chained PWM DMA channel A/B flow and ADC sample/control DMA refresh; the
+  STM32G474 backend provides the analogous TIM update DMA into CCR with
+  circular half/full callbacks and ADC1 circular DMA scan.
+- Preserved the DACless configuration shape, double-buffered block flow,
+  sample/block callbacks, ADC result buffer, compatibility globals and RP2040
+  blend-fraction interpolation helper behavior, with attribution to the
+  original Brian Varren / Brian Sullivan code in the shared driver source.
+- Added per-instance HAL mutex protection with `jh_hal_mutex_create_once`,
+  DMA-driven default operation plus `cfg.useDma=false` cooperative `service()`
+  processing for normal task/core context, and `hal_pwm_freq_stop()` so
+  `mute()` can stop polling PWM output without destroying the channel.
+- Added `examples/44_dacless_audio` plus a polling build variant, API/module
+  docs, README credits and host regression coverage in
+  `test_hal_dma_pwm_audio` and `test_dacless_driver`.
+- The shared driver no longer depends on the old RP2040-local
+  `impl/rp2040/drivers/DACless` import.
+
 ### hal_udp - handle-based UDP sockets
 
 - Added `hal_udp_socket_t` and the handle-based

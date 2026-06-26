@@ -222,6 +222,10 @@ Analog out / status
   HAL_ENABLE_DAC           True DAC output. Real on STM32G474 (DAC1, 12-bit,
                            PA4/PA5); reported unsupported on RP2040 (no DAC) -
                            check hal_dac_is_supported().
+  HAL_ENABLE_DACLESS       Shared DACless PWM-audio engine with block/sample
+                           callbacks and ADC sampling. Propagates:
+                           DMA_PWM_AUDIO, PWM_FREQ.
+  HAL_ENABLE_DMA_PWM_AUDIO Timer-paced PWM-audio DMA helper used by DACless.
   HAL_ENABLE_PWM_FREQ      Frequency-controlled PWM.
   HAL_ENABLE_RGB_LED       NeoPixel RGB status LED.
 
@@ -320,6 +324,7 @@ HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
 HAL_ENABLE_MAX5395     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
 HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
+HAL_ENABLE_DACLESS     -> HAL_ENABLE_DMA_PWM_AUDIO, HAL_ENABLE_PWM_FREQ
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_DHT         standalone GPIO/timing driver
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
