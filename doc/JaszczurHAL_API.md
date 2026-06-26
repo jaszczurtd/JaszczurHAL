@@ -142,7 +142,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi`, `hal_i2c` (master, one-shot helpers, bus-clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (ILI9341, ST77xx, SSD1306, GFX primitives, text, fonts) |
-| 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_bh1750` (ambient light), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
+| 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 - power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_pga2311` (stereo volume controller), `hal_math` (constrain, map, roundToN) |
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
@@ -169,6 +169,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_digipot` | [Module flags](api/02_module_flags.md) (flag table) |
 | `hal_display` | [CAN and display](api/10_can_display.md) |
 | `hal_ds18b20` | [Sensors](api/11_sensors.md) |
+| `hal_dht` | [Sensors](api/11_sensors.md) |
 | `hal_eeprom` | [Storage](api/14_storage.md) |
 | `hal_external_adc` | [Sensors](api/11_sensors.md) |
 | `hal_gps` | [Sensors](api/11_sensors.md) |

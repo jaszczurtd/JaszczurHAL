@@ -65,6 +65,7 @@ Both are integrated as HAL-internal implementation detail (not public API).
 | SSD1306 driver (ported) | OLED backend (`HAL_ENABLE_SSD1306`) ported into `impl/shared/drivers/display/ssd1306_driver.*` | Limor Fried (Ladyada) + contributors (Adafruit SSD1306) | BSD-2-Clause (attribution in source headers) | `src/hal/impl/shared/drivers/display/ssd1306_driver.h` |
 | NeoPixel core (ported) | `hal_rgb_led` | Phil "Paint Your Dragon" Burgess + contributors (Adafruit_NeoPixel) | LGPL (attribution in source headers) | `src/hal/impl/shared/drivers/neopixel/COPYING`, `src/hal/impl/shared/drivers/neopixel/jh_neopixel.h` |
 | `DS3231` | RTC DS3231 backend (`hal_rtc`) | Eric Ayars, Andrew Wickert, Jean-Claude Wippler, Northern Widget contributors | Public domain declarations in source headers | `src/hal/impl/shared/drivers/ds3231/ds3231.h`, `src/hal/impl/shared/drivers/ds3231/ds3231.cpp` |
+| DHT11/DHT22 driver (ported) | `hal_dht` | Bonezegei (Jofel Batutay) | Attribution in source header | `src/hal/impl/shared/drivers/dht/hal_dht.cpp` |
 | `MCP2515` | `hal_can` backend | Seeed Technology (Loovee), Cory J. Fowler | LGPL (`license.txt` included) | `src/hal/impl/shared/drivers/mcp2515/license.txt` and `src/hal/impl/shared/drivers/mcp2515/mcp2515_driver.h` |
 | `arduino-wireguard-pico-w` | `hal_wireguard` backend | Kenta Ida (original API), Daniel Hope (core), Marcin Kielesiński (RP2040/Pico W port) | BSD-3-Clause | `src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/LICENSE` |
 | `PubSubClient` | `hal_mqtt` backend | Nick O'Leary | MIT | `src/hal/impl/rp2040/frameworks/PubSubClient/LICENSE.txt` |
@@ -163,7 +164,8 @@ backend together with selected utility modules.
 Covered test targets include:
 
 - `test_hal_gpio`, `test_hal_adc`, `test_hal_pwm`, `test_hal_spi`,
-  `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`, `test_hal_pga2311`
+  `test_hal_timer`, `test_hal_onewire`, `test_hal_ds18b20`, `test_hal_dht`,
+  `test_hal_pga2311`
 - `test_stm32_hal_timer` validates the real STM32G474 timer backend in a
   host-driven build, including callback rescheduling and managed timers.
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_bh1750_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`

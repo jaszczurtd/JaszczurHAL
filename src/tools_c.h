@@ -66,6 +66,9 @@ typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #ifdef HAL_ENABLE_WIREGUARD
 #include <hal/hal_wireguard.h>
 #endif
+#ifdef HAL_ENABLE_DHT
+#include <hal/hal_dht.h>
+#endif
 #include <hal/hal_spi.h>
 #include <hal/hal_sync.h>
 #ifdef HAL_ENABLE_I2C

@@ -57,6 +57,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_max5395.cpp
     ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
+    ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp
@@ -115,6 +116,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MCP9600        # propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
+    HAL_ENABLE_DHT            # shared DHT11/DHT22 GPIO temperature/humidity driver
     HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
     HAL_ENABLE_TSC2007        # shared TSC2007 touch controller over HAL I2C
     HAL_ENABLE_STMPE610       # shared STMPE610 touch controller over HAL I2C/SPI

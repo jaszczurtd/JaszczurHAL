@@ -192,6 +192,7 @@ target_compile_definitions(test_ff16_memdisk PRIVATE
 target_compile_options(test_ff16_memdisk PRIVATE -Wall -Wextra)
 add_test(NAME test_ff16_memdisk COMMAND test_ff16_memdisk)
 add_hal_test(test_hal_ds18b20)
+add_hal_test(test_hal_dht)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)
 add_stm32_host_test(test_stm32_hal_timer)

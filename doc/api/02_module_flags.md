@@ -62,6 +62,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `impl/shared/drivers/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `impl/shared/drivers/mcp9600/mcp9600_driver.cpp` | shared Arduino-free MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `impl/shared/drivers/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `impl/shared/drivers/max6675/max6675_driver.cpp` | shared Arduino-free MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/ds18b20/hal_ds18b20.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
+| `HAL_ENABLE_DHT` | `hal_dht.h` | `impl/shared/drivers/dht/hal_dht.cpp` | shared DHT11/DHT22 temperature/humidity driver over HAL GPIO |
 | `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/drivers/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
 | `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/drivers/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
 | `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/drivers/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |

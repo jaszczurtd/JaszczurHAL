@@ -218,6 +218,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_timer` | low-level alarm add/cancel paths, `_ex` diagnostics, managed timer start/stop/pause/resume/period/remaining behavior |
 | `test_stm32_hal_timer` | real STM32G474 timer backend under host simulation: one-shot alarms, callback reschedule, cancel, pool limits/destruction, long-delay chunking, managed stop/pause/resume |
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
+| `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |

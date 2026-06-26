@@ -2,7 +2,7 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_bh1750`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
+Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
 
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
@@ -152,6 +152,62 @@ void     hal_mock_ds18b20_set_presence(hal_ds18b20_t h, bool present);
 void     hal_mock_ds18b20_set_crc_ok(hal_ds18b20_t h, bool ok);
 uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 ```
+
+---
+
+## `hal_dht` - DHT11/DHT22 temperature and humidity sensor  *(optional - `HAL_ENABLE_DHT`)*
+
+Blocking single-frame DHT reader over HAL GPIO.
+
+```c
+#include <hal/hal_dht.h>
+
+#ifndef HAL_DHT_MAX_INSTANCES
+#define HAL_DHT_MAX_INSTANCES 4
+#endif
+
+typedef enum {
+  HAL_DHT_SENSOR_DHT11 = 0,
+  HAL_DHT_SENSOR_DHT22 = 1,
+} hal_dht_sensor_t;
+
+typedef struct {
+  uint8_t data_pin;
+  hal_dht_sensor_t sensor;
+} hal_dht_config_t;
+
+typedef struct hal_dht_impl_s *hal_dht_t;
+
+typedef struct {
+  float temperature_c;
+  float temperature_f;
+  float humidity;
+} hal_dht_sample_t;
+
+hal_dht_config_t hal_dht_default_config(uint8_t data_pin);
+hal_dht_t        hal_dht_init(const hal_dht_config_t *cfg);
+void             hal_dht_deinit(hal_dht_t h);
+bool             hal_dht_read(hal_dht_t h);
+float            hal_dht_get_temperature_c(hal_dht_t h);
+float            hal_dht_get_temperature_f(hal_dht_t h);
+float            hal_dht_get_humidity(hal_dht_t h);
+bool             hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out);
+```
+
+`hal_dht_read()` performs the DHT start pulse and 40-bit frame read, validates
+the checksum, and updates the cached sample only on success. The implementation
+keeps the Bonezegei DHT timing flow: 250 ms idle-high settle, 18 ms host-low
+start pulse, 40 us release, 80/80 us response timing, and a 30 us bit
+discriminator. DHT11 frames are decoded as integral humidity and decimal
+temperature bytes; DHT22 frames use the native 16-bit humidity and signed 16-bit
+temperature fields with 0.1 unit resolution.
+
+**impl/rp2040 + impl/stm32g474 + impl/.mock:** all use
+`impl/shared/drivers/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
+**Thread safety:** handle creation uses a singleton pool mutex created with
+`jh_hal_mutex_create_once`; each handle has its own mutex for read/get/deinit.
+The timing-critical frame read masks interrupts only for the short DHT
+bit-bang window.
 
 ---
 
