@@ -39,7 +39,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
-| `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `impl/shared/hal_bsd_sockets.cpp` | BSD/POSIX compatibility over HAL UDP/TCP, including IPv4 `getaddrinfo()` (propagates UDP + TCP + WIFI) |
+| `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp` | BSD/POSIX compatibility over HAL UDP/TCP, including IPv4 `getaddrinfo()` (propagates UDP + TCP + WIFI) |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |

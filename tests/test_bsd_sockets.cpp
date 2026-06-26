@@ -103,6 +103,34 @@ void test_udp_sendto_autobinds_and_translates_remote_sockaddr(void) {
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
+void test_udp_autobind_skips_ephemeral_port_already_bound(void) {
+  const uint8_t payload[] = {'s', 'k', 'i', 'p'};
+  struct sockaddr_in local = make_any_sockaddr(49152u);
+  struct sockaddr_in remote = make_sockaddr("203.0.113.10", 7778u);
+
+  int bound_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  int auto_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, bound_fd);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, auto_fd);
+  TEST_ASSERT_EQUAL_INT(0, bind(bound_fd, (const struct sockaddr *)&local,
+                                (socklen_t)sizeof(local)));
+
+  TEST_ASSERT_EQUAL_INT((int)sizeof(payload),
+                        sendto(auto_fd, payload, sizeof(payload), 0,
+                               (const struct sockaddr *)&remote,
+                               (socklen_t)sizeof(remote)));
+
+  hal_udp_socket_t bound_udp = hal_mock_bsd_socket_get_udp_handle(bound_fd);
+  hal_udp_socket_t auto_udp = hal_mock_bsd_socket_get_udp_handle(auto_fd);
+  TEST_ASSERT_NOT_NULL(bound_udp);
+  TEST_ASSERT_NOT_NULL(auto_udp);
+  TEST_ASSERT_EQUAL_UINT16(49152u, hal_mock_udp_get_local_port_for(bound_udp));
+  TEST_ASSERT_EQUAL_UINT16(49153u, hal_mock_udp_get_local_port_for(auto_udp));
+
+  TEST_ASSERT_EQUAL_INT(0, close(auto_fd));
+  TEST_ASSERT_EQUAL_INT(0, close(bound_fd));
+}
+
 void test_udp_bind_and_recvfrom_translate_sender_sockaddr(void) {
   const uint8_t payload[] = {'r', 'x'};
   uint8_t out[4] = {};
@@ -344,6 +372,27 @@ void test_nonblocking_accept_returns_eagain_until_client_is_pending(void) {
   TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
 }
 
+void test_blocking_accept_backend_listener_error_reports_einval(void) {
+  struct sockaddr_in local = make_any_sockaddr(8082u);
+
+  int listener_fd = socket(AF_INET, SOCK_STREAM, 0);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, listener_fd);
+  TEST_ASSERT_EQUAL_INT(0, bind(listener_fd, (const struct sockaddr *)&local,
+                                (socklen_t)sizeof(local)));
+  TEST_ASSERT_EQUAL_INT(0, listen(listener_fd, 1));
+
+  hal_tcp_listener_t listener =
+      hal_mock_bsd_socket_get_tcp_listener(listener_fd);
+  TEST_ASSERT_NOT_NULL(listener);
+  hal_tcp_listener_close(listener);
+
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, accept(listener_fd, NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+  TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
+}
+
 void test_select_reports_read_and_write_ready_sets(void) {
   const uint8_t rx[] = {'s', 'e', 'l'};
   struct sockaddr_in local_a = make_any_sockaddr(9100u);
@@ -388,6 +437,34 @@ void test_select_reports_read_and_write_ready_sets(void) {
   TEST_ASSERT_EQUAL_INT(0, close(tcp_fd));
   TEST_ASSERT_EQUAL_INT(0, close(udp_ready_fd));
   TEST_ASSERT_EQUAL_INT(0, close(udp_idle_fd));
+}
+
+void test_select_reports_tcp_exception_after_connected_socket_shutdown(void) {
+  struct sockaddr_in remote = make_sockaddr("10.1.2.4", 1884u);
+
+  int fresh_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  int connected_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fresh_fd);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, connected_fd);
+  TEST_ASSERT_EQUAL_INT(0,
+                        connect(connected_fd, (const struct sockaddr *)&remote,
+                                (socklen_t)sizeof(remote)));
+  TEST_ASSERT_EQUAL_INT(0, shutdown(connected_fd, SHUT_RDWR));
+
+  fd_set exceptfds;
+  FD_ZERO(&exceptfds);
+  FD_SET(fresh_fd, &exceptfds);
+  FD_SET(connected_fd, &exceptfds);
+
+  struct timeval timeout = {};
+  const int max_fd = connected_fd > fresh_fd ? connected_fd : fresh_fd;
+  TEST_ASSERT_EQUAL_INT(1,
+                        select(max_fd + 1, NULL, NULL, &exceptfds, &timeout));
+  TEST_ASSERT_FALSE(FD_ISSET(fresh_fd, &exceptfds));
+  TEST_ASSERT_TRUE(FD_ISSET(connected_fd, &exceptfds));
+
+  TEST_ASSERT_EQUAL_INT(0, close(connected_fd));
+  TEST_ASSERT_EQUAL_INT(0, close(fresh_fd));
 }
 
 void test_getaddrinfo_hostname_result_connects_tcp_client(void) {
@@ -531,13 +608,16 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_inet_helpers_translate_ipv4_and_byte_order);
   RUN_TEST(test_udp_sendto_autobinds_and_translates_remote_sockaddr);
+  RUN_TEST(test_udp_autobind_skips_ephemeral_port_already_bound);
   RUN_TEST(test_udp_bind_and_recvfrom_translate_sender_sockaddr);
   RUN_TEST(test_tcp_client_connect_send_recv_and_unistd_aliases);
   RUN_TEST(test_tcp_server_bind_listen_accept_returns_connected_socket_fd);
   RUN_TEST(test_nonblocking_tcp_recv_and_msg_dontwait_report_eagain);
   RUN_TEST(test_nonblocking_udp_recvfrom_and_msg_dontwait);
   RUN_TEST(test_nonblocking_accept_returns_eagain_until_client_is_pending);
+  RUN_TEST(test_blocking_accept_backend_listener_error_reports_einval);
   RUN_TEST(test_select_reports_read_and_write_ready_sets);
+  RUN_TEST(test_select_reports_tcp_exception_after_connected_socket_shutdown);
   RUN_TEST(test_getaddrinfo_hostname_result_connects_tcp_client);
   RUN_TEST(test_getaddrinfo_passive_numeric_and_errors);
   RUN_TEST(test_setsockopt_accepts_reuseaddr_and_reports_unsupported_options);

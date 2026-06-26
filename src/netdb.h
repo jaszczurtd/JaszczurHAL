@@ -5,6 +5,10 @@
  * @brief Minimal IPv4 getaddrinfo declarations for JaszczurHAL BSD sockets.
  */
 
+#include "hal/hal_config.h"
+
+#ifdef HAL_ENABLE_BSD_SOCKETS
+
 #include <sys/socket.h>
 
 #ifdef __cplusplus
@@ -74,3 +78,5 @@ const char *gai_strerror(int errcode);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_BSD_SOCKETS */

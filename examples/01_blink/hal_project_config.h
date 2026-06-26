@@ -18,7 +18,7 @@
  *   #define HAL_TARGET_STM32G474
  *   #define HAL_TARGET_MOCK
  *
- * See src/HAL_FLAGS.txt / src/hal/hal_target.h for details.
+ * See doc/HAL_FLAGS.txt / src/hal/hal_target.h for details.
  *
  * ── Module enable flags ───────────────────────────────────────────────────
  * Blink uses only core GPIO + debug serial, which are always available, so no

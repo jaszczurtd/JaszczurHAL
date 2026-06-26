@@ -5,6 +5,10 @@
  * @brief Minimal IPv4 text/binary conversion helpers for BSD sockets.
  */
 
+#include "../hal/hal_config.h"
+
+#ifdef HAL_ENABLE_BSD_SOCKETS
+
 #include <netinet/in.h>
 
 #ifdef __cplusplus
@@ -22,3 +26,5 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* HAL_ENABLE_BSD_SOCKETS */

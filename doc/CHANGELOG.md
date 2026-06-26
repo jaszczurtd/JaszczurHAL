@@ -746,7 +746,7 @@ Next release.
   (`hal_gpio_attach_interrupt`) - same contract, ISR-rate limited. A nice
   contrast: identical API, hardware timer on G474 vs ISR counter on RP2040.
 - Mock backend with `hal_mock_pcnt_inject/_get_edge/_get_pin` and a Unity
-  suite (`test_hal_pcnt`); documented in `src/HAL_FLAGS.txt`.
+  suite (`test_hal_pcnt`); documented in `doc/HAL_FLAGS.txt`.
 - Second of the planned core-peripheral additions (DAC -> **PCNT** -> GPT
   capture/compare/encoder -> SPI-slave -> RNG).
 
@@ -763,7 +763,7 @@ Next release.
   `hal_pwm` + RC filter instead). Portable code should branch on
   `hal_dac_is_supported()`.
 - Mock backend with `hal_mock_dac_get()` / `hal_mock_dac_is_initialized()`
-  helpers and a Unity suite (`test_hal_dac`); documented in `src/HAL_FLAGS.txt`.
+  helpers and a Unity suite (`test_hal_dac`); documented in `doc/HAL_FLAGS.txt`.
 - First of the planned core-peripheral additions (DAC -> PCNT -> GPT
   capture/compare/encoder -> SPI-slave -> RNG) hardening the STM32G474 backend.
 
@@ -785,7 +785,7 @@ Next release.
   `#if HAL_TARGET_IS_*` guards. Unused backends compile to nothing.
 - Wired the switch into `hal_config.h` and the build configs
   (`CMakeLists.txt` -> MOCK, `rp2040_lib` -> RP2040, `stm32_lib` -> STM32G474).
-  Documented in `src/HAL_FLAGS.txt`.
+  Documented in `doc/HAL_FLAGS.txt`.
 
 ### stm32g474 - first real (non-stub) backend bring-up
 
@@ -1234,7 +1234,7 @@ Next release.
 - New diagnostic flag **`HAL_CONFIG_VERBOSE`**: when defined, the
   preprocessor emits a `#pragma message` for every `HAL_ENABLE_*` flag
   that is active after propagation.
-- Refreshed `src/HAL_FLAGS.txt` and the corresponding section of
+- Refreshed `doc/HAL_FLAGS.txt` and the corresponding section of
   `JaszczurHAL_API.md` to describe the new opt-in surface, dependency
   graph, and consistency checks.
 
@@ -1293,7 +1293,7 @@ Next release.
 ### Changed
 - `hal/hal.h` now exposes `hal_ds18b20.h` when `HAL_ENABLE_DS18B20`
   is defined.
-- `hal_config.h` and `src/HAL_FLAGS.txt` now document
+- `hal_config.h` and `doc/HAL_FLAGS.txt` now document
   `HAL_ENABLE_DS18B20` and `HAL_DS18B20_MAX_INSTANCES`.
 - Host-test build registers `test_hal_ds18b20` in `tests/CMakeLists.txt`.
 - STM32 bootstrap profile initially left DS18B20 off until the shared OneWire
@@ -1306,7 +1306,7 @@ Next release.
 - DS18B20 conversion wait uses `hal_micros64()` deadlines in the non-blocking
   state machine.
 - Documentation synchronized with current APIs:
-  `README.md`, `JaszczurHAL_API.md`, and `src/HAL_FLAGS.txt` now reflect
+  `README.md`, `JaszczurHAL_API.md`, and `doc/HAL_FLAGS.txt` now reflect
   extended `hal_timer` semantics and the DS18B20 module/test surface.
 
 ## [1.5.1] - 2026-05-18
@@ -1346,7 +1346,7 @@ Next release.
   missing-path remove semantics.
 - Expanded `test_hal_ota` with callback replace/unregister flow and re-begin
   queue-clear coverage.
-- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+- Documentation updated (`README.md`, `doc/HAL_FLAGS.txt`,
   `JaszczurHAL_API.md`).
 
 ## [Unreleased] - 2026-05-18 (UDP module bootstrap)
@@ -1368,7 +1368,7 @@ Next release.
   definitions and registers the new suite in `tests/CMakeLists.txt`.
 - Expanded `test_hal_udp` with chunked-read behavior and stop/reset state
   coverage for cached remote endpoint + packet context.
-- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+- Documentation updated (`README.md`, `doc/HAL_FLAGS.txt`,
   `JaszczurHAL_API.md`).
 
 ## [Unreleased] - 2026-05-18 (WireGuard IPv4 helper APIs)
@@ -1407,7 +1407,7 @@ Next release.
 - Host-test build enables `HAL_ENABLE_WIREGUARD` in `hal_mock`
   compile definitions and registers the new suite in
   `tests/CMakeLists.txt`.
-- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+- Documentation updated (`README.md`, `doc/HAL_FLAGS.txt`,
   `JaszczurHAL_API.md`).
 
 ## [Unreleased] - 2026-05-18 (MQTT module bootstrap)
@@ -1428,7 +1428,7 @@ Next release.
   `HAL_ENABLE_MQTT` (same conditional model as other optional drivers).
 - Host-test build enables `HAL_ENABLE_MQTT` in `hal_mock` compile
   definitions and registers the new suite in `tests/CMakeLists.txt`.
-- Documentation updated (`README.md`, `src/HAL_FLAGS.txt`,
+- Documentation updated (`README.md`, `doc/HAL_FLAGS.txt`,
   `JaszczurHAL_API.md`).
 
 ## [Unreleased] - 2026-04-30 (Fiesta R1.8 - serialized TX on hal_serial)

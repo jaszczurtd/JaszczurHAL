@@ -3,8 +3,8 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
-#include "../shared/hal_debug_format.h"
 #include "../shared/hal_mutex_once.h"
+#include "hal/impl/shared/compat/debug_format/hal_debug_format.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>

@@ -34,7 +34,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `runalltests.sh` - full local validation gate.
 - `runmefirst.sh` - one-time local toolchain setup.
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
-- `src/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
+- `doc/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
 - `src/libConfig.h` - backward-compat redirect to `hal/hal_config.h`.
 - `src/tools.h` - C++ utility aggregator.
 - `src/tools_c.h` - C-compatible utility declarations.
