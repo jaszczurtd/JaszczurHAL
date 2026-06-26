@@ -46,6 +46,8 @@ hal_irq_priority_t hal_mock_gpio_get_irq_priority(void);
 // ── Sync / critical section ──────────────────────────────────────────────────
 /** @brief Current critical-section nesting depth (0 = not in a section). */
 uint32_t hal_mock_critical_depth(void);
+/** @brief Number of critical-section entries since the last reset. */
+uint32_t hal_mock_critical_enter_count(void);
 /** @brief Model of the "interrupts enabled" state; false while masked by a
  *         critical section. Pure test introspection - no real interrupts. */
 bool hal_mock_irq_enabled(void);
@@ -73,6 +75,7 @@ bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 #include "../../hal_dma_pwm_audio.h"
 void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
                                      uint8_t buffer_index);
+void hal_mock_dma_pwm_audio_fail_next_create(bool fail);
 uint32_t hal_mock_dma_pwm_audio_completion_count(hal_dma_pwm_audio_t audio);
 uint8_t hal_mock_dma_pwm_audio_get_pin(hal_dma_pwm_audio_t audio);
 uint16_t hal_mock_dma_pwm_audio_get_idle_value(hal_dma_pwm_audio_t audio);

@@ -78,15 +78,15 @@ void test_pwm_audio_rejects_incomplete_config(void) {
   TEST_ASSERT_NULL(hal_dma_pwm_audio_create(&cfg));
 }
 
-void test_interpolators_match_blend_fraction(void) {
-  TEST_ASSERT_EQUAL_UINT16(1500u, hal_dma_interpolate0(1000u, 2000u, 128u));
-  TEST_ASSERT_EQUAL_UINT16(1996u, hal_dma_interpolate1(1000u, 2000u, 255u));
+void test_interpolate_blends_fraction(void) {
+  TEST_ASSERT_EQUAL_UINT16(1500u, hal_dma_interpolate(1000u, 2000u, 128u));
+  TEST_ASSERT_EQUAL_UINT16(1996u, hal_dma_interpolate(1000u, 2000u, 255u));
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pwm_audio_lifecycle_and_callbacks);
   RUN_TEST(test_pwm_audio_rejects_incomplete_config);
-  RUN_TEST(test_interpolators_match_blend_fraction);
+  RUN_TEST(test_interpolate_blends_fraction);
   return UNITY_END();
 }

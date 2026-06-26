@@ -65,6 +65,14 @@ static bool wait_while_level(uint8_t pin, bool level, uint32_t timeout_us) {
   return true;
 }
 
+static bool sample_bit_high_after_low_pulse(uint8_t pin) {
+  hal_critical_section_enter();
+  hal_delay_us(DHT_BIT_SAMPLE_US);
+  const bool high = hal_gpio_read(pin) == true;
+  hal_critical_section_exit();
+  return high;
+}
+
 static void decode_frame_locked(hal_dht_t h,
                                 const uint8_t frame[DHT_DATA_BYTES]) {
   if (h->sensor == HAL_DHT_SENSOR_DHT22) {
@@ -98,8 +106,6 @@ static bool read_frame_locked(hal_dht_t h) {
   hal_gpio_set_mode(h->pin, HAL_GPIO_OUTPUT_LOW);
   hal_delay_ms(DHT_START_LOW_MS);
 
-  hal_critical_section_enter();
-
   hal_gpio_write(h->pin, true);
   hal_delay_us(DHT_START_HIGH_US);
   hal_gpio_set_mode(h->pin, HAL_GPIO_INPUT_PULLUP);
@@ -117,8 +123,7 @@ static bool read_frame_locked(hal_dht_t h) {
             break;
           }
 
-          hal_delay_us(DHT_BIT_SAMPLE_US);
-          if (hal_gpio_read(h->pin) == true) {
+          if (sample_bit_high_after_low_pulse(h->pin)) {
             frame[b] |= (uint8_t)(1u << (7u - bit));
           }
 
@@ -127,8 +132,6 @@ static bool read_frame_locked(hal_dht_t h) {
       }
     }
   }
-
-  hal_critical_section_exit();
 
   if (!ok) {
     return false;

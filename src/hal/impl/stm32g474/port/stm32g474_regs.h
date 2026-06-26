@@ -632,8 +632,10 @@
 /* ── Peripheral (APB) kernel clocks ──────────────────────────────────────── */
 /* SPI/UART baud is derived from the APB clock (PCLK), which need NOT equal the
  * core clock once the PLL and APB prescalers are configured. With the current
- * HSI16 bring-up (no PLL, no APB prescaler) both PCLKs equal the core clock;
- * update these alongside any clock-tree change. SPI1 is on APB2 (PCLK2),
- * SPI2 on APB1 (PCLK1). */
+ * HSI16 bring-up (no PLL, no APB prescaler) both PCLKs equal the core clock.
+ * SPI1 is on APB2 (PCLK2), SPI2 on APB1 (PCLK1). STM32 TIM kernels are a
+ * special case: when the APB prescaler is not 1, timer clock is 2 * PCLKx.
+ * Current PWM code assumes APB prescaler == 1 and uses these PCLK values as
+ * timer clocks; update both contracts alongside any clock-tree change. */
 #define JH_G474_PCLK1_HZ JH_G474_CORE_CLOCK_HZ /* APB1 -> SPI2 */
 #define JH_G474_PCLK2_HZ JH_G474_CORE_CLOCK_HZ /* APB2 -> SPI1 */

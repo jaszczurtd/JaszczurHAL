@@ -71,6 +71,7 @@ void test_read_valid_frame_updates_sample(void) {
   TEST_ASSERT_TRUE(hal_dht_get_sample(dht, &sample));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 24.6f, sample.temperature_c);
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 55.0f, sample.humidity);
+  TEST_ASSERT_EQUAL_UINT32(40u, hal_mock_critical_enter_count());
   TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_depth());
   TEST_ASSERT_TRUE(hal_mock_irq_enabled());
 
@@ -145,6 +146,7 @@ void test_missing_response_high_returns_false_and_restores_interrupts(void) {
                                        sizeof(no_response_high[0]));
 
   TEST_ASSERT_FALSE(hal_dht_read(dht));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_enter_count());
   TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_depth());
   TEST_ASSERT_TRUE(hal_mock_irq_enabled());
 

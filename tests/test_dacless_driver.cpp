@@ -27,13 +27,15 @@ void setUp(void) {
   hal_mock_adc_inject(28u, 0);
   hal_mock_adc_inject(29u, 0);
   hal_mock_mutex_stats_reset();
+  hal_mock_dma_pwm_audio_fail_next_create(false);
+  hal_mock_critical_section_reset();
 }
 
-void tearDown(void) {}
+void tearDown(void) { TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_depth()); }
 
 void test_default_config_and_sample_rate(void) {
   DAClessAudio audio;
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   TEST_ASSERT_EQUAL_UINT8(6u, audio.getConfig().pinPWM);
   TEST_ASSERT_EQUAL_UINT16(12u, audio.getConfig().pwmBits);
@@ -53,7 +55,7 @@ void test_polling_config_creates_pwm_freq_channel(void) {
   DAClessConfig cfg;
   cfg.useDma = false;
   DAClessAudio audio(cfg);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   TEST_ASSERT_FALSE(audio.isDmaActive());
   TEST_ASSERT_EQUAL_UINT32(
@@ -83,7 +85,7 @@ void test_begin_samples_adc_inputs(void) {
   cfg.useDma = false;
   cfg.nAdcInputs = 2u;
   DAClessAudio audio(cfg);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   TEST_ASSERT_EQUAL_UINT16(111u, audio.getADC(0u));
   TEST_ASSERT_EQUAL_UINT16(222u, audio.getADC(1u));
@@ -97,7 +99,7 @@ void test_sample_callback_fills_finished_buffer_after_block_rollover(void) {
   cfg.nAdcInputs = 0u;
   DAClessAudio audio(cfg);
   audio.setSampleCallback(sample_cb, nullptr);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   audio.service();
   hal_mock_advance_micros(33u);
@@ -119,7 +121,7 @@ void test_block_callback_takes_precedence_over_sample_callback(void) {
   DAClessAudio audio(cfg);
   audio.setSampleCallback(sample_cb, nullptr);
   audio.setBlockCallback(block_cb, nullptr);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   audio.service();
   hal_mock_advance_micros(33u);
@@ -133,13 +135,61 @@ void test_block_callback_takes_precedence_over_sample_callback(void) {
   TEST_ASSERT_EQUAL_INT(1, s_block_calls);
 }
 
+void test_non_owner_instance_does_not_clobber_out_buf_global(void) {
+  DAClessConfig owner_cfg;
+  owner_cfg.useDma = false;
+  owner_cfg.blockSize = 2u;
+  owner_cfg.nAdcInputs = 0u;
+  DAClessAudio owner(owner_cfg);
+  TEST_ASSERT_TRUE(owner.begin());
+
+  owner.service();
+  hal_mock_advance_micros(33u);
+  owner.service();
+
+  const volatile uint16_t *owner_buf = owner.getOutBufPtr();
+  TEST_ASSERT_NOT_NULL(owner_buf);
+  TEST_ASSERT_EQUAL_PTR(owner_buf, out_buf_ptr);
+
+  DAClessConfig other_cfg;
+  other_cfg.useDma = false;
+  other_cfg.blockSize = 2u;
+  other_cfg.nAdcInputs = 0u;
+  DAClessAudio other(other_cfg);
+  TEST_ASSERT_TRUE(other.begin());
+
+  other.service();
+  hal_mock_advance_micros(33u);
+  other.service();
+
+  TEST_ASSERT_NOT_NULL(other.getOutBufPtr());
+  TEST_ASSERT_NOT_EQUAL(owner_buf, other.getOutBufPtr());
+  TEST_ASSERT_EQUAL_PTR(owner_buf, out_buf_ptr);
+}
+
+void test_polling_service_clamps_large_catchup_burst(void) {
+  DAClessConfig cfg;
+  cfg.useDma = false;
+  cfg.blockSize = 128u;
+  cfg.nAdcInputs = 0u;
+  DAClessAudio audio(cfg);
+  audio.setSampleCallback(sample_cb, nullptr);
+  TEST_ASSERT_TRUE(audio.begin());
+
+  hal_mock_advance_micros(1000000u);
+  audio.service();
+
+  TEST_ASSERT_LESS_OR_EQUAL_INT((int)DACLESS_MAX_POLLING_CATCHUP_SAMPLES + 1,
+                                s_sample_calls);
+}
+
 void test_dma_sample_callback_fills_completed_buffer(void) {
   DAClessConfig cfg;
   cfg.blockSize = 2u;
   cfg.nAdcInputs = 0u;
   DAClessAudio audio(cfg);
   audio.setSampleCallback(sample_cb, nullptr);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   hal_mock_dma_pwm_audio_complete(audio.getDmaAudioForTest(), 0u);
 
@@ -160,7 +210,7 @@ void test_dma_block_callback_takes_precedence(void) {
   DAClessAudio audio(cfg);
   audio.setSampleCallback(sample_cb, nullptr);
   audio.setBlockCallback(block_cb, nullptr);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   hal_mock_dma_pwm_audio_complete(audio.getDmaAudioForTest(), 1u);
 
@@ -178,7 +228,7 @@ void test_mute_stops_pwm_and_unmute_restarts_on_service(void) {
   cfg.blockSize = 2u;
   cfg.nAdcInputs = 0u;
   DAClessAudio audio(cfg);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   audio.service();
   TEST_ASSERT_TRUE(hal_mock_pwm_freq_is_running(audio.getPwmChannelForTest()));
@@ -200,7 +250,7 @@ void test_dma_mute_pauses_and_unmute_resumes_backend(void) {
   cfg.blockSize = 2u;
   cfg.nAdcInputs = 0u;
   DAClessAudio audio(cfg);
-  audio.begin();
+  TEST_ASSERT_TRUE(audio.begin());
 
   hal_dma_pwm_audio_t dma = audio.getDmaAudioForTest();
   TEST_ASSERT_TRUE(hal_dma_pwm_audio_is_running(dma));
@@ -215,11 +265,25 @@ void test_dma_mute_pauses_and_unmute_resumes_backend(void) {
   TEST_ASSERT_TRUE(hal_dma_pwm_audio_is_running(dma));
 }
 
-void test_interpolate_matches_rp2040_blend_fraction(void) {
+void test_begin_reports_dma_backend_create_failure(void) {
+  DAClessConfig cfg;
+  cfg.nAdcInputs = 0u;
+  DAClessAudio audio(cfg);
+
+  hal_mock_dma_pwm_audio_fail_next_create(true);
+
+  TEST_ASSERT_FALSE(audio.begin());
+  TEST_ASSERT_FALSE(audio.isRunning());
+  TEST_ASSERT_FALSE(audio.isDmaActive());
+  TEST_ASSERT_TRUE(audio.isMuted());
+  TEST_ASSERT_NULL(audio.getDmaAudioForTest());
+}
+
+void test_interpolate_blends_fraction(void) {
   TEST_ASSERT_EQUAL_UINT16(1000u, interpolate(1000u, 2000u, 0u));
   TEST_ASSERT_EQUAL_UINT16(1500u, interpolate(1000u, 2000u, 128u));
   TEST_ASSERT_EQUAL_UINT16(1996u, interpolate(1000u, 2000u, 255u));
-  TEST_ASSERT_EQUAL_UINT16(1500u, interpolate1(2000u, 1000u, 128u));
+  TEST_ASSERT_EQUAL_UINT16(1500u, interpolate(2000u, 1000u, 128u));
 }
 
 void test_public_methods_balance_mutex_locking(void) {
@@ -228,7 +292,7 @@ void test_public_methods_balance_mutex_locking(void) {
     cfg.useDma = false;
     cfg.blockSize = 2u;
     DAClessAudio audio(cfg);
-    audio.begin();
+    TEST_ASSERT_TRUE(audio.begin());
     audio.getADC(0u);
     audio.setSampleCallback(sample_cb, nullptr);
     audio.mute();
@@ -249,11 +313,14 @@ int main(void) {
   RUN_TEST(test_begin_samples_adc_inputs);
   RUN_TEST(test_sample_callback_fills_finished_buffer_after_block_rollover);
   RUN_TEST(test_block_callback_takes_precedence_over_sample_callback);
+  RUN_TEST(test_non_owner_instance_does_not_clobber_out_buf_global);
+  RUN_TEST(test_polling_service_clamps_large_catchup_burst);
   RUN_TEST(test_dma_sample_callback_fills_completed_buffer);
   RUN_TEST(test_dma_block_callback_takes_precedence);
   RUN_TEST(test_mute_stops_pwm_and_unmute_restarts_on_service);
   RUN_TEST(test_dma_mute_pauses_and_unmute_resumes_backend);
-  RUN_TEST(test_interpolate_matches_rp2040_blend_fraction);
+  RUN_TEST(test_begin_reports_dma_backend_create_failure);
+  RUN_TEST(test_interpolate_blends_fraction);
   RUN_TEST(test_public_methods_balance_mutex_locking);
   return UNITY_END();
 }

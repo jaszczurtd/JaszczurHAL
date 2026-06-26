@@ -78,6 +78,11 @@ struct TimerHw {
   bool has_bdtr;
 };
 
+/* STM32 TIM kernels run at PCLKx only while the corresponding APB prescaler is
+ * 1. If a future clock tree uses an APB divider, the timer kernel clock becomes
+ * 2 * PCLKx and this table must switch to explicit timer-clock constants.
+ * Keeping one source here preserves consistency between timer programming and
+ * jh_stm32_pwm_source_clock_hz() under the current APB prescaler == 1 setup. */
 static const TimerHw kTimerHw[PWM_TIMER_COUNT] = {
     {TIM2_BASE, JH_G474_PCLK1_HZ, RCC_APB1ENR1_TIM2EN, false, false},
     {TIM3_BASE, JH_G474_PCLK1_HZ, RCC_APB1ENR1_TIM3EN, false, false},
@@ -286,6 +291,11 @@ bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
 
 bool jh_stm32_pwm_pin_supported(uint8_t pin) {
   return find_pin(pin) != nullptr;
+}
+
+uint32_t jh_stm32_pwm_source_clock_hz(uint8_t pin) {
+  const PwmPinMap *map = find_pin(pin);
+  return map ? timer_clock_hz(map->timer) : 0u;
 }
 
 bool jh_stm32_pwm_prepare_frequency_pin(uint8_t pin, uint32_t frequency_hz,

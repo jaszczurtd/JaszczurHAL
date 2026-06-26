@@ -55,9 +55,9 @@ const volatile uint16_t *adc_results_buf = nullptr;
 
 DAClessAudio::DAClessAudio(const DAClessConfig &cfg)
     : cfg_(normalizeConfig(cfg)) {
-  sampleRateInt_ = sampleRateIntForBits(cfg_.pwmBits);
-  sampleRate_ =
-      (float)sourceClockHz() / (float)periodTicksForBits(cfg_.pwmBits);
+  sampleRateInt_ = sampleRateIntForBits(cfg_.pwmBits, cfg_.pinPWM);
+  sampleRate_ = (float)sourceClockHz(cfg_.pinPWM) /
+                (float)periodTicksForBits(cfg_.pwmBits);
   samplePeriodQ16_ = samplePeriodQ16ForRate(sampleRateInt_);
   fillSilenceUnlocked();
   playBuf_ = bufferA();
@@ -123,19 +123,12 @@ DAClessConfig DAClessAudio::normalizeConfig(const DAClessConfig &cfg) {
   return out;
 }
 
-uint32_t DAClessAudio::sourceClockHz() {
+uint32_t DAClessAudio::sourceClockHz(uint8_t pin) {
 #ifdef HAL_DACLESS_SOURCE_CLOCK_HZ
+  (void)pin;
   return (uint32_t)HAL_DACLESS_SOURCE_CLOCK_HZ;
-#elif HAL_TARGET_IS_RP2040
-#ifdef F_CPU
-  return (uint32_t)F_CPU;
 #else
-  return 125000000u;
-#endif
-#elif HAL_TARGET_IS_STM32G474
-  return 16000000u;
-#else
-  return 125000000u;
+  return hal_pwm_freq_source_clock_hz(pin);
 #endif
 }
 
@@ -156,9 +149,9 @@ uint32_t DAClessAudio::periodTicksForBits(uint16_t bits) {
   return 1u << bits;
 }
 
-uint32_t DAClessAudio::sampleRateIntForBits(uint16_t bits) {
+uint32_t DAClessAudio::sampleRateIntForBits(uint16_t bits, uint8_t pin) {
   const uint32_t ticks = periodTicksForBits(bits);
-  return (sourceClockHz() + (ticks / 2u)) / ticks;
+  return (sourceClockHz(pin) + (ticks / 2u)) / ticks;
 }
 
 uint64_t DAClessAudio::samplePeriodQ16ForRate(uint32_t sample_rate_hz) {
@@ -166,6 +159,23 @@ uint64_t DAClessAudio::samplePeriodQ16ForRate(uint32_t sample_rate_hz) {
     return 0u;
   }
   return (((uint64_t)1000000u << 16u) + (sample_rate_hz / 2u)) / sample_rate_hz;
+}
+
+uint64_t DAClessAudio::clampPollingCatchupQ16(uint64_t now_q16,
+                                              uint64_t next_due_q16,
+                                              uint64_t sample_period_q16) {
+  if (sample_period_q16 == 0u || now_q16 < next_due_q16) {
+    return next_due_q16;
+  }
+
+  const uint64_t max_catchup =
+      (uint64_t)DACLESS_MAX_POLLING_CATCHUP_SAMPLES * sample_period_q16;
+  const uint64_t overdue = now_q16 - next_due_q16;
+  if (overdue <= max_catchup) {
+    return next_due_q16;
+  }
+
+  return now_q16 - max_catchup;
 }
 
 void DAClessAudio::registerInstance() {
@@ -230,6 +240,20 @@ void DAClessAudio::fillSilenceUnlocked() {
   }
 }
 
+void DAClessAudio::markBeginFailedUnlocked() {
+  hal_critical_section_enter();
+  begun_ = false;
+  muted_ = true;
+  dmaActive_ = false;
+  playBuf_ = bufferA();
+  playIndex_ = 0u;
+  outBufPtr_ = nullptr;
+  bufReady_ = false;
+  callbackInProgress_ = false;
+  updateCompatibilityGlobalsUnlocked();
+  hal_critical_section_exit();
+}
+
 void DAClessAudio::sampleAdcUnlocked() {
   if (cfg_.nAdcInputs == 0u) {
     return;
@@ -247,12 +271,21 @@ void DAClessAudio::sampleAdcUnlocked() {
   }
 }
 
-void DAClessAudio::begin() {
+bool DAClessAudio::begin() {
   if (!lock()) {
-    return;
+    return false;
   }
 
   fillSilenceUnlocked();
+  hal_critical_section_enter();
+  begun_ = false;
+  muted_ = true;
+  dmaActive_ = false;
+  outBufPtr_ = nullptr;
+  bufReady_ = false;
+  callbackInProgress_ = false;
+  updateCompatibilityGlobalsUnlocked();
+  hal_critical_section_exit();
 
   if (cfg_.useDma) {
     if (pwm_ != nullptr) {
@@ -261,9 +294,9 @@ void DAClessAudio::begin() {
       pwm_ = nullptr;
     }
     if (!startDmaUnlocked()) {
-      HAL_ASSERT(false, "DAClessAudio::begin: DMA audio create failed");
+      markBeginFailedUnlocked();
       unlock();
-      return;
+      return false;
     }
   } else {
     stopDmaUnlocked();
@@ -271,9 +304,9 @@ void DAClessAudio::begin() {
       pwm_ = hal_pwm_freq_create(cfg_.pinPWM, sampleRateInt_,
                                  periodTicksForBits(cfg_.pwmBits));
       if (pwm_ == nullptr) {
-        HAL_ASSERT(false, "DAClessAudio::begin: PWM channel create failed");
+        markBeginFailedUnlocked();
         unlock();
-        return;
+        return false;
       }
     }
     sampleAdcUnlocked();
@@ -285,19 +318,24 @@ void DAClessAudio::begin() {
   bufReady_ = false;
   callbackInProgress_ = false;
   nextSampleDueQ16_ = hal_micros64() << 16u;
+  hal_critical_section_enter();
   begun_ = true;
   muted_ = false;
   updateCompatibilityGlobalsUnlocked();
+  hal_critical_section_exit();
 
   unlock();
+  return true;
 }
 
 void DAClessAudio::setSampleCallback(SampleCallback cb, void *userdata) {
   if (!lock()) {
     return;
   }
+  hal_critical_section_enter();
   sampleCb_ = cb;
   userPtr_ = userdata;
+  hal_critical_section_exit();
   unlock();
 }
 
@@ -305,8 +343,10 @@ void DAClessAudio::setBlockCallback(BlockCallback cb, void *userdata) {
   if (!lock()) {
     return;
   }
+  hal_critical_section_enter();
   blockCb_ = cb;
   userPtr_ = userdata;
+  hal_critical_section_exit();
   unlock();
 }
 
@@ -315,7 +355,9 @@ void DAClessAudio::mute() {
     return;
   }
 
+  hal_critical_section_enter();
   muted_ = true;
+  hal_critical_section_exit();
   if (dmaActive_ && dma_ != nullptr) {
     hal_dma_pwm_audio_pause(dma_, midpointForBits(cfg_.pwmBits));
   } else if (pwm_ != nullptr) {
@@ -330,7 +372,9 @@ void DAClessAudio::unmute() {
   if (!lock()) {
     return;
   }
+  hal_critical_section_enter();
   muted_ = false;
+  hal_critical_section_exit();
   if (dmaActive_ && dma_ != nullptr) {
     hal_dma_pwm_audio_resume(dma_);
   }
@@ -366,13 +410,50 @@ void DAClessAudio::writeCurrentSampleUnlocked() {
 }
 
 void DAClessAudio::prepareFinishedBuffer(uint16_t *buffer) {
+  hal_critical_section_enter();
   outBufPtr_ = buffer;
-  out_buf_ptr = outBufPtr_;
   bufReady_ = true;
+  updateCompatibilityGlobalsUnlocked();
+  hal_critical_section_exit();
   if (!dmaActive_) {
     sampleAdcUnlocked();
   }
+}
+
+bool DAClessAudio::claimDmaBufferUnlocked(uint16_t *buffer,
+                                          CallbackSnapshot &snapshot) {
+  if (buffer == nullptr) {
+    return false;
+  }
+
+  hal_critical_section_enter();
+  if (muted_ || callbackInProgress_) {
+    hal_critical_section_exit();
+    return false;
+  }
+
+  outBufPtr_ = buffer;
+  bufReady_ = true;
+  callbackInProgress_ = true;
   updateCompatibilityGlobalsUnlocked();
+  snapshot = callbackSnapshotUnlocked();
+  hal_critical_section_exit();
+  return true;
+}
+
+void DAClessAudio::finishCallbackUnlocked() {
+  hal_critical_section_enter();
+  callbackInProgress_ = false;
+  bufReady_ = false;
+  hal_critical_section_exit();
+}
+
+DAClessAudio::CallbackSnapshot DAClessAudio::callbackSnapshotUnlocked() const {
+  CallbackSnapshot snapshot = {};
+  snapshot.sample_cb = sampleCb_;
+  snapshot.block_cb = blockCb_;
+  snapshot.user = userPtr_;
+  return snapshot;
 }
 
 void DAClessAudio::fillBufferWithCallback(uint16_t *buffer,
@@ -450,22 +531,14 @@ void DAClessAudio::dmaBufferDoneThunk(void *user, uint16_t *buffer,
 
 void DAClessAudio::onDmaBufferDone(uint16_t *buffer, uint8_t buffer_index) {
   (void)buffer_index;
-  if (buffer == nullptr || muted_ || callbackInProgress_) {
+  CallbackSnapshot snapshot = {};
+  if (!claimDmaBufferUnlocked(buffer, snapshot)) {
     return;
   }
 
-  outBufPtr_ = buffer;
-  out_buf_ptr = outBufPtr_;
-  bufReady_ = true;
-  updateCompatibilityGlobalsUnlocked();
-
-  SampleCallback sample_cb = sampleCb_;
-  BlockCallback block_cb = blockCb_;
-  void *user = userPtr_;
-  callbackInProgress_ = true;
-  fillBufferWithCallback(buffer, sample_cb, block_cb, user);
-  callbackInProgress_ = false;
-  bufReady_ = false;
+  fillBufferWithCallback(buffer, snapshot.sample_cb, snapshot.block_cb,
+                         snapshot.user);
+  finishCallbackUnlocked();
 }
 
 void DAClessAudio::service() {
@@ -480,6 +553,8 @@ void DAClessAudio::service() {
   }
 
   const uint64_t now_q16 = hal_micros64() << 16u;
+  nextSampleDueQ16_ =
+      clampPollingCatchupQ16(now_q16, nextSampleDueQ16_, samplePeriodQ16_);
   while (now_q16 >= nextSampleDueQ16_) {
     writeCurrentSampleUnlocked();
     nextSampleDueQ16_ += samplePeriodQ16_;
@@ -493,19 +568,17 @@ void DAClessAudio::service() {
     playIndex_ = 0u;
     prepareFinishedBuffer(finished);
 
-    SampleCallback sample_cb = sampleCb_;
-    BlockCallback block_cb = blockCb_;
-    void *user = userPtr_;
+    CallbackSnapshot snapshot = callbackSnapshotUnlocked();
     callbackInProgress_ = true;
     unlock();
 
-    fillBufferWithCallback(finished, sample_cb, block_cb, user);
+    fillBufferWithCallback(finished, snapshot.sample_cb, snapshot.block_cb,
+                           snapshot.user);
 
     if (!lock()) {
       return;
     }
-    callbackInProgress_ = false;
-    bufReady_ = false;
+    finishCallbackUnlocked();
 
     if (!begun_ || muted_) {
       break;
@@ -516,11 +589,7 @@ void DAClessAudio::service() {
 }
 
 uint16_t interpolate(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return hal_dma_interpolate0(x, y, mu_scaled);
-}
-
-uint16_t interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return hal_dma_interpolate1(x, y, mu_scaled);
+  return hal_dma_interpolate(x, y, mu_scaled);
 }
 
 #endif /* HAL_ENABLE_DACLESS */

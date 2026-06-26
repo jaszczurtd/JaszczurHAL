@@ -41,7 +41,15 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
   return ch;
 }
 
+uint32_t hal_pwm_freq_source_clock_hz(uint8_t pin) {
+  (void)pin;
+  return 125000000u;
+}
+
 void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value) {
+  if (!ch) {
+    return;
+  }
   ch->last_value = value;
   ch->running = 1;
 }

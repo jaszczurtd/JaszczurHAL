@@ -66,7 +66,11 @@ void app_start(void) {
 
   s_audio = new (s_audio_storage) DAClessAudio(cfg);
   s_audio->setBlockCallback(fill_audio_block, nullptr);
-  s_audio->begin();
+  if (!s_audio->begin()) {
+    derr("DACless begin failed");
+    s_audio = nullptr;
+    return;
+  }
   s_audio->unmute();
 
   deb("DACless sample rate: %.2f Hz", (double)s_audio->getSampleRate());

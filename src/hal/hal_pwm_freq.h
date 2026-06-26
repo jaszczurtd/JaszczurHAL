@@ -42,6 +42,13 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
                                            uint32_t resolution);
 
 /**
+ * @brief Return the source clock used to derive PWM frequency on a pin.
+ * @param pin GPIO pin intended for frequency-controlled PWM output.
+ * @return Source clock in Hz, or 0 when the pin/backend cannot provide one.
+ */
+uint32_t hal_pwm_freq_source_clock_hz(uint8_t pin);
+
+/**
  * @brief Write a duty-cycle value to the channel.
  * @param ch    Handle from hal_pwm_freq_create().
  * @param value Value in [0, resolution].

@@ -22,24 +22,17 @@ struct hal_dma_pwm_audio_impl_s {
 };
 
 static hal_dma_pwm_audio_impl_t s_pool[HAL_DMA_PWM_AUDIO_MAX_CHANNELS];
-
-static uint16_t blend_fraction(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  const int32_t delta = (int32_t)y - (int32_t)x;
-  const int32_t frac = (int32_t)(mu_scaled & 0xFFu);
-  int32_t value = (int32_t)x + ((delta * frac) >> 8);
-  if (value < 0) {
-    return 0u;
-  }
-  if (value > 65535) {
-    return 65535u;
-  }
-  return (uint16_t)value;
-}
+static bool s_fail_next_create = false;
 
 bool hal_dma_pwm_audio_supported(void) { return true; }
 
 hal_dma_pwm_audio_t
 hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
+  if (s_fail_next_create) {
+    s_fail_next_create = false;
+    return nullptr;
+  }
+
   if (cfg == nullptr || cfg->buffer_a == nullptr || cfg->buffer_b == nullptr ||
       cfg->block_size == 0u || cfg->period_ticks == 0u ||
       cfg->sample_rate_hz == 0u) {
@@ -108,14 +101,6 @@ bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio) {
   return audio != nullptr && audio->in_use && audio->paused != 0;
 }
 
-uint16_t hal_dma_interpolate0(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
-}
-
-uint16_t hal_dma_interpolate1(uint16_t x, uint16_t y, uint16_t mu_scaled) {
-  return blend_fraction(x, y, mu_scaled);
-}
-
 void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
                                      uint8_t buffer_index) {
   if (audio == nullptr || !audio->in_use || !audio->running || audio->paused) {
@@ -128,6 +113,10 @@ void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
   if (audio->cfg.buffer_done_cb != nullptr) {
     audio->cfg.buffer_done_cb(audio->cfg.user, buffer, buffer_index ? 1u : 0u);
   }
+}
+
+void hal_mock_dma_pwm_audio_fail_next_create(bool fail) {
+  s_fail_next_create = fail;
 }
 
 uint32_t hal_mock_dma_pwm_audio_completion_count(hal_dma_pwm_audio_t audio) {
