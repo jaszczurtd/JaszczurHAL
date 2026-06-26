@@ -79,6 +79,14 @@ Next release.
 - Added basic `setsockopt()` compatibility for `SOL_SOCKET` +
   `SO_REUSEADDR`/`SO_REUSEPORT`, with unsupported options reported through
   `ENOPROTOOPT`.
+- Extended socket option and endpoint compatibility with `getsockopt(SO_ERROR)`,
+  `getsockname()`, `getpeername()`, `SO_RCVTIMEO` and `SO_SNDTIMEO`.
+- Added connected UDP compatibility: `connect()` on `SOCK_DGRAM` records a
+  default peer, then `send()`/`write()` and `recv()`/`read()` work on that
+  peer without explicit `sendto()`/`recvfrom()` addresses.
+- Documented and tested non-blocking TCP `connect()` as an immediate
+  best-effort attempt rather than a full pending-connect state machine; added
+  listener readiness coverage for `select()`.
 - Updated BSD sockets TCP/UDP client examples to resolve
   `BSD_EXAMPLE_SERVER_HOST` with `getaddrinfo()`, while preserving
   `BSD_EXAMPLE_SERVER_IP` as the default host alias.

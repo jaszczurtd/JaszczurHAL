@@ -33,9 +33,17 @@ static void compile_tcp_client_shape(void) {
   struct addrinfo hints;
   struct addrinfo *resolved = NULL;
   struct sockaddr_in remote = endpoint("192.0.2.10", 80u);
+  struct sockaddr_in local_name;
+  struct sockaddr_in peer_name;
+  socklen_t name_len = (socklen_t)sizeof(local_name);
+  struct timeval timeout;
+  int so_error = 0;
+  socklen_t opt_len = (socklen_t)sizeof(so_error);
   int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (fd >= 0) {
     int opt = 1;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -48,6 +56,16 @@ static void compile_tcp_client_shape(void) {
                   (socklen_t)sizeof(remote));
     (void)setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt,
                      (socklen_t)sizeof(opt));
+    (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                     (socklen_t)sizeof(timeout));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                     (socklen_t)sizeof(timeout));
+    (void)getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len);
+    opt_len = (socklen_t)sizeof(timeout);
+    (void)getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, &opt_len);
+    (void)getsockname(fd, (struct sockaddr *)&local_name, &name_len);
+    name_len = (socklen_t)sizeof(peer_name);
+    (void)getpeername(fd, (struct sockaddr *)&peer_name, &name_len);
     (void)fcntl(fd, F_SETFL, O_NONBLOCK);
     (void)send(fd, tx, sizeof(tx) - 1u, 0);
     (void)send(fd, tx, sizeof(tx) - 1u, MSG_DONTWAIT);
@@ -77,12 +95,25 @@ static void compile_tcp_server_shape(void) {
 }
 
 static void compile_udp_client_shape(void) {
+  char rx[8];
   const char tx[] = "ping";
   struct sockaddr_in remote = endpoint("198.51.100.20", 9000u);
+  struct sockaddr_in local_name;
+  struct sockaddr_in peer_name;
+  socklen_t name_len = (socklen_t)sizeof(local_name);
   int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   if (fd >= 0) {
     (void)sendto(fd, tx, sizeof(tx) - 1u, MSG_DONTWAIT,
                  (const struct sockaddr *)&remote, (socklen_t)sizeof(remote));
+    (void)connect(fd, (const struct sockaddr *)&remote,
+                  (socklen_t)sizeof(remote));
+    (void)send(fd, tx, sizeof(tx) - 1u, 0);
+    (void)write(fd, tx, sizeof(tx) - 1u);
+    (void)recv(fd, rx, sizeof(rx), MSG_DONTWAIT);
+    (void)read(fd, rx, sizeof(rx));
+    (void)getsockname(fd, (struct sockaddr *)&local_name, &name_len);
+    name_len = (socklen_t)sizeof(peer_name);
+    (void)getpeername(fd, (struct sockaddr *)&peer_name, &name_len);
     (void)close(fd);
   }
 }

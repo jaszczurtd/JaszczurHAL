@@ -165,6 +165,71 @@ void test_udp_bind_and_recvfrom_translate_sender_sockaddr(void) {
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
+void test_connected_udp_send_write_recv_read_use_connected_peer(void) {
+  const uint8_t first_tx[] = {'u', '1'};
+  const uint8_t second_tx[] = {'u', '2', 'x'};
+  const uint8_t first_rx[] = {'r', '1'};
+  const uint8_t second_rx[] = {'r', '2', 'x'};
+  uint8_t out[8] = {};
+  hal_net_endpoint_t captured_remote = {};
+  struct sockaddr_in local = {};
+  struct sockaddr_in peer = {};
+  socklen_t local_len = (socklen_t)sizeof(local);
+  socklen_t peer_len = (socklen_t)sizeof(peer);
+
+  int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, send(fd, first_tx, sizeof(first_tx), 0));
+  TEST_ASSERT_EQUAL_INT(ENOTCONN, errno);
+
+  struct sockaddr_in remote = make_sockaddr("203.0.113.55", 9050u);
+  TEST_ASSERT_EQUAL_INT(0, connect(fd, (const struct sockaddr *)&remote,
+                                   (socklen_t)sizeof(remote)));
+
+  hal_udp_socket_t udp = hal_mock_bsd_socket_get_udp_handle(fd);
+  TEST_ASSERT_NOT_NULL(udp);
+  TEST_ASSERT_EQUAL_UINT16(49152u, hal_mock_udp_get_local_port_for(udp));
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        getsockname(fd, (struct sockaddr *)&local, &local_len));
+  TEST_ASSERT_EQUAL_UINT16(49152u, ntohs(local.sin_port));
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        getpeername(fd, (struct sockaddr *)&peer, &peer_len));
+  TEST_ASSERT_EQUAL_UINT16(9050u, ntohs(peer.sin_port));
+
+  TEST_ASSERT_EQUAL_INT((int)sizeof(first_tx),
+                        send(fd, first_tx, sizeof(first_tx), 0));
+  TEST_ASSERT_TRUE(hal_mock_udp_get_last_tx_remote_for(udp, &captured_remote));
+  TEST_ASSERT_EQUAL_UINT8(203u, captured_remote.addr[0]);
+  TEST_ASSERT_EQUAL_UINT8(55u, captured_remote.addr[3]);
+  TEST_ASSERT_EQUAL_UINT16(9050u, captured_remote.port);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(
+      first_tx, hal_mock_udp_get_last_tx_payload_for(udp), sizeof(first_tx));
+
+  TEST_ASSERT_EQUAL_INT((int)sizeof(second_tx),
+                        write(fd, second_tx, sizeof(second_tx)));
+  TEST_ASSERT_TRUE(hal_mock_udp_get_last_tx_remote_for(udp, &captured_remote));
+  TEST_ASSERT_EQUAL_UINT16(9050u, captured_remote.port);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(
+      second_tx, hal_mock_udp_get_last_tx_payload_for(udp), sizeof(second_tx));
+
+  hal_mock_udp_inject_packet_to(udp, "198.51.100.2", 7777u, first_rx,
+                                (uint16_t)sizeof(first_rx));
+  TEST_ASSERT_EQUAL_INT((int)sizeof(first_rx), recv(fd, out, sizeof(out), 0));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(first_rx, out, sizeof(first_rx));
+
+  memset(out, 0, sizeof(out));
+  hal_mock_udp_inject_packet_to(udp, "198.51.100.3", 7778u, second_rx,
+                                (uint16_t)sizeof(second_rx));
+  TEST_ASSERT_EQUAL_INT((int)sizeof(second_rx), read(fd, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(second_rx, out, sizeof(second_rx));
+
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+}
+
 void test_tcp_client_connect_send_recv_and_unistd_aliases(void) {
   const uint8_t first_tx[] = {'p', 'i', 'n', 'g'};
   const uint8_t second_tx[] = {'o', 'k'};
@@ -207,6 +272,68 @@ void test_tcp_client_connect_send_recv_and_unistd_aliases(void) {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(second_rx, out, sizeof(second_rx));
 
   TEST_ASSERT_EQUAL_INT(0, shutdown(fd, SHUT_RDWR));
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+}
+
+void test_getsockname_getpeername_and_so_error_for_tcp_client(void) {
+  struct sockaddr_in local = {};
+  struct sockaddr_in peer = {};
+  socklen_t local_len = (socklen_t)sizeof(local);
+  socklen_t peer_len = (socklen_t)sizeof(peer);
+  socklen_t opt_len = (socklen_t)sizeof(int);
+  int so_error = -1;
+
+  int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1,
+                        getpeername(fd, (struct sockaddr *)&peer, &peer_len));
+  TEST_ASSERT_EQUAL_INT(ENOTCONN, errno);
+
+  struct sockaddr_in remote = make_sockaddr("10.20.30.41", 1884u);
+  TEST_ASSERT_EQUAL_INT(0, connect(fd, (const struct sockaddr *)&remote,
+                                   (socklen_t)sizeof(remote)));
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        getsockname(fd, (struct sockaddr *)&local, &local_len));
+  TEST_ASSERT_EQUAL_UINT32(sizeof(local), local_len);
+  TEST_ASSERT_EQUAL_INT(AF_INET, local.sin_family);
+  TEST_ASSERT_EQUAL_UINT16(0u, ntohs(local.sin_port));
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        getpeername(fd, (struct sockaddr *)&peer, &peer_len));
+  TEST_ASSERT_EQUAL_UINT32(sizeof(peer), peer_len);
+  TEST_ASSERT_EQUAL_INT(AF_INET, peer.sin_family);
+  TEST_ASSERT_EQUAL_UINT16(1884u, ntohs(peer.sin_port));
+
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len));
+  TEST_ASSERT_EQUAL_INT(0, so_error);
+  TEST_ASSERT_EQUAL_UINT32(sizeof(int), opt_len);
+
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+
+  fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+  hal_mock_tcp_set_connect_result(false);
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, connect(fd, (const struct sockaddr *)&remote,
+                                    (socklen_t)sizeof(remote)));
+  TEST_ASSERT_EQUAL_INT(ECONNREFUSED, errno);
+
+  so_error = 0;
+  opt_len = (socklen_t)sizeof(so_error);
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len));
+  TEST_ASSERT_EQUAL_INT(ECONNREFUSED, so_error);
+
+  so_error = -1;
+  opt_len = (socklen_t)sizeof(so_error);
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len));
+  TEST_ASSERT_EQUAL_INT(0, so_error);
+
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
@@ -256,6 +383,53 @@ void test_tcp_server_bind_listen_accept_returns_connected_socket_fd(void) {
   TEST_ASSERT_EQUAL_INT((int)sizeof(rx),
                         recv(accepted_fd, out, sizeof(out), 0));
   TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, out, sizeof(rx));
+
+  TEST_ASSERT_EQUAL_INT(0, close(accepted_fd));
+  TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
+}
+
+void test_getsockname_getpeername_for_bound_udp_and_accepted_tcp(void) {
+  struct sockaddr_in local = make_any_sockaddr(9020u);
+  struct sockaddr_in out = {};
+  socklen_t out_len = (socklen_t)sizeof(out);
+
+  int udp_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, udp_fd);
+  TEST_ASSERT_EQUAL_INT(0, bind(udp_fd, (const struct sockaddr *)&local,
+                                (socklen_t)sizeof(local)));
+  TEST_ASSERT_EQUAL_INT(0,
+                        getsockname(udp_fd, (struct sockaddr *)&out, &out_len));
+  TEST_ASSERT_EQUAL_INT(AF_INET, out.sin_family);
+  TEST_ASSERT_EQUAL_UINT16(9020u, ntohs(out.sin_port));
+  TEST_ASSERT_EQUAL_INT(0, close(udp_fd));
+
+  int listener_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, listener_fd);
+  local = make_any_sockaddr(8083u);
+  TEST_ASSERT_EQUAL_INT(0, bind(listener_fd, (const struct sockaddr *)&local,
+                                (socklen_t)sizeof(local)));
+  TEST_ASSERT_EQUAL_INT(0, listen(listener_fd, 1));
+
+  hal_tcp_listener_t listener =
+      hal_mock_bsd_socket_get_tcp_listener(listener_fd);
+  TEST_ASSERT_NOT_NULL(listener);
+  hal_net_endpoint_t remote = make_endpoint(192u, 0u, 2u, 91u, 4445u);
+  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+
+  int accepted_fd = accept(listener_fd, NULL, NULL);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, accepted_fd);
+
+  out_len = (socklen_t)sizeof(out);
+  memset(&out, 0, sizeof(out));
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockname(accepted_fd, (struct sockaddr *)&out, &out_len));
+  TEST_ASSERT_EQUAL_UINT16(8083u, ntohs(out.sin_port));
+
+  out_len = (socklen_t)sizeof(out);
+  memset(&out, 0, sizeof(out));
+  TEST_ASSERT_EQUAL_INT(
+      0, getpeername(accepted_fd, (struct sockaddr *)&out, &out_len));
+  TEST_ASSERT_EQUAL_UINT16(4445u, ntohs(out.sin_port));
 
   TEST_ASSERT_EQUAL_INT(0, close(accepted_fd));
   TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
@@ -370,6 +544,95 @@ void test_nonblocking_accept_returns_eagain_until_client_is_pending(void) {
 
   TEST_ASSERT_EQUAL_INT(0, close(accepted_fd));
   TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
+}
+
+void test_select_reports_tcp_listener_readiness(void) {
+  struct sockaddr_in local = make_any_sockaddr(8084u);
+
+  int listener_fd = socket(AF_INET, SOCK_STREAM, 0);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, listener_fd);
+  TEST_ASSERT_EQUAL_INT(0, bind(listener_fd, (const struct sockaddr *)&local,
+                                (socklen_t)sizeof(local)));
+  TEST_ASSERT_EQUAL_INT(0, listen(listener_fd, 1));
+
+  fd_set readfds;
+  FD_ZERO(&readfds);
+  FD_SET(listener_fd, &readfds);
+  struct timeval timeout = {};
+  TEST_ASSERT_EQUAL_INT(
+      0, select(listener_fd + 1, &readfds, NULL, NULL, &timeout));
+  TEST_ASSERT_FALSE(FD_ISSET(listener_fd, &readfds));
+
+  hal_tcp_listener_t listener =
+      hal_mock_bsd_socket_get_tcp_listener(listener_fd);
+  TEST_ASSERT_NOT_NULL(listener);
+  hal_net_endpoint_t remote = make_endpoint(192u, 0u, 2u, 92u, 4446u);
+  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+
+  FD_ZERO(&readfds);
+  FD_SET(listener_fd, &readfds);
+  timeout = {};
+  TEST_ASSERT_EQUAL_INT(
+      1, select(listener_fd + 1, &readfds, NULL, NULL, &timeout));
+  TEST_ASSERT_TRUE(FD_ISSET(listener_fd, &readfds));
+
+  int accepted_fd = accept(listener_fd, NULL, NULL);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, accepted_fd);
+  TEST_ASSERT_EQUAL_INT(0, close(accepted_fd));
+
+  FD_ZERO(&readfds);
+  FD_SET(listener_fd, &readfds);
+  timeout = {};
+  TEST_ASSERT_EQUAL_INT(
+      0, select(listener_fd + 1, &readfds, NULL, NULL, &timeout));
+  TEST_ASSERT_FALSE(FD_ISSET(listener_fd, &readfds));
+
+  TEST_ASSERT_EQUAL_INT(0, close(listener_fd));
+}
+
+void test_nonblocking_tcp_connect_is_immediate_best_effort(void) {
+  struct sockaddr_in remote = make_sockaddr("10.1.2.5", 1885u);
+  int so_error = 0;
+  socklen_t opt_len = (socklen_t)sizeof(so_error);
+
+  int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+  TEST_ASSERT_EQUAL_INT(0, fcntl(fd, F_SETFL, O_NONBLOCK));
+
+  hal_mock_tcp_set_connect_result(false);
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, connect(fd, (const struct sockaddr *)&remote,
+                                    (socklen_t)sizeof(remote)));
+  TEST_ASSERT_EQUAL_INT(EINPROGRESS, errno);
+
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len));
+  TEST_ASSERT_EQUAL_INT(EINPROGRESS, so_error);
+
+  fd_set writefds;
+  FD_ZERO(&writefds);
+  FD_SET(fd, &writefds);
+  struct timeval timeout = {};
+  TEST_ASSERT_EQUAL_INT(0, select(fd + 1, NULL, &writefds, NULL, &timeout));
+  TEST_ASSERT_FALSE(FD_ISSET(fd, &writefds));
+
+  hal_mock_tcp_set_connect_result(true);
+  TEST_ASSERT_EQUAL_INT(0, connect(fd, (const struct sockaddr *)&remote,
+                                   (socklen_t)sizeof(remote)));
+
+  FD_ZERO(&writefds);
+  FD_SET(fd, &writefds);
+  timeout = {};
+  TEST_ASSERT_EQUAL_INT(1, select(fd + 1, NULL, &writefds, NULL, &timeout));
+  TEST_ASSERT_TRUE(FD_ISSET(fd, &writefds));
+
+  so_error = -1;
+  opt_len = (socklen_t)sizeof(so_error);
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_ERROR, &so_error, &opt_len));
+  TEST_ASSERT_EQUAL_INT(0, so_error);
+
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
 void test_blocking_accept_backend_listener_error_reports_einval(void) {
@@ -566,6 +829,47 @@ void test_setsockopt_accepts_reuseaddr_and_reports_unsupported_options(void) {
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
+void test_socket_timeouts_round_trip_through_sockopts(void) {
+  struct timeval timeout = {};
+  struct timeval out_timeout = {};
+  socklen_t out_len = (socklen_t)sizeof(out_timeout);
+
+  int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+
+  timeout.tv_sec = 1;
+  timeout.tv_usec = 250000;
+  TEST_ASSERT_EQUAL_INT(0, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                                      (socklen_t)sizeof(timeout)));
+
+  timeout.tv_sec = 0;
+  timeout.tv_usec = 1500;
+  TEST_ASSERT_EQUAL_INT(0, setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout,
+                                      (socklen_t)sizeof(timeout)));
+
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &out_timeout, &out_len));
+  TEST_ASSERT_EQUAL_UINT32(sizeof(out_timeout), out_len);
+  TEST_ASSERT_EQUAL_INT(1, out_timeout.tv_sec);
+  TEST_ASSERT_EQUAL_INT(250000, out_timeout.tv_usec);
+
+  memset(&out_timeout, 0, sizeof(out_timeout));
+  out_len = (socklen_t)sizeof(out_timeout);
+  TEST_ASSERT_EQUAL_INT(
+      0, getsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &out_timeout, &out_len));
+  TEST_ASSERT_EQUAL_INT(0, out_timeout.tv_sec);
+  TEST_ASSERT_EQUAL_INT(2000, out_timeout.tv_usec);
+
+  timeout.tv_sec = -1;
+  timeout.tv_usec = 0;
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout,
+                                       (socklen_t)sizeof(timeout)));
+  TEST_ASSERT_EQUAL_INT(EINVAL, errno);
+
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+}
+
 void test_errors_set_errno_for_invalid_and_unsupported_operations(void) {
   struct sockaddr_in remote = make_sockaddr("203.0.113.8", 443u);
   const uint8_t payload[] = {0x42u};
@@ -582,7 +886,7 @@ void test_errors_set_errno_for_invalid_and_unsupported_operations(void) {
   TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, udp_fd);
   errno = 0;
   TEST_ASSERT_EQUAL_INT(-1, send(udp_fd, payload, sizeof(payload), 0));
-  TEST_ASSERT_EQUAL_INT(EOPNOTSUPP, errno);
+  TEST_ASSERT_EQUAL_INT(ENOTCONN, errno);
   TEST_ASSERT_EQUAL_INT(0, close(udp_fd));
 
   int tcp_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -610,17 +914,23 @@ int main(void) {
   RUN_TEST(test_udp_sendto_autobinds_and_translates_remote_sockaddr);
   RUN_TEST(test_udp_autobind_skips_ephemeral_port_already_bound);
   RUN_TEST(test_udp_bind_and_recvfrom_translate_sender_sockaddr);
+  RUN_TEST(test_connected_udp_send_write_recv_read_use_connected_peer);
   RUN_TEST(test_tcp_client_connect_send_recv_and_unistd_aliases);
+  RUN_TEST(test_getsockname_getpeername_and_so_error_for_tcp_client);
   RUN_TEST(test_tcp_server_bind_listen_accept_returns_connected_socket_fd);
+  RUN_TEST(test_getsockname_getpeername_for_bound_udp_and_accepted_tcp);
   RUN_TEST(test_nonblocking_tcp_recv_and_msg_dontwait_report_eagain);
   RUN_TEST(test_nonblocking_udp_recvfrom_and_msg_dontwait);
   RUN_TEST(test_nonblocking_accept_returns_eagain_until_client_is_pending);
+  RUN_TEST(test_select_reports_tcp_listener_readiness);
+  RUN_TEST(test_nonblocking_tcp_connect_is_immediate_best_effort);
   RUN_TEST(test_blocking_accept_backend_listener_error_reports_einval);
   RUN_TEST(test_select_reports_read_and_write_ready_sets);
   RUN_TEST(test_select_reports_tcp_exception_after_connected_socket_shutdown);
   RUN_TEST(test_getaddrinfo_hostname_result_connects_tcp_client);
   RUN_TEST(test_getaddrinfo_passive_numeric_and_errors);
   RUN_TEST(test_setsockopt_accepts_reuseaddr_and_reports_unsupported_options);
+  RUN_TEST(test_socket_timeouts_round_trip_through_sockopts);
   RUN_TEST(test_errors_set_errno_for_invalid_and_unsupported_operations);
   return UNITY_END();
 }
