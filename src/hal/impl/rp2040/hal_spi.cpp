@@ -6,6 +6,7 @@
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
 
+#include <hardware/dma.h>
 #include <hardware/gpio.h>
 #include <hardware/spi.h>
 
@@ -20,6 +21,8 @@ typedef struct {
   uint32_t actual_clock_hz;
   uint8_t applied_data_bits;
   bool hw_configured;
+  int dma_tx_channel;
+  bool dma_tx_channel_claimed;
   hal_mutex_t mutex;
 } hal_spi_bus_state_t;
 
@@ -146,6 +149,31 @@ static uint8_t spi_transfer8_fast(uint8_t idx, uint8_t data) {
   return (uint8_t)hw->dr;
 }
 
+static void spi_wait_idle_and_drain_rx(uint8_t idx) {
+  spi_hw_t *hw = spi_get_hw(spi_hw(idx));
+  while (hw->sr & SPI_SSPSR_BSY_BITS) {
+  }
+  while (hw->sr & SPI_SSPSR_RNE_BITS) {
+    (void)hw->dr;
+  }
+}
+
+static bool spi_claim_dma_tx_channel(uint8_t idx) {
+  hal_spi_bus_state_t *st = &s_spi[idx];
+  if (st->dma_tx_channel_claimed) {
+    return true;
+  }
+
+  const int channel = dma_claim_unused_channel(false);
+  if (channel < 0) {
+    return false;
+  }
+
+  st->dma_tx_channel = channel;
+  st->dma_tx_channel_claimed = true;
+  return true;
+}
+
 void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
                   uint8_t sck_pin) {
   const uint8_t idx = spi_bus_index(bus);
@@ -159,6 +187,7 @@ void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
   st->applied_settings = spi_default_settings();
   st->applied_data_bits = 0u;
   st->hw_configured = false;
+  st->dma_tx_channel = st->dma_tx_channel_claimed ? st->dma_tx_channel : -1;
   st->transaction_active = false;
   st->initialized = true;
   spi_hw_init(idx);
@@ -166,6 +195,11 @@ void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
 
 void hal_spi_deinit(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
+  if (s_spi[idx].dma_tx_channel_claimed) {
+    dma_channel_unclaim(s_spi[idx].dma_tx_channel);
+    s_spi[idx].dma_tx_channel = -1;
+    s_spi[idx].dma_tx_channel_claimed = false;
+  }
   spi_deinit(spi_hw(idx));
   s_spi[idx].hw_configured = false;
   s_spi[idx].applied_data_bits = 0u;
@@ -197,9 +231,7 @@ void hal_spi_begin_transaction(uint8_t bus,
 void hal_spi_end_transaction(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
   if (s_spi[idx].initialized) {
-    spi_hw_t *hw = spi_get_hw(spi_hw(idx));
-    while (hw->sr & SPI_SSPSR_BSY_BITS) {
-    }
+    spi_wait_idle_and_drain_rx(idx);
   }
   s_spi[idx].transaction_active = false;
 }
@@ -277,6 +309,44 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
     return;
   }
   hal_spi_transfer_txrx(bus, data, nullptr, len);
+}
+
+bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
+  if (len == 0u) {
+    return true;
+  }
+  if (data == nullptr) {
+    return false;
+  }
+
+  const uint8_t idx = spi_bus_index(bus);
+  spi_ensure_initialized(idx);
+  spi_apply_settings(idx, 8u);
+
+  if (s_spi[idx].settings.bit_order == HAL_SPI_LSBFIRST) {
+    hal_spi_write(bus, data, len);
+    return true;
+  }
+
+  if (!spi_claim_dma_tx_channel(idx)) {
+    hal_spi_write(bus, data, len);
+    return true;
+  }
+
+  spi_inst_t *hw = spi_hw(idx);
+  spi_hw_t *regs = spi_get_hw(hw);
+  dma_channel_config config =
+      dma_channel_get_default_config(s_spi[idx].dma_tx_channel);
+  channel_config_set_transfer_data_size(&config, DMA_SIZE_8);
+  channel_config_set_read_increment(&config, true);
+  channel_config_set_write_increment(&config, false);
+  channel_config_set_dreq(&config, spi_get_dreq(hw, true));
+
+  dma_channel_configure(s_spi[idx].dma_tx_channel, &config, &regs->dr, data,
+                        len, true);
+  dma_channel_wait_for_finish_blocking(s_spi[idx].dma_tx_channel);
+  spi_wait_idle_and_drain_rx(idx);
+  return true;
 }
 
 #endif // HAL_TARGET_IS_RP2040

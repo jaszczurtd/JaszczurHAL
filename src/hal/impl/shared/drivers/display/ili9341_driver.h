@@ -41,6 +41,7 @@ typedef struct {
   uint8_t rotation;
   bool initialized;
   bool inverted;
+  bool write_active;
 } jh_ili9341_t;
 
 typedef bool (*jh_ili9341_command_write_fn)(void *ctx, uint8_t command,
@@ -65,6 +66,15 @@ bool jh_ili9341_set_addr_window(jh_ili9341_t *dev, uint16_t x, uint16_t y,
                                 uint16_t w, uint16_t h);
 bool jh_ili9341_write_pixels(jh_ili9341_t *dev, const uint16_t *pixels,
                              size_t count);
+bool jh_ili9341_begin_write(jh_ili9341_t *dev, uint16_t x, uint16_t y,
+                            uint16_t w, uint16_t h);
+bool jh_ili9341_write_pixels_fast(jh_ili9341_t *dev, const uint16_t *pixels,
+                                  size_t count);
+bool jh_ili9341_write_pixels_be(jh_ili9341_t *dev, const uint8_t *pixels_be,
+                                size_t byte_count);
+bool jh_ili9341_write_pixels_dma(jh_ili9341_t *dev, const uint8_t *pixels_be,
+                                 size_t byte_count);
+bool jh_ili9341_end_write(jh_ili9341_t *dev);
 bool jh_ili9341_fill_rect(jh_ili9341_t *dev, uint16_t x, uint16_t y, uint16_t w,
                           uint16_t h, uint16_t color);
 bool jh_ili9341_draw_rgb_bitmap(jh_ili9341_t *dev, uint16_t x, uint16_t y,

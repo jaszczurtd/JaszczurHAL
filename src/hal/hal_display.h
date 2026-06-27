@@ -377,6 +377,64 @@ bool hal_display_draw_line(int x0, int y0, int x1, int y1, uint16_t color);
  */
 bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h);
 
+/**
+ * @brief Set a TFT address window and begin streaming RGB565 pixel data.
+ *
+ * The stream keeps the display/SPI transaction open until
+ * hal_display_end_write() is called. This is intended for large contiguous
+ * updates such as full frames or scanline batches where per-pixel or
+ * per-scanline window setup would dominate runtime.
+ *
+ * Only immediate-mode TFT backends support this API.
+ *
+ * @param x,y Top-left corner.
+ * @param w,h Width and height of the stream window.
+ * @return true when the stream is open.
+ */
+bool hal_display_begin_write(int x, int y, int w, int h);
+
+/**
+ * @brief Stream native-endian RGB565 pixels into an open TFT write window.
+ *
+ * Pixel words are converted to the big-endian byte order expected by common
+ * TFT controllers, then written in large chunks without changing the address
+ * window.
+ *
+ * @param pixels Native-endian RGB565 pixel words.
+ * @param count Number of pixels.
+ * @return true when the pixels were written.
+ */
+bool hal_display_write_pixels_fast(const uint16_t *pixels, size_t count);
+
+/**
+ * @brief Stream already big-endian RGB565 bytes into an open TFT write window.
+ *
+ * This path performs no byte swapping and no extra chunking.
+ *
+ * @param pixels_be RGB565 bytes in controller order: high byte, low byte.
+ * @param byte_count Number of bytes to write. Must be even.
+ * @return true when the bytes were written.
+ */
+bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count);
+
+/**
+ * @brief Stream big-endian RGB565 bytes through the backend DMA fast path.
+ *
+ * On RP2040 this uses SPI TX DMA. Other backends fall back to a blocking SPI
+ * write while preserving the same public contract.
+ *
+ * @param pixels_be RGB565 bytes in controller order: high byte, low byte.
+ * @param byte_count Number of bytes to write. Must be even.
+ * @return true when the bytes were written.
+ */
+bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count);
+
+/**
+ * @brief Finish the currently open TFT write stream.
+ * @return true when the stream was closed cleanly.
+ */
+bool hal_display_end_write(void);
+
 /* ---- Text ---- */
 
 /**
