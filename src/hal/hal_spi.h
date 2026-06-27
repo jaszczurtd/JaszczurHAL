@@ -146,6 +146,22 @@ void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
  */
 void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 
+/**
+ * @brief Write a byte buffer using the fastest backend path available.
+ *
+ * On RP2040 this uses a blocking SPI TX DMA transfer when possible. Backends
+ * without a hardware DMA implementation fall back to hal_spi_write().
+ *
+ * The caller is responsible for holding any required SPI/device transaction
+ * state, exactly like for hal_spi_write().
+ *
+ * @param bus SPI controller index (0 = SPI, 1 = SPI1).
+ * @param data Buffer to transmit.
+ * @param len Number of bytes to transmit.
+ * @return true when all bytes were accepted for transmission.
+ */
+bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

@@ -145,6 +145,20 @@ void test_spi_transfer_txrx_supports_full_duplex_buffers(void) {
   TEST_ASSERT_EQUAL_UINT8(0x03, tx_log[2]);
 }
 
+void test_spi_write_dma_records_tx_in_mock(void) {
+  uint8_t tx[] = {0x10, 0x20, 0x30, 0x40};
+  uint8_t tx_log[4] = {};
+
+  TEST_ASSERT_TRUE(hal_spi_write_dma(0, tx, sizeof(tx)));
+
+  TEST_ASSERT_EQUAL_UINT32(4u, hal_mock_spi_get_transfer_count(0));
+  TEST_ASSERT_EQUAL_size_t(4u, hal_mock_spi_get_tx(0, tx_log, sizeof(tx_log)));
+  TEST_ASSERT_EQUAL_UINT8(0x10, tx_log[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x20, tx_log[1]);
+  TEST_ASSERT_EQUAL_UINT8(0x30, tx_log[2]);
+  TEST_ASSERT_EQUAL_UINT8(0x40, tx_log[3]);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_spi_not_initialized_after_reset);
@@ -156,5 +170,6 @@ int main(void) {
   RUN_TEST(test_spi_transfer_records_tx_and_reads_scripted_rx);
   RUN_TEST(test_spi_transfer16_respects_active_bit_order);
   RUN_TEST(test_spi_transfer_txrx_supports_full_duplex_buffers);
+  RUN_TEST(test_spi_write_dma_records_tx_in_mock);
   return UNITY_END();
 }

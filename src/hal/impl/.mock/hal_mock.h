@@ -313,6 +313,17 @@ void hal_mock_display_get_last_fill_rect(int *x, int *y, int *w, int *h,
 /** @brief Read parameters of the last hal_display_draw_rgb_bitmap() call. */
 void hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w,
                                       int *h);
+/** @brief Return true when the mock display has an open write stream. */
+bool hal_mock_display_stream_active(void);
+/** @brief Read parameters of the last hal_display_begin_write() call. */
+void hal_mock_display_get_last_stream_window(int *x, int *y, int *w, int *h);
+/** @brief Return total pixels written through hal_display_write_pixels_fast().
+ */
+size_t hal_mock_display_get_stream_fast_pixels(void);
+/** @brief Return total bytes written through hal_display_write_pixels_be(). */
+size_t hal_mock_display_get_stream_be_bytes(void);
+/** @brief Return total bytes written through hal_display_write_pixels_dma(). */
+size_t hal_mock_display_get_stream_dma_bytes(void);
 #endif
 
 // ── WiFi ─────────────────────────────────────────────────────────────────────

@@ -50,6 +50,8 @@
 
 #define ST7796S_BGR 0x08u
 
+#define ST77XX_PIXEL_CHUNK_BYTES 256u
+
 static const uint8_t s_st7735_bcmd[] = {18u,
                                         ST77XX_SWRESET,
                                         ST_CMD_DELAY,
@@ -840,6 +842,97 @@ bool jh_st77xx_write_pixels(jh_st77xx_t *dev, const uint16_t *pixels,
   return true;
 }
 
+bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
+                           uint16_t h) {
+  if (dev == NULL || !dev->initialized || w == 0u || h == 0u ||
+      dev->write_active) {
+    return false;
+  }
+  if (!jh_st77xx_set_addr_window(dev, x, y, w, h)) {
+    return false;
+  }
+
+  const uint8_t bus = dev->config.bus;
+  const hal_spi_settings_t settings = spi_settings_for(dev);
+
+  hal_spi_lock(bus);
+  hal_spi_begin_transaction(bus, &settings);
+  if (pin_is_connected(dev->config.cs_pin)) {
+    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
+  }
+  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+  dev->write_active = true;
+  return true;
+}
+
+bool jh_st77xx_write_pixels_be(jh_st77xx_t *dev, const uint8_t *pixels_be,
+                               size_t byte_count) {
+  if (dev == NULL || !dev->initialized || !dev->write_active ||
+      (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
+    return false;
+  }
+  if (byte_count == 0u) {
+    return true;
+  }
+
+  hal_spi_write(dev->config.bus, pixels_be, byte_count);
+  return true;
+}
+
+bool jh_st77xx_write_pixels_dma(jh_st77xx_t *dev, const uint8_t *pixels_be,
+                                size_t byte_count) {
+  if (dev == NULL || !dev->initialized || !dev->write_active ||
+      (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
+    return false;
+  }
+  if (byte_count == 0u) {
+    return true;
+  }
+
+  return hal_spi_write_dma(dev->config.bus, pixels_be, byte_count);
+}
+
+bool jh_st77xx_write_pixels_fast(jh_st77xx_t *dev, const uint16_t *pixels,
+                                 size_t count) {
+  if (dev == NULL || !dev->initialized || !dev->write_active ||
+      (pixels == NULL && count > 0u)) {
+    return false;
+  }
+  if (count == 0u) {
+    return true;
+  }
+
+  uint8_t chunk[ST77XX_PIXEL_CHUNK_BYTES];
+  while (count > 0u) {
+    const size_t pixel_count =
+        (count < (sizeof(chunk) / 2u)) ? count : (sizeof(chunk) / 2u);
+    for (size_t i = 0u; i < pixel_count; ++i) {
+      put_u16_be(&chunk[i * 2u], pixels[i]);
+    }
+    if (!jh_st77xx_write_pixels_be(dev, chunk, pixel_count * 2u)) {
+      return false;
+    }
+    pixels += pixel_count;
+    count -= pixel_count;
+  }
+  return true;
+}
+
+bool jh_st77xx_end_write(jh_st77xx_t *dev) {
+  if (dev == NULL || !dev->initialized || !dev->write_active) {
+    return false;
+  }
+
+  const uint8_t bus = dev->config.bus;
+  if (pin_is_connected(dev->config.cs_pin)) {
+    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
+  }
+  hal_spi_end_transaction(bus);
+  hal_spi_unlock(bus);
+  dev->write_active = false;
+  return true;
+}
+
 bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
                          uint16_t h, uint16_t color) {
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u) {
@@ -884,8 +977,12 @@ bool jh_st77xx_draw_rgb_bitmap(jh_st77xx_t *dev, uint16_t x, uint16_t y,
   if (dev == NULL || pixels == NULL || w == 0u || h == 0u) {
     return false;
   }
-  return jh_st77xx_set_addr_window(dev, x, y, w, h) &&
-         jh_st77xx_write_pixels(dev, pixels, (size_t)w * (size_t)h);
+  if (!jh_st77xx_begin_write(dev, x, y, w, h)) {
+    return false;
+  }
+  const bool ok =
+      jh_st77xx_write_pixels_fast(dev, pixels, (size_t)w * (size_t)h);
+  return jh_st77xx_end_write(dev) && ok;
 }
 
 #endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_TFT && any ST77xx backend enabled   \

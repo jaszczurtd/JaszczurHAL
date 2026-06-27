@@ -72,6 +72,7 @@ static jh_st77xx_config_t s_tft_config = {};
 static bool s_tft_pins_configured = false;
 #endif
 static bool s_tft_ready = false;
+static bool s_tft_stream_active = false;
 
 static bool draw_pixel_unlocked(int x, int y, uint16_t color);
 static bool fill_rect_unlocked(int x, int y, int w, int h, uint16_t color);
@@ -298,6 +299,49 @@ static bool tft_draw_rgb_bitmap_driver(uint16_t x, uint16_t y,
   return jh_ili9341_draw_rgb_bitmap(&s_tft, x, y, pixels, w, h);
 #else
   return jh_st77xx_draw_rgb_bitmap(&s_tft, x, y, pixels, w, h);
+#endif
+}
+
+static bool tft_begin_write_driver(uint16_t x, uint16_t y, uint16_t w,
+                                   uint16_t h) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_begin_write(&s_tft, x, y, w, h);
+#else
+  return jh_st77xx_begin_write(&s_tft, x, y, w, h);
+#endif
+}
+
+static bool tft_write_pixels_fast_driver(const uint16_t *pixels, size_t count) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_fast(&s_tft, pixels, count);
+#else
+  return jh_st77xx_write_pixels_fast(&s_tft, pixels, count);
+#endif
+}
+
+static bool tft_write_pixels_be_driver(const uint8_t *pixels_be,
+                                       size_t byte_count) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_be(&s_tft, pixels_be, byte_count);
+#else
+  return jh_st77xx_write_pixels_be(&s_tft, pixels_be, byte_count);
+#endif
+}
+
+static bool tft_write_pixels_dma_driver(const uint8_t *pixels_be,
+                                        size_t byte_count) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_dma(&s_tft, pixels_be, byte_count);
+#else
+  return jh_st77xx_write_pixels_dma(&s_tft, pixels_be, byte_count);
+#endif
+}
+
+static bool tft_end_write_driver(void) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_end_write(&s_tft);
+#else
+  return jh_st77xx_end_write(&s_tft);
 #endif
 }
 
@@ -914,6 +958,124 @@ bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h) {
   hal_derr("hal_display_draw_rgb_bitmap: RGB bitmaps are unsupported on "
            "current backend");
   return false;
+}
+
+bool hal_display_begin_write(int x, int y, int w, int h) {
+#ifdef HAL_ENABLE_TFT
+  display_ensure_mutex();
+  hal_mutex_lock(s_display_mutex);
+
+  if (s_tft_stream_active) {
+    hal_derr("hal_display_begin_write: stream already active");
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+  if (!ensure_display_ready("hal_display_begin_write")) {
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+  if (!using_tft()) {
+    hal_derr("hal_display_begin_write: supported only by TFT backends");
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+  if (w <= 0 || h <= 0) {
+    hal_derr("hal_display_begin_write: invalid size %dx%d", w, h);
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+  if (x < 0 || y < 0 || x > s_width - w || y > s_height - h) {
+    hal_derr("hal_display_begin_write: out-of-bounds clipping is not "
+             "supported");
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+
+  if (!tft_begin_write_driver((uint16_t)x, (uint16_t)y, (uint16_t)w,
+                              (uint16_t)h)) {
+    hal_mutex_unlock(s_display_mutex);
+    return false;
+  }
+
+  s_tft_stream_active = true;
+  return true;
+#else
+  (void)x;
+  (void)y;
+  (void)w;
+  (void)h;
+  hal_derr("hal_display_begin_write: TFT backend is not enabled");
+  return false;
+#endif
+}
+
+static bool ensure_tft_stream_ready(const char *fn) {
+#ifdef HAL_ENABLE_TFT
+  if (s_tft_stream_active && using_tft()) {
+    return true;
+  }
+#endif
+  hal_derr("%s: no active TFT write stream", fn);
+  return false;
+}
+
+bool hal_display_write_pixels_fast(const uint16_t *pixels, size_t count) {
+  if ((pixels == NULL && count > 0u) ||
+      !ensure_tft_stream_ready("hal_display_write_pixels_fast")) {
+    return false;
+  }
+#ifdef HAL_ENABLE_TFT
+  return tft_write_pixels_fast_driver(pixels, count);
+#else
+  (void)pixels;
+  (void)count;
+  return false;
+#endif
+}
+
+bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count) {
+  if ((pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u ||
+      !ensure_tft_stream_ready("hal_display_write_pixels_be")) {
+    return false;
+  }
+#ifdef HAL_ENABLE_TFT
+  return tft_write_pixels_be_driver(pixels_be, byte_count);
+#else
+  (void)pixels_be;
+  (void)byte_count;
+  return false;
+#endif
+}
+
+bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count) {
+  if ((pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u ||
+      !ensure_tft_stream_ready("hal_display_write_pixels_dma")) {
+    return false;
+  }
+#ifdef HAL_ENABLE_TFT
+  return tft_write_pixels_dma_driver(pixels_be, byte_count);
+#else
+  (void)pixels_be;
+  (void)byte_count;
+  return false;
+#endif
+}
+
+bool hal_display_end_write(void) {
+#ifdef HAL_ENABLE_TFT
+  if (!s_tft_stream_active) {
+    hal_derr("hal_display_end_write: no active TFT write stream");
+    return false;
+  }
+
+  const bool ok = tft_end_write_driver();
+  s_tft_stream_active = false;
+  hal_mutex_unlock(s_display_mutex);
+  return ok;
+#else
+  hal_derr("hal_display_end_write: TFT backend is not enabled");
+  return false;
+#endif
 }
 
 /* ---- Text ---------------------------------------------------------------- */

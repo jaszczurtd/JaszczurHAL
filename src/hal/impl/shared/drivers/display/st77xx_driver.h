@@ -82,6 +82,7 @@ typedef struct {
   uint8_t color_order;
   bool initialized;
   bool inverted;
+  bool write_active;
 } jh_st77xx_t;
 
 typedef bool (*jh_st77xx_command_write_fn)(void *ctx, uint8_t command,
@@ -110,6 +111,15 @@ bool jh_st77xx_set_addr_window(jh_st77xx_t *dev, uint16_t x, uint16_t y,
                                uint16_t w, uint16_t h);
 bool jh_st77xx_write_pixels(jh_st77xx_t *dev, const uint16_t *pixels,
                             size_t count);
+bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
+                           uint16_t h);
+bool jh_st77xx_write_pixels_fast(jh_st77xx_t *dev, const uint16_t *pixels,
+                                 size_t count);
+bool jh_st77xx_write_pixels_be(jh_st77xx_t *dev, const uint8_t *pixels_be,
+                               size_t byte_count);
+bool jh_st77xx_write_pixels_dma(jh_st77xx_t *dev, const uint8_t *pixels_be,
+                                size_t byte_count);
+bool jh_st77xx_end_write(jh_st77xx_t *dev);
 bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
                          uint16_t h, uint16_t color);
 bool jh_st77xx_draw_rgb_bitmap(jh_st77xx_t *dev, uint16_t x, uint16_t y,

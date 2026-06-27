@@ -365,4 +365,15 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
   hal_spi_transfer_txrx(bus, data, nullptr, len);
 }
 
+bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
+  if (len == 0u) {
+    return true;
+  }
+  if (data == nullptr) {
+    return false;
+  }
+  hal_spi_write(bus, data, len);
+  return true;
+}
+
 #endif // HAL_TARGET_IS_STM32G474
