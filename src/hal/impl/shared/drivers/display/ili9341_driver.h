@@ -24,7 +24,11 @@ extern "C" {
 #define JH_ILI9341_TFTWIDTH 240u
 #define JH_ILI9341_TFTHEIGHT 320u
 
+/* Overridable so a project (e.g. via compiler -D flags) can raise the TFT SPI
+ * clock for higher frame throughput. */
+#ifndef JH_ILI9341_SPI_DEFAULT_HZ
 #define JH_ILI9341_SPI_DEFAULT_HZ 24000000UL
+#endif
 
 typedef struct {
   uint8_t bus;
