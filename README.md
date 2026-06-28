@@ -38,10 +38,10 @@ It is my private retrofit/automotive-kind project built from several tightly int
 
 There are also smaller (but not trivial) projects, for example:
 
-* https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker
-* https://github.com/jaszczurtd/lights-timer
+* https://github.com/jaszczurtd/doomConsole (port of Doom game with sound and TFT display)
+* https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker (DPF regeneration cycles tracking device)
+* https://github.com/jaszczurtd/lights-timer (Remote management of aquarium lighting using an Android application)
 
-Even these simpler projects exercise important parts of the library, including WireGuard-related cryptographic components, MQTT-based cloud connectivity, and GPS/LTE telemetry.
 
 ## Public include
 
