@@ -9,10 +9,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#if defined(ARDUINO) && !defined(LED_BUILTIN)
-#include <pins_arduino.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
