@@ -41,6 +41,7 @@
 #include "hal_serial.h"
 #include "hal_serial_session.h"
 #include "hal_soft_timer.h"
+#include "hal_status.h"
 #include "hal_sync.h"
 #include "hal_system.h"
 #include "hal_timer.h"

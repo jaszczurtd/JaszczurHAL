@@ -7,8 +7,8 @@ Simple backlog of future architecture and implementation work.
   - Document callback contexts, task contexts and ISR/task boundaries.
   - Run hardware smoke tests before considering FreeRTOS as a default runtime.
 
-- Add status-returning APIs without breaking existing wrappers.
-  - Add `_ex` functions returning a shared `hal_status_t`.
+- Expand status-returning APIs without breaking existing wrappers.
+  - Shared `hal_status_t` exists; add `_ex` functions returning it where useful.
   - Keep current `bool` / `NULL` APIs as compatibility wrappers.
   - Start with statuses that can be reported accurately today.
   - Improve backend-specific I2C error mapping later.

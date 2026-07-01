@@ -2,9 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.8.0] - 2026-07-01
+## [1.9.0] - 2026-xx-xx
 
-Next release.
+### HAL status codes
+
+- Added public `hal_status_t` in `hal_status.h` as a shared status vocabulary
+  for new APIs (`HAL_OK`, `HAL_EINVAL`, `HAL_EBUSY`, `HAL_ETIMEOUT`,
+  `HAL_EIO`, `HAL_EUNSUPPORTED`, `HAL_ENOENT`, `HAL_EAGAIN`) without changing
+  existing module return contracts.
+- Added `hal_status_to_string()` for stable symbolic status names in logs and
+  diagnostics.
 
 ### RP2040 backend - native pico-sdk migration (decouple from Arduino)
 
@@ -31,6 +38,8 @@ Next release.
   `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
   `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
   `HAL_ENABLE_WIREGUARD`.
+
+## [1.8.0] - 2026-07-01
 
 ### hal_dht - shared DHT11/DHT22 GPIO driver
 
@@ -394,6 +403,8 @@ Next release.
   the target abstraction instead of a local per-board pin override.
 - Normalized the final `runalltests.sh` summary label to the current
   `RP2040 + STM32G474` target naming.
+
+## [1.7.0] - 2026-06-08
 
 ### hal_pga2311 - shared PGA2311 stereo-volume module
 

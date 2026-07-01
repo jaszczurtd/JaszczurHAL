@@ -2,6 +2,54 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
+## `hal_status` - Shared status codes
+
+```c
+#include <hal/hal_status.h>
+
+typedef enum {
+    HAL_NONE = 0,
+    HAL_OK = 1,
+    HAL_EINVAL = -1,
+    HAL_EBUSY = -2,
+    HAL_ETIMEOUT = -3,
+    HAL_EIO = -4,
+    HAL_EUNSUPPORTED = -5,
+    HAL_ENOENT = -6,
+    HAL_EAGAIN = -7,
+    HAL_EOVERFLOW = -8,
+    HAL_ENOMEM = -9,
+    HAL_IGNORED = -10,
+    HAL_EEXIST = -11,
+    HAL_EPERM = -12,
+    HAL_EINTERNAL = -13,
+    HAL_ECANCELED = -14,
+    HAL_EPROTO = -15,
+    HAL_EAUTH = -16,
+    HAL_EBUS = -17,
+    HAL_EHW = -18,
+    HAL_ECONFIG = -19,
+    HAL_ESTATE = -20,
+    HAL_EUNINIT = -21,
+    HAL_EDEPRECATED = -22,
+    HAL_EUNKNOWN = -23,
+} hal_status_t;
+
+static inline const char *hal_status_to_string(hal_status_t status);
+```
+
+This is the common status vocabulary for new public APIs. Existing modules keep
+their current `bool`, `NULL`, `void` and module-specific status contracts until
+they are intentionally migrated in compatible steps.
+
+Use `HAL_OK` for success, `status < 0` for generic failure checks, and the
+specific error codes for diagnostics at module/backend boundaries.
+`hal_status_to_string()` returns stable symbolic names such as `"HAL_EIO"` and
+`"HAL_STATUS_UNKNOWN"` for unrecognised numeric values. The `HAL_` prefix avoids
+collisions with POSIX `errno` names used by the BSD sockets compatibility layer.
+
+---
+
 ## `hal_timer` - Hardware alarms
 
 ```c
