@@ -157,7 +157,7 @@ Storage
 
 Buses
   HAL_ENABLE_UART          Hardware UART.
-  HAL_ENABLE_SWSERIAL      SoftwareSerial.
+  HAL_ENABLE_SWSERIAL      Shared software UART over HAL GPIO/timing/sync.
   HAL_ENABLE_I2C           I2C master (Wire).
   HAL_ENABLE_I2C_SLAVE     I2C slave / target mode with register map.
   HAL_ENABLE_SPI           SPI master/controller.

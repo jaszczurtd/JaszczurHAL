@@ -22,7 +22,7 @@
 | `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
-| `hal_swserial` | `SoftwareSerial` (Arduino-pico) |
+| `hal_swserial` | shared HAL GPIO/timing/sync software UART |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |

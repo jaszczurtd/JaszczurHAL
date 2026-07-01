@@ -59,6 +59,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
     ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
     ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
+    ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp

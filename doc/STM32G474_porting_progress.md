@@ -253,7 +253,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules still missing a real STM32G474 backend, or still blocked by a missing
 STM32 storage/transport layer:
-`mqtt, ota, swserial, udp, wifi, wireguard`.
+`mqtt, ota, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -287,7 +287,7 @@ logic.
   but a different transport (e.g. via the already-portable SIMCom modem).
   Effectively N/A for a bare G474.
 - `hal_ota` - STM32 flash/update specific, not a vendor-driver port.
-- `hal_swserial` - STM32 peripheral/timer work.
+- `hal_swserial` - implemented through the shared HAL GPIO/timing/sync driver.
 
 ### Recommended order
 1. **On-silicon validation first** - confirm the delivered register-level
@@ -297,9 +297,8 @@ logic.
 2. **Widen STM32-targeted regression coverage** - add focused tests for the
   STM32-specific backends beyond `hal_system` and `hal_timer`, especially
   GPIO IRQ, PWM, I2C, SPI, CAN, and RTC integration seams.
-3. **Remaining peripheral gaps** - decide whether STM32G474 needs
-  `hal_swserial`, and define a separate OTA/update strategy if firmware
-  updates become part of the target requirements.
+3. **Remaining peripheral gaps** - define a separate OTA/update strategy if
+  firmware updates become part of the target requirements.
 4. **Optional performance follow-up** - evaluate display bulk-write and DMA
   paths only if measured TFT throughput or CPU cost justifies the added
   backend complexity.

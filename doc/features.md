@@ -37,7 +37,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 |---|---|---|
 | UART | Hardware serial communication abstraction. | [hal_uart.h](../src/hal/hal_uart.h) |
 | Serial/debug console | TX-serialized console output, RP2040 TinyUSB CDC transport, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
-| Software serial | Bit-banged serial transport for targets/modules that need it. | [hal_swserial.h](../src/hal/hal_swserial.h) |
+| Software serial | Shared HAL GPIO/timing/sync software UART for targets/modules that need it. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable I2C controller API used by sensors, RTCs and storage devices. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
 | SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including blocking and asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |

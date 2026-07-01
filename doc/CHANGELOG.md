@@ -10,6 +10,10 @@ Next release.
 
 - Migrated the RP2040 `hal_uart` backend to the native pico-sdk hardware UART
   instead of the Arduino `Serial1`/`SerialPIO` path.
+- Moved `hal_swserial` to a shared HAL GPIO/timing/sync implementation used by
+  RP2040, STM32G474 and mock builds. The driver preserves the Serial-over-PIO
+  frame handling model, adds per-instance locking, critical-section-protected
+  bit timing, host coverage for GPIO framing, and `examples/45_swserial_loopback`.
 - Decoupled `hal_system` from Arduino as a cornerstone change: `hal_millis()`
   now uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/
   `hal_micros64()` use `time_us_64()`, and `hal_delay_ms()` selects pico
