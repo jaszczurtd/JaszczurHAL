@@ -224,7 +224,7 @@
 
      Buses:
        HAL_ENABLE_UART          - Hardware UART.
-       HAL_ENABLE_SWSERIAL      - SoftwareSerial.
+      HAL_ENABLE_SWSERIAL      - shared software UART over HAL GPIO/timing/sync.
        HAL_ENABLE_I2C           - I2C master/controller.
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
        HAL_ENABLE_SPI           - SPI master/controller.
@@ -1035,8 +1035,8 @@
 
 /**
  * @def HAL_SWSERIAL_MAX_INSTANCES
- * Maximum number of SoftwareSerial ports.
- * Each slot holds a SoftwareSerial object (~50 B on AVR, ~120 B on ARM).
+ * Maximum number of shared software UART ports.
+ * Each slot holds a HAL-owned software UART state object.
  */
 #ifndef HAL_SWSERIAL_MAX_INSTANCES
 #define HAL_SWSERIAL_MAX_INSTANCES 4
@@ -1157,7 +1157,7 @@ typedef struct {
   int pwm_freq_max_channels;  /**< Effective PWM-freq channel limit.  */
   int can_max_instances;      /**< Effective CAN instance limit.      */
   int uart_max_instances;     /**< Effective hardware UART limit.     */
-  int swserial_max_instances; /**< Effective SoftwareSerial limit.    */
+  int swserial_max_instances; /**< Effective software UART limit.      */
   int mock_can_max_inst;      /**< Mock CAN instance limit.           */
   int mock_can_buf_size;      /**< Mock CAN ring-buffer depth.        */
   int mock_max_alarms;        /**< Mock timer alarm limit.            */

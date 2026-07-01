@@ -338,7 +338,7 @@ int     hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf, i
 
 ---
 
-## `hal_swserial` - Software serial  *(optional - `HAL_ENABLE_SWSERIAL`)*
+## `hal_swserial` - Software UART  *(optional - `HAL_ENABLE_SWSERIAL`)*
 
 UART frame-format constants for `config` are defined in `hal/hal_uart_config.h`.
 
@@ -375,9 +375,10 @@ void hal_swserial_flush(hal_swserial_t h);       // block until TX complete
 void hal_swserial_destroy(hal_swserial_t h);
 ```
 
-**impl/rp2040:** `SoftwareSerial` (Arduino-pico).
-**impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
-**Thread safety:** Not thread-safe. All calls must be made from the same core that created the handle.
+The implementation is shared across RP2040, STM32G474 and mock builds. It uses
+HAL GPIO interrupts for RX start-bit detection, HAL microsecond timing for
+sampling/transmit bit periods, HAL critical sections for timing-sensitive bit
+streams and per-instance HAL mutexes for public API calls.
 
 **Mock helpers:**
 ```c

@@ -35,7 +35,7 @@ two FreeRTOS tasks or RP2040 cores cannot publish different locks for the same
 module. Module init/begin calls still remain the preferred place to create
 those locks before normal runtime sharing.
 
-Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_swserial`, `hal_time`, `pidController`)
+Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_time`, `pidController`)
 must be serialized by the caller or used from a single core.
 
 ### Mock backend
