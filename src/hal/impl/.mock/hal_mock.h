@@ -242,6 +242,8 @@ uint32_t hal_mock_spi_get_clock_hz(uint8_t bus);
 uint8_t hal_mock_spi_get_bit_order(uint8_t bus);
 uint8_t hal_mock_spi_get_data_mode(uint8_t bus);
 uint32_t hal_mock_spi_get_transfer_count(uint8_t bus);
+uint32_t hal_mock_spi_get_dma_write_count(uint8_t bus);
+void hal_mock_spi_fail_next_dma_write(uint8_t bus, bool fail);
 void hal_mock_spi_push_rx(uint8_t bus, const uint8_t *data, size_t len);
 size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
 void hal_mock_spi_reset(void);

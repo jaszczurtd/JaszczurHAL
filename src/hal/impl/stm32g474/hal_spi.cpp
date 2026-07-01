@@ -366,6 +366,14 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
 }
 
 bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
+  if (!hal_spi_write_dma_async_start(bus, data, len)) {
+    return false;
+  }
+  return hal_spi_write_dma_async_wait(bus);
+}
+
+bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
+                                   size_t len) {
   if (len == 0u) {
     return true;
   }
@@ -373,6 +381,16 @@ bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
     return false;
   }
   hal_spi_write(bus, data, len);
+  return true;
+}
+
+bool hal_spi_write_dma_async_busy(uint8_t bus) {
+  (void)bus;
+  return false;
+}
+
+bool hal_spi_write_dma_async_wait(uint8_t bus) {
+  (void)bus;
   return true;
 }
 

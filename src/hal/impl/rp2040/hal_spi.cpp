@@ -23,6 +23,7 @@ typedef struct {
   bool hw_configured;
   int dma_tx_channel;
   bool dma_tx_channel_claimed;
+  bool dma_tx_active;
   hal_mutex_t mutex;
 } hal_spi_bus_state_t;
 
@@ -195,6 +196,7 @@ void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
 
 void hal_spi_deinit(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
+  (void)hal_spi_write_dma_async_wait(idx);
   if (s_spi[idx].dma_tx_channel_claimed) {
     dma_channel_unclaim(s_spi[idx].dma_tx_channel);
     s_spi[idx].dma_tx_channel = -1;
@@ -230,6 +232,7 @@ void hal_spi_begin_transaction(uint8_t bus,
 
 void hal_spi_end_transaction(uint8_t bus) {
   const uint8_t idx = spi_bus_index(bus);
+  (void)hal_spi_write_dma_async_wait(idx);
   if (s_spi[idx].initialized) {
     spi_wait_idle_and_drain_rx(idx);
   }
@@ -312,6 +315,14 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
 }
 
 bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
+  if (!hal_spi_write_dma_async_start(bus, data, len)) {
+    return false;
+  }
+  return hal_spi_write_dma_async_wait(bus);
+}
+
+bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
+                                   size_t len) {
   if (len == 0u) {
     return true;
   }
@@ -322,6 +333,10 @@ bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
   const uint8_t idx = spi_bus_index(bus);
   spi_ensure_initialized(idx);
   spi_apply_settings(idx, 8u);
+
+  if (s_spi[idx].dma_tx_active) {
+    return false;
+  }
 
   if (s_spi[idx].settings.bit_order == HAL_SPI_LSBFIRST) {
     hal_spi_write(bus, data, len);
@@ -344,8 +359,31 @@ bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
 
   dma_channel_configure(s_spi[idx].dma_tx_channel, &config, &regs->dr, data,
                         len, true);
+  s_spi[idx].dma_tx_active = true;
+  return true;
+}
+
+bool hal_spi_write_dma_async_busy(uint8_t bus) {
+  const uint8_t idx = spi_bus_index(bus);
+  if (!s_spi[idx].dma_tx_active || !s_spi[idx].dma_tx_channel_claimed) {
+    return false;
+  }
+  if (dma_channel_is_busy(s_spi[idx].dma_tx_channel)) {
+    return true;
+  }
+  spi_wait_idle_and_drain_rx(idx);
+  s_spi[idx].dma_tx_active = false;
+  return false;
+}
+
+bool hal_spi_write_dma_async_wait(uint8_t bus) {
+  const uint8_t idx = spi_bus_index(bus);
+  if (!s_spi[idx].dma_tx_active || !s_spi[idx].dma_tx_channel_claimed) {
+    return true;
+  }
   dma_channel_wait_for_finish_blocking(s_spi[idx].dma_tx_channel);
   spi_wait_idle_and_drain_rx(idx);
+  s_spi[idx].dma_tx_active = false;
   return true;
 }
 

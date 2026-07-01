@@ -162,6 +162,33 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
  */
 bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len);
 
+/**
+ * @brief Start a byte-buffer write using a backend DMA path when available.
+ *
+ * On RP2040 this starts SPI TX DMA and returns before the transfer completes.
+ * The caller must keep @p data valid and must not start another async transfer
+ * on the same bus until hal_spi_write_dma_async_busy() is false or
+ * hal_spi_write_dma_async_wait() has returned. Backends without asynchronous
+ * DMA complete the write before returning.
+ *
+ * @param bus SPI controller index (0 = SPI, 1 = SPI1).
+ * @param data Buffer to transmit.
+ * @param len Number of bytes to transmit.
+ * @return true when the transfer was started or completed.
+ */
+bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
+                                   size_t len);
+
+/**
+ * @brief Return true while an asynchronous SPI DMA write is still active.
+ */
+bool hal_spi_write_dma_async_busy(uint8_t bus);
+
+/**
+ * @brief Wait for the asynchronous SPI DMA write on @p bus to complete.
+ */
+bool hal_spi_write_dma_async_wait(uint8_t bus);
+
 #ifdef __cplusplus
 }
 #endif

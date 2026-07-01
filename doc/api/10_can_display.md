@@ -397,6 +397,17 @@ bool hal_display_draw_line(int x0, int y0, int x1, int y1, uint16_t color);
 // --- Bitmap ---
 bool hal_display_draw_rgb_bitmap(int x, int y, uint16_t *data, int w, int h);
 
+// --- TFT streaming ---
+bool hal_display_begin_write(int x, int y, int w, int h);
+bool hal_display_write_pixels_fast(const uint16_t *pixels, size_t count);
+bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count);
+bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count);
+bool hal_display_write_pixels_dma_async_start(const uint8_t *pixels_be,
+                                              size_t byte_count);
+bool hal_display_write_pixels_dma_async_busy(void);
+bool hal_display_write_pixels_dma_async_wait(void);
+bool hal_display_end_write(void);
+
 // --- Text ---
 bool hal_display_set_font(hal_font_id_t font);
 bool hal_display_set_text_color(uint16_t color);
@@ -436,10 +447,28 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+**TFT streaming:** Immediate-mode TFT backends support an explicit streaming
+sequence for large contiguous updates:
+`hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then
+`hal_display_end_write()`. `hal_display_write_pixels_fast()` accepts native
+`uint16_t` RGB565 words and swaps them to controller byte order internally;
+`hal_display_write_pixels_be()` accepts already big-endian RGB565 bytes;
+`hal_display_write_pixels_dma()` is the blocking DMA-capable byte-stream helper.
+The asynchronous variant,
+`hal_display_write_pixels_dma_async_start()` / `_busy()` / `_wait()`, maps to
+`hal_spi_write_dma_async_*()` for ILI9341 and ST77xx drivers. When the backend
+is truly asynchronous, keep `pixels_be` valid and keep the display write stream
+open until `_wait()` completes. `hal_display_end_write()` waits for any active
+async pixel DMA before closing the TFT transaction.
+**ST77xx notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`, and
+`HAL_DISPLAY_ST7796S` share the ST77xx backend. `JH_ST77XX_SPI_DEFAULT_HZ` can
+be overridden before including/building the driver to tune the default TFT SPI
+clock for a board. ST7796S keeps its documented BGR-oriented defaults without
+forcing swapped inversion commands.
 **impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use shared HAL SPI/GPIO drivers; SSD1306 uses the shared HAL I2C driver; geometry, bitmap, and text rendering run through the shared `jh_gfx` engine.
 **impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
 **impl/.mock:** deterministic host mock with inspectable state for tests.
-**Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. Mock backend is unsynchronized and intended for single-threaded tests.
+**Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. During TFT streaming the mutex stays held between `hal_display_begin_write()` and `hal_display_end_write()`, including any async DMA wait. Mock backend is unsynchronized and intended for single-threaded tests.
 
 **Mock helpers:**
 ```c

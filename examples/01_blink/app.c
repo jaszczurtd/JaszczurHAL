@@ -6,12 +6,12 @@
 
 void app_start(void) {
   debugInit();
-  hal_gpio_set_mode(LED_BUILTIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
 }
 
 void app_task0(void) {
-  hal_gpio_write(LED_BUILTIN, true);
+  hal_gpio_write(HAL_LED_BUILTIN, true);
   hal_delay_ms(200);
-  hal_gpio_write(LED_BUILTIN, false);
+  hal_gpio_write(HAL_LED_BUILTIN, false);
   hal_delay_ms(200);
 }

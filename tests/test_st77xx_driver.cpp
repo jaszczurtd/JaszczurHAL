@@ -147,21 +147,36 @@ void test_st7789_addr_window_applies_rotation_offsets_and_big_endian_pixels(
                           0x2Bu, 0x00u, 0x36u, 0x00u, 0x36u,
                           0x2Cu, 0x12u, 0x34u, 0xABu, 0xCDu};
   TEST_ASSERT_TRUE(tx_has_tail(tail, sizeof(tail)));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
 }
 
-void test_st7796s_uses_swapped_invert_commands(void) {
+void test_st7789_fill_rect_falls_back_to_spi_write_when_dma_fails(void) {
+  jh_st77xx_t dev = {};
+  const jh_st77xx_config_t config = make_st7789_config();
+  TEST_ASSERT_TRUE(jh_st77xx_init(&dev, &config));
+
+  hal_mock_spi_reset();
+  hal_mock_spi_fail_next_dma_write(config.bus, true);
+  TEST_ASSERT_TRUE(jh_st77xx_fill_rect(&dev, 3u, 4u, 2u, 1u, 0xF800u));
+
+  const uint8_t tail[] = {0xF8u, 0x00u, 0xF8u, 0x00u};
+  TEST_ASSERT_TRUE(tx_has_tail(tail, sizeof(tail)));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
+}
+
+void test_st7796s_uses_standard_invert_commands(void) {
   jh_st77xx_t dev = {};
   const jh_st77xx_config_t config = make_st7796s_config();
   TEST_ASSERT_TRUE(jh_st77xx_init(&dev, &config));
 
   hal_mock_spi_reset();
   TEST_ASSERT_TRUE(jh_st77xx_invert(&dev, true));
-  const uint8_t invert_on_tail[] = {0x20u};
+  const uint8_t invert_on_tail[] = {0x21u};
   TEST_ASSERT_TRUE(tx_has_tail(invert_on_tail, sizeof(invert_on_tail)));
 
   hal_mock_spi_reset();
   TEST_ASSERT_TRUE(jh_st77xx_invert(&dev, false));
-  const uint8_t invert_off_tail[] = {0x21u};
+  const uint8_t invert_off_tail[] = {0x20u};
   TEST_ASSERT_TRUE(tx_has_tail(invert_off_tail, sizeof(invert_off_tail)));
 }
 
@@ -171,6 +186,7 @@ int main(void) {
   RUN_TEST(test_st7789_init_sets_offsets_and_rotation);
   RUN_TEST(
       test_st7789_addr_window_applies_rotation_offsets_and_big_endian_pixels);
-  RUN_TEST(test_st7796s_uses_swapped_invert_commands);
+  RUN_TEST(test_st7789_fill_rect_falls_back_to_spi_write_when_dma_fails);
+  RUN_TEST(test_st7796s_uses_standard_invert_commands);
   return UNITY_END();
 }
