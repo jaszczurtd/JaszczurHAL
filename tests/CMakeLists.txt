@@ -229,6 +229,7 @@ add_hal_test(test_hal_rgb_led)
 add_hal_test(test_hal_serial)
 add_hal_test(test_hal_serial_session)
 add_hal_test(test_hal_serial_session_vocabulary)
+add_hal_test(test_hal_status)
 add_hal_test(test_hal_swserial)
 add_hal_test(test_hal_onewire)
 # Real bit-banging driver (JHOneWire) compiled straight in, run against mock GPIO
