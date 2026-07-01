@@ -337,6 +337,31 @@ static bool tft_write_pixels_dma_driver(const uint8_t *pixels_be,
 #endif
 }
 
+static bool tft_write_pixels_dma_async_start_driver(const uint8_t *pixels_be,
+                                                    size_t byte_count) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_dma_async_start(&s_tft, pixels_be, byte_count);
+#else
+  return jh_st77xx_write_pixels_dma_async_start(&s_tft, pixels_be, byte_count);
+#endif
+}
+
+static bool tft_write_pixels_dma_async_busy_driver(void) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_dma_async_busy(&s_tft);
+#else
+  return jh_st77xx_write_pixels_dma_async_busy(&s_tft);
+#endif
+}
+
+static bool tft_write_pixels_dma_async_wait_driver(void) {
+#if defined(HAL_DISPLAY_ILI9341)
+  return jh_ili9341_write_pixels_dma_async_wait(&s_tft);
+#else
+  return jh_st77xx_write_pixels_dma_async_wait(&s_tft);
+#endif
+}
+
 static bool tft_end_write_driver(void) {
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_end_write(&s_tft);
@@ -1061,6 +1086,43 @@ bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count) {
 #endif
 }
 
+bool hal_display_write_pixels_dma_async_start(const uint8_t *pixels_be,
+                                              size_t byte_count) {
+  if ((pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u ||
+      !ensure_tft_stream_ready("hal_display_write_pixels_dma_async_start")) {
+    return false;
+  }
+#ifdef HAL_ENABLE_TFT
+  return tft_write_pixels_dma_async_start_driver(pixels_be, byte_count);
+#else
+  (void)pixels_be;
+  (void)byte_count;
+  return false;
+#endif
+}
+
+bool hal_display_write_pixels_dma_async_busy(void) {
+#ifdef HAL_ENABLE_TFT
+  if (!s_tft_stream_active) {
+    return false;
+  }
+  return tft_write_pixels_dma_async_busy_driver();
+#else
+  return false;
+#endif
+}
+
+bool hal_display_write_pixels_dma_async_wait(void) {
+#ifdef HAL_ENABLE_TFT
+  if (!s_tft_stream_active) {
+    return true;
+  }
+  return tft_write_pixels_dma_async_wait_driver();
+#else
+  return true;
+#endif
+}
+
 bool hal_display_end_write(void) {
 #ifdef HAL_ENABLE_TFT
   if (!s_tft_stream_active) {
@@ -1068,6 +1130,7 @@ bool hal_display_end_write(void) {
     return false;
   }
 
+  (void)tft_write_pixels_dma_async_wait_driver();
   const bool ok = tft_end_write_driver();
   s_tft_stream_active = false;
   hal_mutex_unlock(s_display_mutex);

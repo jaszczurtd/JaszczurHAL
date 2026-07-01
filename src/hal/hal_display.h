@@ -430,6 +430,28 @@ bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count);
 bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count);
 
 /**
+ * @brief Start streaming big-endian RGB565 bytes through async DMA.
+ *
+ * When the backend supports asynchronous SPI DMA this returns before the bytes
+ * have left the bus. Keep @p pixels_be valid until
+ * hal_display_write_pixels_dma_async_wait() completes and do not start another
+ * async display write before the previous one is done. Backends without async
+ * DMA complete the transfer before returning.
+ */
+bool hal_display_write_pixels_dma_async_start(const uint8_t *pixels_be,
+                                              size_t byte_count);
+
+/**
+ * @brief Return true while an asynchronous display DMA write is still active.
+ */
+bool hal_display_write_pixels_dma_async_busy(void);
+
+/**
+ * @brief Wait for the asynchronous display DMA write to complete.
+ */
+bool hal_display_write_pixels_dma_async_wait(void);
+
+/**
  * @brief Finish the currently open TFT write stream.
  * @return true when the stream was closed cleanly.
  */

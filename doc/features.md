@@ -40,7 +40,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | Software serial | Bit-banged serial transport for targets/modules that need it. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable I2C controller API used by sensors, RTCs and storage devices. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
-| SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers. | [hal_spi.h](../src/hal/hal_spi.h) |
+| SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including blocking and asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |
 | CAN facade | Backend-selectable CAN surface for classic CAN and CAN FD-capable backends. | [hal_can.h](../src/hal/hal_can.h) |
 | MCP2515 CAN | Shared SPI CAN backend. | [mcp2515 driver](../src/hal/impl/shared/drivers/mcp2515/) |
 | MCP2517FD/MCP2518FD CAN FD | Shared SPI CAN FD backend. | [mcp251xfd driver](../src/hal/impl/shared/drivers/mcp251xfd/) |
@@ -89,7 +89,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 
 | Area | What it offers | Source |
 |---|---|---|
-| Generic display facade | Common drawing/display surface for OLED and TFT backends. | [hal_display.h](../src/hal/hal_display.h) |
+| Generic display facade | Common drawing/display surface for OLED and TFT backends, including explicit TFT pixel streaming and async DMA-capable RGB565 writes. | [hal_display.h](../src/hal/hal_display.h) |
 | GFX engine and fonts | Shared graphics primitives and bundled bitmap fonts. | [display drivers](../src/hal/impl/shared/drivers/display/) |
 | ILI9341 TFT | SPI TFT display backend. | [ili9341 driver](../src/hal/impl/shared/drivers/display/ili9341_driver.h) |
 | ST7735/ST7789/ST7796S TFT | Shared ST77xx-family SPI TFT backend. | [st77xx driver](../src/hal/impl/shared/drivers/display/st77xx_driver.h) |

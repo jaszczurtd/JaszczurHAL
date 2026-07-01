@@ -22,6 +22,8 @@ typedef struct {
   uint8_t tx_log[MOCK_SPI_BUF_SIZE];
   size_t tx_len;
   uint32_t transfer_count;
+  uint32_t dma_write_count;
+  bool fail_next_dma_write;
 } mock_spi_bus_t;
 
 static uint8_t s_last_bus = 0;
@@ -161,13 +163,37 @@ void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
 }
 
 bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
+  if (!hal_spi_write_dma_async_start(bus, data, len)) {
+    return false;
+  }
+  return hal_spi_write_dma_async_wait(bus);
+}
+
+bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
+                                   size_t len) {
+  const uint8_t idx = spi_bus_index(bus);
   if (len == 0u) {
     return true;
   }
   if (data == NULL) {
     return false;
   }
+  s_spi[idx].dma_write_count++;
+  if (s_spi[idx].fail_next_dma_write) {
+    s_spi[idx].fail_next_dma_write = false;
+    return false;
+  }
   hal_spi_write(bus, data, len);
+  return true;
+}
+
+bool hal_spi_write_dma_async_busy(uint8_t bus) {
+  (void)bus;
+  return false;
+}
+
+bool hal_spi_write_dma_async_wait(uint8_t bus) {
+  (void)bus;
   return true;
 }
 
@@ -201,6 +227,14 @@ uint8_t hal_mock_spi_get_data_mode(uint8_t bus) {
 
 uint32_t hal_mock_spi_get_transfer_count(uint8_t bus) {
   return s_spi[spi_bus_index(bus)].transfer_count;
+}
+
+uint32_t hal_mock_spi_get_dma_write_count(uint8_t bus) {
+  return s_spi[spi_bus_index(bus)].dma_write_count;
+}
+
+void hal_mock_spi_fail_next_dma_write(uint8_t bus, bool fail) {
+  s_spi[spi_bus_index(bus)].fail_next_dma_write = fail;
 }
 
 void hal_mock_spi_push_rx(uint8_t bus, const uint8_t *data, size_t len) {

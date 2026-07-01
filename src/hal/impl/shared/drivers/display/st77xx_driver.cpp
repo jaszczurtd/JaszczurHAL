@@ -50,7 +50,7 @@
 
 #define ST7796S_BGR 0x08u
 
-#define ST77XX_PIXEL_CHUNK_BYTES 256u
+#define ST77XX_PIXEL_CHUNK_BYTES 1024u
 
 static const uint8_t s_st7735_bcmd[] = {18u,
                                         ST77XX_SWRESET,
@@ -508,8 +508,6 @@ static void set_default_geometry(jh_st77xx_t *dev) {
     dev->height = dev->window_height;
     dev->row_start = dev->config.row_offset;
     dev->col_start = dev->config.col_offset;
-    dev->invert_on_command = ST77XX_INVOFF;
-    dev->invert_off_command = ST77XX_INVON;
     break;
   default:
     break;
@@ -776,6 +774,21 @@ static void put_u16_be(uint8_t *out, uint16_t value) {
   out[1] = (uint8_t)value;
 }
 
+static bool spi_write_dma_or_fallback(uint8_t bus, const uint8_t *data,
+                                      size_t len) {
+  if (len == 0u) {
+    return true;
+  }
+  if (data == NULL) {
+    return false;
+  }
+  if (hal_spi_write_dma(bus, data, len)) {
+    return true;
+  }
+  hal_spi_write(bus, data, len);
+  return true;
+}
+
 bool jh_st77xx_set_addr_window(jh_st77xx_t *dev, uint16_t x, uint16_t y,
                                uint16_t w, uint16_t h) {
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u) {
@@ -885,11 +898,35 @@ bool jh_st77xx_write_pixels_dma(jh_st77xx_t *dev, const uint8_t *pixels_be,
       (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
     return false;
   }
+  return spi_write_dma_or_fallback(dev->config.bus, pixels_be, byte_count);
+}
+
+bool jh_st77xx_write_pixels_dma_async_start(jh_st77xx_t *dev,
+                                            const uint8_t *pixels_be,
+                                            size_t byte_count) {
+  if (dev == NULL || !dev->initialized || !dev->write_active ||
+      (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
+    return false;
+  }
   if (byte_count == 0u) {
     return true;
   }
 
-  return hal_spi_write_dma(dev->config.bus, pixels_be, byte_count);
+  return hal_spi_write_dma_async_start(dev->config.bus, pixels_be, byte_count);
+}
+
+bool jh_st77xx_write_pixels_dma_async_busy(jh_st77xx_t *dev) {
+  if (dev == NULL || !dev->initialized) {
+    return false;
+  }
+  return hal_spi_write_dma_async_busy(dev->config.bus);
+}
+
+bool jh_st77xx_write_pixels_dma_async_wait(jh_st77xx_t *dev) {
+  if (dev == NULL || !dev->initialized) {
+    return false;
+  }
+  return hal_spi_write_dma_async_wait(dev->config.bus);
 }
 
 bool jh_st77xx_write_pixels_fast(jh_st77xx_t *dev, const uint16_t *pixels,
@@ -909,7 +946,7 @@ bool jh_st77xx_write_pixels_fast(jh_st77xx_t *dev, const uint16_t *pixels,
     for (size_t i = 0u; i < pixel_count; ++i) {
       put_u16_be(&chunk[i * 2u], pixels[i]);
     }
-    if (!jh_st77xx_write_pixels_be(dev, chunk, pixel_count * 2u)) {
+    if (!jh_st77xx_write_pixels_dma(dev, chunk, pixel_count * 2u)) {
       return false;
     }
     pixels += pixel_count;
@@ -944,7 +981,7 @@ bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
 
   const uint8_t bus = dev->config.bus;
   const hal_spi_settings_t settings = spi_settings_for(dev);
-  uint8_t chunk[64];
+  uint8_t chunk[ST77XX_PIXEL_CHUNK_BYTES];
   for (size_t i = 0u; i < sizeof(chunk); i += 2u) {
     put_u16_be(&chunk[i], color);
   }
@@ -960,7 +997,14 @@ bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
   while (remaining > 0u) {
     const size_t pixels =
         remaining < (sizeof(chunk) / 2u) ? remaining : (sizeof(chunk) / 2u);
-    hal_spi_write(bus, chunk, pixels * 2u);
+    if (!spi_write_dma_or_fallback(bus, chunk, pixels * 2u)) {
+      if (pin_is_connected(dev->config.cs_pin)) {
+        hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
+      }
+      hal_spi_end_transaction(bus);
+      hal_spi_unlock(bus);
+      return false;
+    }
     remaining -= pixels;
   }
 

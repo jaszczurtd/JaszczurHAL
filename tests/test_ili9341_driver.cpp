@@ -85,6 +85,21 @@ void test_addr_window_and_bitmap_write_big_endian_pixels(void) {
                           0x2Bu, 0x00u, 0x03u, 0x00u, 0x03u,
                           0x2Cu, 0x12u, 0x34u, 0xABu, 0xCDu};
   TEST_ASSERT_TRUE(tx_has_tail(tail, sizeof(tail)));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
+}
+
+void test_fill_rect_falls_back_to_spi_write_when_dma_fails(void) {
+  jh_ili9341_t dev = {};
+  const jh_ili9341_config_t config = make_config();
+  TEST_ASSERT_TRUE(jh_ili9341_init(&dev, &config));
+
+  hal_mock_spi_reset();
+  hal_mock_spi_fail_next_dma_write(config.bus, true);
+  TEST_ASSERT_TRUE(jh_ili9341_fill_rect(&dev, 4u, 5u, 2u, 1u, 0x07E0u));
+
+  const uint8_t tail[] = {0x07u, 0xE0u, 0x07u, 0xE0u};
+  TEST_ASSERT_TRUE(tx_has_tail(tail, sizeof(tail)));
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
 }
 
 int main(void) {
@@ -92,5 +107,6 @@ int main(void) {
   RUN_TEST(test_init_sends_ili9341_sequence_over_hal_spi);
   RUN_TEST(test_set_rotation_writes_madctl_and_updates_dimensions);
   RUN_TEST(test_addr_window_and_bitmap_write_big_endian_pixels);
+  RUN_TEST(test_fill_rect_falls_back_to_spi_write_when_dma_fails);
   return UNITY_END();
 }

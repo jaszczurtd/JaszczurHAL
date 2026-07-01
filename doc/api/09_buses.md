@@ -27,15 +27,33 @@ uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data);
 void     hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
 void     hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx, size_t len);
 void     hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
+bool     hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len);
+
+// Asynchronous DMA-capable write path. Backends without async DMA complete
+// the transfer before returning from _start().
+bool     hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data, size_t len);
+bool     hal_spi_write_dma_async_busy(uint8_t bus);
+bool     hal_spi_write_dma_async_wait(uint8_t bus);
 ```
 
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
 
-**impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing.
-**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13.
+**DMA writes:** `hal_spi_write_dma()` is the blocking convenience wrapper: it
+starts the fastest available backend write path and returns only after the
+buffer has been accepted/transmitted according to that backend. The
+`hal_spi_write_dma_async_*()` trio exposes the non-blocking form where the
+backend supports it. After a successful `_async_start()`, the caller must keep
+the `data` buffer alive and unchanged until `_async_busy()` becomes false or
+`_async_wait()` returns, and must not start a second async write on the same bus
+while the previous one is active. Backends without asynchronous DMA perform the
+write inside `_async_start()`, report `_async_busy() == false`, and let
+`_async_wait()` return immediately.
+
+**impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
+**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. The async DMA API currently falls back to the synchronous polling write path.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
-**Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses.
+**Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses. Treat async DMA lifetime as part of the same transaction/critical section: keep chip-select and bus ownership valid until `_async_wait()` completes.
 
 ---
 

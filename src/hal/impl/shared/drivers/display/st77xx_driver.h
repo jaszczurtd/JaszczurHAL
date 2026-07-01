@@ -21,7 +21,9 @@
 extern "C" {
 #endif
 
+#ifndef JH_ST77XX_SPI_DEFAULT_HZ
 #define JH_ST77XX_SPI_DEFAULT_HZ 32000000UL
+#endif
 
 #define JH_ST7735_TFTWIDTH_128 128u
 #define JH_ST7735_TFTWIDTH_80 80u
@@ -119,6 +121,11 @@ bool jh_st77xx_write_pixels_be(jh_st77xx_t *dev, const uint8_t *pixels_be,
                                size_t byte_count);
 bool jh_st77xx_write_pixels_dma(jh_st77xx_t *dev, const uint8_t *pixels_be,
                                 size_t byte_count);
+bool jh_st77xx_write_pixels_dma_async_start(jh_st77xx_t *dev,
+                                            const uint8_t *pixels_be,
+                                            size_t byte_count);
+bool jh_st77xx_write_pixels_dma_async_busy(jh_st77xx_t *dev);
+bool jh_st77xx_write_pixels_dma_async_wait(jh_st77xx_t *dev);
 bool jh_st77xx_end_write(jh_st77xx_t *dev);
 bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
                          uint16_t h, uint16_t color);
