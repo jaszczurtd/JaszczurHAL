@@ -5,8 +5,10 @@
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
 #include "../../hal_dma_pwm_audio.h"
+#include "../../hal_serial.h"
 
 #include <hardware/adc.h>
+#include <hardware/clocks.h>
 #include <hardware/dma.h>
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
@@ -29,6 +31,7 @@ struct hal_dma_pwm_audio_impl_s {
   uint8_t adc_count;
   volatile uint16_t *adc_buffer;
   uint32_t adc_write_addr;
+  uint32_t sample_rate_hz;
   int dma_a;
   int dma_b;
   int dma_adc_sample;
@@ -39,6 +42,18 @@ struct hal_dma_pwm_audio_impl_s {
 
 static hal_dma_pwm_audio_impl_t s_pool[HAL_DMA_PWM_AUDIO_MAX_CHANNELS];
 static bool s_irq_installed = false;
+
+static uint32_t dma_claim_mask(void) {
+  uint32_t mask = 0u;
+
+  for (uint32_t i = 0u; i < NUM_DMA_CHANNELS && i < 32u; ++i) {
+    if (dma_channel_is_claimed(i)) {
+      mask |= 1u << i;
+    }
+  }
+
+  return mask;
+}
 
 static uint8_t ring_bits_for_bytes(uint32_t bytes) {
   if (bytes == 0u) {
@@ -118,6 +133,10 @@ static bool claim_channels(hal_dma_pwm_audio_impl_t *audio, bool adc_enabled) {
   audio->dma_a = dma_claim_unused_channel(false);
   audio->dma_b = dma_claim_unused_channel(false);
   if (audio->dma_a < 0 || audio->dma_b < 0) {
+    hal_deb("hal_dma_pwm_audio: claim failed pwm a=%d b=%d mask=0x%08lx "
+            "channels=%u",
+            audio->dma_a, audio->dma_b, (unsigned long)dma_claim_mask(),
+            (unsigned int)NUM_DMA_CHANNELS);
     release_claimed_channels(audio);
     return false;
   }
@@ -126,6 +145,10 @@ static bool claim_channels(hal_dma_pwm_audio_impl_t *audio, bool adc_enabled) {
     audio->dma_adc_sample = dma_claim_unused_channel(false);
     audio->dma_adc_control = dma_claim_unused_channel(false);
     if (audio->dma_adc_sample < 0 || audio->dma_adc_control < 0) {
+      hal_deb("hal_dma_pwm_audio: claim failed adc sample=%d control=%d "
+              "mask=0x%08lx channels=%u",
+              audio->dma_adc_sample, audio->dma_adc_control,
+              (unsigned long)dma_claim_mask(), (unsigned int)NUM_DMA_CHANNELS);
       release_claimed_channels(audio);
       return false;
     }
@@ -137,7 +160,13 @@ static bool claim_channels(hal_dma_pwm_audio_impl_t *audio, bool adc_enabled) {
 static void configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio,
                               uint32_t period_ticks) {
   gpio_set_function(audio->pwm_pin, GPIO_FUNC_PWM);
-  pwm_set_clkdiv(audio->pwm_slice, 1.0f);
+  const uint32_t clk_hz = clock_get_hz(clk_sys);
+  float clkdiv = (float)((double)clk_hz / ((double)audio->sample_rate_hz *
+                                           (double)period_ticks));
+  if (clkdiv < 1.0f) {
+    clkdiv = 1.0f;
+  }
+  pwm_set_clkdiv(audio->pwm_slice, clkdiv);
   pwm_set_wrap(audio->pwm_slice, period_ticks - 1u);
   pwm_set_gpio_level(audio->pwm_pin, audio->idle_value);
   pwm_set_irq_enabled(audio->pwm_slice, true);
@@ -166,6 +195,15 @@ static void configure_pwm_dma(hal_dma_pwm_audio_impl_t *audio,
                         &pwm_hw->slice[audio->pwm_slice].cc, audio->buffer_b,
                         audio->block_size, false);
   dma_channel_set_irq1_enabled((uint)audio->dma_b, true);
+
+  const uint32_t actual_hz =
+      (uint32_t)((double)clk_hz / ((double)clkdiv * (double)period_ticks) +
+                 0.5);
+  hal_deb("hal_dma_pwm_audio: pwm clk=%lu rate=%lu actual=%lu period=%lu "
+          "clkdiv=%.3f",
+          (unsigned long)clk_hz, (unsigned long)audio->sample_rate_hz,
+          (unsigned long)actual_hz, (unsigned long)period_ticks,
+          (double)clkdiv);
 }
 
 static void configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
@@ -244,6 +282,7 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
   audio->pwm_slice = (uint8_t)pwm_gpio_to_slice_num(cfg->pwm_pin);
   audio->block_size = cfg->block_size;
   audio->idle_value = cfg->idle_value;
+  audio->sample_rate_hz = cfg->sample_rate_hz;
   audio->buffer_a = cfg->buffer_a;
   audio->buffer_b = cfg->buffer_b;
   audio->adc_pins = cfg->adc_pins;
@@ -254,7 +293,6 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 
   if (!claim_channels(audio, cfg->adc_count > 0u)) {
     audio->in_use = false;
-    HAL_ASSERT(false, "hal_dma_pwm_audio: RP2040 DMA channel claim failed");
     return nullptr;
   }
 

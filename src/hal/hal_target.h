@@ -91,21 +91,36 @@ hal_project_config.h (or via a -D flag)."
 #define HAL_TARGET_NAME "mock"
 #endif
 
-/* ── 4b. Board-compatibility fallback for LED_BUILTIN ────────────────────
- * Client code often expects Arduino-style LED_BUILTIN to exist. Keep any
- * board/core-provided definition intact; only provide a fallback when the
- * active target selected by JaszczurHAL does not define it itself. */
-#ifndef LED_BUILTIN
+/* ── 4b. Board LED fallback ───────────────────────────────────────────────
+ * HAL internals use HAL_LED_BUILTIN so they never need Arduino's
+ * pins_arduino.h. Keep LED_BUILTIN as a non-Arduino compatibility fallback;
+ * Arduino builds should let Arduino.h provide its own LED_BUILTIN later.
+ *
+ * Do not include Arduino's pins_arduino.h here. On RP2350 WiFi variants it can
+ * re-enter Arduino.h before the variant has defined PICO_RP2350A, which trips
+ * Arduino-Pico's RP2350 sanity check. Use local board/MCU knowledge instead. */
+#ifndef HAL_LED_BUILTIN
 #if HAL_TARGET_IS_RP2040
-#if !defined(ARDUINO) && defined(PIN_LED)
-#define LED_BUILTIN PIN_LED
+#if defined(PIN_LED)
+#define HAL_LED_BUILTIN PIN_LED
+#elif defined(ARDUINO_RASPBERRY_PI_PICO_W) ||                                  \
+    defined(ARDUINO_RASPBERRY_PI_PICO_2W)
+#define HAL_LED_BUILTIN 64u
+#elif defined(ARDUINO_RASPBERRY_PI_PICO) ||                                    \
+    defined(ARDUINO_RASPBERRY_PI_PICO_2) ||                                    \
+    defined(ARDUINO_WAVESHARE_RP2040_PLUS)
+#define HAL_LED_BUILTIN 25u
 #elif !defined(ARDUINO)
-#define LED_BUILTIN 25u
+#define HAL_LED_BUILTIN 25u
 #endif
 #elif HAL_TARGET_IS_STM32G474
 /* Nucleo-G474RE LD2 = PA5, and HAL GPIO numbering is port*16 + pin. */
-#define LED_BUILTIN 5u
+#define HAL_LED_BUILTIN 5u
 #endif
+#endif
+
+#if !defined(LED_BUILTIN) && !defined(ARDUINO) && defined(HAL_LED_BUILTIN)
+#define LED_BUILTIN HAL_LED_BUILTIN
 #endif
 
 /* ── 5. Derived: real STM32G474 hardware vs host-stub sanity build ────────
