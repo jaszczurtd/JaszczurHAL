@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.7.0] - 2026-06-26
+## [1.8.0] - 2026-07-01
 
 Next release.
 
