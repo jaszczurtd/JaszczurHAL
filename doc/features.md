@@ -45,6 +45,8 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | MCP2515 CAN | Shared SPI CAN backend. | [mcp2515 driver](../src/hal/impl/shared/drivers/mcp2515/) |
 | MCP2517FD/MCP2518FD CAN FD | Shared SPI CAN FD backend. | [mcp251xfd driver](../src/hal/impl/shared/drivers/mcp251xfd/) |
 | STM32G474 native FDCAN | Native STM32G474 FDCAN backend. | [STM32 FDCAN backend](../src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp) |
+| MFRC522 RFID | Shared RFID reader driver over HAL SPI/I2C. | [hal_mfrc522.h](../src/hal/hal_mfrc522.h), [mfrc522 driver](../src/hal/impl/shared/drivers/mfrc522/) |
+| PN532 NFC/RFID | Shared NFC/RFID reader driver over HAL SPI/I2C/UART. | [hal_pn532.h](../src/hal/hal_pn532.h), [pn532 driver](../src/hal/impl/shared/drivers/pn532/) |
 | WiFi | WiFi-capable RP2040/Pico W style connectivity surface. | [hal_wifi.h](../src/hal/hal_wifi.h) |
 | UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
 | TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP2040 backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |

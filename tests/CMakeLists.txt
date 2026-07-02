@@ -168,6 +168,25 @@ add_executable(test_mcp2515_driver
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
 add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
+add_executable(test_mfrc522_driver
+    test_mfrc522_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522_spi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522_i2c.cpp
+)
+target_compile_definitions(test_mfrc522_driver PRIVATE HAL_ENABLE_MFRC522)
+target_link_libraries(test_mfrc522_driver PRIVATE hal_mock)
+add_test(NAME test_mfrc522_driver COMMAND test_mfrc522_driver)
+add_executable(test_pn532_driver
+    test_pn532_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_spi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_i2c.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_uart.cpp
+)
+target_compile_definitions(test_pn532_driver PRIVATE HAL_ENABLE_PN532)
+target_link_libraries(test_pn532_driver PRIVATE hal_mock)
+add_test(NAME test_pn532_driver COMMAND test_pn532_driver)
 add_executable(test_wireguard_crypto_shared
     test_wireguard_crypto_shared.cpp
 )

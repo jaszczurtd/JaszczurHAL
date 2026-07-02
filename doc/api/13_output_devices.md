@@ -1,8 +1,8 @@
-# Output devices - RGB LED, PGA2311 volume, math helpers
+# Output devices - RGB LED, PGA2311, MFRC522, PN532, math helpers
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_rgb_led`, `hal_pga2311`, `hal_math`.
+Covers: `hal_rgb_led`, `hal_pga2311`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
 
 ## `hal_math` - Lightweight numeric helpers
 
@@ -155,6 +155,76 @@ wrapped in `hal_spi_lock()` / `hal_spi_unlock()`.
 
 ---
 
+## `hal_mfrc522` - MFRC522 RFID reader  *(optional - `HAL_ENABLE_MFRC522`)*
+
+```cpp
+#include <hal/hal_mfrc522.h>
+
+hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
+
+MFRC522_SPI bus(cs_pin, rst_pin, 0 /* SPI bus */);
+MFRC522 rfid(&bus);
+rfid.PCD_Init();
+
+byte version = rfid.PCD_GetVersion();
+if (rfid.PICC_IsNewCardPresent() && rfid.PICC_ReadCardSerial()) {
+  MFRC522::PICC_Type type = MFRC522::PICC_GetType(rfid.uid.sak);
+  const char *name = MFRC522::PICC_GetTypeName(type);
+}
+```
+
+`MFRC522_SPI` uses HAL SPI transactions and chip-select GPIO control.
+`MFRC522_I2C` uses HAL I2C write/read transactions. The application still owns
+bus pin setup with `hal_spi_init()` or `hal_i2c_init_bus()`.
+
+The port preserves the MFRC522 protocol logic from the
+MFRC522-spi-i2c-uart-async / Miguel Balboa driver lineage while replacing
+transport and timing calls with JaszczurHAL primitives. `StatusCodeToHalStatus()`
+maps driver-local outcomes to shared `hal_status_t` values.
+
+**Thread safety:** SPI and I2C register transactions use HAL bus locks. The
+driver allocates a per-instance HAL mutex for future broader sequencing; create
+and destroy remain single-owner lifecycle operations.
+
+Example: `examples/46_mfrc522_rfid`.
+
+---
+
+## `hal_pn532` - PN532 NFC/RFID reader  *(optional - `HAL_ENABLE_PN532`)*
+
+```cpp
+#include <hal/hal_pn532.h>
+
+hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
+
+PN532_SPI bus(cs_pin, rst_pin, 0 /* SPI bus */);
+PN532 nfc(&bus);
+nfc.begin();
+
+uint32_t firmware = 0;
+if (nfc.getFirmwareVersion(&firmware) == HAL_OK) {
+  nfc.SAMConfig();
+}
+```
+
+`PN532_SPI` uses HAL SPI transactions and chip-select GPIO control.
+`PN532_I2C` is available when `HAL_ENABLE_I2C` is enabled and uses HAL I2C
+direct read/write transactions with the PN532 ready byte. `PN532_UART` is
+available when `HAL_ENABLE_UART` is enabled and uses timeout-based reads on the
+HAL UART API. The application owns bus pin setup with `hal_spi_init()`,
+`hal_i2c_init_bus()` or `hal_uart_create()`/`hal_uart_begin()`.
+
+The port preserves the Adafruit_PN532 frame construction, ACK handling,
+firmware query, SAM configuration, passive target scan and core MIFARE
+exchange helpers while replacing transport and timing calls with JaszczurHAL
+primitives. Public PN532 operations return `hal_status_t`.
+
+**Thread safety:** public PN532 operations are serialized with a per-instance
+HAL mutex created through `jh_hal_mutex_create_once()`. SPI and I2C transports
+also use HAL bus locks for physical transactions. Create and destroy remain
+single-owner lifecycle operations.
+
+Example: `examples/47_pn532_nfc`.
 
 ---
 

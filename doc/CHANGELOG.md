@@ -13,6 +13,29 @@ All notable changes to this project will be documented in this file.
 - Added `hal_status_to_string()` for stable symbolic status names in logs and
   diagnostics.
 
+### MFRC522 - shared RFID reader driver
+
+- Moved the MFRC522 RFID reader driver into
+  `src/hal/impl/shared/drivers/mfrc522/` with public `hal_mfrc522.h` and
+  opt-in `HAL_ENABLE_MFRC522`, making the driver usable from RP2040,
+  STM32G474 and mock builds.
+- Ported the MFRC522-spi-i2c-uart-async / Miguel Balboa protocol logic to
+  JaszczurHAL SPI, I2C, GPIO, timing and mutex primitives, with
+  `StatusCodeToHalStatus()` mapping driver outcomes to `hal_status_t`.
+- Added `examples/46_mfrc522_rfid`, module/API docs and host coverage in
+  `test_mfrc522_driver`; removed the old imported Arduino driver folder.
+
+### PN532 - shared NFC/RFID reader driver
+
+- Added a shared PN532 driver in `src/hal/impl/shared/drivers/pn532/` with
+  public `hal_pn532.h` and opt-in `HAL_ENABLE_PN532` for RP2040, STM32G474
+  and mock builds.
+- Ported the Adafruit_PN532 command framing, ACK handling and core card
+  commands to JaszczurHAL SPI/I2C/UART transports, GPIO, timing and mutex
+  primitives, returning `hal_status_t` from the new API surface.
+- Added `examples/47_pn532_nfc`, API/docs entries and host coverage in
+  `test_pn532_driver`; removed the old imported Adafruit_PN532 driver folder.
+
 ### RP2040 backend - native pico-sdk migration (decouple from Arduino)
 
 - Migrated the RP2040 `hal_uart` backend to the native pico-sdk hardware UART

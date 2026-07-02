@@ -57,6 +57,13 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp
     ${SRC}/hal/impl/shared/drivers/digipot/digipot_max5395.cpp
     ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
+    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522.cpp
+    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522_spi.cpp
+    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522_i2c.cpp
+    ${SRC}/hal/impl/shared/drivers/pn532/pn532.cpp
+    ${SRC}/hal/impl/shared/drivers/pn532/pn532_spi.cpp
+    ${SRC}/hal/impl/shared/drivers/pn532/pn532_i2c.cpp
+    ${SRC}/hal/impl/shared/drivers/pn532/pn532_uart.cpp
     ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
     ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
     ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
@@ -127,6 +134,8 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MCP401X        # propagates HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
     HAL_ENABLE_MAX5395        # second digipot backend
     HAL_ENABLE_PGA2311        # shared SPI stereo volume controller
+    HAL_ENABLE_MFRC522        # shared MFRC522 RFID reader over HAL SPI/I2C
+    HAL_ENABLE_PN532          # shared PN532 NFC/RFID reader over HAL SPI/I2C/UART
     HAL_ENABLE_GPS            # portable NMEA engine (transport: SWSERIAL/UART, both on below)
     HAL_ENABLE_DAC
     HAL_ENABLE_DACLESS       # shared DACless PWM-audio driver
