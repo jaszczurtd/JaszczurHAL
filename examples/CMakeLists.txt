@@ -439,6 +439,8 @@ jh_example(44_dacless_audio_polling
     TARGETS rp2040 stm32g474
     DEFINES HAL_ENABLE_DACLESS DACLESS_EXAMPLE_USE_DMA=0)
 jh_example(45_swserial_loopback TARGETS rp2040 stm32g474)
+jh_example(46_mfrc522_rfid TARGETS rp2040 stm32g474)
+jh_example(47_pn532_nfc TARGETS rp2040 stm32g474)
 set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
 if(DEFINED EXTRA_HAL_DEFINES)
     jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})

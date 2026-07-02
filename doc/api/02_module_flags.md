@@ -74,6 +74,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/drivers/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/drivers/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
+| `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` + `impl/shared/drivers/mfrc522/mfrc522.h` | `impl/shared/drivers/mfrc522/mfrc522*.cpp` | MFRC522 RFID reader driver over HAL SPI/I2C (propagates SPI) |
+| `HAL_ENABLE_PN532` | `hal_pn532.h` + `impl/shared/drivers/pn532/pn532.h` | `impl/shared/drivers/pn532/pn532*.cpp` | PN532 NFC/RFID reader driver over HAL SPI/I2C/UART (propagates SPI) |
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `impl/shared/drivers/dacless/dacless.h` | `impl/shared/drivers/dacless/dacless.cpp` | Shared DACless PWM-audio engine with block/sample callbacks and ADC sampling (propagates DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio DMA helper used by DACless |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
@@ -125,6 +127,8 @@ HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
+HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
+HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART

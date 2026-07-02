@@ -277,6 +277,12 @@
        HAL_ENABLE_PGA2311       - PGA2311 stereo volume controller over SPI
                                   (propagates: SPI).
 
+     RFID:
+       HAL_ENABLE_MFRC522       - shared MFRC522 RFID reader driver over HAL
+                                  SPI/I2C (propagates: SPI).
+       HAL_ENABLE_PN532         - shared PN532 NFC/RFID reader driver over
+                                  HAL SPI/I2C/UART (propagates: SPI).
+
      PWM audio:
        HAL_ENABLE_DACLESS       - DACless PWM-audio engine with block/sample
                                   callbacks and ADC sampling (propagates:
@@ -522,6 +528,20 @@
 
 /* SPI audio volume control. */
 #ifdef HAL_ENABLE_PGA2311
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
+/* MFRC522 RFID reader. */
+#ifdef HAL_ENABLE_MFRC522
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
+/* PN532 NFC/RFID reader. */
+#ifdef HAL_ENABLE_PN532
 #ifndef HAL_ENABLE_SPI
 #define HAL_ENABLE_SPI
 #endif
@@ -816,6 +836,12 @@
 #endif
 #ifdef HAL_ENABLE_PGA2311
 #pragma message("HAL_CONFIG: HAL_ENABLE_PGA2311")
+#endif
+#ifdef HAL_ENABLE_MFRC522
+#pragma message("HAL_CONFIG: HAL_ENABLE_MFRC522")
+#endif
+#ifdef HAL_ENABLE_PN532
+#pragma message("HAL_CONFIG: HAL_ENABLE_PN532")
 #endif
 #ifdef HAL_ENABLE_DACLESS
 #pragma message("HAL_CONFIG: HAL_ENABLE_DACLESS")

@@ -73,6 +73,12 @@
 #ifdef HAL_ENABLE_PGA2311
 #include "hal_pga2311.h"
 #endif
+#ifdef HAL_ENABLE_MFRC522
+#include "hal_mfrc522.h"
+#endif
+#ifdef HAL_ENABLE_PN532
+#include "hal_pn532.h"
+#endif
 #ifdef HAL_ENABLE_DISPLAY
 #include "hal_display.h"
 #endif
