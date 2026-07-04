@@ -37,6 +37,40 @@ rp2040_system_watchdog_latch_boot_reason(void) {
 
 } // namespace
 
+void rp2040_system_get_arch_info(rp2040_system_arch_info_t *out) {
+  if (out == nullptr) {
+    return;
+  }
+
+#if defined(PICO_RP2350)
+  out->mcu = "RP2350";
+#if defined(PICO_RP2350A)
+  out->mcu_subtype = "RP2350A";
+#elif defined(PICO_RP2350B)
+  out->mcu_subtype = "RP2350B";
+#else
+  out->mcu_subtype = "RP2350";
+#endif
+  out->cpu_arch = "ARM Cortex-M33";
+  out->ram_total_bytes = 520u * 1024u;
+  out->ram_usable_bytes = 520u * 1024u;
+#else
+  out->mcu = "RP2040";
+  out->mcu_subtype = "RP2040";
+  out->cpu_arch = "ARM Cortex-M0+";
+  out->ram_total_bytes = 264u * 1024u;
+  out->ram_usable_bytes = 256u * 1024u;
+#endif
+
+  out->backend_name = "rp2040/arduino-pico+pico-sdk";
+  out->cpu_cores = 2u;
+#if defined(__ARM_FP) && (__ARM_FP != 0)
+  out->has_fpu = true;
+#else
+  out->has_fpu = false;
+#endif
+}
+
 void rp2040_system_watchdog_feed(void) { watchdog_update(); }
 
 void rp2040_system_watchdog_enable(uint32_t ms, bool pause_on_debug) {

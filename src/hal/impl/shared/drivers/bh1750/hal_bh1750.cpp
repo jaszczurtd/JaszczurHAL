@@ -34,9 +34,10 @@ hal_bh1750_config_t hal_bh1750_default_config(void) {
   return cfg;
 }
 
-bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg) {
+hal_status_t hal_bh1750_init_ex(hal_bh1750_t *dev,
+                                const hal_bh1750_config_t *cfg) {
   if (dev == NULL) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_bh1750_config_t effective =
@@ -46,7 +47,7 @@ bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg) {
   dev->initialized = false;
   dev->mutex = hal_mutex_create();
   if (dev->mutex == NULL) {
-    return false;
+    return HAL_ENOMEM;
   }
 
   hal_mutex_lock(dev->mutex);
@@ -64,7 +65,11 @@ bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg) {
   if (!ok) {
     hal_bh1750_deinit(dev);
   }
-  return ok;
+  return hal_status_from_bool(ok, HAL_EBUS);
+}
+
+bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg) {
+  return hal_status_to_bool(hal_bh1750_init_ex(dev, cfg));
 }
 
 void hal_bh1750_deinit(hal_bh1750_t *dev) {
@@ -76,9 +81,14 @@ void hal_bh1750_deinit(hal_bh1750_t *dev) {
   dev->initialized = false;
 }
 
-float hal_bh1750_light(hal_bh1750_t *dev) {
+hal_status_t hal_bh1750_light_ex(hal_bh1750_t *dev, float *out_lux) {
+  if (out_lux == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_lux = -1.0f;
+
   if (!bh1750_valid(dev)) {
-    return -1.0f;
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(dev->mutex);
@@ -90,11 +100,18 @@ float hal_bh1750_light(hal_bh1750_t *dev) {
   hal_mutex_unlock(dev->mutex);
 
   if (!ok) {
-    return -1.0f;
+    return HAL_EBUS;
   }
 
   const uint16_t raw = (uint16_t)(((uint16_t)data[0] << 8) | data[1]);
-  return (float)raw / 1.2f;
+  *out_lux = (float)raw / 1.2f;
+  return HAL_OK;
+}
+
+float hal_bh1750_light(hal_bh1750_t *dev) {
+  float lux = -1.0f;
+  (void)hal_bh1750_light_ex(dev, &lux);
+  return lux;
 }
 
 #endif /* HAL_ENABLE_BH1750 && HAL_ENABLE_I2C */

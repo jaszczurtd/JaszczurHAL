@@ -15,6 +15,7 @@ extern "C" {
  * hal_i2c_init_bus() before initialising the sensor.
  */
 
+#include "hal_status.h"
 #include "hal_sync.h"
 
 #include <stdbool.h>
@@ -53,6 +54,8 @@ hal_bh1750_config_t hal_bh1750_default_config(void);
  * @param cfg Optional config; NULL uses hal_bh1750_default_config().
  * @return true when the sensor ACKs the mode command.
  */
+hal_status_t hal_bh1750_init_ex(hal_bh1750_t *dev,
+                                const hal_bh1750_config_t *cfg);
 bool hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg);
 
 /** @brief Release internal resources associated with the driver state. */
@@ -65,6 +68,7 @@ void hal_bh1750_deinit(hal_bh1750_t *dev);
  * -1.0f when the read does not provide a complete sample. A valid raw sample is
  * decoded as big-endian uint16_t divided by 1.2.
  */
+hal_status_t hal_bh1750_light_ex(hal_bh1750_t *dev, float *out_lux);
 float hal_bh1750_light(hal_bh1750_t *dev);
 
 #endif /* HAL_ENABLE_BH1750 */

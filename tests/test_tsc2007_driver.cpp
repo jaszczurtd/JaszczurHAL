@@ -61,7 +61,7 @@ void test_default_config_matches_source_driver_address(void) {
 }
 
 void test_init_probes_address_and_sends_powerdown_temp0_command(void) {
-  TEST_ASSERT_TRUE(hal_tsc2007_init(&dev, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tsc2007_init_ex(&dev, NULL));
   TEST_ASSERT_TRUE(dev.initialized);
   TEST_ASSERT_NOT_NULL(dev.mutex);
   TEST_ASSERT_EQUAL_UINT8(HAL_TSC2007_I2C_ADDR_DEFAULT,
@@ -78,10 +78,14 @@ void test_init_probes_address_and_sends_powerdown_temp0_command(void) {
 void test_init_failure_releases_mutex_and_does_not_wait(void) {
   hal_mock_i2c_set_busy(true);
 
-  TEST_ASSERT_FALSE(hal_tsc2007_init(&dev, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_tsc2007_init_ex(&dev, NULL));
   TEST_ASSERT_FALSE(dev.initialized);
   TEST_ASSERT_NULL(dev.mutex);
   TEST_ASSERT_EQUAL_UINT32(0u, hal_micros());
+}
+
+void test_init_ex_rejects_null_driver(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_tsc2007_init_ex(NULL, NULL));
 }
 
 void test_command_builds_byte_waits_and_decodes_twelve_bit_reply(void) {
@@ -96,8 +100,20 @@ void test_command_builds_byte_waits_and_decodes_twelve_bit_reply(void) {
                           HAL_TSC2007_ADC_12BIT);
 
   TEST_ASSERT_EQUAL_UINT16(0xABCu, value);
-  TEST_ASSERT_EQUAL_UINT32(500u, hal_micros());
-  TEST_ASSERT_EQUAL_INT(1, hal_mock_i2c_get_write_frame_count());
+
+  const uint16_t samples2[] = {0x123u};
+  inject_samples(samples2, 1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tsc2007_command_ex(&dev, HAL_TSC2007_MEASURE_Y,
+                                               HAL_TSC2007_ADON_IRQOFF,
+                                               HAL_TSC2007_ADC_12BIT, &value));
+  TEST_ASSERT_EQUAL_UINT16(0x123u, value);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tsc2007_command_ex(&dev, HAL_TSC2007_MEASURE_Y,
+                                               HAL_TSC2007_ADON_IRQOFF,
+                                               HAL_TSC2007_ADC_12BIT, NULL));
+  TEST_ASSERT_EQUAL_UINT32(1000u, hal_micros());
+  TEST_ASSERT_EQUAL_INT(2, hal_mock_i2c_get_write_frame_count());
   assert_frame_byte(0, 0xC4u);
 }
 
@@ -114,7 +130,8 @@ void test_read_touch_uses_source_sequence_and_accepts_stable_sample(void) {
   uint16_t y = 0u;
   uint16_t z1 = 0u;
   uint16_t z2 = 0u;
-  TEST_ASSERT_TRUE(hal_tsc2007_read_touch(&dev, &x, &y, &z1, &z2));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tsc2007_read_touch_ex(&dev, &x, &y, &z1, &z2));
 
   TEST_ASSERT_EQUAL_UINT16(1234u, x);
   TEST_ASSERT_EQUAL_UINT16(2345u, y);
@@ -144,6 +161,9 @@ void test_read_touch_rejects_unstable_duplicate_samples(void) {
   uint16_t z1 = 0u;
   uint16_t z2 = 0u;
   TEST_ASSERT_FALSE(hal_tsc2007_read_touch(&dev, &x, &y, &z1, &z2));
+  inject_samples(samples, sizeof(samples) / sizeof(samples[0]));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_tsc2007_read_touch_ex(&dev, &x, &y, &z1, &z2));
   TEST_ASSERT_EQUAL_UINT16(55u, x);
   TEST_ASSERT_EQUAL_UINT16(66u, y);
 
@@ -151,7 +171,8 @@ void test_read_touch_rejects_unstable_duplicate_samples(void) {
       100u, 200u, 1000u, 2200u, 1000u, 2301u, 0u,
   };
   inject_samples(y_unstable, sizeof(y_unstable) / sizeof(y_unstable[0]));
-  TEST_ASSERT_FALSE(hal_tsc2007_read_touch(&dev, &x, &y, &z1, &z2));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_tsc2007_read_touch_ex(&dev, &x, &y, &z1, &z2));
 }
 
 void test_read_touch_rejects_4095_coordinates_after_assigning_xy(void) {
@@ -168,6 +189,18 @@ void test_read_touch_rejects_4095_coordinates_after_assigning_xy(void) {
   TEST_ASSERT_FALSE(hal_tsc2007_read_touch(&dev, &x, &y, &z1, &z2));
   TEST_ASSERT_EQUAL_UINT16(4095u, x);
   TEST_ASSERT_EQUAL_UINT16(1200u, y);
+}
+
+void test_status_api_reports_invalid_and_uninitialized_touch_reads(void) {
+  uint16_t x = 0u;
+  uint16_t y = 0u;
+  uint16_t z1 = 0u;
+  uint16_t z2 = 0u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT,
+                        hal_tsc2007_read_touch_ex(&dev, &x, &y, &z1, &z2));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tsc2007_read_touch_ex(&dev, NULL, &y, &z1, &z2));
 }
 
 void test_get_point_returns_x_y_and_z1_or_zero_point(void) {
@@ -236,10 +269,12 @@ int main(void) {
   RUN_TEST(test_default_config_matches_source_driver_address);
   RUN_TEST(test_init_probes_address_and_sends_powerdown_temp0_command);
   RUN_TEST(test_init_failure_releases_mutex_and_does_not_wait);
+  RUN_TEST(test_init_ex_rejects_null_driver);
   RUN_TEST(test_command_builds_byte_waits_and_decodes_twelve_bit_reply);
   RUN_TEST(test_read_touch_uses_source_sequence_and_accepts_stable_sample);
   RUN_TEST(test_read_touch_rejects_unstable_duplicate_samples);
   RUN_TEST(test_read_touch_rejects_4095_coordinates_after_assigning_xy);
+  RUN_TEST(test_status_api_reports_invalid_and_uninitialized_touch_reads);
   RUN_TEST(test_get_point_returns_x_y_and_z1_or_zero_point);
   RUN_TEST(test_selected_i2c_bus_and_address_are_used);
   RUN_TEST(test_multi_command_read_takes_one_driver_mutex);

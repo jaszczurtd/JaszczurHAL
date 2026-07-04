@@ -276,8 +276,33 @@ bool     hal_in_isr(void);            // true when called from an exception/IRQ 
 uint32_t hal_get_free_heap(void);     // available heap in bytes
 float    hal_read_chip_temp(void);    // on-die temperature in °C (±2 °C typical)
 void     hal_enter_bootloader(void);  // jump to RP2040 USB bootloader (does not return on hardware)
-uint32_t hal_get_core_id(void);       // 0 or 1
 void     hal_u32_to_bytes_be(uint32_t val, uint8_t *buf); // writes big-endian bytes
+
+typedef struct {
+    const char *target_name;
+    const char *backend_name;
+    const char *mcu;
+    const char *mcu_subtype;
+    const char *cpu_arch;
+    const char *rtos_name;
+    uint8_t cpu_cores;
+    bool is_hardware;
+    bool has_fpu;
+    bool has_rtos;
+    uint32_t cpu_clock_hz;
+    uint32_t peripheral_clock_hz;
+    uint32_t flash_total_bytes;
+    uint32_t flash_usable_bytes;
+    uint32_t flash_reserved_bytes;
+    uint32_t ram_total_bytes;
+    uint32_t ram_usable_bytes;
+    uint32_t heap_total_bytes;
+    uint32_t heap_free_bytes;
+    uint32_t stack_total_bytes;
+    uint32_t uid_bytes;
+} hal_system_architecture_t;
+
+hal_status_t hal_system_get_current_architecture(hal_system_architecture_t *out);
 
 // Device unique identifier (RP2040 flash unique id).
 #define HAL_DEVICE_UID_BYTES        8u
@@ -309,8 +334,9 @@ void               hal_stack_guard_check(void);
 
 ```
 
-**impl/rp2040:** Time is read through native pico-sdk only - `hal_millis()` uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/`hal_micros64()` use `time_us_64()` (no Arduino `millis()`/`micros()`). All RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, and the UID hex formatter live in the SoC driver `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to pico `sleep_ms()` (when interrupts are enabled) or `busy_wait_ms()` (in ISR / HAL-critical context). `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` uses `busy_wait_us()` (never `sleep_us()`/`delayMicroseconds()`, which arm an alarm interrupt and would deadlock inside a critical section). The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
-**impl/stm32g474:** Host-stub backend with the same dispatch pattern as the RP2040 backend. All SoC bindings (SysTick/FreeRTOS tick time, DWT cycle fallback delays, IWDG planned, `__WFI()`, ADC1 channel 16 for on-die temp, `UID_BASE` for the device id) live in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` behind `stm32g474_system_*` wrappers. `hal_in_isr()` reads `IPSR` on ARM targets and returns `false` on host builds (same rule as Arduino, gated by `__arm__`). In `HAL_ENABLE_FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the core is outside `hal_critical_section_*`; otherwise it falls back to a DWT cycle busy-wait. `hal_idle()` yields in valid FreeRTOS task context and uses a no-op fallback otherwise. `hal_delay_us()` remains a DWT cycle busy-wait on hardware FreeRTOS builds.
+`hal_system_get_current_architecture()` returns a by-value snapshot copied into the caller-provided output struct. String fields point to backend-owned static storage; numeric fields use `0` when the backend cannot report a meaningful value. The API does not allocate and the caller does not own or free the returned strings.
+**impl/rp2040:** Time is read through native pico-sdk only - `hal_millis()` uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/`hal_micros64()` use `time_us_64()` (no Arduino `millis()`/`micros()`). All RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, the UID hex formatter, and the backend architecture metadata live in the SoC driver `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to pico `sleep_ms()` (when interrupts are enabled) or `busy_wait_ms()` (in ISR / HAL-critical context). `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` uses `busy_wait_us()` (never `sleep_us()`/`delayMicroseconds()`, which arm an alarm interrupt and would deadlock inside a critical section). The architecture snapshot reports total flash from `PICO_FLASH_SIZE_BYTES` and, when the final Arduino-pico layout exposes `FS_START`, computes usable firmware flash as the XIP region before the filesystem/EEPROM partition. `stack_total_bytes` reports the core-0 stack reservation only (`PICO_STACK_SIZE` / `HAL_RP2040_STACK_SIZE`); `heap_total_bytes` stays `0` because Arduino-pico does not expose a stable total-heap capacity. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
+**impl/stm32g474:** Bare-metal backend with the same dispatch/wrapper pattern as the RP2040 path; host sanity builds of this backend report `is_hardware = false` when `JH_STM32G474_HW` is not active. All SoC bindings (SysTick/FreeRTOS tick time, DWT cycle fallback delays, IWDG planned, `__WFI()`, ADC1 channel 16 for on-die temp, `UID_BASE` for the device id, backend architecture metadata, and stack/RAM span helpers) live in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` behind `stm32g474_system_*` wrappers. `hal_in_isr()` reads `IPSR` on ARM targets and returns `false` on host builds (same rule as Arduino, gated by `__arm__`). In `HAL_ENABLE_FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the core is outside `hal_critical_section_*`; otherwise it falls back to a DWT cycle busy-wait. `hal_idle()` yields in valid FreeRTOS task context and uses a no-op fallback otherwise. `hal_delay_us()` remains a DWT cycle busy-wait on hardware FreeRTOS builds. The architecture snapshot reports `flash_total_bytes` from `HAL_STM32_FLASH_SIZE` and subtracts `HAL_STM32_FLASH_EEPROM_SIZE` plus `HAL_STM32_FLASH_LITTLEFS_SIZE` into `flash_reserved_bytes`; `flash_usable_bytes` is the remainder. On hardware builds, `ram_total_bytes`/`ram_usable_bytes` and `stack_total_bytes` are derived from the STM32 linker layout symbols exported by `stm32_lib/STM32G474RETx_FLASH.ld`; host fallback uses the backend defaults.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 **Thread safety:** RP2040 backend: time/watchdog APIs are safe to call from both cores. In RP2040 and STM32G474 FreeRTOS modes, `hal_delay_ms()` yields or blocks the calling task only in legal task context and busy-waits in pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` always blocks only the calling core. Mock backend uses shared unsynchronized state and is intended for single-threaded tests.
 **Note:** `COUNTOF(arr)` works only with statically-allocated arrays (not pointers).
@@ -320,6 +346,33 @@ If `x == NULL`, it performs `goto error;`. The surrounding function must define
 an `error:` label.
 
 ### Examples
+
+**Example: Architecture snapshot**
+```c
+#include <hal/hal_system.h>
+
+void example_architecture_snapshot(void) {
+    hal_system_architecture_t arch = {0};
+    hal_status_t status = hal_system_get_current_architecture(&arch);
+    if (status != HAL_OK) {
+        hal_derr("arch snapshot failed: %s", hal_status_to_string(status));
+        return;
+    }
+
+    hal_deb("target=%s backend=%s mcu=%s cpu=%s rtos=%s",
+            arch.target_name,
+            arch.backend_name,
+            arch.mcu,
+            arch.cpu_arch,
+            arch.rtos_name);
+    hal_deb("flash total=%lu usable=%lu reserved=%lu ram=%lu heap_free=%lu",
+            (unsigned long)arch.flash_total_bytes,
+            (unsigned long)arch.flash_usable_bytes,
+            (unsigned long)arch.flash_reserved_bytes,
+            (unsigned long)arch.ram_total_bytes,
+            (unsigned long)arch.heap_free_bytes);
+}
+```
 
 **Example: System timing and watchdog**
 ```c

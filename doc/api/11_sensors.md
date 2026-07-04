@@ -232,15 +232,20 @@ typedef struct {
 } hal_bh1750_t;
 
 hal_bh1750_config_t hal_bh1750_default_config(void);
+hal_status_t hal_bh1750_init_ex(hal_bh1750_t *dev,
+                                const hal_bh1750_config_t *cfg);
 bool  hal_bh1750_init(hal_bh1750_t *dev, const hal_bh1750_config_t *cfg);
 void  hal_bh1750_deinit(hal_bh1750_t *dev);
+hal_status_t hal_bh1750_light_ex(hal_bh1750_t *dev, float *out_lux);
 float hal_bh1750_light(hal_bh1750_t *dev);
 ```
 
-`hal_bh1750_init()` sends command `0x10` (continuous H-resolution mode), waits
-180 ms for the first measurement, and returns true only when the device ACKs
-the command. `hal_bh1750_light()` reads exactly two bytes and returns lux as
-`raw / 1.2f`; it returns `-1.0f` on an incomplete read.
+`hal_bh1750_init_ex()` sends command `0x10` (continuous H-resolution mode),
+waits 180 ms for the first measurement, and returns `HAL_OK` only when the
+device ACKs the command. `hal_bh1750_light_ex()` reads exactly two bytes and
+returns lux as `raw / 1.2f` through `out_lux`; failed reads return `HAL_EBUS`
+and set the output to `-1.0f`. The legacy `hal_bh1750_init()` and
+`hal_bh1750_light()` wrappers preserve the original `bool` / `-1.0f` behavior.
 
 **impl/shared:** `impl/shared/drivers/bh1750/hal_bh1750.cpp` is used by RP2040,
 STM32G474, and mock tests. The default address is `0x5C` to preserve the source
@@ -278,32 +283,45 @@ typedef struct {
 } hal_tsc2007_t;
 
 hal_tsc2007_config_t hal_tsc2007_default_config(void);
+hal_status_t hal_tsc2007_init_ex(hal_tsc2007_t *dev,
+                                 const hal_tsc2007_config_t *cfg);
 bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg);
 void hal_tsc2007_deinit(hal_tsc2007_t *dev);
 
+hal_status_t hal_tsc2007_command_ex(hal_tsc2007_t *dev,
+                                    hal_tsc2007_function_t func,
+                                    hal_tsc2007_power_t pwr,
+                                    hal_tsc2007_resolution_t res,
+                                    uint16_t *out_value);
 uint16_t hal_tsc2007_command(hal_tsc2007_t *dev,
                              hal_tsc2007_function_t func,
                              hal_tsc2007_power_t pwr,
                              hal_tsc2007_resolution_t res);
 
+hal_status_t hal_tsc2007_read_touch_ex(hal_tsc2007_t *dev, uint16_t *x,
+                                       uint16_t *y, uint16_t *z1,
+                                       uint16_t *z2);
 bool hal_tsc2007_read_touch(hal_tsc2007_t *dev, uint16_t *x, uint16_t *y,
                             uint16_t *z1, uint16_t *z2);
 hal_tsc2007_point_t hal_tsc2007_get_point(hal_tsc2007_t *dev);
 ```
 
-`hal_tsc2007_init()` probes the 7-bit address and sends the same initial
+`hal_tsc2007_init_ex()` probes the 7-bit address and sends the same initial
 `MEASURE_TEMP0` / `POWERDOWN_IRQON` / 12-bit command as the source driver.
-`hal_tsc2007_command()` builds the command byte as `(function << 4) |
+`hal_tsc2007_command_ex()` builds the command byte as `(function << 4) |
 (power << 2) | (resolution << 1)`, waits 500 us, reads exactly two bytes and
-returns the 12-bit value decoded from the upper reply bits. Failed command
-transactions return `0`, matching the source behavior.
+returns the 12-bit value decoded from the upper reply bits through `out_value`.
+The legacy `hal_tsc2007_command()` wrapper still returns `0` on failure.
 
-`hal_tsc2007_read_touch()` performs the established sequence:
+`hal_tsc2007_read_touch_ex()` performs the established sequence:
 `Z1`, `Z2`, `X`, `Y`, duplicate `X`, duplicate `Y`, then `MEASURE_TEMP0` with
 power-down. The X/Y sample is accepted only when the duplicate measurements are
 within `HAL_TSC2007_STABILITY_THRESHOLD` and neither accepted coordinate equals
-`HAL_TSC2007_TOUCH_INVALID`. `hal_tsc2007_get_point()` returns `{x, y, z1}` or
-`{0, 0, 0}` when the sample is rejected.
+`HAL_TSC2007_TOUCH_INVALID`. Rejected samples return `HAL_ENOENT`, I2C
+transaction failures return `HAL_EBUS`, and invalid arguments return
+`HAL_EINVAL`. `hal_tsc2007_read_touch()` preserves the legacy `bool` shape, and
+`hal_tsc2007_get_point()` returns `{x, y, z1}` or `{0, 0, 0}` when the sample
+is rejected.
 
 **impl/shared:** `impl/shared/drivers/tsc2007/tsc2007.cpp` is used by RP2040,
 STM32G474, and mock tests over HAL I2C and HAL system timing.
@@ -355,11 +373,15 @@ hal_stmpe610_config_t hal_stmpe610_soft_spi_config(uint8_t cs_pin,
                                                    uint8_t sck_pin);
 
 bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg);
+hal_status_t hal_stmpe610_init_ex(hal_stmpe610_t *dev,
+                                  const hal_stmpe610_config_t *cfg);
 void hal_stmpe610_deinit(hal_stmpe610_t *dev);
 
 bool hal_stmpe610_touched(hal_stmpe610_t *dev);
 bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev);
 uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev);
+hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
+                                       uint16_t *y, uint8_t *z);
 void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
                             uint8_t *z);
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev);
@@ -370,17 +392,23 @@ void hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
                                   uint8_t value);
 ```
 
-`hal_stmpe610_init()` probes chip ID `0x0811`, keeps the original hardware-SPI
-mode-1 fallback when mode 0 does not answer, then runs the established
-touch-controller setup sequence: soft reset, 10 ms wait, register flush reads,
-TSC enable, touch interrupt enable, ADC/TSC timing setup, FIFO threshold/reset,
-50 mA drive current and interrupt-status clear.
+`hal_stmpe610_init_ex()` probes chip ID `0x0811`, keeps the original
+hardware-SPI mode-1 fallback when mode 0 does not answer, then runs the
+established touch-controller setup sequence: soft reset, 10 ms wait, register
+flush reads, TSC enable, touch interrupt enable, ADC/TSC timing setup, FIFO
+threshold/reset, 50 mA drive current and interrupt-status clear. It reports
+bad arguments/configuration as `HAL_EINVAL`, allocation failure as `HAL_ENOMEM`
+and chip-ID mismatch as `HAL_ENOENT`; `hal_stmpe610_init()` remains the legacy
+`bool` wrapper.
 
-`hal_stmpe610_read_data()` reads four bytes from the FIFO data port and decodes
-12-bit X/Y plus 8-bit pressure. `hal_stmpe610_get_point()` drains the FIFO,
-returns the last sample, and clears interrupt status when the FIFO is empty.
-The I2C 16-bit register read path is dispatched only through I2C; this avoids
-the fall-through transport bug present in the source import.
+`hal_stmpe610_read_data_ex()` reads four bytes from the FIFO data port and
+decodes 12-bit X/Y plus 8-bit pressure, returning `HAL_EUNINIT` for an
+uninitialized instance and `HAL_EINVAL` for bad output pointers.
+`hal_stmpe610_read_data()` preserves the old void-returning behavior.
+`hal_stmpe610_get_point()` drains the FIFO, returns the last sample, and clears
+interrupt status when the FIFO is empty. The I2C 16-bit register read path is
+dispatched only through I2C; this avoids the fall-through transport bug present
+in the source import.
 
 **impl/shared:** `impl/shared/drivers/stmpe610/stmpe610.cpp` is used by RP2040,
 STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI

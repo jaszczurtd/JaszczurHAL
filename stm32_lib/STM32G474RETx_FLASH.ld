@@ -44,9 +44,12 @@ PROVIDE(__hal_stm32_littlefs_flash_start = ORIGIN(HAL_LITTLEFS_FLASH));
 PROVIDE(__hal_stm32_littlefs_flash_end = ORIGIN(HAL_LITTLEFS_FLASH) + LENGTH(HAL_LITTLEFS_FLASH));
 PROVIDE(__hal_stm32_eeprom_flash_start = ORIGIN(HAL_EEPROM_FLASH));
 PROVIDE(__hal_stm32_eeprom_flash_end = ORIGIN(HAL_EEPROM_FLASH) + LENGTH(HAL_EEPROM_FLASH));
+PROVIDE(__jh_stm32_ram_start = ORIGIN(RAM));
+PROVIDE(__jh_stm32_ram_end = ORIGIN(RAM) + LENGTH(RAM));
 
 /* Top of stack = top of RAM. */
 _estack = ORIGIN(RAM) + LENGTH(RAM);
+PROVIDE(__jh_stm32_stack_top = _estack);
 
 /* Minimum heap/stack kept free (sanity guard for the linker). */
 _Min_Heap_Size  = 0x400;
@@ -59,6 +62,7 @@ _Min_Stack_Size = DEFINED(HAL_STM32_MIN_STACK_SIZE) ? HAL_STM32_MIN_STACK_SIZE :
 
 /* Stack-guard anchor used by stm32g474_fault.cpp. */
 JH_StackLimit = ORIGIN(RAM) + LENGTH(RAM) - _Min_Stack_Size;
+PROVIDE(__jh_stm32_stack_limit = JH_StackLimit);
 
 SECTIONS
 {

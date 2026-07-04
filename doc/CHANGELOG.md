@@ -107,6 +107,13 @@ All notable changes to this project will be documented in this file.
   existing module return contracts.
 - Added `hal_status_to_string()` for stable symbolic status names in logs and
   diagnostics.
+- Added small status helper functions (`hal_status_is_ok()`,
+  `hal_status_is_error()`, `hal_status_from_bool()` and
+  `hal_status_to_bool()`) so legacy `bool` wrappers and new `_ex` APIs use one
+  canonical conversion pattern.
+- Added `hal_status_t`-returning `_ex` APIs for BH1750, TSC2007 and STMPE610
+  sensor/input drivers while keeping the existing `bool`, `float` and `void`
+  compatibility wrappers unchanged.
 
 ### MFRC522 - shared RFID reader driver
 

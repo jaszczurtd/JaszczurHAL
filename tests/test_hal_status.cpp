@@ -98,10 +98,26 @@ void test_hal_status_to_string_returns_symbolic_names(void) {
                            hal_status_to_string((hal_status_t)-1000));
 }
 
+void test_hal_status_helpers_convert_legacy_results(void) {
+  TEST_ASSERT_TRUE(hal_status_is_ok(HAL_OK));
+  TEST_ASSERT_FALSE(hal_status_is_ok(HAL_NONE));
+  TEST_ASSERT_FALSE(hal_status_is_ok(HAL_EINVAL));
+
+  TEST_ASSERT_FALSE(hal_status_is_error(HAL_OK));
+  TEST_ASSERT_FALSE(hal_status_is_error(HAL_NONE));
+  TEST_ASSERT_TRUE(hal_status_is_error(HAL_EBUS));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_status_from_bool(true, HAL_EBUS));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, hal_status_from_bool(false, HAL_EBUS));
+  TEST_ASSERT_TRUE(hal_status_to_bool(HAL_OK));
+  TEST_ASSERT_FALSE(hal_status_to_bool(HAL_EINVAL));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_hal_status_values_are_stable);
   RUN_TEST(test_hal_status_failure_values_are_negative);
   RUN_TEST(test_hal_status_to_string_returns_symbolic_names);
+  RUN_TEST(test_hal_status_helpers_convert_legacy_results);
   return UNITY_END();
 }

@@ -22,8 +22,11 @@
 
 #define TSC2007_CONVERSION_DELAY_US 500u
 
-static bool tsc2007_ensure_mutex(hal_tsc2007_t *dev) {
-  return (dev != NULL) && (jh_hal_mutex_create_once(&dev->mutex) != NULL);
+static hal_status_t tsc2007_ensure_mutex(hal_tsc2007_t *dev) {
+  if (dev == NULL) {
+    return HAL_EINVAL;
+  }
+  return jh_hal_mutex_create_once(&dev->mutex) != NULL ? HAL_OK : HAL_ENOMEM;
 }
 
 static bool tsc2007_valid(hal_tsc2007_t *dev) {
@@ -37,16 +40,22 @@ static uint8_t tsc2007_command_byte(hal_tsc2007_function_t func,
                    ((uint8_t)res << 1u));
 }
 
-static uint16_t tsc2007_command_unlocked(hal_tsc2007_t *dev,
-                                         hal_tsc2007_function_t func,
-                                         hal_tsc2007_power_t pwr,
-                                         hal_tsc2007_resolution_t res) {
+static hal_status_t tsc2007_command_unlocked_ex(hal_tsc2007_t *dev,
+                                                hal_tsc2007_function_t func,
+                                                hal_tsc2007_power_t pwr,
+                                                hal_tsc2007_resolution_t res,
+                                                uint16_t *out_value) {
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+
   const uint8_t cmd = tsc2007_command_byte(func, pwr, res);
   bool write_ok = false;
   const uint8_t status = hal_i2c_write_byte_bus(
       dev->cfg.i2c_bus, dev->cfg.i2c_addr, cmd, &write_ok);
   if (!write_ok || status != 0u) {
-    return 0u;
+    return HAL_EBUS;
   }
 
   hal_delay_us(TSC2007_CONVERSION_DELAY_US);
@@ -54,10 +63,20 @@ static uint16_t tsc2007_command_unlocked(hal_tsc2007_t *dev,
   uint8_t reply[2] = {0u, 0u};
   if (!hal_i2c_read_bytes_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr, reply,
                               sizeof(reply))) {
-    return 0u;
+    return HAL_EBUS;
   }
 
-  return (uint16_t)(((uint16_t)reply[0] << 4u) | (reply[1] >> 4u));
+  *out_value = (uint16_t)(((uint16_t)reply[0] << 4u) | (reply[1] >> 4u));
+  return HAL_OK;
+}
+
+static uint16_t tsc2007_command_unlocked(hal_tsc2007_t *dev,
+                                         hal_tsc2007_function_t func,
+                                         hal_tsc2007_power_t pwr,
+                                         hal_tsc2007_resolution_t res) {
+  uint16_t value = 0u;
+  (void)tsc2007_command_unlocked_ex(dev, func, pwr, res, &value);
+  return value;
 }
 
 static uint16_t tsc2007_abs_diff(uint16_t a, uint16_t b) {
@@ -72,9 +91,11 @@ hal_tsc2007_config_t hal_tsc2007_default_config(void) {
   return cfg;
 }
 
-bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg) {
-  if (!tsc2007_ensure_mutex(dev)) {
-    return false;
+hal_status_t hal_tsc2007_init_ex(hal_tsc2007_t *dev,
+                                 const hal_tsc2007_config_t *cfg) {
+  hal_status_t status = tsc2007_ensure_mutex(dev);
+  if (status != HAL_OK) {
+    return status;
   }
 
   hal_tsc2007_config_t effective =
@@ -88,18 +109,26 @@ bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg) {
   const bool present =
       !hal_i2c_is_busy_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr);
   if (present) {
-    (void)tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_TEMP0,
-                                   HAL_TSC2007_POWERDOWN_IRQON,
-                                   HAL_TSC2007_ADC_12BIT);
+    uint16_t ignored = 0u;
+    (void)tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_TEMP0,
+                                      HAL_TSC2007_POWERDOWN_IRQON,
+                                      HAL_TSC2007_ADC_12BIT, &ignored);
+    status = HAL_OK;
     dev->initialized = true;
+  } else {
+    status = HAL_ENOENT;
   }
 
   hal_mutex_unlock(dev->mutex);
 
-  if (!present) {
+  if (status != HAL_OK) {
     hal_tsc2007_deinit(dev);
   }
-  return present;
+  return status;
+}
+
+bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg) {
+  return hal_status_to_bool(hal_tsc2007_init_ex(dev, cfg));
 }
 
 void hal_tsc2007_deinit(hal_tsc2007_t *dev) {
@@ -119,57 +148,102 @@ void hal_tsc2007_deinit(hal_tsc2007_t *dev) {
 uint16_t hal_tsc2007_command(hal_tsc2007_t *dev, hal_tsc2007_function_t func,
                              hal_tsc2007_power_t pwr,
                              hal_tsc2007_resolution_t res) {
+  uint16_t value = 0u;
+  (void)hal_tsc2007_command_ex(dev, func, pwr, res, &value);
+  return value;
+}
+
+hal_status_t hal_tsc2007_command_ex(hal_tsc2007_t *dev,
+                                    hal_tsc2007_function_t func,
+                                    hal_tsc2007_power_t pwr,
+                                    hal_tsc2007_resolution_t res,
+                                    uint16_t *out_value) {
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+
   if (!tsc2007_valid(dev)) {
-    return 0u;
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(dev->mutex);
-  const uint16_t value = tsc2007_command_unlocked(dev, func, pwr, res);
+  const hal_status_t status =
+      tsc2007_command_unlocked_ex(dev, func, pwr, res, out_value);
   hal_mutex_unlock(dev->mutex);
-  return value;
+  return status;
+}
+
+hal_status_t hal_tsc2007_read_touch_ex(hal_tsc2007_t *dev, uint16_t *x,
+                                       uint16_t *y, uint16_t *z1,
+                                       uint16_t *z2) {
+  if (x == NULL || y == NULL || z1 == NULL || z2 == NULL) {
+    return HAL_EINVAL;
+  }
+  if (!tsc2007_valid(dev)) {
+    return HAL_EUNINIT;
+  }
+
+  hal_mutex_lock(dev->mutex);
+
+  uint16_t x1 = 0u;
+  uint16_t y1 = 0u;
+  uint16_t x2 = 0u;
+  uint16_t y2 = 0u;
+  uint16_t ignored = 0u;
+  hal_status_t status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_Z1,
+                                                    HAL_TSC2007_ADON_IRQOFF,
+                                                    HAL_TSC2007_ADC_12BIT, z1);
+  if (status == HAL_OK) {
+    status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_Z2,
+                                         HAL_TSC2007_ADON_IRQOFF,
+                                         HAL_TSC2007_ADC_12BIT, z2);
+  }
+  if (status == HAL_OK) {
+    status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_X,
+                                         HAL_TSC2007_ADON_IRQOFF,
+                                         HAL_TSC2007_ADC_12BIT, &x1);
+  }
+  if (status == HAL_OK) {
+    status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_Y,
+                                         HAL_TSC2007_ADON_IRQOFF,
+                                         HAL_TSC2007_ADC_12BIT, &y1);
+  }
+  if (status == HAL_OK) {
+    status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_X,
+                                         HAL_TSC2007_ADON_IRQOFF,
+                                         HAL_TSC2007_ADC_12BIT, &x2);
+  }
+  if (status == HAL_OK) {
+    status = tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_Y,
+                                         HAL_TSC2007_ADON_IRQOFF,
+                                         HAL_TSC2007_ADC_12BIT, &y2);
+  }
+  if (status == HAL_OK) {
+    (void)tsc2007_command_unlocked_ex(dev, HAL_TSC2007_MEASURE_TEMP0,
+                                      HAL_TSC2007_POWERDOWN_IRQON,
+                                      HAL_TSC2007_ADC_12BIT, &ignored);
+  }
+
+  if (status == HAL_OK &&
+      tsc2007_abs_diff(x1, x2) <= HAL_TSC2007_STABILITY_THRESHOLD &&
+      tsc2007_abs_diff(y1, y2) <= HAL_TSC2007_STABILITY_THRESHOLD) {
+    *x = x1;
+    *y = y1;
+    if (*x == HAL_TSC2007_TOUCH_INVALID || *y == HAL_TSC2007_TOUCH_INVALID) {
+      status = HAL_ENOENT;
+    }
+  } else if (status == HAL_OK) {
+    status = HAL_ENOENT;
+  }
+
+  hal_mutex_unlock(dev->mutex);
+  return status;
 }
 
 bool hal_tsc2007_read_touch(hal_tsc2007_t *dev, uint16_t *x, uint16_t *y,
                             uint16_t *z1, uint16_t *z2) {
-  if (!tsc2007_valid(dev) || x == NULL || y == NULL || z1 == NULL ||
-      z2 == NULL) {
-    return false;
-  }
-
-  hal_mutex_lock(dev->mutex);
-
-  *z1 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_Z1,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  *z2 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_Z2,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  const uint16_t x1 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_X,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  const uint16_t y1 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_Y,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  const uint16_t x2 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_X,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  const uint16_t y2 =
-      tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_Y,
-                               HAL_TSC2007_ADON_IRQOFF, HAL_TSC2007_ADC_12BIT);
-  (void)tsc2007_command_unlocked(dev, HAL_TSC2007_MEASURE_TEMP0,
-                                 HAL_TSC2007_POWERDOWN_IRQON,
-                                 HAL_TSC2007_ADC_12BIT);
-
-  bool ok = false;
-  if (tsc2007_abs_diff(x1, x2) <= HAL_TSC2007_STABILITY_THRESHOLD &&
-      tsc2007_abs_diff(y1, y2) <= HAL_TSC2007_STABILITY_THRESHOLD) {
-    *x = x1;
-    *y = y1;
-    ok = (*x != HAL_TSC2007_TOUCH_INVALID) && (*y != HAL_TSC2007_TOUCH_INVALID);
-  }
-
-  hal_mutex_unlock(dev->mutex);
-  return ok;
+  return hal_status_to_bool(hal_tsc2007_read_touch_ex(dev, x, y, z1, z2));
 }
 
 hal_tsc2007_point_t hal_tsc2007_get_point(hal_tsc2007_t *dev) {
