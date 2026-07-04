@@ -31,8 +31,19 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
 - `scripts/ensure_freertos_kernel.sh` - shared helper for fetching/verifying
   the pinned `third_party/FreeRTOS-Kernel` checkout.
+- `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
+  security inventory.
+- `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
+  security inventory.
+- `scripts/check_vulnerabilities.sh` - optional local vulnerability scanner
+  wrapper that regenerates the SBOM and runs available source/vendored
+  dependency scanners.
 - `runalltests.sh` - full local validation gate.
 - `runmefirst.sh` - one-time local toolchain setup.
+- `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
+- `security/third_party.json` - human-maintained third-party inventory.
+- `security/sbom.cdx.json` - generated CycloneDX SBOM.
+- `security/vulnerability_log.md` - CVE/CVSS assessment and patch-decision log.
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
 - `doc/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
 - `src/libConfig.h` - backward-compat redirect to `hal/hal_config.h`.
@@ -138,6 +149,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS flag, stack-size overrides, core modules, `library.properties` note |
 | 3 | [Build dependencies and unit tests](api/03_build_tests.md) | Hardware and mock/PC dependency tables, ctest build/run instructions, full test-suite inventory, how to add a new test suite, mock time control |
 | 4 | [Multicore safety, drivers, migration](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, migration table from Arduino/pico SDK |
+| S | [Security supply chain](security_supply_chain.md) | Third-party inventory, CycloneDX SBOM generation, vulnerability scanning and CVE/CVSS assessment workflow |
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |

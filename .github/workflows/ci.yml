@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  schedule:
+    # Weekly security refresh: Monday 04:23 UTC.
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -114,6 +118,47 @@ jobs:
             echo "::error::clang-tidy reported findings (see logs above)"
             exit 1
           fi
+
+  # ── Security supply-chain gate ─────────────────────────────────────────────
+  # Regenerates the repository CycloneDX SBOM from security/third_party.json and
+  # verifies that the committed SBOM is up to date. Then runs osv-scanner against
+  # the source tree/SBOM and cve-bin-tool against the generated SBOM. cve-bin-tool
+  # intentionally does not scan the whole repository tree because local build*
+  # artifacts and object files create excessive noise; the SBOM is the source of
+  # truth for tracked bundled and pinned dependencies.
+  security-scan:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install security scanners
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates python3 pipx
+
+          arch="$(uname -m)"
+          case "${arch}" in
+            x86_64|amd64) osv_arch="amd64" ;;
+            aarch64|arm64) osv_arch="arm64" ;;
+            *) echo "::error::Unsupported osv-scanner architecture: ${arch}"; exit 1 ;;
+          esac
+
+          curl -fsSL \
+            "https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${osv_arch}" \
+            -o /tmp/osv-scanner
+          chmod +x /tmp/osv-scanner
+          sudo install -m 0755 /tmp/osv-scanner /usr/local/bin/osv-scanner
+
+          python3 -m pipx install cve-bin-tool
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Verify generated SBOM is current
+        run: ./scripts/check_sbom.sh
+
+      - name: Run vulnerability scan
+        run: JH_SECURITY_SCAN_SOURCE=1 ./scripts/check_vulnerabilities.sh
 
   # ── STM32 skeleton compile gate ────────────────────────────────────────────
   # This job builds the STM32G474 static-library target with the host compiler

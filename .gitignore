@@ -16,6 +16,7 @@ install_manifest.txt
 *.o
 *.a
 *__pycache__*
+*.py[cod]
 GRBHAL/
 
 # Fetched third-party dependencies
@@ -49,3 +50,18 @@ compile_commands.json
 .claude/
 AGENTS.md
 .agents
+
+# Security scanner local output/cache. Keep the repository SBOM tracked.
+.osv-scanner/
+.cve-bin-tool/
+cve-bin-tool*.csv
+cve-bin-tool*.json
+cve-bin-tool*.html
+cve-bin-tool*.pdf
+*.sarif
+*.spdx
+*.spdx.json
+*.spdx.yaml
+*.vex.json
+*.vex.yaml
+!security/sbom.cdx.json

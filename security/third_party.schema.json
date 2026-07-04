@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "security/third_party.schema.json",
+  "title": "JaszczurHAL third-party component inventory",
+  "type": "object",
+  "required": ["schema_version", "project", "components"],
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "schema_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "project": {
+      "type": "object",
+      "required": ["name", "version_file", "repository", "license"],
+      "properties": {
+        "name": {"type": "string"},
+        "version_file": {"type": "string"},
+        "repository": {"type": "string"},
+        "license": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "vulnerability_sources": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "version", "type", "scope", "licenses", "paths"],
+        "properties": {
+          "name": {"type": "string"},
+          "version": {"type": "string"},
+          "commit": {"type": "string"},
+          "type": {"type": "string"},
+          "scope": {
+            "type": "string",
+            "enum": ["required", "optional", "development", "excluded"]
+          },
+          "supplier": {"type": "string"},
+          "licenses": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "purl": {"type": "string"},
+          "paths": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "upstream": {"type": "string"},
+          "feature_flags": {
+            "type": "array",
+            "items": {"type": "string"}
+          },
+          "notes": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

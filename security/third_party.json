@@ -1,0 +1,161 @@
+{
+  "schema": "security/third_party.schema.json",
+  "schema_version": 1,
+  "project": {
+    "name": "JaszczurHAL",
+    "version_file": "library.properties",
+    "repository": "https://github.com/jaszczurtd/JaszczurHAL",
+    "license": "MIT"
+  },
+  "vulnerability_sources": [
+    "https://osv.dev",
+    "https://nvd.nist.gov/vuln",
+    "https://github.com/advisories"
+  ],
+  "components": [
+    {
+      "name": "FreeRTOS-Kernel",
+      "version": "V11.1.0+",
+      "commit": "2e588af95bad29aef577373512883370c9408c1c",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "FreeRTOS",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/FreeRTOS/FreeRTOS-Kernel@2e588af95bad29aef577373512883370c9408c1c",
+      "paths": ["third_party/FreeRTOS-Kernel", "freertos_core_version.conf"],
+      "upstream": "https://github.com/FreeRTOS/FreeRTOS-Kernel",
+      "feature_flags": ["HAL_ENABLE_FREERTOS"],
+      "notes": "Pinned external checkout for STM32G474 FreeRTOS builds; RP2040 uses arduino-pico's bundled FreeRTOS mode."
+    },
+    {
+      "name": "cJSON",
+      "version": "1.7.18",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Dave Gamble and cJSON contributors",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/DaveGamble/cJSON@v1.7.18",
+      "paths": ["src/hal/impl/shared/frameworks/cjson"],
+      "upstream": "https://github.com/DaveGamble/cJSON",
+      "feature_flags": ["HAL_ENABLE_CJSON", "HAL_ENABLE_NET_COMMANDS"],
+      "notes": "Bundled cJSON and cJSON_Utils sources."
+    },
+    {
+      "name": "LodePNG",
+      "version": "20260119",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Lode Vandevenne",
+      "licenses": ["Zlib"],
+      "purl": "pkg:generic/lodepng@20260119",
+      "paths": ["src/hal/impl/shared/frameworks/lodepng"],
+      "upstream": "https://github.com/lvandeve/lodepng",
+      "feature_flags": ["HAL_ENABLE_PNG"],
+      "notes": "Bundled memory-oriented PNG encoder/decoder with disk and C++ std wrappers disabled by default."
+    },
+    {
+      "name": "FatFs",
+      "version": "R0.16",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "ChaN",
+      "licenses": ["BSD-1-Clause"],
+      "purl": "pkg:generic/fatfs@R0.16",
+      "paths": ["src/hal/impl/shared/frameworks/filesystem/ff16"],
+      "upstream": "http://elm-chan.org/fsw/ff/00index_e.html",
+      "feature_flags": ["HAL_ENABLE_FAT", "HAL_ENABLE_SDLOGGER"],
+      "notes": "Generic FAT filesystem core used by shared SD/FatFs support."
+    },
+    {
+      "name": "littlefs",
+      "version": "2.11",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "littlefs authors and Arm Limited",
+      "licenses": ["BSD-3-Clause"],
+      "purl": "pkg:github/littlefs-project/littlefs@v2.11",
+      "paths": ["src/hal/impl/stm32g474/drivers/littlefs"],
+      "upstream": "https://github.com/littlefs-project/littlefs",
+      "feature_flags": ["HAL_ENABLE_LITTLEFS"],
+      "notes": "STM32G474 internal-flash LittleFS backend support."
+    },
+    {
+      "name": "PubSubClient",
+      "version": "unknown-vendored",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Nicholas O'Leary",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/knolleary/pubsubclient",
+      "paths": ["src/hal/impl/rp2040/frameworks/PubSubClient"],
+      "upstream": "https://github.com/knolleary/pubsubclient",
+      "feature_flags": ["HAL_ENABLE_MQTT"],
+      "notes": "Vendored Arduino MQTT client used by the RP2040 MQTT backend. Record the exact upstream tag/commit at the next refresh."
+    },
+    {
+      "name": "arduino-wireguard-pico-w",
+      "version": "0.1.8",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Kenta Ida, Daniel Hope, Marcin Kielesinski",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@0.1.8",
+      "paths": ["src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w"],
+      "upstream": "https://github.com/jaszczurtd/arduino-wireguard-pico-w",
+      "feature_flags": ["HAL_ENABLE_WIREGUARD"],
+      "notes": "RP2040/Pico W port of WireGuard-ESP32 with lwIP/Pico compatibility glue."
+    },
+    {
+      "name": "WireGuard crypto core",
+      "version": "unknown-vendored",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "WireGuard and upstream crypto contributors",
+      "licenses": ["MIT"],
+      "purl": "pkg:generic/wireguard-crypto-core",
+      "paths": ["src/hal/impl/shared/frameworks/wireguard/crypto"],
+      "upstream": "https://www.wireguard.com",
+      "feature_flags": ["HAL_ENABLE_WIREGUARD"],
+      "notes": "Shared ChaCha20, Poly1305, BLAKE2s and X25519 primitives used by HAL crypto/WireGuard paths; local license detail includes x25519 MIT attribution."
+    },
+    {
+      "name": "JPEGDecoder / picojpeg",
+      "version": "unknown-vendored",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Makoto Kurauchi, Bodmer, Rich Geldreich",
+      "licenses": ["BSD-style"],
+      "purl": "pkg:generic/jpegdecoder-picojpeg",
+      "paths": ["src/hal/impl/shared/frameworks/jpeg"],
+      "upstream": "https://github.com/Bodmer/JPEGDecoder",
+      "feature_flags": ["HAL_ENABLE_JPEG"],
+      "notes": "Bundled JPEGDecoder and picojpeg sources for memory-based embedded JPEG decode."
+    },
+    {
+      "name": "Unity",
+      "version": "unknown-vendored",
+      "type": "library",
+      "scope": "development",
+      "supplier": "ThrowTheSwitch",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/ThrowTheSwitch/Unity",
+      "paths": ["src/utils/unity.c", "src/utils/unity.h", "src/utils/unity_internals.h"],
+      "upstream": "https://github.com/ThrowTheSwitch/Unity",
+      "feature_flags": [],
+      "notes": "Bundled test framework sources used by host/unit tests."
+    },
+    {
+      "name": "SmartTimers",
+      "version": "unknown-vendored",
+      "type": "library",
+      "scope": "required",
+      "supplier": "Nettigo, garthoff/Timers contributors",
+      "licenses": ["unknown"],
+      "purl": "pkg:generic/smarttimers",
+      "paths": ["src/hal/impl/shared/frameworks/smart_timers"],
+      "upstream": "https://github.com/nettigo/Timers",
+      "feature_flags": [],
+      "notes": "Based on Nettigo Timers, itself a fork of garthoff/Timers. License should be confirmed during the next upstream refresh."
+    }
+  ]
+}

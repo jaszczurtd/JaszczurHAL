@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Security supply chain
+
+- Added `SECURITY.md` with vulnerability reporting, triage, CVSS guidance and
+  third-party maintenance policy.
+- Added a human-maintained third-party inventory in `security/third_party.json`
+  and a generated CycloneDX SBOM at `security/sbom.cdx.json`.
+- Added `scripts/generate_sbom.py` for deterministic offline SBOM generation,
+  `scripts/check_sbom.sh` for SBOM freshness checks,
+  `scripts/check_vulnerabilities.sh` as an optional scanner wrapper, and
+  `security/vulnerability_log.md` for CVE/CVSS assessment decisions.
+- Documented the SBOM and vulnerability-tracking workflow in
+  `doc/security_supply_chain.md`.
+- Added a dedicated GitHub Actions `security-scan` job for PR/push, weekly and
+  manual SBOM/vulnerability checks.
+
 ### Simple I/O chip drivers
 
 - Added shared HAL-only drivers for MCP23017, PCA9654E, PCF8574, 74HC595,
