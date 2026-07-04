@@ -5,6 +5,7 @@
 #include "../../hal_system.h"
 #include "drivers/stm32g474/stm32g474_fault.h"
 #include "drivers/stm32g474/stm32g474_system.h"
+#include "port/stm32g474_regs.h"
 
 #if defined(HAL_ENABLE_FREERTOS)
 #include <FreeRTOS.h>
@@ -79,6 +80,59 @@ void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
 
 bool hal_watchdog_caused_reboot(void) {
   return stm32g474_system_watchdog_caused_reboot();
+}
+
+hal_status_t
+hal_system_get_current_architecture(hal_system_architecture_t *out) {
+  if (out == nullptr) {
+    return HAL_EINVAL;
+  }
+
+  stm32g474_system_arch_info_t arch_info = {};
+  stm32g474_system_get_arch_info(&arch_info);
+
+#ifndef HAL_STM32_FLASH_SIZE
+#define HAL_STM32_FLASH_SIZE (512u * 1024u)
+#endif
+
+  const uint32_t flash_reserved = (uint32_t)HAL_STM32_FLASH_EEPROM_SIZE +
+                                  (uint32_t)HAL_STM32_FLASH_LITTLEFS_SIZE;
+  const uint32_t flash_total = (uint32_t)HAL_STM32_FLASH_SIZE;
+  const uint32_t flash_usable =
+      flash_total > flash_reserved ? flash_total - flash_reserved : 0u;
+
+  hal_system_architecture_t info = {};
+  info.target_name = HAL_TARGET_NAME;
+  info.backend_name = arch_info.backend_name;
+  info.mcu = arch_info.mcu;
+  info.mcu_subtype = arch_info.mcu_subtype;
+  info.cpu_arch = arch_info.cpu_arch;
+#if JH_STM32_HAL_SYSTEM_FREERTOS
+  info.rtos_name = "FreeRTOS";
+#else
+  info.rtos_name = "none";
+#endif
+  info.cpu_cores = arch_info.cpu_cores;
+#if defined(JH_STM32G474_HW)
+  info.is_hardware = true;
+#else
+  info.is_hardware = false;
+#endif
+  info.has_fpu = arch_info.has_fpu;
+  info.has_rtos = JH_STM32_HAL_SYSTEM_FREERTOS != 0;
+  info.cpu_clock_hz = JH_G474_CORE_CLOCK_HZ;
+  info.peripheral_clock_hz = JH_G474_PCLK1_HZ;
+  info.flash_total_bytes = flash_total;
+  info.flash_usable_bytes = flash_usable;
+  info.flash_reserved_bytes = flash_reserved;
+  info.ram_total_bytes = arch_info.ram_total_bytes;
+  info.ram_usable_bytes = arch_info.ram_usable_bytes;
+  info.heap_total_bytes = 0u;
+  info.heap_free_bytes = hal_get_free_heap();
+  info.stack_total_bytes = stm32g474_system_main_stack_bytes();
+  info.uid_bytes = HAL_DEVICE_UID_BYTES;
+  *out = info;
+  return HAL_OK;
 }
 
 void hal_idle(void) {

@@ -3,6 +3,8 @@
 #include "../../hal_system.h"
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
+#include <hardware/clocks.h>
+#include <hardware/regs/addressmap.h>
 #include <pico/time.h>
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
@@ -86,6 +88,75 @@ void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
 
 bool hal_watchdog_caused_reboot(void) {
   return rp2040_system_watchdog_caused_reboot();
+}
+
+hal_status_t
+hal_system_get_current_architecture(hal_system_architecture_t *out) {
+  if (out == nullptr) {
+    return HAL_EINVAL;
+  }
+
+  rp2040_system_arch_info_t arch_info = {};
+  rp2040_system_get_arch_info(&arch_info);
+
+#if defined(PICO_FLASH_SIZE_BYTES)
+  const uint32_t flash_total = (uint32_t)PICO_FLASH_SIZE_BYTES;
+#else
+  const uint32_t flash_total = 0u;
+#endif
+
+#if defined(FS_START)
+  const uint32_t flash_xip_base = (uint32_t)XIP_BASE;
+  const uint32_t flash_layout_limit = flash_xip_base + flash_total;
+  const uint32_t flash_fs_start = (uint32_t)FS_START;
+  const bool flash_layout_known = flash_total > 0u &&
+                                  flash_fs_start >= flash_xip_base &&
+                                  flash_fs_start <= flash_layout_limit;
+  const uint32_t flash_usable =
+      flash_layout_known ? flash_fs_start - flash_xip_base : 0u;
+  const uint32_t flash_reserved =
+      flash_layout_known ? flash_total - flash_usable : 0u;
+#else
+  const uint32_t flash_usable = 0u;
+  const uint32_t flash_reserved = 0u;
+#endif
+
+#if defined(PICO_STACK_SIZE)
+  const uint32_t stack_total = (uint32_t)PICO_STACK_SIZE;
+#elif defined(HAL_RP2040_STACK_SIZE)
+  const uint32_t stack_total = (uint32_t)HAL_RP2040_STACK_SIZE;
+#else
+  const uint32_t stack_total = 0u;
+#endif
+
+  hal_system_architecture_t info = {};
+  info.target_name = HAL_TARGET_NAME;
+  info.backend_name = arch_info.backend_name;
+  info.mcu = arch_info.mcu;
+  info.mcu_subtype = arch_info.mcu_subtype;
+  info.cpu_arch = arch_info.cpu_arch;
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  info.rtos_name = "FreeRTOS SMP";
+#else
+  info.rtos_name = "arduino-pico";
+#endif
+  info.cpu_cores = arch_info.cpu_cores;
+  info.is_hardware = true;
+  info.has_fpu = arch_info.has_fpu;
+  info.has_rtos = JH_RP2040_HAL_SYSTEM_FREERTOS != 0;
+  info.cpu_clock_hz = clock_get_hz(clk_sys);
+  info.peripheral_clock_hz = clock_get_hz(clk_peri);
+  info.flash_total_bytes = flash_total;
+  info.flash_usable_bytes = flash_usable;
+  info.flash_reserved_bytes = flash_reserved;
+  info.ram_total_bytes = arch_info.ram_total_bytes;
+  info.ram_usable_bytes = arch_info.ram_usable_bytes;
+  info.heap_total_bytes = 0u;
+  info.heap_free_bytes = hal_get_free_heap();
+  info.stack_total_bytes = stack_total;
+  info.uid_bytes = HAL_DEVICE_UID_BYTES;
+  *out = info;
+  return HAL_OK;
 }
 
 void hal_idle(void) {

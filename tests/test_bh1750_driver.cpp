@@ -36,7 +36,7 @@ void test_init_sends_continuous_h_resolution_command_and_waits(void) {
   hal_bh1750_config_t cfg = hal_bh1750_default_config();
   cfg.i2c_addr = HAL_BH1750_I2C_ADDR_LOW;
 
-  TEST_ASSERT_TRUE(hal_bh1750_init(&dev, &cfg));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bh1750_init_ex(&dev, &cfg));
   TEST_ASSERT_TRUE(dev.initialized);
   TEST_ASSERT_EQUAL_UINT32(180u, hal_millis());
   TEST_ASSERT_EQUAL_UINT8(HAL_BH1750_I2C_ADDR_LOW,
@@ -51,10 +51,15 @@ void test_init_sends_continuous_h_resolution_command_and_waits(void) {
 void test_init_failure_does_not_wait_and_releases_driver(void) {
   hal_mock_i2c_set_busy(true);
 
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, hal_bh1750_init_ex(&dev, NULL));
   TEST_ASSERT_FALSE(hal_bh1750_init(&dev, NULL));
   TEST_ASSERT_FALSE(dev.initialized);
   TEST_ASSERT_NULL(dev.mutex);
   TEST_ASSERT_EQUAL_UINT32(0u, hal_millis());
+}
+
+void test_init_ex_rejects_null_driver(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_bh1750_init_ex(NULL, NULL));
 }
 
 void test_light_decodes_two_byte_sample_as_lux(void) {
@@ -66,8 +71,12 @@ void test_light_decodes_two_byte_sample_as_lux(void) {
   hal_mock_i2c_inject_rx(rx, (int)sizeof(rx));
   uint32_t before = hal_i2c_get_transaction_count();
 
+  float lux = -1.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_bh1750_light_ex(&dev, &lux));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 400.0f, lux);
+  hal_mock_i2c_inject_rx(rx, (int)sizeof(rx));
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 400.0f, hal_bh1750_light(&dev));
-  TEST_ASSERT_EQUAL_UINT32(before + 1u, hal_i2c_get_transaction_count());
+  TEST_ASSERT_EQUAL_UINT32(before + 2u, hal_i2c_get_transaction_count());
 }
 
 void test_light_routes_to_selected_i2c_bus(void) {
@@ -85,6 +94,10 @@ void test_light_routes_to_selected_i2c_bus(void) {
 }
 
 void test_light_returns_minus_one_for_invalid_driver(void) {
+  float lux = 123.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_bh1750_light_ex(NULL, &lux));
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, lux);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_bh1750_light_ex(&dev, NULL));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -1.0f, hal_bh1750_light(NULL));
 }
 
@@ -93,6 +106,7 @@ int main(void) {
   RUN_TEST(test_default_config_preserves_source_driver_default_address);
   RUN_TEST(test_init_sends_continuous_h_resolution_command_and_waits);
   RUN_TEST(test_init_failure_does_not_wait_and_releases_driver);
+  RUN_TEST(test_init_ex_rejects_null_driver);
   RUN_TEST(test_light_decodes_two_byte_sample_as_lux);
   RUN_TEST(test_light_routes_to_selected_i2c_bus);
   RUN_TEST(test_light_returns_minus_one_for_invalid_driver);

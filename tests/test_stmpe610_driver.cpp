@@ -118,7 +118,7 @@ void test_default_config_uses_i2c_address(void) {
 void test_i2c_init_runs_reference_setup_sequence(void) {
   inject_i2c_init_success(0u);
 
-  TEST_ASSERT_TRUE(hal_stmpe610_init(&dev, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stmpe610_init_ex(&dev, NULL));
   TEST_ASSERT_TRUE(dev.initialized);
   TEST_ASSERT_NOT_NULL(dev.mutex);
   TEST_ASSERT_EQUAL_UINT32(10u, hal_millis());
@@ -129,9 +129,17 @@ void test_i2c_init_rejects_wrong_chip_id(void) {
 
   hal_mock_i2c_inject_rx_bus(0u, rx, sizeof(rx));
 
-  TEST_ASSERT_FALSE(hal_stmpe610_init(&dev, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_stmpe610_init_ex(&dev, NULL));
   TEST_ASSERT_FALSE(dev.initialized);
   TEST_ASSERT_NULL(dev.mutex);
+}
+
+void test_init_ex_rejects_invalid_arguments_and_config(void) {
+  hal_stmpe610_config_t bad =
+      hal_stmpe610_spi_config(0u, HAL_STMPE610_PIN_NONE);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_stmpe610_init_ex(NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_stmpe610_init_ex(&dev, &bad));
 }
 
 void test_i2c_register_access_uses_expected_frames(void) {
@@ -183,11 +191,25 @@ void test_read_data_decodes_fifo_bytes(void) {
 
   hal_mock_i2c_reset_write_log_bus(0u);
   hal_mock_i2c_inject_rx_bus(0u, rx, sizeof(rx));
-  hal_stmpe610_read_data(&dev, &x, &y, &z);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stmpe610_read_data_ex(&dev, &x, &y, &z));
 
   TEST_ASSERT_EQUAL_UINT16(0x0123u, x);
   TEST_ASSERT_EQUAL_UINT16(0x0456u, y);
   TEST_ASSERT_EQUAL_UINT8(0x78u, z);
+}
+
+void test_read_data_ex_reports_invalid_and_uninitialized(void) {
+  uint16_t x = 9u;
+  uint16_t y = 8u;
+  uint8_t z = 7u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT,
+                        hal_stmpe610_read_data_ex(&dev, &x, &y, &z));
+  TEST_ASSERT_EQUAL_UINT16(0u, x);
+  TEST_ASSERT_EQUAL_UINT16(0u, y);
+  TEST_ASSERT_EQUAL_UINT8(0u, z);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_stmpe610_read_data_ex(&dev, NULL, &y, &z));
 }
 
 void test_get_point_drains_fifo_and_clears_interrupts(void) {
@@ -342,9 +364,11 @@ int main(void) {
   RUN_TEST(test_default_config_uses_i2c_address);
   RUN_TEST(test_i2c_init_runs_reference_setup_sequence);
   RUN_TEST(test_i2c_init_rejects_wrong_chip_id);
+  RUN_TEST(test_init_ex_rejects_invalid_arguments_and_config);
   RUN_TEST(test_i2c_register_access_uses_expected_frames);
   RUN_TEST(test_i2c_read16_reads_two_adjacent_registers);
   RUN_TEST(test_read_data_decodes_fifo_bytes);
+  RUN_TEST(test_read_data_ex_reports_invalid_and_uninitialized);
   RUN_TEST(test_get_point_drains_fifo_and_clears_interrupts);
   RUN_TEST(test_get_point_locks_driver_once);
   RUN_TEST(test_spi_init_uses_mode0_and_chip_select);

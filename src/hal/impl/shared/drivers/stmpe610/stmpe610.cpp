@@ -111,8 +111,11 @@ static bool stmpe610_valid_config(const hal_stmpe610_config_t *cfg) {
   }
 }
 
-static bool stmpe610_ensure_mutex(hal_stmpe610_t *dev) {
-  return (dev != NULL) && jh_hal_mutex_create_once(&dev->mutex);
+static hal_status_t stmpe610_ensure_mutex(hal_stmpe610_t *dev) {
+  if (dev == NULL) {
+    return HAL_EINVAL;
+  }
+  return jh_hal_mutex_create_once(&dev->mutex) != NULL ? HAL_OK : HAL_ENOMEM;
 }
 
 static bool stmpe610_ready(hal_stmpe610_t *dev) {
@@ -277,15 +280,21 @@ static void stmpe610_read_data_unlocked(hal_stmpe610_t *dev, uint16_t *x,
   *z = data[3];
 }
 
-bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg) {
+hal_status_t hal_stmpe610_init_ex(hal_stmpe610_t *dev,
+                                  const hal_stmpe610_config_t *cfg) {
   if (dev == NULL) {
-    return false;
+    return HAL_EINVAL;
   }
 
   const hal_stmpe610_config_t effective = stmpe610_normalized_config(cfg);
 
-  if (!stmpe610_valid_config(&effective) || !stmpe610_ensure_mutex(dev)) {
-    return false;
+  if (!stmpe610_valid_config(&effective)) {
+    return HAL_EINVAL;
+  }
+
+  hal_status_t status = stmpe610_ensure_mutex(dev);
+  if (status != HAL_OK) {
+    return status;
   }
 
   hal_mutex_lock(dev->mutex);
@@ -343,7 +352,11 @@ bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg) {
     hal_stmpe610_deinit(dev);
   }
 
-  return ok;
+  return hal_status_from_bool(ok, HAL_ENOENT);
+}
+
+bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg) {
+  return hal_status_to_bool(hal_stmpe610_init_ex(dev, cfg));
 }
 
 void hal_stmpe610_deinit(hal_stmpe610_t *dev) {
@@ -447,8 +460,8 @@ uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev) {
   return size;
 }
 
-void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
-                            uint8_t *z) {
+hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
+                                       uint16_t *y, uint8_t *z) {
   if (x != NULL) {
     *x = 0u;
   }
@@ -459,13 +472,22 @@ void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
     *z = 0u;
   }
 
-  if (!stmpe610_ready(dev) || (x == NULL) || (y == NULL) || (z == NULL)) {
-    return;
+  if ((x == NULL) || (y == NULL) || (z == NULL)) {
+    return HAL_EINVAL;
+  }
+  if (!stmpe610_ready(dev)) {
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(dev->mutex);
   stmpe610_read_data_unlocked(dev, x, y, z);
   hal_mutex_unlock(dev->mutex);
+  return HAL_OK;
+}
+
+void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
+                            uint8_t *z) {
+  (void)hal_stmpe610_read_data_ex(dev, x, y, z);
 }
 
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev) {

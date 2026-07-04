@@ -10,6 +10,8 @@
  * return shapes.
  */
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -115,6 +117,27 @@ static inline const char *hal_status_to_string(hal_status_t status) {
   default:
     return "HAL_STATUS_UNKNOWN";
   }
+}
+
+/** @brief Return true when @p status represents a successful operation. */
+static inline bool hal_status_is_ok(hal_status_t status) {
+  return status == HAL_OK;
+}
+
+/** @brief Return true when @p status represents a failure. */
+static inline bool hal_status_is_error(hal_status_t status) {
+  return status < HAL_NONE;
+}
+
+/** @brief Convert a legacy boolean result into a HAL status code. */
+static inline hal_status_t hal_status_from_bool(bool ok,
+                                                hal_status_t error_status) {
+  return ok ? HAL_OK : error_status;
+}
+
+/** @brief Convert a HAL status code into the legacy boolean success shape. */
+static inline bool hal_status_to_bool(hal_status_t status) {
+  return hal_status_is_ok(status);
 }
 
 #ifdef __cplusplus

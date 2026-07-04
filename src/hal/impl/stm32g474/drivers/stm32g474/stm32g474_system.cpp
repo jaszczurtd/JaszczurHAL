@@ -21,6 +21,10 @@
 #include "../../port/stm32g474_regs.h"
 extern "C" uint32_t stm32g474_systick_millis(void);
 extern "C" uint32_t stm32g474_systick_micros(void);
+extern uint8_t __jh_stm32_ram_start;
+extern uint8_t __jh_stm32_ram_end;
+extern uint8_t __jh_stm32_stack_top;
+extern uint8_t __jh_stm32_stack_limit;
 
 #ifdef HAL_ENABLE_FREERTOS
 static void stm32g474_delay_cycles(uint32_t cycles) {
@@ -41,6 +45,11 @@ static void stm32g474_delay_us_busy(uint32_t us) {
   stm32g474_delay_cycles(us * cycles_per_us);
 }
 #endif
+
+static uint32_t stm32g474_symbol_span_bytes(const uint8_t *start,
+                                            const uint8_t *end) {
+  return (uint32_t)((uintptr_t)end - (uintptr_t)start);
+}
 #endif
 
 namespace {
@@ -70,6 +79,36 @@ static uint32_t host_freertos_millis(void) {
 #endif
 
 } // namespace
+
+void stm32g474_system_get_arch_info(stm32g474_system_arch_info_t *out) {
+  if (out == nullptr) {
+    return;
+  }
+
+  out->backend_name = "stm32g474/bare-metal";
+  out->mcu = "STM32G474RE";
+  out->mcu_subtype = "STM32G474RETx";
+  out->cpu_arch = "ARM Cortex-M4F";
+  out->cpu_cores = 1u;
+#ifdef JH_STM32G474_HW
+  out->ram_total_bytes =
+      stm32g474_symbol_span_bytes(&__jh_stm32_ram_start, &__jh_stm32_ram_end);
+  out->ram_usable_bytes = out->ram_total_bytes;
+#else
+  out->ram_total_bytes = 96u * 1024u;
+  out->ram_usable_bytes = 96u * 1024u;
+#endif
+  out->has_fpu = true;
+}
+
+uint32_t stm32g474_system_main_stack_bytes(void) {
+#ifdef JH_STM32G474_HW
+  return stm32g474_symbol_span_bytes(&__jh_stm32_stack_limit,
+                                     &__jh_stm32_stack_top);
+#else
+  return 0x800u;
+#endif
+}
 
 uint32_t stm32g474_system_millis(void) {
 #ifdef JH_STM32G474_HW

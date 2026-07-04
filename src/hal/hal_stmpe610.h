@@ -1,6 +1,7 @@
 #ifndef JASZCZUR_HAL_STMPE610_H
 #define JASZCZUR_HAL_STMPE610_H
 
+#include "hal_status.h"
 #include "hal_sync.h"
 
 #include <stdbool.h>
@@ -139,6 +140,8 @@ hal_stmpe610_config_t hal_stmpe610_soft_spi_config(uint8_t cs_pin,
                                                    uint8_t miso_pin,
                                                    uint8_t sck_pin);
 
+hal_status_t hal_stmpe610_init_ex(hal_stmpe610_t *dev,
+                                  const hal_stmpe610_config_t *cfg);
 bool hal_stmpe610_init(hal_stmpe610_t *dev, const hal_stmpe610_config_t *cfg);
 void hal_stmpe610_deinit(hal_stmpe610_t *dev);
 
@@ -146,6 +149,8 @@ uint16_t hal_stmpe610_get_version(hal_stmpe610_t *dev);
 bool hal_stmpe610_touched(hal_stmpe610_t *dev);
 bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev);
 uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev);
+hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
+                                       uint16_t *y, uint8_t *z);
 void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
                             uint8_t *z);
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev);

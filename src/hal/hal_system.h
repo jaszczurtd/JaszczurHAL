@@ -22,6 +22,7 @@
  */
 
 #include "hal_math.h"
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -56,6 +57,52 @@ extern "C" {
 #ifndef COUNTOF
 #define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
+
+/**
+ * @brief Snapshot of the currently running HAL architecture/backend.
+ *
+ * String fields point to static storage owned by the backend. Numeric fields
+ * use zero when a value is not known or not meaningful for the current target.
+ *
+ * Memory fields deliberately separate physical capacity from the region
+ * available to the application. For example, STM32G474 reports the whole
+ * internal flash in @c flash_total_bytes and the linker/application region in
+ * @c flash_usable_bytes after HAL storage reservations are subtracted.
+ */
+typedef struct {
+  const char *target_name;  /**< Canonical HAL target name. */
+  const char *backend_name; /**< Backend/runtime carrier name. */
+  const char *mcu;          /**< MCU or host family name. */
+  const char *mcu_subtype;  /**< Board/chip/package subtype if known. */
+  const char *cpu_arch;     /**< CPU architecture/core description. */
+  const char *rtos_name;    /**< Active RTOS/runtime scheduler name. */
+  uint8_t cpu_cores;        /**< Number of CPU cores visible to HAL. */
+  bool is_hardware;         /**< true on real MCU hardware. */
+  bool has_fpu;          /**< true when hardware floating point is enabled. */
+  bool has_rtos;         /**< true when an RTOS-aware HAL path is active. */
+  uint32_t cpu_clock_hz; /**< Current/core CPU clock in Hz. */
+  uint32_t peripheral_clock_hz; /**< Primary peripheral/bus clock in Hz. */
+  uint32_t flash_total_bytes;   /**< Total non-volatile program storage. */
+  uint32_t flash_usable_bytes;  /**< Program flash available to application. */
+  uint32_t
+      flash_reserved_bytes; /**< Flash reserved by HAL storage/filesystems. */
+  uint32_t ram_total_bytes; /**< Total RAM relevant to the HAL runtime. */
+  uint32_t
+      ram_usable_bytes; /**< RAM region normally available to app/linker. */
+  uint32_t heap_total_bytes;  /**< Heap capacity if known. */
+  uint32_t heap_free_bytes;   /**< Current free heap reported by backend. */
+  uint32_t stack_total_bytes; /**< Main/core stack reservation if known. */
+  uint32_t uid_bytes;         /**< Unique-device-ID width in bytes. */
+} hal_system_architecture_t;
+
+/**
+ * @brief Return a snapshot describing the currently running HAL architecture.
+ *
+ * @param out Destination structure.
+ * @return HAL_OK on success, HAL_EINVAL when @p out is NULL.
+ */
+hal_status_t
+hal_system_get_current_architecture(hal_system_architecture_t *out);
 
 /**
  * @brief Convert 32-bit value to 4-byte big-endian representation.

@@ -21,6 +21,7 @@ extern "C" {
  * concurrently with other operations on the same instance.
  */
 
+#include "hal_status.h"
 #include "hal_sync.h"
 
 #include <stdbool.h>
@@ -91,6 +92,8 @@ hal_tsc2007_config_t hal_tsc2007_default_config(void);
  * @param cfg Optional config; NULL uses hal_tsc2007_default_config().
  * @return true when the I2C address responds to the probe.
  */
+hal_status_t hal_tsc2007_init_ex(hal_tsc2007_t *dev,
+                                 const hal_tsc2007_config_t *cfg);
 bool hal_tsc2007_init(hal_tsc2007_t *dev, const hal_tsc2007_config_t *cfg);
 
 /** @brief Release internal resources associated with the driver state. */
@@ -114,6 +117,14 @@ uint16_t hal_tsc2007_command(hal_tsc2007_t *dev, hal_tsc2007_function_t func,
  * by no more than HAL_TSC2007_STABILITY_THRESHOLD and neither accepted
  * coordinate is HAL_TSC2007_TOUCH_INVALID.
  */
+hal_status_t hal_tsc2007_command_ex(hal_tsc2007_t *dev,
+                                    hal_tsc2007_function_t func,
+                                    hal_tsc2007_power_t pwr,
+                                    hal_tsc2007_resolution_t res,
+                                    uint16_t *out_value);
+
+hal_status_t hal_tsc2007_read_touch_ex(hal_tsc2007_t *dev, uint16_t *x,
+                                       uint16_t *y, uint16_t *z1, uint16_t *z2);
 bool hal_tsc2007_read_touch(hal_tsc2007_t *dev, uint16_t *x, uint16_t *y,
                             uint16_t *z1, uint16_t *z2);
 

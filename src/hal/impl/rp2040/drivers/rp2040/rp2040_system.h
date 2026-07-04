@@ -26,6 +26,22 @@
 extern "C" {
 #endif
 
+typedef struct {
+  const char *backend_name;
+  const char *mcu;
+  const char *mcu_subtype;
+  const char *cpu_arch;
+  uint8_t cpu_cores;
+  uint32_t ram_total_bytes;
+  uint32_t ram_usable_bytes;
+  bool has_fpu;
+} rp2040_system_arch_info_t;
+
+/** @brief Return static architecture metadata for the active RP2040-family
+ * build.
+ */
+void rp2040_system_get_arch_info(rp2040_system_arch_info_t *out);
+
 /** @brief Feed (kick) the RP2040 hardware watchdog. Wraps @c watchdog_update().
  */
 void rp2040_system_watchdog_feed(void);
