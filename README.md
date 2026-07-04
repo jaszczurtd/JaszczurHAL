@@ -90,6 +90,8 @@ scripts/
   build_rp2040_lib.sh       # RP2040 static-library helper
   build_stm32_lib.sh        # STM32G474 static-library helper
   ensure_freertos_kernel.sh # pinned FreeRTOS-Kernel fetch/verify helper
+  generate_sbom.py          # CycloneDX SBOM generator
+  check_vulnerabilities.sh  # optional local vulnerability scanner wrapper
 runalltests.sh              # full local validation gate
 runmefirst.sh               # one-time local toolchain setup
 doc/
@@ -103,7 +105,12 @@ doc/
   ESP32_porting_progress.md # ESP32 backend notes / future porting track
   datasheets/               # local reference PDFs and notes
   future_ideas.md           # architecture roadmap and backlog
+  security_supply_chain.md  # SBOM and vulnerability tracking process
 examples/                   # buildable example apps for RP2040 and STM32G474
+security/
+  third_party.json          # third-party component inventory
+  sbom.cdx.json             # generated CycloneDX SBOM
+  vulnerability_log.md      # CVE/CVSS assessment and patch log
 src/
   JaszczurHAL.h             # primary public include
   hal_app_entry.cpp         # optional portable app entry wrapper
@@ -205,6 +212,35 @@ see:
 
 - [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 - [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
+
+## Security and SBOM
+
+JaszczurHAL keeps a lightweight software supply-chain record for bundled and
+pinned dependencies:
+
+- [SECURITY.md](SECURITY.md) - vulnerability reporting, triage and maintenance
+  policy,
+- [doc/security_supply_chain.md](doc/security_supply_chain.md) - SBOM and
+  vulnerability-tracking workflow,
+- [security/third_party.json](security/third_party.json) - human-maintained
+  third-party inventory,
+- [security/sbom.cdx.json](security/sbom.cdx.json) - generated CycloneDX SBOM.
+
+Regenerate the SBOM after third-party updates:
+
+```bash
+./scripts/generate_sbom.py
+```
+
+Optional local vulnerability checks use scanner tools when they are installed:
+
+```bash
+./scripts/check_vulnerabilities.sh
+```
+
+The GitHub Actions `security-scan` job verifies SBOM freshness and runs the
+scanner wrapper on pull requests, pushes to `main`, a weekly schedule and manual
+dispatch.
 
 ## FreeRTOS opt-in
 

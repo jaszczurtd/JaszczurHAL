@@ -1,0 +1,520 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "tools": [
+      {
+        "vendor": "JaszczurHAL",
+        "name": "scripts/generate_sbom.py",
+        "version": "1"
+      }
+    ],
+    "component": {
+      "type": "library",
+      "bom-ref": "pkg:jaszczurhal",
+      "name": "JaszczurHAL",
+      "version": "1.8.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "vcs",
+          "url": "https://github.com/jaszczurtd/JaszczurHAL"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:freertos-kernel@V11.1.0+",
+      "name": "FreeRTOS-Kernel",
+      "version": "V11.1.0+",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "FreeRTOS"
+      },
+      "purl": "pkg:github/FreeRTOS/FreeRTOS-Kernel@2e588af95bad29aef577373512883370c9408c1c",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/FreeRTOS/FreeRTOS-Kernel"
+        },
+        {
+          "type": "other",
+          "url": "third_party/FreeRTOS-Kernel",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "freertos_core_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "2e588af95bad29aef577373512883370c9408c1c"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Pinned external checkout for STM32G474 FreeRTOS builds; RP2040 uses arduino-pico's bundled FreeRTOS mode."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_FREERTOS"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/FreeRTOS-Kernel,freertos_core_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:cjson@1.7.18",
+      "name": "cJSON",
+      "version": "1.7.18",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Dave Gamble and cJSON contributors"
+      },
+      "purl": "pkg:github/DaveGamble/cJSON@v1.7.18",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/DaveGamble/cJSON"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/cjson",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Bundled cJSON and cJSON_Utils sources."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_CJSON,HAL_ENABLE_NET_COMMANDS"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/cjson"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:lodepng@20260119",
+      "name": "LodePNG",
+      "version": "20260119",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "Zlib"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Lode Vandevenne"
+      },
+      "purl": "pkg:generic/lodepng@20260119",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/lvandeve/lodepng"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/lodepng",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Bundled memory-oriented PNG encoder/decoder with disk and C++ std wrappers disabled by default."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_PNG"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/lodepng"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:fatfs@R0.16",
+      "name": "FatFs",
+      "version": "R0.16",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-1-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "ChaN"
+      },
+      "purl": "pkg:generic/fatfs@R0.16",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "http://elm-chan.org/fsw/ff/00index_e.html"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/filesystem/ff16",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Generic FAT filesystem core used by shared SD/FatFs support."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_FAT,HAL_ENABLE_SDLOGGER"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/filesystem/ff16"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:littlefs@2.11",
+      "name": "littlefs",
+      "version": "2.11",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "littlefs authors and Arm Limited"
+      },
+      "purl": "pkg:github/littlefs-project/littlefs@v2.11",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/littlefs-project/littlefs"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/stm32g474/drivers/littlefs",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "STM32G474 internal-flash LittleFS backend support."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_LITTLEFS"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/stm32g474/drivers/littlefs"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pubsubclient@unknown-vendored",
+      "name": "PubSubClient",
+      "version": "unknown-vendored",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Nicholas O'Leary"
+      },
+      "purl": "pkg:github/knolleary/pubsubclient",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/knolleary/pubsubclient"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/rp2040/frameworks/PubSubClient",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Vendored Arduino MQTT client used by the RP2040 MQTT backend. Record the exact upstream tag/commit at the next refresh."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_MQTT"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/rp2040/frameworks/PubSubClient"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:arduino-wireguard-pico-w@0.1.8",
+      "name": "arduino-wireguard-pico-w",
+      "version": "0.1.8",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Kenta Ida, Daniel Hope, Marcin Kielesinski"
+      },
+      "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@0.1.8",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/jaszczurtd/arduino-wireguard-pico-w"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "RP2040/Pico W port of WireGuard-ESP32 with lwIP/Pico compatibility glue."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_WIREGUARD"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:wireguard-crypto-core@unknown-vendored",
+      "name": "WireGuard crypto core",
+      "version": "unknown-vendored",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "WireGuard and upstream crypto contributors"
+      },
+      "purl": "pkg:generic/wireguard-crypto-core",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.wireguard.com"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/wireguard/crypto",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Shared ChaCha20, Poly1305, BLAKE2s and X25519 primitives used by HAL crypto/WireGuard paths; local license detail includes x25519 MIT attribution."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_WIREGUARD"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/wireguard/crypto"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:jpegdecoder-picojpeg@unknown-vendored",
+      "name": "JPEGDecoder / picojpeg",
+      "version": "unknown-vendored",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-style"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Makoto Kurauchi, Bodmer, Rich Geldreich"
+      },
+      "purl": "pkg:generic/jpegdecoder-picojpeg",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Bodmer/JPEGDecoder"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/jpeg",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Bundled JPEGDecoder and picojpeg sources for memory-based embedded JPEG decode."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_JPEG"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/jpeg"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:unity@unknown-vendored",
+      "name": "Unity",
+      "version": "unknown-vendored",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "ThrowTheSwitch"
+      },
+      "purl": "pkg:github/ThrowTheSwitch/Unity",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/ThrowTheSwitch/Unity"
+        },
+        {
+          "type": "other",
+          "url": "src/utils/unity.c",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/utils/unity.h",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/utils/unity_internals.h",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Bundled test framework sources used by host/unit tests."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/utils/unity.c,src/utils/unity.h,src/utils/unity_internals.h"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:smarttimers@unknown-vendored",
+      "name": "SmartTimers",
+      "version": "unknown-vendored",
+      "scope": "required",
+      "licenses": [
+        {
+          "license": {
+            "name": "unknown"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Nettigo, garthoff/Timers contributors"
+      },
+      "purl": "pkg:generic/smarttimers",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/nettigo/Timers"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/smart_timers",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Based on Nettigo Timers, itself a fork of garthoff/Timers. License should be confirmed during the next upstream refresh."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/smart_timers"
+        }
+      ]
+    }
+  ],
+  "serialNumber": "urn:uuid:f1b71b75-b465-00d1-d516-b9f524221c9c"
+}

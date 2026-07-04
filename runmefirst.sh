@@ -48,8 +48,9 @@ sudo apt-get update
 
 # Core build + host-test toolchain (required: without these `cmake -B build`
 # and `ctest` cannot run). build-essential provides gcc/g++/make; the host mock
-# backend links pthreads, which comes with glibc. curl fetches arduino-cli below.
-sudo apt-get install -y build-essential cmake git curl
+# backend links pthreads, which comes with glibc. curl fetches arduino-cli and
+# the security scanner below. Python runs repository helper scripts.
+sudo apt-get install -y build-essential cmake git curl ca-certificates python3
 
 # STM32 FreeRTOS dependency - fetched only as part of this explicit setup step.
 "${SCRIPT_DIR}/scripts/ensure_freertos_kernel.sh" --force --repo-root "${SCRIPT_DIR}"
@@ -58,6 +59,54 @@ sudo apt-get install -y build-essential cmake git curl
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
 # See README "Continuous integration and quality gates".
 sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools clang-format
+
+# Security/SBOM tooling. `generate_sbom.py` only needs Python stdlib, but the
+# vulnerability check wrapper uses osv-scanner for source/vendored dependency
+# checks and can optionally use cve-bin-tool for SBOM-based CVE checks.
+sudo apt-get install -y pipx
+
+install_osv_scanner() {
+  if command -v osv-scanner >/dev/null 2>&1; then
+    return
+  fi
+
+  local arch
+  case "$(uname -m)" in
+    x86_64|amd64) arch="amd64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *)
+      echo "Unsupported architecture for automatic osv-scanner install: $(uname -m)"
+      echo "Install osv-scanner manually and re-run this script."
+      return 1
+      ;;
+  esac
+
+  local version="${OSV_SCANNER_VERSION:-latest}"
+  local url
+  if [ "${version}" = "latest" ]; then
+    url="https://github.com/google/osv-scanner/releases/latest/download/osv-scanner_linux_${arch}"
+  else
+    url="https://github.com/google/osv-scanner/releases/download/${version}/osv-scanner_linux_${arch}"
+  fi
+
+  local tmp
+  tmp="$(mktemp)"
+  curl -fsSL "${url}" -o "${tmp}"
+  chmod +x "${tmp}"
+  sudo install -m 0755 "${tmp}" /usr/local/bin/osv-scanner
+  rm -f "${tmp}"
+}
+
+install_cve_bin_tool() {
+  if command -v cve-bin-tool >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/cve-bin-tool" ]; then
+    return
+  fi
+
+  python3 -m pipx install cve-bin-tool
+}
+
+install_osv_scanner
+install_cve_bin_tool
 
 # ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
 # (scripts/build_stm32_lib.sh). The host-compiler STM32 build and the unit
@@ -83,9 +132,14 @@ fi
 echo
 echo "Verifying toolchain..."
 missing=0
-for tool in cmake g++ gcc make git valgrind clang-tidy cppcheck run-clang-tidy \
-            clang-format arm-none-eabi-gcc arduino-cli; do
-  if command -v "$tool" >/dev/null 2>&1; then
+tool_exists() {
+  command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
+}
+
+for tool in cmake g++ gcc make git python3 valgrind clang-tidy cppcheck \
+            run-clang-tidy clang-format osv-scanner cve-bin-tool \
+            arm-none-eabi-gcc arduino-cli; do
+  if tool_exists "$tool"; then
     printf '  ok       %s\n' "$tool"
   else
     printf '  MISSING  %s\n' "$tool"
