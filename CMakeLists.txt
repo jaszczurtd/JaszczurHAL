@@ -42,6 +42,11 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp
+    ${SRC}/hal/impl/shared/compat/http_server/hal_http_server.cpp
+    ${SRC}/hal/impl/shared/compat/http_files/hal_http_files.cpp
+    ${SRC}/hal/impl/shared/compat/websocket/hal_websocket.cpp
+    ${SRC}/hal/impl/shared/compat/net_console/hal_net_console.cpp
+    ${SRC}/hal/impl/shared/compat/net_commands/hal_net_commands.cpp
     ${SRC}/hal/impl/shared/compat/debug_format/hal_debug_format.cpp
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
@@ -64,6 +69,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/pn532/pn532_spi.cpp
     ${SRC}/hal/impl/shared/drivers/pn532/pn532_i2c.cpp
     ${SRC}/hal/impl/shared/drivers/pn532/pn532_uart.cpp
+    ${SRC}/hal/impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp
     ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
     ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
     ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
@@ -104,6 +110,11 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP
     HAL_ENABLE_TCP            # handle-based TCP client/listener transport
+    HAL_ENABLE_HTTP_SERVER    # small HTTP/1.1 server over HAL TCP
+    HAL_ENABLE_HTTP_FILES     # static file serving/upload helpers over HTTP
+    HAL_ENABLE_WEBSOCKET      # small WebSocket server over HAL TCP
+    HAL_ENABLE_NET_CONSOLE    # password-protected serial/debug mirror over TCP
+    HAL_ENABLE_NET_COMMANDS   # HTTP/WebSocket JSON/text command dispatch
     HAL_ENABLE_BSD_SOCKETS    # minimal POSIX/BSD socket adapter
     HAL_ENABLE_OTA
     HAL_ENABLE_WIREGUARD
@@ -127,6 +138,12 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
     HAL_ENABLE_DHT            # shared DHT11/DHT22 GPIO temperature/humidity driver
     HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
+    HAL_ENABLE_MCP3221        # shared MCP3221 12-bit ADC over HAL I2C
+    HAL_ENABLE_MCP23017       # shared MCP23017 GPIO expander over HAL I2C
+    HAL_ENABLE_PCA9654E       # shared PCA9654E output expander over HAL I2C
+    HAL_ENABLE_PCF8574        # shared PCF8574 GPIO expander over HAL I2C
+    HAL_ENABLE_HC595          # shared 74HC595 output expander over HAL SPI
+    HAL_ENABLE_MCP4725        # shared MCP4725 12-bit DAC over HAL I2C
     HAL_ENABLE_TSC2007        # shared TSC2007 touch controller over HAL I2C
     HAL_ENABLE_STMPE610       # shared STMPE610 touch controller over HAL I2C/SPI
     HAL_ENABLE_IRSMALL_DECODER # shared IR receiver decoder over HAL GPIO interrupts

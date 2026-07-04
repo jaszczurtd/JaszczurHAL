@@ -1,6 +1,7 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_MOCK
 #include "../../hal_config.h"
+#include "../../hal_net_console.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
@@ -277,11 +278,15 @@ static void hal_serial_write_locked(const char *data, size_t len) {
   }
 
   fwrite(data, 1u, len, stdout);
+  hal_net_console_write_from_serial(data, len);
   mock_capture_append(s_last_serial_line, sizeof(s_last_serial_line), data,
                       len);
 }
 
-static void hal_serial_finish_line_locked(void) { fputc('\n', stdout); }
+static void hal_serial_finish_line_locked(void) {
+  fputc('\n', stdout);
+  hal_net_console_write_from_serial("\n", 1u);
+}
 
 typedef struct {
   bool capture_deb;

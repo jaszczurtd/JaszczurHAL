@@ -476,6 +476,10 @@ uint16_t hal_mock_tcp_listener_get_local_port(hal_tcp_listener_t listener);
 uint8_t hal_mock_tcp_listener_get_backlog(hal_tcp_listener_t listener);
 /** @brief Return number of pending clients queued on a mock TCP listener. */
 uint8_t hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener);
+/** @brief Find a mock listener by bound local port. */
+hal_tcp_listener_t hal_mock_tcp_listener_find_by_port(uint16_t local_port);
+/** @brief Return the last socket created by listener accept. */
+hal_tcp_socket_t hal_mock_tcp_get_last_accepted_socket(void);
 #endif
 
 // ── BSD sockets adapter ─────────────────────────────────────────────────────

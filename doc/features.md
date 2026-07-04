@@ -50,6 +50,11 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | WiFi | WiFi-capable RP2040/Pico W style connectivity surface. | [hal_wifi.h](../src/hal/hal_wifi.h) |
 | UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
 | TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP2040 backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |
+| HTTP server | Small poll-driven HTTP/1.1 server over HAL TCP with exact/prefix routes, request headers, buffered responses, automatic `Content-Length` and mock-testable request handling. | [hal_http_server.h](../src/hal/hal_http_server.h) |
+| HTTP files | Callback-backed static file serving, ETag/`If-None-Match`, raw PUT and multipart upload helpers over HAL HTTP routes. | [hal_http_files.h](../src/hal/hal_http_files.h) |
+| WebSocket server | Small poll-driven WebSocket server over HAL TCP with HTTP Upgrade handshake, callbacks, send helpers and broadcast. | [hal_websocket.h](../src/hal/hal_websocket.h) |
+| Net console | Password-protected TCP console that mirrors `hal_serial`/debug output to authenticated clients while preserving local UART/USB logs, plus bidirectional command input. | [hal_net_console.h](../src/hal/hal_net_console.h) |
+| Network commands | Shared JSON/text command dispatcher for HTTP and WebSocket control channels, backed by cJSON and `hal_status_t` responses. | [hal_net_commands.h](../src/hal/hal_net_commands.h) |
 | BSD sockets adapter | Minimal IPv4 `sys/socket.h` / `netinet/in.h` / `arpa/inet.h` / `netdb.h` compatibility layer over HAL UDP/TCP handles, including `getaddrinfo()`, `setsockopt()`, `O_NONBLOCK`, `MSG_DONTWAIT` and `select()` readiness. | [socket.h](../src/sys/socket.h), [netdb.h](../src/netdb.h) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
 | OTA | ArduinoOTA-oriented update integration. | [hal_ota.h](../src/hal/hal_ota.h) |
@@ -82,6 +87,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | DHT11/DHT22 | Shared GPIO temperature and humidity sensor driver. | [hal_dht.h](../src/hal/hal_dht.h), [dht driver](../src/hal/impl/shared/drivers/dht/) |
 | 1-Wire bus | Generic shared 1-Wire bus wrapper/driver. | [hal_onewire.h](../src/hal/hal_onewire.h), [onewire driver](../src/hal/impl/shared/drivers/onewire/) |
 | BH1750 | Shared I2C ambient-light sensor driver. | [hal_bh1750.h](../src/hal/hal_bh1750.h), [bh1750 driver](../src/hal/impl/shared/drivers/bh1750/) |
+| MCP3221 | Shared I2C 12-bit ADC driver. | [hal_mcp3221.h](../src/hal/hal_mcp3221.h), [simple I/O drivers](../src/hal/impl/shared/drivers/simple_io/) |
 | ADS1X15 / ADS1115 | Shared external ADC driver over I2C. | [hal_external_adc.h](../src/hal/hal_external_adc.h), [ads1x15 driver](../src/hal/impl/shared/drivers/ads1x15/) |
 | TSC2007 touch | Shared I2C resistive touch controller driver. | [hal_tsc2007.h](../src/hal/hal_tsc2007.h), [tsc2007 driver](../src/hal/impl/shared/drivers/tsc2007/) |
 | STMPE610 touch | Shared I2C/SPI resistive touch controller driver. | [hal_stmpe610.h](../src/hal/hal_stmpe610.h), [stmpe610 driver](../src/hal/impl/shared/drivers/stmpe610/) |
@@ -102,6 +108,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | MCP4017/4018/4019 | Shared I2C digital potentiometer backend. | [digipot drivers](../src/hal/impl/shared/drivers/digipot/) |
 | MAX5395 | Shared I2C digital potentiometer backend. | [digipot drivers](../src/hal/impl/shared/drivers/digipot/) |
 | PGA2311 audio volume | Shared SPI/GPIO stereo volume controller driver. | [hal_pga2311.h](../src/hal/hal_pga2311.h), [pga2311 driver](../src/hal/impl/shared/drivers/pga2311/) |
+| MCP23017 / PCA9654E / PCF8574 / 74HC595 / MCP4725 | Shared simple I/O expander and DAC drivers over HAL I2C/SPI/GPIO. | [simple I/O drivers](../src/hal/impl/shared/drivers/simple_io/) |
 | DACless PWM audio | Shared PWM-audio engine with DMA and polling paths, block/sample callbacks and ADC sampling. | [hal_dacless.h](../src/hal/hal_dacless.h), [hal_dma_pwm_audio.h](../src/hal/hal_dma_pwm_audio.h), [dacless driver](../src/hal/impl/shared/drivers/dacless/) |
 
 ## Crypto, media and bundled libraries

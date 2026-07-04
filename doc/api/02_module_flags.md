@@ -39,6 +39,11 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
+| `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `impl/shared/compat/http_server/hal_http_server.cpp` | Small poll-driven HTTP/1.1 server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `impl/shared/compat/http_files/hal_http_files.cpp` | Callback-backed file serving, ETag and upload helpers over HAL HTTP routes (propagates HTTP_SERVER + TCP + WIFI) |
+| `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `impl/shared/compat/websocket/hal_websocket.cpp` | Small poll-driven WebSocket server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `impl/shared/compat/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `impl/shared/compat/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp` | BSD/POSIX compatibility over HAL UDP/TCP, including IPv4 `getaddrinfo()` (propagates UDP + TCP + WIFI) |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
@@ -64,6 +69,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/ds18b20/hal_ds18b20.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
 | `HAL_ENABLE_DHT` | `hal_dht.h` | `impl/shared/drivers/dht/hal_dht.cpp` | shared DHT11/DHT22 temperature/humidity driver over HAL GPIO |
 | `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/drivers/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
+| `HAL_ENABLE_MCP3221` | `hal_mcp3221.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | MCP3221 12-bit ADC over HAL I2C (propagates I2C) |
 | `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/drivers/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
 | `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/drivers/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
 | `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
@@ -74,6 +80,11 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MCP401X` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_mcp401x.cpp` | MCP4017/4018/4019 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_MAX5395` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/digipot_max5395.cpp` | MAX5395 shared HAL I2C driver (propagates DIGIPOT + I2C) |
 | `HAL_ENABLE_PGA2311` | `hal_pga2311.h` + `impl/shared/drivers/pga2311/pga2311_driver.h` | `hal_pga2311.cpp` + `impl/shared/drivers/pga2311/pga2311_driver.cpp` | PGA2311 shared HAL SPI/GPIO stereo volume driver (propagates SPI) |
+| `HAL_ENABLE_MCP23017` | `hal_mcp23017.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | MCP23017 GPIO expander over HAL I2C (propagates I2C) |
+| `HAL_ENABLE_PCA9654E` | `hal_pca9654e.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | PCA9654E output expander over HAL I2C (propagates I2C) |
+| `HAL_ENABLE_PCF8574` | `hal_pcf8574.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | PCF8574 quasi-bidirectional GPIO expander over HAL I2C (propagates I2C) |
+| `HAL_ENABLE_HC595` | `hal_hc595.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | 74HC595 shift-register output expander over HAL SPI/GPIO (propagates SPI) |
+| `HAL_ENABLE_MCP4725` | `hal_mcp4725.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | MCP4725 12-bit DAC over HAL I2C (propagates I2C) |
 | `HAL_ENABLE_MFRC522` | `hal_mfrc522.h` + `impl/shared/drivers/mfrc522/mfrc522.h` | `impl/shared/drivers/mfrc522/mfrc522*.cpp` | MFRC522 RFID reader driver over HAL SPI/I2C (propagates SPI) |
 | `HAL_ENABLE_PN532` | `hal_pn532.h` + `impl/shared/drivers/pn532/pn532.h` | `impl/shared/drivers/pn532/pn532*.cpp` | PN532 NFC/RFID reader driver over HAL SPI/I2C/UART (propagates SPI) |
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `impl/shared/drivers/dacless/dacless.h` | `impl/shared/drivers/dacless/dacless.cpp` | Shared DACless PWM-audio engine with block/sample callbacks and ADC sampling (propagates DMA_PWM_AUDIO + PWM_FREQ) |
@@ -115,11 +126,18 @@ HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_TCP         -> HAL_ENABLE_WIFI
+HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_HTTP_FILES  -> HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_WEBSOCKET   -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
+                           HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_MCP3221     -> HAL_ENABLE_I2C
 HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C + HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
@@ -127,6 +145,11 @@ HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
+HAL_ENABLE_MCP23017    -> HAL_ENABLE_I2C
+HAL_ENABLE_PCA9654E    -> HAL_ENABLE_I2C
+HAL_ENABLE_PCF8574     -> HAL_ENABLE_I2C
+HAL_ENABLE_HC595       -> HAL_ENABLE_SPI
+HAL_ENABLE_MCP4725     -> HAL_ENABLE_I2C
 HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
 HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE

@@ -95,6 +95,7 @@ add_executable(test_bh1750_driver
 )
 target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
 add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
+add_hal_test(test_simple_io_drivers)
 add_executable(test_hd44780_driver
     test_hd44780_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/hd44780/hd44780.cpp
@@ -283,6 +284,11 @@ target_compile_options(test_hal_config_storage_flags PRIVATE -Wall -Wextra)
 add_test(NAME test_hal_config_storage_flags COMMAND test_hal_config_storage_flags)
 add_hal_test(test_hal_udp)
 add_hal_test(test_hal_tcp)
+add_hal_test(test_hal_http_server)
+add_hal_test(test_hal_http_files)
+add_hal_test(test_hal_websocket)
+add_hal_test(test_hal_net_console)
+add_hal_test(test_hal_net_commands)
 add_hal_test(test_bsd_sockets)
 add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
 target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)

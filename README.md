@@ -204,7 +204,7 @@ For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` o
 see:
 
 - [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
-- `doc/HAL_FLAGS.txt`
+- [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
 
 ## FreeRTOS opt-in
 

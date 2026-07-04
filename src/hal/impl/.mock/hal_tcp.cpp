@@ -40,6 +40,7 @@ static hal_tcp_socket_impl_t s_tcp_pool[HAL_TCP_SOCKET_MAX_INSTANCES];
 static hal_tcp_listener_impl_t
     s_tcp_listener_pool[HAL_TCP_LISTENER_MAX_INSTANCES];
 static bool s_connect_result = true;
+static hal_tcp_socket_t s_last_accepted_socket = NULL;
 
 static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   if (!endpoint) {
@@ -89,6 +90,15 @@ static void reset_listener(hal_tcp_listener_impl_t *listener) {
 static bool is_valid_socket(hal_tcp_socket_t socket) {
   for (size_t i = 0u; i < HAL_TCP_SOCKET_MAX_INSTANCES; ++i) {
     if (socket == &s_tcp_pool[i] && s_tcp_pool[i].in_use) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool is_pool_socket(hal_tcp_socket_t socket) {
+  for (size_t i = 0u; i < HAL_TCP_SOCKET_MAX_INSTANCES; ++i) {
+    if (socket == &s_tcp_pool[i]) {
       return true;
     }
   }
@@ -146,6 +156,7 @@ void hal_mock_tcp_reset(void) {
     reset_listener(&s_tcp_listener_pool[i]);
   }
   s_connect_result = true;
+  s_last_accepted_socket = NULL;
 }
 
 void hal_mock_tcp_set_connect_result(bool result) { s_connect_result = result; }
@@ -255,10 +266,15 @@ void hal_tcp_socket_shutdown(hal_tcp_socket_t socket) {
 }
 
 void hal_tcp_socket_close(hal_tcp_socket_t socket) {
-  if (!is_valid_socket(socket)) {
+  if (!is_pool_socket(socket)) {
     return;
   }
-  reset_socket(socket);
+
+  socket->in_use = false;
+  socket->connected = false;
+  socket->rx_len = 0u;
+  socket->rx_pos = 0u;
+  reset_endpoint(&socket->remote_endpoint);
 }
 
 hal_tcp_listener_t hal_tcp_listener_open(void) {
@@ -336,6 +352,7 @@ hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
 
   socket->connected = true;
   socket->remote_endpoint = pending_remote;
+  s_last_accepted_socket = socket;
   if (remote) {
     *remote = pending_remote;
   }
@@ -372,14 +389,14 @@ void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
 }
 
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket) {
-  if (!is_valid_socket(socket)) {
+  if (!is_pool_socket(socket)) {
     return NULL;
   }
   return socket->tx_payload;
 }
 
 uint16_t hal_mock_tcp_get_last_tx_len(hal_tcp_socket_t socket) {
-  if (!is_valid_socket(socket)) {
+  if (!is_pool_socket(socket)) {
     return 0u;
   }
   return socket->tx_len;
@@ -434,6 +451,20 @@ uint8_t hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener) {
     return 0u;
   }
   return listener->pending_count;
+}
+
+hal_tcp_listener_t hal_mock_tcp_listener_find_by_port(uint16_t local_port) {
+  for (size_t i = 0u; i < HAL_TCP_LISTENER_MAX_INSTANCES; ++i) {
+    if (s_tcp_listener_pool[i].in_use && s_tcp_listener_pool[i].bound &&
+        s_tcp_listener_pool[i].local_endpoint.port == local_port) {
+      return &s_tcp_listener_pool[i];
+    }
+  }
+  return NULL;
+}
+
+hal_tcp_socket_t hal_mock_tcp_get_last_accepted_socket(void) {
+  return s_last_accepted_socket;
 }
 
 #endif /* HAL_ENABLE_TCP */

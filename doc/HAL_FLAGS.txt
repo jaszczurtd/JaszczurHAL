@@ -127,6 +127,19 @@ Connectivity
     Thread-safe WiFiUDP wrapper. Propagates: WIFI.
   HAL_ENABLE_TCP
     TCP client/listener transport. Propagates: WIFI.
+  HAL_ENABLE_HTTP_SERVER
+    Small poll-driven HTTP/1.1 server over HAL TCP. Propagates: TCP, WIFI.
+  HAL_ENABLE_HTTP_FILES
+    File serving, ETag and upload helpers over HAL HTTP routes. Propagates:
+    HTTP_SERVER, TCP, WIFI.
+  HAL_ENABLE_WEBSOCKET
+    Small poll-driven WebSocket server over HAL TCP. Propagates: TCP, WIFI.
+  HAL_ENABLE_NET_CONSOLE
+    Password-protected serial/debug mirror and command stream over HAL TCP.
+    Propagates: TCP, WIFI.
+  HAL_ENABLE_NET_COMMANDS
+    JSON/text command dispatcher for HTTP and WebSocket control channels.
+    Propagates: HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI.
   HAL_ENABLE_BSD_SOCKETS
     Minimal POSIX/BSD socket adapter over HAL UDP/TCP. Propagates: UDP, TCP,
     WIFI.
@@ -187,6 +200,8 @@ Sensors
                            over HAL GPIO.
   HAL_ENABLE_BH1750        Shared BH1750 ambient-light sensor over HAL I2C.
                            Propagates: I2C.
+  HAL_ENABLE_MCP3221       Shared MCP3221 12-bit ADC over HAL I2C.
+                           Propagates: I2C.
   HAL_ENABLE_TSC2007       Shared TSC2007 resistive touch controller over HAL I2C.
                            Propagates: I2C.
   HAL_ENABLE_STMPE610      Shared STMPE610 resistive touch controller over HAL
@@ -217,6 +232,20 @@ Digital potentiometers
 Audio volume control
   HAL_ENABLE_PGA2311       PGA2311 stereo volume controller over HAL SPI/GPIO.
     Propagates: SPI.
+
+Simple I/O chips
+  HAL_ENABLE_MCP23017      Shared MCP23017 GPIO expander over HAL I2C.
+                           Propagates: I2C.
+  HAL_ENABLE_PCA9654E      Shared PCA9654E output expander over HAL I2C.
+                           Propagates: I2C.
+  HAL_ENABLE_PCF8574       Shared PCF8574 quasi-bidirectional GPIO expander
+                           over HAL I2C. Propagates: I2C.
+  HAL_ENABLE_HC595         Shared 74HC595 shift-register output expander over
+                           HAL SPI/GPIO. Propagates: SPI.
+  HAL_ENABLE_MCP4725       Shared MCP4725 12-bit DAC over HAL I2C.
+                           Propagates: I2C.
+
+RFID
   HAL_ENABLE_MFRC522       MFRC522 RFID reader driver over HAL SPI/I2C.
     Propagates: SPI.
   HAL_ENABLE_PN532         PN532 NFC/RFID reader driver over HAL SPI/I2C/UART.
@@ -313,12 +342,19 @@ HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_TCP         -> HAL_ENABLE_WIFI
+HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_HTTP_FILES  -> HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_WEBSOCKET   -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
+                           HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM, HAL_ENABLE_UART
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_MCP3221     -> HAL_ENABLE_I2C
 HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C, HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
@@ -328,6 +364,11 @@ HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
 HAL_ENABLE_MAX5395     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C
 HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
+HAL_ENABLE_MCP23017    -> HAL_ENABLE_I2C
+HAL_ENABLE_PCA9654E    -> HAL_ENABLE_I2C
+HAL_ENABLE_PCF8574     -> HAL_ENABLE_I2C
+HAL_ENABLE_HC595       -> HAL_ENABLE_SPI
+HAL_ENABLE_MCP4725     -> HAL_ENABLE_I2C
 HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
 HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DACLESS     -> HAL_ENABLE_DMA_PWM_AUDIO, HAL_ENABLE_PWM_FREQ

@@ -1,5 +1,6 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_RP2040
+#include "../../hal_net_console.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
@@ -365,8 +366,13 @@ static inline bool hal_serial_should_flush(void) {
 }
 
 static void hal_serial_write_locked(const char *data, size_t len) {
+  if (data == NULL || len == 0u) {
+    return;
+  }
+  hal_net_console_write_from_serial(data, len);
+
 #ifndef NO_USB
-  if (data == NULL || len == 0u || !hal_serial_usb_inited()) {
+  if (!hal_serial_usb_inited()) {
     return;
   }
 
