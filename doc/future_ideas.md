@@ -2,6 +2,52 @@
 
 Simple backlog of future architecture and implementation work.
 
+- High priority: shared network architecture for STM32 WiFi modem first.
+  - Treat STM32 connectivity as the next major platform-unlock item, not as a
+    small target-specific patch.
+  - Use an offloaded WiFi module first. ESP8266MOD is acceptable for prototype
+    work and for proving the architecture, but do not name the architecture
+    after ESP8266. ESP8266EX is already marked by Espressif as not recommended
+    for new designs, so keep the design replaceable by ESP32-C3/S3-class
+    modules or other AT/offloaded modules.
+  - Prefer role-based flags over chip-based API names:
+    `HAL_ENABLE_WIFI_MODEM`, `HAL_ENABLE_ESP_AT`, and only optionally a
+    narrower `HAL_ENABLE_ESP8266_AT` profile.
+  - Add a target-neutral internal network interface layer, for example
+    `hal_netif_ops`, underneath the public `hal_wifi`, `hal_net`, `hal_udp`,
+    `hal_tcp` and BSD sockets APIs. Do not expose this as the primary public
+    user API unless it proves necessary.
+  - The shared layer should own behavior, state machines and tests:
+    WiFi scan/connect/disconnect/status/RSSI/MAC/IP, DNS resolution, TCP/UDP
+    open/send/recv/close, timeout semantics, reconnect handling, socket state
+    and error mapping.
+  - Backend-specific adapters should only bind that contract to transport:
+    STM32G474 -> ESP-AT over `hal_uart` plus optional reset/enable GPIO;
+    RP2040 -> current Pico W / CYW43 / Arduino-Pico network stack;
+    future ESP32 -> native Arduino-ESP32 or ESP-IDF backend.
+  - Place reusable ESP-AT logic under `src/hal/impl/shared/drivers/esp_at/`
+    or a similarly named shared network/modem folder. Keep transport abstract:
+    read/write/flush/reset/time/lock should come from a small adapter over HAL
+    UART/GPIO/system primitives.
+  - The ESP-AT parser must handle asynchronous URCs interleaved with command
+    responses, command serialization with one modem lock, `CIPMUX` link IDs,
+    partial receives, disconnect notifications and reset/resync after parser
+    loss.
+  - Initial STM32 milestone:
+    1. `AT` probe, firmware/version query, reset and echo-off.
+    2. STA mode, scan, connect, disconnect, status, RSSI, MAC and IP.
+    3. `hal_net_resolve_ipv4`.
+    4. TCP client sockets.
+    5. UDP sockets.
+    6. BSD sockets compatibility over the existing adapter.
+    7. MQTT only after TCP behavior is stable.
+  - Keep TLS, OTA and WireGuard out of the first milestone. Add TLS only when
+    the selected module provides reliable TLS offload and the API can report
+    meaningful errors.
+  - Hardware notes for ESP8266-class modules: require solid 3.3 V power with
+    current headroom for WiFi TX peaks, local decoupling, proper boot strap
+    pins, and explicit `EN`/`RST` control where possible.
+
 - Continue FreeRTOS hardening.
   - Harden module-level synchronization and ownership.
   - Document callback contexts, task contexts and ISR/task boundaries.
@@ -22,18 +68,6 @@ Simple backlog of future architecture and implementation work.
   - Validate the STM32G474 native FDCAN backend on hardware.
   - Keep Zephyr CAN as a reference checklist for timing, states, filters,
     error counters and transceiver handling.
-
-- Add STM32 WiFi through offloaded network modules.
-  - Prefer module-based WiFi first, not a full native WiFi stack.
-  - Use Zephyr `eswifi` and `esp_at` as design references, not direct copies.
-  - Keep `hal_wifi.h` as the first integration point.
-  - Consider a module flag such as `HAL_ENABLE_ESWIFI` or
-    `HAL_ENABLE_WIFI_MODEM`.
-  - Implement a target-neutral command engine over `hal_uart` and/or `hal_spi`.
-  - Implement STA scan/connect/disconnect/status/RSSI/MAC/IP first.
-  - Add AP mode second.
-  - Add simple TCP/UDP client support after the WiFi facade works.
-  - Add TLS only if the selected module provides TLS offload.
 
 - Add an ADP5360 shared I2C PMIC driver.
   - Put reusable register/protocol logic in `src/hal/impl/shared/`.

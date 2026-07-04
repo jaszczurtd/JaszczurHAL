@@ -2,9 +2,11 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_wireguard`, `hal_mqtt`,
-`hal_ota`, `hal_time`, and the optional `HAL_ENABLE_BSD_SOCKETS` compatibility
-adapter. Shared network types live in `hal_net.h`.
+Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_http_server`,
+`hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
+`hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`, and the optional
+`HAL_ENABLE_BSD_SOCKETS` compatibility adapter.
+Shared network types live in `hal_net.h`.
 
 ## Shared network types
 
@@ -147,6 +149,669 @@ bool        hal_mock_wifi_set_scan_result(size_t index,
                                           int32_t channel,
                                           int32_t rssi);
 ```
+
+---
+
+## `hal_http_server` - HTTP/1.1 server  *(opt-in - `HAL_ENABLE_HTTP_SERVER`)*
+
+Small poll-driven HTTP server implemented over the handle-based `hal_tcp`
+listener/socket API. Enabling `HAL_ENABLE_HTTP_SERVER` propagates
+`HAL_ENABLE_TCP`, which in turn propagates `HAL_ENABLE_WIFI` on current
+network-capable builds.
+
+The first version is intentionally compact and deterministic:
+
+- exact method/path route matching,
+- one request per TCP connection,
+- `GET`, `HEAD`, `POST`, `PUT`, `DELETE` and `OPTIONS` method parsing,
+- query string, request headers and request body exposure to the handler,
+- buffered response body with automatic `Content-Length`,
+- exact and prefix route registration,
+- explicit status, content-type and response-header helpers,
+- cooperative `hal_http_server_poll()` service loop.
+
+```c
+#include <hal/hal_http_server.h>
+
+typedef enum {
+  HAL_HTTP_METHOD_UNKNOWN = 0,
+  HAL_HTTP_METHOD_GET,
+  HAL_HTTP_METHOD_HEAD,
+  HAL_HTTP_METHOD_POST,
+  HAL_HTTP_METHOD_PUT,
+  HAL_HTTP_METHOD_DELETE,
+  HAL_HTTP_METHOD_OPTIONS
+} hal_http_method_t;
+
+typedef struct {
+  const char *name;
+  const char *value;
+} hal_http_header_t;
+
+typedef struct {
+  hal_http_method_t method;
+  const char *path;
+  const char *query;
+  const char *body;
+  size_t body_len;
+  const hal_http_header_t *headers;
+  size_t header_count;
+  hal_net_endpoint_t remote;
+} hal_http_request_t;
+
+typedef hal_status_t (*hal_http_handler_t)(const hal_http_request_t *request,
+                                           hal_http_response_t *response,
+                                           void *user);
+
+hal_status_t hal_http_server_route(hal_http_method_t method, const char *path,
+                                   hal_http_handler_t handler, void *user);
+hal_status_t hal_http_server_route_prefix(hal_http_method_t method,
+                                          const char *path_prefix,
+                                          hal_http_handler_t handler,
+                                          void *user);
+void hal_http_server_clear_routes(void);
+hal_status_t hal_http_server_start(uint16_t port);
+void hal_http_server_stop(void);
+bool hal_http_server_is_running(void);
+void hal_http_server_poll(void);
+
+hal_status_t hal_http_response_set_status(hal_http_response_t *response,
+                                          uint16_t status_code,
+                                          const char *reason);
+hal_status_t hal_http_response_set_content_type(
+    hal_http_response_t *response,
+    const char *content_type);
+hal_status_t hal_http_response_set_header(hal_http_response_t *response,
+                                          const char *name,
+                                          const char *value);
+hal_status_t hal_http_response_write(hal_http_response_t *response,
+                                     const void *data,
+                                     size_t len);
+hal_status_t hal_http_response_write_str(hal_http_response_t *response,
+                                         const char *text);
+const char *hal_http_request_get_header(const hal_http_request_t *request,
+                                        const char *name);
+const char *hal_http_method_to_string(hal_http_method_t method);
+```
+
+Example handler:
+
+```c
+static hal_status_t status_route(const hal_http_request_t *request,
+                                 hal_http_response_t *response,
+                                 void *user) {
+  (void)user;
+  const char *content_type =
+      hal_http_request_get_header(request, "Content-Type");
+  (void)content_type;
+  hal_status_t status =
+      hal_http_response_set_content_type(response, "application/json");
+  if (status != HAL_OK) {
+    return status;
+  }
+  return hal_http_response_write_str(response, "{\"ok\":true}");
+}
+```
+
+Start and service from the application loop:
+
+```c
+hal_http_server_route(HAL_HTTP_METHOD_GET, "/api/status", status_route, NULL);
+hal_http_server_start(80);
+
+for (;;) {
+  hal_http_server_poll();
+}
+```
+
+Default static limits can be overridden before including HAL headers:
+
+```c
+#define HAL_HTTP_SERVER_MAX_ROUTES 8u
+#define HAL_HTTP_SERVER_MAX_CLIENTS 2u
+#define HAL_HTTP_SERVER_REQUEST_BUFFER_SIZE 512u
+#define HAL_HTTP_SERVER_RESPONSE_BUFFER_SIZE 1024u
+#define HAL_HTTP_SERVER_MAX_REQUEST_HEADERS 12u
+#define HAL_HTTP_SERVER_MAX_RESPONSE_HEADERS 8u
+#define HAL_HTTP_SERVER_RESPONSE_HEADER_SIZE 512u
+#define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
+```
+
+**impl/shared:** `impl/shared/compat/http_server/hal_http_server.cpp`.
+**impl/.mock:** covered through the mock TCP listener/socket backend and
+`test_hal_http_server`.
+
+---
+
+## `hal_http_files` - file serving and upload  *(opt-in - `HAL_ENABLE_HTTP_FILES`)*
+
+Small file adapter built on top of `hal_http_server`. Enabling
+`HAL_ENABLE_HTTP_FILES` also enables `HAL_ENABLE_HTTP_SERVER`, `HAL_ENABLE_TCP`
+and `HAL_ENABLE_WIFI`.
+
+The adapter is filesystem-neutral. It maps HTTP URLs to a mounted root and
+calls application/backend callbacks for `stat`, `read` and optional `write`.
+That keeps the HTTP layer reusable for RAM assets, LittleFS, FatFs/SD, flash
+assets or tests.
+
+Supported behavior:
+
+- `GET` / `HEAD` file serving through prefix routes,
+- MIME type selection from extension,
+- generated weak ETags from path, size and mtime,
+- `If-None-Match` -> `304 Not Modified`,
+- raw `PUT` upload to a path under the mounted prefix,
+- multipart/form-data `POST` upload with `path` and `file` fields,
+- path traversal rejection for `..` and backslashes.
+
+```c
+#include <hal/hal_http_files.h>
+
+typedef struct {
+  bool exists;
+  bool is_dir;
+  size_t size;
+  uint32_t mtime;
+  const char *content_type;
+  const char *etag;
+} hal_http_file_info_t;
+
+typedef hal_status_t (*hal_http_file_stat_cb_t)(
+    const char *path,
+    hal_http_file_info_t *out_info,
+    void *user);
+
+typedef hal_status_t (*hal_http_file_read_cb_t)(
+    const char *path,
+    size_t offset,
+    void *buffer,
+    size_t max_len,
+    size_t *out_len,
+    void *user);
+
+typedef hal_status_t (*hal_http_file_write_cb_t)(
+    const char *path,
+    size_t offset,
+    const void *data,
+    size_t len,
+    bool final,
+    void *user);
+
+typedef struct {
+  const char *url_prefix;
+  const char *fs_root;
+  const char *index_name;
+  const char *upload_path;
+  bool enable_upload;
+  hal_http_file_stat_cb_t stat;
+  hal_http_file_read_cb_t read;
+  hal_http_file_write_cb_t write;
+  void *user;
+} hal_http_files_config_t;
+
+hal_status_t hal_http_files_mount(const hal_http_files_config_t *config);
+void hal_http_files_clear(void);
+const char *hal_http_files_content_type_for_path(const char *path);
+hal_status_t hal_http_files_make_etag(const char *path,
+                                      const hal_http_file_info_t *info,
+                                      char *out,
+                                      size_t out_size);
+```
+
+Basic flow:
+
+```c
+hal_http_files_config_t cfg = {0};
+cfg.url_prefix = "/files";
+cfg.fs_root = "/www";
+cfg.upload_path = "/upload";
+cfg.enable_upload = true;
+cfg.stat = my_stat;
+cfg.read = my_read;
+cfg.write = my_write;
+
+hal_http_files_mount(&cfg);
+hal_http_server_start(80);
+
+for (;;) {
+  hal_http_server_poll();
+}
+```
+
+Multipart upload example:
+
+```http
+POST /upload HTTP/1.1
+Content-Type: multipart/form-data; boundary=AaB03x
+
+--AaB03x
+Content-Disposition: form-data; name="path"
+
+logs
+--AaB03x
+Content-Disposition: form-data; name="file"; filename="boot.txt"
+Content-Type: text/plain
+
+hello
+--AaB03x--
+```
+
+With the config above, the file callback receives path
+`/www/logs/boot.txt`.
+
+The current `hal_http_server` buffers each request and response in fixed-size
+static buffers, so this adapter is intended for small embedded files,
+configuration uploads and diagnostics rather than large streaming transfers.
+
+Default static limits can be overridden before including HAL headers:
+
+```c
+#define HAL_HTTP_FILES_MAX_MOUNTS 2u
+#define HAL_HTTP_FILES_PATH_MAX 128u
+#define HAL_HTTP_FILES_ETAG_MAX 48u
+#define HAL_HTTP_FILES_IO_BUFFER_SIZE 128u
+```
+
+**impl/shared:** `impl/shared/compat/http_files/hal_http_files.cpp`.
+**impl/.mock:** covered through mock HTTP/TCP and `test_hal_http_files`.
+
+---
+
+## `hal_websocket` - WebSocket server  *(opt-in - `HAL_ENABLE_WEBSOCKET`)*
+
+Small poll-driven WebSocket server implemented directly over `hal_tcp`.
+Enabling `HAL_ENABLE_WEBSOCKET` propagates `HAL_ENABLE_TCP`, which in turn
+propagates `HAL_ENABLE_WIFI` on current connected builds.
+
+The server accepts TCP clients, performs the HTTP Upgrade handshake for one
+configured path, then switches each accepted socket into WebSocket frame
+parsing. The first implementation is intentionally compact:
+
+- RFC 6455 `Sec-WebSocket-Accept` handshake,
+- masked client frames and unmasked server frames,
+- single-frame text/binary messages,
+- automatic pong response to ping,
+- close frame handling with disconnect callback,
+- per-client send helpers and broadcast helpers,
+- cooperative `hal_websocket_server_poll()` service loop.
+
+It does not implement fragmented messages, permessage-deflate, TLS, cookies or
+subprotocol negotiation. Put authentication or session policy in the
+application protocol or in the HTTP page that opens the socket.
+
+```c
+#include <hal/hal_websocket.h>
+
+typedef uint8_t hal_websocket_client_t;
+
+typedef enum {
+  HAL_WEBSOCKET_MESSAGE_TEXT = 1,
+  HAL_WEBSOCKET_MESSAGE_BINARY = 2
+} hal_websocket_message_type_t;
+
+typedef struct {
+  void (*on_connect)(hal_websocket_client_t client, void *user);
+  void (*on_message)(hal_websocket_client_t client,
+                     hal_websocket_message_type_t type,
+                     const uint8_t *data,
+                     size_t len,
+                     void *user);
+  void (*on_disconnect)(hal_websocket_client_t client,
+                        uint16_t close_code,
+                        void *user);
+} hal_websocket_callbacks_t;
+
+hal_status_t hal_websocket_server_set_callbacks(
+    const hal_websocket_callbacks_t *callbacks,
+    void *user);
+hal_status_t hal_websocket_server_start(uint16_t port, const char *path);
+void hal_websocket_server_stop(void);
+bool hal_websocket_server_is_running(void);
+void hal_websocket_server_poll(void);
+
+size_t hal_websocket_client_count(void);
+bool hal_websocket_client_is_connected(hal_websocket_client_t client);
+
+hal_status_t hal_websocket_send(hal_websocket_client_t client,
+                                hal_websocket_message_type_t type,
+                                const void *data,
+                                size_t len);
+hal_status_t hal_websocket_send_text(hal_websocket_client_t client,
+                                     const char *text);
+hal_status_t hal_websocket_broadcast(hal_websocket_message_type_t type,
+                                     const void *data,
+                                     size_t len,
+                                     size_t *sent_count);
+hal_status_t hal_websocket_broadcast_text(const char *text,
+                                          size_t *sent_count);
+hal_status_t hal_websocket_close(hal_websocket_client_t client,
+                                 uint16_t close_code);
+```
+
+Minimal callback setup:
+
+```c
+static void ws_message(hal_websocket_client_t client,
+                       hal_websocket_message_type_t type,
+                       const uint8_t *data,
+                       size_t len,
+                       void *user) {
+  (void)type;
+  (void)user;
+  hal_websocket_send(client, HAL_WEBSOCKET_MESSAGE_TEXT, data, len);
+}
+
+hal_websocket_callbacks_t cb = {0};
+cb.on_message = ws_message;
+hal_websocket_server_set_callbacks(&cb, NULL);
+hal_websocket_server_start(81, "/ws");
+
+for (;;) {
+  hal_websocket_server_poll();
+}
+```
+
+Broadcasting telemetry:
+
+```c
+char msg[64];
+size_t sent_count = 0u;
+snprintf(msg, sizeof(msg), "uptime=%lu", (unsigned long)hal_millis());
+hal_websocket_broadcast_text(msg, &sent_count);
+```
+
+Default static limits can be overridden before including HAL headers:
+
+```c
+#define HAL_WEBSOCKET_MAX_CLIENTS 2u
+#define HAL_WEBSOCKET_REQUEST_BUFFER_SIZE 512u
+#define HAL_WEBSOCKET_FRAME_BUFFER_SIZE 256u
+#define HAL_WEBSOCKET_DEFAULT_BACKLOG 2u
+```
+
+**impl/shared:** `impl/shared/compat/websocket/hal_websocket.cpp`.
+**impl/.mock:** covered through the mock TCP listener/socket backend and
+`test_hal_websocket`.
+
+---
+
+## `hal_net_console` - TCP debug console  *(opt-in - `HAL_ENABLE_NET_CONSOLE`)*
+
+Password-protected TCP console implemented over the handle-based `hal_tcp`
+listener/socket API. Enabling `HAL_ENABLE_NET_CONSOLE` propagates
+`HAL_ENABLE_TCP`, which in turn propagates `HAL_ENABLE_WIFI` on connected
+builds.
+
+The console is a transport, not a replacement for the normal debug port:
+`hal_serial`, `deb` and `derr` still write to UART/USB, and authenticated TCP
+clients receive an additional copy. TCP input is available to firmware through
+a line callback and a polling RX buffer, so applications can expose a small
+command shell or diagnostics interface.
+
+Security model: a non-empty password is required by the API, but the transport
+is plain TCP. Use it only on trusted networks or behind a secure tunnel/VPN
+when remote access matters.
+
+```c
+#include <hal/hal_net_console.h>
+
+#define HAL_NET_CONSOLE_DEFAULT_PORT 2323u
+
+typedef uint8_t hal_net_console_client_t;
+
+typedef enum {
+  HAL_NET_CONSOLE_EVENT_CONNECT = 0,
+  HAL_NET_CONSOLE_EVENT_AUTHENTICATED,
+  HAL_NET_CONSOLE_EVENT_DISCONNECT
+} hal_net_console_event_t;
+
+typedef void (*hal_net_console_event_cb_t)(hal_net_console_client_t client,
+                                           hal_net_console_event_t event,
+                                           void *user);
+typedef hal_status_t (*hal_net_console_line_cb_t)(
+    hal_net_console_client_t client,
+    const char *line,
+    void *user);
+
+hal_status_t hal_net_console_set_callbacks(hal_net_console_event_cb_t event_cb,
+                                           hal_net_console_line_cb_t line_cb,
+                                           void *user);
+hal_status_t hal_net_console_start(uint16_t port, const char *password);
+void hal_net_console_stop(void);
+bool hal_net_console_is_running(void);
+void hal_net_console_poll(void);
+
+size_t hal_net_console_client_count(void);
+size_t hal_net_console_authenticated_count(void);
+bool hal_net_console_client_is_authenticated(hal_net_console_client_t client);
+
+hal_status_t hal_net_console_write(const void *data, size_t len);
+hal_status_t hal_net_console_write_text(const char *text);
+hal_status_t hal_net_console_write_to(hal_net_console_client_t client,
+                                      const void *data,
+                                      size_t len);
+hal_status_t hal_net_console_write_text_to(hal_net_console_client_t client,
+                                           const char *text);
+
+int hal_net_console_available(void);
+int hal_net_console_read(void *buffer, size_t max_len);
+void hal_net_console_close(hal_net_console_client_t client);
+```
+
+Minimal command callback:
+
+```c
+static hal_status_t console_line(hal_net_console_client_t client,
+                                 const char *line,
+                                 void *user) {
+  (void)user;
+  if (strcmp(line, "status") == 0) {
+    return hal_net_console_write_text_to(client, "ok\r\n");
+  }
+  return hal_net_console_write_text_to(client, "unknown\r\n");
+}
+
+hal_net_console_set_callbacks(NULL, console_line, NULL);
+hal_net_console_start(HAL_NET_CONSOLE_DEFAULT_PORT, "change-me");
+
+for (;;) {
+  hal_net_console_poll();
+}
+```
+
+Default static limits can be overridden before including HAL headers:
+
+```c
+#define HAL_NET_CONSOLE_MAX_CLIENTS 2u
+#define HAL_NET_CONSOLE_RX_BUFFER_SIZE 256u
+#define HAL_NET_CONSOLE_TX_BUFFER_SIZE 1024u
+#define HAL_NET_CONSOLE_LINE_BUFFER_SIZE 128u
+#define HAL_NET_CONSOLE_PASSWORD_MAX 64u
+#define HAL_NET_CONSOLE_DEFAULT_BACKLOG 2u
+```
+
+**impl/shared:** `impl/shared/compat/net_console/hal_net_console.cpp`.
+**impl/.mock:** covered through the mock TCP listener/socket backend and
+`test_hal_net_console`.
+
+---
+
+## `hal_net_commands` - HTTP/WebSocket command layer  *(opt-in - `HAL_ENABLE_NET_COMMANDS`)*
+
+Small command registry inspired by embedded WebUI control channels. Enabling
+`HAL_ENABLE_NET_COMMANDS` also enables `HAL_ENABLE_HTTP_SERVER`,
+`HAL_ENABLE_WEBSOCKET`, `HAL_ENABLE_CJSON`, `HAL_ENABLE_TCP` and
+`HAL_ENABLE_WIFI`.
+
+Requests can be plain text:
+
+```text
+status
+echo hello
+```
+
+or JSON parsed by cJSON:
+
+```json
+{"cmd":"status","args":{"verbose":true}}
+```
+
+`cmd` and `command` are accepted as command-name fields. `args` and `params`
+are exposed to handlers as `json_args`; string args are also mirrored through
+`args_text`.
+
+```c
+#include <hal/hal_net_commands.h>
+
+typedef enum {
+  HAL_NET_COMMANDS_FORMAT_TEXT = 0,
+  HAL_NET_COMMANDS_FORMAT_JSON,
+  HAL_NET_COMMANDS_FORMAT_AUTO
+} hal_net_commands_format_t;
+
+typedef enum {
+  HAL_NET_COMMANDS_SOURCE_DIRECT = 0,
+  HAL_NET_COMMANDS_SOURCE_HTTP,
+  HAL_NET_COMMANDS_SOURCE_WEBSOCKET
+} hal_net_commands_source_t;
+
+typedef struct {
+  hal_net_commands_source_t source;
+  const char *command;
+  const char *args_text;
+  const cJSON *json_root;
+  const cJSON *json_args;
+  const hal_http_request_t *http_request;
+  hal_websocket_client_t websocket_client;
+} hal_net_command_request_t;
+
+typedef struct {
+  hal_status_t status;
+  const char *message;
+  const char *content_type;
+  char body[HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE];
+  size_t body_len;
+  bool overflow;
+} hal_net_command_response_t;
+
+typedef hal_status_t (*hal_net_command_handler_t)(
+    const hal_net_command_request_t *request,
+    hal_net_command_response_t *response,
+    void *user);
+
+hal_status_t hal_net_commands_register(const char *name,
+                                       hal_net_command_handler_t handler,
+                                       void *user);
+hal_status_t hal_net_commands_unregister(const char *name);
+void hal_net_commands_clear(void);
+size_t hal_net_commands_count(void);
+
+hal_status_t hal_net_commands_execute_text(
+    const char *text,
+    hal_net_command_response_t *response);
+hal_status_t hal_net_commands_execute_json(
+    const char *json,
+    size_t len,
+    hal_net_command_response_t *response);
+hal_status_t hal_net_commands_execute(
+    const void *data,
+    size_t len,
+    hal_net_commands_format_t format,
+    hal_net_command_response_t *response);
+
+hal_status_t hal_net_commands_register_http_route(
+    const char *path,
+    hal_net_commands_format_t format);
+hal_status_t hal_net_commands_handle_http_request(
+    const hal_http_request_t *request,
+    hal_http_response_t *response,
+    hal_net_commands_format_t format);
+hal_status_t hal_net_commands_handle_websocket_message(
+    hal_websocket_client_t client,
+    hal_websocket_message_type_t type,
+    const uint8_t *data,
+    size_t len,
+    hal_net_commands_format_t format);
+```
+
+Response helpers append to a fixed response buffer and use `hal_status_t`:
+
+```c
+void hal_net_command_response_reset(hal_net_command_response_t *response);
+hal_status_t hal_net_command_response_set_status(
+    hal_net_command_response_t *response,
+    hal_status_t status,
+    const char *message);
+hal_status_t hal_net_command_response_set_content_type(
+    hal_net_command_response_t *response,
+    const char *content_type);
+hal_status_t hal_net_command_response_write(
+    hal_net_command_response_t *response,
+    const void *data,
+    size_t len);
+hal_status_t hal_net_command_response_write_str(
+    hal_net_command_response_t *response,
+    const char *text);
+hal_status_t hal_net_command_response_write_json(
+    hal_net_command_response_t *response,
+    const cJSON *json);
+```
+
+Basic flow:
+
+```c
+static hal_status_t status_command(const hal_net_command_request_t *request,
+                                   hal_net_command_response_t *response,
+                                   void *user) {
+  (void)request;
+  (void)user;
+  cJSON *root = cJSON_CreateObject();
+  if (!root) {
+    return HAL_ENOMEM;
+  }
+  cJSON_AddStringToObject(root, "status", "ok");
+  hal_status_t status = hal_net_command_response_write_json(response, root);
+  cJSON_Delete(root);
+  return status;
+}
+
+hal_net_commands_register("status", status_command, NULL);
+hal_net_commands_register_http_route(HAL_NET_COMMANDS_DEFAULT_HTTP_PATH,
+                                     HAL_NET_COMMANDS_FORMAT_AUTO);
+```
+
+For WebSocket, call the helper from the normal message callback:
+
+```c
+static void ws_message(hal_websocket_client_t client,
+                       hal_websocket_message_type_t type,
+                       const uint8_t *data,
+                       size_t len,
+                       void *user) {
+  (void)user;
+  hal_net_commands_handle_websocket_message(
+      client, type, data, len, HAL_NET_COMMANDS_FORMAT_AUTO);
+}
+```
+
+If a handler does not write a body, the dispatcher emits a small default
+response in the request format. Unknown commands return `HAL_ENOENT`; JSON
+parse errors return `HAL_EPROTO`. HTTP integration maps common HAL failures to
+HTTP status codes (`400`, `403`, `404`, `413`, `500`) and still returns
+`HAL_OK` to the HTTP server once a response was written.
+
+Default static limits can be overridden before including HAL headers:
+
+```c
+#define HAL_NET_COMMANDS_MAX_COMMANDS 8u
+#define HAL_NET_COMMANDS_NAME_MAX 32u
+#define HAL_NET_COMMANDS_TEXT_BUFFER_SIZE 256u
+#define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE 512u
+```
+
+**impl/shared:** `impl/shared/compat/net_commands/hal_net_commands.cpp`.
+**impl/.mock:** covered through mock HTTP/WebSocket TCP backends and
+`test_hal_net_commands`.
 
 ---
 

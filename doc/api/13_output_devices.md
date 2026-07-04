@@ -1,8 +1,8 @@
-# Output devices - RGB LED, PGA2311, MFRC522, PN532, math helpers
+# Output devices - RGB LED, PGA2311, simple I/O chips, MFRC522, PN532, math helpers
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_rgb_led`, `hal_pga2311`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
+Covers: `hal_rgb_led`, `hal_pga2311`, `hal_mcp23017`, `hal_pca9654e`, `hal_pcf8574`, `hal_hc595`, `hal_mcp4725`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
 
 ## `hal_math` - Lightweight numeric helpers
 
@@ -225,6 +225,74 @@ also use HAL bus locks for physical transactions. Create and destroy remain
 single-owner lifecycle operations.
 
 Example: `examples/47_pn532_nfc`.
+
+---
+
+## Simple I/O chips  *(optional - `HAL_ENABLE_MCP23017`, `HAL_ENABLE_PCA9654E`, `HAL_ENABLE_PCF8574`, `HAL_ENABLE_HC595`, `HAL_ENABLE_MCP4725`)*
+
+```c
+#include <hal/hal_mcp23017.h>
+#include <hal/hal_pca9654e.h>
+#include <hal/hal_pcf8574.h>
+#include <hal/hal_hc595.h>
+#include <hal/hal_mcp4725.h>
+
+hal_i2c_init(sda_pin, scl_pin, HAL_I2C_CLOCK_STANDARD_HZ);
+hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
+
+/* MCP23017 - I2C 16-bit GPIO expander. */
+hal_mcp23017_t gpio = {0};
+hal_mcp23017_init_ex(&gpio, NULL);
+hal_mcp23017_write_pin_ex(&gpio, 0, true);
+
+/* PCA9654E - I2C 8-bit output expander. */
+hal_pca9654e_t out8 = {0};
+hal_pca9654e_init_ex(&out8, NULL);
+hal_pca9654e_write_all_ex(&out8, 0x0Fu);
+
+/* PCF8574 - I2C 8-bit quasi-bidirectional GPIO. */
+hal_pcf8574_t io8 = {0};
+hal_pcf8574_init_ex(&io8, NULL);
+hal_pcf8574_write_pin_ex(&io8, 3u, true);
+uint8_t input_port = hal_pcf8574_read_all(&io8);
+
+/* 74HC595 - SPI shift register (up to 4 chained = 32 outputs). */
+hal_hc595_config_t sr_cfg = hal_hc595_default_config(cs_pin);
+hal_hc595_t sr = {0};
+hal_hc595_init_ex(&sr, &sr_cfg);
+hal_hc595_write_all_ex(&sr, 0x55u);
+
+/* MCP4725 - I2C 12-bit DAC. */
+hal_mcp4725_t dac = {0};
+hal_mcp4725_init_ex(&dac, NULL);
+hal_mcp4725_write_ex(&dac, 2048u); /* ~ mid-scale */
+```
+
+The shared simple-I/O driver group currently covers:
+
+- `hal_mcp23017`: MCP23017 GPIO expander over I2C. Runtime modes mirror the
+  grblHAL plugin variants: 8 inputs/8 outputs, 16 outputs, or 16 inputs. Input
+  inversion, pull-ups and MCP interrupt register configuration are exposed with
+  `hal_status_t` APIs.
+- `hal_pca9654e`: PCA9654E output-only expander over I2C. Init writes the
+  source-driver register sequence: all pins output, no inversion, outputs low.
+- `hal_pcf8574`: PCF8574 quasi-bidirectional GPIO expander over I2C. The driver
+  keeps the output latch locally, writes the full 8-bit port in one transaction,
+  and reads the current port state as one byte.
+- `hal_hc595`: one to four chained 74HC595 shift registers over HAL SPI and a
+  GPIO latch/chip-select pin. Bytes are shifted highest register first, matching
+  the source driver.
+- `hal_mcp4725`: MCP4725 12-bit DAC over I2C. Init can send the general-call
+  reset/wake sequence, reads the EEPROM-backed current DAC value, and writes
+  fast-mode DAC updates.
+
+The transaction flow is based on working grblHAL plugin drivers by Terje Io and
+uses JaszczurHAL I2C/SPI/GPIO/timing/status/sync primitives throughout.
+
+**Thread safety:** each device instance owns a HAL mutex, and bus transactions
+use the underlying HAL I2C/SPI locks. Lifecycle calls remain single-owner.
+
+Example: `examples/53_simple_io_chips`.
 
 ---
 

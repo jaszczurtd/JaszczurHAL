@@ -206,7 +206,7 @@ common definition `LED_BUILTIN` is also supported.
 
 ## WiFi-Capable Examples
 
-Examples 10, 11, 15, and 42 require a WiFi-capable board. The CMake system
+Examples 10, 11, 15, 42, 48, 49, 50, 51 and 52 require a WiFi-capable board. The CMake system
 automatically selects the `rpipicow` FQBN for these:
 
 ```
@@ -263,3 +263,11 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 44 | dacless_audio | rp2040, stm32g474 | DACless PWM audio DMA path, block callback, ADC-controlled phase increment |
 | 44 | dacless_audio_polling | rp2040, stm32g474 | Same DACless example with `cfg.useDma=false` polling path |
 | 45 | swserial_loopback | rp2040, stm32g474 | Software UART loopback/echo |
+| 46 | mfrc522_rfid | rp2040, stm32g474 | SPI/I2C, MFRC522 RFID reader |
+| 47 | pn532_nfc | rp2040, stm32g474 | SPI/I2C/UART, PN532 NFC/RFID reader |
+| 48 | http_server | rp2040 (WiFi) | Small HTTP/1.1 server over HAL TCP with HTML and JSON routes |
+| 49 | websocket | rp2040 (WiFi) | HTTP page plus WebSocket telemetry/echo server over HAL TCP |
+| 50 | net_console | rp2040 (WiFi) | Password-protected TCP mirror for serial/debug logs plus command input |
+| 51 | net_commands | rp2040 (WiFi) | Shared JSON/text command callbacks exposed through HTTP POST and WebSocket messages |
+| 52 | http_files | rp2040 (WiFi) | Callback-backed HTTP file serving, ETag and multipart upload demo |
+| 53 | simple_io_chips | rp2040, stm32g474 | I2C/SPI, MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725 simple external I/O chips |

@@ -201,6 +201,18 @@
        HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).
        HAL_ENABLE_TCP           - TCP client/listener transport
                                   (propagates: WIFI).
+       HAL_ENABLE_HTTP_SERVER   - small poll-driven HTTP/1.1 server over
+                                  hal_tcp (propagates: TCP, WIFI).
+       HAL_ENABLE_HTTP_FILES    - small file serving/upload adapter over
+                                  HAL HTTP routes (propagates: HTTP_SERVER,
+                                  TCP, WIFI).
+       HAL_ENABLE_WEBSOCKET     - small WebSocket server over hal_tcp
+                                  (propagates: TCP, WIFI).
+       HAL_ENABLE_NET_CONSOLE   - password-protected serial/debug mirror over
+                                  hal_tcp (propagates: TCP, WIFI).
+       HAL_ENABLE_NET_COMMANDS  - JSON/text command dispatcher for HTTP and
+                                  WebSocket control channels (propagates:
+                                  HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI).
        HAL_ENABLE_BSD_SOCKETS   - minimal POSIX/BSD socket adapter
                                   (propagates: UDP, TCP, WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
@@ -260,6 +272,8 @@
        HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper.
        HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC via shared ADS1X15
                                   HAL I2C driver (propagates: I2C).
+       HAL_ENABLE_MCP3221       - MCP3221 12-bit ADC over HAL I2C
+                                  (propagates: I2C).
        HAL_ENABLE_GPS           - GPS / NMEA receiver (requires a serial
                                   transport: HAL_ENABLE_UART or
                                   HAL_ENABLE_SWSERIAL; does NOT auto-enable
@@ -276,6 +290,18 @@
      Audio volume control:
        HAL_ENABLE_PGA2311       - PGA2311 stereo volume controller over SPI
                                   (propagates: SPI).
+
+     Simple I/O chips:
+       HAL_ENABLE_MCP23017      - MCP23017 I2C GPIO expander
+                                  (propagates: I2C).
+       HAL_ENABLE_PCA9654E      - PCA9654E I2C output expander
+                                  (propagates: I2C).
+       HAL_ENABLE_PCF8574       - PCF8574 quasi-bidirectional I2C GPIO
+                                  expander (propagates: I2C).
+       HAL_ENABLE_HC595         - 74HC595 SPI shift-register output expander
+                                  (propagates: SPI).
+       HAL_ENABLE_MCP4725       - MCP4725 12-bit DAC over HAL I2C
+                                  (propagates: I2C).
 
      RFID:
        HAL_ENABLE_MFRC522       - shared MFRC522 RFID reader driver over HAL
@@ -424,6 +450,54 @@
 #endif
 #endif
 
+#ifdef HAL_ENABLE_HTTP_SERVER
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#endif
+
+#ifdef HAL_ENABLE_HTTP_FILES
+#ifndef HAL_ENABLE_HTTP_SERVER
+#define HAL_ENABLE_HTTP_SERVER
+#endif
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_WEBSOCKET
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#endif
+
+#ifdef HAL_ENABLE_NET_CONSOLE
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#endif
+
+#ifdef HAL_ENABLE_NET_COMMANDS
+#ifndef HAL_ENABLE_HTTP_SERVER
+#define HAL_ENABLE_HTTP_SERVER
+#endif
+#ifndef HAL_ENABLE_WEBSOCKET
+#define HAL_ENABLE_WEBSOCKET
+#endif
+#ifndef HAL_ENABLE_CJSON
+#define HAL_ENABLE_CJSON
+#endif
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
+#endif
+
 #ifdef HAL_ENABLE_OTA
 #ifndef HAL_ENABLE_WIFI
 #define HAL_ENABLE_WIFI
@@ -454,6 +528,12 @@
 #endif
 
 #ifdef HAL_ENABLE_BH1750
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_MCP3221
 #ifndef HAL_ENABLE_I2C
 #define HAL_ENABLE_I2C
 #endif
@@ -530,6 +610,37 @@
 #ifdef HAL_ENABLE_PGA2311
 #ifndef HAL_ENABLE_SPI
 #define HAL_ENABLE_SPI
+#endif
+#endif
+
+/* Simple I/O chips. */
+#ifdef HAL_ENABLE_MCP23017
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_PCA9654E
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_PCF8574
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_HC595
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_MCP4725
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
 #endif
 #endif
 
@@ -644,11 +755,13 @@
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
   KV, SDLOGGER, GPS, DACLESS, DMA_PWM_AUDIO, PWM_FREQ, RGB_LED, DS18B20, DHT,
-  BH1750, TSC2007, STMPE610, ONEWIRE, EXTERNAL_ADC, PGA2311, TIME, UNITY, MQTT,
-  UDP, TCP, OTA, WIREGUARD, LITTLEFS, CRYPTO, CJSON, PNG, PNG_AS_BASE64, JPEG,
-  JPEG_AS_BASE64) do NOT need such checks - they can be enabled on their own.
-  The checks below only catch generic-API modules enabled without any backend,
-   which would otherwise leave the user with a non-functional binary. */
+  BH1750, TSC2007, STMPE610, ONEWIRE, EXTERNAL_ADC, MCP3221, MCP23017,
+  PCA9654E, PCF8574, HC595, MCP4725, PGA2311, TIME, UNITY, MQTT, UDP, TCP,
+  HTTP_SERVER, HTTP_FILES, WEBSOCKET, NET_CONSOLE, NET_COMMANDS, OTA, WIREGUARD,
+  LITTLEFS, CRYPTO, CJSON, PNG, PNG_AS_BASE64, JPEG, JPEG_AS_BASE64) do NOT need
+  such checks - they can be enabled on their own. The checks below only catch
+  generic-API modules enabled without any backend, which would otherwise leave
+  the user with a non-functional binary. */
 
 #if defined(HAL_ENABLE_RTC) && !defined(HAL_ENABLE_PCF8563) &&                 \
     !defined(HAL_ENABLE_DS3231)
@@ -722,6 +835,21 @@
 #endif
 #ifdef HAL_ENABLE_TCP
 #pragma message("HAL_CONFIG: HAL_ENABLE_TCP")
+#endif
+#ifdef HAL_ENABLE_HTTP_SERVER
+#pragma message("HAL_CONFIG: HAL_ENABLE_HTTP_SERVER")
+#endif
+#ifdef HAL_ENABLE_HTTP_FILES
+#pragma message("HAL_CONFIG: HAL_ENABLE_HTTP_FILES")
+#endif
+#ifdef HAL_ENABLE_WEBSOCKET
+#pragma message("HAL_CONFIG: HAL_ENABLE_WEBSOCKET")
+#endif
+#ifdef HAL_ENABLE_NET_CONSOLE
+#pragma message("HAL_CONFIG: HAL_ENABLE_NET_CONSOLE")
+#endif
+#ifdef HAL_ENABLE_NET_COMMANDS
+#pragma message("HAL_CONFIG: HAL_ENABLE_NET_COMMANDS")
 #endif
 #ifdef HAL_ENABLE_BSD_SOCKETS
 #pragma message("HAL_CONFIG: HAL_ENABLE_BSD_SOCKETS")
@@ -806,6 +934,24 @@
 #endif
 #ifdef HAL_ENABLE_BH1750
 #pragma message("HAL_CONFIG: HAL_ENABLE_BH1750")
+#endif
+#ifdef HAL_ENABLE_MCP3221
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP3221")
+#endif
+#ifdef HAL_ENABLE_MCP23017
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP23017")
+#endif
+#ifdef HAL_ENABLE_PCA9654E
+#pragma message("HAL_CONFIG: HAL_ENABLE_PCA9654E")
+#endif
+#ifdef HAL_ENABLE_PCF8574
+#pragma message("HAL_CONFIG: HAL_ENABLE_PCF8574")
+#endif
+#ifdef HAL_ENABLE_HC595
+#pragma message("HAL_CONFIG: HAL_ENABLE_HC595")
+#endif
+#ifdef HAL_ENABLE_MCP4725
+#pragma message("HAL_CONFIG: HAL_ENABLE_MCP4725")
 #endif
 #ifdef HAL_ENABLE_TSC2007
 #pragma message("HAL_CONFIG: HAL_ENABLE_TSC2007")

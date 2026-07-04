@@ -16,6 +16,7 @@ install_manifest.txt
 *.o
 *.a
 *__pycache__*
+GRBHAL/
 
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/

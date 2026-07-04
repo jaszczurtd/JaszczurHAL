@@ -2,7 +2,7 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
+Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_mcp3221`, `hal_tsc2007`, `hal_stmpe610`, `hal_irsmall_decoder`, `hal_rtc`, `hal_external_adc`, `hal_gps`.
 
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
@@ -736,6 +736,33 @@ void hal_mock_gps_reset(void);                                 // zero all state
 
 ---
 
+
+---
+
+## `hal_mcp3221` - MCP3221 12-bit ADC  *(optional - `HAL_ENABLE_MCP3221`)*
+
+```c
+#include <hal/hal_mcp3221.h>
+
+hal_i2c_init(sda_pin, scl_pin, HAL_I2C_CLOCK_STANDARD_HZ);
+
+hal_mcp3221_t adc = {0};
+hal_status_t status = hal_mcp3221_init_ex(&adc, NULL);
+if (status == HAL_OK) {
+  uint16_t raw = 0;
+  status = hal_mcp3221_read_ex(&adc, &raw);
+}
+```
+
+Default config uses bus 0 and address `HAL_MCP3221_I2C_ADDR_DEFAULT` (`0x4D`,
+matching the grblHAL plugin default `(0x9A >> 1)`). `hal_mcp3221_read_ex()`
+requests exactly two bytes and decodes them as a big-endian raw value, preserving
+the source driver's behavior.
+
+**Thread safety:** per-instance mutex serializes reads; I2C transactions use
+the HAL I2C bus lock. Lifecycle calls remain single-owner.
+
+Example: `examples/53_simple_io_chips`.
 
 ---
 

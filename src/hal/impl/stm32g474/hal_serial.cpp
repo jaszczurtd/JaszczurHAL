@@ -2,6 +2,7 @@
 #if HAL_TARGET_IS_STM32G474
 
 #include "../../hal_config.h"
+#include "../../hal_net_console.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
@@ -262,6 +263,7 @@ static void hal_serial_write_locked(const char *data, size_t len) {
   if (data == NULL || len == 0u) {
     return;
   }
+  hal_net_console_write_from_serial(data, len);
 #ifdef JH_STM32G474_HW
   for (size_t i = 0u; i < len; ++i) {
     g474_debug_uart_putc(data[i]);

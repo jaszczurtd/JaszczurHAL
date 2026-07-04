@@ -4,6 +4,86 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Simple I/O chip drivers
+
+- Added shared HAL-only drivers for MCP23017, PCA9654E, PCF8574, 74HC595,
+  MCP3221 and MCP4725 under `src/hal/impl/shared/drivers/simple_io/`, with
+  public `hal_mcp23017.h`, `hal_pca9654e.h`, `hal_pcf8574.h`, `hal_hc595.h`,
+  `hal_mcp3221.h` and `hal_mcp4725.h`.
+- Ported the working grblHAL plugin transaction flows by Terje Io onto
+  JaszczurHAL I2C/SPI/GPIO/timing/sync primitives and exposed new
+  `hal_status_t`-based `_ex` APIs while keeping simple `bool` wrappers.
+- Added per-instance mutex protection for multicore/FreeRTOS-safe runtime use,
+  host coverage in `test_simple_io_drivers`, and
+  `examples/53_simple_io_chips` for RP2040 and STM32G474.
+
+### HTTP server
+
+- Added opt-in `HAL_ENABLE_HTTP_SERVER`, public `hal_http_server.h` and a
+  small poll-driven HTTP/1.1 server implemented over the handle-based
+  `hal_tcp` listener/socket API.
+- The server supports exact route registration for GET/HEAD/POST/PUT/DELETE
+  and OPTIONS, query/body exposure, buffered responses with automatic
+  `Content-Length`, content-type/status helpers and close-after-response
+  semantics.
+- HTTP requests now expose parsed headers to handlers through
+  `hal_http_header_t`, `request.headers`, `request.header_count` and
+  `hal_http_request_get_header()`, and responses can add arbitrary headers via
+  `hal_http_response_set_header()`.
+- Added prefix route registration with `hal_http_server_route_prefix()` so
+  modules can mount path subtrees such as static file roots.
+- HTTP route, start, handler and response helper APIs return `hal_status_t`
+  result codes instead of collapsing failures to `bool`.
+- Added host coverage in `test_hal_http_server` and `examples/48_http_server`
+  for a Pico W style HTML/JSON status endpoint.
+
+### HTTP files
+
+- Added opt-in `HAL_ENABLE_HTTP_FILES`, public `hal_http_files.h` and a
+  callback-backed file serving/upload adapter over `hal_http_server`.
+- The adapter supports GET/HEAD prefix-mounted file serving, extension-based
+  content types, weak ETag generation, `If-None-Match`, raw PUT uploads,
+  multipart/form-data POST uploads and path traversal rejection.
+- Added host coverage in `test_hal_http_files` and a RAM-backed Pico W example
+  in `examples/52_http_files`; real firmware can replace the RAM callbacks
+  with LittleFS, FatFs/SD or flash-asset callbacks.
+
+### WebSocket server
+
+- Added opt-in `HAL_ENABLE_WEBSOCKET`, public `hal_websocket.h` and a small
+  poll-driven WebSocket server over the handle-based `hal_tcp` listener/socket
+  API.
+- The server performs the HTTP Upgrade handshake, parses masked single-frame
+  text/binary client messages, handles ping/pong and close frames, and exposes
+  connect/message/disconnect callbacks plus per-client send and broadcast
+  helpers.
+- WebSocket start, callback, send, broadcast and close APIs return
+  `hal_status_t`; broadcast helpers report the sent-client count through an
+  optional output pointer.
+- Added host coverage in `test_hal_websocket` and `examples/49_websocket` for
+  a Pico W style HTTP page with a live WebSocket telemetry/echo channel.
+
+### Net console
+
+- Added opt-in `HAL_ENABLE_NET_CONSOLE`, public `hal_net_console.h` and a
+  password-protected TCP console transport over `hal_tcp`.
+- `hal_serial`/`deb`/`derr` output still goes to the normal UART/USB debug
+  path and is additionally mirrored to authenticated TCP clients.
+- Added bidirectional command input through a line callback and polling RX API,
+  per-client/broadcast write helpers using `hal_status_t`, host coverage in
+  `test_hal_net_console` and `examples/50_net_console`.
+
+### Network commands
+
+- Added opt-in `HAL_ENABLE_NET_COMMANDS`, public `hal_net_commands.h` and a
+  shared JSON/text command dispatcher for HTTP and WebSocket control channels.
+- Commands are registered by name and receive source-aware callbacks with
+  plain-text args or cJSON-backed `cmd`/`args` payloads, plus fixed-buffer
+  response helpers returning `hal_status_t`.
+- Added HTTP route and WebSocket message helpers, structured default success
+  and error responses, host coverage in `test_hal_net_commands` and
+  `examples/51_net_commands`.
+
 ### HAL status codes
 
 - Added public `hal_status_t` in `hal_status.h` as a shared status vocabulary

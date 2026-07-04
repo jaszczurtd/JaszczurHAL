@@ -64,14 +64,32 @@
 #ifdef HAL_ENABLE_EXTERNAL_ADC
 #include "hal_external_adc.h"
 #endif
+#ifdef HAL_ENABLE_MCP3221
+#include "hal_mcp3221.h"
+#endif
 #ifdef HAL_ENABLE_RGB_LED
 #include "hal_rgb_led.h"
+#endif
+#ifdef HAL_ENABLE_MCP23017
+#include "hal_mcp23017.h"
+#endif
+#ifdef HAL_ENABLE_PCA9654E
+#include "hal_pca9654e.h"
+#endif
+#ifdef HAL_ENABLE_PCF8574
+#include "hal_pcf8574.h"
+#endif
+#ifdef HAL_ENABLE_HC595
+#include "hal_hc595.h"
 #endif
 #ifdef HAL_ENABLE_CAN
 #include "hal_can.h"
 #endif
 #ifdef HAL_ENABLE_PGA2311
 #include "hal_pga2311.h"
+#endif
+#ifdef HAL_ENABLE_MCP4725
+#include "hal_mcp4725.h"
 #endif
 #ifdef HAL_ENABLE_MFRC522
 #include "hal_mfrc522.h"
@@ -99,6 +117,21 @@
 #endif
 #ifdef HAL_ENABLE_TCP
 #include "hal_tcp.h"
+#endif
+#ifdef HAL_ENABLE_HTTP_SERVER
+#include "hal_http_server.h"
+#endif
+#ifdef HAL_ENABLE_HTTP_FILES
+#include "hal_http_files.h"
+#endif
+#ifdef HAL_ENABLE_WEBSOCKET
+#include "hal_websocket.h"
+#endif
+#ifdef HAL_ENABLE_NET_CONSOLE
+#include "hal_net_console.h"
+#endif
+#ifdef HAL_ENABLE_NET_COMMANDS
+#include "hal_net_commands.h"
 #endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include "hal_wireguard.h"
