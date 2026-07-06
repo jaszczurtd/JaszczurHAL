@@ -135,12 +135,12 @@ void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   memcpy(uid, s_device_uid, HAL_DEVICE_UID_BYTES);
 }
 
-bool hal_get_device_uid_hex(char *buf, size_t buflen) {
+hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
   if (buf == nullptr) {
-    return false;
+    return HAL_EINVAL;
   }
   if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
-    return false;
+    return HAL_EOVERFLOW;
   }
   static const char kHex[] = "0123456789ABCDEF";
   for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
@@ -148,7 +148,11 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen) {
     buf[(i * 2u) + 1u] = kHex[s_device_uid[i] & 0x0Fu];
   }
   buf[HAL_DEVICE_UID_BYTES * 2u] = '\0';
-  return true;
+  return HAL_OK;
+}
+
+bool hal_get_device_uid_hex(char *buf, size_t buflen) {
+  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
 }
 
 void hal_mock_set_device_uid(const uint8_t uid[HAL_DEVICE_UID_BYTES]) {

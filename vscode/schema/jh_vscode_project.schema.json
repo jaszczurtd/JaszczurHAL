@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://jaszczur.dev/schemas/jh_vscode_project.schema.json",
+  "title": "JaszczurHAL VS Code Project",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "project": {
+      "type": "string",
+      "minLength": 1
+    },
+    "module": {
+      "type": "string",
+      "minLength": 1
+    },
+    "toolchain": {
+      "type": "string",
+      "enum": ["arduino-cli", "cmake", "custom"]
+    },
+    "fqbn": {
+      "type": "string",
+      "minLength": 1
+    },
+    "buildDir": {
+      "type": "string",
+      "minLength": 1
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "usbManufacturer": {
+          "type": "string"
+        },
+        "usbProduct": {
+          "type": "string"
+        },
+        "byIdHint": {
+          "type": "string"
+        }
+      }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "elf": {
+          "type": "string"
+        },
+        "uf2": {
+          "type": "string"
+        },
+        "compileCommands": {
+          "type": "string"
+        }
+      }
+    },
+    "upload": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["serial", "uf2", "custom"]
+        },
+        "port": {
+          "type": "string"
+        },
+        "byId": {
+          "type": "string"
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "preBuild": {
+          "type": "string"
+        },
+        "postBuild": {
+          "type": "string"
+        },
+        "preUpload": {
+          "type": "string"
+        },
+        "postUpload": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
+

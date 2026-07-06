@@ -46,6 +46,8 @@ typedef struct {
 
 static i2c_bus_state_t s_i2c[2] = {};
 
+static inline bool i2c_bus_valid(uint8_t bus) { return bus <= 1u; }
+
 static inline uint8_t i2c_bus_index(uint8_t bus) {
   HAL_ASSERT(bus <= 1u, "hal_i2c: invalid bus index");
   return (bus <= 1u) ? bus : 0u;
@@ -104,6 +106,20 @@ static void i2c_lock_bus(uint8_t bus) {
 static void i2c_unlock_bus(uint8_t bus) {
   i2c_ensure_mutex(bus);
   i2c_unlock_state(i2c_state(bus));
+}
+
+static hal_status_t i2c_status_from_result(uint8_t result) {
+  switch (result) {
+  case HAL_I2C_RESULT_OK:
+    return HAL_OK;
+  case HAL_I2C_ERROR_TIMEOUT:
+    return HAL_ETIMEOUT;
+  case HAL_I2C_ERROR_GENERIC:
+    return HAL_EBUS;
+  case HAL_I2C_ERROR_OTHER:
+  default:
+    return HAL_EIO;
+  }
 }
 
 #ifdef JH_STM32G474_HW
@@ -472,12 +488,21 @@ static bool i2c_hw_ack(uint32_t base, uint8_t addr) {
 }
 #endif /* JH_STM32G474_HW */
 
-void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
-  hal_i2c_init_bus(0, sda_pin, scl_pin, clock_hz);
+hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
+                             uint32_t clock_hz) {
+  return hal_i2c_init_bus_ex(0, sda_pin, scl_pin, clock_hz);
 }
 
-void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                      uint32_t clock_hz) {
+void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
+  const hal_status_t status = hal_i2c_init_ex(sda_pin, scl_pin, clock_hz);
+  HAL_ASSERT(status == HAL_OK, "hal_i2c_init: failed to initialize bus");
+}
+
+hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                                 uint32_t clock_hz) {
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
   i2c_ensure_mutex(bus);
 
   i2c_bus_state_t *st = i2c_state(bus);
@@ -501,17 +526,35 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   const i2c_hw_desc_t *desc = i2c_hw_desc_for_bus(bus);
   if (!i2c_hw_configure_bus(st, desc, sda_pin, scl_pin)) {
     st->initialized = false;
-    HAL_ASSERT(false,
-               "hal_i2c_init_bus: invalid SDA/SCL pin mapping for selected "
-               "bus");
-    return;
+    return HAL_ECONFIG;
   }
 #endif
   st->initialized = true;
+  return HAL_OK;
+}
+
+void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                      uint32_t clock_hz) {
+  const hal_status_t status =
+      hal_i2c_init_bus_ex(bus, sda_pin, scl_pin, clock_hz);
+  HAL_ASSERT(status == HAL_OK,
+             "hal_i2c_init_bus: invalid SDA/SCL pin mapping for selected bus");
 }
 
 void hal_i2c_set_clock(uint32_t clock_hz) {
-  hal_i2c_set_clock_bus(0, clock_hz);
+  (void)hal_i2c_set_clock_ex(clock_hz);
+}
+
+hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz) {
+  return hal_i2c_set_clock_bus_ex(0, clock_hz);
+}
+
+hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz) {
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
+  hal_i2c_set_clock_bus(bus, clock_hz);
+  return HAL_OK;
 }
 
 void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
@@ -578,6 +621,17 @@ uint8_t hal_i2c_end_transmission(void) {
   return hal_i2c_end_transmission_bus(0);
 }
 
+hal_status_t hal_i2c_end_transmission_ex(void) {
+  return hal_i2c_end_transmission_bus_ex(0);
+}
+
+hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
+  return i2c_status_from_result(hal_i2c_end_transmission_bus(bus));
+}
+
 uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   i2c_bus_state_t *st = i2c_state(bus);
   uint8_t err = HAL_I2C_RESULT_OK;
@@ -599,6 +653,30 @@ uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk) {
   return hal_i2c_write_byte_bus(0, address, data, outWriteOk);
 }
 
+hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+                                   bool *outWriteOk) {
+  return hal_i2c_write_byte_bus_ex(0, address, data, outWriteOk);
+}
+
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t data, bool *outWriteOk) {
+  if (!i2c_bus_valid(bus)) {
+    if (outWriteOk != NULL) {
+      *outWriteOk = false;
+    }
+    return HAL_EINVAL;
+  }
+  bool write_ok = false;
+  uint8_t result = hal_i2c_write_byte_bus(bus, address, data, &write_ok);
+  if (outWriteOk != NULL) {
+    *outWriteOk = write_ok;
+  }
+  if (!write_ok) {
+    return HAL_EIO;
+  }
+  return i2c_status_from_result(result);
+}
+
 uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
                                bool *outWriteOk) {
   hal_i2c_begin_transmission_bus(bus, address);
@@ -613,6 +691,22 @@ uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
   return hal_i2c_read_byte_bus(0, address, outReadOk);
 }
 
+hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue) {
+  return hal_i2c_read_byte_bus_ex(0, address, outValue);
+}
+
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+                                      uint8_t *outValue) {
+  if (outValue == NULL) {
+    return HAL_EINVAL;
+  }
+  *outValue = 0u;
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
+  return hal_i2c_read_bytes_bus_ex(bus, address, outValue, 1u);
+}
+
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
   uint8_t value = 0u;
   const bool ok = hal_i2c_read_bytes_bus(bus, address, &value, 1u);
@@ -624,7 +718,32 @@ uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
 
 bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
                         uint8_t *rx, size_t rx_len) {
-  return hal_i2c_write_read_bus(0, address, tx, tx_len, rx, rx_len);
+  return hal_status_to_bool(
+      hal_i2c_write_read_ex(address, tx, tx_len, rx, rx_len));
+}
+
+hal_status_t hal_i2c_write_read_ex(uint8_t address, const uint8_t *tx,
+                                   size_t tx_len, uint8_t *rx, size_t rx_len) {
+  return hal_i2c_write_read_bus_ex(0, address, tx, tx_len, rx, rx_len);
+}
+
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+                                       const uint8_t *tx, size_t tx_len,
+                                       uint8_t *rx, size_t rx_len) {
+  if (!i2c_bus_valid(bus) || (tx_len > 0u && tx == NULL) ||
+      (rx_len > 0u && rx == NULL) || tx_len > STM32_I2C_BUF_SIZE ||
+      rx_len > STM32_I2C_BUF_SIZE) {
+    return HAL_EINVAL;
+  }
+  if (tx_len == 0u) {
+    return hal_i2c_read_bytes_bus_ex(bus, address, rx, rx_len);
+  }
+  if (!i2c_state(bus)->initialized) {
+    HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
+    return HAL_EUNINIT;
+  }
+  return hal_status_from_bool(
+      hal_i2c_write_read_bus(bus, address, tx, tx_len, rx, rx_len), HAL_EBUS);
 }
 
 bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
@@ -681,7 +800,29 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
 }
 
 bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
-  return hal_i2c_read_bytes_bus(0, address, rx, rx_len);
+  return hal_status_to_bool(hal_i2c_read_bytes_ex(address, rx, rx_len));
+}
+
+hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx,
+                                   size_t rx_len) {
+  return hal_i2c_read_bytes_bus_ex(0, address, rx, rx_len);
+}
+
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t *rx, size_t rx_len) {
+  if (!i2c_bus_valid(bus) || (rx_len > 0u && rx == NULL) ||
+      rx_len > STM32_I2C_BUF_SIZE) {
+    return HAL_EINVAL;
+  }
+  if (rx_len == 0u) {
+    return HAL_OK;
+  }
+  if (!i2c_state(bus)->initialized) {
+    HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
+    return HAL_EUNINIT;
+  }
+  return hal_status_from_bool(hal_i2c_read_bytes_bus(bus, address, rx, rx_len),
+                              HAL_EBUS);
 }
 
 bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
@@ -721,6 +862,25 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
 
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
   return hal_i2c_request_from_bus(0, address, count);
+}
+
+hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+                                     uint8_t *outReceived) {
+  return hal_i2c_request_from_bus_ex(0, address, count, outReceived);
+}
+
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+                                         uint8_t count, uint8_t *outReceived) {
+  if (outReceived == NULL || !i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
+  *outReceived = 0u;
+  if (!i2c_state(bus)->initialized && count > 0u) {
+    HAL_ASSERT(false, "hal_i2c: bus used before hal_i2c_init_bus");
+    return HAL_EUNINIT;
+  }
+  *outReceived = hal_i2c_request_from_bus(bus, address, count);
+  return (*outReceived == count) ? HAL_OK : HAL_EBUS;
 }
 
 uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
@@ -794,6 +954,34 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus) {
 
 void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
   hal_i2c_bus_clear_bus(0, sda_pin, scl_pin);
+}
+
+hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin) {
+  return hal_i2c_bus_clear_bus_ex(0, sda_pin, scl_pin);
+}
+
+hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
+                                      uint8_t scl_pin) {
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
+#ifdef JH_STM32G474_HW
+  i2c_bus_state_t *st = i2c_state(bus);
+  const i2c_hw_desc_t *desc = i2c_hw_desc_for_bus(bus);
+  uint8_t clear_sda = sda_pin;
+  uint8_t clear_scl = scl_pin;
+  if (clear_sda == 0u) {
+    clear_sda = (st->sda_pin != 0u) ? st->sda_pin : desc->default_sda_pin;
+  }
+  if (clear_scl == 0u) {
+    clear_scl = (st->scl_pin != 0u) ? st->scl_pin : desc->default_scl_pin;
+  }
+  if (!i2c_pin_valid(clear_sda) || !i2c_pin_valid(clear_scl)) {
+    return HAL_EINVAL;
+  }
+#endif
+  hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin);
+  return HAL_OK;
 }
 
 void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {

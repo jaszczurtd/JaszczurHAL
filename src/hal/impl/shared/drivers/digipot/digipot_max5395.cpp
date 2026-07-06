@@ -42,21 +42,21 @@ static bool max5395_validate(const hal_digipot_config_t *cfg) {
          max5395_e2e_valid(cfg->e2e_resistance) && max5395_mode_valid(cfg);
 }
 
-static bool max5395_init(hal_digipot_config_t *cfg) {
+static hal_status_t max5395_init(hal_digipot_config_t *cfg) {
   if (cfg == nullptr) {
-    return false;
+    return HAL_EINVAL;
   }
   const uint8_t addr = cfg->i2c_addr;
 
   uint8_t rst[2] = {MAX5395_CMD_RST, 0x00u};
   if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, rst, sizeof(rst))) {
-    return false;
+    return HAL_EBUS;
   }
 
   if (!cfg->charge_pump_en) {
     uint8_t qp[2] = {MAX5395_CMD_QP_OFF, 0x00u};
     if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, qp, sizeof(qp))) {
-      return false;
+      return HAL_EBUS;
     }
   }
 
@@ -66,16 +66,16 @@ static bool max5395_init(hal_digipot_config_t *cfg) {
                             : MAX5395_CMD_SD_L_WREG;
     uint8_t sd[2] = {cmd, 0x00u};
     if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, sd, sizeof(sd))) {
-      return false;
+      return HAL_EBUS;
     }
   }
-  return true;
+  return HAL_OK;
 }
 
-static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
-                                   uint32_t ohms) {
+static hal_status_t max5395_set_resistance(const hal_digipot_config_t *cfg,
+                                           uint32_t ohms) {
   if (cfg == nullptr || ohms > cfg->e2e_resistance) {
-    return false;
+    return HAL_EINVAL;
   }
   const uint8_t addr = cfg->i2c_addr;
 
@@ -90,7 +90,7 @@ static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
     uint8_t config = 0u;
     if (!hal_digipot_i2c_read_cmd(cfg->i2c_bus, addr, MAX5395_CMD_CONFIG,
                                   &config)) {
-      return false;
+      return HAL_EBUS;
     }
     const uint32_t wiper_res = (0u == (config & MAX5395_CONFIG_QP_MASK))
                                    ? MAX5395_WIPER_RES_QP_OFF
@@ -103,16 +103,16 @@ static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
     }
   } break;
   default:
-    return false;
+    return HAL_EINVAL;
   }
 
   uint8_t clr[2] = {MAX5395_CMD_SD_CLR, 0x00u};
   if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, clr, sizeof(clr))) {
-    return false;
+    return HAL_EBUS;
   }
   uint8_t wr[2] = {MAX5395_CMD_WIPER, wiper};
   if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, wr, sizeof(wr))) {
-    return false;
+    return HAL_EBUS;
   }
 
   if (cfg->mode != HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER) {
@@ -121,10 +121,10 @@ static bool max5395_set_resistance(const hal_digipot_config_t *cfg,
                             : MAX5395_CMD_SD_L_WREG;
     uint8_t sd[2] = {cmd, 0x00u};
     if (!hal_digipot_i2c_write(cfg->i2c_bus, addr, sd, sizeof(sd))) {
-      return false;
+      return HAL_EBUS;
     }
   }
-  return true;
+  return HAL_OK;
 }
 
 static uint16_t max5395_step_count(void) { return MAX5395_STEP_RESISTANCES; }

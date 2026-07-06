@@ -159,8 +159,19 @@ void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   stm32g474_system_get_device_uid(uid);
 }
 
+hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
+  if (buf == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (buflen < HAL_DEVICE_UID_HEX_BUF_SIZE) {
+    return HAL_EOVERFLOW;
+  }
+  return hal_status_from_bool(stm32g474_system_get_device_uid_hex(buf, buflen),
+                              HAL_EIO);
+}
+
 bool hal_get_device_uid_hex(char *buf, size_t buflen) {
-  return stm32g474_system_get_device_uid_hex(buf, buflen);
+  return hal_status_to_bool(hal_get_device_uid_hex_ex(buf, buflen));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

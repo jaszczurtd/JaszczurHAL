@@ -2,6 +2,8 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
+#include <string.h>
+
 void setUp(void) {
   hal_mock_set_millis(0);
   hal_mock_watchdog_reset_flag();
@@ -185,6 +187,10 @@ void test_get_device_uid_null_arg_is_safe(void) {
 
 void test_get_device_uid_hex_formats_default_as_uppercase(void) {
   char buf[HAL_DEVICE_UID_HEX_BUF_SIZE] = {0};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_device_uid_hex_ex(buf, sizeof(buf)));
+  TEST_ASSERT_EQUAL_STRING("E661A4D1234567AB", buf);
+
+  memset(buf, 0, sizeof(buf));
   TEST_ASSERT_TRUE(hal_get_device_uid_hex(buf, sizeof(buf)));
   TEST_ASSERT_EQUAL_STRING("E661A4D1234567AB", buf);
 }
@@ -201,10 +207,15 @@ void test_get_device_uid_hex_formats_injected_value(void) {
 
 void test_get_device_uid_hex_rejects_small_buffer(void) {
   char buf[HAL_DEVICE_UID_HEX_BUF_SIZE - 1u] = {0};
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_get_device_uid_hex_ex(buf, sizeof(buf)));
   TEST_ASSERT_FALSE(hal_get_device_uid_hex(buf, sizeof(buf)));
 }
 
 void test_get_device_uid_hex_null_buffer_is_safe(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_get_device_uid_hex_ex(NULL, 0));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_get_device_uid_hex_ex(NULL, HAL_DEVICE_UID_HEX_BUF_SIZE));
   TEST_ASSERT_FALSE(hal_get_device_uid_hex(NULL, 0));
   TEST_ASSERT_FALSE(hal_get_device_uid_hex(NULL, HAL_DEVICE_UID_HEX_BUF_SIZE));
 }

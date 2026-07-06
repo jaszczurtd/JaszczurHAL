@@ -74,6 +74,40 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 #define HAL_I2C_ERROR_OTHER         3u
 #define HAL_I2C_ERROR_TIMEOUT       4u
 
+// Status-returning API for new code. Legacy wrappers below are preserved.
+hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
+                             uint32_t clock_hz);
+hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin,
+                                 uint8_t scl_pin, uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz);
+hal_status_t hal_i2c_end_transmission_ex(void);
+hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
+hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+                                   bool *outWriteOk);
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t data, bool *outWriteOk);
+hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue);
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+                                      uint8_t *outValue);
+hal_status_t hal_i2c_write_read_ex(uint8_t address,
+                                   const uint8_t *tx, size_t tx_len,
+                                   uint8_t *rx, size_t rx_len);
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+                                       const uint8_t *tx, size_t tx_len,
+                                       uint8_t *rx, size_t rx_len);
+hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx,
+                                   size_t rx_len);
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t *rx, size_t rx_len);
+hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+                                     uint8_t *outReceived);
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+                                         uint8_t count, uint8_t *outReceived);
+hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin);
+hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
+                                      uint8_t scl_pin);
+
 // Init bus, set clock, and start the selected backend controller
 // (also creates the per-bus mutex).
 void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
@@ -161,6 +195,14 @@ void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
+
+The `_ex` variants return `HAL_OK` on success and `hal_status_t` diagnostics
+for new code. Invalid buses or buffers return `HAL_EINVAL`; uninitialized bus
+use returns `HAL_EUNINIT` where the backend can detect it; legacy
+`HAL_I2C_ERROR_TIMEOUT` maps to `HAL_ETIMEOUT`, generic NACK/bus failures map
+to `HAL_EBUS`, and non-specific backend failures map to `HAL_EIO`.
+Existing wrappers keep their `void`, `uint8_t` and `bool` return shapes for
+source compatibility.
 
 **Init behavior:** `hal_i2c_init*()` creates the per-bus mutex, configures
 SDA/SCL, clock and starts the backend controller; it should still be called

@@ -1,0 +1,18 @@
+{
+    "$schema": "../schema/jh_vscode_project.schema.json",
+    "project": "example-project",
+    "module": "firmware",
+    "toolchain": "arduino-cli",
+    "fqbn": "rp2040:rp2040:rpipicow",
+    "buildDir": "${project}/.build",
+    "identity": {
+        "enabled": true,
+        "usbManufacturer": "Jaszczur",
+        "usbProduct": "Example Firmware",
+        "byIdHint": "Example_Firmware"
+    },
+    "upload": {
+        "strategy": "serial"
+    }
+}
+

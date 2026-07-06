@@ -36,26 +36,26 @@ static bool mcp401x_validate(const hal_digipot_config_t *cfg) {
          mcp401x_mode_valid(cfg);
 }
 
-static bool mcp401x_init(hal_digipot_config_t *cfg) {
+static hal_status_t mcp401x_init(hal_digipot_config_t *cfg) {
   if (cfg == nullptr) {
-    return false;
+    return HAL_EINVAL;
   }
   /* Address is fixed in silicon regardless of what the caller set. */
   cfg->i2c_addr = MCP401X_I2C_ADDRESS;
-  return true;
+  return HAL_OK;
 }
 
-static bool mcp401x_set_resistance(const hal_digipot_config_t *cfg,
-                                   uint32_t ohms) {
+static hal_status_t mcp401x_set_resistance(const hal_digipot_config_t *cfg,
+                                           uint32_t ohms) {
   if (cfg == nullptr || ohms > cfg->e2e_resistance) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uint8_t wiper = 0u;
   switch (cfg->mode) {
   case HAL_DIGIPOT_MODE_VOLTAGE_DIVIDER:
     if (cfg->mcp401x_device != HAL_DIGIPOT_MCP4018) {
-      return false;
+      return HAL_EINVAL;
     }
     wiper = hal_digipot_scale_to_wiper_trunc(ohms, cfg->e2e_resistance,
                                              MCP401X_STEP_RESISTANCES);
@@ -70,23 +70,23 @@ static bool mcp401x_set_resistance(const hal_digipot_config_t *cfg,
 
     if (cfg->mode == HAL_DIGIPOT_MODE_VARIABLE_RESISTOR_WH) {
       if (cfg->mcp401x_device != HAL_DIGIPOT_MCP4018) {
-        return false;
+        return HAL_EINVAL;
       }
       wiper = (uint8_t)(MCP401X_STEP_RESISTANCES - wiper);
     }
   } break;
   default:
-    return false;
+    return HAL_EINVAL;
   }
 
   if (!hal_digipot_i2c_write(cfg->i2c_bus, MCP401X_I2C_ADDRESS, &wiper, 1u)) {
-    return false;
+    return HAL_EBUS;
   }
   uint8_t reg = 0u;
   if (!hal_digipot_i2c_read_raw(cfg->i2c_bus, MCP401X_I2C_ADDRESS, &reg)) {
-    return false;
+    return HAL_EBUS;
   }
-  return wiper == reg;
+  return wiper == reg ? HAL_OK : HAL_EIO;
 }
 
 static uint16_t mcp401x_step_count(void) { return MCP401X_STEP_RESISTANCES; }

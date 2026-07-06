@@ -32,6 +32,33 @@ All notable changes to this project will be documented in this file.
   host coverage in `test_simple_io_drivers`, and
   `examples/53_simple_io_chips` for RP2040 and STM32G474.
 
+### Status-returning API expansion
+
+- Added `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` with
+  `hal_status_t` diagnostics while keeping `hal_digipot_init()` and
+  `hal_digipot_set_resistance()` as compatibility wrappers.
+- Propagated status codes through the shared MCP401x/MAX5395 digipot backends
+  for invalid configuration/range, pool exhaustion, I2C bus failures and
+  MCP401x read-back mismatch reporting.
+- Added `hal_dac_init_ex()`, `hal_dac_write_ex()` and
+  `hal_dac_write_millivolts_ex()` with `hal_status_t` diagnostics while
+  preserving the existing `bool`/`void` DAC wrappers.
+- Added `hal_pcnt_init_ex()`, `hal_pcnt_read_ex()`, `hal_pcnt_reset_ex()` and
+  `hal_pcnt_read_and_reset_ex()` with status diagnostics while preserving the
+  existing PCNT compatibility wrappers.
+- Added `hal_get_device_uid_hex_ex()` so callers can distinguish NULL-buffer
+  (`HAL_EINVAL`) and too-small-buffer (`HAL_EOVERFLOW`) failures while keeping
+  the existing `hal_get_device_uid_hex()` wrapper.
+- Added status-returning I2C master APIs (`hal_i2c_init_ex()`,
+  `hal_i2c_init_bus_ex()`, `hal_i2c_set_clock_ex()`,
+  `hal_i2c_set_clock_bus_ex()`, `hal_i2c_end_transmission_ex()`,
+  `hal_i2c_end_transmission_bus_ex()`, one-byte read/write helpers,
+  write-read/read-bytes helpers, request-from helpers and bus-clear helpers)
+  while keeping the existing `void`/`uint8_t`/`bool` I2C wrappers.
+- Mock, RP2040 and STM32G474 I2C backends now map invalid buses/buffers,
+  uninitialized bus use, bus errors and timeouts to `hal_status_t` where the
+  backend can report them.
+
 ### HTTP server
 
 - Added opt-in `HAL_ENABLE_HTTP_SERVER`, public `hal_http_server.h` and a

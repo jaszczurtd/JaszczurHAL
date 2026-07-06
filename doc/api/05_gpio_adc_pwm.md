@@ -90,6 +90,70 @@ pins sharing the same TIM channel are not independent. Call
 
 ---
 
+## `hal_dac` - True DAC output  *(optional - `HAL_ENABLE_DAC`)*
+
+```c
+#include <hal/hal_dac.h>
+
+bool hal_dac_is_supported(void);
+uint8_t hal_dac_resolution_bits(void);
+uint16_t hal_dac_max_value(void);
+
+hal_status_t hal_dac_init_ex(uint8_t channel);
+bool hal_dac_init(uint8_t channel);
+
+hal_status_t hal_dac_write_ex(uint8_t channel, uint16_t value);
+void hal_dac_write(uint8_t channel, uint16_t value);
+
+hal_status_t hal_dac_write_millivolts_ex(uint8_t channel, uint16_t millivolts);
+void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
+```
+
+The `_ex` APIs report `HAL_OK`, `HAL_EUNSUPPORTED` on targets without a true
+DAC (RP2040), `HAL_EINVAL` for invalid channels and `HAL_EUNINIT` for writes
+before channel initialization. The legacy `bool`/`void` wrappers remain source
+compatible.
+
+**impl/stm32g474:** real DAC1, 12-bit, channel 0 -> PA4 and channel 1 -> PA5.
+**impl/rp2040:** no true DAC peripheral; status APIs return
+`HAL_EUNSUPPORTED`.
+**impl/.mock:** two 12-bit channels with mock read-back helpers.
+
+---
+
+## `hal_pcnt` - Pulse / edge counter  *(optional - `HAL_ENABLE_PCNT`)*
+
+```c
+#include <hal/hal_pcnt.h>
+
+bool hal_pcnt_is_supported(void);
+uint8_t hal_pcnt_channel_count(void);
+
+hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
+                              hal_pcnt_edge_t edge);
+bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge);
+
+hal_status_t hal_pcnt_read_ex(uint8_t channel, uint32_t *out_count);
+uint32_t hal_pcnt_read(uint8_t channel);
+
+hal_status_t hal_pcnt_reset_ex(uint8_t channel);
+void hal_pcnt_reset(uint8_t channel);
+
+hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count);
+uint32_t hal_pcnt_read_and_reset(uint8_t channel);
+```
+
+The `_ex` APIs report `HAL_OK`, `HAL_EINVAL` for invalid channels, edges or
+output pointers, and `HAL_EUNINIT` when reading/resetting a valid channel that
+has not been initialized. The legacy wrappers keep the previous `bool`,
+`uint32_t` and `void` shapes.
+
+**impl/rp2040:** GPIO interrupt based software counters.
+**impl/stm32g474:** TIM2 external-clock mode for channel 0.
+**impl/.mock:** in-memory counters with pulse injection helpers.
+
+---
+
 ## `hal_pwm_freq` - PWM with frequency control  *(optional - `HAL_ENABLE_PWM_FREQ`)*
 
 Use this instead of `hal_pwm` when you need a specific PWM frequency (e.g. 160 Hz, 300 Hz).

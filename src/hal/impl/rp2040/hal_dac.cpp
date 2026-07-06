@@ -19,17 +19,28 @@
 bool hal_dac_is_supported(void) { return false; }
 uint8_t hal_dac_resolution_bits(void) { return 0u; }
 uint16_t hal_dac_max_value(void) { return 0u; }
-bool hal_dac_init(uint8_t channel) {
+hal_status_t hal_dac_init_ex(uint8_t channel) {
   (void)channel;
-  return false;
+  return HAL_EUNSUPPORTED;
 }
-void hal_dac_write(uint8_t channel, uint16_t value) {
+bool hal_dac_init(uint8_t channel) {
+  return hal_status_to_bool(hal_dac_init_ex(channel));
+}
+hal_status_t hal_dac_write_ex(uint8_t channel, uint16_t value) {
   (void)channel;
   (void)value;
+  return HAL_EUNSUPPORTED;
 }
-void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
+void hal_dac_write(uint8_t channel, uint16_t value) {
+  (void)hal_dac_write_ex(channel, value);
+}
+hal_status_t hal_dac_write_millivolts_ex(uint8_t channel, uint16_t millivolts) {
   (void)channel;
   (void)millivolts;
+  return HAL_EUNSUPPORTED;
+}
+void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
+  (void)hal_dac_write_millivolts_ex(channel, millivolts);
 }
 
 #endif // HAL_ENABLE_DAC

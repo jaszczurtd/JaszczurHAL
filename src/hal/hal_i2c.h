@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
+#include "hal_status.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -75,6 +76,89 @@ extern "C" {
 
 /** @brief I2C transaction timed out. */
 #define HAL_I2C_ERROR_TIMEOUT 4u
+
+/**
+ * @brief Status-returning variant of hal_i2c_init().
+ * @return HAL_OK on success, or HAL_EINVAL/HAL_ECONFIG when the selected bus
+ *         or pin mapping is invalid.
+ */
+hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
+                             uint32_t clock_hz);
+
+/**
+ * @brief Status-returning variant of hal_i2c_init_bus().
+ */
+hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                                 uint32_t clock_hz);
+
+/** @brief Status-returning variant of hal_i2c_set_clock(). */
+hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz);
+
+/** @brief Status-returning variant of hal_i2c_set_clock_bus(). */
+hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz);
+
+/** @brief Status-returning variant of hal_i2c_end_transmission(). */
+hal_status_t hal_i2c_end_transmission_ex(void);
+
+/** @brief Status-returning variant of hal_i2c_end_transmission_bus(). */
+hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
+
+/**
+ * @brief Status-returning variant of hal_i2c_write_byte().
+ *
+ * @p outWriteOk remains optional and receives the byte-queue result, matching
+ * the legacy helper. The returned status also reports a queue failure.
+ */
+hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
+                                   bool *outWriteOk);
+
+/** @brief Bus-selecting variant of hal_i2c_write_byte_ex(). */
+hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t data, bool *outWriteOk);
+
+/**
+ * @brief Status-returning one-byte read helper.
+ * @param outValue Destination byte. Must not be NULL.
+ */
+hal_status_t hal_i2c_read_byte_ex(uint8_t address, uint8_t *outValue);
+
+/** @brief Bus-selecting variant of hal_i2c_read_byte_ex(). */
+hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
+                                      uint8_t *outValue);
+
+/** @brief Status-returning variant of hal_i2c_write_read(). */
+hal_status_t hal_i2c_write_read_ex(uint8_t address, const uint8_t *tx,
+                                   size_t tx_len, uint8_t *rx, size_t rx_len);
+
+/** @brief Bus-selecting variant of hal_i2c_write_read_ex(). */
+hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
+                                       const uint8_t *tx, size_t tx_len,
+                                       uint8_t *rx, size_t rx_len);
+
+/** @brief Status-returning variant of hal_i2c_read_bytes(). */
+hal_status_t hal_i2c_read_bytes_ex(uint8_t address, uint8_t *rx, size_t rx_len);
+
+/** @brief Bus-selecting variant of hal_i2c_read_bytes_ex(). */
+hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
+                                       uint8_t *rx, size_t rx_len);
+
+/**
+ * @brief Status-returning variant of hal_i2c_request_from().
+ * @param outReceived Destination for received byte count. Must not be NULL.
+ */
+hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
+                                     uint8_t *outReceived);
+
+/** @brief Bus-selecting variant of hal_i2c_request_from_ex(). */
+hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
+                                         uint8_t count, uint8_t *outReceived);
+
+/** @brief Status-returning variant of hal_i2c_bus_clear(). */
+hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin);
+
+/** @brief Bus-selecting variant of hal_i2c_bus_clear_ex(). */
+hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
+                                      uint8_t scl_pin);
 
 /**
  * @brief Configure I2C pins, start the bus in controller (master) mode,

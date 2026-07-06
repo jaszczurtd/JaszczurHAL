@@ -1,0 +1,23 @@
+[
+    {
+        "key": "ctrl+shift+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Build"
+    },
+    {
+        "key": "ctrl+shift+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Upload"
+    },
+    {
+        "key": "ctrl+shift+3",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Serial Monitor"
+    },
+    {
+        "key": "ctrl+shift+4",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Upload (UF2 / BOOTSEL)"
+    }
+]
+

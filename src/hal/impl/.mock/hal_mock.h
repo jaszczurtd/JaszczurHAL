@@ -85,6 +85,7 @@ uint16_t hal_mock_dma_pwm_audio_get_idle_value(hal_dma_pwm_audio_t audio);
 #ifdef HAL_ENABLE_DAC
 uint16_t hal_mock_dac_get(uint8_t channel);
 bool hal_mock_dac_is_initialized(uint8_t channel);
+void hal_mock_dac_reset(void);
 #endif
 
 // ── PCNT (pulse counter) ─────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ bool hal_mock_dac_is_initialized(uint8_t channel);
 void hal_mock_pcnt_inject(uint8_t channel, uint32_t pulses);
 hal_pcnt_edge_t hal_mock_pcnt_get_edge(uint8_t channel);
 uint8_t hal_mock_pcnt_get_pin(uint8_t channel);
+void hal_mock_pcnt_reset(void);
 #endif
 
 // ── Timer

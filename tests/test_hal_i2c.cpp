@@ -504,6 +504,115 @@ void test_write_read_writes_register_and_consumes_rx_sequence(void) {
   TEST_ASSERT_EQUAL_INT(0xCC, hal_i2c_read());
 }
 
+void test_status_init_and_clock_helpers_report_errors(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_init_ex(4, 5, HAL_I2C_CLOCK_FAST_HZ));
+  TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_HZ, hal_mock_i2c_get_clock_hz());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_i2c_set_clock_ex(HAL_I2C_CLOCK_STANDARD_HZ));
+  TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_STANDARD_HZ,
+                           hal_mock_i2c_get_clock_hz());
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_i2c_init_bus_ex(9, 4, 5, HAL_I2C_CLOCK_STANDARD_HZ));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_set_clock_bus_ex(9, HAL_I2C_CLOCK_STANDARD_HZ));
+}
+
+void test_status_end_transmission_maps_legacy_result(void) {
+  hal_i2c_begin_transmission(0x50);
+  TEST_ASSERT_EQUAL_UINT(1, hal_i2c_write(0xAA));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_end_transmission_ex());
+
+  hal_mock_i2c_set_busy(true);
+  hal_i2c_begin_transmission(0x50);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, hal_i2c_end_transmission_ex());
+  hal_mock_i2c_set_busy(false);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_end_transmission_bus_ex(9));
+}
+
+void test_status_write_byte_reports_queue_and_bus_errors(void) {
+  bool write_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_write_byte_ex(0x42, 0xA5, &write_ok));
+  TEST_ASSERT_TRUE(write_ok);
+
+  hal_mock_i2c_set_busy(true);
+  write_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, hal_i2c_write_byte_ex(0x42, 0xA5, &write_ok));
+  TEST_ASSERT_TRUE(write_ok);
+  hal_mock_i2c_set_busy(false);
+
+  write_ok = true;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_byte_bus_ex(9, 0x42, 0xA5, &write_ok));
+  TEST_ASSERT_FALSE(write_ok);
+}
+
+void test_status_read_byte_returns_value_and_rejects_null(void) {
+  const uint8_t rx[] = {0x5A};
+  uint8_t value = 0u;
+  hal_mock_i2c_inject_rx(rx, 1);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_read_byte_ex(0x48, &value));
+  TEST_ASSERT_EQUAL_UINT8(0x5A, value);
+
+  value = 0xFFu;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_read_byte_ex(0x48, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_read_byte_bus_ex(9, 0x48, &value));
+  TEST_ASSERT_EQUAL_UINT8(0u, value);
+}
+
+void test_status_read_bytes_and_write_read_validate_arguments(void) {
+  const uint8_t rx[] = {0x10, 0x20};
+  const uint8_t reg = 0x01;
+  uint8_t out[2] = {};
+  hal_mock_i2c_inject_rx(rx, 2);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_read_bytes_ex(0x48, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, out, 2);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_read_bytes_ex(0x48, NULL, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_read_bytes_ex(0x48, NULL, 1));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_read_bytes_bus_ex(9, 0x48, out, 1));
+
+  hal_mock_i2c_inject_rx(rx, 2);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_i2c_write_read_ex(0x48, &reg, 1, out, sizeof(out)));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(rx, out, 2);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_read_ex(0x48, NULL, 1, out, 1));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_read_ex(0x48, &reg, 1, NULL, 1));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_write_read_bus_ex(9, 0x48, &reg, 1, out, 1));
+}
+
+void test_status_request_from_returns_count(void) {
+  const uint8_t rx[] = {0xAA, 0xBB};
+  uint8_t received = 0u;
+  hal_mock_i2c_inject_rx(rx, 2);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_request_from_ex(0x48, 2, &received));
+  TEST_ASSERT_EQUAL_UINT8(2, received);
+  TEST_ASSERT_EQUAL_INT(2, hal_i2c_available());
+  TEST_ASSERT_EQUAL_INT(0xAA, hal_i2c_read());
+  TEST_ASSERT_EQUAL_INT(0xBB, hal_i2c_read());
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_request_from_ex(0x48, 1, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_request_from_bus_ex(9, 0x48, 1, &received));
+}
+
+void test_status_bus_clear_reports_selected_bus(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear_ex(4, 5));
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear_bus_ex(1, 6, 7));
+  TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count_bus(1));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_bus_clear_bus_ex(9, 6, 7));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_begin_transmission_sets_last_address);
@@ -548,5 +657,12 @@ int main(void) {
   RUN_TEST(test_read_bytes_bus_routes_to_selected_controller);
   RUN_TEST(test_read_bytes_rejects_invalid_arguments);
   RUN_TEST(test_write_read_writes_register_and_consumes_rx_sequence);
+  RUN_TEST(test_status_init_and_clock_helpers_report_errors);
+  RUN_TEST(test_status_end_transmission_maps_legacy_result);
+  RUN_TEST(test_status_write_byte_reports_queue_and_bus_errors);
+  RUN_TEST(test_status_read_byte_returns_value_and_rejects_null);
+  RUN_TEST(test_status_read_bytes_and_write_read_validate_arguments);
+  RUN_TEST(test_status_request_from_returns_count);
+  RUN_TEST(test_status_bus_clear_reports_selected_bus);
   return UNITY_END();
 }

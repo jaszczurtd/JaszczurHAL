@@ -1,0 +1,22 @@
+{
+    "jaszczurhal.root": "../../libraries/JaszczurHAL",
+    "jaszczurhal.vscodeEntry": "../../libraries/JaszczurHAL/vscode/entry/jh-vscode",
+    "arduino.cliPath": "arduino-cli",
+    "arduino.fqbn": "rp2040:rp2040:rpipicow",
+    "arduino.uploadPort": "/dev/ttyACM0",
+    "arduino.sketchbookPath": "",
+    "arduino.buildDir": "${workspaceFolder}/.build",
+    "arduino.verbose": true,
+    "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
+    "C_Cpp.errorSquiggles": "enabled",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "files.exclude": {
+        "**/.build": true
+    },
+    "search.exclude": {
+        "**/.build": true
+    }
+}
+

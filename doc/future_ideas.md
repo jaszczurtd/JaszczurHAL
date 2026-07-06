@@ -58,7 +58,75 @@ Simple backlog of future architecture and implementation work.
   - Keep current `bool` / `NULL` APIs as compatibility wrappers.
   - Start with statuses that can be reported accurately today.
   - Improve backend-specific I2C error mapping later.
-  - Good first candidates: digipot init and set-resistance paths.
+  - Progress:
+    - DONE: digipot init/set-resistance now expose
+      `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` while
+      preserving the legacy handle/`bool` wrappers. The MCP401x/MAX5395 shared
+      drivers report invalid config/range, pool exhaustion, I2C bus failures
+      and MCP401x read-back mismatches through `hal_status_t`.
+    - DONE: DAC init/raw-write/millivolt-write now expose
+      `hal_dac_init_ex()`, `hal_dac_write_ex()` and
+      `hal_dac_write_millivolts_ex()` while preserving existing `bool`/`void`
+      wrappers. Mock/STM32G474 report invalid channels and uninitialized
+      writes; RP2040 reports `HAL_EUNSUPPORTED`.
+    - DONE: PCNT init/read/reset/read-and-reset now expose
+      `hal_pcnt_init_ex()`, `hal_pcnt_read_ex()`, `hal_pcnt_reset_ex()` and
+      `hal_pcnt_read_and_reset_ex()` while preserving legacy wrappers. Current
+      backends report invalid channels/edges and uninitialized channel access.
+    - DONE: system device UID hex formatting now exposes
+      `hal_get_device_uid_hex_ex()` while preserving the legacy `bool` wrapper.
+      It reports `HAL_EINVAL` for NULL buffers and `HAL_EOVERFLOW` for
+      insufficient output buffers.
+    - DONE: I2C master now exposes status-returning `_ex` variants for bus
+      init, clock changes, end-transmission, one-byte write/read helpers,
+      write-read/read-bytes transfers, legacy request-from count reporting and
+      bus-clear while preserving existing `void`/`uint8_t`/`bool`
+      compatibility wrappers. Mock/RP2040/STM32G474 map invalid buses,
+      invalid buffers, uninitialized buses, bus errors and timeouts to
+      `hal_status_t` where the backend can report them.
+  - Current quick audit: roughly 100 public HAL operations still deserve
+    `hal_status_t`-returning variants. This excludes pure predicates/getters
+    such as `*_is_connected()`, `*_supported()`, `*_available()` and legacy
+    wrappers that already have `_ex` counterparts.
+  - Highest-priority shared transport APIs: SPI/DMA candidates:
+    `hal_spi_init()`, `hal_spi_begin_transaction()`,
+    `hal_spi_transfer()`, `hal_spi_transfer16()`,
+    `hal_spi_transfer_buffer()`, `hal_spi_transfer_txrx()`,
+    `hal_spi_write()`, `hal_spi_write_dma()`,
+    `hal_spi_write_dma_async_start()` and `hal_spi_write_dma_async_wait()`.
+  - Serial candidates: `hal_uart_set_rx()`, `hal_uart_set_tx()`,
+    `hal_uart_begin()`, `hal_uart_read()`, `hal_uart_flush()`,
+    `hal_uart_get_error_counters()`, plus matching `hal_swserial_*` setup and
+    read/flush paths.
+  - Storage candidates: `hal_kv_init()`, `hal_kv_set_u32()`,
+    `hal_kv_get_u32()`, `hal_kv_set_blob()`, `hal_kv_get_blob()`,
+    `hal_kv_delete()`, `hal_kv_gc()`, `hal_kv_commit()`,
+    `hal_littlefs_begin()`, `hal_littlefs_format()`,
+    `hal_littlefs_remove()`, `hal_sdlogger_init()`,
+    `hal_sdlogger_crash_init()` and append/close/report paths that currently
+    return `void`.
+  - Network candidates: `hal_wifi_set_mode()`, `hal_wifi_disconnect()`,
+    `hal_wifi_set_hostname()`, `hal_wifi_begin_station()`,
+    `hal_wifi_get_local_ip()`, `hal_wifi_get_dns_ip()`,
+    `hal_wifi_get_mac()`, `hal_wifi_ping_ex()`, `hal_wifi_scan_networks()`,
+    `hal_wifi_get_scan_result()`, `hal_net_resolve_ipv4()`,
+    `hal_tcp_socket_connect()`, TCP send/recv/bind/listen/accept paths,
+    UDP bind/sendto/recvfrom/begin-packet/write/end-packet paths, MQTT
+    connect/publish/subscribe/config paths and WireGuard begin/peer/handshake
+    paths.
+  - Use existing tests as a validation if changes do not break anything.
+  - Display candidates: `hal_display_init_ssd1306_i2c_ex()` currently has an
+    `_ex` suffix but still returns `bool`; migrate it and the configure,
+    drawing, pixel-write, DMA, text and text-preparation paths as a coherent
+    display status pass.
+  - Sensor/time/output candidates: RTC get/set/control paths, DHT read/sample,
+    DS18B20 request/take-latest, external ADC init/read, thermocouple read and
+    configuration paths, IR decoder init/control/readout, DMA PWM audio
+    start/pause/resume, PGA2311 set/get conversion helpers and RGB LED
+    init/set paths.
+  - Lower priority: functions that are intentionally predicates, cheap cached
+    getters, lifecycle `destroy/deinit/stop` calls, or compatibility wrappers
+    over already status-returning APIs.
 
 - Continue CAN API v2 follow-up work.
   - Add interrupt-driven RX/TX completion paths.
