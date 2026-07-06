@@ -45,37 +45,54 @@ static const hal_digipot_ops_t *ops_for_chip(hal_digipot_chip_t chip) {
   }
 }
 
-hal_digipot_t hal_digipot_init(const hal_digipot_config_t *cfg) {
+hal_status_t hal_digipot_init_ex(const hal_digipot_config_t *cfg,
+                                 hal_digipot_t *out) {
+  if (out != NULL) {
+    *out = NULL;
+  }
   if (cfg == NULL) {
-    return NULL;
+    return HAL_EINVAL;
+  }
+  if (out == NULL) {
+    return HAL_EINVAL;
   }
 
   const hal_digipot_ops_t *ops = ops_for_chip(cfg->chip);
   if (ops == NULL || ops->validate == NULL || !ops->validate(cfg)) {
-    return NULL;
+    return HAL_EINVAL;
   }
 
   hal_digipot_impl_s *h = pool_alloc();
   if (h == NULL) {
-    return NULL;
+    return HAL_ENOMEM;
   }
   h->cfg = *cfg;
   h->ops = ops;
   h->mutex = hal_mutex_create();
 
-  bool ok = true;
+  hal_status_t status = HAL_OK;
   if (h->ops->init != NULL) {
     if (h->mutex != NULL) {
       hal_mutex_lock(h->mutex);
     }
-    ok = h->ops->init(&h->cfg);
+    status = h->ops->init(&h->cfg);
     if (h->mutex != NULL) {
       hal_mutex_unlock(h->mutex);
     }
   }
 
-  if (!ok) {
+  if (status != HAL_OK) {
     hal_digipot_deinit(h);
+    return status;
+  }
+
+  *out = h;
+  return HAL_OK;
+}
+
+hal_digipot_t hal_digipot_init(const hal_digipot_config_t *cfg) {
+  hal_digipot_t h = NULL;
+  if (!hal_status_to_bool(hal_digipot_init_ex(cfg, &h))) {
     return NULL;
   }
   return h;
@@ -93,19 +110,23 @@ void hal_digipot_deinit(hal_digipot_t h) {
   h->in_use = false;
 }
 
-bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms) {
+hal_status_t hal_digipot_set_resistance_ex(hal_digipot_t h, uint32_t ohms) {
   if (h == NULL || !h->in_use || h->ops == NULL ||
       h->ops->set_resistance == NULL) {
-    return false;
+    return HAL_EUNINIT;
   }
   if (h->mutex != NULL) {
     hal_mutex_lock(h->mutex);
   }
-  const bool ok = h->ops->set_resistance(&h->cfg, ohms);
+  const hal_status_t status = h->ops->set_resistance(&h->cfg, ohms);
   if (h->mutex != NULL) {
     hal_mutex_unlock(h->mutex);
   }
-  return ok;
+  return status;
+}
+
+bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms) {
+  return hal_status_to_bool(hal_digipot_set_resistance_ex(h, ohms));
 }
 
 uint16_t hal_digipot_step_count(hal_digipot_t h) {

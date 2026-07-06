@@ -38,41 +38,81 @@ static hal_gpio_irq_mode_t to_irq_mode(hal_pcnt_edge_t edge) {
   }
 }
 
+static bool edge_valid(hal_pcnt_edge_t edge) {
+  return edge == HAL_PCNT_EDGE_RISING || edge == HAL_PCNT_EDGE_FALLING ||
+         edge == HAL_PCNT_EDGE_BOTH;
+}
+
 bool hal_pcnt_is_supported(void) { return true; }
 
 uint8_t hal_pcnt_channel_count(void) { return RP2040_PCNT_CHANNELS; }
 
-bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge) {
-  if (channel >= RP2040_PCNT_CHANNELS) {
-    return false;
+hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
+                              hal_pcnt_edge_t edge) {
+  if (channel >= RP2040_PCNT_CHANNELS || !edge_valid(edge)) {
+    return HAL_EINVAL;
   }
   s_count[channel] = 0u;
   hal_gpio_set_mode(pin, HAL_GPIO_INPUT_PULLUP);
   hal_gpio_attach_interrupt(pin, s_isr[channel], to_irq_mode(edge));
   s_init[channel] = true;
-  return true;
+  return HAL_OK;
+}
+
+bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge) {
+  return hal_status_to_bool(hal_pcnt_init_ex(channel, pin, edge));
+}
+
+hal_status_t hal_pcnt_read_ex(uint8_t channel, uint32_t *out_count) {
+  if (out_count == nullptr || channel >= RP2040_PCNT_CHANNELS) {
+    return HAL_EINVAL;
+  }
+  *out_count = 0u;
+  if (!s_init[channel]) {
+    return HAL_EUNINIT;
+  }
+  *out_count = s_count[channel];
+  return HAL_OK;
 }
 
 uint32_t hal_pcnt_read(uint8_t channel) {
-  return (channel < RP2040_PCNT_CHANNELS && s_init[channel]) ? s_count[channel]
-                                                             : 0u;
+  uint32_t count = 0u;
+  (void)hal_pcnt_read_ex(channel, &count);
+  return count;
 }
 
-void hal_pcnt_reset(uint8_t channel) {
-  if (channel < RP2040_PCNT_CHANNELS) {
-    s_count[channel] = 0u;
+hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
+  if (channel >= RP2040_PCNT_CHANNELS) {
+    return HAL_EINVAL;
   }
+  if (!s_init[channel]) {
+    return HAL_EUNINIT;
+  }
+  s_count[channel] = 0u;
+  return HAL_OK;
+}
+
+void hal_pcnt_reset(uint8_t channel) { (void)hal_pcnt_reset_ex(channel); }
+
+hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count) {
+  if (out_count == nullptr || channel >= RP2040_PCNT_CHANNELS) {
+    return HAL_EINVAL;
+  }
+  *out_count = 0u;
+  if (!s_init[channel]) {
+    return HAL_EUNINIT;
+  }
+  hal_critical_section_enter();
+  *out_count = s_count[channel];
+  s_count[channel] = 0u;
+  hal_critical_section_exit();
+  return HAL_OK;
 }
 
 uint32_t hal_pcnt_read_and_reset(uint8_t channel) {
-  if (channel >= RP2040_PCNT_CHANNELS) {
-    return 0u;
-  }
-  hal_critical_section_enter();
-  const uint32_t v = s_count[channel];
-  s_count[channel] = 0u;
-  hal_critical_section_exit();
-  return v;
+  uint32_t count = 0u;
+  (void)hal_pcnt_read_and_reset_ex(channel, &count);
+  return count;
 }
 
 #endif // HAL_ENABLE_PCNT

@@ -70,15 +70,6 @@ static hal_status_t tsc2007_command_unlocked_ex(hal_tsc2007_t *dev,
   return HAL_OK;
 }
 
-static uint16_t tsc2007_command_unlocked(hal_tsc2007_t *dev,
-                                         hal_tsc2007_function_t func,
-                                         hal_tsc2007_power_t pwr,
-                                         hal_tsc2007_resolution_t res) {
-  uint16_t value = 0u;
-  (void)tsc2007_command_unlocked_ex(dev, func, pwr, res, &value);
-  return value;
-}
-
 static uint16_t tsc2007_abs_diff(uint16_t a, uint16_t b) {
   return (a >= b) ? (uint16_t)(a - b) : (uint16_t)(b - a);
 }

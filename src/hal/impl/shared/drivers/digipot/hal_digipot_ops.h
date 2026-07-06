@@ -12,8 +12,9 @@
 
 typedef struct hal_digipot_ops {
   bool (*validate)(const hal_digipot_config_t *cfg);
-  bool (*init)(hal_digipot_config_t *cfg);
-  bool (*set_resistance)(const hal_digipot_config_t *cfg, uint32_t ohms);
+  hal_status_t (*init)(hal_digipot_config_t *cfg);
+  hal_status_t (*set_resistance)(const hal_digipot_config_t *cfg,
+                                 uint32_t ohms);
   uint16_t (*step_count)(void);
 } hal_digipot_ops_t;
 

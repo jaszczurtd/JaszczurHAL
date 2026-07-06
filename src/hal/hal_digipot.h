@@ -39,6 +39,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "hal_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -83,7 +85,7 @@ typedef enum {
 /* ── Configuration descriptor ────────────────────────────────────────────── */
 
 /**
- * @brief Initialisation descriptor passed to hal_digipot_init().
+ * @brief Initialisation descriptor passed to hal_digipot_init_ex().
  *
  * Common fields apply to every chip; chip-specific fields are only consulted
  * for their respective @ref chip value.
@@ -115,7 +117,7 @@ typedef hal_digipot_impl_t *hal_digipot_t;
 /* ── API ─────────────────────────────────────────────────────────────────── */
 
 /**
- * @brief Initialise a digital potentiometer and return an opaque handle.
+ * @brief Initialise a digital potentiometer and return a status code.
  *
  * Validates the configuration against the selected chip (legal end-to-end
  * resistance, address and device/mode combination) and performs any required
@@ -124,8 +126,22 @@ typedef hal_digipot_impl_t *hal_digipot_t;
  * bus up beforehand with hal_i2c_init() / hal_i2c_init_bus().
  *
  * @param cfg  Pointer to a filled-in configuration struct.
- * @return Handle on success; NULL if the pool is exhausted, the configuration
- *         is invalid, or the chip did not acknowledge.
+ * @param out  Pointer receiving the created handle on success. Set to NULL on
+ *             failure when provided.
+ * @return HAL_OK on success, HAL_EINVAL for invalid configuration,
+ *         HAL_ENOMEM when the static pool is exhausted, or HAL_EBUS/HAL_EIO
+ *         for transport/device failures.
+ */
+hal_status_t hal_digipot_init_ex(const hal_digipot_config_t *cfg,
+                                 hal_digipot_t *out);
+
+/**
+ * @brief Initialise a digital potentiometer and return an opaque handle.
+ *
+ * Compatibility wrapper over hal_digipot_init_ex().
+ *
+ * @param cfg  Pointer to a filled-in configuration struct.
+ * @return Handle on success; NULL on failure.
  */
 hal_digipot_t hal_digipot_init(const hal_digipot_config_t *cfg);
 
@@ -144,8 +160,20 @@ void hal_digipot_deinit(hal_digipot_t h);
  *
  * @param h     Valid handle.
  * @param ohms  Desired resistance in Ohms.
- * @return true on success; false on invalid argument, unsupported mode for the
- *         device, or an I2C / read-back-verification failure.
+ * @return HAL_OK on success, HAL_EUNINIT for an invalid handle, HAL_EINVAL for
+ *         invalid/unsupported resistance or mode, HAL_EBUS for I2C failures,
+ *         or HAL_EIO for read-back verification failures.
+ */
+hal_status_t hal_digipot_set_resistance_ex(hal_digipot_t h, uint32_t ohms);
+
+/**
+ * @brief Set the wiper resistance in Ohms according to the configured mode.
+ *
+ * Compatibility wrapper over hal_digipot_set_resistance_ex().
+ *
+ * @param h     Valid handle.
+ * @param ohms  Desired resistance in Ohms.
+ * @return true on success; false on failure.
  */
 bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms);
 

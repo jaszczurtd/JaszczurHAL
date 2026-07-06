@@ -1,8 +1,8 @@
-# Output devices - RGB LED, PGA2311, simple I/O chips, MFRC522, PN532, math helpers
+# Output devices - RGB LED, digipot, PGA2311, simple I/O chips, MFRC522, PN532, math helpers
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_rgb_led`, `hal_pga2311`, `hal_mcp23017`, `hal_pca9654e`, `hal_pcf8574`, `hal_hc595`, `hal_mcp4725`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
+Covers: `hal_rgb_led`, `hal_digipot`, `hal_pga2311`, `hal_mcp23017`, `hal_pca9654e`, `hal_pcf8574`, `hal_hc595`, `hal_mcp4725`, `hal_mfrc522`, `hal_pn532`, `hal_math`.
 
 ## `hal_math` - Lightweight numeric helpers
 
@@ -75,6 +75,42 @@ uint8_t             hal_mock_rgb_led_get_pin(void);
 uint8_t             hal_mock_rgb_led_get_num_pixels(void);
 void                hal_mock_rgb_led_reset(void);
 ```
+
+---
+
+
+## `hal_digipot` - I2C digital potentiometers  *(optional - `HAL_ENABLE_DIGIPOT`)*
+
+```c
+#include <hal/hal_digipot.h>
+
+hal_status_t hal_digipot_init_ex(const hal_digipot_config_t *cfg,
+                                 hal_digipot_t *out);
+hal_digipot_t hal_digipot_init(const hal_digipot_config_t *cfg);
+
+hal_status_t hal_digipot_set_resistance_ex(hal_digipot_t h, uint32_t ohms);
+bool hal_digipot_set_resistance(hal_digipot_t h, uint32_t ohms);
+
+void hal_digipot_deinit(hal_digipot_t h);
+uint16_t hal_digipot_step_count(hal_digipot_t h);
+uint32_t hal_digipot_e2e_resistance(hal_digipot_t h);
+hal_digipot_mode_t hal_digipot_mode(hal_digipot_t h);
+```
+
+`hal_digipot_init_ex()` reports invalid configuration (`HAL_EINVAL`), static
+pool exhaustion (`HAL_ENOMEM`) and chip/bus initialisation failures
+(`HAL_EBUS`). `hal_digipot_set_resistance_ex()` reports invalid handles
+(`HAL_EUNINIT`), invalid resistance/mode (`HAL_EINVAL`), I2C failures
+(`HAL_EBUS`) and MCP401x read-back mismatches (`HAL_EIO`). The legacy
+`hal_digipot_init()` and `hal_digipot_set_resistance()` wrappers remain for
+source compatibility.
+
+**impl/shared:** `hal_digipot.cpp` owns the handle pool, validation dispatch and
+per-instance mutex; chip-specific MCP401x/MAX5395 transaction logic lives under
+`impl/shared/drivers/digipot/`.
+
+**Thread safety:** runtime operations are serialized per instance and each chip
+transaction uses HAL I2C helpers.
 
 ---
 

@@ -309,6 +309,7 @@ hal_status_t hal_system_get_current_architecture(hal_system_architecture_t *out)
 #define HAL_DEVICE_UID_HEX_BUF_SIZE 17u  // 16 hex chars + NUL
 
 void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
+hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen);
 bool hal_get_device_uid_hex(char *buf, size_t buflen);
 
 // Crash / fault diagnostics (full reference in the "Crash / fault diagnostics"
@@ -519,9 +520,12 @@ void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() retu
 **Device UID details:**
 - `hal_get_device_uid(uid)` fills an exactly 8-byte output buffer. Passing
   `NULL` is a safe no-op.
-- `hal_get_device_uid_hex(buf, buflen)` writes 16 uppercase hex characters
-  followed by a NUL terminator (17 bytes total). Returns `false` and writes
-  nothing when `buf` is `NULL` or `buflen < HAL_DEVICE_UID_HEX_BUF_SIZE`.
+- `hal_get_device_uid_hex_ex(buf, buflen)` writes 16 uppercase hex characters
+  followed by a NUL terminator (17 bytes total). It reports `HAL_EINVAL` for
+  `NULL` buffers and `HAL_EOVERFLOW` when
+  `buflen < HAL_DEVICE_UID_HEX_BUF_SIZE`.
+- `hal_get_device_uid_hex(buf, buflen)` is the legacy `bool` wrapper over the
+  status-returning API.
 - On RP2040 hardware the source is the 64-bit unique identifier stored in
   the external QSPI flash chip, read via `pico_get_unique_board_id()`.
   This identifier is persistent across reboots, unique per device, and the

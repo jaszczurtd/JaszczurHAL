@@ -433,6 +433,18 @@ void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
  *
  * @param buf    Output buffer.
  * @param buflen Size of @p buf in bytes.
+ * @return HAL_OK on success, HAL_EINVAL for NULL buffer, or HAL_EOVERFLOW
+ *         when @p buflen is smaller than @ref HAL_DEVICE_UID_HEX_BUF_SIZE.
+ */
+hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen);
+
+/**
+ * @brief Write the unique device identifier as an uppercase hex string.
+ *
+ * Compatibility wrapper over hal_get_device_uid_hex_ex().
+ *
+ * @param buf    Output buffer.
+ * @param buflen Size of @p buf in bytes.
  * @return true on success, false on NULL buffer or insufficient size.
  */
 bool hal_get_device_uid_hex(char *buf, size_t buflen);

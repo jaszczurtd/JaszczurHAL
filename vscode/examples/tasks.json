@@ -1,0 +1,84 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Project: Build",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["build", "--project", "${workspaceFolder}"],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build (Debug)",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["build-debug", "--project", "${workspaceFolder}"],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["upload", "--project", "${workspaceFolder}"],
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload (UF2 / BOOTSEL)",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["upload-uf2", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Serial Monitor",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["monitor", "--project", "${workspaceFolder}"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Debug Probe Monitor",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["monitor-probe", "--project", "${workspaceFolder}"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Serial Monitor (Any)",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["monitor-any", "--project", "${workspaceFolder}"],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Refresh IntelliSense",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["refresh-intellisense", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Clear USB Identity",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["clear-identity", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Config Dump",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["config-dump", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        }
+    ]
+}
+

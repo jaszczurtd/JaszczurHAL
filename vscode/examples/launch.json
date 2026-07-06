@@ -1,0 +1,28 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug: RP2040",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/${workspaceFolderBasename}.ino.elf",
+            "request": "launch",
+            "type": "cortex-debug",
+            "servertype": "openocd",
+            "serverpath": "${config:cortex-debug.openocdPath}",
+            "gdbPath": "${config:cortex-debug.gdbPath}",
+            "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "searchDir": [
+                "${config:cortex-debug.openocdScriptsPath}"
+            ],
+            "svdFile": "${config:cortex-debug.svdFileRP2040}",
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug)",
+            "showDevDebugOutput": "parsed"
+        }
+    ]
+}
+
