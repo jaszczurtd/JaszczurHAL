@@ -25,6 +25,10 @@
       "type": "string",
       "minLength": 1
     },
+    "cmakeBuildDir": {
+      "type": "string",
+      "minLength": 1
+    },
     "identity": {
       "type": "object",
       "additionalProperties": true,
@@ -94,4 +98,3 @@
     }
   }
 }
-

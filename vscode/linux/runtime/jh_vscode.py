@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
+import fcntl
 import json
 import os
-import re
+import signal
+import shutil
+import subprocess
+import time
 import sys
 from pathlib import Path
 from typing import Any
@@ -52,6 +57,8 @@ SUPPORTED_ACTIONS = {
     "clear-identity",
     "config-dump",
 }
+
+BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
 
 
 def strip_json_comments(text: str) -> str:
@@ -132,7 +139,19 @@ def expand_project_vars(value: Any, project_dir: Path, config: dict[str, Any]) -
 
 def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = {}
-    for key in ("project", "module", "toolchain", "fqbn", "buildDir", "identity", "artifacts", "upload", "hooks"):
+    for key in (
+        "project",
+        "module",
+        "toolchain",
+        "fqbn",
+        "buildDir",
+        "cmakeBuildDir",
+        "cmake",
+        "identity",
+        "artifacts",
+        "upload",
+        "hooks",
+    ):
         if key in data:
             config[key] = data[key]
     return config
@@ -231,6 +250,9 @@ def load_project_config(project_dir: Path) -> dict[str, Any]:
         config["buildDir"] = str(project_dir / ".build")
         sources["buildDir"] = "default"
 
+    config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
+    if "cmakeBuildDir" in config:
+        config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
     for section_name in ("artifacts", "upload", "hooks"):
         section = config.get(section_name)
         if isinstance(section, dict):
@@ -238,7 +260,6 @@ def load_project_config(project_dir: Path) -> dict[str, Any]:
                 key: expand_project_vars(value, project_dir, config)
                 for key, value in section.items()
             }
-    config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
     return config
@@ -300,6 +321,866 @@ def command_config_dump(args: argparse.Namespace) -> int:
     return 0
 
 
+def as_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def resolve_cli(cli: str | None) -> str:
+    if cli:
+        expanded = os.path.expanduser(cli)
+        if os.path.isabs(expanded) or "/" in expanded:
+            return expanded
+        found = shutil.which(expanded)
+        if found:
+            return found
+        return expanded
+    found = shutil.which("arduino-cli")
+    return found or "arduino-cli"
+
+
+def require_arduino_sketch(project_dir: Path, module: str) -> Path:
+    native = project_dir / f"{module}.ino"
+    if native.is_file():
+        return project_dir
+    raise ValueError(
+        f"arduino-cli toolchain requires {native}; "
+        "use toolchain 'cmake' for projects that generate the Arduino sketch via CMake"
+    )
+
+
+def build_arduino_compile_command(
+    config: dict[str, Any],
+    project_dir: Path,
+    *,
+    debug: bool = False,
+    upload: bool = False,
+    only_compilation_database: bool = False,
+) -> list[str]:
+    cli = resolve_cli(config.get("cliPath"))
+    fqbn = config.get("fqbn")
+    if not fqbn:
+        raise ValueError("missing fqbn; set jaszczurhal.fqbn or arduino.fqbn")
+
+    build_dir = get_build_dir(config, project_dir)
+    sketch_dir = require_arduino_sketch(project_dir, str(config.get("module") or project_dir.name))
+
+    cmd = [
+        cli,
+        "compile",
+        "--fqbn",
+        str(fqbn),
+        "--build-path",
+        str(build_dir),
+    ]
+
+    sketchbook = str(config.get("sketchbookPath") or "")
+    if sketchbook:
+        libraries_dir = Path(os.path.expanduser(sketchbook)) / "libraries"
+        if libraries_dir.is_dir():
+            cmd.extend(["--libraries", str(libraries_dir)])
+
+    cmd.extend(
+        [
+            "--build-property",
+            f"compiler.cpp.extra_flags=-I '{project_dir}'",
+            "--build-property",
+            f"compiler.c.extra_flags=-I '{project_dir}'",
+        ]
+    )
+
+    identity = config.get("identity")
+    if isinstance(identity, dict) and as_bool(identity.get("enabled")):
+        manufacturer = identity.get("usbManufacturer")
+        product = identity.get("usbProduct")
+        if manufacturer and product:
+            cmd.extend(["--build-property", f'build.usb_manufacturer="{manufacturer}"'])
+            cmd.extend(["--build-property", f'build.usb_product="{product}"'])
+
+    if debug:
+        cmd.append("--optimize-for-debug")
+    if upload:
+        cmd.append("--upload")
+        port = config.get("uploadPort") or (config.get("upload") or {}).get("port")
+        if port:
+            cmd.extend(["--port", str(port)])
+    if only_compilation_database:
+        cmd.append("--only-compilation-database")
+
+    cmd.extend(["--warnings", "all"])
+    if as_bool(config.get("verbose")):
+        cmd.append("-v")
+    cmd.append(str(sketch_dir))
+    return cmd
+
+
+def normalize_identity_text(value: str) -> str:
+    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_")
+
+
+def identity_enabled(config: dict[str, Any]) -> bool:
+    identity = config.get("identity")
+    return isinstance(identity, dict) and as_bool(identity.get("enabled"))
+
+
+def expected_identity_tokens(config: dict[str, Any]) -> list[str]:
+    identity = config.get("identity")
+    if not isinstance(identity, dict):
+        return []
+    tokens = []
+    by_id_hint = identity.get("byIdHint")
+    if isinstance(by_id_hint, str) and by_id_hint.strip():
+        tokens.append(normalize_identity_text(by_id_hint))
+    manufacturer = identity.get("usbManufacturer")
+    product = identity.get("usbProduct")
+    if isinstance(manufacturer, str) and isinstance(product, str) and manufacturer.strip() and product.strip():
+        tokens.append(normalize_identity_text(f"{manufacturer}_{product}"))
+        tokens.append(normalize_identity_text(f"{manufacturer} {product}"))
+    return [token for token in tokens if token]
+
+
+def by_id_links_for_port(port: str) -> list[Path]:
+    port_path = Path(port)
+    try:
+        resolved_port = port_path.resolve()
+    except OSError:
+        return []
+
+    by_id_dir = Path("/dev/serial/by-id")
+    if not by_id_dir.is_dir():
+        return []
+
+    matches = []
+    for link in sorted(by_id_dir.iterdir()):
+        try:
+            if link.resolve() == resolved_port:
+                matches.append(link)
+        except OSError:
+            continue
+    return matches
+
+
+def resolve_upload_port_for_tool(port: str) -> str:
+    if not port:
+        return port
+    try:
+        resolved = Path(port).resolve(strict=True)
+    except OSError:
+        return port
+    if resolved.parent == Path("/dev") and resolved.name.startswith("tty"):
+        return str(resolved)
+    return port
+
+
+def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: bool = False) -> int:
+    if not identity_enabled(config):
+        return 0
+    if allow_unverified:
+        print("warning: unverified serial upload allowed by --allow-unverified-port", file=sys.stderr)
+        return 0
+    if not port:
+        print("error: identity-enabled upload requires an explicit verified port", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+
+    expected = expected_identity_tokens(config)
+    links = by_id_links_for_port(port)
+    normalized_names = [normalize_identity_text(link.name) for link in links]
+
+    if expected and any(token in name for token in expected for name in normalized_names):
+        return 0
+
+    print(f"error: refusing upload to unverified port: {port}", file=sys.stderr)
+    identity = config.get("identity") or {}
+    print(
+        "error: expected USB identity: "
+        f"{identity.get('usbManufacturer', '?')} {identity.get('usbProduct', '?')}",
+        file=sys.stderr,
+    )
+    if links:
+        print("error: matching /dev/serial/by-id links for this port:", file=sys.stderr)
+        for link in links:
+            print(f"  {link.name}", file=sys.stderr)
+    else:
+        print("error: no /dev/serial/by-id link resolves to this port", file=sys.stderr)
+    print("error: for first flash of a clean board, pass --allow-unverified-port with an explicit --port", file=sys.stderr)
+    return EXIT_UNSAFE_DEVICE
+
+
+def process_cmdline(pid: int) -> str:
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").strip()
+        return raw.decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def port_owner_pids(port: str) -> list[int]:
+    pids: set[int] = set()
+    for cmd in (["fuser", port], ["lsof", "-t", "--", port]):
+        try:
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, check=False)
+        except Exception:
+            continue
+        for item in result.stdout.split():
+            try:
+                pids.add(int(item))
+            except ValueError:
+                pass
+    return sorted(pids)
+
+
+def owns_jh_monitor(pid: int, project_dir: Path) -> bool:
+    cmdline = process_cmdline(pid)
+    if "serial_persistent.py" not in cmdline and "serial-persistent.py" not in cmdline:
+        return False
+    return str(project_dir) in cmdline
+
+
+def upload_marker(project_dir: Path) -> Path:
+    return project_dir / ".vscode" / ".jh-upload-in-progress"
+
+
+def begin_upload_release(project_dir: Path) -> None:
+    marker = upload_marker(project_dir)
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(str(os.getpid()), encoding="utf-8")
+
+
+def end_upload_release(project_dir: Path) -> None:
+    marker = upload_marker(project_dir)
+    try:
+        marker.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(f"warning: could not remove upload marker {marker}: {exc}", file=sys.stderr)
+
+
+def release_port_for_upload(port: str, project_dir: Path) -> int:
+    owners = [pid for pid in port_owner_pids(port) if pid != os.getpid()]
+    if not owners:
+        return 0
+
+    own_monitors = [pid for pid in owners if owns_jh_monitor(pid, project_dir)]
+    foreign = [pid for pid in owners if pid not in own_monitors]
+    if foreign:
+        print(f"error: serial port is busy and not owned by this project monitor: {port}", file=sys.stderr)
+        for pid in foreign:
+            print(f"  PID {pid}: {process_cmdline(pid) or '?'}", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+
+    begin_upload_release(project_dir)
+    for pid in own_monitors:
+        try:
+            release_signal = signal.SIGUSR1 if hasattr(signal, "SIGUSR1") else signal.SIGTERM
+            os.kill(pid, release_signal)
+            print(f"released own serial monitor PID {pid}")
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            print(f"error: cannot stop own serial monitor PID {pid}: permission denied", file=sys.stderr)
+            end_upload_release(project_dir)
+            return EXIT_UNSAFE_DEVICE
+
+    deadline = time.time() + 3.0
+    while time.time() < deadline:
+        remaining = [pid for pid in port_owner_pids(port) if pid != os.getpid()]
+        if not remaining:
+            return 0
+        time.sleep(0.1)
+
+    print(f"error: serial port stayed busy after stopping own monitor: {port}", file=sys.stderr)
+    for pid in port_owner_pids(port):
+        if pid != os.getpid():
+            print(f"  PID {pid}: {process_cmdline(pid) or '?'}", file=sys.stderr)
+    end_upload_release(project_dir)
+    return EXIT_UNSAFE_DEVICE
+
+
+def run_command(cmd: list[str], *, verbose: bool = False) -> int:
+    if verbose:
+        print("+ " + " ".join(cmd), flush=True)
+    try:
+        completed = subprocess.run(cmd, check=False)
+    except FileNotFoundError:
+        print(f"error: command not found: {cmd[0]}", file=sys.stderr)
+        return EXIT_CONFIG
+    except OSError as exc:
+        print(f"error: failed to run {cmd[0]}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+    return int(completed.returncode)
+
+
+def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, Any], int]:
+    project_dir = resolve_project(args)
+    if project_dir is None:
+        print(f"error: {args.action} requires --project <path>", file=sys.stderr)
+        return Path(), {}, EXIT_USAGE
+    if not project_dir.exists() or not project_dir.is_dir():
+        print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return project_dir, {}, EXIT_CONFIG
+    try:
+        config = load_project_config(project_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return project_dir, {}, EXIT_CONFIG
+    apply_cli_overrides(config, args)
+    return project_dir, config, 0
+
+
+def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
+    build_dir = Path(str(config.get("cmakeBuildDir") or project_dir / ".build" / "cmake")).expanduser()
+    if not build_dir.is_absolute():
+        build_dir = project_dir / build_dir
+    return build_dir
+
+
+def cmake_targets(config: dict[str, Any]) -> dict[str, str]:
+    defaults = {
+        "build": "firmware",
+        "buildDebug": "firmware_debug",
+        "upload": "firmware_upload",
+        "compileDb": "firmware_compile_db",
+    }
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict) and isinstance(cmake.get("targets"), dict):
+        defaults.update({str(key): str(value) for key, value in cmake["targets"].items()})
+    return defaults
+
+
+def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
+    args = [
+        f"-DARDUINO_CLI={resolve_cli(config.get('cliPath'))}",
+        f"-DARDUINO_FQBN={config.get('fqbn') or ''}",
+        f"-DARDUINO_SKETCHBOOK={config.get('sketchbookPath') or ''}",
+        f"-DARDUINO_UPLOAD_PORT={config.get('uploadPort') or (config.get('upload') or {}).get('port') or ''}",
+        f"-DARDUINO_VERBOSE={'ON' if as_bool(config.get('verbose')) else 'OFF'}",
+    ]
+
+    root = config.get("root")
+    if isinstance(root, str) and root:
+        root_path = Path(os.path.expanduser(root))
+        if not root_path.is_absolute():
+            root_path = project_dir / root_path
+        args.append(f"-DJH_ROOT={root_path.resolve()}")
+
+    identity = config.get("identity")
+    if isinstance(identity, dict) and as_bool(identity.get("enabled")):
+        manufacturer = identity.get("usbManufacturer")
+        product = identity.get("usbProduct")
+        if manufacturer and product:
+            args.append(f"-DJH_USB_MANUFACTURER={manufacturer}")
+            args.append(f"-DJH_USB_PRODUCT={product}")
+
+    return args
+
+
+def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
+    build_dir = get_cmake_build_dir(config, project_dir)
+    cmd = ["cmake", "-S", str(project_dir), "-B", str(build_dir)]
+    cmd.extend(cmake_cache_args(config, project_dir))
+    return run_command(cmd, verbose=as_bool(config.get("verbose")))
+
+
+def run_cmake_target(config: dict[str, Any], project_dir: Path, target: str) -> int:
+    configure_status = configure_cmake_project(config, project_dir)
+    if configure_status != 0:
+        return configure_status
+    cmd = ["cmake", "--build", str(get_cmake_build_dir(config, project_dir)), "--target", target]
+    return run_command(cmd, verbose=as_bool(config.get("verbose")))
+
+
+def command_build(args: argparse.Namespace, *, debug: bool = False) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    if config.get("toolchain") == "cmake":
+        target = cmake_targets(config)["buildDebug" if debug else "build"]
+        rc = run_cmake_target(config, project_dir, target)
+        return 0 if rc == 0 else EXIT_BUILD
+    if config.get("toolchain") not in {"arduino-cli", "custom"}:
+        print(f"error: build for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
+        return EXIT_UNSUPPORTED
+    with build_lock(config, project_dir):
+        try:
+            cmd = build_arduino_compile_command(config, project_dir, debug=debug)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+        rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    return 0 if rc == 0 else EXIT_BUILD
+
+
+def command_upload(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    if config.get("toolchain") not in {"arduino-cli", "custom", "cmake"}:
+        print(f"error: upload for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
+        return EXIT_UNSUPPORTED
+    port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    verify_status = verify_upload_port(config, str(port or ""), allow_unverified=args.allow_unverified_port)
+    if verify_status != 0:
+        return verify_status
+    if port:
+        upload_port = resolve_upload_port_for_tool(str(port))
+        config["uploadPort"] = upload_port
+        upload = dict(config.get("upload") or {})
+        upload["port"] = upload_port
+        config["upload"] = upload
+        release_status = release_port_for_upload(upload_port, project_dir)
+        if release_status != 0:
+            return release_status
+    if config.get("toolchain") == "cmake":
+        try:
+            target = cmake_targets(config)["upload"]
+            rc = run_cmake_target(config, project_dir, target)
+        finally:
+            end_upload_release(project_dir)
+        return 0 if rc == 0 else EXIT_UPLOAD
+    try:
+        with build_lock(config, project_dir):
+            try:
+                cmd = build_arduino_compile_command(config, project_dir, upload=True)
+            except ValueError as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return EXIT_CONFIG
+            rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    finally:
+        end_upload_release(project_dir)
+    return 0 if rc == 0 else EXIT_UPLOAD
+
+
+def find_configured_uf2(config: dict[str, Any]) -> Path | None:
+    artifacts = config.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return None
+    uf2 = artifacts.get("uf2")
+    if not uf2:
+        return None
+    path = Path(str(uf2)).expanduser()
+    if path.is_file():
+        return path
+    return None
+
+
+def find_uf2(build_dir: Path) -> Path | None:
+    matches = sorted(build_dir.rglob("*.uf2"))
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+    exact = [path for path in matches if path.parent == build_dir]
+    if len(exact) == 1:
+        return exact[0]
+    print("error: multiple UF2 artifacts found:", file=sys.stderr)
+    for path in matches:
+        print(f"  {path}", file=sys.stderr)
+    return None
+
+
+def find_bootsel_mounts() -> list[Path]:
+    user = os.environ.get("USER", "")
+    roots = []
+    if user:
+        roots.extend([Path("/media") / user, Path("/run/media") / user])
+    mounts: list[Path] = []
+    for root in roots:
+        if not root.is_dir():
+            continue
+        for child in root.iterdir():
+            if child.is_dir() and child.name in BOOTSEL_LABELS:
+                mounts.append(child)
+    return sorted(mounts)
+
+
+def iter_lsblk_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    flat: list[dict[str, Any]] = []
+    for device in devices:
+        flat.append(device)
+        children = device.get("children")
+        if isinstance(children, list):
+            flat.extend(iter_lsblk_devices(children))
+    return flat
+
+
+def find_bootsel_blocks() -> list[dict[str, Any]]:
+    cmd = ["lsblk", "--json", "-o", "PATH,LABEL,FSTYPE,MOUNTPOINTS"]
+    try:
+        result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    except OSError:
+        return []
+    if result.returncode != 0:
+        return []
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+
+    matches: list[dict[str, Any]] = []
+    for device in iter_lsblk_devices(payload.get("blockdevices") or []):
+        if device.get("label") not in BOOTSEL_LABELS:
+            continue
+        if device.get("fstype") not in {None, "vfat", "fat", "msdos"}:
+            continue
+        path = device.get("path")
+        if not path:
+            continue
+        matches.append(device)
+    return matches
+
+
+def bootsel_mountpoint(block: dict[str, Any]) -> Path | None:
+    mountpoints = block.get("mountpoints")
+    if isinstance(mountpoints, list):
+        for mountpoint in mountpoints:
+            if mountpoint:
+                return Path(str(mountpoint))
+    mountpoint = block.get("mountpoint")
+    if mountpoint:
+        return Path(str(mountpoint))
+    return None
+
+
+def mount_bootsel_block(block: dict[str, Any]) -> Path | None:
+    existing = bootsel_mountpoint(block)
+    if existing:
+        return existing
+
+    device = str(block.get("path") or "")
+    if not device:
+        return None
+    if shutil.which("udisksctl") is None:
+        return None
+
+    cmd = ["udisksctl", "mount", "-b", device]
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip()
+        if message:
+            print(f"warning: could not mount {device}: {message}", file=sys.stderr)
+        return None
+
+    blocks = find_bootsel_blocks()
+    for candidate in blocks:
+        if candidate.get("path") == device:
+            return bootsel_mountpoint(candidate)
+    mounts = find_bootsel_mounts()
+    if len(mounts) == 1:
+        return mounts[0]
+    return None
+
+
+def find_single_bootsel_mount() -> tuple[Path | None, list[str]]:
+    mounts = find_bootsel_mounts()
+    blocks = find_bootsel_blocks()
+    block_mounts = [mount for mount in (bootsel_mountpoint(block) for block in blocks) if mount]
+    for mount in block_mounts:
+        if mount not in mounts:
+            mounts.append(mount)
+
+    unique_mounts = sorted(set(mounts))
+    unmounted = [block for block in blocks if bootsel_mountpoint(block) is None]
+    candidates = [str(mount) for mount in unique_mounts] + [
+        str(block.get("path")) for block in unmounted if block.get("path")
+    ]
+    if len(candidates) != 1:
+        return None, candidates
+    if unique_mounts:
+        return unique_mounts[0], candidates
+    return mount_bootsel_block(unmounted[0]), candidates
+
+
+def command_upload_uf2(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+
+    build_status = command_build(args, debug=False)
+    if build_status != 0:
+        return build_status
+
+    build_dir = Path(str(config.get("buildDir") or project_dir / ".build")).expanduser()
+    if not build_dir.is_absolute():
+        build_dir = project_dir / build_dir
+    uf2 = find_configured_uf2(config) or find_uf2(build_dir)
+    if uf2 is None:
+        print(f"error: no unique UF2 artifact found in {build_dir}", file=sys.stderr)
+        return EXIT_UPLOAD
+
+    mount, bootsel_candidates = find_single_bootsel_mount()
+    if not bootsel_candidates:
+        print("error: BOOTSEL drive not found", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+    if len(bootsel_candidates) > 1:
+        print("error: multiple BOOTSEL drives found; refusing to guess", file=sys.stderr)
+        for candidate in bootsel_candidates:
+            print(f"  {candidate}", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+    if mount is None:
+        print("error: BOOTSEL drive found but could not be mounted", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+
+    destination = mount / uf2.name
+    print(f"Copying {uf2} -> {destination}")
+    try:
+        shutil.copy2(uf2, destination)
+        os.sync()
+    except OSError as exc:
+        print(f"error: UF2 copy failed: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
+    time.sleep(0.2)
+    return 0
+
+
+def neutral_firmware_source_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "neutral_fw" / "rp2040_arduino_pico"
+
+
+def prepare_neutral_sketch(build_dir: Path) -> Path:
+    source = neutral_firmware_source_dir() / "neutral_identity.ino"
+    if not source.is_file():
+        raise FileNotFoundError(f"neutral firmware source not found: {source}")
+
+    sketch_dir = build_dir / "_jh_neutral_identity" / "neutral_identity"
+    sketch_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, sketch_dir / "neutral_identity.ino")
+    return sketch_dir
+
+
+def build_neutral_compile_command(config: dict[str, Any], sketch_dir: Path, build_dir: Path) -> list[str]:
+    cli = resolve_cli(config.get("cliPath"))
+    fqbn = config.get("fqbn")
+    if not fqbn:
+        raise ValueError("missing fqbn; set jaszczurhal.fqbn or arduino.fqbn")
+
+    cmd = [
+        cli,
+        "compile",
+        "--fqbn",
+        str(fqbn),
+        "--build-path",
+        str(build_dir),
+        "--upload",
+    ]
+    port = config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    if port:
+        cmd.extend(["--port", str(port)])
+    cmd.extend(["--warnings", "all"])
+    if as_bool(config.get("verbose")):
+        cmd.append("-v")
+    cmd.append(str(sketch_dir))
+    return cmd
+
+
+def command_clear_identity(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    if config.get("toolchain") not in {"arduino-cli", "custom", "cmake"}:
+        print(f"error: clear-identity for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
+        return EXIT_UNSUPPORTED
+
+    port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    verify_status = verify_upload_port(config, str(port or ""), allow_unverified=args.allow_unverified_port)
+    if verify_status != 0:
+        return verify_status
+    if port:
+        upload_port = resolve_upload_port_for_tool(str(port))
+        config["uploadPort"] = upload_port
+        upload = dict(config.get("upload") or {})
+        upload["port"] = upload_port
+        config["upload"] = upload
+        release_status = release_port_for_upload(upload_port, project_dir)
+        if release_status != 0:
+            return release_status
+
+    neutral_build_dir = get_build_dir(config, project_dir) / "neutral_identity"
+    try:
+        with build_lock(config, project_dir):
+            try:
+                sketch_dir = prepare_neutral_sketch(get_build_dir(config, project_dir))
+                cmd = build_neutral_compile_command(config, sketch_dir, neutral_build_dir)
+            except (OSError, ValueError) as exc:
+                print(f"error: {exc}", file=sys.stderr)
+                return EXIT_CONFIG
+            rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    finally:
+        end_upload_release(project_dir)
+    return 0 if rc == 0 else EXIT_UPLOAD
+
+
+def command_monitor(args: argparse.Namespace, mode: str) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+
+    runtime = Path(__file__).resolve().parent / "serial_persistent.py"
+    cmd = [
+        sys.executable,
+        str(runtime),
+        "--project",
+        str(project_dir),
+        "--baud",
+        str(args.baud),
+        "--mode",
+        mode,
+        "--lock-policy",
+        args.lock_policy,
+    ]
+    port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    if port:
+        cmd.append(str(port))
+    rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    return 0 if rc == 0 else EXIT_MONITOR
+
+
+def get_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
+    build_dir = Path(str(config.get("buildDir") or project_dir / ".build")).expanduser()
+    if not build_dir.is_absolute():
+        build_dir = project_dir / build_dir
+    return build_dir
+
+
+@contextmanager
+def build_lock(config: dict[str, Any], project_dir: Path):
+    build_dir = get_build_dir(config, project_dir)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = build_dir / ".jh-build.lock"
+    with lock_path.open("w", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+def command_refresh_intellisense(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    if config.get("toolchain") == "cmake":
+        target = cmake_targets(config)["compileDb"]
+        rc = run_cmake_target(config, project_dir, target)
+        if rc != 0:
+            return EXIT_BUILD
+
+        build_dir = get_build_dir(config, project_dir)
+        raw_compile_db = build_dir / "arduino" / "compile_commands.json"
+        if not raw_compile_db.is_file():
+            raw_compile_db = build_dir / "compile_commands.json"
+        patched_compile_db = build_dir / "compile_commands_patched.json"
+        if not raw_compile_db.is_file():
+            print(f"error: compile database was not generated: {raw_compile_db}", file=sys.stderr)
+            return EXIT_BUILD
+
+        try:
+            compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
+            patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
+        except (OSError, json.JSONDecodeError) as exc:
+            print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
+            return EXIT_GENERIC
+
+        cpp_props = {
+            "configurations": [
+                {
+                    "name": str(config.get("module") or project_dir.name),
+                    "compileCommands": str(patched_compile_db),
+                    "intelliSenseMode": "gcc-arm",
+                    "compilerPath": "",
+                    "cStandard": "c11",
+                    "cppStandard": "gnu++17",
+                }
+            ],
+            "version": 4,
+        }
+        cpp_props_path = project_dir / ".vscode" / "c_cpp_properties.json"
+        try:
+            cpp_props_path.write_text(json.dumps(cpp_props, indent=4) + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"error: failed to write {cpp_props_path}: {exc}", file=sys.stderr)
+            return EXIT_GENERIC
+
+        print(f"Wrote {patched_compile_db}")
+        print(f"Wrote {cpp_props_path}")
+        return 0
+    if config.get("toolchain") not in {"arduino-cli", "custom"}:
+        print(f"error: refresh-intellisense for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
+        return EXIT_UNSUPPORTED
+
+    with build_lock(config, project_dir):
+        try:
+            cmd = build_arduino_compile_command(config, project_dir, only_compilation_database=True)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+
+        rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    if rc != 0:
+        return EXIT_BUILD
+
+    build_dir = get_build_dir(config, project_dir)
+    raw_compile_db = build_dir / "compile_commands.json"
+    patched_compile_db = build_dir / "compile_commands_patched.json"
+    if not raw_compile_db.is_file():
+        print(f"error: compile database was not generated: {raw_compile_db}", file=sys.stderr)
+        return EXIT_BUILD
+
+    try:
+        compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
+        patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+
+    cpp_props = {
+        "configurations": [
+            {
+                "name": str(config.get("module") or project_dir.name),
+                "compileCommands": str(patched_compile_db),
+                "intelliSenseMode": "gcc-arm",
+                "compilerPath": "",
+                "cStandard": "c11",
+                "cppStandard": "gnu++17",
+            }
+        ],
+        "version": 4,
+    }
+    cpp_props_path = project_dir / ".vscode" / "c_cpp_properties.json"
+    try:
+        cpp_props_path.write_text(json.dumps(cpp_props, indent=4) + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"error: failed to write {cpp_props_path}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+
+    print(f"Wrote {patched_compile_db}")
+    print(f"Wrote {cpp_props_path}")
+    return 0
+
+
+def command_clean(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    build_dir = get_build_dir(config, project_dir)
+    if not build_dir.exists():
+        print(f"Nothing to clean: {build_dir}")
+        return 0
+    if project_dir not in build_dir.resolve().parents and build_dir.resolve() != project_dir:
+        print(f"error: refusing to clean outside project directory: {build_dir}", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
+    try:
+        shutil.rmtree(build_dir)
+    except OSError as exc:
+        print(f"error: failed to remove {build_dir}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+    print(f"Removed {build_dir}")
+    return 0
+
+
 def command_stub(args: argparse.Namespace) -> int:
     action = "build-debug" if args.action == "debug" else args.action
     if args.action in MODULE_ACTIONS:
@@ -324,6 +1205,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--project", help="Firmware module directory.")
     parser.add_argument("--fqbn", help="Override board FQBN.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")
+    parser.add_argument(
+        "--allow-unverified-port",
+        action="store_true",
+        help="Allow upload to a port that does not match configured USB identity.",
+    )
+    parser.add_argument("--baud", type=int, default=115200, help="Serial monitor baud rate.")
+    parser.add_argument(
+        "--lock-policy",
+        choices=["wait", "replace-own", "replace-any"],
+        default="wait",
+        help="Serial monitor port lock policy.",
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output.")
     parser.add_argument("--json", action="store_true", help="Emit JSON where supported.")
     parser.add_argument("--version", action="store_true", help="Show version and exit.")
@@ -347,6 +1240,26 @@ def main(argv: list[str]) -> int:
 
     if args.action == "config-dump":
         return command_config_dump(args)
+    if args.action == "build":
+        return command_build(args, debug=False)
+    if args.action in {"build-debug", "debug"}:
+        return command_build(args, debug=True)
+    if args.action == "upload":
+        return command_upload(args)
+    if args.action == "upload-uf2":
+        return command_upload_uf2(args)
+    if args.action == "monitor":
+        return command_monitor(args, "pico")
+    if args.action == "monitor-probe":
+        return command_monitor(args, "probe")
+    if args.action == "monitor-any":
+        return command_monitor(args, "any")
+    if args.action == "refresh-intellisense":
+        return command_refresh_intellisense(args)
+    if args.action == "clean":
+        return command_clean(args)
+    if args.action == "clear-identity":
+        return command_clear_identity(args)
     return command_stub(args)
 
 
@@ -356,4 +1269,3 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("interrupted", file=sys.stderr)
         raise SystemExit(EXIT_GENERIC)
-
