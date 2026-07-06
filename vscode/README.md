@@ -42,6 +42,11 @@ Common options:
 --project <path>       Firmware module directory.
 --fqbn <fqbn>          Override configured board FQBN for this invocation.
 --port <port>          Override configured upload/monitor port.
+--baud <baud>          Serial monitor baud rate, default 115200.
+--lock-policy <mode>   Serial monitor lock policy: wait, replace-own, replace-any.
+--allow-unverified-port
+                       Expert-only serial upload to an explicitly selected port
+                       that does not match configured USB identity.
 --verbose              Enable verbose output.
 --json                 Emit machine-readable output where supported.
 --help                 Show help.
@@ -61,6 +66,33 @@ jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
 and `clear-identity` require `--project`. Actions that touch a device must fail
 before accessing serial ports, BOOTSEL disks, or build artifacts when the target
 module is ambiguous.
+
+Arduino CLI mode requires a real project sketch file named `<module>.ino`.
+Projects that do not keep a checked-in `.ino` should use `toolchain: "cmake"`
+and generate the small Arduino compatibility sketch from their own
+`CMakeLists.txt`, following the existing Ford/TimerNTP model. In that mode
+`jh-vscode` only configures and runs CMake targets such as:
+
+```text
+firmware
+firmware_debug
+firmware_upload
+firmware_compile_db
+```
+
+The generated sketch belongs under the CMake build directory, not under the
+shared `jh-vscode` runtime. This keeps project-specific build layout visible in
+the project and avoids hidden Python-side source staging.
+
+The serial monitor defaults to `--lock-policy wait`. `replace-own` may stop only
+another JaszczurHAL monitor for the same project. `replace-any` is an explicit
+emergency option and should not be used in default VS Code tasks.
+
+For identity-enabled projects, `upload` verifies the selected serial port before
+running `arduino-cli --upload`. A port is considered verified when its
+`/dev/serial/by-id` name matches the configured identity. First flashing a clean
+board must be an explicit operation with `--allow-unverified-port --port <port>`.
+Default VS Code tasks must not pass this flag.
 
 ## Configuration Precedence
 
@@ -125,8 +157,17 @@ manufacturer/product properties.
 
 `clear-identity` is a separate action. It requires `--project`, builds the
 neutral firmware from `neutral_fw/`, does not pass custom USB identity build
-properties, and flashes only a verified target. A manually attached BOOTSEL disk
-is not considered verified for multi-module projects.
+properties, and flashes only a verified serial target.
+
+`upload-uf2` intentionally keeps manual BOOTSEL simple: it builds the project,
+requires exactly one BOOTSEL drive or `RPI-RP2` block device, mounts it with
+`udisksctl` when needed, copies the UF2, and refuses to guess when multiple
+BOOTSEL drives are visible.
+
+When `upload` finds this project's persistent serial monitor on the upload
+port, it asks the monitor to release the port, keeps a short-lived project
+marker while the upload is in progress, and lets the monitor reconnect
+automatically after the board returns.
 
 ## Exit Codes
 
@@ -152,4 +193,3 @@ is not considered verified for multi-module projects.
 
 `.vscode/c_cpp_properties.json` is treated as a generated adapter for VS Code
 cpptools. It should not be the long-term hand-edited contract of a project.
-
