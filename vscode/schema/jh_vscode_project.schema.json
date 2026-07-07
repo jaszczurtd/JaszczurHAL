@@ -29,6 +29,28 @@
       "type": "string",
       "minLength": 1
     },
+    "cmake": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "sourceDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "integer", "boolean", "null"]
+          }
+        },
+        "targets": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
     "identity": {
       "type": "object",
       "additionalProperties": true,
