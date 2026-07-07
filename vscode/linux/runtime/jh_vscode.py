@@ -8,6 +8,7 @@ from contextlib import contextmanager
 import fcntl
 import json
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -59,6 +60,48 @@ SUPPORTED_ACTIONS = {
 }
 
 BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
+
+SECTION_HEADER_RE = re.compile(
+    r"^\s*\d+\s+"
+    r"(?P<name>\S+)\s+"
+    r"(?P<size>[0-9a-fA-F]+)\s+"
+    r"(?P<vma>[0-9a-fA-F]+)\s+"
+    r"(?P<lma>[0-9a-fA-F]+)\s+"
+    r"(?P<fileoff>[0-9a-fA-F]+)\s+"
+    r"2\*\*(?P<align>\d+)"
+)
+
+ANSI_YELLOW = "\033[33m"
+ANSI_RESET = "\033[0m"
+YELLOW_OUTPUT_PREFIXES = (
+    "Using verified serial port:",
+    "released own serial monitor PID ",
+    "-- Arduino FQBN:",
+    "-- Generated sketch:",
+    "-- Arduino build dir:",
+)
+
+
+def color_enabled() -> bool:
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    if os.environ.get("NO_COLOR"):
+        return False
+    return sys.stdout.isatty()
+
+
+def yellow_text(text: str) -> str:
+    if not color_enabled():
+        return text
+    return f"{ANSI_YELLOW}{text}{ANSI_RESET}"
+
+
+def maybe_yellow_output(line: str) -> str:
+    bare = line.rstrip("\r\n")
+    newline = line[len(bare):]
+    if any(bare.startswith(prefix) for prefix in YELLOW_OUTPUT_PREFIXES):
+        return yellow_text(bare) + newline
+    return line
 
 
 def strip_json_comments(text: str) -> str:
@@ -260,6 +303,17 @@ def load_project_config(project_dir: Path) -> dict[str, Any]:
                 key: expand_project_vars(value, project_dir, config)
                 for key, value in section.items()
             }
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict):
+        cmake = dict(cmake)
+        if "sourceDir" in cmake:
+            cmake["sourceDir"] = expand_project_vars(cmake["sourceDir"], project_dir, config)
+        if isinstance(cmake.get("cache"), dict):
+            cmake["cache"] = {
+                str(key): expand_project_vars(value, project_dir, config)
+                for key, value in cmake["cache"].items()
+            }
+        config["cmake"] = cmake
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
     return config
@@ -463,6 +517,116 @@ def by_id_links_for_port(port: str) -> list[Path]:
     return matches
 
 
+def read_optional_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def tty_usb_identity_text(tty: Path) -> str:
+    sys_tty = Path("/sys/class/tty") / tty.name / "device"
+    try:
+        device = sys_tty.resolve(strict=True)
+    except OSError:
+        return ""
+
+    parts: list[str] = []
+    current = device
+    sys_root = Path("/sys")
+    for _ in range(8):
+        for name in ("manufacturer", "product", "interface", "serial"):
+            value = read_optional_text(current / name)
+            if value:
+                parts.append(value)
+        if current == sys_root or current.parent == current:
+            break
+        current = current.parent
+    return " ".join(parts)
+
+
+def verified_identity_ports(config: dict[str, Any]) -> list[tuple[Path, Path | None]]:
+    expected = expected_identity_tokens(config)
+    if not expected:
+        return []
+
+    matches: list[tuple[Path, Path | None]] = []
+    seen: set[Path] = set()
+
+    by_id_dir = Path("/dev/serial/by-id")
+    if by_id_dir.is_dir():
+        for link in sorted(by_id_dir.iterdir()):
+            normalized = normalize_identity_text(link.name)
+            if not any(token in normalized for token in expected):
+                continue
+            try:
+                resolved = link.resolve(strict=True)
+            except OSError:
+                continue
+            if resolved in seen:
+                continue
+            seen.add(resolved)
+            matches.append((resolved, link))
+
+    for pattern in ("ttyACM*", "ttyUSB*"):
+        for tty in sorted(Path("/dev").glob(pattern)):
+            try:
+                resolved = tty.resolve(strict=True)
+            except OSError:
+                continue
+            if resolved in seen:
+                continue
+            normalized = normalize_identity_text(tty_usb_identity_text(tty))
+            if normalized and any(token in normalized for token in expected):
+                seen.add(resolved)
+                matches.append((resolved, None))
+    return matches
+
+
+def select_verified_identity_port(config: dict[str, Any]) -> tuple[str | None, int]:
+    matches = verified_identity_ports(config)
+    if len(matches) == 1:
+        port, link = matches[0]
+        if link is not None:
+            print(yellow_text(f"Using verified serial port: {port} ({link.name})"))
+        else:
+            print(yellow_text(f"Using verified serial port: {port} (matched USB identity from sysfs)"))
+        return str(port), 0
+    if len(matches) > 1:
+        print("error: multiple verified serial ports match this project identity:", file=sys.stderr)
+        for port, link in matches:
+            suffix = f" ({link.name})" if link is not None else " (matched USB identity from sysfs)"
+            print(f"  {port}{suffix}", file=sys.stderr)
+        print("error: pass --port explicitly to choose one", file=sys.stderr)
+        return None, EXIT_UNSAFE_DEVICE
+    return None, 0
+
+
+def identity_display_text(config: dict[str, Any]) -> str:
+    identity = config.get("identity") or {}
+    manufacturer = identity.get("usbManufacturer") or "?"
+    product = identity.get("usbProduct") or "?"
+    by_id_hint = identity.get("byIdHint")
+    label = f"{manufacturer} {product}"
+    if by_id_hint:
+        label = f"{label} (by-id hint: {by_id_hint})"
+    return label
+
+
+def print_identity_upload_requirements(config: dict[str, Any]) -> None:
+    print("error: identity-enabled upload has no verified target", file=sys.stderr)
+    print(f"error: expected USB identity: {identity_display_text(config)}", file=sys.stderr)
+    print("error: requirements for the default 'upload' flow:", file=sys.stderr)
+    print("  1. For normal reflashing, the running firmware must expose a USB serial port", file=sys.stderr)
+    print("     whose /dev/serial/by-id link or sysfs USB descriptors match the expected identity.", file=sys.stderr)
+    print("  2. If no serial port is configured, exactly one BOOTSEL UF2 drive may be visible", file=sys.stderr)
+    print("     so the tool can safely fall back to UF2 upload.", file=sys.stderr)
+    print("  3. For the first flash of a clean board, either use BOOTSEL/UF2 or pass", file=sys.stderr)
+    print("     both an explicit --port and --allow-unverified-port intentionally.", file=sys.stderr)
+    print("  4. If more than one matching board is connected, pass --port explicitly.", file=sys.stderr)
+    print("error: currently no verified serial port was selected and no usable BOOTSEL fallback was chosen", file=sys.stderr)
+
+
 def resolve_upload_port_for_tool(port: str) -> str:
     if not port:
         return port
@@ -482,7 +646,7 @@ def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: b
         print("warning: unverified serial upload allowed by --allow-unverified-port", file=sys.stderr)
         return 0
     if not port:
-        print("error: identity-enabled upload requires an explicit verified port", file=sys.stderr)
+        print_identity_upload_requirements(config)
         return EXIT_UNSAFE_DEVICE
 
     expected = expected_identity_tokens(config)
@@ -492,13 +656,16 @@ def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: b
     if expected and any(token in name for token in expected for name in normalized_names):
         return 0
 
+    try:
+        sysfs_port = Path(port).resolve(strict=True)
+    except OSError:
+        sysfs_port = Path(port)
+    normalized_sysfs = normalize_identity_text(tty_usb_identity_text(sysfs_port))
+    if expected and normalized_sysfs and any(token in normalized_sysfs for token in expected):
+        return 0
+
     print(f"error: refusing upload to unverified port: {port}", file=sys.stderr)
-    identity = config.get("identity") or {}
-    print(
-        "error: expected USB identity: "
-        f"{identity.get('usbManufacturer', '?')} {identity.get('usbProduct', '?')}",
-        file=sys.stderr,
-    )
+    print(f"error: expected USB identity: {identity_display_text(config)}", file=sys.stderr)
     if links:
         print("error: matching /dev/serial/by-id links for this port:", file=sys.stderr)
         for link in links:
@@ -577,7 +744,7 @@ def release_port_for_upload(port: str, project_dir: Path) -> int:
         try:
             release_signal = signal.SIGUSR1 if hasattr(signal, "SIGUSR1") else signal.SIGTERM
             os.kill(pid, release_signal)
-            print(f"released own serial monitor PID {pid}")
+            print(yellow_text(f"released own serial monitor PID {pid}"))
         except ProcessLookupError:
             pass
         except PermissionError:
@@ -603,6 +770,28 @@ def release_port_for_upload(port: str, project_dir: Path) -> int:
 def run_command(cmd: list[str], *, verbose: bool = False) -> int:
     if verbose:
         print("+ " + " ".join(cmd), flush=True)
+    if Path(cmd[0]).name == "cmake":
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
+            )
+        except FileNotFoundError:
+            print(f"error: command not found: {cmd[0]}", file=sys.stderr)
+            return EXIT_CONFIG
+        except OSError as exc:
+            print(f"error: failed to run {cmd[0]}: {exc}", file=sys.stderr)
+            return EXIT_GENERIC
+
+        assert process.stdout is not None
+        for line in process.stdout:
+            sys.stdout.write(maybe_yellow_output(line))
+            sys.stdout.flush()
+        return int(process.wait())
+
     try:
         completed = subprocess.run(cmd, check=False)
     except FileNotFoundError:
@@ -612,6 +801,232 @@ def run_command(cmd: list[str], *, verbose: bool = False) -> int:
         print(f"error: failed to run {cmd[0]}: {exc}", file=sys.stderr)
         return EXIT_GENERIC
     return int(completed.returncode)
+
+
+def memory_overview_enabled() -> bool:
+    value = os.environ.get("JH_VSCODE_MEMORY_OVERVIEW", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def find_configured_elf(config: dict[str, Any]) -> Path | None:
+    artifacts = config.get("artifacts")
+    if not isinstance(artifacts, dict):
+        return None
+    elf = artifacts.get("elf")
+    if not elf:
+        return None
+    path = Path(str(elf)).expanduser()
+    if path.is_file():
+        return path
+    return None
+
+
+def find_elf(build_dir: Path) -> Path | None:
+    direct = build_dir / "firmware.elf"
+    if direct.is_file():
+        return direct
+
+    matches = sorted(build_dir.rglob("*.elf"))
+    if not matches:
+        return None
+    if len(matches) == 1:
+        return matches[0]
+
+    exact = [path for path in matches if path.parent == build_dir]
+    if len(exact) == 1:
+        return exact[0]
+    return None
+
+
+def resolve_elf_artifact(config: dict[str, Any], project_dir: Path) -> Path | None:
+    configured = find_configured_elf(config)
+    if configured is not None:
+        return configured
+    return find_elf(get_build_dir(config, project_dir))
+
+
+def parse_objdump_sections(elf: Path, objdump: str) -> list[dict[str, Any]]:
+    try:
+        result = subprocess.run([objdump, "-h", str(elf)], check=False, capture_output=True, text=True)
+    except OSError as exc:
+        print(f"warning: memory map overview skipped; failed to run {objdump}: {exc}", file=sys.stderr)
+        return []
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout).strip()
+        if message:
+            print(f"warning: memory map overview skipped; objdump failed: {message}", file=sys.stderr)
+        return []
+
+    sections: list[dict[str, Any]] = []
+    current: dict[str, Any] | None = None
+    for line in result.stdout.splitlines():
+        match = SECTION_HEADER_RE.match(line)
+        if match:
+            current = {
+                "name": match.group("name"),
+                "size": int(match.group("size"), 16),
+                "vma": int(match.group("vma"), 16),
+                "lma": int(match.group("lma"), 16),
+                "flags": [],
+            }
+            sections.append(current)
+            continue
+        if current is not None:
+            stripped = line.strip()
+            if stripped:
+                current["flags"] = [part.strip() for part in stripped.split(",") if part.strip()]
+                current = None
+
+    return [
+        section
+        for section in sections
+        if section["size"] > 0 and section["vma"] != 0 and "ALLOC" in set(section.get("flags") or [])
+    ]
+
+
+def is_flash_address(address: int) -> bool:
+    return 0x10000000 <= address < 0x11000000
+
+
+def is_psram_address(address: int) -> bool:
+    return 0x11000000 <= address < 0x12000000
+
+
+def is_sram_address(address: int) -> bool:
+    return 0x20000000 <= address < 0x30000000
+
+
+def memory_region(address: int) -> str:
+    if is_flash_address(address):
+        return "FLASH/XIP"
+    if is_psram_address(address):
+        return "PSRAM/XIP"
+    if is_sram_address(address):
+        return "SRAM"
+    return "OTHER"
+
+
+def format_size(size: int) -> str:
+    if size < 1024:
+        return f"{size} B"
+    kib = size / 1024
+    if kib < 1024:
+        return f"{kib:.1f} KiB"
+    return f"{kib / 1024:.2f} MiB"
+
+
+def format_range(start: int, size: int) -> str:
+    return f"0x{start:08x}-0x{start + size - 1:08x}"
+
+
+def memory_section_note(section: dict[str, Any]) -> str:
+    name = str(section["name"])
+    flags = set(section.get("flags") or [])
+    vma = int(section["vma"])
+    lma = int(section["lma"])
+
+    if name == ".boot2":
+        return "boot block"
+    if name == ".ota":
+        return "OTA metadata"
+    if name == ".partition":
+        return "partition table"
+    if name == ".flash_end":
+        return "flash marker"
+    if name == ".data" and is_sram_address(vma) and is_flash_address(lma):
+        return "RAM runtime, FLASH init"
+    if name in {".bss", ".tbss"}:
+        return "zeroed RAM"
+    if name == ".noinit":
+        return "retained/noinit RAM"
+    if "heap" in name:
+        return "reserved heap"
+    if "stack" in name:
+        return "reserved stack"
+    if name == ".ram_vector_table":
+        return "runtime vector table"
+    if "CODE" in flags:
+        return "code"
+    if "READONLY" in flags:
+        return "read-only data"
+    if "LOAD" not in flags:
+        return "reserved"
+    return "data"
+
+
+def print_memory_map_overview(config: dict[str, Any], project_dir: Path) -> None:
+    if not memory_overview_enabled():
+        return
+
+    elf = resolve_elf_artifact(config, project_dir)
+    if elf is None:
+        return
+
+    objdump = shutil.which("arm-none-eabi-objdump") or shutil.which("objdump")
+    if objdump is None:
+        print("warning: memory map overview skipped; arm-none-eabi-objdump not found", file=sys.stderr)
+        return
+
+    sections = parse_objdump_sections(elf, objdump)
+    if not sections:
+        return
+
+    regions: dict[str, list[dict[str, Any]]] = {}
+    for section in sections:
+        regions.setdefault(memory_region(int(section["vma"])), []).append(section)
+
+    print("")
+    print(f"Memory map overview: {elf}")
+    for region in ("FLASH/XIP", "SRAM", "PSRAM/XIP", "OTHER"):
+        region_sections = regions.get(region)
+        if not region_sections:
+            continue
+        total = sum(int(section["size"]) for section in region_sections)
+        print(f"{region} ({format_size(total)} by VMA):")
+        print("  section              VMA range              LMA          size       note")
+        for section in region_sections:
+            lma = int(section["lma"])
+            vma = int(section["vma"])
+            flags = set(section.get("flags") or [])
+            if "LOAD" not in flags:
+                lma_text = "no-load"
+            elif lma == vma:
+                lma_text = "same"
+            else:
+                lma_text = f"0x{lma:08x}"
+            print(
+                f"  {str(section['name']):<20} "
+                f"{format_range(vma, int(section['size'])):<22} "
+                f"{lma_text:<12} "
+                f"{format_size(int(section['size'])):>9}  "
+                f"{memory_section_note(section)}"
+            )
+
+    flash_load_sections = [
+        section
+        for section in sections
+        if is_flash_address(int(section["lma"])) and "LOAD" in set(section.get("flags") or [])
+    ]
+    flash_load_size = sum(int(section["size"]) for section in flash_load_sections)
+    sram_static = sum(
+        int(section["size"])
+        for section in sections
+        if memory_region(int(section["vma"])) == "SRAM"
+        and "heap" not in str(section["name"])
+        and "stack" not in str(section["name"])
+    )
+    sram_reserved = sum(
+        int(section["size"])
+        for section in sections
+        if memory_region(int(section["vma"])) == "SRAM"
+        and ("heap" in str(section["name"]) or "stack" in str(section["name"]))
+    )
+    print(
+        "Totals: "
+        f"FLASH load sections {format_size(flash_load_size)}, "
+        f"SRAM static {format_size(sram_static)}, "
+        f"SRAM reserved heap/stack {format_size(sram_reserved)}"
+    )
 
 
 def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, Any], int]:
@@ -636,6 +1051,17 @@ def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
     if not build_dir.is_absolute():
         build_dir = project_dir / build_dir
     return build_dir
+
+
+def get_cmake_source_dir(config: dict[str, Any], project_dir: Path) -> Path:
+    cmake = config.get("cmake")
+    source_dir = None
+    if isinstance(cmake, dict):
+        source_dir = cmake.get("sourceDir")
+    source_path = Path(str(source_dir or project_dir)).expanduser()
+    if not source_path.is_absolute():
+        source_path = project_dir / source_path
+    return source_path
 
 
 def cmake_targets(config: dict[str, Any]) -> dict[str, str]:
@@ -675,12 +1101,22 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
             args.append(f"-DJH_USB_MANUFACTURER={manufacturer}")
             args.append(f"-DJH_USB_PRODUCT={product}")
 
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict) and isinstance(cmake.get("cache"), dict):
+        for key, value in cmake["cache"].items():
+            if value is None:
+                continue
+            if isinstance(value, bool):
+                value = "ON" if value else "OFF"
+            args.append(f"-D{key}={value}")
+
     return args
 
 
 def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
+    source_dir = get_cmake_source_dir(config, project_dir)
     build_dir = get_cmake_build_dir(config, project_dir)
-    cmd = ["cmake", "-S", str(project_dir), "-B", str(build_dir)]
+    cmd = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
     cmd.extend(cmake_cache_args(config, project_dir))
     return run_command(cmd, verbose=as_bool(config.get("verbose")))
 
@@ -693,14 +1129,18 @@ def run_cmake_target(config: dict[str, Any], project_dir: Path, target: str) -> 
     return run_command(cmd, verbose=as_bool(config.get("verbose")))
 
 
-def command_build(args: argparse.Namespace, *, debug: bool = False) -> int:
+def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_overview: bool = True) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
     if config.get("toolchain") == "cmake":
         target = cmake_targets(config)["buildDebug" if debug else "build"]
         rc = run_cmake_target(config, project_dir, target)
-        return 0 if rc == 0 else EXIT_BUILD
+        if rc == 0:
+            if show_memory_overview:
+                print_memory_map_overview(config, project_dir)
+            return 0
+        return EXIT_BUILD
     if config.get("toolchain") not in {"arduino-cli", "custom"}:
         print(f"error: build for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
         return EXIT_UNSUPPORTED
@@ -711,7 +1151,11 @@ def command_build(args: argparse.Namespace, *, debug: bool = False) -> int:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_CONFIG
         rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
-    return 0 if rc == 0 else EXIT_BUILD
+    if rc == 0:
+        if show_memory_overview:
+            print_memory_map_overview(config, project_dir)
+        return 0
+    return EXIT_BUILD
 
 
 def command_upload(args: argparse.Namespace) -> int:
@@ -722,6 +1166,20 @@ def command_upload(args: argparse.Namespace) -> int:
         print(f"error: upload for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
         return EXIT_UNSUPPORTED
     port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    upload_config = config.get("upload") or {}
+    upload_strategy = upload_config.get("strategy") if isinstance(upload_config, dict) else None
+    if config.get("toolchain") == "cmake" and not port:
+        if upload_strategy == "uf2":
+            return command_upload_uf2(args)
+        _, bootsel_candidates = find_single_bootsel_mount()
+        if bootsel_candidates:
+            print("No serial upload port configured; BOOTSEL device detected, using UF2 upload.")
+            return command_upload_uf2(args)
+        if identity_enabled(config):
+            port, detect_status = select_verified_identity_port(config)
+            if detect_status != 0:
+                return detect_status
+
     verify_status = verify_upload_port(config, str(port or ""), allow_unverified=args.allow_unverified_port)
     if verify_status != 0:
         return verify_status
@@ -740,7 +1198,10 @@ def command_upload(args: argparse.Namespace) -> int:
             rc = run_cmake_target(config, project_dir, target)
         finally:
             end_upload_release(project_dir)
-        return 0 if rc == 0 else EXIT_UPLOAD
+        if rc == 0:
+            print_memory_map_overview(config, project_dir)
+            return 0
+        return EXIT_UPLOAD
     try:
         with build_lock(config, project_dir):
             try:
@@ -751,7 +1212,10 @@ def command_upload(args: argparse.Namespace) -> int:
             rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
     finally:
         end_upload_release(project_dir)
-    return 0 if rc == 0 else EXIT_UPLOAD
+    if rc == 0:
+        print_memory_map_overview(config, project_dir)
+        return 0
+    return EXIT_UPLOAD
 
 
 def find_configured_uf2(config: dict[str, Any]) -> Path | None:
@@ -899,7 +1363,7 @@ def command_upload_uf2(args: argparse.Namespace) -> int:
     if status != 0:
         return status
 
-    build_status = command_build(args, debug=False)
+    build_status = command_build(args, debug=False, show_memory_overview=False)
     if build_status != 0:
         return build_status
 
@@ -932,6 +1396,7 @@ def command_upload_uf2(args: argparse.Namespace) -> int:
     except OSError as exc:
         print(f"error: UF2 copy failed: {exc}", file=sys.stderr)
         return EXIT_UPLOAD
+    print_memory_map_overview(config, project_dir)
     time.sleep(0.2)
     return 0
 

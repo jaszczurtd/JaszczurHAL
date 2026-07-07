@@ -80,9 +80,21 @@ firmware_upload
 firmware_compile_db
 ```
 
+By default, `jh-vscode` configures CMake with `-S <project>`. Projects that
+keep a shared firmware CMake entry outside the module directory can set
+`cmake.sourceDir` in `.vscode/jaszczurhal.project.json`, for example
+`${project}/../common/cmake/FiestaArduinoFirmware`.
+
 The generated sketch belongs under the CMake build directory, not under the
 shared `jh-vscode` runtime. This keeps project-specific build layout visible in
 the project and avoids hidden Python-side source staging.
+
+After a successful `build`, `upload`, or `upload-uf2`, `jh-vscode` prints a
+compact ELF memory map overview when a `firmware.elf` artifact is available.
+The overview is derived from `arm-none-eabi-objdump -h`, groups allocated
+sections by FLASH/XIP, SRAM, PSRAM, and OTHER, and shows VMA/LMA placement,
+section sizes, and short notes. Set `JH_VSCODE_MEMORY_OVERVIEW=0` to suppress
+this extra console output.
 
 The serial monitor defaults to `--lock-policy wait`. `replace-own` may stop only
 another JaszczurHAL monitor for the same project. `replace-any` is an explicit
