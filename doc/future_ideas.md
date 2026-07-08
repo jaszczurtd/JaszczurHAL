@@ -142,6 +142,42 @@ Simple backlog of future architecture and implementation work.
   - Use the existing shared I2C device-driver pattern.
   - Keep board policy outside the driver.
 
+- Add optional 10-bit I2C master addressing.
+  - The whole public I2C API takes `uint8_t address` (7-bit). A 10-bit
+    address spans `0x000`-`0x3FF`, so it needs a wider value (`uint16_t`)
+    plus an explicit addressing-mode marker: the value alone cannot be
+    distinguished from a 7-bit address.
+  - Prefer an additive, non-breaking design over widening the existing ABI.
+    Widen only the internal transfer helpers to `(uint16_t addr,
+    bool addr_10bit)`; keep every current public function delegating with
+    `addr_10bit=false` so existing code and shared drivers are untouched.
+  - Expose a narrow set of new 10-bit entry points for the atomic modern
+    paths that real 10-bit devices use, e.g. `hal_i2c_write_read10_ex()`,
+    `hal_i2c_read_bytes10_ex()` and a raw-command write. Do not double the
+    whole API surface.
+  - Scope out (document as intentional): the legacy buffered Arduino-Wire
+    path (`hal_i2c_begin_transmission()` / `cur_addr` are `uint8_t`, and
+    Wire semantics are 7-bit anyway) and `hal_i2c_slave` 10-bit target mode
+    (separate follow-up).
+  - Backend feasibility:
+    - STM32G474 (register-level): straightforward. In `i2c_hw_write/read/
+      write_read/ack`, program `CR2` with the `ADD10` bit set, place the full
+      address in `SADD[9:0]` without the `<<1` shift, and handle `HEAD10R`
+      for the read phase. Add the missing `ADD10`/`HEAD10R` bit defines to
+      the register map.
+    - RP2040: the backend calls Pico SDK `i2c_read_timeout_us()` /
+      `i2c_write_timeout_us()`, whose `uint8_t addr` signatures program a
+      7-bit `IC_TAR`. 10-bit master needs `IC_CON.IC_10BITADDR_MASTER` and a
+      full 10-bit `IC_TAR`, so add a small custom path instead of relying on
+      those SDK helpers. This is the most work of the three.
+    - Mock: trivial. Widen the stored address and extend expectation matching.
+  - Validation: 10-bit addresses use the `11110xx` prefix on the wire; the
+    mode helper must not confuse them with reserved 7-bit ranges. Add
+    mock-based unit tests for 10-bit transactions; real ACK behavior on
+    STM32/RP2040 needs an actual 10-bit device on the bus.
+  - Suggested order: land STM32 + mock + tests first (lowest risk), then the
+    RP2040 SDK path.
+
 - Polish the legacy utility API after Arduino decoupling.
   - Keep `#include <JaszczurHAL.h>` and `#include <hal/hal.h>` as the primary
     portable include surfaces.

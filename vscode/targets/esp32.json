@@ -1,0 +1,13 @@
+{
+  "id": "esp32",
+  "displayName": "Espressif ESP32 (skeleton - no HAL backend yet)",
+  "toolchain": "cmake",
+  "defaultBoard": "esp32-devkitc",
+  "status": "skeleton",
+  "upload": { "strategy": "esptool" },
+  "monitor": { "transport": "serial" },
+  "cache": { "JH_TARGET": "esp32" },
+  "boards": [
+    { "id": "esp32-devkitc", "displayName": "ESP32-DevKitC", "cache": { "ARDUINO_FQBN": "esp32:esp32:esp32" } }
+  ]
+}

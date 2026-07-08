@@ -1,0 +1,37 @@
+# Target registry
+
+One JSON descriptor per **target family** consumed by the jh-vscode board
+selector (`select-board`) and the project generator. This is **data only** - the
+build recipes live in `cmake/targets/<target>.cmake` and the HAL backends in
+`src/hal/impl/<target>/`.
+
+## Descriptor shape
+
+| Field | Meaning |
+|---|---|
+| `id` | Target family id (matches `JH_TARGET` and the `cmake/targets/<id>.cmake` recipe). |
+| `displayName` | Human label shown in the board picker. |
+| `toolchain` | jh-vscode toolchain kind (`cmake` for every dispatcher-based target). |
+| `defaultBoard` | Board id used when the manifest sets `target` but not `board`. |
+| `upload` | Default upload block for the family (`strategy` + strategy params, e.g. `openocd`). Overridable per project in the manifest. |
+| `monitor` | Serial monitor transport hint. |
+| `cache` | Family-level CMake cache entries merged for every board (e.g. `JH_TARGET`, `CMAKE_TOOLCHAIN_FILE`). |
+| `boards[]` | Selectable variants: `{ id, displayName, cache }`. The board `cache` overlays the family `cache` (e.g. `ARDUINO_FQBN` for rp2040). |
+| `status` | Optional; `"skeleton"` marks a family without a working HAL backend yet (listed but flagged). |
+
+## Tokens
+
+`cache` values may use `${jhRoot}` - the absolute path to the JaszczurHAL repo
+root (this directory's grandparent). The consumer (select-board / generator)
+resolves it when writing the choice into a project manifest. `${project}` and the
+other manifest tokens are resolved later by the normal jh-vscode expansion.
+
+## How a selection maps to a manifest
+
+`select-board <target> <board>` composes the effective CMake cache as
+`family.cache` ⊕ `board.cache` and writes, into the project's
+`targetProfiles.<target>`, the `toolchain` / `cmake.cache` / `upload` for that
+target, plus top-level `target`/`board`. The jh-vscode resolver
+(`resolve_target_profile`) then deep-merges that profile over the base manifest
+at build/upload time. Adding a board = one entry in `boards[]`; adding a family =
+a new `<id>.json` here + a `cmake/targets/<id>.cmake` recipe + a HAL backend.

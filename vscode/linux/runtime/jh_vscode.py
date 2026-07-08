@@ -180,12 +180,206 @@ def expand_project_vars(value: Any, project_dir: Path, config: dict[str, Any]) -
     return value
 
 
+def expand_config_sections(config: dict[str, Any], project_dir: Path) -> None:
+    """Expand ${...} tokens in the path-bearing sections of config, in place.
+
+    Idempotent: once tokens are substituted, re-running is a no-op. Called for the
+    base manifest and again after a target overlay is merged in.
+    """
+    if "buildDir" in config:
+        config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
+    if "cmakeBuildDir" in config:
+        config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
+    for section_name in ("artifacts", "upload", "hooks"):
+        section = config.get(section_name)
+        if isinstance(section, dict):
+            config[section_name] = {
+                key: expand_project_vars(value, project_dir, config)
+                for key, value in section.items()
+            }
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict):
+        cmake = dict(cmake)
+        if "sourceDir" in cmake:
+            cmake["sourceDir"] = expand_project_vars(cmake["sourceDir"], project_dir, config)
+        if isinstance(cmake.get("cache"), dict):
+            cmake["cache"] = {
+                str(key): expand_project_vars(value, project_dir, config)
+                for key, value in cmake["cache"].items()
+            }
+        config["cmake"] = cmake
+
+
+def deep_merge(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    """Return base with overlay applied: dicts merge recursively, everything else
+    (scalars, lists) is replaced by the overlay value."""
+    result = dict(base)
+    for key, value in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def resolve_target_profile(
+    config: dict[str, Any],
+    project_dir: Path,
+    sources: dict[str, str],
+    target_override: str | None = None,
+    board_override: str | None = None,
+    override_source: str = "cli",
+) -> None:
+    """Resolve the active target and merge its targetProfiles overlay in place.
+
+    Precedence for the active target/board: override (CLI or the gitignored
+    .vscode/jaszczurhal.local.json, whichever the caller passed) > manifest
+    target/board > default 'rp2040'. `override_source` labels the override's
+    origin for config-dump only.
+
+    Parity contract: a manifest with no target / board / targetProfiles AND no
+    override is left byte-for-byte untouched, so config-dump on existing pico
+    manifests is unchanged. When target machinery IS present, the active target's
+    overlay is deep-merged over the base, the input-only targetProfiles map is
+    dropped, and ${...} tokens introduced by the overlay are expanded.
+    """
+    profiles = config.get("targetProfiles")
+    manifest_target = config.get("target")
+    manifest_board = config.get("board")
+    has_any = (
+        target_override is not None
+        or board_override is not None
+        or manifest_target is not None
+        or manifest_board is not None
+        or isinstance(profiles, dict)
+    )
+    if not has_any:
+        return
+
+    # Registry is loaded ONLY on the active-target path, so plain pico manifests
+    # (no target machinery) never touch it -> parity + no cost.
+    registry = load_target_registry()
+    active = target_override or manifest_target or "rp2040"
+    target_desc = registry.get(active)
+
+    # Board precedence: override > manifest > registry defaultBoard. The board is
+    # scoped to the ACTIVE target: a board carried over from a different target
+    # (e.g. local.json held an STM32 board but the target was switched to rp2040)
+    # is invalid here and falls back to this target's default.
+    board = board_override or manifest_board
+    if isinstance(target_desc, dict):
+        valid_boards = [b.get("id") for b in (target_desc.get("boards") or []) if isinstance(b, dict)]
+        if board is None or (valid_boards and board not in valid_boards):
+            board = target_desc.get("defaultBoard")
+
+    # Effective overlay = registry family+board layer (build defaults) with the
+    # manifest's own targetProfiles.<active> entry merged on top (project wins).
+    registry_layer: dict[str, Any] = {}
+    if isinstance(target_desc, dict):
+        if target_desc.get("toolchain"):
+            registry_layer["toolchain"] = target_desc["toolchain"]
+        reg_cache = resolve_registry_board_cache(target_desc, board)
+        if reg_cache:
+            registry_layer["cmake"] = {"cache": reg_cache}
+        if isinstance(target_desc.get("upload"), dict):
+            registry_layer["upload"] = dict(target_desc["upload"])
+
+    manifest_overlay: dict[str, Any] = {}
+    if isinstance(profiles, dict) and isinstance(profiles.get(active), dict):
+        manifest_overlay = profiles[active]
+
+    # Precedence (low -> high): registry target/board defaults are the FLOOR, the
+    # base manifest overrides them, and the active target's targetProfiles overlay
+    # overrides the base. (CLI --target/--board is already folded into
+    # active/board.) So a project's explicit setting (e.g. upload.strategy) always
+    # beats a registry default, and a per-target profile beats the project-wide
+    # value. cmake.cache from all three layers deep-merges key-by-key.
+    base = dict(config)
+    base.pop("targetProfiles", None)
+    merged = deep_merge(deep_merge(registry_layer, base), manifest_overlay)
+    config.clear()
+    config.update(merged)
+
+    # Expand tokens the overlay may have introduced (idempotent on the base).
+    expand_config_sections(config, project_dir)
+
+    config["target"] = active
+    sources["target"] = override_source if target_override else (
+        ".vscode/jaszczurhal.project.json" if manifest_target is not None else "default"
+    )
+    # Display-only: mark keys the registry/targetProfiles contributed, without
+    # clobbering a base-manifest source already recorded for the same key.
+    overlay_source = f"registry/targetProfiles:{active}"
+    for key in set(registry_layer) | set(manifest_overlay):
+        if key not in ("targetProfiles", "target", "board"):
+            sources.setdefault(key, overlay_source)
+
+    if board is not None:
+        config["board"] = board
+        if board_override:
+            sources["board"] = override_source
+        elif manifest_board is not None:
+            sources["board"] = ".vscode/jaszczurhal.project.json"
+        else:
+            sources["board"] = f"registry:{active}.defaultBoard"
+
+
+def jaszczurhal_root() -> Path:
+    """Absolute JaszczurHAL repo root, located relative to this script:
+    <root>/vscode/linux/runtime/jh_vscode.py."""
+    return Path(__file__).resolve().parents[3]
+
+
+def target_registry_dir() -> Path:
+    return jaszczurhal_root() / "vscode" / "targets"
+
+
+def load_target_registry() -> dict[str, dict[str, Any]]:
+    """Load every target descriptor in vscode/targets/*.json, keyed by target id.
+    Malformed / unreadable files are skipped so one bad descriptor cannot break
+    the CLI."""
+    registry: dict[str, dict[str, Any]] = {}
+    directory = target_registry_dir()
+    if not directory.is_dir():
+        return registry
+    for path in sorted(directory.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        target_id = str(data.get("id") or path.stem)
+        registry[target_id] = data
+    return registry
+
+
+def resolve_registry_board_cache(target_desc: dict[str, Any], board_id: str | None) -> dict[str, Any]:
+    """Effective CMake cache for a board: family cache overlaid by the board's
+    own cache, with ${jhRoot} resolved to the absolute repo root."""
+    cache: dict[str, Any] = dict(target_desc.get("cache") or {})
+    boards = target_desc.get("boards") or []
+    selected = board_id or target_desc.get("defaultBoard")
+    for board in boards:
+        if isinstance(board, dict) and board.get("id") == selected:
+            cache.update(board.get("cache") or {})
+            break
+    root = str(jaszczurhal_root())
+    return {
+        key: (value.replace("${jhRoot}", root) if isinstance(value, str) else value)
+        for key, value in cache.items()
+    }
+
+
 def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     config: dict[str, Any] = {}
     for key in (
         "project",
         "module",
         "toolchain",
+        "target",
+        "board",
+        "targetProfiles",
         "fqbn",
         "buildDir",
         "cmakeBuildDir",
@@ -226,7 +420,11 @@ def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
     return None
 
 
-def load_project_config(project_dir: Path) -> dict[str, Any]:
+def load_project_config(
+    project_dir: Path,
+    target_override: str | None = None,
+    board_override: str | None = None,
+) -> dict[str, Any]:
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
     settings = load_json_file(vscode_dir / "settings.json")
@@ -293,27 +491,24 @@ def load_project_config(project_dir: Path) -> dict[str, Any]:
         config["buildDir"] = str(project_dir / ".build")
         sources["buildDir"] = "default"
 
-    config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
-    if "cmakeBuildDir" in config:
-        config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
-    for section_name in ("artifacts", "upload", "hooks"):
-        section = config.get(section_name)
-        if isinstance(section, dict):
-            config[section_name] = {
-                key: expand_project_vars(value, project_dir, config)
-                for key, value in section.items()
-            }
-    cmake = config.get("cmake")
-    if isinstance(cmake, dict):
-        cmake = dict(cmake)
-        if "sourceDir" in cmake:
-            cmake["sourceDir"] = expand_project_vars(cmake["sourceDir"], project_dir, config)
-        if isinstance(cmake.get("cache"), dict):
-            cmake["cache"] = {
-                str(key): expand_project_vars(value, project_dir, config)
-                for key, value in cmake["cache"].items()
-            }
-        config["cmake"] = cmake
+    expand_config_sections(config, project_dir)
+    # User-local active board selection (gitignored). CLI overrides win over it;
+    # it wins over the manifest default. Absent -> no effect (parity preserved).
+    local_state = load_json_file(vscode_dir / "jaszczurhal.local.json")
+    local_target = local_state.get("target") if isinstance(local_state, dict) else None
+    local_board = local_state.get("board") if isinstance(local_state, dict) else None
+    eff_target = target_override or local_target
+    eff_board = board_override or local_board
+    if target_override or board_override:
+        override_source = "cli"
+    else:
+        override_source = ".vscode/jaszczurhal.local.json"
+    resolve_target_profile(
+        config, project_dir, sources,
+        target_override=eff_target,
+        board_override=eff_board,
+        override_source=override_source,
+    )
     config["_projectDir"] = str(project_dir)
     config["_sources"] = sources
     return config
@@ -363,7 +558,11 @@ def command_config_dump(args: argparse.Namespace) -> int:
         print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
         return EXIT_CONFIG
     try:
-        config = load_project_config(project_dir)
+        config = load_project_config(
+            project_dir,
+            target_override=getattr(args, "target", None),
+            board_override=getattr(args, "board", None),
+        )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
@@ -372,6 +571,112 @@ def command_config_dump(args: argparse.Namespace) -> int:
         print(json.dumps(config, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print_human_config(config)
+    return 0
+
+
+LOCAL_STATE_FILENAME = "jaszczurhal.local.json"
+
+
+def ensure_local_state_gitignored(project_dir: Path) -> None:
+    """Make sure the gitignored user-local selection file is actually ignored.
+    Adds the rule to <project>/.gitignore if missing (the rule is tracked; the
+    state file it names is not)."""
+    gitignore = project_dir / ".gitignore"
+    entry = f".vscode/{LOCAL_STATE_FILENAME}"
+    text = ""
+    if gitignore.exists():
+        try:
+            text = gitignore.read_text(encoding="utf-8")
+        except OSError:
+            return
+        if entry in [line.strip() for line in text.splitlines()]:
+            return
+    prefix = "" if (not text or text.endswith("\n")) else "\n"
+    try:
+        with gitignore.open("a", encoding="utf-8") as handle:
+            handle.write(f"{prefix}# jh-vscode user-local active board selection\n{entry}\n")
+    except OSError:
+        pass
+
+
+def command_select_board(args: argparse.Namespace) -> int:
+    project_dir = resolve_project(args)
+    if project_dir is None:
+        print("error: select-board requires --project <path>", file=sys.stderr)
+        return EXIT_USAGE
+    if not project_dir.is_dir():
+        print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    registry = load_target_registry()
+    vscode_dir = project_dir / ".vscode"
+    local_state = load_json_file(vscode_dir / LOCAL_STATE_FILENAME)
+    manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
+    current_target = local_state.get("target") or manifest.get("target")
+    current_board = local_state.get("board") or manifest.get("board")
+
+    # List mode: no --target given.
+    if not args.target:
+        if args.json:
+            listing = {
+                "current": {"target": current_target, "board": current_board},
+                "targets": [
+                    {
+                        "id": desc.get("id", tid),
+                        "displayName": desc.get("displayName"),
+                        "status": desc.get("status"),
+                        "defaultBoard": desc.get("defaultBoard"),
+                        "boards": [
+                            {"id": b.get("id"), "displayName": b.get("displayName")}
+                            for b in (desc.get("boards") or []) if isinstance(b, dict)
+                        ],
+                    }
+                    for tid, desc in sorted(registry.items())
+                ],
+            }
+            print(json.dumps(listing, ensure_ascii=False, indent=2, sort_keys=True))
+            return 0
+        shown_t = current_target or "(default rp2040)"
+        shown_b = current_board or "(target default)"
+        print(f"Current selection: target={shown_t} board={shown_b}")
+        print("Available targets:")
+        for tid, desc in sorted(registry.items()):
+            flag = " [skeleton]" if desc.get("status") == "skeleton" else ""
+            print(f"  {tid}{flag} - {desc.get('displayName', '')}")
+            for board in desc.get("boards") or []:
+                if not isinstance(board, dict):
+                    continue
+                mark = "*" if board.get("id") == desc.get("defaultBoard") else " "
+                print(f"     {mark} {board.get('id')} - {board.get('displayName', '')}")
+        print("Select: jh-vscode select-board --project <p> --target <id> [--board <id>]")
+        return 0
+
+    # Set mode.
+    target = args.target
+    desc = registry.get(target)
+    if desc is None:
+        known = ", ".join(sorted(registry)) or "(registry empty)"
+        print(f"error: unknown target '{target}'. Known targets: {known}", file=sys.stderr)
+        return EXIT_CONFIG
+    board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
+    board = args.board or desc.get("defaultBoard")
+    if board_ids and board not in board_ids:
+        print(f"error: unknown board '{board}' for target '{target}'. Known boards: {', '.join(board_ids)}", file=sys.stderr)
+        return EXIT_CONFIG
+    if desc.get("status") == "skeleton":
+        print(f"warning: target '{target}' is a skeleton (no working HAL backend yet); selecting anyway.", file=sys.stderr)
+
+    new_state = dict(local_state) if isinstance(local_state, dict) else {}
+    new_state["target"] = target
+    if board is not None:
+        new_state["board"] = board
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    (vscode_dir / LOCAL_STATE_FILENAME).write_text(
+        json.dumps(new_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    ensure_local_state_gitignored(project_dir)
+    print(f"Selected target={target} board={board or '(target default)'}")
+    print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (gitignored; project default stays in the manifest).")
     return 0
 
 
@@ -647,7 +952,11 @@ def command_list_ports(args: argparse.Namespace) -> int:
             print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
             return EXIT_CONFIG
         try:
-            config = load_project_config(project_dir)
+            config = load_project_config(
+            project_dir,
+            target_override=getattr(args, "target", None),
+            board_override=getattr(args, "board", None),
+        )
         except ValueError as exc:
             print(f"error: {exc}", file=sys.stderr)
             return EXIT_CONFIG
@@ -1149,7 +1458,11 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
         print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
     try:
-        config = load_project_config(project_dir)
+        config = load_project_config(
+            project_dir,
+            target_override=getattr(args, "target", None),
+            board_override=getattr(args, "board", None),
+        )
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
@@ -1161,6 +1474,15 @@ def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
     build_dir = Path(str(config.get("cmakeBuildDir") or project_dir / ".build" / "cmake")).expanduser()
     if not build_dir.is_absolute():
         build_dir = project_dir / build_dir
+    # When a target is active, isolate the CMake cache per target/board: RP2040
+    # (project NONE) and STM32 (cross toolchain) must never share one cache dir.
+    # Manifests without a resolved target keep the flat path -> pico parity.
+    target = config.get("target")
+    if target:
+        build_dir = build_dir / str(target)
+        board = config.get("board")
+        if board:
+            build_dir = build_dir / str(board)
     return build_dir
 
 
@@ -1279,6 +1601,16 @@ def command_upload(args: argparse.Namespace) -> int:
     port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
     upload_config = config.get("upload") or {}
     upload_strategy = upload_config.get("strategy") if isinstance(upload_config, dict) else None
+    if config.get("toolchain") == "cmake" and upload_strategy == "openocd":
+        # SWD/JTAG flashers (e.g. STM32 via OpenOCD): no serial port, BOOTSEL,
+        # by-id identity guard, port release, or monitor handoff applies. Delegate
+        # straight to the CMake firmware_upload target after config resolution.
+        target = cmake_targets(config)["upload"]
+        rc = run_cmake_target(config, project_dir, target)
+        if rc == 0:
+            print_memory_map_overview(config, project_dir)
+            return 0
+        return EXIT_UPLOAD
     if config.get("toolchain") == "cmake" and not port:
         if upload_strategy == "uf2":
             return command_upload_uf2(args)
@@ -1780,6 +2112,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("action", nargs="?", help="Action to run.")
     parser.add_argument("--project", help="Firmware module directory.")
     parser.add_argument("--fqbn", help="Override board FQBN.")
+    parser.add_argument("--target", help="Override active target family (e.g. rp2040, stm32g474).")
+    parser.add_argument("--board", help="Override active board/variant within the target.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")
     parser.add_argument(
         "--allow-unverified-port",
@@ -1838,6 +2172,8 @@ def main(argv: list[str]) -> int:
         return command_clean(args)
     if args.action == "clear-identity":
         return command_clear_identity(args)
+    if args.action == "select-board":
+        return command_select_board(args)
     return command_stub(args)
 
 

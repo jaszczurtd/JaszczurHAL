@@ -82,8 +82,9 @@ firmware_compile_db
 
 By default, `jh-vscode` configures CMake with `-S <project>`. Projects that
 keep a shared firmware CMake entry outside the module directory can set
-`cmake.sourceDir` in `.vscode/jaszczurhal.project.json`, for example
-`${project}/../common/cmake/FiestaArduinoFirmware`.
+`cmake.sourceDir` in `.vscode/jaszczurhal.project.json`, for example the
+JaszczurHAL multi-target dispatcher
+`${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project`.
 
 The generated sketch belongs under the CMake build directory, not under the
 shared `jh-vscode` runtime. This keeps project-specific build layout visible in
