@@ -29,10 +29,6 @@ doc/zephyr_driver_candidates.md
 # Keep root workspace automation tracked:
 !/.vscode/
 !/.vscode/**
-# ...but vscode-templates ships a reference .vscode/ that downstream projects copy,
-# so keep those tracked:
-!vscode-templates/*/.vscode/
-!vscode-templates/*/.vscode/**
 !examples/*/.vscode/
 !examples/*/.vscode/**
 .idea/

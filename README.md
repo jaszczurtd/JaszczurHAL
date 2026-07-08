@@ -107,6 +107,8 @@ doc/
   future_ideas.md           # architecture roadmap and backlog
   security_supply_chain.md  # SBOM and vulnerability tracking process
 examples/                   # buildable example apps for RP2040 and STM32G474
+vscode/                     # shared jh-vscode entry, schema, docs, generator
+  tools/create-vscode-example.py # standalone VS Code firmware project generator
 security/
   third_party.json          # third-party component inventory
   sbom.cdx.json             # generated CycloneDX SBOM
@@ -139,9 +141,6 @@ src/
 tests/                      # host unit tests (CMake + Unity)
   freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
 third_party/                # optional local dependencies, e.g. FreeRTOS-Kernel
-vscode-templates/           # ready-to-use VS Code project configurations
-  linux/                    # Linux/macOS template scripts and settings
-  windows/                  # Windows template scripts and settings
 ```
 
 The `src/hal/impl/shared/` folder contains internal, backend-agnostic implementation code reused by at least two hardware backends.
@@ -160,7 +159,31 @@ Shared implementations are split by role:
   for example `filesystem/`, `gps/`, `irsmall_decoder/`, and `wireguard/`.
 
 ## Quick start
-See [examples/README.md](examples/README.md) for the full build system guide.
+There are two common starting points:
+
+- To explore HAL APIs, portability patterns, and backend coverage, start with
+  the checked-in examples. See [examples/README.md](examples/README.md) for the
+  full example build guide.
+- To create a new RP2040 firmware project for day-to-day work in VS Code, use
+  the VS Code project generator. It creates a separate project directory with a
+  blink application, project-local HAL configuration, ready-to-run VS Code
+  tasks for build/upload/monitor/IntelliSense refresh, and USB identity set to
+  `Jaszczur Example`.
+
+From the directory that contains your firmware repositories:
+
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output your-example-project-name
+cd your-example-project-name
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode list-ports --project "$PWD"
+```
+
+Open the generated directory `your-example-project-name` in VS Code and run the
+`Project:*` tasks from `.vscode/tasks.json`. For the first flash of a blank board, put the
+board in BOOTSEL mode and run `Project: Upload (UF2 / BOOTSEL)`. After that, normal
+`Project: Upload` uses the verified USB identity.
 
 ## Examples
 
@@ -352,41 +375,53 @@ git config core.hooksPath .githooks
 
 ## VS Code Development Environment
 
-`vscode-templates/` contains ready-to-use VS Code project configurations, and scripts.
+`vscode/` is the supported VS Code integration layer for firmware projects that
+use JaszczurHAL. Projects call the stable entrypoint:
 
-But please note: the primary development environment for this library is Linux, preferably a Debian-like distribution. Most scripts and configuration helpers are primarily targeted at that platform.
+```text
+libraries/JaszczurHAL/vscode/entry/jh-vscode
+```
 
-### Features
+The entrypoint resolves project configuration, builds CMake-based RP2040
+firmware, performs identity-verified upload, handles BOOTSEL/UF2 upload,
+starts persistent serial monitors, refreshes IntelliSense, and can clear a
+board's visible USB identity with neutral firmware.
 
-- One-key build, upload, and debug workflow
-- Raspberry Pi Debug Probe support for RP2040/RP2350, including breakpoints and source-level inspection
-- Persistent serial monitor with automatic reconnect after device replug
-- Cortex-Debug integration for live sessions
-- IntelliSense with full RP2040/RP2350 API support
-- Support for multiple Raspberry Pi Pico variants
-- UF2 bootloader upload mode
-- Board selection with custom clock and optimization settings
+For a new standalone project, generate a small working project outside this
+repository:
 
-### Platform-Specific Templates
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output your-example-project-name
+```
 
-- **[Linux/macOS](vscode-templates/linux/)** - Fully functional bash-based build and deployment scripts
-  - Lightweight bash implementation
-  - Compatible with standard GNU toolchains
+Then open that generated directory in VS Code. The generated `.vscode/tasks.json`
+uses the same task labels as migrated projects:
 
-- **[Windows](vscode-templates/windows/)** - nearly complete RP2040 development setup with Python-based build orchestration, Arduino CLI integration, debug support, and serial monitoring
-  - Python-based build flow for cross-platform consistency
-  - VID:PID-aware serial monitor with automatic reconnect
-  - Interactive board and build option selector
-  - Cortex-Debug integration for live debug sessions
+- `Project: Build`
+- `Project: Upload`
+- `Project: Serial Monitor`
+- `Project: Upload (UF2 / BOOTSEL)`
+- `Project: Debug Probe Monitor`
+- `Project: Refresh IntelliSense`
+- `Project: Clean`
 
-Quick Start:
+Important: VS Code does not load project-local
+`.vscode/keybindings.reference.json` automatically. Keyboard shortcuts only work
+after the matching entries are present in the real VS Code user file:
 
-1. Choose your platform: [Windows](vscode-templates/windows/) or [Linux](vscode-templates/linux/)
-2. Copy the template to your project directory
-3. Configure environment variables (Arduino CLI path, serial port)
-4. Start building with `Ctrl+Shift+1` (or `Ctrl+Shift+2` to upload)
+```text
+~/.config/Code/User/keybindings.json
+```
 
-See [vscode-templates/README.md](vscode-templates/README.md) for detailed setup, or visit your platform-specific folder.
+Copy (add) the generated or project-local `.vscode/keybindings.reference.json` entries
+into that user file. If a shortcut such as `Ctrl+Shift+3` opens "Show all tasks"
+or asks for `Project: Monitor (persistent)`, the global user keybinding is still
+pointing at a missing task label.
+
+Linux is the primary supported environment for this workflow. Windows users
+should prefer WSL2 or a Bash-backed VS Code shell until native Windows parity is
+explicitly implemented.
 
 ## Building as a static library (.a)
 
@@ -420,9 +455,9 @@ Primary docs:
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
 - Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
-- VS Code setup (Windows & Linux): [vscode-templates/README.md](vscode-templates/README.md)
-  - Windows template: [vscode-templates/windows/README.md](vscode-templates/windows/README.md)
-  - Linux template: [vscode-templates/linux/README.md](vscode-templates/linux/README.md)
+- VS Code firmware workflow: [vscode/README.md](vscode/README.md)
+  - Project generator: [vscode/tools/create-vscode-example.py](vscode/tools/create-vscode-example.py)
+  - Fiesta parity checklist: [vscode/docs/fiesta-parity-checklist.md](vscode/docs/fiesta-parity-checklist.md)
 
 
 ## Notes and credits

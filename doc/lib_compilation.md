@@ -371,6 +371,34 @@ cmake --build build_examples_rp2040 -j$(nproc)
 Examples are the numbered directories under `examples/` (e.g. `01_blink`,
 `38_stm32g474_fdcan_native`). `runalltests.sh` builds them as gate 7.
 
+## Standalone VS Code Firmware Example
+
+For a complete RP2040 VS Code firmware project, use the generator from the
+shared `jh-vscode` layer instead of copying legacy wrapper scripts:
+
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output jaszczurhal-vscode-example
+```
+
+The generated project should live outside the JaszczurHAL repository, for
+example next to the other firmware projects. It contains a blink app,
+`.vscode/jaszczurhal.project.json`, `.vscode/tasks.json`, a project-local
+`hal_project_config.h`, and a CMake file that generates the Arduino
+compatibility sketch under `.build/cmake/sketch/<module>`.
+
+Build-related commands then go through the shared entrypoint:
+
+```bash
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+```
+
+The default serial upload task remains identity-guarded. First flashing a blank
+board must use either BOOTSEL/UF2 or an explicit `--port` with
+`--allow-unverified-port`.
+
 ---
 
 ## Build File Structure
