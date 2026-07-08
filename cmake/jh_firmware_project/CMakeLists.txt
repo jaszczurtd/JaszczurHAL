@@ -1,0 +1,50 @@
+cmake_minimum_required(VERSION 3.20)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JaszczurHAL multi-target firmware dispatcher.
+#
+# A client project's .vscode manifest points cmake.sourceDir HERE and selects a
+# target via cmake.cache:
+#     JH_TARGET       = rp2040 | stm32g474        (default: rp2040)
+#     JH_PROJECT_DIR  = <the project's source dir> (required)
+# plus target-specific cache (ARDUINO_FQBN for rp2040; CMAKE_TOOLCHAIN_FILE for
+# stm32g474) and any project DEFINES/options.
+#
+# Whatever the target, this produces the canonical jh-vscode target contract:
+#     firmware / firmware_debug / firmware_upload / firmware_compile_db
+#
+# The dispatch shape (project(NONE) then per-target enable_language) mirrors the
+# proven examples/CMakeLists.txt, so the RP2040 path stays byte-for-byte the
+# arduino-cli flow it always was.
+# ─────────────────────────────────────────────────────────────────────────────
+
+project(jh_firmware NONE)
+
+set(JH_TARGET "rp2040" CACHE STRING "Target backend: rp2040 | stm32g474")
+set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
+
+# Repo root: this file is <JH_ROOT>/cmake/jh_firmware_project/CMakeLists.txt
+get_filename_component(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+if(NOT EXISTS "${JH_ROOT}/library.properties")
+    message(FATAL_ERROR "JaszczurHAL root not found at '${JH_ROOT}'")
+endif()
+
+if(NOT JH_PROJECT_DIR)
+    message(FATAL_ERROR "JH_PROJECT_DIR is required (the client project source dir)")
+endif()
+get_filename_component(JH_PROJECT_DIR "${JH_PROJECT_DIR}" ABSOLUTE)
+if(NOT IS_DIRECTORY "${JH_PROJECT_DIR}")
+    message(FATAL_ERROR "JH_PROJECT_DIR not found: ${JH_PROJECT_DIR}")
+endif()
+get_filename_component(JH_MODULE_NAME "${JH_PROJECT_DIR}" NAME)
+
+message(STATUS "jh-firmware: target=${JH_TARGET} module=${JH_MODULE_NAME}")
+
+if(JH_TARGET STREQUAL "stm32g474")
+    enable_language(C CXX ASM)
+    include("${JH_ROOT}/cmake/targets/stm32g474.cmake")
+elseif(JH_TARGET STREQUAL "rp2040")
+    include("${JH_ROOT}/cmake/targets/rp2040.cmake")
+else()
+    message(FATAL_ERROR "Unsupported JH_TARGET='${JH_TARGET}' (expected rp2040 | stm32g474)")
+endif()

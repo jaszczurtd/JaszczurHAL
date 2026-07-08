@@ -1,0 +1,15 @@
+{
+  "id": "rp2040",
+  "displayName": "Raspberry Pi RP2040 / RP2350 (Arduino-Pico)",
+  "toolchain": "cmake",
+  "defaultBoard": "pico",
+  "upload": { "strategy": "uf2" },
+  "monitor": { "transport": "serial" },
+  "cache": { "JH_TARGET": "rp2040" },
+  "boards": [
+    { "id": "pico",   "displayName": "Raspberry Pi Pico (RP2040)",   "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipico" } },
+    { "id": "picow",  "displayName": "Raspberry Pi Pico W (RP2040)",  "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipicow" } },
+    { "id": "pico2",  "displayName": "Raspberry Pi Pico 2 (RP2350)",  "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipico2" } },
+    { "id": "pico2w", "displayName": "Raspberry Pi Pico 2 W (RP2350)", "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipico2w" } }
+  ]
+}

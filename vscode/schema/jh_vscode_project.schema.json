@@ -17,6 +17,16 @@
       "type": "string",
       "enum": ["arduino-cli", "cmake", "custom"]
     },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Active target family id (e.g. rp2040, stm32g474). Absent = rp2040 (current behaviour)."
+    },
+    "board": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Active board/variant id within the active target (resolved against the target registry in vscode/targets/<target>.json)."
+    },
     "fqbn": {
       "type": "string",
       "minLength": 1
@@ -45,9 +55,30 @@
         },
         "targets": {
           "type": "object",
+          "description": "CMake target-name alias map (build/buildDebug/upload/compileDb -> concrete CMake target names). NOT a multi-target profile map; see targetProfiles.",
           "additionalProperties": {
             "type": "string"
           }
+        }
+      }
+    },
+    "targetProfiles": {
+      "type": "object",
+      "description": "Per-target overlay manifests, keyed by target id (rp2040, stm32g474, ...). Deliberately NOT named 'targets' to avoid colliding with cmake.targets. The active target's overlay is deep-merged over the base manifest during resolution; absent = single implicit rp2040 profile (current behaviour).",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "toolchain": {
+            "type": "string",
+            "enum": ["arduino-cli", "cmake", "custom"]
+          },
+          "buildDir": { "type": "string" },
+          "cmakeBuildDir": { "type": "string" },
+          "cmake": { "type": "object", "additionalProperties": true },
+          "upload": { "type": "object", "additionalProperties": true },
+          "identity": { "type": "object", "additionalProperties": true },
+          "artifacts": { "type": "object", "additionalProperties": true }
         }
       }
     },
@@ -90,13 +121,23 @@
       "properties": {
         "strategy": {
           "type": "string",
-          "enum": ["serial", "uf2", "custom"]
+          "enum": ["serial", "uf2", "custom", "openocd", "esptool"]
         },
         "port": {
           "type": "string"
         },
         "byId": {
           "type": "string"
+        },
+        "openocd": {
+          "type": "object",
+          "description": "OpenOCD parameters for strategy=openocd (SWD flash, e.g. STM32). No serial port / BOOTSEL / by-id identity logic applies.",
+          "additionalProperties": true,
+          "properties": {
+            "bin": { "type": "string" },
+            "interface": { "type": "string" },
+            "target": { "type": "string" }
+          }
         }
       }
     },
