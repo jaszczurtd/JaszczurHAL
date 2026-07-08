@@ -583,6 +583,117 @@ def verified_identity_ports(config: dict[str, Any]) -> list[tuple[Path, Path | N
     return matches
 
 
+def serial_candidate_paths() -> list[Path]:
+    candidates: set[Path] = set()
+    for pattern in ("/dev/ttyACM*", "/dev/ttyUSB*"):
+        for path in sorted(Path("/dev").glob(Path(pattern).name)):
+            if path.exists():
+                candidates.add(path)
+
+    by_id_dir = Path("/dev/serial/by-id")
+    if by_id_dir.is_dir():
+        for link in by_id_dir.iterdir():
+            try:
+                resolved = link.resolve(strict=True)
+            except OSError:
+                continue
+            if resolved.name.startswith(("ttyACM", "ttyUSB")):
+                candidates.add(resolved)
+    return sorted(candidates, key=lambda path: path.name)
+
+
+def serial_port_records(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    expected = expected_identity_tokens(config or {})
+    records: list[dict[str, Any]] = []
+    for port in serial_candidate_paths():
+        links = by_id_links_for_port(str(port))
+        link_names = [link.name for link in links]
+        sysfs_identity = tty_usb_identity_text(port)
+        haystacks = [normalize_identity_text(name) for name in link_names]
+        if sysfs_identity:
+            haystacks.append(normalize_identity_text(sysfs_identity))
+        verified = bool(expected and any(token in text for token in expected for text in haystacks))
+        records.append(
+            {
+                "port": str(port),
+                "byId": link_names,
+                "sysfsIdentity": sysfs_identity,
+                "verifiedForProject": verified,
+            }
+        )
+    return records
+
+
+def bootsel_candidates_without_mount() -> list[str]:
+    mounts = find_bootsel_mounts()
+    blocks = find_bootsel_blocks()
+    block_mounts = [mount for mount in (bootsel_mountpoint(block) for block in blocks) if mount]
+    for mount in block_mounts:
+        if mount not in mounts:
+            mounts.append(mount)
+
+    unique_mounts = sorted(set(mounts))
+    unmounted = [block for block in blocks if bootsel_mountpoint(block) is None]
+    return [str(mount) for mount in unique_mounts] + [
+        str(block.get("path")) for block in unmounted if block.get("path")
+    ]
+
+
+def command_list_ports(args: argparse.Namespace) -> int:
+    project_dir = resolve_project(args)
+    config: dict[str, Any] = {}
+    if project_dir is not None:
+        if not project_dir.exists() or not project_dir.is_dir():
+            print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+            return EXIT_CONFIG
+        try:
+            config = load_project_config(project_dir)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_CONFIG
+        apply_cli_overrides(config, args)
+
+    records = serial_port_records(config if config else None)
+    bootsel = bootsel_candidates_without_mount()
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "project": str(project_dir) if project_dir else None,
+                    "expectedIdentity": identity_display_text(config) if identity_enabled(config) else None,
+                    "serial": records,
+                    "bootsel": bootsel,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    if identity_enabled(config):
+        print(f"Expected identity: {identity_display_text(config)}")
+    if records:
+        print("Serial ports:")
+        for record in records:
+            label = "verified" if record["verifiedForProject"] else "unverified"
+            print(f"  {record['port']} [{label}]")
+            for link in record["byId"]:
+                print(f"    by-id: {link}")
+            if record["sysfsIdentity"]:
+                print(f"    sysfs: {record['sysfsIdentity']}")
+    else:
+        print("Serial ports: none")
+
+    if bootsel:
+        print("BOOTSEL candidates:")
+        for candidate in bootsel:
+            print(f"  {candidate}")
+    else:
+        print("BOOTSEL candidates: none")
+    return 0
+
+
 def select_verified_identity_port(config: dict[str, Any]) -> tuple[str | None, int]:
     matches = verified_identity_ports(config)
     if len(matches) == 1:
@@ -1719,6 +1830,8 @@ def main(argv: list[str]) -> int:
         return command_monitor(args, "probe")
     if args.action == "monitor-any":
         return command_monitor(args, "any")
+    if args.action == "list-ports":
+        return command_list_ports(args)
     if args.action == "refresh-intellisense":
         return command_refresh_intellisense(args)
     if args.action == "clean":

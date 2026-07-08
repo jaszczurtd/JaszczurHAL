@@ -12,6 +12,8 @@
   and `clear-identity`.
 - Add identity-guarded serial upload, simple one-drive BOOTSEL UF2 upload,
   persistent monitor port handoff, and automatic monitor reconnect after upload.
+- Implement read-only `list-ports`, including project identity matching and
+  BOOTSEL candidate reporting, so device checks do not require a risky upload.
 - Expand the identity-enabled upload failure message with the required
   verified serial, BOOTSEL, first-flash, and explicit-port conditions.
 - Highlight key upload/build status lines in yellow in terminal output:
@@ -20,6 +22,9 @@
 - Print an ELF memory map overview after successful build/upload, grouped by
   FLASH/XIP, SRAM, and PSRAM with VMA/LMA ranges, section notes, and totals;
   set `JH_VSCODE_MEMORY_OVERVIEW=0` to disable it.
+- Add `tools/create-vscode-example.py`, a standalone CMake-first VS Code
+  project generator with blink firmware, USB identity, tasks, launch config,
+  and IntelliSense refresh wiring.
 - Add Linux CMake target orchestration for projects that generate their Arduino
   compatibility sketch from project-owned `CMakeLists.txt` files.
 - Support `cmake.sourceDir` in project manifests so module workspaces can use a

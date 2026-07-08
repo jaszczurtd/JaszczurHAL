@@ -89,6 +89,74 @@ The generated sketch belongs under the CMake build directory, not under the
 shared `jh-vscode` runtime. This keeps project-specific build layout visible in
 the project and avoids hidden Python-side source staging.
 
+## New Project Generator
+
+Use `tools/create-vscode-example.py` to create a standalone, CMake-first VS Code
+firmware project next to your other firmware repositories:
+
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output /home/user/projects/jaszczurhal-vscode-example
+```
+
+The generated project contains a small blink application, project-local
+`.vscode/` files, a `hal_project_config.h` with `HAL_PROVIDE_APP_ENTRY`, and a
+`CMakeLists.txt` that generates the Arduino compatibility sketch under
+`.build/cmake/sketch/<module>`. It uses `jh-vscode` for the same actions as
+migrated projects:
+
+```bash
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+```
+
+The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
+The `vscode/examples/` directory remains a place for lightweight configuration
+snippets, not a checked-in firmware project.
+
+## VS Code Keyboard Shortcuts
+
+Project `.vscode/keybindings.reference.json` files are references only. VS Code
+does not load them automatically and there is no repository-local keyboard
+shortcut activation step. Shortcuts work only when the matching entries are
+present in the real VS Code user file:
+
+```text
+~/.config/Code/User/keybindings.json
+```
+
+After migrating a project, make sure that global shortcuts call the canonical
+task labels:
+
+```text
+Ctrl+Shift+1  Project: Build
+Ctrl+Shift+2  Project: Upload
+Ctrl+Shift+3  Project: Serial Monitor
+Ctrl+Shift+4  Project: Upload (UF2 / BOOTSEL)
+Ctrl+Shift+5  Project: Debug Probe Monitor
+Ctrl+Shift+6  Project: Refresh IntelliSense
+Ctrl+Shift+7  Project: Clean
+```
+
+Old bindings such as `Project: Monitor (persistent)` or
+`Project: Monitor (Debug Probe)` will open the "Show all tasks" prompt once
+the compatibility aliases are removed from project `tasks.json`.
+
+If `Ctrl+Shift+3` does not start the monitor, inspect the real user
+`keybindings.json` first. The correct binding is:
+
+```json
+{
+    "key": "ctrl+shift+3",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Project: Serial Monitor"
+}
+```
+
+After editing the user keybindings file, reload the VS Code window if the old
+binding is still cached.
+
 After a successful `build`, `upload`, or `upload-uf2`, `jh-vscode` prints a
 compact ELF memory map overview when a `firmware.elf` artifact is available.
 The overview is derived from `arm-none-eabi-objdump -h`, groups allocated
