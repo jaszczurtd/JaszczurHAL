@@ -50,6 +50,25 @@ All notable changes to this project will be documented in this file.
   host coverage in `test_simple_io_drivers`, and
   `examples/53_simple_io_chips` for RP2040 and STM32G474.
 
+### ADP5360 PMIC driver
+
+- Added `HAL_ENABLE_ADP5360`, public `hal_adp5360.h` and a shared HAL-only
+  ADP5360 PMIC driver under `src/hal/impl/shared/drivers/adp5360/` for RP2040,
+  STM32G474 and mock builds.
+- Ported the Zephyr ADP5360 MFD, charger, fuel-gauge and regulator register
+  flows from the Analog Devices/Nordic Apache-2.0 drivers onto JaszczurHAL
+  I2C/GPIO/timing/sync primitives, with `hal_status_t` error mapping and
+  per-device mutex protection via `jh_hal_mutex_create_once()`.
+- Added host coverage in `test_adp5360_driver`, API documentation and
+  `examples/54_adp5360_pmic` using `debugInit()`, `deb()` and `derr()`.
+
+### Display raw buffer foundation
+
+- Added `hal_display_pixel_format_t` and `hal_display_buffer_desc_t` to
+  describe low-level display buffers with pixel format, pitch, width, height,
+  buffer size and frame-continuation hints ahead of the planned raw area-write
+  API.
+
 ### Status-returning API expansion
 
 - Added `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` with

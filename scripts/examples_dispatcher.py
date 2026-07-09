@@ -114,6 +114,7 @@ EXAMPLES: list[dict[str, Any]] = [
     {"dir": "51_net_commands", "targets": ["rp2040"], "board": "picow"},
     {"dir": "52_http_files", "targets": ["rp2040"], "board": "picow"},
     {"dir": "53_simple_io_chips", "targets": ["rp2040", "stm32g474"]},
+    {"dir": "54_adp5360_pmic", "targets": ["rp2040", "stm32g474"]},
 ]
 
 

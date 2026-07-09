@@ -336,6 +336,27 @@ typedef enum {
     HAL_DISPLAY_ROTATION_270 = 3,
 } hal_display_rotation_t;
 
+// --- Raw buffer description ---
+typedef enum {
+    HAL_DISPLAY_PIXEL_FORMAT_NONE = 0u,
+    HAL_DISPLAY_PIXEL_FORMAT_MONO01 = (1u << 0),      // 0=black, 1=white
+    HAL_DISPLAY_PIXEL_FORMAT_MONO10 = (1u << 1),      // 1=black, 0=white
+    HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE = (1u << 2),   // high byte first
+    HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE = (1u << 3),
+    HAL_DISPLAY_PIXEL_FORMAT_RGB888 = (1u << 4),
+    HAL_DISPLAY_PIXEL_FORMAT_BGR888 = (1u << 5),
+    HAL_DISPLAY_PIXEL_FORMAT_L8 = (1u << 6),
+} hal_display_pixel_format_t;
+
+typedef struct {
+    hal_display_pixel_format_t pixel_format;
+    uint16_t pitch;           // pixels between consecutive source rows
+    uint16_t width;           // rectangle width in pixels
+    uint16_t height;          // rectangle height in pixels
+    size_t buf_size;          // available source-buffer bytes
+    bool frame_incomplete;    // future streaming hint
+} hal_display_buffer_desc_t;
+
 #define HAL_DISPLAY_ROTATION(deg) \
     ((uint8_t)( \
         ((deg) == 0)   ? HAL_DISPLAY_ROTATION_0 : \
@@ -447,6 +468,11 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
+**Raw buffers:** `hal_display_pixel_format_t` and
+`hal_display_buffer_desc_t` describe rectangular source buffers for the
+planned low-level area-write/capabilities layer. `pitch` is in pixels and may
+be larger than `width` when the source rectangle is a sub-area of a larger
+framebuffer. No public raw area-write function is exposed yet.
 **TFT streaming:** Immediate-mode TFT backends support an explicit streaming
 sequence for large contiguous updates:
 `hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then

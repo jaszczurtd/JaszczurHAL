@@ -69,6 +69,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_DS18B20` | `hal_ds18b20.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/ds18b20/hal_ds18b20.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free DS18B20 backend over 1-Wire (propagates ONEWIRE) |
 | `HAL_ENABLE_DHT` | `hal_dht.h` | `impl/shared/drivers/dht/hal_dht.cpp` | shared DHT11/DHT22 temperature/humidity driver over HAL GPIO |
 | `HAL_ENABLE_BH1750` | `hal_bh1750.h` | `impl/shared/drivers/bh1750/hal_bh1750.cpp` | shared HAL I2C BH1750 ambient-light sensor driver (propagates I2C) |
+| `HAL_ENABLE_ADP5360` | `hal_adp5360.h` | `impl/shared/drivers/adp5360/hal_adp5360.cpp` | shared HAL I2C ADP5360 PMIC driver: MFD init/reset/shipment, charger, fuel-gauge and buck/buck-boost regulator control (propagates I2C) |
 | `HAL_ENABLE_MCP3221` | `hal_mcp3221.h` | `impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp` | MCP3221 12-bit ADC over HAL I2C (propagates I2C) |
 | `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/drivers/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
 | `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/drivers/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
@@ -137,6 +138,7 @@ HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_ADP5360     -> HAL_ENABLE_I2C
 HAL_ENABLE_MCP3221     -> HAL_ENABLE_I2C
 HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C + HAL_ENABLE_SPI

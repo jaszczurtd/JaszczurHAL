@@ -138,6 +138,51 @@ typedef enum {
   HAL_DISPLAY_ROTATION_270 = 3,
 } hal_display_rotation_t;
 
+/* ---- Raw buffer description --------------------------------------------- */
+
+/*
+ * Pixel formats used by the low-level display buffer/area-write layer.
+ *
+ * Multi-byte pixels are described in display-controller byte order. For the
+ * common SPI TFT path that means RGB565_BE / already big-endian bytes when
+ * streaming raw byte buffers. RGB565_NATIVE is provided for caller-owned
+ * uint16_t buffers in the MCU native endianness, matching the existing
+ * hal_display_write_pixels_fast() helper.
+ *
+ * Values are bit flags so a future capabilities struct can OR several
+ * supported formats together.
+ */
+typedef enum {
+  HAL_DISPLAY_PIXEL_FORMAT_NONE = 0u,
+  HAL_DISPLAY_PIXEL_FORMAT_MONO01 = (1u << 0),    /* 0=black, 1=white */
+  HAL_DISPLAY_PIXEL_FORMAT_MONO10 = (1u << 1),    /* 1=black, 0=white */
+  HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE = (1u << 2), /* high byte first */
+  HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE = (1u << 3),
+  HAL_DISPLAY_PIXEL_FORMAT_RGB888 = (1u << 4),
+  HAL_DISPLAY_PIXEL_FORMAT_BGR888 = (1u << 5),
+  HAL_DISPLAY_PIXEL_FORMAT_L8 = (1u << 6),
+} hal_display_pixel_format_t;
+
+/*
+ * Descriptor for a rectangular pixel buffer.
+ *
+ * - width/height describe the updated rectangle in pixels.
+ * - pitch is the number of pixels between consecutive rows in the source
+ *   buffer. It may be larger than width for sub-rectangles inside a larger
+ *   framebuffer.
+ * - buf_size is the available source-buffer size in bytes.
+ * - frame_incomplete lets future streaming backends keep a panel transaction
+ *   open across several area writes.
+ */
+typedef struct {
+  hal_display_pixel_format_t pixel_format;
+  uint16_t pitch;
+  uint16_t width;
+  uint16_t height;
+  size_t buf_size;
+  bool frame_incomplete;
+} hal_display_buffer_desc_t;
+
 /*
  * Maps degrees (0/90/180/270) to HAL enum values.
  *
