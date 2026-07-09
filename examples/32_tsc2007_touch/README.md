@@ -11,6 +11,6 @@ Portable TSC2007 resistive touch controller example using the shared
 Build targets:
 
 ```bash
-cmake --build build_examples_rp2040 --target 32_tsc2007_touch_rp2040
-cmake --build build_examples_stm32 --target 32_tsc2007_touch_stm32g474
+../../vscode/entry/jh-vscode build --project . --target rp2040
+../../vscode/entry/jh-vscode build --project . --target stm32g474
 ```

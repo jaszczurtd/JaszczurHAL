@@ -17,13 +17,8 @@ Default wiring:
 Build one target:
 
 ```bash
-cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-cmake --build build_examples_rp2040 --target 39_sdlogger_rp2040
-
-cmake -S examples -B build_examples_stm32 \
-      -DJH_EXAMPLE_TARGET=stm32g474 \
-      -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
-cmake --build build_examples_stm32 --target 39_sdlogger_stm32g474
+../../vscode/entry/jh-vscode build --project . --target rp2040
+../../vscode/entry/jh-vscode build --project . --target stm32g474
 ```
 
 Generated filenames stay in FatFs 8.3 form because LFN is disabled:

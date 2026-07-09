@@ -353,39 +353,49 @@ matching options, for example:
 The reservation sits before the EEPROM/KV flash pages and reduces the space
 available for application code.
 
-For complete firmware examples, use the unified example build in
-`examples/CMakeLists.txt`, which wires in the startup files, linker script,
-target definitions, and HAL include paths needed for flashable outputs. Select
-the backend with `-DJH_EXAMPLE_TARGET`:
+For complete firmware examples, use the dispatcher-backed example manifests.
+Every numbered `examples/NN_*` directory can be opened directly in VS Code and
+builds through `vscode/entry/jh-vscode` plus `cmake/jh_firmware_project`.
+The quality-gate runner builds the same manifests:
 
 ```bash
 # STM32G474 example firmware
-cmake -S examples -B build_examples_stm32g474 -DJH_EXAMPLE_TARGET=stm32g474
-cmake --build build_examples_stm32g474 -j$(nproc)
+scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 
 # RP2040 example firmware
-cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-cmake --build build_examples_rp2040 -j$(nproc)
+scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
 ```
 
 Examples are the numbered directories under `examples/` (e.g. `01_blink`,
 `38_stm32g474_fdcan_native`). `runalltests.sh` builds them as gate 7.
 
-## Standalone VS Code Firmware Example
+## Standalone VS Code Firmware Project
 
-For a complete RP2040 VS Code firmware project, use the generator from the
-shared `jh-vscode` layer instead of copying legacy wrapper scripts:
+For a complete target-selectable VS Code firmware project, use the generator
+from the shared `jh-vscode` layer instead of copying legacy wrapper scripts or
+project-local CMake recipes:
 
 ```bash
 libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output jaszczurhal-vscode-example
 ```
 
+To start on a non-default board, pass the initial target and board:
+
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output jaszczurhal-stm32-example \
+  --target stm32g474 \
+  --board nucleo-g474re
+```
+
 The generated project should live outside the JaszczurHAL repository, for
 example next to the other firmware projects. It contains a blink app,
 `.vscode/jaszczurhal.project.json`, `.vscode/tasks.json`, a project-local
-`hal_project_config.h`, and a CMake file that generates the Arduino
-compatibility sketch under `.build/cmake/sketch/<module>`.
+`hal_project_config.h`, and no project-local firmware `CMakeLists.txt`. The
+manifest points `cmake.sourceDir` at
+`libraries/JaszczurHAL/cmake/jh_firmware_project`; that dispatcher selects the
+active backend from the resolved `target`/`board` and target registry.
 
 Build-related commands then go through the shared entrypoint:
 
@@ -393,11 +403,14 @@ Build-related commands then go through the shared entrypoint:
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode build-debug --project "$PWD"
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode select-board --project "$PWD" --interactive
 ```
 
-The default serial upload task remains identity-guarded. First flashing a blank
-board must use either BOOTSEL/UF2 or an explicit `--port` with
-`--allow-unverified-port`.
+`Project: Upload` is target-neutral: RP2040 uses the registry upload strategy
+(`uf2` by default, or verified serial when configured); STM32G474 uses the
+OpenOCD upload target. First flashing a blank RP2040 board can use BOOTSEL/UF2.
+An explicit serial port upload still requires `--port` plus
+`--allow-unverified-port` when the identity cannot be verified.
 
 ---
 
@@ -428,6 +441,18 @@ scripts/
     checkout from freertos_core_version.conf.
 
 examples/
-  CMakeLists.txt        # unified example build; -DJH_EXAMPLE_TARGET=rp2040|stm32g474
+  CMakeLists.txt        # compatibility wrapper around scripts/examples_dispatcher.py
   01_blink/ ... 41_*/     # numbered, self-contained example apps
+
+cmake/
+  jh_firmware_project/CMakeLists.txt
+    Shared firmware dispatcher used by generated and migrated VS Code projects.
+  targets/rp2040.cmake
+  targets/stm32g474.cmake
+
+vscode/
+  entry/jh-vscode
+    Stable build/upload/monitor/select-board entrypoint for firmware projects.
+  targets/*.json
+    Target and board registry consumed by jh-vscode and the generator.
 ```

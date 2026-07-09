@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Multi-target VS Code firmware workflow
+
+- Added the shared `cmake/jh_firmware_project` dispatcher and target recipes so
+  VS Code firmware projects can build through one CMake entry for RP2040/RP2350
+  and STM32G474.
+- Added the `vscode/targets/` registry plus `jh-vscode select-board`, with
+  target/board selection stored in the gitignored
+  `.vscode/jaszczurhal.local.json` user-local file.
+- Updated the VS Code project generator to create dispatcher-backed,
+  target-selectable projects with `--target`/`--board`, target-neutral tasks,
+  GUI/terminal board selection, and no project-local firmware CMake recipe.
+- Migrated all checked-in `examples/01_*` through `examples/53_*` directories
+  to dispatcher-backed VS Code projects with per-example manifests, board
+  selection tasks, and a manifest-driven examples quality-gate runner.
+- Added OpenOCD upload support for STM32G474, RP2040-only UF2/BOOTSEL gating,
+  target/board-specific CMake build directories, and friendlier diagnostics for
+  missing target backends or firmware images that do not fit the selected MCU.
+
 ### Security supply chain
 
 - Added `SECURITY.md` with vulnerability reporting, triage, CVSS guidance and

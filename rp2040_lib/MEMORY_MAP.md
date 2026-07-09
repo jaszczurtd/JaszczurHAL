@@ -33,6 +33,12 @@ static-library configuration. The final sketch build may select a different
 arduino-pico board menu option / FQBN, which changes the generated linker
 values.
 
+In dispatcher-backed VS Code projects, the active board is selected through
+`jh-vscode select-board` or generator `--target`/`--board` flags. The RP2040
+board registry maps that selection to the effective `ARDUINO_FQBN`, so the
+memory layout follows the selected registry board rather than a project-local
+hard-coded FQBN.
+
 ## Default Flash Layout For `rpipico`, 2 MB, No FS
 
 The standard arduino-pico `rpipico` "2MB (no FS)" option uses this effective

@@ -1,0 +1,28 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "47_pn532_nfc",
+    "example": {
+        "targets": [
+            "rp2040",
+            "stm32g474"
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${project}/.build/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "47_pn532_nfc"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

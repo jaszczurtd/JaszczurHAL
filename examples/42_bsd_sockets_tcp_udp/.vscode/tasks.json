@@ -1,0 +1,247 @@
+{
+    "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "boardSelection",
+            "description": "Target/board",
+            "type": "pickString",
+            "options": [
+                "rp2040:pico - Raspberry Pi Pico (RP2040)",
+                "rp2040:picow - Raspberry Pi Pico W (RP2040)",
+                "rp2040:pico2 - Raspberry Pi Pico 2 (RP2350)",
+                "rp2040:pico2w - Raspberry Pi Pico 2 W (RP2350)",
+                "stm32g474:nucleo-g474re - NUCLEO-G474RE (512 KB flash / 128 KB RAM)",
+                "esp32:esp32-devkitc - ESP32-DevKitC (skeleton)"
+            ],
+            "default": "rp2040:picow - Raspberry Pi Pico W (RP2040)"
+        }
+    ],
+    "tasks": [
+        {
+            "label": "Project: Build",
+            "detail": "Compile through JaszczurHAL VS Code entry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build (Debug)",
+            "detail": "Debug build through JaszczurHAL VS Code entry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build-debug",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload",
+            "detail": "Upload through the active target backend",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "upload",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Upload (UF2 / BOOTSEL)",
+            "detail": "RP2040 only: build and copy UF2 to the single visible BOOTSEL drive",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "upload-uf2",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: List ports",
+            "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "list-ports",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Serial Monitor",
+            "detail": "Persistent serial monitor",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "replace-own"
+            ],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Debug Probe Monitor",
+            "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor-probe",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "replace-own"
+            ],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Serial Monitor (Any)",
+            "detail": "Any serial monitor through JaszczurHAL VS Code entry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "monitor-any",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "wait"
+            ],
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Refresh IntelliSense",
+            "detail": "Refresh IntelliSense through JaszczurHAL VS Code entry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "refresh-intellisense",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Clean",
+            "detail": "Clean build directory",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "clean",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Config Dump",
+            "detail": "Show resolved JaszczurHAL VS Code project configuration",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "config-dump",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board",
+            "detail": "Interactive target/board selection",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "select-board",
+                "--project",
+                "${workspaceFolder}",
+                "--interactive"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board (GUI)",
+            "detail": "Pick target/board from the VS Code input menu",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "select-board",
+                "--project",
+                "${workspaceFolder}",
+                "--selection",
+                "${input:boardSelection}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Build variant: tcp_client",
+            "detail": "Compile example variant tcp_client",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "tcp_client"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: udp_server",
+            "detail": "Compile example variant udp_server",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "udp_server"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: udp_client",
+            "detail": "Compile example variant udp_client",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "udp_client"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        }
+    ]
+}

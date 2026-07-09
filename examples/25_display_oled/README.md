@@ -20,10 +20,10 @@ at I2C address `0x3C`. Console on the board default debug UART @ 115200.
 
 ```bash
 # RP2040
-cmake --build build_examples_rp2040 --target 25_display_oled_rp2040
+../../vscode/entry/jh-vscode build --project . --target rp2040
 
 # STM32G474
-cmake --build build_examples_stm32 --target 25_display_oled_stm32g474
+../../vscode/entry/jh-vscode build --project . --target stm32g474
 ```
 
 ## Notes

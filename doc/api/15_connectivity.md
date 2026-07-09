@@ -69,10 +69,15 @@ bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
 
 ## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
 
-Arduino builds should select a WiFi-capable board/FQBN (for example
-`rp2040:rp2040:rpipicow`). `PICO_W` is not the HAL WiFi enable flag; keep using
-`HAL_ENABLE_WIFI` directly or enable a dependent module such as
+RP2040 Arduino builds should select a WiFi-capable board/FQBN (for example
+`rp2040:rp2040:rpipicow`; in generated VS Code projects, select
+`rp2040:picow` or `rp2040:pico2w`). `PICO_W` is not the HAL WiFi enable flag;
+keep using `HAL_ENABLE_WIFI` directly or enable a dependent module such as
 `HAL_ENABLE_MQTT` / `HAL_ENABLE_WIREGUARD`, which propagates WiFi.
+
+STM32G474 does not have a WiFi/network backend yet. `jh-vscode build` and
+`upload` preflight known network flags on STM32G474 and report an axis-2 target
+support diagnostic instead of letting the compiler fail deep in backend code.
 
 ```c
 #include <hal/hal_wifi.h>

@@ -97,7 +97,7 @@ static void smoke_table_worker(void *arg) {
 
 void app_start(void) {
   debugInit();
-  hal_gpio_set_mode(LED_BUILTIN, HAL_GPIO_OUTPUT);
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);
 
   s_smoke_mutex = hal_mutex_create();
   if (s_smoke_mutex == NULL) {
@@ -148,7 +148,7 @@ void app_task0(void) {
     xSemaphoreGive(s_table_mutex);
   }
 
-  hal_gpio_write(LED_BUILTIN, ((table_sum + task1_ticks) & 1u) != 0u);
+  hal_gpio_write(HAL_LED_BUILTIN, ((table_sum + task1_ticks) & 1u) != 0u);
   hal_debug_loop();
   hal_idle();
   hal_delay_ms(100);

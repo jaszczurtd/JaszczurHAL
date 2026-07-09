@@ -7,6 +7,7 @@ cmake_minimum_required(VERSION 3.20)
 # target via cmake.cache:
 #     JH_TARGET       = rp2040 | stm32g474        (default: rp2040)
 #     JH_PROJECT_DIR  = <the project's source dir> (required)
+#     JH_MODULE_NAME  = firmware/sketch name      (optional; default: dir name)
 # plus target-specific cache (ARDUINO_FQBN for rp2040; CMAKE_TOOLCHAIN_FILE for
 # stm32g474) and any project DEFINES/options.
 #
@@ -22,6 +23,8 @@ project(jh_firmware NONE)
 
 set(JH_TARGET "rp2040" CACHE STRING "Target backend: rp2040 | stm32g474")
 set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
+set(JH_MODULE_NAME "" CACHE STRING "Client firmware module/sketch name")
+set(JH_PROJECT_SOURCES "" CACHE STRING "Optional ';'-separated project sources; relative paths resolve from JH_PROJECT_DIR")
 
 # Repo root: this file is <JH_ROOT>/cmake/jh_firmware_project/CMakeLists.txt
 get_filename_component(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
@@ -36,9 +39,36 @@ get_filename_component(JH_PROJECT_DIR "${JH_PROJECT_DIR}" ABSOLUTE)
 if(NOT IS_DIRECTORY "${JH_PROJECT_DIR}")
     message(FATAL_ERROR "JH_PROJECT_DIR not found: ${JH_PROJECT_DIR}")
 endif()
-get_filename_component(JH_MODULE_NAME "${JH_PROJECT_DIR}" NAME)
+if(NOT JH_MODULE_NAME)
+    get_filename_component(JH_MODULE_NAME "${JH_PROJECT_DIR}" NAME)
+endif()
 
 message(STATUS "jh-firmware: target=${JH_TARGET} module=${JH_MODULE_NAME}")
+
+function(jh_resolve_project_sources OUT_VAR)
+    set(_sources "")
+    if(JH_PROJECT_SOURCES)
+        foreach(_src IN LISTS JH_PROJECT_SOURCES)
+            if(IS_ABSOLUTE "${_src}")
+                set(_src_abs "${_src}")
+            else()
+                get_filename_component(_src_abs "${JH_PROJECT_DIR}/${_src}" ABSOLUTE)
+            endif()
+            if(NOT EXISTS "${_src_abs}")
+                message(FATAL_ERROR "JH_PROJECT_SOURCES entry not found: ${_src_abs}")
+            endif()
+            list(APPEND _sources "${_src_abs}")
+        endforeach()
+    else()
+        file(GLOB _sources CONFIGURE_DEPENDS
+            "${JH_PROJECT_DIR}/*.c"
+            "${JH_PROJECT_DIR}/*.cpp"
+            "${JH_PROJECT_DIR}/*.h"
+            "${JH_PROJECT_DIR}/*.hpp"
+        )
+    endif()
+    set(${OUT_VAR} ${_sources} PARENT_SCOPE)
+endfunction()
 
 if(JH_TARGET STREQUAL "stm32g474")
     enable_language(C CXX ASM)

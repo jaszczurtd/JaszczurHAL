@@ -1,6 +1,6 @@
 # STM32G474 Porting Progress
 
-Last updated: 2026-06-23 (audit aligned with current repo state)
+Last updated: 2026-07-09 (audit aligned with current repo state)
 
 ## Goal
 Provide and harden a non-Arduino `STM32G474` target for JaszczurHAL so the
@@ -93,13 +93,21 @@ Other modules remain opt-in through project config or `EXTRA_HAL_DEFINES`.
   paths compile) once the Arm toolchain is installed:
   - `./scripts/build_stm32_lib.sh --clean`
 - **Examples build system** - STM32G474-targeted examples compile to
-  ELF/BIN/HEX without errors using the unified CMake build:
+  ELF/BIN/HEX without errors through dispatcher-backed VS Code manifests:
   ```bash
-  cmake -S examples -B build_examples_stm32 \
-        -DJH_EXAMPLE_TARGET=stm32g474 \
-        -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
-  cmake --build build_examples_stm32
+  scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
   ```
+- **VS Code firmware dispatcher** - generated or migrated projects can build
+  STM32G474 firmware through the shared dispatcher:
+  ```bash
+  libraries/JaszczurHAL/vscode/entry/jh-vscode build \
+    --project /path/to/project \
+    --target stm32g474 \
+    --board nucleo-g474re
+  ```
+  The target registry supplies the STM32 toolchain file and OpenOCD upload
+  strategy; project manifests point `cmake.sourceDir` at
+  `cmake/jh_firmware_project` and pass `JH_PROJECT_DIR`.
 
 ## How to build for the real STM32G474
 After installing the Arm toolchain:
@@ -114,6 +122,17 @@ Optionally:
 ./scripts/build_stm32_lib.sh --clean \
   -p /path/to/project \
   -D HAL_DISABLE_ASSERTS
+```
+
+For application firmware, prefer the shared VS Code/dispatcher path above over
+copying `stm32_lib/CMakeLists.txt` into a project. New projects can be generated
+directly for STM32G474:
+
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output /path/to/project \
+  --target stm32g474 \
+  --board nucleo-g474re
 ```
 
 ## Real backends delivered (beyond the skeleton)

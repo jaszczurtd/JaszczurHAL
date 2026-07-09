@@ -20,6 +20,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
+include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
@@ -29,10 +30,7 @@ set(OPENOCD_BIN "openocd" CACHE STRING "OpenOCD executable")
 set(OPENOCD_INTERFACE "interface/stlink.cfg" CACHE STRING "OpenOCD interface script")
 set(OPENOCD_TARGET "target/stm32g4x.cfg" CACHE STRING "OpenOCD target script")
 
-file(GLOB _sources CONFIGURE_DEPENDS
-    "${JH_PROJECT_DIR}/*.c"
-    "${JH_PROJECT_DIR}/*.cpp"
-)
+jh_resolve_project_sources(_sources)
 
 # Extra flat libraries (the STM32 counterpart of the RP2040 recipe's
 # --libraries): each dir's C/C++ sources are compiled and its root is added to
@@ -51,6 +49,26 @@ foreach(_lib IN LISTS JH_EXTRA_LIBRARIES)
 endforeach()
 
 set(_defines HAL_PROVIDE_APP_ENTRY=1 ${JH_EXTRA_DEFINES})
+function(_jh_extract_define_value OUT_VAR KEY)
+    set(_value "")
+    foreach(_def IN LISTS ARGN)
+        if("${_def}" MATCHES "^${KEY}=(.+)$")
+            set(_value "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
+endfunction()
+
+_jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_defines})
+_jh_extract_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_defines})
+jh_cmake_defines_contain(_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_defines})
+if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
+    list(APPEND _defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
+    set(_stm32_littlefs_size "65536")
+endif()
+if(NOT "${_stm32_littlefs_size}" STREQUAL "")
+    string(REGEX REPLACE "[uUlL]+$" "" _stm32_littlefs_size "${_stm32_littlefs_size}")
+endif()
 
 # Fiesta-convention projects: bridge initialization/looper -> app_* via the
 # shared generated adapter. Canonical-entry projects define app_start directly.
@@ -68,6 +86,21 @@ jh_add_stm32g474_firmware(firmware
     INCLUDES "${JH_PROJECT_DIR}" ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
 )
+
+if(NOT "${_stm32_main_stack_size}" STREQUAL "")
+    target_link_options(firmware PRIVATE
+        "-Wl,--defsym=HAL_STM32_MIN_STACK_SIZE=${_stm32_main_stack_size}"
+    )
+endif()
+if(NOT "${_stm32_littlefs_size}" STREQUAL "")
+    target_link_options(firmware PRIVATE
+        "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_stm32_littlefs_size}"
+    )
+endif()
+jh_cmake_defines_contain(_stm32_has_freertos HAL_ENABLE_FREERTOS ${_defines})
+if(_stm32_has_freertos)
+    jh_stm32g474_enable_freertos(firmware)
+endif()
 
 add_custom_target(firmware_debug DEPENDS firmware)
 add_custom_target(firmware_compile_db COMMAND "${CMAKE_COMMAND}" -E true)

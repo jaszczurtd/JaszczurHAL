@@ -272,8 +272,9 @@ jobs:
           test -f build_rp2040/libJaszczurHAL.a
 
   # ── Examples build gate ────────────────────────────────────────────────────
-  # Compile all examples through examples/CMakeLists.txt. That file is the
-  # source of truth for app.c/app.cpp examples and their supported targets.
+  # Compile all examples through dispatcher-backed VS Code manifests. The
+  # manifests are the source of truth for app.c/app.cpp examples, variants, and
+  # supported targets.
   arduino-examples:
     runs-on: ubuntu-latest
     needs: arduino-flag-matrix
@@ -297,14 +298,7 @@ jobs:
             --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
       - name: Compile RP2040 examples
-        run: |
-          cmake -S examples -B build_examples_rp2040 \
-            -DJH_EXAMPLE_TARGET=rp2040
-          cmake --build build_examples_rp2040 --parallel 4
+        run: scripts/examples_dispatcher.py build --target rp2040 --jobs 4
 
       - name: Compile STM32G474 examples
-        run: |
-          cmake -S examples -B build_examples_stm32g474 \
-            -DJH_EXAMPLE_TARGET=stm32g474 \
-            -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
-          cmake --build build_examples_stm32g474 --parallel 4
+        run: scripts/examples_dispatcher.py build --target stm32g474 --jobs 4

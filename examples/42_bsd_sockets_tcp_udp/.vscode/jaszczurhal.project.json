@@ -1,0 +1,63 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "42_bsd_sockets_tcp_server",
+    "example": {
+        "targets": [
+            "rp2040"
+        ],
+        "variants": [
+            {
+                "id": "tcp_client",
+                "module": "42_bsd_sockets_tcp_client",
+                "sources": [
+                    "tcp_client.c",
+                    "bsd_socket_example_common.h"
+                ],
+                "targets": [
+                    "rp2040"
+                ]
+            },
+            {
+                "id": "udp_server",
+                "module": "42_bsd_sockets_udp_server",
+                "sources": [
+                    "udp_server.c",
+                    "bsd_socket_example_common.h"
+                ],
+                "targets": [
+                    "rp2040"
+                ]
+            },
+            {
+                "id": "udp_client",
+                "module": "42_bsd_sockets_udp_client",
+                "sources": [
+                    "udp_client.c",
+                    "bsd_socket_example_common.h"
+                ],
+                "targets": [
+                    "rp2040"
+                ]
+            }
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "picow",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${project}/.build/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "42_bsd_sockets_tcp_server",
+            "JH_PROJECT_SOURCES": "tcp_server.c;bsd_socket_example_common.h"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

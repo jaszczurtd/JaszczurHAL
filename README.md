@@ -164,11 +164,11 @@ There are two common starting points:
 - To explore HAL APIs, portability patterns, and backend coverage, start with
   the checked-in examples. See [examples/README.md](examples/README.md) for the
   full example build guide.
-- To create a new RP2040 firmware project for day-to-day work in VS Code, use
-  the VS Code project generator. It creates a separate project directory with a
-  blink application, project-local HAL configuration, ready-to-run VS Code
-  tasks for build/upload/monitor/IntelliSense refresh, and USB identity set to
-  `Jaszczur Example`.
+- To create a new target-selectable firmware project for day-to-day work in VS
+  Code, use the VS Code project generator. It creates a separate project
+  directory with a blink application, project-local HAL configuration,
+  ready-to-run VS Code tasks for build/upload/monitor/IntelliSense refresh,
+  target/board selection, and USB identity set to `Jaszczur Example`.
 
 From the directory that contains your firmware repositories:
 
@@ -177,13 +177,17 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output your-example-project-name
 cd your-example-project-name
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode select-board --project "$PWD" --interactive
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode list-ports --project "$PWD"
 ```
 
 Open the generated directory `your-example-project-name` in VS Code and run the
-`Project:*` tasks from `.vscode/tasks.json`. For the first flash of a blank board, put the
-board in BOOTSEL mode and run `Project: Upload (UF2 / BOOTSEL)`. After that, normal
-`Project: Upload` uses the verified USB identity.
+`Project:*` tasks from `.vscode/tasks.json`. The generated project starts on
+`rp2040/pico`; pass `--target`/`--board` to the generator or run
+`Project: Select board` later to change the active board. For the first flash of
+a blank RP2040 board, put the board in BOOTSEL mode and run
+`Project: Upload (UF2 / BOOTSEL)`. After that, normal `Project: Upload` uses the
+active target's upload backend and, on serial targets, the verified USB identity.
 
 ## Examples
 
@@ -191,21 +195,22 @@ The `examples/` tree contains a number of small, focused applications that demon
 HAL modules. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h`.
 
-A unified CMake build system compiles all examples for the selected backend:
+Each numbered example is also a dispatcher-backed VS Code firmware project.
+Open any `examples/NN_name/` directory directly in VS Code to get the standard
+JaszczurHAL tasks, including GUI/terminal target selection.
+
+The full example quality gate builds the checked-in manifests through the same
+dispatcher path:
 
 ```bash
 # RP2040 (requires arduino-cli + rp2040 core)
-cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-cmake --build build_examples_rp2040
+scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
 
 # STM32G474 (requires arm-none-eabi-gcc)
-cmake -S examples -B build_examples_stm32 \
-      -DJH_EXAMPLE_TARGET=stm32g474 \
-      -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
-cmake --build build_examples_stm32
+scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 
 # Single example
-cmake --build build_examples_rp2040 --target 01_blink_rp2040
+vscode/entry/jh-vscode build --project examples/01_blink --target rp2040
 ```
 Each example uses the portable entry-point contract (`app_start` /
 `app_task0`, plus optional `app_task1`
@@ -382,10 +387,12 @@ use JaszczurHAL. Projects call the stable entrypoint:
 libraries/JaszczurHAL/vscode/entry/jh-vscode
 ```
 
-The entrypoint resolves project configuration, builds CMake-based RP2040
-firmware, performs identity-verified upload, handles BOOTSEL/UF2 upload,
-starts persistent serial monitors, refreshes IntelliSense, and can clear a
-board's visible USB identity with neutral firmware.
+The entrypoint resolves project configuration, selects the active target/board,
+builds dispatcher-backed CMake firmware for supported targets, performs
+identity-verified serial upload where applicable, handles RP2040 BOOTSEL/UF2
+upload, delegates STM32 flashing to OpenOCD, starts persistent serial monitors,
+refreshes IntelliSense, and can clear a board's visible USB identity with
+neutral firmware.
 
 For a new standalone project, generate a small working project outside this
 repository:
@@ -395,16 +402,22 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --output your-example-project-name
 ```
 
+Use `--target` and `--board` to choose a non-default initial board, for example
+`--target stm32g474 --board nucleo-g474re`. Otherwise the project starts at
+`rp2040/pico` and can be changed later with `Project: Select board`.
+
 Then open that generated directory in VS Code. The generated `.vscode/tasks.json`
 uses the same task labels as migrated projects:
 
-- `Project: Build`
-- `Project: Upload`
-- `Project: Serial Monitor`
-- `Project: Upload (UF2 / BOOTSEL)`
-- `Project: Debug Probe Monitor`
-- `Project: Refresh IntelliSense`
-- `Project: Clean`
+- Ctrl+Shift+1  Project: Build
+- Ctrl+Shift+2  Project: Upload
+- Ctrl+Shift+3  Project: Serial Monitor
+- Ctrl+Shift+4  Project: Upload (UF2 / BOOTSEL)
+- Ctrl+Shift+5  Project: Debug Probe Monitor
+- Ctrl+Shift+6  Project: Refresh IntelliSense
+- Ctrl+Shift+7  Project: Clean
+- Ctrl+Shift+Alt+1  Project: Select board (GUI)
+- Ctrl+Shift+Alt+2  Project: Select board
 
 Important: VS Code does not load project-local
 `.vscode/keybindings.reference.json` automatically. Keyboard shortcuts only work
