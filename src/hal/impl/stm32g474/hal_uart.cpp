@@ -172,26 +172,37 @@ hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
   return NULL;
 }
 
-bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin) {
+hal_status_t hal_uart_set_rx_ex(hal_uart_t h, uint8_t rx_pin) {
   if (!h) {
-    return false;
+    return HAL_EINVAL;
   }
   h->rx_pin = rx_pin;
-  return true;
+  return HAL_OK;
+}
+
+bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin) {
+  return hal_status_to_bool(hal_uart_set_rx_ex(h, rx_pin));
+}
+
+hal_status_t hal_uart_set_tx_ex(hal_uart_t h, uint8_t tx_pin) {
+  if (!h) {
+    return HAL_EINVAL;
+  }
+  h->tx_pin = tx_pin;
+  return HAL_OK;
 }
 
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin) {
-  if (!h) {
-    return false;
-  }
-  h->tx_pin = tx_pin;
-  return true;
+  return hal_status_to_bool(hal_uart_set_tx_ex(h, tx_pin));
 }
 
-void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
+hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config) {
   (void)config;
   if (!h) {
-    return;
+    return HAL_EINVAL;
+  }
+  if (baud == 0u) {
+    return HAL_EINVAL;
   }
   h->head = 0;
   h->tail = 0;
@@ -208,6 +219,11 @@ void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
 #else
   (void)baud;
 #endif
+  return HAL_OK;
+}
+
+void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
+  (void)hal_uart_begin_ex(h, baud, config);
 }
 
 int hal_uart_available(hal_uart_t h) {
@@ -220,19 +236,38 @@ int hal_uart_available(hal_uart_t h) {
   return (h->tail - h->head + HAL_UART_BUF_SIZE) % HAL_UART_BUF_SIZE;
 }
 
-int hal_uart_read(hal_uart_t h) {
-  if (!h || hal_uart_available(h) == 0) {
-    return -1;
+hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
+  if (!out_value) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+  if (!h) {
+    return HAL_EINVAL;
+  }
+  if (hal_uart_available(h) == 0) {
+    return HAL_EAGAIN;
   }
 
-  int val = h->rx_buf[h->head];
+  *out_value = h->rx_buf[h->head];
   h->head = (h->head + 1) % HAL_UART_BUF_SIZE;
-  return val;
+  return HAL_OK;
 }
 
-size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
-  if (!h || !data || len == 0u) {
-    return 0u;
+int hal_uart_read(hal_uart_t h) {
+  uint8_t value = 0u;
+  return hal_status_to_bool(hal_uart_read_ex(h, &value)) ? (int)value : -1;
+}
+
+hal_status_t hal_uart_write_ex(hal_uart_t h, const uint8_t *data, size_t len,
+                               size_t *out_written) {
+  if (out_written) {
+    *out_written = 0u;
+  }
+  if (!h || (len > 0u && !data)) {
+    return HAL_EINVAL;
+  }
+  if (len == 0u) {
+    return HAL_OK;
   }
 #ifdef JH_STM32G474_HW
   const uint32_t base = usart_base(h->port);
@@ -241,9 +276,18 @@ size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
     while (!(USART_ISR(base) & USART_ISR_TXE_F) && to) {
       --to;
     }
+    if (to == 0u) {
+      if (out_written) {
+        *out_written = i;
+      }
+      return HAL_ETIMEOUT;
+    }
     USART_TDR(base) = data[i];
   }
-  return len;
+  if (out_written) {
+    *out_written = len;
+  }
+  return HAL_OK;
 #else
   size_t copy_len = len;
   if (copy_len >= sizeof(h->last_write)) {
@@ -251,20 +295,45 @@ size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
   }
   memcpy(h->last_write, data, copy_len);
   h->last_write[copy_len] = '\0';
-  return copy_len;
+  if (out_written) {
+    *out_written = copy_len;
+  }
+  return (copy_len == len) ? HAL_OK : HAL_EOVERFLOW;
 #endif
 }
 
-size_t hal_uart_println(hal_uart_t h, const char *s) {
+size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
+  size_t written = 0u;
+  (void)hal_uart_write_ex(h, data, len, &written);
+  return written;
+}
+
+hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,
+                                 size_t *out_written) {
+  if (out_written) {
+    *out_written = 0u;
+  }
   if (!h) {
-    return 0u;
+    return HAL_EINVAL;
   }
   const char *text = s ? s : "";
   size_t n = strlen(text);
 #ifdef JH_STM32G474_HW
-  hal_uart_write(h, (const uint8_t *)text, n);
-  hal_uart_write(h, (const uint8_t *)"\r\n", 2u);
-  return n + 2u;
+  size_t text_written = 0u;
+  hal_status_t status =
+      hal_uart_write_ex(h, (const uint8_t *)text, n, &text_written);
+  if (!hal_status_to_bool(status)) {
+    if (out_written) {
+      *out_written = text_written;
+    }
+    return status;
+  }
+  size_t newline_written = 0u;
+  status = hal_uart_write_ex(h, (const uint8_t *)"\r\n", 2u, &newline_written);
+  if (out_written) {
+    *out_written = text_written + newline_written;
+  }
+  return status;
 #else
   size_t total = n + 2u;
   if (total >= sizeof(h->last_write)) {
@@ -277,22 +346,44 @@ size_t hal_uart_println(hal_uart_t h, const char *s) {
   if (copy_text + 2u < sizeof(h->last_write))
     h->last_write[copy_text + 1u] = '\n';
   h->last_write[total] = '\0';
-  return total;
+  if (out_written) {
+    *out_written = total;
+  }
+  return (total == n + 2u) ? HAL_OK : HAL_EOVERFLOW;
 #endif
 }
 
-void hal_uart_flush(hal_uart_t h) { (void)h; }
+size_t hal_uart_println(hal_uart_t h, const char *s) {
+  size_t written = 0u;
+  (void)hal_uart_println_ex(h, s, &written);
+  return written;
+}
 
-bool hal_uart_get_error_counters(hal_uart_t h,
-                                 hal_uart_error_counters_t *counters) {
+hal_status_t hal_uart_flush_ex(hal_uart_t h) {
+  if (!h) {
+    return HAL_EINVAL;
+  }
+  return HAL_OK;
+}
+
+void hal_uart_flush(hal_uart_t h) { (void)hal_uart_flush_ex(h); }
+
+hal_status_t
+hal_uart_get_error_counters_ex(hal_uart_t h,
+                               hal_uart_error_counters_t *counters) {
   if (!h || !counters) {
-    return false;
+    return HAL_EINVAL;
   }
 #ifdef JH_STM32G474_HW
   (void)hal_uart_available(h);
 #endif
   *counters = h->errors;
-  return true;
+  return HAL_OK;
+}
+
+bool hal_uart_get_error_counters(hal_uart_t h,
+                                 hal_uart_error_counters_t *counters) {
+  return hal_status_to_bool(hal_uart_get_error_counters_ex(h, counters));
 }
 
 void hal_uart_destroy(hal_uart_t h) {

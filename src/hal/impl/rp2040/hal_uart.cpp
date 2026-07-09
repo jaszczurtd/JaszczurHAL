@@ -422,44 +422,55 @@ hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
   return NULL;
 }
 
-bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin) {
+hal_status_t hal_uart_set_rx_ex(hal_uart_t h, uint8_t rx_pin) {
   if (!h || !h->uart || !h->mutex || !uart_rx_pin_valid(h->uart, rx_pin)) {
-    return false;
+    return HAL_EINVAL;
   }
   uart_lock(h);
   if (h->running && h->rx_pin != rx_pin) {
     uart_unlock(h);
-    return false;
+    return HAL_ESTATE;
   }
   h->rx_pin = rx_pin;
   uart_unlock(h);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin) {
+bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin) {
+  return hal_status_to_bool(hal_uart_set_rx_ex(h, rx_pin));
+}
+
+hal_status_t hal_uart_set_tx_ex(hal_uart_t h, uint8_t tx_pin) {
   if (!h || !h->uart || !h->mutex || !uart_tx_pin_valid(h->uart, tx_pin)) {
-    return false;
+    return HAL_EINVAL;
   }
   uart_lock(h);
   if (h->running && h->tx_pin != tx_pin) {
     uart_unlock(h);
-    return false;
+    return HAL_ESTATE;
   }
   h->tx_pin = tx_pin;
   uart_unlock(h);
-  return true;
+  return HAL_OK;
 }
 
-void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
+bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin) {
+  return hal_status_to_bool(hal_uart_set_tx_ex(h, tx_pin));
+}
+
+hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config) {
   if (!h || !h->uart || !h->mutex) {
-    return;
+    return HAL_EINVAL;
+  }
+  if (baud == 0u) {
+    return HAL_EINVAL;
   }
   uart_lock(h);
   if (!uart_rx_pin_valid(h->uart, h->rx_pin) ||
       !uart_tx_pin_valid(h->uart, h->tx_pin)) {
     HAL_ASSERT(0, "hal_uart_begin: invalid RX/TX pin for selected UART port");
     uart_unlock(h);
-    return;
+    return HAL_EINVAL;
   }
 
   if (h->running) {
@@ -488,8 +499,15 @@ void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
   if (!uart_enable_rx_irq(h)) {
     h->running = false;
     uart_deinit(h->uart);
+    uart_unlock(h);
+    return HAL_EBUSY;
   }
   uart_unlock(h);
+  return HAL_OK;
+}
+
+void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
+  (void)hal_uart_begin_ex(h, baud, config);
 }
 
 int hal_uart_available(hal_uart_t h) {
@@ -505,9 +523,16 @@ int hal_uart_available(hal_uart_t h) {
   return available;
 }
 
-int hal_uart_read(hal_uart_t h) {
-  if (!h || !h->uart || !h->mutex || !h->running) {
-    return -1;
+hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
+  if (!out_value) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+  if (!h || !h->uart || !h->mutex) {
+    return HAL_EINVAL;
+  }
+  if (!h->running) {
+    return HAL_EUNINIT;
   }
   uart_lock(h);
   uart_rx_lock(h);
@@ -515,28 +540,62 @@ int hal_uart_read(hal_uart_t h) {
   if (uart_ring_available(h) == 0) {
     uart_rx_unlock(h);
     uart_unlock(h);
-    return -1;
+    return HAL_EAGAIN;
   }
-  const int val = h->rx_buf[h->head];
+  *out_value = h->rx_buf[h->head];
   h->head = (h->head + 1) % HAL_RP2040_UART_BUF_SIZE;
   uart_rx_unlock(h);
   uart_unlock(h);
-  return val;
+  return HAL_OK;
 }
 
-size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
-  if (!h || !h->uart || !h->mutex || !h->running || !data || len == 0u) {
-    return 0u;
+int hal_uart_read(hal_uart_t h) {
+  uint8_t value = 0u;
+  return hal_status_to_bool(hal_uart_read_ex(h, &value)) ? (int)value : -1;
+}
+
+hal_status_t hal_uart_write_ex(hal_uart_t h, const uint8_t *data, size_t len,
+                               size_t *out_written) {
+  if (out_written) {
+    *out_written = 0u;
+  }
+  if (!h || !h->uart || !h->mutex) {
+    return HAL_EINVAL;
+  }
+  if (!h->running) {
+    return HAL_EUNINIT;
+  }
+  if (len > 0u && !data) {
+    return HAL_EINVAL;
+  }
+  if (len == 0u) {
+    return HAL_OK;
   }
   uart_lock(h);
   uart_write_blocking(h->uart, data, len);
   uart_unlock(h);
-  return len;
+  if (out_written) {
+    *out_written = len;
+  }
+  return HAL_OK;
 }
 
-size_t hal_uart_println(hal_uart_t h, const char *s) {
-  if (!h || !h->uart || !h->mutex || !h->running) {
-    return 0u;
+size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len) {
+  size_t written = 0u;
+  (void)hal_uart_write_ex(h, data, len, &written);
+  return written;
+}
+
+hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,
+                                 size_t *out_written) {
+  if (out_written) {
+    *out_written = 0u;
+  }
+  if (!h || !h->uart || !h->mutex) {
+    return HAL_EINVAL;
+  }
+  if (!h->running) {
+    return HAL_EUNINIT;
   }
   const char *text = s ? s : "";
   const size_t text_len = strlen(text);
@@ -546,22 +605,38 @@ size_t hal_uart_println(hal_uart_t h, const char *s) {
   }
   uart_write_blocking(h->uart, (const uint8_t *)"\r\n", 2u);
   uart_unlock(h);
-  return text_len + 2u;
+  if (out_written) {
+    *out_written = text_len + 2u;
+  }
+  return HAL_OK;
 }
 
-void hal_uart_flush(hal_uart_t h) {
-  if (!h || !h->uart || !h->mutex || !h->running) {
-    return;
+size_t hal_uart_println(hal_uart_t h, const char *s) {
+  size_t written = 0u;
+  (void)hal_uart_println_ex(h, s, &written);
+  return written;
+}
+
+hal_status_t hal_uart_flush_ex(hal_uart_t h) {
+  if (!h || !h->uart || !h->mutex) {
+    return HAL_EINVAL;
+  }
+  if (!h->running) {
+    return HAL_EUNINIT;
   }
   uart_lock(h);
   uart_tx_wait_blocking(h->uart);
   uart_unlock(h);
+  return HAL_OK;
 }
 
-bool hal_uart_get_error_counters(hal_uart_t h,
-                                 hal_uart_error_counters_t *counters) {
+void hal_uart_flush(hal_uart_t h) { (void)hal_uart_flush_ex(h); }
+
+hal_status_t
+hal_uart_get_error_counters_ex(hal_uart_t h,
+                               hal_uart_error_counters_t *counters) {
   if (!h || !h->mutex || !counters) {
-    return false;
+    return HAL_EINVAL;
   }
 
   uart_lock(h);
@@ -570,7 +645,12 @@ bool hal_uart_get_error_counters(hal_uart_t h,
   *counters = h->errors;
   uart_rx_unlock(h);
   uart_unlock(h);
-  return true;
+  return HAL_OK;
+}
+
+bool hal_uart_get_error_counters(hal_uart_t h,
+                                 hal_uart_error_counters_t *counters) {
+  return hal_status_to_bool(hal_uart_get_error_counters_ex(h, counters));
 }
 
 void hal_uart_destroy(hal_uart_t h) {

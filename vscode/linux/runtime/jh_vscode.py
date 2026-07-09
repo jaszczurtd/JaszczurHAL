@@ -2520,6 +2520,22 @@ def get_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
     return build_dir
 
 
+def find_compile_database(*base_dirs: Path) -> Path | None:
+    seen: set[Path] = set()
+    for base_dir in base_dirs:
+        for candidate in (
+            base_dir / "arduino" / "compile_commands.json",
+            base_dir / "compile_commands.json",
+        ):
+            key = candidate.resolve(strict=False)
+            if key in seen:
+                continue
+            seen.add(key)
+            if candidate.is_file():
+                return candidate
+    return None
+
+
 @contextmanager
 def build_lock(config: dict[str, Any], project_dir: Path):
     build_dir = get_build_dir(config, project_dir)
@@ -2544,12 +2560,18 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
             return EXIT_BUILD
 
         build_dir = get_build_dir(config, project_dir)
-        raw_compile_db = build_dir / "arduino" / "compile_commands.json"
-        if not raw_compile_db.is_file():
-            raw_compile_db = build_dir / "compile_commands.json"
+        cmake_build_dir = get_cmake_build_dir(config, project_dir)
+        raw_compile_db = find_compile_database(cmake_build_dir, build_dir)
         patched_compile_db = build_dir / "compile_commands_patched.json"
-        if not raw_compile_db.is_file():
-            print(f"error: compile database was not generated: {raw_compile_db}", file=sys.stderr)
+        if raw_compile_db is None:
+            print(
+                "error: compile database was not generated; checked: "
+                f"{cmake_build_dir / 'arduino' / 'compile_commands.json'}, "
+                f"{cmake_build_dir / 'compile_commands.json'}, "
+                f"{build_dir / 'arduino' / 'compile_commands.json'}, "
+                f"{build_dir / 'compile_commands.json'}",
+                file=sys.stderr,
+            )
             return EXIT_BUILD
 
         try:
@@ -2598,10 +2620,15 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
         return EXIT_BUILD
 
     build_dir = get_build_dir(config, project_dir)
-    raw_compile_db = build_dir / "compile_commands.json"
+    raw_compile_db = find_compile_database(build_dir)
     patched_compile_db = build_dir / "compile_commands_patched.json"
-    if not raw_compile_db.is_file():
-        print(f"error: compile database was not generated: {raw_compile_db}", file=sys.stderr)
+    if raw_compile_db is None:
+        print(
+            "error: compile database was not generated; checked: "
+            f"{build_dir / 'arduino' / 'compile_commands.json'}, "
+            f"{build_dir / 'compile_commands.json'}",
+            file=sys.stderr,
+        )
         return EXIT_BUILD
 
     try:

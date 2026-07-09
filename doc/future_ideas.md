@@ -5,6 +5,12 @@ Simple backlog of future architecture and implementation work.
 - High priority: shared network architecture for STM32 WiFi modem first.
   - Treat STM32 connectivity as the next major platform-unlock item, not as a
     small target-specific patch.
+  - Reuse lessons and helper patterns from the existing `hal_modem_at`
+    generic AT-command engine and `hal_simcom_a76xx` cellular driver. They
+    already cover UART-backed AT command/response flow, URC dispatch,
+    watchdog-friendly waits, response buffering and modem-family layering.
+    The WiFi work still needs a separate ESP-AT/network contract; do not fork
+    the cellular API shape blindly.
   - Use an offloaded WiFi module first. ESP8266MOD is acceptable for prototype
     work and for proving the architecture, but do not name the architecture
     after ESP8266. ESP8266EX is already marked by Espressif as not recommended
@@ -57,7 +63,12 @@ Simple backlog of future architecture and implementation work.
   - Shared `hal_status_t` exists; add `_ex` functions returning it where useful.
   - Keep current `bool` / `NULL` APIs as compatibility wrappers.
   - Start with statuses that can be reported accurately today.
-  - Improve backend-specific I2C error mapping later.
+  - Some historical `_ex` APIs are not status-returning. Treat
+    `hal_wifi_ping_ex()`, `hal_rgb_led_init_ex()` and
+    `hal_display_init_ssd1306_i2c_ex()` as naming debt/suffix collisions, not
+    as completed `hal_status_t` work.
+  - Improve backend-specific error mapping only where the backend can report
+    it honestly; do not invent precision just to fill enum cases.
   - Progress:
     - DONE: digipot init/set-resistance now expose
       `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` while
@@ -84,20 +95,30 @@ Simple backlog of future architecture and implementation work.
       compatibility wrappers. Mock/RP2040/STM32G474 map invalid buses,
       invalid buffers, uninitialized buses, bus errors and timeouts to
       `hal_status_t` where the backend can report them.
-  - Current quick audit: roughly 100 public HAL operations still deserve
-    `hal_status_t`-returning variants. This excludes pure predicates/getters
-    such as `*_is_connected()`, `*_supported()`, `*_available()` and legacy
-    wrappers that already have `_ex` counterparts.
+    - DONE: UART now exposes status-returning `_ex` variants for pin changes,
+      begin, one-byte read, write, println, flush and error-counter reads while
+      preserving legacy `bool`/`void`/`int`/`size_t` wrappers. Mock/STM32G474
+      report invalid arguments, empty reads and mock capture overflow; RP2040
+      also reports uninitialized UART use and pin changes rejected while the
+      port is running.
+    - DONE: several shared device drivers already use `hal_status_t` APIs and
+      should not be counted as remaining transport/API backlog: simple I/O
+      expanders and helpers (`PCA9654E`, `PCF8574`, `MCP23017`, `HC595`,
+      `MCP3221`, `MCP4725`), `BH1750`, `TSC2007`, `STMPE610` and the PN532
+      transport classes.
+  - Current quick audit should be refreshed before large status-conversion
+    work. Treat the remaining lists below as qualitative priority buckets, not
+    as an exact count.
   - Highest-priority shared transport APIs: SPI/DMA candidates:
     `hal_spi_init()`, `hal_spi_begin_transaction()`,
     `hal_spi_transfer()`, `hal_spi_transfer16()`,
     `hal_spi_transfer_buffer()`, `hal_spi_transfer_txrx()`,
     `hal_spi_write()`, `hal_spi_write_dma()`,
     `hal_spi_write_dma_async_start()` and `hal_spi_write_dma_async_wait()`.
-  - Serial candidates: `hal_uart_set_rx()`, `hal_uart_set_tx()`,
-    `hal_uart_begin()`, `hal_uart_read()`, `hal_uart_flush()`,
-    `hal_uart_get_error_counters()`, plus matching `hal_swserial_*` setup and
-    read/flush paths.
+  - Serial candidates: matching `hal_swserial_*` setup, read, write, println
+    and flush paths. `hal_swserial` is already a shared implementation used by
+    RP2040, STM32G474 and mock builds; this is status/API polish, not a
+    missing-backend task.
   - Storage candidates: `hal_kv_init()`, `hal_kv_set_u32()`,
     `hal_kv_get_u32()`, `hal_kv_set_blob()`, `hal_kv_get_blob()`,
     `hal_kv_delete()`, `hal_kv_gc()`, `hal_kv_commit()`,
@@ -108,8 +129,10 @@ Simple backlog of future architecture and implementation work.
   - Network candidates: `hal_wifi_set_mode()`, `hal_wifi_disconnect()`,
     `hal_wifi_set_hostname()`, `hal_wifi_begin_station()`,
     `hal_wifi_get_local_ip()`, `hal_wifi_get_dns_ip()`,
-    `hal_wifi_get_mac()`, `hal_wifi_ping_ex()`, `hal_wifi_scan_networks()`,
-    `hal_wifi_get_scan_result()`, `hal_net_resolve_ipv4()`,
+    `hal_wifi_get_mac()`, status-returning ping API around the historical
+    `hal_wifi_ping()` / int-returning `hal_wifi_ping_ex()`,
+    `hal_wifi_scan_networks()`, `hal_wifi_get_scan_result()`,
+    `hal_net_resolve_ipv4()`,
     `hal_tcp_socket_connect()`, TCP send/recv/bind/listen/accept paths,
     UDP bind/sendto/recvfrom/begin-packet/write/end-packet paths, MQTT
     connect/publish/subscribe/config paths and WireGuard begin/peer/handshake
@@ -123,7 +146,9 @@ Simple backlog of future architecture and implementation work.
     DS18B20 request/take-latest, external ADC init/read, thermocouple read and
     configuration paths, IR decoder init/control/readout, DMA PWM audio
     start/pause/resume, PGA2311 set/get conversion helpers and RGB LED
-    init/set paths.
+    init/set paths. Be careful with `hal_rgb_led_init_ex()`: it already exists
+    as a pixel-type overload and returns `void`, so a status migration needs a
+    new name or a deliberate compatibility plan.
   - Lower priority: functions that are intentionally predicates, cheap cached
     getters, lifecycle `destroy/deinit/stop` calls, or compatibility wrappers
     over already status-returning APIs.
@@ -212,7 +237,9 @@ Simple backlog of future architecture and implementation work.
 
 - Continue STM32 backend catch-up.
   - Focus on modules that still lack real STM32G474 backends:
-    `mqtt`, `ota`, `swserial`, `udp`, `wifi` and `wireguard`.
+    `mqtt`, `ota`, `udp`, `wifi` and `wireguard`.
+  - `hal_swserial` is no longer a STM32 backend gap; it lives in the shared
+    driver layer over HAL GPIO/time/sync and is used by the STM32 GPS path.
   - Keep module/runtime coverage work ahead of optional polish.
   - Prefer portable HAL-level drivers over Arduino wrappers for any new device
     work.
