@@ -409,15 +409,15 @@ Use `--target` and `--board` to choose a non-default initial board, for example
 Then open that generated directory in VS Code. The generated `.vscode/tasks.json`
 uses the same task labels as migrated projects:
 
-- Ctrl+Shift+1  Project: Build
-- Ctrl+Shift+2  Project: Upload
-- Ctrl+Shift+3  Project: Serial Monitor
-- Ctrl+Shift+4  Project: Upload (UF2 / BOOTSEL)
-- Ctrl+Shift+5  Project: Debug Probe Monitor
-- Ctrl+Shift+6  Project: Refresh IntelliSense
-- Ctrl+Shift+7  Project: Clean
-- Ctrl+Shift+Alt+1  Project: Select board (GUI)
-- Ctrl+Shift+Alt+2  Project: Select board
+- Ctrl+Shift+1:   Project: Build
+- Ctrl+Shift+2:   Project: Upload
+- Ctrl+Shift+3:   Project: Serial Monitor
+- Ctrl+Shift+4:   Project: Upload (UF2 / BOOTSEL)
+- Ctrl+Shift+5:   Project: Debug Probe Monitor
+- Ctrl+Shift+6:   Project: Refresh IntelliSense
+- Ctrl+Shift+7:   Project: Clean
+- Ctrl+Shift+Alt+1:   Project: Select board (GUI)
+- Ctrl+Shift+Alt+2:   Project: Select board
 
 Important: VS Code does not load project-local
 `.vscode/keybindings.reference.json` automatically. Keyboard shortcuts only work

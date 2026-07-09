@@ -11,6 +11,7 @@
  * swapped in application code with minimal changes.
  */
 
+#include "hal_status.h"
 #include "hal_uart_config.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -50,17 +51,26 @@ typedef hal_uart_impl_t *hal_uart_t;
 hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
                            uint8_t tx_pin);
 
+/** @brief Status-returning variant of hal_uart_set_rx(). */
+hal_status_t hal_uart_set_rx_ex(hal_uart_t h, uint8_t rx_pin);
+
 /**
  * @brief Reassign the RX pin.
  * @return true on success.
  */
 bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin);
 
+/** @brief Status-returning variant of hal_uart_set_tx(). */
+hal_status_t hal_uart_set_tx_ex(hal_uart_t h, uint8_t tx_pin);
+
 /**
  * @brief Reassign the TX pin.
  * @return true on success.
  */
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
+
+/** @brief Status-returning variant of hal_uart_begin(). */
+hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config);
 
 /**
  * @brief Start the UART with the given baud rate and frame config.
@@ -71,8 +81,24 @@ void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
 /** @brief Return the number of bytes available in the receive buffer. */
 int hal_uart_available(hal_uart_t h);
 
+/**
+ * @brief Status-returning one-byte read helper.
+ * @param out_value Destination byte. Must not be NULL.
+ * @return HAL_OK when a byte was read, HAL_EAGAIN when no byte is available.
+ */
+hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value);
+
 /** @brief Read one byte (0-255) or return -1 if empty. */
 int hal_uart_read(hal_uart_t h);
+
+/**
+ * @brief Status-returning variant of hal_uart_write().
+ *
+ * @p out_written is optional and receives the number of bytes accepted for
+ * transmission or captured by the backend.
+ */
+hal_status_t hal_uart_write_ex(hal_uart_t h, const uint8_t *data, size_t len,
+                               size_t *out_written);
 
 /**
  * @brief Write raw bytes.
@@ -80,11 +106,27 @@ int hal_uart_read(hal_uart_t h);
  */
 size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len);
 
+/** @brief Status-returning variant of hal_uart_println(). */
+hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,
+                                 size_t *out_written);
+
 /** @brief Print a string followed by a line ending. */
 size_t hal_uart_println(hal_uart_t h, const char *s);
 
+/** @brief Status-returning variant of hal_uart_flush(). */
+hal_status_t hal_uart_flush_ex(hal_uart_t h);
+
 /** @brief Flush the transmit buffer, blocking until all bytes are sent. */
 void hal_uart_flush(hal_uart_t h);
+
+/**
+ * @brief Status-returning variant of hal_uart_get_error_counters().
+ *
+ * Counters are reset by hal_uart_begin().
+ */
+hal_status_t
+hal_uart_get_error_counters_ex(hal_uart_t h,
+                               hal_uart_error_counters_t *counters);
 
 /**
  * @brief Copy cumulative RX error counters.

@@ -38,8 +38,74 @@ void test_uart_captures_written_line(void) {
 void test_uart_reassigns_pins(void) {
   TEST_ASSERT_TRUE(hal_uart_set_rx(s_uart, 9));
   TEST_ASSERT_TRUE(hal_uart_set_tx(s_uart, 8));
-  TEST_ASSERT_EQUAL_UINT8(9u, hal_mock_uart_get_rx_pin(s_uart));
-  TEST_ASSERT_EQUAL_UINT8(8u, hal_mock_uart_get_tx_pin(s_uart));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_set_rx_ex(s_uart, 7));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_set_tx_ex(s_uart, 6));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_set_rx_ex(NULL, 7));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_set_tx_ex(NULL, 6));
+  TEST_ASSERT_EQUAL_UINT8(7u, hal_mock_uart_get_rx_pin(s_uart));
+  TEST_ASSERT_EQUAL_UINT8(6u, hal_mock_uart_get_tx_pin(s_uart));
+}
+
+void test_uart_status_read_reports_byte_empty_and_invalid_args(void) {
+  uint8_t value = 0xEEu;
+  const uint8_t payload[] = {'O', 'K'};
+  hal_mock_uart_push(s_uart, payload, (int)sizeof(payload));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_read_ex(s_uart, &value));
+  TEST_ASSERT_EQUAL_UINT8('O', value);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_read_ex(s_uart, &value));
+  TEST_ASSERT_EQUAL_UINT8('K', value);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_uart_read_ex(s_uart, &value));
+  TEST_ASSERT_EQUAL_UINT8(0u, value);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_read_ex(s_uart, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_read_ex(NULL, &value));
+}
+
+void test_uart_status_write_and_println_report_counts(void) {
+  size_t written = 123u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_uart_write_ex(s_uart, (const uint8_t *)"AB", 2u, &written));
+  TEST_ASSERT_EQUAL_UINT32(2u, written);
+  TEST_ASSERT_EQUAL_STRING("AB", hal_mock_uart_last_write(s_uart));
+
+  written = 123u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_write_ex(s_uart, NULL, 0u, &written));
+  TEST_ASSERT_EQUAL_UINT32(0u, written);
+
+  written = 123u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_write_ex(s_uart, NULL, 1u, &written));
+  TEST_ASSERT_EQUAL_UINT32(0u, written);
+
+  written = 123u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_println_ex(s_uart, "AT", &written));
+  TEST_ASSERT_EQUAL_UINT32(4u, written);
+  TEST_ASSERT_EQUAL_STRING("AT\r\n", hal_mock_uart_last_write(s_uart));
+}
+
+void test_uart_status_begin_flush_and_errors(void) {
+  hal_uart_error_counters_t counters = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_uart_begin_ex(s_uart, 115200, HAL_UART_CFG_8N1));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_begin_ex(NULL, 115200, HAL_UART_CFG_8N1));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_flush_ex(s_uart));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_flush_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_uart_get_error_counters_ex(s_uart, &counters));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_get_error_counters_ex(s_uart, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_uart_get_error_counters_ex(NULL, &counters));
+}
+
+void test_uart_status_write_reports_capture_overflow(void) {
+  uint8_t big[600];
+  memset(big, 'X', sizeof(big));
+  size_t written = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_uart_write_ex(s_uart, big, sizeof(big), &written));
+  TEST_ASSERT_EQUAL_UINT32(511u, written);
 }
 
 /* ── NULL handle safety ─────────────────────────────────────────────────── */
@@ -139,6 +205,10 @@ int main(void) {
   RUN_TEST(test_uart_reads_injected_bytes);
   RUN_TEST(test_uart_captures_written_line);
   RUN_TEST(test_uart_reassigns_pins);
+  RUN_TEST(test_uart_status_read_reports_byte_empty_and_invalid_args);
+  RUN_TEST(test_uart_status_write_and_println_report_counts);
+  RUN_TEST(test_uart_status_begin_flush_and_errors);
+  RUN_TEST(test_uart_status_write_reports_capture_overflow);
   RUN_TEST(test_uart_null_handle_returns_safe_defaults);
   RUN_TEST(test_uart_write_null_data_returns_zero);
   RUN_TEST(test_uart_write_zero_len_returns_zero);
