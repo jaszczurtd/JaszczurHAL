@@ -395,7 +395,15 @@ example next to the other firmware projects. It contains a blink app,
 `hal_project_config.h`, and no project-local firmware `CMakeLists.txt`. The
 manifest points `cmake.sourceDir` at
 `libraries/JaszczurHAL/cmake/jh_firmware_project`; that dispatcher selects the
-active backend from the resolved `target`/`board` and target registry.
+active backend from the resolved `target`/`board` and target registry. The
+complete manifest/source/target/upload model is described in
+[`FwProjectWorkflow.md`](FwProjectWorkflow.md).
+
+The process of adding new files to a project that uses JaszczurHAL is described in
+[`FwProjectWorkflow.md`](FwProjectWorkflow.md#adding-project-source-files). In short,
+flat projects can add `*.c`, `*.cpp`, `*.h`, and `*.hpp` files directly under
+`JH_PROJECT_DIR`; subdirectory layouts should set the complete
+semicolon-separated `JH_PROJECT_SOURCES` list in `.vscode/jaszczurhal.project.json`.
 
 Build-related commands then go through the shared entrypoint:
 

@@ -30,17 +30,33 @@ other manifest tokens are resolved later by the normal jh-vscode expansion.
 
 `select-board` persists only the active `target`/`board` pair in the
 gitignored `.vscode/jaszczurhal.local.json`. It does not rewrite the tracked
-project manifest. At build/upload time, the jh-vscode resolver composes the
-effective configuration as:
+project manifest.
+
+At build/upload time, the active target/board pair is selected first:
+
+```text
+CLI --target/--board
+  -> .vscode/jaszczurhal.local.json
+  -> manifest target/board
+  -> rp2040 + registry defaultBoard
+```
+
+The jh-vscode resolver then composes the effective configuration as:
 
 ```text
 registry family defaults
   -> registry board cache
   -> base .vscode/jaszczurhal.project.json
   -> targetProfiles.<target>
-  -> CLI overrides / local target selection
+  -> final active target/board pinning
 ```
+
+CLI and local selection choose the active pair; they do not rewrite the tracked
+manifest. Per-invocation CLI flags such as `--port` are applied by the action
+after configuration resolution.
 
 The resolver always pins `cmake.cache.JH_TARGET` to the active family. Adding a
 board = one entry in `boards[]`; adding a family = a new `<id>.json` here + a
-`cmake/targets/<id>.cmake` recipe + a HAL backend.
+`cmake/targets/<id>.cmake` recipe + a HAL backend. The full user-facing project
+workflow is documented in
+[`doc/FwProjectWorkflow.md`](../../doc/FwProjectWorkflow.md).
