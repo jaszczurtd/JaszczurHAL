@@ -189,10 +189,12 @@ Simple backlog of future architecture and implementation work.
   - Keep Zephyr CAN as a reference checklist for timing, states, filters,
     error counters and transceiver handling.
 
-- Add an ADP5360 shared I2C PMIC driver.
-  - Put reusable register/protocol logic in `src/hal/impl/shared/`.
-  - Use the existing shared I2C device-driver pattern.
-  - Keep board policy outside the driver.
+- ADP5360 shared I2C PMIC driver.
+  - DONE: added a Zephyr-inspired shared HAL-only ADP5360 driver under
+    `src/hal/impl/shared/drivers/adp5360/`, public `hal_adp5360.h`, host
+    tests, API docs and `examples/54_adp5360_pmic`.
+  - Remaining follow-up: optional INT/PGOOD/reset-status GPIO callback support
+    if an application needs interrupt-driven PMIC events.
 
 - Add optional 10-bit I2C master addressing.
   - The whole public I2C API takes `uint8_t address` (7-bit). A 10-bit
@@ -261,6 +263,38 @@ Simple backlog of future architecture and implementation work.
     objects and shell integration in the first pass.
   - Wrap extracted ideas with JaszczurHAL config structs, HAL I/O primitives,
     mutexes and compatibility wrappers.
+  - Display-driver migration notes:
+    - The most valuable Zephyr display idea is the generic raw write contract:
+      pixel format, buffer descriptor with `pitch`, `width`, `height` and
+      `buf_size`, capabilities reporting and `write(x, y, desc, buf)` style
+      area updates. The first additive JaszczurHAL type layer now exists as
+      `hal_display_pixel_format_t` and `hal_display_buffer_desc_t`; next add
+      capabilities reporting and a status-returning area-write API before
+      importing more panel controllers.
+    - Keep the current JaszczurHAL GFX/text/high-level display API. Treat the
+      Zephyr-style API as a lower-level raw blit/capabilities layer underneath
+      or beside it.
+    - First adapt existing JaszczurHAL display backends (`ILI9341`, `ST7735`,
+      `ST7789`, `ST7796S`, `SSD1306`) to the raw write/capabilities layer.
+      This should preserve existing examples and public wrappers.
+    - Reuse Zephyr's proven handling for `pitch > width` by splitting writes
+      into row-sized transfers, and keep RGB565 byte order explicit.
+    - Extend the SSD1306-family driver next: Zephyr has useful reference
+      support for `SSD1309`, `SSD1315`, `SH1106` and `CH1115`, including
+      command addressing differences, segment/page offsets, orientation,
+      contrast, suspend/resume and I2C/SPI bus splitting.
+    - After the raw API exists, consider new panel families in this order:
+      `GC9A01`, `SSD1331`/`SSD135x`, `ST7567`, then e-paper controllers such
+      as `SSD16xx`/`UC81xx`.
+    - Defer DSI/LTDC/MCUX/QEMU/SDL/Renesas-style Zephyr display backends for
+      now; they do not map cleanly to the current shared RP2040/STM32G474 HAL
+      goals.
+    - Treat ILI9xxx GRAM readback and tearing-effect/vblank handling as later
+      optional work. They need stronger SPI/MIPI-DBI read and callback
+      contracts than the current display layer exposes.
+    - Make display raw APIs status-returning from the start (`hal_status_t`)
+      and guard shared display state with the existing display mutex pattern
+      based on `jh_hal_mutex_create_once`.
 
 - Continue STM32 backend catch-up.
   - Focus on modules that still lack real STM32G474 backends:

@@ -263,6 +263,10 @@
                                   (propagates: ONEWIRE).
        HAL_ENABLE_BH1750        - shared BH1750 ambient-light sensor over
                                   HAL I2C (propagates: I2C).
+       HAL_ENABLE_ADP5360       - shared ADP5360 PMIC over HAL I2C:
+                                  MFD init/reset/shipment, charger,
+                                  fuel-gauge and buck/buck-boost regulator
+                                  control (propagates: I2C).
        HAL_ENABLE_TSC2007       - shared TSC2007 resistive touch controller
                                   over HAL I2C (propagates: I2C).
        HAL_ENABLE_STMPE610      - shared STMPE610 resistive touch controller
@@ -528,6 +532,12 @@
 #endif
 
 #ifdef HAL_ENABLE_BH1750
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
+#ifdef HAL_ENABLE_ADP5360
 #ifndef HAL_ENABLE_I2C
 #define HAL_ENABLE_I2C
 #endif
@@ -934,6 +944,9 @@
 #endif
 #ifdef HAL_ENABLE_BH1750
 #pragma message("HAL_CONFIG: HAL_ENABLE_BH1750")
+#endif
+#ifdef HAL_ENABLE_ADP5360
+#pragma message("HAL_CONFIG: HAL_ENABLE_ADP5360")
 #endif
 #ifdef HAL_ENABLE_MCP3221
 #pragma message("HAL_CONFIG: HAL_ENABLE_MCP3221")

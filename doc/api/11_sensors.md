@@ -256,6 +256,60 @@ mutex.
 
 ---
 
+## `hal_adp5360` - ADP5360 PMIC  *(optional - `HAL_ENABLE_ADP5360`)*
+
+```c
+#include <hal/hal_adp5360.h>
+
+#define HAL_ADP5360_I2C_ADDR_DEFAULT 0x46u
+#define HAL_ADP5360_DEVICE_ID        0x10u
+
+hal_adp5360_config_t hal_adp5360_default_config(void);
+hal_status_t hal_adp5360_init_ex(hal_adp5360_t *dev,
+                                 const hal_adp5360_config_t *cfg);
+bool hal_adp5360_init(hal_adp5360_t *dev, const hal_adp5360_config_t *cfg);
+void hal_adp5360_deinit(hal_adp5360_t *dev);
+
+hal_status_t hal_adp5360_shipment_mode_enable(hal_adp5360_t *dev);
+hal_status_t hal_adp5360_software_reset(hal_adp5360_t *dev);
+hal_status_t hal_adp5360_hardware_reset(hal_adp5360_t *dev);
+
+hal_status_t hal_adp5360_charger_enable(hal_adp5360_t *dev, bool enable);
+hal_status_t hal_adp5360_fuel_gauge_get_soc_pct(hal_adp5360_t *dev,
+                                                uint8_t *out_pct);
+hal_status_t hal_adp5360_fuel_gauge_get_voltage_uv(hal_adp5360_t *dev,
+                                                   uint32_t *out_uv);
+hal_status_t hal_adp5360_regulator_set_voltage(hal_adp5360_t *dev,
+                                               hal_adp5360_regulator_t reg,
+                                               int32_t min_uv,
+                                               int32_t max_uv);
+```
+
+The shared ADP5360 driver is modeled on the working Zephyr ADP5360 MFD,
+charger, fuel-gauge and regulator drivers, but depends only on JaszczurHAL.
+`hal_adp5360_init_ex()` probes device ID `0x10`, programs supervisory reset /
+watchdog options, clears interrupt status registers, and optionally applies the
+charger, fuel-gauge, BUCK and BUCK-BOOST configuration sections from
+`hal_adp5360_config_t`.
+
+Runtime APIs expose the Zephyr-derived behavior as `hal_status_t` calls:
+shipment mode, software/hardware reset, charger online/status/health/current
+controls, fuel-gauge SOC/voltage/capacity/alarm reads and writes, and
+regulator voltage/current/mode/enable/active-discharge control. The low-level
+`hal_adp5360_reg_read/write/burst/update()` helpers are public for board bring
+up and diagnostics.
+
+**impl/shared:** `impl/shared/drivers/adp5360/hal_adp5360.cpp` is used by
+RP2040, STM32G474 and mock tests. It uses HAL I2C/GPIO/time primitives and a
+per-device mutex created with `jh_hal_mutex_create_once()`, so the driver is
+safe to call from multicore/FreeRTOS task contexts when the underlying HAL I2C
+backend is initialized.
+
+Current scope intentionally does not include Zephyr-style GPIO interrupt
+callback registration for ADP5360 INT/PGOOD/reset-status pins.
+
+---
+
 ## `hal_tsc2007` - TSC2007 resistive touch controller  *(optional - `HAL_ENABLE_TSC2007`)*
 
 ```c

@@ -36,6 +36,19 @@ void test_ssd1306_init_ex_rejects_invalid_size(void) {
       hal_display_init_ssd1306_i2c_ex(0, 64, 0, 0x3C, -1, 0x02, false));
 }
 
+void test_display_buffer_descriptor_describes_raw_area(void) {
+  const hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE, 128u, 64u, 32u, 4096u, true};
+
+  TEST_ASSERT_EQUAL_UINT32(HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE,
+                           desc.pixel_format);
+  TEST_ASSERT_EQUAL_UINT16(128u, desc.pitch);
+  TEST_ASSERT_EQUAL_UINT16(64u, desc.width);
+  TEST_ASSERT_EQUAL_UINT16(32u, desc.height);
+  TEST_ASSERT_EQUAL_size_t(4096u, desc.buf_size);
+  TEST_ASSERT_TRUE(desc.frame_incomplete);
+}
+
 void test_draw_image_draws_background_and_bitmap(void) {
   uint16_t data[6] = {1, 2, 3, 4, 5, 6};
 
@@ -255,6 +268,7 @@ int main(void) {
   RUN_TEST(test_ssd1306_init_sets_dimensions);
   RUN_TEST(test_ssd1306_init_ex_sets_dimensions_on_selected_bus);
   RUN_TEST(test_ssd1306_init_ex_rejects_invalid_size);
+  RUN_TEST(test_display_buffer_descriptor_describes_raw_area);
   RUN_TEST(test_draw_image_draws_background_and_bitmap);
   RUN_TEST(test_stream_write_api_tracks_window_and_counts);
   RUN_TEST(test_stream_write_api_rejects_invalid_order_and_odd_bytes);

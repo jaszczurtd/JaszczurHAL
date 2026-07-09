@@ -90,6 +90,7 @@ For the target-selectable VS Code firmware project model, see
 | DHT11/DHT22 | Shared GPIO temperature and humidity sensor driver. | [hal_dht.h](../src/hal/hal_dht.h), [dht driver](../src/hal/impl/shared/drivers/dht/) |
 | 1-Wire bus | Generic shared 1-Wire bus wrapper/driver. | [hal_onewire.h](../src/hal/hal_onewire.h), [onewire driver](../src/hal/impl/shared/drivers/onewire/) |
 | BH1750 | Shared I2C ambient-light sensor driver. | [hal_bh1750.h](../src/hal/hal_bh1750.h), [bh1750 driver](../src/hal/impl/shared/drivers/bh1750/) |
+| ADP5360 PMIC | Shared I2C PMIC driver with charger control, fuel-gauge readings, shipment/reset helpers and buck/buckboost regulator configuration. | [hal_adp5360.h](../src/hal/hal_adp5360.h), [adp5360 driver](../src/hal/impl/shared/drivers/adp5360/) |
 | MCP3221 | Shared I2C 12-bit ADC driver. | [hal_mcp3221.h](../src/hal/hal_mcp3221.h), [simple I/O drivers](../src/hal/impl/shared/drivers/simple_io/) |
 | ADS1X15 / ADS1115 | Shared external ADC driver over I2C. | [hal_external_adc.h](../src/hal/hal_external_adc.h), [ads1x15 driver](../src/hal/impl/shared/drivers/ads1x15/) |
 | TSC2007 touch | Shared I2C resistive touch controller driver. | [hal_tsc2007.h](../src/hal/hal_tsc2007.h), [tsc2007 driver](../src/hal/impl/shared/drivers/tsc2007/) |

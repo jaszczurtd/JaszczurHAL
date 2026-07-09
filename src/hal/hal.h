@@ -166,6 +166,9 @@
 #ifdef HAL_ENABLE_BH1750
 #include "hal_bh1750.h"
 #endif
+#ifdef HAL_ENABLE_ADP5360
+#include "hal_adp5360.h"
+#endif
 #ifdef HAL_ENABLE_TSC2007
 #include "hal_tsc2007.h"
 #endif

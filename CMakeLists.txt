@@ -72,6 +72,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp
     ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
     ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
+    ${SRC}/hal/impl/shared/drivers/adp5360/hal_adp5360.cpp
     ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
@@ -138,6 +139,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
     HAL_ENABLE_DHT            # shared DHT11/DHT22 GPIO temperature/humidity driver
     HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
+    HAL_ENABLE_ADP5360        # shared ADP5360 PMIC over HAL I2C
     HAL_ENABLE_MCP3221        # shared MCP3221 12-bit ADC over HAL I2C
     HAL_ENABLE_MCP23017       # shared MCP23017 GPIO expander over HAL I2C
     HAL_ENABLE_PCA9654E       # shared PCA9654E output expander over HAL I2C

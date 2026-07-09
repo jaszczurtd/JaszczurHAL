@@ -95,6 +95,13 @@ add_executable(test_bh1750_driver
 )
 target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
 add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
+add_executable(test_adp5360_driver
+    test_adp5360_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/adp5360/hal_adp5360.cpp
+)
+target_compile_definitions(test_adp5360_driver PRIVATE HAL_ENABLE_ADP5360)
+target_link_libraries(test_adp5360_driver PRIVATE hal_mock)
+add_test(NAME test_adp5360_driver COMMAND test_adp5360_driver)
 add_hal_test(test_simple_io_drivers)
 add_executable(test_hd44780_driver
     test_hd44780_driver.cpp
