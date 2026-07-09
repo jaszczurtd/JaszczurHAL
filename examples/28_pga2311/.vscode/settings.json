@@ -1,0 +1,22 @@
+{
+    "jaszczurhal.cliPath": "arduino-cli",
+    "jaszczurhal.sketchbookPath": "",
+    "jaszczurhal.buildDir": "${workspaceFolder}/.build",
+    "jaszczurhal.verbose": false,
+    "jaszczurhal.root": "../..",
+    "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
+    "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
+    "C_Cpp.errorSquiggles": "enabled",
+    "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
+    "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
+    "files.associations": {
+        "*.ino": "cpp"
+    },
+    "files.exclude": {
+        "**/.build": true
+    },
+    "search.exclude": {
+        "**/.build": true
+    }
+}

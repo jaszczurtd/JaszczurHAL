@@ -9,7 +9,8 @@
 #
 # Inputs (set by the dispatcher / manifest cache):
 #   JH_ROOT, JH_PROJECT_DIR, JH_MODULE_NAME, ARDUINO_FQBN,
-#   ARDUINO_UPLOAD_PORT, ARDUINO_VERBOSE, JH_USB_MANUFACTURER, JH_USB_PRODUCT
+#   ARDUINO_UPLOAD_PORT, ARDUINO_VERBOSE, JH_USB_MANUFACTURER, JH_USB_PRODUCT,
+#   JH_EXTRA_DEFINES, JH_PROJECT_SOURCES, JH_RP2040_FREERTOS
 # ─────────────────────────────────────────────────────────────────────────────
 
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
@@ -22,10 +23,40 @@ set(ARDUINO_LIBRARIES "" CACHE PATH "Extra Arduino libraries directory (--librar
 set(ARDUINO_WERROR OFF CACHE BOOL "Treat compiler warnings as errors (-Werror)")
 set(JH_USB_MANUFACTURER "" CACHE STRING "USB manufacturer descriptor")
 set(JH_USB_PRODUCT "" CACHE STRING "USB product descriptor")
+set(JH_EXTRA_DEFINES "" CACHE STRING "Extra compile definitions for the firmware (';'-separated)")
+set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build with arduino-pico FreeRTOS FQBN option")
+
+function(_jh_rp2040_apply_freertos OUT_VAR FQBN)
+    if(NOT JH_RP2040_FREERTOS)
+        set(${OUT_VAR} "${FQBN}" PARENT_SCOPE)
+        return()
+    endif()
+
+    set(_fqbn "${FQBN}")
+    if("${_fqbn}" MATCHES "(^|[,:])os=")
+        set(${OUT_VAR} "${_fqbn}" PARENT_SCOPE)
+    elseif("${_fqbn}" MATCHES "^[^:]+:[^:]+:[^:]+$")
+        set(${OUT_VAR} "${_fqbn}:os=freertos" PARENT_SCOPE)
+    else()
+        set(${OUT_VAR} "${_fqbn},os=freertos" PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(_jh_extract_define_value OUT_VAR KEY)
+    set(_value "")
+    foreach(_def IN LISTS ARGN)
+        if("${_def}" MATCHES "^${KEY}=(.+)$")
+            set(_value "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
+endfunction()
+
+_jh_rp2040_apply_freertos(ARDUINO_FQBN "${ARDUINO_FQBN}")
 
 set(APP_NAME "${JH_MODULE_NAME}")
 set(SKETCH_DIR "${CMAKE_BINARY_DIR}/sketch/${APP_NAME}")
-set(ARDUINO_BUILD_DIR "${JH_PROJECT_DIR}/.build/arduino")
+set(ARDUINO_BUILD_DIR "${CMAKE_BINARY_DIR}/arduino")
 set(OUT_DIR "${JH_PROJECT_DIR}/.build")
 set(FIRMWARE_ELF "${OUT_DIR}/firmware.elf")
 set(FIRMWARE_BIN "${OUT_DIR}/firmware.bin")
@@ -41,12 +72,7 @@ file(WRITE "${SKETCH_DIR}/${APP_NAME}.ino"
     "#include <JaszczurHAL.h>\n"
 )
 
-file(GLOB _project_files CONFIGURE_DEPENDS
-    "${JH_PROJECT_DIR}/*.c"
-    "${JH_PROJECT_DIR}/*.cpp"
-    "${JH_PROJECT_DIR}/*.h"
-    "${JH_PROJECT_DIR}/*.hpp"
-)
+jh_resolve_project_sources(_project_files)
 foreach(_src IN LISTS _project_files)
     get_filename_component(_file "${_src}" NAME)
     set(_dst "${SKETCH_DIR}/${_file}")
@@ -59,13 +85,25 @@ endforeach()
 # on the library's setup()/loop() -> app_* bridge via HAL_PROVIDE_APP_ENTRY.
 # Canonical-entry projects (e.g. vp37) have no firmware_entry.h and set the flags
 # themselves in hal_project_config.h, so this leaves them byte-for-byte unchanged.
-set(_entry_defs "")
+set(_entry_defs " -DHAL_PROVIDE_APP_ENTRY")
 jh_generate_entry_adapter("${JH_PROJECT_DIR}" "${SKETCH_DIR}" _adapter _core1)
-if(_adapter)
-    set(_entry_defs " -DHAL_PROVIDE_APP_ENTRY")
-    if(_core1)
-        string(APPEND _entry_defs " -DHAL_ENABLE_APP_TASK1")
-    endif()
+if(_adapter AND _core1)
+    string(APPEND _entry_defs " -DHAL_ENABLE_APP_TASK1")
+endif()
+set(_extra_defines ${JH_EXTRA_DEFINES})
+if(JH_RP2040_FREERTOS)
+    list(APPEND _extra_defines HAL_ENABLE_FREERTOS)
+endif()
+_jh_extract_define_value(_rp2040_stack_size HAL_RP2040_STACK_SIZE ${_extra_defines})
+_jh_extract_define_value(_rp2040_core1_stack_size HAL_RP2040_CORE1_STACK_SIZE ${_extra_defines})
+foreach(_def IN LISTS _extra_defines)
+    string(APPEND _entry_defs " -D${_def}")
+endforeach()
+if(NOT "${_rp2040_stack_size}" STREQUAL "")
+    string(APPEND _entry_defs " -DPICO_STACK_SIZE=${_rp2040_stack_size}")
+endif()
+if(NOT "${_rp2040_core1_stack_size}" STREQUAL "")
+    string(APPEND _entry_defs " -DPICO_CORE1_STACK_SIZE=${_rp2040_core1_stack_size}")
 endif()
 if(ARDUINO_WERROR)
     string(APPEND _entry_defs " -Werror")

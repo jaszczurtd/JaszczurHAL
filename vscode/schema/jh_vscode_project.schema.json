@@ -13,6 +13,41 @@
       "type": "string",
       "minLength": 1
     },
+    "example": {
+      "type": "object",
+      "description": "Optional metadata for checked-in example projects. jh-vscode ignores it except for variant selection and friendly unsupported-target diagnostics.",
+      "additionalProperties": true,
+      "properties": {
+        "targets": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "id": { "type": "string" },
+              "module": { "type": "string" },
+              "sources": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "targets": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "extraDefines": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "cmake": { "type": "object", "additionalProperties": true }
+            }
+          }
+        }
+      }
+    },
     "toolchain": {
       "type": "string",
       "enum": ["arduino-cli", "cmake", "custom"]

@@ -31,6 +31,7 @@ doc/zephyr_driver_candidates.md
 !/.vscode/**
 !examples/*/.vscode/
 !examples/*/.vscode/**
+examples/*/.vscode/jaszczurhal.local.json
 .idea/
 .codex
 *.swp

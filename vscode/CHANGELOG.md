@@ -3,6 +3,18 @@
 ## 0.1.0 - Unreleased
 
 - Start the shared VS Code entry layer under `libraries/JaszczurHAL/vscode/`.
+- Add multi-target board selection: target registry descriptors, `target` /
+  `board` / `targetProfiles` manifest fields, `select-board`, and gitignored
+  `.vscode/jaszczurhal.local.json` persistence.
+- Route generated and migrated firmware projects through the shared
+  `cmake/jh_firmware_project` dispatcher instead of per-project Arduino CMake
+  recipes; CMake caches are isolated per target/board.
+- Make `tools/create-vscode-example.py` generate dispatcher-backed projects with
+  `--target` / `--board`, target-neutral tasks, GUI/interactive board selection,
+  and no generated firmware `CMakeLists.txt`.
+- Add STM32/OpenOCD upload handling, RP2040-only `upload-uf2` gating, and
+  friendly axis-2/axis-3 build diagnostics for missing target backends and
+  linker memory overflows.
 - Define the initial `jh-vscode` CLI contract and `--project` semantics.
 - Add a minimal project manifest schema.
 - Add a neutral RP2040 Arduino-Pico firmware sketch for USB identity cleanup.
@@ -25,8 +37,9 @@
 - Add `tools/create-vscode-example.py`, a standalone CMake-first VS Code
   project generator with blink firmware, USB identity, tasks, launch config,
   and IntelliSense refresh wiring.
-- Add Linux CMake target orchestration for projects that generate their Arduino
-  compatibility sketch from project-owned `CMakeLists.txt` files.
+- Add Linux CMake target orchestration for firmware projects; current generated
+  and migrated projects use the shared dispatcher, while early pilot
+  project-owned recipes were folded into that common path.
 - Support `cmake.sourceDir` in project manifests so module workspaces can use a
   shared project-owned CMake entry outside the module directory.
 - Complete the `router-reset/reseter` pilot on real hardware: verified build,

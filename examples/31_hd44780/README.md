@@ -17,6 +17,6 @@ The example uses 4-bit mode and assumes the LCD `RW` pin is tied to GND.
 Build targets:
 
 ```bash
-cmake --build build_examples_rp2040 --target 31_hd44780_rp2040
-cmake --build build_examples_stm32 --target 31_hd44780_stm32g474
+../../vscode/entry/jh-vscode build --project . --target rp2040
+../../vscode/entry/jh-vscode build --project . --target stm32g474
 ```

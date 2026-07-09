@@ -1,7 +1,10 @@
 # Fiesta Parity Checklist
 
-This checklist must be completed before any Fiesta firmware module is switched
-to the shared JaszczurHAL VS Code entry.
+This checklist was completed while switching Fiesta firmware modules to the
+shared JaszczurHAL VS Code entry. The current shared workflow also includes the
+target/board selector (`Project: Select board`, `Project: Select board (GUI)`);
+board selection is stored in gitignored `.vscode/jaszczurhal.local.json`, not in
+tracked Fiesta manifests.
 
 ## Scope
 

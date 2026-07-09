@@ -213,8 +213,8 @@ Target rules:
   `__FREERTOS` is present and emits a clear compile-time error if a normal
   non-FreeRTOS Arduino-pico build defines `HAL_ENABLE_FREERTOS`. For the
   static library, use `./scripts/build_rp2040_lib.sh --freertos`; for
-  examples, use
-  `-DJH_RP2040_FREERTOS=ON` or the `rp2040-freertos` preset. The
+  examples, build `examples/29_freertos_smoke`, whose dispatcher manifest sets
+  the RP2040 FreeRTOS FQBN option. The
   `29_freertos_smoke` example verifies that `<FreeRTOS.h>` and `<task.h>` are
   available to application code and exercises portable `app_task0()` /
   `app_task1()` dispatch, native `xTaskCreate()` worker tasks, a
@@ -264,8 +264,12 @@ I2C-slave callback path. Timer callback context, Arduino-origin wrapper
 internals, and remaining per-module exceptions are summarized in
 [Thread-SafetyAudit.md](Thread-SafetyAudit.md).
 
-Arduino CLI does not add the sketch directory to the include path for library
-source files, so the build command must add it explicitly:
+The supported VS Code project flow (`create-vscode-example.py` plus
+`jh-vscode`) adds the project include path automatically through the shared
+dispatcher. The raw `arduino-cli` commands below are for manual or legacy
+Arduino builds. In that mode, Arduino CLI does not add the sketch directory to
+the include path for library source files, so the build command must add it
+explicitly:
 
 ```bash
 arduino-cli compile \
@@ -276,7 +280,9 @@ arduino-cli compile \
   --warnings all .
 ```
 
-In VS Code tasks, use `${workspaceFolder}` for the path.
+In hand-written VS Code tasks for legacy Arduino projects, use
+`${workspaceFolder}` for the path. New generated projects should keep using the
+`Project: Build` / `Project: Select board` tasks emitted by `jh-vscode`.
 
 ### Alternative: `-D` flags on the command line
 

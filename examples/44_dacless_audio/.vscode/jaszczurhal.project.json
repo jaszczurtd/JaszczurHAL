@@ -1,0 +1,42 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "44_dacless_audio",
+    "example": {
+        "targets": [
+            "rp2040",
+            "stm32g474"
+        ],
+        "variants": [
+            {
+                "id": "polling",
+                "module": "44_dacless_audio_polling",
+                "extraDefines": [
+                    "HAL_ENABLE_DACLESS",
+                    "DACLESS_EXAMPLE_USE_DMA=0"
+                ],
+                "targets": [
+                    "rp2040",
+                    "stm32g474"
+                ]
+            }
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${project}/.build",
+    "cmakeBuildDir": "${project}/.build/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "44_dacless_audio"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

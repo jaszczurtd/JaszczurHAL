@@ -12,7 +12,7 @@
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
 #   6. Target static-library builds (STM32 + RP2040 flag matrix)
-#   7. Examples build (RP2040 + STM32G474, via examples/CMakeLists.txt)
+#   7. Examples build (RP2040 + STM32G474, via dispatcher-backed manifests)
 #
 # Usage:
 #   ./runalltests.sh          # run everything
@@ -384,28 +384,14 @@ pass "RP2040 flag matrix built successfully."
 # ═══════════════════════════════════════════════════════════════════════════════
 header "Gate 7/7: Examples build (RP2040 + STM32G474)"
 
-BUILD_EXAMPLES_RP2040="${SCRIPT_DIR}/build_examples_rp2040"
-BUILD_EXAMPLES_STM32="${SCRIPT_DIR}/build_examples_stm32g474"
-rm -rf "${BUILD_EXAMPLES_RP2040}" "${BUILD_EXAMPLES_STM32}"
-
-info "Configuring RP2040 examples..."
-run_logged /tmp/jh_examples_rp2040_configure.log \
-    cmake -S examples -B "${BUILD_EXAMPLES_RP2040}" -DJH_EXAMPLE_TARGET=rp2040
-
-info "Building RP2040 examples supported by examples/CMakeLists.txt..."
+info "Building RP2040 examples through dispatcher-backed VS Code manifests..."
 run_logged /tmp/jh_examples_rp2040_build.log \
-    cmake --build "${BUILD_EXAMPLES_RP2040}" --parallel "${JOBS}"
+    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build --target rp2040 --jobs "${JOBS}"
 pass "RP2040 examples built successfully."
 
-info "Configuring STM32G474 examples..."
-run_logged /tmp/jh_examples_stm32g474_configure.log \
-    cmake -S examples -B "${BUILD_EXAMPLES_STM32}" \
-        -DJH_EXAMPLE_TARGET=stm32g474 \
-        -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake"
-
-info "Building STM32G474 examples supported by examples/CMakeLists.txt..."
+info "Building STM32G474 examples through dispatcher-backed VS Code manifests..."
 run_logged /tmp/jh_examples_stm32g474_build.log \
-    cmake --build "${BUILD_EXAMPLES_STM32}" --parallel "${JOBS}"
+    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build --target stm32g474 --jobs "${JOBS}"
 pass "STM32G474 examples built successfully."
 
 # ═══════════════════════════════════════════════════════════════════════════════

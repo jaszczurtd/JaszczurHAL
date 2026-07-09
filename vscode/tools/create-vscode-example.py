@@ -13,7 +13,7 @@ from pathlib import Path
 
 DEFAULT_PROJECT_NAME = "jaszczurhal-vscode-example"
 DEFAULT_MODULE = "example"
-DEFAULT_FQBN = "rp2040:rp2040:rpipico"
+DEFAULT_TARGET = "rp2040"
 DEFAULT_USB_MANUFACTURER = "Jaszczur"
 DEFAULT_USB_PRODUCT = "Example Project"
 
@@ -21,7 +21,6 @@ DEFAULT_USB_PRODUCT = "Example Project"
 GENERATED_FILES = (
     ".gitignore",
     "README.md",
-    "CMakeLists.txt",
     "app.cpp",
     "hal_project_config.h",
     ".vscode/jaszczurhal.project.json",
@@ -61,6 +60,66 @@ def json_text(data: dict) -> str:
     return json.dumps(data, indent=4, sort_keys=False) + "\n"
 
 
+def load_target_registry(jh_root: Path) -> dict[str, dict]:
+    registry_dir = jh_root / "vscode" / "targets"
+    registry: dict[str, dict] = {}
+    for path in sorted(registry_dir.glob("*.json")):
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise RuntimeError(f"target descriptor must be a JSON object: {path}")
+        target_id = str(data.get("id") or path.stem)
+        registry[target_id] = data
+    return registry
+
+
+def resolve_target_board(registry: dict[str, dict], target: str, board: str | None) -> tuple[str, str]:
+    if target not in registry:
+        known = ", ".join(sorted(registry)) or "(none)"
+        raise RuntimeError(f"unknown target '{target}'. Known targets: {known}")
+
+    desc = registry[target]
+    boards = [item for item in (desc.get("boards") or []) if isinstance(item, dict)]
+    board_ids = [str(item.get("id")) for item in boards if item.get("id")]
+    selected = board or desc.get("defaultBoard")
+    if not selected:
+        raise RuntimeError(f"target '{target}' does not define a default board; pass --board")
+    selected = str(selected)
+    if board_ids and selected not in board_ids:
+        raise RuntimeError(
+            f"unknown board '{selected}' for target '{target}'. Known boards: {', '.join(board_ids)}"
+        )
+    return target, selected
+
+
+def board_selection_label(target: str, board: str, desc: dict, board_desc: dict) -> str:
+    label = f"{target}:{board} - {board_desc.get('displayName', board)}"
+    if desc.get("status") == "skeleton":
+        label += " (skeleton)"
+    return label
+
+
+def board_selection_values(registry: dict[str, dict], selected_target: str, selected_board: str) -> tuple[str, str]:
+    options: list[str] = []
+    default = ""
+    sorted_targets = sorted(registry.items(), key=lambda item: (item[1].get("status") == "skeleton", item[0]))
+    for target, desc in sorted_targets:
+        boards = [item for item in (desc.get("boards") or []) if isinstance(item, dict)]
+        for board_desc in boards:
+            board = board_desc.get("id")
+            if not board:
+                continue
+            board = str(board)
+            label = board_selection_label(target, board, desc, board_desc)
+            options.append(label)
+            if target == selected_target and board == selected_board:
+                default = label
+    if not options:
+        raise RuntimeError("target registry has no selectable boards")
+    if not default:
+        default = options[0]
+    return json.dumps(options, indent=16), json.dumps(default)
+
+
 def ensure_writable_output(output_dir: Path, force: bool) -> None:
     if not output_dir.exists():
         return
@@ -83,7 +142,8 @@ def build_files(
     output_dir: Path,
     project_name: str,
     module: str,
-    fqbn: str,
+    target: str,
+    board: str | None,
     usb_manufacturer: str,
     usb_product: str,
     by_id_hint: str,
@@ -91,22 +151,28 @@ def build_files(
     script_path = Path(__file__).resolve()
     jh_root = script_path.parents[2]
     vscode_dir = output_dir / ".vscode"
+    registry = load_target_registry(jh_root)
+    target, board = resolve_target_board(registry, target, board)
+    board_options_json, board_default_json = board_selection_values(registry, target, board)
     values = {
         "PROJECT_NAME": project_name,
         "MODULE": module,
-        "FQBN": fqbn,
+        "TARGET": target,
+        "BOARD": board,
         "USB_MANUFACTURER": usb_manufacturer,
         "USB_PRODUCT": usb_product,
         "BY_ID_HINT": by_id_hint,
         "JH_ROOT_REL": relpath(output_dir, jh_root),
+        "JH_DISPATCHER_REL": relpath(output_dir, jh_root / "cmake" / "jh_firmware_project"),
         "JH_ENTRY_REL": relpath(output_dir, jh_root / "vscode" / "entry" / "jh-vscode"),
         "SCHEMA_REL": relpath(vscode_dir, jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json"),
+        "BOARD_OPTIONS_JSON": board_options_json,
+        "BOARD_DEFAULT_JSON": board_default_json,
     }
 
     files: dict[str, str] = {
         ".gitignore": GITIGNORE_TEMPLATE,
         "README.md": render_template(README_TEMPLATE, values),
-        "CMakeLists.txt": render_template(CMAKE_TEMPLATE, values),
         "app.cpp": render_template(APP_CPP_TEMPLATE, values),
         "hal_project_config.h": HAL_PROJECT_CONFIG_TEMPLATE,
         ".vscode/jaszczurhal.project.json": json_text(
@@ -115,17 +181,22 @@ def build_files(
                 "project": project_name,
                 "module": module,
                 "toolchain": "cmake",
-                "fqbn": fqbn,
+                "target": target,
+                "board": board,
                 "buildDir": "${project}/.build",
                 "cmakeBuildDir": "${project}/.build/cmake",
+                "cmake": {
+                    "sourceDir": f"${{project}}/{values['JH_DISPATCHER_REL']}",
+                    "cache": {
+                        "JH_PROJECT_DIR": "${project}",
+                        "JH_MODULE_NAME": module,
+                    },
+                },
                 "identity": {
                     "enabled": True,
                     "usbManufacturer": usb_manufacturer,
                     "usbProduct": usb_product,
                     "byIdHint": by_id_hint,
-                },
-                "upload": {
-                    "strategy": "serial",
                 },
                 "artifacts": {
                     "elf": "${buildDir}/firmware.elf",
@@ -144,7 +215,7 @@ def build_files(
                 "jaszczurhal.vscodeEntry": values["JH_ENTRY_REL"],
                 "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
                 "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
-                "cmake.sourceDirectory": "${workspaceFolder}",
+                "cmake.sourceDirectory": f"${{workspaceFolder}}/{values['JH_DISPATCHER_REL']}",
                 "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
             }
         ),
@@ -186,7 +257,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument("--name", default=DEFAULT_PROJECT_NAME, help="Project name stored in the manifest.")
     parser.add_argument("--module", default=DEFAULT_MODULE, help="Firmware module/sketch name, default: example.")
-    parser.add_argument("--fqbn", default=DEFAULT_FQBN, help=f"Arduino FQBN, default: {DEFAULT_FQBN}.")
+    parser.add_argument("--target", default=DEFAULT_TARGET, help=f"Initial target id, default: {DEFAULT_TARGET}.")
+    parser.add_argument("--board", default="", help="Initial board id; defaults to the selected target's default board.")
     parser.add_argument(
         "--usb-manufacturer",
         default=DEFAULT_USB_MANUFACTURER,
@@ -223,7 +295,8 @@ def main(argv: list[str]) -> int:
             output_dir=output_dir,
             project_name=args.name.strip() or DEFAULT_PROJECT_NAME,
             module=module,
-            fqbn=args.fqbn.strip() or DEFAULT_FQBN,
+            target=args.target.strip() or DEFAULT_TARGET,
+            board=args.board.strip() or None,
             usb_manufacturer=args.usb_manufacturer.strip() or DEFAULT_USB_MANUFACTURER,
             usb_product=args.usb_product.strip() or DEFAULT_USB_PRODUCT,
             by_id_hint=by_id_hint,
@@ -242,6 +315,7 @@ def main(argv: list[str]) -> int:
 GITIGNORE_TEMPLATE = """.build/
 build/
 .vscode/.jh-upload-in-progress
+.vscode/jaszczurhal.local.json
 .vscode/c_cpp_properties.json
 compile_commands.json
 compile_commands_patched.json
@@ -259,7 +333,9 @@ Standalone JaszczurHAL VS Code example project generated by
 
 The project demonstrates the current firmware workflow:
 
-- CMake owns sketch generation under `.build/cmake/sketch/@@MODULE@@`.
+- The manifest points CMake at JaszczurHAL's shared firmware dispatcher.
+- Target/board selection starts at `@@TARGET@@:@@BOARD@@` and can be changed
+  without editing tracked files.
 - `jh-vscode` owns build, debug build, upload, UF2 upload, monitor, clean, and IntelliSense refresh.
 - The firmware identity is `@@USB_MANUFACTURER@@ @@USB_PRODUCT@@`.
 - Application code lives in `app.cpp` and uses `app_start` / `app_task0`.
@@ -271,6 +347,17 @@ The project demonstrates the current firmware workflow:
 @@JH_ENTRY_REL@@ build-debug --project "$PWD"
 @@JH_ENTRY_REL@@ refresh-intellisense --project "$PWD"
 ```
+
+## Target / Board
+
+```bash
+@@JH_ENTRY_REL@@ select-board --project "$PWD" --interactive
+@@JH_ENTRY_REL@@ select-board --project "$PWD" --target stm32g474 --board nucleo-g474re
+@@JH_ENTRY_REL@@ config-dump --project "$PWD"
+```
+
+The selection is stored in `.vscode/jaszczurhal.local.json`, which is ignored by
+the generated `.gitignore`.
 
 ## Flashing
 
@@ -287,7 +374,7 @@ example firmware, use:
 @@JH_ENTRY_REL@@ upload --project "$PWD"
 ```
 
-For the first flash of a blank board, either use BOOTSEL:
+For RP2040 first flash of a blank board, either use BOOTSEL:
 
 ```bash
 @@JH_ENTRY_REL@@ upload-uf2 --project "$PWD"
@@ -301,152 +388,6 @@ or make an explicit serial decision:
 
 The explicit-port path is intentionally manual because it can overwrite any
 board connected on that port.
-"""
-
-
-CMAKE_TEMPLATE = """cmake_minimum_required(VERSION 3.20)
-
-project(@@MODULE@@ NONE)
-
-set(APP_NAME "@@MODULE@@")
-set(ARDUINO_CLI "arduino-cli" CACHE STRING "arduino-cli executable")
-set(ARDUINO_FQBN "@@FQBN@@" CACHE STRING "Arduino fully qualified board name")
-set(ARDUINO_SKETCHBOOK "" CACHE PATH "Arduino sketchbook path")
-set(ARDUINO_UPLOAD_PORT "" CACHE STRING "Arduino upload port")
-set(ARDUINO_VERBOSE OFF CACHE BOOL "Enable verbose Arduino CLI output")
-set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/@@JH_ROOT_REL@@" CACHE PATH "JaszczurHAL library root")
-set(JH_USB_MANUFACTURER "" CACHE STRING "USB manufacturer descriptor")
-set(JH_USB_PRODUCT "" CACHE STRING "USB product descriptor")
-
-if(NOT EXISTS "${JH_ROOT}/library.properties")
-    message(FATAL_ERROR "JaszczurHAL not found at JH_ROOT='${JH_ROOT}'")
-endif()
-
-set(SKETCH_DIR "${CMAKE_BINARY_DIR}/sketch/${APP_NAME}")
-set(ARDUINO_BUILD_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.build/arduino")
-set(FIRMWARE_ELF "${CMAKE_CURRENT_SOURCE_DIR}/.build/firmware.elf")
-set(FIRMWARE_BIN "${CMAKE_CURRENT_SOURCE_DIR}/.build/firmware.bin")
-set(FIRMWARE_UF2 "${CMAKE_CURRENT_SOURCE_DIR}/.build/firmware.uf2")
-set(FIRMWARE_MAP "${CMAKE_CURRENT_SOURCE_DIR}/.build/firmware.map")
-
-file(MAKE_DIRECTORY "${SKETCH_DIR}" "${ARDUINO_BUILD_DIR}")
-
-file(WRITE "${SKETCH_DIR}/${APP_NAME}.ino"
-    "// Auto-generated by CMake - do not edit or commit.\\n"
-    "// Real application entry lives in app.cpp via JaszczurHAL app_start/app_task0.\\n"
-    "#include <JaszczurHAL.h>\\n"
-)
-
-file(GLOB JH_EXAMPLE_PROJECT_FILES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.c"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
-    "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
-)
-
-foreach(_src IN LISTS JH_EXAMPLE_PROJECT_FILES)
-    get_filename_component(_file "${_src}" NAME)
-    set(_dst "${SKETCH_DIR}/${_file}")
-    file(REMOVE "${_dst}")
-    file(CREATE_LINK "${_src}" "${_dst}" SYMBOLIC COPY_ON_ERROR)
-endforeach()
-
-set(ARDUINO_LIBRARY_ARGS)
-set(_sketchbook_libraries "")
-set(_jh_in_sketchbook OFF)
-
-if(ARDUINO_SKETCHBOOK)
-    set(_sketchbook_libraries "${ARDUINO_SKETCHBOOK}/libraries")
-    if(EXISTS "${_sketchbook_libraries}")
-        list(APPEND ARDUINO_LIBRARY_ARGS --libraries "${_sketchbook_libraries}")
-        if(EXISTS "${_sketchbook_libraries}/JaszczurHAL/library.properties")
-            file(REAL_PATH "${JH_ROOT}" _jh_root_real)
-            file(REAL_PATH "${_sketchbook_libraries}/JaszczurHAL" _jh_sketchbook_real)
-            if(_jh_root_real STREQUAL _jh_sketchbook_real)
-                set(_jh_in_sketchbook ON)
-            endif()
-        endif()
-    endif()
-endif()
-
-if(NOT _jh_in_sketchbook)
-    list(APPEND ARDUINO_LIBRARY_ARGS --library "${JH_ROOT}")
-endif()
-
-set(ARDUINO_COMMON_ARGS
-    compile
-    --fqbn "${ARDUINO_FQBN}"
-    --build-path "${ARDUINO_BUILD_DIR}"
-    ${ARDUINO_LIBRARY_ARGS}
-    --build-property "compiler.cpp.extra_flags=-I${SKETCH_DIR} -I${CMAKE_CURRENT_SOURCE_DIR}"
-    --build-property "compiler.c.extra_flags=-I${SKETCH_DIR} -I${CMAKE_CURRENT_SOURCE_DIR}"
-    --warnings all
-)
-
-if(JH_USB_MANUFACTURER AND JH_USB_PRODUCT)
-    list(APPEND ARDUINO_COMMON_ARGS
-        --build-property "build.usb_manufacturer=\\"${JH_USB_MANUFACTURER}\\""
-        --build-property "build.usb_product=\\"${JH_USB_PRODUCT}\\""
-    )
-endif()
-
-if(ARDUINO_VERBOSE)
-    list(APPEND ARDUINO_COMMON_ARGS --verbose)
-endif()
-
-function(add_arduino_compile_target target_name)
-    set(options DEBUG UPLOAD COMPILE_DB)
-    cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
-
-    set(_cmd "${ARDUINO_CLI}" ${ARDUINO_COMMON_ARGS})
-
-    if(ARG_DEBUG)
-        list(APPEND _cmd --optimize-for-debug)
-    endif()
-
-    if(ARG_COMPILE_DB)
-        list(APPEND _cmd --only-compilation-database)
-    endif()
-
-    if(ARG_UPLOAD)
-        list(APPEND _cmd --upload)
-        if(ARDUINO_UPLOAD_PORT)
-            list(APPEND _cmd --port "${ARDUINO_UPLOAD_PORT}")
-        endif()
-    endif()
-
-    list(APPEND _cmd "${SKETCH_DIR}")
-
-    add_custom_target("${target_name}"
-        COMMAND ${_cmd}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        USES_TERMINAL
-        VERBATIM
-    )
-
-    if(NOT ARG_COMPILE_DB)
-        add_custom_command(TARGET "${target_name}" POST_BUILD
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.elf" "${FIRMWARE_ELF}"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.bin" "${FIRMWARE_BIN}"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.uf2" "${FIRMWARE_UF2}"
-            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${ARDUINO_BUILD_DIR}/${APP_NAME}.ino.map" "${FIRMWARE_MAP}"
-            VERBATIM
-        )
-    endif()
-endfunction()
-
-add_arduino_compile_target(firmware)
-add_arduino_compile_target(firmware_debug DEBUG)
-add_arduino_compile_target(firmware_upload UPLOAD)
-add_arduino_compile_target(firmware_compile_db COMPILE_DB)
-
-message(STATUS "Arduino FQBN: ${ARDUINO_FQBN}")
-message(STATUS "Generated sketch: ${SKETCH_DIR}")
-message(STATUS "Arduino build dir: ${ARDUINO_BUILD_DIR}")
 """
 
 
@@ -476,12 +417,23 @@ extern "C" void app_task0(void) {
 
 HAL_PROJECT_CONFIG_TEMPLATE = """#pragma once
 
+#ifndef HAL_PROVIDE_APP_ENTRY
 #define HAL_PROVIDE_APP_ENTRY
+#endif
 """
 
 
 TASKS_TEMPLATE = """{
     "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "boardSelection",
+            "description": "Target/board",
+            "type": "pickString",
+            "options": @@BOARD_OPTIONS_JSON@@,
+            "default": @@BOARD_DEFAULT_JSON@@
+        }
+    ],
     "tasks": [
         {
             "label": "Project: Build",
@@ -506,7 +458,7 @@ TASKS_TEMPLATE = """{
         },
         {
             "label": "Project: Upload",
-            "detail": "Identity-verified @@MODULE@@ serial upload",
+            "detail": "Upload @@MODULE@@ through the active target backend",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["upload", "--project", "${workspaceFolder}"],
@@ -514,7 +466,7 @@ TASKS_TEMPLATE = """{
         },
         {
             "label": "Project: Upload (UF2 / BOOTSEL)",
-            "detail": "Build @@MODULE@@ and copy UF2 to the single visible BOOTSEL drive",
+            "detail": "RP2040 only: build @@MODULE@@ and copy UF2 to the single visible BOOTSEL drive",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["upload-uf2", "--project", "${workspaceFolder}"],
@@ -586,6 +538,30 @@ TASKS_TEMPLATE = """{
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["config-dump", "--project", "${workspaceFolder}"],
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board",
+            "detail": "Interactive target/board selection",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["select-board", "--project", "${workspaceFolder}", "--interactive"],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": true,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Select board (GUI)",
+            "detail": "Pick target/board from the VS Code input menu",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
+            "problemMatcher": []
         }
     ]
 }
@@ -651,6 +627,16 @@ KEYBINDINGS_TEMPLATE = """[
         "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
         "args": "Project: Config Dump"
+    },
+    {
+        "key": "ctrl+shift+alt+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Select board (GUI)"
+    },
+    {
+        "key": "ctrl+shift+alt+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Select board"
     }
 ]
 """

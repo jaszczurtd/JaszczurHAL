@@ -11,23 +11,23 @@ The only embedded-specific pieces are WiFi startup and the JaszczurHAL
 
 ## Targets
 
-The examples are built as four separate RP2040/Pico W targets:
+The folder is a dispatcher-backed RP2040/Pico W example project. The default
+`Project: Build` task builds the TCP server. The other socket programs are
+available as example variants:
 
 ```bash
-cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-cmake --build build_examples_rp2040 --target 42_bsd_sockets_tcp_server_rp2040
-cmake --build build_examples_rp2040 --target 42_bsd_sockets_tcp_client_rp2040
-cmake --build build_examples_rp2040 --target 42_bsd_sockets_udp_server_rp2040
-cmake --build build_examples_rp2040 --target 42_bsd_sockets_udp_client_rp2040
+../../vscode/entry/jh-vscode build --project . --target rp2040
+../../vscode/entry/jh-vscode build --project . --target rp2040 --variant tcp_client
+../../vscode/entry/jh-vscode build --project . --target rp2040 --variant udp_server
+../../vscode/entry/jh-vscode build --project . --target rp2040 --variant udp_client
 ```
 
-`examples/CMakeLists.txt` selects the WiFi-capable RP2040 FQBN
-`JH_RP2040_WIFI_FQBN` for all four targets.
+The manifest defaults to `rp2040:picow`, so the registry supplies a WiFi-capable
+Arduino-Pico FQBN for all four builds.
 
 ## Configuration
 
-Edit `hal_project_config.h` before building or pass equivalent `-D` defines
-through `EXTRA_HAL_DEFINES`:
+Edit `hal_project_config.h` before building:
 
 ```c
 #define BSD_EXAMPLE_WIFI_SSID "your-ssid"

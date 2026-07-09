@@ -1,460 +1,53 @@
 cmake_minimum_required(VERSION 3.16)
-project(JaszczurHAL_Examples NONE)
+project(JaszczurHAL_Examples_Dispatcher NONE)
 
-set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
-include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
+# Compatibility wrapper for the checked-in examples.
+#
+# The example projects themselves now live as dispatcher-backed VS Code firmware
+# projects under examples/*/.vscode/jaszczurhal.project.json. This CMake entry
+# remains only so older muscle-memory commands such as:
+#
+#   cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
+#   cmake --build build_examples_rp2040
+#
+# still exercise the same new path instead of the retired examples-local Arduino
+# and STM32 recipes.
 
 set(JH_EXAMPLE_TARGET "rp2040" CACHE STRING "Example backend: rp2040 or stm32g474")
 set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS rp2040 stm32g474)
+set(JH_EXAMPLE_JOBS "1" CACHE STRING "Parallel example project builds used by the dispatcher runner")
 
-set(JH_RP2040_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Default RP2040 Arduino FQBN")
-set(JH_RP2040_WIFI_FQBN "rp2040:rp2040:rpipicow" CACHE STRING "RP2040 WiFi-capable Arduino FQBN")
-set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build RP2040 examples with arduino-pico FreeRTOS SMP mode")
-set(EXTRA_HAL_DEFINES "" CACHE STRING "Semicolon-separated extra HAL compile definitions")
-
-if(DEFINED JH_STM32_FREERTOS)
-    message(FATAL_ERROR
-        "JH_STM32_FREERTOS has been removed as a user-facing switch. "
-        "Use -DEXTRA_HAL_DEFINES=HAL_ENABLE_FREERTOS instead.")
+if(DEFINED JH_STM32_FREERTOS OR DEFINED JH_RP2040_FREERTOS OR DEFINED EXTRA_HAL_DEFINES)
+    message(WARNING
+        "The legacy examples CMake switches JH_STM32_FREERTOS, "
+        "JH_RP2040_FREERTOS and EXTRA_HAL_DEFINES are retired. "
+        "Per-example flags now live in examples/*/.vscode/jaszczurhal.project.json.")
 endif()
 
-if(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
-    enable_language(C CXX ASM)
-    set(CMAKE_C_STANDARD 11)
-    set(CMAKE_CXX_STANDARD 17)
-    set(CMAKE_C_STANDARD_REQUIRED ON)
-    set(CMAKE_CXX_STANDARD_REQUIRED ON)
-elseif(NOT JH_EXAMPLE_TARGET STREQUAL "rp2040")
-    message(FATAL_ERROR "Unsupported JH_EXAMPLE_TARGET='${JH_EXAMPLE_TARGET}'")
-endif()
+get_filename_component(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+set(_jh_examples_runner "${JH_ROOT}/scripts/examples_dispatcher.py")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
-function(_jh_list_contains OUT_VAR ITEM)
-    set(_found FALSE)
-    foreach(_entry IN LISTS ARGN)
-        if("${_entry}" STREQUAL "${ITEM}")
-            set(_found TRUE)
-        endif()
-    endforeach()
-    set(${OUT_VAR} ${_found} PARENT_SCOPE)
-endfunction()
+add_custom_target(examples ALL
+    COMMAND "${Python3_EXECUTABLE}" "${_jh_examples_runner}"
+            build --target "${JH_EXAMPLE_TARGET}" --jobs "${JH_EXAMPLE_JOBS}"
+    WORKING_DIRECTORY "${JH_ROOT}"
+    USES_TERMINAL
+    VERBATIM
+)
 
-function(_jh_extract_define_value OUT_VAR KEY)
-    set(_value "")
-    foreach(_def IN LISTS ARGN)
-        if("${_def}" MATCHES "^${KEY}=(.+)$")
-            set(_value "${CMAKE_MATCH_1}")
-        endif()
-    endforeach()
-    set(${OUT_VAR} "${_value}" PARENT_SCOPE)
-endfunction()
-
-function(_jh_make_safe_name OUT_VAR NAME)
-    string(REPLACE "-" "_" _safe "${NAME}")
-    string(REPLACE "." "_" _safe "${_safe}")
-    set(${OUT_VAR} "${_safe}" PARENT_SCOPE)
-endfunction()
-
-function(_jh_rp2040_apply_freertos OUT_VAR FQBN)
-    if(NOT JH_RP2040_FREERTOS)
-        set(${OUT_VAR} "${FQBN}" PARENT_SCOPE)
-        return()
+file(GLOB _jh_example_dirs LIST_DIRECTORIES true CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/[0-9][0-9]_*")
+foreach(_jh_example_dir IN LISTS _jh_example_dirs)
+    if(NOT IS_DIRECTORY "${_jh_example_dir}")
+        continue()
     endif()
-
-    set(_fqbn "${FQBN}")
-    if("${_fqbn}" MATCHES "(^|[,:])os=")
-        set(${OUT_VAR} "${_fqbn}" PARENT_SCOPE)
-    elseif("${_fqbn}" MATCHES "^[^:]+:[^:]+:[^:]+$")
-        set(${OUT_VAR} "${_fqbn}:os=freertos" PARENT_SCOPE)
-    else()
-        set(${OUT_VAR} "${_fqbn},os=freertos" PARENT_SCOPE)
-    endif()
-endfunction()
-
-function(_jh_add_rp2040_example NAME)
-    set(options)
-    set(oneValueArgs DIR FQBN)
-    set(multiValueArgs SOURCES DEFINES)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(NOT ARG_DIR)
-        set(ARG_DIR "${NAME}")
-    endif()
-    if(NOT ARG_FQBN)
-        set(ARG_FQBN "${JH_RP2040_FQBN}")
-    endif()
-    _jh_rp2040_apply_freertos(ARG_FQBN "${ARG_FQBN}")
-
-    set(_example_dir "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_DIR}")
-    if(NOT ARG_SOURCES)
-        if(EXISTS "${_example_dir}/app.c")
-            set(ARG_SOURCES "${_example_dir}/app.c")
-        elseif(EXISTS "${_example_dir}/app.cpp")
-            set(ARG_SOURCES "${_example_dir}/app.cpp")
-        else()
-            message(FATAL_ERROR "${NAME}: no app.c/app.cpp found")
-        endif()
-    endif()
-
-    _jh_make_safe_name(_safe "${NAME}")
-    set(_sketch_dir "${CMAKE_BINARY_DIR}/rp2040/${_safe}/${_safe}")
-    set(_output_dir "${CMAKE_BINARY_DIR}/rp2040/${_safe}/output")
-    file(MAKE_DIRECTORY "${_sketch_dir}")
-
-    set(_rp2040_defines ${ARG_DEFINES})
-    list(APPEND _rp2040_defines ${EXTRA_HAL_DEFINES})
-    if(JH_RP2040_FREERTOS)
-        list(APPEND _rp2040_defines HAL_ENABLE_FREERTOS)
-    endif()
-    _jh_extract_define_value(_rp2040_stack_size HAL_RP2040_STACK_SIZE ${_rp2040_defines})
-    _jh_extract_define_value(_rp2040_core1_stack_size HAL_RP2040_CORE1_STACK_SIZE ${_rp2040_defines})
-    jh_cmake_defines_contain(_rp2040_has_app_task1 HAL_ENABLE_APP_TASK1 ${_rp2040_defines})
-
-    file(WRITE "${_sketch_dir}/${_safe}.ino"
-        "// Auto-generated by CMake - do not edit or commit.\n"
-        "// Real application code lives in app.c/app.cpp.\n"
-        "#include <JaszczurHAL.h>\n"
-        "#include <hal/hal_app.h>\n"
-        "\n"
-        "void setup(void) {\n"
-        "    app_start();\n"
-        "}\n"
-        "\n"
-        "void loop(void) {\n"
-        "    app_task0();\n"
-        "}\n"
-    )
-    if(_rp2040_has_app_task1)
-        file(APPEND "${_sketch_dir}/${_safe}.ino"
-            "\n"
-            "void loop1(void) {\n"
-            "    app_task1();\n"
-            "}\n"
-        )
-    endif()
-
-    file(REMOVE "${_sketch_dir}/app.c" "${_sketch_dir}/app.cpp" "${_sketch_dir}/hal_app_entry.cpp")
-    foreach(_src IN LISTS ARG_SOURCES)
-        get_filename_component(_src_abs "${_src}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
-        get_filename_component(_src_name "${_src_abs}" NAME)
-        file(REMOVE "${_sketch_dir}/${_src_name}")
-        file(CREATE_LINK "${_src_abs}" "${_sketch_dir}/${_src_name}" SYMBOLIC)
-    endforeach()
-
-    if(EXISTS "${_example_dir}/hal_project_config.h")
-        file(REMOVE "${_sketch_dir}/hal_project_config.h")
-        file(CREATE_LINK "${_example_dir}/hal_project_config.h" "${_sketch_dir}/hal_project_config.h" SYMBOLIC)
-    endif()
-
-    set(_rp2040_extra_flags "")
-    foreach(_def IN LISTS _rp2040_defines)
-        string(APPEND _rp2040_extra_flags " -D${_def}")
-    endforeach()
-    if(NOT "${_rp2040_stack_size}" STREQUAL "")
-        string(APPEND _rp2040_extra_flags " -DPICO_STACK_SIZE=${_rp2040_stack_size}")
-    endif()
-    if(NOT "${_rp2040_core1_stack_size}" STREQUAL "")
-        string(APPEND _rp2040_extra_flags " -DPICO_CORE1_STACK_SIZE=${_rp2040_core1_stack_size}")
-    endif()
-    string(STRIP "${_rp2040_extra_flags}" _rp2040_extra_flags)
-
-    set(_rp2040_build_property_args
-        --build-property "compiler.cpp.extra_flags=-I ${_sketch_dir}"
-        --build-property "compiler.c.extra_flags=-I ${_sketch_dir}"
-    )
-    if(NOT "${_rp2040_extra_flags}" STREQUAL "")
-        list(APPEND _rp2040_build_property_args
-            --build-property "build.extra_flags=${_rp2040_extra_flags}"
-        )
-    endif()
-
-    add_custom_target("${_safe}_rp2040" ALL
-        COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_output_dir}"
-        COMMAND "${CMAKE_COMMAND}" -E make_directory "${_output_dir}"
-        COMMAND arduino-cli compile
-            --fqbn "${ARG_FQBN}"
-            --build-path "${_output_dir}"
-            --library "${JH_ROOT}"
-            ${_rp2040_build_property_args}
-            "${_sketch_dir}"
-        COMMENT "[RP2040] ${NAME} (${ARG_FQBN})"
+    get_filename_component(_jh_example_name "${_jh_example_dir}" NAME)
+    add_custom_target("${_jh_example_name}_${JH_EXAMPLE_TARGET}"
+        COMMAND "${Python3_EXECUTABLE}" "${_jh_examples_runner}"
+                build --target "${JH_EXAMPLE_TARGET}" --example "${_jh_example_name}" --jobs 1
+        WORKING_DIRECTORY "${JH_ROOT}"
+        USES_TERMINAL
         VERBATIM
     )
-endfunction()
-
-function(_jh_add_stm32g474_example NAME)
-    set(options)
-    set(oneValueArgs DIR)
-    set(multiValueArgs SOURCES DEFINES)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(NOT ARG_DIR)
-        set(ARG_DIR "${NAME}")
-    endif()
-
-    set(_example_dir "${CMAKE_CURRENT_SOURCE_DIR}/${ARG_DIR}")
-    if(NOT ARG_SOURCES)
-        if(EXISTS "${_example_dir}/app.c")
-            set(ARG_SOURCES "${_example_dir}/app.c")
-        elseif(EXISTS "${_example_dir}/app.cpp")
-            set(ARG_SOURCES "${_example_dir}/app.cpp")
-        else()
-            message(FATAL_ERROR "${NAME}: no app.c/app.cpp found")
-        endif()
-    endif()
-
-    set(SRC "${JH_ROOT}/src")
-    set(G474 "${SRC}/hal/impl/stm32g474")
-    set(LDSCRIPT "${JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
-
-    file(GLOB _stm32_impl "${G474}/*.cpp")
-    file(GLOB _stm32_drivers "${G474}/drivers/*/*.cpp")
-    file(GLOB_RECURSE _stm32_shared
-        "${SRC}/hal/impl/shared/*.cpp"
-        "${SRC}/hal/impl/shared/*.c"
-    )
-    set(_stm32_littlefs_sources
-        "${G474}/drivers/littlefs/lfs.c"
-        "${G474}/drivers/littlefs/lfs_util.c"
-    )
-
-    set(_hal_common
-        "${SRC}/hal/hal_config.cpp"
-        "${SRC}/hal/hal_can_util.cpp"
-        "${SRC}/hal/hal_crypto.cpp"
-        "${SRC}/hal/hal_pga2311.cpp"
-        "${SRC}/hal/hal_digipot.cpp"
-        "${SRC}/hal/hal_kv.cpp"
-        "${SRC}/hal/hal_timer_ext.cpp"
-        "${SRC}/hal/hal_soft_timer.cpp"
-        "${SRC}/hal/hal_pid_controller.cpp"
-        "${SRC}/hal_app_entry.cpp"
-    )
-
-    set(_utils
-        "${SRC}/utils/tools.cpp"
-        "${SRC}/utils/pidController.cpp"
-        "${SRC}/utils/draw7Segment.cpp"
-    )
-
-    _jh_make_safe_name(_safe "${NAME}")
-    set(_target "${_safe}_stm32g474")
-    add_executable("${_target}"
-        ${ARG_SOURCES}
-        "${G474}/port/startup_stm32g474.c"
-        "${G474}/port/system_stm32g474.c"
-        "${G474}/port/g474_debug_uart.c"
-        "${G474}/port/exception_info.c"
-        "${G474}/port/atomic_stubs_cm4.c"
-        "${G474}/port/runtime/stm32g474_syscalls.c"
-        ${_stm32_impl}
-        ${_stm32_drivers}
-        ${_stm32_littlefs_sources}
-        ${_stm32_shared}
-        ${_hal_common}
-        ${_utils}
-    )
-    set_target_properties("${_target}" PROPERTIES
-        OUTPUT_NAME "${_safe}_stm32g474"
-        SUFFIX ".elf"
-        LINKER_LANGUAGE CXX
-    )
-
-    target_include_directories("${_target}" PRIVATE
-        "${_example_dir}"
-        "${SRC}"
-        "${SRC}/hal"
-        "${G474}"
-        "${G474}/drivers/littlefs"
-    )
-    set(_stm32_defines ${ARG_DEFINES})
-    list(APPEND _stm32_defines ${EXTRA_HAL_DEFINES})
-    _jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_stm32_defines})
-    jh_cmake_defines_contain(_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_stm32_defines})
-    _jh_extract_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_stm32_defines})
-    if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
-        list(APPEND _stm32_defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
-        set(_stm32_littlefs_size "65536")
-    endif()
-    if(NOT "${_stm32_littlefs_size}" STREQUAL "")
-        string(REGEX REPLACE "[uUlL]+$" "" _stm32_littlefs_size "${_stm32_littlefs_size}")
-    endif()
-
-    target_compile_definitions("${_target}" PRIVATE
-        HAL_TARGET_STM32G474=1
-        HAL_PROVIDE_APP_ENTRY=1
-        ${_stm32_defines}
-    )
-
-    jh_cmake_defines_contain(_stm32_has_freertos HAL_ENABLE_FREERTOS ${_stm32_defines})
-    if(_stm32_has_freertos)
-        jh_stm32g474_enable_freertos("${_target}")
-    endif()
-
-    set(_arch_flags -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard)
-    target_compile_options("${_target}" PRIVATE
-        ${_arch_flags}
-        -ffunction-sections
-        -fdata-sections
-        -Wall
-        -Wextra
-        -include "${SRC}/hal/hal_target.h"
-        $<$<COMPILE_LANGUAGE:C>:-ffreestanding>
-        $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>
-    )
-    set_source_files_properties(${_stm32_littlefs_sources} PROPERTIES
-        COMPILE_OPTIONS "-w"
-    )
-    target_link_options("${_target}" PRIVATE
-        ${_arch_flags}
-        "-T${LDSCRIPT}"
-        -nostartfiles
-        -Wl,--gc-sections
-        --specs=nano.specs
-        --specs=nosys.specs
-    )
-    if(NOT "${_stm32_main_stack_size}" STREQUAL "")
-        target_link_options("${_target}" PRIVATE
-            "-Wl,--defsym=HAL_STM32_MIN_STACK_SIZE=${_stm32_main_stack_size}"
-        )
-    endif()
-    if(NOT "${_stm32_littlefs_size}" STREQUAL "")
-        target_link_options("${_target}" PRIVATE
-            "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_stm32_littlefs_size}"
-        )
-    endif()
-
-    add_custom_command(TARGET "${_target}" POST_BUILD
-        COMMAND "${CMAKE_OBJCOPY}" -O binary "$<TARGET_FILE:${_target}>" "${CMAKE_CURRENT_BINARY_DIR}/${_safe}_stm32g474.bin"
-        COMMAND "${CMAKE_OBJCOPY}" -O ihex "$<TARGET_FILE:${_target}>" "${CMAKE_CURRENT_BINARY_DIR}/${_safe}_stm32g474.hex"
-        VERBATIM
-    )
-endfunction()
-
-function(jh_example NAME)
-    set(options)
-    set(oneValueArgs DIR FQBN)
-    set(multiValueArgs SOURCES TARGETS DEFINES)
-    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
-
-    if(NOT ARG_TARGETS)
-        set(ARG_TARGETS rp2040)
-    endif()
-
-    _jh_list_contains(_supports_target "${JH_EXAMPLE_TARGET}" ${ARG_TARGETS})
-    if(NOT _supports_target)
-        string(REPLACE ";" ", " _declared_targets "${ARG_TARGETS}")
-        message(STATUS
-            "[${JH_EXAMPLE_TARGET}] skip ${NAME}: example declares target(s): ${_declared_targets}")
-        return()
-    endif()
-
-    if(JH_EXAMPLE_TARGET STREQUAL "rp2040")
-        _jh_add_rp2040_example("${NAME}"
-            DIR "${ARG_DIR}"
-            FQBN "${ARG_FQBN}"
-            SOURCES ${ARG_SOURCES}
-            DEFINES ${ARG_DEFINES}
-        )
-    elseif(JH_EXAMPLE_TARGET STREQUAL "stm32g474")
-        _jh_add_stm32g474_example("${NAME}"
-            DIR "${ARG_DIR}"
-            SOURCES ${ARG_SOURCES}
-            DEFINES ${ARG_DEFINES}
-        )
-    endif()
-endfunction()
-
-jh_example(01_blink TARGETS rp2040 stm32g474)
-jh_example(02_debug_helper TARGETS rp2040 stm32g474)
-jh_example(03_soft_timer_table TARGETS rp2040 stm32g474)
-jh_example(04_crypto TARGETS rp2040 stm32g474)
-jh_example(05_modem_A7670E TARGETS rp2040)
-jh_example(06_ds18b20 TARGETS rp2040 stm32g474)
-jh_example(07_gps TARGETS rp2040)
-jh_example(08_thermocouple TARGETS rp2040 stm32g474)
-jh_example(09_display_tft TARGETS rp2040 stm32g474)
-jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(11_wireguard TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(12_kv_store TARGETS rp2040 stm32g474)
-jh_example(13_i2c_slave TARGETS rp2040 stm32g474)
-jh_example(14_uart TARGETS rp2040 stm32g474)
-jh_example(15_wifi TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(16_littlefs TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_LITTLEFS)
-jh_example(17_pid_controller TARGETS rp2040 stm32g474)
-jh_example(18_rgb_led TARGETS rp2040 stm32g474)
-jh_example(19_timer_ext TARGETS rp2040 stm32g474)
-jh_example(20_i2c_scan TARGETS rp2040 stm32g474)
-jh_example(21_adc_read TARGETS rp2040 stm32g474)
-jh_example(22_gps_uart TARGETS rp2040 stm32g474)
-jh_example(23_external_adc_ads1115 TARGETS rp2040 stm32g474)
-jh_example(24_can_mcp2515 TARGETS rp2040 stm32g474)
-jh_example(25_display_oled TARGETS rp2040 stm32g474)
-jh_example(26_rtc_clock TARGETS rp2040 stm32g474)
-jh_example(27_rtc_ds3231 TARGETS rp2040 stm32g474)
-jh_example(28_pga2311 TARGETS rp2040 stm32g474)
-jh_example(30_bh1750_light TARGETS rp2040 stm32g474)
-jh_example(31_hd44780 TARGETS rp2040 stm32g474)
-jh_example(32_tsc2007_touch TARGETS rp2040 stm32g474)
-jh_example(33_stmpe610_touch TARGETS rp2040 stm32g474)
-jh_example(34_irsmall_decoder TARGETS rp2040 stm32g474)
-jh_example(35_cJSON TARGETS rp2040 stm32g474)
-jh_example(36_lodePNG TARGETS rp2040 stm32g474)
-jh_example(37_lodePNG_ili9341_base64 TARGETS rp2040 stm32g474)
-jh_example(38_stm32g474_fdcan_native TARGETS stm32g474)
-jh_example(39_sdlogger TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_SDLOGGER)
-jh_example(40_jpeg TARGETS rp2040 stm32g474)
-jh_example(41_jpeg_ili931_base64 TARGETS rp2040 stm32g474)
-jh_example(42_bsd_sockets_tcp_server
-    DIR 42_bsd_sockets_tcp_udp
-    SOURCES
-        42_bsd_sockets_tcp_udp/tcp_server.c
-        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
-    TARGETS rp2040
-    FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(42_bsd_sockets_tcp_client
-    DIR 42_bsd_sockets_tcp_udp
-    SOURCES
-        42_bsd_sockets_tcp_udp/tcp_client.c
-        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
-    TARGETS rp2040
-    FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(42_bsd_sockets_udp_server
-    DIR 42_bsd_sockets_tcp_udp
-    SOURCES
-        42_bsd_sockets_tcp_udp/udp_server.c
-        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
-    TARGETS rp2040
-    FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(42_bsd_sockets_udp_client
-    DIR 42_bsd_sockets_tcp_udp
-    SOURCES
-        42_bsd_sockets_tcp_udp/udp_client.c
-        42_bsd_sockets_tcp_udp/bsd_socket_example_common.h
-    TARGETS rp2040
-    FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(43_dht_temperature_humidity TARGETS rp2040 stm32g474)
-jh_example(44_dacless_audio TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_DACLESS)
-jh_example(44_dacless_audio_polling
-    DIR 44_dacless_audio
-    TARGETS rp2040 stm32g474
-    DEFINES HAL_ENABLE_DACLESS DACLESS_EXAMPLE_USE_DMA=0)
-jh_example(45_swserial_loopback TARGETS rp2040 stm32g474)
-jh_example(46_mfrc522_rfid TARGETS rp2040 stm32g474)
-jh_example(47_pn532_nfc TARGETS rp2040 stm32g474)
-jh_example(48_http_server TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(49_websocket TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(50_net_console TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(51_net_commands TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(52_http_files TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
-jh_example(53_simple_io_chips TARGETS rp2040 stm32g474)
-set(_jh_examples_freertos_enabled ${JH_RP2040_FREERTOS})
-if(DEFINED EXTRA_HAL_DEFINES)
-    jh_cmake_defines_contain(_jh_examples_has_freertos HAL_ENABLE_FREERTOS ${EXTRA_HAL_DEFINES})
-    if(_jh_examples_has_freertos)
-        set(_jh_examples_freertos_enabled TRUE)
-    endif()
-endif()
-
-if(_jh_examples_freertos_enabled)
-    jh_example(29_freertos_smoke TARGETS rp2040 stm32g474 DEFINES HAL_ENABLE_FREERTOS HAL_ENABLE_APP_TASK1)
-endif()
+endforeach()

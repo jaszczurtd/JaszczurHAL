@@ -23,15 +23,24 @@ build recipes live in `cmake/targets/<target>.cmake` and the HAL backends in
 
 `cache` values may use `${jhRoot}` - the absolute path to the JaszczurHAL repo
 root (this directory's grandparent). The consumer (select-board / generator)
-resolves it when writing the choice into a project manifest. `${project}` and the
+resolves it while building the effective configuration. `${project}` and the
 other manifest tokens are resolved later by the normal jh-vscode expansion.
 
 ## How a selection maps to a manifest
 
-`select-board <target> <board>` composes the effective CMake cache as
-`family.cache` ⊕ `board.cache` and writes, into the project's
-`targetProfiles.<target>`, the `toolchain` / `cmake.cache` / `upload` for that
-target, plus top-level `target`/`board`. The jh-vscode resolver
-(`resolve_target_profile`) then deep-merges that profile over the base manifest
-at build/upload time. Adding a board = one entry in `boards[]`; adding a family =
-a new `<id>.json` here + a `cmake/targets/<id>.cmake` recipe + a HAL backend.
+`select-board` persists only the active `target`/`board` pair in the
+gitignored `.vscode/jaszczurhal.local.json`. It does not rewrite the tracked
+project manifest. At build/upload time, the jh-vscode resolver composes the
+effective configuration as:
+
+```text
+registry family defaults
+  -> registry board cache
+  -> base .vscode/jaszczurhal.project.json
+  -> targetProfiles.<target>
+  -> CLI overrides / local target selection
+```
+
+The resolver always pins `cmake.cache.JH_TARGET` to the active family. Adding a
+board = one entry in `boards[]`; adding a family = a new `<id>.json` here + a
+`cmake/targets/<id>.cmake` recipe + a HAL backend.

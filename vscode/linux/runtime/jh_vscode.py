@@ -70,6 +70,28 @@ SECTION_HEADER_RE = re.compile(
     r"(?P<fileoff>[0-9a-fA-F]+)\s+"
     r"2\*\*(?P<align>\d+)"
 )
+HAL_ENABLE_RE = re.compile(r"^\s*#\s*define\s+(HAL_ENABLE_[A-Z0-9_]+)\b")
+HAL_DEFINE_TOKEN_RE = re.compile(r"(?:^|(?<=[;\s]))(?:-D)?(HAL_ENABLE_[A-Z0-9_]+)(?=[=;\s]|$)")
+REGION_OVERFLOW_RE = re.compile(r"region [`'](?P<region>[^`']+)[`'] overflowed by (?P<bytes>\d+) bytes")
+SECTION_WILL_NOT_FIT_RE = re.compile(
+    r"section [`'](?P<section>[^`']+)[`'] will not fit in region [`'](?P<region>[^`']+)[`']"
+)
+
+STM32G474_NETWORK_MODULES = {
+    "HAL_ENABLE_WIFI",
+    "HAL_ENABLE_TIME",
+    "HAL_ENABLE_MQTT",
+    "HAL_ENABLE_UDP",
+    "HAL_ENABLE_TCP",
+    "HAL_ENABLE_HTTP_SERVER",
+    "HAL_ENABLE_HTTP_FILES",
+    "HAL_ENABLE_WEBSOCKET",
+    "HAL_ENABLE_NET_CONSOLE",
+    "HAL_ENABLE_NET_COMMANDS",
+    "HAL_ENABLE_BSD_SOCKETS",
+    "HAL_ENABLE_OTA",
+    "HAL_ENABLE_WIREGUARD",
+}
 
 ANSI_YELLOW = "\033[33m"
 ANSI_RESET = "\033[0m"
@@ -293,7 +315,9 @@ def resolve_target_profile(
     # overrides the base. (CLI --target/--board is already folded into
     # active/board.) So a project's explicit setting (e.g. upload.strategy) always
     # beats a registry default, and a per-target profile beats the project-wide
-    # value. cmake.cache from all three layers deep-merges key-by-key.
+    # value. cmake.cache from all three layers deep-merges key-by-key. The active
+    # dispatcher target itself is pinned after the merge so legacy manifests with
+    # a hard-coded JH_TARGET cannot silently select a different backend.
     base = dict(config)
     base.pop("targetProfiles", None)
     merged = deep_merge(deep_merge(registry_layer, base), manifest_overlay)
@@ -302,6 +326,30 @@ def resolve_target_profile(
 
     # Expand tokens the overlay may have introduced (idempotent on the base).
     expand_config_sections(config, project_dir)
+
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict):
+        cache = cmake.get("cache")
+        if not isinstance(cache, dict):
+            cache = {}
+            cmake["cache"] = cache
+        cache["JH_TARGET"] = active
+
+    target_switched = active != (manifest_target or "rp2040")
+    registry_upload = target_desc.get("upload") if isinstance(target_desc, dict) else None
+    overlay_upload = manifest_overlay.get("upload") if isinstance(manifest_overlay, dict) else None
+    if (
+        target_switched
+        and isinstance(registry_upload, dict)
+        and registry_upload.get("strategy")
+        and not (isinstance(overlay_upload, dict) and overlay_upload.get("strategy"))
+    ):
+        upload = config.get("upload")
+        if not isinstance(upload, dict):
+            upload = {}
+            config["upload"] = upload
+        upload["strategy"] = registry_upload["strategy"]
+        sources["upload"] = f"registry:{active}.upload.strategy"
 
     config["target"] = active
     sources["target"] = override_source if target_override else (
@@ -376,6 +424,7 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
     for key in (
         "project",
         "module",
+        "example",
         "toolchain",
         "target",
         "board",
@@ -392,6 +441,59 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
         if key in data:
             config[key] = data[key]
     return config
+
+
+def example_variants(config: dict[str, Any]) -> list[dict[str, Any]]:
+    example = config.get("example")
+    if not isinstance(example, dict):
+        return []
+    variants = example.get("variants")
+    if not isinstance(variants, list):
+        return []
+    return [variant for variant in variants if isinstance(variant, dict)]
+
+
+def apply_example_variant(config: dict[str, Any], variant_id: str | None) -> None:
+    if not variant_id:
+        return
+
+    variant: dict[str, Any] | None = None
+    for candidate in example_variants(config):
+        if str(candidate.get("id") or "") == variant_id:
+            variant = candidate
+            break
+    if variant is None:
+        known = ", ".join(str(item.get("id")) for item in example_variants(config) if item.get("id"))
+        raise ValueError(f"unknown example variant '{variant_id}'" + (f"; known variants: {known}" if known else ""))
+
+    module = str(variant.get("module") or f"{config.get('module', 'firmware')}_{variant_id}")
+    config["module"] = module
+    if config.get("cmakeBuildDir"):
+        config["cmakeBuildDir"] = f"{config['cmakeBuildDir']}/variants/{variant_id}"
+
+    cmake = dict(config.get("cmake") or {})
+    cache = dict(cmake.get("cache") or {})
+    cache["JH_MODULE_NAME"] = module
+    sources = variant.get("sources")
+    if isinstance(sources, list) and sources:
+        cache["JH_PROJECT_SOURCES"] = ";".join(str(source) for source in sources)
+    extra_defines = variant.get("extraDefines")
+    if isinstance(extra_defines, list) and extra_defines:
+        cache["JH_EXTRA_DEFINES"] = ";".join(str(item) for item in extra_defines)
+    if isinstance(variant.get("cmake"), dict):
+        variant_cmake = variant["cmake"]
+        if isinstance(variant_cmake.get("cache"), dict):
+            cache = deep_merge(cache, {str(k): v for k, v in variant_cmake["cache"].items()})
+        cmake = deep_merge(cmake, {k: v for k, v in variant_cmake.items() if k != "cache"})
+    cmake["cache"] = cache
+    config["cmake"] = cmake
+
+    example = dict(config.get("example") or {})
+    example["activeVariant"] = variant_id
+    if isinstance(variant.get("targets"), list):
+        example["activeTargets"] = [str(target) for target in variant["targets"]]
+    config["example"] = example
+    config.setdefault("_sources", {})["example.activeVariant"] = "cli"
 
 
 def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
@@ -566,6 +668,11 @@ def command_config_dump(args: argparse.Namespace) -> int:
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
+    try:
+        apply_example_variant(config, getattr(args, "variant", None))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
     apply_cli_overrides(config, args)
     if args.json:
         print(json.dumps(config, ensure_ascii=False, indent=2, sort_keys=True))
@@ -577,19 +684,86 @@ def command_config_dump(args: argparse.Namespace) -> int:
 LOCAL_STATE_FILENAME = "jaszczurhal.local.json"
 
 
+def git_repo_root(path: Path) -> Path | None:
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    root = result.stdout.strip()
+    return Path(root).resolve() if root else None
+
+
+def git_path_is_ignored(path: Path) -> bool:
+    root = git_repo_root(path.parent)
+    if root is None:
+        return False
+    try:
+        rel = path.resolve().relative_to(root)
+    except ValueError:
+        return False
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "-q", "--", rel.as_posix()],
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def gitignore_has_entry(gitignore: Path, entry: str) -> bool:
+    if not gitignore.exists():
+        return False
+    try:
+        text = gitignore.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return entry in [line.strip() for line in text.splitlines()]
+
+
+def local_state_gitignore_target(project_dir: Path) -> tuple[Path, str]:
+    project_gitignore = project_dir / ".gitignore"
+    entry = f".vscode/{LOCAL_STATE_FILENAME}"
+    if project_gitignore.exists():
+        return project_gitignore, entry
+
+    root = git_repo_root(project_dir)
+    if root is not None:
+        root_gitignore = root / ".gitignore"
+        if root_gitignore.exists():
+            local_state = project_dir / ".vscode" / LOCAL_STATE_FILENAME
+            try:
+                return root_gitignore, local_state.resolve().relative_to(root).as_posix()
+            except ValueError:
+                pass
+
+    return project_gitignore, entry
+
+
 def ensure_local_state_gitignored(project_dir: Path) -> None:
     """Make sure the gitignored user-local selection file is actually ignored.
-    Adds the rule to <project>/.gitignore if missing (the rule is tracked; the
-    state file it names is not)."""
-    gitignore = project_dir / ".gitignore"
-    entry = f".vscode/{LOCAL_STATE_FILENAME}"
+    Appends a missing rule only; existing .gitignore contents are never
+    rewritten or regenerated."""
+    local_state = project_dir / ".vscode" / LOCAL_STATE_FILENAME
+    if git_path_is_ignored(local_state):
+        return
+
+    gitignore, entry = local_state_gitignore_target(project_dir)
+    if gitignore_has_entry(gitignore, entry):
+        return
+
     text = ""
     if gitignore.exists():
         try:
             text = gitignore.read_text(encoding="utf-8")
         except OSError:
-            return
-        if entry in [line.strip() for line in text.splitlines()]:
             return
     prefix = "" if (not text or text.endswith("\n")) else "\n"
     try:
@@ -597,6 +771,266 @@ def ensure_local_state_gitignored(project_dir: Path) -> None:
             handle.write(f"{prefix}# jh-vscode user-local active board selection\n{entry}\n")
     except OSError:
         pass
+
+
+def collect_hal_enables(config: dict[str, Any], project_dir: Path) -> dict[str, str]:
+    enabled: dict[str, str] = {}
+    hal_project_config = project_dir / "hal_project_config.h"
+    if hal_project_config.is_file():
+        try:
+            text = hal_project_config.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        for line in text.splitlines():
+            match = HAL_ENABLE_RE.match(line)
+            if match:
+                enabled.setdefault(match.group(1), "hal_project_config.h")
+
+    cmake = config.get("cmake")
+    cache = cmake.get("cache") if isinstance(cmake, dict) else None
+    if isinstance(cache, dict):
+        for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
+            value = cache.get(key)
+            if not value:
+                continue
+            for match in HAL_DEFINE_TOKEN_RE.finditer(str(value)):
+                enabled.setdefault(match.group(1), f"cmake.cache.{key}")
+    return enabled
+
+
+def target_descriptor(config: dict[str, Any]) -> dict[str, Any] | None:
+    target = config.get("target")
+    if not target:
+        return None
+    return load_target_registry().get(str(target))
+
+
+def target_display_name(config: dict[str, Any]) -> str:
+    target = str(config.get("target") or "default")
+    board = config.get("board")
+    if board:
+        return f"{target}/{board}"
+    return target
+
+
+def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> list[str]:
+    messages: list[str] = []
+    target = str(config.get("target") or "")
+    example = config.get("example")
+    if isinstance(example, dict):
+        supported_targets = example.get("activeTargets") or example.get("targets")
+        if isinstance(supported_targets, list) and target and target not in [str(item) for item in supported_targets]:
+            variant = example.get("activeVariant")
+            suffix = f" variant '{variant}'" if variant else ""
+            messages.append(
+                f"axis-2: example {config.get('module', project_dir.name)}{suffix} "
+                f"does not declare support for target {target_display_name(config)}; "
+                f"supported targets: {', '.join(str(item) for item in supported_targets)}."
+            )
+            return messages
+
+    desc = target_descriptor(config)
+    if isinstance(desc, dict) and desc.get("status") == "skeleton":
+        messages.append(
+            f"axis-2: target {target_display_name(config)} is a skeleton; "
+            "the HAL backend/recipe is not implemented yet."
+        )
+        return messages
+
+    enabled = collect_hal_enables(config, project_dir)
+    if target == "stm32g474":
+        network = sorted(module for module in enabled if module in STM32G474_NETWORK_MODULES)
+        if network:
+            messages.append(
+                "axis-2: stm32g474 has no WiFi/network HAL backend yet; "
+                f"enabled modules: {', '.join(network)}. "
+                "Use an RP2040/Pico W target, disable those modules, or add a STM32 network backend."
+            )
+    return messages
+
+
+def print_build_diagnostics(messages: list[str]) -> None:
+    if not messages:
+        return
+    print("", file=sys.stderr)
+    print(yellow_text("JaszczurHAL diagnostics:"), file=sys.stderr)
+    for message in messages:
+        print(f"  - {message}", file=sys.stderr)
+
+
+def diagnose_build_output(output: str, config: dict[str, Any]) -> list[str]:
+    messages: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    overflow_regions: set[str] = set()
+    for match in REGION_OVERFLOW_RE.finditer(output):
+        region = match.group("region")
+        overflow_bytes = int(match.group("bytes"))
+        key = ("overflow", region)
+        if key in seen:
+            continue
+        seen.add(key)
+        overflow_regions.add(region)
+        messages.append(
+            f"axis-3: firmware does not fit {target_display_name(config)} region {region}; "
+            f"linker reports overflow by {format_size(overflow_bytes)} ({overflow_bytes} bytes)."
+        )
+
+    for match in SECTION_WILL_NOT_FIT_RE.finditer(output):
+        section = match.group("section")
+        region = match.group("region")
+        if region in overflow_regions:
+            continue
+        key = ("section", region)
+        if key in seen:
+            continue
+        seen.add(key)
+        messages.append(
+            f"axis-3: section {section} will not fit {target_display_name(config)} region {region}."
+        )
+    return messages
+
+
+def select_board_options(registry: dict[str, dict[str, Any]]) -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
+    options: list[tuple[str, str, dict[str, Any], dict[str, Any]]] = []
+    for target_id, desc in sorted_target_items(registry):
+        boards = desc.get("boards") or []
+        for board in boards:
+            if not isinstance(board, dict):
+                continue
+            board_id = board.get("id")
+            if board_id:
+                options.append((str(target_id), str(board_id), desc, board))
+    return options
+
+
+def sorted_target_items(registry: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    return sorted(registry.items(), key=lambda item: (item[1].get("status") == "skeleton", item[0]))
+
+
+def parse_board_selection(selection: str) -> tuple[str, str | None]:
+    value = selection.strip()
+    if " - " in value:
+        value = value.split(" - ", 1)[0].strip()
+    if not value:
+        raise ValueError("empty board selection")
+    value = value.split()[0]
+    if ":" in value:
+        target, board = value.split(":", 1)
+    elif "/" in value:
+        target, board = value.split("/", 1)
+    else:
+        target, board = value, None
+    target = target.strip()
+    board = board.strip() if board is not None else None
+    if not target:
+        raise ValueError(f"invalid board selection: {selection!r}")
+    if board == "":
+        board = None
+    return target, board
+
+
+def current_board_selection(
+    registry: dict[str, dict[str, Any]],
+    local_state: dict[str, Any],
+    manifest: dict[str, Any],
+) -> tuple[str, str | None, str]:
+    target = local_state.get("target") or manifest.get("target") or "rp2040"
+    source = ".vscode/jaszczurhal.local.json" if local_state.get("target") else (
+        ".vscode/jaszczurhal.project.json" if manifest.get("target") else "default"
+    )
+    board = local_state.get("board") or manifest.get("board")
+    desc = registry.get(str(target))
+    if isinstance(desc, dict):
+        board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
+        if board is None or (board_ids and board not in board_ids):
+            board = desc.get("defaultBoard")
+    return str(target), str(board) if board is not None else None, source
+
+
+def persist_board_selection(
+    project_dir: Path,
+    local_state: dict[str, Any],
+    target: str,
+    board: str | None,
+) -> int:
+    vscode_dir = project_dir / ".vscode"
+    new_state = dict(local_state) if isinstance(local_state, dict) else {}
+    new_state["target"] = target
+    if board is not None:
+        new_state["board"] = board
+    else:
+        new_state.pop("board", None)
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    (vscode_dir / LOCAL_STATE_FILENAME).write_text(
+        json.dumps(new_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    ensure_local_state_gitignored(project_dir)
+    print(f"Selected target={target} board={board or '(target default)'}")
+    print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (gitignored; project default stays in the manifest).")
+    return 0
+
+
+def validate_board_selection(
+    registry: dict[str, dict[str, Any]],
+    target: str,
+    board: str | None,
+) -> tuple[dict[str, Any] | None, str | None, int]:
+    desc = registry.get(target)
+    if desc is None:
+        known = ", ".join(sorted(registry)) or "(registry empty)"
+        print(f"error: unknown target '{target}'. Known targets: {known}", file=sys.stderr)
+        return None, None, EXIT_CONFIG
+    board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
+    selected_board = board or desc.get("defaultBoard")
+    if board_ids and selected_board not in board_ids:
+        print(f"error: unknown board '{selected_board}' for target '{target}'. Known boards: {', '.join(board_ids)}", file=sys.stderr)
+        return None, None, EXIT_CONFIG
+    if desc.get("status") == "skeleton":
+        print(f"warning: target '{target}' is a skeleton (no working HAL backend yet); selecting anyway.", file=sys.stderr)
+    return desc, str(selected_board) if selected_board is not None else None, 0
+
+
+def interactive_board_selection(
+    registry: dict[str, dict[str, Any]],
+    current_target: str,
+    current_board: str | None,
+) -> tuple[str | None, str | None, int]:
+    options = select_board_options(registry)
+    if not options:
+        print("error: target registry has no selectable boards", file=sys.stderr)
+        return None, None, EXIT_CONFIG
+
+    print(f"Current selection: target={current_target} board={current_board or '(target default)'}")
+    print("Select target/board:")
+    for index, (target, board, desc, board_desc) in enumerate(options, start=1):
+        marker = "*" if target == current_target and board == current_board else " "
+        skeleton = " [skeleton]" if desc.get("status") == "skeleton" else ""
+        print(
+            f"  {index:2d}. {marker} {target}:{board}{skeleton} - "
+            f"{desc.get('displayName', target)} / {board_desc.get('displayName', board)}"
+        )
+    print("  q. cancel")
+    try:
+        answer = input("Board selection> ").strip()
+    except EOFError:
+        print("error: no interactive input available", file=sys.stderr)
+        return None, None, EXIT_USAGE
+    if answer.lower() in {"", "q", "quit", "cancel"}:
+        print("Selection cancelled.")
+        return None, None, 0
+    try:
+        selected = int(answer)
+    except ValueError:
+        try:
+            return (*parse_board_selection(answer), 0)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return None, None, EXIT_USAGE
+    if selected < 1 or selected > len(options):
+        print(f"error: selection out of range: {selected}", file=sys.stderr)
+        return None, None, EXIT_USAGE
+    target, board, _, _ = options[selected - 1]
+    return target, board, 0
 
 
 def command_select_board(args: argparse.Namespace) -> int:
@@ -612,14 +1046,28 @@ def command_select_board(args: argparse.Namespace) -> int:
     vscode_dir = project_dir / ".vscode"
     local_state = load_json_file(vscode_dir / LOCAL_STATE_FILENAME)
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
-    current_target = local_state.get("target") or manifest.get("target")
-    current_board = local_state.get("board") or manifest.get("board")
+    current_target, current_board, current_source = current_board_selection(registry, local_state, manifest)
 
-    # List mode: no --target given.
-    if not args.target:
+    target = args.target
+    board = args.board
+    if args.selection:
+        try:
+            target, board = parse_board_selection(args.selection)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_USAGE
+    elif args.interactive and not target:
+        target, board, status = interactive_board_selection(registry, current_target, current_board)
+        if status != 0:
+            return status
+        if target is None:
+            return 0
+
+    # List mode: no selection requested.
+    if not target:
         if args.json:
             listing = {
-                "current": {"target": current_target, "board": current_board},
+                "current": {"target": current_target, "board": current_board, "source": current_source},
                 "targets": [
                     {
                         "id": desc.get("id", tid),
@@ -631,16 +1079,14 @@ def command_select_board(args: argparse.Namespace) -> int:
                             for b in (desc.get("boards") or []) if isinstance(b, dict)
                         ],
                     }
-                    for tid, desc in sorted(registry.items())
+                    for tid, desc in sorted_target_items(registry)
                 ],
             }
             print(json.dumps(listing, ensure_ascii=False, indent=2, sort_keys=True))
             return 0
-        shown_t = current_target or "(default rp2040)"
-        shown_b = current_board or "(target default)"
-        print(f"Current selection: target={shown_t} board={shown_b}")
+        print(f"Current selection: target={current_target} board={current_board or '(target default)'} ({current_source})")
         print("Available targets:")
-        for tid, desc in sorted(registry.items()):
+        for tid, desc in sorted_target_items(registry):
             flag = " [skeleton]" if desc.get("status") == "skeleton" else ""
             print(f"  {tid}{flag} - {desc.get('displayName', '')}")
             for board in desc.get("boards") or []:
@@ -649,35 +1095,14 @@ def command_select_board(args: argparse.Namespace) -> int:
                 mark = "*" if board.get("id") == desc.get("defaultBoard") else " "
                 print(f"     {mark} {board.get('id')} - {board.get('displayName', '')}")
         print("Select: jh-vscode select-board --project <p> --target <id> [--board <id>]")
+        print("        jh-vscode select-board --project <p> --interactive")
         return 0
 
     # Set mode.
-    target = args.target
-    desc = registry.get(target)
-    if desc is None:
-        known = ", ".join(sorted(registry)) or "(registry empty)"
-        print(f"error: unknown target '{target}'. Known targets: {known}", file=sys.stderr)
-        return EXIT_CONFIG
-    board_ids = [b.get("id") for b in (desc.get("boards") or []) if isinstance(b, dict)]
-    board = args.board or desc.get("defaultBoard")
-    if board_ids and board not in board_ids:
-        print(f"error: unknown board '{board}' for target '{target}'. Known boards: {', '.join(board_ids)}", file=sys.stderr)
-        return EXIT_CONFIG
-    if desc.get("status") == "skeleton":
-        print(f"warning: target '{target}' is a skeleton (no working HAL backend yet); selecting anyway.", file=sys.stderr)
-
-    new_state = dict(local_state) if isinstance(local_state, dict) else {}
-    new_state["target"] = target
-    if board is not None:
-        new_state["board"] = board
-    vscode_dir.mkdir(parents=True, exist_ok=True)
-    (vscode_dir / LOCAL_STATE_FILENAME).write_text(
-        json.dumps(new_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    ensure_local_state_gitignored(project_dir)
-    print(f"Selected target={target} board={board or '(target default)'}")
-    print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (gitignored; project default stays in the manifest).")
-    return 0
+    _, selected_board, status = validate_board_selection(registry, str(target), board)
+    if status != 0:
+        return status
+    return persist_board_selection(project_dir, local_state, str(target), selected_board)
 
 
 def as_bool(value: Any) -> bool:
@@ -1223,6 +1648,37 @@ def run_command(cmd: list[str], *, verbose: bool = False) -> int:
     return int(completed.returncode)
 
 
+def run_command_capture(cmd: list[str], *, verbose: bool = False, capture_limit: int = 250_000) -> tuple[int, str]:
+    if verbose:
+        print("+ " + " ".join(cmd), flush=True)
+    try:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+    except FileNotFoundError:
+        print(f"error: command not found: {cmd[0]}", file=sys.stderr)
+        return EXIT_CONFIG, ""
+    except OSError as exc:
+        print(f"error: failed to run {cmd[0]}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC, ""
+
+    captured: list[str] = []
+    captured_size = 0
+    assert process.stdout is not None
+    for line in process.stdout:
+        sys.stdout.write(maybe_yellow_output(line))
+        sys.stdout.flush()
+        captured.append(line)
+        captured_size += len(line)
+        while captured_size > capture_limit and captured:
+            captured_size -= len(captured.pop(0))
+    return int(process.wait()), "".join(captured)
+
+
 def memory_overview_enabled() -> bool:
     value = os.environ.get("JH_VSCODE_MEMORY_OVERVIEW", "1").strip().lower()
     return value not in {"0", "false", "no", "off"}
@@ -1259,6 +1715,10 @@ def find_elf(build_dir: Path) -> Path | None:
 
 
 def resolve_elf_artifact(config: dict[str, Any], project_dir: Path) -> Path | None:
+    if config.get("toolchain") == "cmake":
+        cmake_elf = find_elf(get_cmake_build_dir(config, project_dir))
+        if cmake_elf is not None:
+            return cmake_elf
     configured = find_configured_elf(config)
     if configured is not None:
         return configured
@@ -1305,7 +1765,10 @@ def parse_objdump_sections(elf: Path, objdump: str) -> list[dict[str, Any]]:
 
 
 def is_flash_address(address: int) -> bool:
-    return 0x10000000 <= address < 0x11000000
+    return (
+        0x08000000 <= address < 0x09000000
+        or 0x10000000 <= address < 0x11000000
+    )
 
 
 def is_psram_address(address: int) -> bool:
@@ -1466,6 +1929,11 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
+    try:
+        apply_example_variant(config, getattr(args, "variant", None))
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return project_dir, {}, EXIT_CONFIG
     apply_cli_overrides(config, args)
     return project_dir, config, 0
 
@@ -1495,6 +1963,68 @@ def get_cmake_source_dir(config: dict[str, Any], project_dir: Path) -> Path:
     if not source_path.is_absolute():
         source_path = project_dir / source_path
     return source_path
+
+
+def path_within(child: Path, parent: Path) -> bool:
+    child_resolved = child.resolve()
+    parent_resolved = parent.resolve()
+    return child_resolved == parent_resolved or parent_resolved in child_resolved.parents
+
+
+def cmake_cache_home_directory(cache_path: Path) -> Path | None:
+    try:
+        text = cache_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        if line.startswith("CMAKE_HOME_DIRECTORY:INTERNAL="):
+            value = line.split("=", 1)[1].strip()
+            if value:
+                return Path(value).expanduser()
+            return None
+    return None
+
+
+def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project_dir: Path) -> int:
+    cache_path = build_dir / "CMakeCache.txt"
+    if not cache_path.is_file():
+        return 0
+
+    cached_source = cmake_cache_home_directory(cache_path)
+    if cached_source is None:
+        return 0
+    if cached_source.resolve() == source_dir.resolve():
+        return 0
+
+    if not path_within(build_dir, project_dir):
+        print(
+            f"error: refusing to reset stale CMake cache outside project directory: {build_dir}",
+            file=sys.stderr,
+        )
+        print(
+            f"       cached source: {cached_source.resolve()}",
+            file=sys.stderr,
+        )
+        print(
+            f"       requested source: {source_dir.resolve()}",
+            file=sys.stderr,
+        )
+        return EXIT_UNSAFE_DEVICE
+
+    print(
+        yellow_text(
+            "warning: stale CMake cache source changed; resetting "
+            f"{build_dir} ({cached_source.resolve()} -> {source_dir.resolve()})"
+        ),
+        file=sys.stderr,
+    )
+    try:
+        cache_path.unlink()
+        shutil.rmtree(build_dir / "CMakeFiles", ignore_errors=True)
+    except OSError as exc:
+        print(f"error: failed to reset stale CMake cache in {build_dir}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+    return 0
 
 
 def cmake_targets(config: dict[str, Any]) -> dict[str, str]:
@@ -1543,12 +2073,28 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
                 value = "ON" if value else "OFF"
             args.append(f"-D{key}={value}")
 
+    upload = config.get("upload")
+    openocd = upload.get("openocd") if isinstance(upload, dict) else None
+    if isinstance(openocd, dict):
+        openocd_cache_keys = {
+            "bin": "OPENOCD_BIN",
+            "interface": "OPENOCD_INTERFACE",
+            "target": "OPENOCD_TARGET",
+        }
+        for semantic, cache_key in openocd_cache_keys.items():
+            value = openocd.get(semantic)
+            if value:
+                args.append(f"-D{cache_key}={value}")
+
     return args
 
 
 def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
     source_dir = get_cmake_source_dir(config, project_dir)
     build_dir = get_cmake_build_dir(config, project_dir)
+    reset_status = reset_stale_cmake_cache_if_needed(source_dir, build_dir, project_dir)
+    if reset_status != 0:
+        return reset_status
     cmd = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
     cmd.extend(cmake_cache_args(config, project_dir))
     return run_command(cmd, verbose=as_bool(config.get("verbose")))
@@ -1559,7 +2105,10 @@ def run_cmake_target(config: dict[str, Any], project_dir: Path, target: str) -> 
     if configure_status != 0:
         return configure_status
     cmd = ["cmake", "--build", str(get_cmake_build_dir(config, project_dir)), "--target", target]
-    return run_command(cmd, verbose=as_bool(config.get("verbose")))
+    rc, output = run_command_capture(cmd, verbose=as_bool(config.get("verbose")))
+    if rc != 0:
+        print_build_diagnostics(diagnose_build_output(output, config))
+    return rc
 
 
 def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_overview: bool = True) -> int:
@@ -1567,6 +2116,10 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
     if status != 0:
         return status
     if config.get("toolchain") == "cmake":
+        diagnostics = build_preflight_diagnostics(config, project_dir)
+        if diagnostics:
+            print_build_diagnostics(diagnostics)
+            return EXIT_BUILD
         target = cmake_targets(config)["buildDebug" if debug else "build"]
         rc = run_cmake_target(config, project_dir, target)
         if rc == 0:
@@ -1598,6 +2151,11 @@ def command_upload(args: argparse.Namespace) -> int:
     if config.get("toolchain") not in {"arduino-cli", "custom", "cmake"}:
         print(f"error: upload for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
         return EXIT_UNSUPPORTED
+    if config.get("toolchain") == "cmake":
+        diagnostics = build_preflight_diagnostics(config, project_dir)
+        if diagnostics:
+            print_build_diagnostics(diagnostics)
+            return EXIT_UPLOAD
     port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
     upload_config = config.get("upload") or {}
     upload_strategy = upload_config.get("strategy") if isinstance(upload_config, dict) else None
@@ -1805,6 +2363,15 @@ def command_upload_uf2(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
+
+    target = config.get("target")
+    if target and str(target) != "rp2040":
+        print(
+            f"error: upload-uf2 is RP2040/UF2 only; active target is {target_display_name(config)}",
+            file=sys.stderr,
+        )
+        print("       Use 'select-board --target rp2040' or the target-neutral 'upload' action.", file=sys.stderr)
+        return EXIT_UNSUPPORTED
 
     build_status = command_build(args, debug=False, show_memory_overview=False)
     if build_status != 0:
@@ -2114,6 +2681,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fqbn", help="Override board FQBN.")
     parser.add_argument("--target", help="Override active target family (e.g. rp2040, stm32g474).")
     parser.add_argument("--board", help="Override active board/variant within the target.")
+    parser.add_argument("--variant", help="Example variant id from the manifest's example.variants list.")
+    parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
+    parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")
     parser.add_argument(
         "--allow-unverified-port",

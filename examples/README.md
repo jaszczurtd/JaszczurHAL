@@ -2,13 +2,23 @@
 
 ## Build System Overview
 
-The examples use a unified CMake build system (`examples/CMakeLists.txt`) that
-compiles all examples for a selected backend. Two backends are supported:
+Each numbered example directory is a dispatcher-backed firmware project with its
+own `.vscode/jaszczurhal.project.json`. You can open any `examples/NN_name/`
+folder directly in VS Code and use the same JaszczurHAL tasks as downstream
+projects: Build, Upload, Monitor, Clean, Config Dump, and GUI/terminal board
+selection.
+
+The quality gate uses `scripts/examples_dispatcher.py` to discover those
+manifests and build the examples through `vscode/entry/jh-vscode` and
+`cmake/jh_firmware_project`. Two concrete targets are supported today:
 
 | Backend | Toolchain | Method |
 |---------|-----------|--------|
-| **RP2040** | `arduino-cli` + `rp2040:rp2040` core | Auto-generates a `.ino` wrapper with `setup()`/`loop()` and optional `loop1()`, symlinks sources, invokes `arduino-cli compile` |
-| **STM32G474** | `arm-none-eabi-gcc` | Builds a bare-metal ELF with linker script, startup files, and all HAL sources |
+| **RP2040/RP2350** | `arduino-cli` + `rp2040:rp2040` core | Dispatcher auto-generates the Arduino compatibility sketch and invokes `arduino-cli compile` |
+| **STM32G474** | `arm-none-eabi-gcc` | Dispatcher builds a bare-metal ELF/BIN/HEX through the reusable STM32 recipe |
+
+`examples/CMakeLists.txt` remains only as a compatibility wrapper around the
+same runner. It no longer contains a separate examples-local build recipe.
 
 ### Requirements
 
@@ -23,85 +33,47 @@ compiles all examples for a selected backend. Two backends are supported:
 
 ## How to Build
 
-### Configure + build all examples for RP2040
+### Build all examples for RP2040
 
 ```bash
-cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-cmake --build build_examples_rp2040
+scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
 ```
 
-### Configure + build RP2040 FreeRTOS examples
+### Build all examples for STM32G474
 
 ```bash
-cmake -S examples -B build_examples_rp2040_freertos \
-      -DJH_EXAMPLE_TARGET=rp2040 \
-      -DJH_RP2040_FREERTOS=ON
-cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
+scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 ```
 
-This uses the arduino-pico FQBN option `os=freertos`, defines
-`HAL_ENABLE_FREERTOS`, and compiles the `29_freertos_smoke` application with
-native `<FreeRTOS.h>` / `<task.h>` includes. The smoke app enables
-`HAL_ENABLE_APP_TASK1`, so the generated `.ino` emits `loop1()` and
-arduino-pico owns the secondary FreeRTOS/core path. It also creates two native
-FreeRTOS worker tasks with `xTaskCreate()`; both workers read and update a
-shared table protected by a FreeRTOS mutex and print live snapshots. The app
-still shares HAL task heartbeat state through `hal_mutex_t` and uses
-`hal_delay_ms()` / `hal_idle()` from task context. The normal RP2040 preset
-remains a non-FreeRTOS build.
-
-### Configure + build all examples for STM32G474
-
-```bash
-cmake -S examples -B build_examples_stm32 \
-      -DJH_EXAMPLE_TARGET=stm32g474 \
-      -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
-cmake --build build_examples_stm32
-```
-
-### Configure + build STM32G474 FreeRTOS examples
-
-```bash
-cmake --preset stm32g474-freertos -S examples
-cmake --build build_examples_stm32g474_freertos --target 29_freertos_smoke_stm32g474
-```
-
-This requires a local `third_party/FreeRTOS-Kernel` checkout, or
-`-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. If the default checkout is
-missing, CMake runs `scripts/ensure_freertos_kernel.sh` and fetches the pinned
-kernel ref before adding FreeRTOS sources. The smoke app uses native FreeRTOS
-headers, while the HAL-provided STM32 entry creates the `app_task0()` and
-`app_task1()` FreeRTOS tasks and starts the scheduler. From `app_start()`, the
-smoke app also creates two worker tasks with `xTaskCreate()` to exercise a
-mutex-protected shared table workload.
+Examples that do not declare support for the selected target are reported as
+skipped. For example, `38_stm32g474_fdcan_native` is STM32-only, while WiFi/HTTP
+examples are RP2040/Pico W-only until STM32 network backends exist.
 
 ### Build a single example
 
 ```bash
-# RP2040
-cmake --build build_examples_rp2040 --target 01_blink_rp2040
-
-# STM32G474
-cmake --build build_examples_stm32 --target 01_blink_stm32g474
+vscode/entry/jh-vscode build --project examples/01_blink --target rp2040
+vscode/entry/jh-vscode build --project examples/01_blink --target stm32g474
 ```
 
-Target names follow the pattern: `<folder_name>_<backend>`.
-
-### Using CMake presets (alternative)
+The runner can do the same for quality-gate logs:
 
 ```bash
-cmake --preset rp2040 -S examples
+scripts/examples_dispatcher.py build --target rp2040 --example 01_blink
+```
+
+### Compatibility CMake Wrapper
+
+```bash
+cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
 cmake --build build_examples_rp2040
 
-cmake --preset rp2040-freertos -S examples
-cmake --build build_examples_rp2040_freertos --target 29_freertos_smoke_rp2040
-
-cmake --preset stm32g474 -S examples
-cmake --build build_examples_stm32
-
-cmake --preset stm32g474-freertos -S examples
-cmake --build build_examples_stm32g474_freertos --target 29_freertos_smoke_stm32g474
+cmake -S examples -B build_examples_stm32g474 -DJH_EXAMPLE_TARGET=stm32g474
+cmake --build build_examples_stm32g474
 ```
+
+This wrapper delegates to `scripts/examples_dispatcher.py`; it exists for older
+commands and CI muscle memory, not as a second build system.
 
 ## Application Structure
 
@@ -111,7 +83,7 @@ Each example follows the same portable layout:
 NN_example_name/
 ├── app.c (or app.cpp)          ← application logic
 ├── hal_project_config.h        ← feature flags + backend/module config
-└── .vscode/                    ← (optional) VS Code direct-build tasks
+└── .vscode/                    ← dispatcher manifest, tasks, settings
 ```
 
 There is no `main()`, no `setup()`/`loop()`, and no `.ino` file written by the

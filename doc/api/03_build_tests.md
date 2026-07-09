@@ -90,7 +90,7 @@ Runs the complete quality-gate suite (7 gates, in order):
 4. Static analysis: cppcheck
 5. Static analysis: clang-tidy (host + STM32 compile databases; `build_stm32_host/`)
 6. Target static-library builds (STM32G474 + RP2040 flag matrix)
-7. Examples build (RP2040 + STM32G474, via `examples/CMakeLists.txt`)
+7. Examples build (RP2040 + STM32G474, via dispatcher-backed example manifests)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
 
