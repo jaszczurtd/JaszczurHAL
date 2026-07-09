@@ -6,7 +6,11 @@ JaszczurHAL is a hardware abstraction layer and utility library for embedded pro
 
 The most complete backend currently targets RP2040/2350 boards through Arduino-Pico. STM32G474 is also supported as a real, fast bare-metal backend, with only a small number of modules still in progress. ESP32 is next in line.
 
-## Why this exists
+## How do you even pronounce this library name?
+
+Like this: **"YASH-choor-HAL"**. You're welcome. :)
+
+## Why this exists?
 
 Many embedded projects start as quickly written code and become increasingly difficult to evolve over time, especially when hardware access is tightly coupled with application logic or when drivers are bound to a specific hardware target.
 
@@ -97,6 +101,7 @@ runmefirst.sh               # one-time local toolchain setup
 doc/
   JaszczurHAL_API.md        # detailed API/reference
   api/                      # split API chapters included by the main reference
+  FwProjectWorkflow.md      # dispatcher-backed firmware project workflow
   HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
   lib_compilation.md        # static-library build guide
   features.md               # high-level feature matrix
@@ -168,7 +173,7 @@ There are two common starting points:
   Code, use the VS Code project generator. It creates a separate project
   directory with a blink application, project-local HAL configuration,
   ready-to-run VS Code tasks for build/upload/monitor/IntelliSense refresh,
-  target/board selection, and USB identity set to `Jaszczur Example`.
+  target/board selection, and USB identity set to `Jaszczur Example Project`.
 
 From the directory that contains your firmware repositories:
 
@@ -212,15 +217,21 @@ scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
 # Single example
 vscode/entry/jh-vscode build --project examples/01_blink --target rp2040
 ```
-Each example uses the portable entry-point contract (`app_start` /
-`app_task0`, plus optional `app_task1`
+Each example uses the portable entry-point contract: `app_start()`,
+`app_task0()`, and optional `app_task1()`.
 
-The `app_task1` pattern (when `HAL_ENABLE_APP_TASK1` is defined) comes from RP2040/2350 nature - a dual-core execution.
-STM32G474 supports the same application structure as well, but maps it to cooperative `app_task0` / `app_task1` calls.
+The `app_task1()` pattern, enabled with `HAL_ENABLE_APP_TASK1`, maps naturally
+to RP2040/RP2350 dual-core execution. STM32G474 supports the same application
+shape, but maps it to cooperative `app_task0()` / `app_task1()` calls.
 
-When FreeRTOS is enabled, all targets gain full multithreading with consistent behavior. In that configuration, the `app_task1` pattern can simply be replaced by regular FreeRTOS tasks.
+When FreeRTOS is enabled, all targets gain full multithreading with consistent
+behavior. In that configuration, regular FreeRTOS tasks are usually the more
+explicit model.
 
-The vast majority of examples build for all supported targets and provide the same behavior across them. On STM32, the few remaining exceptions come from temporary gaps in module support, such as Wi-Fi See [examples/README.md](examples/README.md) for details.
+The vast majority of examples build for all supported targets and provide the
+same behavior across them. On STM32, the few remaining exceptions come from
+temporary gaps in module support, such as Wi-Fi. See
+[examples/README.md](examples/README.md) for details.
 
 ## Module selection (quick)
 
@@ -302,6 +313,12 @@ existing RP2040/Arduino projects need no change. Selecting two targets - or a
 bare-metal ARM build with no detectable target - is a compile-time `#error`.
 Backend files compile only for their selected target, so unused backends cost zero code.
 
+Dispatcher-backed VS Code projects select the active family/board with the
+manifest, `.vscode/jaszczurhal.local.json`, or `--target`/`--board`; the
+dispatcher then pins `JH_TARGET` for CMake and lets `hal_target.h` select the
+HAL backend. See [FwProjectWorkflow.md](doc/FwProjectWorkflow.md) for the full
+target/board/configuration model.
+
 ## Host tests (quick)
 
 ```bash
@@ -370,6 +387,12 @@ In order to make it work, it needs to be installed once per clone:
 git config core.hooksPath .githooks
 ```
 
+The pre-commit hook normalizes staged text files at commit time: CRLF, trailing
+horizontal whitespace, final newline, selected UTF-8 punctuation, and
+`clang-format` for staged C/C++ files when available. It only processes staged
+files and re-adds changed files to the index; it is not an editor-on-save
+formatter for unstaged work.
+
 Manual equivalent (without running setup script):
 
 ```bash
@@ -392,7 +415,8 @@ builds dispatcher-backed CMake firmware for supported targets, performs
 identity-verified serial upload where applicable, handles RP2040 BOOTSEL/UF2
 upload, delegates STM32 flashing to OpenOCD, starts persistent serial monitors,
 refreshes IntelliSense, and can clear a board's visible USB identity with
-neutral firmware.
+neutral firmware. The end-to-end project model is documented in
+[FwProjectWorkflow.md](doc/FwProjectWorkflow.md).
 
 For a new standalone project, generate a small working project outside this
 repository:
@@ -436,6 +460,11 @@ Linux is the primary supported environment for this workflow. Windows users
 should prefer WSL2 or a Bash-backed VS Code shell until native Windows parity is
 explicitly implemented.
 
+Adding new files to a dispatcher-backed project is described in
+[FwProjectWorkflow.md](doc/FwProjectWorkflow.md#adding-project-source-files).
+Flat project roots are discovered automatically; subdirectory layouts should use
+the complete `JH_PROJECT_SOURCES` list.
+
 ## Building as a static library (.a)
 
 The complete guide for compiling JaszczurHAL to a linkable static library
@@ -446,7 +475,7 @@ The complete guide for compiling JaszczurHAL to a linkable static library
 The pinned version of the `earlephilhower/arduino-pico` core is defined in a single file:
 
 ```text
-rp2040_core_version.conf    ← RP2040_CORE_VERSION=x.y.z
+rp2040_core_version.conf    -> RP2040_CORE_VERSION=x.y.z
 ```
 
 `runmefirst.sh` and the CI workflow source this file automatically;
@@ -463,15 +492,21 @@ No other files need to be touched.
 Primary docs:
 
 - API reference: [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
+- Firmware project workflow: [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
 - Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
 - Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
 - VS Code firmware workflow: [vscode/README.md](vscode/README.md)
-  - Project generator: [vscode/tools/create-vscode-example.py](vscode/tools/create-vscode-example.py)
-  - Fiesta parity checklist: [vscode/docs/fiesta-parity-checklist.md](vscode/docs/fiesta-parity-checklist.md)
+- Project generator: [vscode/tools/create-vscode-example.py](vscode/tools/create-vscode-example.py)
 
+
+
+## For Embedded Engineers Who Usually Skip Arduino Projects
+
+The Arduino footprint in this repository is a tooling detail, not the shape of the software. Despite relying on `arduino-cli`, this is not an Arduino project. The official Arduino IDE cannot build this repository, and that tool will not be supported in the future. The project is expected to move even farther away from the Arduino ecosystem over time.
+`arduino-cli` is used only as part of the current toolchain: to access the `earlephilhower/arduino-pico` core and to preserve driver-level compatibility where it is useful. Useful drivers are absorbed into `JaszczurHAL` only after being rewritten for its API, adapted for multithreaded use, and stripped of unrelated Arduino-specific code. The supported development flow is based on Python/Bash scripts, CMake, and VS Code.
 
 ## Notes and credits
 

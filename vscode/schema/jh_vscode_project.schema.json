@@ -152,6 +152,7 @@
     },
     "upload": {
       "type": "object",
+      "description": "Upload configuration. Stable dispatcher paths currently cover RP2040 UF2/serial-style upload and STM32 OpenOCD; custom/esptool are reserved extension points.",
       "additionalProperties": true,
       "properties": {
         "strategy": {
@@ -178,6 +179,7 @@
     },
     "hooks": {
       "type": "object",
+      "description": "Reserved hook configuration. The current runtime preserves/expands this section as data, but does not provide a stable executed hook system.",
       "additionalProperties": true,
       "properties": {
         "preBuild": {

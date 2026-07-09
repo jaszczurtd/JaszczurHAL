@@ -7,6 +7,8 @@ IntelliSense refresh, board/port helpers, and USB identity cleanup.
 The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
 call `entry/jh-vscode` and keep project-specific behavior in configuration.
 Files under `linux/runtime/` and `windows/runtime/` are implementation details.
+For the full firmware project model, see
+[`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md).
 
 ## CLI Contract
 
@@ -14,7 +16,7 @@ Files under `linux/runtime/` and `windows/runtime/` are implementation details.
 jh-vscode <action> [options]
 ```
 
-Supported actions in the initial contract:
+Implemented actions:
 
 ```text
 build
@@ -28,13 +30,16 @@ refresh-intellisense
 clean
 select-board
 list-ports
-change-port
 clear-identity
 config-dump
 ```
 
 Compatibility note: `debug` is accepted as an alias for `build-debug` only for
 early migration work. New tasks should use `build-debug`.
+
+Reserved compatibility action: `change-port` is part of the historical CLI
+contract but is not implemented as a stable project action. Do not use it in
+default project tasks.
 
 Common options:
 
@@ -93,6 +98,54 @@ module directory as `JH_PROJECT_DIR`.
 For RP2040, the dispatcher generates the Arduino compatibility sketch under the
 target/board CMake build directory. STM32G474 uses the bare-metal recipe and
 OpenOCD upload target from the registry.
+
+## Adding Project Source Files
+
+Dispatcher-backed projects do not keep a project-local firmware `CMakeLists.txt`
+and do not list source files in `.vscode/tasks.json`. Source discovery is owned
+by the shared dispatcher through `JH_PROJECT_DIR` and, when needed,
+`JH_PROJECT_SOURCES`.
+
+For the common flat project layout, add new `*.c`, `*.cpp`, `*.h`, or `*.hpp`
+files directly under the project directory. They are discovered automatically on
+the next build:
+
+```text
+my-firmware/
+  hal_project_config.h
+  tracker.cpp
+  tracker.h
+  new_module.c
+  new_module.h
+```
+
+For source files in subdirectories, add a complete explicit source list to
+`.vscode/jaszczurhal.project.json` under `cmake.cache`:
+
+```json
+"cmake": {
+  "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
+  "cache": {
+    "JH_PROJECT_DIR": "${project}",
+    "ARDUINO_LIBRARIES": "${project}/../libraries",
+    "JH_PROJECT_SOURCES": "tracker.cpp;tracker.h;hal_project_config.h;paradygmat/paradygmat.c;paradygmat/paradygmat.h;paradygmat/filter.cpp;paradygmat/filter.h"
+  }
+}
+```
+
+`JH_PROJECT_SOURCES` is a semicolon-separated CMake list stored as a JSON string.
+Relative paths resolve from `JH_PROJECT_DIR`. When this option is present, it
+replaces automatic source discovery, so list the whole firmware project, not only
+the new subdirectory files.
+
+Prefer project-root-relative includes from code outside the subdirectory:
+
+```c
+#include "paradygmat/paradygmat.h"
+```
+
+After changing the explicit list, run `Project: Build`. If an RP2040 build still
+uses stale generated sketch links, run `Project: Clean` once and build again.
 
 ## New Project Generator
 
@@ -196,18 +249,29 @@ this flag.
 
 ## Configuration Precedence
 
-Configuration is loaded relative to `--project` in this order:
+Configuration is loaded relative to `--project`, but target selection and
+manifest merging are separate steps.
 
-1. Explicit CLI flags.
-2. User-local `.vscode/jaszczurhal.local.json` target/board selection.
-3. `.vscode/jaszczurhal.project.json`.
-4. Target registry defaults and the active `targetProfiles.<target>` overlay.
-5. `.vscode/settings.json` keys under `jaszczurhal.*`.
-6. `.vscode/settings.json` keys under `arduino.*`.
-7. Legacy `.vscode/arduino.json`, only for projects that still need it.
-8. Development fallback from the directory name, with a warning.
+Active target/board selection:
 
-For the same semantic value, `jaszczurhal.*` wins over `arduino.*`.
+1. Explicit CLI `--target` / `--board`.
+2. User-local `.vscode/jaszczurhal.local.json`, written by `select-board`.
+3. Manifest `target` / `board`.
+4. Default `rp2040` plus the registry default board.
+
+Effective dispatcher configuration is then merged from low to high precedence:
+
+1. Target registry family defaults and selected-board cache.
+2. Base `.vscode/jaszczurhal.project.json`.
+3. Active `targetProfiles.<target>` overlay.
+4. Final active target/board pinning, including `cmake.cache.JH_TARGET`.
+5. Per-invocation CLI flags such as `--port`, `--fqbn`, or `--verbose`.
+
+`.vscode/settings.json` is a compatibility/fill-in source for local tool paths,
+ports and legacy Arduino settings. For the same semantic value,
+`jaszczurhal.*` wins over `arduino.*`, and manifest values for stable project
+identity/source/build behavior should be treated as authoritative. Legacy
+`.vscode/arduino.json` is only a fallback for projects that still need it.
 
 Stable project data should move to `.vscode/jaszczurhal.project.json` during
 migration. Developer-local preferences, such as a temporary serial port or a
@@ -295,7 +359,7 @@ automatically after the board returns.
 8   Unsupported action or platform path.
 ```
 
-## Generated Files
+## Generated Files And Build Cache
 
 `refresh-intellisense` uses compile database output as the source of truth:
 
@@ -305,3 +369,10 @@ automatically after the board returns.
 
 `.vscode/c_cpp_properties.json` is treated as a generated adapter for VS Code
 cpptools. It should not be the long-term hand-edited contract of a project.
+
+For dispatcher-backed projects with an active target, the base `cmakeBuildDir`
+is isolated by target and board, for example
+`.build/cmake/rp2040/pico/` or `.build/cmake/stm32g474/nucleo-g474re/`. If the
+cached CMake source directory changes during migration, `jh-vscode` resets the
+stale in-project cache before configuring again. See
+[`FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md#build-directories-and-generated-files).

@@ -52,6 +52,12 @@ sudo apt-get update
 # the security scanner below. Python runs repository helper scripts.
 sudo apt-get install -y build-essential cmake git curl ca-certificates python3
 
+# Client/runtime tooling used by generated jh-vscode projects:
+# - openocd flashes/debugs STM32G474 targets,
+# - python3-serial powers the persistent serial monitor,
+# - psmisc provides fuser for safe serial monitor handoff before upload.
+sudo apt-get install -y openocd python3-serial psmisc
+
 # STM32 FreeRTOS dependency - fetched only as part of this explicit setup step.
 "${SCRIPT_DIR}/scripts/ensure_freertos_kernel.sh" --force --repo-root "${SCRIPT_DIR}"
 
@@ -138,7 +144,9 @@ tool_exists() {
 
 for tool in cmake g++ gcc make git python3 valgrind clang-tidy cppcheck \
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
-            arm-none-eabi-gcc arduino-cli; do
+            arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
+            arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \
+            openocd fuser arduino-cli; do
   if tool_exists "$tool"; then
     printf '  ok       %s\n' "$tool"
   else
@@ -146,6 +154,13 @@ for tool in cmake g++ gcc make git python3 valgrind clang-tidy cppcheck \
     missing=1
   fi
 done
+
+if python3 -c 'import serial' >/dev/null 2>&1; then
+  printf '  ok       %s\n' "python3:serial"
+else
+  printf '  MISSING  %s\n' "python3:serial"
+  missing=1
+fi
 
 if [ "$missing" -ne 0 ]; then
   echo "Some tools are still missing (see above)."

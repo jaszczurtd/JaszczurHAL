@@ -40,6 +40,9 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
   dependency scanners.
 - `runalltests.sh` - full local validation gate.
 - `runmefirst.sh` - one-time local toolchain setup.
+- `doc/FwProjectWorkflow.md` - dispatcher-backed firmware project workflow:
+  manifest model, target/board selection, source discovery, upload/debug-build
+  behavior, build directories, and generated files.
 - `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
 - `security/third_party.json` - human-maintained third-party inventory.
 - `security/sbom.cdx.json` - generated CycloneDX SBOM.
@@ -92,6 +95,8 @@ This file is the API-oriented companion to [README.md](../README.md).
 Recommended split of responsibilities:
 
 - [README.md](../README.md): overview, architecture, quick start, build/test entry points, practical examples
+- [FwProjectWorkflow.md](FwProjectWorkflow.md): dispatcher-backed firmware
+  project workflow, including manifest/target/source/build/upload behavior
 - `doc/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
 Where both documents touch the same topic, [README.md](../README.md) should be
@@ -146,6 +151,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | # | File | Contents |
 |---|------|----------|
 | 1 | [Library compilation guide](lib_compilation.md) | Building for all targets (host/mock, RP2040/Arduino, STM32G474 bare-metal), static-library helpers, FreeRTOS build variants, CMake presets, stack-size overrides, linking with a firmware project |
+| P | [Firmware project workflow](FwProjectWorkflow.md) | Dispatcher-backed VS Code firmware projects: manifest model, target/board selection, source discovery, per-target CMake cache layout, upload/debug-build behavior and generated files |
 | 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS flag, stack-size overrides, core modules, `library.properties` note |
 | 3 | [Build dependencies and unit tests](api/03_build_tests.md) | Hardware and mock/PC dependency tables, ctest build/run instructions, full test-suite inventory, how to add a new test suite, mock time control |
 | 4 | [Multicore safety, drivers, migration](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, migration table from Arduino/pico SDK |

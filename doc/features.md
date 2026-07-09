@@ -3,6 +3,8 @@
 This document is a high-level inventory of what JaszczurHAL offers. It is meant
 as a compact feature map, not an API reference. For function signatures,
 configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL_API.md).
+For the target-selectable VS Code firmware project model, see
+[FwProjectWorkflow.md](FwProjectWorkflow.md).
 
 ## Platform and build capabilities
 
@@ -14,6 +16,7 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/hal_config.h) |
 | Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples. | [hal_app.h](../src/hal/hal_app.h) |
 | FreeRTOS integration | Native FreeRTOS-aware mutex, delay and app-task support for supported target builds. | [STM32 FreeRTOS glue](../src/hal/impl/stm32g474/freertos/) |
+| Dispatcher-backed firmware projects | Shared VS Code/CMake workflow for generated projects, migrated downstream modules and checked-in examples, with target/board selection and per-target CMake cache isolation. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Static library builds | Dedicated CMake/helper flows for RP2040 and STM32G474 library builds. | [rp2040_lib](../rp2040_lib/), [stm32_lib](../stm32_lib/) |
 | Validation gate | Full local gate for unit tests, Valgrind, static analysis, target builds and examples. | [runalltests.sh](../runalltests.sh) |
 
@@ -129,5 +132,6 @@ configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL
 |---|---|---|
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
+| Firmware project workflow | Manifest, target/board selection, source discovery, upload/debug-build behavior and generated files for dispatcher-backed projects. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Porting/status notes | Target-specific progress notes and architecture roadmap. | [STM32G474 progress](STM32G474_porting_progress.md), [future ideas](future_ideas.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

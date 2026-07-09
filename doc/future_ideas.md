@@ -54,6 +54,33 @@ Simple backlog of future architecture and implementation work.
     current headroom for WiFi TX peaks, local decoupling, proper boot strap
     pins, and explicit `EN`/`RST` control where possible.
 
+- Investigate occasional Fiesta CDC / serial-debug link drops during monitor
+  sessions.
+  - Not critical for runtime operation because it has not been observed with
+    USB disconnected.
+  - Symptoms are intermittent/random rather than reliably reproducible.
+  - Observed trigger: starting/stopping the persistent serial monitor can
+    make Pico-class boards disappear/reappear from the host-side CDC view,
+    especially when the monitor is terminated brutally (for example by `kill`)
+    instead of exiting cleanly.
+  - Important refinement: this currently looks more like USB CDC disconnect /
+    reconnect or host-side re-enumeration than a full MCU reset. The Fiesta app
+    can keep running normally, visible on the display, while the USB serial
+    connection drops or restarts from the host perspective.
+  - Current suspicion: behaviour may depend on the USB hub/host path used for
+    the connected module.
+  - Likely blind alleys unless new evidence appears:
+    1200-baud bootloader touch does not match the symptom if the board returns
+    to the running app rather than UF2/upload mode; watchdog reset also does
+    not match when the display/app loop keeps running continuously.
+  - Diagnostic angles: distinguish physical USB connect/disconnect from serial
+    port open/close, upload handoff and monitor reconnect; check for 1200-baud
+    bootloader touch, DTR/HUPCL side effects, CDC TX backpressure, excessive
+    debug logging, watchdog resets and power/ground disturbance through USB.
+    Correlate device uptime/display refresh with host `dmesg -w` and
+    `udevadm monitor --kernel --property --subsystem-match=tty` so MCU reset,
+    CDC-only re-enumeration and hub/port reset are separated cleanly.
+
 - Continue FreeRTOS hardening.
   - Harden module-level synchronization and ownership.
   - Document callback contexts, task contexts and ISR/task boundaries.
