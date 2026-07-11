@@ -13,12 +13,32 @@ extern "C" {
  * @brief Thread-safe HAL wrapper for arduino-wireguard-pico-w.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #define HAL_WIREGUARD_IPV4_OCTETS 4u
 #define HAL_WIREGUARD_IP_STR_LEN 16u
+
+hal_status_t
+hal_wireguard_begin_ex(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
+                       const char *private_key, const char *remote_peer_address,
+                       const char *remote_peer_public_key,
+                       uint16_t remote_peer_port);
+hal_status_t hal_wireguard_begin_advanced_ex(
+    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
+    const char *remote_peer_address, const char *remote_peer_public_key,
+    uint16_t remote_peer_port,
+    const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
+    const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
+hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
+                                      size_t endpoint_ip_out_size,
+                                      uint16_t *endpoint_port_out,
+                                      bool *out_peer_up);
+hal_status_t hal_wireguard_kick_handshake_ex(
+    const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t probe_port,
+    uint32_t min_interval_ms);
 
 /**
  * @brief Parse dotted IPv4 text into 4 octets.
@@ -81,13 +101,12 @@ bool hal_wireguard_begin_text(const char *local_ip_text,
  * @param allowed_mask Allowed network mask as octets.
  * @return true when tunnel start succeeded.
  */
-bool hal_wireguard_begin_advanced(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
-                                  const char *private_key,
-                                  const char *remote_peer_address,
-                                  const char *remote_peer_public_key,
-                                  uint16_t remote_peer_port,
-                                  const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
-                                  const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
+bool hal_wireguard_begin_advanced(
+    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
+    const char *remote_peer_address, const char *remote_peer_public_key,
+    uint16_t remote_peer_port,
+    const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
+    const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
 
 /**
  * @brief Start WireGuard in advanced mode using dotted IPv4 text.
@@ -126,8 +145,7 @@ bool hal_wireguard_is_initialized(void);
  * @param endpoint_port_out Optional endpoint port output.
  * @return true when peer is up (and optional outputs were written).
  */
-bool hal_wireguard_peer_up(char *endpoint_ip_out,
-                           size_t endpoint_ip_out_size,
+bool hal_wireguard_peer_up(char *endpoint_ip_out, size_t endpoint_ip_out_size,
                            uint16_t *endpoint_port_out);
 
 /**
@@ -145,9 +163,9 @@ bool hal_wireguard_peer_up_quick(void);
  * @param min_interval_ms Minimum interval between probes.
  * @return true when probe request was accepted.
  */
-bool hal_wireguard_kick_handshake(const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS],
-                                  uint16_t probe_port,
-                                  uint32_t min_interval_ms);
+bool hal_wireguard_kick_handshake(
+    const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t probe_port,
+    uint32_t min_interval_ms);
 
 /**
  * @brief Trigger non-blocking handshake via tiny UDP probe (IPv4 text helper).

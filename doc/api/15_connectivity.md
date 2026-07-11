@@ -8,6 +8,129 @@ Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_http_server`,
 `HAL_ENABLE_BSD_SOCKETS` compatibility adapter.
 Shared network types live in `hal_net.h`.
 
+## Status-returning network API
+
+New code can use additive `_ex` operations returning `hal_status_t` across
+WiFi, resolver, TCP, UDP, MQTT and WireGuard. Existing APIs remain available
+unchanged. Operations which historically returned a count, accepted socket or
+peer state use an explicit output parameter, so converting to a status does not
+discard the original result.
+
+Representative entries include `hal_wifi_begin_station_ex()`,
+`hal_wifi_ping_status_ex()`, `hal_net_resolve_ipv4_ex()`,
+`hal_tcp_socket_{connect,send,recv}_ex()`,
+`hal_tcp_listener_{bind,listen,accept}_ex()`,
+`hal_udp_socket_{bind,sendto,recvfrom}_ex()`, legacy-packet UDP `_ex` helpers,
+`hal_mqtt_{connect,publish,subscribe}_ex()` and
+`hal_wireguard_{begin,peer_up,kick_handshake}_ex()`.
+
+The complete additive status surface is:
+
+```c
+// WiFi and resolver
+hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode);
+hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
+hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
+hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
+                                       bool non_blocking);
+hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
+                                     uint32_t timeout_ms, int *out_result);
+hal_status_t hal_wifi_scan_networks_ex(int *out_count);
+hal_status_t hal_wifi_get_scan_result_ex(size_t index,
+                                         hal_wifi_scan_result_t *out);
+hal_status_t hal_net_resolve_ipv4_ex(
+    const char *host_or_ip, uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
+
+// Handle-based TCP
+hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
+                                       const hal_net_endpoint_t *remote,
+                                       uint32_t timeout_ms);
+hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
+                                    size_t len, size_t *out_sent);
+hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
+                                    size_t max_len, uint32_t timeout_ms,
+                                    size_t *out_received);
+hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
+                                      const hal_net_endpoint_t *local);
+hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
+                                        uint8_t backlog);
+hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        hal_tcp_socket_t *out_socket);
+
+// Handle-based and compatibility UDP
+hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
+                                    const hal_net_endpoint_t *local);
+hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
+                                      size_t len,
+                                      const hal_net_endpoint_t *remote,
+                                      size_t *out_sent);
+hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
+                                        size_t max_len,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        size_t *out_received);
+hal_status_t hal_udp_begin_ex(uint16_t local_port);
+hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
+                             uint16_t *out_read);
+hal_status_t hal_udp_remote_ip_ex(char *out, size_t out_size);
+hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
+                                     uint16_t remote_port);
+hal_status_t hal_udp_begin_packet_remote_ex(void);
+hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
+                              uint16_t *out_written);
+hal_status_t hal_udp_write_str_ex(const char *text, uint16_t *out_written);
+hal_status_t hal_udp_end_packet_ex(void);
+
+// MQTT
+hal_status_t hal_mqtt_set_server_ex(const char *host, uint16_t port);
+hal_status_t hal_mqtt_set_callback_ex(hal_mqtt_message_callback_t callback,
+                                      void *user);
+hal_status_t hal_mqtt_set_keepalive_ex(uint16_t keepalive_s);
+hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s);
+hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size);
+hal_status_t hal_mqtt_connect_ex(const char *client_id);
+hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
+                                      const char *pass);
+hal_status_t hal_mqtt_loop_ex(void);
+hal_status_t hal_mqtt_publish_ex(const char *topic, const uint8_t *payload,
+                                 uint16_t payload_len, bool retained);
+hal_status_t hal_mqtt_publish_str_ex(const char *topic, const char *payload,
+                                     bool retained);
+hal_status_t hal_mqtt_subscribe_ex(const char *topic, uint8_t qos);
+hal_status_t hal_mqtt_unsubscribe_ex(const char *topic);
+
+// WireGuard
+hal_status_t hal_wireguard_begin_ex(
+    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
+    const char *private_key, const char *remote_peer_address,
+    const char *remote_peer_public_key, uint16_t remote_peer_port);
+hal_status_t hal_wireguard_begin_advanced_ex(
+    const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
+    const char *remote_peer_address, const char *remote_peer_public_key,
+    uint16_t remote_peer_port,
+    const uint8_t allowed_ip[HAL_WIREGUARD_IPV4_OCTETS],
+    const uint8_t allowed_mask[HAL_WIREGUARD_IPV4_OCTETS]);
+hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
+                                      size_t endpoint_ip_out_size,
+                                      uint16_t *endpoint_port_out,
+                                      bool *out_peer_up);
+hal_status_t hal_wireguard_kick_handshake_ex(
+    const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t probe_port,
+    uint32_t min_interval_ms);
+```
+
+Common validation reports `HAL_EINVAL`. Resolver/lookup absence uses
+`HAL_ENOENT`, an unavailable accept uses `HAL_EAGAIN`, an operation requiring
+an initialized WireGuard tunnel uses `HAL_EUNINIT`, and ambiguous legacy
+backend failures map conservatively to `HAL_EIO`. This adapter does not claim
+timeout/protocol precision that the underlying backend does not expose. See the
+public module headers for complete signatures.
+
 ## Shared network types
 
 `hal_net.h` contains plain C value types shared by handle-based UDP, TCP, and
@@ -46,6 +169,8 @@ typedef enum {
 #ifdef HAL_ENABLE_WIFI
 bool hal_net_resolve_ipv4(const char *host_or_ip,
                           uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
+hal_status_t hal_net_resolve_ipv4_ex(
+    const char *host_or_ip, uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
 #endif
 ```
 
@@ -118,10 +243,23 @@ int     hal_wifi_get_strength(void);                // 0..5 bars
 bool    hal_wifi_get_local_ip(char *out, size_t out_size);
 bool    hal_wifi_get_dns_ip(char *out, size_t out_size);
 bool    hal_wifi_get_mac(char *out, size_t out_size);
+hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode);
+hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
+hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
+hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
+                                       bool non_blocking);
+hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);
 int     hal_wifi_ping(const char *host_or_ip);      // >=0 ok, <0 error (uses timeout set by hal_wifi_set_timeout_ms)
 int     hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms); // >=0 ok, <0 error (per-call timeout)
+hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
+                                     uint32_t timeout_ms, int *out_result);
 int     hal_wifi_scan_networks(void);               // >=0 result count, <0 error
 bool    hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out);
+hal_status_t hal_wifi_scan_networks_ex(int *out_count);
+hal_status_t hal_wifi_get_scan_result_ex(size_t index,
+                                         hal_wifi_scan_result_t *out);
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 ```
 

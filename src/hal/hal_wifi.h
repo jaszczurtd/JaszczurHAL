@@ -8,6 +8,7 @@
  * @brief Thread-safe HAL wrapper for WiFi operations.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -25,27 +26,41 @@ extern "C" {
 #endif
 
 typedef enum {
-	HAL_WIFI_MODE_OFF = 0,
-	HAL_WIFI_MODE_STA = 1,
-	HAL_WIFI_MODE_AP = 2,
-	HAL_WIFI_MODE_AP_STA = 3
+  HAL_WIFI_MODE_OFF = 0,
+  HAL_WIFI_MODE_STA = 1,
+  HAL_WIFI_MODE_AP = 2,
+  HAL_WIFI_MODE_AP_STA = 3
 } hal_wifi_mode_t;
 
 typedef enum {
-	HAL_WIFI_ENC_UNKNOWN = 0,
-	HAL_WIFI_ENC_NONE,
-	HAL_WIFI_ENC_WPA,
-	HAL_WIFI_ENC_WPA2,
-	HAL_WIFI_ENC_AUTO
+  HAL_WIFI_ENC_UNKNOWN = 0,
+  HAL_WIFI_ENC_NONE,
+  HAL_WIFI_ENC_WPA,
+  HAL_WIFI_ENC_WPA2,
+  HAL_WIFI_ENC_AUTO
 } hal_wifi_encryption_t;
 
 typedef struct {
-	char                  ssid[HAL_WIFI_SSID_MAX_LEN];
-	uint8_t               bssid[HAL_WIFI_BSSID_LEN];
-	hal_wifi_encryption_t encryption;
-	int32_t               rssi;
-	int32_t               channel;
+  char ssid[HAL_WIFI_SSID_MAX_LEN];
+  uint8_t bssid[HAL_WIFI_BSSID_LEN];
+  hal_wifi_encryption_t encryption;
+  int32_t rssi;
+  int32_t channel;
 } hal_wifi_scan_result_t;
+
+hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode);
+hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
+hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
+hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
+                                       bool non_blocking);
+hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);
+hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
+                                     uint32_t timeout_ms, int *out_result);
+hal_status_t hal_wifi_scan_networks_ex(int *out_count);
+hal_status_t hal_wifi_get_scan_result_ex(size_t index,
+                                         hal_wifi_scan_result_t *out);
 
 /** @brief Set WiFi mode. */
 bool hal_wifi_set_mode(hal_wifi_mode_t mode);
@@ -68,7 +83,8 @@ bool hal_wifi_set_hostname(const char *hostname);
  * @param password WiFi password.
  * @param non_blocking true uses non-blocking begin when available.
  */
-bool hal_wifi_begin_station(const char *ssid, const char *password, bool non_blocking);
+bool hal_wifi_begin_station(const char *ssid, const char *password,
+                            bool non_blocking);
 
 /** @brief Set socket timeout in milliseconds for WiFi stack operations. */
 bool hal_wifi_set_timeout_ms(uint32_t timeout_ms);

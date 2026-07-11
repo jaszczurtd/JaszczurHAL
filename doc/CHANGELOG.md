@@ -4,6 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### SPI/DMA status API
+
+- Added status-returning SPI `_ex` APIs for init, begin/end transaction,
+  byte/word/buffer transfer, write, blocking DMA and asynchronous DMA
+  start/wait while preserving all existing compatibility functions.
+- Added a shared status adapter used by mock, RP2040 and STM32G474 builds. It
+  validates buses/settings/buffers, reports active async DMA as `HAL_EBUSY` and
+  maps backend DMA failure to `HAL_EIO` without inventing unsupported polling
+  transfer precision.
+- Expanded `test_hal_spi` with success, invalid-argument and injected DMA
+  failure coverage.
+
+### Network status API
+
+- Added status-returning APIs for WiFi, IPv4 resolution, TCP, UDP, MQTT and
+  WireGuard while preserving all legacy `bool`, integer and handle-returning
+  functions.
+- Added explicit output parameters for ping/scan results, transferred byte
+  counts, accepted TCP sockets and WireGuard peer state. The new ping entry is
+  `hal_wifi_ping_status_ex()` because the historical int-returning
+  `hal_wifi_ping_ex()` remains source-compatible.
+- Added `hal_network_status.cpp` as a shared validation/result adapter and a
+  cross-module `test_hal_network_status` covering success and representative
+  `HAL_EINVAL`, `HAL_ENOENT`, `HAL_EUNINIT` and `HAL_EIO` paths.
+
 ### Multi-target VS Code firmware workflow
 
 - Added the shared `cmake/jh_firmware_project` dispatcher and target recipes so

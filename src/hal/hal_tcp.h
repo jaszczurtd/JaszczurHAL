@@ -28,6 +28,23 @@ typedef struct hal_tcp_socket_impl_t *hal_tcp_socket_t;
 /** @brief Opaque TCP listener/server handle. */
 typedef struct hal_tcp_listener_impl_t *hal_tcp_listener_t;
 
+hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
+                                       const hal_net_endpoint_t *remote,
+                                       uint32_t timeout_ms);
+hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
+                                    size_t len, size_t *out_sent);
+hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
+                                    size_t max_len, uint32_t timeout_ms,
+                                    size_t *out_received);
+hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
+                                      const hal_net_endpoint_t *local);
+hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
+                                        uint8_t backlog);
+hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        hal_tcp_socket_t *out_socket);
+
 /**
  * @brief Allocate a TCP client socket from the backend pool.
  * @return Socket handle, or NULL when no socket slot is available.

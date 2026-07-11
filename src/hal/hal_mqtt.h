@@ -15,6 +15,7 @@ extern "C" {
  * This module is opt-in and is compiled only when HAL_ENABLE_MQTT is defined.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -27,13 +28,30 @@ extern "C" {
  */
 typedef void (*hal_mqtt_message_callback_t)(const char *topic,
                                             const uint8_t *payload,
-                                            uint16_t length,
-                                            void *user);
+                                            uint16_t length, void *user);
+
+hal_status_t hal_mqtt_set_server_ex(const char *host, uint16_t port);
+hal_status_t hal_mqtt_set_callback_ex(hal_mqtt_message_callback_t callback,
+                                      void *user);
+hal_status_t hal_mqtt_set_keepalive_ex(uint16_t keepalive_s);
+hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s);
+hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size);
+hal_status_t hal_mqtt_connect_ex(const char *client_id);
+hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
+                                      const char *pass);
+hal_status_t hal_mqtt_loop_ex(void);
+hal_status_t hal_mqtt_publish_ex(const char *topic, const uint8_t *payload,
+                                 uint16_t payload_len, bool retained);
+hal_status_t hal_mqtt_publish_str_ex(const char *topic, const char *payload,
+                                     bool retained);
+hal_status_t hal_mqtt_subscribe_ex(const char *topic, uint8_t qos);
+hal_status_t hal_mqtt_unsubscribe_ex(const char *topic);
 
 /** @brief Configure MQTT broker hostname/address and port. */
 bool hal_mqtt_set_server(const char *host, uint16_t port);
 
-/** @brief Register message callback and opaque user pointer (both may be NULL). */
+/** @brief Register message callback and opaque user pointer (both may be NULL).
+ */
 bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user);
 
 /** @brief Override keep-alive interval in seconds. */
@@ -52,7 +70,8 @@ uint16_t hal_mqtt_get_buffer_size(void);
 bool hal_mqtt_connect(const char *client_id);
 
 /** @brief Connect using client ID plus username/password credentials. */
-bool hal_mqtt_connect_auth(const char *client_id, const char *user, const char *pass);
+bool hal_mqtt_connect_auth(const char *client_id, const char *user,
+                           const char *pass);
 
 /** @brief Disconnect if connected. */
 void hal_mqtt_disconnect(void);
@@ -72,10 +91,12 @@ int hal_mqtt_state(void);
 bool hal_mqtt_loop(void);
 
 /** @brief Publish raw payload bytes. */
-bool hal_mqtt_publish(const char *topic, const uint8_t *payload, uint16_t payload_len, bool retained);
+bool hal_mqtt_publish(const char *topic, const uint8_t *payload,
+                      uint16_t payload_len, bool retained);
 
 /** @brief Publish a null-terminated string payload. */
-bool hal_mqtt_publish_str(const char *topic, const char *payload, bool retained);
+bool hal_mqtt_publish_str(const char *topic, const char *payload,
+                          bool retained);
 
 /** @brief Subscribe to topic with qos 0 or 1. */
 bool hal_mqtt_subscribe(const char *topic, uint8_t qos);

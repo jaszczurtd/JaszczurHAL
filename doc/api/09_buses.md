@@ -9,6 +9,26 @@ Covers: `hal_spi`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `hal_swserial`, `hal_
 ```c
 #include <hal/hal_spi.h>
 
+// Status-returning API for new code. Legacy functions below remain available.
+hal_status_t hal_spi_init_ex(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
+                             uint8_t sck_pin);
+hal_status_t hal_spi_begin_transaction_ex(
+    uint8_t bus, const hal_spi_settings_t *settings);
+hal_status_t hal_spi_end_transaction_ex(uint8_t bus);
+hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
+                                 uint8_t *out_received);
+hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
+                                   uint16_t *out_received);
+hal_status_t hal_spi_transfer_buffer_ex(uint8_t bus, uint8_t *buffer,
+                                        size_t len);
+hal_status_t hal_spi_transfer_txrx_ex(uint8_t bus, const uint8_t *tx,
+                                      uint8_t *rx, size_t len);
+hal_status_t hal_spi_write_ex(uint8_t bus, const uint8_t *data, size_t len);
+hal_status_t hal_spi_write_dma_ex(uint8_t bus, const uint8_t *data, size_t len);
+hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus,
+                                              const uint8_t *data, size_t len);
+hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus);
+
 // Configure pins and start the SPI bus in master mode.
 // bus: 0 = SPI (default), 1 = SPI1 (second controller, RP2040)
 void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin, uint8_t sck_pin);
@@ -38,6 +58,15 @@ bool     hal_spi_write_dma_async_wait(uint8_t bus);
 
 Only bus values 0 and 1 are supported. Other values are programmer errors and
 trigger `HAL_ASSERT` in checked builds.
+
+The status API reports `HAL_EINVAL` for invalid buses, settings, output
+pointers and non-empty NULL buffers; async DMA start reports `HAL_EBUSY` when a
+transfer is already active and maps a backend start/wait failure to `HAL_EIO`.
+Zero-length buffer operations succeed without requiring a buffer. Existing
+backends do not expose a reliable error result for every polling byte transfer,
+so successful `hal_spi_transfer*_ex()` currently means the validated backend
+operation was invoked; it must not be interpreted as richer hardware fault
+diagnostics than the backend can honestly provide.
 
 **DMA writes:** `hal_spi_write_dma()` is the blocking convenience wrapper: it
 starts the fastest available backend write path and returns only after the

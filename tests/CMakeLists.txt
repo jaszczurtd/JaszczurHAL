@@ -304,6 +304,7 @@ set_target_properties(test_bsd_sockets_c_compile PROPERTIES
 add_test(NAME test_bsd_sockets_c_compile COMMAND test_bsd_sockets_c_compile)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)
+add_hal_test(test_hal_network_status)
 add_hal_test(test_hal_modem_at)
 add_hal_test(test_hal_simcom_a76xx)
 add_hal_test(test_hal_ota)

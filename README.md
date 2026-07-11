@@ -76,7 +76,7 @@ Utility-only includes are also available:
 - Across all targets, thread safety is treated as a core design principle. Only a few modules intentionally deviate from this rule where enforcing thread safety would be impractical or unnatural,
 - Initialization and teardown paths (`init` / `create` / `destroy` / `deinit`) are intentionally treated as single-core operations,
 - Singleton and per-bus locks are initialized atomically on first use using defensive lazy mutex creation,
-- The mock backend is intended for deterministic single-threaded tests rather than validating true concurrent synchronization, but FreeRTOS POSIX-based tests are also available through the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` flag. `runalltests.sh` gate demostrates this in practice: it enables a host-side FreeRTOS POSIX scheduler test so `HAL_ENABLE_FREERTOS`, mutex/delay and lazy create-once behavior are covered in `ctest` without hardware.
+- The mock backend is intended for deterministic single-threaded tests rather than validating true concurrent synchronization, but FreeRTOS POSIX-based tests are also available through the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` flag. The `runalltests.sh` gate demonstrates this in practice: it enables a host-side FreeRTOS POSIX scheduler test so `HAL_ENABLE_FREERTOS`, mutex/delay and lazy create-once behavior are covered in `ctest` without hardware.
 
 For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
 see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).

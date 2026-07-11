@@ -28,6 +28,29 @@ extern "C" {
 /** @brief Opaque UDP socket handle. */
 typedef struct hal_udp_socket_impl_t *hal_udp_socket_t;
 
+hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
+                                    const hal_net_endpoint_t *local);
+hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
+                                      size_t len,
+                                      const hal_net_endpoint_t *remote,
+                                      size_t *out_sent);
+hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
+                                        size_t max_len,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        size_t *out_received);
+hal_status_t hal_udp_begin_ex(uint16_t local_port);
+hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
+                             uint16_t *out_read);
+hal_status_t hal_udp_remote_ip_ex(char *out, size_t out_size);
+hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
+                                     uint16_t remote_port);
+hal_status_t hal_udp_begin_packet_remote_ex(void);
+hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
+                              uint16_t *out_written);
+hal_status_t hal_udp_write_str_ex(const char *text, uint16_t *out_written);
+hal_status_t hal_udp_end_packet_ex(void);
+
 /**
  * @brief Allocate a UDP socket from the backend pool.
  * @return Socket handle, or NULL when no socket slot is available.

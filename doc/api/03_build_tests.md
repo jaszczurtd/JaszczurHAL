@@ -103,12 +103,10 @@ This is the **recommended pre-commit validation** and **CI/CD test gate**. Run b
 The CMake build at the project root compiles a static library `hal_mock` from:
 
 - all `src/hal/impl/.mock/*.cpp` stubs,
-- the backend-neutral HAL sources in `UTIL_SOURCES` (see `CMakeLists.txt`):
-  `hal_config.cpp`, `hal_can_util.cpp`, `compat/debug_format/hal_debug_format.cpp`, `hal_crypto.cpp`,
-  `hal_kv.cpp`, `hal_modem_at.cpp`, `hal_simcom_a76xx.cpp`, `hal_timer_ext.cpp`,
-  `hal_soft_timer.cpp`, `hal_digipot.cpp`, `hal_pga2311.cpp`, plus the shared
-  drivers (mcp2515/mcp251xfd/digipot/pga2311) and shared frameworks
-  (wireguard crypto, smart_timers, cJSON, lodepng, jpeg) and `pidController.cpp`,
+- the backend-neutral HAL sources in `UTIL_SOURCES` (see `CMakeLists.txt`),
+  including shared status adapters (`hal_spi_status.cpp`,
+  `hal_network_status.cpp`), HAL facades, compatibility layers, portable
+  device drivers and bundled frameworks,
 - `src/utils/unity.c` (Unity framework).
 
 The exact list is the `UTIL_SOURCES` set in `CMakeLists.txt` - treat that as the
@@ -228,7 +226,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
-| `test_hal_spi` | SPI init/reinit, reset, per-bus lock-depth coverage |
+| `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
@@ -239,6 +237,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
 | `test_mcp9600_driver` | Shared MCP9600/MCP9601 device ID handling, register transactions, fixed-point decoding, ADC sign extension, config bit preservation, alert/status and legacy ambient-resolution mapping |
 | `test_bh1750_driver` | Shared BH1750 init command, first-measurement delay, I2C bus routing and two-byte lux decode |
+| `test_adp5360_driver` | Shared ADP5360 device-ID validation, charger/fuel-gauge/regulator register flows, status conversion, I2C failures and instance-mutex coverage |
 | `test_simple_io_drivers` | Shared MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725 init sequences, per-pin/full-port write and read paths, invert/pull-up/IRQ configuration and instance-mutex coverage |
 | `test_hd44780_driver` | Shared HD44780 GPIO init, 4-bit/8-bit command framing, cursor row offsets, CGRAM writes, print/write path and instance-mutex coverage |
 | `test_hal_dma_pwm_audio` | Mock DMA PWM-audio lifecycle, callback dispatch, pause/resume and interpolation coverage |
@@ -265,6 +264,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_bsd_sockets_c_compile` | C compile/link smoke test for socket headers, `netdb.h`, TCP/UDP client/server shapes, `fcntl()`, `select()`, `getaddrinfo()` and `setsockopt()` |
 | `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
+| `test_hal_network_status` | Cross-module WiFi/DNS, TCP/UDP, MQTT and WireGuard status API validation, outputs and failure mapping |
 | `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
@@ -275,6 +275,34 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
 | `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
+| `test_hal_critical_section` | critical-section nesting and interrupt-state restoration behavior |
+| `test_hal_dac` | DAC init/write/millivolt compatibility and status `_ex` validation |
+| `test_hal_digipot` | MCP401x/MAX5395 facade init/set behavior, range validation and status mapping |
+| `test_hal_pcnt` | pulse-counter init/read/reset compatibility and status `_ex` validation |
+| `test_hal_i2c_slave` | I2C-slave register map, callbacks, RX/TX transactions and invalid-input handling |
+| `test_hal_serial_session_vocabulary` | serial-session command/status vocabulary constants and conversion helpers |
+| `test_hal_status` | shared `hal_status_t` values, string conversion, predicates and bool/status adapters |
+| `test_hal_modem_at` | generic AT engine command/response parsing, URCs, timeouts and callback dispatch |
+| `test_hal_simcom_a76xx` | SIMCom A76xx power/SIM/PDP/GNSS/LBS/MQTT command flows and URC handling |
+| `test_pcf8563_driver` | shared PCF8563 register encoding, datetime, alarm, timer, CLKOUT and integrity behavior |
+| `test_ds3231_driver` | shared DS3231 datetime, alarm, status, temperature and register behavior |
+| `test_ili9341_driver` | shared ILI9341 command/init sequence, address windows and pixel writes |
+| `test_st77xx_driver` | shared ST7735/ST7789/ST7796S initialization, offsets, windows and pixel writes |
+| `test_ssd1306_driver` | shared SSD1306 initialization, framebuffer updates and I2C command/data transfers |
+| `test_jh_gfx_geometry` | shared GFX clipping, geometry primitives, bitmap and text-layout behavior |
+| `test_mcp2515_driver` | shared MCP2515 register/SPI transactions, bit timing, TX/RX, filters and errors |
+| `test_mfrc522_driver` | shared MFRC522 register transports, initialization and RFID protocol helpers |
+| `test_pn532_driver` | shared PN532 SPI/I2C/UART framing, ACK/response parsing and NFC commands |
+| `test_ff16_memdisk` | FatFs ff16 integration over an in-memory disk, mount and file I/O behavior |
+| `test_stm32_pwm_clock` | STM32G474 PWM timer-clock, prescaler and period calculation coverage |
+| `test_hal_onewire_driver` | shared bit-bang OneWire timing, reset/presence, bit/byte I/O and search behavior |
+| `test_hal_config_storage_flags` | compile/runtime coverage for storage feature-flag propagation and configuration |
+| `test_jpeg` | bundled JPEGDecoder/picojpeg decode, dimensions, RGB conversion and malformed input |
+| `test_lodepng` | bundled LodePNG encode/decode, memory ownership, conversion and error handling |
+| `test_gps_nmea_parser` | NMEA framing/checksum, fix/date/time/speed parsing and invalid-input recovery |
+| `test_stm32_hal_system` | STM32G474 system clock, reset/fault state and backend system-service simulation |
+| `test_stm32_hal_i2c_slave` | STM32G474 I2C-slave register backend, events, callbacks and error handling |
+| `test_freertos_posix_runtime` | Host FreeRTOS POSIX scheduler, task dispatch, mutex/delay and lazy create-once behavior |
 
 ### Adding a new test suite
 
