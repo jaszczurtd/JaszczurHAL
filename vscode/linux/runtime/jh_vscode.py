@@ -599,6 +599,13 @@ def load_project_config(
     local_state = load_json_file(vscode_dir / "jaszczurhal.local.json")
     local_target = local_state.get("target") if isinstance(local_state, dict) else None
     local_board = local_state.get("board") if isinstance(local_state, dict) else None
+    local_port = local_state.get("uploadPort") if isinstance(local_state, dict) else None
+    if local_port:
+        config["uploadPort"] = str(local_port)
+        upload = dict(config.get("upload") or {})
+        upload["port"] = str(local_port)
+        config["upload"] = upload
+        sources["uploadPort"] = ".vscode/jaszczurhal.local.json"
     eff_target = target_override or local_target
     eff_board = board_override or local_board
     if target_override or board_override:
@@ -1425,6 +1432,66 @@ def command_list_ports(args: argparse.Namespace) -> int:
             print(f"  {candidate}")
     else:
         print("BOOTSEL candidates: none")
+    return 0
+
+
+def command_change_port(args: argparse.Namespace) -> int:
+    project_dir = resolve_project(args)
+    if project_dir is None:
+        print("error: change-port requires --project <path>", file=sys.stderr)
+        return EXIT_USAGE
+    if not project_dir.is_dir():
+        print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    selected = args.port
+    records = serial_port_records()
+    if not selected:
+        if not records:
+            print("error: no serial ports found; connect a device or pass --port <path>", file=sys.stderr)
+            return EXIT_CONFIG
+        print("Select serial port:")
+        for index, record in enumerate(records, start=1):
+            suffix = f" ({', '.join(record['byId'])})" if record["byId"] else ""
+            print(f"  {index:2d}. {record['port']}{suffix}")
+        print("  q. cancel")
+        try:
+            answer = input("Port selection> ").strip()
+        except EOFError:
+            print("error: no interactive input available; pass --port <path>", file=sys.stderr)
+            return EXIT_USAGE
+        if answer.lower() in {"", "q", "quit", "cancel"}:
+            print("Selection cancelled.")
+            return 0
+        try:
+            index = int(answer)
+        except ValueError:
+            selected = answer
+        else:
+            if index < 1 or index > len(records):
+                print(f"error: selection out of range: {index}", file=sys.stderr)
+                return EXIT_USAGE
+            selected = records[index - 1]["port"]
+
+    selected_path = Path(str(selected)).expanduser()
+    if not selected_path.exists():
+        print(f"error: serial port does not exist: {selected_path}", file=sys.stderr)
+        return EXIT_CONFIG
+    try:
+        selected_value = str(selected_path.resolve(strict=True))
+    except OSError as exc:
+        print(f"error: cannot resolve serial port {selected_path}: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    vscode_dir = project_dir / ".vscode"
+    local_path = vscode_dir / LOCAL_STATE_FILENAME
+    local_state = load_json_file(local_path)
+    local_state["uploadPort"] = selected_value
+    vscode_dir.mkdir(parents=True, exist_ok=True)
+    local_path.write_text(json.dumps(local_state, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    ensure_local_state_gitignored(project_dir)
+    print(f"Selected upload/monitor port: {selected_value}")
+    print(f"Persisted to .vscode/{LOCAL_STATE_FILENAME} (user-local).")
     return 0
 
 
@@ -2763,6 +2830,8 @@ def main(argv: list[str]) -> int:
         return command_monitor(args, "any")
     if args.action == "list-ports":
         return command_list_ports(args)
+    if args.action == "change-port":
+        return command_change_port(args)
     if args.action == "refresh-intellisense":
         return command_refresh_intellisense(args)
     if args.action == "clean":

@@ -481,6 +481,14 @@ TASKS_TEMPLATE = """{
             "problemMatcher": []
         },
         {
+            "label": "Project: Change port",
+            "detail": "Interactively persist the upload/monitor serial port",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["change-port", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
             "label": "Project: Serial Monitor",
             "detail": "Persistent @@MODULE@@ serial monitor",
             "type": "shell",

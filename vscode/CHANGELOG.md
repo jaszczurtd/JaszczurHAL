@@ -26,6 +26,11 @@
   persistent monitor port handoff, and automatic monitor reconnect after upload.
 - Implement read-only `list-ports`, including project identity matching and
   BOOTSEL candidate reporting, so device checks do not require a risky upload.
+- Implement `change-port`: interactive or `--port` selection persisted as the
+  user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
+- Allow dispatcher-backed projects to provide `JH_PROJECT_RECIPE` for
+  target-specific applications such as doomConsole while retaining the common
+  target selection and `jh-vscode` orchestration layer.
 - Expand the identity-enabled upload failure message with the required
   verified serial, BOOTSEL, first-flash, and explicit-port conditions.
 - Highlight key upload/build status lines in yellow in terminal output:

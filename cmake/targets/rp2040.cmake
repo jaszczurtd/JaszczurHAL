@@ -85,10 +85,13 @@ endforeach()
 # on the library's setup()/loop() -> app_* bridge via HAL_PROVIDE_APP_ENTRY.
 # Canonical-entry projects (e.g. vp37) have no firmware_entry.h and set the flags
 # themselves in hal_project_config.h, so this leaves them byte-for-byte unchanged.
-set(_entry_defs " -DHAL_PROVIDE_APP_ENTRY")
+set(_entry_defs "")
 jh_generate_entry_adapter("${JH_PROJECT_DIR}" "${SKETCH_DIR}" _adapter _core1)
-if(_adapter AND _core1)
-    string(APPEND _entry_defs " -DHAL_ENABLE_APP_TASK1")
+if(_adapter)
+    string(APPEND _entry_defs " -DHAL_PROVIDE_APP_ENTRY")
+    if(_core1)
+        string(APPEND _entry_defs " -DHAL_ENABLE_APP_TASK1")
+    endif()
 endif()
 set(_extra_defines ${JH_EXTRA_DEFINES})
 if(JH_RP2040_FREERTOS)
