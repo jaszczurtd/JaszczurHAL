@@ -128,6 +128,21 @@ Simple backlog of future architecture and implementation work.
       report invalid arguments, empty reads and mock capture overflow; RP2040
       also reports uninitialized UART use and pin changes rejected while the
       port is running.
+    - DONE: SPI init, begin/end transaction, byte/word/buffer transfers,
+      write and blocking/asynchronous DMA write now expose status-returning
+      `_ex` variants while preserving all legacy `void`/value/`bool` APIs.
+      The shared status layer validates buses, settings, output pointers and
+      buffers, reports an already-active async transfer as `HAL_EBUSY`, and
+      maps backend DMA start/wait failure to `HAL_EIO`. Mock tests cover
+      successful transfers, invalid arguments and injected DMA failure;
+      RP2040 and STM32G474 static-library builds include the new layer.
+    - DONE: network candidates now expose additive status APIs across WiFi,
+      IPv4 resolution, handle-based TCP/UDP plus legacy UDP packet operations,
+      MQTT configuration/connect/publish/subscribe and WireGuard begin/peer/
+      handshake paths. Count-, handle- and value-returning operations preserve
+      their result through explicit output parameters. The historical
+      int-returning `hal_wifi_ping_ex()` is retained; the status variant is
+      named `hal_wifi_ping_status_ex()` to avoid a suffix collision.
     - DONE: several shared device drivers already use `hal_status_t` APIs and
       should not be counted as remaining transport/API backlog: simple I/O
       expanders and helpers (`PCA9654E`, `PCF8574`, `MCP23017`, `HC595`,
@@ -136,12 +151,10 @@ Simple backlog of future architecture and implementation work.
   - Current quick audit should be refreshed before large status-conversion
     work. Treat the remaining lists below as qualitative priority buckets, not
     as an exact count.
-  - Highest-priority shared transport APIs: SPI/DMA candidates:
-    `hal_spi_init()`, `hal_spi_begin_transaction()`,
-    `hal_spi_transfer()`, `hal_spi_transfer16()`,
-    `hal_spi_transfer_buffer()`, `hal_spi_transfer_txrx()`,
-    `hal_spi_write()`, `hal_spi_write_dma()`,
-    `hal_spi_write_dma_async_start()` and `hal_spi_write_dma_async_wait()`.
+  - SPI/DMA status conversion is complete for the previously listed
+    candidates. Future SPI work should improve backend-native timeout/hardware
+    error reporting only where the hardware path can distinguish it honestly;
+    do not infer an error merely from a received `0xFF` byte.
   - Serial candidates: matching `hal_swserial_*` setup, read, write, println
     and flush paths. `hal_swserial` is already a shared implementation used by
     RP2040, STM32G474 and mock builds; this is status/API polish, not a
@@ -153,17 +166,11 @@ Simple backlog of future architecture and implementation work.
     `hal_littlefs_remove()`, `hal_sdlogger_init()`,
     `hal_sdlogger_crash_init()` and append/close/report paths that currently
     return `void`.
-  - Network candidates: `hal_wifi_set_mode()`, `hal_wifi_disconnect()`,
-    `hal_wifi_set_hostname()`, `hal_wifi_begin_station()`,
-    `hal_wifi_get_local_ip()`, `hal_wifi_get_dns_ip()`,
-    `hal_wifi_get_mac()`, status-returning ping API around the historical
-    `hal_wifi_ping()` / int-returning `hal_wifi_ping_ex()`,
-    `hal_wifi_scan_networks()`, `hal_wifi_get_scan_result()`,
-    `hal_net_resolve_ipv4()`,
-    `hal_tcp_socket_connect()`, TCP send/recv/bind/listen/accept paths,
-    UDP bind/sendto/recvfrom/begin-packet/write/end-packet paths, MQTT
-    connect/publish/subscribe/config paths and WireGuard begin/peer/handshake
-    paths.
+  - Network status conversion is complete for the previously listed
+    candidates. Further work should move error mapping into backend-native
+    implementations when they can distinguish timeout, disconnect, DNS and
+    protocol errors more precisely; compatibility adapters currently map
+    ambiguous backend failures conservatively.
   - Use existing tests as a validation if changes do not break anything.
   - Display candidates: `hal_display_init_ssd1306_i2c_ex()` currently has an
     `_ex` suffix but still returns `bool`; migrate it and the configure,

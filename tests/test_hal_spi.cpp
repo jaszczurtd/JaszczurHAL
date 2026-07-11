@@ -173,6 +173,54 @@ void test_spi_write_dma_async_mock_completes_synchronously(void) {
   TEST_ASSERT_EQUAL_UINT8(0xAA, tx_log[1]);
 }
 
+void test_spi_status_api_validates_arguments(void) {
+  hal_spi_settings_t invalid_order = {4000000u, 2u, HAL_SPI_MODE0};
+  hal_spi_settings_t invalid_mode = {4000000u, HAL_SPI_MSBFIRST, 4u};
+  uint8_t byte = 0u;
+  uint16_t word = 0u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_spi_init_ex(2u, 1u, 2u, 3u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_spi_begin_transaction_ex(0u, &invalid_order));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_spi_begin_transaction_ex(0u, &invalid_mode));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_spi_transfer_ex(0u, 0x55u, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_spi_transfer16_ex(0u, 0x1234u, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_spi_transfer_buffer_ex(0u, nullptr, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_spi_transfer_txrx_ex(0u, nullptr, nullptr, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_spi_write_ex(0u, nullptr, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_spi_write_dma_ex(0u, nullptr, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_transfer_ex(0u, 0x55u, &byte));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_transfer16_ex(0u, 0x1234u, &word));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_write_ex(0u, nullptr, 0u));
+}
+
+void test_spi_status_api_transfers_and_maps_dma_failure(void) {
+  uint8_t scripted_rx[] = {0x31u, 0x32u, 0x33u};
+  uint8_t received = 0u;
+  uint8_t tx[] = {0xA1u, 0xA2u};
+  uint8_t rx[2] = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_init_ex(1u, 12u, 13u, 14u));
+  hal_mock_spi_push_rx(1u, scripted_rx, sizeof(scripted_rx));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_transfer_ex(1u, 0x10u, &received));
+  TEST_ASSERT_EQUAL_UINT8(0x31u, received);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_spi_transfer_txrx_ex(1u, tx, rx, sizeof(tx)));
+  TEST_ASSERT_EQUAL_UINT8(0x32u, rx[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x33u, rx[1]);
+
+  hal_mock_spi_fail_next_dma_write(1u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        hal_spi_write_dma_async_start_ex(1u, tx, sizeof(tx)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_spi_write_dma_async_start_ex(1u, tx, sizeof(tx)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_write_dma_async_wait_ex(1u));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_spi_not_initialized_after_reset);
@@ -186,5 +234,7 @@ int main(void) {
   RUN_TEST(test_spi_transfer_txrx_supports_full_duplex_buffers);
   RUN_TEST(test_spi_write_dma_records_tx_in_mock);
   RUN_TEST(test_spi_write_dma_async_mock_completes_synchronously);
+  RUN_TEST(test_spi_status_api_validates_arguments);
+  RUN_TEST(test_spi_status_api_transfers_and_maps_dma_failure);
   return UNITY_END();
 }

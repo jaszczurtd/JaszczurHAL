@@ -43,7 +43,8 @@ For the target-selectable VS Code firmware project model, see
 | Software serial | Shared HAL GPIO/timing/sync software UART for targets/modules that need it. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable I2C controller API used by sensors, RTCs and storage devices. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
-| SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including blocking and asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |
+| SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including status-returning transfer APIs and blocking/asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |
+| Network status API | Additive `hal_status_t` operations for WiFi/DNS, TCP/UDP, MQTT and WireGuard with legacy wrappers preserved. | [connectivity API](api/15_connectivity.md) |
 | CAN facade | Backend-selectable CAN surface for classic CAN and CAN FD-capable backends. | [hal_can.h](../src/hal/hal_can.h) |
 | MCP2515 CAN | Shared SPI CAN backend. | [mcp2515 driver](../src/hal/impl/shared/drivers/mcp2515/) |
 | MCP2517FD/MCP2518FD CAN FD | Shared SPI CAN FD backend. | [mcp251xfd driver](../src/hal/impl/shared/drivers/mcp251xfd/) |

@@ -9,6 +9,7 @@
  * Backend-specific TCP/IP stack objects must stay in implementation files.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -69,6 +70,8 @@ typedef enum {
 } hal_net_status_t;
 
 #ifdef HAL_ENABLE_WIFI
+hal_status_t hal_net_resolve_ipv4_ex(const char *host_or_ip,
+                                     uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
 /**
  * @brief Resolve a hostname or dotted IPv4 literal to an IPv4 address.
  *

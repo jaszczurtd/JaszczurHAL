@@ -19,6 +19,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hal_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -42,6 +44,27 @@ typedef struct {
   uint8_t bit_order; /**< HAL_SPI_MSBFIRST or HAL_SPI_LSBFIRST. */
   uint8_t data_mode; /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
 } hal_spi_settings_t;
+
+/** Status-returning SPI APIs. Existing APIs below remain compatibility
+ * wrappers. */
+hal_status_t hal_spi_init_ex(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
+                             uint8_t sck_pin);
+hal_status_t hal_spi_begin_transaction_ex(uint8_t bus,
+                                          const hal_spi_settings_t *settings);
+hal_status_t hal_spi_end_transaction_ex(uint8_t bus);
+hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
+                                 uint8_t *out_received);
+hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
+                                   uint16_t *out_received);
+hal_status_t hal_spi_transfer_buffer_ex(uint8_t bus, uint8_t *buffer,
+                                        size_t len);
+hal_status_t hal_spi_transfer_txrx_ex(uint8_t bus, const uint8_t *tx,
+                                      uint8_t *rx, size_t len);
+hal_status_t hal_spi_write_ex(uint8_t bus, const uint8_t *data, size_t len);
+hal_status_t hal_spi_write_dma_ex(uint8_t bus, const uint8_t *data, size_t len);
+hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
+                                              size_t len);
+hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus);
 
 /**
  * @brief Configure SPI pins and start the bus in controller (master) mode.

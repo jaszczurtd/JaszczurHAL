@@ -104,7 +104,7 @@ backend decide how to enter them:
 
 | Backend | Entry implementation | `app_start()` | `app_task0()` | `app_task1()` |
 |---------|----------------------|---------------|---------------|---------------|
-| RP2040 examples (arduino-pico) | CMake-generated `.ino` | `setup()` | `loop()` (core 0) | `loop1()` only with `HAL_ENABLE_APP_TASK1` |
+| RP2040 examples (arduino-pico) | `HAL_PROVIDE_APP_ENTRY` selected by CMake; shim in `hal_app_entry.cpp` | `setup()` | `loop()` (core 0) | `loop1()` only with `HAL_ENABLE_APP_TASK1` |
 | STM32G474 examples (bare-metal) | `HAL_PROVIDE_APP_ENTRY` from CMake | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
 | STM32G474 examples (FreeRTOS) | `HAL_PROVIDE_APP_ENTRY` + `HAL_ENABLE_FREERTOS` | Before scheduler | FreeRTOS task | FreeRTOS task only with `HAL_ENABLE_APP_TASK1` |
 | Mock/host apps | `HAL_PROVIDE_APP_ENTRY` when requested | Before super-loop | Super-loop body | Only with `HAL_ENABLE_APP_TASK1`, cooperative |
@@ -117,8 +117,9 @@ library-provided entry shim emits `loop1()` only when both
 `HAL_PROVIDE_APP_ENTRY` and `HAL_ENABLE_APP_TASK1` are defined.
 
 This keeps single-core sketches single-core by default. For RP2040 examples,
-the generated `.ino` wrapper calls only `app_start()` and `app_task0()` unless
-the example's compile definitions contain `HAL_ENABLE_APP_TASK1`. Define
+the generated `.ino` includes JaszczurHAL, while the library entry shim calls
+`app_start()` and `app_task0()`. It emits `loop1()` only when the example's
+compile definitions contain `HAL_ENABLE_APP_TASK1`. Define
 `HAL_ENABLE_APP_TASK1` only when the application
 intentionally wants the `app_task1()` / `loop1()` core-1 path.
 
@@ -150,8 +151,7 @@ void app_task0(void) {
 ```c
 #pragma once
 
-/* Entry point is selected by the build system:
- * RP2040 generates setup()/loop(); STM32 defines HAL_PROVIDE_APP_ENTRY. */
+/* Entry point is selected by the build system through HAL_PROVIDE_APP_ENTRY. */
 
 /* Enable additional HAL modules as needed: */
 // #define HAL_ENABLE_GPS
@@ -233,7 +233,7 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 42 | bsd_sockets_tcp_udp | rp2040 (WiFi) | BSD/POSIX socket compatibility examples: TCP server/client and UDP server/client, including `getaddrinfo()` hostname resolution |
 | 43 | dht_temperature_humidity | rp2040, stm32g474 | GPIO, DHT11/DHT22 temperature and humidity |
 | 44 | dacless_audio | rp2040, stm32g474 | DACless PWM audio DMA path, block callback, ADC-controlled phase increment |
-| 44 | dacless_audio_polling | rp2040, stm32g474 | Same DACless example with `cfg.useDma=false` polling path |
+| 44 (variant) | dacless_audio_polling | rp2040, stm32g474 | Same DACless example with `cfg.useDma=false` polling path |
 | 45 | swserial_loopback | rp2040, stm32g474 | Software UART loopback/echo |
 | 46 | mfrc522_rfid | rp2040, stm32g474 | SPI/I2C, MFRC522 RFID reader |
 | 47 | pn532_nfc | rp2040, stm32g474 | SPI/I2C/UART, PN532 NFC/RFID reader |
