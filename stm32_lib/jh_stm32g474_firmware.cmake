@@ -33,11 +33,12 @@ set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 #     SOURCES  <portable app sources (.c/.cpp)>
 #     INCLUDES <extra include dirs>
 #     DEFINES  <extra compile definitions, e.g. HAL_ENABLE_*>
+#     LIBRARIES <precompiled static archives or CMake library targets>
 #     [JH_ROOT <path>]   # JaszczurHAL repo root; defaults to this module's ../
 # )
 # Produces an executable <target> named "<target>.elf" plus <target>.bin/.hex.
 function(jh_add_stm32g474_firmware TARGET)
-    cmake_parse_arguments(ARG "" "JH_ROOT" "SOURCES;INCLUDES;DEFINES;OPTIONS" ${ARGN})
+    cmake_parse_arguments(ARG "" "JH_ROOT" "SOURCES;INCLUDES;DEFINES;OPTIONS;LIBRARIES" ${ARGN})
 
     if(NOT ARG_JH_ROOT)
         get_filename_component(ARG_JH_ROOT "${_JH_STM32_MODULE_DIR}/.." ABSOLUTE)
@@ -140,6 +141,10 @@ function(jh_add_stm32g474_firmware TARGET)
         --specs=nano.specs
         --specs=nosys.specs
     )
+
+    if(ARG_LIBRARIES)
+        target_link_libraries(${TARGET} PRIVATE ${ARG_LIBRARIES})
+    endif()
 
     if(CMAKE_OBJCOPY)
         add_custom_command(TARGET ${TARGET} POST_BUILD

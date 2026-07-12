@@ -26,6 +26,7 @@ include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
 set(JH_EXTRA_DEFINES "" CACHE STRING "Extra compile definitions for the firmware")
 set(JH_EXTRA_LIBRARIES "" CACHE STRING "Extra flat library dirs to compile+include (';'-separated), e.g. Credentials")
+set(JH_LINK_LIBRARIES "" CACHE STRING "Precompiled static archives or CMake library targets (';'-separated)")
 set(OPENOCD_BIN "openocd" CACHE STRING "OpenOCD executable")
 set(OPENOCD_INTERFACE "interface/stlink.cfg" CACHE STRING "OpenOCD interface script")
 set(OPENOCD_TARGET "target/stm32g4x.cfg" CACHE STRING "OpenOCD target script")
@@ -85,6 +86,7 @@ jh_add_stm32g474_firmware(firmware
     SOURCES ${_sources}
     INCLUDES "${JH_PROJECT_DIR}" ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
+    LIBRARIES ${JH_LINK_LIBRARIES}
 )
 
 if(NOT "${_stm32_main_stack_size}" STREQUAL "")
@@ -111,4 +113,4 @@ jh_stm32g474_add_openocd_upload(firmware_upload
     OPENOCD_TARGET "${OPENOCD_TARGET}"
 )
 
-message(STATUS "jh-firmware[stm32g474]: sources=${JH_PROJECT_DIR} extra_inc=${JH_EXTRA_INCLUDES}")
+message(STATUS "jh-firmware[stm32g474]: sources=${JH_PROJECT_DIR} extra_inc=${JH_EXTRA_INCLUDES} link_libs=${JH_LINK_LIBRARIES}")
