@@ -2603,6 +2603,35 @@ def find_compile_database(*base_dirs: Path) -> Path | None:
     return None
 
 
+def remap_project_compile_commands(compile_db: Any, project_dir: Path) -> Any:
+    """Point Arduino sketch-copy entries back at the editable project sources."""
+    if not isinstance(compile_db, list):
+        return compile_db
+
+    project_dir = project_dir.resolve()
+    for entry in compile_db:
+        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
+            continue
+        generated_source = Path(entry["file"])
+        if generated_source.parent.name != "sketch":
+            continue
+        project_source = project_dir / generated_source.name
+        if not project_source.is_file():
+            continue
+
+        generated_text = str(generated_source)
+        project_text = str(project_source)
+        entry["file"] = project_text
+        if isinstance(entry.get("arguments"), list):
+            entry["arguments"] = [
+                project_text if argument == generated_text else argument
+                for argument in entry["arguments"]
+            ]
+        if isinstance(entry.get("command"), str):
+            entry["command"] = entry["command"].replace(generated_text, project_text)
+    return compile_db
+
+
 @contextmanager
 def build_lock(config: dict[str, Any], project_dir: Path):
     build_dir = get_build_dir(config, project_dir)
@@ -2643,6 +2672,7 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
 
         try:
             compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
+            compile_db = remap_project_compile_commands(compile_db, project_dir)
             patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
         except (OSError, json.JSONDecodeError) as exc:
             print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
@@ -2700,6 +2730,7 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
 
     try:
         compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
+        compile_db = remap_project_compile_commands(compile_db, project_dir)
         patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
     except (OSError, json.JSONDecodeError) as exc:
         print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
