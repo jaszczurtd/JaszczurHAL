@@ -3,6 +3,14 @@
 #include <limits.h>
 #include <string.h>
 
+#if defined(HAL_ENABLE_TCP) || defined(HAL_ENABLE_UDP)
+#include "hal_net.h"
+
+static bool endpoint_valid(const hal_net_endpoint_t *ep) {
+  return ep != nullptr && ep->family == HAL_NET_AF_INET && ep->port != 0u;
+}
+#endif
+
 #ifdef HAL_ENABLE_WIFI
 #include "hal_net.h"
 #include "hal_wifi.h"
@@ -83,9 +91,6 @@ hal_status_t hal_net_resolve_ipv4_ex(const char *host_or_ip,
 
 #ifdef HAL_ENABLE_TCP
 #include "hal_tcp.h"
-static bool endpoint_valid(const hal_net_endpoint_t *ep) {
-  return ep != nullptr && ep->family == HAL_NET_AF_INET && ep->port != 0u;
-}
 hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t s,
                                        const hal_net_endpoint_t *r,
                                        uint32_t t) {
