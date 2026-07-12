@@ -303,7 +303,7 @@ else
 fi
 
 info "Building RP2040 flag matrix..."
-ARDUINO_FLAG_PROFILES=(empty-core typical-set sdlogger all-enabled)
+ARDUINO_FLAG_PROFILES=(empty-core typical-set udp-wireguard sdlogger all-enabled)
 for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
     flags=()
     case "${profile}" in
@@ -320,6 +320,15 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_GPS
                 -D HAL_ENABLE_ILI9341
                 -D HAL_ENABLE_PWM_FREQ
+            )
+            ;;
+        udp-wireguard)
+            # Keep UDP independent from TCP. This catches shared network
+            # helpers accidentally guarded by HAL_ENABLE_TCP and compiles the
+            # bundled WireGuard/lwIP headers with the Arduino-Pico core.
+            flags=(
+                -D HAL_ENABLE_UDP
+                -D HAL_ENABLE_WIREGUARD
             )
             ;;
         sdlogger)

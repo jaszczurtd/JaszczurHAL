@@ -195,6 +195,9 @@ jobs:
   #                  once (KV->EEPROM, MQTT->WIFI, PCF8563->RTC+I2C,
   #                  GPS->SWSERIAL, MCP9600->THERMOCOUPLE+I2C,
   #                  DS18B20->ONEWIRE, ILI9341->TFT->DISPLAY).
+  #   udp-wireguard - UDP without TCP plus WireGuard/lwIP. Catches network
+  #                  helpers accidentally hidden behind HAL_ENABLE_TCP and
+  #                  warning regressions in bundled lwIP include ordering.
   #   all-enabled  - every concrete HAL_ENABLE_* module/backend flag set
   #                  explicitly. Validates that no two backends collide
   #                  and that all consistency #error checks stay satisfied.
@@ -218,12 +221,17 @@ jobs:
               -D HAL_ENABLE_GPS
               -D HAL_ENABLE_ILI9341
               -D HAL_ENABLE_PWM_FREQ
+          - profile: udp-wireguard
+            flags: >-
+              -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_WIREGUARD
           - profile: all-enabled
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_TIME
               -D HAL_ENABLE_MQTT
               -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_TCP
               -D HAL_ENABLE_OTA
               -D HAL_ENABLE_WIREGUARD
               -D HAL_ENABLE_EEPROM
