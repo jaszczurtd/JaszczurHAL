@@ -23,6 +23,8 @@ typedef struct {
   int rx_pos;
   uint8_t cur_addr;
   bool busy;
+  bool scan_device_map_enabled;
+  bool scan_device_present[128];
   bool initialized;
   uint32_t clock_hz;
   int lock_depth;
@@ -76,40 +78,28 @@ static void mock_i2c_commit_write_frame(mock_i2c_bus_state_t *st) {
   }
 }
 
-static hal_status_t i2c_status_from_result(uint8_t result) {
-  switch (result) {
-  case HAL_I2C_RESULT_OK:
-    return HAL_OK;
-  case HAL_I2C_ERROR_TIMEOUT:
-    return HAL_ETIMEOUT;
-  case HAL_I2C_ERROR_GENERIC:
-    return HAL_EBUS;
-  case HAL_I2C_ERROR_OTHER:
+static uint8_t i2c_result_from_status(hal_status_t status) {
+  switch (status) {
+  case HAL_OK:
+    return HAL_I2C_RESULT_OK;
+  case HAL_ETIMEOUT:
+    return HAL_I2C_ERROR_TIMEOUT;
+  case HAL_EBUS:
+    return HAL_I2C_ERROR_GENERIC;
   default:
-    return HAL_EIO;
+    return HAL_I2C_ERROR_OTHER;
   }
 }
 
-hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
-                             uint32_t clock_hz) {
-  return hal_i2c_init_bus_ex(0, sda_pin, scl_pin, clock_hz);
+hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
+  return hal_i2c_init_bus(0, sda_pin, scl_pin, clock_hz);
 }
 
-void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz) {
-  (void)hal_i2c_init_ex(sda_pin, scl_pin, clock_hz);
-}
-
-hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                                 uint32_t clock_hz) {
+hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                              uint32_t clock_hz) {
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  hal_i2c_init_bus(bus, sda_pin, scl_pin, clock_hz);
-  return HAL_OK;
-}
-
-void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                      uint32_t clock_hz) {
   mock_i2c_bus_state_t *st = i2c_state(bus);
   (void)sda_pin;
   (void)scl_pin;
@@ -126,28 +116,23 @@ void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   st->read_byte_lock_depth_at_read = 0;
   st->transaction_count = 0;
   st->bus_clear_count = 0;
+  st->scan_device_map_enabled = false;
+  memset(st->scan_device_present, 0, sizeof(st->scan_device_present));
   st->tx_len = 0;
   st->wlog_count = 0;
-}
-
-hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz) {
-  return hal_i2c_set_clock_bus_ex(0, clock_hz);
-}
-
-void hal_i2c_set_clock(uint32_t clock_hz) {
-  (void)hal_i2c_set_clock_ex(clock_hz);
-}
-
-hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz) {
-  if (!i2c_bus_valid(bus)) {
-    return HAL_EINVAL;
-  }
-  hal_i2c_set_clock_bus(bus, clock_hz);
   return HAL_OK;
 }
 
-void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
+hal_status_t hal_i2c_set_clock(uint32_t clock_hz) {
+  return hal_i2c_set_clock_bus(0, clock_hz);
+}
+
+hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz) {
+  if (!i2c_bus_valid(bus)) {
+    return HAL_EINVAL;
+  }
   i2c_state(bus)->clock_hz = clock_hz;
+  return HAL_OK;
 }
 
 void hal_i2c_deinit(void) { hal_i2c_deinit_bus(0); }
@@ -217,7 +202,7 @@ size_t hal_i2c_write_bus(uint8_t bus, uint8_t data) {
 }
 
 uint8_t hal_i2c_end_transmission(void) {
-  return hal_i2c_end_transmission_bus(0);
+  return i2c_result_from_status(hal_i2c_end_transmission_ex());
 }
 
 hal_status_t hal_i2c_end_transmission_ex(void) {
@@ -228,16 +213,18 @@ hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus) {
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  return i2c_status_from_result(hal_i2c_end_transmission_bus(bus));
-}
-
-uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
   mock_i2c_bus_state_t *st = i2c_state(bus);
   st->transaction_count++;
   mock_i2c_commit_write_frame(st);
   hal_i2c_unlock_bus(bus);
-  return st->busy ? 2
-                  : 0; // 2 = NACK on address (simulates device not responding)
+  if (st->scan_device_map_enabled && st->tx_len == 0 && st->cur_addr < 128u) {
+    return st->scan_device_present[st->cur_addr] ? HAL_OK : HAL_EBUS;
+  }
+  return st->busy ? HAL_EBUS : HAL_OK;
+}
+
+uint8_t hal_i2c_end_transmission_bus(uint8_t bus) {
+  return i2c_result_from_status(hal_i2c_end_transmission_bus_ex(bus));
 }
 
 uint8_t hal_i2c_write_byte(uint8_t address, uint8_t data, bool *outWriteOk) {
@@ -257,25 +244,22 @@ hal_status_t hal_i2c_write_byte_bus_ex(uint8_t bus, uint8_t address,
     }
     return HAL_EINVAL;
   }
-  bool write_ok = false;
-  uint8_t result = hal_i2c_write_byte_bus(bus, address, data, &write_ok);
+  hal_i2c_begin_transmission_bus(bus, address);
+  const bool write_ok = hal_i2c_write_bus(bus, data) == 1u;
   if (outWriteOk != NULL) {
     *outWriteOk = write_ok;
   }
+  const hal_status_t transfer_status = hal_i2c_end_transmission_bus_ex(bus);
   if (!write_ok) {
     return HAL_EIO;
   }
-  return i2c_status_from_result(result);
+  return transfer_status;
 }
 
 uint8_t hal_i2c_write_byte_bus(uint8_t bus, uint8_t address, uint8_t data,
                                bool *outWriteOk) {
-  hal_i2c_begin_transmission_bus(bus, address);
-  size_t written = hal_i2c_write_bus(bus, data);
-  if (outWriteOk != NULL) {
-    *outWriteOk = (written == 1);
-  }
-  return hal_i2c_end_transmission_bus(bus);
+  return i2c_result_from_status(
+      hal_i2c_write_byte_bus_ex(bus, address, data, outWriteOk));
 }
 
 uint8_t hal_i2c_read_byte(uint8_t address, bool *outReadOk) {
@@ -295,40 +279,16 @@ hal_status_t hal_i2c_read_byte_bus_ex(uint8_t bus, uint8_t address,
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  bool read_ok = false;
-  uint8_t value = hal_i2c_read_byte_bus(bus, address, &read_ok);
-  if (!read_ok) {
-    return HAL_EIO;
-  }
-  *outValue = value;
-  return HAL_OK;
+  return hal_i2c_read_bytes_bus_ex(bus, address, outValue, 1u);
 }
 
 uint8_t hal_i2c_read_byte_bus(uint8_t bus, uint8_t address, bool *outReadOk) {
-  mock_i2c_bus_state_t *st = i2c_state(bus);
-  hal_i2c_lock_bus(bus);
-  (void)address;
-  mock_i2c_load_rx(st, 1u);
-  st->transaction_count++;
-
-  uint8_t received = 1;
-  if (received != 1) {
-    if (outReadOk != NULL)
-      *outReadOk = false;
-    hal_i2c_unlock_bus(bus);
-    return 0;
+  uint8_t value = 0u;
+  const hal_status_t status = hal_i2c_read_byte_bus_ex(bus, address, &value);
+  if (outReadOk != NULL) {
+    *outReadOk = hal_status_to_bool(status);
   }
-  st->read_byte_lock_depth_at_read = st->lock_depth;
-  int raw = (st->rx_pos < st->rx_len) ? st->rx_buf[st->rx_pos++] : -1;
-  hal_i2c_unlock_bus(bus);
-  if (raw < 0) {
-    if (outReadOk != NULL)
-      *outReadOk = false;
-    return 0;
-  }
-  if (outReadOk != NULL)
-    *outReadOk = true;
-  return (uint8_t)raw;
+  return hal_status_to_bool(status) ? value : 0u;
 }
 
 bool hal_i2c_write_read(uint8_t address, const uint8_t *tx, size_t tx_len,
@@ -350,17 +310,6 @@ hal_status_t hal_i2c_write_read_bus_ex(uint8_t bus, uint8_t address,
       rx_len > MOCK_I2C_BUF_SIZE) {
     return HAL_EINVAL;
   }
-  return hal_status_from_bool(
-      hal_i2c_write_read_bus(bus, address, tx, tx_len, rx, rx_len), HAL_EBUS);
-}
-
-bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
-                            size_t tx_len, uint8_t *rx, size_t rx_len) {
-  if ((tx_len > 0u && tx == NULL) || (rx_len > 0u && rx == NULL) ||
-      tx_len > 255u || rx_len > 255u) {
-    return false;
-  }
-
   mock_i2c_bus_state_t *st = i2c_state(bus);
   hal_i2c_lock_bus(bus);
   st->cur_addr = address;
@@ -368,19 +317,19 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   for (size_t i = 0; i < tx_len; ++i) {
     if (hal_i2c_write_bus(bus, tx[i]) != 1u) {
       hal_i2c_unlock_bus(bus);
-      return false;
+      return HAL_EIO;
     }
   }
   st->transaction_count++;
   mock_i2c_commit_write_frame(st);
   if (st->busy) {
     hal_i2c_unlock_bus(bus);
-    return false;
+    return HAL_EBUS;
   }
 
   if (rx_len == 0u) {
     hal_i2c_unlock_bus(bus);
-    return true;
+    return HAL_OK;
   }
 
   mock_i2c_load_rx(st, (uint8_t)rx_len);
@@ -388,14 +337,23 @@ bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
   for (size_t i = 0; i < rx_len; ++i) {
     if (st->rx_pos >= st->rx_len) {
       hal_i2c_unlock_bus(bus);
-      return false;
+      return HAL_EBUS;
     }
     st->read_byte_lock_depth_at_read = st->lock_depth;
     rx[i] = st->rx_buf[st->rx_pos++];
   }
   hal_i2c_unlock_bus(bus);
-  return true;
+  return HAL_OK;
 }
+
+bool hal_i2c_write_read_bus(uint8_t bus, uint8_t address, const uint8_t *tx,
+                            size_t tx_len, uint8_t *rx, size_t rx_len) {
+  return hal_status_to_bool(
+      hal_i2c_write_read_bus_ex(bus, address, tx, tx_len, rx, rx_len));
+}
+
+static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
+                                    size_t rx_len);
 
 bool hal_i2c_read_bytes(uint8_t address, uint8_t *rx, size_t rx_len) {
   return hal_status_to_bool(hal_i2c_read_bytes_ex(address, rx, rx_len));
@@ -412,12 +370,12 @@ hal_status_t hal_i2c_read_bytes_bus_ex(uint8_t bus, uint8_t address,
       rx_len > MOCK_I2C_BUF_SIZE) {
     return HAL_EINVAL;
   }
-  return hal_status_from_bool(hal_i2c_read_bytes_bus(bus, address, rx, rx_len),
+  return hal_status_from_bool(i2c_read_bytes_bus_impl(bus, address, rx, rx_len),
                               HAL_EBUS);
 }
 
-bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
-                            size_t rx_len) {
+static bool i2c_read_bytes_bus_impl(uint8_t bus, uint8_t address, uint8_t *rx,
+                                    size_t rx_len) {
   if ((rx_len > 0u && rx == NULL) || rx_len > MOCK_I2C_BUF_SIZE) {
     return false;
   }
@@ -442,8 +400,19 @@ bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
   return true;
 }
 
+bool hal_i2c_read_bytes_bus(uint8_t bus, uint8_t address, uint8_t *rx,
+                            size_t rx_len) {
+  return hal_status_to_bool(
+      hal_i2c_read_bytes_bus_ex(bus, address, rx, rx_len));
+}
+
+static uint8_t i2c_request_from_bus_impl(uint8_t bus, uint8_t address,
+                                         uint8_t count);
+
 uint8_t hal_i2c_request_from(uint8_t address, uint8_t count) {
-  return hal_i2c_request_from_bus(0, address, count);
+  uint8_t received = 0u;
+  (void)hal_i2c_request_from_ex(address, count, &received);
+  return received;
 }
 
 hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
@@ -456,11 +425,12 @@ hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
   if (outReceived == NULL || !i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  *outReceived = hal_i2c_request_from_bus(bus, address, count);
+  *outReceived = i2c_request_from_bus_impl(bus, address, count);
   return (*outReceived == count) ? HAL_OK : HAL_EBUS;
 }
 
-uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
+static uint8_t i2c_request_from_bus_impl(uint8_t bus, uint8_t address,
+                                         uint8_t count) {
   mock_i2c_bus_state_t *st = i2c_state(bus);
   hal_i2c_lock_bus(bus);
   (void)address;
@@ -468,6 +438,12 @@ uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
   st->transaction_count++;
   hal_i2c_unlock_bus(bus);
   return count;
+}
+
+uint8_t hal_i2c_request_from_bus(uint8_t bus, uint8_t address, uint8_t count) {
+  uint8_t received = 0u;
+  (void)hal_i2c_request_from_bus_ex(bus, address, count, &received);
+  return received;
 }
 
 int hal_i2c_available(void) { return hal_i2c_available_bus(0); }
@@ -555,27 +531,19 @@ int hal_mock_i2c_get_read_byte_lock_depth(void) {
   return hal_mock_i2c_get_read_byte_lock_depth_bus(0);
 }
 
-void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
-  (void)hal_i2c_bus_clear_ex(sda_pin, scl_pin);
+hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin) {
+  return hal_i2c_bus_clear_bus(0, sda_pin, scl_pin);
 }
 
-hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin) {
-  return hal_i2c_bus_clear_bus_ex(0, sda_pin, scl_pin);
-}
-
-hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
-                                      uint8_t scl_pin) {
+hal_status_t hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin,
+                                   uint8_t scl_pin) {
   if (!i2c_bus_valid(bus)) {
     return HAL_EINVAL;
   }
-  hal_i2c_bus_clear_bus(bus, sda_pin, scl_pin);
-  return HAL_OK;
-}
-
-void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin) {
   (void)sda_pin;
   (void)scl_pin;
   i2c_state(bus)->bus_clear_count++;
+  return HAL_OK;
 }
 
 uint32_t hal_mock_i2c_get_bus_clear_count(void) {
@@ -613,10 +581,60 @@ bool hal_i2c_is_busy_bus(uint8_t bus, uint8_t address) {
   return busy;
 }
 
+hal_status_t hal_i2c_scan(uint8_t *addresses, size_t capacity, size_t *outFound,
+                          hal_i2c_scan_callback_t callback) {
+  return hal_i2c_scan_bus(0, addresses, capacity, outFound, callback);
+}
+
+hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses, size_t capacity,
+                              size_t *outFound,
+                              hal_i2c_scan_callback_t callback) {
+  if (!i2c_bus_valid(bus) || outFound == NULL ||
+      (addresses == NULL && capacity > 0u)) {
+    return HAL_EINVAL;
+  }
+  *outFound = 0u;
+  if (!i2c_state(bus)->initialized) {
+    return HAL_EUNINIT;
+  }
+
+  for (uint8_t address = HAL_I2C_SCAN_FIRST_ADDRESS;
+       address <= HAL_I2C_SCAN_LAST_ADDRESS; ++address) {
+    if (callback != NULL) {
+      callback();
+    }
+    hal_i2c_begin_transmission_bus(bus, address);
+    const hal_status_t probe_status = hal_i2c_end_transmission_bus_ex(bus);
+    if (probe_status == HAL_OK) {
+      if (*outFound < capacity) {
+        addresses[*outFound] = address;
+      }
+      (*outFound)++;
+    } else if (probe_status != HAL_EBUS) {
+      return probe_status;
+    }
+  }
+
+  return (addresses != NULL && *outFound > capacity) ? HAL_EOVERFLOW : HAL_OK;
+}
+
 void hal_mock_i2c_set_busy(bool busy) { hal_mock_i2c_set_busy_bus(0, busy); }
 
 void hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy) {
   i2c_state(bus)->busy = busy;
+}
+
+void hal_mock_i2c_set_device_present(uint8_t address, bool present) {
+  hal_mock_i2c_set_device_present_bus(0, address, present);
+}
+
+void hal_mock_i2c_set_device_present_bus(uint8_t bus, uint8_t address,
+                                         bool present) {
+  mock_i2c_bus_state_t *st = i2c_state(bus);
+  if (address < 128u) {
+    st->scan_device_map_enabled = true;
+    st->scan_device_present[address] = present;
+  }
 }
 
 /* ── Write-frame log inspection ───────────────────────────────────────── */

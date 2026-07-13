@@ -102,17 +102,16 @@ uint16_t hal_dac_max_value(void);
 hal_status_t hal_dac_init_ex(uint8_t channel);
 bool hal_dac_init(uint8_t channel);
 
-hal_status_t hal_dac_write_ex(uint8_t channel, uint16_t value);
-void hal_dac_write(uint8_t channel, uint16_t value);
-
-hal_status_t hal_dac_write_millivolts_ex(uint8_t channel, uint16_t millivolts);
-void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
+hal_status_t hal_dac_write(uint8_t channel, uint16_t value);
+hal_status_t hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
 ```
 
-The `_ex` APIs report `HAL_OK`, `HAL_EUNSUPPORTED` on targets without a true
+The status APIs report `HAL_OK`, `HAL_EUNSUPPORTED` on targets without a true
 DAC (RP2040), `HAL_EINVAL` for invalid channels and `HAL_EUNINIT` for writes
-before channel initialization. The legacy `bool`/`void` wrappers remain source
-compatible.
+before channel initialization. `hal_dac_init()` remains the historical `bool`
+compatibility wrapper over `hal_dac_init_ex()`. The historical write functions
+now return `hal_status_t` in place; existing callers may continue to ignore the
+result.
 
 **impl/stm32g474:** real DAC1, 12-bit, channel 0 -> PA4 and channel 1 -> PA5.
 **impl/rp2040:** no true DAC peripheral; status APIs return

@@ -88,193 +88,110 @@ Simple backlog of future architecture and implementation work.
 
 - Migrate the HAL to honest status-returning APIs (priority direction).
 
-  - **STATUS: ACTIVE - this is the priority approach (adopted 2026-07-13).**
-    We no longer add parallel `_ex` wrappers on top of the legacy API. Instead
-    we **modify the existing functions** so the status becomes the real result,
-    and the historical shape becomes a thin compatibility layer.
+  - **STATUS: ACTIVE (adopted 2026-07-13).** Migrate module by module. A
+    component is marked `done [x]` only when its complete audited scope follows
+    the current status-first rules. Additive `_ex` coverage alone is partial and
+    remains `done [ ]`.
 
-  - **The earlier additive `_ex`-over-`bool` work is itself part of the
-    migration backlog - it must be re-migrated to this paradigm, not left as
-    is.** The modules already touched additively (SPI, I2C, UART, network,
-    `hal_kv`/`hal_littlefs`, display, RTC, several shared drivers) are a
-    **superseded scaffolding phase**: their `_ex` wrappers stay callable for
-    compatibility, but each such module must be reworked so the status logic
-    lives in the backends and the legacy shapes become thin wrappers (same
-    pattern as `hal_eeprom`). Its structural limit was that a thin `_ex` wrapper
-    calling the legacy `bool` cannot surface information the backend never
-    exposes, so many wrappers collapsed to a generic `HAL_EIO` or an
-    always-`HAL_OK`; re-migration is what turns that latent value real.
-    Redundant `_ex` symbols created only to wrap a `void`/`bool` (rather than a
-    value-returning getter) should be **removed** during re-migration, exactly
-    as the `hal_eeprom` pilot removed its 8 redundant `_ex` entry points.
+  - **Hard implementation rules:**
 
-  - **The approach (apply per module):**
-    1. **Status is the primary result**, and the real logic lives **per backend**
-       (`.mock` / `rp2040` / `stm32g474`) so it can return specific, honest
-       codes (`HAL_EIO`, `HAL_EOVERFLOW`, `HAL_EUNINIT`, ...).
-    2. **`bool hal_foo()` becomes a thin wrapper** - `return
-       hal_status_is_ok(hal_foo_ex(...))`. Same signature, zero caller impact.
-    3. **`void` functions are upgraded in place to return `hal_status_t`**
-       wherever they can report anything meaningful - do **not** keep returning
-       `void` (a half-truth) where a status is available. This is
-       source-compatible: existing callers simply ignore the new return value.
-       It recovers genuinely lost errors - e.g. `hal_eeprom_commit()` /
-       `write_byte()` on AT24C256 failing on I2C, which the `void` API
-       discarded. Because `void`->`hal_status_t` needs no new symbol, this
-       **shrinks** the API surface instead of growing it (the `hal_eeprom`
-       pilot removed 8 redundant `_ex` symbols and an adapter file, and both
-       target libraries got smaller).
-    4. **Keep `_ex` only for value-returning getters** that cannot change their
-       return type (e.g. `uint8_t hal_eeprom_read_byte()` ->
-       `hal_eeprom_read_byte_ex(addr, uint8_t *out)`), reporting the value
-       through an output parameter.
-    5. **Never** collapse a `bool` function to a single name returning
-       `hal_status_t`. Error codes are **negative (truthy)** in C, so
-       `if (hal_foo())` would read an error as success. Keep `bool` as a
-       separate wrapper.
+    1. The status-returning public function contains the real validation, state,
+       I/O and error mapping in the owning backend or shared-driver source.
+    2. A historical `bool` function remains a separate, adjacent thin wrapper
+       using `hal_status_to_bool(status_function(...))`. Never change it in
+       place to `hal_status_t`, because negative errors are truthy in C.
+    3. A fallible historical `void` function changes in place to
+       `hal_status_t`; remove any redundant `_ex` adapter. Keep an `_ex` status
+       companion when the legacy return value must remain a value, handle or
+       `bool`, and return that legacy result through an output parameter where
+       needed.
+    4. Do not preprocessor-rename public functions to private `*_impl` symbols,
+       inject implementations through `.inc` files, or add a generic status
+       adapter that calls a legacy `bool`/`void` implementation.
+    5. Map only errors the backend can distinguish honestly. Private low-level
+       `bool` helpers are acceptable when the underlying driver exposes only
+       success/failure.
 
-  - **Reference implementation (DONE): `hal_eeprom`.** Full pilot completed and
-    green through the whole quality gate (host tests, Valgrind, cppcheck,
-    clang-tidy, RP2040/STM32G474 library + example builds). The 8 historical
-    `void` entry points now return `hal_status_t` in place; `read_byte`,
-    `read_int` and `size` kept their value return and gained `_ex` companions;
-    the additive `hal_eeprom_status.cpp` adapter was removed; AT24C256 I2C and
-    STM32 flash-commit failures now surface as `HAL_EIO`. Use it as the template
-    for every subsequent module.
+  - **Definition of done:** representative success and failure paths have
+    tests; `./runalltests.sh` passes all seven gates; no new compiler,
+    clang-tidy or cppcheck warnings are introduced. Do not add `nodiscard` to
+    functions changed from `void`, because existing callers intentionally
+    ignore their result.
 
-  - **Safety verified in-tree (2026-07-13):** no `hal_*` API function is taken
-    by address into a `void(*)(...)`/`bool(*)(...)` typedef or dispatch table
-    (only user callbacks use function pointers), and there is no
-    `[[nodiscard]]` / `warn_unused_result` anywhere. Therefore `void`->status is
-    safe **provided we do not add `nodiscard`** to the migrated functions.
+  - **Audited component checklist (2026-07-13):**
 
-  - **Per-step definition of done (mandatory):**
-    1. Every migration step **must end with a full `./runalltests.sh` pass** -
-       all seven gates green (host tests, Valgrind, cppcheck, clang-tidy,
-       target library builds, examples). A step is not complete until the whole
-       gate is green.
-    2. **Add new tests whenever the change makes them possible.** Each newly
-       status-returning function should gain coverage for its success path and
-       its representative failure codes (`HAL_EINVAL`, `HAL_EUNINIT`,
-       `HAL_EOVERFLOW`, `HAL_EIO`, ...). Do not migrate a function and leave its
-       new outcomes untested.
-    3. **Zero-warnings policy.** The build must stay warning-free; treat any new
-       compiler or clang-tidy/cppcheck warning as a failure to fix before the
-       step is done. Do not silence warnings by adding `nodiscard` (it would
-       break the `void`->status source compatibility) or by blanket suppressions.
+    Current-rule migrations:
 
-  - **Scope and sequencing:** ~269 `bool` + ~195 `void` public functions. Do it
-    **module by module behind the full quality gate**, not big-bang. Convert
-    **selectively**: where a backend has genuine failure modes (buses, storage,
-    filesystem, network, RTC/I2C comm) the codes carry real diagnostics; for
-    intrinsically infallible ops (many GPIO/PWM setters) the upgrade is for
-    uniformity only - do not invent precision.
-    - Candidate order after `hal_eeprom`: `hal_kv` (sits directly on EEPROM),
-      then **re-migrate every additive-phase module** (SPI, I2C, UART, network,
-      `hal_littlefs`, display, RTC, shared drivers) - folding their `_ex` logic
-      into the backends, upgrading `void`->status in place and dropping redundant
-      `_ex` symbols - plus the not-yet-touched modules. "Done additively" is
-      **not** "done": those modules are re-migration targets, not finished work.
+    - `hal_eeprom` done [x]
+    - `hal_display` done [x]
+    - `hal_digipot` done [x]
+    - `hal_dac` done [x]
+    - `hal_i2c` done [x]
 
-  - Improve backend-specific error mapping only where the backend can report
-    it honestly; do not invent precision just to fill enum cases.
-  - Some historical `_ex` APIs are not status-returning. Treat
+    Native status-first implementations (no re-migration required):
+
+    - `hal_adp5360` done [x]
+    - `hal_bh1750` done [x]
+    - `hal_tsc2007` done [x]
+    - PN532 core and I2C/SPI/UART transports done [x]
+    - `hal_http_server` done [x]
+    - `hal_http_files` done [x]
+    - `hal_websocket` done [x]
+    - `hal_net_console` done [x]
+    - `hal_net_commands` done [x]
+
+    Additive or partial status work requiring current-rule re-migration:
+
+    - `hal_pcnt` done [ ]
+    - `hal_system` done [ ]
+    - `hal_uart` done [ ]
+    - `hal_spi` done [ ]
+    - `hal_wifi` / `hal_net` / `hal_tcp` / `hal_udp` done [ ]
+    - `hal_mqtt` / `hal_wireguard` done [ ]
+    - `hal_kv` done [ ]
+    - `hal_littlefs` done [ ]
+    - `hal_rtc` done [ ]
+    - `hal_stmpe610` done [ ]
+    - `hal_pca9654e` done [ ]
+    - `hal_pcf8574` done [ ]
+    - `hal_mcp23017` done [ ]
+    - `hal_hc595` done [ ]
+    - `hal_mcp3221` done [ ]
+    - `hal_mcp4725` done [ ]
+
+    Not yet migrated in the currently identified priority scope:
+
+    - `hal_swserial` done [ ]
+    - `hal_sdlogger` done [ ]
+    - `hal_dht` done [ ]
+    - `hal_ds18b20` done [ ]
+    - `hal_external_adc` done [ ]
+    - `hal_thermocouple` done [ ]
+    - `hal_irsmall_decoder` done [ ]
+    - `hal_dma_pwm_audio` done [ ]
+    - `hal_pga2311` done [ ]
+    - `hal_rgb_led` done [ ]
+
+  - Audit notes: `hal_pcnt` already has useful backend-local status functions,
+    but fallible legacy `void` operations still discard their results. UART has
+    the same issue. SPI, network, KV, LittleFS and RTC
+    still use separate `hal_*_status.cpp` adapters. `hal_system` currently has
+    only selected status-aware operations. `hal_stmpe610` still exposes
+    fallible register/data I/O through legacy `void`/value paths, so it is not
+    complete under the current rule. The simple-I/O drivers already have real
+    local status implementations, but their `bool` wrappers use the private
+    `status_ok()` indirection instead of the required direct
+    `hal_status_to_bool(...)` form; they need a small conformance pass before
+    being checked off. The HTTP/WebSocket/console/command modules were designed
+    status-first; their remaining `void` operations are polling, reset or
+    infallible local cleanup paths rather than discarded transport results.
+
+  - `hal_eeprom` is the reference source layout; `hal_display` is the reference
+    for a larger shared backend. Historical suffix collisions such as
     `hal_wifi_ping_ex()`, `hal_rgb_led_init_ex()` and
-    `hal_display_init_ssd1306_i2c_ex()` as naming debt/suffix collisions, not
-    as completed `hal_status_t` work.
-  - Progress (prior additive `_ex`-over-`bool` phase; see revised direction
-    above). NOTE: these "DONE" items are **additive scaffolding and are now
-    re-migration targets** under the priority approach - they are not finished
-    work:
-    - DONE: digipot init/set-resistance now expose
-      `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` while
-      preserving the legacy handle/`bool` wrappers. The MCP401x/MAX5395 shared
-      drivers report invalid config/range, pool exhaustion, I2C bus failures
-      and MCP401x read-back mismatches through `hal_status_t`.
-    - DONE: DAC init/raw-write/millivolt-write now expose
-      `hal_dac_init_ex()`, `hal_dac_write_ex()` and
-      `hal_dac_write_millivolts_ex()` while preserving existing `bool`/`void`
-      wrappers. Mock/STM32G474 report invalid channels and uninitialized
-      writes; RP2040 reports `HAL_EUNSUPPORTED`.
-    - DONE: PCNT init/read/reset/read-and-reset now expose
-      `hal_pcnt_init_ex()`, `hal_pcnt_read_ex()`, `hal_pcnt_reset_ex()` and
-      `hal_pcnt_read_and_reset_ex()` while preserving legacy wrappers. Current
-      backends report invalid channels/edges and uninitialized channel access.
-    - DONE: system device UID hex formatting now exposes
-      `hal_get_device_uid_hex_ex()` while preserving the legacy `bool` wrapper.
-      It reports `HAL_EINVAL` for NULL buffers and `HAL_EOVERFLOW` for
-      insufficient output buffers.
-    - DONE: I2C master now exposes status-returning `_ex` variants for bus
-      init, clock changes, end-transmission, one-byte write/read helpers,
-      write-read/read-bytes transfers, legacy request-from count reporting and
-      bus-clear while preserving existing `void`/`uint8_t`/`bool`
-      compatibility wrappers. Mock/RP2040/STM32G474 map invalid buses,
-      invalid buffers, uninitialized buses, bus errors and timeouts to
-      `hal_status_t` where the backend can report them.
-    - DONE: UART now exposes status-returning `_ex` variants for pin changes,
-      begin, one-byte read, write, println, flush and error-counter reads while
-      preserving legacy `bool`/`void`/`int`/`size_t` wrappers. Mock/STM32G474
-      report invalid arguments, empty reads and mock capture overflow; RP2040
-      also reports uninitialized UART use and pin changes rejected while the
-      port is running.
-    - DONE: SPI init, begin/end transaction, byte/word/buffer transfers,
-      write and blocking/asynchronous DMA write now expose status-returning
-      `_ex` variants while preserving all legacy `void`/value/`bool` APIs.
-      The shared status layer validates buses, settings, output pointers and
-      buffers, reports an already-active async transfer as `HAL_EBUSY`, and
-      maps backend DMA start/wait failure to `HAL_EIO`. Mock tests cover
-      successful transfers, invalid arguments and injected DMA failure;
-      RP2040 and STM32G474 static-library builds include the new layer.
-    - DONE: network candidates now expose additive status APIs across WiFi,
-      IPv4 resolution, handle-based TCP/UDP plus legacy UDP packet operations,
-      MQTT configuration/connect/publish/subscribe and WireGuard begin/peer/
-      handshake paths. Count-, handle- and value-returning operations preserve
-      their result through explicit output parameters. The historical
-      int-returning `hal_wifi_ping_ex()` is retained; the status variant is
-      named `hal_wifi_ping_status_ex()` to avoid a suffix collision.
-    - DONE: several shared device drivers already use `hal_status_t` APIs and
-      should not be counted as remaining transport/API backlog: simple I/O
-      expanders and helpers (`PCA9654E`, `PCF8574`, `MCP23017`, `HC595`,
-      `MCP3221`, `MCP4725`), `BH1750`, `TSC2007`, `STMPE610` and the PN532
-      transport classes.
-  - Current quick audit should be refreshed before large status-conversion
-    work. Treat the remaining lists below as qualitative priority buckets, not
-    as an exact count.
-  - SPI/DMA status conversion is complete for the previously listed
-    candidates. Future SPI work should improve backend-native timeout/hardware
-    error reporting only where the hardware path can distinguish it honestly;
-    do not infer an error merely from a received `0xFF` byte.
-  - Serial candidates: matching `hal_swserial_*` setup, read, write, println
-    and flush paths. `hal_swserial` is already a shared implementation used by
-    RP2040, STM32G474 and mock builds; this is status/API polish, not a
-    missing-backend task.
-  - Storage candidates: `hal_kv_init()`, `hal_kv_set_u32()`,
-    `hal_kv_get_u32()`, `hal_kv_set_blob()`, `hal_kv_get_blob()`,
-    `hal_kv_delete()`, `hal_kv_gc()`, `hal_kv_commit()`,
-    `hal_littlefs_begin()`, `hal_littlefs_format()`,
-    `hal_littlefs_remove()`, `hal_sdlogger_init()`,
-    `hal_sdlogger_crash_init()` and append/close/report paths that currently
-    return `void`.
-  - Network status conversion is complete for the previously listed
-    candidates. Further work should move error mapping into backend-native
-    implementations when they can distinguish timeout, disconnect, DNS and
-    protocol errors more precisely; compatibility adapters currently map
-    ambiguous backend failures conservatively.
-  - Use existing tests as a validation if changes do not break anything.
-  - Display candidates: `hal_display_init_ssd1306_i2c_ex()` currently has an
-    `_ex` suffix but still returns `bool`; migrate it and the configure,
-    drawing, pixel-write, DMA, text and text-preparation paths as a coherent
-    display status pass.
-  - Sensor/time/output candidates: RTC get/set/control paths, DHT read/sample,
-    DS18B20 request/take-latest, external ADC init/read, thermocouple read and
-    configuration paths, IR decoder init/control/readout, DMA PWM audio
-    start/pause/resume, PGA2311 set/get conversion helpers and RGB LED
-    init/set paths. Be careful with `hal_rgb_led_init_ex()`: it already exists
-    as a pixel-type overload and returns `void`, so a status migration needs a
-    new name or a deliberate compatibility plan.
-  - Lower priority: functions that are intentionally predicates, cheap cached
-    getters, lifecycle `destroy/deinit/stop` calls, or compatibility wrappers
-    over already status-returning APIs.
+    `hal_display_init_ssd1306_i2c_ex()` are naming debt, not evidence of status
+    completion. Predicates, cached getters and infallible cleanup operations do
+    not need artificial error codes.
 
 - Continue CAN API v2 follow-up work.
   - Add interrupt-driven RX/TX completion paths.

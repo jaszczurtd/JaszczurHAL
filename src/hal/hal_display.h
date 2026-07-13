@@ -241,8 +241,10 @@ typedef enum {
  * @param cs  Chip-select pin.
  * @param dc  Data/command pin.
  * @param rst Reset pin.
+ * @return HAL_OK when the backend was prepared, HAL_EIO when immediate panel
+ *         initialisation failed.
  */
-void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
+hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
 #endif /* HAL_ENABLE_TFT */
 
 #ifdef HAL_ENABLE_SSD1306
@@ -308,8 +310,9 @@ bool hal_display_configure(int width, int height, uint8_t rotation, bool invert,
  * @param delay_ms ILI9341 delay in milliseconds between commands that request
  *                 it. ST77xx sequences carry per-command delay values.
  *                 No-op for display types without a soft-init path.
+ * @return HAL_OK on success/no-op, HAL_EIO when the backend sequence failed.
  */
-void hal_display_soft_init(int delay_ms);
+hal_status_t hal_display_soft_init(int delay_ms);
 
 /**
  * @brief Set the display rotation (0-3).
@@ -666,22 +669,20 @@ int hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
- * Status-returning display APIs. Every legacy entry point above remains a
- * compatibility wrapper; the _ex variants return hal_status_t so callers can
- * distinguish invalid arguments (HAL_EINVAL) from an uninitialised/unconfigured
- * backend (HAL_EUNINIT), an invalid stream state (HAL_ESTATE) or backend I/O
- * failure (HAL_EIO). Value-returning helpers expose their result through an
- * output parameter.
+ * Status-returning display APIs. Historical bool entry points above are thin
+ * compatibility wrappers over these backend implementations. Functions that
+ * historically returned void now return hal_status_t in place. Callers can
+ * distinguish invalid arguments (HAL_EINVAL), an uninitialised backend
+ * (HAL_EUNINIT), unsupported operations (HAL_EUNSUPPORTED), invalid stream
+ * state (HAL_ESTATE), busy state (HAL_EBUSY), overflow (HAL_EOVERFLOW) and
+ * backend I/O failure (HAL_EIO). Value-returning helpers expose their result
+ * through an output parameter.
  *
  * Naming note: hal_display_init_ssd1306_i2c_ex() is already the historical
  * bus-selecting initialiser, so its status form is hal_display_init_ssd1306_
  * i2c_status_ex() (mirrors hal_wifi_ping_status_ex()). It is the single
  * status-returning SSD1306 entry point; pass i2c_bus = 0 for the primary bus.
  */
-
-#ifdef HAL_ENABLE_TFT
-hal_status_t hal_display_init_ex(uint8_t cs, uint8_t dc, uint8_t rst);
-#endif /* HAL_ENABLE_TFT */
 
 #ifdef HAL_ENABLE_SSD1306
 hal_status_t
@@ -692,7 +693,6 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
 
 hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
                                       bool invert, bool bgr);
-hal_status_t hal_display_soft_init_ex(int delay_ms);
 hal_status_t hal_display_set_rotation_ex(uint8_t r);
 hal_status_t hal_display_invert_ex(bool invert);
 hal_status_t hal_display_get_width_ex(int *out_width);

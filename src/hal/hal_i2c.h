@@ -65,6 +65,16 @@ extern "C" {
 /** @brief I2C high-speed mode clock: 3.4 MHz. */
 #define HAL_I2C_CLOCK_HIGH_SPEED_HZ 3400000UL
 
+/** @brief First non-reserved 7-bit address probed by hal_i2c_scan(). */
+#define HAL_I2C_SCAN_FIRST_ADDRESS 0x08u
+
+/** @brief Last non-reserved 7-bit address probed by hal_i2c_scan(). */
+#define HAL_I2C_SCAN_LAST_ADDRESS 0x77u
+
+/** @brief Number of usable addresses covered by a complete I2C scan. */
+#define HAL_I2C_SCAN_ADDRESS_COUNT                                             \
+  (HAL_I2C_SCAN_LAST_ADDRESS - HAL_I2C_SCAN_FIRST_ADDRESS + 1u)
+
 /** @brief I2C transaction completed successfully. */
 #define HAL_I2C_RESULT_OK 0u
 
@@ -78,24 +88,37 @@ extern "C" {
 #define HAL_I2C_ERROR_TIMEOUT 4u
 
 /**
- * @brief Status-returning variant of hal_i2c_init().
- * @return HAL_OK on success, or HAL_EINVAL/HAL_ECONFIG when the selected bus
- *         or pin mapping is invalid.
+ * @brief Optional callback invoked before each address probe during a scan.
+ *
+ * Pass hal_watchdog_feed directly when long scans must keep the watchdog fed.
  */
-hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
-                             uint32_t clock_hz);
+typedef void (*hal_i2c_scan_callback_t)(void);
 
 /**
- * @brief Status-returning variant of hal_i2c_init_bus().
+ * @brief Scan the default I2C bus for devices that acknowledge their address.
+ *
+ * Performs one bounded scan of the non-reserved 7-bit address range
+ * 0x08..0x77. Discovered addresses are written in ascending order. A NULL
+ * @p addresses pointer is valid only when @p capacity is zero and provides a
+ * count-only scan. @p outFound always receives the total number of devices
+ * detected, even when a supplied output buffer is too small.
+ *
+ * @param addresses Optional destination array for discovered addresses.
+ * @param capacity Number of entries available in @p addresses.
+ * @param outFound Destination for the total number of discovered devices.
+ * @param callback Optional callback invoked before every probe. May be NULL.
+ * @return HAL_OK on a complete or count-only scan, HAL_EOVERFLOW when more
+ *         devices were found than fit in a supplied @p addresses buffer,
+ *         HAL_EINVAL for invalid arguments,
+ *         HAL_EUNINIT before bus initialisation, or a backend transfer error.
  */
-hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                                 uint32_t clock_hz);
+hal_status_t hal_i2c_scan(uint8_t *addresses, size_t capacity, size_t *outFound,
+                          hal_i2c_scan_callback_t callback);
 
-/** @brief Status-returning variant of hal_i2c_set_clock(). */
-hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz);
-
-/** @brief Status-returning variant of hal_i2c_set_clock_bus(). */
-hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz);
+/** @brief Bus-selecting variant of hal_i2c_scan(). */
+hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses, size_t capacity,
+                              size_t *outFound,
+                              hal_i2c_scan_callback_t callback);
 
 /** @brief Status-returning variant of hal_i2c_end_transmission(). */
 hal_status_t hal_i2c_end_transmission_ex(void);
@@ -153,13 +176,6 @@ hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
 hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
                                          uint8_t count, uint8_t *outReceived);
 
-/** @brief Status-returning variant of hal_i2c_bus_clear(). */
-hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin);
-
-/** @brief Bus-selecting variant of hal_i2c_bus_clear_ex(). */
-hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
-                                      uint8_t scl_pin);
-
 /**
  * @brief Configure I2C pins, start the bus in controller (master) mode,
  *        and initialise the internal thread-safety mutex.
@@ -169,8 +185,9 @@ hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
  *                 HAL_I2C_CLOCK_STANDARD_HZ, HAL_I2C_CLOCK_FAST_HZ,
  *                 HAL_I2C_CLOCK_FAST_PLUS_HZ, or
  *                 HAL_I2C_CLOCK_HIGH_SPEED_HZ.
+ * @return HAL_OK on success or HAL_EINVAL/HAL_ECONFIG for an invalid setup.
  */
-void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
+hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
 
 /**
  * @brief Configure pins and start the selected I2C controller.
@@ -178,22 +195,25 @@ void hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
  * @param sda_pin  SDA pin number.
  * @param scl_pin  SCL pin number.
  * @param clock_hz Bus clock frequency in Hz.
+ * @return HAL_OK on success or HAL_EINVAL/HAL_ECONFIG for an invalid setup.
  */
-void hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
-                      uint32_t clock_hz);
+hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
+                              uint32_t clock_hz);
 
 /**
  * @brief Change the clock of the default I2C controller after init.
  * @param clock_hz Bus clock frequency in Hz.
+ * @return HAL_OK on success.
  */
-void hal_i2c_set_clock(uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock(uint32_t clock_hz);
 
 /**
  * @brief Change the clock of the selected I2C controller after init.
  * @param bus      I2C controller index (0 = default, 1 = second controller).
  * @param clock_hz Bus clock frequency in Hz.
+ * @return HAL_OK on success or HAL_EINVAL for an invalid bus.
  */
-void hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
 
 /**
  * @brief Stop the I2C bus.
@@ -486,16 +506,19 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
  *
  * @param sda_pin  SDA pin number.
  * @param scl_pin  SCL pin number.
+ * @return HAL_OK on success or HAL_EINVAL for invalid pins.
  */
-void hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
+hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
 
 /**
  * @brief Perform a bus clear on the specified I2C controller pins.
  * @param bus     I2C controller index (0 = default, 1 = second controller).
  * @param sda_pin SDA pin number.
  * @param scl_pin SCL pin number.
+ * @return HAL_OK on success or HAL_EINVAL for an invalid bus/pin mapping.
  */
-void hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
+hal_status_t hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin,
+                                   uint8_t scl_pin);
 
 #endif /* HAL_ENABLE_I2C */
 #ifdef __cplusplus

@@ -26,22 +26,15 @@ hal_status_t hal_dac_init_ex(uint8_t channel) {
 bool hal_dac_init(uint8_t channel) {
   return hal_status_to_bool(hal_dac_init_ex(channel));
 }
-hal_status_t hal_dac_write_ex(uint8_t channel, uint16_t value) {
+hal_status_t hal_dac_write(uint8_t channel, uint16_t value) {
   (void)channel;
   (void)value;
   return HAL_EUNSUPPORTED;
 }
-void hal_dac_write(uint8_t channel, uint16_t value) {
-  (void)hal_dac_write_ex(channel, value);
-}
-hal_status_t hal_dac_write_millivolts_ex(uint8_t channel, uint16_t millivolts) {
+hal_status_t hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
   (void)channel;
   (void)millivolts;
   return HAL_EUNSUPPORTED;
 }
-void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
-  (void)hal_dac_write_millivolts_ex(channel, millivolts);
-}
-
 #endif // HAL_ENABLE_DAC
 #endif // HAL_TARGET_IS_RP2040

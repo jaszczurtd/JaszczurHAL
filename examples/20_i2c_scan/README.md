@@ -6,6 +6,8 @@ I2C1 master works on silicon before relying on it.
 
 - **I2C1**: SCL = **PB8**, SDA = **PB9** (Arduino headers: D15 = SCL, D14 = SDA)
 - 100 kHz standard mode (TIMINGR tuned for the 16 MHz HSI bring-up clock)
+- Uses `hal_i2c_scan()` and passes `hal_watchdog_feed` as the per-probe
+  callback; formatting and the two-second repetition stay in the application.
 - Console: USART2 / ST-Link Virtual COM Port @ **115200 8N1**
 
 > Status: the I2C register sequence (I2C v2, AUTOEND) compiles and is written to
@@ -24,7 +26,7 @@ Nucleo-G474RE                 I2C device (e.g. PCF8563 RTC, AT24C256, BME280)
   GND ──────────────────────────── GND
 ```
 
-External pull-ups (2.2k–10k to 3V3) are **required** - STM32 internal pull-ups
+External pull-ups (2.2k-10k to 3V3) are **required** - STM32 internal pull-ups
 are too weak for reliable I2C. Many breakout boards already include them.
 
 ## Build & flash (Linux Mint / Debian-like)

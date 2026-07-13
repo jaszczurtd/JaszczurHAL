@@ -3,8 +3,8 @@
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
 Covers: `hal_status_t`, the status helper functions in
-[`hal_status.h`](../../src/hal/hal_status.h), and the status-returning `_ex`
-API convention shared by every migrated module.
+[`hal_status.h`](../../src/hal/hal_status.h), in-place status migration and
+status-returning `_ex` companions used by migrated modules.
 
 ## Why it exists
 
@@ -15,11 +15,13 @@ uniform result type so callers can branch on the cause - invalid argument,
 uninitialised backend, bus error, not-found, overflow - without inventing a
 per-module error convention.
 
-The status API is **purely additive**. Every legacy entry point keeps its
-original signature and behaviour; the new `_ex` variants are thin wrappers that
-call the legacy function and translate its result into `hal_status_t`. Existing
-code keeps compiling and running unchanged - adopt `_ex` where you want richer
-diagnostics, at your own pace.
+The migration is **status-first**. The status-returning function owns
+validation, backend execution and error mapping. A historical `bool`, value or
+handle API remains as a thin compatibility wrapper and gains an `_ex` companion
+where needed. A fallible historical `void` function changes in place to return
+`hal_status_t`, which remains source-compatible with callers that ignore the
+result; redundant `_ex` adapters are removed. This avoids status functions that
+can only guess after calling an information-losing legacy wrapper.
 
 ## Status codes
 
@@ -81,10 +83,20 @@ if (hal_status_is_error(st)) {
 }
 ```
 
-## The `_ex` naming convention
+## Status naming and migration convention
 
-For a legacy function `hal_foo_bar()`, the status-returning variant is
-`hal_foo_bar_ex()` and returns `hal_status_t`.
+New fallible APIs return `hal_status_t` directly. During migration, the
+historical return shape decides whether the original name can become the
+status API or needs an `_ex` companion:
+
+- A fallible historical `void` function changes in place to `hal_status_t`.
+  Existing callers may keep ignoring the return value, and a redundant `_ex`
+  adapter is not retained. Examples include `hal_eeprom_commit()`,
+  `hal_display_init()`, `hal_dac_write()` and `hal_i2c_init()`.
+
+- A historical `bool` function remains a thin compatibility wrapper because
+  negative `hal_status_t` errors are truthy in C. Its adjacent `_ex` function
+  owns validation and execution.
 
 - **Value-returning** helpers expose their result through an **output
   parameter**, keeping the return value free for the status:
@@ -113,11 +125,10 @@ For a legacy function `hal_foo_bar()`, the status-returning variant is
   `hal_littlefs_is_mounted()`, `hal_spi_write_dma_async_busy()`) report state,
   not the outcome of a fallible operation, so they keep no `_ex` form.
 
-## Where the `_ex` variants are documented
+## Where status variants are documented
 
-The `_ex` functions are just additional variants of an existing API, so each
-one is documented **inline next to its legacy counterpart** in that module's
-reference section, with a worked example:
+Status functions and their compatibility wrappers are documented **inline
+next to each other** in the module reference, with worked examples:
 
 | Area | Section |
 |---|---|
@@ -129,11 +140,12 @@ reference section, with a worked example:
 
 ## Migration guidance
 
-- New code should prefer `_ex`; legacy calls remain valid indefinitely.
+- New code should prefer the status-returning function: either the primary
+  function returning `hal_status_t` or its `_ex` companion when a legacy
+  value/handle/`bool` signature must remain available.
 - Treat `hal_status_is_error(st)` as the generic failure gate; branch on
   specific codes only where you act on them.
 - A residual failure that the legacy `bool` cannot disambiguate is mapped to
   the most representative code for that module (documented in each module's
-  header and section). When a backend genuinely cannot report a cause (for
-  example a `void` EEPROM write), the `_ex` wrapper adds the validation it can
-  and otherwise returns `HAL_OK`.
+  header and section). Status paths own validation, backend execution and
+  error mapping; they must not be adapters that call a legacy wrapper.

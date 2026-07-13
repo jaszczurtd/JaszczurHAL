@@ -315,11 +315,6 @@ int getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 /** @} */
 
-#ifdef I2C_SCANNER
-/** @brief Scan I2C bus and print discovered addresses. */
-void i2cScanner(void);
-#endif
-
 #ifdef __cplusplus
 }
 #endif

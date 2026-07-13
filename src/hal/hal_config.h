@@ -73,7 +73,6 @@
 #endif
 
 /* Uncomment (or define via -D) to enable optional features:
- *   #define I2C_SCANNER
  *   #define RESET_EEPROM
  *   #define PICO_W     // board/core define; HAL WiFi uses HAL_ENABLE_WIFI
  *   #define HAL_ENABLE_FREERTOS

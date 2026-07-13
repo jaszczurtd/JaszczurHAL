@@ -103,13 +103,30 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 #define HAL_I2C_ERROR_OTHER         3u
 #define HAL_I2C_ERROR_TIMEOUT       4u
 
-// Status-returning API for new code. Legacy wrappers below are preserved.
-hal_status_t hal_i2c_init_ex(uint8_t sda_pin, uint8_t scl_pin,
-                             uint32_t clock_hz);
-hal_status_t hal_i2c_init_bus_ex(uint8_t bus, uint8_t sda_pin,
-                                 uint8_t scl_pin, uint32_t clock_hz);
-hal_status_t hal_i2c_set_clock_ex(uint32_t clock_hz);
-hal_status_t hal_i2c_set_clock_bus_ex(uint8_t bus, uint32_t clock_hz);
+// Fallible historical void operations now return status in place.
+hal_status_t hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin,
+                          uint32_t clock_hz);
+hal_status_t hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin,
+                              uint8_t scl_pin, uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock(uint32_t clock_hz);
+hal_status_t hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
+hal_status_t hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
+hal_status_t hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin,
+                                   uint8_t scl_pin);
+
+// One bounded scan of the usable 7-bit range 0x08..0x77. The callback is
+// optional and runs before every probe; hal_watchdog_feed can be passed
+// directly. A NULL addresses pointer with capacity 0 performs a count-only
+// scan. outFound receives the total count even when the output is too small.
+typedef void (*hal_i2c_scan_callback_t)(void);
+hal_status_t hal_i2c_scan(uint8_t *addresses, size_t capacity,
+                          size_t *outFound,
+                          hal_i2c_scan_callback_t callback);
+hal_status_t hal_i2c_scan_bus(uint8_t bus, uint8_t *addresses,
+                              size_t capacity, size_t *outFound,
+                              hal_i2c_scan_callback_t callback);
+
+// Status companions for historical value/bool-returning operations.
 hal_status_t hal_i2c_end_transmission_ex(void);
 hal_status_t hal_i2c_end_transmission_bus_ex(uint8_t bus);
 hal_status_t hal_i2c_write_byte_ex(uint8_t address, uint8_t data,
@@ -133,16 +150,6 @@ hal_status_t hal_i2c_request_from_ex(uint8_t address, uint8_t count,
                                      uint8_t *outReceived);
 hal_status_t hal_i2c_request_from_bus_ex(uint8_t bus, uint8_t address,
                                          uint8_t count, uint8_t *outReceived);
-hal_status_t hal_i2c_bus_clear_ex(uint8_t sda_pin, uint8_t scl_pin);
-hal_status_t hal_i2c_bus_clear_bus_ex(uint8_t bus, uint8_t sda_pin,
-                                      uint8_t scl_pin);
-
-// Init bus, set clock, and start the selected backend controller
-// (also creates the per-bus mutex).
-void    hal_i2c_init(uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz);
-void    hal_i2c_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin, uint32_t clock_hz); // bus: 0=default, 1=second controller
-void    hal_i2c_set_clock(uint32_t clock_hz);
-void    hal_i2c_set_clock_bus(uint8_t bus, uint32_t clock_hz);
 void    hal_i2c_deinit(void);
 void    hal_i2c_deinit_bus(uint8_t bus);
 
@@ -212,14 +219,6 @@ uint32_t hal_i2c_get_transaction_count_bus(uint8_t bus);
 bool    hal_i2c_is_busy(uint8_t address);
 bool    hal_i2c_is_busy_bus(uint8_t bus, uint8_t address);
 
-// I2C bus clear (per I2C specification §3.1.16).
-// Toggles SCL up to 9 times at GPIO level to release a slave holding SDA
-// low (e.g. after master reset mid-transaction), then generates a STOP
-// condition.  Leaves SDA/SCL as inputs with pull-ups.
-// Must be called BEFORE hal_i2c_init() - the bus is not usable for normal I2C
-// transactions during this procedure.
-void    hal_i2c_bus_clear(uint8_t sda_pin, uint8_t scl_pin);
-void    hal_i2c_bus_clear_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin);
 ```
 
 Only bus values 0 and 1 are supported. Other values are programmer errors and
@@ -232,6 +231,20 @@ use returns `HAL_EUNINIT` where the backend can detect it; legacy
 to `HAL_EBUS`, and non-specific backend failures map to `HAL_EIO`.
 Existing wrappers keep their `void`, `uint8_t` and `bool` return shapes for
 source compatibility.
+
+`hal_i2c_scan()` replaces the old `tools.cpp` `i2cScanner()` helper. It scans
+once rather than owning an infinite print/delay loop, skips reserved 7-bit
+addresses, has no serial dependency, supports both controllers, reports
+buffer truncation as `HAL_EOVERFLOW`, and keeps watchdog servicing explicit
+through its optional callback. Applications own presentation and scheduling:
+
+```c
+uint8_t addresses[HAL_I2C_SCAN_ADDRESS_COUNT];
+size_t found = 0;
+hal_status_t status =
+    hal_i2c_scan(addresses, HAL_I2C_SCAN_ADDRESS_COUNT, &found,
+                 hal_watchdog_feed);
+```
 
 **Init behavior:** `hal_i2c_init*()` creates the per-bus mutex, configures
 SDA/SCL, clock and starts the backend controller; it should still be called
@@ -273,6 +286,8 @@ bool    hal_mock_i2c_is_initialized(void);                                      
 bool    hal_mock_i2c_is_initialized_bus(uint8_t bus);                             // init state for selected bus
 void    hal_mock_i2c_set_busy(bool busy);                                         // control hal_i2c_is_busy() + end_transmission NACK on bus 0
 void    hal_mock_i2c_set_busy_bus(uint8_t bus, bool busy);                        // control hal_i2c_is_busy() + end_transmission NACK on selected bus
+void    hal_mock_i2c_set_device_present(uint8_t address, bool present);            // configure scan ACK map on bus 0
+void    hal_mock_i2c_set_device_present_bus(uint8_t bus, uint8_t address, bool present); // configure scan ACK map on selected bus
 uint32_t hal_mock_i2c_get_bus_clear_count(void);                                  // number of bus_clear calls on bus 0
 uint32_t hal_mock_i2c_get_bus_clear_count_bus(uint8_t bus);                       // number of bus_clear calls on selected bus
 ```
