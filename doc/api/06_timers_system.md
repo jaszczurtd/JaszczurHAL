@@ -38,9 +38,10 @@ typedef enum {
 static inline const char *hal_status_to_string(hal_status_t status);
 ```
 
-This is the common status vocabulary for new public APIs. Existing modules keep
-their current `bool`, `NULL`, `void` and module-specific status contracts until
-they are intentionally migrated in compatible steps.
+This is the common status vocabulary for new public APIs. Existing value,
+handle and `bool` contracts remain compatibility wrappers when migrated;
+fallible historical `void` operations may change in place to return
+`hal_status_t` because callers can continue ignoring the result.
 
 Use `HAL_OK` for success, `status < 0` for generic failure checks, and the
 specific error codes for diagnostics at module/backend boundaries.

@@ -20,20 +20,26 @@ void app_start(void) {
   deb("=== JaszczurHAL G474 I2C scanner ===");
   deb("I2C1: SCL=PB8, SDA=PB9 (external pull-ups to 3V3 required)");
 
-  hal_i2c_init(25u, 24u, 100000u);
+  const hal_status_t status = hal_i2c_init(25u, 24u, 100000u);
+  if (status != HAL_OK) {
+    deb("I2C init failed: %s", hal_status_to_string(status));
+  }
 }
 
 void app_task0(void) {
+  uint8_t addresses[HAL_I2C_SCAN_ADDRESS_COUNT];
+  size_t found = 0u;
   deb("scanning 0x08..0x77 ...");
-  int found = 0;
-  for (uint8_t addr = 0x08u; addr <= 0x77u; ++addr) {
-    /* hal_i2c_is_busy() returns false when the device ACKs (present). */
-    if (!hal_i2c_is_busy(addr)) {
-      deb("  device @ 0x%02X", (unsigned)addr);
-      ++found;
+  const hal_status_t status = hal_i2c_scan(
+      addresses, HAL_I2C_SCAN_ADDRESS_COUNT, &found, hal_watchdog_feed);
+  if (status != HAL_OK) {
+    deb("  scan failed: %s", hal_status_to_string(status));
+  } else {
+    for (size_t i = 0u; i < found; ++i) {
+      deb("  device @ 0x%02X", (unsigned)addresses[i]);
     }
   }
-  if (found == 0) {
+  if (status == HAL_OK && found == 0u) {
     deb("  (no devices found)");
   }
   hal_delay_ms(2000);

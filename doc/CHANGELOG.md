@@ -63,24 +63,31 @@ All notable changes to this project will be documented in this file.
 
 ### Display status API
 
-- Added status-returning display `_ex` APIs across the whole module: init,
-  configure/soft-init, rotation/inversion, dimension getters, screen/geometry
-  drawing, RGB bitmap and streaming writes (including async DMA), and the full
-  text/font helper surface while preserving every existing `bool`/`int`/`void`
-  compatibility function.
-- Added `hal_display_status.cpp`, a backend-agnostic validation/result adapter
-  shared by mock, RP2040 and STM32G474 builds. It distinguishes invalid
-  arguments (`HAL_EINVAL`) from an unconfigured backend (`HAL_EUNINIT`), an
-  invalid stream state (`HAL_ESTATE`) and initialisation I/O failure
-  (`HAL_EIO`). Value-returning helpers expose their result through an output
-  parameter.
+- Re-migrated the complete display module to the revised status-first pattern.
+  Status validation and error mapping now live as explicitly named functions
+  inside the mock and shared RP2040/STM32G474 backend sources; every historical
+  `bool` entry point is a thin adjacent wrapper. The superseded
+  backend-agnostic `hal_display_status.cpp` adapter was removed; the migration
+  uses no preprocessor symbol aliases, injected `.inc` implementation or
+  separate compatibility translation unit.
+- Changed the historical `void hal_display_init()` and
+  `void hal_display_soft_init()` functions in place to return `hal_status_t`;
+  their redundant additive `_ex` variants were removed. Existing callers may
+  continue ignoring the result. Value-returning dimension/text helpers retain
+  their original shape and their status `_ex` output-parameter companions.
+- Display operations now preserve distinct backend-owned results for invalid
+  arguments (`HAL_EINVAL`), unconfigured state (`HAL_EUNINIT`), unsupported
+  bitmap/stream paths (`HAL_EUNSUPPORTED`), missing stream (`HAL_ESTATE`), an
+  already-open stream or active async DMA (`HAL_EBUSY`), formatting truncation
+  (`HAL_EOVERFLOW`) and panel/bus failure (`HAL_EIO`).
 - Because the historical bus-selecting initialiser already occupies
   `hal_display_init_ssd1306_i2c_ex()`, the SSD1306 status entry point is
   `hal_display_init_ssd1306_i2c_status_ex()` (mirrors `hal_wifi_ping_status_ex()`).
 - Completed the mock display backend with the async DMA write trio
   (`_async_start`/`_async_busy`/`_async_wait`) so the full public surface is
-  host-testable, and expanded `test_hal_display` with success, invalid-argument,
-  uninitialised and stream-state coverage for the new APIs.
+  host-testable, added deterministic display I/O failure injection, and
+  expanded `test_hal_display` with success, invalid-argument, uninitialised,
+  busy/stream-state, overflow and backend-I/O coverage.
 
 ### SPI/DMA status API
 
@@ -180,24 +187,30 @@ All notable changes to this project will be documented in this file.
 - Propagated status codes through the shared MCP401x/MAX5395 digipot backends
   for invalid configuration/range, pool exhaustion, I2C bus failures and
   MCP401x read-back mismatch reporting.
-- Added `hal_dac_init_ex()`, `hal_dac_write_ex()` and
-  `hal_dac_write_millivolts_ex()` with `hal_status_t` diagnostics while
-  preserving the existing `bool`/`void` DAC wrappers.
+- Migrated DAC writes to the status-first layout: `hal_dac_write()` and
+  `hal_dac_write_millivolts()` now return `hal_status_t` in place, and their
+  redundant `_ex` variants were removed. `hal_dac_init_ex()` remains the
+  status implementation beside the historical `bool hal_dac_init()` wrapper.
 - Added `hal_pcnt_init_ex()`, `hal_pcnt_read_ex()`, `hal_pcnt_reset_ex()` and
   `hal_pcnt_read_and_reset_ex()` with status diagnostics while preserving the
   existing PCNT compatibility wrappers.
 - Added `hal_get_device_uid_hex_ex()` so callers can distinguish NULL-buffer
   (`HAL_EINVAL`) and too-small-buffer (`HAL_EOVERFLOW`) failures while keeping
   the existing `hal_get_device_uid_hex()` wrapper.
-- Added status-returning I2C master APIs (`hal_i2c_init_ex()`,
-  `hal_i2c_init_bus_ex()`, `hal_i2c_set_clock_ex()`,
-  `hal_i2c_set_clock_bus_ex()`, `hal_i2c_end_transmission_ex()`,
-  `hal_i2c_end_transmission_bus_ex()`, one-byte read/write helpers,
-  write-read/read-bytes helpers, request-from helpers and bus-clear helpers)
-  while keeping the existing `void`/`uint8_t`/`bool` I2C wrappers.
-- Mock, RP2040 and STM32G474 I2C backends now map invalid buses/buffers,
-  uninitialized bus use, bus errors and timeouts to `hal_status_t` where the
-  backend can report them.
+- Re-migrated I2C master APIs to the status-first backend layout. Init, clock
+  and bus-clear operations now return `hal_status_t` in place and their six
+  redundant `_ex` variants were removed. Historical value/`bool` APIs remain
+  compatibility wrappers over adjacent status companions.
+- Mock, RP2040 and STM32G474 now own validation, I/O and error mapping in their
+  status paths; compatibility wrappers no longer serve as the implementation
+  called by status APIs. Backends distinguish invalid arguments,
+  uninitialized use, bus errors and RP2040 timeouts where available.
+- Moved the legacy `i2cScanner()` utility into `hal_i2c` as status-first
+  `hal_i2c_scan()` / `hal_i2c_scan_bus()`. The new scanner performs one bounded
+  pass over non-reserved addresses, returns discovered addresses without a
+  serial dependency, supports count-only scans and explicit overflow
+  reporting, and accepts a per-probe `void(void)` callback so
+  `hal_watchdog_feed` can be passed directly. Removed the `I2C_SCANNER` flag.
 
 ### HTTP server
 

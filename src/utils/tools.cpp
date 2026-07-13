@@ -264,47 +264,6 @@ int percentFrom(int givenVal, int maxVal) {
   return (givenVal * 100) / maxVal;
 }
 
-#ifdef I2C_SCANNER
-
-unsigned int loopCounter = 0;
-static bool t = false;
-void i2cScanner(void) {
-  uint8_t error, address;
-  int nDevices;
-
-  char i2c_buf[32];
-  while (true) {
-    snprintf(i2c_buf, sizeof(i2c_buf), "Scanning %u...", loopCounter++);
-    hal_serial_println(i2c_buf);
-
-    nDevices = 0;
-    for (address = 1; address < 127; address++) {
-      hal_watchdog_feed();
-      // The i2c_scanner uses the return value of
-      // the Write.endTransmisstion to see if
-      // a device did acknowledge to the address.
-      hal_i2c_begin_transmission(address);
-      error = hal_i2c_end_transmission();
-
-      if (error == 0) {
-        snprintf(i2c_buf, sizeof(i2c_buf), "I2C found: 0x%02X", address);
-        hal_serial_println(i2c_buf);
-        nDevices++;
-      } else if (error == 4) {
-        snprintf(i2c_buf, sizeof(i2c_buf), "I2C error at: 0x%02X", address);
-        hal_serial_println(i2c_buf);
-      }
-    }
-    if (nDevices == 0)
-      hal_serial_println("No I2C devices found");
-    else
-      hal_serial_println("done");
-
-    m_delay(500); // wait 500 mseconds for next scan
-  }
-}
-#endif
-
 unsigned long getSeconds(void) { return ((hal_millis() + 500) / 1000); }
 
 bool isDaylightSavingTime(int year, int month, int day) {

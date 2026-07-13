@@ -384,7 +384,7 @@ typedef enum {
 
 // Construct display object and start the SPI driver.
 // For ILI9341: also calls begin(). For other drivers: init is deferred to configure().
-void hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
+hal_status_t hal_display_init(uint8_t cs, uint8_t dc, uint8_t rst);
 
 // Construct and initialise an SSD1306 OLED connected via I2C.
 bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
@@ -395,7 +395,7 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
 // Re-send backend register-init sequence when the selected driver supports it.
-void hal_display_soft_init(int delay_ms);
+hal_status_t hal_display_soft_init(int delay_ms);
 
 bool hal_display_set_rotation(uint8_t r);
 bool hal_display_invert(bool invert);
@@ -499,6 +499,7 @@ forcing swapped inversion commands.
 **Mock helpers:**
 ```c
 void         hal_mock_display_reset(void);
+void         hal_mock_display_fail_next_io(void);
 const char  *hal_mock_display_last_print(void);
 const char  *hal_mock_display_last_println(void);
 hal_font_id_t hal_mock_display_get_font(void);
@@ -509,10 +510,16 @@ void         hal_mock_display_get_last_fill_rect(int *x, int *y, int *w, int *h,
 void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w, int *h);
 ```
 
-**Status-returning `_ex` variants:** every function above has an additive
-`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
-The legacy functions are unchanged; `_ex` adds argument validation and a typed
-result. Value-returning getters take an output parameter.
+**Status-first API:** status validation and error mapping live in the mock and
+shared hardware backends. Historical `bool` functions are thin compatibility
+wrappers over status-returning `_ex` operations. Historical `void` init and
+soft-init now return `hal_status_t` in place; existing callers can keep ignoring
+the result. Value-returning getters retain their original signature and expose
+typed errors through `_ex` variants with an output parameter.
+
+The backend can report `HAL_EINVAL`, `HAL_EUNINIT`, `HAL_EUNSUPPORTED`,
+`HAL_ESTATE`, `HAL_EBUSY`, `HAL_EOVERFLOW` and `HAL_EIO` without collapsing
+them through a legacy boolean result.
 
 ```c
 // Configure + draw with typed diagnostics
@@ -527,7 +534,7 @@ if (hal_display_get_width_ex(&width) == HAL_OK) {
     // width valid only when the call returned HAL_OK
 }
 
-// Streaming reports stream-state problems as HAL_ESTATE
+// Streaming distinguishes an absent stream from an already-open one.
 if (hal_display_begin_write_ex(0, 0, 240, 320) == HAL_OK) {
     hal_display_write_pixels_be_ex(pixels_be, byte_count); // HAL_EINVAL on odd count
     hal_display_end_write_ex();

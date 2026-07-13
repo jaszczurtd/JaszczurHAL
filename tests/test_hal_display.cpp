@@ -351,6 +351,35 @@ void test_ex_prepare_text_formats_and_reports_status(void) {
       HAL_EINVAL, hal_display_prepare_text_ex(NULL, sizeof(buf), &width, "x"));
 }
 
+void test_status_init_and_soft_init_return_real_results(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init(1u, 2u, 3u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_soft_init(0));
+}
+
+void test_status_stream_distinguishes_busy_and_invalid_state(void) {
+  const uint8_t pixels_be[2] = {0x12, 0x34};
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_display_write_pixels_be_ex(pixels_be, 2u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_begin_write_ex(0, 0, 2, 2));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_display_begin_write_ex(0, 0, 2, 2));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_end_write_ex());
+}
+
+void test_status_flush_surfaces_backend_io_failure(void) {
+  hal_mock_display_fail_next_io();
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_display_flush_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_flush_ex());
+}
+
+void test_status_prepare_text_reports_overflow(void) {
+  char buf[4] = {};
+  int width = 123;
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_display_prepare_text_ex(
+                                           buf, sizeof(buf), &width, "abcdef"));
+  TEST_ASSERT_EQUAL_STRING("abc", buf);
+  TEST_ASSERT_EQUAL_INT(0, width);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_configure_sets_dimensions);
@@ -385,5 +414,9 @@ int main(void) {
   RUN_TEST(test_ex_text_helpers_report_status);
   RUN_TEST(test_ex_ssd1306_status_init_sets_dimensions);
   RUN_TEST(test_ex_prepare_text_formats_and_reports_status);
+  RUN_TEST(test_status_init_and_soft_init_return_real_results);
+  RUN_TEST(test_status_stream_distinguishes_busy_and_invalid_state);
+  RUN_TEST(test_status_flush_surfaces_backend_io_failure);
+  RUN_TEST(test_status_prepare_text_reports_overflow);
   return UNITY_END();
 }

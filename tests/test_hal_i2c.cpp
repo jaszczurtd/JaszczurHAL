@@ -12,6 +12,10 @@ void setUp(void) {
 
 void tearDown(void) {}
 
+static unsigned s_scan_callback_count = 0u;
+
+static void scan_progress_callback(void) { s_scan_callback_count++; }
+
 void test_begin_transmission_sets_last_address(void) {
   hal_i2c_begin_transmission(0x3C);
   TEST_ASSERT_EQUAL_UINT8(0x3C, hal_mock_i2c_get_last_addr());
@@ -505,18 +509,17 @@ void test_write_read_writes_register_and_consumes_rx_sequence(void) {
 }
 
 void test_status_init_and_clock_helpers_report_errors(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_init_ex(4, 5, HAL_I2C_CLOCK_FAST_HZ));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_init(4, 5, HAL_I2C_CLOCK_FAST_HZ));
   TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_FAST_HZ, hal_mock_i2c_get_clock_hz());
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        hal_i2c_set_clock_ex(HAL_I2C_CLOCK_STANDARD_HZ));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_set_clock(HAL_I2C_CLOCK_STANDARD_HZ));
   TEST_ASSERT_EQUAL_UINT32(HAL_I2C_CLOCK_STANDARD_HZ,
                            hal_mock_i2c_get_clock_hz());
 
-  TEST_ASSERT_EQUAL_INT(
-      HAL_EINVAL, hal_i2c_init_bus_ex(9, 4, 5, HAL_I2C_CLOCK_STANDARD_HZ));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
-                        hal_i2c_set_clock_bus_ex(9, HAL_I2C_CLOCK_STANDARD_HZ));
+                        hal_i2c_init_bus(9, 4, 5, HAL_I2C_CLOCK_STANDARD_HZ));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_set_clock_bus(9, HAL_I2C_CLOCK_STANDARD_HZ));
 }
 
 void test_status_end_transmission_maps_legacy_result(void) {
@@ -604,13 +607,61 @@ void test_status_request_from_returns_count(void) {
 }
 
 void test_status_bus_clear_reports_selected_bus(void) {
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear_ex(4, 5));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear(4, 5));
   TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count());
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear_bus_ex(1, 6, 7));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_bus_clear_bus(1, 6, 7));
   TEST_ASSERT_EQUAL_UINT32(1, hal_mock_i2c_get_bus_clear_count_bus(1));
 
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_bus_clear_bus_ex(9, 6, 7));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_bus_clear_bus(9, 6, 7));
+}
+
+void test_scan_returns_present_devices_and_calls_progress_callback(void) {
+  uint8_t addresses[4] = {};
+  size_t found = 0u;
+  s_scan_callback_count = 0u;
+  hal_mock_i2c_set_device_present(0x08u, true);
+  hal_mock_i2c_set_device_present(0x3Cu, true);
+  hal_mock_i2c_set_device_present(0x77u, true);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_i2c_scan(addresses, 4u, &found, scan_progress_callback));
+
+  TEST_ASSERT_EQUAL_UINT(3u, found);
+  TEST_ASSERT_EQUAL_UINT8(0x08u, addresses[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x3Cu, addresses[1]);
+  TEST_ASSERT_EQUAL_UINT8(0x77u, addresses[2]);
+  TEST_ASSERT_EQUAL_UINT(HAL_I2C_SCAN_ADDRESS_COUNT, s_scan_callback_count);
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_lock_depth());
+}
+
+void test_scan_reports_output_overflow_but_counts_all_devices(void) {
+  uint8_t addresses[1] = {};
+  size_t found = 0u;
+  hal_mock_i2c_set_device_present(0x20u, true);
+  hal_mock_i2c_set_device_present(0x21u, true);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_i2c_scan(addresses, 1u, &found, NULL));
+  TEST_ASSERT_EQUAL_UINT(2u, found);
+  TEST_ASSERT_EQUAL_UINT8(0x20u, addresses[0]);
+
+  found = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_i2c_scan(NULL, 0u, &found, NULL));
+  TEST_ASSERT_EQUAL_UINT(2u, found);
+}
+
+void test_scan_validates_arguments_bus_and_initialization(void) {
+  uint8_t addresses[2] = {};
+  size_t found = 123u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_scan(addresses, 2u, NULL, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_i2c_scan(NULL, 1u, &found, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_i2c_scan_bus(9u, addresses, 2u, &found, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT,
+                        hal_i2c_scan_bus(1u, addresses, 2u, &found, NULL));
+  TEST_ASSERT_EQUAL_UINT(0u, found);
 }
 
 int main(void) {
@@ -664,5 +715,8 @@ int main(void) {
   RUN_TEST(test_status_read_bytes_and_write_read_validate_arguments);
   RUN_TEST(test_status_request_from_returns_count);
   RUN_TEST(test_status_bus_clear_reports_selected_bus);
+  RUN_TEST(test_scan_returns_present_devices_and_calls_progress_callback);
+  RUN_TEST(test_scan_reports_output_overflow_but_counts_all_devices);
+  RUN_TEST(test_scan_validates_arguments_bus_and_initialization);
   return UNITY_END();
 }

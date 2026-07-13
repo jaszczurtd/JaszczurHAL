@@ -229,9 +229,9 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
-| `test_hal_i2c` | bus0/bus1 begin/request/read flow, direct read-bytes helper, address capture, busy helper, lock-depth and init/deinit state coverage |
+| `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |
 | `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
-| `test_hal_display` | display helper API (text sizing/formatting, presets, draw image, SSD1306 init + `hal_display_init_ssd1306_i2c_ex`, text-line helpers) |
+| `test_hal_display` | status-first display API, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
@@ -276,7 +276,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
 | `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
 | `test_hal_critical_section` | critical-section nesting and interrupt-state restoration behavior |
-| `test_hal_dac` | DAC init/write/millivolt compatibility and status `_ex` validation |
+| `test_hal_dac` | DAC init compatibility plus status-first raw/millivolt writes, channel/range/uninitialised validation and unsupported-target reporting |
 | `test_hal_digipot` | MCP401x/MAX5395 facade init/set behavior, range validation and status mapping |
 | `test_hal_pcnt` | pulse-counter init/read/reset compatibility and status `_ex` validation |
 | `test_hal_i2c_slave` | I2C-slave register map, callbacks, RX/TX transactions and invalid-input handling |

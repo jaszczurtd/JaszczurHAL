@@ -172,7 +172,8 @@ Storage
 Buses
   HAL_ENABLE_UART          Hardware UART.
   HAL_ENABLE_SWSERIAL      Shared software UART over HAL GPIO/timing/sync.
-  HAL_ENABLE_I2C           I2C master (Wire).
+  HAL_ENABLE_I2C           I2C master/controller with status-first transfers,
+                           two-bus support, bus clear and bounded address scan.
   HAL_ENABLE_I2C_SLAVE     I2C slave / target mode with register map.
   HAL_ENABLE_SPI           SPI master/controller.
   HAL_ENABLE_CAN           Generic CAN API facade.
@@ -255,7 +256,8 @@ RFID
 Analog out / status
   HAL_ENABLE_DAC           True DAC output. Real on STM32G474 (DAC1, 12-bit,
                            PA4/PA5); reported unsupported on RP2040 (no DAC) -
-                           check hal_dac_is_supported().
+                           check hal_dac_is_supported(). Writes return
+                           hal_status_t diagnostics in place.
   HAL_ENABLE_DACLESS       Shared DACless PWM-audio engine with block/sample
                            callbacks and ADC sampling. Propagates:
                            DMA_PWM_AUDIO, PWM_FREQ.

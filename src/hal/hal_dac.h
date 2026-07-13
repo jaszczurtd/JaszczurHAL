@@ -71,17 +71,7 @@ bool hal_dac_init(uint8_t channel);
  *         HAL_EINVAL when the channel is invalid, or HAL_EUNINIT when the
  *         channel has not been initialized.
  */
-hal_status_t hal_dac_write_ex(uint8_t channel, uint16_t value);
-
-/**
- * @brief Write a raw code to a DAC channel.
- *
- * Compatibility wrapper over hal_dac_write_ex().
- *
- * @param channel Channel index.
- * @param value   Code in [0, hal_dac_max_value()]; values above are clamped.
- */
-void hal_dac_write(uint8_t channel, uint16_t value);
+hal_status_t hal_dac_write(uint8_t channel, uint16_t value);
 
 /**
  * @brief Write an output voltage expressed in millivolts.
@@ -95,17 +85,7 @@ void hal_dac_write(uint8_t channel, uint16_t value);
  *         HAL_EINVAL when the channel is invalid, or HAL_EUNINIT when the
  *         channel has not been initialized.
  */
-hal_status_t hal_dac_write_millivolts_ex(uint8_t channel, uint16_t millivolts);
-
-/**
- * @brief Write an output voltage expressed in millivolts.
- *
- * Compatibility wrapper over hal_dac_write_millivolts_ex().
- *
- * @param channel      Channel index.
- * @param millivolts   Desired output in mV (clamped to [0, VREF]).
- */
-void hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
+hal_status_t hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts);
 
 #ifdef __cplusplus
 }

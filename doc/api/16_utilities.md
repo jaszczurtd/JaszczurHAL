@@ -256,7 +256,6 @@ const char *encToString(uint8_t enc);       // HAL WiFi encryption label
 bool  scanNetworks(const char *networkToFind);  // requires HAL_ENABLE_WIFI
 int   getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
-void  i2cScanner(void);
 ```
 
 ---
