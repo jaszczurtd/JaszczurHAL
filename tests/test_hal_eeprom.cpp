@@ -111,6 +111,54 @@ void test_write_int_at_end_does_not_wraparound(void) {
   TEST_ASSERT_EQUAL_INT32(0x55, hal_eeprom_read_int(last));
 }
 
+/* ---- Status-returning (_ex) API coverage ---- */
+
+void test_ex_byte_and_int_roundtrip(void) {
+  uint8_t b = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_write_byte(10, 0xAB));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_read_byte_ex(10, &b));
+  TEST_ASSERT_EQUAL_UINT8(0xAB, b);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_eeprom_read_byte_ex(10, NULL));
+
+  int32_t v = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_write_int(20, -123456));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_read_int_ex(20, &v));
+  TEST_ASSERT_EQUAL_INT32(-123456, v);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_eeprom_read_int_ex(20, NULL));
+}
+
+void test_ex_range_validation_reports_overflow(void) {
+  const uint16_t size = hal_eeprom_size();
+  const uint8_t data[3] = {1, 2, 3};
+
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_eeprom_write_byte(size, 0));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EOVERFLOW,
+      hal_eeprom_write_bytes((uint16_t)(size - 2u), data, sizeof(data)));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_eeprom_write_int((uint16_t)(size - 3u), 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_eeprom_write_bytes(0, NULL, sizeof(data)));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_write_bytes(0, data, 0));
+}
+
+void test_ex_uninitialised_and_size_status(void) {
+  uint16_t sz = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_size_ex(&sz));
+  TEST_ASSERT_EQUAL_UINT16(hal_eeprom_size(), sz);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_eeprom_size_ex(NULL));
+
+  hal_mock_eeprom_reset(); /* size back to 0, not initialised */
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_eeprom_size_ex(&sz));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_eeprom_write_byte(0, 0xFF));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_eeprom_init((hal_eeprom_type_t)99, 256, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_init(HAL_EEPROM_FLASH, 256, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_commit());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_eeprom_reset());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_init_sets_type);
@@ -126,5 +174,8 @@ int main(void) {
   RUN_TEST(test_write_bytes_clips_at_end_without_wraparound);
   RUN_TEST(test_read_bytes_pads_out_of_range_tail_with_zero);
   RUN_TEST(test_write_int_at_end_does_not_wraparound);
+  RUN_TEST(test_ex_byte_and_int_roundtrip);
+  RUN_TEST(test_ex_range_validation_reports_overflow);
+  RUN_TEST(test_ex_uninitialised_and_size_status);
   return UNITY_END();
 }

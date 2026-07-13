@@ -673,6 +673,27 @@ void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
 void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 ```
 
+**Status-returning `_ex` variants:** every function above has an additive
+`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
+`hal_rtc_init_ex()` produces the handle through an output parameter; the other
+operations return `HAL_EINVAL` for a NULL handle/pointer and `HAL_EIO` for a
+bus/backend failure.
+
+```c
+hal_rtc_t rtc = NULL;
+hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);
+// HAL_OK -> handle ready, HAL_EINVAL -> bad args,
+// HAL_EIO -> invalid config / probe failure / pool exhaustion
+if (st != HAL_OK) {
+    return;
+}
+
+uint64_t epoch = 0;
+if (hal_rtc_get_epoch_ex(rtc, &epoch) == HAL_OK) {
+    use(epoch);              // HAL_EINVAL if handle/output is NULL
+}
+```
+
 ---
 
 

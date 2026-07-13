@@ -229,7 +229,41 @@ static void flash_load_mirror(void) {
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
-void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr) {
+/*
+ * Status for an [addr, addr+len) access against the active device size.
+ * Mirrors the clip performed by clipped_len(): HAL_EOVERFLOW means the access
+ * is (partly) clipped; the clip side effect is preserved by the callers below.
+ */
+static hal_status_t eeprom_range_status(uint16_t addr, uint16_t len) {
+  if (s_size == 0u) {
+    return HAL_EUNINIT;
+  }
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  if (addr >= s_size || (uint32_t)addr + (uint32_t)len > (uint32_t)s_size) {
+    return HAL_EOVERFLOW;
+  }
+  return HAL_OK;
+}
+
+/* Combine a range status with an I2C-io result: a bus failure on an otherwise
+ * in-range access reports HAL_EIO. */
+static hal_status_t combine_io(hal_status_t range, bool io_ok) {
+  if (range == HAL_EUNINIT) {
+    return range;
+  }
+  if (!io_ok) {
+    return HAL_EIO;
+  }
+  return range;
+}
+
+hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
+                             uint8_t i2c_addr) {
+  if (type < HAL_EEPROM_DEFAULT || type > HAL_EEPROM_FLASH) {
+    return HAL_EINVAL;
+  }
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
 
@@ -245,27 +279,25 @@ void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr) {
   }
 
   hal_mutex_unlock(s_eeprom_mutex);
+  return HAL_OK;
 }
 
-void hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
-                                      void *ctx) {
+hal_status_t
+hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
+                                 void *ctx) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
   s_progress_callback = callback;
   s_progress_ctx = ctx;
   hal_mutex_unlock(s_eeprom_mutex);
+  return HAL_OK;
 }
 
 static void write_byte_nolock(uint16_t addr, uint8_t val) {
-  if (s_type == HAL_EEPROM_STM32_FLASH) {
-    if (addr < s_size && s_flash_reserved_size > 0u) {
-      s_flash_mirror[addr] = val;
-      s_dirty = true;
-    }
-    return;
+  if (addr < s_size && s_flash_reserved_size > 0u) {
+    s_flash_mirror[addr] = val;
+    s_dirty = true;
   }
-
-  (void)at24_write_bytes(addr, &val, clipped_len(addr, 1u));
 }
 
 static uint8_t read_byte_nolock(uint16_t addr) {
@@ -282,11 +314,42 @@ static uint8_t read_byte_nolock(uint16_t addr) {
   return value;
 }
 
-void hal_eeprom_write_byte(uint16_t addr, uint8_t val) {
+/* Clipped write/read returning I2C success so the AT24C256 path can surface
+ * bus failures as HAL_EIO; the STM32 flash mirror path cannot fail here. */
+static bool write_clipped_nolock(uint16_t addr, const uint8_t *data,
+                                 uint16_t n) {
+  if (n == 0u) {
+    return true;
+  }
+  if (s_type == HAL_EEPROM_STM32_FLASH) {
+    for (uint16_t i = 0u; i < n; i++) {
+      write_byte_nolock((uint16_t)(addr + i), data[i]);
+    }
+    return true;
+  }
+  return at24_write_bytes(addr, data, n);
+}
+
+static bool read_clipped_nolock(uint16_t addr, uint8_t *out, uint16_t n) {
+  if (n == 0u) {
+    return true;
+  }
+  if (s_type == HAL_EEPROM_STM32_FLASH) {
+    for (uint16_t i = 0u; i < n; i++) {
+      out[i] = read_byte_nolock((uint16_t)(addr + i));
+    }
+    return true;
+  }
+  return at24_read_bytes(addr, out, n);
+}
+
+hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
-  write_byte_nolock(addr, val);
+  const hal_status_t range = eeprom_range_status(addr, 1u);
+  const bool io_ok = write_clipped_nolock(addr, &val, clipped_len(addr, 1u));
   hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
 }
 
 uint8_t hal_eeprom_read_byte(uint16_t addr) {
@@ -297,38 +360,43 @@ uint8_t hal_eeprom_read_byte(uint16_t addr) {
   return val;
 }
 
-void hal_eeprom_write_int(uint16_t addr, int32_t val) {
+hal_status_t hal_eeprom_read_byte_ex(uint16_t addr, uint8_t *out_val) {
+  if (out_val == NULL) {
+    return HAL_EINVAL;
+  }
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t range = eeprom_range_status(addr, 1u);
+  bool io_ok = true;
+  if (range == HAL_OK) {
+    io_ok = read_clipped_nolock(addr, out_val, 1u);
+  }
+  hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
+}
+
+hal_status_t hal_eeprom_write_int(uint16_t addr, int32_t val) {
+  eeprom_ensure_mutex();
+  hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t range =
+      eeprom_range_status(addr, (uint16_t)sizeof(int32_t));
   uint8_t raw[4] = {
       (uint8_t)((val >> 0) & 0xFF),
       (uint8_t)((val >> 8) & 0xFF),
       (uint8_t)((val >> 16) & 0xFF),
       (uint8_t)((val >> 24) & 0xFF),
   };
-  const uint16_t n = clipped_len(addr, sizeof(raw));
-  if (s_type == HAL_EEPROM_STM32_FLASH) {
-    for (uint16_t i = 0u; i < n; ++i) {
-      write_byte_nolock((uint16_t)(addr + i), raw[i]);
-    }
-  } else {
-    (void)at24_write_bytes(addr, raw, n);
-  }
+  const bool io_ok =
+      write_clipped_nolock(addr, raw, clipped_len(addr, sizeof(raw)));
   hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
 }
 
 int32_t hal_eeprom_read_int(uint16_t addr) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
   uint8_t raw[4] = {0u, 0u, 0u, 0u};
-  const uint16_t n = clipped_len(addr, sizeof(raw));
-  if (s_type == HAL_EEPROM_STM32_FLASH) {
-    for (uint16_t i = 0u; i < n; ++i) {
-      raw[i] = read_byte_nolock((uint16_t)(addr + i));
-    }
-  } else {
-    (void)at24_read_bytes(addr, raw, n);
-  }
+  (void)read_clipped_nolock(addr, raw, clipped_len(addr, sizeof(raw)));
   const int32_t val =
       (int32_t)(((uint32_t)raw[0]) | ((uint32_t)raw[1] << 8) |
                 ((uint32_t)raw[2] << 16) | ((uint32_t)raw[3] << 24));
@@ -336,66 +404,85 @@ int32_t hal_eeprom_read_int(uint16_t addr) {
   return val;
 }
 
-void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len) {
-  if (data == NULL || len == 0u) {
-    return;
+hal_status_t hal_eeprom_read_int_ex(uint16_t addr, int32_t *out_val) {
+  if (out_val == NULL) {
+    return HAL_EINVAL;
   }
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
-
-  const uint16_t n = clipped_len(addr, len);
-  if (s_type == HAL_EEPROM_STM32_FLASH) {
-    for (uint16_t i = 0u; i < n; i++) {
-      write_byte_nolock((uint16_t)(addr + i), data[i]);
+  const hal_status_t range =
+      eeprom_range_status(addr, (uint16_t)sizeof(int32_t));
+  bool io_ok = true;
+  if (range == HAL_OK) {
+    uint8_t raw[4] = {0u, 0u, 0u, 0u};
+    io_ok = read_clipped_nolock(addr, raw, sizeof(raw));
+    if (io_ok) {
+      *out_val = (int32_t)(((uint32_t)raw[0]) | ((uint32_t)raw[1] << 8) |
+                           ((uint32_t)raw[2] << 16) | ((uint32_t)raw[3] << 24));
     }
-  } else {
-    (void)at24_write_bytes(addr, data, n);
   }
-
   hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
 }
 
-void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
-  if (out == NULL || len == 0u) {
-    return;
+hal_status_t hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data,
+                                    uint16_t len) {
+  if (data == NULL) {
+    return HAL_EINVAL;
+  }
+  if (len == 0u) {
+    return HAL_OK;
   }
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t range = eeprom_range_status(addr, len);
+  const bool io_ok = write_clipped_nolock(addr, data, clipped_len(addr, len));
+  hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
+}
 
-  const uint16_t n = clipped_len(addr, len);
-  if (s_type == HAL_EEPROM_STM32_FLASH) {
-    for (uint16_t i = 0u; i < n; i++) {
-      out[i] = read_byte_nolock((uint16_t)(addr + i));
-    }
-  } else {
-    (void)at24_read_bytes(addr, out, n);
+hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
+  if (out == NULL) {
+    return HAL_EINVAL;
   }
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  eeprom_ensure_mutex();
+  hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t range = eeprom_range_status(addr, len);
+  const uint16_t n = clipped_len(addr, len);
+  const bool io_ok = read_clipped_nolock(addr, out, n);
   for (uint16_t i = n; i < len; i++) {
     out[i] = 0u;
   }
-
   hal_mutex_unlock(s_eeprom_mutex);
+  return combine_io(range, io_ok);
 }
 
-void hal_eeprom_commit(void) {
+hal_status_t hal_eeprom_commit(void) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
 
+  hal_status_t st = HAL_OK;
   if (s_type == HAL_EEPROM_STM32_FLASH && s_dirty) {
     if (flash_commit_mirror()) {
       s_dirty = false;
     } else {
       hal_derr("hal_eeprom_commit: STM32 flash commit failed");
+      st = HAL_EIO;
     }
   }
 
   hal_mutex_unlock(s_eeprom_mutex);
+  return st;
 }
 
-void hal_eeprom_reset(void) {
+hal_status_t hal_eeprom_reset(void) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
 
+  hal_status_t st = (s_size == 0u) ? HAL_EUNINIT : HAL_OK;
   if (s_type == HAL_EEPROM_STM32_FLASH) {
     memset(s_flash_mirror, 0, s_flash_reserved_size);
     s_dirty = true;
@@ -407,16 +494,30 @@ void hal_eeprom_reset(void) {
         chunk = HAL_AT24C256_PAGE_SIZE;
       }
       if (!at24_write_bytes((uint16_t)a, zeros, chunk)) {
+        st = HAL_EIO;
         break;
       }
     }
   }
 
   hal_mutex_unlock(s_eeprom_mutex);
-  hal_eeprom_commit();
+  const hal_status_t cst = hal_eeprom_commit();
+  if (st == HAL_OK) {
+    st = cst;
+  }
+  return st;
 }
 
 uint16_t hal_eeprom_size(void) { return s_size; }
+
+hal_status_t hal_eeprom_size_ex(uint16_t *out_size) {
+  if (out_size == NULL) {
+    return HAL_EINVAL;
+  }
+  const uint16_t size = s_size;
+  *out_size = size;
+  return size > 0u ? HAL_OK : HAL_EUNINIT;
+}
 
 #endif /* HAL_ENABLE_EEPROM */
 #endif /* HAL_TARGET_IS_STM32G474 */

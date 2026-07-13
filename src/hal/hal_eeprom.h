@@ -48,6 +48,7 @@
  * `hal_eeprom_init()` must be called from one core only.
  */
 
+#include "hal_status.h"
 #include <stdint.h>
 
 /**
@@ -87,8 +88,11 @@ extern "C" {
  *                  HAL_EEPROM_AT24C256; ignored for flash-backed EEPROM.
  *                  Pass 0 to use the default address defined by
  *                  @c EEPROM_I2C_ADDRESS in hal_config.h (0x50).
+ * @return HAL_OK, or HAL_EINVAL for an unknown back-end type. Existing callers
+ *         that ignore the return value are unaffected.
  */
-void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
+hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
+                             uint8_t i2c_addr);
 
 /**
  * @brief Register an optional callback for long EEPROM operations.
@@ -98,9 +102,11 @@ void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
  * call hal_watchdog_feed() from this callback.
  *
  * Configure this before starting concurrent EEPROM access.
+ * @return HAL_OK.
  */
-void hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
-                                      void *ctx);
+hal_status_t
+hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
+                                 void *ctx);
 
 /**
  * @brief Write one byte to EEPROM.
@@ -113,13 +119,16 @@ void hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
  *
  * @param addr EEPROM address.
  * @param val  Byte value to store.
+ * @return HAL_OK; HAL_EUNINIT before init; HAL_EOVERFLOW when @p addr is
+ *         outside the device (no write happens, matching the legacy clip).
  */
-void hal_eeprom_write_byte(uint16_t addr, uint8_t val);
+hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val);
 
 /**
  * @brief Read one byte from EEPROM.
  * @param addr EEPROM address.
- * @return Stored byte value.
+ * @return Stored byte value (0 when out of range). Use
+ * hal_eeprom_read_byte_ex() for a typed status.
  */
 uint8_t hal_eeprom_read_byte(uint16_t addr);
 
@@ -130,13 +139,16 @@ uint8_t hal_eeprom_read_byte(uint16_t addr);
  *
  * @param addr EEPROM address (must leave room for 4 bytes).
  * @param val  Value to store.
+ * @return HAL_OK; HAL_EUNINIT before init; HAL_EOVERFLOW when the 4-byte range
+ *         does not fully fit (the in-range prefix is still written, matching
+ *         the legacy clip).
  */
-void hal_eeprom_write_int(uint16_t addr, int32_t val);
+hal_status_t hal_eeprom_write_int(uint16_t addr, int32_t val);
 
 /**
  * @brief Read a 32-bit signed integer from EEPROM (little-endian, 4 bytes).
  * @param addr EEPROM address where the integer starts.
- * @return Stored value.
+ * @return Stored value. Use hal_eeprom_read_int_ex() for a typed status.
  */
 int32_t hal_eeprom_read_int(uint16_t addr);
 
@@ -156,8 +168,12 @@ int32_t hal_eeprom_read_int(uint16_t addr);
  * @param addr EEPROM start address.
  * @param data Source buffer (must contain at least @p len bytes).
  * @param len  Number of bytes to write.
+ * @return HAL_OK; HAL_EINVAL when @p data is NULL; HAL_EUNINIT before init;
+ *         HAL_EOVERFLOW when the range is clipped (in-range prefix is still
+ *         written, matching the legacy clip).
  */
-void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
+hal_status_t hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data,
+                                    uint16_t len);
 
 /**
  * @brief Read a contiguous block of bytes from EEPROM under a single internal
@@ -169,8 +185,11 @@ void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
  * @param addr EEPROM start address.
  * @param out  Destination buffer (must hold at least @p len bytes).
  * @param len  Number of bytes to read.
+ * @return HAL_OK; HAL_EINVAL when @p out is NULL; HAL_EUNINIT before init;
+ *         HAL_EOVERFLOW when the range is clipped (out-of-range tail is still
+ *         zero-filled, matching the legacy behaviour).
  */
-void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
+hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
 
 /**
  * @brief Commit buffered writes to non-volatile storage.
@@ -180,8 +199,9 @@ void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
  *
  * Call this once after a group of hal_eeprom_write_byte() /
  * hal_eeprom_write_int() calls when using the RP2040 back-end.
+ * @return HAL_OK on success; a backend flash/I2C error code otherwise.
  */
-void hal_eeprom_commit(void);
+hal_status_t hal_eeprom_commit(void);
 
 /**
  * @brief Zero-fill the entire EEPROM.
@@ -190,15 +210,32 @@ void hal_eeprom_commit(void);
  * For HAL_EEPROM_AT24C256: writes 0 to every byte in page-sized chunks.
  *
  * @warning This is a slow operation - avoid calling it in time-critical paths.
+ * @return HAL_OK on success; a backend flash/I2C error code otherwise.
  */
-void hal_eeprom_reset(void);
+hal_status_t hal_eeprom_reset(void);
 
 /**
  * @brief Return the EEPROM size in bytes.
  *
  * Returns the active flash-backed EEPROM size or 32768 for HAL_EEPROM_AT24C256.
+ * Use hal_eeprom_size_ex() for a typed status (HAL_EUNINIT before init).
  */
 uint16_t hal_eeprom_size(void);
+
+/* ---- Status forms of the value-returning getters ------------------------ */
+/*
+ * The write/commit/reset/init/callback entry points above already return
+ * hal_status_t directly (their historical `void` was upgraded in place, which
+ * is source-compatible: existing callers simply ignore the new return value).
+ *
+ * The three getters below still return their value by convention, so they gain
+ * `_ex` companions that report the value through an output parameter and return
+ * a typed status: HAL_EINVAL for a NULL output, HAL_EUNINIT before init and
+ * HAL_EOVERFLOW when the address is outside the device.
+ */
+hal_status_t hal_eeprom_read_byte_ex(uint16_t addr, uint8_t *out_val);
+hal_status_t hal_eeprom_read_int_ex(uint16_t addr, int32_t *out_val);
+hal_status_t hal_eeprom_size_ex(uint16_t *out_size);
 
 #ifdef __cplusplus
 }

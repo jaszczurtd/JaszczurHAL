@@ -51,6 +51,7 @@
  *   // draw ...
  */
 
+#include "hal_status.h"
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -662,6 +663,108 @@ int hal_display_prepare_text(char *display_txt, size_t display_txt_size,
  */
 int hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
                                const char *format, va_list args);
+
+/* ---- Status-returning APIs ---------------------------------------------- */
+/*
+ * Status-returning display APIs. Every legacy entry point above remains a
+ * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * distinguish invalid arguments (HAL_EINVAL) from an uninitialised/unconfigured
+ * backend (HAL_EUNINIT), an invalid stream state (HAL_ESTATE) or backend I/O
+ * failure (HAL_EIO). Value-returning helpers expose their result through an
+ * output parameter.
+ *
+ * Naming note: hal_display_init_ssd1306_i2c_ex() is already the historical
+ * bus-selecting initialiser, so its status form is hal_display_init_ssd1306_
+ * i2c_status_ex() (mirrors hal_wifi_ping_status_ex()). It is the single
+ * status-returning SSD1306 entry point; pass i2c_bus = 0 for the primary bus.
+ */
+
+#ifdef HAL_ENABLE_TFT
+hal_status_t hal_display_init_ex(uint8_t cs, uint8_t dc, uint8_t rst);
+#endif /* HAL_ENABLE_TFT */
+
+#ifdef HAL_ENABLE_SSD1306
+hal_status_t
+hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
+                                       uint8_t i2c_addr, int8_t rst_pin,
+                                       uint8_t switchvcc, bool periphBegin);
+#endif /* HAL_ENABLE_SSD1306 */
+
+hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
+                                      bool invert, bool bgr);
+hal_status_t hal_display_soft_init_ex(int delay_ms);
+hal_status_t hal_display_set_rotation_ex(uint8_t r);
+hal_status_t hal_display_invert_ex(bool invert);
+hal_status_t hal_display_get_width_ex(int *out_width);
+hal_status_t hal_display_get_height_ex(int *out_height);
+
+hal_status_t hal_display_fill_screen_ex(uint16_t color);
+hal_status_t hal_display_flush_ex(void);
+hal_status_t hal_display_draw_image_ex(int x, int y, int w, int h,
+                                       uint16_t background, uint16_t *data);
+
+hal_status_t hal_display_fill_rect_ex(int x, int y, int w, int h,
+                                      uint16_t color);
+hal_status_t hal_display_draw_rect_ex(int x, int y, int w, int h,
+                                      uint16_t color);
+hal_status_t hal_display_fill_circle_ex(int x, int y, int r, uint16_t color);
+hal_status_t hal_display_draw_circle_ex(int x, int y, int r, uint16_t color);
+hal_status_t hal_display_fill_round_rect_ex(int x, int y, int w, int h, int r,
+                                            uint16_t color);
+hal_status_t hal_display_draw_line_ex(int x0, int y0, int x1, int y1,
+                                      uint16_t color);
+
+hal_status_t hal_display_draw_rgb_bitmap_ex(int x, int y, uint16_t *data, int w,
+                                            int h);
+hal_status_t hal_display_begin_write_ex(int x, int y, int w, int h);
+hal_status_t hal_display_write_pixels_fast_ex(const uint16_t *pixels,
+                                              size_t count);
+hal_status_t hal_display_write_pixels_be_ex(const uint8_t *pixels_be,
+                                            size_t byte_count);
+hal_status_t hal_display_write_pixels_dma_ex(const uint8_t *pixels_be,
+                                             size_t byte_count);
+hal_status_t
+hal_display_write_pixels_dma_async_start_ex(const uint8_t *pixels_be,
+                                            size_t byte_count);
+hal_status_t hal_display_write_pixels_dma_async_wait_ex(void);
+hal_status_t hal_display_end_write_ex(void);
+
+hal_status_t hal_display_set_font_ex(hal_font_id_t font);
+hal_status_t hal_display_set_text_color_ex(uint16_t color);
+hal_status_t hal_display_set_text_size_ex(uint8_t size);
+hal_status_t hal_display_set_cursor_ex(int x, int y);
+hal_status_t hal_display_print_ex(const char *s);
+hal_status_t hal_display_println_ex(const char *s);
+hal_status_t hal_display_print_at_ex(int x, int y, const char *s);
+hal_status_t hal_display_clear_text_line_ex(int line_index, int line_height,
+                                            uint16_t bg_color);
+hal_status_t hal_display_print_line_ex(int line_index, int line_height,
+                                       const char *text, bool clear_first,
+                                       uint16_t fg_color, uint16_t bg_color);
+hal_status_t hal_display_draw_text_centered_ex(const char *text,
+                                               uint16_t fg_color,
+                                               uint16_t bg_color,
+                                               bool clear_first,
+                                               bool flush_after);
+hal_status_t hal_display_get_text_bounds_ex(const char *s, int *w, int *h);
+hal_status_t hal_display_text_width_ex(const char *text, int *out_width);
+hal_status_t hal_display_text_height_ex(const char *text, int *out_height);
+hal_status_t hal_display_println_prepared_text_ex(char *text);
+hal_status_t hal_display_set_default_font_ex(void);
+hal_status_t hal_display_set_default_font_with_pos_and_color_ex(int x, int y,
+                                                                uint16_t color);
+hal_status_t hal_display_set_text_size_one_with_color_ex(uint16_t color);
+hal_status_t hal_display_set_sans_bold_with_pos_and_color_ex(int x, int y,
+                                                             uint16_t color);
+hal_status_t hal_display_set_serif9pt_with_color_ex(uint16_t color);
+hal_status_t hal_display_prepare_text_ex(char *display_txt,
+                                         size_t display_txt_size,
+                                         int *out_width, const char *format,
+                                         ...);
+hal_status_t hal_display_prepare_text_v_ex(char *display_txt,
+                                           size_t display_txt_size,
+                                           int *out_width, const char *format,
+                                           va_list args);
 
 #ifdef __cplusplus
 }

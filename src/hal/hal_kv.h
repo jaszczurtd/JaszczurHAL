@@ -12,16 +12,17 @@ extern "C" {
  * @brief Thread-safe append-only KV/record storage on top of hal_eeprom.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
 typedef struct {
-    uint32_t generation;
-    uint16_t used_bytes;
-    uint16_t capacity_bytes;
-    uint16_t key_count;
-    uint32_t next_sequence;
+  uint32_t generation;
+  uint16_t used_bytes;
+  uint16_t capacity_bytes;
+  uint16_t key_count;
+  uint32_t next_sequence;
 } hal_kv_stats_t;
 
 /**
@@ -46,7 +47,8 @@ bool hal_kv_set_blob(uint16_t key, const uint8_t *data, uint16_t len);
  *
  * If out is NULL, function only returns length via out_len.
  */
-bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *out_len);
+bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size,
+                     uint16_t *out_len);
 
 /** @brief Delete key from store. */
 bool hal_kv_delete(uint16_t key);
@@ -84,6 +86,28 @@ void hal_kv_set_auto_commit(bool enabled);
  */
 bool hal_kv_commit(void);
 
+/* ---- Status-returning APIs ---------------------------------------------- */
+/*
+ * Status-returning KV APIs. Every legacy entry point above remains a
+ * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * distinguish invalid arguments (HAL_EINVAL), a read miss (HAL_ENOENT), a
+ * caller buffer too small for a stored blob (HAL_EOVERFLOW), statistics on a
+ * store that is not ready (HAL_EUNINIT) and backend write/commit failures
+ * (HAL_EIO). The legacy bool API cannot separate an uninitialised store from a
+ * genuine miss, so HAL_ENOENT covers both for the read helpers.
+ */
+hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes);
+hal_status_t hal_kv_set_u32_ex(uint16_t key, uint32_t value);
+hal_status_t hal_kv_get_u32_ex(uint16_t key, uint32_t *out_value);
+hal_status_t hal_kv_set_blob_ex(uint16_t key, const uint8_t *data,
+                                uint16_t len);
+hal_status_t hal_kv_get_blob_ex(uint16_t key, uint8_t *out, uint16_t out_size,
+                                uint16_t *out_len);
+hal_status_t hal_kv_delete_ex(uint16_t key);
+hal_status_t hal_kv_gc_ex(void);
+hal_status_t hal_kv_get_stats_ex(hal_kv_stats_t *out_stats);
+hal_status_t hal_kv_set_auto_commit_ex(bool enabled);
+hal_status_t hal_kv_commit_ex(void);
 
 #endif /* HAL_ENABLE_KV */
 #ifdef __cplusplus

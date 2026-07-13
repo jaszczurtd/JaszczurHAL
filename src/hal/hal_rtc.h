@@ -22,6 +22,7 @@
  * #error from hal_config.h.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -276,6 +277,42 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 
 /** @brief Read RTC alarm match fields. */
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
+
+/* ---- Status-returning APIs ---------------------------------------------- */
+/*
+ * Status-returning RTC APIs. Every legacy entry point above remains a
+ * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * distinguish invalid arguments (HAL_EINVAL) from a backend/bus failure
+ * (HAL_EIO). hal_rtc_init_ex() produces the handle through an output parameter
+ * and maps invalid config / probe failure / pool exhaustion to HAL_EIO. The
+ * legacy bool API cannot separate a genuine bus error from an unsupported
+ * feature, so both surface as HAL_EIO.
+ */
+hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *cfg,
+                             hal_rtc_t *out_handle);
+hal_status_t hal_rtc_deinit_ex(hal_rtc_t h);
+hal_status_t hal_rtc_get_datetime_ex(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
+hal_status_t hal_rtc_set_datetime_ex(hal_rtc_t h, const hal_rtc_datetime_t *dt);
+hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch);
+hal_status_t hal_rtc_set_epoch_ex(hal_rtc_t h, uint64_t epoch);
+hal_status_t hal_rtc_get_clock_integrity_ex(hal_rtc_t h, bool *out_ok);
+hal_status_t hal_rtc_set_interrupt_enable_ex(hal_rtc_t h, uint8_t irq_mask);
+hal_status_t hal_rtc_get_interrupt_enable_ex(hal_rtc_t h,
+                                             uint8_t *out_irq_mask);
+hal_status_t hal_rtc_get_and_clear_flags_ex(hal_rtc_t h, uint8_t *out_flags);
+hal_status_t hal_rtc_get_temperature_ex(hal_rtc_t h, float *out_temperature_c);
+hal_status_t hal_rtc_set_clkout_mode_ex(hal_rtc_t h,
+                                        hal_rtc_clkout_mode_t mode);
+hal_status_t hal_rtc_get_clkout_mode_ex(hal_rtc_t h,
+                                        hal_rtc_clkout_mode_t *out_mode);
+hal_status_t hal_rtc_set_timer_ex(hal_rtc_t h,
+                                  hal_rtc_timer_clock_t timer_clock,
+                                  uint8_t count);
+hal_status_t hal_rtc_get_timer_ex(hal_rtc_t h,
+                                  hal_rtc_timer_clock_t *out_timer_clock,
+                                  uint8_t *out_count);
+hal_status_t hal_rtc_set_alarm_ex(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
+hal_status_t hal_rtc_get_alarm_ex(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 
 #ifdef __cplusplus
 }

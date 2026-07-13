@@ -166,6 +166,10 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_spi_status.cpp
     ${SRC}/hal/hal_network_status.cpp
+    ${SRC}/hal/hal_display_status.cpp
+    ${SRC}/hal/hal_kv_status.cpp
+    ${SRC}/hal/hal_littlefs_status.cpp
+    ${SRC}/hal/hal_rtc_status.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_pga2311.cpp

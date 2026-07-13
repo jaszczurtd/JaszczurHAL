@@ -103,6 +103,44 @@ void test_remove_missing_path_returns_false(void) {
   TEST_ASSERT_FALSE(hal_littlefs_remove("/missing.txt"));
 }
 
+/* ---- Status-returning (_ex) API coverage ---- */
+
+void test_ex_lifecycle_and_status(void) {
+  size_t bytes = 123u;
+  /* Unmounted: byte queries and path ops report HAL_EUNINIT. */
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_littlefs_total_bytes_ex(&bytes));
+  TEST_ASSERT_EQUAL_INT(0u, bytes);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_littlefs_exists_ex("/cfg"));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_begin_ex());
+  hal_mock_littlefs_set_total_bytes(4096u);
+  hal_mock_littlefs_set_used_bytes(1024u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_total_bytes_ex(&bytes));
+  TEST_ASSERT_EQUAL_INT(4096u, bytes);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_used_bytes_ex(&bytes));
+  TEST_ASSERT_EQUAL_INT(1024u, bytes);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_end_ex());
+}
+
+void test_ex_path_validation_and_lookup(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_littlefs_exists_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_littlefs_exists_ex(""));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_littlefs_total_bytes_ex(NULL));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_begin_ex());
+  hal_mock_littlefs_set_exists("/present.txt", true);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_exists_ex("/present.txt"));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_littlefs_exists_ex("/missing.txt"));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_remove_ex("/present.txt"));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_littlefs_remove_ex("/present.txt"));
+}
+
+void test_ex_begin_failure_reports_io(void) {
+  hal_mock_littlefs_set_begin_result(false);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_littlefs_begin_ex());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_mount_stats_and_unmount);
@@ -112,5 +150,8 @@ int main(void) {
   RUN_TEST(test_progress_callback_runs_during_format);
   RUN_TEST(test_format_failure_preserves_mount_and_data);
   RUN_TEST(test_remove_missing_path_returns_false);
+  RUN_TEST(test_ex_lifecycle_and_status);
+  RUN_TEST(test_ex_path_validation_and_lookup);
+  RUN_TEST(test_ex_begin_failure_reports_io);
   return UNITY_END();
 }

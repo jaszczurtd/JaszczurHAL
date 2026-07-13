@@ -259,14 +259,23 @@ bool hal_display_write_pixels_be(const uint8_t *pixels_be, size_t byte_count) {
   s_stream_be_bytes += byte_count;
   return true;
 }
-bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count) {
+bool hal_display_write_pixels_dma_async_start(const uint8_t *pixels_be,
+                                              size_t byte_count) {
   if (!s_stream_active || (pixels_be == NULL && byte_count > 0u) ||
       (byte_count & 1u) != 0u) {
-    hal_derr("hal_display_write_pixels_dma: invalid stream write");
+    hal_derr("hal_display_write_pixels_dma_async_start: invalid stream write");
     return false;
   }
   s_stream_dma_bytes += byte_count;
   return true;
+}
+bool hal_display_write_pixels_dma_async_busy(void) { return false; }
+bool hal_display_write_pixels_dma_async_wait(void) { return true; }
+bool hal_display_write_pixels_dma(const uint8_t *pixels_be, size_t byte_count) {
+  if (!hal_display_write_pixels_dma_async_start(pixels_be, byte_count)) {
+    return false;
+  }
+  return hal_display_write_pixels_dma_async_wait();
 }
 bool hal_display_end_write(void) {
   if (!s_stream_active) {

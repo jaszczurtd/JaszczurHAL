@@ -52,22 +52,49 @@ static void notify_progress(void) {
 
 /* ── Public API (mock implementations) ─────────────────────────────────── */
 
-void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr) {
+/*
+ * Status for an [addr, addr+len) access against the active device size.
+ * Mirrors the clip performed by clipped_len(): if this returns HAL_EOVERFLOW
+ * the access is partially clipped; the side effect (partial write / zero-pad)
+ * is preserved by the callers below.
+ */
+static hal_status_t eeprom_range_status(uint16_t addr, uint16_t len) {
+  const uint16_t size = active_size();
+  if (size == 0u) {
+    return HAL_EUNINIT;
+  }
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  if (addr >= size || (uint32_t)addr + (uint32_t)len > (uint32_t)size) {
+    return HAL_EOVERFLOW;
+  }
+  return HAL_OK;
+}
+
+hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
+                             uint8_t i2c_addr) {
+  if (type < HAL_EEPROM_DEFAULT || type > HAL_EEPROM_FLASH) {
+    return HAL_EINVAL;
+  }
   (void)i2c_addr;
   eeprom_ensure_mutex();
   s_type = type;
   s_size = eeprom_type_uses_requested_size(type) ? size : (uint16_t)32768U;
   s_committed = false;
   memset(s_mem, 0, sizeof(s_mem));
+  return HAL_OK;
 }
 
-void hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
-                                      void *ctx) {
+hal_status_t
+hal_eeprom_set_progress_callback(hal_eeprom_progress_callback_t callback,
+                                 void *ctx) {
   eeprom_ensure_mutex();
   hal_mutex_lock(s_eeprom_mutex);
   s_progress_callback = callback;
   s_progress_ctx = ctx;
   hal_mutex_unlock(s_eeprom_mutex);
+  return HAL_OK;
 }
 
 /* ── Lock-free helpers (caller holds s_eeprom_mutex) ────────────────── */
@@ -83,10 +110,12 @@ static uint8_t read_byte_nolock(uint16_t addr) {
   return (clipped_len(addr, 1u) == 1u) ? s_mem[addr] : 0;
 }
 
-void hal_eeprom_write_byte(uint16_t addr, uint8_t val) {
+hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val) {
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, 1u);
   write_byte_nolock(addr, val);
   hal_mutex_unlock(s_eeprom_mutex);
+  return st;
 }
 
 uint8_t hal_eeprom_read_byte(uint16_t addr) {
@@ -96,8 +125,22 @@ uint8_t hal_eeprom_read_byte(uint16_t addr) {
   return val;
 }
 
-void hal_eeprom_write_int(uint16_t addr, int32_t val) {
+hal_status_t hal_eeprom_read_byte_ex(uint16_t addr, uint8_t *out_val) {
+  if (out_val == NULL) {
+    return HAL_EINVAL;
+  }
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, 1u);
+  if (st == HAL_OK) {
+    *out_val = read_byte_nolock(addr);
+  }
+  hal_mutex_unlock(s_eeprom_mutex);
+  return st;
+}
+
+hal_status_t hal_eeprom_write_int(uint16_t addr, int32_t val) {
+  hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, (uint16_t)sizeof(uint32_t));
   uint8_t raw[4] = {
       (uint8_t)((val >> 0) & 0xFF),
       (uint8_t)((val >> 8) & 0xFF),
@@ -109,6 +152,7 @@ void hal_eeprom_write_int(uint16_t addr, int32_t val) {
     write_byte_nolock((uint16_t)(addr + i), raw[i]);
   }
   hal_mutex_unlock(s_eeprom_mutex);
+  return st;
 }
 
 int32_t hal_eeprom_read_int(uint16_t addr) {
@@ -124,23 +168,51 @@ int32_t hal_eeprom_read_int(uint16_t addr) {
   return val;
 }
 
-void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len) {
-  if (!data || len == 0u) {
-    return;
+hal_status_t hal_eeprom_read_int_ex(uint16_t addr, int32_t *out_val) {
+  if (out_val == NULL) {
+    return HAL_EINVAL;
   }
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, (uint16_t)sizeof(uint32_t));
+  if (st == HAL_OK) {
+    uint8_t raw[4] = {0u, 0u, 0u, 0u};
+    for (uint16_t i = 0u; i < sizeof(raw); ++i) {
+      raw[i] = read_byte_nolock((uint16_t)(addr + i));
+    }
+    *out_val = (int32_t)(((uint32_t)raw[0]) | ((uint32_t)raw[1] << 8) |
+                         ((uint32_t)raw[2] << 16) | ((uint32_t)raw[3] << 24));
+  }
+  hal_mutex_unlock(s_eeprom_mutex);
+  return st;
+}
+
+hal_status_t hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data,
+                                    uint16_t len) {
+  if (!data) {
+    return HAL_EINVAL;
+  }
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, len);
   const uint16_t n = clipped_len(addr, len);
   for (uint16_t i = 0; i < n; i++) {
     write_byte_nolock((uint16_t)(addr + i), data[i]);
   }
   hal_mutex_unlock(s_eeprom_mutex);
+  return st;
 }
 
-void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
-  if (!out || len == 0u) {
-    return;
+hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
+  if (!out) {
+    return HAL_EINVAL;
+  }
+  if (len == 0u) {
+    return HAL_OK;
   }
   hal_mutex_lock(s_eeprom_mutex);
+  const hal_status_t st = eeprom_range_status(addr, len);
   const uint16_t n = clipped_len(addr, len);
   for (uint16_t i = 0; i < n; i++) {
     out[i] = read_byte_nolock((uint16_t)(addr + i));
@@ -149,24 +221,36 @@ void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
     out[i] = 0u;
   }
   hal_mutex_unlock(s_eeprom_mutex);
+  return st;
 }
 
-void hal_eeprom_commit(void) {
+hal_status_t hal_eeprom_commit(void) {
   hal_mutex_lock(s_eeprom_mutex);
   s_committed = true;
   notify_progress();
   hal_mutex_unlock(s_eeprom_mutex);
+  return HAL_OK;
 }
 
-void hal_eeprom_reset(void) {
+hal_status_t hal_eeprom_reset(void) {
   hal_mutex_lock(s_eeprom_mutex);
   memset(s_mem, 0, sizeof(s_mem));
   s_committed = true;
   notify_progress();
   hal_mutex_unlock(s_eeprom_mutex);
+  return HAL_OK;
 }
 
 uint16_t hal_eeprom_size(void) { return s_size; }
+
+hal_status_t hal_eeprom_size_ex(uint16_t *out_size) {
+  if (out_size == NULL) {
+    return HAL_EINVAL;
+  }
+  const uint16_t size = s_size;
+  *out_size = size;
+  return size > 0u ? HAL_OK : HAL_EUNINIT;
+}
 
 /* ── Mock helpers ───────────────────────────────────────────────────────── */
 
