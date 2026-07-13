@@ -101,6 +101,55 @@ void test_gc_and_concurrent_updates(void) {
   TEST_ASSERT_TRUE(st.key_count >= 3u);
 }
 
+/* ---- Status-returning (_ex) API coverage ---- */
+
+void test_ex_u32_roundtrip_and_status(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_u32_ex(200, 0xCAFEBABEu));
+  uint32_t out = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_u32_ex(200, &out));
+  TEST_ASSERT_EQUAL_HEX32(0xCAFEBABEu, out);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_get_u32_ex(200, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_kv_get_u32_ex(999, &out));
+}
+
+void test_ex_blob_reports_overflow_and_length(void) {
+  const uint8_t payload[5] = {1, 2, 3, 4, 5};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_set_blob_ex(300, payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_set_blob_ex(301, NULL, 4));
+
+  /* Length-only query. */
+  uint16_t len = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_blob_ex(300, NULL, 0, &len));
+  TEST_ASSERT_EQUAL_UINT16(sizeof(payload), len);
+
+  /* Too-small buffer is reported distinctly from a miss. */
+  uint8_t small[2] = {0};
+  len = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_kv_get_blob_ex(300, small, sizeof(small), &len));
+  TEST_ASSERT_EQUAL_UINT16(sizeof(payload), len);
+
+  uint8_t big[8] = {0};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_kv_get_blob_ex(300, big, sizeof(big), &len));
+  TEST_ASSERT_EQUAL_UINT16(sizeof(payload), len);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(payload, big, sizeof(payload));
+
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_kv_get_blob_ex(999, big, sizeof(big), &len));
+}
+
+void test_ex_stats_and_commit_status(void) {
+  hal_kv_stats_t stats;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_get_stats_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit_ex(false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_commit_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit_ex(true));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_get_u32_and_reinit);
@@ -108,5 +157,8 @@ int main(void) {
   RUN_TEST(test_delete_removes_key);
   RUN_TEST(test_unchanged_value_skips_writes);
   RUN_TEST(test_gc_and_concurrent_updates);
+  RUN_TEST(test_ex_u32_roundtrip_and_status);
+  RUN_TEST(test_ex_blob_reports_overflow_and_length);
+  RUN_TEST(test_ex_stats_and_commit_status);
   return UNITY_END();
 }

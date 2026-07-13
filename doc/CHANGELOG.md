@@ -4,6 +4,84 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### RTC status API
+
+- Added status-returning `_ex` APIs across the whole RTC module:
+  init/deinit, datetime and Unix-epoch read/write, clock integrity, interrupt
+  enable, event flags, temperature, clock output, timer and alarm, while
+  preserving every existing `bool`/handle-returning/`void` compatibility
+  function.
+- Added `hal_rtc_status.cpp`, a backend-agnostic validation/result adapter
+  shared by mock, RP2040 and STM32G474 builds. `hal_rtc_init_ex()` produces the
+  handle through an output parameter and maps a NULL result (invalid config,
+  probe failure or pool exhaustion) to `HAL_EIO`; the remaining operations
+  return `HAL_EINVAL` for a NULL handle/pointer argument and `HAL_EIO` for a
+  backend/bus failure. Because the legacy bool API cannot separate a bus error
+  from an unsupported feature (for example DS3231-only temperature), both
+  surface as `HAL_EIO`.
+- Expanded `test_hal_rtc` with success, invalid-argument and NULL-handle
+  coverage for the new APIs.
+
+### EEPROM status refactor (reference pattern for the revised migration)
+
+- Reworked `hal_eeprom` as the reference pattern for the revised status
+  direction (see `doc/future_ideas.md`): instead of adding parallel `_ex`
+  wrappers over the legacy `void` API, the historically `void` entry points
+  (`init`, `set_progress_callback`, `write_byte`, `write_int`, `write_bytes`,
+  `read_bytes`, `commit`, `reset`) now **return `hal_status_t` directly**. This
+  is source-compatible: existing callers that ignore the return value are
+  unaffected. The value-returning getters keep their signature and gain
+  `_ex` companions with an output parameter: `hal_eeprom_read_byte_ex`,
+  `hal_eeprom_read_int_ex`, `hal_eeprom_size_ex`.
+- The status logic now lives **in each backend** (mock, RP2040, STM32G474)
+  rather than in a shared adapter, so it can report native failures: the
+  AT24C256 path now surfaces I2C errors as `HAL_EIO` and the STM32 flash commit
+  surfaces failed flash writes as `HAL_EIO` - outcomes the old `void` API
+  discarded. Out-of-range access still clips exactly as before and is reported
+  as `HAL_EOVERFLOW`; access before init is `HAL_EUNINIT`; a NULL buffer is
+  `HAL_EINVAL`. The additive `hal_eeprom_status.cpp` adapter was removed.
+- Expanded `test_hal_eeprom` with byte/int round-trip, range/overflow,
+  uninitialised and NULL-argument status coverage.
+
+### Storage status API
+
+- Added status-returning `_ex` APIs for `hal_kv`
+  (init/get/set/blob/delete/gc/stats/commit) and `hal_littlefs`
+  (begin/end/format/exists/remove/byte counts) while preserving every existing
+  `bool`/`int`/`void` compatibility function. (`hal_eeprom` was subsequently
+  reworked in place - see the EEPROM refactor entry above.)
+- Added `hal_kv_status.cpp` and `hal_littlefs_status.cpp` as backend-agnostic
+  validation/result adapters shared by mock, RP2040 and STM32G474 builds. They
+  surface distinct codes for invalid arguments (`HAL_EINVAL`), read misses
+  (`HAL_ENOENT`), a caller buffer too small for a stored KV blob
+  (`HAL_EOVERFLOW`), an uninitialised/unmounted backend (`HAL_EUNINIT`) and
+  backend I/O failure (`HAL_EIO`). Reads and byte-count queries expose their
+  result through an output parameter.
+- Expanded `test_hal_kv` and `test_hal_littlefs` with success,
+  invalid-argument, overflow, not-found and uninitialised coverage for the new
+  APIs.
+
+### Display status API
+
+- Added status-returning display `_ex` APIs across the whole module: init,
+  configure/soft-init, rotation/inversion, dimension getters, screen/geometry
+  drawing, RGB bitmap and streaming writes (including async DMA), and the full
+  text/font helper surface while preserving every existing `bool`/`int`/`void`
+  compatibility function.
+- Added `hal_display_status.cpp`, a backend-agnostic validation/result adapter
+  shared by mock, RP2040 and STM32G474 builds. It distinguishes invalid
+  arguments (`HAL_EINVAL`) from an unconfigured backend (`HAL_EUNINIT`), an
+  invalid stream state (`HAL_ESTATE`) and initialisation I/O failure
+  (`HAL_EIO`). Value-returning helpers expose their result through an output
+  parameter.
+- Because the historical bus-selecting initialiser already occupies
+  `hal_display_init_ssd1306_i2c_ex()`, the SSD1306 status entry point is
+  `hal_display_init_ssd1306_i2c_status_ex()` (mirrors `hal_wifi_ping_status_ex()`).
+- Completed the mock display backend with the async DMA write trio
+  (`_async_start`/`_async_busy`/`_async_wait`) so the full public surface is
+  host-testable, and expanded `test_hal_display` with success, invalid-argument,
+  uninitialised and stream-state coverage for the new APIs.
+
 ### SPI/DMA status API
 
 - Added status-returning SPI `_ex` APIs for init, begin/end transaction,

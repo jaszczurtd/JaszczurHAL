@@ -262,6 +262,95 @@ void test_invalid_get_text_bounds_null_text_returns_zero(void) {
   TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
 }
 
+/* ---- Status-returning (_ex) API coverage ---- */
+
+void test_ex_configure_and_getters_report_status(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_display_configure_ex(240, 320, 1, false, false));
+  int w = 0;
+  int h = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_width_ex(&w));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_height_ex(&h));
+  TEST_ASSERT_EQUAL_INT(240, w);
+  TEST_ASSERT_EQUAL_INT(320, h);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_configure_ex(0, 320, 1, false, false));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_get_width_ex(NULL));
+}
+
+void test_ex_getters_report_uninit_when_unconfigured(void) {
+  hal_mock_display_reset();
+  int w = 123;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_width_ex(&w));
+  TEST_ASSERT_EQUAL_INT(0, w);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_fill_screen_ex(0x1234));
+}
+
+void test_ex_geometry_validates_arguments(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_fill_rect_ex(0, 0, 10, 10, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_fill_rect_ex(0, 0, 0, 10, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_fill_circle_ex(0, 0, -1, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_fill_round_rect_ex(0, 0, 10, 10, -1, 0));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_draw_image_ex(0, 0, 2, 2, 0, NULL));
+}
+
+void test_ex_stream_write_flow_and_state(void) {
+  const uint8_t pixels_be[4] = {0x12, 0x34, 0x56, 0x78};
+
+  /* No open stream yet. */
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_display_write_pixels_be_ex(pixels_be, 4u));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_begin_write_ex(0, 0, 10, 10));
+  TEST_ASSERT_TRUE(hal_mock_display_stream_active());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_write_pixels_be_ex(pixels_be, 4u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_write_pixels_dma_ex(pixels_be, 4u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_pixels_be_ex(pixels_be, 3u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_end_write_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, hal_display_end_write_ex());
+}
+
+void test_ex_text_helpers_report_status(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_set_text_size_ex(0));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_set_text_size_ex(2));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_print_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_print_ex("hello"));
+
+  int width = -1;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_text_width_ex("hello", &width));
+  TEST_ASSERT_EQUAL_INT((int)strlen("hello") * 6, width);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_text_width_ex(NULL, &width));
+}
+
+void test_ex_ssd1306_status_init_sets_dimensions(void) {
+  hal_mock_display_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_ssd1306_i2c_status_ex(
+                                    128, 64, 1, 0x3C, -1, 0x02, false));
+  int w = 0;
+  int h = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_width_ex(&w));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_height_ex(&h));
+  TEST_ASSERT_EQUAL_INT(128, w);
+  TEST_ASSERT_EQUAL_INT(64, h);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_display_init_ssd1306_i2c_status_ex(
+                                        0, 64, 0, 0x3C, -1, 0x02, false));
+}
+
+void test_ex_prepare_text_formats_and_reports_status(void) {
+  char buf[32] = {};
+  int width = 0;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_display_prepare_text_ex(buf, sizeof(buf), &width, "x=%d", 7));
+  TEST_ASSERT_EQUAL_STRING("x=7", buf);
+  TEST_ASSERT_EQUAL_INT((int)strlen("x=7") * 6, width);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_display_prepare_text_ex(NULL, sizeof(buf), &width, "x"));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_configure_sets_dimensions);
@@ -289,5 +378,12 @@ int main(void) {
   RUN_TEST(test_invalid_clear_text_line_height_is_rejected);
   RUN_TEST(test_invalid_text_size_zero_is_rejected);
   RUN_TEST(test_invalid_get_text_bounds_null_text_returns_zero);
+  RUN_TEST(test_ex_configure_and_getters_report_status);
+  RUN_TEST(test_ex_getters_report_uninit_when_unconfigured);
+  RUN_TEST(test_ex_geometry_validates_arguments);
+  RUN_TEST(test_ex_stream_write_flow_and_state);
+  RUN_TEST(test_ex_text_helpers_report_status);
+  RUN_TEST(test_ex_ssd1306_status_init_sets_dimensions);
+  RUN_TEST(test_ex_prepare_text_formats_and_reports_status);
   return UNITY_END();
 }

@@ -13,6 +13,7 @@ extern "C" {
  * @brief Thread-safe wrapper for LittleFS filesystem lifecycle helpers.
  */
 
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -61,6 +62,27 @@ size_t hal_littlefs_total_bytes(void);
 
 /** @brief Used filesystem size in bytes (0 when unmounted/unknown). */
 size_t hal_littlefs_used_bytes(void);
+
+/* ---- Status-returning APIs ---------------------------------------------- */
+/*
+ * Status-returning LittleFS APIs. Every legacy entry point above remains a
+ * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * distinguish a NULL/empty path or NULL output (HAL_EINVAL), an operation
+ * issued while unmounted (HAL_EUNINIT), a path that does not exist
+ * (HAL_ENOENT) and a mount/format backend failure (HAL_EIO). Byte-count
+ * queries expose their result through an output parameter. The plain state
+ * query hal_littlefs_is_mounted() has no _ex form.
+ */
+hal_status_t
+hal_littlefs_set_progress_callback_ex(hal_littlefs_progress_callback_t callback,
+                                      void *ctx);
+hal_status_t hal_littlefs_begin_ex(void);
+hal_status_t hal_littlefs_end_ex(void);
+hal_status_t hal_littlefs_format_ex(void);
+hal_status_t hal_littlefs_exists_ex(const char *path);
+hal_status_t hal_littlefs_remove_ex(const char *path);
+hal_status_t hal_littlefs_total_bytes_ex(size_t *out_bytes);
+hal_status_t hal_littlefs_used_bytes_ex(size_t *out_bytes);
 
 #ifdef __cplusplus
 }

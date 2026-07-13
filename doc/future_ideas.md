@@ -86,17 +86,106 @@ Simple backlog of future architecture and implementation work.
   - Document callback contexts, task contexts and ISR/task boundaries.
   - Run hardware smoke tests before considering FreeRTOS as a default runtime.
 
-- Expand status-returning APIs without breaking existing wrappers.
-  - Shared `hal_status_t` exists; add `_ex` functions returning it where useful.
-  - Keep current `bool` / `NULL` APIs as compatibility wrappers.
-  - Start with statuses that can be reported accurately today.
+- Migrate the HAL to honest status-returning APIs (priority direction).
+
+  - **STATUS: ACTIVE - this is the priority approach (adopted 2026-07-13).**
+    We no longer add parallel `_ex` wrappers on top of the legacy API. Instead
+    we **modify the existing functions** so the status becomes the real result,
+    and the historical shape becomes a thin compatibility layer.
+
+  - **The earlier additive `_ex`-over-`bool` work is itself part of the
+    migration backlog - it must be re-migrated to this paradigm, not left as
+    is.** The modules already touched additively (SPI, I2C, UART, network,
+    `hal_kv`/`hal_littlefs`, display, RTC, several shared drivers) are a
+    **superseded scaffolding phase**: their `_ex` wrappers stay callable for
+    compatibility, but each such module must be reworked so the status logic
+    lives in the backends and the legacy shapes become thin wrappers (same
+    pattern as `hal_eeprom`). Its structural limit was that a thin `_ex` wrapper
+    calling the legacy `bool` cannot surface information the backend never
+    exposes, so many wrappers collapsed to a generic `HAL_EIO` or an
+    always-`HAL_OK`; re-migration is what turns that latent value real.
+    Redundant `_ex` symbols created only to wrap a `void`/`bool` (rather than a
+    value-returning getter) should be **removed** during re-migration, exactly
+    as the `hal_eeprom` pilot removed its 8 redundant `_ex` entry points.
+
+  - **The approach (apply per module):**
+    1. **Status is the primary result**, and the real logic lives **per backend**
+       (`.mock` / `rp2040` / `stm32g474`) so it can return specific, honest
+       codes (`HAL_EIO`, `HAL_EOVERFLOW`, `HAL_EUNINIT`, ...).
+    2. **`bool hal_foo()` becomes a thin wrapper** - `return
+       hal_status_is_ok(hal_foo_ex(...))`. Same signature, zero caller impact.
+    3. **`void` functions are upgraded in place to return `hal_status_t`**
+       wherever they can report anything meaningful - do **not** keep returning
+       `void` (a half-truth) where a status is available. This is
+       source-compatible: existing callers simply ignore the new return value.
+       It recovers genuinely lost errors - e.g. `hal_eeprom_commit()` /
+       `write_byte()` on AT24C256 failing on I2C, which the `void` API
+       discarded. Because `void`->`hal_status_t` needs no new symbol, this
+       **shrinks** the API surface instead of growing it (the `hal_eeprom`
+       pilot removed 8 redundant `_ex` symbols and an adapter file, and both
+       target libraries got smaller).
+    4. **Keep `_ex` only for value-returning getters** that cannot change their
+       return type (e.g. `uint8_t hal_eeprom_read_byte()` ->
+       `hal_eeprom_read_byte_ex(addr, uint8_t *out)`), reporting the value
+       through an output parameter.
+    5. **Never** collapse a `bool` function to a single name returning
+       `hal_status_t`. Error codes are **negative (truthy)** in C, so
+       `if (hal_foo())` would read an error as success. Keep `bool` as a
+       separate wrapper.
+
+  - **Reference implementation (DONE): `hal_eeprom`.** Full pilot completed and
+    green through the whole quality gate (host tests, Valgrind, cppcheck,
+    clang-tidy, RP2040/STM32G474 library + example builds). The 8 historical
+    `void` entry points now return `hal_status_t` in place; `read_byte`,
+    `read_int` and `size` kept their value return and gained `_ex` companions;
+    the additive `hal_eeprom_status.cpp` adapter was removed; AT24C256 I2C and
+    STM32 flash-commit failures now surface as `HAL_EIO`. Use it as the template
+    for every subsequent module.
+
+  - **Safety verified in-tree (2026-07-13):** no `hal_*` API function is taken
+    by address into a `void(*)(...)`/`bool(*)(...)` typedef or dispatch table
+    (only user callbacks use function pointers), and there is no
+    `[[nodiscard]]` / `warn_unused_result` anywhere. Therefore `void`->status is
+    safe **provided we do not add `nodiscard`** to the migrated functions.
+
+  - **Per-step definition of done (mandatory):**
+    1. Every migration step **must end with a full `./runalltests.sh` pass** -
+       all seven gates green (host tests, Valgrind, cppcheck, clang-tidy,
+       target library builds, examples). A step is not complete until the whole
+       gate is green.
+    2. **Add new tests whenever the change makes them possible.** Each newly
+       status-returning function should gain coverage for its success path and
+       its representative failure codes (`HAL_EINVAL`, `HAL_EUNINIT`,
+       `HAL_EOVERFLOW`, `HAL_EIO`, ...). Do not migrate a function and leave its
+       new outcomes untested.
+    3. **Zero-warnings policy.** The build must stay warning-free; treat any new
+       compiler or clang-tidy/cppcheck warning as a failure to fix before the
+       step is done. Do not silence warnings by adding `nodiscard` (it would
+       break the `void`->status source compatibility) or by blanket suppressions.
+
+  - **Scope and sequencing:** ~269 `bool` + ~195 `void` public functions. Do it
+    **module by module behind the full quality gate**, not big-bang. Convert
+    **selectively**: where a backend has genuine failure modes (buses, storage,
+    filesystem, network, RTC/I2C comm) the codes carry real diagnostics; for
+    intrinsically infallible ops (many GPIO/PWM setters) the upgrade is for
+    uniformity only - do not invent precision.
+    - Candidate order after `hal_eeprom`: `hal_kv` (sits directly on EEPROM),
+      then **re-migrate every additive-phase module** (SPI, I2C, UART, network,
+      `hal_littlefs`, display, RTC, shared drivers) - folding their `_ex` logic
+      into the backends, upgrading `void`->status in place and dropping redundant
+      `_ex` symbols - plus the not-yet-touched modules. "Done additively" is
+      **not** "done": those modules are re-migration targets, not finished work.
+
+  - Improve backend-specific error mapping only where the backend can report
+    it honestly; do not invent precision just to fill enum cases.
   - Some historical `_ex` APIs are not status-returning. Treat
     `hal_wifi_ping_ex()`, `hal_rgb_led_init_ex()` and
     `hal_display_init_ssd1306_i2c_ex()` as naming debt/suffix collisions, not
     as completed `hal_status_t` work.
-  - Improve backend-specific error mapping only where the backend can report
-    it honestly; do not invent precision just to fill enum cases.
-  - Progress:
+  - Progress (prior additive `_ex`-over-`bool` phase; see revised direction
+    above). NOTE: these "DONE" items are **additive scaffolding and are now
+    re-migration targets** under the priority approach - they are not finished
+    work:
     - DONE: digipot init/set-resistance now expose
       `hal_digipot_init_ex()` and `hal_digipot_set_resistance_ex()` while
       preserving the legacy handle/`bool` wrappers. The MCP401x/MAX5395 shared

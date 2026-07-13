@@ -70,9 +70,9 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade. | [hal_eeprom.h](../src/hal/hal_eeprom.h) |
-| Key-value storage | Small persistent key-value layer on top of EEPROM-style storage. | [hal_kv.h](../src/hal/hal_kv.h) |
-| LittleFS | Lightweight filesystem lifecycle/helpers; STM32G474 can use internal flash partitioning. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
+| EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade, including status-returning (`hal_status_t`) access APIs with range validation. | [hal_eeprom.h](../src/hal/hal_eeprom.h) |
+| Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../src/hal/hal_kv.h) |
+| LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; STM32G474 can use internal flash partitioning. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
 | FatFs / SD over SPI | Shared FatFs core and SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
 | SD logger | SD-card logging and crash-report logging support. | [hal_sdlogger.h](../src/hal/hal_sdlogger.h), [sdlogger](../src/hal/impl/shared/frameworks/filesystem/sdlogger/) |
 
@@ -80,7 +80,7 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| RTC facade | Common real-time-clock surface with multiple chip backends. | [hal_rtc.h](../src/hal/hal_rtc.h) |
+| RTC facade | Common real-time-clock surface with multiple chip backends, including status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs. | [hal_rtc.h](../src/hal/hal_rtc.h) |
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/impl/shared/drivers/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/impl/shared/drivers/ds3231/) |
 | GPS / NMEA | Portable NMEA parser and GPS abstraction for UART/software-serial receivers. | [hal_gps.h](../src/hal/hal_gps.h), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |
@@ -102,7 +102,7 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| Generic display facade | Common drawing/display surface for OLED and TFT backends, including explicit TFT pixel streaming and async DMA-capable RGB565 writes. | [hal_display.h](../src/hal/hal_display.h) |
+| Generic display facade | Common drawing/display surface for OLED and TFT backends, including explicit TFT pixel streaming, async DMA-capable RGB565 writes and status-returning (`hal_status_t`) drawing/text APIs. | [hal_display.h](../src/hal/hal_display.h) |
 | GFX engine and fonts | Shared graphics primitives and bundled bitmap fonts. | [display drivers](../src/hal/impl/shared/drivers/display/) |
 | ILI9341 TFT | SPI TFT display backend. | [ili9341 driver](../src/hal/impl/shared/drivers/display/ili9341_driver.h) |
 | ST7735/ST7789/ST7796S TFT | Shared ST77xx-family SPI TFT backend. | [st77xx driver](../src/hal/impl/shared/drivers/display/st77xx_driver.h) |

@@ -509,6 +509,35 @@ void         hal_mock_display_get_last_fill_rect(int *x, int *y, int *w, int *h,
 void         hal_mock_display_get_last_bitmap(int *x, int *y, uint16_t **data, int *w, int *h);
 ```
 
+**Status-returning `_ex` variants:** every function above has an additive
+`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
+The legacy functions are unchanged; `_ex` adds argument validation and a typed
+result. Value-returning getters take an output parameter.
+
+```c
+// Configure + draw with typed diagnostics
+hal_status_t st = hal_display_configure_ex(240, 320, 0, false, false);
+// HAL_EINVAL -> bad width/height, HAL_EIO -> backend init failed
+
+st = hal_display_fill_rect_ex(0, 0, 240, 40, HAL_COLOR(BLUE));
+// HAL_EINVAL -> non-positive width/height, HAL_EUNINIT -> not configured yet
+
+int width = 0;
+if (hal_display_get_width_ex(&width) == HAL_OK) {
+    // width valid only when the call returned HAL_OK
+}
+
+// Streaming reports stream-state problems as HAL_ESTATE
+if (hal_display_begin_write_ex(0, 0, 240, 320) == HAL_OK) {
+    hal_display_write_pixels_be_ex(pixels_be, byte_count); // HAL_EINVAL on odd count
+    hal_display_end_write_ex();
+}
+```
+
+Naming note: because `hal_display_init_ssd1306_i2c_ex()` already exists (the
+bus-selecting initialiser), the SSD1306 status entry point is
+`hal_display_init_ssd1306_i2c_status_ex()`.
+
 ---
 
 

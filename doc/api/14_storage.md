@@ -183,6 +183,34 @@ void example_eeprom(void) {
 }
 ```
 
+**Status-returning API** (see [Status API](01_status_api.md)):
+`hal_eeprom` is the **reference module** for the revised status migration.
+The historically `void` entry points (`init`, `write_byte`, `write_int`,
+`write_bytes`, `read_bytes`, `commit`, `reset`, `set_progress_callback`) now
+**return `hal_status_t` directly** - this is source-compatible, so existing
+callers that ignore the return value are unaffected, and new code can inspect
+it. On the AT24C256 back-end this recovers real I2C failures (`HAL_EIO`) that
+the old `void` API discarded. The three value-returning getters keep their
+signature and gain `_ex` companions (`hal_eeprom_read_byte_ex`,
+`hal_eeprom_read_int_ex`, `hal_eeprom_size_ex`) that report the value through
+an output parameter. Out-of-range access still clips exactly as before; the new
+status merely reports it as `HAL_EOVERFLOW`.
+
+```c
+hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);   // returns HAL_OK / HAL_EINVAL
+
+hal_status_t st = hal_eeprom_write_byte(600, 0x42);
+// HAL_EUNINIT   -> hal_eeprom_init() not called yet
+// HAL_EOVERFLOW -> addr outside the device (write clipped, as before)
+// HAL_EIO       -> AT24C256 I2C failure
+// HAL_OK        -> buffered; persist with hal_eeprom_commit()
+
+uint8_t value = 0;
+if (hal_eeprom_read_byte_ex(10, &value) == HAL_OK) {
+    use(value);              // HAL_EINVAL if the output pointer is NULL
+}
+```
+
 ---
 
 
@@ -300,6 +328,24 @@ void example_kv(void) {
 }
 ```
 
+**Status-returning `_ex` variants:** every function above has an additive
+`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
+A read miss maps to `HAL_ENOENT`, and `hal_kv_get_blob_ex()` reports a too-small
+caller buffer distinctly as `HAL_EOVERFLOW` (with the required length in
+`*out_len`).
+
+```c
+uint8_t  buf[64];
+uint16_t len = 0;
+hal_status_t st = hal_kv_get_blob_ex(KEY_PROFILE, buf, sizeof(buf), &len);
+switch (st) {
+case HAL_OK:        use(buf, len);                       break;
+case HAL_ENOENT:    /* key absent or store not ready */  break;
+case HAL_EOVERFLOW: /* buf too small; *len = needed */    break;
+default:            break;
+}
+```
+
 ---
 
 
@@ -390,6 +436,22 @@ void hal_mock_littlefs_set_format_result(bool result);
 void hal_mock_littlefs_set_total_bytes(size_t total_bytes);
 void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
 void hal_mock_littlefs_set_exists(const char *path, bool exists);
+```
+
+**Status-returning `_ex` variants:** every function above has an additive
+`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
+The plain state query `hal_littlefs_is_mounted()` has no `_ex` form.
+
+```c
+if (hal_littlefs_begin_ex() != HAL_OK) {
+    return;                 // HAL_EIO: mount failed
+}
+hal_status_t st = hal_littlefs_exists_ex("/config.json");
+// HAL_OK -> present, HAL_ENOENT -> absent,
+// HAL_EUNINIT -> not mounted, HAL_EINVAL -> NULL/empty path
+
+size_t used = 0;
+hal_littlefs_used_bytes_ex(&used);   // HAL_EUNINIT (used=0) while unmounted
 ```
 
 ---
