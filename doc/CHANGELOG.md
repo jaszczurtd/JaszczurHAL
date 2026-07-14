@@ -190,6 +190,11 @@ All notable changes to this project will be documented in this file.
 - Added the shared `cmake/jh_firmware_project` dispatcher and target recipes so
   VS Code firmware projects can build through one CMake entry for RP2040/RP2350
   and STM32G474.
+- Fixed the generated Fiesta entry adapter so RP2040 executes
+  `initialization1()` through Arduino `setup1()` instead of core-0
+  `app_start()`. This restores the core-1 affinity of GPIO/IRQ initialization
+  without changing initialization order on other targets; a host regression
+  test now verifies the generated RP2040 adapter's call mapping.
 - Added the `vscode/targets/` registry plus `jh-vscode select-board`, with
   target/board selection stored in the gitignored
   `.vscode/jaszczurhal.local.json` user-local file.

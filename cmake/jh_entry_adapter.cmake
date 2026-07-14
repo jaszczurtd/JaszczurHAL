@@ -4,11 +4,12 @@
 # JaszczurHAL's canonical entry contract is app_start / app_task0 / app_task1
 # (see src/hal/hal_app.h). Projects that follow a different convention - notably
 # the Fiesta initialization/looper convention, marked by a firmware_entry.h -
-# get a small, target-UNAWARE adapter generated in the build dir (never in the
-# source tree) that bridges that convention onto the canonical entry. The same
-# adapter works for every backend: on RP2040/Arduino the library's
-# hal_app_entry.cpp maps setup()/loop() -> app_*, and on STM32 the HAL provides
-# main() -> app_*, both gated by HAL_PROVIDE_APP_ENTRY.
+# get a small cross-target adapter generated in the build dir (never in the
+# source tree) that bridges that convention onto the canonical entry. On
+# RP2040/Arduino, initialization1() must retain the old setup1() core affinity;
+# other backends retain their existing common app_start() initialization order.
+# The library's hal_app_entry.cpp supplies setup()/loop()/loop1() on RP2040 and
+# main() on STM32, all gated by HAL_PROVIDE_APP_ENTRY.
 #
 # jh_generate_entry_adapter(<project_dir> <out_dir> <out_adapter_var> <out_core1_var>)
 #   - If <project_dir>/firmware_entry.h exists: writes the adapter to
@@ -39,11 +40,12 @@ function(jh_generate_entry_adapter project_dir out_dir out_adapter_var out_core1
 // Bridges the Fiesta initialization/looper convention onto the canonical
 // app_start / app_task0 / app_task1 entry contract.
 #include <hal/hal_app.h>
+#include <hal/hal_target.h>
 #include "firmware_entry.h"
 
 extern "C" void app_start(void) {
     initialization();
-#if defined(FIESTA_ENABLE_CORE1) && FIESTA_ENABLE_CORE1
+#if defined(FIESTA_ENABLE_CORE1) && FIESTA_ENABLE_CORE1 && !HAL_TARGET_IS_RP2040
     initialization1();
 #endif
 }
@@ -51,6 +53,9 @@ extern "C" void app_start(void) {
 extern "C" void app_task0(void) { looper(); }
 
 #if defined(FIESTA_ENABLE_CORE1) && FIESTA_ENABLE_CORE1
+#if HAL_TARGET_IS_RP2040
+void setup1(void) { initialization1(); }
+#endif
 extern "C" void app_task1(void) { looper1(); }
 #endif
 ]==])

@@ -61,6 +61,58 @@ function(add_stm32_i2c_slave_host_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+# Exercise the real Fiesta-convention CMake generator, not a handwritten copy.
+# The secondary initializer must execute through Arduino setup1() on RP2040 so
+# its GPIO/IRQ setup retains core-1 affinity.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_entry_adapter.cmake")
+set(_entry_fixture_dir
+    "${CMAKE_CURRENT_BINARY_DIR}/jh_entry_adapter_fixture")
+set(_entry_generated_dir
+    "${CMAKE_CURRENT_BINARY_DIR}/jh_entry_adapter_generated")
+file(MAKE_DIRECTORY "${_entry_fixture_dir}")
+file(WRITE "${_entry_fixture_dir}/firmware_entry.h" [=[
+#pragma once
+#define FIESTA_ENABLE_CORE1 1
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void initialization(void);
+void initialization1(void);
+void looper(void);
+void looper1(void);
+#ifdef __cplusplus
+}
+#endif
+]=])
+
+jh_generate_entry_adapter(
+    "${_entry_fixture_dir}"
+    "${_entry_generated_dir}"
+    _entry_adapter_source
+    _entry_adapter_has_core1
+)
+if(NOT _entry_adapter_source OR NOT _entry_adapter_has_core1)
+    message(FATAL_ERROR "Core-1 entry adapter fixture was not generated")
+endif()
+
+add_executable(test_jh_entry_adapter
+    test_jh_entry_adapter.cpp
+    "${_entry_adapter_source}"
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_jh_entry_adapter PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    "${_entry_fixture_dir}"
+)
+target_compile_definitions(test_jh_entry_adapter PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_jh_entry_adapter PRIVATE -Wall -Wextra)
+add_test(NAME test_jh_entry_adapter COMMAND test_jh_entry_adapter)
+
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
