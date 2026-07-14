@@ -139,34 +139,6 @@ void hal_onewire_target_search(hal_onewire_t h, uint8_t family_code);
  */
 bool hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8], bool search_mode);
 
-/**
- * @brief Compute Dallas/Maxim 8-bit CRC.
- * @param data Pointer to bytes.
- * @param len  Number of bytes.
- * @return CRC-8 value.
- */
-uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len);
-
-/**
- * @brief Verify Dallas/Maxim 16-bit CRC against inverted bytes read from bus.
- * @param data         Pointer to bytes included in CRC.
- * @param len          Number of bytes.
- * @param inverted_crc Two CRC bytes as transmitted by 1-Wire devices.
- * @param crc          Optional starting CRC value (usually 0).
- * @return true when CRC matches.
- */
-bool hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
-                             const uint8_t inverted_crc[2], uint16_t crc);
-
-/**
- * @brief Compute Dallas/Maxim 16-bit CRC.
- * @param data Pointer to bytes.
- * @param len  Number of bytes.
- * @param crc  Optional starting CRC value (usually 0).
- * @return CRC-16 value before the bus-level bitwise inversion.
- */
-uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc);
-
 #endif /* HAL_ENABLE_ONEWIRE */
 #ifdef __cplusplus
 }

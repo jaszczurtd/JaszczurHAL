@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Generic `hal_crc` checksums
+
+- Extracted the Dallas/Maxim CRC-8/CRC-16 routines out of `hal_onewire` into a
+  new backend-agnostic `hal_crc` module (`hal_crc8_maxim`, `hal_crc16_maxim`,
+  `hal_crc16_maxim_check`), so both the OneWire driver and downstream projects
+  can share them without depending on the 1-Wire bus API.
+- Added `hal_crc16_ccitt` (CRC-16/CCITT-FALSE) and `hal_crc32` (CRC-32/ISO-HDLC)
+  alongside the migrated variants; every routine is a table-free bitwise loop
+  and is named after its concrete catalog variant.
+- Removed the redundant `hal_onewire_crc8/crc16/check_crc16` public API and the
+  duplicate `JHOneWire::crc8/crc16/check_crc16` driver methods; DS18B20 ROM and
+  scratchpad validation now call `hal_crc8_maxim` directly.
+- `hal_crc` is opt-in via `HAL_ENABLE_CRC` and is auto-enabled by
+  `HAL_ENABLE_ONEWIRE`/`HAL_ENABLE_DS18B20`. `tests/test_hal_crc.cpp` pins all
+  variants against catalog check values and preserves the former OneWire
+  regression vectors.
+
 ### System status-first API
 
 - Completed the `hal_system` migration to the current status-first rules.

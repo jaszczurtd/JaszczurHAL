@@ -331,60 +331,7 @@ bool JHOneWire::search(uint8_t *new_addr, bool search_mode) {
   return search_result;
 }
 
-uint8_t JHOneWire::crc8(const uint8_t *addr, uint8_t len) {
-  static const uint8_t dscrc2x16_table[] = {
-      0x00, 0x5E, 0xBC, 0xE2, 0x61, 0x3F, 0xDD, 0x83, 0xC2, 0x9C, 0x7E,
-      0x20, 0xA3, 0xFD, 0x1F, 0x41, 0x00, 0x9D, 0x23, 0xBE, 0x46, 0xDB,
-      0x65, 0xF8, 0x8C, 0x11, 0xAF, 0x32, 0xCA, 0x57, 0xE9, 0x74};
-
-  if (addr == NULL) {
-    return 0u;
-  }
-
-  uint8_t crc = 0u;
-  while (len--) {
-    crc = (uint8_t)(*addr++ ^ crc);
-    crc = (uint8_t)(dscrc2x16_table[crc & 0x0Fu] ^
-                    dscrc2x16_table[16u + ((crc >> 4u) & 0x0Fu)]);
-  }
-  return crc;
-}
-
-bool JHOneWire::check_crc16(const uint8_t *input, uint16_t len,
-                            const uint8_t *inverted_crc, uint16_t crc) {
-  if (input == NULL || inverted_crc == NULL) {
-    return false;
-  }
-
-  crc = (uint16_t)~crc16(input, len, crc);
-  return ((crc & 0xFFu) == inverted_crc[0]) && ((crc >> 8u) == inverted_crc[1]);
-}
-
-uint16_t JHOneWire::crc16(const uint8_t *input, uint16_t len, uint16_t crc) {
-  static const uint8_t oddparity[16] = {0u, 1u, 1u, 0u, 1u, 0u, 0u, 1u,
-                                        1u, 0u, 0u, 1u, 0u, 1u, 1u, 0u};
-
-  if (input == NULL) {
-    return crc;
-  }
-
-  for (uint16_t i = 0u; i < len; ++i) {
-    uint16_t cdata = input[i];
-    cdata = (uint16_t)((cdata ^ crc) & 0xFFu);
-    crc >>= 8u;
-
-    if (oddparity[cdata & 0x0Fu] ^ oddparity[cdata >> 4u]) {
-      crc ^= 0xC001u;
-    }
-
-    cdata <<= 6u;
-    crc ^= cdata;
-    cdata <<= 1u;
-    crc ^= cdata;
-  }
-
-  return crc;
-}
+/* CRC-8/CRC-16 moved to hal_crc.cpp (hal_crc8_maxim / hal_crc16_maxim). */
 
 #endif /* HAL_ENABLE_ONEWIRE */
 #endif /* supported target */

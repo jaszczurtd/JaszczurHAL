@@ -273,7 +273,10 @@
                                   over HAL I2C/SPI (propagates: I2C, SPI).
        HAL_ENABLE_IRSMALL_DECODER - shared IRsmallDecoder-compatible infrared
                                   receiver decoder over HAL GPIO interrupts.
-       HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper.
+       HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper
+                                  (propagates: CRC).
+       HAL_ENABLE_CRC           - generic CRC-8/16/32 checksums (hal_crc);
+                                  auto-enabled by ONEWIRE/DS18B20.
        HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC via shared ADS1X15
                                   HAL I2C driver (propagates: I2C).
        HAL_ENABLE_MCP3221       - MCP3221 12-bit ADC over HAL I2C
@@ -685,6 +688,13 @@
 #endif
 #endif
 
+/* 1-Wire relies on CRC-8/CRC-16 for ROM and scratchpad validation. */
+#ifdef HAL_ENABLE_ONEWIRE
+#ifndef HAL_ENABLE_CRC
+#define HAL_ENABLE_CRC
+#endif
+#endif
+
 /* GPS needs a serial transport but is not tied to a specific one: it can be
    fed from a hardware UART (hal_uart) or SoftwareSerial (hal_swserial). The
    caller enables whichever the wiring uses. If neither is selected, GPS
@@ -977,6 +987,9 @@
 #endif
 #ifdef HAL_ENABLE_ONEWIRE
 #pragma message("HAL_CONFIG: HAL_ENABLE_ONEWIRE")
+#endif
+#ifdef HAL_ENABLE_CRC
+#pragma message("HAL_CONFIG: HAL_ENABLE_CRC")
 #endif
 #ifdef HAL_ENABLE_EXTERNAL_ADC
 #pragma message("HAL_CONFIG: HAL_ENABLE_EXTERNAL_ADC")

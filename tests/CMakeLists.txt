@@ -123,6 +123,7 @@ add_test(NAME test_rp2040_swserial_backend
 )
 
 add_hal_test(test_hal_gpio)
+add_hal_test(test_hal_crc)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
 add_hal_test(test_hal_critical_section)
