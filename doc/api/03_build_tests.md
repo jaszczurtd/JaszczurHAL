@@ -22,7 +22,7 @@
 | `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
-| `hal_swserial` | shared HAL GPIO/timing/sync software UART |
+| `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
@@ -224,7 +224,8 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb`/`derr` capture, streamed debug formatter coverage beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred log ring behavior, mute semantics, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
-| `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
+| `test_hal_swserial` | software UART status success/failure paths, pool exhaustion, RX inject, TX capture, frame format and pin reassignment |
+| `test_rp2040_swserial_backend` | RP2040 source-selection guard: native Pico SDK PIO programs required; Arduino serial wrappers, GPIO RX callbacks, microsecond bit delays and HAL critical sections forbidden |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_pga2311` | PGA2311 status/config validation, pool exhaustion, injected SPI failures and retry, frame writes, dB/code conversion, soft/hardware mute behavior |

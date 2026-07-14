@@ -113,6 +113,15 @@ target_compile_definitions(test_jh_entry_adapter PRIVATE
 target_compile_options(test_jh_entry_adapter PRIVATE -Wall -Wextra)
 add_test(NAME test_jh_entry_adapter COMMAND test_jh_entry_adapter)
 
+# RP2040 SoftwareSerial must stay on the native Pico SDK PIO backend.  This is a
+# source-selection contract rather than a host runtime test: the regression it
+# guards against is compiling the portable, GPIO-ISR bit-banger for RP2040.
+add_test(NAME test_rp2040_swserial_backend
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp2040_swserial_backend.cmake
+)
+
 add_hal_test(test_hal_gpio)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)

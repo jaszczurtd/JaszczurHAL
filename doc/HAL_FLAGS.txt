@@ -171,7 +171,8 @@ Storage
 
 Buses
   HAL_ENABLE_UART          Hardware UART.
-  HAL_ENABLE_SWSERIAL      Shared software UART over HAL GPIO/timing/sync.
+  HAL_ENABLE_SWSERIAL      Software UART. RP2040 uses native Pico SDK PIO/DMA;
+                           other targets use the shared HAL GPIO backend.
   HAL_ENABLE_I2C           I2C master/controller with status-first transfers,
                            two-bus support, bus clear and bounded address scan.
   HAL_ENABLE_I2C_SLAVE     I2C slave / target mode with register map.

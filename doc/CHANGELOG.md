@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### SoftwareSerial status-first API
+
+- Migrated the complete `hal_swserial` surface to the current status-first
+  rules. `create`, pin setters, one-byte reads, writes and `println` now have
+  adjacent status implementations while their historical handle/bool/value
+  functions remain thin compatibility wrappers. The fallible historical
+  `begin` and `flush` functions now return `hal_status_t` directly.
+- The owning RP2040 and shared backends now distinguish invalid pins, frame
+  formats and baud rates, pool/native-resource exhaustion, post-start pin
+  changes, unstarted I/O and empty nonblocking reads. GPS consumes create,
+  begin and read statuses and releases a handle when startup fails.
+- Expanded host coverage with status success/failure paths, output
+  initialisation, legacy-wrapper behaviour and instance-pool exhaustion.
+
+### RP2040 SoftwareSerial PIO/DMA backend
+
+- Replaced the RP2040 shared GPIO/interrupt bit-banger with a native Pico SDK
+  backend: PIO state machines perform RX and TX bit timing and DMA moves
+  completed RX frames into a circular buffer. This removes the approximately
+  one-frame-long GPIO callback at 9600 baud that could delay unrelated RPM and
+  CAN processing.
+- Kept the legacy `hal_swserial` call shapes source-compatible and retained all
+  5-8-bit, parity and stop-bit frame configurations. STM32G474 and mock builds
+  continue to use the shared HAL implementation. The RP2040 backend uses no
+  Arduino core, `SoftwareSerial` or `SerialPIO` dependency; each handle reserves
+  two PIO state machines and one DMA channel.
+- Added a source-selection regression test that requires the native PIO
+  backend on RP2040 and rejects Arduino wrappers, GPIO RX callbacks,
+  microsecond bit delays and HAL critical sections in that backend.
+
 ### Network transport status refactor
 
 - Re-migrated `hal_wifi`, `hal_net`, `hal_tcp` and `hal_udp` so status-returning

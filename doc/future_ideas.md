@@ -163,7 +163,7 @@ Simple backlog of future architecture and implementation work.
 
     Not yet migrated in the currently identified priority scope:
 
-    - `hal_swserial` done [ ]
+    - `hal_swserial` done [x]
     - `hal_sdlogger` done [ ]
     - `hal_dht` done [ ]
     - `hal_ds18b20` done [ ]

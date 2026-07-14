@@ -731,9 +731,10 @@ float hal_mock_ext_adc_get_range(void);                               // return 
 
 ## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_ENABLE_GPS`)*
 
-Singleton GPS subsystem. A portable in-tree NMEA parser behind a platform-independent API.
-The real implementation feeds the parser from a PIO-based SoftwareSerial port;
-the mock lets tests inject position, speed, date and time directly.
+Singleton GPS subsystem. A portable in-tree NMEA parser behind a
+platform-independent API. RP2040 can feed it from the native PIO/DMA
+SoftwareSerial backend or a hardware UART; the mock lets tests inject position,
+speed, date and time directly.
 
 **Auto-detect framing:** After ~500 received characters, if every NMEA sentence
 failed its checksum, the implementation automatically toggles between 8N1 and
@@ -749,8 +750,8 @@ failed its checksum, the implementation automatically toggles between 8N1 and
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config);
 
 // Drain available serial bytes into the parser.
-// Must be called frequently (every main-loop iteration) to prevent the
-// PIO SoftwareSerial 32-byte FIFO from overflowing at 9600 baud.
+// Must be called frequently (normally every main-loop iteration) to move
+// buffered transport data into the NMEA parser.
 // No-op in the mock build - use inject helpers directly.
 void hal_gps_update(void);
 
@@ -803,8 +804,8 @@ int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buf
 **Engine:** the portable NMEA parser (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`) wrapped
 by a shared facade (`impl/shared/frameworks/gps/hal_gps_core.cpp`) - used by both hardware
 backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
-**impl/rp2040 (RP2040):** transport only - SoftwareSerial (default) or UART,
-selected at compile time. `hal_gps_update()` must be polled every loop iteration.
+**impl/rp2040 (RP2040):** transport only - native Pico SDK PIO/DMA SoftwareSerial (default) or hardware UART, selected at compile time. `hal_gps_update()` should be
+polled every loop iteration.
 **impl/stm32g474:** transport only - hardware UART (USART1 by default).
 **impl/.mock:** internal state struct; inject helpers set values directly.
 **Thread safety:** the shared engine is thread-safe and multicore-safe - an
