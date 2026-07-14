@@ -77,7 +77,7 @@ const char *hal_status_to_string(hal_status_t status);    // e.g. "HAL_EINVAL"
 `"HAL_STATUS_UNKNOWN"`), which is handy for logging:
 
 ```c
-hal_status_t st = hal_spi_init_ex(0, rx, tx, sck);
+hal_status_t st = hal_spi_init(0, rx, tx, sck);
 if (hal_status_is_error(st)) {
     hal_derr("SPI init failed: %s", hal_status_to_string(st));
 }
@@ -133,7 +133,9 @@ next to each other** in the module reference, with worked examples:
 | Area | Section |
 |---|---|
 | Buses (`hal_spi`, `hal_i2c`) | [Communication buses](09_buses.md) |
+| GPIO/peripherals (`hal_dac`, `hal_pcnt`) | [GPIO, ADC and PWM](05_gpio_adc_pwm.md) |
 | Display (`hal_display`) | [CAN bus and display](10_can_display.md) |
+| Output devices (`hal_dac`, `hal_rgb_led`, `hal_pga2311`) | [Output devices](13_output_devices.md) |
 | RTC (`hal_rtc`) | [Sensors](11_sensors.md) |
 | Storage (`hal_eeprom`, `hal_kv`, `hal_littlefs`) | [Storage](14_storage.md) |
 | Networking (`hal_wifi`, `hal_tcp`, `hal_udp`, `hal_mqtt`, `hal_wireguard`) | [Network connectivity](15_connectivity.md) |

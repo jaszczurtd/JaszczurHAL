@@ -109,14 +109,15 @@ bool hal_mock_net_set_dns_entry(const char *host, const char *ip) {
   return true;
 }
 
-bool hal_net_resolve_ipv4(const char *host_or_ip,
-                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
+hal_status_t hal_net_resolve_ipv4_ex(const char *host_or_ip,
+                                     uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
   if (!host_or_ip || host_or_ip[0] == '\0' || !out_addr) {
-    return false;
+    return HAL_EINVAL;
   }
+  memset(out_addr, 0, HAL_NET_IPV4_ADDR_LEN);
 
   if (parse_ipv4_literal(host_or_ip, out_addr)) {
-    return true;
+    return HAL_OK;
   }
 
   if (strcmp(host_or_ip, "localhost") == 0) {
@@ -124,18 +125,23 @@ bool hal_net_resolve_ipv4(const char *host_or_ip,
     out_addr[1] = 0u;
     out_addr[2] = 0u;
     out_addr[3] = 1u;
-    return true;
+    return HAL_OK;
   }
 
   for (size_t i = 0u; i < HAL_MOCK_NET_DNS_MAX_ENTRIES; ++i) {
     if (s_dns_entries[i].in_use &&
         strcmp(s_dns_entries[i].host, host_or_ip) == 0) {
       memcpy(out_addr, s_dns_entries[i].addr, HAL_NET_IPV4_ADDR_LEN);
-      return true;
+      return HAL_OK;
     }
   }
 
-  return false;
+  return HAL_ENOENT;
+}
+
+bool hal_net_resolve_ipv4(const char *host_or_ip,
+                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
+  return hal_status_to_bool(hal_net_resolve_ipv4_ex(host_or_ip, out_addr));
 }
 
 #endif /* HAL_ENABLE_WIFI */

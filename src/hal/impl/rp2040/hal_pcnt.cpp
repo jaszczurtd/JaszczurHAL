@@ -81,7 +81,7 @@ uint32_t hal_pcnt_read(uint8_t channel) {
   return count;
 }
 
-hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
+hal_status_t hal_pcnt_reset(uint8_t channel) {
   if (channel >= RP2040_PCNT_CHANNELS) {
     return HAL_EINVAL;
   }
@@ -91,8 +91,6 @@ hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
   s_count[channel] = 0u;
   return HAL_OK;
 }
-
-void hal_pcnt_reset(uint8_t channel) { (void)hal_pcnt_reset_ex(channel); }
 
 hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count) {
   if (out_count == nullptr || channel >= RP2040_PCNT_CHANNELS) {

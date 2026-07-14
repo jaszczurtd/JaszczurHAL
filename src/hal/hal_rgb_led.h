@@ -1,6 +1,7 @@
 #pragma once
 
 #include "hal_config.h"
+#include "hal_status.h"
 #ifdef HAL_ENABLE_RGB_LED
 
 /**
@@ -50,8 +51,11 @@ typedef enum {
  *
  * @param pin        GPIO pin connected to the data line of the NeoPixel.
  * @param num_pixels Number of pixels in the chain (typically 1).
+ * @return HAL_OK on success, HAL_EINVAL for invalid configuration,
+ *         HAL_ENOMEM when backend resources cannot be allocated, or a backend
+ *         setup error.
  */
-void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
+hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
 
 /**
  * @brief Initialise the LED driver with an explicit pixel type.
@@ -63,9 +67,12 @@ void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
  * @param pin        GPIO pin connected to the data line.
  * @param num_pixels Number of pixels in the chain.
  * @param pixel_type Colour order and speed (hal_rgb_led_pixel_type_t).
+ * @return HAL_OK on success, HAL_EINVAL for invalid configuration,
+ *         HAL_ENOMEM when backend resources cannot be allocated, or a backend
+ *         setup error.
  */
-void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
-                         hal_rgb_led_pixel_type_t pixel_type);
+hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
+                                 hal_rgb_led_pixel_type_t pixel_type);
 
 /**
  * @brief Set the brightness used by hal_rgb_led_set_color().
@@ -80,16 +87,19 @@ void hal_rgb_led_set_brightness(uint8_t brightness);
 /**
  * @brief Turn the LED off (equivalent to
  * hal_rgb_led_set_color(HAL_RGB_LED_NONE)).
+ * @return HAL_OK on success or the error returned by hal_rgb_led_set_color().
  */
-void hal_rgb_led_off(void);
+hal_status_t hal_rgb_led_off(void);
 
 /**
  * @brief Set the status LED colour.
  * Repeated calls with the same colour are suppressed - the LED is only
  * updated when the colour actually changes, keeping SPI/DMA traffic minimal.
  * @param color Desired colour.
+ * @return HAL_OK on success, HAL_EINVAL for an invalid colour, HAL_EUNINIT
+ *         before initialisation, or HAL_EIO on a transport failure.
  */
-void hal_rgb_led_set_color(hal_rgb_led_color_t color);
+hal_status_t hal_rgb_led_set_color(hal_rgb_led_color_t color);
 
 #ifdef __cplusplus
 }

@@ -16,6 +16,10 @@ unchanged. Operations which historically returned a count, accepted socket or
 peer state use an explicit output parameter, so converting to a status does not
 discard the original result.
 
+WiFi, resolver, TCP and UDP implement status handling directly in the mock and
+RP2040 backends. Their historical `bool`, count and handle APIs are adjacent
+thin compatibility wrappers; they do not contain the real I/O path.
+
 Representative entries include `hal_wifi_begin_station_ex()`,
 `hal_wifi_ping_status_ex()`, `hal_net_resolve_ipv4_ex()`,
 `hal_tcp_socket_{connect,send,recv}_ex()`,
@@ -33,6 +37,7 @@ hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
 hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
 hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
                                        bool non_blocking);
+hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms);
 hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);
@@ -45,6 +50,7 @@ hal_status_t hal_net_resolve_ipv4_ex(
     const char *host_or_ip, uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
 
 // Handle-based TCP
+hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket);
 hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
                                        const hal_net_endpoint_t *remote,
                                        uint32_t timeout_ms);
@@ -61,8 +67,10 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
                                         hal_net_endpoint_t *remote,
                                         uint32_t timeout_ms,
                                         hal_tcp_socket_t *out_socket);
+hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener);
 
 // Handle-based and compatibility UDP
+hal_status_t hal_udp_socket_open_ex(hal_udp_socket_t *out_socket);
 hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
                                     const hal_net_endpoint_t *local);
 hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
@@ -75,9 +83,11 @@ hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
                                         uint32_t timeout_ms,
                                         size_t *out_received);
 hal_status_t hal_udp_begin_ex(uint16_t local_port);
+hal_status_t hal_udp_parse_packet_ex(int *out_size);
 hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
                              uint16_t *out_read);
 hal_status_t hal_udp_remote_ip_ex(char *out, size_t out_size);
+hal_status_t hal_udp_remote_port_ex(uint16_t *out_port);
 hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
                                      uint16_t remote_port);
 hal_status_t hal_udp_begin_packet_remote_ex(void);
@@ -125,11 +135,12 @@ hal_status_t hal_wireguard_kick_handshake_ex(
 ```
 
 Common validation reports `HAL_EINVAL`. Resolver/lookup absence uses
-`HAL_ENOENT`, an unavailable accept uses `HAL_EAGAIN`, an operation requiring
-an initialized WireGuard tunnel uses `HAL_EUNINIT`, and ambiguous legacy
-backend failures map conservatively to `HAL_EIO`. This adapter does not claim
-timeout/protocol precision that the underlying backend does not expose. See the
-public module headers for complete signatures.
+`HAL_ENOENT`, an unavailable accept uses `HAL_EAGAIN`, pool exhaustion uses
+`HAL_ENOMEM`, and an operation attempted in the wrong socket state uses
+`HAL_ESTATE` or `HAL_EUNINIT`. Native transport failures use `HAL_EIO`.
+The still-unmigrated MQTT/WireGuard compatibility adapter maps ambiguous legacy
+backend failures conservatively to `HAL_EIO`. See the public module headers for
+complete signatures.
 
 ## Shared network types
 
@@ -248,6 +259,7 @@ hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
 hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
 hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
                                        bool non_blocking);
+hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms);
 hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);

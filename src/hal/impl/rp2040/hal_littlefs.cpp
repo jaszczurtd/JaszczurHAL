@@ -31,16 +31,18 @@ static bool validate_non_empty(const char *value, const char *fn,
   return true;
 }
 
-void hal_littlefs_set_progress_callback(
-    hal_littlefs_progress_callback_t callback, void *ctx) {
+hal_status_t
+hal_littlefs_set_progress_callback(hal_littlefs_progress_callback_t callback,
+                                   void *ctx) {
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
   s_progress_callback = callback;
   s_progress_ctx = ctx;
   hal_mutex_unlock(s_littlefs_mutex);
+  return HAL_OK;
 }
 
-bool hal_littlefs_begin(void) {
+hal_status_t hal_littlefs_begin_ex(void) {
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
 
@@ -52,10 +54,14 @@ bool hal_littlefs_begin(void) {
   if (!ok) {
     hal_derr("hal_littlefs_begin: LittleFS.begin() failed");
   }
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-void hal_littlefs_end(void) {
+bool hal_littlefs_begin(void) {
+  return hal_status_to_bool(hal_littlefs_begin_ex());
+}
+
+hal_status_t hal_littlefs_end(void) {
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
 
@@ -65,9 +71,10 @@ void hal_littlefs_end(void) {
   s_littlefs_mounted = false;
 
   hal_mutex_unlock(s_littlefs_mutex);
+  return HAL_OK;
 }
 
-bool hal_littlefs_format(void) {
+hal_status_t hal_littlefs_format_ex(void) {
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
 
@@ -87,7 +94,11 @@ bool hal_littlefs_format(void) {
   if (!ok) {
     hal_derr("hal_littlefs_format: LittleFS.format() failed");
   }
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
+}
+
+bool hal_littlefs_format(void) {
+  return hal_status_to_bool(hal_littlefs_format_ex());
 }
 
 bool hal_littlefs_is_mounted(void) {
@@ -100,9 +111,9 @@ bool hal_littlefs_is_mounted(void) {
   return mounted;
 }
 
-bool hal_littlefs_exists(const char *path) {
+hal_status_t hal_littlefs_exists_ex(const char *path) {
   if (!validate_non_empty(path, "hal_littlefs_exists", "path")) {
-    return false;
+    return HAL_EINVAL;
   }
 
   littlefs_ensure_mutex();
@@ -111,18 +122,22 @@ bool hal_littlefs_exists(const char *path) {
   if (!s_littlefs_mounted) {
     hal_mutex_unlock(s_littlefs_mutex);
     hal_derr("hal_littlefs_exists: filesystem is not mounted");
-    return false;
+    return HAL_EUNINIT;
   }
 
   const bool exists = LittleFS.exists(path);
 
   hal_mutex_unlock(s_littlefs_mutex);
-  return exists;
+  return exists ? HAL_OK : HAL_ENOENT;
 }
 
-bool hal_littlefs_remove(const char *path) {
+bool hal_littlefs_exists(const char *path) {
+  return hal_status_to_bool(hal_littlefs_exists_ex(path));
+}
+
+hal_status_t hal_littlefs_remove_ex(const char *path) {
   if (!validate_non_empty(path, "hal_littlefs_remove", "path")) {
-    return false;
+    return HAL_EINVAL;
   }
 
   littlefs_ensure_mutex();
@@ -131,45 +146,78 @@ bool hal_littlefs_remove(const char *path) {
   if (!s_littlefs_mounted) {
     hal_mutex_unlock(s_littlefs_mutex);
     hal_derr("hal_littlefs_remove: filesystem is not mounted");
-    return false;
+    return HAL_EUNINIT;
+  }
+
+  if (!LittleFS.exists(path)) {
+    hal_mutex_unlock(s_littlefs_mutex);
+    return HAL_ENOENT;
   }
 
   const bool ok = LittleFS.remove(path);
 
   hal_mutex_unlock(s_littlefs_mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
+}
+
+bool hal_littlefs_remove(const char *path) {
+  return hal_status_to_bool(hal_littlefs_remove_ex(path));
+}
+
+hal_status_t hal_littlefs_total_bytes_ex(size_t *out_bytes) {
+  if (!out_bytes) {
+    return HAL_EINVAL;
+  }
+  *out_bytes = 0u;
+  littlefs_ensure_mutex();
+  hal_mutex_lock(s_littlefs_mutex);
+
+  if (!s_littlefs_mounted) {
+    hal_mutex_unlock(s_littlefs_mutex);
+    return HAL_EUNINIT;
+  }
+  FSInfo info{};
+  const bool ok = LittleFS.info(info);
+  if (ok) {
+    *out_bytes = (size_t)info.totalBytes;
+  }
+
+  hal_mutex_unlock(s_littlefs_mutex);
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 size_t hal_littlefs_total_bytes(void) {
+  size_t bytes = 0u;
+  (void)hal_littlefs_total_bytes_ex(&bytes);
+  return bytes;
+}
+
+hal_status_t hal_littlefs_used_bytes_ex(size_t *out_bytes) {
+  if (!out_bytes) {
+    return HAL_EINVAL;
+  }
+  *out_bytes = 0u;
   littlefs_ensure_mutex();
   hal_mutex_lock(s_littlefs_mutex);
 
-  size_t total = 0u;
-  if (s_littlefs_mounted) {
-    FSInfo info{};
-    if (LittleFS.info(info)) {
-      total = (size_t)info.totalBytes;
-    }
+  if (!s_littlefs_mounted) {
+    hal_mutex_unlock(s_littlefs_mutex);
+    return HAL_EUNINIT;
+  }
+  FSInfo info{};
+  const bool ok = LittleFS.info(info);
+  if (ok) {
+    *out_bytes = (size_t)info.usedBytes;
   }
 
   hal_mutex_unlock(s_littlefs_mutex);
-  return total;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 size_t hal_littlefs_used_bytes(void) {
-  littlefs_ensure_mutex();
-  hal_mutex_lock(s_littlefs_mutex);
-
-  size_t used = 0u;
-  if (s_littlefs_mounted) {
-    FSInfo info{};
-    if (LittleFS.info(info)) {
-      used = (size_t)info.usedBytes;
-    }
-  }
-
-  hal_mutex_unlock(s_littlefs_mutex);
-  return used;
+  size_t bytes = 0u;
+  (void)hal_littlefs_used_bytes_ex(&bytes);
+  return bytes;
 }
 
 #endif /* HAL_ENABLE_LITTLEFS */

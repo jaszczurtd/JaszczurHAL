@@ -127,6 +127,10 @@ Simple backlog of future architecture and implementation work.
     - `hal_digipot` done [x]
     - `hal_dac` done [x]
     - `hal_i2c` done [x]
+    - `hal_spi` done [x]
+    - `hal_rgb_led` done [x]
+    - `hal_pga2311` done [x]
+    - `hal_pcnt` done [x]
 
     Native status-first implementations (no re-migration required):
 
@@ -142,14 +146,12 @@ Simple backlog of future architecture and implementation work.
 
     Additive or partial status work requiring current-rule re-migration:
 
-    - `hal_pcnt` done [ ]
     - `hal_system` done [ ]
     - `hal_uart` done [ ]
-    - `hal_spi` done [ ]
-    - `hal_wifi` / `hal_net` / `hal_tcp` / `hal_udp` done [ ]
+    - `hal_wifi` / `hal_net` / `hal_tcp` / `hal_udp` done [x]
     - `hal_mqtt` / `hal_wireguard` done [ ]
-    - `hal_kv` done [ ]
-    - `hal_littlefs` done [ ]
+    - `hal_kv` done [x]
+    - `hal_littlefs` done [x]
     - `hal_rtc` done [ ]
     - `hal_stmpe610` done [ ]
     - `hal_pca9654e` done [ ]
@@ -169,13 +171,10 @@ Simple backlog of future architecture and implementation work.
     - `hal_thermocouple` done [ ]
     - `hal_irsmall_decoder` done [ ]
     - `hal_dma_pwm_audio` done [ ]
-    - `hal_pga2311` done [ ]
-    - `hal_rgb_led` done [ ]
 
-  - Audit notes: `hal_pcnt` already has useful backend-local status functions,
-    but fallible legacy `void` operations still discard their results. UART has
-    the same issue. SPI, network, KV, LittleFS and RTC
-    still use separate `hal_*_status.cpp` adapters. `hal_system` currently has
+  - Audit notes: UART still has fallible legacy `void` operations that discard
+    their results. MQTT/WireGuard and RTC still use separate
+    `hal_*_status.cpp` adapters. `hal_system` currently has
     only selected status-aware operations. `hal_stmpe610` still exposes
     fallible register/data I/O through legacy `void`/value paths, so it is not
     complete under the current rule. The simple-I/O drivers already have real

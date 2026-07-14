@@ -64,10 +64,11 @@ void hal_pga2311_driver_init_pins(const hal_pga2311_config_t *cfg) {
   }
 }
 
-bool hal_pga2311_driver_write_codes(const hal_pga2311_config_t *cfg,
-                                    uint8_t left_code, uint8_t right_code) {
+hal_status_t hal_pga2311_driver_write_codes(const hal_pga2311_config_t *cfg,
+                                            uint8_t left_code,
+                                            uint8_t right_code) {
   if (cfg == NULL) {
-    return false;
+    return HAL_EINVAL;
   }
 
   const uint8_t bus = cfg->spi_bus;
@@ -77,15 +78,19 @@ bool hal_pga2311_driver_write_codes(const hal_pga2311_config_t *cfg,
   const hal_spi_settings_t spi_settings = build_spi_settings(cfg);
 
   hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &spi_settings);
+  hal_status_t status = hal_spi_begin_transaction(bus, &spi_settings);
+  if (hal_status_is_error(status)) {
+    hal_spi_unlock(bus);
+    return status;
+  }
 
   hal_gpio_write(cfg->cs_pin, false);
-  hal_spi_write(bus, frame, 2u);
+  status = hal_spi_write(bus, frame, 2u);
   hal_gpio_write(cfg->cs_pin, true);
 
-  hal_spi_end_transaction(bus);
+  const hal_status_t end_status = hal_spi_end_transaction(bus);
   hal_spi_unlock(bus);
-  return true;
+  return hal_status_is_error(status) ? status : end_status;
 }
 
 #endif /* HAL_ENABLE_PGA2311 */

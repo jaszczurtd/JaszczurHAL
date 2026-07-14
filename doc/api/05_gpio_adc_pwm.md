@@ -135,17 +135,17 @@ bool hal_pcnt_init(uint8_t channel, uint8_t pin, hal_pcnt_edge_t edge);
 hal_status_t hal_pcnt_read_ex(uint8_t channel, uint32_t *out_count);
 uint32_t hal_pcnt_read(uint8_t channel);
 
-hal_status_t hal_pcnt_reset_ex(uint8_t channel);
-void hal_pcnt_reset(uint8_t channel);
+hal_status_t hal_pcnt_reset(uint8_t channel);
 
 hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count);
 uint32_t hal_pcnt_read_and_reset(uint8_t channel);
 ```
 
-The `_ex` APIs report `HAL_OK`, `HAL_EINVAL` for invalid channels, edges or
-output pointers, and `HAL_EUNINIT` when reading/resetting a valid channel that
-has not been initialized. The legacy wrappers keep the previous `bool`,
-`uint32_t` and `void` shapes.
+The status APIs report `HAL_OK`, `HAL_EINVAL` for invalid channels, pins, edges
+or output pointers, and `HAL_EUNINIT` when reading/resetting a valid channel
+that has not been initialized. Historical `void hal_pcnt_reset()` now returns
+`hal_status_t` directly; existing callers may keep ignoring the result. The
+legacy init/read/read-and-reset wrappers retain their `bool`/`uint32_t` shapes.
 
 **impl/rp2040:** GPIO interrupt based software counters.
 **impl/stm32g474:** TIM2 external-clock mode for channel 0.

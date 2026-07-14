@@ -13,7 +13,8 @@
  * Two SPI controllers are supported via the @p bus parameter:
  *   - bus 0 -> default hardware controller (RP2040 SPI0, STM32G474 SPI1)
  *   - bus 1 -> second hardware controller (RP2040 SPI1, STM32G474 SPI2)
- * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
+ * Any other bus value is rejected by status-returning operations. Low-level
+ * synchronization and cleanup helpers retain HAL_ASSERT checks.
  */
 
 #include <stddef.h>
@@ -45,22 +46,12 @@ typedef struct {
   uint8_t data_mode; /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
 } hal_spi_settings_t;
 
-/** Status-returning SPI APIs. Existing APIs below remain compatibility
- * wrappers. */
-hal_status_t hal_spi_init_ex(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
-                             uint8_t sck_pin);
-hal_status_t hal_spi_begin_transaction_ex(uint8_t bus,
-                                          const hal_spi_settings_t *settings);
-hal_status_t hal_spi_end_transaction_ex(uint8_t bus);
+/** Status-returning companions for APIs whose historical return value must be
+ * preserved. The value-returning APIs below remain compatibility wrappers. */
 hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
                                  uint8_t *out_received);
 hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
                                    uint16_t *out_received);
-hal_status_t hal_spi_transfer_buffer_ex(uint8_t bus, uint8_t *buffer,
-                                        size_t len);
-hal_status_t hal_spi_transfer_txrx_ex(uint8_t bus, const uint8_t *tx,
-                                      uint8_t *rx, size_t len);
-hal_status_t hal_spi_write_ex(uint8_t bus, const uint8_t *data, size_t len);
 hal_status_t hal_spi_write_dma_ex(uint8_t bus, const uint8_t *data, size_t len);
 hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
                                               size_t len);
@@ -72,8 +63,11 @@ hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus);
  * @param rx_pin  MISO pin number.
  * @param tx_pin  MOSI pin number.
  * @param sck_pin SCK  pin number.
+ * @return HAL_OK on success, HAL_EINVAL for an invalid bus, or a backend
+ *         setup error.
  */
-void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin, uint8_t sck_pin);
+hal_status_t hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
+                          uint8_t sck_pin);
 
 /**
  * @brief Stop the selected SPI controller.
@@ -106,8 +100,11 @@ void hal_spi_unlock(uint8_t bus);
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  * @param settings Transaction settings, or NULL for HAL defaults.
+ * @return HAL_OK on success, HAL_EINVAL for invalid settings, or a backend
+ *         setup error.
  */
-void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
+hal_status_t hal_spi_begin_transaction(uint8_t bus,
+                                       const hal_spi_settings_t *settings);
 
 /**
  * @brief Finish a transaction on the selected SPI controller.
@@ -116,8 +113,9 @@ void hal_spi_begin_transaction(uint8_t bus, const hal_spi_settings_t *settings);
  * it, but does not release the HAL mutex.
  *
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
+ * @return HAL_OK on success or a backend completion error.
  */
-void hal_spi_end_transaction(uint8_t bus);
+hal_status_t hal_spi_end_transaction(uint8_t bus);
 
 /**
  * @brief Full-duplex transfer of one byte.
@@ -144,8 +142,10 @@ uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data);
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  * @param buffer Buffer to transmit and overwrite with received bytes.
  * @param len Number of bytes to transfer.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments, or a backend
+ *         transfer error.
  */
-void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
+hal_status_t hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
 
 /**
  * @brief Full-duplex buffer transfer.
@@ -157,17 +157,21 @@ void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len);
  * @param tx Optional transmit buffer.
  * @param rx Optional receive buffer.
  * @param len Number of bytes to transfer.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments, or a backend
+ *         transfer error.
  */
-void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
-                           size_t len);
+hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
+                                   size_t len);
 
 /**
  * @brief Write a byte buffer, discarding received bytes.
  * @param bus SPI controller index (0 = SPI, 1 = SPI1).
  * @param data Buffer to transmit.
  * @param len Number of bytes to transmit.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments, or a backend
+ *         transfer error.
  */
-void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
+hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
 
 /**
  * @brief Write a byte buffer using the fastest backend path available.

@@ -56,55 +56,77 @@ static bool checked_snprintf(char *out, size_t out_size, const char *fn,
   return true;
 }
 
-bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
+hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode) {
   switch (mode) {
   case HAL_WIFI_MODE_OFF:
   case HAL_WIFI_MODE_STA:
   case HAL_WIFI_MODE_AP:
   case HAL_WIFI_MODE_AP_STA:
     s_mode = mode;
-    return true;
+    return HAL_OK;
   default:
     hal_derr("hal_wifi_set_mode: invalid mode value %d", (int)mode);
-    return false;
+    return HAL_EINVAL;
   }
 }
 
-bool hal_wifi_disconnect(bool erase_credentials) {
+bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
+  return hal_status_to_bool(hal_wifi_set_mode_ex(mode));
+}
+
+hal_status_t hal_wifi_disconnect_ex(bool erase_credentials) {
   (void)erase_credentials;
   s_connected = false;
   s_status = 0;
   s_has_local_ip = false;
   snprintf(s_ip, sizeof(s_ip), "%s", "0.0.0.0");
-  return true;
+  return HAL_OK;
+}
+
+bool hal_wifi_disconnect(bool erase_credentials) {
+  return hal_status_to_bool(hal_wifi_disconnect_ex(erase_credentials));
+}
+
+hal_status_t hal_wifi_set_hostname_ex(const char *hostname) {
+  if (!hostname || hostname[0] == '\0') {
+    hal_derr("hal_wifi_set_hostname: hostname is NULL/empty");
+    return HAL_EINVAL;
+  }
+  snprintf(s_hostname, sizeof(s_hostname), "%s", hostname);
+  return HAL_OK;
 }
 
 bool hal_wifi_set_hostname(const char *hostname) {
-  if (!hostname || hostname[0] == '\0') {
-    hal_derr("hal_wifi_set_hostname: hostname is NULL/empty");
-    return false;
+  return hal_status_to_bool(hal_wifi_set_hostname_ex(hostname));
+}
+
+hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
+                                       bool non_blocking) {
+  (void)non_blocking;
+  if (!ssid || ssid[0] == '\0') {
+    hal_derr("hal_wifi_begin_station: SSID is NULL/empty");
+    return HAL_EINVAL;
   }
-  snprintf(s_hostname, sizeof(s_hostname), "%s", hostname);
-  return true;
+  if (!password) {
+    hal_derr("hal_wifi_begin_station: password pointer is NULL");
+    return HAL_EINVAL;
+  }
+  return HAL_OK;
 }
 
 bool hal_wifi_begin_station(const char *ssid, const char *password,
                             bool non_blocking) {
-  (void)non_blocking;
-  if (!ssid || ssid[0] == '\0') {
-    hal_derr("hal_wifi_begin_station: SSID is NULL/empty");
-    return false;
-  }
-  if (!password) {
-    hal_derr("hal_wifi_begin_station: password pointer is NULL");
-    return false;
-  }
-  return true;
+  return hal_status_to_bool(
+      hal_wifi_begin_station_ex(ssid, password, non_blocking));
+}
+
+hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms) {
+  s_timeout_ms = timeout_ms;
+  return HAL_OK;
 }
 
 bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
-  s_timeout_ms = timeout_ms;
-  return true;
+  return hal_status_to_bool(hal_wifi_set_timeout_ms_ex(timeout_ms));
 }
 
 bool hal_wifi_is_connected(void) { return s_connected; }
@@ -131,59 +153,105 @@ int hal_wifi_get_strength(void) {
   return 0;
 }
 
-bool hal_wifi_get_local_ip(char *out, size_t out_size) {
+hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_local_ip"))
-    return false;
-  return checked_snprintf(out, out_size, "hal_wifi_get_local_ip", "%s", s_ip);
+    return HAL_EINVAL;
+  return checked_snprintf(out, out_size, "hal_wifi_get_local_ip", "%s", s_ip)
+             ? HAL_OK
+             : HAL_EOVERFLOW;
+}
+
+bool hal_wifi_get_local_ip(char *out, size_t out_size) {
+  return hal_status_to_bool(hal_wifi_get_local_ip_ex(out, out_size));
+}
+
+hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size) {
+  if (!validate_out(out, out_size, "hal_wifi_get_dns_ip"))
+    return HAL_EINVAL;
+  return checked_snprintf(out, out_size, "hal_wifi_get_dns_ip", "%s", s_dns)
+             ? HAL_OK
+             : HAL_EOVERFLOW;
 }
 
 bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
-  if (!validate_out(out, out_size, "hal_wifi_get_dns_ip"))
-    return false;
-  return checked_snprintf(out, out_size, "hal_wifi_get_dns_ip", "%s", s_dns);
+  return hal_status_to_bool(hal_wifi_get_dns_ip_ex(out, out_size));
+}
+
+hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size) {
+  if (!validate_out(out, out_size, "hal_wifi_get_mac"))
+    return HAL_EINVAL;
+  return checked_snprintf(out, out_size, "hal_wifi_get_mac", "%s", s_mac)
+             ? HAL_OK
+             : HAL_EOVERFLOW;
 }
 
 bool hal_wifi_get_mac(char *out, size_t out_size) {
-  if (!validate_out(out, out_size, "hal_wifi_get_mac"))
-    return false;
-  return checked_snprintf(out, out_size, "hal_wifi_get_mac", "%s", s_mac);
+  return hal_status_to_bool(hal_wifi_get_mac_ex(out, out_size));
 }
 
 int hal_wifi_ping(const char *host_or_ip) {
-  if (!host_or_ip || host_or_ip[0] == '\0') {
-    hal_derr("hal_wifi_ping: host_or_ip is NULL/empty");
-    return -1;
-  }
-  return s_ping_result;
+  int result = -1;
+  (void)hal_wifi_ping_status_ex(host_or_ip, s_timeout_ms, &result);
+  return result;
 }
 
-int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
+hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
+                                     uint32_t timeout_ms, int *out_result) {
+  if (out_result != NULL) {
+    *out_result = -1;
+  }
   if (!host_or_ip || host_or_ip[0] == '\0') {
     hal_derr("hal_wifi_ping_ex: host_or_ip is NULL/empty");
-    return -1;
+    return HAL_EINVAL;
+  }
+  if (out_result == NULL) {
+    return HAL_EINVAL;
   }
 
   const uint32_t previous_timeout_ms = s_timeout_ms;
   s_timeout_ms = timeout_ms;
-  const int res = s_ping_result;
+  *out_result = s_ping_result;
   s_timeout_ms = previous_timeout_ms;
-  return res;
+  return *out_result >= 0 ? HAL_OK : HAL_EIO;
 }
 
-int hal_wifi_scan_networks(void) { return (int)s_scan_count; }
+int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
+  int result = -1;
+  (void)hal_wifi_ping_status_ex(host_or_ip, timeout_ms, &result);
+  return result;
+}
 
-bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+hal_status_t hal_wifi_scan_networks_ex(int *out_count) {
+  if (out_count == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_count = (int)s_scan_count;
+  return HAL_OK;
+}
+
+int hal_wifi_scan_networks(void) {
+  int count = -1;
+  (void)hal_wifi_scan_networks_ex(&count);
+  return count;
+}
+
+hal_status_t hal_wifi_get_scan_result_ex(size_t index,
+                                         hal_wifi_scan_result_t *out) {
   if (out == NULL) {
     hal_derr("hal_wifi_get_scan_result: output pointer is NULL");
-    return false;
+    return HAL_EINVAL;
   }
   if (index >= s_scan_count) {
     hal_derr("hal_wifi_get_scan_result: index %u out of range",
              (unsigned)index);
-    return false;
+    return HAL_ENOENT;
   }
   *out = s_scan_results[index];
-  return true;
+  return HAL_OK;
+}
+
+bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+  return hal_status_to_bool(hal_wifi_get_scan_result_ex(index, out));
 }
 
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {

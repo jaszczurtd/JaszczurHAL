@@ -25,17 +25,22 @@ extern "C" {
  */
 typedef void (*hal_littlefs_progress_callback_t)(void *ctx);
 
-/** @brief Register an optional callback for long LittleFS operations. */
-void hal_littlefs_set_progress_callback(
-    hal_littlefs_progress_callback_t callback, void *ctx);
+/** @brief Register an optional callback for long LittleFS operations.
+ *  @return HAL_OK when the callback configuration was stored.
+ */
+hal_status_t
+hal_littlefs_set_progress_callback(hal_littlefs_progress_callback_t callback,
+                                   void *ctx);
 
 /** @brief Mount LittleFS.
  *  @return true on successful mount.
  */
 bool hal_littlefs_begin(void);
 
-/** @brief Unmount LittleFS. */
-void hal_littlefs_end(void);
+/** @brief Unmount LittleFS.
+ *  @return HAL_OK, or HAL_EIO when the backend cannot unmount it.
+ */
+hal_status_t hal_littlefs_end(void);
 
 /** @brief Format LittleFS partition.
  *  @return true on successful format.
@@ -65,19 +70,16 @@ size_t hal_littlefs_used_bytes(void);
 
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
- * Status-returning LittleFS APIs. Every legacy entry point above remains a
- * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * Status-returning LittleFS APIs own validation and backend I/O. Historical
+ * bool/value entry points are compatibility wrappers; the _ex variants return
+ * hal_status_t so callers can
  * distinguish a NULL/empty path or NULL output (HAL_EINVAL), an operation
  * issued while unmounted (HAL_EUNINIT), a path that does not exist
  * (HAL_ENOENT) and a mount/format backend failure (HAL_EIO). Byte-count
  * queries expose their result through an output parameter. The plain state
  * query hal_littlefs_is_mounted() has no _ex form.
  */
-hal_status_t
-hal_littlefs_set_progress_callback_ex(hal_littlefs_progress_callback_t callback,
-                                      void *ctx);
 hal_status_t hal_littlefs_begin_ex(void);
-hal_status_t hal_littlefs_end_ex(void);
 hal_status_t hal_littlefs_format_ex(void);
 hal_status_t hal_littlefs_exists_ex(const char *path);
 hal_status_t hal_littlefs_remove_ex(const char *path);

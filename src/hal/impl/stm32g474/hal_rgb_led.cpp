@@ -37,19 +37,21 @@ static inline void stm32_wait_until(uint32_t target) {
 }
 #endif
 
-static void rgb_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_rgb_mutex);
+static bool rgb_pixel_type_valid(hal_rgb_led_pixel_type_t pixel_type) {
+  return pixel_type == HAL_RGB_LED_PIXEL_RGB_KHZ800 ||
+         pixel_type == HAL_RGB_LED_PIXEL_GRB_KHZ800 ||
+         pixel_type == HAL_RGB_LED_PIXEL_RGBW_KHZ800;
 }
 
-static inline void rgb_lock(void) {
-  rgb_ensure_mutex();
+static hal_status_t rgb_lock(void) {
+  if (jh_hal_mutex_create_once(&s_rgb_mutex) == nullptr) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_rgb_mutex);
+  return HAL_OK;
 }
 
-static inline void rgb_unlock(void) {
-  rgb_ensure_mutex();
-  hal_mutex_unlock(s_rgb_mutex);
-}
+static void rgb_unlock(void) { hal_mutex_unlock(s_rgb_mutex); }
 
 static bool stm32_write_pixels(const uint8_t *pixels, uint32_t num_bytes,
                                bool is800khz, uint8_t pin, void *user) {
@@ -118,56 +120,73 @@ static bool stm32_write_pixels(const uint8_t *pixels, uint32_t num_bytes,
 #endif
 }
 
-static void s_init_with_type(uint8_t pin, uint8_t num_pixels,
-                             uint16_t neo_type) {
+static hal_status_t s_init_with_type(uint8_t pin, uint8_t num_pixels,
+                                     uint16_t neo_type) {
   if (s_strip_ready) {
     jh_neopixel_deinit(&s_strip);
     s_strip_ready = false;
   }
 
   if (!jh_neopixel_init(&s_strip, num_pixels, pin, neo_type)) {
-    return;
+    return HAL_ENOMEM;
   }
 
   hal_gpio_set_mode(pin, HAL_GPIO_OUTPUT);
   hal_gpio_write(pin, false);
   s_strip_ready = true;
   s_last_color = -1;
+  return HAL_OK;
 }
 
-void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels) {
-  rgb_lock();
-  s_init_with_type(pin, num_pixels, HAL_RGB_LED_PIXEL_RGB_KHZ800);
-  rgb_unlock();
+hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels) {
+  return hal_rgb_led_init_ex(pin, num_pixels, HAL_RGB_LED_PIXEL_RGB_KHZ800);
 }
 
-void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
-                         hal_rgb_led_pixel_type_t pixel_type) {
-  rgb_lock();
-  s_init_with_type(pin, num_pixels, (uint16_t)pixel_type);
+hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
+                                 hal_rgb_led_pixel_type_t pixel_type) {
+  if ((pin >> 4) > 6u || num_pixels == 0u ||
+      !rgb_pixel_type_valid(pixel_type)) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t lock_status = rgb_lock();
+  if (hal_status_is_error(lock_status)) {
+    return lock_status;
+  }
+  const hal_status_t status =
+      s_init_with_type(pin, num_pixels, (uint16_t)pixel_type);
   rgb_unlock();
+  return status;
 }
 
 void hal_rgb_led_set_brightness(uint8_t brightness) {
-  rgb_lock();
+  if (hal_status_is_error(rgb_lock())) {
+    return;
+  }
   s_brightness = (brightness < 1u) ? 1u : brightness;
   s_last_color = -1;
   rgb_unlock();
 }
 
-void hal_rgb_led_off(void) { hal_rgb_led_set_color(HAL_RGB_LED_NONE); }
+hal_status_t hal_rgb_led_off(void) {
+  return hal_rgb_led_set_color(HAL_RGB_LED_NONE);
+}
 
-void hal_rgb_led_set_color(hal_rgb_led_color_t color) {
-  rgb_lock();
+hal_status_t hal_rgb_led_set_color(hal_rgb_led_color_t color) {
+  if (color < HAL_RGB_LED_NONE || color > HAL_RGB_LED_PURPLE) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t lock_status = rgb_lock();
+  if (hal_status_is_error(lock_status)) {
+    return lock_status;
+  }
   if (!s_strip_ready) {
     rgb_unlock();
-    return;
+    return HAL_EUNINIT;
   }
   if ((int)color == s_last_color) {
     rgb_unlock();
-    return;
+    return HAL_OK;
   }
-  s_last_color = (int)color;
 
   uint8_t r = 0u;
   uint8_t g = 0u;
@@ -202,8 +221,12 @@ void hal_rgb_led_set_color(hal_rgb_led_color_t color) {
   }
 
   jh_neopixel_set_pixel_color_packed(&s_strip, 0u, jh_neopixel_color(r, g, b));
-  (void)jh_neopixel_show(&s_strip, stm32_write_pixels, nullptr);
+  const bool shown = jh_neopixel_show(&s_strip, stm32_write_pixels, nullptr);
+  if (shown) {
+    s_last_color = (int)color;
+  }
   rgb_unlock();
+  return shown ? HAL_OK : HAL_EIO;
 }
 
 #endif /* HAL_ENABLE_RGB_LED */

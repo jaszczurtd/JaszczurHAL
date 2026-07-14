@@ -61,10 +61,12 @@ static void notify_progress(void) {
   }
 }
 
-void hal_littlefs_set_progress_callback(
-    hal_littlefs_progress_callback_t callback, void *ctx) {
+hal_status_t
+hal_littlefs_set_progress_callback(hal_littlefs_progress_callback_t callback,
+                                   void *ctx) {
   s_progress_callback = callback;
   s_progress_ctx = ctx;
+  return HAL_OK;
 }
 
 void hal_mock_littlefs_reset(void) {
@@ -126,16 +128,23 @@ void hal_mock_littlefs_set_exists(const char *path, bool exists) {
   }
 }
 
-bool hal_littlefs_begin(void) {
+hal_status_t hal_littlefs_begin_ex(void) {
   s_littlefs.mounted = s_littlefs.begin_result;
-  return s_littlefs.begin_result;
+  return s_littlefs.begin_result ? HAL_OK : HAL_EIO;
 }
 
-void hal_littlefs_end(void) { s_littlefs.mounted = false; }
+bool hal_littlefs_begin(void) {
+  return hal_status_to_bool(hal_littlefs_begin_ex());
+}
 
-bool hal_littlefs_format(void) {
+hal_status_t hal_littlefs_end(void) {
+  s_littlefs.mounted = false;
+  return HAL_OK;
+}
+
+hal_status_t hal_littlefs_format_ex(void) {
   if (!s_littlefs.format_result) {
-    return false;
+    return HAL_EIO;
   }
 
   notify_progress();
@@ -144,54 +153,88 @@ bool hal_littlefs_format(void) {
   s_littlefs.used_bytes = 0u;
   s_littlefs.mounted = false;
   notify_progress();
-  return true;
+  return HAL_OK;
+}
+
+bool hal_littlefs_format(void) {
+  return hal_status_to_bool(hal_littlefs_format_ex());
 }
 
 bool hal_littlefs_is_mounted(void) { return s_littlefs.mounted; }
 
-bool hal_littlefs_exists(const char *path) {
+hal_status_t hal_littlefs_exists_ex(const char *path) {
   if (!validate_non_empty(path, "hal_littlefs_exists", "path")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (!s_littlefs.mounted) {
     hal_derr("hal_littlefs_exists: filesystem is not mounted");
-    return false;
+    return HAL_EUNINIT;
   }
 
-  return find_path_index(path) >= 0;
+  return find_path_index(path) >= 0 ? HAL_OK : HAL_ENOENT;
 }
 
-bool hal_littlefs_remove(const char *path) {
+bool hal_littlefs_exists(const char *path) {
+  return hal_status_to_bool(hal_littlefs_exists_ex(path));
+}
+
+hal_status_t hal_littlefs_remove_ex(const char *path) {
   if (!validate_non_empty(path, "hal_littlefs_remove", "path")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (!s_littlefs.mounted) {
     hal_derr("hal_littlefs_remove: filesystem is not mounted");
-    return false;
+    return HAL_EUNINIT;
   }
 
   const int idx = find_path_index(path);
   if (idx < 0) {
-    return false;
+    return HAL_ENOENT;
   }
 
   s_littlefs.path_used[idx] = false;
   s_littlefs.paths[idx][0] = '\0';
-  return true;
+  return HAL_OK;
+}
+
+bool hal_littlefs_remove(const char *path) {
+  return hal_status_to_bool(hal_littlefs_remove_ex(path));
+}
+
+hal_status_t hal_littlefs_total_bytes_ex(size_t *out_bytes) {
+  if (!out_bytes) {
+    return HAL_EINVAL;
+  }
+  *out_bytes = 0u;
+  if (!s_littlefs.mounted) {
+    return HAL_EUNINIT;
+  }
+  *out_bytes = s_littlefs.total_bytes;
+  return HAL_OK;
 }
 
 size_t hal_littlefs_total_bytes(void) {
-  if (!s_littlefs.mounted) {
-    return 0u;
+  size_t bytes = 0u;
+  (void)hal_littlefs_total_bytes_ex(&bytes);
+  return bytes;
+}
+
+hal_status_t hal_littlefs_used_bytes_ex(size_t *out_bytes) {
+  if (!out_bytes) {
+    return HAL_EINVAL;
   }
-  return s_littlefs.total_bytes;
+  *out_bytes = 0u;
+  if (!s_littlefs.mounted) {
+    return HAL_EUNINIT;
+  }
+  *out_bytes = s_littlefs.used_bytes;
+  return HAL_OK;
 }
 
 size_t hal_littlefs_used_bytes(void) {
-  if (!s_littlefs.mounted) {
-    return 0u;
-  }
-  return s_littlefs.used_bytes;
+  size_t bytes = 0u;
+  (void)hal_littlefs_used_bytes_ex(&bytes);
+  return bytes;
 }
 
 #endif /* HAL_ENABLE_LITTLEFS */

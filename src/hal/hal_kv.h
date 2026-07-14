@@ -73,8 +73,9 @@ bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
  * explicitly if needed before disabling deferred mode.
  *
  * @param enabled true (default) for auto-commit, false to defer commits.
+ * @return HAL_OK, or HAL_ENOMEM if the module mutex cannot be created.
  */
-void hal_kv_set_auto_commit(bool enabled);
+hal_status_t hal_kv_set_auto_commit(bool enabled);
 
 /**
  * @brief Flush pending writes to non-volatile storage.
@@ -88,13 +89,14 @@ bool hal_kv_commit(void);
 
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
- * Status-returning KV APIs. Every legacy entry point above remains a
- * compatibility wrapper; the _ex variants return hal_status_t so callers can
+ * Status-returning KV APIs own validation and EEPROM I/O. The historical bool
+ * entry points are compatibility wrappers; the _ex variants return
+ * hal_status_t so callers can
  * distinguish invalid arguments (HAL_EINVAL), a read miss (HAL_ENOENT), a
  * caller buffer too small for a stored blob (HAL_EOVERFLOW), statistics on a
  * store that is not ready (HAL_EUNINIT) and backend write/commit failures
  * (HAL_EIO). The legacy bool API cannot separate an uninitialised store from a
- * genuine miss, so HAL_ENOENT covers both for the read helpers.
+ * genuine miss; the status API reports them as HAL_EUNINIT and HAL_ENOENT.
  */
 hal_status_t hal_kv_init_ex(uint16_t base_addr, uint16_t size_bytes);
 hal_status_t hal_kv_set_u32_ex(uint16_t key, uint32_t value);
@@ -106,7 +108,6 @@ hal_status_t hal_kv_get_blob_ex(uint16_t key, uint8_t *out, uint16_t out_size,
 hal_status_t hal_kv_delete_ex(uint16_t key);
 hal_status_t hal_kv_gc_ex(void);
 hal_status_t hal_kv_get_stats_ex(hal_kv_stats_t *out_stats);
-hal_status_t hal_kv_set_auto_commit_ex(bool enabled);
 hal_status_t hal_kv_commit_ex(void);
 
 #endif /* HAL_ENABLE_KV */

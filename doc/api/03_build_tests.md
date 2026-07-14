@@ -104,8 +104,8 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 
 - all `src/hal/impl/.mock/*.cpp` stubs,
 - the backend-neutral HAL sources in `UTIL_SOURCES` (see `CMakeLists.txt`),
-  including shared status adapters (`hal_spi_status.cpp`,
-  `hal_network_status.cpp`), HAL facades, compatibility layers, portable
+  including remaining shared MQTT/WireGuard status adapters in
+  `hal_network_status.cpp`, HAL facades, compatibility layers, portable
   device drivers and bundled frameworks,
 - `src/utils/unity.c` (Unity framework).
 
@@ -227,10 +227,10 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_swserial` | software UART RX inject, TX capture, pin reassignment |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
-| `test_hal_pga2311` | PGA2311 config validation, SPI frame writes, dB/code conversion, soft/hardware mute behavior |
+| `test_hal_pga2311` | PGA2311 status/config validation, pool exhaustion, injected SPI failures and retry, frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |
-| `test_hal_rgb_led` | init/init_ex, brightness clamp, off path, pre-init set_color guard |
+| `test_hal_rgb_led` | status-first init/init_ex, invalid config, allocation/transport failure, retry, brightness clamp, off and pre-init guard |
 | `test_hal_display` | status-first display API, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
@@ -251,7 +251,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
 | `test_hal_net` | shared endpoint/status shape, network limits, IPv4 literal/localhost/mock-DNS resolver behavior |
-| `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, missing-path remove semantics, input validation |
+| `test_hal_littlefs` | mount/unmount flow, size stats, path exists/remove helpers, format success/failure behavior, direct status operations, missing-path and unmounted-state semantics, input validation |
 | `test_hal_sdlogger` | EEPROM-backed file numbering, buffered log flush/close, crash-report formatting, SD/open failure paths |
 | `test_hal_udp` | begin/parse/read flow, handle-based multi-socket bind/RX/TX separation, chunked datagram reads, remote endpoint capture/reset-on-stop, beginPacket explicit/remote sender paths, write/endPacket behavior, input validation |
 | `test_hal_tcp` | TCP client connect/send/recv/shutdown/close, listener bind/listen/accept, backlog/pool limits, readiness probes and accepted-socket independence |
@@ -264,10 +264,10 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_bsd_sockets_c_compile` | C compile/link smoke test for socket headers, `netdb.h`, TCP/UDP client/server shapes, `fcntl()`, `select()`, `getaddrinfo()` and `setsockopt()` |
 | `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
-| `test_hal_network_status` | Cross-module WiFi/DNS, TCP/UDP, MQTT and WireGuard status API validation, outputs and failure mapping |
+| `test_hal_network_status` | Cross-module WiFi/DNS, TCP/UDP, MQTT and WireGuard status API validation, output initialization, pool exhaustion, state and failure mapping |
 | `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
-| `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates |
+| `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates, direct EEPROM-status propagation, uninitialised/range/capacity errors and output initialization |
 | `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
 | `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |
@@ -278,7 +278,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_critical_section` | critical-section nesting and interrupt-state restoration behavior |
 | `test_hal_dac` | DAC init compatibility plus status-first raw/millivolt writes, channel/range/uninitialised validation and unsupported-target reporting |
 | `test_hal_digipot` | MCP401x/MAX5395 facade init/set behavior, range validation and status mapping |
-| `test_hal_pcnt` | pulse-counter init/read/reset compatibility and status `_ex` validation |
+| `test_hal_pcnt` | pulse-counter init/read/reset success, invalid arguments, uninitialised channels and compatibility wrappers |
 | `test_hal_i2c_slave` | I2C-slave register map, callbacks, RX/TX transactions and invalid-input handling |
 | `test_hal_serial_session_vocabulary` | serial-session command/status vocabulary constants and conversion helpers |
 | `test_hal_status` | shared `hal_status_t` values, string conversion, predicates and bool/status adapters |
