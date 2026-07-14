@@ -47,28 +47,36 @@ static bool parse_ipv4_literal(const char *src,
   return true;
 }
 
-bool hal_net_resolve_ipv4(const char *host_or_ip,
-                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
+hal_status_t hal_net_resolve_ipv4_ex(const char *host_or_ip,
+                                     uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
   if (!host_or_ip || host_or_ip[0] == '\0' || !out_addr) {
     hal_derr("hal_net_resolve_ipv4: host_or_ip/output is invalid");
-    return false;
+    return HAL_EINVAL;
+  }
+  for (size_t i = 0u; i < HAL_NET_IPV4_ADDR_LEN; ++i) {
+    out_addr[i] = 0u;
   }
 
   if (parse_ipv4_literal(host_or_ip, out_addr)) {
-    return true;
+    return HAL_OK;
   }
 
   IPAddress resolved(0, 0, 0, 0);
   if (WiFi.hostByName(host_or_ip, resolved) != 1) {
     hal_derr("hal_net_resolve_ipv4: DNS lookup failed for '%s'", host_or_ip);
-    return false;
+    return HAL_ENOENT;
   }
 
   out_addr[0] = (uint8_t)resolved[0];
   out_addr[1] = (uint8_t)resolved[1];
   out_addr[2] = (uint8_t)resolved[2];
   out_addr[3] = (uint8_t)resolved[3];
-  return true;
+  return HAL_OK;
+}
+
+bool hal_net_resolve_ipv4(const char *host_or_ip,
+                          uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
+  return hal_status_to_bool(hal_net_resolve_ipv4_ex(host_or_ip, out_addr));
 }
 
 #endif /* HAL_ENABLE_WIFI */

@@ -42,10 +42,10 @@ void test_inject_and_read(void) {
 void test_reset(void) {
   hal_mock_pcnt_inject(1, 50);
   TEST_ASSERT_EQUAL_UINT32(50, hal_pcnt_read(1));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_pcnt_reset_ex(1));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_pcnt_reset(1));
   TEST_ASSERT_EQUAL_UINT32(0, hal_pcnt_read(1));
   hal_mock_pcnt_inject(1, 50);
-  hal_pcnt_reset(1);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_pcnt_reset(1));
   TEST_ASSERT_EQUAL_UINT32(0, hal_pcnt_read(1));
 }
 
@@ -64,7 +64,7 @@ void test_uninitialised_channel_reads_zero(void) {
   uint32_t count = 123u;
   TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_pcnt_read_ex(3, &count));
   TEST_ASSERT_EQUAL_UINT32(0, count);
-  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_pcnt_reset_ex(3));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_pcnt_reset(3));
   TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_pcnt_read_and_reset_ex(3, &count));
   TEST_ASSERT_EQUAL_UINT32(0, hal_pcnt_read(3)); // valid but not init in setUp
 }
@@ -73,7 +73,7 @@ void test_status_api_reports_invalid_arguments(void) {
   uint32_t count = 123u;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_read_ex(99, &count));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_read_ex(0, NULL));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_reset_ex(99));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_reset(99));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_read_and_reset_ex(99, &count));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_pcnt_read_and_reset_ex(0, NULL));
 }

@@ -23,6 +23,7 @@ typedef struct {
   size_t tx_len;
   uint32_t transfer_count;
   uint32_t dma_write_count;
+  bool fail_next_write;
   bool fail_next_dma_write;
 } mock_spi_bus_t;
 
@@ -32,6 +33,12 @@ static mock_spi_bus_t s_spi[2] = {};
 static inline uint8_t spi_bus_index(uint8_t bus) {
   HAL_ASSERT(bus <= 1u, "hal_spi: invalid bus index");
   return (bus <= 1u) ? bus : 0u;
+}
+
+static bool spi_settings_valid(const hal_spi_settings_t *settings) {
+  return settings == nullptr || ((settings->bit_order == HAL_SPI_LSBFIRST ||
+                                  settings->bit_order == HAL_SPI_MSBFIRST) &&
+                                 settings->data_mode <= HAL_SPI_MODE3);
 }
 
 static hal_spi_settings_t spi_default_settings(void) {
@@ -68,8 +75,11 @@ static uint8_t spi_next_rx(mock_spi_bus_t *st) {
   return 0xFFu;
 }
 
-void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
-                  uint8_t sck_pin) {
+hal_status_t hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
+                          uint8_t sck_pin) {
+  if (bus > 1u) {
+    return HAL_EINVAL;
+  }
   const uint8_t idx = spi_bus_index(bus);
   mock_spi_bus_t *st = &s_spi[idx];
   s_last_bus = idx;
@@ -78,6 +88,7 @@ void hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
   st->sck_pin = sck_pin;
   st->settings = spi_normalize_settings(nullptr);
   st->initialized = true;
+  return HAL_OK;
 }
 
 void hal_spi_deinit(uint8_t bus) {
@@ -96,95 +107,172 @@ void hal_spi_unlock(uint8_t bus) {
   }
 }
 
-void hal_spi_begin_transaction(uint8_t bus,
-                               const hal_spi_settings_t *settings) {
+hal_status_t hal_spi_begin_transaction(uint8_t bus,
+                                       const hal_spi_settings_t *settings) {
+  if (bus > 1u || !spi_settings_valid(settings)) {
+    return HAL_EINVAL;
+  }
   const uint8_t idx = spi_bus_index(bus);
   if (!s_spi[idx].initialized) {
-    hal_spi_init(idx, 0u, 0u, 0u);
+    const hal_status_t status = hal_spi_init(idx, 0u, 0u, 0u);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
   }
   s_last_bus = idx;
   s_spi[idx].settings = spi_normalize_settings(settings);
   s_spi[idx].transaction_active = true;
+  return HAL_OK;
 }
 
-void hal_spi_end_transaction(uint8_t bus) {
+hal_status_t hal_spi_end_transaction(uint8_t bus) {
+  if (bus > 1u) {
+    return HAL_EINVAL;
+  }
   s_spi[spi_bus_index(bus)].transaction_active = false;
+  return HAL_OK;
 }
 
-uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
+hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
+                                 uint8_t *out_received) {
+  if (bus > 1u || out_received == nullptr) {
+    return HAL_EINVAL;
+  }
   const uint8_t idx = spi_bus_index(bus);
   if (!s_spi[idx].initialized) {
-    hal_spi_init(idx, 0u, 0u, 0u);
+    const hal_status_t status = hal_spi_init(idx, 0u, 0u, 0u);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
   }
   mock_spi_bus_t *st = &s_spi[idx];
   spi_log_tx(st, data);
   st->transfer_count++;
-  return spi_next_rx(st);
+  *out_received = spi_next_rx(st);
+  return HAL_OK;
+}
+
+uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
+  uint8_t received = 0xFFu;
+  (void)hal_spi_transfer_ex(bus, data, &received);
+  return received;
+}
+
+hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
+                                   uint16_t *out_received) {
+  if (bus > 1u || out_received == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_spi[bus].initialized) {
+    const hal_status_t init_status = hal_spi_init(bus, 0u, 0u, 0u);
+    if (hal_status_is_error(init_status)) {
+      return init_status;
+    }
+  }
+  mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
+  uint16_t in = 0u;
+  uint8_t first = 0u;
+  uint8_t second = 0u;
+  hal_status_t status;
+  if (st->settings.bit_order == HAL_SPI_LSBFIRST) {
+    status = hal_spi_transfer_ex(bus, (uint8_t)(data & 0xFFu), &first);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
+    status = hal_spi_transfer_ex(bus, (uint8_t)(data >> 8), &second);
+    in = (uint16_t)(first | ((uint16_t)second << 8));
+  } else {
+    status = hal_spi_transfer_ex(bus, (uint8_t)(data >> 8), &first);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
+    status = hal_spi_transfer_ex(bus, (uint8_t)(data & 0xFFu), &second);
+    in = (uint16_t)(((uint16_t)first << 8) | second);
+  }
+  if (hal_status_is_error(status)) {
+    return status;
+  }
+  *out_received = in;
+  return HAL_OK;
 }
 
 uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {
-  mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
-  uint16_t in = 0u;
-  if (st->settings.bit_order == HAL_SPI_LSBFIRST) {
-    in = hal_spi_transfer(bus, (uint8_t)(data & 0xFFu));
-    in |= (uint16_t)hal_spi_transfer(bus, (uint8_t)(data >> 8)) << 8;
-  } else {
-    in = (uint16_t)hal_spi_transfer(bus, (uint8_t)(data >> 8)) << 8;
-    in |= hal_spi_transfer(bus, (uint8_t)(data & 0xFFu));
-  }
-  return in;
+  uint16_t received = 0xFFFFu;
+  (void)hal_spi_transfer16_ex(bus, data, &received);
+  return received;
 }
 
-void hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
-  if (buffer == NULL) {
-    return;
+hal_status_t hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
+  if (bus > 1u || (len > 0u && buffer == nullptr)) {
+    return HAL_EINVAL;
   }
-  for (size_t i = 0; i < len; ++i) {
-    buffer[i] = hal_spi_transfer(bus, buffer[i]);
-  }
+  return hal_spi_transfer_txrx(bus, buffer, buffer, len);
 }
 
-void hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
-                           size_t len) {
+hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
+                                   size_t len) {
+  if (bus > 1u || (len > 0u && tx == nullptr && rx == nullptr)) {
+    return HAL_EINVAL;
+  }
   for (size_t i = 0; i < len; ++i) {
     const uint8_t out = tx ? tx[i] : 0xFFu;
-    const uint8_t in = hal_spi_transfer(bus, out);
+    uint8_t in = 0u;
+    const hal_status_t status = hal_spi_transfer_ex(bus, out, &in);
+    if (hal_status_is_error(status)) {
+      return status;
+    }
     if (rx) {
       rx[i] = in;
     }
   }
+  return HAL_OK;
 }
 
-void hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
-  if (data == NULL) {
-    return;
+hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
+  if (bus > 1u || (len > 0u && data == nullptr)) {
+    return HAL_EINVAL;
   }
-  hal_spi_transfer_txrx(bus, data, NULL, len);
+  mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
+  if (st->fail_next_write) {
+    st->fail_next_write = false;
+    return HAL_EIO;
+  }
+  return hal_spi_transfer_txrx(bus, data, nullptr, len);
+}
+
+hal_status_t hal_spi_write_dma_ex(uint8_t bus, const uint8_t *data,
+                                  size_t len) {
+  hal_status_t status = hal_spi_write_dma_async_start_ex(bus, data, len);
+  if (hal_status_is_error(status)) {
+    return status;
+  }
+  return hal_spi_write_dma_async_wait_ex(bus);
 }
 
 bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
-  if (!hal_spi_write_dma_async_start(bus, data, len)) {
-    return false;
-  }
-  return hal_spi_write_dma_async_wait(bus);
+  return hal_status_to_bool(hal_spi_write_dma_ex(bus, data, len));
 }
 
-bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
-                                   size_t len) {
+hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
+                                              size_t len) {
+  if (bus > 1u || (len > 0u && data == nullptr)) {
+    return HAL_EINVAL;
+  }
   const uint8_t idx = spi_bus_index(bus);
   if (len == 0u) {
-    return true;
-  }
-  if (data == NULL) {
-    return false;
+    return HAL_OK;
   }
   s_spi[idx].dma_write_count++;
   if (s_spi[idx].fail_next_dma_write) {
     s_spi[idx].fail_next_dma_write = false;
-    return false;
+    return HAL_EIO;
   }
-  hal_spi_write(bus, data, len);
-  return true;
+  return hal_spi_write(bus, data, len);
+}
+
+bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
+                                   size_t len) {
+  return hal_status_to_bool(hal_spi_write_dma_async_start_ex(bus, data, len));
 }
 
 bool hal_spi_write_dma_async_busy(uint8_t bus) {
@@ -192,9 +280,12 @@ bool hal_spi_write_dma_async_busy(uint8_t bus) {
   return false;
 }
 
+hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus) {
+  return bus <= 1u ? HAL_OK : HAL_EINVAL;
+}
+
 bool hal_spi_write_dma_async_wait(uint8_t bus) {
-  (void)bus;
-  return true;
+  return hal_status_to_bool(hal_spi_write_dma_async_wait_ex(bus));
 }
 
 // ── Mock helpers
@@ -231,6 +322,10 @@ uint32_t hal_mock_spi_get_transfer_count(uint8_t bus) {
 
 uint32_t hal_mock_spi_get_dma_write_count(uint8_t bus) {
   return s_spi[spi_bus_index(bus)].dma_write_count;
+}
+
+void hal_mock_spi_fail_next_write(uint8_t bus, bool fail) {
+  s_spi[spi_bus_index(bus)].fail_next_write = fail;
 }
 
 void hal_mock_spi_fail_next_dma_write(uint8_t bus, bool fail) {

@@ -53,6 +53,7 @@ hal_status_t hal_wifi_disconnect_ex(bool erase_credentials);
 hal_status_t hal_wifi_set_hostname_ex(const char *hostname);
 hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
                                        bool non_blocking);
+hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms);
 hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size);
 hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size);

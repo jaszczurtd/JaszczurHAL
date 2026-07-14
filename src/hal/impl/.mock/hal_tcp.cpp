@@ -161,25 +161,35 @@ void hal_mock_tcp_reset(void) {
 
 void hal_mock_tcp_set_connect_result(bool result) { s_connect_result = result; }
 
-hal_tcp_socket_t hal_tcp_socket_open(void) {
-  hal_tcp_socket_t socket = allocate_socket();
-  if (!socket) {
-    hal_derr("hal_tcp_socket_open: socket pool exhausted");
+hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket) {
+  if (!out_socket) {
+    return HAL_EINVAL;
   }
+  *out_socket = allocate_socket();
+  if (!*out_socket) {
+    hal_derr("hal_tcp_socket_open: socket pool exhausted");
+    return HAL_ENOMEM;
+  }
+  return HAL_OK;
+}
+
+hal_tcp_socket_t hal_tcp_socket_open(void) {
+  hal_tcp_socket_t socket = NULL;
+  (void)hal_tcp_socket_open_ex(&socket);
   return socket;
 }
 
-bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
-                            const hal_net_endpoint_t *remote,
-                            uint32_t timeout_ms) {
+hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
+                                       const hal_net_endpoint_t *remote,
+                                       uint32_t timeout_ms) {
   (void)timeout_ms;
 
   if (!validate_endpoint(remote, "hal_tcp_socket_connect", "remote")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (!is_valid_socket(socket)) {
     hal_derr("hal_tcp_socket_connect: socket handle is invalid");
-    return false;
+    return HAL_EINVAL;
   }
 
   socket->connected = false;
@@ -189,21 +199,39 @@ bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
   socket->tx_len = 0u;
 
   if (!s_connect_result) {
-    return false;
+    return HAL_EIO;
   }
 
   socket->connected = true;
-  return true;
+  return HAL_OK;
 }
 
-int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
+bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
+                            const hal_net_endpoint_t *remote,
+                            uint32_t timeout_ms) {
+  return hal_status_to_bool(
+      hal_tcp_socket_connect_ex(socket, remote, timeout_ms));
+}
+
+hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
+                                    size_t len, size_t *out_sent) {
+  if (out_sent) {
+    *out_sent = 0u;
+  }
+  if (!out_sent) {
+    return HAL_EINVAL;
+  }
   if (len > 0u && data == NULL) {
     hal_derr("hal_tcp_socket_send: data is NULL while len > 0");
-    return -1;
+    return HAL_EINVAL;
   }
-  if (!is_valid_socket(socket) || !socket->connected) {
-    hal_derr("hal_tcp_socket_send: socket is invalid or not connected");
-    return -1;
+  if (!is_valid_socket(socket)) {
+    hal_derr("hal_tcp_socket_send: socket is invalid");
+    return HAL_EINVAL;
+  }
+  if (!socket->connected) {
+    hal_derr("hal_tcp_socket_send: socket is not connected");
+    return HAL_ESTATE;
   }
 
   size_t to_copy = len;
@@ -216,30 +244,59 @@ int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
   }
   socket->tx_len = (uint16_t)to_copy;
 
-  return (int)to_copy;
+  *out_sent = to_copy;
+  return HAL_OK;
 }
 
-int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
-                        uint32_t timeout_ms) {
-  (void)timeout_ms;
+int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
+  size_t sent = 0u;
+  return hal_status_is_ok(hal_tcp_socket_send_ex(socket, data, len, &sent))
+             ? (int)sent
+             : -1;
+}
 
+hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
+                                    size_t max_len, uint32_t timeout_ms,
+                                    size_t *out_received) {
+  (void)timeout_ms;
+  if (out_received) {
+    *out_received = 0u;
+  }
+  if (!out_received) {
+    return HAL_EINVAL;
+  }
   if (max_len > 0u && buffer == NULL) {
     hal_derr("hal_tcp_socket_recv: buffer is NULL while max_len > 0");
-    return -1;
+    return HAL_EINVAL;
   }
-  if (!is_valid_socket(socket) || !socket->connected) {
-    hal_derr("hal_tcp_socket_recv: socket is invalid or not connected");
-    return -1;
+  if (!is_valid_socket(socket)) {
+    hal_derr("hal_tcp_socket_recv: socket is invalid");
+    return HAL_EINVAL;
+  }
+  if (!socket->connected) {
+    hal_derr("hal_tcp_socket_recv: socket is not connected");
+    return HAL_ESTATE;
   }
   if (max_len == 0u) {
-    return 0;
+    return HAL_OK;
   }
 
   size_t read_max = max_len;
   if (read_max > 65535u) {
     read_max = 65535u;
   }
-  return socket_read(socket, (uint8_t *)buffer, (uint16_t)read_max);
+  *out_received =
+      (size_t)socket_read(socket, (uint8_t *)buffer, (uint16_t)read_max);
+  return HAL_OK;
+}
+
+int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
+                        uint32_t timeout_ms) {
+  size_t received = 0u;
+  return hal_status_is_ok(hal_tcp_socket_recv_ex(socket, buffer, max_len,
+                                                 timeout_ms, &received))
+             ? (int)received
+             : -1;
 }
 
 bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
@@ -277,27 +334,38 @@ void hal_tcp_socket_close(hal_tcp_socket_t socket) {
   reset_endpoint(&socket->remote_endpoint);
 }
 
-hal_tcp_listener_t hal_tcp_listener_open(void) {
+hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener) {
+  if (!out_listener) {
+    return HAL_EINVAL;
+  }
+  *out_listener = NULL;
   for (size_t i = 0u; i < HAL_TCP_LISTENER_MAX_INSTANCES; ++i) {
     if (!s_tcp_listener_pool[i].in_use) {
       reset_listener(&s_tcp_listener_pool[i]);
       s_tcp_listener_pool[i].in_use = true;
-      return &s_tcp_listener_pool[i];
+      *out_listener = &s_tcp_listener_pool[i];
+      return HAL_OK;
     }
   }
 
   hal_derr("hal_tcp_listener_open: listener pool exhausted");
-  return NULL;
+  return HAL_ENOMEM;
 }
 
-bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
-                           const hal_net_endpoint_t *local) {
+hal_tcp_listener_t hal_tcp_listener_open(void) {
+  hal_tcp_listener_t listener = NULL;
+  (void)hal_tcp_listener_open_ex(&listener);
+  return listener;
+}
+
+hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
+                                      const hal_net_endpoint_t *local) {
   if (!validate_endpoint(local, "hal_tcp_listener_bind", "local")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (!is_valid_listener(listener)) {
     hal_derr("hal_tcp_listener_bind: listener handle is invalid");
-    return false;
+    return HAL_EINVAL;
   }
 
   listener->local_endpoint = *local;
@@ -305,43 +373,63 @@ bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
   listener->listening = false;
   listener->pending_head = 0u;
   listener->pending_count = 0u;
-  return true;
+  return HAL_OK;
 }
 
-bool hal_tcp_listener_listen(hal_tcp_listener_t listener, uint8_t backlog) {
+bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
+                           const hal_net_endpoint_t *local) {
+  return hal_status_to_bool(hal_tcp_listener_bind_ex(listener, local));
+}
+
+hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
+                                        uint8_t backlog) {
   if (backlog == 0u) {
     hal_derr("hal_tcp_listener_listen: backlog must be > 0");
-    return false;
+    return HAL_EINVAL;
   }
-  if (!is_valid_listener(listener) || !listener->bound) {
-    hal_derr("hal_tcp_listener_listen: listener is invalid or not bound");
-    return false;
+  if (!is_valid_listener(listener)) {
+    hal_derr("hal_tcp_listener_listen: listener is invalid");
+    return HAL_EINVAL;
+  }
+  if (!listener->bound) {
+    hal_derr("hal_tcp_listener_listen: listener is not bound");
+    return HAL_ESTATE;
   }
 
   listener->backlog = capped_backlog(backlog);
   listener->listening = true;
   listener->pending_head = 0u;
   listener->pending_count = 0u;
-  return true;
+  return HAL_OK;
 }
 
-hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
-                                         hal_net_endpoint_t *remote,
-                                         uint32_t timeout_ms) {
-  (void)timeout_ms;
+bool hal_tcp_listener_listen(hal_tcp_listener_t listener, uint8_t backlog) {
+  return hal_status_to_bool(hal_tcp_listener_listen_ex(listener, backlog));
+}
 
-  if (!is_valid_listener(listener) || !listener->listening) {
-    hal_derr("hal_tcp_listener_accept: listener is invalid or not listening");
-    return NULL;
+hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        hal_tcp_socket_t *out_socket) {
+  (void)timeout_ms;
+  if (out_socket) {
+    *out_socket = NULL;
+  }
+  if (!out_socket || !is_valid_listener(listener)) {
+    return HAL_EINVAL;
+  }
+  if (!listener->listening) {
+    hal_derr("hal_tcp_listener_accept: listener is not listening");
+    return HAL_ESTATE;
   }
   if (listener->pending_count == 0u) {
-    return NULL;
+    return HAL_EAGAIN;
   }
 
   hal_tcp_socket_t socket = allocate_socket();
   if (!socket) {
     hal_derr("hal_tcp_listener_accept: socket pool exhausted");
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   const hal_net_endpoint_t pending_remote =
@@ -357,6 +445,15 @@ hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
     *remote = pending_remote;
   }
 
+  *out_socket = socket;
+  return HAL_OK;
+}
+
+hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
+                                         hal_net_endpoint_t *remote,
+                                         uint32_t timeout_ms) {
+  hal_tcp_socket_t socket = NULL;
+  (void)hal_tcp_listener_accept_ex(listener, remote, timeout_ms, &socket);
   return socket;
 }
 

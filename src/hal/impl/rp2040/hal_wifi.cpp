@@ -86,7 +86,7 @@ static hal_wifi_encryption_t map_encryption(uint8_t enc) {
   }
 }
 
-bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
+hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode) {
   WiFiMode_t platform_mode;
   switch (mode) {
   case HAL_WIFI_MODE_OFF:
@@ -103,46 +103,58 @@ bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
     break;
   default:
     hal_derr("hal_wifi_set_mode: invalid mode value %d", (int)mode);
-    return false;
+    return HAL_EINVAL;
   }
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   WiFi.mode(platform_mode);
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_wifi_disconnect(bool erase_credentials) {
+bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
+  return hal_status_to_bool(hal_wifi_set_mode_ex(mode));
+}
+
+hal_status_t hal_wifi_disconnect_ex(bool erase_credentials) {
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   WiFi.disconnect(erase_credentials);
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_wifi_set_hostname(const char *hostname) {
+bool hal_wifi_disconnect(bool erase_credentials) {
+  return hal_status_to_bool(hal_wifi_disconnect_ex(erase_credentials));
+}
+
+hal_status_t hal_wifi_set_hostname_ex(const char *hostname) {
   if (!hostname || hostname[0] == '\0') {
     hal_derr("hal_wifi_set_hostname: hostname is NULL/empty");
-    return false;
+    return HAL_EINVAL;
   }
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   WiFi.setHostname(hostname);
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_wifi_begin_station(const char *ssid, const char *password,
-                            bool non_blocking) {
+bool hal_wifi_set_hostname(const char *hostname) {
+  return hal_status_to_bool(hal_wifi_set_hostname_ex(hostname));
+}
+
+hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
+                                       bool non_blocking) {
   if (!ssid || ssid[0] == '\0') {
     hal_derr("hal_wifi_begin_station: SSID is NULL/empty");
-    return false;
+    return HAL_EINVAL;
   }
   if (!password) {
     hal_derr("hal_wifi_begin_station: password pointer is NULL");
-    return false;
+    return HAL_EINVAL;
   }
 
   wifi_ensure_mutex();
@@ -153,16 +165,26 @@ bool hal_wifi_begin_station(const char *ssid, const char *password,
     WiFi.begin(ssid, password);
   }
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
+bool hal_wifi_begin_station(const char *ssid, const char *password,
+                            bool non_blocking) {
+  return hal_status_to_bool(
+      hal_wifi_begin_station_ex(ssid, password, non_blocking));
+}
+
+hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms) {
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   s_wifi_timeout_ms = timeout_ms;
   WiFi.setTimeout(timeout_ms);
   hal_mutex_unlock(s_wifi_mutex);
-  return true;
+  return HAL_OK;
+}
+
+bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
+  return hal_status_to_bool(hal_wifi_set_timeout_ms_ex(timeout_ms));
 }
 
 bool hal_wifi_is_connected(void) {
@@ -215,33 +237,44 @@ int hal_wifi_get_strength(void) {
   return 0;
 }
 
-bool hal_wifi_get_local_ip(char *out, size_t out_size) {
+hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_local_ip"))
-    return false;
+    return HAL_EINVAL;
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   IPAddress ip = WiFi.localIP();
   hal_mutex_unlock(s_wifi_mutex);
 
-  return format_ipv4(out, out_size, "hal_wifi_get_local_ip", ip);
+  return format_ipv4(out, out_size, "hal_wifi_get_local_ip", ip)
+             ? HAL_OK
+             : HAL_EOVERFLOW;
 }
 
-bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
+bool hal_wifi_get_local_ip(char *out, size_t out_size) {
+  return hal_status_to_bool(hal_wifi_get_local_ip_ex(out, out_size));
+}
+
+hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_dns_ip"))
-    return false;
+    return HAL_EINVAL;
 
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   IPAddress ip = WiFi.dnsIP();
   hal_mutex_unlock(s_wifi_mutex);
 
-  return format_ipv4(out, out_size, "hal_wifi_get_dns_ip", ip);
+  return format_ipv4(out, out_size, "hal_wifi_get_dns_ip", ip) ? HAL_OK
+                                                               : HAL_EOVERFLOW;
 }
 
-bool hal_wifi_get_mac(char *out, size_t out_size) {
+bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
+  return hal_status_to_bool(hal_wifi_get_dns_ip_ex(out, out_size));
+}
+
+hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_wifi_get_mac"))
-    return false;
+    return HAL_EINVAL;
 
   uint8_t mac[6] = {};
   wifi_ensure_mutex();
@@ -249,17 +282,31 @@ bool hal_wifi_get_mac(char *out, size_t out_size) {
   WiFi.macAddress(mac);
   hal_mutex_unlock(s_wifi_mutex);
 
-  return format_mac(out, out_size, "hal_wifi_get_mac", mac);
+  return format_mac(out, out_size, "hal_wifi_get_mac", mac) ? HAL_OK
+                                                            : HAL_EOVERFLOW;
+}
+
+bool hal_wifi_get_mac(char *out, size_t out_size) {
+  return hal_status_to_bool(hal_wifi_get_mac_ex(out, out_size));
 }
 
 int hal_wifi_ping(const char *host_or_ip) {
-  return hal_wifi_ping_ex(host_or_ip, s_wifi_timeout_ms);
+  int result = -1;
+  (void)hal_wifi_ping_status_ex(host_or_ip, s_wifi_timeout_ms, &result);
+  return result;
 }
 
-int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
+hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
+                                     uint32_t timeout_ms, int *out_result) {
+  if (out_result != NULL) {
+    *out_result = -1;
+  }
   if (!host_or_ip || host_or_ip[0] == '\0') {
     hal_derr("hal_wifi_ping_ex: host_or_ip is NULL/empty");
-    return -1;
+    return HAL_EINVAL;
+  }
+  if (out_result == NULL) {
+    return HAL_EINVAL;
   }
 
   wifi_ensure_mutex();
@@ -268,26 +315,43 @@ int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
   if (timeout_ms != previous_timeout_ms) {
     WiFi.setTimeout(timeout_ms);
   }
-  const int res = WiFi.ping(host_or_ip);
+  *out_result = WiFi.ping(host_or_ip);
   if (timeout_ms != previous_timeout_ms) {
     WiFi.setTimeout(previous_timeout_ms);
   }
   hal_mutex_unlock(s_wifi_mutex);
-  return res;
+  return *out_result >= 0 ? HAL_OK : HAL_EIO;
 }
 
-int hal_wifi_scan_networks(void) {
+int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
+  int result = -1;
+  (void)hal_wifi_ping_status_ex(host_or_ip, timeout_ms, &result);
+  return result;
+}
+
+hal_status_t hal_wifi_scan_networks_ex(int *out_count) {
+  if (out_count == NULL) {
+    return HAL_EINVAL;
+  }
   wifi_ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   s_wifi_scan_count = WiFi.scanNetworks();
   hal_mutex_unlock(s_wifi_mutex);
-  return s_wifi_scan_count;
+  *out_count = s_wifi_scan_count;
+  return s_wifi_scan_count >= 0 ? HAL_OK : HAL_EIO;
 }
 
-bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+int hal_wifi_scan_networks(void) {
+  int count = -1;
+  (void)hal_wifi_scan_networks_ex(&count);
+  return count;
+}
+
+hal_status_t hal_wifi_get_scan_result_ex(size_t index,
+                                         hal_wifi_scan_result_t *out) {
   if (out == NULL) {
     hal_derr("hal_wifi_get_scan_result: output pointer is NULL");
-    return false;
+    return HAL_EINVAL;
   }
 
   wifi_ensure_mutex();
@@ -296,7 +360,7 @@ bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
     hal_mutex_unlock(s_wifi_mutex);
     hal_derr("hal_wifi_get_scan_result: index %u out of range",
              (unsigned)index);
-    return false;
+    return HAL_ENOENT;
   }
 
   bool ssid_ok =
@@ -307,7 +371,11 @@ bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
   out->channel = (int32_t)WiFi.channel((int)index);
   out->rssi = (int32_t)WiFi.RSSI((int)index);
   hal_mutex_unlock(s_wifi_mutex);
-  return ssid_ok;
+  return ssid_ok ? HAL_OK : HAL_EOVERFLOW;
+}
+
+bool hal_wifi_get_scan_result(size_t index, hal_wifi_scan_result_t *out) {
+  return hal_status_to_bool(hal_wifi_get_scan_result_ex(index, out));
 }
 
 const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {

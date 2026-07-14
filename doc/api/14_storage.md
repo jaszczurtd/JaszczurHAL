@@ -240,7 +240,7 @@ bool hal_kv_get_blob(uint16_t key, uint8_t *out, uint16_t out_size, uint16_t *ou
 bool hal_kv_delete(uint16_t key);
 bool hal_kv_gc(void);
 bool hal_kv_get_stats(hal_kv_stats_t *out_stats);
-void hal_kv_set_auto_commit(bool enabled);
+hal_status_t hal_kv_set_auto_commit(bool enabled);
 bool hal_kv_commit(void);
 ```
 
@@ -328,11 +328,14 @@ void example_kv(void) {
 }
 ```
 
-**Status-returning `_ex` variants:** every function above has an additive
-`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
-A read miss maps to `HAL_ENOENT`, and `hal_kv_get_blob_ex()` reports a too-small
-caller buffer distinctly as `HAL_EOVERFLOW` (with the required length in
-`*out_len`).
+**Status API:** the `_ex` operations own validation and EEPROM I/O; the
+historical bool functions above are thin compatibility wrappers. The
+historically `void` `hal_kv_set_auto_commit()` now returns `hal_status_t`
+directly. A read miss maps to `HAL_ENOENT`, use before successful init to
+`HAL_EUNINIT`, an invalid EEPROM range to `HAL_EOVERFLOW`, insufficient bank
+capacity to `HAL_ENOMEM`, and underlying EEPROM failures are propagated.
+`hal_kv_get_blob_ex()` reports a too-small caller buffer as `HAL_EOVERFLOW`
+with the required length in `*out_len`.
 
 ```c
 uint8_t  buf[64];
@@ -340,7 +343,8 @@ uint16_t len = 0;
 hal_status_t st = hal_kv_get_blob_ex(KEY_PROFILE, buf, sizeof(buf), &len);
 switch (st) {
 case HAL_OK:        use(buf, len);                       break;
-case HAL_ENOENT:    /* key absent or store not ready */  break;
+case HAL_ENOENT:    /* key absent */                     break;
+case HAL_EUNINIT:   /* store not initialized */          break;
 case HAL_EOVERFLOW: /* buf too small; *len = needed */    break;
 default:            break;
 }
@@ -356,14 +360,16 @@ Thread-safe wrapper for LittleFS mount/format and lightweight path helpers.
 ```c
 #include <hal/hal_littlefs.h>
 
-bool   hal_littlefs_begin(void);
-void   hal_littlefs_end(void);
-bool   hal_littlefs_format(void);
-bool   hal_littlefs_is_mounted(void);
-bool   hal_littlefs_exists(const char *path);
-bool   hal_littlefs_remove(const char *path);
-size_t hal_littlefs_total_bytes(void);
-size_t hal_littlefs_used_bytes(void);
+hal_status_t hal_littlefs_set_progress_callback(
+    hal_littlefs_progress_callback_t callback, void *ctx);
+bool         hal_littlefs_begin(void);
+hal_status_t hal_littlefs_end(void);
+bool         hal_littlefs_format(void);
+bool         hal_littlefs_is_mounted(void);
+bool         hal_littlefs_exists(const char *path);
+bool         hal_littlefs_remove(const char *path);
+size_t       hal_littlefs_total_bytes(void);
+size_t       hal_littlefs_used_bytes(void);
 ```
 
 **Behavior notes:**
@@ -438,9 +444,14 @@ void hal_mock_littlefs_set_used_bytes(size_t used_bytes);
 void hal_mock_littlefs_set_exists(const char *path, bool exists);
 ```
 
-**Status-returning `_ex` variants:** every function above has an additive
-`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
-The plain state query `hal_littlefs_is_mounted()` has no `_ex` form.
+**Status API:** lifecycle, path and size `_ex` operations own validation and
+backend I/O; historical bool/value functions are thin compatibility wrappers.
+The historically `void` callback setter and unmount function now return
+`hal_status_t` directly. The plain state query
+`hal_littlefs_is_mounted()` has no `_ex` form. An invalid path/output maps to
+`HAL_EINVAL`, use while unmounted to `HAL_EUNINIT`, a missing path to
+`HAL_ENOENT`, an unconfigured STM32 partition to `HAL_ECONFIG`, and native
+mount/format/stat/unmount failures to `HAL_EIO`.
 
 ```c
 if (hal_littlefs_begin_ex() != HAL_OK) {

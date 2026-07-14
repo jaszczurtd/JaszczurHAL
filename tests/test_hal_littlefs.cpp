@@ -78,7 +78,8 @@ void test_format_clears_files_and_unmounts(void) {
 void test_progress_callback_runs_during_format(void) {
   uint32_t marker = 0x5678u;
 
-  hal_littlefs_set_progress_callback(progress_callback, &marker);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_littlefs_set_progress_callback(progress_callback, &marker));
 
   TEST_ASSERT_TRUE(hal_littlefs_format());
   TEST_ASSERT_EQUAL_UINT32(2u, s_progress_calls);
@@ -120,7 +121,7 @@ void test_ex_lifecycle_and_status(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_used_bytes_ex(&bytes));
   TEST_ASSERT_EQUAL_INT(1024u, bytes);
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_end_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_littlefs_end());
 }
 
 void test_ex_path_validation_and_lookup(void) {

@@ -4,6 +4,7 @@
 #ifdef HAL_ENABLE_PGA2311
 
 #include "hal_spi.h"
+#include "hal_status.h"
 
 /**
  * @file hal_pga2311.h
@@ -44,9 +45,9 @@ extern "C" {
 
 /** @brief Raw gain-code constants (8-bit per channel). */
 #define HAL_PGA2311_CODE_MUTE 0x00u
-#define HAL_PGA2311_CODE_MIN  0x01u
-#define HAL_PGA2311_CODE_0DB  0xC0u
-#define HAL_PGA2311_CODE_MAX  0xFFu
+#define HAL_PGA2311_CODE_MIN 0x01u
+#define HAL_PGA2311_CODE_0DB 0xC0u
+#define HAL_PGA2311_CODE_MAX 0xFFu
 
 /** @brief Gain range in half-dB units for code-based volume control. */
 #define HAL_PGA2311_GAIN_HALF_DB_MIN (-191)
@@ -58,8 +59,8 @@ extern "C" {
 
 /** @brief Hardware mute input polarity. */
 typedef enum {
-    HAL_PGA2311_MUTE_ACTIVE_LOW = 0,  /**< mute asserted at logic LOW.  */
-    HAL_PGA2311_MUTE_ACTIVE_HIGH = 1, /**< mute asserted at logic HIGH. */
+  HAL_PGA2311_MUTE_ACTIVE_LOW = 0,  /**< mute asserted at logic LOW.  */
+  HAL_PGA2311_MUTE_ACTIVE_HIGH = 1, /**< mute asserted at logic HIGH. */
 } hal_pga2311_mute_polarity_t;
 
 /**
@@ -68,17 +69,19 @@ typedef enum {
  * Defaults can be obtained via hal_pga2311_default_config().
  */
 typedef struct {
-    uint8_t spi_bus;      /**< SPI controller index (0 = SPI, 1 = SPI1). */
-    uint8_t cs_pin;       /**< Chip-select GPIO pin (required). */
-    uint8_t mute_pin;     /**< Optional hardware mute pin, or HAL_PGA2311_MUTE_PIN_NONE. */
+  uint8_t spi_bus;  /**< SPI controller index (0 = SPI, 1 = SPI1). */
+  uint8_t cs_pin;   /**< Chip-select GPIO pin (required). */
+  uint8_t mute_pin; /**< Optional hardware mute pin, or
+                       HAL_PGA2311_MUTE_PIN_NONE. */
 
-    hal_pga2311_mute_polarity_t mute_polarity; /**< Hardware mute polarity. */
+  hal_pga2311_mute_polarity_t mute_polarity; /**< Hardware mute polarity. */
 
-    uint32_t spi_clock_hz; /**< SPI clock in Hz (0 = HAL_PGA2311_SPI_DEFAULT_HZ). */
-    uint8_t spi_bit_order; /**< HAL_SPI_MSBFIRST or HAL_SPI_LSBFIRST. */
-    uint8_t spi_mode;      /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
+  uint32_t
+      spi_clock_hz; /**< SPI clock in Hz (0 = HAL_PGA2311_SPI_DEFAULT_HZ). */
+  uint8_t spi_bit_order; /**< HAL_SPI_MSBFIRST or HAL_SPI_LSBFIRST. */
+  uint8_t spi_mode;      /**< HAL_SPI_MODE0..HAL_SPI_MODE3. */
 
-    bool start_muted; /**< Apply mute immediately after init. */
+  bool start_muted; /**< Apply mute immediately after init. */
 } hal_pga2311_config_t;
 
 /** @brief Opaque handle type; NULL means invalid/uninitialised. */
@@ -101,8 +104,14 @@ hal_pga2311_config_t hal_pga2311_default_config(void);
  * application/board setup.
  *
  * @param cfg Pointer to configuration descriptor.
- * @return Non-NULL handle on success, NULL on invalid config or pool exhaustion.
+ * @param out_handle Receives the created handle on success and NULL on error.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments/configuration,
+ *         HAL_ENOMEM when the static pool or mutex allocation is exhausted,
+ *         or a propagated SPI status when start-muted setup writes a frame.
  */
+hal_status_t hal_pga2311_init_ex(const hal_pga2311_config_t *cfg,
+                                 hal_pga2311_t *out_handle);
+/** @brief Compatibility wrapper returning NULL on any init error. */
 hal_pga2311_t hal_pga2311_init(const hal_pga2311_config_t *cfg);
 
 /**
@@ -116,13 +125,19 @@ void hal_pga2311_deinit(hal_pga2311_t h);
  * @param h Valid handle.
  * @param left_code Left channel raw code.
  * @param right_code Right channel raw code.
- * @return true on success; false on invalid handle/config or SPI write failure.
+ * @return HAL_OK, HAL_EINVAL for an invalid handle, or a propagated SPI error.
  */
-bool hal_pga2311_set_raw(hal_pga2311_t h, uint8_t left_code, uint8_t right_code);
+hal_status_t hal_pga2311_set_raw_ex(hal_pga2311_t h, uint8_t left_code,
+                                    uint8_t right_code);
+/** @brief Compatibility wrapper over hal_pga2311_set_raw_ex(). */
+bool hal_pga2311_set_raw(hal_pga2311_t h, uint8_t left_code,
+                         uint8_t right_code);
 
 /**
  * @brief Set both channels to the same raw code.
  */
+hal_status_t hal_pga2311_set_raw_both_ex(hal_pga2311_t h, uint8_t code);
+/** @brief Compatibility wrapper over hal_pga2311_set_raw_both_ex(). */
 bool hal_pga2311_set_raw_both(hal_pga2311_t h, uint8_t code);
 
 /**
@@ -130,8 +145,11 @@ bool hal_pga2311_set_raw_both(hal_pga2311_t h, uint8_t code);
  *
  * Valid range: HAL_PGA2311_GAIN_HALF_DB_MIN..HAL_PGA2311_GAIN_HALF_DB_MAX.
  */
-bool hal_pga2311_set_gain_half_db(hal_pga2311_t h,
-                                  int16_t left_half_db,
+hal_status_t hal_pga2311_set_gain_half_db_ex(hal_pga2311_t h,
+                                             int16_t left_half_db,
+                                             int16_t right_half_db);
+/** @brief Compatibility wrapper over hal_pga2311_set_gain_half_db_ex(). */
+bool hal_pga2311_set_gain_half_db(hal_pga2311_t h, int16_t left_half_db,
                                   int16_t right_half_db);
 
 /**
@@ -139,11 +157,16 @@ bool hal_pga2311_set_gain_half_db(hal_pga2311_t h,
  *
  * Valid range: HAL_PGA2311_GAIN_DB_MIN..HAL_PGA2311_GAIN_DB_MAX.
  */
+hal_status_t hal_pga2311_set_gain_db_ex(hal_pga2311_t h, float left_db,
+                                        float right_db);
+/** @brief Compatibility wrapper over hal_pga2311_set_gain_db_ex(). */
 bool hal_pga2311_set_gain_db(hal_pga2311_t h, float left_db, float right_db);
 
 /**
  * @brief Set the same gain for both channels in dB.
  */
+hal_status_t hal_pga2311_set_gain_db_both_ex(hal_pga2311_t h, float db);
+/** @brief Compatibility wrapper over hal_pga2311_set_gain_db_both_ex(). */
 bool hal_pga2311_set_gain_db_both(hal_pga2311_t h, float db);
 
 /**
@@ -153,6 +176,8 @@ bool hal_pga2311_set_gain_db_both(hal_pga2311_t h, float db);
  * is emulated by writing HAL_PGA2311_CODE_MUTE to both channels and restoring
  * the cached target codes when unmuted.
  */
+hal_status_t hal_pga2311_set_mute_ex(hal_pga2311_t h, bool mute);
+/** @brief Compatibility wrapper over hal_pga2311_set_mute_ex(). */
 bool hal_pga2311_set_mute(hal_pga2311_t h, bool mute);
 
 /**
@@ -167,8 +192,7 @@ bool hal_pga2311_is_muted(hal_pga2311_t h);
  * These are the target (requested) values, which may differ from hardware
  * output while software mute is active.
  */
-bool hal_pga2311_get_target_raw(hal_pga2311_t h,
-                                uint8_t *left_code,
+bool hal_pga2311_get_target_raw(hal_pga2311_t h, uint8_t *left_code,
                                 uint8_t *right_code);
 
 /**
@@ -176,13 +200,15 @@ bool hal_pga2311_get_target_raw(hal_pga2311_t h,
  *
  * Returns false if either target code is HAL_PGA2311_CODE_MUTE.
  */
-bool hal_pga2311_get_target_gain_half_db(hal_pga2311_t h,
-                                         int16_t *left_half_db,
+bool hal_pga2311_get_target_gain_half_db(hal_pga2311_t h, int16_t *left_half_db,
                                          int16_t *right_half_db);
 
 /**
  * @brief Convert gain from 0.5 dB units to raw PGA2311 code.
  */
+hal_status_t hal_pga2311_gain_half_db_to_raw_ex(int16_t half_db,
+                                                uint8_t *out_code);
+/** @brief Compatibility wrapper over hal_pga2311_gain_half_db_to_raw_ex(). */
 bool hal_pga2311_gain_half_db_to_raw(int16_t half_db, uint8_t *out_code);
 
 /**
@@ -190,6 +216,9 @@ bool hal_pga2311_gain_half_db_to_raw(int16_t half_db, uint8_t *out_code);
  *
  * HAL_PGA2311_CODE_MUTE is treated as non-convertible and returns false.
  */
+hal_status_t hal_pga2311_raw_to_gain_half_db_ex(uint8_t code,
+                                                int16_t *out_half_db);
+/** @brief Compatibility wrapper over hal_pga2311_raw_to_gain_half_db_ex(). */
 bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 
 #ifdef __cplusplus

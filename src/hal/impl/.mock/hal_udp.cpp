@@ -191,47 +191,75 @@ void hal_mock_udp_reset(void) {
   s_default_udp = NULL;
 }
 
-hal_udp_socket_t hal_udp_socket_open(void) {
+hal_status_t hal_udp_socket_open_ex(hal_udp_socket_t *out_socket) {
+  if (!out_socket) {
+    return HAL_EINVAL;
+  }
+  *out_socket = NULL;
   for (size_t i = 0u; i < HAL_UDP_SOCKET_MAX_INSTANCES; ++i) {
     if (!s_udp_pool[i].in_use) {
       reset_socket(&s_udp_pool[i]);
       s_udp_pool[i].in_use = true;
-      return &s_udp_pool[i];
+      *out_socket = &s_udp_pool[i];
+      return HAL_OK;
     }
   }
 
   hal_derr("hal_udp_socket_open: socket pool exhausted");
-  return NULL;
+  return HAL_ENOMEM;
 }
 
-bool hal_udp_socket_bind(hal_udp_socket_t socket,
-                         const hal_net_endpoint_t *local) {
+hal_udp_socket_t hal_udp_socket_open(void) {
+  hal_udp_socket_t socket = NULL;
+  (void)hal_udp_socket_open_ex(&socket);
+  return socket;
+}
+
+hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
+                                    const hal_net_endpoint_t *local) {
   if (!validate_endpoint(local, "hal_udp_socket_bind", "local")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (!is_valid_socket(socket)) {
     hal_derr("hal_udp_socket_bind: socket handle is invalid");
-    return false;
+    return HAL_EINVAL;
   }
 
   socket->local_endpoint = *local;
   socket->bound = true;
   reset_socket_io(socket);
-  return true;
+  return HAL_OK;
 }
 
-int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
-                          const hal_net_endpoint_t *remote) {
+bool hal_udp_socket_bind(hal_udp_socket_t socket,
+                         const hal_net_endpoint_t *local) {
+  return hal_status_to_bool(hal_udp_socket_bind_ex(socket, local));
+}
+
+hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
+                                      size_t len,
+                                      const hal_net_endpoint_t *remote,
+                                      size_t *out_sent) {
+  if (out_sent) {
+    *out_sent = 0u;
+  }
+  if (!out_sent) {
+    return HAL_EINVAL;
+  }
   if (len > 0u && data == NULL) {
     hal_derr("hal_udp_socket_sendto: data is NULL while len > 0");
-    return -1;
+    return HAL_EINVAL;
   }
   if (!validate_endpoint(remote, "hal_udp_socket_sendto", "remote")) {
-    return -1;
+    return HAL_EINVAL;
   }
-  if (!is_valid_socket(socket) || !socket->bound) {
-    hal_derr("hal_udp_socket_sendto: socket is invalid or not bound");
-    return -1;
+  if (!is_valid_socket(socket)) {
+    hal_derr("hal_udp_socket_sendto: socket is invalid");
+    return HAL_EINVAL;
+  }
+  if (!socket->bound) {
+    hal_derr("hal_udp_socket_sendto: socket is not bound");
+    return HAL_ESTATE;
   }
 
   size_t to_copy = len;
@@ -249,24 +277,45 @@ int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
   endpoint_to_ip_string(remote, socket->last_begin_packet_host,
                         sizeof(socket->last_begin_packet_host));
   socket->last_begin_packet_port = remote->port;
-  return (int)to_copy;
+  *out_sent = to_copy;
+  return HAL_OK;
 }
 
-int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
-                            size_t max_len, hal_net_endpoint_t *remote,
-                            uint32_t timeout_ms) {
-  (void)timeout_ms;
+int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
+                          const hal_net_endpoint_t *remote) {
+  size_t sent = 0u;
+  return hal_status_is_ok(
+             hal_udp_socket_sendto_ex(socket, data, len, remote, &sent))
+             ? (int)sent
+             : -1;
+}
 
+hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
+                                        size_t max_len,
+                                        hal_net_endpoint_t *remote,
+                                        uint32_t timeout_ms,
+                                        size_t *out_received) {
+  (void)timeout_ms;
+  if (out_received) {
+    *out_received = 0u;
+  }
+  if (!out_received) {
+    return HAL_EINVAL;
+  }
   if (max_len > 0u && buffer == NULL) {
     hal_derr("hal_udp_socket_recvfrom: buffer is NULL while max_len > 0");
-    return -1;
+    return HAL_EINVAL;
   }
-  if (!is_valid_socket(socket) || !socket->bound) {
-    hal_derr("hal_udp_socket_recvfrom: socket is invalid or not bound");
-    return -1;
+  if (!is_valid_socket(socket)) {
+    hal_derr("hal_udp_socket_recvfrom: socket is invalid");
+    return HAL_EINVAL;
+  }
+  if (!socket->bound) {
+    hal_derr("hal_udp_socket_recvfrom: socket is not bound");
+    return HAL_ESTATE;
   }
   if (!socket->rx_pending) {
-    return 0;
+    return HAL_OK;
   }
 
   if (remote) {
@@ -274,14 +323,26 @@ int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
   }
 
   if (max_len == 0u) {
-    return 0;
+    return HAL_OK;
   }
 
   size_t read_max = max_len;
   if (read_max > 65535u) {
     read_max = 65535u;
   }
-  return socket_read(socket, (uint8_t *)buffer, (uint16_t)read_max);
+  *out_received =
+      (size_t)socket_read(socket, (uint8_t *)buffer, (uint16_t)read_max);
+  return HAL_OK;
+}
+
+int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
+                            size_t max_len, hal_net_endpoint_t *remote,
+                            uint32_t timeout_ms) {
+  size_t received = 0u;
+  return hal_status_is_ok(hal_udp_socket_recvfrom_ex(
+             socket, buffer, max_len, remote, timeout_ms, &received))
+             ? (int)received
+             : -1;
 }
 
 bool hal_udp_socket_can_recv(hal_udp_socket_t socket) {
@@ -302,88 +363,148 @@ void hal_udp_socket_close(hal_udp_socket_t socket) {
   reset_socket(socket);
 }
 
-bool hal_udp_begin(uint16_t local_port) {
+hal_status_t hal_udp_begin_ex(uint16_t local_port) {
   if (local_port == 0u) {
     hal_derr("hal_udp_begin: local_port must be > 0");
-    return false;
+    return HAL_EINVAL;
   }
 
   if (!is_valid_socket(s_default_udp)) {
-    s_default_udp = hal_udp_socket_open();
-    if (!s_default_udp) {
+    const hal_status_t open_status = hal_udp_socket_open_ex(&s_default_udp);
+    if (hal_status_is_error(open_status)) {
       hal_derr("hal_udp_begin: socket allocation failed");
-      return false;
+      return open_status;
     }
   }
 
   hal_net_endpoint_t local = {};
   local.family = HAL_NET_AF_INET;
   local.port = local_port;
-  return hal_udp_socket_bind(s_default_udp, &local);
+  return hal_udp_socket_bind_ex(s_default_udp, &local);
+}
+
+bool hal_udp_begin(uint16_t local_port) {
+  return hal_status_to_bool(hal_udp_begin_ex(local_port));
 }
 
 void hal_udp_stop(void) { hal_udp_socket_close(s_default_udp); }
 
-int hal_udp_parse_packet(void) {
+hal_status_t hal_udp_parse_packet_ex(int *out_size) {
+  if (!out_size) {
+    return HAL_EINVAL;
+  }
+  *out_size = 0;
   hal_udp_socket_t socket = default_socket();
-  if (!socket || !socket->bound || !socket->rx_pending) {
-    return 0;
+  if (!socket || !socket->bound) {
+    return HAL_EUNINIT;
+  }
+  if (!socket->rx_pending) {
+    return HAL_OK;
+  }
+  *out_size = (int)(socket->rx_len - socket->rx_pos);
+  return HAL_OK;
+}
+
+int hal_udp_parse_packet(void) {
+  int size = 0;
+  (void)hal_udp_parse_packet_ex(&size);
+  return size;
+}
+
+hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
+                             uint16_t *out_read) {
+  if (out_read) {
+    *out_read = 0u;
+  }
+  if (!out_read) {
+    return HAL_EINVAL;
+  }
+  if (max_len > 0u && buffer == NULL) {
+    hal_derr("hal_udp_read: buffer is NULL while max_len > 0");
+    return HAL_EINVAL;
   }
 
-  return (int)(socket->rx_len - socket->rx_pos);
+  hal_udp_socket_t socket = default_socket();
+  if (!socket || !socket->bound) {
+    return HAL_EUNINIT;
+  }
+  if (max_len == 0u) {
+    return HAL_OK;
+  }
+  *out_read = (uint16_t)socket_read(socket, buffer, max_len);
+  return HAL_OK;
 }
 
 int hal_udp_read(uint8_t *buffer, uint16_t max_len) {
-  if (max_len > 0u && buffer == NULL) {
-    hal_derr("hal_udp_read: buffer is NULL while max_len > 0");
-    return -1;
-  }
-
-  hal_udp_socket_t socket = default_socket();
-  if (!socket || max_len == 0u) {
-    return 0;
-  }
-
-  return socket_read(socket, buffer, max_len);
+  uint16_t read = 0u;
+  const hal_status_t status = hal_udp_read_ex(buffer, max_len, &read);
+  return hal_status_is_ok(status) || status == HAL_EUNINIT ? (int)read : -1;
 }
 
-bool hal_udp_remote_ip(char *out, size_t out_size) {
+hal_status_t hal_udp_remote_ip_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_udp_remote_ip")) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_udp_socket_t socket = default_socket();
   if (!socket) {
-    (void)snprintf(out, out_size, "%s", "0.0.0.0");
-    return false;
+    const int written = snprintf(out, out_size, "%s", "0.0.0.0");
+    if (written < 0) {
+      return HAL_EIO;
+    }
+    if ((size_t)written >= out_size) {
+      return HAL_EOVERFLOW;
+    }
+    return HAL_EUNINIT;
   }
-
-  if (snprintf(out, out_size, "%s", socket->remote_ip) < 0) {
+  const int written = snprintf(out, out_size, "%s", socket->remote_ip);
+  if (written < 0) {
     hal_derr("hal_udp_remote_ip: snprintf failed");
-    return false;
+    return HAL_EIO;
   }
+  if ((size_t)written >= out_size) {
+    return HAL_EOVERFLOW;
+  }
+  return socket->remote_port != 0u ? HAL_OK : HAL_ENOENT;
+}
 
-  return socket->remote_port != 0u;
+bool hal_udp_remote_ip(char *out, size_t out_size) {
+  return hal_status_to_bool(hal_udp_remote_ip_ex(out, out_size));
+}
+
+hal_status_t hal_udp_remote_port_ex(uint16_t *out_port) {
+  if (!out_port) {
+    return HAL_EINVAL;
+  }
+  *out_port = 0u;
+  hal_udp_socket_t socket = default_socket();
+  if (!socket || !socket->bound) {
+    return HAL_EUNINIT;
+  }
+  *out_port = socket->remote_port;
+  return *out_port != 0u ? HAL_OK : HAL_ENOENT;
 }
 
 uint16_t hal_udp_remote_port(void) {
-  hal_udp_socket_t socket = default_socket();
-  return socket ? socket->remote_port : 0u;
+  uint16_t port = 0u;
+  (void)hal_udp_remote_port_ex(&port);
+  return port;
 }
 
-bool hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port) {
+hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
+                                     uint16_t remote_port) {
   if (!validate_non_empty(host_or_ip, "hal_udp_begin_packet", "host_or_ip")) {
-    return false;
+    return HAL_EINVAL;
   }
   if (remote_port == 0u) {
     hal_derr("hal_udp_begin_packet: remote_port must be > 0");
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_udp_socket_t socket = default_socket();
   if (!socket || !socket->bound) {
     hal_derr("hal_udp_begin_packet: UDP socket is not started");
-    return false;
+    return HAL_EUNINIT;
   }
 
   snprintf(socket->last_begin_packet_host,
@@ -393,19 +514,23 @@ bool hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port) {
   socket->tx_len = 0u;
   socket->end_packet_called = false;
   socket->last_tx_remote_valid = false;
-  return true;
+  return HAL_OK;
 }
 
-bool hal_udp_begin_packet_remote(void) {
+bool hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port) {
+  return hal_status_to_bool(hal_udp_begin_packet_ex(host_or_ip, remote_port));
+}
+
+hal_status_t hal_udp_begin_packet_remote_ex(void) {
   hal_udp_socket_t socket = default_socket();
   if (!socket || !socket->bound) {
     hal_derr("hal_udp_begin_packet_remote: UDP socket is not started");
-    return false;
+    return HAL_EUNINIT;
   }
   if (socket->remote_port == 0u ||
       endpoint_is_zero_ipv4(&socket->remote_endpoint)) {
     hal_derr("hal_udp_begin_packet_remote: remote endpoint is not available");
-    return false;
+    return HAL_ENOENT;
   }
 
   snprintf(socket->last_begin_packet_host,
@@ -416,18 +541,35 @@ bool hal_udp_begin_packet_remote(void) {
   socket->end_packet_called = false;
   socket->last_tx_remote = socket->remote_endpoint;
   socket->last_tx_remote_valid = true;
-  return true;
+  return HAL_OK;
 }
 
-uint16_t hal_udp_write(const uint8_t *data, uint16_t len) {
+bool hal_udp_begin_packet_remote(void) {
+  return hal_status_to_bool(hal_udp_begin_packet_remote_ex());
+}
+
+hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
+                              uint16_t *out_written) {
+  if (out_written) {
+    *out_written = 0u;
+  }
+  if (!out_written) {
+    return HAL_EINVAL;
+  }
   if (len > 0u && data == NULL) {
     hal_derr("hal_udp_write: data is NULL while len > 0");
-    return 0u;
+    return HAL_EINVAL;
   }
 
   hal_udp_socket_t socket = default_socket();
-  if (!socket || !socket->bound || !socket->packet_started || len == 0u) {
-    return 0u;
+  if (!socket || !socket->bound) {
+    return HAL_EUNINIT;
+  }
+  if (!socket->packet_started) {
+    return HAL_ESTATE;
+  }
+  if (len == 0u) {
+    return HAL_OK;
   }
 
   uint16_t room = (uint16_t)(MOCK_UDP_PAYLOAD_BUF_SIZE - socket->tx_len);
@@ -441,28 +583,51 @@ uint16_t hal_udp_write(const uint8_t *data, uint16_t len) {
     socket->tx_len = (uint16_t)(socket->tx_len + to_copy);
   }
 
-  return to_copy;
+  *out_written = to_copy;
+  return to_copy == len ? HAL_OK : HAL_EOVERFLOW;
+}
+
+uint16_t hal_udp_write(const uint8_t *data, uint16_t len) {
+  uint16_t written = 0u;
+  (void)hal_udp_write_ex(data, len, &written);
+  return written;
+}
+
+hal_status_t hal_udp_write_str_ex(const char *text, uint16_t *out_written) {
+  if (!text) {
+    hal_derr("hal_udp_write_str: text is NULL");
+    return HAL_EINVAL;
+  }
+  if (!out_written) {
+    return HAL_EINVAL;
+  }
+  const size_t len = strlen(text);
+  if (len > UINT16_MAX) {
+    *out_written = 0u;
+    return HAL_EOVERFLOW;
+  }
+  return hal_udp_write_ex((const uint8_t *)text, (uint16_t)len, out_written);
 }
 
 uint16_t hal_udp_write_str(const char *text) {
-  if (!text) {
-    hal_derr("hal_udp_write_str: text is NULL");
-    return 0u;
-  }
-
-  const size_t len = strnlen(text, 65535u);
-  return hal_udp_write((const uint8_t *)text, (uint16_t)len);
+  uint16_t written = 0u;
+  (void)hal_udp_write_str_ex(text, &written);
+  return written;
 }
 
-bool hal_udp_end_packet(void) {
+hal_status_t hal_udp_end_packet_ex(void) {
   hal_udp_socket_t socket = default_socket();
   if (!socket || !socket->bound || !socket->packet_started) {
-    return false;
+    return HAL_ESTATE;
   }
 
   socket->packet_started = false;
   socket->end_packet_called = true;
-  return socket->end_packet_result;
+  return socket->end_packet_result ? HAL_OK : HAL_EIO;
+}
+
+bool hal_udp_end_packet(void) {
+  return hal_status_to_bool(hal_udp_end_packet_ex());
 }
 
 void hal_mock_udp_inject_packet_to(hal_udp_socket_t socket,

@@ -15,7 +15,7 @@
  * Channel 0 -> TIM2 (32-bit) in external-clock mode 1, counting edges on
  * TIM2_CH1 = PA0 (AF1). The counter increments per selected edge with zero
  * CPU involvement. Additional channels (other timers/pins) are a follow-up;
- * hal_pcnt_init() returns false for them today.
+ * hal_pcnt_init_ex() returns HAL_EINVAL for them today.
  */
 
 #define G474_PCNT_CHANNELS 1
@@ -36,10 +36,9 @@ uint8_t hal_pcnt_channel_count(void) { return G474_PCNT_CHANNELS; }
 
 hal_status_t hal_pcnt_init_ex(uint8_t channel, uint8_t pin,
                               hal_pcnt_edge_t edge) {
-  if (channel >= G474_PCNT_CHANNELS || !edge_valid(edge)) {
+  if (channel >= G474_PCNT_CHANNELS || pin != 0u || !edge_valid(edge)) {
     return HAL_EINVAL;
   }
-  (void)pin; /* fixed to TIM2_CH1 = PA0 for channel 0 */
 #ifndef JH_STM32G474_HW
   (void)edge;
 #endif
@@ -102,7 +101,7 @@ uint32_t hal_pcnt_read(uint8_t channel) {
   return count;
 }
 
-hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
+hal_status_t hal_pcnt_reset(uint8_t channel) {
   if (channel >= G474_PCNT_CHANNELS) {
     return HAL_EINVAL;
   }
@@ -117,14 +116,12 @@ hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
   return HAL_OK;
 }
 
-void hal_pcnt_reset(uint8_t channel) { (void)hal_pcnt_reset_ex(channel); }
-
 hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count) {
   hal_status_t status = hal_pcnt_read_ex(channel, out_count);
   if (status != HAL_OK) {
     return status;
   }
-  return hal_pcnt_reset_ex(channel);
+  return hal_pcnt_reset(channel);
 }
 
 uint32_t hal_pcnt_read_and_reset(uint8_t channel) {

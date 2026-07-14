@@ -56,7 +56,7 @@ uint32_t hal_pcnt_read(uint8_t channel) {
   return count;
 }
 
-hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
+hal_status_t hal_pcnt_reset(uint8_t channel) {
   if (channel >= MOCK_PCNT_CHANNELS) {
     return HAL_EINVAL;
   }
@@ -67,14 +67,12 @@ hal_status_t hal_pcnt_reset_ex(uint8_t channel) {
   return HAL_OK;
 }
 
-void hal_pcnt_reset(uint8_t channel) { (void)hal_pcnt_reset_ex(channel); }
-
 hal_status_t hal_pcnt_read_and_reset_ex(uint8_t channel, uint32_t *out_count) {
   hal_status_t status = hal_pcnt_read_ex(channel, out_count);
   if (status != HAL_OK) {
     return status;
   }
-  return hal_pcnt_reset_ex(channel);
+  return hal_pcnt_reset(channel);
 }
 
 uint32_t hal_pcnt_read_and_reset(uint8_t channel) {

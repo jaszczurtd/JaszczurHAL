@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Network transport status refactor
+
+- Re-migrated `hal_wifi`, `hal_net`, `hal_tcp` and `hal_udp` so status-returning
+  operations own validation and I/O inside the mock and RP2040 backends. The
+  historical bool/count/handle APIs are now thin adjacent compatibility
+  wrappers; their sections were removed from `hal_network_status.cpp`.
+- Added status variants for WiFi timeout configuration, TCP socket/listener
+  allocation, UDP socket allocation, packet parsing and remote-port lookup.
+  The network API now distinguishes invalid arguments, invalid/uninitialised
+  state, missing DNS/remote data, would-block accept, pool exhaustion, output
+  overflow and backend I/O failure.
+- Expanded cross-module network status tests with output initialization,
+  precise state errors and TCP/UDP pool exhaustion coverage.
+
+### KV and LittleFS status refactor
+
+- Re-migrated `hal_kv` and `hal_littlefs` so status-returning functions own
+  validation and storage I/O in the shared KV implementation and each
+  LittleFS backend. Historical bool/value functions are thin adjacent
+  compatibility wrappers; the fallible historical `void` functions for KV
+  auto-commit and LittleFS callback/unmount now return `hal_status_t` directly.
+- Removed the superseded `hal_kv_status.cpp` and `hal_littlefs_status.cpp`
+  adapters. KV now propagates EEPROM read, write and commit errors and
+  distinguishes uninitialised, invalid-range, capacity, missing-key and
+  caller-buffer errors. LittleFS distinguishes invalid arguments, unmounted
+  state, missing paths, invalid STM32 partition configuration and backend I/O.
+- Expanded storage tests with direct status calls, output initialization,
+  uninitialised/range/capacity behavior and the updated callback/unmount API.
+
 ### RTC status API
 
 - Added status-returning `_ex` APIs across the whole RTC module:
@@ -50,13 +79,14 @@ All notable changes to this project will be documented in this file.
   (begin/end/format/exists/remove/byte counts) while preserving every existing
   `bool`/`int`/`void` compatibility function. (`hal_eeprom` was subsequently
   reworked in place - see the EEPROM refactor entry above.)
-- Added `hal_kv_status.cpp` and `hal_littlefs_status.cpp` as backend-agnostic
+- Initially added `hal_kv_status.cpp` and `hal_littlefs_status.cpp` as backend-agnostic
   validation/result adapters shared by mock, RP2040 and STM32G474 builds. They
   surface distinct codes for invalid arguments (`HAL_EINVAL`), read misses
   (`HAL_ENOENT`), a caller buffer too small for a stored KV blob
   (`HAL_EOVERFLOW`), an uninitialised/unmounted backend (`HAL_EUNINIT`) and
   backend I/O failure (`HAL_EIO`). Reads and byte-count queries expose their
-  result through an output parameter.
+  result through an output parameter. Both adapters were subsequently removed
+  by the KV/LittleFS refactor described above.
 - Expanded `test_hal_kv` and `test_hal_littlefs` with success,
   invalid-argument, overflow, not-found and uninitialised coverage for the new
   APIs.
@@ -91,15 +121,56 @@ All notable changes to this project will be documented in this file.
 
 ### SPI/DMA status API
 
-- Added status-returning SPI `_ex` APIs for init, begin/end transaction,
-  byte/word/buffer transfer, write, blocking DMA and asynchronous DMA
-  start/wait while preserving all existing compatibility functions.
-- Added a shared status adapter used by mock, RP2040 and STM32G474 builds. It
-  validates buses/settings/buffers, reports active async DMA as `HAL_EBUSY` and
-  maps backend DMA failure to `HAL_EIO` without inventing unsupported polling
-  transfer precision.
-- Expanded `test_hal_spi` with success, invalid-argument and injected DMA
-  failure coverage.
+- Re-migrated SPI to the revised backend-owned status-first pattern. Historical
+  fallible `void` operations (`init`, begin/end transaction, buffer transfer
+  and write) now return `hal_status_t` in place; byte/word and DMA APIs retain
+  their value/`bool` compatibility wrappers over adjacent `_ex` functions.
+- Removed the superseded `hal_spi_status.cpp` adapter. Mock, RP2040 and
+  STM32G474 now validate and map results in their owning backend: active RP2040
+  DMA reports `HAL_EBUSY`, short Pico SDK transfers report `HAL_EIO`, and
+  STM32G474 polling expiration reports `HAL_ETIMEOUT`.
+- Expanded `test_hal_spi` with success, invalid-argument, zero-length buffer,
+  compatibility-wrapper and injected DMA failure coverage.
+
+### RGB LED status API
+
+- Migrated `hal_rgb_led` to backend-owned status-first behavior. Historical
+  init, explicit-type init, colour and off operations now return
+  `hal_status_t` in place; `hal_rgb_led_init_ex()` retains its established name
+  because `_ex` already identifies the pixel-type overload.
+- Mock, RP2040 and STM32G474 now distinguish invalid configuration
+  (`HAL_EINVAL`), use before init (`HAL_EUNINIT`), allocation/transport-resource
+  exhaustion (`HAL_ENOMEM`) and pixel transport failure (`HAL_EIO`). Failed
+  writes no longer poison the repeated-colour cache, so callers can retry.
+- Expanded `test_hal_rgb_led` with invalid configuration, pre-init access,
+  injected init/write failures and successful retry coverage.
+
+### PGA2311 status API
+
+- Added direct status companions for PGA2311 init, gain/raw setters, mute and
+  gain-code conversions. Historical handle/`bool` functions remain adjacent
+  compatibility wrappers using `hal_status_to_bool(...)` where applicable;
+  cached getters, the mute predicate and infallible cleanup retain their shape.
+- The shared PGA2311 SPI driver now propagates transaction/write/completion
+  errors and always restores CS, transaction and lock state. Failed gain writes
+  no longer alter the cached target, so retry and later software-unmute restore
+  the last successfully accepted value.
+- Expanded `test_hal_pga2311` with status validation, static-pool exhaustion,
+  injected SPI failure, resource cleanup and successful retry coverage.
+
+### Pulse-counter status API
+
+- Completed the existing backend-owned `hal_pcnt` migration. Historical
+  `void hal_pcnt_reset()` now returns `hal_status_t` directly and the redundant
+  `hal_pcnt_reset_ex()` entry point was removed. Existing callers that ignore
+  the reset result remain source-compatible.
+- Kept `hal_pcnt_init()` as a thin `bool` wrapper over backend-local
+  `hal_pcnt_init_ex()`, while count-returning read helpers retain their `_ex`
+  output-parameter companions. Predicates and channel-count queries remain
+  value-returning state queries.
+- STM32G474 init now honestly rejects pins other than its fixed TIM2_CH1/PA0
+  input. Tests and API documentation cover direct reset statuses, invalid
+  arguments and uninitialised channels.
 
 ### Network status API
 
@@ -191,9 +262,8 @@ All notable changes to this project will be documented in this file.
   `hal_dac_write_millivolts()` now return `hal_status_t` in place, and their
   redundant `_ex` variants were removed. `hal_dac_init_ex()` remains the
   status implementation beside the historical `bool hal_dac_init()` wrapper.
-- Added `hal_pcnt_init_ex()`, `hal_pcnt_read_ex()`, `hal_pcnt_reset_ex()` and
-  `hal_pcnt_read_and_reset_ex()` with status diagnostics while preserving the
-  existing PCNT compatibility wrappers.
+- Added status diagnostics for PCNT init/read/read-and-reset. The reset API was
+  subsequently migrated in place; see "Pulse-counter status API" above.
 - Added `hal_get_device_uid_hex_ex()` so callers can distinguish NULL-buffer
   (`HAL_EINVAL`) and too-small-buffer (`HAL_EOVERFLOW`) failures while keeping
   the existing `hal_get_device_uid_hex()` wrapper.

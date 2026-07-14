@@ -145,9 +145,29 @@ void test_ex_stats_and_commit_status(void) {
   hal_kv_stats_t stats;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_get_stats_ex(&stats));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_get_stats_ex(NULL));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit_ex(false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(false));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_commit_ex());
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit_ex(true));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_kv_set_auto_commit(true));
+}
+
+void test_ex_initialization_and_capacity_errors(void) {
+  uint32_t value = 123u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_kv_init_ex(0u, 32u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_get_u32_ex(1u, &value));
+  TEST_ASSERT_EQUAL_UINT32(0u, value);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_set_u32_ex(1u, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_commit_ex());
+
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_kv_init_ex(900u, 512u));
+  hal_mock_eeprom_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_kv_init_ex(0u, 512u));
+}
+
+void test_ex_blob_too_large_reports_overflow(void) {
+  uint8_t payload[256] = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_kv_set_blob_ex(777u, payload, sizeof(payload)));
 }
 
 int main(void) {
@@ -160,5 +180,7 @@ int main(void) {
   RUN_TEST(test_ex_u32_roundtrip_and_status);
   RUN_TEST(test_ex_blob_reports_overflow_and_length);
   RUN_TEST(test_ex_stats_and_commit_status);
+  RUN_TEST(test_ex_initialization_and_capacity_errors);
+  RUN_TEST(test_ex_blob_too_large_reports_overflow);
   return UNITY_END();
 }

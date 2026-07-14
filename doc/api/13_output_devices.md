@@ -45,20 +45,28 @@ typedef enum {
 } hal_rgb_led_pixel_type_t;
 
 // Init with default RGB byte order
-void hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
+hal_status_t hal_rgb_led_init(uint8_t pin, uint8_t num_pixels);
 
 // Init with explicit pixel type (use HAL_RGB_LED_PIXEL_GRB_KHZ800 for WS2812B)
-void hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels, hal_rgb_led_pixel_type_t pixel_type);
+hal_status_t hal_rgb_led_init_ex(uint8_t pin, uint8_t num_pixels,
+                                 hal_rgb_led_pixel_type_t pixel_type);
 
 // Set brightness [1, 255]; default is 30. Takes effect on next set_color() call.
 void hal_rgb_led_set_brightness(uint8_t brightness);
 
 // Set colour. Repeated calls with the same colour are suppressed (no LED transport traffic).
-void hal_rgb_led_set_color(hal_rgb_led_color_t color);
+hal_status_t hal_rgb_led_set_color(hal_rgb_led_color_t color);
 
 // Turn LED off (equivalent to set_color(HAL_RGB_LED_NONE))
-void hal_rgb_led_off(void);
+hal_status_t hal_rgb_led_off(void);
 ```
+
+The historically `void` init, colour and off operations now return status in
+place. Existing callers may continue to ignore the result. Invalid pixel
+counts/types or colours return `HAL_EINVAL`, colour writes before init return
+`HAL_EUNINIT`, allocation/resource failures return `HAL_ENOMEM`, and transport
+failures return `HAL_EIO`. `hal_rgb_led_init_ex()` keeps its historical name
+because `_ex` already denotes the explicit pixel-type variant.
 
 **impl/rp2040:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/drivers/neopixel/rp2040_pio.h`).
 **impl/stm32g474:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
@@ -74,6 +82,8 @@ hal_rgb_led_pixel_type_t hal_mock_rgb_led_get_pixel_type(void);
 uint8_t             hal_mock_rgb_led_get_pin(void);
 uint8_t             hal_mock_rgb_led_get_num_pixels(void);
 void                hal_mock_rgb_led_reset(void);
+void                hal_mock_rgb_led_fail_next_init(bool fail);
+void                hal_mock_rgb_led_fail_next_write(bool fail);
 ```
 
 ---
@@ -155,28 +165,49 @@ typedef struct hal_pga2311_impl_s hal_pga2311_impl_t;
 typedef hal_pga2311_impl_t *hal_pga2311_t;
 
 hal_pga2311_config_t hal_pga2311_default_config(void);
+hal_status_t hal_pga2311_init_ex(const hal_pga2311_config_t *cfg,
+                                 hal_pga2311_t *out_handle);
 hal_pga2311_t hal_pga2311_init(const hal_pga2311_config_t *cfg);
 void hal_pga2311_deinit(hal_pga2311_t h);
 
+hal_status_t hal_pga2311_set_raw_ex(hal_pga2311_t h, uint8_t left_code,
+                                    uint8_t right_code);
 bool hal_pga2311_set_raw(hal_pga2311_t h, uint8_t left_code, uint8_t right_code);
+hal_status_t hal_pga2311_set_raw_both_ex(hal_pga2311_t h, uint8_t code);
 bool hal_pga2311_set_raw_both(hal_pga2311_t h, uint8_t code);
+hal_status_t hal_pga2311_set_gain_half_db_ex(hal_pga2311_t h,
+                                             int16_t left_half_db,
+                                             int16_t right_half_db);
 bool hal_pga2311_set_gain_half_db(hal_pga2311_t h, int16_t left_half_db, int16_t right_half_db);
+hal_status_t hal_pga2311_set_gain_db_ex(hal_pga2311_t h, float left_db,
+                                        float right_db);
 bool hal_pga2311_set_gain_db(hal_pga2311_t h, float left_db, float right_db);
+hal_status_t hal_pga2311_set_gain_db_both_ex(hal_pga2311_t h, float db);
 bool hal_pga2311_set_gain_db_both(hal_pga2311_t h, float db);
 
+hal_status_t hal_pga2311_set_mute_ex(hal_pga2311_t h, bool mute);
 bool hal_pga2311_set_mute(hal_pga2311_t h, bool mute);
 bool hal_pga2311_is_muted(hal_pga2311_t h);
 
 bool hal_pga2311_get_target_raw(hal_pga2311_t h, uint8_t *left_code, uint8_t *right_code);
 bool hal_pga2311_get_target_gain_half_db(hal_pga2311_t h, int16_t *left_half_db, int16_t *right_half_db);
 
+hal_status_t hal_pga2311_gain_half_db_to_raw_ex(int16_t half_db,
+                                                uint8_t *out_code);
 bool hal_pga2311_gain_half_db_to_raw(int16_t half_db, uint8_t *out_code);
+hal_status_t hal_pga2311_raw_to_gain_half_db_ex(uint8_t code,
+                                                int16_t *out_half_db);
 bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 ```
 
 **Behavior notes:**
 - `HAL_ENABLE_PGA2311` auto-propagates `HAL_ENABLE_SPI` in `hal_config.h`.
 - The module does not call `hal_spi_init()`; the application owns SPI bus pin setup.
+- Status init distinguishes invalid configuration (`HAL_EINVAL`), static-pool
+  or mutex exhaustion (`HAL_ENOMEM`) and propagated SPI setup/write failures.
+- Status setters and conversion helpers return `HAL_EINVAL` for invalid
+  handles, output pointers or gain ranges and propagate SPI transport errors.
+  Existing handle/`bool` APIs are compatibility wrappers.
 - With `mute_pin == HAL_PGA2311_MUTE_PIN_NONE`, mute is emulated in software by
   writing `HAL_PGA2311_CODE_MUTE` to both channels and restoring cached target
   codes on unmute.

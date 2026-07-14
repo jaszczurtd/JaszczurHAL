@@ -65,13 +65,12 @@ void app_start(void) {
   cfg.spi_clock_hz = HAL_PGA2311_SPI_DEFAULT_HZ;
   cfg.start_muted = false;
 
-  s_pga = hal_pga2311_init(&cfg);
-  if (!s_pga) {
+  if (hal_pga2311_init_ex(&cfg, &s_pga) != HAL_OK) {
     derr("PGA2311 init FAILED");
     return;
   }
 
-  if (hal_pga2311_set_gain_half_db(s_pga, -40, -40)) {
+  if (hal_pga2311_set_gain_half_db_ex(s_pga, -40, -40) == HAL_OK) {
     deb("Initial gain set to -20.0 dB");
   }
 }
@@ -89,7 +88,7 @@ void app_task0(void) {
   s_last_step_ms = now;
 
   if (s_mute_phase) {
-    if (hal_pga2311_set_mute(s_pga, false)) {
+    if (hal_pga2311_set_mute_ex(s_pga, false) == HAL_OK) {
       deb("PGA2311 mute OFF");
     }
     s_mute_phase = false;
@@ -97,7 +96,7 @@ void app_task0(void) {
   }
 
   const int16_t gain = s_gain_half_db_steps[s_gain_idx];
-  if (hal_pga2311_set_gain_half_db(s_pga, gain, gain)) {
+  if (hal_pga2311_set_gain_half_db_ex(s_pga, gain, gain) == HAL_OK) {
     log_half_db("Set gain: ", gain);
   } else {
     derr("Set gain FAILED");
@@ -106,7 +105,7 @@ void app_task0(void) {
   s_gain_idx++;
   if (s_gain_idx >= ARRAY_LEN(s_gain_half_db_steps)) {
     s_gain_idx = 0u;
-    if (hal_pga2311_set_mute(s_pga, true)) {
+    if (hal_pga2311_set_mute_ex(s_pga, true) == HAL_OK) {
       deb("PGA2311 mute ON");
       s_mute_phase = true;
     }

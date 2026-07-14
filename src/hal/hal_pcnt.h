@@ -15,8 +15,9 @@
  * frequencies).
  *   - mock      : in-memory counter with a test injection helper.
  *
- * Channel numbering is uniform (0,1,...). hal_pcnt_init() returns false if the
- * channel is not available on the current target; check it in portable code.
+ * Channel numbering is uniform (0,1,...). hal_pcnt_init_ex() reports an
+ * unavailable channel/pin/edge as HAL_EINVAL; the bool compatibility wrapper
+ * returns false.
  */
 
 #include <stdbool.h>
@@ -94,16 +95,7 @@ uint32_t hal_pcnt_read(uint8_t channel);
  * @return HAL_OK on success, HAL_EINVAL for an invalid channel, or
  *         HAL_EUNINIT when the channel has not been initialized.
  */
-hal_status_t hal_pcnt_reset_ex(uint8_t channel);
-
-/**
- * @brief Reset the counter to zero.
- *
- * Compatibility wrapper over hal_pcnt_reset_ex().
- *
- * @param channel Channel index.
- */
-void hal_pcnt_reset(uint8_t channel);
+hal_status_t hal_pcnt_reset(uint8_t channel);
 
 /**
  * @brief Read the count and atomically reset it to zero.
