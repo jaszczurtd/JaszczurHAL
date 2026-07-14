@@ -31,9 +31,10 @@ void hal_delay_us(uint32_t us) { s_micros += us; }
 
 void hal_watchdog_feed(void) { s_watchdog_fed = true; }
 
-void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
+hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
   (void)ms;
   (void)pause_on_debug;
+  return HAL_OK;
 }
 
 bool hal_watchdog_caused_reboot(void) { return s_caused_reboot; }
@@ -118,21 +119,37 @@ void hal_mock_set_free_heap(uint32_t bytes) { s_free_heap = bytes; }
 
 static float s_chip_temp = 25.0f;
 
-float hal_read_chip_temp(void) { return s_chip_temp; }
+hal_status_t hal_read_chip_temp_ex(float *out_celsius) {
+  if (out_celsius == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_celsius = s_chip_temp;
+  return HAL_OK;
+}
+
+float hal_read_chip_temp(void) {
+  float celsius = 0.0f;
+  (void)hal_read_chip_temp_ex(&celsius);
+  return celsius;
+}
 
 void hal_mock_set_chip_temp(float celsius) { s_chip_temp = celsius; }
 
-void hal_enter_bootloader(void) { s_bootloader_requested = true; }
+hal_status_t hal_enter_bootloader(void) {
+  s_bootloader_requested = true;
+  return HAL_OK;
+}
 
 bool hal_mock_bootloader_was_requested(void) { return s_bootloader_requested; }
 
 void hal_mock_bootloader_reset_flag(void) { s_bootloader_requested = false; }
 
-void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
+hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
   if (uid == nullptr) {
-    return;
+    return HAL_EINVAL;
   }
   memcpy(uid, s_device_uid, HAL_DEVICE_UID_BYTES);
+  return HAL_OK;
 }
 
 hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
@@ -216,12 +233,19 @@ const char *hal_reset_reason_str(hal_reset_reason_t reason) {
   }
 }
 
-bool hal_get_last_fault(hal_fault_info_t *out) {
-  if (out == nullptr || !s_fault_info.valid) {
-    return false;
+hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out) {
+  if (out == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_fault_info.valid) {
+    return HAL_ENOENT;
   }
   *out = s_fault_info;
-  return true;
+  return HAL_OK;
+}
+
+bool hal_get_last_fault(hal_fault_info_t *out) {
+  return hal_status_to_bool(hal_get_last_fault_ex(out));
 }
 
 void hal_clear_last_fault(void) {
@@ -235,10 +259,14 @@ bool hal_last_boot_was_brownout(void) { return s_brownout_suspected; }
 
 void hal_alive_mark(void) { s_alive_marked = true; }
 
-bool hal_stack_guard_init(void) {
+hal_status_t hal_stack_guard_init_ex(void) {
   s_stack_guard_armed = true;
   s_stack_guard_check_triggered = false;
-  return true;
+  return HAL_OK;
+}
+
+bool hal_stack_guard_init(void) {
+  return hal_status_to_bool(hal_stack_guard_init_ex());
 }
 
 void hal_stack_guard_check(void) {

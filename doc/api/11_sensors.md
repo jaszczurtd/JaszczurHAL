@@ -673,24 +673,30 @@ void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
 void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
 ```
 
-**Status-returning `_ex` variants:** every function above has an additive
-`_ex` counterpart returning `hal_status_t` (see [Status API](01_status_api.md)).
-`hal_rtc_init_ex()` produces the handle through an output parameter; the other
-operations return `HAL_EINVAL` for a NULL handle/pointer and `HAL_EIO` for a
-bus/backend failure.
+**Status-returning `_ex` variants:** every fallible handle/bool operation above
+has an additive `_ex` counterpart returning `hal_status_t` (see
+[Status API](01_status_api.md)). `hal_rtc_init_ex()` produces the handle through
+an output parameter. `hal_rtc_deinit()` is infallible cleanup, remains `void`
+and intentionally has no `_ex` companion.
+
+RTC backends own their status results directly. They distinguish invalid
+arguments or configuration (`HAL_EINVAL`), pool/mutex exhaustion (`HAL_ENOMEM`),
+unsupported chips or chip features (`HAL_EUNSUPPORTED`), Unix epoch conversion
+outside 1970..2099 (`HAL_EOVERFLOW`) and backend/bus failures (`HAL_EIO`). I2C
+bus init status is propagated.
 
 ```c
 hal_rtc_t rtc = NULL;
 hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);
 // HAL_OK -> handle ready, HAL_EINVAL -> bad args,
-// HAL_EIO -> invalid config / probe failure / pool exhaustion
+// HAL_ENOMEM -> pool/mutex exhausted, HAL_EIO -> probe/bus failure
 if (st != HAL_OK) {
     return;
 }
 
 uint64_t epoch = 0;
 if (hal_rtc_get_epoch_ex(rtc, &epoch) == HAL_OK) {
-    use(epoch);              // HAL_EINVAL if handle/output is NULL
+    use(epoch);              // HAL_EOVERFLOW if RTC date is outside Unix range
 }
 ```
 

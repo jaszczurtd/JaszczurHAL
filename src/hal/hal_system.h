@@ -108,12 +108,17 @@ hal_system_get_current_architecture(hal_system_architecture_t *out);
  * @brief Convert 32-bit value to 4-byte big-endian representation.
  * @param val Source value.
  * @param buf Destination buffer of at least 4 bytes.
+ * @return HAL_OK on success or HAL_EINVAL when @p buf is NULL.
  */
-static inline void hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
+static inline hal_status_t hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
+  if (buf == NULL) {
+    return HAL_EINVAL;
+  }
   buf[0] = (uint8_t)(val >> 24);
   buf[1] = (uint8_t)(val >> 16);
   buf[2] = (uint8_t)(val >> 8);
   buf[3] = (uint8_t)(val);
+  return HAL_OK;
 }
 
 /**
@@ -161,8 +166,10 @@ void hal_watchdog_feed(void);
  * @param ms             Timeout in milliseconds.
  * @param pause_on_debug If true, pause the watchdog when a debugger is
  * attached.
+ * @return HAL_OK on success, HAL_EINVAL for an unsupported timeout value, or
+ *         HAL_EUNSUPPORTED when the backend has no watchdog implementation.
  */
-void hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
+hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
 
 /**
  * @brief Check whether the last boot was caused by a watchdog *timeout*.
@@ -259,6 +266,20 @@ const char *hal_reset_reason_str(hal_reset_reason_t reason);
 /**
  * @brief Retrieve the CPU state captured by the previous HardFault.
  *
+ * This is the status-returning implementation used by
+ * @ref hal_get_last_fault.
+ *
+ * @param out Destination structure.
+ * @return HAL_OK when a snapshot was copied, HAL_EINVAL when @p out is NULL,
+ *         or HAL_ENOENT when no captured fault is available.
+ */
+hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out);
+
+/**
+ * @brief Retrieve the CPU state captured by the previous HardFault.
+ *
+ * Compatibility wrapper over @ref hal_get_last_fault_ex.
+ *
  * @param out Destination, populated only when the function returns true.
  * @return true if a fault snapshot is available (i.e. the previous boot
  *         followed a HardFault captured by this HAL). false otherwise, in
@@ -310,13 +331,27 @@ void hal_alive_mark(void);
 /**
  * @brief Install a stack-overflow detector for the calling core.
  *
+ * This is the status-returning implementation used by
+ * @ref hal_stack_guard_init.
+ *
+ * @return HAL_OK when the guard was installed or HAL_EUNSUPPORTED when the
+ *         active backend cannot provide a stack guard.
+ */
+hal_status_t hal_stack_guard_init_ex(void);
+
+/**
+ * @brief Install a stack-overflow detector for the calling core.
+ *
+ * Compatibility wrapper over @ref hal_stack_guard_init_ex.
  * Implementation strategy depends on the backend:
  * - RP2040 (arduino-pico): writes a canary word at the bottom of the linker
  *   stack region (@c __StackLimit). @ref hal_stack_guard_check verifies the
  *   canary; corruption indicates the stack grew past its allocation. On
  *   detection the HAL synthesises a HardFault-equivalent reset with reason
  *   @ref HAL_RESET_REASON_STACK_OVERFLOW.
- * - Other backends: not implemented; returns false.
+ * - STM32G474: uses the linker-provided stack limit and the backend's retained
+ *   stack-overflow marker path.
+ * - Unsupported backends return false.
  *
  * The detector is *soft* -- it does not trap at the instant of overflow,
  * only at the next @ref hal_stack_guard_check call. For instant trapping,
@@ -366,16 +401,29 @@ bool hal_in_isr(void);
 uint32_t hal_get_free_heap(void);
 
 /**
+ * @brief Read the on-chip temperature sensor into a caller-owned output.
+ *
+ * This is the status-returning implementation used by
+ * @ref hal_read_chip_temp.
+ *
+ * @param out_celsius Destination for the measured die temperature.
+ * @return HAL_OK on success, HAL_EINVAL when @p out_celsius is NULL, or
+ *         HAL_EUNSUPPORTED when the backend has no implemented sensor path.
+ */
+hal_status_t hal_read_chip_temp_ex(float *out_celsius);
+
+/**
  * @brief Read the on-chip temperature sensor.
  *
- * On RP2040 this wraps the Arduino-pico @c analogReadTemp() function which
- * samples the internal ADC channel connected to the die temperature sensor
- * and converts the raw reading to degrees Celsius.
+ * Compatibility wrapper over @ref hal_read_chip_temp_ex. On RP2040 this
+ * wraps the Arduino-pico @c analogReadTemp() function which samples the
+ * internal ADC channel connected to the die temperature sensor and converts
+ * the raw reading to degrees Celsius.
  *
  * The value is approximate (+/-2 C typical) and reflects the silicon
  * temperature, not the ambient air temperature.
  *
- * @return Die temperature in degrees Celsius as a floating-point value.
+ * @return Die temperature in degrees Celsius, or 0.0f when unsupported.
  */
 float hal_read_chip_temp(void);
 
@@ -393,8 +441,10 @@ float hal_read_chip_temp(void);
  *
  * @note This function does not return on real hardware.
  * @note In mock/unit-test builds this is implemented as a non-resetting flag.
+ * @return HAL_OK when the request was accepted or HAL_EUNSUPPORTED when the
+ *         backend has no bootloader-entry implementation.
  */
-void hal_enter_bootloader(void);
+hal_status_t hal_enter_bootloader(void);
 
 /**
  * @brief Length in bytes of the unique device identifier.
@@ -418,8 +468,9 @@ void hal_enter_bootloader(void);
  * via @c hal_mock_set_device_uid().
  *
  * @param uid Output buffer of exactly @ref HAL_DEVICE_UID_BYTES bytes.
+ * @return HAL_OK on success or HAL_EINVAL when @p uid is NULL.
  */
-void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
+hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
 
 /**
  * @brief Write the unique device identifier as an uppercase hex string.

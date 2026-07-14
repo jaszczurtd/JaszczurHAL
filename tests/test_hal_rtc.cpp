@@ -404,14 +404,43 @@ void test_ex_init_and_handle_status(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &handle));
   TEST_ASSERT_NOT_NULL(handle);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_deinit_ex(handle));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_deinit_ex(nullptr));
+  hal_rtc_deinit(handle);
+  hal_rtc_deinit(nullptr);
 
   hal_rtc_config_t bad = default_cfg();
   bad.chip = (hal_rtc_chip_t)99;
   hal_rtc_t bad_handle = nullptr;
-  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_rtc_init_ex(&bad, &bad_handle));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_rtc_init_ex(&bad, &bad_handle));
   TEST_ASSERT_NULL(bad_handle);
+
+  bad = default_cfg();
+  bad.bus.i2c.clock_hz = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_init_ex(&bad, &bad_handle));
+  TEST_ASSERT_NULL(bad_handle);
+
+  bad = default_cfg();
+  bad.chip = HAL_RTC_CHIP_DS3231;
+  bad.bus.i2c.i2c_addr = HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_init_ex(&bad, &bad_handle));
+  TEST_ASSERT_NULL(bad_handle);
+}
+
+void test_ex_init_reports_pool_exhaustion(void) {
+  hal_rtc_config_t cfg = default_cfg();
+  hal_rtc_t handles[HAL_RTC_MAX_INSTANCES - 1] = {};
+
+  for (int i = 0; i < HAL_RTC_MAX_INSTANCES - 1; ++i) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &handles[i]));
+    TEST_ASSERT_NOT_NULL(handles[i]);
+  }
+
+  hal_rtc_t extra = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_rtc_init_ex(&cfg, &extra));
+  TEST_ASSERT_NULL(extra);
+
+  for (int i = 0; i < HAL_RTC_MAX_INSTANCES - 1; ++i) {
+    hal_rtc_deinit(handles[i]);
+  }
 }
 
 void test_ex_datetime_roundtrip_and_validation(void) {
@@ -432,6 +461,10 @@ void test_ex_datetime_roundtrip_and_validation(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_datetime_ex(nullptr, &in));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_datetime_ex(s_rtc, nullptr));
+
+  hal_rtc_datetime_t bad = in;
+  bad.second = 60;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_datetime_ex(s_rtc, &bad));
 }
 
 void test_ex_epoch_and_control_status(void) {
@@ -442,6 +475,21 @@ void test_ex_epoch_and_control_status(void) {
   TEST_ASSERT_EQUAL_UINT64(epoch, out_epoch);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_epoch_ex(s_rtc, nullptr));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_epoch_ex(nullptr, epoch));
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_rtc_set_epoch_ex(s_rtc, 4102444800ull));
+
+  hal_rtc_datetime_t pre_unix = {};
+  pre_unix.second = 59;
+  pre_unix.minute = 59;
+  pre_unix.hour = 23;
+  pre_unix.day = 31;
+  pre_unix.weekday = 3;
+  pre_unix.month = 12;
+  pre_unix.year = 1969;
+  pre_unix.clock_integrity = true;
+  hal_mock_rtc_set_datetime(s_rtc, &pre_unix);
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, hal_rtc_get_epoch_ex(s_rtc, &out_epoch));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_set_epoch_ex(s_rtc, epoch));
 
   TEST_ASSERT_EQUAL_INT(
       HAL_OK, hal_rtc_set_interrupt_enable_ex(s_rtc, HAL_RTC_IRQ_ALARM));
@@ -455,6 +503,57 @@ void test_ex_epoch_and_control_status(void) {
   hal_rtc_alarm_t read_alarm = {};
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_alarm_ex(s_rtc, &read_alarm));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_alarm_ex(nullptr, &alarm));
+}
+
+void test_ex_feature_statuses_and_validation(void) {
+  bool integrity_ok = false;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_rtc_get_clock_integrity_ex(s_rtc, &integrity_ok));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_get_clock_integrity_ex(s_rtc, nullptr));
+
+  uint8_t flags = 0;
+  hal_mock_rtc_set_flags(s_rtc, HAL_RTC_FLAG_ALARM | HAL_RTC_FLAG_TIMER);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_and_clear_flags_ex(s_rtc, &flags));
+  TEST_ASSERT_EQUAL_UINT8((HAL_RTC_FLAG_ALARM | HAL_RTC_FLAG_TIMER), flags);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_get_and_clear_flags_ex(s_rtc, nullptr));
+
+  float temperature_c = 123.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_rtc_get_temperature_ex(s_rtc, &temperature_c));
+  TEST_ASSERT_EQUAL_FLOAT(123.0f, temperature_c);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_temperature_ex(s_rtc, nullptr));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_rtc_set_clkout_mode_ex(s_rtc, HAL_RTC_CLKOUT_1024_HZ));
+  hal_rtc_clkout_mode_t clkout = HAL_RTC_CLKOUT_DISABLED;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_clkout_mode_ex(s_rtc, &clkout));
+  TEST_ASSERT_EQUAL_INT((int)HAL_RTC_CLKOUT_1024_HZ, (int)clkout);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_rtc_set_clkout_mode_ex(s_rtc, (hal_rtc_clkout_mode_t)99));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_clkout_mode_ex(s_rtc, nullptr));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_rtc_set_timer_ex(s_rtc, HAL_RTC_TIMER_64_HZ, 42));
+  hal_rtc_timer_clock_t timer_clock = HAL_RTC_TIMER_DISABLED;
+  uint8_t timer_count = 0;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_rtc_get_timer_ex(s_rtc, &timer_clock, &timer_count));
+  TEST_ASSERT_EQUAL_INT((int)HAL_RTC_TIMER_64_HZ, (int)timer_clock);
+  TEST_ASSERT_EQUAL_UINT8(42, timer_count);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_rtc_set_timer_ex(s_rtc, (hal_rtc_timer_clock_t)77, 10));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_get_timer_ex(s_rtc, nullptr, &timer_count));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_get_timer_ex(s_rtc, &timer_clock, nullptr));
+
+  hal_rtc_alarm_t alarm = valid_alarm();
+  alarm.minute = 60;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_alarm_ex(s_rtc, &alarm));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_set_alarm_ex(s_rtc, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_alarm_ex(s_rtc, nullptr));
 }
 
 int main(void) {
@@ -479,8 +578,10 @@ int main(void) {
   RUN_TEST(test_alarm_roundtrip_and_validation);
   RUN_TEST(test_invalid_arguments_return_false);
   RUN_TEST(test_ex_init_and_handle_status);
+  RUN_TEST(test_ex_init_reports_pool_exhaustion);
   RUN_TEST(test_ex_datetime_roundtrip_and_validation);
   RUN_TEST(test_ex_epoch_and_control_status);
+  RUN_TEST(test_ex_feature_statuses_and_validation);
   return UNITY_END();
 }
 

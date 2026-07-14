@@ -220,7 +220,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
-| `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration and invalid-input guards |
+| `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
 | `test_hal_serial` | `println` capture, `deb`/`derr` capture, streamed debug formatter coverage beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred log ring behavior, mute semantics, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |

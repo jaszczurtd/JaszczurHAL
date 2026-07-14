@@ -111,7 +111,7 @@ status API or needs an `_ex` companion:
 
   ```c
   hal_rtc_t rtc = NULL;
-  hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);  // HAL_OK, or HAL_EIO on failure
+  hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);  // HAL_OK, or a precise failure status
   ```
 
 - **Collision fallback:** when `hal_foo_bar_ex()` already exists as a legacy

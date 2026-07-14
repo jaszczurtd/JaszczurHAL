@@ -12,6 +12,7 @@ void setUp(void) {
   hal_mock_set_chip_temp(25.0f);
   hal_mock_bootloader_reset_flag();
   hal_mock_reset_device_uid();
+  hal_mock_fault_diagnostics_reset();
 }
 
 void tearDown(void) {}
@@ -51,12 +52,20 @@ void test_watchdog_feed_and_reboot_flag(void) {
   TEST_ASSERT_TRUE(hal_watchdog_caused_reboot());
 }
 
+void test_watchdog_enable_reports_success(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_watchdog_enable(5000u, false));
+}
+
 void test_heap_and_chip_temp_helpers(void) {
   hal_mock_set_free_heap(123456);
   TEST_ASSERT_EQUAL_UINT32(123456, hal_get_free_heap());
 
   hal_mock_set_chip_temp(41.75f);
+  float chip_temp = 0.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_read_chip_temp_ex(&chip_temp));
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.75f, chip_temp);
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 41.75f, hal_read_chip_temp());
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_read_chip_temp_ex(NULL));
 }
 
 void test_get_current_architecture_rejects_null_output(void) {
@@ -85,7 +94,7 @@ void test_get_current_architecture_reports_mock_snapshot(void) {
 
 void test_enter_bootloader_sets_mock_flag(void) {
   TEST_ASSERT_FALSE(hal_mock_bootloader_was_requested());
-  hal_enter_bootloader();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_enter_bootloader());
   TEST_ASSERT_TRUE(hal_mock_bootloader_was_requested());
 }
 
@@ -149,17 +158,18 @@ done:
 
 void test_u32_to_bytes_be_converts_correctly(void) {
   uint8_t bytes[4] = {0u, 0u, 0u, 0u};
-  hal_u32_to_bytes_be(0x12345678u, bytes);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_u32_to_bytes_be(0x12345678u, bytes));
 
   TEST_ASSERT_EQUAL_HEX8(0x12u, bytes[0]);
   TEST_ASSERT_EQUAL_HEX8(0x34u, bytes[1]);
   TEST_ASSERT_EQUAL_HEX8(0x56u, bytes[2]);
   TEST_ASSERT_EQUAL_HEX8(0x78u, bytes[3]);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_u32_to_bytes_be(0u, NULL));
 }
 
 void test_get_device_uid_returns_default_mock_pattern(void) {
   uint8_t uid[HAL_DEVICE_UID_BYTES] = {0};
-  hal_get_device_uid(uid);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_device_uid(uid));
   /* Default mock UID is {0xE6,0x61,0xA4,0xD1,0x23,0x45,0x67,0xAB}. */
   TEST_ASSERT_EQUAL_HEX8(0xE6, uid[0]);
   TEST_ASSERT_EQUAL_HEX8(0x61, uid[1]);
@@ -172,7 +182,7 @@ void test_get_device_uid_reflects_injected_value(void) {
   hal_mock_set_device_uid(custom);
 
   uint8_t out[HAL_DEVICE_UID_BYTES] = {0};
-  hal_get_device_uid(out);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_device_uid(out));
 
   for (size_t i = 0; i < HAL_DEVICE_UID_BYTES; ++i) {
     TEST_ASSERT_EQUAL_HEX8(custom[i], out[i]);
@@ -180,9 +190,27 @@ void test_get_device_uid_reflects_injected_value(void) {
 }
 
 void test_get_device_uid_null_arg_is_safe(void) {
-  hal_get_device_uid(NULL);
-  /* No crash, no observable effect. */
-  TEST_PASS();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_get_device_uid(NULL));
+}
+
+void test_fault_snapshot_status_distinguishes_invalid_and_missing(void) {
+  hal_fault_info_t out = {false, 0u, 0u, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_get_last_fault_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_get_last_fault_ex(&out));
+  TEST_ASSERT_FALSE(hal_get_last_fault(&out));
+
+  const hal_fault_info_t staged = {true, 0x12345678u, 0xABCDEF00u, 0x21000000u};
+  hal_mock_set_last_fault(&staged);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_last_fault_ex(&out));
+  TEST_ASSERT_TRUE(out.valid);
+  TEST_ASSERT_EQUAL_HEX32(staged.pc, out.pc);
+  TEST_ASSERT_TRUE(hal_get_last_fault(&out));
+}
+
+void test_stack_guard_status_and_legacy_wrapper_succeed(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stack_guard_init_ex());
+  TEST_ASSERT_TRUE(hal_mock_stack_guard_is_armed());
+  TEST_ASSERT_TRUE(hal_stack_guard_init());
 }
 
 void test_get_device_uid_hex_formats_default_as_uppercase(void) {
@@ -241,6 +269,7 @@ int main(void) {
   RUN_TEST(test_delay_us_updates_micros_only);
   RUN_TEST(test_micros_helpers_keep_millis_in_sync);
   RUN_TEST(test_watchdog_feed_and_reboot_flag);
+  RUN_TEST(test_watchdog_enable_reports_success);
   RUN_TEST(test_heap_and_chip_temp_helpers);
   RUN_TEST(test_get_current_architecture_rejects_null_output);
   RUN_TEST(test_get_current_architecture_reports_mock_snapshot);
@@ -257,6 +286,8 @@ int main(void) {
   RUN_TEST(test_get_device_uid_returns_default_mock_pattern);
   RUN_TEST(test_get_device_uid_reflects_injected_value);
   RUN_TEST(test_get_device_uid_null_arg_is_safe);
+  RUN_TEST(test_fault_snapshot_status_distinguishes_invalid_and_missing);
+  RUN_TEST(test_stack_guard_status_and_legacy_wrapper_succeed);
   RUN_TEST(test_get_device_uid_hex_formats_default_as_uppercase);
   RUN_TEST(test_get_device_uid_hex_formats_injected_value);
   RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);
