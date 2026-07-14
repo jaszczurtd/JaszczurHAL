@@ -34,15 +34,28 @@ void app_start(void) {
   deb("RX=%u TX=%u baud=%lu", (unsigned)EXAMPLE_SWSERIAL_RX_PIN,
       (unsigned)EXAMPLE_SWSERIAL_TX_PIN, (unsigned long)EXAMPLE_SWSERIAL_BAUD);
 
-  s_swserial =
-      hal_swserial_create(EXAMPLE_SWSERIAL_RX_PIN, EXAMPLE_SWSERIAL_TX_PIN);
-  if (s_swserial == NULL) {
-    derr("SWSERIAL create FAILED");
+  hal_status_t status = hal_swserial_create_ex(
+      EXAMPLE_SWSERIAL_RX_PIN, EXAMPLE_SWSERIAL_TX_PIN, &s_swserial);
+  if (status != HAL_OK) {
+    derr("SWSERIAL create FAILED: %s", hal_status_to_string(status));
     return;
   }
 
-  hal_swserial_begin(s_swserial, EXAMPLE_SWSERIAL_BAUD, HAL_UART_CFG_8N1);
-  hal_swserial_println(s_swserial, "JaszczurHAL swserial ready");
+  status =
+      hal_swserial_begin(s_swserial, EXAMPLE_SWSERIAL_BAUD, HAL_UART_CFG_8N1);
+  if (status != HAL_OK) {
+    derr("SWSERIAL begin FAILED: %s", hal_status_to_string(status));
+    hal_swserial_destroy(s_swserial);
+    s_swserial = NULL;
+    return;
+  }
+  status =
+      hal_swserial_println_ex(s_swserial, "JaszczurHAL swserial ready", NULL);
+  if (status != HAL_OK) {
+    derr("SWSERIAL initial write FAILED: %s", hal_status_to_string(status));
+    hal_swserial_destroy(s_swserial);
+    s_swserial = NULL;
+  }
 }
 
 void app_task0(void) {
@@ -52,10 +65,22 @@ void app_task0(void) {
   }
 
   while (hal_swserial_available(s_swserial) > 0) {
-    const int c = hal_swserial_read(s_swserial);
-    if (c >= 0) {
-      const uint8_t echo[] = {(uint8_t)c};
-      hal_swserial_write(s_swserial, echo, sizeof(echo));
+    uint8_t value = 0u;
+    hal_status_t status = hal_swserial_read_ex(s_swserial, &value);
+    if (status == HAL_EAGAIN) {
+      break;
+    }
+    if (status != HAL_OK) {
+      derr("SWSERIAL read FAILED: %s", hal_status_to_string(status));
+      break;
+    }
+
+    size_t written = 0u;
+    status = hal_swserial_write_ex(s_swserial, &value, 1u, &written);
+    if (status != HAL_OK || written != 1u) {
+      derr("SWSERIAL echo FAILED: %s (written=%lu)",
+           hal_status_to_string(status), (unsigned long)written);
+      break;
     }
   }
 
@@ -66,7 +91,11 @@ void app_task0(void) {
     char line[48] = {};
     snprintf(line, sizeof(line), "swserial line %lu",
              (unsigned long)s_line_counter++);
-    hal_swserial_println(s_swserial, line);
-    deb("SWSERIAL TX: %s", line);
+    const hal_status_t status = hal_swserial_println_ex(s_swserial, line, NULL);
+    if (status == HAL_OK) {
+      deb("SWSERIAL TX: %s", line);
+    } else {
+      derr("SWSERIAL TX FAILED: %s", hal_status_to_string(status));
+    }
   }
 }

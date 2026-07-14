@@ -1,4 +1,5 @@
 #include "hal/hal_config.h"
+#if !HAL_TARGET_IS_RP2040
 #ifdef HAL_ENABLE_SWSERIAL
 
 #include "hal/hal_swserial.h"
@@ -17,9 +18,8 @@
  * Software UART for JaszczurHAL.
  *
  * The framing and RX/TX flow are based on the Serial-over-PIO implementation
- * by Earle F. Philhower, III. This refactor keeps the same UART frame handling
- * ideas while moving the driver onto JaszczurHAL GPIO, timing and sync
- * primitives so RP2040, STM32G474 and mock builds share one implementation.
+ * by Earle F. Philhower, III. STM32G474 and mock builds use this portable HAL
+ * GPIO/timing implementation; RP2040 has a dedicated native PIO/DMA backend.
  */
 
 #define HAL_SWSERIAL_RX_BUF_SIZE 64u
@@ -59,6 +59,44 @@ static hal_swserial_t s_rx_by_pin[HAL_SWSERIAL_MAX_GPIO_PIN + 1u];
 
 static inline uint8_t next_index(uint8_t index) {
   return (uint8_t)((index + 1u) % HAL_SWSERIAL_RX_BUF_SIZE);
+}
+
+static bool swserial_pin_valid(uint8_t pin) {
+#if HAL_TARGET_IS_MOCK
+  return pin < 64u;
+#elif HAL_TARGET_IS_STM32G474
+  /* STM32 GPIO ids use port_index * 16 + pin_number; ports A..G exist. */
+  return (pin >> 4u) <= 6u;
+#else
+  /* Keep the portable backend usable by targets with the trampoline range. */
+  return pin < HAL_SWSERIAL_IRQ_PIN_COUNT;
+#endif
+}
+
+static bool swserial_config_valid(uint16_t config) {
+  constexpr uint16_t data_mask = 0x0700u;
+  constexpr uint16_t stop_mask = 0x0030u;
+  constexpr uint16_t parity_mask = 0x0003u;
+  constexpr uint16_t known_mask = data_mask | stop_mask | parity_mask;
+
+  if ((config & (uint16_t)~known_mask) != 0u) {
+    return false;
+  }
+
+  const uint16_t data = config & data_mask;
+  if (data != HAL_UART_DATA_5 && data != HAL_UART_DATA_6 &&
+      data != HAL_UART_DATA_7 && data != HAL_UART_DATA_8) {
+    return false;
+  }
+
+  const uint16_t stop = config & stop_mask;
+  if (stop != HAL_UART_STOP_BIT_1 && stop != HAL_UART_STOP_BIT_2) {
+    return false;
+  }
+
+  const uint16_t parity = config & parity_mask;
+  return parity == HAL_UART_PARITY_NONE || parity == HAL_UART_PARITY_EVEN ||
+         parity == HAL_UART_PARITY_ODD;
 }
 
 static int swserial_parity(uint32_t data) {
@@ -172,76 +210,122 @@ static void swserial_reset_handle(hal_swserial_t h, uint8_t rx_pin,
   h->parity = HAL_SWSERIAL_PARITY_NONE;
 }
 
-hal_swserial_t hal_swserial_create(uint8_t rx_pin, uint8_t tx_pin) {
+hal_status_t hal_swserial_create_ex(uint8_t rx_pin, uint8_t tx_pin,
+                                    hal_swserial_t *out_handle) {
+  if (out_handle == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_handle = NULL;
+
+  if (!swserial_pin_valid(rx_pin) || !swserial_pin_valid(tx_pin) ||
+      rx_pin == tx_pin) {
+    return HAL_EINVAL;
+  }
   if (jh_hal_mutex_create_once(&s_pool_mutex) == NULL) {
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   hal_mutex_lock(s_pool_mutex);
   for (int i = 0; i < hal_get_config()->swserial_max_instances; i++) {
     if (!s_used[i]) {
-      s_used[i] = true;
       hal_swserial_t h = &s_pool[i];
       swserial_reset_handle(h, rx_pin, tx_pin);
       h->mutex = hal_mutex_create();
+      if (h->mutex == NULL) {
+        memset(h, 0, sizeof(*h));
+        hal_mutex_unlock(s_pool_mutex);
+        return HAL_ENOMEM;
+      }
+      s_used[i] = true;
+      *out_handle = h;
       hal_mutex_unlock(s_pool_mutex);
-      return h;
+      return HAL_OK;
     }
   }
   hal_mutex_unlock(s_pool_mutex);
-
-  HAL_ASSERT(
-      0, "hal_swserial: pool exhausted - increase HAL_SWSERIAL_MAX_INSTANCES");
-  return NULL;
+  return HAL_ENOMEM;
 }
 
-bool hal_swserial_set_rx(hal_swserial_t h, uint8_t rx_pin) {
-  if (h == NULL) {
-    return false;
+hal_swserial_t hal_swserial_create(uint8_t rx_pin, uint8_t tx_pin) {
+  hal_swserial_t h = NULL;
+  (void)hal_swserial_create_ex(rx_pin, tx_pin, &h);
+  return h;
+}
+
+hal_status_t hal_swserial_set_rx_ex(hal_swserial_t h, uint8_t rx_pin) {
+  if (h == NULL || h->mutex == NULL || !swserial_pin_valid(rx_pin)) {
+    return HAL_EINVAL;
   }
   hal_mutex_lock(h->mutex);
   if (h->rx_pin == rx_pin) {
     hal_mutex_unlock(h->mutex);
-    return true;
+    return HAL_OK;
+  }
+  if (rx_pin == h->tx_pin) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EINVAL;
   }
   if (h->started) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_ESTATE;
   }
   h->rx_pin = rx_pin;
   hal_mutex_unlock(h->mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_swserial_set_tx(hal_swserial_t h, uint8_t tx_pin) {
-  if (h == NULL) {
-    return false;
+bool hal_swserial_set_rx(hal_swserial_t h, uint8_t rx_pin) {
+  return hal_status_to_bool(hal_swserial_set_rx_ex(h, rx_pin));
+}
+
+hal_status_t hal_swserial_set_tx_ex(hal_swserial_t h, uint8_t tx_pin) {
+  if (h == NULL || h->mutex == NULL || !swserial_pin_valid(tx_pin)) {
+    return HAL_EINVAL;
   }
   hal_mutex_lock(h->mutex);
   if (h->tx_pin == tx_pin) {
     hal_mutex_unlock(h->mutex);
-    return true;
+    return HAL_OK;
+  }
+  if (tx_pin == h->rx_pin) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EINVAL;
   }
   if (h->started) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_ESTATE;
   }
   h->tx_pin = tx_pin;
   hal_mutex_unlock(h->mutex);
-  return true;
+  return HAL_OK;
 }
 
-void hal_swserial_begin(hal_swserial_t h, uint32_t baud, uint16_t config) {
-  if (h == NULL || baud == 0u) {
-    return;
+bool hal_swserial_set_tx(hal_swserial_t h, uint8_t tx_pin) {
+  return hal_status_to_bool(hal_swserial_set_tx_ex(h, tx_pin));
+}
+
+hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
+                                uint16_t config) {
+  if (h == NULL || h->mutex == NULL || baud == 0u || baud > 1000000u ||
+      !swserial_config_valid(config)) {
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
+  if (!swserial_pin_valid(h->rx_pin) || !swserial_pin_valid(h->tx_pin) ||
+      h->rx_pin == h->tx_pin) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EINVAL;
+  }
+
+  if (h->started) {
+    h->started = false;
+    hal_gpio_detach_interrupt(h->rx_pin);
+    s_rx_by_pin[h->rx_pin] = NULL;
+  }
+
   h->baud = baud;
   h->bit_us = (1000000u + (baud / 2u)) / baud;
-  if (h->bit_us == 0u) {
-    h->bit_us = 1u;
-  }
   h->bits = swserial_data_bits(config);
   h->stop_bits = swserial_stop_bits(config);
   h->parity = swserial_parity_mode(config);
@@ -251,42 +335,62 @@ void hal_swserial_begin(hal_swserial_t h, uint32_t baud, uint16_t config) {
 
   hal_gpio_set_mode(h->tx_pin, HAL_GPIO_OUTPUT_HIGH);
   hal_gpio_set_mode(h->rx_pin, HAL_GPIO_INPUT_PULLUP);
-  if (h->rx_pin < s_pin_trampoline.size()) {
-    s_rx_by_pin[h->rx_pin] = h;
-    hal_gpio_attach_interrupt(h->rx_pin, s_pin_trampoline[h->rx_pin],
-                              HAL_GPIO_IRQ_FALLING);
-    hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGH);
-  } else {
-    HAL_ASSERT(false, "hal_swserial: RX pin has no IRQ trampoline");
-  }
+  s_rx_by_pin[h->rx_pin] = h;
+  hal_gpio_attach_interrupt(h->rx_pin, s_pin_trampoline[h->rx_pin],
+                            HAL_GPIO_IRQ_FALLING);
+  hal_gpio_set_irq_priority(HAL_IRQ_PRIORITY_HIGH);
   h->started = true;
   hal_mutex_unlock(h->mutex);
+  return HAL_OK;
 }
 
 int hal_swserial_available(hal_swserial_t h) {
-  if (h == NULL) {
+  if (h == NULL || h->mutex == NULL) {
+    return 0;
+  }
+  hal_mutex_lock(h->mutex);
+  if (!h->started) {
+    hal_mutex_unlock(h->mutex);
     return 0;
   }
   hal_critical_section_enter();
-  int available = (int)((h->tail + HAL_SWSERIAL_RX_BUF_SIZE - h->head) %
-                        HAL_SWSERIAL_RX_BUF_SIZE);
+  const int available = (int)((h->tail + HAL_SWSERIAL_RX_BUF_SIZE - h->head) %
+                              HAL_SWSERIAL_RX_BUF_SIZE);
   hal_critical_section_exit();
+  hal_mutex_unlock(h->mutex);
   return available;
 }
 
-int hal_swserial_read(hal_swserial_t h) {
-  if (h == NULL) {
-    return -1;
+hal_status_t hal_swserial_read_ex(hal_swserial_t h, uint8_t *out_value) {
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+  if (h == NULL || h->mutex == NULL) {
+    return HAL_EINVAL;
+  }
+
+  hal_mutex_lock(h->mutex);
+  if (!h->started) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EUNINIT;
   }
   hal_critical_section_enter();
   if (h->head == h->tail) {
     hal_critical_section_exit();
-    return -1;
+    hal_mutex_unlock(h->mutex);
+    return HAL_EAGAIN;
   }
-  int value = h->rx_buf[h->head];
+  *out_value = h->rx_buf[h->head];
   h->head = next_index(h->head);
   hal_critical_section_exit();
-  return value;
+  hal_mutex_unlock(h->mutex);
+  return HAL_OK;
+}
+
+int hal_swserial_read(hal_swserial_t h) {
+  uint8_t value = 0u;
+  return hal_status_to_bool(hal_swserial_read_ex(h, &value)) ? (int)value : -1;
 }
 
 static size_t swserial_write_byte_locked(hal_swserial_t h, uint8_t byte) {
@@ -317,17 +421,11 @@ static size_t swserial_write_byte_locked(hal_swserial_t h, uint8_t byte) {
   return 1u;
 }
 
-size_t hal_swserial_write(hal_swserial_t h, const uint8_t *data, size_t len) {
-  if (h == NULL || data == NULL || len == 0u) {
+static size_t swserial_write_locked(hal_swserial_t h, const uint8_t *data,
+                                    size_t len) {
+  if (len == 0u) {
     return 0u;
   }
-
-  hal_mutex_lock(h->mutex);
-  if (!h->started) {
-    hal_mutex_unlock(h->mutex);
-    return 0u;
-  }
-
 #if HAL_TARGET_IS_MOCK
   size_t copy_len = len;
   if (copy_len >= sizeof(h->last_write)) {
@@ -341,44 +439,107 @@ size_t hal_swserial_write(hal_swserial_t h, const uint8_t *data, size_t len) {
   for (size_t i = 0u; i < len; ++i) {
     written += swserial_write_byte_locked(h, data[i]);
   }
-  hal_mutex_unlock(h->mutex);
   return written;
+}
+
+hal_status_t hal_swserial_write_ex(hal_swserial_t h, const uint8_t *data,
+                                   size_t len, size_t *out_written) {
+  if (out_written != NULL) {
+    *out_written = 0u;
+  }
+  if (h == NULL || h->mutex == NULL || (len > 0u && data == NULL)) {
+    return HAL_EINVAL;
+  }
+
+  hal_mutex_lock(h->mutex);
+  if (!h->started) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EUNINIT;
+  }
+
+  const size_t written = swserial_write_locked(h, data, len);
+  hal_mutex_unlock(h->mutex);
+  if (out_written != NULL) {
+    *out_written = written;
+  }
+  return HAL_OK;
+}
+
+size_t hal_swserial_write(hal_swserial_t h, const uint8_t *data, size_t len) {
+  size_t written = 0u;
+  (void)hal_swserial_write_ex(h, data, len, &written);
+  return written;
+}
+
+hal_status_t hal_swserial_println_ex(hal_swserial_t h, const char *s,
+                                     size_t *out_written) {
+  if (out_written != NULL) {
+    *out_written = 0u;
+  }
+  if (h == NULL || h->mutex == NULL) {
+    return HAL_EINVAL;
+  }
+
+  const char *text = (s != NULL) ? s : "";
+  const size_t len = strlen(text);
+  static const uint8_t crlf[] = {'\r', '\n'};
+
+  hal_mutex_lock(h->mutex);
+  if (!h->started) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EUNINIT;
+  }
+
+  const size_t written = swserial_write_locked(h, (const uint8_t *)text, len);
+  (void)swserial_write_locked(h, crlf, sizeof(crlf));
+#if HAL_TARGET_IS_MOCK
+  size_t copy_len = len;
+  if (copy_len >= sizeof(h->last_write)) {
+    copy_len = sizeof(h->last_write) - 1u;
+  }
+  memcpy(h->last_write, text, copy_len);
+  h->last_write[copy_len] = '\0';
+#endif
+  hal_mutex_unlock(h->mutex);
+
+  if (out_written != NULL) {
+    *out_written = written;
+  }
+  return HAL_OK;
 }
 
 size_t hal_swserial_println(hal_swserial_t h, const char *s) {
-  const char *text = (s != NULL) ? s : "";
-  const size_t len = strlen(text);
-  size_t written = hal_swserial_write(h, (const uint8_t *)text, len);
-  static const uint8_t crlf[] = {'\r', '\n'};
-  (void)hal_swserial_write(h, crlf, sizeof(crlf));
-#if HAL_TARGET_IS_MOCK
-  if (h != NULL) {
-    size_t copy_len = len;
-    if (copy_len >= sizeof(h->last_write)) {
-      copy_len = sizeof(h->last_write) - 1u;
-    }
-    memcpy(h->last_write, text, copy_len);
-    h->last_write[copy_len] = '\0';
-  }
-#endif
+  size_t written = 0u;
+  (void)hal_swserial_println_ex(h, s, &written);
   return written;
 }
 
-void hal_swserial_flush(hal_swserial_t h) {
-  if (h != NULL && h->started) {
-    hal_delay_us((uint32_t)(h->bit_us * (h->bits + h->stop_bits + 2u)));
+hal_status_t hal_swserial_flush(hal_swserial_t h) {
+  if (h == NULL || h->mutex == NULL) {
+    return HAL_EINVAL;
   }
+
+  hal_mutex_lock(h->mutex);
+  if (!h->started) {
+    hal_mutex_unlock(h->mutex);
+    return HAL_EUNINIT;
+  }
+  hal_delay_us((uint32_t)(h->bit_us * (h->bits + h->stop_bits + 2u)));
+  hal_mutex_unlock(h->mutex);
+  return HAL_OK;
 }
 
 void hal_swserial_destroy(hal_swserial_t h) {
   if (h == NULL) {
     return;
   }
-  (void)jh_hal_mutex_create_once(&s_pool_mutex);
+  if (jh_hal_mutex_create_once(&s_pool_mutex) == NULL) {
+    return;
+  }
 
   hal_mutex_lock(s_pool_mutex);
   for (int i = 0; i < hal_get_config()->swserial_max_instances; i++) {
-    if (h == &s_pool[i]) {
+    if (h == &s_pool[i] && s_used[i] && h->mutex != NULL) {
       hal_mutex_lock(h->mutex);
       if (h->started && h->rx_pin < s_pin_trampoline.size()) {
         hal_gpio_detach_interrupt(h->rx_pin);
@@ -427,3 +588,4 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h) {
 #endif
 
 #endif /* HAL_ENABLE_SWSERIAL */
+#endif /* !HAL_TARGET_IS_RP2040 */

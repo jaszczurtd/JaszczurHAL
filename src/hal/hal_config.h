@@ -235,7 +235,8 @@
 
      Buses:
        HAL_ENABLE_UART          - Hardware UART.
-      HAL_ENABLE_SWSERIAL      - shared software UART over HAL GPIO/timing/sync.
+      HAL_ENABLE_SWSERIAL      - software UART (RP2040 PIO/DMA; shared GPIO
+                                  fallback on other targets).
        HAL_ENABLE_I2C           - I2C master/controller.
        HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
        HAL_ENABLE_SPI           - SPI master/controller.
@@ -1219,8 +1220,9 @@
 
 /**
  * @def HAL_SWSERIAL_MAX_INSTANCES
- * Maximum number of shared software UART ports.
- * Each slot holds a HAL-owned software UART state object.
+ * Maximum number of software UART ports in the HAL-owned pool.
+ * On RP2040 this is an upper bound: every active handle also needs two free
+ * PIO state machines and one free DMA channel.
  */
 #ifndef HAL_SWSERIAL_MAX_INSTANCES
 #define HAL_SWSERIAL_MAX_INSTANCES 4

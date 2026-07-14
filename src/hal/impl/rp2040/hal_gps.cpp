@@ -50,12 +50,19 @@ static void gps_reinit_serial(uint16_t config) {
     s_serial = NULL;
   }
   s_config = config;
-  s_serial = hal_swserial_create(s_rx_pin, s_tx_pin);
-  if (!s_serial) {
-    hal_derr_limited("gps", "reinit failed: swserial create returned NULL");
+  hal_status_t status = hal_swserial_create_ex(s_rx_pin, s_tx_pin, &s_serial);
+  if (status != HAL_OK) {
+    hal_derr_limited("gps", "reinit failed: swserial create: %s",
+                     hal_status_to_string(status));
     return;
   }
-  hal_swserial_begin(s_serial, s_baud, s_config);
+  status = hal_swserial_begin(s_serial, s_baud, s_config);
+  if (status != HAL_OK) {
+    hal_derr_limited("gps", "reinit failed: swserial begin: %s",
+                     hal_status_to_string(status));
+    hal_swserial_destroy(s_serial);
+    s_serial = NULL;
+  }
 }
 
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
@@ -69,12 +76,19 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
   s_autodetect_done = false;
   hal_gps_engine_reset();
 
-  s_serial = hal_swserial_create(rx_pin, tx_pin);
-  if (!s_serial) {
-    hal_derr_limited("gps", "init failed: swserial create returned NULL");
+  hal_status_t status = hal_swserial_create_ex(rx_pin, tx_pin, &s_serial);
+  if (status != HAL_OK) {
+    hal_derr_limited("gps", "init failed: swserial create: %s",
+                     hal_status_to_string(status));
     return;
   }
-  hal_swserial_begin(s_serial, baud, config);
+  status = hal_swserial_begin(s_serial, baud, config);
+  if (status != HAL_OK) {
+    hal_derr_limited("gps", "init failed: swserial begin: %s",
+                     hal_status_to_string(status));
+    hal_swserial_destroy(s_serial);
+    s_serial = NULL;
+  }
 }
 
 void hal_gps_update(void) {
@@ -83,7 +97,17 @@ void hal_gps_update(void) {
     return;
   }
   while (hal_swserial_available(s_serial) > 0) {
-    hal_gps_encode((char)hal_swserial_read(s_serial));
+    uint8_t value = 0u;
+    const hal_status_t status = hal_swserial_read_ex(s_serial, &value);
+    if (status == HAL_OK) {
+      hal_gps_encode((char)value);
+      continue;
+    }
+    if (status != HAL_EAGAIN) {
+      hal_derr_limited("gps", "swserial read failed: %s",
+                       hal_status_to_string(status));
+    }
+    break;
   }
 
   /* Auto-detect: if after GPS_AUTODETECT_CHARS bytes every sentence failed

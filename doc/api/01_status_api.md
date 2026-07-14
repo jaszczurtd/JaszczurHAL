@@ -132,7 +132,7 @@ next to each other** in the module reference, with worked examples:
 
 | Area | Section |
 |---|---|
-| Buses (`hal_spi`, `hal_i2c`) | [Communication buses](09_buses.md) |
+| Buses (`hal_spi`, `hal_i2c`, `hal_swserial`) | [Communication buses](09_buses.md) |
 | GPIO/peripherals (`hal_dac`, `hal_pcnt`) | [GPIO, ADC and PWM](05_gpio_adc_pwm.md) |
 | Display (`hal_display`) | [CAN bus and display](10_can_display.md) |
 | Output devices (`hal_dac`, `hal_rgb_led`, `hal_pga2311`) | [Output devices](13_output_devices.md) |

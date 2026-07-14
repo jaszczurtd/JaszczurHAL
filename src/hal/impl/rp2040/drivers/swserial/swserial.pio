@@ -1,0 +1,55 @@
+;
+; Copyright (c) 2026 JaszczurHAL contributors
+;
+; SPDX-License-Identifier: BSD-3-Clause
+;
+
+; RP2040 software UART transport used by hal_swserial.
+;
+; Both programs run at eight PIO clocks per serial bit.  The application loads
+; Y once when it configures a state machine:
+;   RX: number of sampled data/parity bits minus one
+;   TX: number of shifted data/parity/stop bits minus one
+;
+; Keeping the bit count in Y allows one program image to support 5..8 data
+; bits, optional parity and one/two stop bits without patching instruction
+; memory shared by multiple SoftwareSerial instances.
+
+.program jh_swserial_rx
+
+; IN pin 0 and JMP pin are mapped to the selected RX GPIO.  The first sample is
+; taken 1.5 bit periods after the falling start edge.  The JMP after the final
+; loop iteration lands at the centre of the first stop bit and rejects framing
+; errors before they reach DMA.
+
+.wrap_target
+start:
+    wait 0 pin 0
+    mov x, y       [10]
+bitloop:
+    in pins, 1
+    jmp x-- bitloop [6]
+    jmp pin good_stop
+    wait 1 pin 0
+    mov isr, null
+    jmp start
+good_stop:
+    push block
+.wrap
+
+
+.program jh_swserial_tx
+.side_set 1 opt
+
+; FIFO words contain data, optional parity and every stop bit.  Keeping stop
+; bits inside the shifted frame makes the blocking PULL/TXSTALL flag a precise
+; transmit-complete condition; no CPU-side timing delay is needed.  PULL keeps
+; the line high while idle.  MOV asserts the start bit for eight clocks.
+
+.wrap_target
+    pull block        side 1
+    mov x, y          side 0 [7]
+bitloop:
+    out pins, 1
+    jmp x-- bitloop          [6]
+.wrap

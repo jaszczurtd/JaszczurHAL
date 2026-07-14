@@ -435,31 +435,74 @@ HAL_UART_CFG_5O1  HAL_UART_CFG_6O1  HAL_UART_CFG_7O1  HAL_UART_CFG_8O1
 HAL_UART_CFG_5O2  HAL_UART_CFG_6O2  HAL_UART_CFG_7O2  HAL_UART_CFG_8O2
 ```
 
-All values are Arduino-compatible. On Arduino targets HAL maps directly to
-core `SERIAL_*` constants; on host/mock builds HAL uses fallback values that
-match ArduinoCore-API.
+The numeric values remain Arduino-compatible.
 
 ```c
 #include <hal/hal_swserial.h>
 
 typedef hal_swserial_impl_t *hal_swserial_t;  // opaque handle
 
+hal_status_t hal_swserial_create_ex(uint8_t rx_pin, uint8_t tx_pin,
+                                    hal_swserial_t *out_handle);
 hal_swserial_t hal_swserial_create(uint8_t rx_pin, uint8_t tx_pin);
+
+hal_status_t hal_swserial_set_rx_ex(hal_swserial_t h, uint8_t rx_pin);
 bool hal_swserial_set_rx(hal_swserial_t h, uint8_t rx_pin);
+hal_status_t hal_swserial_set_tx_ex(hal_swserial_t h, uint8_t tx_pin);
 bool hal_swserial_set_tx(hal_swserial_t h, uint8_t tx_pin);
-void hal_swserial_begin(hal_swserial_t h, uint32_t baud, uint16_t config);  // e.g. HAL_UART_CFG_8N1
+
+hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
+                                uint16_t config);  // e.g. HAL_UART_CFG_8N1
 int  hal_swserial_available(hal_swserial_t h);
+
+hal_status_t hal_swserial_read_ex(hal_swserial_t h, uint8_t *out_value);
 int  hal_swserial_read(hal_swserial_t h);     // returns byte (0-255) or -1 if empty
+hal_status_t hal_swserial_write_ex(hal_swserial_t h, const uint8_t *data,
+                                   size_t len, size_t *out_written);
 size_t hal_swserial_write(hal_swserial_t h, const uint8_t *data, size_t len);
+hal_status_t hal_swserial_println_ex(hal_swserial_t h, const char *s,
+                                     size_t *out_written);
 size_t hal_swserial_println(hal_swserial_t h, const char *s);
-void hal_swserial_flush(hal_swserial_t h);       // block until TX complete
+hal_status_t hal_swserial_flush(hal_swserial_t h);  // block until TX complete
 void hal_swserial_destroy(hal_swserial_t h);
 ```
 
-The implementation is shared across RP2040, STM32G474 and mock builds. It uses
-HAL GPIO interrupts for RX start-bit detection, HAL microsecond timing for
-sampling/transmit bit periods, HAL critical sections for timing-sensitive bit
-streams and per-instance HAL mutexes for public API calls.
+New code should prefer the status forms. `create_ex()` reports `HAL_EINVAL`
+for invalid/overlapping pins and `HAL_ENOMEM` when the instance or native
+PIO/DMA resources are exhausted. Pin changes after `begin()` report
+`HAL_ESTATE`; I/O before `begin()` reports `HAL_EUNINIT`; an empty
+`read_ex()` reports `HAL_EAGAIN`. A zero-length `write_ex()` is valid even
+with a NULL data pointer. The optional `out_written` from `println_ex()`
+counts payload bytes only, excluding CRLF, to preserve the historical return
+value.
+
+`begin()` and `flush()` historically returned `void`; they now return
+`hal_status_t` directly, so existing callers may continue to ignore the result.
+The handle-, bool- and value-returning functions remain compatibility wrappers
+over their adjacent status implementations. `available()` remains a cheap
+polling getter (0 for an invalid or unstarted handle), and `destroy()` remains
+infallible cleanup.
+
+```c
+hal_swserial_t port = NULL;
+hal_status_t st = hal_swserial_create_ex(rx_pin, tx_pin, &port);
+if (st == HAL_OK) {
+    st = hal_swserial_begin(port, 9600, HAL_UART_CFG_8N1);
+}
+
+uint8_t byte = 0;
+if (st == HAL_OK && hal_swserial_read_ex(port, &byte) == HAL_OK) {
+    // consume byte
+}
+```
+
+**impl/rp2040:** a native Pico SDK backend. Two PIO state machines perform RX and TX bit timing, and DMA transfers completed RX frames to a circular buffer. It does not execute a byte-long GPIO callback, delay loop or critical section. Every handle requires two free PIO state machines and one free DMA channel; the PIO programs are shared between handles on a PIO block.
+
+**impl/stm32g474 / impl/.mock:** the shared HAL GPIO/timing/sync backend. The
+mock also exposes deterministic RX/TX helpers for host tests.
+
+Public operations are serialized by a per-instance HAL mutex. Create/destroy
+should follow the project-wide setup/teardown serialization policy.
 
 **Mock helpers:**
 ```c
