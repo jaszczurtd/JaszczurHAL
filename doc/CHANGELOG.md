@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### System status-first API
+
+- Completed the `hal_system` migration to the current status-first rules.
+  Fallible historical `void` operations for watchdog setup, bootloader entry,
+  raw device UID reads and big-endian conversion now return `hal_status_t`
+  directly.
+- Added status implementations for chip-temperature reads, captured-fault
+  retrieval and stack-guard setup. Their historical value/`bool` APIs remain
+  thin compatibility wrappers, while missing fault snapshots and unsupported
+  STM32 system services now report `HAL_ENOENT` and `HAL_EUNSUPPORTED`
+  explicitly.
+- Expanded mock and STM32 host tests with success, invalid-argument, missing
+  data, unsupported-backend and compatibility-wrapper coverage.
+
 ### SoftwareSerial status-first API
 
 - Migrated the complete `hal_swserial` surface to the current status-first
@@ -65,21 +79,20 @@ All notable changes to this project will be documented in this file.
 
 ### RTC status API
 
-- Added status-returning `_ex` APIs across the whole RTC module:
-  init/deinit, datetime and Unix-epoch read/write, clock integrity, interrupt
-  enable, event flags, temperature, clock output, timer and alarm, while
-  preserving every existing `bool`/handle-returning/`void` compatibility
-  function.
-- Added `hal_rtc_status.cpp`, a backend-agnostic validation/result adapter
-  shared by mock, RP2040 and STM32G474 builds. `hal_rtc_init_ex()` produces the
-  handle through an output parameter and maps a NULL result (invalid config,
-  probe failure or pool exhaustion) to `HAL_EIO`; the remaining operations
-  return `HAL_EINVAL` for a NULL handle/pointer argument and `HAL_EIO` for a
-  backend/bus failure. Because the legacy bool API cannot separate a bus error
-  from an unsupported feature (for example DS3231-only temperature), both
-  surface as `HAL_EIO`.
-- Expanded `test_hal_rtc` with success, invalid-argument and NULL-handle
-  coverage for the new APIs.
+- Reworked RTC to the revised status-first migration pattern: mock, RP2040 and
+  STM32G474 backends now own their `_ex` validation and I/O results directly,
+  while the legacy handle/bool functions remain thin compatibility wrappers.
+  Infallible `hal_rtc_deinit()` stays `void` and has no artificial status
+  companion.
+- Removed the superseded `hal_rtc_status.cpp` adapter and its build entries.
+  RTC status calls now distinguish invalid arguments/configuration
+  (`HAL_EINVAL`), pool or mutex exhaustion (`HAL_ENOMEM`), unsupported chips or
+  chip features (`HAL_EUNSUPPORTED`), epoch conversion outside 1970..2099
+  (`HAL_EOVERFLOW`) and backend/bus failures (`HAL_EIO`). I2C bus init status is
+  propagated instead of being collapsed.
+- Expanded `test_hal_rtc` with direct status coverage for success paths,
+  invalid arguments/configuration, pool exhaustion, unsupported features and
+  epoch overflow.
 
 ### EEPROM status refactor (reference pattern for the revised migration)
 

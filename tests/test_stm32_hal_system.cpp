@@ -61,6 +61,7 @@ void test_stm32_fault_frame_overrides_rcc_reason(void) {
                         (int)hal_get_reset_reason());
 
   hal_fault_info_t info = {false, 0u, 0u, 0u};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_last_fault_ex(&info));
   TEST_ASSERT_TRUE(hal_get_last_fault(&info));
   TEST_ASSERT_TRUE(info.valid);
   TEST_ASSERT_EQUAL_HEX32(0x08001234u, info.pc);
@@ -68,6 +69,7 @@ void test_stm32_fault_frame_overrides_rcc_reason(void) {
   TEST_ASSERT_EQUAL_HEX32(0x21000000u, info.psr);
 
   hal_clear_last_fault();
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_get_last_fault_ex(&info));
   TEST_ASSERT_FALSE(hal_get_last_fault(&info));
 }
 
@@ -81,9 +83,18 @@ void test_stm32_stack_overflow_marker_overrides_reason(void) {
                         (int)hal_get_reset_reason());
 
   hal_fault_info_t info = {false, 0u, 0u, 0u};
-  TEST_ASSERT_TRUE(hal_get_last_fault(&info));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_last_fault_ex(&info));
   TEST_ASSERT_TRUE(info.valid);
   TEST_ASSERT_EQUAL_HEX32(0xDEADD000u, info.pc);
+}
+
+void test_stm32_system_status_reports_unsupported_services(void) {
+  float temperature = 123.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_read_chip_temp_ex(&temperature));
+  TEST_ASSERT_FLOAT_WITHIN(0.0001f, 123.0f, temperature);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_read_chip_temp_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_watchdog_enable(1000u, false));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
 }
 
 int main(void) {
@@ -94,5 +105,6 @@ int main(void) {
   RUN_TEST(test_stm32_reset_reason_bor_with_alive_maps_to_brownout);
   RUN_TEST(test_stm32_fault_frame_overrides_rcc_reason);
   RUN_TEST(test_stm32_stack_overflow_marker_overrides_reason);
+  RUN_TEST(test_stm32_system_status_reports_unsupported_services);
   return UNITY_END();
 }

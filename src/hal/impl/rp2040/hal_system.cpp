@@ -82,8 +82,18 @@ void hal_delay_us(uint32_t us) {
 
 void hal_watchdog_feed(void) { rp2040_system_watchdog_feed(); }
 
-void hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
+hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
+#if defined(PICO_RP2350)
+  constexpr uint32_t kMaxWatchdogDelayMs = 16777u;
+#else
+  /* RP2040-E1 makes the counter decrement twice per watchdog tick. */
+  constexpr uint32_t kMaxWatchdogDelayMs = 8388u;
+#endif
+  if (ms > kMaxWatchdogDelayMs) {
+    return HAL_EINVAL;
+  }
   rp2040_system_watchdog_enable(ms, pause_on_debug);
+  return HAL_OK;
 }
 
 bool hal_watchdog_caused_reboot(void) {
@@ -173,12 +183,31 @@ bool hal_in_isr(void) { return rp2040_system_in_isr(); }
 
 uint32_t hal_get_free_heap(void) { return rp2040_system_get_free_heap(); }
 
-float hal_read_chip_temp(void) { return rp2040_system_read_chip_temp(); }
+hal_status_t hal_read_chip_temp_ex(float *out_celsius) {
+  if (out_celsius == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_celsius = rp2040_system_read_chip_temp();
+  return HAL_OK;
+}
 
-void hal_enter_bootloader(void) { rp2040_system_enter_bootloader(); }
+float hal_read_chip_temp(void) {
+  float celsius = 0.0f;
+  (void)hal_read_chip_temp_ex(&celsius);
+  return celsius;
+}
 
-void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
+hal_status_t hal_enter_bootloader(void) {
+  rp2040_system_enter_bootloader();
+  return HAL_OK;
+}
+
+hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]) {
+  if (uid == nullptr) {
+    return HAL_EINVAL;
+  }
   rp2040_system_get_device_uid(uid);
+  return HAL_OK;
 }
 
 hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen) {
@@ -237,8 +266,15 @@ const char *hal_reset_reason_str(hal_reset_reason_t reason) {
   }
 }
 
+hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out) {
+  if (out == nullptr) {
+    return HAL_EINVAL;
+  }
+  return rp2040_fault_get_last_fault(out) ? HAL_OK : HAL_ENOENT;
+}
+
 bool hal_get_last_fault(hal_fault_info_t *out) {
-  return rp2040_fault_get_last_fault(out);
+  return hal_status_to_bool(hal_get_last_fault_ex(out));
 }
 
 void hal_clear_last_fault(void) { rp2040_fault_clear_last_fault(); }
@@ -249,7 +285,13 @@ bool hal_last_boot_was_brownout(void) {
 
 void hal_alive_mark(void) { rp2040_fault_alive_mark(); }
 
-bool hal_stack_guard_init(void) { return rp2040_fault_stack_guard_init(); }
+hal_status_t hal_stack_guard_init_ex(void) {
+  return rp2040_fault_stack_guard_init() ? HAL_OK : HAL_EUNSUPPORTED;
+}
+
+bool hal_stack_guard_init(void) {
+  return hal_status_to_bool(hal_stack_guard_init_ex());
+}
 
 void hal_stack_guard_check(void) { rp2040_fault_stack_guard_check(); }
 #endif // HAL_TARGET_IS_RP2040

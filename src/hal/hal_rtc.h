@@ -280,17 +280,12 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
- * Status-returning RTC APIs. Every legacy entry point above remains a
- * compatibility wrapper; the _ex variants return hal_status_t so callers can
- * distinguish invalid arguments (HAL_EINVAL) from a backend/bus failure
- * (HAL_EIO). hal_rtc_init_ex() produces the handle through an output parameter
- * and maps invalid config / probe failure / pool exhaustion to HAL_EIO. The
- * legacy bool API cannot separate a genuine bus error from an unsupported
- * feature, so both surface as HAL_EIO.
+ * Status-returning RTC APIs own validation and I/O in each backend. Legacy
+ * handle/bool entry points remain compatibility wrappers. Infallible deinit
+ * stays void and has no artificial status companion.
  */
 hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *cfg,
                              hal_rtc_t *out_handle);
-hal_status_t hal_rtc_deinit_ex(hal_rtc_t h);
 hal_status_t hal_rtc_get_datetime_ex(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
 hal_status_t hal_rtc_set_datetime_ex(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch);

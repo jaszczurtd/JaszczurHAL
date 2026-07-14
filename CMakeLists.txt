@@ -41,7 +41,6 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
-    ${SRC}/hal/hal_rtc_status.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp
     ${SRC}/hal/impl/shared/compat/http_server/hal_http_server.cpp

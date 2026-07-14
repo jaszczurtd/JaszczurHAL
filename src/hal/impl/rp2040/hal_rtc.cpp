@@ -99,6 +99,32 @@ static bool rtc_validate_alarm(const hal_rtc_alarm_t *alarm) {
   return true;
 }
 
+static bool rtc_validate_clkout_mode(hal_rtc_clkout_mode_t mode) {
+  switch (mode) {
+  case HAL_RTC_CLKOUT_DISABLED:
+  case HAL_RTC_CLKOUT_1_HZ:
+  case HAL_RTC_CLKOUT_32_HZ:
+  case HAL_RTC_CLKOUT_1024_HZ:
+  case HAL_RTC_CLKOUT_32768_HZ:
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool rtc_validate_timer_clock(hal_rtc_timer_clock_t timer_clock) {
+  switch (timer_clock) {
+  case HAL_RTC_TIMER_DISABLED:
+  case HAL_RTC_TIMER_1_60_HZ:
+  case HAL_RTC_TIMER_1_HZ:
+  case HAL_RTC_TIMER_64_HZ:
+  case HAL_RTC_TIMER_4096_HZ:
+    return true;
+  default:
+    return false;
+  }
+}
+
 static bool rtc_is_leap_year(uint16_t year) {
   return ((year % 4u) == 0u && (year % 100u) != 0u) || ((year % 400u) == 0u);
 }
@@ -525,10 +551,12 @@ static void ds3231_alarm2_to_rtc(uint8_t day, uint8_t hour, uint8_t minute,
 }
 #endif /* HAL_ENABLE_DS3231 */
 
-hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
-  if (!cfg) {
-    return NULL;
+hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *cfg,
+                             hal_rtc_t *out_handle) {
+  if (!cfg || !out_handle) {
+    return HAL_EINVAL;
   }
+  *out_handle = NULL;
 
   hal_critical_section_enter();
   int slot = -1;
@@ -541,10 +569,8 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
   }
   hal_critical_section_exit();
 
-  HAL_ASSERT(slot >= 0,
-             "hal_rtc: pool exhausted - increase HAL_RTC_MAX_INSTANCES");
   if (slot < 0) {
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   hal_rtc_impl_t *h = &s_pool[slot];
@@ -555,7 +581,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
 
   if (!h->mutex) {
     rtc_release_pool_slot(h);
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   if (!rtc_backend_supported(cfg->chip)) {
@@ -563,7 +589,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
     hal_mutex_destroy(h->mutex);
     h->mutex = NULL;
     rtc_release_pool_slot(h);
-    return NULL;
+    return HAL_EUNSUPPORTED;
   }
 
   uint8_t default_addr = 0u;
@@ -591,7 +617,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
     hal_mutex_destroy(h->mutex);
     h->mutex = NULL;
     rtc_release_pool_slot(h);
-    return NULL;
+    return HAL_EINVAL;
   }
 
 #ifdef HAL_ENABLE_DS3231
@@ -602,11 +628,18 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
     hal_mutex_destroy(h->mutex);
     h->mutex = NULL;
     rtc_release_pool_slot(h);
-    return NULL;
+    return HAL_EINVAL;
   }
 #endif
 
-  hal_i2c_init_bus(ic->i2c_bus, ic->sda_pin, ic->scl_pin, ic->clock_hz);
+  const hal_status_t i2c_status =
+      hal_i2c_init_bus(ic->i2c_bus, ic->sda_pin, ic->scl_pin, ic->clock_hz);
+  if (i2c_status != HAL_OK) {
+    hal_mutex_destroy(h->mutex);
+    h->mutex = NULL;
+    rtc_release_pool_slot(h);
+    return i2c_status;
+  }
 
   switch (cfg->chip) {
 #ifdef HAL_ENABLE_PCF8563
@@ -620,7 +653,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
       hal_mutex_destroy(h->mutex);
       h->mutex = NULL;
       rtc_release_pool_slot(h);
-      return NULL;
+      return HAL_EIO;
     }
     break;
 #endif
@@ -632,7 +665,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
       hal_mutex_destroy(h->mutex);
       h->mutex = NULL;
       rtc_release_pool_slot(h);
-      return NULL;
+      return HAL_EIO;
     }
 
     new (h->backend.ds3231_mem) DS3231(ic->i2c_bus, addr);
@@ -641,7 +674,7 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
       hal_mutex_destroy(h->mutex);
       h->mutex = NULL;
       rtc_release_pool_slot(h);
-      return NULL;
+      return HAL_EIO;
     }
     break;
 #endif
@@ -650,9 +683,16 @@ hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
     hal_mutex_destroy(h->mutex);
     h->mutex = NULL;
     rtc_release_pool_slot(h);
-    return NULL;
+    return HAL_EUNSUPPORTED;
   }
 
+  *out_handle = h;
+  return HAL_OK;
+}
+
+hal_rtc_t hal_rtc_init(const hal_rtc_config_t *cfg) {
+  hal_rtc_t h = NULL;
+  (void)hal_rtc_init_ex(cfg, &h);
   return h;
 }
 
@@ -674,9 +714,9 @@ void hal_rtc_deinit(hal_rtc_t h) {
   rtc_release_pool_slot(h);
 }
 
-bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
+hal_status_t hal_rtc_get_datetime_ex(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
   if (!h || !out_dt) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -718,12 +758,17 @@ bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
+bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt) {
+  return hal_status_to_bool(hal_rtc_get_datetime_ex(h, out_dt));
+}
+
+hal_status_t hal_rtc_set_datetime_ex(hal_rtc_t h,
+                                     const hal_rtc_datetime_t *dt) {
   if (!h || !dt || !rtc_validate_datetime(dt)) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -753,38 +798,51 @@ bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
+bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt) {
+  return hal_status_to_bool(hal_rtc_set_datetime_ex(h, dt));
+}
+
+hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch) {
   if (!h || !out_epoch) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_rtc_datetime_t dt = {};
-  if (!hal_rtc_get_datetime(h, &dt)) {
-    return false;
+  const hal_status_t status = hal_rtc_get_datetime_ex(h, &dt);
+  if (status != HAL_OK) {
+    return status;
   }
 
-  return rtc_datetime_to_epoch(&dt, out_epoch);
+  return rtc_datetime_to_epoch(&dt, out_epoch) ? HAL_OK : HAL_EOVERFLOW;
 }
 
-bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch) {
+bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
+  return hal_status_to_bool(hal_rtc_get_epoch_ex(h, out_epoch));
+}
+
+hal_status_t hal_rtc_set_epoch_ex(hal_rtc_t h, uint64_t epoch) {
   if (!h) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_rtc_datetime_t dt = {};
   if (!rtc_epoch_to_datetime(epoch, &dt)) {
-    return false;
+    return HAL_EOVERFLOW;
   }
 
-  return hal_rtc_set_datetime(h, &dt);
+  return hal_rtc_set_datetime_ex(h, &dt);
 }
 
-bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
+bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch) {
+  return hal_status_to_bool(hal_rtc_set_epoch_ex(h, epoch));
+}
+
+hal_status_t hal_rtc_get_clock_integrity_ex(hal_rtc_t h, bool *out_ok) {
   if (!h || !out_ok) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -808,13 +866,22 @@ bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask) {
+bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok) {
+  return hal_status_to_bool(hal_rtc_get_clock_integrity_ex(h, out_ok));
+}
+
+hal_status_t hal_rtc_set_interrupt_enable_ex(hal_rtc_t h, uint8_t irq_mask) {
   if (!h) {
-    return false;
+    return HAL_EINVAL;
   }
+#ifdef HAL_ENABLE_DS3231
+  if (h->chip == HAL_RTC_CHIP_DS3231 && (irq_mask & HAL_RTC_IRQ_TIMER) != 0u) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   hal_mutex_lock(h->mutex);
   bool ok = false;
@@ -852,12 +919,17 @@ bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask) {
+bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask) {
+  return hal_status_to_bool(hal_rtc_set_interrupt_enable_ex(h, irq_mask));
+}
+
+hal_status_t hal_rtc_get_interrupt_enable_ex(hal_rtc_t h,
+                                             uint8_t *out_irq_mask) {
   if (!h || !out_irq_mask) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -903,12 +975,16 @@ bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
+bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask) {
+  return hal_status_to_bool(hal_rtc_get_interrupt_enable_ex(h, out_irq_mask));
+}
+
+hal_status_t hal_rtc_get_and_clear_flags_ex(hal_rtc_t h, uint8_t *out_flags) {
   if (!h || !out_flags) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -952,13 +1028,22 @@ bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c) {
+bool hal_rtc_get_and_clear_flags(hal_rtc_t h, uint8_t *out_flags) {
+  return hal_status_to_bool(hal_rtc_get_and_clear_flags_ex(h, out_flags));
+}
+
+hal_status_t hal_rtc_get_temperature_ex(hal_rtc_t h, float *out_temperature_c) {
   if (!h || !out_temperature_c) {
-    return false;
+    return HAL_EINVAL;
   }
+#ifdef HAL_ENABLE_PCF8563
+  if (h->chip == HAL_RTC_CHIP_PCF8563) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   hal_mutex_lock(h->mutex);
   bool ok = false;
@@ -980,13 +1065,23 @@ bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode) {
-  if (!h) {
-    return false;
+bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c) {
+  return hal_status_to_bool(hal_rtc_get_temperature_ex(h, out_temperature_c));
+}
+
+hal_status_t hal_rtc_set_clkout_mode_ex(hal_rtc_t h,
+                                        hal_rtc_clkout_mode_t mode) {
+  if (!h || !rtc_validate_clkout_mode(mode)) {
+    return HAL_EINVAL;
   }
+#ifdef HAL_ENABLE_DS3231
+  if (h->chip == HAL_RTC_CHIP_DS3231 && mode == HAL_RTC_CLKOUT_32_HZ) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   hal_mutex_lock(h->mutex);
   bool ok = false;
@@ -1014,12 +1109,17 @@ bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode) {
+bool hal_rtc_set_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t mode) {
+  return hal_status_to_bool(hal_rtc_set_clkout_mode_ex(h, mode));
+}
+
+hal_status_t hal_rtc_get_clkout_mode_ex(hal_rtc_t h,
+                                        hal_rtc_clkout_mode_t *out_mode) {
   if (!h || !out_mode) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -1048,14 +1148,24 @@ bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock,
-                       uint8_t count) {
-  if (!h) {
-    return false;
+bool hal_rtc_get_clkout_mode(hal_rtc_t h, hal_rtc_clkout_mode_t *out_mode) {
+  return hal_status_to_bool(hal_rtc_get_clkout_mode_ex(h, out_mode));
+}
+
+hal_status_t hal_rtc_set_timer_ex(hal_rtc_t h,
+                                  hal_rtc_timer_clock_t timer_clock,
+                                  uint8_t count) {
+  if (!h || !rtc_validate_timer_clock(timer_clock)) {
+    return HAL_EINVAL;
   }
+#ifdef HAL_ENABLE_DS3231
+  if (h->chip == HAL_RTC_CHIP_DS3231) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   hal_mutex_lock(h->mutex);
   bool ok = false;
@@ -1085,14 +1195,25 @@ bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock,
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock,
-                       uint8_t *out_count) {
+bool hal_rtc_set_timer(hal_rtc_t h, hal_rtc_timer_clock_t timer_clock,
+                       uint8_t count) {
+  return hal_status_to_bool(hal_rtc_set_timer_ex(h, timer_clock, count));
+}
+
+hal_status_t hal_rtc_get_timer_ex(hal_rtc_t h,
+                                  hal_rtc_timer_clock_t *out_timer_clock,
+                                  uint8_t *out_count) {
   if (!h || !out_timer_clock || !out_count) {
-    return false;
+    return HAL_EINVAL;
   }
+#ifdef HAL_ENABLE_DS3231
+  if (h->chip == HAL_RTC_CHIP_DS3231) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
 
   hal_mutex_lock(h->mutex);
   bool ok = false;
@@ -1119,12 +1240,18 @@ bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock,
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
+bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock,
+                       uint8_t *out_count) {
+  return hal_status_to_bool(
+      hal_rtc_get_timer_ex(h, out_timer_clock, out_count));
+}
+
+hal_status_t hal_rtc_set_alarm_ex(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
   if (!h || !alarm || !rtc_validate_alarm(alarm)) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -1163,12 +1290,23 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  if (ok) {
+    return HAL_OK;
+  }
+#ifdef HAL_ENABLE_DS3231
+  return h->chip == HAL_RTC_CHIP_DS3231 ? HAL_EUNSUPPORTED : HAL_EIO;
+#else
+  return HAL_EIO;
+#endif
 }
 
-bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
+bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm) {
+  return hal_status_to_bool(hal_rtc_set_alarm_ex(h, alarm));
+}
+
+hal_status_t hal_rtc_get_alarm_ex(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
   if (!h || !out_alarm) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
@@ -1216,7 +1354,11 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
   }
 
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
+}
+
+bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
+  return hal_status_to_bool(hal_rtc_get_alarm_ex(h, out_alarm));
 }
 
 #endif /* HAL_ENABLE_RTC */

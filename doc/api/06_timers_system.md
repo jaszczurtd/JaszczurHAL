@@ -270,14 +270,15 @@ uint64_t hal_micros64(void);          // 64-bit timestamp, no overflow
 void     hal_delay_ms(uint32_t ms);
 void     hal_delay_us(uint32_t us);
 void     hal_watchdog_feed(void);
-void     hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
+hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug);
 bool     hal_watchdog_caused_reboot(void);
 void     hal_idle(void);
 bool     hal_in_isr(void);            // true when called from an exception/IRQ handler
 uint32_t hal_get_free_heap(void);     // available heap in bytes
+hal_status_t hal_read_chip_temp_ex(float *out_celsius);
 float    hal_read_chip_temp(void);    // on-die temperature in °C (±2 °C typical)
-void     hal_enter_bootloader(void);  // jump to RP2040 USB bootloader (does not return on hardware)
-void     hal_u32_to_bytes_be(uint32_t val, uint8_t *buf); // writes big-endian bytes
+hal_status_t hal_enter_bootloader(void); // does not return on supported hardware
+hal_status_t hal_u32_to_bytes_be(uint32_t val, uint8_t *buf);
 
 typedef struct {
     const char *target_name;
@@ -309,7 +310,7 @@ hal_status_t hal_system_get_current_architecture(hal_system_architecture_t *out)
 #define HAL_DEVICE_UID_BYTES        8u
 #define HAL_DEVICE_UID_HEX_BUF_SIZE 17u  // 16 hex chars + NUL
 
-void hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
+hal_status_t hal_get_device_uid(uint8_t uid[HAL_DEVICE_UID_BYTES]);
 hal_status_t hal_get_device_uid_hex_ex(char *buf, size_t buflen);
 bool hal_get_device_uid_hex(char *buf, size_t buflen);
 
@@ -318,10 +319,12 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen);
 void               hal_fault_subsystem_init(void);
 hal_reset_reason_t hal_get_reset_reason(void);
 const char        *hal_reset_reason_str(hal_reset_reason_t reason);
+hal_status_t        hal_get_last_fault_ex(hal_fault_info_t *out);
 bool               hal_get_last_fault(hal_fault_info_t *out);
 void               hal_clear_last_fault(void);
 bool               hal_last_boot_was_brownout(void);
 void               hal_alive_mark(void);
+hal_status_t        hal_stack_guard_init_ex(void);
 bool               hal_stack_guard_init(void);
 void               hal_stack_guard_check(void);
 
@@ -337,6 +340,13 @@ void               hal_stack_guard_check(void);
 ```
 
 `hal_system_get_current_architecture()` returns a by-value snapshot copied into the caller-provided output struct. String fields point to backend-owned static storage; numeric fields use `0` when the backend cannot report a meaningful value. The API does not allocate and the caller does not own or free the returned strings.
+
+The status-first system calls distinguish invalid output pointers
+(`HAL_EINVAL`), absent retained fault data (`HAL_ENOENT`) and services that the
+active backend does not implement (`HAL_EUNSUPPORTED`). The historical
+`hal_read_chip_temp()`, `hal_get_last_fault()` and `hal_stack_guard_init()`
+functions are compatibility wrappers over their adjacent `_ex` operations.
+
 **impl/rp2040:** Time is read through native pico-sdk only - `hal_millis()` uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/`hal_micros64()` use `time_us_64()` (no Arduino `millis()`/`micros()`). All RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, the UID hex formatter, and the backend architecture metadata live in the SoC driver `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to pico `sleep_ms()` (when interrupts are enabled) or `busy_wait_ms()` (in ISR / HAL-critical context). `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` uses `busy_wait_us()` (never `sleep_us()`/`delayMicroseconds()`, which arm an alarm interrupt and would deadlock inside a critical section). The architecture snapshot reports total flash from `PICO_FLASH_SIZE_BYTES` and, when the final Arduino-pico layout exposes `FS_START`, computes usable firmware flash as the XIP region before the filesystem/EEPROM partition. `stack_total_bytes` reports the core-0 stack reservation only (`PICO_STACK_SIZE` / `HAL_RP2040_STACK_SIZE`); `heap_total_bytes` stays `0` because Arduino-pico does not expose a stable total-heap capacity. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
 **impl/stm32g474:** Bare-metal backend with the same dispatch/wrapper pattern as the RP2040 path; host sanity builds of this backend report `is_hardware = false` when `JH_STM32G474_HW` is not active. All SoC bindings (SysTick/FreeRTOS tick time, DWT cycle fallback delays, IWDG planned, `__WFI()`, ADC1 channel 16 for on-die temp, `UID_BASE` for the device id, backend architecture metadata, and stack/RAM span helpers) live in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` behind `stm32g474_system_*` wrappers. `hal_in_isr()` reads `IPSR` on ARM targets and returns `false` on host builds (same rule as Arduino, gated by `__arm__`). In `HAL_ENABLE_FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the core is outside `hal_critical_section_*`; otherwise it falls back to a DWT cycle busy-wait. `hal_idle()` yields in valid FreeRTOS task context and uses a no-op fallback otherwise. `hal_delay_us()` remains a DWT cycle busy-wait on hardware FreeRTOS builds. The architecture snapshot reports `flash_total_bytes` from `HAL_STM32_FLASH_SIZE` and subtracts `HAL_STM32_FLASH_EEPROM_SIZE` plus `HAL_STM32_FLASH_LITTLEFS_SIZE` into `flash_reserved_bytes`; `flash_usable_bytes` is the remainder. On hardware builds, `ram_total_bytes`/`ram_usable_bytes` and `stack_total_bytes` are derived from the STM32 linker layout symbols exported by `stm32_lib/STM32G474RETx_FLASH.ld`; host fallback uses the backend defaults.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
@@ -400,7 +410,12 @@ void example_system_timing(void) {
     uint32_t one_hour = HOURS(1);    // 3600000 ms
 
     // Setup watchdog: reset if not fed for 5 seconds
-    hal_watchdog_enable(5000, false);  // don't pause on debugger
+    hal_status_t watchdog_status = hal_watchdog_enable(5000, false);
+    if (watchdog_status != HAL_OK) {
+        hal_derr("watchdog unavailable: %s",
+                 hal_status_to_string(watchdog_status));
+        return;
+    }
 
     // Main loop with watchdog feeding
     uint32_t loop_count = 0;
@@ -432,7 +447,9 @@ void example_device_uid_and_reset(void) {
 
     // Get device unique identifier
     uint8_t uid[HAL_DEVICE_UID_BYTES];
-    hal_get_device_uid(uid);
+    if (hal_get_device_uid(uid) != HAL_OK) {
+        return;
+    }
 
     char uid_hex[HAL_DEVICE_UID_HEX_BUF_SIZE];
     if (hal_get_device_uid_hex(uid_hex, sizeof(uid_hex))) {
@@ -460,11 +477,14 @@ void example_device_uid_and_reset(void) {
 
     // System info
     uint32_t free_heap = hal_get_free_heap();
-    float chip_temp = hal_read_chip_temp();
+    float chip_temp = 0.0f;
+    hal_status_t temp_status = hal_read_chip_temp_ex(&chip_temp);
     uint32_t core_id = hal_get_core_id();
 
-    hal_deb("Free heap: %lu bytes, Chip temp: %.1f°C, Core: %lu",
-            free_heap, chip_temp, core_id);
+    if (temp_status == HAL_OK) {
+        hal_deb("Free heap: %lu bytes, Chip temp: %.1f°C, Core: %lu",
+                free_heap, chip_temp, core_id);
+    }
 
     // Mark alive for brownout detection
     hal_alive_mark();
@@ -519,8 +539,8 @@ void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() retu
 ```
 
 **Device UID details:**
-- `hal_get_device_uid(uid)` fills an exactly 8-byte output buffer. Passing
-  `NULL` is a safe no-op.
+- `hal_get_device_uid(uid)` fills an exactly 8-byte output buffer and returns
+  `HAL_EINVAL` for `NULL`.
 - `hal_get_device_uid_hex_ex(buf, buflen)` writes 16 uppercase hex characters
   followed by a NUL terminator (17 bytes total). It reports `HAL_EINVAL` for
   `NULL` buffers and `HAL_EOVERFLOW` when
@@ -561,10 +581,12 @@ typedef struct {
 void               hal_fault_subsystem_init(void);
 hal_reset_reason_t hal_get_reset_reason(void);
 const char        *hal_reset_reason_str(hal_reset_reason_t reason);
+hal_status_t        hal_get_last_fault_ex(hal_fault_info_t *out);
 bool               hal_get_last_fault(hal_fault_info_t *out);
 void               hal_clear_last_fault(void);
 bool               hal_last_boot_was_brownout(void);
 void               hal_alive_mark(void);
+hal_status_t        hal_stack_guard_init_ex(void);
 bool               hal_stack_guard_init(void);
 void               hal_stack_guard_check(void);
 ```
