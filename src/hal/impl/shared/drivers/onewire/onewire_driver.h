@@ -44,10 +44,7 @@ public:
   void target_search(uint8_t family_code);
   bool search(uint8_t *new_addr, bool search_mode = true);
 
-  static uint8_t crc8(const uint8_t *addr, uint8_t len);
-  static bool check_crc16(const uint8_t *input, uint16_t len,
-                          const uint8_t *inverted_crc, uint16_t crc = 0u);
-  static uint16_t crc16(const uint8_t *input, uint16_t len, uint16_t crc = 0u);
+  /* CRC-8/CRC-16 moved to hal_crc.h (hal_crc8_maxim / hal_crc16_maxim). */
 
 private:
   uint8_t pin_;

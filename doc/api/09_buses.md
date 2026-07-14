@@ -602,19 +602,18 @@ void    hal_onewire_reset_search(hal_onewire_t h);
 void    hal_onewire_target_search(hal_onewire_t h, uint8_t family_code);
 bool    hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8],
                            bool search_mode);
-
-uint8_t  hal_onewire_crc8(const uint8_t *data, uint8_t len);
-bool     hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
-                                 const uint8_t inverted_crc[2],
-                                 uint16_t crc);
-uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc);
 ```
+
+> **CRC helpers moved.** The Dallas/Maxim CRC-8 and CRC-16 routines that used to
+> live here are now generic and live in `hal_crc.h`
+> (`hal_crc8_maxim`, `hal_crc16_maxim`, `hal_crc16_maxim_check`). See
+> [Utilities -> `hal_crc`](16_utilities.md).
 
 **impl/rp2040 + impl/stm32g474:** Both delegate to the same shared driver. The
 driver uses HAL GPIO input/output switching, `hal_delay_us()` slot timing and
 HAL critical sections around timing-sensitive sub-slots. An external 1-Wire
 pull-up is still expected, matching the original OneWire electrical model.
-**impl/.mock:** Scripted presence/read/search responses plus CRC helpers.
+**impl/.mock:** Scripted presence/read/search responses.
 **Thread safety:** Hardware builds use a per-handle mutex and a shared bus
 mutex around public operations. DS18B20 uses its own low-level driver instance
 so multi-step scratchpad transactions remain atomic under the DS18B20 mutex.

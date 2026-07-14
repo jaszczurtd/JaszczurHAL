@@ -4,6 +4,7 @@
 #include "hal/hal_config.h"
 #ifdef HAL_ENABLE_DS18B20
 
+#include "hal/hal_crc.h"
 #include "hal/hal_ds18b20.h"
 #include "hal/hal_serial.h"
 #include "hal/hal_sync.h"
@@ -148,7 +149,7 @@ static bool ds18b20_valid_address(const uint8_t *address) {
   if (address == NULL) {
     return false;
   }
-  return JHOneWire::crc8(address, 7u) == address[7];
+  return hal_crc8_maxim(address, 7u) == address[7];
 }
 
 static bool scratchpad_is_all_zeros(const uint8_t *scratchpad, size_t len) {
@@ -192,7 +193,7 @@ static bool ds18b20_is_connected(hal_ds18b20_impl_t *h, const uint8_t *address,
 
   const bool ok = ds18b20_read_scratchpad(h, address, scratchpad);
   return ok && !scratchpad_is_all_zeros(scratchpad, 9u) &&
-         (JHOneWire::crc8(scratchpad, 8u) == scratchpad[DS18B20_SCRATCH_CRC]);
+         (hal_crc8_maxim(scratchpad, 8u) == scratchpad[DS18B20_SCRATCH_CRC]);
 }
 
 static bool ds18b20_read_power_supply(hal_ds18b20_impl_t *h,

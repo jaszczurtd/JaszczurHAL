@@ -260,6 +260,46 @@ float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 
 ---
 
+## `hal_crc` - CRC checksums
+
+```c
+#include <hal/hal_crc.h>
+```
+
+Backend-agnostic, table-free CRC checksums for data integrity (**not**
+cryptography - for hashing/HMAC see [`hal_crypto`](07_crypto.md)). Opt-in via
+`HAL_ENABLE_CRC`; enabling `HAL_ENABLE_ONEWIRE` (or `HAL_ENABLE_DS18B20`) also
+turns it on, since the 1-Wire path needs CRC for ROM/scratchpad validation. CRC
+is a family parameterized by width, polynomial, init, reflection and final XOR,
+so every routine is named after the concrete variant it computes - there is
+deliberately no unqualified `hal_crc16` that would silently commit to one
+polynomial.
+
+### Functions
+
+```c
+uint8_t  hal_crc8_maxim(const uint8_t *data, size_t len);   // CRC-8/MAXIM-DOW (1-Wire)
+uint16_t hal_crc16_maxim(const uint8_t *data, size_t len, uint16_t crc); // Maxim 1-Wire CRC-16
+bool     hal_crc16_maxim_check(const uint8_t *data, size_t len,
+                               const uint8_t inverted_crc[2], uint16_t crc);
+uint16_t hal_crc16_ccitt(const uint8_t *data, size_t len, uint16_t crc); // CRC-16/CCITT-FALSE, poly 0x1021
+uint32_t hal_crc32(const uint8_t *data, size_t len);        // CRC-32/ISO-HDLC (zlib/Ethernet)
+```
+
+- The `crc` seed lets `hal_crc16_*` continue over a split buffer; pass `0` for
+  the Maxim variant and `HAL_CRC16_CCITT_INIT` (`0xFFFF`) for CCITT to start
+  fresh. `hal_crc8_maxim` and `hal_crc32` are one-shot.
+- `hal_crc16_maxim_check` reproduces the 1-Wire bus convention where devices
+  transmit the CRC-16 bit-inverted (the old `hal_onewire_check_crc16`).
+- Catalog check values over `"123456789"`: CRC-8/MAXIM `0xA1`,
+  CRC-16/CCITT-FALSE `0x29B1`, CRC-32 `0xCBF43926` - pinned by
+  `tests/test_hal_crc.cpp`.
+
+Adding a new variant (e.g. `hal_crc16_ccitt`, `hal_crc32c`) is a self-contained
+addition here; it never disturbs the existing entries.
+
+---
+
 ## SmartTimers
 
 ```c

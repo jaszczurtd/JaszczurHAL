@@ -235,27 +235,7 @@ bool hal_onewire_search(hal_onewire_t h, uint8_t out_rom[8], bool search_mode) {
   return found;
 }
 
-uint8_t hal_onewire_crc8(const uint8_t *data, uint8_t len) {
-  if (!data || len == 0u) {
-    return 0u;
-  }
-  return JHOneWire::crc8(data, len);
-}
-
-bool hal_onewire_check_crc16(const uint8_t *data, uint16_t len,
-                             const uint8_t inverted_crc[2], uint16_t crc) {
-  if (!data || !inverted_crc) {
-    return false;
-  }
-  return JHOneWire::check_crc16(data, len, inverted_crc, crc);
-}
-
-uint16_t hal_onewire_crc16(const uint8_t *data, uint16_t len, uint16_t crc) {
-  if (!data && len != 0u) {
-    return crc;
-  }
-  return JHOneWire::crc16(data, len, crc);
-}
+/* CRC helpers now live in hal_crc.h (hal_crc8_maxim / hal_crc16_maxim). */
 
 #endif /* HAL_ENABLE_ONEWIRE */
 #endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */

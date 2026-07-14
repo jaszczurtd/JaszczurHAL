@@ -52,6 +52,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp
+    ${SRC}/hal/hal_crc.cpp
     ${SRC}/hal/hal_pga2311.cpp
     ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/blake2s.c
     ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
@@ -138,6 +139,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MCP9600        # propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
+    HAL_ENABLE_CRC            # generic CRC-8/16/32 (also auto-enabled by ONEWIRE)
     HAL_ENABLE_DHT            # shared DHT11/DHT22 GPIO temperature/humidity driver
     HAL_ENABLE_BH1750         # shared ambient-light sensor over HAL I2C
     HAL_ENABLE_ADP5360        # shared ADP5360 PMIC over HAL I2C
