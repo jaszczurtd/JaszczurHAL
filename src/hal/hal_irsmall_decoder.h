@@ -19,6 +19,7 @@ extern "C" {
  */
 
 #include "hal_gpio.h"
+#include "hal_status.h"
 #include "hal_sync.h"
 
 #include <stdbool.h>
@@ -90,16 +91,28 @@ hal_irsmall_decoder_default_config(uint8_t input_pin,
 bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
                               const hal_irsmall_decoder_config_t *cfg);
 
+hal_status_t
+hal_irsmall_decoder_init_ex(hal_irsmall_decoder_t *dev,
+                            const hal_irsmall_decoder_config_t *cfg);
+
 void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev);
 
-void hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev);
 
-void hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev);
 
-void hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev);
+
+hal_status_t
+hal_irsmall_decoder_data_available_ex(hal_irsmall_decoder_t *dev,
+                                      hal_irsmall_decoder_data_t *out,
+                                      bool *out_available);
 
 bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
                                         hal_irsmall_decoder_data_t *out);
+
+hal_status_t hal_irsmall_decoder_has_data_ex(hal_irsmall_decoder_t *dev,
+                                             bool *out_has_data);
 
 bool hal_irsmall_decoder_has_data(hal_irsmall_decoder_t *dev);
 

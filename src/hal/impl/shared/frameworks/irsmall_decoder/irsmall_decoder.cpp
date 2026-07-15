@@ -131,8 +131,14 @@ static void irsmall_free_slot(hal_irsmall_decoder_t *dev) {
   hal_mutex_unlock(s_irsmall_slots_mutex);
 }
 
-static bool irsmall_ready(hal_irsmall_decoder_t *dev) {
-  return (dev != NULL) && (dev->mutex != NULL) && dev->initialized;
+static hal_status_t irsmall_ready_status(hal_irsmall_decoder_t *dev) {
+  if (dev == NULL) {
+    return HAL_EINVAL;
+  }
+  if (dev->mutex == NULL || !dev->initialized) {
+    return HAL_EUNINIT;
+  }
+  return HAL_OK;
 }
 
 uint32_t hal_irsmall_decoder_timeout_us(hal_irsmall_protocol_t protocol) {
@@ -779,15 +785,21 @@ hal_irsmall_decoder_default_config(uint8_t input_pin,
 
 bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
                               const hal_irsmall_decoder_config_t *cfg) {
+  return hal_status_to_bool(hal_irsmall_decoder_init_ex(dev, cfg));
+}
+
+hal_status_t
+hal_irsmall_decoder_init_ex(hal_irsmall_decoder_t *dev,
+                            const hal_irsmall_decoder_config_t *cfg) {
   if (dev == NULL) {
-    return false;
+    return HAL_EINVAL;
   }
 
   if (dev->initialized) {
     hal_irsmall_decoder_deinit(dev);
   }
   if (!irsmall_ensure_dev_mutex(dev)) {
-    return false;
+    return HAL_ENOMEM;
   }
 
   const hal_irsmall_decoder_config_t effective =
@@ -795,12 +807,12 @@ bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
           ? *cfg
           : hal_irsmall_decoder_default_config(0u, HAL_IRSMALL_PROTOCOL_NEC);
   if (!irsmall_valid_protocol(effective.protocol)) {
-    return false;
+    return HAL_EINVAL;
   }
 
   const int slot = irsmall_alloc_slot(dev);
   if (slot < 0) {
-    return false;
+    return HAL_ENOMEM;
   }
 
   hal_gpio_set_mode(effective.input_pin, HAL_GPIO_INPUT_PULLUP);
@@ -831,7 +843,7 @@ bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
   hal_gpio_attach_interrupt(effective.input_pin, s_irsmall_callbacks[slot],
                             hal_irsmall_decoder_irq_mode(effective.protocol));
   hal_gpio_set_irq_priority(effective.irq_priority);
-  return true;
+  return HAL_OK;
 }
 
 void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev) {
@@ -855,9 +867,10 @@ void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev) {
   dev->slot_index = IRSMALL_SLOT_NONE;
 }
 
-void hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev) {
-  if (!irsmall_ready(dev)) {
-    return;
+hal_status_t hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev) {
+  hal_status_t status = irsmall_ready_status(dev);
+  if (!hal_status_is_ok(status)) {
+    return status;
   }
 
   hal_mutex_lock(dev->mutex);
@@ -869,28 +882,32 @@ void hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev) {
                             s_irsmall_callbacks[dev->slot_index],
                             hal_irsmall_decoder_irq_mode(dev->cfg.protocol));
   hal_gpio_set_irq_priority(dev->cfg.irq_priority);
-  hal_irsmall_decoder_reset(dev);
+  return hal_irsmall_decoder_reset(dev);
 }
 
-void hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev) {
-  if (!irsmall_ready(dev)) {
-    return;
+hal_status_t hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev) {
+  hal_status_t status = irsmall_ready_status(dev);
+  if (!hal_status_is_ok(status)) {
+    return status;
   }
 
   hal_mutex_lock(dev->mutex);
   dev->enabled = false;
   hal_mutex_unlock(dev->mutex);
   hal_gpio_detach_interrupt(dev->cfg.input_pin);
+  return HAL_OK;
 }
 
-void hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev) {
-  if (!irsmall_ready(dev)) {
-    return;
+hal_status_t hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev) {
+  hal_status_t status = irsmall_ready_status(dev);
+  if (!hal_status_is_ok(status)) {
+    return status;
   }
 
   hal_mutex_lock(dev->mutex);
   irsmall_reset_isr_state(dev, hal_micros());
   hal_mutex_unlock(dev->mutex);
+  return HAL_OK;
 }
 
 static bool irsmall_take_data(hal_irsmall_decoder_t *dev,
@@ -922,18 +939,39 @@ static bool irsmall_take_data(hal_irsmall_decoder_t *dev,
 
 bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
                                         hal_irsmall_decoder_data_t *out) {
-  if (!irsmall_ready(dev)) {
-    return false;
-  }
-
-  hal_mutex_lock(dev->mutex);
-  const bool available = irsmall_take_data(dev, out);
-  hal_mutex_unlock(dev->mutex);
+  bool available = false;
+  (void)hal_irsmall_decoder_data_available_ex(dev, out, &available);
   return available;
 }
 
+hal_status_t
+hal_irsmall_decoder_data_available_ex(hal_irsmall_decoder_t *dev,
+                                      hal_irsmall_decoder_data_t *out,
+                                      bool *out_available) {
+  if (out_available == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_available = false;
+  hal_status_t status = irsmall_ready_status(dev);
+  if (!hal_status_is_ok(status)) {
+    return status;
+  }
+  hal_mutex_lock(dev->mutex);
+  const bool available = irsmall_take_data(dev, out);
+  hal_mutex_unlock(dev->mutex);
+  *out_available = available;
+  return HAL_OK;
+}
+
 bool hal_irsmall_decoder_has_data(hal_irsmall_decoder_t *dev) {
-  return hal_irsmall_decoder_data_available(dev, NULL);
+  bool available = false;
+  (void)hal_irsmall_decoder_has_data_ex(dev, &available);
+  return available;
+}
+
+hal_status_t hal_irsmall_decoder_has_data_ex(hal_irsmall_decoder_t *dev,
+                                             bool *out_has_data) {
+  return hal_irsmall_decoder_data_available_ex(dev, NULL, out_has_data);
 }
 
 #endif /* HAL_ENABLE_IRSMALL_DECODER */

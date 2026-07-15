@@ -40,6 +40,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "hal_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -183,6 +185,8 @@ typedef struct {
  *         does not respond.
  */
 hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg);
+hal_status_t hal_thermocouple_init_ex(const hal_thermocouple_config_t *cfg,
+                                      hal_thermocouple_t *out_handle);
 
 /**
  * @brief Release a thermocouple handle back to the static pool.
@@ -204,6 +208,7 @@ void hal_thermocouple_deinit(hal_thermocouple_t h);
  * @return Temperature in °C, or NAN on fault / invalid handle.
  */
 float hal_thermocouple_read(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c);
 
 #ifdef HAL_ENABLE_MCP9600
 /**
@@ -216,6 +221,8 @@ float hal_thermocouple_read(hal_thermocouple_t h);
  * @return Temperature in °C, or NAN if unsupported / error.
  */
 float hal_thermocouple_read_ambient(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_read_ambient_ex(hal_thermocouple_t h,
+                                              float *out_c);
 
 /**
  * @brief Read the raw EMF ADC value in µV (signed 24-bit, sign-extended).
@@ -226,6 +233,8 @@ float hal_thermocouple_read_ambient(hal_thermocouple_t h);
  * @return Raw µV reading, or 0 if unsupported.
  */
 int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_read_adc_raw_ex(hal_thermocouple_t h,
+                                              int32_t *out_raw);
 #endif /* HAL_ENABLE_MCP9600 */
 
 #ifdef HAL_ENABLE_MCP9600
@@ -237,8 +246,8 @@ int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h);
  * @param h     Valid handle.
  * @param type  Desired wire type.
  */
-void hal_thermocouple_set_type(hal_thermocouple_t h,
-                               hal_thermocouple_type_t type);
+hal_status_t hal_thermocouple_set_type(hal_thermocouple_t h,
+                                       hal_thermocouple_type_t type);
 #endif /* HAL_ENABLE_MCP9600 */
 
 /**
@@ -251,6 +260,8 @@ void hal_thermocouple_set_type(hal_thermocouple_t h,
  * @return Current wire type.
  */
 hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_get_type_ex(hal_thermocouple_t h,
+                                          hal_thermocouple_type_t *out_type);
 
 #ifdef HAL_ENABLE_MCP9600
 /**
@@ -261,7 +272,7 @@ hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h);
  * @param h      Valid handle.
  * @param coeff  Filter coefficient in [0, 7].
  */
-void hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff);
+hal_status_t hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff);
 
 /**
  * @brief Get the current hardware IIR filter coefficient.
@@ -272,6 +283,8 @@ void hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff);
  * @return Coefficient in [0, 7], or 0 if unsupported.
  */
 uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_get_filter_ex(hal_thermocouple_t h,
+                                            uint8_t *out_coeff);
 
 /**
  * @brief Set the hot-junction ADC conversion resolution.
@@ -281,8 +294,9 @@ uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
  * @param h    Valid handle.
  * @param res  Desired ADC resolution.
  */
-void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
-                                         hal_thermocouple_adc_res_t res);
+hal_status_t
+hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
+                                    hal_thermocouple_adc_res_t res);
 
 /**
  * @brief Get the current hot-junction ADC conversion resolution.
@@ -295,6 +309,9 @@ void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
  */
 hal_thermocouple_adc_res_t
 hal_thermocouple_get_adc_resolution(hal_thermocouple_t h);
+hal_status_t
+hal_thermocouple_get_adc_resolution_ex(hal_thermocouple_t h,
+                                       hal_thermocouple_adc_res_t *out_res);
 
 /**
  * @brief Set the cold-junction (ambient) ADC resolution.
@@ -304,8 +321,9 @@ hal_thermocouple_get_adc_resolution(hal_thermocouple_t h);
  * @param h    Valid handle.
  * @param res  Desired ambient resolution.
  */
-void hal_thermocouple_set_ambient_resolution(
-    hal_thermocouple_t h, hal_thermocouple_ambient_res_t res);
+hal_status_t
+hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h,
+                                        hal_thermocouple_ambient_res_t res);
 
 /**
  * @brief Enable or put the sensor into sleep / low-power mode.
@@ -315,7 +333,7 @@ void hal_thermocouple_set_ambient_resolution(
  * @param h       Valid handle.
  * @param enable  true = normal operation; false = sleep.
  */
-void hal_thermocouple_enable(hal_thermocouple_t h, bool enable);
+hal_status_t hal_thermocouple_enable(hal_thermocouple_t h, bool enable);
 #endif /* HAL_ENABLE_MCP9600 */
 
 /**
@@ -328,6 +346,8 @@ void hal_thermocouple_enable(hal_thermocouple_t h, bool enable);
  * @return true if awake and measuring.
  */
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_is_enabled_ex(hal_thermocouple_t h,
+                                            bool *out_enabled);
 
 #ifdef HAL_ENABLE_MCP9600
 /**
@@ -341,9 +361,10 @@ bool hal_thermocouple_is_enabled(hal_thermocouple_t h);
  * @param enabled    true to enable this alert channel.
  * @param cfg        Alert parameters (must be non-NULL when @p enabled).
  */
-void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
-                                bool enabled,
-                                const hal_thermocouple_alert_cfg_t *cfg);
+hal_status_t
+hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
+                           bool enabled,
+                           const hal_thermocouple_alert_cfg_t *cfg);
 
 /**
  * @brief Read back the configured trigger temperature of an alert channel.
@@ -355,6 +376,9 @@ void hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
  * @return Trigger temperature in °C, or NAN if unsupported / invalid channel.
  */
 float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
+hal_status_t hal_thermocouple_get_alert_temp_ex(hal_thermocouple_t h,
+                                                uint8_t alert_num,
+                                                float *out_c);
 
 /**
  * @brief Read the raw 8-bit status register.
@@ -367,6 +391,8 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
  * @return Status byte, or 0 if unsupported.
  */
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_get_status_ex(hal_thermocouple_t h,
+                                            uint8_t *out_status);
 #endif /* HAL_ENABLE_MCP9600 */
 
 #ifdef __cplusplus

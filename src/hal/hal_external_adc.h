@@ -20,6 +20,8 @@ extern "C" {
  * not need to take additional locks.
  */
 
+#include "hal_status.h"
+
 #include <stdint.h>
 
 /**
@@ -28,7 +30,7 @@ extern "C" {
  * @param adc_range LSB size in millivolts (e.g. 0.1875 for ±6.144 V
  * full-scale). Stored internally and used by hal_ext_adc_read_scaled().
  */
-void hal_ext_adc_init(uint8_t address, float adc_range);
+hal_status_t hal_ext_adc_init(uint8_t address, float adc_range);
 
 /**
  * @brief Initialise ADS1115 on selected I2C controller.
@@ -36,7 +38,19 @@ void hal_ext_adc_init(uint8_t address, float adc_range);
  * @param address   7-bit I2C address of the ADS1115.
  * @param adc_range LSB size in millivolts.
  */
-void hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range);
+hal_status_t hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address,
+                                  float adc_range);
+
+/**
+ * @brief Status-returning raw read variant.
+ *
+ * @param channel ADS1115 input channel (0-3).
+ * @param out     Receives the raw signed 16-bit ADC result.
+ * @return HAL_OK; HAL_EINVAL for an invalid channel/output pointer;
+ *         HAL_EUNINIT before successful init; HAL_ETIMEOUT/HAL_EBUS/HAL_EIO
+ *         for ADS1115/backend read failures.
+ */
+hal_status_t hal_ext_adc_read_ex(uint8_t channel, int16_t *out);
 
 /**
  * @brief Read a raw 16-bit value from the given single-ended channel.
@@ -49,6 +63,15 @@ void hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range);
  * @note Returns 0 on invalid channel or ADS1X15 communication/timeout errors.
  */
 int16_t hal_ext_adc_read(uint8_t channel);
+
+/**
+ * @brief Status-returning scaled read variant.
+ *
+ * @param channel ADS1115 input channel (0-3).
+ * @param out     Receives the scaled value.
+ * @return HAL_OK or the same error statuses as hal_ext_adc_read_ex().
+ */
+hal_status_t hal_ext_adc_read_scaled_ex(uint8_t channel, float *out);
 
 /**
  * @brief Read a channel and apply the stored adc_range scale factor.

@@ -8,6 +8,8 @@ extern "C" {
 
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
+#include "hal_status.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -43,12 +45,16 @@ typedef struct {
 } hal_dma_pwm_audio_config_t;
 
 bool hal_dma_pwm_audio_supported(void);
+hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
+                                         hal_dma_pwm_audio_t *out_audio);
 hal_dma_pwm_audio_t
 hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg);
+hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio);
-void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio);
-void hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio, uint16_t idle_value);
-void hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio);
+hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio);
+hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
+                                     uint16_t idle_value);
+hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio);
 void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_is_running(hal_dma_pwm_audio_t audio);
 bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio);

@@ -51,13 +51,13 @@ static inline void mqtt_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_mqtt_mutex);
 }
 
-static bool validate_non_empty(const char *value, const char *fn,
-                               const char *name) {
+static hal_status_t validate_non_empty(const char *value, const char *fn,
+                                       const char *name) {
   if (!value || value[0] == '\0') {
     hal_derr("%s: %s is NULL/empty", fn, name);
-    return false;
+    return HAL_EINVAL;
   }
-  return true;
+  return HAL_OK;
 }
 
 static void mqtt_internal_callback(char *topic, uint8_t *payload,
@@ -100,14 +100,16 @@ static inline void mqtt_bind_callback(void) {
   s_client.setCallback(mqtt_internal_callback);
 }
 
-bool hal_mqtt_set_server(const char *host, uint16_t port) {
-  if (!validate_non_empty(host, "hal_mqtt_set_server", "host")) {
-    return false;
+hal_status_t hal_mqtt_set_server_ex(const char *host, uint16_t port) {
+  hal_status_t status =
+      validate_non_empty(host, "hal_mqtt_set_server_ex", "host");
+  if (status != HAL_OK) {
+    return status;
   }
 
-  if (port <= 0 || port > 65535) {
-    hal_derr("hal_mqtt_set_server: invalid broker port: %d", port);
-    return false;
+  if (port == 0u) {
+    hal_derr("hal_mqtt_set_server_ex: invalid broker port: %u", (unsigned)port);
+    return HAL_EINVAL;
   }
 
   mqtt_ensure_mutex();
@@ -119,10 +121,15 @@ bool hal_mqtt_set_server(const char *host, uint16_t port) {
   s_server_configured = true;
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user) {
+bool hal_mqtt_set_server(const char *host, uint16_t port) {
+  return hal_status_to_bool(hal_mqtt_set_server_ex(host, port));
+}
+
+hal_status_t hal_mqtt_set_callback_ex(hal_mqtt_message_callback_t callback,
+                                      void *user) {
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
@@ -131,20 +138,38 @@ bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user) {
   mqtt_bind_callback();
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_mqtt_set_keepalive(uint16_t keepalive_s) {
+bool hal_mqtt_set_callback(hal_mqtt_message_callback_t callback, void *user) {
+  return hal_status_to_bool(hal_mqtt_set_callback_ex(callback, user));
+}
+
+hal_status_t hal_mqtt_set_keepalive_ex(uint16_t keepalive_s) {
+  if (keepalive_s == 0u) {
+    hal_derr("hal_mqtt_set_keepalive_ex: keepalive_s must be > 0");
+    return HAL_EINVAL;
+  }
+
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.setKeepAlive(keepalive_s);
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_mqtt_set_socket_timeout(uint16_t timeout_s) {
+bool hal_mqtt_set_keepalive(uint16_t keepalive_s) {
+  return hal_status_to_bool(hal_mqtt_set_keepalive_ex(keepalive_s));
+}
+
+hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s) {
+  if (timeout_s == 0u) {
+    hal_derr("hal_mqtt_set_socket_timeout_ex: timeout_s must be > 0");
+    return HAL_EINVAL;
+  }
+
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
@@ -152,10 +177,19 @@ bool hal_mqtt_set_socket_timeout(uint16_t timeout_s) {
   s_wifi_client.setTimeout((unsigned long)timeout_s * 1000UL);
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return true;
+  return HAL_OK;
 }
 
-bool hal_mqtt_set_buffer_size(uint16_t size) {
+bool hal_mqtt_set_socket_timeout(uint16_t timeout_s) {
+  return hal_status_to_bool(hal_mqtt_set_socket_timeout_ex(timeout_s));
+}
+
+hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size) {
+  if (size == 0u) {
+    hal_derr("hal_mqtt_set_buffer_size_ex: size must be > 0");
+    return HAL_EINVAL;
+  }
+
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
@@ -163,10 +197,15 @@ bool hal_mqtt_set_buffer_size(uint16_t size) {
 
   hal_mutex_unlock(s_mqtt_mutex);
   if (!ok) {
-    hal_derr("hal_mqtt_set_buffer_size: setBufferSize(%u) failed",
+    hal_derr("hal_mqtt_set_buffer_size_ex: setBufferSize(%u) failed",
              (unsigned)size);
+    return HAL_EIO;
   }
-  return ok;
+  return HAL_OK;
+}
+
+bool hal_mqtt_set_buffer_size(uint16_t size) {
+  return hal_status_to_bool(hal_mqtt_set_buffer_size_ex(size));
 }
 
 uint16_t hal_mqtt_get_buffer_size(void) {
@@ -179,9 +218,11 @@ uint16_t hal_mqtt_get_buffer_size(void) {
   return size;
 }
 
-bool hal_mqtt_connect(const char *client_id) {
-  if (!validate_non_empty(client_id, "hal_mqtt_connect", "client_id")) {
-    return false;
+hal_status_t hal_mqtt_connect_ex(const char *client_id) {
+  hal_status_t status =
+      validate_non_empty(client_id, "hal_mqtt_connect_ex", "client_id");
+  if (status != HAL_OK) {
+    return status;
   }
 
   mqtt_ensure_mutex();
@@ -189,24 +230,35 @@ bool hal_mqtt_connect(const char *client_id) {
 
   if (!s_server_configured) {
     hal_mutex_unlock(s_mqtt_mutex);
-    hal_derr("hal_mqtt_connect: server is not configured");
-    return false;
+    hal_derr("hal_mqtt_connect_ex: server is not configured");
+    return HAL_EUNINIT;
   }
 
   mqtt_bind_callback();
   const bool ok = s_client.connect(client_id);
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
 }
 
-bool hal_mqtt_connect_auth(const char *client_id, const char *user,
-                           const char *pass) {
-  if (!validate_non_empty(client_id, "hal_mqtt_connect_auth", "client_id")) {
-    return false;
+bool hal_mqtt_connect(const char *client_id) {
+  return hal_status_to_bool(hal_mqtt_connect_ex(client_id));
+}
+
+hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
+                                      const char *pass) {
+  hal_status_t status =
+      validate_non_empty(client_id, "hal_mqtt_connect_auth_ex", "client_id");
+  if (status != HAL_OK) {
+    return status;
   }
-  if (!validate_non_empty(user, "hal_mqtt_connect_auth", "user")) {
-    return false;
+  status = validate_non_empty(user, "hal_mqtt_connect_auth_ex", "user");
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (pass == NULL) {
+    hal_derr("hal_mqtt_connect_auth_ex: pass is NULL");
+    return HAL_EINVAL;
   }
 
   mqtt_ensure_mutex();
@@ -214,15 +266,20 @@ bool hal_mqtt_connect_auth(const char *client_id, const char *user,
 
   if (!s_server_configured) {
     hal_mutex_unlock(s_mqtt_mutex);
-    hal_derr("hal_mqtt_connect_auth: server is not configured");
-    return false;
+    hal_derr("hal_mqtt_connect_auth_ex: server is not configured");
+    return HAL_EUNINIT;
   }
 
   mqtt_bind_callback();
   const bool ok = s_client.connect(client_id, user, pass);
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
+}
+
+bool hal_mqtt_connect_auth(const char *client_id, const char *user,
+                           const char *pass) {
+  return hal_status_to_bool(hal_mqtt_connect_auth_ex(client_id, user, pass));
 }
 
 void hal_mqtt_disconnect(void) {
@@ -254,7 +311,7 @@ int hal_mqtt_state(void) {
   return state;
 }
 
-bool hal_mqtt_loop(void) {
+hal_status_t hal_mqtt_loop_ex(void) {
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
@@ -296,77 +353,125 @@ bool hal_mqtt_loop(void) {
     }
   }
 
-  return ok;
+  return ok ? HAL_OK : HAL_EIO;
+}
+
+bool hal_mqtt_loop(void) { return hal_status_to_bool(hal_mqtt_loop_ex()); }
+
+hal_status_t hal_mqtt_publish_ex(const char *topic, const uint8_t *payload,
+                                 uint16_t payload_len, bool retained) {
+  hal_status_t status =
+      validate_non_empty(topic, "hal_mqtt_publish_ex", "topic");
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (payload_len > 0u && payload == NULL) {
+    hal_derr("hal_mqtt_publish_ex: payload is NULL while payload_len > 0");
+    return HAL_EINVAL;
+  }
+
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
+
+  bool connected = s_client.connected();
+  const bool ok = connected
+                      ? s_client.publish(topic, payload, payload_len, retained)
+                      : false;
+
+  hal_mutex_unlock(s_mqtt_mutex);
+  if (!connected) {
+    return HAL_ESTATE;
+  }
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_mqtt_publish(const char *topic, const uint8_t *payload,
                       uint16_t payload_len, bool retained) {
-  if (!validate_non_empty(topic, "hal_mqtt_publish", "topic")) {
-    return false;
+  return hal_status_to_bool(
+      hal_mqtt_publish_ex(topic, payload, payload_len, retained));
+}
+
+hal_status_t hal_mqtt_publish_str_ex(const char *topic, const char *payload,
+                                     bool retained) {
+  hal_status_t status =
+      validate_non_empty(topic, "hal_mqtt_publish_str_ex", "topic");
+  if (status != HAL_OK) {
+    return status;
   }
-  if (payload_len > 0u && payload == NULL) {
-    hal_derr("hal_mqtt_publish: payload is NULL while payload_len > 0");
-    return false;
+  if (!payload) {
+    hal_derr("hal_mqtt_publish_str_ex: payload is NULL");
+    return HAL_EINVAL;
   }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
-  const bool ok = s_client.publish(topic, payload, payload_len, retained);
+  bool connected = s_client.connected();
+  const bool ok =
+      connected ? s_client.publish(topic, payload, retained) : false;
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  if (!connected) {
+    return HAL_ESTATE;
+  }
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_mqtt_publish_str(const char *topic, const char *payload,
                           bool retained) {
-  if (!validate_non_empty(topic, "hal_mqtt_publish_str", "topic")) {
-    return false;
+  return hal_status_to_bool(hal_mqtt_publish_str_ex(topic, payload, retained));
+}
+
+hal_status_t hal_mqtt_subscribe_ex(const char *topic, uint8_t qos) {
+  hal_status_t status =
+      validate_non_empty(topic, "hal_mqtt_subscribe_ex", "topic");
+  if (status != HAL_OK) {
+    return status;
   }
-  if (!payload) {
-    hal_derr("hal_mqtt_publish_str: payload is NULL");
-    return false;
+  if (qos > 1u) {
+    hal_derr("hal_mqtt_subscribe_ex: qos must be 0 or 1");
+    return HAL_EINVAL;
   }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
-  const bool ok = s_client.publish(topic, payload, retained);
+  bool connected = s_client.connected();
+  const bool ok = connected ? s_client.subscribe(topic, qos) : false;
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  if (!connected) {
+    return HAL_ESTATE;
+  }
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_mqtt_subscribe(const char *topic, uint8_t qos) {
-  if (!validate_non_empty(topic, "hal_mqtt_subscribe", "topic")) {
-    return false;
-  }
-  if (qos > 1u) {
-    hal_derr("hal_mqtt_subscribe: qos must be 0 or 1");
-    return false;
+  return hal_status_to_bool(hal_mqtt_subscribe_ex(topic, qos));
+}
+
+hal_status_t hal_mqtt_unsubscribe_ex(const char *topic) {
+  hal_status_t status =
+      validate_non_empty(topic, "hal_mqtt_unsubscribe_ex", "topic");
+  if (status != HAL_OK) {
+    return status;
   }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
-  const bool ok = s_client.subscribe(topic, qos);
+  bool connected = s_client.connected();
+  const bool ok = connected ? s_client.unsubscribe(topic) : false;
 
   hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  if (!connected) {
+    return HAL_ESTATE;
+  }
+  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_mqtt_unsubscribe(const char *topic) {
-  if (!validate_non_empty(topic, "hal_mqtt_unsubscribe", "topic")) {
-    return false;
-  }
-
-  mqtt_ensure_mutex();
-  hal_mutex_lock(s_mqtt_mutex);
-
-  const bool ok = s_client.unsubscribe(topic);
-
-  hal_mutex_unlock(s_mqtt_mutex);
-  return ok;
+  return hal_status_to_bool(hal_mqtt_unsubscribe_ex(topic));
 }
 
 #endif /* HAL_ENABLE_MQTT */

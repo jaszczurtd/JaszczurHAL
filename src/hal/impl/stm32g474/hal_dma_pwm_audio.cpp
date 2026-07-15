@@ -285,10 +285,21 @@ bool hal_dma_pwm_audio_supported(void) { return true; }
 
 hal_dma_pwm_audio_t
 hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
+  hal_dma_pwm_audio_t audio = nullptr;
+  (void)hal_dma_pwm_audio_create_ex(cfg, &audio);
+  return audio;
+}
+
+hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
+                                         hal_dma_pwm_audio_t *out_audio) {
+  if (out_audio == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_audio = nullptr;
   if (cfg == nullptr || cfg->buffer_a == nullptr || cfg->buffer_b == nullptr ||
       cfg->block_size == 0u || cfg->period_ticks == 0u ||
       cfg->sample_rate_hz == 0u) {
-    return nullptr;
+    return HAL_EINVAL;
   }
 
   hal_dma_pwm_audio_impl_t *audio = nullptr;
@@ -303,13 +314,13 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 
   if (audio == nullptr) {
     HAL_ASSERT(false, "hal_dma_pwm_audio: STM32 pool exhausted");
-    return nullptr;
+    return HAL_ENOMEM;
   }
 
   if (!jh_stm32_pwm_prepare_pin(cfg->pwm_pin, cfg->sample_rate_hz,
                                 cfg->period_ticks, &audio->pwm)) {
     audio->in_use = false;
-    return nullptr;
+    return HAL_EIO;
   }
 
   audio->buffer_a = cfg->buffer_a;
@@ -325,7 +336,7 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 #ifdef JH_STM32G474_HW
   if (s_irq_audio != nullptr) {
     audio->in_use = false;
-    return nullptr;
+    return HAL_EBUSY;
   }
 
   RCC_AHB1ENR |= RCC_AHB1ENR_DMA1EN | RCC_AHB1ENR_DMAMUX1EN;
@@ -333,27 +344,32 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 
   if (!configure_adc_dma(audio)) {
     audio->in_use = false;
-    return nullptr;
+    return HAL_EIO;
   }
   if (!configure_pwm_dma(audio)) {
     release_adc_dma(audio);
     audio->in_use = false;
-    return nullptr;
+    return HAL_EIO;
   }
   s_irq_audio = audio;
 #endif
 
-  return audio;
+  *out_audio = audio;
+  return HAL_OK;
 }
 
 bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio) {
+  return hal_status_to_bool(hal_dma_pwm_audio_start_ex(audio));
+}
+
+hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
-    return false;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
 #ifdef JH_STM32G474_HW
   if (!start_adc_dma_conversion(audio)) {
-    return false;
+    return HAL_EIO;
   }
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
@@ -363,12 +379,12 @@ bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio) {
 
   audio->running = true;
   audio->paused = false;
-  return true;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
+hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
 #ifdef JH_STM32G474_HW
@@ -379,11 +395,13 @@ void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
 #endif
 
   audio->running = false;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio, uint16_t idle_value) {
+hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
+                                     uint16_t idle_value) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
   audio->idle_value = idle_value;
 
@@ -395,16 +413,17 @@ void hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio, uint16_t idle_value) {
 #endif
 
   audio->paused = true;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
+hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
 #ifdef JH_STM32G474_HW
   if (!start_adc_dma_conversion(audio)) {
-    return;
+    return HAL_EIO;
   }
   DMA_IFCR(DMA1_BASE) = DMA_IFCR_CLEAR_ALL(kPwmDmaChannel);
   DMA_CCR(DMA1_BASE, kPwmDmaChannel) |= DMA_CCR_EN;
@@ -414,6 +433,7 @@ void hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
 
   audio->paused = false;
   audio->running = true;
+  return HAL_OK;
 }
 
 void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio) {
