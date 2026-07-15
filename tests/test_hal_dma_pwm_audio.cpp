@@ -57,18 +57,18 @@ void test_pwm_audio_lifecycle_and_callbacks(void) {
   TEST_ASSERT_EQUAL_UINT8(1u, s_last_index);
   TEST_ASSERT_EQUAL_PTR(buffer_b, s_last_buffer);
 
-  hal_dma_pwm_audio_pause(audio, 1234u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dma_pwm_audio_pause(audio, 1234u));
   TEST_ASSERT_TRUE(hal_dma_pwm_audio_is_paused(audio));
   TEST_ASSERT_EQUAL_UINT16(1234u, hal_mock_dma_pwm_audio_get_idle_value(audio));
   hal_mock_dma_pwm_audio_complete(audio, 0u);
   TEST_ASSERT_EQUAL_INT(2, s_calls);
 
-  hal_dma_pwm_audio_resume(audio);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dma_pwm_audio_resume(audio));
   TEST_ASSERT_TRUE(hal_dma_pwm_audio_is_running(audio));
   hal_mock_dma_pwm_audio_complete(audio, 0u);
   TEST_ASSERT_EQUAL_INT(3, s_calls);
 
-  hal_dma_pwm_audio_stop(audio);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dma_pwm_audio_stop(audio));
   TEST_ASSERT_FALSE(hal_dma_pwm_audio_is_running(audio));
   hal_dma_pwm_audio_destroy(audio);
 }
@@ -76,6 +76,20 @@ void test_pwm_audio_lifecycle_and_callbacks(void) {
 void test_pwm_audio_rejects_incomplete_config(void) {
   hal_dma_pwm_audio_config_t cfg = {};
   TEST_ASSERT_NULL(hal_dma_pwm_audio_create(&cfg));
+}
+
+void test_pwm_audio_status_variants_report_errors(void) {
+  hal_dma_pwm_audio_t audio = nullptr;
+  hal_dma_pwm_audio_config_t cfg = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_dma_pwm_audio_create_ex(nullptr, &audio));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_create_ex(&cfg, &audio));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_create_ex(&cfg, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_start_ex(nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_stop(nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_pause(nullptr, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dma_pwm_audio_resume(nullptr));
 }
 
 void test_interpolate_blends_fraction(void) {
@@ -87,6 +101,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_pwm_audio_lifecycle_and_callbacks);
   RUN_TEST(test_pwm_audio_rejects_incomplete_config);
+  RUN_TEST(test_pwm_audio_status_variants_report_errors);
   RUN_TEST(test_interpolate_blends_fraction);
   return UNITY_END();
 }

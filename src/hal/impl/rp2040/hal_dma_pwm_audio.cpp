@@ -251,10 +251,21 @@ bool hal_dma_pwm_audio_supported(void) { return true; }
 
 hal_dma_pwm_audio_t
 hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
+  hal_dma_pwm_audio_t audio = nullptr;
+  (void)hal_dma_pwm_audio_create_ex(cfg, &audio);
+  return audio;
+}
+
+hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
+                                         hal_dma_pwm_audio_t *out_audio) {
+  if (out_audio == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_audio = nullptr;
   if (cfg == nullptr || cfg->buffer_a == nullptr || cfg->buffer_b == nullptr ||
       cfg->block_size == 0u || cfg->period_ticks == 0u ||
       cfg->sample_rate_hz == 0u || !adc_pins_match_dacless_scan(cfg)) {
-    return nullptr;
+    return HAL_EINVAL;
   }
 
   hal_dma_pwm_audio_impl_t *audio = nullptr;
@@ -275,7 +286,7 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 
   if (audio == nullptr) {
     HAL_ASSERT(false, "hal_dma_pwm_audio: RP2040 pool exhausted");
-    return nullptr;
+    return HAL_ENOMEM;
   }
 
   audio->pwm_pin = cfg->pwm_pin;
@@ -293,19 +304,24 @@ hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
 
   if (!claim_channels(audio, cfg->adc_count > 0u)) {
     audio->in_use = false;
-    return nullptr;
+    return HAL_EIO;
   }
 
   ensure_irq_installed();
   configure_pwm_dma(audio, cfg->period_ticks);
   configure_adc_dma(audio);
   audio->configured = true;
-  return audio;
+  *out_audio = audio;
+  return HAL_OK;
 }
 
 bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio) {
+  return hal_status_to_bool(hal_dma_pwm_audio_start_ex(audio));
+}
+
+hal_status_t hal_dma_pwm_audio_start_ex(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use || !audio->configured) {
-    return false;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
   if (audio->adc_count > 0u) {
@@ -318,12 +334,12 @@ bool hal_dma_pwm_audio_start(hal_dma_pwm_audio_t audio) {
   audio->paused = false;
   pwm_set_enabled(audio->pwm_slice, true);
   dma_channel_start((uint)audio->dma_a);
-  return true;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
+hal_status_t hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
 
   pwm_set_enabled(audio->pwm_slice, false);
@@ -343,25 +359,29 @@ void hal_dma_pwm_audio_stop(hal_dma_pwm_audio_t audio) {
     adc_run(false);
   }
   audio->running = false;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio, uint16_t idle_value) {
+hal_status_t hal_dma_pwm_audio_pause(hal_dma_pwm_audio_t audio,
+                                     uint16_t idle_value) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
   audio->idle_value = idle_value;
   pwm_set_gpio_level(audio->pwm_pin, idle_value);
   pwm_set_enabled(audio->pwm_slice, false);
   audio->paused = true;
+  return HAL_OK;
 }
 
-void hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
+hal_status_t hal_dma_pwm_audio_resume(hal_dma_pwm_audio_t audio) {
   if (audio == nullptr || !audio->in_use) {
-    return;
+    return audio == nullptr ? HAL_EINVAL : HAL_ESTATE;
   }
   audio->paused = false;
   audio->running = true;
   pwm_set_enabled(audio->pwm_slice, true);
+  return HAL_OK;
 }
 
 void hal_dma_pwm_audio_destroy(hal_dma_pwm_audio_t audio) {

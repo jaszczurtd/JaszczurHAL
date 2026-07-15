@@ -138,16 +138,36 @@ void test_network_pool_and_single_udp_statuses(void) {
 void test_mqtt_and_wireguard_statuses(void) {
   const uint8_t local_ip[4] = {10u, 0u, 0u, 2u};
   const uint8_t probe_ip[4] = {1u, 1u, 1u, 1u};
+  uint8_t parsed_ip[4] = {};
   bool peer_up = false;
 
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_mqtt_connect_ex("client"));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_mqtt_set_server_ex(nullptr, 1883u));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mqtt_set_server_ex("broker.test", 1883u));
+  hal_mock_mqtt_set_connect_result(false);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_mqtt_connect_ex("client-fail"));
+  hal_mock_mqtt_set_connect_result(true);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mqtt_connect_ex("client"));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_mqtt_publish_ex("topic", nullptr, 1u, false));
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_mqtt_publish_str_ex("topic", "value", false));
+  hal_mqtt_disconnect();
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_mqtt_publish_str_ex("topic", "value", false));
 
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_wireguard_parse_ipv4_ex("10.0.bad.2", parsed_ip));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_wireguard_parse_ipv4_ex("10.0.0.2", parsed_ip));
+  TEST_ASSERT_EQUAL_UINT8(2u, parsed_ip[3]);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_wireguard_peer_up_quick_ex(&peer_up));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_wireguard_kick_handshake_text_ex("bad.ip", 53u, 100u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_wireguard_begin_text_ex("10.0.0.2", "private", "peer.test",
+                                          "public", 51820u));
+  hal_mock_wireguard_reset();
   TEST_ASSERT_EQUAL_INT(HAL_EUNINIT,
                         hal_wireguard_kick_handshake_ex(probe_ip, 53u, 100u));
   TEST_ASSERT_EQUAL_INT(HAL_OK,

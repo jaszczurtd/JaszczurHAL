@@ -75,6 +75,7 @@ static void init_decoder(hal_irsmall_protocol_t protocol) {
   hal_irsmall_decoder_config_t cfg =
       hal_irsmall_decoder_default_config(IR_PIN, protocol);
   cfg.irq_priority = HAL_IRQ_PRIORITY_HIGH;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_irsmall_decoder_init_ex(&dev, &cfg));
   TEST_ASSERT_TRUE(hal_irsmall_decoder_init(&dev, &cfg));
   TEST_ASSERT_TRUE(dev.initialized);
   TEST_ASSERT_TRUE(dev.enabled);
@@ -324,11 +325,11 @@ void test_disable_detaches_interrupt_and_enable_resets_state(void) {
   hal_irsmall_decoder_data_t data;
 
   init_decoder(HAL_IRSMALL_PROTOCOL_NEC);
-  hal_irsmall_decoder_disable(&dev);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_irsmall_decoder_disable(&dev));
   send_nec_frame(0x12u, 0x34u, false);
   TEST_ASSERT_FALSE(hal_irsmall_decoder_data_available(&dev, &data));
 
-  hal_irsmall_decoder_enable(&dev);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_irsmall_decoder_enable(&dev));
   send_nec_frame(0x22u, 0x44u, false);
   TEST_ASSERT_TRUE(hal_irsmall_decoder_data_available(&dev, &data));
   TEST_ASSERT_EQUAL_UINT16(0x22u, data.addr);
@@ -349,6 +350,25 @@ void test_timeout_resets_partial_frame(void) {
   TEST_ASSERT_EQUAL_UINT8(0u, dev.state);
 }
 
+void test_status_api_reports_invalid_and_uninitialized_state(void) {
+  hal_irsmall_decoder_data_t data;
+  bool available = true;
+  hal_irsmall_decoder_config_t cfg =
+      hal_irsmall_decoder_default_config(IR_PIN, HAL_IRSMALL_PROTOCOL_NEC);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_irsmall_decoder_init_ex(nullptr, &cfg));
+  cfg.protocol = (hal_irsmall_protocol_t)99;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_irsmall_decoder_init_ex(&dev, &cfg));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_irsmall_decoder_data_available_ex(
+                                         &dev, &data, &available));
+  TEST_ASSERT_FALSE(available);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_irsmall_decoder_enable(&dev));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_irsmall_decoder_reset(&dev));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_irsmall_decoder_has_data_ex(&dev, nullptr));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_config_and_protocol_helpers);
@@ -365,5 +385,6 @@ int main(void) {
   RUN_TEST(test_samsung32_decodes_repeated_address_and_command_complement);
   RUN_TEST(test_disable_detaches_interrupt_and_enable_resets_state);
   RUN_TEST(test_timeout_resets_partial_frame);
+  RUN_TEST(test_status_api_reports_invalid_and_uninitialized_state);
   return UNITY_END();
 }
