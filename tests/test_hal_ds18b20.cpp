@@ -29,7 +29,7 @@ static hal_ds18b20_config_t default_cfg(void) {
 static void require_ready_sample(hal_ds18b20_t h, float expected) {
   float t = 0.0f;
   bool fresh = false;
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(h, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_take_latest_ex(h, &t, &fresh));
   TEST_ASSERT_TRUE(fresh);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, expected, t);
 }
@@ -64,17 +64,23 @@ void test_init_with_rom_returns_handle(void) {
   cfg.rom_code[6] = 0x11;
   cfg.rom_code[7] = 0x22;
 
-  hal_ds18b20_t h_rom = hal_ds18b20_init(&cfg);
+  hal_ds18b20_t h_rom = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_init_ex(&cfg, &h_rom));
   TEST_ASSERT_NOT_NULL(h_rom);
-  hal_ds18b20_deinit(h_rom);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_deinit(h_rom));
 }
 
 void test_init_rejects_null_config(void) {
   TEST_ASSERT_NULL(hal_ds18b20_init(nullptr));
+  hal_ds18b20_t h = (hal_ds18b20_t)0x1;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_ds18b20_init_ex(nullptr, &h));
+  TEST_ASSERT_NULL(h);
+  hal_ds18b20_config_t cfg = default_cfg();
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_ds18b20_init_ex(&cfg, nullptr));
 }
 
 void test_request_marks_sensor_busy(void) {
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   TEST_ASSERT_TRUE(hal_ds18b20_is_busy(s_sensor));
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_ds18b20_get_request_count(s_sensor));
 }
@@ -83,12 +89,13 @@ void test_poll_before_deadline_keeps_busy_and_no_sample(void) {
   float t = 0.0f;
   bool fresh = false;
 
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(200000u);
-  hal_ds18b20_poll(s_sensor);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_ds18b20_poll(s_sensor));
 
   TEST_ASSERT_TRUE(hal_ds18b20_is_busy(s_sensor));
-  TEST_ASSERT_FALSE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
 }
 
 void test_poll_after_deadline_publishes_fresh_sample(void) {
@@ -96,16 +103,18 @@ void test_poll_after_deadline_publishes_fresh_sample(void) {
   bool fresh = false;
 
   hal_mock_ds18b20_set_next_temp(s_sensor, 42.5f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(750000u);
-  hal_ds18b20_poll(s_sensor);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(s_sensor));
 
   TEST_ASSERT_FALSE(hal_ds18b20_is_busy(s_sensor));
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
   TEST_ASSERT_TRUE(fresh);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 42.5f, t);
 
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
   TEST_ASSERT_FALSE(fresh);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 42.5f, t);
 }
@@ -128,20 +137,20 @@ void test_resolution_hint_controls_conversion_deadline_9_to_12_bit(void) {
     TEST_ASSERT_NOT_NULL(h);
 
     hal_mock_ds18b20_set_next_temp(h, 30.0f + (float)i);
-    TEST_ASSERT_TRUE(hal_ds18b20_request(h));
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(h));
 
     if (vectors[i].tconv_us > 0u) {
       hal_mock_advance_micros(vectors[i].tconv_us - 1u);
     }
-    hal_ds18b20_poll(h);
+    TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_ds18b20_poll(h));
     TEST_ASSERT_TRUE(hal_ds18b20_is_busy(h));
 
     hal_mock_advance_micros(1u);
-    hal_ds18b20_poll(h);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(h));
     TEST_ASSERT_FALSE(hal_ds18b20_is_busy(h));
     require_ready_sample(h, 30.0f + (float)i);
 
-    hal_ds18b20_deinit(h);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_deinit(h));
   }
 }
 
@@ -152,27 +161,29 @@ void test_invalid_resolution_hint_falls_back_to_12_bit_timing(void) {
   TEST_ASSERT_NOT_NULL(h);
 
   hal_mock_ds18b20_set_next_temp(h, 11.5f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(h));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(h));
   hal_mock_advance_micros(749999u);
-  hal_ds18b20_poll(h);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_ds18b20_poll(h));
   TEST_ASSERT_TRUE(hal_ds18b20_is_busy(h));
 
   hal_mock_advance_micros(1u);
-  hal_ds18b20_poll(h);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(h));
   TEST_ASSERT_FALSE(hal_ds18b20_is_busy(h));
   require_ready_sample(h, 11.5f);
 
-  hal_ds18b20_deinit(h);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_deinit(h));
 }
 
 void test_request_while_busy_returns_false(void) {
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_ds18b20_request_ex(s_sensor));
   TEST_ASSERT_FALSE(hal_ds18b20_request(s_sensor));
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_ds18b20_get_request_count(s_sensor));
 }
 
 void test_missing_presence_rejects_request(void) {
   hal_mock_ds18b20_set_presence(s_sensor, false);
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_ds18b20_request_ex(s_sensor));
   TEST_ASSERT_FALSE(hal_ds18b20_request(s_sensor));
   TEST_ASSERT_FALSE(hal_ds18b20_is_busy(s_sensor));
 }
@@ -182,29 +193,31 @@ void test_crc_error_keeps_previous_sample_and_not_fresh(void) {
   bool fresh = false;
 
   hal_mock_ds18b20_set_next_temp(s_sensor, 10.0f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(750000u);
-  hal_ds18b20_poll(s_sensor);
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
   TEST_ASSERT_TRUE(fresh);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, t);
 
   hal_mock_ds18b20_set_crc_ok(s_sensor, false);
   hal_mock_ds18b20_set_next_temp(s_sensor, 20.0f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(750000u);
-  hal_ds18b20_poll(s_sensor);
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, hal_ds18b20_poll(s_sensor));
 
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
   TEST_ASSERT_FALSE(fresh);
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 10.0f, t);
 }
 
 void test_take_latest_is_thread_safe_for_concurrent_readers(void) {
   hal_mock_ds18b20_set_next_temp(s_sensor, 24.75f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(750000u);
-  hal_ds18b20_poll(s_sensor);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(s_sensor));
 
   std::atomic<bool> ok(true);
   auto worker = [&ok]() {
@@ -238,25 +251,32 @@ void test_take_latest_argument_validation_and_empty_cache(void) {
   float t = 0.0f;
   bool fresh = false;
 
-  TEST_ASSERT_FALSE(hal_ds18b20_take_latest(nullptr, &t, &fresh));
-  TEST_ASSERT_FALSE(hal_ds18b20_take_latest(s_sensor, nullptr, &fresh));
-  TEST_ASSERT_FALSE(hal_ds18b20_take_latest(s_sensor, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_ds18b20_take_latest_ex(nullptr, &t, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_ds18b20_take_latest_ex(s_sensor, nullptr, &fresh));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, &fresh));
 
   hal_mock_ds18b20_set_next_temp(s_sensor, 5.0f);
-  TEST_ASSERT_TRUE(hal_ds18b20_request(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_request_ex(s_sensor));
   hal_mock_advance_micros(750000u);
-  hal_ds18b20_poll(s_sensor);
-  TEST_ASSERT_TRUE(hal_ds18b20_take_latest(s_sensor, &t, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_poll(s_sensor));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_ds18b20_take_latest_ex(s_sensor, &t, nullptr));
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 5.0f, t);
 }
 
 void test_invalid_handle_guards_for_request_poll_busy(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_ds18b20_request_ex(nullptr));
   TEST_ASSERT_FALSE(hal_ds18b20_request(nullptr));
-  hal_ds18b20_poll(nullptr); /* no crash */
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_ds18b20_poll(nullptr));
   TEST_ASSERT_FALSE(hal_ds18b20_is_busy(nullptr));
 }
 
-void test_deinit_null_is_noop(void) { hal_ds18b20_deinit(nullptr); }
+void test_deinit_null_is_noop(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_deinit(nullptr));
+}
 
 void test_instance_pool_limit_is_enforced(void) {
   hal_ds18b20_config_t cfg = default_cfg();
@@ -271,9 +291,12 @@ void test_instance_pool_limit_is_enforced(void) {
 
   cfg.data_pin = 99u;
   TEST_ASSERT_NULL(hal_ds18b20_init(&cfg));
+  hal_ds18b20_t extra = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_ds18b20_init_ex(&cfg, &extra));
+  TEST_ASSERT_NULL(extra);
 
   for (int i = 0; i < (HAL_DS18B20_MAX_INSTANCES - 1); ++i) {
-    hal_ds18b20_deinit(hs[i]);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ds18b20_deinit(hs[i]));
   }
 }
 

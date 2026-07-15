@@ -21,6 +21,8 @@ extern "C" {
  * - Multi-device bus: set use_rom=true and provide rom_code (Match ROM).
  */
 
+#include "hal_status.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -30,8 +32,8 @@ extern "C" {
 #endif
 
 /** @brief Opaque DS18B20 handle. */
-typedef struct hal_ds18b20_impl_s  hal_ds18b20_impl_t;
-typedef       hal_ds18b20_impl_t  *hal_ds18b20_t;
+typedef struct hal_ds18b20_impl_s hal_ds18b20_impl_t;
+typedef hal_ds18b20_impl_t *hal_ds18b20_t;
 
 /**
  * @brief Resolution hint used for conversion-time scheduling.
@@ -40,20 +42,21 @@ typedef       hal_ds18b20_impl_t  *hal_ds18b20_t;
  * The hint is used as a safe initial fallback before the first successful read.
  */
 typedef enum {
-    HAL_DS18B20_RES_9_BIT  = 9,
-    HAL_DS18B20_RES_10_BIT = 10,
-    HAL_DS18B20_RES_11_BIT = 11,
-    HAL_DS18B20_RES_12_BIT = 12,
+  HAL_DS18B20_RES_9_BIT = 9,
+  HAL_DS18B20_RES_10_BIT = 10,
+  HAL_DS18B20_RES_11_BIT = 11,
+  HAL_DS18B20_RES_12_BIT = 12,
 } hal_ds18b20_resolution_t;
 
 /**
  * @brief DS18B20 initialisation descriptor.
  */
 typedef struct {
-    uint8_t data_pin;                       /**< 1-Wire bus pin.              */
-    bool    use_rom;                        /**< true = Match ROM, false = Skip ROM. */
-    uint8_t rom_code[8];                    /**< 64-bit ROM code when use_rom=true.  */
-    hal_ds18b20_resolution_t resolution_hint; /**< Initial conversion-time hint. */
+  uint8_t data_pin;    /**< 1-Wire bus pin.              */
+  bool use_rom;        /**< true = Match ROM, false = Skip ROM. */
+  uint8_t rom_code[8]; /**< 64-bit ROM code when use_rom=true.  */
+  hal_ds18b20_resolution_t
+      resolution_hint; /**< Initial conversion-time hint. */
 } hal_ds18b20_config_t;
 
 /**
@@ -64,8 +67,23 @@ typedef struct {
  */
 hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg);
 
-/** @brief Release handle resources and free the pool slot. */
-void hal_ds18b20_deinit(hal_ds18b20_t h);
+/**
+ * @brief Create a DS18B20 handle and return typed status.
+ *
+ * @param cfg Initialisation descriptor.
+ * @param out Destination for the created handle. Set to NULL on failure.
+ * @return HAL_OK; HAL_EINVAL for invalid arguments; HAL_ENOMEM when the handle
+ *         pool or mutex allocation fails; HAL_ENOENT when no matching sensor is
+ *         found.
+ */
+hal_status_t hal_ds18b20_init_ex(const hal_ds18b20_config_t *cfg,
+                                 hal_ds18b20_t *out);
+
+/**
+ * @brief Release handle resources and free the pool slot.
+ * @return HAL_OK. NULL is treated as a no-op for legacy compatibility.
+ */
+hal_status_t hal_ds18b20_deinit(hal_ds18b20_t h);
 
 /**
  * @brief Start a temperature conversion (non-blocking).
@@ -76,12 +94,26 @@ void hal_ds18b20_deinit(hal_ds18b20_t h);
 bool hal_ds18b20_request(hal_ds18b20_t h);
 
 /**
+ * @brief Start a temperature conversion and return typed status.
+ *
+ * @return HAL_OK; HAL_EINVAL for invalid handle; HAL_EBUSY while conversion is
+ *         already in progress; HAL_ENOENT when the sensor is missing; HAL_EIO
+ *         when the conversion command cannot be sent.
+ */
+hal_status_t hal_ds18b20_request_ex(hal_ds18b20_t h);
+
+/**
  * @brief Progress the internal state machine.
  *
  * Call this periodically from the main loop (or a periodic soft timer).
  * The function performs at most one short state-machine step per call.
+ *
+ * @return HAL_OK when a conversion completed with a valid sample; HAL_EINVAL
+ *         for invalid handle; HAL_ESTATE when no conversion is active;
+ *         HAL_EAGAIN before the conversion deadline; HAL_EPROTO for CRC or
+ *         scratchpad decode failure.
  */
-void hal_ds18b20_poll(hal_ds18b20_t h);
+hal_status_t hal_ds18b20_poll(hal_ds18b20_t h);
 
 /** @brief Return true when conversion is still in progress. */
 bool hal_ds18b20_is_busy(hal_ds18b20_t h);
@@ -100,6 +132,14 @@ bool hal_ds18b20_is_busy(hal_ds18b20_t h);
  */
 bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
 
+/**
+ * @brief Read the cached sample and return typed status.
+ *
+ * @return HAL_OK; HAL_EINVAL for invalid arguments; HAL_ENOENT when no valid
+ *         sample is cached.
+ */
+hal_status_t hal_ds18b20_take_latest_ex(hal_ds18b20_t h, float *temp_c,
+                                        bool *fresh);
 
 #endif /* HAL_ENABLE_DS18B20 */
 #ifdef __cplusplus

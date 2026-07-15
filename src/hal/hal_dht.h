@@ -15,6 +15,8 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "hal_status.h"
+
 /** @brief Maximum number of simultaneous DHT handles. */
 #ifndef HAL_DHT_MAX_INSTANCES
 #define HAL_DHT_MAX_INSTANCES 4
@@ -47,6 +49,8 @@ typedef struct {
 hal_dht_config_t hal_dht_default_config(uint8_t data_pin);
 
 /** @brief Initialise a DHT handle and configure the data pin idle state. */
+hal_status_t hal_dht_init_ex(const hal_dht_config_t *cfg,
+                             hal_dht_t *out_handle);
 hal_dht_t hal_dht_init(const hal_dht_config_t *cfg);
 
 /** @brief Release handle resources and free the pool slot. */
@@ -59,8 +63,9 @@ void hal_dht_deinit(hal_dht_t h);
  * 18 ms host-low start pulse, 40 us host-high release, then 5 bytes sampled
  * with a 30 us bit discriminator.
  *
- * @return true when the frame checksum is valid and a sample was updated.
+ * @return HAL_OK when the frame checksum is valid and a sample was updated.
  */
+hal_status_t hal_dht_read_ex(hal_dht_t h);
 bool hal_dht_read(hal_dht_t h);
 
 /** @brief Return last temperature in Celsius. */
@@ -73,6 +78,7 @@ float hal_dht_get_temperature_f(hal_dht_t h);
 float hal_dht_get_humidity(hal_dht_t h);
 
 /** @brief Copy the last decoded sample. */
+hal_status_t hal_dht_get_sample_ex(hal_dht_t h, hal_dht_sample_t *out);
 bool hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out);
 
 #endif /* HAL_ENABLE_DHT */

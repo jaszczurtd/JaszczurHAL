@@ -151,14 +151,18 @@ bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev);
 uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev);
 hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
                                        uint16_t *y, uint8_t *z);
-void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
-                            uint8_t *z);
+hal_status_t hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x,
+                                    uint16_t *y, uint8_t *z);
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev);
 
+hal_status_t hal_stmpe610_read_register8_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                            uint8_t *out_value);
 uint8_t hal_stmpe610_read_register8(hal_stmpe610_t *dev, uint8_t reg);
+hal_status_t hal_stmpe610_read_register16_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                             uint16_t *out_value);
 uint16_t hal_stmpe610_read_register16(hal_stmpe610_t *dev, uint8_t reg);
-void hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
-                                  uint8_t value);
+hal_status_t hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
+                                          uint8_t value);
 
 #endif
 

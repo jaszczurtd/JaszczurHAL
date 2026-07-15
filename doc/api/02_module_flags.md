@@ -74,7 +74,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_TSC2007` | `hal_tsc2007.h` | `impl/shared/drivers/tsc2007/tsc2007.cpp` | shared HAL I2C TSC2007 resistive touch controller driver (propagates I2C) |
 | `HAL_ENABLE_STMPE610` | `hal_stmpe610.h` | `impl/shared/drivers/stmpe610/stmpe610.cpp` | shared HAL I2C/SPI STMPE610 resistive touch controller driver (propagates I2C + SPI) |
 | `HAL_ENABLE_IRSMALL_DECODER` | `hal_irsmall_decoder.h` | `impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp` | shared HAL GPIO interrupt infrared receiver decoder |
-| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/onewire/hal_onewire.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver |
+| `HAL_ENABLE_ONEWIRE` | `hal_onewire.h` + `impl/shared/drivers/onewire/onewire_driver.h` | `impl/shared/drivers/onewire/hal_onewire.cpp` + `impl/shared/drivers/onewire/onewire_driver.cpp` | shared Arduino-free 1-Wire bit-bang driver (propagates CRC) |
 | `HAL_ENABLE_EXTERNAL_ADC` | `hal_external_adc.h` + `impl/shared/drivers/ads1x15/ads1x15_driver.h` | `impl/shared/drivers/ads1x15/hal_external_adc_ads1x15.cpp` + `impl/shared/drivers/ads1x15/ads1x15_driver.cpp` | shared Arduino-free ADS1X15/ADS1115 driver (propagates I2C) |
 | `HAL_ENABLE_GPS` | `hal_gps.h` | `hal_gps.cpp` + `impl/shared/frameworks/gps/gps_nmea_parser.cpp` | portable NMEA engine (RP2040 + STM32G474); needs a transport: SWSERIAL or UART |
 | `HAL_ENABLE_DIGIPOT` | `hal_digipot.h` + `impl/shared/drivers/digipot/hal_digipot_ops.h` | `hal_digipot.cpp` + `impl/shared/drivers/digipot/*.cpp` | facade/pool/dispatch; needs MCP401X or MAX5395 backend |
@@ -101,6 +101,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/drivers/display/ssd1306_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
+| `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
 | `HAL_ENABLE_CJSON` | `hal/impl/shared/frameworks/cjson/cJSON.h`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/cjson/cJSON.c`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.c` | bundled cJSON |
@@ -155,6 +156,7 @@ HAL_ENABLE_MCP4725     -> HAL_ENABLE_I2C
 HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
 HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
+HAL_ENABLE_ONEWIRE     -> HAL_ENABLE_CRC
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_MCP2515     -> HAL_ENABLE_CAN + HAL_ENABLE_SPI

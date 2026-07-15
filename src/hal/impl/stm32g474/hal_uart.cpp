@@ -196,7 +196,7 @@ bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin) {
   return hal_status_to_bool(hal_uart_set_tx_ex(h, tx_pin));
 }
 
-hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config) {
+hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
   (void)config;
   if (!h) {
     return HAL_EINVAL;
@@ -220,10 +220,6 @@ hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config) {
   (void)baud;
 #endif
   return HAL_OK;
-}
-
-void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
-  (void)hal_uart_begin_ex(h, baud, config);
 }
 
 int hal_uart_available(hal_uart_t h) {
@@ -359,14 +355,12 @@ size_t hal_uart_println(hal_uart_t h, const char *s) {
   return written;
 }
 
-hal_status_t hal_uart_flush_ex(hal_uart_t h) {
+hal_status_t hal_uart_flush(hal_uart_t h) {
   if (!h) {
     return HAL_EINVAL;
   }
   return HAL_OK;
 }
-
-void hal_uart_flush(hal_uart_t h) { (void)hal_uart_flush_ex(h); }
 
 hal_status_t
 hal_uart_get_error_counters_ex(hal_uart_t h,

@@ -175,109 +175,179 @@ static uint8_t stmpe610_soft_spi_in(const hal_stmpe610_t *dev) {
   return value;
 }
 
-static void stmpe610_spi_begin(const hal_stmpe610_t *dev) {
+static hal_status_t stmpe610_spi_begin(const hal_stmpe610_t *dev) {
   if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI) {
     const hal_spi_settings_t settings = stmpe610_spi_settings(dev);
     hal_spi_lock(dev->cfg.spi_bus);
-    hal_spi_begin_transaction(dev->cfg.spi_bus, &settings);
+    const hal_status_t status =
+        hal_spi_begin_transaction(dev->cfg.spi_bus, &settings);
+    if (status != HAL_OK) {
+      hal_spi_unlock(dev->cfg.spi_bus);
+      return status;
+    }
   }
 
   hal_gpio_write(dev->cfg.cs_pin, false);
+  return HAL_OK;
 }
 
-static void stmpe610_spi_end(const hal_stmpe610_t *dev) {
+static hal_status_t stmpe610_spi_end(const hal_stmpe610_t *dev) {
   hal_gpio_write(dev->cfg.cs_pin, true);
 
+  hal_status_t status = HAL_OK;
   if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI) {
-    hal_spi_end_transaction(dev->cfg.spi_bus);
+    status = hal_spi_end_transaction(dev->cfg.spi_bus);
     hal_spi_unlock(dev->cfg.spi_bus);
   }
+  return status;
 }
 
-static void stmpe610_spi_out(const hal_stmpe610_t *dev, uint8_t value) {
+static hal_status_t stmpe610_spi_out(const hal_stmpe610_t *dev, uint8_t value) {
   if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI) {
-    (void)hal_spi_transfer(dev->cfg.spi_bus, value);
-    return;
+    uint8_t ignored = 0u;
+    return hal_spi_transfer_ex(dev->cfg.spi_bus, value, &ignored);
   }
 
   stmpe610_soft_spi_out(dev, value);
+  return HAL_OK;
 }
 
-static uint8_t stmpe610_spi_in(const hal_stmpe610_t *dev) {
+static hal_status_t stmpe610_spi_in(const hal_stmpe610_t *dev,
+                                    uint8_t *out_value) {
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+
   if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI) {
-    return hal_spi_transfer(dev->cfg.spi_bus, 0u);
+    return hal_spi_transfer_ex(dev->cfg.spi_bus, 0u, out_value);
   }
 
-  return stmpe610_soft_spi_in(dev);
+  *out_value = stmpe610_soft_spi_in(dev);
+  return HAL_OK;
 }
 
-static uint8_t stmpe610_read8_unlocked(hal_stmpe610_t *dev, uint8_t reg) {
+static hal_status_t stmpe610_read8_unlocked(hal_stmpe610_t *dev, uint8_t reg,
+                                            uint8_t *out_value) {
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
+
   if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_I2C) {
-    uint8_t value = 0u;
     const uint8_t addr = reg;
-
-    if (!hal_i2c_write_read_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr, &addr, 1u,
-                                &value, 1u)) {
-      return 0u;
-    }
-
-    return value;
+    return hal_i2c_write_read_bus_ex(dev->cfg.i2c_bus, dev->cfg.i2c_addr, &addr,
+                                     1u, out_value, 1u);
   }
 
-  stmpe610_spi_begin(dev);
-  stmpe610_spi_out(dev, (uint8_t)(0x80u | reg));
-  stmpe610_spi_out(dev, 0u);
-  const uint8_t value = stmpe610_spi_in(dev);
-  stmpe610_spi_end(dev);
+  hal_status_t status = stmpe610_spi_begin(dev);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (status == HAL_OK) {
+    status = stmpe610_spi_out(dev, (uint8_t)(0x80u | reg));
+  }
+  if (status == HAL_OK) {
+    status = stmpe610_spi_out(dev, 0u);
+  }
+  if (status == HAL_OK) {
+    status = stmpe610_spi_in(dev, out_value);
+  }
+  const hal_status_t end_status = stmpe610_spi_end(dev);
 
-  return value;
+  return status == HAL_OK ? end_status : status;
 }
 
-static uint16_t stmpe610_read16_unlocked(hal_stmpe610_t *dev, uint8_t reg) {
+static hal_status_t stmpe610_read16_unlocked(hal_stmpe610_t *dev, uint8_t reg,
+                                             uint16_t *out_value) {
   /* The STMPE610 does not auto-increment the register address within a single
    * SPI frame, so a 16-bit value must be read as two independent 8-bit reads
    * of `reg` (high byte) and `reg + 1` (low byte). This matches the reference
    * driver and works identically for I2C and SPI transports. */
-  const uint8_t high = stmpe610_read8_unlocked(dev, reg);
-  const uint8_t low = stmpe610_read8_unlocked(dev, (uint8_t)(reg + 1u));
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_value = 0u;
 
-  return (uint16_t)(((uint16_t)high << 8u) | low);
-}
-
-static void stmpe610_write8_unlocked(hal_stmpe610_t *dev, uint8_t reg,
-                                     uint8_t value) {
-  if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_I2C) {
-    hal_i2c_begin_transmission_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr);
-    (void)hal_i2c_write_bus(dev->cfg.i2c_bus, reg);
-    (void)hal_i2c_write_bus(dev->cfg.i2c_bus, value);
-    (void)hal_i2c_end_transmission_bus(dev->cfg.i2c_bus);
-    return;
+  uint8_t high = 0u;
+  uint8_t low = 0u;
+  hal_status_t status = stmpe610_read8_unlocked(dev, reg, &high);
+  if (status == HAL_OK) {
+    status = stmpe610_read8_unlocked(dev, (uint8_t)(reg + 1u), &low);
+  }
+  if (status != HAL_OK) {
+    return status;
   }
 
-  stmpe610_spi_begin(dev);
-  stmpe610_spi_out(dev, reg);
-  stmpe610_spi_out(dev, value);
-  stmpe610_spi_end(dev);
+  *out_value = (uint16_t)(((uint16_t)high << 8u) | low);
+  return HAL_OK;
 }
 
-static uint16_t stmpe610_get_version_unlocked(hal_stmpe610_t *dev) {
-  const uint8_t high = stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_CHIP_ID_H);
-  const uint8_t low = stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_CHIP_ID_L);
+static hal_status_t stmpe610_write8_unlocked(hal_stmpe610_t *dev, uint8_t reg,
+                                             uint8_t value) {
+  if (dev->cfg.transport == HAL_STMPE610_TRANSPORT_I2C) {
+    hal_i2c_begin_transmission_bus(dev->cfg.i2c_bus, dev->cfg.i2c_addr);
+    if (hal_i2c_write_bus(dev->cfg.i2c_bus, reg) != 1u ||
+        hal_i2c_write_bus(dev->cfg.i2c_bus, value) != 1u) {
+      (void)hal_i2c_end_transmission_bus_ex(dev->cfg.i2c_bus);
+      return HAL_EBUS;
+    }
+    return hal_i2c_end_transmission_bus_ex(dev->cfg.i2c_bus);
+  }
 
-  return (uint16_t)(((uint16_t)high << 8u) | low);
+  hal_status_t status = stmpe610_spi_begin(dev);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (status == HAL_OK) {
+    status = stmpe610_spi_out(dev, reg);
+  }
+  if (status == HAL_OK) {
+    status = stmpe610_spi_out(dev, value);
+  }
+  const hal_status_t end_status = stmpe610_spi_end(dev);
+
+  return status == HAL_OK ? end_status : status;
 }
 
-static void stmpe610_read_data_unlocked(hal_stmpe610_t *dev, uint16_t *x,
-                                        uint16_t *y, uint8_t *z) {
+static hal_status_t stmpe610_get_version_unlocked(hal_stmpe610_t *dev,
+                                                  uint16_t *out_version) {
+  if (out_version == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_version = 0u;
+
+  uint8_t high = 0u;
+  uint8_t low = 0u;
+  hal_status_t status =
+      stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_CHIP_ID_H, &high);
+  if (status == HAL_OK) {
+    status = stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_CHIP_ID_L, &low);
+  }
+  if (status != HAL_OK) {
+    return status;
+  }
+
+  *out_version = (uint16_t)(((uint16_t)high << 8u) | low);
+  return HAL_OK;
+}
+
+static hal_status_t stmpe610_read_data_unlocked(hal_stmpe610_t *dev,
+                                                uint16_t *x, uint16_t *y,
+                                                uint8_t *z) {
   uint8_t data[4];
 
   for (size_t i = 0u; i < sizeof(data); ++i) {
-    data[i] = stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_TSC_DATA_FIFO);
+    const hal_status_t status =
+        stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_TSC_DATA_FIFO, &data[i]);
+    if (status != HAL_OK) {
+      return status;
+    }
   }
 
   *x = (uint16_t)(((uint16_t)data[0] << 4u) | (data[1] >> 4u));
   *y = (uint16_t)((((uint16_t)data[1] & 0x0Fu) << 8u) | data[2]);
   *z = data[3];
+  return HAL_OK;
 }
 
 hal_status_t hal_stmpe610_init_ex(hal_stmpe610_t *dev,
@@ -304,54 +374,93 @@ hal_status_t hal_stmpe610_init_ex(hal_stmpe610_t *dev,
   dev->spi_mode = HAL_SPI_MODE0;
   stmpe610_setup_pins(dev);
 
-  bool ok = stmpe610_get_version_unlocked(dev) == HAL_STMPE610_CHIP_ID;
-  if (!ok && (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI)) {
+  uint16_t version = 0u;
+  status = stmpe610_get_version_unlocked(dev, &version);
+  bool ok = (status == HAL_OK) && (version == HAL_STMPE610_CHIP_ID);
+  if ((status == HAL_OK) && !ok &&
+      (dev->cfg.transport == HAL_STMPE610_TRANSPORT_SPI)) {
     dev->spi_mode = HAL_SPI_MODE1;
-    ok = stmpe610_get_version_unlocked(dev) == HAL_STMPE610_CHIP_ID;
+    status = stmpe610_get_version_unlocked(dev, &version);
+    ok = (status == HAL_OK) && (version == HAL_STMPE610_CHIP_ID);
   }
 
   if (ok) {
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_SYS_CTRL1,
-                             HAL_STMPE610_SYS_CTRL1_RESET);
+    status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_SYS_CTRL1,
+                                      HAL_STMPE610_SYS_CTRL1_RESET);
     hal_delay_ms(10u);
 
-    for (uint8_t reg = 0u; reg < 65u; ++reg) {
-      (void)stmpe610_read8_unlocked(dev, reg);
+    for (uint8_t reg = 0u; status == HAL_OK && reg < 65u; ++reg) {
+      uint8_t ignored = 0u;
+      status = stmpe610_read8_unlocked(dev, reg, &ignored);
     }
 
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_SYS_CTRL2, 0u);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_CTRL,
-                             HAL_STMPE610_TSC_CTRL_EN);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_EN,
-                             HAL_STMPE610_INT_EN_TOUCHDET);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_ADC_CTRL1,
-                             (uint8_t)(0x6u << 4u));
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_ADC_CTRL2,
-                             HAL_STMPE610_ADC_CTRL2_6_5MHZ);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_CFG,
-                             (uint8_t)(HAL_STMPE610_TSC_CFG_4SAMPLE |
-                                       HAL_STMPE610_TSC_CFG_DELAY_1MS |
-                                       HAL_STMPE610_TSC_CFG_SETTLE_5MS));
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_FRACTION_Z, 0x06u);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_TH, 1u);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA,
-                             HAL_STMPE610_FIFO_STA_RESET);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA, 0u);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_I_DRIVE,
-                             HAL_STMPE610_TSC_I_DRIVE_50MA);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_CTRL,
-                             (uint8_t)(HAL_STMPE610_INT_CTRL_POL_HIGH |
-                                       HAL_STMPE610_INT_CTRL_ENABLE));
-    dev->initialized = true;
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_SYS_CTRL2, 0u);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_CTRL,
+                                        HAL_STMPE610_TSC_CTRL_EN);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_EN,
+                                        HAL_STMPE610_INT_EN_TOUCHDET);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_ADC_CTRL1,
+                                        (uint8_t)(0x6u << 4u));
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_ADC_CTRL2,
+                                        HAL_STMPE610_ADC_CTRL2_6_5MHZ);
+    }
+    if (status == HAL_OK) {
+      status =
+          stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_CFG,
+                                   (uint8_t)(HAL_STMPE610_TSC_CFG_4SAMPLE |
+                                             HAL_STMPE610_TSC_CFG_DELAY_1MS |
+                                             HAL_STMPE610_TSC_CFG_SETTLE_5MS));
+    }
+    if (status == HAL_OK) {
+      status =
+          stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_FRACTION_Z, 0x06u);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_TH, 1u);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA,
+                                        HAL_STMPE610_FIFO_STA_RESET);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA, 0u);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_TSC_I_DRIVE,
+                                        HAL_STMPE610_TSC_I_DRIVE_50MA);
+    }
+    if (status == HAL_OK) {
+      status = stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
+    }
+    if (status == HAL_OK) {
+      status =
+          stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_CTRL,
+                                   (uint8_t)(HAL_STMPE610_INT_CTRL_POL_HIGH |
+                                             HAL_STMPE610_INT_CTRL_ENABLE));
+    }
+    if (status == HAL_OK) {
+      dev->initialized = true;
+    }
   }
 
   hal_mutex_unlock(dev->mutex);
 
-  if (!ok) {
+  if (!ok || status != HAL_OK) {
     hal_stmpe610_deinit(dev);
   }
 
+  if (status != HAL_OK) {
+    return status;
+  }
   return hal_status_from_bool(ok, HAL_ENOENT);
 }
 
@@ -374,39 +483,66 @@ void hal_stmpe610_deinit(hal_stmpe610_t *dev) {
   dev->mutex = NULL;
 }
 
-uint8_t hal_stmpe610_read_register8(hal_stmpe610_t *dev, uint8_t reg) {
+hal_status_t hal_stmpe610_read_register8_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                            uint8_t *out_value) {
+  if (out_value != NULL) {
+    *out_value = 0u;
+  }
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
   if (!stmpe610_ready(dev)) {
-    return 0u;
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(dev->mutex);
-  const uint8_t value = stmpe610_read8_unlocked(dev, reg);
+  const hal_status_t status = stmpe610_read8_unlocked(dev, reg, out_value);
   hal_mutex_unlock(dev->mutex);
 
+  return status;
+}
+
+uint8_t hal_stmpe610_read_register8(hal_stmpe610_t *dev, uint8_t reg) {
+  uint8_t value = 0u;
+  (void)hal_stmpe610_read_register8_ex(dev, reg, &value);
   return value;
+}
+
+hal_status_t hal_stmpe610_read_register16_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                             uint16_t *out_value) {
+  if (out_value != NULL) {
+    *out_value = 0u;
+  }
+  if (out_value == NULL) {
+    return HAL_EINVAL;
+  }
+  if (!stmpe610_ready(dev)) {
+    return HAL_EUNINIT;
+  }
+
+  hal_mutex_lock(dev->mutex);
+  const hal_status_t status = stmpe610_read16_unlocked(dev, reg, out_value);
+  hal_mutex_unlock(dev->mutex);
+
+  return status;
 }
 
 uint16_t hal_stmpe610_read_register16(hal_stmpe610_t *dev, uint8_t reg) {
-  if (!stmpe610_ready(dev)) {
-    return 0u;
-  }
-
-  hal_mutex_lock(dev->mutex);
-  const uint16_t value = stmpe610_read16_unlocked(dev, reg);
-  hal_mutex_unlock(dev->mutex);
-
+  uint16_t value = 0u;
+  (void)hal_stmpe610_read_register16_ex(dev, reg, &value);
   return value;
 }
 
-void hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
-                                  uint8_t value) {
+hal_status_t hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
+                                          uint8_t value) {
   if (!stmpe610_ready(dev)) {
-    return;
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(dev->mutex);
-  stmpe610_write8_unlocked(dev, reg, value);
+  const hal_status_t status = stmpe610_write8_unlocked(dev, reg, value);
   hal_mutex_unlock(dev->mutex);
+  return status;
 }
 
 uint16_t hal_stmpe610_get_version(hal_stmpe610_t *dev) {
@@ -415,7 +551,8 @@ uint16_t hal_stmpe610_get_version(hal_stmpe610_t *dev) {
   }
 
   hal_mutex_lock(dev->mutex);
-  const uint16_t version = stmpe610_get_version_unlocked(dev);
+  uint16_t version = 0u;
+  (void)stmpe610_get_version_unlocked(dev, &version);
   hal_mutex_unlock(dev->mutex);
 
   return version;
@@ -427,9 +564,9 @@ bool hal_stmpe610_touched(hal_stmpe610_t *dev) {
   }
 
   hal_mutex_lock(dev->mutex);
-  const bool touched =
-      (stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_TSC_CTRL) &
-       HAL_STMPE610_TSC_CTRL_STA) != 0u;
+  uint8_t value = 0u;
+  (void)stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_TSC_CTRL, &value);
+  const bool touched = (value & HAL_STMPE610_TSC_CTRL_STA) != 0u;
   hal_mutex_unlock(dev->mutex);
 
   return touched;
@@ -441,8 +578,9 @@ bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev) {
   }
 
   hal_mutex_lock(dev->mutex);
-  const bool empty = (stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA) &
-                      HAL_STMPE610_FIFO_STA_EMPTY) != 0u;
+  uint8_t value = 0u;
+  (void)stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA, &value);
+  const bool empty = (value & HAL_STMPE610_FIFO_STA_EMPTY) != 0u;
   hal_mutex_unlock(dev->mutex);
 
   return empty;
@@ -454,7 +592,8 @@ uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev) {
   }
 
   hal_mutex_lock(dev->mutex);
-  const uint8_t size = stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_SIZE);
+  uint8_t size = 0u;
+  (void)stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_SIZE, &size);
   hal_mutex_unlock(dev->mutex);
 
   return size;
@@ -480,14 +619,14 @@ hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
   }
 
   hal_mutex_lock(dev->mutex);
-  stmpe610_read_data_unlocked(dev, x, y, z);
+  const hal_status_t status = stmpe610_read_data_unlocked(dev, x, y, z);
   hal_mutex_unlock(dev->mutex);
-  return HAL_OK;
+  return status;
 }
 
-void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
-                            uint8_t *z) {
-  (void)hal_stmpe610_read_data_ex(dev, x, y, z);
+hal_status_t hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x,
+                                    uint16_t *y, uint8_t *z) {
+  return hal_stmpe610_read_data_ex(dev, x, y, z);
 }
 
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev) {
@@ -506,14 +645,20 @@ hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev) {
 
   hal_mutex_lock(dev->mutex);
 
-  while ((stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA) &
-          HAL_STMPE610_FIFO_STA_EMPTY) == 0u) {
-    stmpe610_read_data_unlocked(dev, &x, &y, &z);
+  uint8_t fifo_status = 0u;
+  hal_status_t status =
+      stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA, &fifo_status);
+  while (status == HAL_OK &&
+         (fifo_status & HAL_STMPE610_FIFO_STA_EMPTY) == 0u) {
+    status = stmpe610_read_data_unlocked(dev, &x, &y, &z);
+    if (status == HAL_OK) {
+      status =
+          stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA, &fifo_status);
+    }
   }
 
-  if ((stmpe610_read8_unlocked(dev, HAL_STMPE610_REG_FIFO_STA) &
-       HAL_STMPE610_FIFO_STA_EMPTY) != 0u) {
-    stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
+  if (status == HAL_OK && (fifo_status & HAL_STMPE610_FIFO_STA_EMPTY) != 0u) {
+    (void)stmpe610_write8_unlocked(dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
   }
 
   hal_mutex_unlock(dev->mutex);

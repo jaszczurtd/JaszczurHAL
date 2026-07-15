@@ -100,6 +100,8 @@ void setUp(void) {
   hal_mock_set_millis(0u);
   hal_i2c_init_bus(0u, 4u, 5u, HAL_I2C_CLOCK_STANDARD_HZ);
   hal_i2c_init_bus(1u, 6u, 7u, HAL_I2C_CLOCK_STANDARD_HZ);
+  hal_mock_i2c_set_busy_bus(0u, false);
+  hal_mock_i2c_set_busy_bus(1u, false);
   hal_spi_init(0u, 16u, 19u, 18u);
   hal_spi_init(1u, 20u, 23u, 22u);
 }
@@ -150,11 +152,19 @@ void test_i2c_register_access_uses_expected_frames(void) {
 
   hal_mock_i2c_reset_write_log_bus(0u);
   hal_mock_i2c_inject_rx_bus(0u, &read_value, 1u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_stmpe610_read_register8_ex(&dev, HAL_STMPE610_REG_TSC_CTRL,
+                                             &read_value));
+  TEST_ASSERT_EQUAL_UINT8(0x5Au, read_value);
+
+  hal_mock_i2c_reset_write_log_bus(0u);
+  hal_mock_i2c_inject_rx_bus(0u, &read_value, 1u);
   TEST_ASSERT_EQUAL_UINT8(
       0x5Au, hal_stmpe610_read_register8(&dev, HAL_STMPE610_REG_TSC_CTRL));
   TEST_ASSERT_TRUE(find_i2c_reg_frame(0u, HAL_STMPE610_REG_TSC_CTRL));
 
-  hal_stmpe610_write_register8(&dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stmpe610_write_register8(
+                                    &dev, HAL_STMPE610_REG_INT_STA, 0xFFu));
   TEST_ASSERT_TRUE(find_i2c_frame(0u, HAL_STMPE610_REG_INT_STA, 0xFFu));
 }
 
@@ -164,6 +174,13 @@ void test_i2c_read16_reads_two_adjacent_registers(void) {
 
   inject_i2c_init_success(0u);
   TEST_ASSERT_TRUE(hal_stmpe610_init(&dev, NULL));
+
+  hal_mock_i2c_reset_write_log_bus(0u);
+  hal_mock_i2c_inject_rx_bus(0u, rx, sizeof(rx));
+  uint16_t reg16 = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stmpe610_read_register16_ex(
+                                    &dev, HAL_STMPE610_REG_TSC_DATA_X, &reg16));
+  TEST_ASSERT_EQUAL_UINT16(0x1234u, reg16);
 
   hal_mock_i2c_reset_write_log_bus(0u);
   hal_mock_i2c_inject_rx_bus(0u, rx, sizeof(rx));
@@ -210,6 +227,33 @@ void test_read_data_ex_reports_invalid_and_uninitialized(void) {
   TEST_ASSERT_EQUAL_UINT8(0u, z);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_stmpe610_read_data_ex(&dev, NULL, &y, &z));
+}
+
+void test_register_status_apis_report_invalid_uninit_and_bus_errors(void) {
+  uint8_t value8 = 9u;
+  uint16_t value16 = 8u;
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EUNINIT,
+      hal_stmpe610_read_register8_ex(&dev, HAL_STMPE610_REG_TSC_CTRL, &value8));
+  TEST_ASSERT_EQUAL_UINT8(0u, value8);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      hal_stmpe610_read_register16_ex(&dev, HAL_STMPE610_REG_TSC_DATA_X, NULL));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EUNINIT,
+      hal_stmpe610_write_register8(&dev, HAL_STMPE610_REG_INT_STA, 0xFFu));
+
+  inject_i2c_init_success(0u);
+  TEST_ASSERT_TRUE(hal_stmpe610_init(&dev, NULL));
+
+  hal_mock_i2c_set_busy_bus(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS,
+                        hal_stmpe610_read_register16_ex(
+                            &dev, HAL_STMPE610_REG_TSC_DATA_X, &value16));
+  TEST_ASSERT_EQUAL_UINT16(0u, value16);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, hal_stmpe610_write_register8(
+                                      &dev, HAL_STMPE610_REG_INT_STA, 0xFFu));
 }
 
 void test_get_point_drains_fifo_and_clears_interrupts(void) {
@@ -307,7 +351,8 @@ void test_spi_register_access_transfers_reference_sequence(void) {
   TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_spi_get_lock_depth(0u));
 
   hal_mock_spi_reset();
-  hal_stmpe610_write_register8(&dev, HAL_STMPE610_REG_INT_STA, 0xFFu);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stmpe610_write_register8(
+                                    &dev, HAL_STMPE610_REG_INT_STA, 0xFFu));
   TEST_ASSERT_EQUAL_size_t(2u, hal_mock_spi_get_tx(0u, tx, sizeof(tx)));
   TEST_ASSERT_EQUAL_UINT8(HAL_STMPE610_REG_INT_STA, tx[0]);
   TEST_ASSERT_EQUAL_UINT8(0xFFu, tx[1]);
@@ -369,6 +414,7 @@ int main(void) {
   RUN_TEST(test_i2c_read16_reads_two_adjacent_registers);
   RUN_TEST(test_read_data_decodes_fifo_bytes);
   RUN_TEST(test_read_data_ex_reports_invalid_and_uninitialized);
+  RUN_TEST(test_register_status_apis_report_invalid_uninit_and_bus_errors);
   RUN_TEST(test_get_point_drains_fifo_and_clears_interrupts);
   RUN_TEST(test_get_point_locks_driver_once);
   RUN_TEST(test_spi_init_uses_mode0_and_chip_select);

@@ -212,7 +212,9 @@ Sensors
   HAL_ENABLE_IRSMALL_DECODER
                            Shared IR receiver decoder over HAL GPIO
                            interrupts and system timing.
-  HAL_ENABLE_ONEWIRE       Shared generic 1-Wire bus API wrapper.
+  HAL_ENABLE_ONEWIRE       Shared generic 1-Wire bus API wrapper. Propagates: CRC.
+  HAL_ENABLE_CRC           Generic CRC-8/16/32 checksums for integrity. Auto-enabled
+                           by ONEWIRE/DS18B20.
   HAL_ENABLE_EXTERNAL_ADC  ADS1115 external ADC via shared ADS1X15 HAL I2C driver.
                            Propagates: I2C.
   HAL_ENABLE_GPS           Portable NMEA receiver. Backend-agnostic engine
@@ -377,6 +379,7 @@ HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
 HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DACLESS     -> HAL_ENABLE_DMA_PWM_AUDIO, HAL_ENABLE_PWM_FREQ
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
+HAL_ENABLE_ONEWIRE     -> HAL_ENABLE_CRC
 HAL_ENABLE_DHT         standalone GPIO/timing driver
 HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_MCP2515     -> HAL_ENABLE_CAN, HAL_ENABLE_SPI

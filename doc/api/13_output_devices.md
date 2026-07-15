@@ -356,6 +356,15 @@ The shared simple-I/O driver group currently covers:
 The transaction flow is based on working grblHAL plugin drivers by Terje Io and
 uses JaszczurHAL I2C/SPI/GPIO/timing/status/sync primitives throughout.
 
+Each simple-I/O driver exposes `_ex` functions for fallible transactions and
+keeps the legacy `bool`/value-returning calls as thin compatibility wrappers.
+Invalid device pointers, pins, modes or output pointers return `HAL_EINVAL`;
+use before successful init returns `HAL_EUNINIT`; mutex allocation failure
+returns `HAL_ENOMEM`; and I2C/SPI/GPIO transaction failures return `HAL_EBUS`
+or `HAL_EIO` depending on the backend operation. Value-returning compatibility
+reads keep their historical zero-on-failure shape; use the `_ex` forms when the
+caller needs to distinguish zero data from an error.
+
 **Thread safety:** each device instance owns a HAL mutex, and bus transactions
 use the underlying HAL I2C/SPI locks. Lifecycle calls remain single-owner.
 

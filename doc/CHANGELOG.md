@@ -21,6 +21,34 @@ All notable changes to this project will be documented in this file.
   variants against catalog check values and preserves the former OneWire
   regression vectors.
 
+### UART status-first API
+
+- Completed the `hal_uart` migration to the current status-first rules.
+  `hal_uart_begin` and `hal_uart_flush` are now `hal_status_t` in place across
+  the RP2040, STM32G474 and mock backends; the redundant `hal_uart_begin_ex` /
+  `hal_uart_flush_ex` adapters were removed. The `bool`/value operations keep
+  their compatibility signatures with adjacent `_ex` status variants, and
+  `hal_uart_create` keeps its handle-returning shape (NULL is its failure
+  signal). Existing callers that ignore the return value are unaffected.
+
+### Driver status-first API migrations
+
+- Completed the current-rule status migrations for STMPE610, the simple-I/O
+  chips (MCP23017, PCA9654E, PCF8574, 74HC595, MCP3221 and MCP4725), DHT,
+  DS18B20 and SD logger.
+- STMPE610 now reports register, FIFO data and write failures through
+  `hal_status_t` APIs while preserving legacy value/`bool` wrappers where
+  applicable.
+- The simple-I/O drivers now keep their existing legacy `bool`/value shapes as
+  thin compatibility wrappers over adjacent `_ex` status implementations.
+- DHT and DS18B20 gained status-returning init/read/sample workflow APIs with
+  explicit invalid-argument, uninitialised, busy, timeout/protocol and missing
+  sample/device statuses.
+- SD logger now reports SD mount, file open/write/flush/close, EEPROM update,
+  uninitialised use and buffer-overflow failures through `hal_status_t`, while
+  the legacy boolean init calls remain source-compatible wrappers.
+- Expanded host mock coverage and docs for the migrated error paths.
+
 ### System status-first API
 
 - Completed the `hal_system` migration to the current status-first rules.

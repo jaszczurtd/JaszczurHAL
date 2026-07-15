@@ -26,7 +26,7 @@ For the target-selectable VS Code firmware project model, see
 |---|---|---|
 | GPIO | Portable digital I/O, pull modes and interrupt-oriented usage. | [hal_gpio.h](../src/hal/hal_gpio.h) |
 | ADC | Portable analog input abstraction. | [hal_adc.h](../src/hal/hal_adc.h) |
-| DAC | True DAC support with status-first writes and explicit unsupported-target, invalid-channel and uninitialised diagnostics. | [hal_dac.h](../src/hal/hal_dac.h) |
+| DAC | True DAC support with additional diagnostics. | [hal_dac.h](../src/hal/hal_dac.h) |
 | PWM | Portable PWM output plus frequency-controlled PWM helpers. | [hal_pwm.h](../src/hal/hal_pwm.h), [hal_pwm_freq.h](../src/hal/hal_pwm_freq.h) |
 | Pulse counting | Edge/pulse counting for signal measurement and simple counter applications. | [hal_pcnt.h](../src/hal/hal_pcnt.h) |
 | Timers and system time | Basic timers, extended timer helpers, idle/delay and system services. | [hal_timer.h](../src/hal/hal_timer.h), [hal_system.h](../src/hal/hal_system.h) |
@@ -41,7 +41,7 @@ For the target-selectable VS Code firmware project model, see
 | UART | Hardware serial communication abstraction. | [hal_uart.h](../src/hal/hal_uart.h) |
 | Serial/debug console | TX-serialized console output, RP2040 TinyUSB CDC transport, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
 | Software serial | Target-optimized software UART: native Pico SDK PIO/DMA on RP2040 and a shared HAL GPIO backend on other targets. | [hal_swserial.h](../src/hal/hal_swserial.h) |
-| I2C master | Portable status-first controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
+| I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
 | SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including status-returning transfer APIs and blocking/asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |
 | Network status API | Additive `hal_status_t` operations for WiFi/DNS, TCP/UDP, MQTT and WireGuard with legacy wrappers preserved. | [connectivity API](api/15_connectivity.md) |
@@ -121,6 +121,7 @@ For the target-selectable VS Code firmware project model, see
 | Area | What it offers | Source |
 |---|---|---|
 | Crypto helpers | Base64, MD5, SHA-256, HMAC-SHA256 and ChaCha20/Poly1305-oriented helpers. | [hal_crypto.h](../src/hal/hal_crypto.h), [wireguard crypto](../src/hal/impl/shared/frameworks/wireguard/crypto/) |
+| CRC checksums | Generic CRC-8/16/32 for data integrity: CRC-8/MAXIM, Maxim 1-Wire CRC-16, CRC-16/CCITT-FALSE and CRC-32/ISO-HDLC. | [hal_crc.h](../src/hal/hal_crc.h) |
 | Session authentication helpers | Optional serial-session authentication support. | [hal_sc_auth.h](../src/hal/hal_sc_auth.h) |
 | Serial framing/session tools | Reusable serial frame/session vocabulary helpers for embedded protocols. | [hal_serial_frame.h](../src/hal/hal_serial_frame.h), [hal_serial_session.h](../src/hal/hal_serial_session.h) |
 | cJSON | Bundled cJSON/cJSON_Utils for constrained JSON work. | [cjson framework](../src/hal/impl/shared/frameworks/cjson/) |

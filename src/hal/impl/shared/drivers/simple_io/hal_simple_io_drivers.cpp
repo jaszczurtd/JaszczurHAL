@@ -32,8 +32,6 @@ static hal_status_t status_from_i2c_end(uint8_t code) {
   return (code == 0u) ? HAL_OK : HAL_EBUS;
 }
 
-static bool status_ok(hal_status_t status) { return status == HAL_OK; }
-
 #if defined(HAL_ENABLE_MCP23017) || defined(HAL_ENABLE_PCA9654E) ||            \
     defined(HAL_ENABLE_PCF8574) || defined(HAL_ENABLE_MCP4725)
 static hal_status_t i2c_write_bytes(uint8_t bus, uint8_t addr,
@@ -215,7 +213,7 @@ hal_status_t hal_mcp23017_init_ex(hal_mcp23017_t *dev,
 }
 
 bool hal_mcp23017_init(hal_mcp23017_t *dev, const hal_mcp23017_config_t *cfg) {
-  return status_ok(hal_mcp23017_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_mcp23017_init_ex(dev, cfg));
 }
 
 void hal_mcp23017_deinit(hal_mcp23017_t *dev) {
@@ -256,7 +254,7 @@ hal_status_t hal_mcp23017_write_all_ex(hal_mcp23017_t *dev, uint16_t value) {
 }
 
 bool hal_mcp23017_write_all(hal_mcp23017_t *dev, uint16_t value) {
-  return status_ok(hal_mcp23017_write_all_ex(dev, value));
+  return hal_status_to_bool(hal_mcp23017_write_all_ex(dev, value));
 }
 
 hal_status_t hal_mcp23017_write_pin_ex(hal_mcp23017_t *dev, uint8_t pin,
@@ -284,7 +282,7 @@ hal_status_t hal_mcp23017_write_pin_ex(hal_mcp23017_t *dev, uint8_t pin,
 }
 
 bool hal_mcp23017_write_pin(hal_mcp23017_t *dev, uint8_t pin, bool on) {
-  return status_ok(hal_mcp23017_write_pin_ex(dev, pin, on));
+  return hal_status_to_bool(hal_mcp23017_write_pin_ex(dev, pin, on));
 }
 
 uint16_t hal_mcp23017_output_latch(const hal_mcp23017_t *dev) {
@@ -379,7 +377,8 @@ hal_status_t hal_mcp23017_config_input_ex(hal_mcp23017_t *dev, uint8_t pin,
 
 bool hal_mcp23017_config_input(hal_mcp23017_t *dev, uint8_t pin, bool inverted,
                                bool pullup) {
-  return status_ok(hal_mcp23017_config_input_ex(dev, pin, inverted, pullup));
+  return hal_status_to_bool(
+      hal_mcp23017_config_input_ex(dev, pin, inverted, pullup));
 }
 
 hal_status_t hal_mcp23017_config_output_ex(hal_mcp23017_t *dev, uint8_t pin,
@@ -402,7 +401,7 @@ hal_status_t hal_mcp23017_config_output_ex(hal_mcp23017_t *dev, uint8_t pin,
 
 bool hal_mcp23017_config_output(hal_mcp23017_t *dev, uint8_t pin,
                                 bool inverted) {
-  return status_ok(hal_mcp23017_config_output_ex(dev, pin, inverted));
+  return hal_status_to_bool(hal_mcp23017_config_output_ex(dev, pin, inverted));
 }
 
 hal_status_t hal_mcp23017_config_irq_ex(hal_mcp23017_t *dev, uint8_t pin,
@@ -546,7 +545,7 @@ hal_status_t hal_pca9654e_init_ex(hal_pca9654e_t *dev,
 }
 
 bool hal_pca9654e_init(hal_pca9654e_t *dev, const hal_pca9654e_config_t *cfg) {
-  return status_ok(hal_pca9654e_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_pca9654e_init_ex(dev, cfg));
 }
 
 void hal_pca9654e_deinit(hal_pca9654e_t *dev) {
@@ -572,7 +571,7 @@ hal_status_t hal_pca9654e_write_all_ex(hal_pca9654e_t *dev, uint8_t value) {
 }
 
 bool hal_pca9654e_write_all(hal_pca9654e_t *dev, uint8_t value) {
-  return status_ok(hal_pca9654e_write_all_ex(dev, value));
+  return hal_status_to_bool(hal_pca9654e_write_all_ex(dev, value));
 }
 
 hal_status_t hal_pca9654e_write_pin_ex(hal_pca9654e_t *dev, uint8_t pin,
@@ -598,7 +597,7 @@ hal_status_t hal_pca9654e_write_pin_ex(hal_pca9654e_t *dev, uint8_t pin,
 }
 
 bool hal_pca9654e_write_pin(hal_pca9654e_t *dev, uint8_t pin, bool on) {
-  return status_ok(hal_pca9654e_write_pin_ex(dev, pin, on));
+  return hal_status_to_bool(hal_pca9654e_write_pin_ex(dev, pin, on));
 }
 
 hal_status_t hal_pca9654e_config_pin_ex(hal_pca9654e_t *dev, uint8_t pin,
@@ -619,7 +618,7 @@ hal_status_t hal_pca9654e_config_pin_ex(hal_pca9654e_t *dev, uint8_t pin,
 }
 
 bool hal_pca9654e_config_pin(hal_pca9654e_t *dev, uint8_t pin, bool inverted) {
-  return status_ok(hal_pca9654e_config_pin_ex(dev, pin, inverted));
+  return hal_status_to_bool(hal_pca9654e_config_pin_ex(dev, pin, inverted));
 }
 
 uint8_t hal_pca9654e_output_latch(const hal_pca9654e_t *dev) {
@@ -667,7 +666,7 @@ hal_status_t hal_pcf8574_init_ex(hal_pcf8574_t *dev,
 }
 
 bool hal_pcf8574_init(hal_pcf8574_t *dev, const hal_pcf8574_config_t *cfg) {
-  return status_ok(hal_pcf8574_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_pcf8574_init_ex(dev, cfg));
 }
 
 void hal_pcf8574_deinit(hal_pcf8574_t *dev) {
@@ -693,7 +692,7 @@ hal_status_t hal_pcf8574_write_all_ex(hal_pcf8574_t *dev, uint8_t value) {
 }
 
 bool hal_pcf8574_write_all(hal_pcf8574_t *dev, uint8_t value) {
-  return status_ok(hal_pcf8574_write_all_ex(dev, value));
+  return hal_status_to_bool(hal_pcf8574_write_all_ex(dev, value));
 }
 
 hal_status_t hal_pcf8574_write_pin_ex(hal_pcf8574_t *dev, uint8_t pin,
@@ -719,7 +718,7 @@ hal_status_t hal_pcf8574_write_pin_ex(hal_pcf8574_t *dev, uint8_t pin,
 }
 
 bool hal_pcf8574_write_pin(hal_pcf8574_t *dev, uint8_t pin, bool on) {
-  return status_ok(hal_pcf8574_write_pin_ex(dev, pin, on));
+  return hal_status_to_bool(hal_pcf8574_write_pin_ex(dev, pin, on));
 }
 
 hal_status_t hal_pcf8574_read_all_ex(hal_pcf8574_t *dev, uint8_t *out_value) {
@@ -786,7 +785,7 @@ hal_status_t hal_pcf8574_config_pin_ex(hal_pcf8574_t *dev, uint8_t pin,
 }
 
 bool hal_pcf8574_config_pin(hal_pcf8574_t *dev, uint8_t pin, bool inverted) {
-  return status_ok(hal_pcf8574_config_pin_ex(dev, pin, inverted));
+  return hal_status_to_bool(hal_pcf8574_config_pin_ex(dev, pin, inverted));
 }
 
 uint8_t hal_pcf8574_output_latch(const hal_pcf8574_t *dev) {
@@ -863,7 +862,7 @@ hal_status_t hal_hc595_init_ex(hal_hc595_t *dev,
 }
 
 bool hal_hc595_init(hal_hc595_t *dev, const hal_hc595_config_t *cfg) {
-  return status_ok(hal_hc595_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_hc595_init_ex(dev, cfg));
 }
 
 void hal_hc595_deinit(hal_hc595_t *dev) {
@@ -894,7 +893,7 @@ hal_status_t hal_hc595_write_all_ex(hal_hc595_t *dev, uint32_t value) {
 }
 
 bool hal_hc595_write_all(hal_hc595_t *dev, uint32_t value) {
-  return status_ok(hal_hc595_write_all_ex(dev, value));
+  return hal_status_to_bool(hal_hc595_write_all_ex(dev, value));
 }
 
 hal_status_t hal_hc595_write_pin_ex(hal_hc595_t *dev, uint8_t pin, bool on) {
@@ -919,7 +918,7 @@ hal_status_t hal_hc595_write_pin_ex(hal_hc595_t *dev, uint8_t pin, bool on) {
 }
 
 bool hal_hc595_write_pin(hal_hc595_t *dev, uint8_t pin, bool on) {
-  return status_ok(hal_hc595_write_pin_ex(dev, pin, on));
+  return hal_status_to_bool(hal_hc595_write_pin_ex(dev, pin, on));
 }
 
 hal_status_t hal_hc595_config_pin_ex(hal_hc595_t *dev, uint8_t pin,
@@ -940,7 +939,7 @@ hal_status_t hal_hc595_config_pin_ex(hal_hc595_t *dev, uint8_t pin,
 }
 
 bool hal_hc595_config_pin(hal_hc595_t *dev, uint8_t pin, bool inverted) {
-  return status_ok(hal_hc595_config_pin_ex(dev, pin, inverted));
+  return hal_status_to_bool(hal_hc595_config_pin_ex(dev, pin, inverted));
 }
 
 uint32_t hal_hc595_output_latch(const hal_hc595_t *dev) {
@@ -976,7 +975,7 @@ hal_status_t hal_mcp3221_init_ex(hal_mcp3221_t *dev,
 }
 
 bool hal_mcp3221_init(hal_mcp3221_t *dev, const hal_mcp3221_config_t *cfg) {
-  return status_ok(hal_mcp3221_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_mcp3221_init_ex(dev, cfg));
 }
 
 void hal_mcp3221_deinit(hal_mcp3221_t *dev) {
@@ -1070,7 +1069,7 @@ hal_status_t hal_mcp4725_init_ex(hal_mcp4725_t *dev,
 }
 
 bool hal_mcp4725_init(hal_mcp4725_t *dev, const hal_mcp4725_config_t *cfg) {
-  return status_ok(hal_mcp4725_init_ex(dev, cfg));
+  return hal_status_to_bool(hal_mcp4725_init_ex(dev, cfg));
 }
 
 void hal_mcp4725_deinit(hal_mcp4725_t *dev) {
@@ -1102,7 +1101,7 @@ hal_status_t hal_mcp4725_write_ex(hal_mcp4725_t *dev, uint16_t value) {
 }
 
 bool hal_mcp4725_write(hal_mcp4725_t *dev, uint16_t value) {
-  return status_ok(hal_mcp4725_write_ex(dev, value));
+  return hal_status_to_bool(hal_mcp4725_write_ex(dev, value));
 }
 
 uint16_t hal_mcp4725_output_latch(const hal_mcp4725_t *dev) {

@@ -479,15 +479,17 @@ SD-over-SPI layer, so enabling it propagates `HAL_ENABLE_FAT`,
 
 int  hal_sdlogger_get_log_number(void);
 int  hal_sdlogger_get_crash_number(void);
+hal_status_t hal_sdlogger_init_ex(int cs);
 bool hal_sdlogger_init(int cs);
+hal_status_t hal_sdlogger_crash_init_ex(const char *add_to_name, int cs);
 bool hal_sdlogger_crash_init(const char *add_to_name, int cs);
 bool hal_sdlogger_is_initialized(void);
 bool hal_sdlogger_crash_is_initialized(void);
-void hal_sdlogger_append(const char *data);
-void hal_sdlogger_crash_append(const char *data);
-void hal_sdlogger_close(void);
-void hal_sdlogger_crash_close(void);
-void hal_sdlogger_crash_report(const char *format, ...);
+hal_status_t hal_sdlogger_append(const char *data);
+hal_status_t hal_sdlogger_crash_append(const char *data);
+hal_status_t hal_sdlogger_close(void);
+hal_status_t hal_sdlogger_crash_close(void);
+hal_status_t hal_sdlogger_crash_report(const char *format, ...);
 ```
 
 **Configuration defaults:**
@@ -507,9 +509,12 @@ HAL_SDLOGGER_SPI_BUS            0u
   `hal_spi_init()` before calling `hal_sdlogger_init()` or
   `hal_sdlogger_crash_init()`.
 - `hal_sdlogger_init(cs)` opens `logNNNNN.txt` and increments the EEPROM log
-  counter.
+  counter; `hal_sdlogger_init_ex(cs)` is the status-returning form and the
+  legacy `bool` function is a thin wrapper.
 - `hal_sdlogger_append()` buffers lines and flushes every
   `HAL_SDLOGGER_WRITE_INTERVAL_MS`; `hal_sdlogger_close()` flushes leftovers.
+  These functions now return `hal_status_t`, so old callers may still ignore
+  the result while new code can check failures.
 - `hal_sdlogger_crash_init(add_to_name, cs)` opens `wdNNNNNN.txt` and writes
   the optional crash tag plus the corresponding log filename into the report.
   Generated filenames intentionally stay in FatFs 8.3 form because LFN is
@@ -518,6 +523,11 @@ HAL_SDLOGGER_SPI_BUS            0u
   target file is opened successfully.
 - `hal_sdlogger_crash_append()` and `hal_sdlogger_crash_report()` flush crash
   entries immediately.
+- Status mapping: SD mount failure returns `HAL_EBUS`; file writes, flushes,
+  closes, and EEPROM update failures return the backend status or `HAL_EIO`;
+  append/close before init return `HAL_EUNINIT`; an oversized buffered log line
+  returns `HAL_EOVERFLOW`; `hal_sdlogger_crash_report(NULL)` returns
+  `HAL_EINVAL`.
 
 Buildable example: `examples/39_sdlogger`.
 

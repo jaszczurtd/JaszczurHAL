@@ -15,6 +15,7 @@
 #include "hal/hal_dht.h"
 
 #include "hal/hal_gpio.h"
+#include "hal/hal_status.h"
 #include "hal/hal_sync.h"
 #include "hal/hal_system.h"
 #include "hal/impl/shared/hal_mutex_once.h"
@@ -55,14 +56,15 @@ static bool handle_valid(hal_dht_t h) {
   return h != NULL && h->in_use && h->initialized && h->mutex != NULL;
 }
 
-static bool wait_while_level(uint8_t pin, bool level, uint32_t timeout_us) {
+static hal_status_t wait_while_level(uint8_t pin, bool level,
+                                     uint32_t timeout_us) {
   const uint32_t start = hal_micros();
   while (hal_gpio_read(pin) == level) {
     if ((uint32_t)(hal_micros() - start) >= timeout_us) {
-      return false;
+      return HAL_ETIMEOUT;
     }
   }
-  return true;
+  return HAL_OK;
 }
 
 static bool sample_bit_high_after_low_pulse(uint8_t pin) {
@@ -95,9 +97,9 @@ static void decode_frame_locked(hal_dht_t h,
   h->temperature_f = (h->temperature_c * 9.0f / 5.0f) + 32.0f;
 }
 
-static bool read_frame_locked(hal_dht_t h) {
+static hal_status_t read_frame_locked(hal_dht_t h) {
   uint8_t frame[DHT_SCRATCH_BYTES] = {};
-  bool ok = false;
+  hal_status_t status = HAL_ETIMEOUT;
 
   hal_gpio_set_mode(h->pin, HAL_GPIO_INPUT_PULLUP);
   hal_gpio_write(h->pin, true);
@@ -115,11 +117,11 @@ static bool read_frame_locked(hal_dht_t h) {
     if (hal_gpio_read(h->pin) == true) {
       hal_delay_us(DHT_RESPONSE_HIGH_US);
 
-      ok = true;
-      for (uint8_t b = 0u; b < DHT_DATA_BYTES && ok; ++b) {
+      status = HAL_OK;
+      for (uint8_t b = 0u; b < DHT_DATA_BYTES && status == HAL_OK; ++b) {
         for (uint8_t bit = 0u; bit < 8u; ++bit) {
-          ok = wait_while_level(h->pin, false, DHT_EDGE_TIMEOUT_US);
-          if (!ok) {
+          status = wait_while_level(h->pin, false, DHT_EDGE_TIMEOUT_US);
+          if (status != HAL_OK) {
             break;
           }
 
@@ -127,24 +129,24 @@ static bool read_frame_locked(hal_dht_t h) {
             frame[b] |= (uint8_t)(1u << (7u - bit));
           }
 
-          ok = wait_while_level(h->pin, true, DHT_EDGE_TIMEOUT_US);
+          status = wait_while_level(h->pin, true, DHT_EDGE_TIMEOUT_US);
         }
       }
     }
   }
 
-  if (!ok) {
-    return false;
+  if (status != HAL_OK) {
+    return status;
   }
 
   frame[5] = (uint8_t)((frame[0] + frame[1] + frame[2] + frame[3]) & 0xffu);
   if (frame[4] != frame[5]) {
-    return false;
+    return HAL_EPROTO;
   }
 
   memcpy(h->data, frame, sizeof(h->data));
   decode_frame_locked(h, frame);
-  return true;
+  return HAL_OK;
 }
 
 hal_dht_config_t hal_dht_default_config(uint8_t data_pin) {
@@ -155,12 +157,18 @@ hal_dht_config_t hal_dht_default_config(uint8_t data_pin) {
   return cfg;
 }
 
-hal_dht_t hal_dht_init(const hal_dht_config_t *cfg) {
-  if (cfg == NULL || !sensor_valid(cfg->sensor)) {
-    return NULL;
+hal_status_t hal_dht_init_ex(const hal_dht_config_t *cfg,
+                             hal_dht_t *out_handle) {
+  if (out_handle != NULL) {
+    *out_handle = NULL;
+  }
+  if (cfg == NULL || out_handle == NULL || !sensor_valid(cfg->sensor)) {
+    return HAL_EINVAL;
   }
 
-  (void)jh_hal_mutex_create_once(&s_pool_mutex);
+  if (jh_hal_mutex_create_once(&s_pool_mutex) == NULL) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_pool_mutex);
 
   hal_dht_t h = NULL;
@@ -176,13 +184,13 @@ hal_dht_t hal_dht_init(const hal_dht_config_t *cfg) {
   hal_mutex_unlock(s_pool_mutex);
 
   if (h == NULL) {
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   h->mutex = hal_mutex_create();
   if (h->mutex == NULL) {
     hal_dht_deinit(h);
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   h->pin = cfg->data_pin;
@@ -197,6 +205,13 @@ hal_dht_t hal_dht_init(const hal_dht_config_t *cfg) {
   h->initialized = true;
   hal_mutex_unlock(h->mutex);
 
+  *out_handle = h;
+  return HAL_OK;
+}
+
+hal_dht_t hal_dht_init(const hal_dht_config_t *cfg) {
+  hal_dht_t h = NULL;
+  (void)hal_dht_init_ex(cfg, &h);
   return h;
 }
 
@@ -213,21 +228,27 @@ void hal_dht_deinit(hal_dht_t h) {
     hal_mutex_destroy(mutex);
   }
 
-  (void)jh_hal_mutex_create_once(&s_pool_mutex);
+  if (jh_hal_mutex_create_once(&s_pool_mutex) == NULL) {
+    return;
+  }
   hal_mutex_lock(s_pool_mutex);
   memset(h, 0, sizeof(*h));
   hal_mutex_unlock(s_pool_mutex);
 }
 
-bool hal_dht_read(hal_dht_t h) {
+hal_status_t hal_dht_read_ex(hal_dht_t h) {
   if (!handle_valid(h)) {
-    return false;
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(h->mutex);
-  const bool ok = read_frame_locked(h);
+  const hal_status_t status = read_frame_locked(h);
   hal_mutex_unlock(h->mutex);
-  return ok;
+  return status;
+}
+
+bool hal_dht_read(hal_dht_t h) {
+  return hal_status_to_bool(hal_dht_read_ex(h));
 }
 
 float hal_dht_get_temperature_c(hal_dht_t h) {
@@ -263,9 +284,12 @@ float hal_dht_get_humidity(hal_dht_t h) {
   return value;
 }
 
-bool hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out) {
-  if (!handle_valid(h) || out == NULL) {
-    return false;
+hal_status_t hal_dht_get_sample_ex(hal_dht_t h, hal_dht_sample_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
+  if (!handle_valid(h)) {
+    return HAL_EUNINIT;
   }
 
   hal_mutex_lock(h->mutex);
@@ -273,7 +297,11 @@ bool hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out) {
   out->temperature_f = h->temperature_f;
   out->humidity = h->humidity;
   hal_mutex_unlock(h->mutex);
-  return true;
+  return HAL_OK;
+}
+
+bool hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out) {
+  return hal_status_to_bool(hal_dht_get_sample_ex(h, out));
 }
 
 #endif /* HAL_ENABLE_DHT */

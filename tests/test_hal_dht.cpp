@@ -44,8 +44,9 @@ void tearDown(void) {}
 
 void test_init_configures_idle_pullup(void) {
   hal_dht_config_t cfg = hal_dht_default_config(DHT_PIN);
-  hal_dht_t dht = hal_dht_init(&cfg);
+  hal_dht_t dht = NULL;
 
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dht_init_ex(&cfg, &dht));
   TEST_ASSERT_NOT_NULL(dht);
   TEST_ASSERT_EQUAL_INT(HAL_GPIO_INPUT_PULLUP, hal_mock_gpio_get_mode(DHT_PIN));
   TEST_ASSERT_TRUE(hal_mock_gpio_get_state(DHT_PIN));
@@ -62,13 +63,13 @@ void test_read_valid_frame_updates_sample(void) {
   const uint8_t frame[5] = {55u, 0u, 24u, 6u, 85u};
   push_frame(DHT_PIN, frame);
 
-  TEST_ASSERT_TRUE(hal_dht_read(dht));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dht_read_ex(dht));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 24.6f, hal_dht_get_temperature_c(dht));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 76.28f, hal_dht_get_temperature_f(dht));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 55.0f, hal_dht_get_humidity(dht));
 
   hal_dht_sample_t sample = {};
-  TEST_ASSERT_TRUE(hal_dht_get_sample(dht, &sample));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dht_get_sample_ex(dht, &sample));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 24.6f, sample.temperature_c);
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 55.0f, sample.humidity);
   TEST_ASSERT_EQUAL_UINT32(40u, hal_mock_critical_enter_count());
@@ -128,6 +129,8 @@ void test_bad_checksum_does_not_update_previous_sample(void) {
 
   const uint8_t bad[5] = {60u, 0u, 30u, 1u, 0u};
   push_frame(DHT_PIN, bad);
+  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, hal_dht_read_ex(dht));
+  push_frame(DHT_PIN, bad);
   TEST_ASSERT_FALSE(hal_dht_read(dht));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 20.5f, hal_dht_get_temperature_c(dht));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, 41.0f, hal_dht_get_humidity(dht));
@@ -145,7 +148,7 @@ void test_missing_response_high_returns_false_and_restores_interrupts(void) {
                                    sizeof(no_response_high) /
                                        sizeof(no_response_high[0]));
 
-  TEST_ASSERT_FALSE(hal_dht_read(dht));
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, hal_dht_read_ex(dht));
   TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_enter_count());
   TEST_ASSERT_EQUAL_UINT32(0u, hal_mock_critical_depth());
   TEST_ASSERT_TRUE(hal_mock_irq_enabled());
@@ -155,10 +158,44 @@ void test_missing_response_high_returns_false_and_restores_interrupts(void) {
 
 void test_invalid_config_is_rejected(void) {
   TEST_ASSERT_NULL(hal_dht_init(NULL));
+  hal_dht_t dht = (hal_dht_t)0x1;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dht_init_ex(NULL, &dht));
+  TEST_ASSERT_NULL(dht);
 
   hal_dht_config_t cfg = hal_dht_default_config(DHT_PIN);
   cfg.sensor = (hal_dht_sensor_t)99;
   TEST_ASSERT_NULL(hal_dht_init(&cfg));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dht_init_ex(&cfg, &dht));
+  TEST_ASSERT_NULL(dht);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dht_init_ex(&cfg, NULL));
+}
+
+void test_status_apis_report_uninitialized_and_invalid_arguments(void) {
+  hal_dht_sample_t sample = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_dht_read_ex(NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_dht_get_sample_ex(NULL, &sample));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_dht_get_sample_ex(NULL, NULL));
+}
+
+void test_init_ex_reports_pool_exhaustion(void) {
+  hal_dht_config_t cfg = hal_dht_default_config(DHT_PIN);
+  hal_dht_t handles[HAL_DHT_MAX_INSTANCES] = {};
+
+  for (size_t i = 0u; i < HAL_DHT_MAX_INSTANCES; ++i) {
+    cfg.data_pin = (uint8_t)(DHT_PIN + i);
+    TEST_ASSERT_EQUAL_INT(HAL_OK, hal_dht_init_ex(&cfg, &handles[i]));
+    TEST_ASSERT_NOT_NULL(handles[i]);
+  }
+
+  hal_dht_t extra = NULL;
+  cfg.data_pin = (uint8_t)(DHT_PIN + HAL_DHT_MAX_INSTANCES);
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_dht_init_ex(&cfg, &extra));
+  TEST_ASSERT_NULL(extra);
+
+  for (size_t i = 0u; i < HAL_DHT_MAX_INSTANCES; ++i) {
+    hal_dht_deinit(handles[i]);
+  }
 }
 
 int main(void) {
@@ -170,5 +207,7 @@ int main(void) {
   RUN_TEST(test_bad_checksum_does_not_update_previous_sample);
   RUN_TEST(test_missing_response_high_returns_false_and_restores_interrupts);
   RUN_TEST(test_invalid_config_is_rejected);
+  RUN_TEST(test_status_apis_report_uninitialized_and_invalid_arguments);
+  RUN_TEST(test_init_ex_reports_pool_exhaustion);
   return UNITY_END();
 }

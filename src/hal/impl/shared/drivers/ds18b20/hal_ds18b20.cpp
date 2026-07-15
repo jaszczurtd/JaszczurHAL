@@ -487,9 +487,15 @@ static float ds18b20_get_temp_c(hal_ds18b20_impl_t *h, const uint8_t *address) {
   return -127.0f;
 }
 
-hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
+hal_status_t hal_ds18b20_init_ex(const hal_ds18b20_config_t *cfg,
+                                 hal_ds18b20_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
+  *out = NULL;
+
   if (!cfg) {
-    return NULL;
+    return HAL_EINVAL;
   }
 
   hal_critical_section_enter();
@@ -507,7 +513,7 @@ hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
       slot >= 0,
       "hal_ds18b20: pool exhausted - increase HAL_DS18B20_MAX_INSTANCES");
   if (slot < 0) {
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   hal_ds18b20_impl_t *h = &s_pool[slot];
@@ -531,7 +537,7 @@ hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
   h->mutex = hal_mutex_create();
   if (!h->mutex) {
     release_pool_slot(h);
-    return NULL;
+    return HAL_ENOMEM;
   }
 
   bool onewire_ready = false;
@@ -546,7 +552,7 @@ hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
     hal_mutex_destroy(h->mutex);
     h->mutex = NULL;
     release_pool_slot(h);
-    return NULL;
+    return HAL_ENOENT;
   }
 
   const uint8_t requested_resolution = resolution_to_u8(h->resolution);
@@ -557,12 +563,19 @@ hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
   }
 
   refresh_conversion_timing(h);
+  *out = h;
+  return HAL_OK;
+}
+
+hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg) {
+  hal_ds18b20_t h = NULL;
+  (void)hal_ds18b20_init_ex(cfg, &h);
   return h;
 }
 
-void hal_ds18b20_deinit(hal_ds18b20_t h) {
+hal_status_t hal_ds18b20_deinit(hal_ds18b20_t h) {
   if (!h) {
-    return;
+    return HAL_OK;
   }
 
   hal_mutex_lock(h->mutex);
@@ -573,61 +586,69 @@ void hal_ds18b20_deinit(hal_ds18b20_t h) {
   hal_mutex_unlock(m);
   hal_mutex_destroy(m);
   release_pool_slot(h);
+  return HAL_OK;
 }
 
-bool hal_ds18b20_request(hal_ds18b20_t h) {
+hal_status_t hal_ds18b20_request_ex(hal_ds18b20_t h) {
   if (!h) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
   if (h->state == DS18B20_STATE_CONVERTING) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_EBUSY;
   }
 
   if (!ds18b20_is_connected(h, h->address, NULL)) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_ENOENT;
   }
 
   if (!ds18b20_request_temperature(h, h->address)) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_EIO;
   }
 
   h->conversion_deadline_us = hal_micros64() + h->conversion_time_us;
   h->state = DS18B20_STATE_CONVERTING;
   hal_mutex_unlock(h->mutex);
-  return true;
+  return HAL_OK;
 }
 
-void hal_ds18b20_poll(hal_ds18b20_t h) {
+bool hal_ds18b20_request(hal_ds18b20_t h) {
+  return hal_status_to_bool(hal_ds18b20_request_ex(h));
+}
+
+hal_status_t hal_ds18b20_poll(hal_ds18b20_t h) {
   if (!h) {
-    return;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
   if (h->state != DS18B20_STATE_CONVERTING) {
     hal_mutex_unlock(h->mutex);
-    return;
+    return HAL_ESTATE;
   }
 
   if (hal_micros64() < h->conversion_deadline_us) {
     hal_mutex_unlock(h->mutex);
-    return;
+    return HAL_EAGAIN;
   }
 
+  hal_status_t status = HAL_EPROTO;
   const float temp_c = ds18b20_get_temp_c(h, h->address);
   if (!isnan(temp_c) && temp_c >= -55.0f && temp_c <= 125.0f) {
     h->last_temp_c = temp_c;
     h->sample_valid = true;
     h->sample_fresh = true;
     refresh_conversion_timing(h);
+    status = HAL_OK;
   }
 
   h->state = DS18B20_STATE_IDLE;
   hal_mutex_unlock(h->mutex);
+  return status;
 }
 
 bool hal_ds18b20_is_busy(hal_ds18b20_t h) {
@@ -641,15 +662,16 @@ bool hal_ds18b20_is_busy(hal_ds18b20_t h) {
   return busy;
 }
 
-bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
+hal_status_t hal_ds18b20_take_latest_ex(hal_ds18b20_t h, float *temp_c,
+                                        bool *fresh) {
   if (!h || !temp_c) {
-    return false;
+    return HAL_EINVAL;
   }
 
   hal_mutex_lock(h->mutex);
   if (!h->sample_valid) {
     hal_mutex_unlock(h->mutex);
-    return false;
+    return HAL_ENOENT;
   }
 
   *temp_c = h->last_temp_c;
@@ -658,7 +680,11 @@ bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
   }
   h->sample_fresh = false;
   hal_mutex_unlock(h->mutex);
-  return true;
+  return HAL_OK;
+}
+
+bool hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh) {
+  return hal_status_to_bool(hal_ds18b20_take_latest_ex(h, temp_c, fresh));
 }
 
 #endif /* HAL_ENABLE_DS18B20 */
