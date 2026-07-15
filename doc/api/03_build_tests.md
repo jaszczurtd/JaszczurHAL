@@ -289,7 +289,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_ds3231_driver` | shared DS3231 datetime, alarm, status, temperature and register behavior |
 | `test_ili9341_driver` | shared ILI9341 command/init sequence, address windows and pixel writes |
 | `test_st77xx_driver` | shared ST7735/ST7789/ST7796S initialization, offsets, windows and pixel writes |
-| `test_ssd1306_driver` | shared SSD1306 initialization, framebuffer updates and I2C command/data transfers |
+| `test_ssd1306_driver` | shared SSD1306-family initialization, framebuffer updates, controller addressing offsets, suspend/resume and I2C/SPI command/data transfers |
 | `test_jh_gfx_geometry` | shared GFX clipping, geometry primitives, bitmap and text-layout behavior |
 | `test_mcp2515_driver` | shared MCP2515 register/SPI transactions, bit timing, TX/RX, filters and errors |
 | `test_mfrc522_driver` | shared MFRC522 register transports, initialization and RFID protocol helpers |

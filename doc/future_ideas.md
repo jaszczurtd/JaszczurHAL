@@ -190,10 +190,11 @@ Simple backlog of future architecture and implementation work.
       This should preserve existing examples and public wrappers.
     - Reuse Zephyr's proven handling for `pitch > width` by splitting writes
       into row-sized transfers, and keep RGB565 byte order explicit.
-    - Extend the SSD1306-family driver next: Zephyr has useful reference
-      support for `SSD1309`, `SSD1315`, `SH1106` and `CH1115`, including
-      command addressing differences, segment/page offsets, orientation,
-      contrast, suspend/resume and I2C/SPI bus splitting.
+    - DONE: extended the SSD1306-family driver with Zephyr-informed support
+      for `SSD1309`, `SSD1315`, `SH1106` and `CH1115`, including controller
+      addressing differences, segment/page/display offsets, hardware
+      orientation, contrast, suspend/resume and I2C/SPI bus splitting through a
+      status-returning family config entry point.
     - After the raw API exists, consider new panel families in this order:
       `GC9A01`, `SSD1331`/`SSD135x`, `ST7567`, then e-paper controllers such
       as `SSD16xx`/`UC81xx`.

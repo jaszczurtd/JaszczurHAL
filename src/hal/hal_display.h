@@ -7,7 +7,7 @@
  * @file hal_display.h
  * @brief Hardware abstraction for TFT and OLED displays.
  *
- * Supports SPI TFT displays and SSD1306 OLED over I2C.
+ * Supports SPI TFT displays and SSD1306-family OLEDs over I2C/SPI.
  *
  * Backend selection (compile-time, opt-in):
  *
@@ -16,8 +16,9 @@
  *                         driver flags; propagates HAL_ENABLE_DISPLAY).
  *                         Without HAL_ENABLE_TFT, hal_display_init() and
  *                         hal_display_soft_init() are not available.
- *   HAL_ENABLE_SSD1306 - enable the SSD1306 OLED driver (propagates
- *                         HAL_ENABLE_DISPLAY).
+ *   HAL_ENABLE_SSD1306 - enable the SSD1306-family OLED driver (propagates
+ *                         HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C; SPI OLED
+ *                         transport also needs HAL_ENABLE_SPI).
  *                         Without it, hal_display_init_ssd1306_i2c() is
  *                         not available.
  *
@@ -42,8 +43,10 @@
  * There is no implicit TFT default driver. The project must explicitly define
  * exactly one HAL_DISPLAY_* macro when TFT backend is enabled.
  *
- * SSD1306 is initialized through the dedicated I2C helper (requires
- * HAL_ENABLE_SSD1306 to be undefined): hal_display_init_ssd1306_i2c(...)
+ * SSD1306-compatible OLEDs are initialized through either the historical I2C
+ * helper or the configurable family helper (requires HAL_ENABLE_SSD1306 to be
+ * defined): hal_display_init_ssd1306_i2c(...),
+ * hal_display_init_ssd1306_family_ex(...)
  *
  * Typical usage:
  *   hal_display_init(CS, DC, RST);
@@ -219,6 +222,47 @@ typedef struct {
 #define HAL_DISPLAY_VCC_SWITCHCAP 0x02
 #endif
 
+#ifdef HAL_ENABLE_SSD1306
+typedef enum {
+  HAL_DISPLAY_OLED_CONTROLLER_SSD1306 = 0,
+  HAL_DISPLAY_OLED_CONTROLLER_SSD1309,
+  HAL_DISPLAY_OLED_CONTROLLER_SSD1315,
+  HAL_DISPLAY_OLED_CONTROLLER_SH1106,
+  HAL_DISPLAY_OLED_CONTROLLER_CH1115,
+} hal_display_oled_controller_t;
+
+typedef enum {
+  HAL_DISPLAY_OLED_BUS_I2C = 0,
+  HAL_DISPLAY_OLED_BUS_SPI,
+} hal_display_oled_bus_t;
+
+typedef enum {
+  HAL_DISPLAY_OLED_ORIENTATION_NATIVE = 0,
+  HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180,
+} hal_display_oled_orientation_t;
+
+typedef struct {
+  hal_display_oled_controller_t controller;
+  hal_display_oled_bus_t bus_type;
+  int width;
+  int height;
+  uint8_t bus;
+  uint8_t i2c_addr;
+  int16_t rst_pin;
+  uint8_t switchvcc;
+  uint32_t clock_hz;
+  int16_t spi_dc_pin;
+  int16_t spi_cs_pin;
+  uint8_t spi_mode;
+  uint8_t segment_offset;
+  uint8_t page_offset;
+  uint8_t display_offset;
+  hal_display_oled_orientation_t orientation;
+  bool internal_iref;
+  bool periphBegin; /* Retained for Arduino-era I2C source compatibility. */
+} hal_display_ssd1306_family_config_t;
+#endif /* HAL_ENABLE_SSD1306 */
+
 /** @brief Available font identifiers. */
 typedef enum {
   HAL_FONT_DEFAULT = 0,   /**< Built-in default font. */
@@ -286,6 +330,24 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
 bool hal_display_init_ssd1306_i2c_ex(int width, int height, uint8_t i2c_bus,
                                      uint8_t i2c_addr, int8_t rst_pin,
                                      uint8_t switchvcc, bool periphBegin);
+
+/**
+ * @brief Construct and initialise an SSD1306-family OLED.
+ *
+ * Supports SSD1306, SSD1309, SSD1315, SH1106 and CH1115 controller variants.
+ * The config selects I2C or SPI transport, controller RAM offsets, controller
+ * orientation and variant power/current-reference options. For I2C, the HAL
+ * I2C peripheral is still initialised lazily. For SPI, configure the bus pins
+ * with hal_spi_init() before calling this helper when the backend requires
+ * explicit SPI pin assignment.
+ *
+ * @param config Family/bus/geometry configuration.
+ * @return HAL_OK on success, HAL_EINVAL for invalid config, HAL_ENOMEM for
+ *         framebuffer allocation failure, HAL_EUNSUPPORTED when the selected
+ *         bus backend is not compiled in, or HAL_EIO for panel I/O failure.
+ */
+hal_status_t hal_display_init_ssd1306_family_ex(
+    const hal_display_ssd1306_family_config_t *config);
 #endif /* HAL_ENABLE_SSD1306 */
 
 /**
@@ -689,10 +751,14 @@ hal_status_t
 hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
                                        uint8_t i2c_addr, int8_t rst_pin,
                                        uint8_t switchvcc, bool periphBegin);
+hal_status_t hal_display_init_ssd1306_family_ex(
+    const hal_display_ssd1306_family_config_t *config);
 #endif /* HAL_ENABLE_SSD1306 */
 
 hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
                                       bool invert, bool bgr);
+hal_status_t hal_display_suspend_ex(void);
+hal_status_t hal_display_resume_ex(void);
 hal_status_t hal_display_set_rotation_ex(uint8_t r);
 hal_status_t hal_display_invert_ex(bool invert);
 hal_status_t hal_display_get_width_ex(int *out_width);

@@ -295,7 +295,9 @@ is not ISR-safe.
 
 ## `hal_display` - TFT / OLED display  *(optional - `HAL_ENABLE_DISPLAY`)*
 
-Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S) and SSD1306 OLED over I2C.
+Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S) and
+SSD1306-family OLEDs (`SSD1306`, `SSD1309`, `SSD1315`, `SH1106`, `CH1115`)
+over I2C/SPI.
 
 ```c
 // Define ONE of these before including hal_display.h (or in build flags):
@@ -375,6 +377,38 @@ typedef struct {
 #define HAL_DISPLAY_VCC_SWITCHCAP 0x02
 
 typedef enum {
+    HAL_DISPLAY_OLED_CONTROLLER_SSD1306 = 0,
+    HAL_DISPLAY_OLED_CONTROLLER_SSD1309,
+    HAL_DISPLAY_OLED_CONTROLLER_SSD1315,
+    HAL_DISPLAY_OLED_CONTROLLER_SH1106,
+    HAL_DISPLAY_OLED_CONTROLLER_CH1115,
+} hal_display_oled_controller_t;
+
+typedef enum {
+    HAL_DISPLAY_OLED_BUS_I2C = 0,
+    HAL_DISPLAY_OLED_BUS_SPI,
+} hal_display_oled_bus_t;
+
+typedef enum {
+    HAL_DISPLAY_OLED_ORIENTATION_NATIVE = 0,
+    HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180,
+} hal_display_oled_orientation_t;
+
+typedef struct {
+    hal_display_oled_controller_t controller;
+    hal_display_oled_bus_t bus_type;
+    int width, height;
+    uint8_t bus, i2c_addr;
+    int16_t rst_pin, spi_dc_pin, spi_cs_pin;
+    uint8_t switchvcc, spi_mode;
+    uint32_t clock_hz;
+    uint8_t segment_offset, page_offset, display_offset;
+    hal_display_oled_orientation_t orientation;
+    bool internal_iref;
+    bool periphBegin;
+} hal_display_ssd1306_family_config_t;
+
+typedef enum {
     HAL_FONT_DEFAULT = 0,
     HAL_FONT_SANS_BOLD_9PT,
     HAL_FONT_SERIF_9PT,
@@ -391,11 +425,17 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
                                   int8_t rst_pin, uint8_t switchvcc,
                                   bool periphBegin);
 
+// Status-returning configurable SSD1306-family init.
+hal_status_t hal_display_init_ssd1306_family_ex(
+    const hal_display_ssd1306_family_config_t *config);
+
 // Configure dimensions, rotation, colour order. Must be called after init().
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
 // Re-send backend register-init sequence when the selected driver supports it.
 hal_status_t hal_display_soft_init(int delay_ms);
+hal_status_t hal_display_suspend_ex(void);
+hal_status_t hal_display_resume_ex(void);
 
 bool hal_display_set_rotation(uint8_t r);
 bool hal_display_invert(bool invert);
@@ -491,7 +531,10 @@ async pixel DMA before closing the TFT transaction.
 be overridden before including/building the driver to tune the default TFT SPI
 clock for a board. ST7796S keeps its documented BGR-oriented defaults without
 forcing swapped inversion commands.
-**impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use shared HAL SPI/GPIO drivers; SSD1306 uses the shared HAL I2C driver; geometry, bitmap, and text rendering run through the shared `jh_gfx` engine.
+**impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use
+shared HAL SPI/GPIO drivers; SSD1306-family OLEDs use the shared HAL I2C/SPI
+driver; geometry, bitmap, and text rendering run through the shared `jh_gfx`
+engine.
 **impl/stm32g474:** Uses the same shared HAL display stack as RP2040.
 **impl/.mock:** deterministic host mock with inspectable state for tests.
 **Thread safety:** Hardware backends serialize display operations with an internal `hal_mutex_t`. During TFT streaming the mutex stays held between `hal_display_begin_write()` and `hal_display_end_write()`, including any async DMA wait. Mock backend is unsynchronized and intended for single-threaded tests.
@@ -543,7 +586,12 @@ if (hal_display_begin_write_ex(0, 0, 240, 320) == HAL_OK) {
 
 Naming note: because `hal_display_init_ssd1306_i2c_ex()` already exists (the
 bus-selecting initialiser), the SSD1306 status entry point is
-`hal_display_init_ssd1306_i2c_status_ex()`.
+`hal_display_init_ssd1306_i2c_status_ex()`. For new OLED-family work prefer
+`hal_display_init_ssd1306_family_ex()`: it selects the controller, I2C/SPI
+transport, segment/page/display offsets, hardware orientation and variant
+current-reference behavior in one status-returning config struct. `HAL_ENABLE_SSD1306`
+still auto-enables I2C for the historical helper; SPI OLED transport also
+requires `HAL_ENABLE_SPI`.
 
 ---
 

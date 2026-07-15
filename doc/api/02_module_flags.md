@@ -99,7 +99,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
-| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/drivers/display/ssd1306_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ssd1306_driver.cpp` | shared HAL I2C SSD1306 core + GFX engine (propagates DISPLAY + I2C) |
+| `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/drivers/display/ssd1306_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ssd1306_driver.cpp` | shared HAL SSD1306-family OLED core (`SSD1306`/`SSD1309`/`SSD1315`/`SH1106`/`CH1115`) + GFX engine; I2C is auto-enabled, SPI transport is available when `HAL_ENABLE_SPI` is also enabled (propagates DISPLAY + I2C) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
@@ -164,6 +164,7 @@ HAL_ENABLE_MCP251XFD   -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
 HAL_ENABLE_STM32G474_FDCAN -> HAL_ENABLE_CAN (STM32G474 only)
 HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
+                           (SPI OLED transport additionally needs HAL_ENABLE_SPI)
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
