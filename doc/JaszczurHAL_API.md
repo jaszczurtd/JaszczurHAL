@@ -55,7 +55,7 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/hal.h` - HAL-only umbrella include.
 - `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
 - `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, simple external I/O chips, WiFi, UDP, WireGuard, MQTT, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_crc.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/hal_status.h` - shared `hal_status_t` result codes for new public
   APIs.
@@ -116,7 +116,7 @@ logic from Arduino and other board-specific SDK calls:
 
 - `hal_gpio`, `hal_adc`, `hal_pwm`, `hal_pwm_freq`
 - `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`, `hal_serial`
-- `hal_crypto`
+- `hal_crypto`, `hal_crc`
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_can`, `hal_display`, `hal_rgb_led`
@@ -168,7 +168,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_digipot` (MCP401x/MAX5395 I2C digital potentiometers), `hal_pga2311` (stereo volume controller), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (I2C GPIO/output expanders), `hal_hc595` (SPI shift-register output expander), `hal_mcp4725` (I2C 12-bit DAC), `hal_mfrc522`/`hal_pn532` (RFID/NFC readers), `hal_math` (constrain, map, roundToN) |
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
 | 15 | [Network connectivity](api/15_connectivity.md) | status-returning `_ex` APIs for `hal_wifi`, resolver, `hal_udp`, `hal_tcp`, `hal_mqtt` and `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, BSD sockets adapter with IPv4 `getaddrinfo()`, `hal_ota`, `hal_time` (NTP/local time) |
-| 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
+| 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `hal_crc` (generic CRC-8/16/32 checksums), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
 | 17 | [cJSON](api/17_cJSON.md) | Bundled `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Bundled `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Bundled `JPEGDecoder` / `picojpeg`, include patterns, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
@@ -184,6 +184,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_adp5360` | [Sensors](api/11_sensors.md) |
 | `hal_bits` | [Timers and system](api/06_timers_system.md) |
 | `hal_can` | [CAN and display](api/10_can_display.md) |
+| `hal_crc` | [Utilities](api/16_utilities.md) |
 | `hal_crypto` | [Cryptography](api/07_crypto.md) |
 | `cJSON` / `cJSON_Utils` | [cJSON](api/17_cJSON.md) |
 | `LodePNG` | [LodePNG](api/18_LodePNG.md) |

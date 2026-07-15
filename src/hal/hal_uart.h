@@ -69,14 +69,17 @@ hal_status_t hal_uart_set_tx_ex(hal_uart_t h, uint8_t tx_pin);
  */
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
 
-/** @brief Status-returning variant of hal_uart_begin(). */
-hal_status_t hal_uart_begin_ex(hal_uart_t h, uint32_t baud, uint16_t config);
-
 /**
  * @brief Start the UART with the given baud rate and frame config.
+ *
+ * Repeating this call reconfigures the port and clears its receive buffer and
+ * error counters.
+ *
  * @param config Frame format, e.g. HAL_UART_CFG_8N1.
+ * @return HAL_OK on success; HAL_EINVAL for an invalid handle or zero baud;
+ *         HAL_EBUSY when the backend could not enable reception.
  */
-void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
+hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
 
 /** @brief Return the number of bytes available in the receive buffer. */
 int hal_uart_available(hal_uart_t h);
@@ -113,11 +116,12 @@ hal_status_t hal_uart_println_ex(hal_uart_t h, const char *s,
 /** @brief Print a string followed by a line ending. */
 size_t hal_uart_println(hal_uart_t h, const char *s);
 
-/** @brief Status-returning variant of hal_uart_flush(). */
-hal_status_t hal_uart_flush_ex(hal_uart_t h);
-
-/** @brief Flush the transmit buffer, blocking until all bytes are sent. */
-void hal_uart_flush(hal_uart_t h);
+/**
+ * @brief Flush the transmit buffer, blocking until all bytes are sent.
+ * @return HAL_OK when transmission is complete; HAL_EINVAL for an invalid
+ *         handle; HAL_EUNINIT before begin() on backends that track it.
+ */
+hal_status_t hal_uart_flush(hal_uart_t h);
 
 /**
  * @brief Status-returning variant of hal_uart_get_error_counters().

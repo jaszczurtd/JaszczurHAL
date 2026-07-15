@@ -538,16 +538,21 @@ typedef struct {
 hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin, uint8_t tx_pin);
 bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin);
 bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
-void hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
+hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
 int  hal_uart_available(hal_uart_t h);
 int  hal_uart_read(hal_uart_t h);
 size_t hal_uart_write(hal_uart_t h, const uint8_t *data, size_t len);
 size_t hal_uart_println(hal_uart_t h, const char *s);
-void hal_uart_flush(hal_uart_t h);       // block until TX complete
+hal_status_t hal_uart_flush(hal_uart_t h);   // block until TX complete
 bool hal_uart_get_error_counters(hal_uart_t h,
                                  hal_uart_error_counters_t *counters);
 void hal_uart_destroy(hal_uart_t h);
 ```
+
+`hal_uart_begin()` and `hal_uart_flush()` are status-first (they replaced the
+former `void` + `_ex` pair). The `bool`/value operations (`set_rx`, `set_tx`,
+`read`, `write`, `println`, `get_error_counters`) keep their compatibility
+signatures and each has an adjacent `_ex` status variant.
 
 **impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
 **impl/stm32g474:** register-level USART1/USART2, polled RX drain; counts ORE, PE, FE, NE, and explicit LIN-break flags when reported by USART_ISR.

@@ -147,42 +147,41 @@ Simple backlog of future architecture and implementation work.
     Additive or partial status work requiring current-rule re-migration:
 
     - `hal_system` done [x]
-    - `hal_uart` done [ ]
+    - `hal_uart` done [x]
     - `hal_wifi` / `hal_net` / `hal_tcp` / `hal_udp` done [x]
     - `hal_mqtt` / `hal_wireguard` done [ ]
     - `hal_kv` done [x]
     - `hal_littlefs` done [x]
     - `hal_rtc` done [x]
-    - `hal_stmpe610` done [ ]
-    - `hal_pca9654e` done [ ]
-    - `hal_pcf8574` done [ ]
-    - `hal_mcp23017` done [ ]
-    - `hal_hc595` done [ ]
-    - `hal_mcp3221` done [ ]
-    - `hal_mcp4725` done [ ]
+    - `hal_stmpe610` done [x]
+    - `hal_pca9654e` done [x]
+    - `hal_pcf8574` done [x]
+    - `hal_mcp23017` done [x]
+    - `hal_hc595` done [x]
+    - `hal_mcp3221` done [x]
+    - `hal_mcp4725` done [x]
 
     Not yet migrated in the currently identified priority scope:
 
     - `hal_swserial` done [x]
-    - `hal_sdlogger` done [ ]
-    - `hal_dht` done [ ]
-    - `hal_ds18b20` done [ ]
+    - `hal_sdlogger` done [x]
+    - `hal_dht` done [x]
+    - `hal_ds18b20` done [x]
     - `hal_external_adc` done [ ]
     - `hal_thermocouple` done [ ]
     - `hal_irsmall_decoder` done [ ]
     - `hal_dma_pwm_audio` done [ ]
 
-  - Audit notes: UART still has fallible legacy `void` operations that discard
-    their results. MQTT/WireGuard still use separate `hal_*_status.cpp`
-    adapters. `hal_stmpe610` still exposes
-    fallible register/data I/O through legacy `void`/value paths, so it is not
-    complete under the current rule. The simple-I/O drivers already have real
-    local status implementations, but their `bool` wrappers use the private
-    `status_ok()` indirection instead of the required direct
-    `hal_status_to_bool(...)` form; they need a small conformance pass before
-    being checked off. The HTTP/WebSocket/console/command modules were designed
-    status-first; their remaining `void` operations are polling, reset or
-    infallible local cleanup paths rather than discarded transport results.
+  - Audit notes: UART is now current-rule complete - `hal_uart_begin` and
+    `hal_uart_flush` are status-first in place (the redundant `_ex` adapters were
+    removed), the `bool`/value operations keep thin compatibility wrappers over
+    their `_ex` forms, and `hal_uart_create` keeps its handle-returning shape
+    (NULL is its honest failure signal; no `_ex` companion was needed).
+    MQTT/WireGuard still use separate `hal_*_status.cpp`
+    adapters. The STMPE610 register/data I/O and simple-I/O drivers are now
+    current-rule complete. The HTTP/WebSocket/console/command modules were
+    designed status-first; their remaining `void` operations are polling, reset
+    or infallible local cleanup paths rather than discarded transport results.
 
   - `hal_eeprom` is the reference source layout; `hal_display` is the reference
     for a larger shared backend. Historical suffix collisions such as

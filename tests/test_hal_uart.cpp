@@ -86,11 +86,11 @@ void test_uart_status_write_and_println_report_counts(void) {
 void test_uart_status_begin_flush_and_errors(void) {
   hal_uart_error_counters_t counters = {};
   TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        hal_uart_begin_ex(s_uart, 115200, HAL_UART_CFG_8N1));
+                        hal_uart_begin(s_uart, 115200, HAL_UART_CFG_8N1));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
-                        hal_uart_begin_ex(NULL, 115200, HAL_UART_CFG_8N1));
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_flush_ex(s_uart));
-  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_flush_ex(NULL));
+                        hal_uart_begin(NULL, 115200, HAL_UART_CFG_8N1));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_uart_flush(s_uart));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_uart_flush(NULL));
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_uart_get_error_counters_ex(s_uart, &counters));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,

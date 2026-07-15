@@ -31,16 +31,16 @@ static uint32_t s_last_write_time = 0;
 static char s_log_buffer[HAL_SDLOGGER_LOG_BUFFER_SIZE];
 static int s_log_buf_pos = 0;
 
-static void sdlogger_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_sdlogger_mutex);
+static hal_status_t sdlogger_ensure_mutex(void) {
+  return jh_hal_mutex_create_once(&s_sdlogger_mutex) ? HAL_OK : HAL_ENOMEM;
 }
 
-static bool ensure_sd_started_locked(int cs) {
+static hal_status_t ensure_sd_started_locked(int cs) {
   if (!s_sd_started) {
     s_sd_started =
         hal_sd_file_begin((uint8_t)HAL_SDLOGGER_SPI_BUS, (uint8_t)cs);
   }
-  return s_sd_started;
+  return s_sd_started ? HAL_OK : HAL_EBUS;
 }
 
 static void clear_log_buffer_locked(void) {
@@ -48,13 +48,21 @@ static void clear_log_buffer_locked(void) {
   s_log_buffer[0] = '\0';
 }
 
-static void flush_log_buffer_locked(void) {
+static hal_status_t flush_log_buffer_locked(void) {
   if (s_log_buf_pos <= 0) {
-    return;
+    return HAL_OK;
   }
-  (void)hal_sd_file_print(&s_log_file, s_log_buffer);
-  (void)hal_sd_file_flush(&s_log_file);
+
+  const size_t bytes_to_write = (size_t)s_log_buf_pos;
+  const size_t bytes_written = hal_sd_file_print(&s_log_file, s_log_buffer);
+  if (bytes_written < bytes_to_write) {
+    return HAL_EIO;
+  }
+  if (!hal_sd_file_flush(&s_log_file)) {
+    return HAL_EIO;
+  }
   clear_log_buffer_locked();
+  return HAL_OK;
 }
 
 static unsigned sdlogger_bounded_filename_number(int number, unsigned modulo) {
@@ -119,19 +127,23 @@ int hal_sdlogger_get_crash_number(void) {
   return hal_eeprom_read_int(HAL_SDLOGGER_EEPROM_CRASH_ADDR);
 }
 
-bool hal_sdlogger_init(int cs) {
+hal_status_t hal_sdlogger_init_ex(int cs) {
   char name[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
   int log_number = hal_sdlogger_get_log_number();
   sdlogger_make_log_filename(name, sizeof(name), log_number);
 
-  sdlogger_ensure_mutex();
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
-  if (!ensure_sd_started_locked(cs)) {
+  status = ensure_sd_started_locked(cs);
+  if (status != HAL_OK) {
     s_log_initialized = false;
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_init: SD card mount failed");
-    return false;
+    return status;
   }
 
   s_log_initialized =
@@ -139,33 +151,52 @@ bool hal_sdlogger_init(int cs) {
   if (!s_log_initialized) {
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_init: log file open failed");
-    return false;
+    return HAL_EIO;
   }
 
-  hal_eeprom_write_int(HAL_SDLOGGER_EEPROM_LOGGER_ADDR, log_number + 1);
-  hal_eeprom_commit();
+  status =
+      hal_eeprom_write_int(HAL_SDLOGGER_EEPROM_LOGGER_ADDR, log_number + 1);
+  if (status == HAL_OK) {
+    status = hal_eeprom_commit();
+  }
+  if (status != HAL_OK) {
+    s_log_initialized = false;
+    (void)hal_sd_file_close(&s_log_file);
+    hal_mutex_unlock(s_sdlogger_mutex);
+    hal_serial_println("hal_sdlogger_init: EEPROM update failed");
+    return status;
+  }
 
   clear_log_buffer_locked();
   s_last_write_time = hal_millis();
   hal_mutex_unlock(s_sdlogger_mutex);
-  return true;
+  return HAL_OK;
+}
+
+bool hal_sdlogger_init(int cs) {
+  return hal_status_to_bool(hal_sdlogger_init_ex(cs));
 }
 
 bool hal_sdlogger_is_initialized(void) {
-  sdlogger_ensure_mutex();
+  if (sdlogger_ensure_mutex() != HAL_OK) {
+    return false;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
   const bool initialized = s_log_initialized;
   hal_mutex_unlock(s_sdlogger_mutex);
   return initialized;
 }
 
-void hal_sdlogger_append(const char *data) {
-  sdlogger_ensure_mutex();
+hal_status_t hal_sdlogger_append(const char *data) {
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
   if (!s_log_initialized) {
     hal_mutex_unlock(s_sdlogger_mutex);
-    return;
+    return HAL_EUNINIT;
   }
 
   const char *s = (data != NULL) ? data : "";
@@ -175,44 +206,61 @@ void hal_sdlogger_append(const char *data) {
     s_log_buf_pos += slen;
     s_log_buffer[s_log_buf_pos++] = '\n';
     s_log_buffer[s_log_buf_pos] = '\0';
+  } else {
+    hal_mutex_unlock(s_sdlogger_mutex);
+    return HAL_EOVERFLOW;
   }
 
   const uint32_t now = hal_millis();
   if ((uint32_t)(now - s_last_write_time) >=
       (uint32_t)HAL_SDLOGGER_WRITE_INTERVAL_MS) {
     s_last_write_time = now;
-    flush_log_buffer_locked();
+    status = flush_log_buffer_locked();
   }
 
   hal_mutex_unlock(s_sdlogger_mutex);
+  return status;
 }
 
-void hal_sdlogger_close(void) {
-  sdlogger_ensure_mutex();
+hal_status_t hal_sdlogger_close(void) {
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
-  if (s_log_initialized) {
-    s_log_initialized = false;
-    flush_log_buffer_locked();
-    (void)hal_sd_file_close(&s_log_file);
+  if (!s_log_initialized) {
+    hal_mutex_unlock(s_sdlogger_mutex);
+    return HAL_EUNINIT;
   }
 
+  status = flush_log_buffer_locked();
+  if (!hal_sd_file_close(&s_log_file) && status == HAL_OK) {
+    status = HAL_EIO;
+  }
+  s_log_initialized = false;
+
   hal_mutex_unlock(s_sdlogger_mutex);
+  return status;
 }
 
-bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
+hal_status_t hal_sdlogger_crash_init_ex(const char *add_to_name, int cs) {
   char name[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
   int crash_number = hal_sdlogger_get_crash_number();
   sdlogger_make_crash_filename(name, sizeof(name), crash_number);
 
-  sdlogger_ensure_mutex();
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
-  if (!ensure_sd_started_locked(cs)) {
+  status = ensure_sd_started_locked(cs);
+  if (status != HAL_OK) {
     s_crash_initialized = false;
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_crash_init: SD card mount failed");
-    return false;
+    return status;
   }
 
   s_crash_initialized =
@@ -220,17 +268,30 @@ bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
   if (!s_crash_initialized) {
     hal_mutex_unlock(s_sdlogger_mutex);
     hal_serial_println("hal_sdlogger_crash_init: crash file open failed");
-    return false;
+    return HAL_EIO;
   }
 
-  hal_eeprom_write_int(HAL_SDLOGGER_EEPROM_CRASH_ADDR, crash_number + 1);
-  hal_eeprom_commit();
+  status =
+      hal_eeprom_write_int(HAL_SDLOGGER_EEPROM_CRASH_ADDR, crash_number + 1);
+  if (status == HAL_OK) {
+    status = hal_eeprom_commit();
+  }
+  if (status != HAL_OK) {
+    s_crash_initialized = false;
+    (void)hal_sd_file_close(&s_crash_file);
+    hal_mutex_unlock(s_sdlogger_mutex);
+    hal_serial_println("hal_sdlogger_crash_init: EEPROM update failed");
+    return status;
+  }
   hal_mutex_unlock(s_sdlogger_mutex);
 
   if (add_to_name != NULL && add_to_name[0] != '\0') {
     char tag_line[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
     sdlogger_make_crash_tag_line(tag_line, sizeof(tag_line), add_to_name);
-    hal_sdlogger_crash_append(tag_line);
+    status = hal_sdlogger_crash_append(tag_line);
+    if (status != HAL_OK) {
+      return status;
+    }
   }
 
   char log_name[sizeof("log00000.txt")] = {};
@@ -238,49 +299,75 @@ bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
                              hal_sdlogger_get_log_number() - 1);
   char line[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
   snprintf(line, sizeof(line), "corresponded log file: %s", log_name);
-  hal_sdlogger_crash_append(line);
-  return true;
+  return hal_sdlogger_crash_append(line);
+}
+
+bool hal_sdlogger_crash_init(const char *add_to_name, int cs) {
+  return hal_status_to_bool(hal_sdlogger_crash_init_ex(add_to_name, cs));
 }
 
 bool hal_sdlogger_crash_is_initialized(void) {
-  sdlogger_ensure_mutex();
+  if (sdlogger_ensure_mutex() != HAL_OK) {
+    return false;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
   const bool initialized = s_crash_initialized;
   hal_mutex_unlock(s_sdlogger_mutex);
   return initialized;
 }
 
-void hal_sdlogger_crash_append(const char *data) {
-  sdlogger_ensure_mutex();
+hal_status_t hal_sdlogger_crash_append(const char *data) {
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
   if (!s_crash_initialized) {
     hal_mutex_unlock(s_sdlogger_mutex);
-    return;
+    return HAL_EUNINIT;
   }
 
-  (void)hal_sd_file_println(&s_crash_file, (data != NULL) ? data : "");
-  (void)hal_sd_file_flush(&s_crash_file);
+  const char *s = (data != NULL) ? data : "";
+  const size_t bytes_to_write = strlen(s) + 1u;
+  const size_t bytes_written = hal_sd_file_println(&s_crash_file, s);
+  if (bytes_written < bytes_to_write) {
+    status = HAL_EIO;
+  } else if (!hal_sd_file_flush(&s_crash_file)) {
+    status = HAL_EIO;
+  }
 
   hal_mutex_unlock(s_sdlogger_mutex);
+  return status;
 }
 
-void hal_sdlogger_crash_close(void) {
-  sdlogger_ensure_mutex();
+hal_status_t hal_sdlogger_crash_close(void) {
+  hal_status_t status = sdlogger_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_sdlogger_mutex);
 
-  if (s_crash_initialized) {
-    s_crash_initialized = false;
-    (void)hal_sd_file_flush(&s_crash_file);
-    (void)hal_sd_file_close(&s_crash_file);
+  if (!s_crash_initialized) {
+    hal_mutex_unlock(s_sdlogger_mutex);
+    return HAL_EUNINIT;
   }
 
+  if (!hal_sd_file_flush(&s_crash_file)) {
+    status = HAL_EIO;
+  }
+  if (!hal_sd_file_close(&s_crash_file) && status == HAL_OK) {
+    status = HAL_EIO;
+  }
+  s_crash_initialized = false;
+
   hal_mutex_unlock(s_sdlogger_mutex);
+  return status;
 }
 
-void hal_sdlogger_crash_report(const char *format, ...) {
-  if (format == NULL || !hal_sdlogger_crash_is_initialized()) {
-    return;
+hal_status_t hal_sdlogger_crash_report(const char *format, ...) {
+  if (format == NULL) {
+    return HAL_EINVAL;
   }
 
   va_list args;
@@ -289,7 +376,7 @@ void hal_sdlogger_crash_report(const char *format, ...) {
   vsnprintf(buffer, sizeof(buffer), format, args);
   va_end(args);
 
-  hal_sdlogger_crash_append(buffer);
+  return hal_sdlogger_crash_append(buffer);
 }
 
 #endif /* HAL_ENABLE_SDLOGGER */

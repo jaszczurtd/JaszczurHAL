@@ -128,12 +128,29 @@ typedef struct {
 } hal_ds18b20_config_t;
 
 hal_ds18b20_t hal_ds18b20_init(const hal_ds18b20_config_t *cfg);
-void          hal_ds18b20_deinit(hal_ds18b20_t h);
+hal_status_t  hal_ds18b20_init_ex(const hal_ds18b20_config_t *cfg,
+                                  hal_ds18b20_t *out);
+hal_status_t  hal_ds18b20_deinit(hal_ds18b20_t h);
 bool          hal_ds18b20_request(hal_ds18b20_t h);
-void          hal_ds18b20_poll(hal_ds18b20_t h);
+hal_status_t  hal_ds18b20_request_ex(hal_ds18b20_t h);
+hal_status_t  hal_ds18b20_poll(hal_ds18b20_t h);
 bool          hal_ds18b20_is_busy(hal_ds18b20_t h);
 bool          hal_ds18b20_take_latest(hal_ds18b20_t h, float *temp_c, bool *fresh);
+hal_status_t  hal_ds18b20_take_latest_ex(hal_ds18b20_t h, float *temp_c,
+                                         bool *fresh);
 ```
+
+`hal_ds18b20_init()` keeps the legacy handle-returning shape; use
+`hal_ds18b20_init_ex()` when the caller needs the reason for failure. The
+legacy `bool` functions are thin wrappers over their `_ex` forms. Historical
+`void` lifecycle/state-machine calls now return `hal_status_t`; callers that
+ignore the result still compile.
+
+Status mapping: invalid arguments return `HAL_EINVAL`, handle pool or mutex
+allocation failure returns `HAL_ENOMEM`, a missing/non-matching sensor returns
+`HAL_ENOENT`, requesting while a conversion is active returns `HAL_EBUSY`,
+polling before the conversion deadline returns `HAL_EAGAIN`, polling while idle
+returns `HAL_ESTATE`, and scratchpad/CRC/decode failure returns `HAL_EPROTO`.
 
 **impl/rp2040 + impl/stm32g474:** Both use the shared Arduino-free
 `src/hal/impl/shared/drivers/onewire/` implementation. The backend performs DS18B20
@@ -185,22 +202,37 @@ typedef struct {
 } hal_dht_sample_t;
 
 hal_dht_config_t hal_dht_default_config(uint8_t data_pin);
+hal_status_t     hal_dht_init_ex(const hal_dht_config_t *cfg,
+                                 hal_dht_t *out_handle);
 hal_dht_t        hal_dht_init(const hal_dht_config_t *cfg);
 void             hal_dht_deinit(hal_dht_t h);
+hal_status_t     hal_dht_read_ex(hal_dht_t h);
 bool             hal_dht_read(hal_dht_t h);
 float            hal_dht_get_temperature_c(hal_dht_t h);
 float            hal_dht_get_temperature_f(hal_dht_t h);
 float            hal_dht_get_humidity(hal_dht_t h);
+hal_status_t     hal_dht_get_sample_ex(hal_dht_t h, hal_dht_sample_t *out);
 bool             hal_dht_get_sample(hal_dht_t h, hal_dht_sample_t *out);
 ```
 
-`hal_dht_read()` performs the DHT start pulse and 40-bit frame read, validates
-the checksum, and updates the cached sample only on success. The implementation
-keeps the Bonezegei DHT timing flow: 250 ms idle-high settle, 18 ms host-low
-start pulse, 40 us release, 80/80 us response timing, and a 30 us bit
-discriminator. DHT11 frames are decoded as integral humidity and decimal
-temperature bytes; DHT22 frames use the native 16-bit humidity and signed 16-bit
-temperature fields with 0.1 unit resolution.
+`hal_dht_init_ex()` is the status-returning initialiser and reports invalid
+configuration as `HAL_EINVAL` and pool/mutex exhaustion as `HAL_ENOMEM`;
+`hal_dht_init()` keeps the legacy handle-returning shape. `hal_dht_read_ex()`
+performs the DHT start pulse and 40-bit frame read, validates the checksum, and
+updates the cached sample only on success. It returns `HAL_EUNINIT` for an
+invalid handle, `HAL_ETIMEOUT` for missing response/edge timing and
+`HAL_EPROTO` for checksum mismatch; `hal_dht_read()` is the legacy `bool`
+wrapper.
+
+The implementation keeps the Bonezegei DHT timing flow: 250 ms idle-high
+settle, 18 ms host-low start pulse, 40 us release, 80/80 us response timing,
+and a 30 us bit discriminator. DHT11 frames are decoded as integral humidity
+and decimal temperature bytes; DHT22 frames use the native 16-bit humidity and
+signed 16-bit temperature fields with 0.1 unit resolution.
+
+`hal_dht_get_sample_ex()` copies the cached sample with `HAL_EUNINIT` /
+`HAL_EINVAL` error reporting; `hal_dht_get_sample()` is the compatibility
+wrapper. The scalar cached getters keep their value-returning fallback shape.
 
 **impl/rp2040 + impl/stm32g474 + impl/.mock:** all use
 `impl/shared/drivers/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
@@ -436,14 +468,18 @@ bool hal_stmpe610_buffer_empty(hal_stmpe610_t *dev);
 uint8_t hal_stmpe610_buffer_size(hal_stmpe610_t *dev);
 hal_status_t hal_stmpe610_read_data_ex(hal_stmpe610_t *dev, uint16_t *x,
                                        uint16_t *y, uint8_t *z);
-void hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x, uint16_t *y,
-                            uint8_t *z);
+hal_status_t hal_stmpe610_read_data(hal_stmpe610_t *dev, uint16_t *x,
+                                    uint16_t *y, uint8_t *z);
 hal_stmpe610_point_t hal_stmpe610_get_point(hal_stmpe610_t *dev);
 
+hal_status_t hal_stmpe610_read_register8_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                            uint8_t *out_value);
 uint8_t hal_stmpe610_read_register8(hal_stmpe610_t *dev, uint8_t reg);
+hal_status_t hal_stmpe610_read_register16_ex(hal_stmpe610_t *dev, uint8_t reg,
+                                             uint16_t *out_value);
 uint16_t hal_stmpe610_read_register16(hal_stmpe610_t *dev, uint8_t reg);
-void hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
-                                  uint8_t value);
+hal_status_t hal_stmpe610_write_register8(hal_stmpe610_t *dev, uint8_t reg,
+                                          uint8_t value);
 ```
 
 `hal_stmpe610_init_ex()` probes chip ID `0x0811`, keeps the original
@@ -458,7 +494,12 @@ and chip-ID mismatch as `HAL_ENOENT`; `hal_stmpe610_init()` remains the legacy
 `hal_stmpe610_read_data_ex()` reads four bytes from the FIFO data port and
 decodes 12-bit X/Y plus 8-bit pressure, returning `HAL_EUNINIT` for an
 uninitialized instance and `HAL_EINVAL` for bad output pointers.
-`hal_stmpe610_read_data()` preserves the old void-returning behavior.
+`hal_stmpe610_read_data()` is status-returning in place; callers that ignored
+the previous `void` result can continue to ignore it. `hal_stmpe610_read_register8_ex()`
+and `hal_stmpe610_read_register16_ex()` report register-read failures through
+output parameters while the legacy value-returning wrappers keep their old
+zero-on-failure shape. `hal_stmpe610_write_register8()` is status-returning in
+place.
 `hal_stmpe610_get_point()` drains the FIFO, returns the last sample, and clears
 interrupt status when the FIFO is empty. The I2C 16-bit register read path is
 dispatched only through I2C; this avoids the fall-through transport bug present
