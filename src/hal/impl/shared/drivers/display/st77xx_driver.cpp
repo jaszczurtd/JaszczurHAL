@@ -4,7 +4,7 @@
 
 #if defined(HAL_ENABLE_DISPLAY) && defined(HAL_ENABLE_TFT) &&                  \
     (defined(HAL_ENABLE_ST7735) || defined(HAL_ENABLE_ST7789) ||               \
-     defined(HAL_ENABLE_ST7796S))
+     defined(HAL_ENABLE_ST7796S) || defined(HAL_ENABLE_GC9A01))
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_spi.h"
@@ -49,6 +49,11 @@
 #define ST7735_GMCTRN1 0xE1u
 
 #define ST7796S_BGR 0x08u
+
+#define GC9A01_INREGEN1 0xFEu
+#define GC9A01_INREGEN2 0xEFu
+#define GC9A01_MADCTL_BGR 0x08u
+#define GC9A01_MADCTL_MH 0x04u
 
 #define ST77XX_PIXEL_CHUNK_BYTES 1024u
 
@@ -328,6 +333,70 @@ static const uint8_t s_st7796s_init[] = {14u,
                                          ST_CMD_DELAY,
                                          150u};
 
+typedef struct {
+  uint8_t command;
+  uint8_t len;
+  uint8_t data[12];
+} gc9a01_reg_t;
+
+static const gc9a01_reg_t s_gc9a01_default_init[] = {
+    {0xEBu, 1u, {0x14u}},
+    {0x84u, 1u, {0x40u}},
+    {0x85u, 1u, {0xFFu}},
+    {0x86u, 1u, {0xFFu}},
+    {0x87u, 1u, {0xFFu}},
+    {0x88u, 1u, {0x0Au}},
+    {0x89u, 1u, {0x21u}},
+    {0x8Au, 1u, {0x00u}},
+    {0x8Bu, 1u, {0x80u}},
+    {0x8Cu, 1u, {0x01u}},
+    {0x8Du, 1u, {0x01u}},
+    {0x8Eu, 1u, {0xFFu}},
+    {0x8Fu, 1u, {0xFFu}},
+    {0xB6u, 2u, {0x00u, 0x20u}},
+    {0x90u, 4u, {0x08u, 0x08u, 0x08u, 0x08u}},
+    {0xBDu, 1u, {0x06u}},
+    {0xBCu, 1u, {0x00u}},
+    {0xFFu, 3u, {0x60u, 0x01u, 0x04u}},
+    {0xBEu, 1u, {0x11u}},
+    {0xE1u, 2u, {0x10u, 0x0Eu}},
+    {0xDFu, 3u, {0x21u, 0x0Cu, 0x02u}},
+    {0xEDu, 2u, {0x1Bu, 0x0Bu}},
+    {0xAEu, 1u, {0x77u}},
+    {0xCDu, 1u, {0x63u}},
+    {0x70u,
+     9u,
+     {0x07u, 0x07u, 0x04u, 0x0Eu, 0x0Fu, 0x09u, 0x07u, 0x08u, 0x03u}},
+    {0x62u,
+     12u,
+     {0x18u, 0x0Du, 0x71u, 0xEDu, 0x70u, 0x70u, 0x18u, 0x0Fu, 0x71u, 0xEFu,
+      0x70u, 0x70u}},
+    {0x63u,
+     12u,
+     {0x18u, 0x11u, 0x71u, 0xF1u, 0x70u, 0x70u, 0x18u, 0x13u, 0x71u, 0xF3u,
+      0x70u, 0x70u}},
+    {0x64u, 7u, {0x28u, 0x29u, 0xF1u, 0x01u, 0xF1u, 0x00u, 0x07u}},
+    {0x66u,
+     10u,
+     {0x3Cu, 0x00u, 0xCDu, 0x67u, 0x45u, 0x45u, 0x10u, 0x00u, 0x00u, 0x00u}},
+    {0x67u,
+     10u,
+     {0x00u, 0x3Cu, 0x00u, 0x00u, 0x00u, 0x01u, 0x54u, 0x10u, 0x32u, 0x98u}},
+    {0x74u, 7u, {0x10u, 0x85u, 0x80u, 0x00u, 0x00u, 0x4Eu, 0x00u}},
+    {0x98u, 2u, {0x3Eu, 0x07u}},
+};
+
+static const gc9a01_reg_t s_gc9a01_panel_regs[] = {
+    {0xC3u, 1u, {0x13u}},
+    {0xC4u, 1u, {0x13u}},
+    {0xC9u, 1u, {0x22u}},
+    {0xF0u, 6u, {0x45u, 0x09u, 0x08u, 0x08u, 0x26u, 0x2Au}},
+    {0xF1u, 6u, {0x43u, 0x70u, 0x72u, 0x36u, 0x37u, 0x6Fu}},
+    {0xF2u, 6u, {0x45u, 0x09u, 0x08u, 0x08u, 0x26u, 0x2Au}},
+    {0xF3u, 6u, {0x43u, 0x70u, 0x72u, 0x36u, 0x37u, 0x6Fu}},
+    {0xE8u, 1u, {0x34u}},
+};
+
 static bool pin_is_connected(int16_t pin) { return pin >= 0 && pin <= 255; }
 
 static uint8_t pin_to_u8(int16_t pin) { return (uint8_t)pin; }
@@ -364,28 +433,34 @@ static bool hal_write_command(void *ctx, uint8_t command, const uint8_t *data,
 
   const uint8_t bus = dev->config.bus;
   const hal_spi_settings_t settings = spi_settings_for(dev);
+  bool ok = true;
 
   hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
+  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
+    hal_spi_unlock(bus);
+    return false;
+  }
 
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
   }
 
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), false);
-  hal_spi_write(bus, &command, 1u);
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
-  if (data != NULL && data_len > 0u) {
-    hal_spi_write(bus, data, data_len);
+  ok = hal_status_is_ok(hal_spi_write(bus, &command, 1u));
+  if (ok) {
+    hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+    if (data != NULL && data_len > 0u) {
+      ok = hal_status_is_ok(hal_spi_write(bus, data, data_len));
+    }
   }
 
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
   }
 
-  hal_spi_end_transaction(bus);
+  ok = hal_status_is_ok(hal_spi_end_transaction(bus)) && ok;
   hal_spi_unlock(bus);
-  return true;
+  return ok;
 }
 
 static bool write_command(jh_st77xx_t *dev, uint8_t command,
@@ -464,6 +539,43 @@ bool jh_st77xx_run_st7796s_init_sequence(const jh_st77xx_command_io_t *io) {
   return jh_st77xx_run_sequence(io, s_st7796s_init);
 }
 
+bool jh_st77xx_run_gc9a01_init_sequence(const jh_st77xx_command_io_t *io) {
+  if (io == NULL || io->write_command == NULL) {
+    return false;
+  }
+  if (!io->write_command(io->ctx, GC9A01_INREGEN1, NULL, 0u) ||
+      !io->write_command(io->ctx, GC9A01_INREGEN2, NULL, 0u)) {
+    return false;
+  }
+  for (size_t i = 0u;
+       i < sizeof(s_gc9a01_default_init) / sizeof(s_gc9a01_default_init[0]);
+       ++i) {
+    if (!io->write_command(io->ctx, s_gc9a01_default_init[i].command,
+                           s_gc9a01_default_init[i].data,
+                           s_gc9a01_default_init[i].len)) {
+      return false;
+    }
+  }
+  for (size_t i = 0u;
+       i < sizeof(s_gc9a01_panel_regs) / sizeof(s_gc9a01_panel_regs[0]); ++i) {
+    if (!io->write_command(io->ctx, s_gc9a01_panel_regs[i].command,
+                           s_gc9a01_panel_regs[i].data,
+                           s_gc9a01_panel_regs[i].len)) {
+      return false;
+    }
+  }
+  const uint8_t pixel_format = 0x55u;
+  if (!io->write_command(io->ctx, ST77XX_COLMOD, &pixel_format, 1u) ||
+      !io->write_command(io->ctx, 0x35u, NULL, 0u) ||
+      !io->write_command(io->ctx, ST77XX_SLPOUT, NULL, 0u)) {
+    return false;
+  }
+  if (io->delay_ms != NULL) {
+    io->delay_ms(io->ctx, 150u);
+  }
+  return io->write_command(io->ctx, ST77XX_DISPON, NULL, 0u);
+}
+
 static bool run_init_sequence_for_config(jh_st77xx_t *dev) {
   const jh_st77xx_command_io_t io = {dev, hal_write_command, hal_delay_adapter};
 
@@ -474,6 +586,8 @@ static bool run_init_sequence_for_config(jh_st77xx_t *dev) {
     return jh_st77xx_run_st7789_init_sequence(&io);
   case JH_ST77XX_CHIP_ST7796S:
     return jh_st77xx_run_st7796s_init_sequence(&io);
+  case JH_ST77XX_CHIP_GC9A01:
+    return jh_st77xx_run_gc9a01_init_sequence(&io);
   default:
     return false;
   }
@@ -508,6 +622,17 @@ static void set_default_geometry(jh_st77xx_t *dev) {
     dev->height = dev->window_height;
     dev->row_start = dev->config.row_offset;
     dev->col_start = dev->config.col_offset;
+    break;
+  case JH_ST77XX_CHIP_GC9A01:
+    dev->window_width =
+        dev->config.width ? dev->config.width : JH_GC9A01_TFTWIDTH;
+    dev->window_height =
+        dev->config.height ? dev->config.height : JH_GC9A01_TFTHEIGHT;
+    dev->width = dev->window_width;
+    dev->height = dev->window_height;
+    dev->row_start = dev->config.row_offset;
+    dev->col_start = dev->config.col_offset;
+    dev->color_order = GC9A01_MADCTL_BGR;
     break;
   default:
     break;
@@ -723,6 +848,37 @@ bool jh_st77xx_set_rotation(jh_st77xx_t *dev, uint8_t rotation) {
       dev->height = dev->window_width;
       break;
     }
+  } else if (dev->config.chip == JH_ST77XX_CHIP_GC9A01) {
+    madctl = GC9A01_MADCTL_BGR;
+    switch (dev->rotation) {
+    case 0:
+      dev->x_start = dev->col_start;
+      dev->y_start = dev->row_start;
+      dev->width = dev->window_width;
+      dev->height = dev->window_height;
+      break;
+    case 1:
+      madctl |= ST77XX_MADCTL_MV | ST77XX_MADCTL_MY;
+      dev->x_start = dev->row_start;
+      dev->y_start = dev->col_start;
+      dev->width = dev->window_height;
+      dev->height = dev->window_width;
+      break;
+    case 2:
+      madctl |= ST77XX_MADCTL_MY | ST77XX_MADCTL_MX | GC9A01_MADCTL_MH;
+      dev->x_start = dev->col_start;
+      dev->y_start = dev->row_start;
+      dev->width = dev->window_width;
+      dev->height = dev->window_height;
+      break;
+    default:
+      madctl |= ST77XX_MADCTL_MV | ST77XX_MADCTL_MX;
+      dev->x_start = dev->row_start;
+      dev->y_start = dev->col_start;
+      dev->width = dev->window_height;
+      dev->height = dev->window_width;
+      break;
+    }
   } else {
     switch (dev->rotation) {
     case 0:
@@ -785,8 +941,7 @@ static bool spi_write_dma_or_fallback(uint8_t bus, const uint8_t *data,
   if (hal_spi_write_dma(bus, data, len)) {
     return true;
   }
-  hal_spi_write(bus, data, len);
-  return true;
+  return hal_status_is_ok(hal_spi_write(bus, data, len));
 }
 
 bool jh_st77xx_set_addr_window(jh_st77xx_t *dev, uint16_t x, uint16_t y,
@@ -828,21 +983,25 @@ bool jh_st77xx_write_pixels(jh_st77xx_t *dev, const uint16_t *pixels,
   const uint8_t bus = dev->config.bus;
   const hal_spi_settings_t settings = spi_settings_for(dev);
   uint8_t chunk[64];
+  bool ok = true;
 
   hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
+  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
+    hal_spi_unlock(bus);
+    return false;
+  }
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
   }
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
 
-  while (count > 0u) {
+  while (count > 0u && ok) {
     const size_t pixel_count =
         (count < (sizeof(chunk) / 2u)) ? count : (sizeof(chunk) / 2u);
     for (size_t i = 0u; i < pixel_count; ++i) {
       put_u16_be(&chunk[i * 2u], pixels[i]);
     }
-    hal_spi_write(bus, chunk, pixel_count * 2u);
+    ok = hal_status_is_ok(hal_spi_write(bus, chunk, pixel_count * 2u));
     pixels += pixel_count;
     count -= pixel_count;
   }
@@ -850,9 +1009,9 @@ bool jh_st77xx_write_pixels(jh_st77xx_t *dev, const uint16_t *pixels,
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
   }
-  hal_spi_end_transaction(bus);
+  ok = hal_status_is_ok(hal_spi_end_transaction(bus)) && ok;
   hal_spi_unlock(bus);
-  return true;
+  return ok;
 }
 
 bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
@@ -869,7 +1028,10 @@ bool jh_st77xx_begin_write(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
   const hal_spi_settings_t settings = spi_settings_for(dev);
 
   hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
+  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
+    hal_spi_unlock(bus);
+    return false;
+  }
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
   }
@@ -888,8 +1050,8 @@ bool jh_st77xx_write_pixels_be(jh_st77xx_t *dev, const uint8_t *pixels_be,
     return true;
   }
 
-  hal_spi_write(dev->config.bus, pixels_be, byte_count);
-  return true;
+  return hal_status_is_ok(
+      hal_spi_write(dev->config.bus, pixels_be, byte_count));
 }
 
 bool jh_st77xx_write_pixels_dma(jh_st77xx_t *dev, const uint8_t *pixels_be,
@@ -964,10 +1126,10 @@ bool jh_st77xx_end_write(jh_st77xx_t *dev) {
   if (pin_is_connected(dev->config.cs_pin)) {
     hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
   }
-  hal_spi_end_transaction(bus);
+  const bool ok = hal_status_is_ok(hal_spi_end_transaction(bus));
   hal_spi_unlock(bus);
   dev->write_active = false;
-  return true;
+  return ok;
 }
 
 bool jh_st77xx_fill_rect(jh_st77xx_t *dev, uint16_t x, uint16_t y, uint16_t w,
@@ -1029,5 +1191,4 @@ bool jh_st77xx_draw_rgb_bitmap(jh_st77xx_t *dev, uint16_t x, uint16_t y,
   return jh_st77xx_end_write(dev) && ok;
 }
 
-#endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_TFT && any ST77xx backend enabled   \
-        */
+#endif /* HAL_ENABLE_DISPLAY && HAL_ENABLE_TFT && any ST77xx/GC9A01 backend */

@@ -127,6 +127,87 @@ static inline hal_status_t hal_u32_to_bytes_be(uint32_t val, uint8_t *buf) {
  */
 uint32_t hal_millis(void);
 
+/** @brief Callback signature used by millis interval helpers. */
+typedef void (*hal_millis_interval_callback_t)(void *user_data);
+
+/**
+ * @brief Check whether a non-blocking millis interval elapsed.
+ *
+ * This helper implements the canonical wrap-safe pattern:
+ *
+ * @code
+ * if ((now_ms - last_ms) >= interval_ms) { ... }
+ * @endcode
+ *
+ * On success it updates @p last_ms to @p now_ms so the next interval starts
+ * from the current tick.
+ *
+ * @param now_ms      Current timestamp (typically @ref hal_millis()).
+ * @param last_ms     Pointer to caller-owned last-fire timestamp.
+ * @param interval_ms Interval in milliseconds (>0).
+ * @return true when elapsed and @p last_ms was updated.
+ */
+static inline bool hal_millis_interval_elapsed(uint32_t now_ms,
+                                               uint32_t *last_ms,
+                                               uint32_t interval_ms) {
+  if (last_ms == NULL || interval_ms == 0u) {
+    return false;
+  }
+  if ((uint32_t)(now_ms - *last_ms) < interval_ms) {
+    return false;
+  }
+  *last_ms = now_ms;
+  return true;
+}
+
+/**
+ * @brief Check whether a non-blocking millis interval elapsed using now().
+ *
+ * Equivalent to calling @ref hal_millis_interval_elapsed with
+ * @ref hal_millis() as @p now_ms.
+ */
+static inline bool hal_millis_interval_elapsed_now(uint32_t *last_ms,
+                                                   uint32_t interval_ms) {
+  return hal_millis_interval_elapsed(hal_millis(), last_ms, interval_ms);
+}
+
+/**
+ * @brief Fire callback when a non-blocking millis interval elapsed.
+ *
+ * Equivalent to:
+ *
+ * @code
+ * if (hal_millis_interval_elapsed(now_ms, &last_ms, interval_ms)) {
+ *   callback(user_data);
+ * }
+ * @endcode
+ *
+ * When elapsed, @p last_ms is updated and the callback is invoked when not
+ * NULL.
+ */
+static inline bool hal_millis_interval_call(
+    uint32_t now_ms, uint32_t *last_ms, uint32_t interval_ms,
+    hal_millis_interval_callback_t callback, void *user_data) {
+  if (!hal_millis_interval_elapsed(now_ms, last_ms, interval_ms)) {
+    return false;
+  }
+  if (callback != NULL) {
+    callback(user_data);
+  }
+  return true;
+}
+
+/**
+ * @brief Fire callback when a non-blocking millis interval elapsed using now().
+ */
+static inline bool
+hal_millis_interval_call_now(uint32_t *last_ms, uint32_t interval_ms,
+                             hal_millis_interval_callback_t callback,
+                             void *user_data) {
+  return hal_millis_interval_call(hal_millis(), last_ms, interval_ms, callback,
+                                  user_data);
+}
+
 /**
  * @brief Return microseconds since boot (32-bit, wraps after ~71 min).
  * @return Microsecond counter.

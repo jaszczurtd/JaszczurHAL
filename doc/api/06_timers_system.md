@@ -265,6 +265,17 @@ void example_alarm_pool(void) {
 #define HOURS(t)    (MINS(t) * 60UL)
 
 uint32_t hal_millis(void);
+typedef void (*hal_millis_interval_callback_t)(void *user_data);
+bool hal_millis_interval_elapsed(uint32_t now_ms, uint32_t *last_ms,
+                                 uint32_t interval_ms);
+bool hal_millis_interval_elapsed_now(uint32_t *last_ms, uint32_t interval_ms);
+bool hal_millis_interval_call(uint32_t now_ms, uint32_t *last_ms,
+                              uint32_t interval_ms,
+                              hal_millis_interval_callback_t callback,
+                              void *user_data);
+bool hal_millis_interval_call_now(uint32_t *last_ms, uint32_t interval_ms,
+                                  hal_millis_interval_callback_t callback,
+                                  void *user_data);
 uint32_t hal_micros(void);
 uint64_t hal_micros64(void);          // 64-bit timestamp, no overflow
 void     hal_delay_ms(uint32_t ms);
@@ -346,6 +357,13 @@ The status-first system calls distinguish invalid output pointers
 active backend does not implement (`HAL_EUNSUPPORTED`). The historical
 `hal_read_chip_temp()`, `hal_get_last_fault()` and `hal_stack_guard_init()`
 functions are compatibility wrappers over their adjacent `_ex` operations.
+
+The millis-interval helpers provide a minimal non-blocking scheduler pattern
+for loop-driven firmware without arming hardware timers. They implement the
+wrap-safe arithmetic `now_ms - last_ms >= interval_ms` and update `last_ms`
+only when the interval elapsed. `*_now` variants fetch `now_ms` internally via
+`hal_millis()`. `hal_millis_interval_call*()` invokes a callback (when non-NULL)
+after a successful elapsed check and returns `true` for that iteration.
 
 **impl/rp2040:** Time is read through native pico-sdk only - `hal_millis()` uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/`hal_micros64()` use `time_us_64()` (no Arduino `millis()`/`micros()`). All RP2040 / pico-sdk bindings (`watchdog_*`, `tight_loop_contents()`, `rp2040.getFreeHeap()`, `analogReadTemp()`, `reset_usb_boot()`, `pico_get_unique_board_id()`), the Cortex-M `IPSR` read used by `hal_in_isr()`, the UID hex formatter, and the backend architecture metadata live in the SoC driver `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}` and are reached through `rp2040_system_*` wrappers. In `HAL_ENABLE_FREERTOS + __FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the current core is not inside `hal_critical_section_*`; otherwise it falls back to pico `sleep_ms()` (when interrupts are enabled) or `busy_wait_ms()` (in ISR / HAL-critical context). `hal_idle()` yields in valid FreeRTOS task context and falls back to `tight_loop_contents()` otherwise. `hal_delay_us()` uses `busy_wait_us()` (never `sleep_us()`/`delayMicroseconds()`, which arm an alarm interrupt and would deadlock inside a critical section). The architecture snapshot reports total flash from `PICO_FLASH_SIZE_BYTES` and, when the final Arduino-pico layout exposes `FS_START`, computes usable firmware flash as the XIP region before the filesystem/EEPROM partition. `stack_total_bytes` reports the core-0 stack reservation only (`PICO_STACK_SIZE` / `HAL_RP2040_STACK_SIZE`); `heap_total_bytes` stays `0` because Arduino-pico does not expose a stable total-heap capacity. The "watchdog caused reboot" status is latched once during C++ static init (before `setup()`) so a later `hal_watchdog_enable()` cannot lose the bit; see the driver header for the scratch[4] magic rationale.
 **impl/stm32g474:** Bare-metal backend with the same dispatch/wrapper pattern as the RP2040 path; host sanity builds of this backend report `is_hardware = false` when `JH_STM32G474_HW` is not active. All SoC bindings (SysTick/FreeRTOS tick time, DWT cycle fallback delays, IWDG planned, `__WFI()`, ADC1 channel 16 for on-die temp, `UID_BASE` for the device id, backend architecture metadata, and stack/RAM span helpers) live in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` behind `stm32g474_system_*` wrappers. `hal_in_isr()` reads `IPSR` on ARM targets and returns `false` on host builds (same rule as Arduino, gated by `__arm__`). In `HAL_ENABLE_FREERTOS` builds, `hal_delay_ms()` uses `vTaskDelay(pdMS_TO_TICKS(ms))` only when the scheduler is running, the caller is in task context, and the core is outside `hal_critical_section_*`; otherwise it falls back to a DWT cycle busy-wait. `hal_idle()` yields in valid FreeRTOS task context and uses a no-op fallback otherwise. `hal_delay_us()` remains a DWT cycle busy-wait on hardware FreeRTOS builds. The architecture snapshot reports `flash_total_bytes` from `HAL_STM32_FLASH_SIZE` and subtracts `HAL_STM32_FLASH_EEPROM_SIZE` plus `HAL_STM32_FLASH_LITTLEFS_SIZE` into `flash_reserved_bytes`; `flash_usable_bytes` is the remainder. On hardware builds, `ram_total_bytes`/`ram_usable_bytes` and `stack_total_bytes` are derived from the STM32 linker layout symbols exported by `stm32_lib/STM32G474RETx_FLASH.ld`; host fallback uses the backend defaults.
@@ -432,6 +450,38 @@ void example_system_timing(void) {
     }
 
     hal_deb("Watchdog feeding complete");
+}
+```
+
+**Example: Non-blocking loop interval callback**
+```c
+#include <hal/hal_system.h>
+
+static uint32_t last_publish_ms = 0;
+
+static void publish_cb(void *user_data) {
+    (void)user_data;
+    callback();
+}
+
+void app_task0(void) {
+    uint32_t now = hal_millis();
+
+    // Canonical wrap-safe non-blocking interval pattern.
+    (void)hal_millis_interval_call(now,
+                                   &last_publish_ms,
+                                   PUBLISH_INTERVAL,
+                                   publish_cb,
+                                   NULL);
+}
+```
+
+Equivalent explicit form:
+
+```c
+uint32_t now = hal_millis();
+if (hal_millis_interval_elapsed(now, &last_publish_ms, PUBLISH_INTERVAL)) {
+    callback();
 }
 ```
 

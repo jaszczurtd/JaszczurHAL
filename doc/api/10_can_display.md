@@ -295,9 +295,9 @@ is not ISR-safe.
 
 ## `hal_display` - TFT / OLED display  *(optional - `HAL_ENABLE_DISPLAY`)*
 
-Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S) and
-SSD1306-family OLEDs (`SSD1306`, `SSD1309`, `SSD1315`, `SH1106`, `CH1115`)
-over I2C/SPI.
+Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S, GC9A01),
+SSD1331/SSD135x RGB OLEDs, SSD1306-family OLEDs (`SSD1306`, `SSD1309`,
+`SSD1315`, `SH1106`, `CH1115`) and ST7567 monochrome LCDs over I2C/SPI.
 
 ```c
 // Define ONE of these before including hal_display.h (or in build flags):
@@ -305,12 +305,14 @@ over I2C/SPI.
 #define HAL_DISPLAY_ST7789
 #define HAL_DISPLAY_ST7735
 #define HAL_DISPLAY_ST7796S
+#define HAL_DISPLAY_GC9A01
 
 // Optional per-driver excludes:
 // #define HAL_ENABLE_ILI9341
 // #define HAL_ENABLE_ST7789
 // #define HAL_ENABLE_ST7735
 // #define HAL_ENABLE_ST7796S
+// #define HAL_ENABLE_GC9A01
 ```
 
 ```c
@@ -358,6 +360,16 @@ typedef struct {
     size_t buf_size;          // available source-buffer bytes
     bool frame_incomplete;    // future streaming hint
 } hal_display_buffer_desc_t;
+
+typedef struct {
+    uint16_t width, height;
+    uint32_t supported_pixel_formats;
+    hal_display_pixel_format_t current_pixel_format;
+    uint8_t current_rotation, supported_rotations;
+    uint16_t x_alignment, y_alignment;
+    uint16_t width_alignment, height_alignment;
+    uint32_t screen_info, flags;
+} hal_display_capabilities_t;
 
 #define HAL_DISPLAY_ROTATION(deg) \
     ((uint8_t)( \
@@ -429,6 +441,12 @@ bool hal_display_init_ssd1306_i2c(int width, int height, uint8_t i2c_addr,
 hal_status_t hal_display_init_ssd1306_family_ex(
     const hal_display_ssd1306_family_config_t *config);
 
+// Config structs are declared conditionally by the matching HAL_ENABLE flag.
+hal_status_t hal_display_init_rgb_oled_ex(
+    const hal_display_rgb_oled_config_t *config);
+hal_status_t hal_display_init_st7567_ex(
+    const hal_display_st7567_config_t *config);
+
 // Configure dimensions, rotation, colour order. Must be called after init().
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
 
@@ -441,6 +459,11 @@ bool hal_display_set_rotation(uint8_t r);
 bool hal_display_invert(bool invert);
 int  hal_display_get_width(void);
 int  hal_display_get_height(void);
+hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *caps);
+hal_status_t hal_display_set_pixel_format_ex(hal_display_pixel_format_t format);
+hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
+                                      const hal_display_buffer_desc_t *desc,
+                                      const void *buffer);
 
 // --- Screen ---
 bool hal_display_fill_screen(uint16_t color);
@@ -508,11 +531,15 @@ int  hal_display_prepare_text_v(char *display_txt, size_t display_txt_size,
 or `HAL_COLOR(name)` selector, for example `HAL_COLOR(ORANGE)`.
 **Display mode helpers:** `HAL_DISPLAY_ROTATION_*`, `HAL_DISPLAY_ROTATION(deg)`,
 `HAL_DISPLAY_INVERT_ON/OFF`, `HAL_DISPLAY_COLOR_ORDER_RGB/BGR`.
-**Raw buffers:** `hal_display_pixel_format_t` and
-`hal_display_buffer_desc_t` describe rectangular source buffers for the
-planned low-level area-write/capabilities layer. `pitch` is in pixels and may
-be larger than `width` when the source rectangle is a sub-area of a larger
-framebuffer. No public raw area-write function is exposed yet.
+**Capabilities and raw buffers:** Query the active backend with
+`hal_display_get_capabilities_ex()`, then use only advertised formats and
+alignments with `hal_display_write_raw_ex()`. `pitch` is in pixels. Current
+hardware backends require `pitch == width`; larger pitches return
+`HAL_EUNSUPPORTED`. TFT and RGB OLED backends accept contiguous
+`RGB565_BE`/`RGB565_NATIVE`. ST7567 accepts `MONO01`/`MONO10`, reports
+`HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
+to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
+ST7567 monochrome polarity.
 **TFT streaming:** Immediate-mode TFT backends support an explicit streaming
 sequence for large contiguous updates:
 `hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then
@@ -526,11 +553,16 @@ The asynchronous variant,
 is truly asynchronous, keep `pixels_be` valid and keep the display write stream
 open until `_wait()` completes. `hal_display_end_write()` waits for any active
 async pixel DMA before closing the TFT transaction.
-**ST77xx notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`, and
-`HAL_DISPLAY_ST7796S` share the ST77xx backend. `JH_ST77XX_SPI_DEFAULT_HZ` can
-be overridden before including/building the driver to tune the default TFT SPI
-clock for a board. ST7796S keeps its documented BGR-oriented defaults without
-forcing swapped inversion commands.
+**ST77xx/GC9A01 notes:** `HAL_DISPLAY_ST7735`, `HAL_DISPLAY_ST7789`,
+`HAL_DISPLAY_ST7796S`, and `HAL_DISPLAY_GC9A01` share the ST77xx-style backend.
+`JH_ST77XX_SPI_DEFAULT_HZ` can be overridden before including/building the
+driver to tune the default TFT SPI clock for a board. ST7796S keeps its
+documented BGR-oriented defaults without forcing swapped inversion commands.
+GC9A01 uses the local Zephyr GC9x01x command sequence and defaults to 240x240.
+SSD1331/SSD135x are immediate RGB565 backends and support raw writes, legacy
+streaming and GFX primitives. Their raw/GFX orientation is currently native
+only. ST7567 is intentionally a raw page backend; capabilities do not advertise
+legacy GFX, streaming or DMA for it.
 **impl/rp2040:** Uses the shared HAL display stack. ILI9341 and ST77xx use
 shared HAL SPI/GPIO drivers; SSD1306-family OLEDs use the shared HAL I2C/SPI
 driver; geometry, bitmap, and text rendering run through the shared `jh_gfx`

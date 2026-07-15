@@ -178,16 +178,16 @@ Simple backlog of future architecture and implementation work.
     - The most valuable Zephyr display idea is the generic raw write contract:
       pixel format, buffer descriptor with `pitch`, `width`, `height` and
       `buf_size`, capabilities reporting and `write(x, y, desc, buf)` style
-      area updates. The first additive JaszczurHAL type layer now exists as
-      `hal_display_pixel_format_t` and `hal_display_buffer_desc_t`; next add
-      capabilities reporting and a status-returning area-write API before
-      importing more panel controllers.
+      area updates. DONE: JaszczurHAL now exposes
+      `hal_display_get_capabilities_ex()`, `hal_display_set_pixel_format_ex()`
+      and `hal_display_write_raw_ex()` with the public pixel/buffer types.
     - Keep the current JaszczurHAL GFX/text/high-level display API. Treat the
       Zephyr-style API as a lower-level raw blit/capabilities layer underneath
       or beside it.
-    - First adapt existing JaszczurHAL display backends (`ILI9341`, `ST7735`,
-      `ST7789`, `ST7796S`, `SSD1306`) to the raw write/capabilities layer.
-      This should preserve existing examples and public wrappers.
+    - DONE: adapted immediate RGB backends (`ILI9341`, ST77xx/GC9A01 and
+      SSD1331/SSD135x) plus ST7567 to capabilities/raw-write while preserving
+      the existing public wrappers. SSD1306 advertises its buffered GFX path;
+      direct raw writes remain intentionally unsupported there.
     - Reuse Zephyr's proven handling for `pitch > width` by splitting writes
       into row-sized transfers, and keep RGB565 byte order explicit.
     - DONE: extended the SSD1306-family driver with Zephyr-informed support
@@ -195,9 +195,11 @@ Simple backlog of future architecture and implementation work.
       addressing differences, segment/page/display offsets, hardware
       orientation, contrast, suspend/resume and I2C/SPI bus splitting through a
       status-returning family config entry point.
-    - After the raw API exists, consider new panel families in this order:
-      `GC9A01`, `SSD1331`/`SSD135x`, `ST7567`, then e-paper controllers such
-      as `SSD16xx`/`UC81xx`.
+    - DONE: added Zephyr-informed shared-driver support for `GC9A01`,
+      `SSD1331`/`SSD135x` and `ST7567`, all routed through `hal_display` with
+      unit and real-facade dispatch coverage.
+    - After the raw API exists, consider e-paper controllers such as
+      `SSD16xx`/`UC81xx`.
     - Defer DSI/LTDC/MCUX/QEMU/SDL/Renesas-style Zephyr display backends for
       now; they do not map cleanly to the current shared RP2040/STM32G474 HAL
       goals.

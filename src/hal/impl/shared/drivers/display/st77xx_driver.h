@@ -1,13 +1,14 @@
 #pragma once
 
 /*
- * ST7735 / ST7789 / ST7796S TFT panel driver.
+ * ST7735 / ST7789 / ST7796S / GC9A01 TFT panel driver.
  *
- * The controller command sequences and addressing logic are adapted from the
- * Adafruit ST7735/ST7789 library (BSD license).  This implementation drives
- * the panels exclusively over the JaszczurHAL SPI / GPIO buses and pairs with
- * the shared GFX engine (jh_gfx.*) for rendering, so it is shared identically
- * by every backend.
+ * The ST77xx command sequences and addressing logic are adapted from the
+ * Adafruit ST7735/ST7789 library (BSD license). GC9A01 behavior follows the
+ * local Zephyr GC9x01x display driver as a reference checklist. This
+ * implementation drives the panels exclusively over the JaszczurHAL SPI / GPIO
+ * buses and pairs with the shared GFX engine (jh_gfx.*) for rendering, so it is
+ * shared identically by every backend.
  *
  * Original work: https://github.com/adafruit/Adafruit-ST7735-Library
  * SPDX-License-Identifier: BSD-2-Clause
@@ -31,6 +32,8 @@ extern "C" {
 #define JH_ST7735_TFTHEIGHT_160 160u
 #define JH_ST7796S_TFTWIDTH 320u
 #define JH_ST7796S_TFTHEIGHT 480u
+#define JH_GC9A01_TFTWIDTH 240u
+#define JH_GC9A01_TFTHEIGHT 240u
 
 #define JH_ST7735_TAB_GREENTAB 0x00u
 #define JH_ST7735_TAB_REDTAB 0x01u
@@ -47,7 +50,8 @@ extern "C" {
 typedef enum {
   JH_ST77XX_CHIP_ST7735 = 0,
   JH_ST77XX_CHIP_ST7789,
-  JH_ST77XX_CHIP_ST7796S
+  JH_ST77XX_CHIP_ST7796S,
+  JH_ST77XX_CHIP_GC9A01
 } jh_st77xx_chip_t;
 
 typedef struct {
@@ -104,6 +108,7 @@ bool jh_st77xx_run_st7735_init_sequence(const jh_st77xx_command_io_t *io,
                                         uint8_t tab);
 bool jh_st77xx_run_st7789_init_sequence(const jh_st77xx_command_io_t *io);
 bool jh_st77xx_run_st7796s_init_sequence(const jh_st77xx_command_io_t *io);
+bool jh_st77xx_run_gc9a01_init_sequence(const jh_st77xx_command_io_t *io);
 
 bool jh_st77xx_init(jh_st77xx_t *dev, const jh_st77xx_config_t *config);
 bool jh_st77xx_soft_init(jh_st77xx_t *dev);

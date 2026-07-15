@@ -7,12 +7,13 @@
  * @file hal_display.h
  * @brief Hardware abstraction for TFT and OLED displays.
  *
- * Supports SPI TFT displays and SSD1306-family OLEDs over I2C/SPI.
+ * Supports SPI TFT displays, RGB OLEDs and monochrome OLED/LCD panels.
  *
  * Backend selection (compile-time, opt-in):
  *
  *   HAL_ENABLE_TFT     - enable the SPI TFT family (requires one of the
- *                         HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S
+ *                         HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S /
+ *                         GC9A01
  *                         driver flags; propagates HAL_ENABLE_DISPLAY).
  *                         Without HAL_ENABLE_TFT, hal_display_init() and
  *                         hal_display_soft_init() are not available.
@@ -21,10 +22,16 @@
  *                         transport also needs HAL_ENABLE_SPI).
  *                         Without it, hal_display_init_ssd1306_i2c() is
  *                         not available.
+ *   HAL_ENABLE_SSD1331 / HAL_ENABLE_SSD135X - enable RGB OLED facade
+ *                         backends over SPI.
+ *   HAL_ENABLE_ST7567  - enable the raw page-oriented monochrome LCD facade
+ *                         backend over I2C or SPI.
  *
- * Both flags may be enabled simultaneously; the runtime entry points
- * stay independent. Enabling HAL_ENABLE_DISPLAY alone (without a TFT
- * driver or SSD1306) triggers a compile-time #error from hal_config.h.
+ * Multiple backend flags may be enabled simultaneously; the runtime init
+ * entry points select the active display. Enabling HAL_ENABLE_DISPLAY alone
+ * (without a TFT
+ * driver, SSD1306, RGB OLED or ST7567) triggers a compile-time #error from
+ * hal_config.h.
  *
  * TFT drivers are selected at compile time (ignored when HAL_ENABLE_TFT is
  * unset): Define exactly one of the following before including this header (or
@@ -35,10 +42,11 @@
  *   HAL_DISPLAY_ST7735   - 128×160 typical; set HAL_DISPLAY_ST7735_TAB to
  *                          override initR() tab-colour (default INITR_BLACKTAB)
  *   HAL_DISPLAY_ST7796S  - 320×480 typical, BGR colour order
+ *   HAL_DISPLAY_GC9A01   - 240×240 typical round TFT, BGR colour order
  *
  * Per-driver exclusion flags (from hal_config.h):
  *   HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 /
- * HAL_ENABLE_ST7796S
+ * HAL_ENABLE_ST7796S / HAL_ENABLE_GC9A01
  *
  * There is no implicit TFT default driver. The project must explicitly define
  * exactly one HAL_DISPLAY_* macro when TFT backend is enabled.
@@ -68,14 +76,17 @@ extern "C" {
 #if (((defined(HAL_DISPLAY_ILI9341) ? 1 : 0) +                                 \
       (defined(HAL_DISPLAY_ST7789) ? 1 : 0) +                                  \
       (defined(HAL_DISPLAY_ST7735) ? 1 : 0) +                                  \
-      (defined(HAL_DISPLAY_ST7796S) ? 1 : 0)) > 1)
+      (defined(HAL_DISPLAY_ST7796S) ? 1 : 0) +                                 \
+      (defined(HAL_DISPLAY_GC9A01) ? 1 : 0)) > 1)
 #error "Define exactly one HAL_DISPLAY_* macro (multiple selected)."
 #endif
 
 #if !defined(HAL_DISPLAY_ILI9341) && !defined(HAL_DISPLAY_ST7789) &&           \
     !defined(HAL_DISPLAY_ST7735) && !defined(HAL_DISPLAY_ST7796S)
+#if !defined(HAL_DISPLAY_GC9A01)
 #error                                                                         \
     "No TFT driver selected. Define one HAL_DISPLAY_* macro or unset HAL_ENABLE_TFT."
+#endif
 #endif
 
 #if defined(HAL_DISPLAY_ILI9341) && !defined(HAL_ENABLE_ILI9341)
@@ -89,6 +100,9 @@ extern "C" {
 #endif
 #if defined(HAL_DISPLAY_ST7796S) && !defined(HAL_ENABLE_ST7796S)
 #error "HAL_DISPLAY_ST7796S selected, but HAL_ENABLE_ST7796S is not defined."
+#endif
+#if defined(HAL_DISPLAY_GC9A01) && !defined(HAL_ENABLE_GC9A01)
+#error "HAL_DISPLAY_GC9A01 selected, but HAL_ENABLE_GC9A01 is not defined."
 #endif
 #endif /* HAL_ENABLE_TFT */
 
@@ -167,13 +181,49 @@ typedef enum {
   HAL_DISPLAY_PIXEL_FORMAT_L8 = (1u << 6),
 } hal_display_pixel_format_t;
 
+typedef enum {
+  HAL_DISPLAY_CAP_NONE = 0u,
+  HAL_DISPLAY_CAP_RAW_WRITE = (1u << 0),
+  HAL_DISPLAY_CAP_STREAM_WRITE = (1u << 1),
+  HAL_DISPLAY_CAP_DMA_WRITE = (1u << 2),
+  HAL_DISPLAY_CAP_ASYNC_DMA_WRITE = (1u << 3),
+  HAL_DISPLAY_CAP_LEGACY_GFX = (1u << 4),
+  HAL_DISPLAY_CAP_BUFFERED = (1u << 5),
+} hal_display_capability_flags_t;
+
+typedef enum {
+  HAL_DISPLAY_SCREEN_INFO_NONE = 0u,
+  /* Consecutive bytes are vertical 8-pixel columns, grouped by pages. */
+  HAL_DISPLAY_SCREEN_INFO_MONO_VTILED = (1u << 0),
+} hal_display_screen_info_t;
+
+#define HAL_DISPLAY_ROTATION_MASK(rotation) (1u << (uint8_t)(rotation))
+#define HAL_DISPLAY_ROTATION_MASK_ALL 0x0Fu
+
+/** Runtime capabilities of the currently active display backend. */
+typedef struct {
+  uint16_t width;
+  uint16_t height;
+  uint32_t supported_pixel_formats;
+  hal_display_pixel_format_t current_pixel_format;
+  uint8_t current_rotation;
+  uint8_t supported_rotations;
+  uint16_t x_alignment;
+  uint16_t y_alignment;
+  uint16_t width_alignment;
+  uint16_t height_alignment;
+  uint32_t screen_info;
+  uint32_t flags;
+} hal_display_capabilities_t;
+
 /*
  * Descriptor for a rectangular pixel buffer.
  *
  * - width/height describe the updated rectangle in pixels.
  * - pitch is the number of pixels between consecutive rows in the source
- *   buffer. It may be larger than width for sub-rectangles inside a larger
- *   framebuffer.
+ *   buffer. The descriptor can express pitch > width, but callers must query
+ *   backend capabilities; current hardware backends reject non-contiguous
+ *   raw areas with HAL_EUNSUPPORTED.
  * - buf_size is the available source-buffer size in bytes.
  * - frame_incomplete lets future streaming backends keep a panel transaction
  *   open across several area writes.
@@ -186,6 +236,73 @@ typedef struct {
   size_t buf_size;
   bool frame_incomplete;
 } hal_display_buffer_desc_t;
+
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+typedef enum {
+  HAL_DISPLAY_RGB_OLED_SSD1331 = 0,
+  HAL_DISPLAY_RGB_OLED_SSD1351,
+  HAL_DISPLAY_RGB_OLED_SSD1357,
+} hal_display_rgb_oled_controller_t;
+
+typedef struct {
+  hal_display_rgb_oled_controller_t controller;
+  uint8_t bus;
+  int16_t cs_pin;
+  int16_t dc_pin;
+  int16_t rst_pin;
+  uint32_t clock_hz;
+  uint8_t spi_mode;
+  uint16_t width;
+  uint16_t height;
+  uint8_t start_line;
+  uint8_t display_offset;
+  uint8_t multiplex_ratio;
+  uint8_t phase_length;
+  uint8_t oscillator_freq;
+  uint8_t precharge_time_a;
+  uint8_t precharge_time_b;
+  uint8_t precharge_time_c;
+  uint8_t precharge_time;
+  uint8_t precharge_voltage;
+  uint8_t vcomh_voltage;
+  uint8_t current_att;
+  uint8_t remap_value;
+  uint8_t column_offset;
+  uint8_t contrast_a;
+  uint8_t contrast_b;
+  uint8_t contrast_c;
+  bool power_save;
+  bool inverted;
+} hal_display_rgb_oled_config_t;
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+typedef enum {
+  HAL_DISPLAY_ST7567_BUS_I2C = 0,
+  HAL_DISPLAY_ST7567_BUS_SPI,
+} hal_display_st7567_bus_t;
+
+typedef struct {
+  hal_display_st7567_bus_t bus_type;
+  uint8_t bus;
+  uint8_t i2c_addr;
+  int16_t rst_pin;
+  int16_t spi_dc_pin;
+  int16_t spi_cs_pin;
+  uint32_t clock_hz;
+  uint8_t spi_mode;
+  uint16_t width;
+  uint16_t height;
+  uint8_t column_offset;
+  uint8_t line_offset;
+  uint8_t regulation_ratio;
+  bool segment_invdir;
+  bool com_invdir;
+  bool inversion_on;
+  bool bias;
+  hal_display_pixel_format_t pixel_format;
+} hal_display_st7567_config_t;
+#endif
 
 /*
  * Maps degrees (0/90/180/270) to HAL enum values.
@@ -262,6 +379,18 @@ typedef struct {
   bool periphBegin; /* Retained for Arduino-era I2C source compatibility. */
 } hal_display_ssd1306_family_config_t;
 #endif /* HAL_ENABLE_SSD1306 */
+
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+/** Initialise an SSD1331/SSD1351/SSD1357 RGB OLED as the active backend. */
+hal_status_t
+hal_display_init_rgb_oled_ex(const hal_display_rgb_oled_config_t *config);
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+/** Initialise an ST7567 LCD as the active raw monochrome backend. */
+hal_status_t
+hal_display_init_st7567_ex(const hal_display_st7567_config_t *config);
+#endif
 
 /** @brief Available font identifiers. */
 typedef enum {
@@ -763,6 +892,13 @@ hal_status_t hal_display_set_rotation_ex(uint8_t r);
 hal_status_t hal_display_invert_ex(bool invert);
 hal_status_t hal_display_get_width_ex(int *out_width);
 hal_status_t hal_display_get_height_ex(int *out_height);
+hal_status_t
+hal_display_get_capabilities_ex(hal_display_capabilities_t *out_capabilities);
+hal_status_t
+hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format);
+hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
+                                      const hal_display_buffer_desc_t *desc,
+                                      const void *buffer);
 
 hal_status_t hal_display_fill_screen_ex(uint16_t color);
 hal_status_t hal_display_flush_ex(void);

@@ -214,6 +214,7 @@ target_compile_definitions(test_st77xx_driver PRIVATE
     HAL_ENABLE_ST7735
     HAL_ENABLE_ST7789
     HAL_ENABLE_ST7796S
+    HAL_ENABLE_GC9A01
 )
 target_link_libraries(test_st77xx_driver PRIVATE hal_mock)
 add_test(NAME test_st77xx_driver COMMAND test_st77xx_driver)
@@ -223,6 +224,75 @@ add_executable(test_ssd1306_driver
 )
 target_link_libraries(test_ssd1306_driver PRIVATE hal_mock)
 add_test(NAME test_ssd1306_driver COMMAND test_ssd1306_driver)
+add_executable(test_rgb_oled_driver
+    test_rgb_oled_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/rgb_oled_driver.cpp
+)
+target_compile_definitions(test_rgb_oled_driver PRIVATE
+    HAL_ENABLE_SSD1331
+    HAL_ENABLE_SSD135X
+)
+target_link_libraries(test_rgb_oled_driver PRIVATE hal_mock)
+add_test(NAME test_rgb_oled_driver COMMAND test_rgb_oled_driver)
+add_executable(test_st7567_driver
+    test_st7567_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st7567_driver.cpp
+)
+target_compile_definitions(test_st7567_driver PRIVATE HAL_ENABLE_ST7567)
+target_link_libraries(test_st7567_driver PRIVATE hal_mock)
+add_test(NAME test_st7567_driver COMMAND test_st7567_driver)
+
+add_executable(test_hal_display_rgb_oled_facade
+    test_hal_display_rgb_oled_facade.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/rgb_oled_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+)
+target_include_directories(test_hal_display_rgb_oled_facade PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils
+)
+target_compile_definitions(test_hal_display_rgb_oled_facade PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_SSD1331
+    HAL_ENABLE_SSD135X
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_hal_display_rgb_oled_facade PRIVATE -Wall -Wextra)
+target_link_libraries(test_hal_display_rgb_oled_facade PRIVATE
+    $<TARGET_FILE:hal_mock>
+    Threads::Threads
+)
+add_dependencies(test_hal_display_rgb_oled_facade hal_mock)
+add_test(NAME test_hal_display_rgb_oled_facade
+         COMMAND test_hal_display_rgb_oled_facade)
+
+add_executable(test_hal_display_st7567_facade
+    test_hal_display_st7567_facade.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st7567_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+)
+target_include_directories(test_hal_display_st7567_facade PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils
+)
+target_compile_definitions(test_hal_display_st7567_facade PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_ST7567
+    HAL_ENABLE_SPI
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_hal_display_st7567_facade PRIVATE -Wall -Wextra)
+target_link_libraries(test_hal_display_st7567_facade PRIVATE
+    $<TARGET_FILE:hal_mock>
+    Threads::Threads
+)
+add_dependencies(test_hal_display_st7567_facade hal_mock)
+add_test(NAME test_hal_display_st7567_facade
+         COMMAND test_hal_display_st7567_facade)
 add_executable(test_jh_gfx_geometry
     test_jh_gfx_geometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp

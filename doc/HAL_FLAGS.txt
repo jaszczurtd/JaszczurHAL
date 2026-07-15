@@ -277,9 +277,10 @@ Display
   HAL_ENABLE_HD44780 HD44780-compatible parallel character LCD driver
                            over HAL GPIO/system timing.
   HAL_ENABLE_DISPLAY
-    Generic display API. Requires at least one of TFT or SSD1306.
+    Generic display API. Requires at least one TFT, SSD1306, SSD1331,
+    SSD135X or ST7567 backend.
   HAL_ENABLE_TFT
-    SPI TFT family fasada. Requires at least one of the four drivers
+    SPI TFT family fasada. Requires at least one of the TFT drivers
     below. Propagates: DISPLAY, SPI.
   HAL_ENABLE_ILI9341       ILI9341 driver over the shared HAL SPI/GPIO core
                            and GFX engine. Propagates: TFT, DISPLAY, SPI.
@@ -289,11 +290,21 @@ Display
                            core and GFX engine. Propagates: TFT, DISPLAY, SPI.
   HAL_ENABLE_ST7796S       ST7796S driver over the shared ST77xx HAL SPI/GPIO
                            core and GFX engine. Propagates: TFT, DISPLAY, SPI.
+  HAL_ENABLE_GC9A01        GC9A01 round TFT driver over the shared ST77xx-like
+                           HAL SPI/GPIO core and GFX engine. Propagates: TFT,
+                           DISPLAY, SPI.
   HAL_ENABLE_SSD1306       SSD1306-family OLED (`SSD1306`, `SSD1309`,
                            `SSD1315`, `SH1106`, `CH1115`) over the shared HAL
                            I2C/SPI-capable driver and GFX engine. Propagates:
                            DISPLAY, I2C. SPI OLED transport additionally needs
                            HAL_ENABLE_SPI.
+  HAL_ENABLE_SSD1331       SSD1331 RGB OLED facade/backend over HAL SPI/GPIO.
+                           Propagates: DISPLAY, SPI.
+  HAL_ENABLE_SSD135X       SSD1351/SSD1357 RGB OLED shared driver over HAL
+                           SPI/GPIO. Propagates: DISPLAY, SPI.
+  HAL_ENABLE_ST7567        ST7567 monochrome LCD facade/backend over HAL I2C or
+                           SPI/GPIO. Propagates: DISPLAY, I2C. SPI transport
+                           additionally needs HAL_ENABLE_SPI.
 
 Crypto / bundled libs
   HAL_ENABLE_CRYPTO
@@ -392,7 +403,11 @@ HAL_ENABLE_ILI9341     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7789      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7735      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7796S     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
+HAL_ENABLE_GC9A01      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY, HAL_ENABLE_I2C
+HAL_ENABLE_SSD1331     -> HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
+HAL_ENABLE_SSD135X     -> HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
+HAL_ENABLE_ST7567      -> HAL_ENABLE_DISPLAY, HAL_ENABLE_I2C
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_JPEG
 
@@ -406,4 +421,4 @@ Consistency checks (compile-time #error)
   HAL_ENABLE_DIGIPOT      requires HAL_ENABLE_MCP401X OR HAL_ENABLE_MAX5395
   HAL_ENABLE_GPS          requires HAL_ENABLE_SWSERIAL OR HAL_ENABLE_UART
   HAL_ENABLE_DISPLAY      requires HAL_ENABLE_TFT     OR HAL_ENABLE_SSD1306
-  HAL_ENABLE_TFT          requires HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S
+  HAL_ENABLE_TFT          requires HAL_ENABLE_ILI9341 / ST7789 / ST7735 / ST7796S / GC9A01

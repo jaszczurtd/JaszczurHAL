@@ -338,8 +338,17 @@
        HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT, SPI).
        HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT, SPI).
+       HAL_ENABLE_GC9A01        - GC9A01 round TFT driver (propagates: TFT,
+                                  SPI).
+       HAL_ENABLE_SSD1331       - SSD1331 RGB OLED facade/backend
+                                  (propagates: DISPLAY, SPI).
+       HAL_ENABLE_SSD135X       - SSD1351/SSD1357 RGB OLED facade/backend
+                                  (propagates: DISPLAY, SPI).
        HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY,
    I2C).
+       HAL_ENABLE_ST7567        - ST7567 monochrome LCD facade/backend
+                                  (propagates: DISPLAY, I2C; SPI transport
+                                  available when SPI is enabled).
 
      Crypto + bundled libs:
        HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
@@ -729,6 +738,11 @@
 #define HAL_ENABLE_TFT
 #endif
 #endif
+#ifdef HAL_ENABLE_GC9A01
+#ifndef HAL_ENABLE_TFT
+#define HAL_ENABLE_TFT
+#endif
+#endif
 
 #ifdef HAL_ENABLE_TFT
 #ifndef HAL_ENABLE_DISPLAY
@@ -772,11 +786,30 @@
 #endif
 #endif
 
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+#ifndef HAL_ENABLE_DISPLAY
+#define HAL_ENABLE_DISPLAY
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+#ifndef HAL_ENABLE_DISPLAY
+#define HAL_ENABLE_DISPLAY
+#endif
+#ifndef HAL_ENABLE_I2C
+#define HAL_ENABLE_I2C
+#endif
+#endif
+
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
   KV, SDLOGGER, GPS, DACLESS, DMA_PWM_AUDIO, PWM_FREQ, RGB_LED, DS18B20, DHT,
   BH1750, TSC2007, STMPE610, ONEWIRE, EXTERNAL_ADC, MCP3221, MCP23017,
-  PCA9654E, PCF8574, HC595, MCP4725, PGA2311, TIME, UNITY, MQTT, UDP, TCP,
+  PCA9654E, PCF8574, HC595, MCP4725, PGA2311, SSD1331, SSD135X, ST7567, TIME,
+  UNITY, MQTT, UDP, TCP,
   HTTP_SERVER, HTTP_FILES, WEBSOCKET, NET_CONSOLE, NET_COMMANDS, OTA, WIREGUARD,
   LITTLEFS, CRYPTO, CJSON, PNG, PNG_AS_BASE64, JPEG, JPEG_AS_BASE64) do NOT need
   such checks - they can be enabled on their own. The checks below only catch
@@ -823,16 +856,17 @@
 #endif
 
 #if defined(HAL_ENABLE_DISPLAY) && !defined(HAL_ENABLE_TFT) &&                 \
-    !defined(HAL_ENABLE_SSD1306)
+    !defined(HAL_ENABLE_SSD1306) && !defined(HAL_ENABLE_SSD1331) &&            \
+    !defined(HAL_ENABLE_SSD135X) && !defined(HAL_ENABLE_ST7567)
 #error                                                                         \
-    "HAL_ENABLE_DISPLAY requires at least one backend: HAL_ENABLE_TFT or HAL_ENABLE_SSD1306"
+    "HAL_ENABLE_DISPLAY requires a TFT, SSD1306, SSD1331, SSD135X, or ST7567 backend"
 #endif
 
 #if defined(HAL_ENABLE_TFT) && !defined(HAL_ENABLE_ILI9341) &&                 \
     !defined(HAL_ENABLE_ST7789) && !defined(HAL_ENABLE_ST7735) &&              \
-    !defined(HAL_ENABLE_ST7796S)
+    !defined(HAL_ENABLE_ST7796S) && !defined(HAL_ENABLE_GC9A01)
 #error                                                                         \
-    "HAL_ENABLE_TFT requires at least one driver: HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S"
+    "HAL_ENABLE_TFT requires at least one driver: HAL_ENABLE_ILI9341 / HAL_ENABLE_ST7789 / HAL_ENABLE_ST7735 / HAL_ENABLE_ST7796S / HAL_ENABLE_GC9A01"
 #endif
 
 /* ── Optional verbose flag report ───────────────────────────────────── */
@@ -1045,8 +1079,20 @@
 #ifdef HAL_ENABLE_ST7796S
 #pragma message("HAL_CONFIG: HAL_ENABLE_ST7796S")
 #endif
+#ifdef HAL_ENABLE_GC9A01
+#pragma message("HAL_CONFIG: HAL_ENABLE_GC9A01")
+#endif
 #ifdef HAL_ENABLE_SSD1306
 #pragma message("HAL_CONFIG: HAL_ENABLE_SSD1306")
+#endif
+#ifdef HAL_ENABLE_SSD1331
+#pragma message("HAL_CONFIG: HAL_ENABLE_SSD1331")
+#endif
+#ifdef HAL_ENABLE_SSD135X
+#pragma message("HAL_CONFIG: HAL_ENABLE_SSD135X")
+#endif
+#ifdef HAL_ENABLE_ST7567
+#pragma message("HAL_CONFIG: HAL_ENABLE_ST7567")
 #endif
 #ifdef HAL_ENABLE_CRYPTO
 #pragma message("HAL_CONFIG: HAL_ENABLE_CRYPTO")
