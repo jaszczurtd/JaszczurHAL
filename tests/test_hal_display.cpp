@@ -49,6 +49,36 @@ void test_display_buffer_descriptor_describes_raw_area(void) {
   TEST_ASSERT_TRUE(desc.frame_incomplete);
 }
 
+void test_capabilities_describe_active_mock_backend(void) {
+  hal_display_capabilities_t caps = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_capabilities_ex(&caps));
+  TEST_ASSERT_EQUAL_UINT16(128u, caps.width);
+  TEST_ASSERT_EQUAL_UINT16(32u, caps.height);
+  TEST_ASSERT_BITS_HIGH(HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE,
+                        caps.supported_pixel_formats);
+  TEST_ASSERT_BITS_HIGH(HAL_DISPLAY_CAP_RAW_WRITE, caps.flags);
+  TEST_ASSERT_EQUAL_UINT8(HAL_DISPLAY_ROTATION_MASK_ALL,
+                          caps.supported_rotations);
+}
+
+void test_raw_write_validates_descriptor_and_area(void) {
+  const uint8_t pixels[8] = {};
+  hal_display_buffer_desc_t desc = {
+      HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE, 2u, 2u, 2u, sizeof(pixels), false};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_display_write_raw_ex(1u, 2u, &desc, pixels));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_write_raw_ex(127u, 0u, &desc, pixels));
+  desc.pitch = 3u;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_display_write_raw_ex(0u, 0u, &desc, pixels));
+  desc.pitch = 2u;
+  desc.pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_display_write_raw_ex(0u, 0u, &desc, pixels));
+}
+
 void test_draw_image_draws_background_and_bitmap(void) {
   uint16_t data[6] = {1, 2, 3, 4, 5, 6};
 
@@ -412,6 +442,8 @@ int main(void) {
   RUN_TEST(test_ssd1306_init_ex_sets_dimensions_on_selected_bus);
   RUN_TEST(test_ssd1306_init_ex_rejects_invalid_size);
   RUN_TEST(test_display_buffer_descriptor_describes_raw_area);
+  RUN_TEST(test_capabilities_describe_active_mock_backend);
+  RUN_TEST(test_raw_write_validates_descriptor_and_area);
   RUN_TEST(test_draw_image_draws_background_and_bitmap);
   RUN_TEST(test_stream_write_api_tracks_window_and_counts);
   RUN_TEST(test_stream_write_api_rejects_invalid_order_and_odd_bytes);

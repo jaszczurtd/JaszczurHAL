@@ -35,6 +35,9 @@ static size_t s_stream_fast_pixels = 0;
 static size_t s_stream_be_bytes = 0;
 static size_t s_stream_dma_bytes = 0;
 static bool s_fail_next_io = false;
+static hal_display_pixel_format_t s_pixel_format =
+    HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE;
+static uint8_t s_rotation = HAL_DISPLAY_ROTATION_0;
 
 static bool s_display_ready(void) {
   if (s_width > 0 && s_height > 0) {
@@ -124,7 +127,7 @@ hal_status_t hal_display_configure_ex(int w, int h, uint8_t r, bool inv,
   }
   s_width = w;
   s_height = h;
-  (void)r;
+  s_rotation = r & 0x03u;
   (void)inv;
   (void)bgr;
   return HAL_OK;
@@ -145,8 +148,11 @@ hal_status_t hal_display_resume_ex(void) {
   return s_display_ready() ? HAL_OK : HAL_EUNINIT;
 }
 hal_status_t hal_display_set_rotation_ex(uint8_t r) {
-  (void)r;
-  return s_display_ready() ? HAL_OK : HAL_EUNINIT;
+  if (!s_display_ready()) {
+    return HAL_EUNINIT;
+  }
+  s_rotation = r & 0x03u;
+  return HAL_OK;
 }
 bool hal_display_set_rotation(uint8_t r) {
   return hal_status_to_bool(hal_display_set_rotation_ex(r));
@@ -177,6 +183,79 @@ hal_status_t hal_display_get_height_ex(int *out_height) {
   }
   *out_height = s_height;
   return s_height > 0 ? HAL_OK : HAL_EUNINIT;
+}
+
+hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
+  memset(out, 0, sizeof(*out));
+  if (!s_display_ready()) {
+    return HAL_EUNINIT;
+  }
+  out->width = (uint16_t)s_width;
+  out->height = (uint16_t)s_height;
+  out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE |
+                                 HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE;
+  out->current_pixel_format = s_pixel_format;
+  out->current_rotation = s_rotation;
+  out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
+  out->x_alignment = 1u;
+  out->y_alignment = 1u;
+  out->width_alignment = 1u;
+  out->height_alignment = 1u;
+  out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
+               HAL_DISPLAY_CAP_DMA_WRITE | HAL_DISPLAY_CAP_ASYNC_DMA_WRITE |
+               HAL_DISPLAY_CAP_LEGACY_GFX;
+  return HAL_OK;
+}
+
+hal_status_t
+hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format) {
+  if (!s_display_ready()) {
+    return HAL_EUNINIT;
+  }
+  if (pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
+      pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
+    return HAL_EUNSUPPORTED;
+  }
+  s_pixel_format = pixel_format;
+  return HAL_OK;
+}
+
+hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
+                                      const hal_display_buffer_desc_t *desc,
+                                      const void *buffer) {
+  if (desc == NULL || buffer == NULL || desc->width == 0u ||
+      desc->height == 0u || desc->pitch < desc->width) {
+    return HAL_EINVAL;
+  }
+  if (!s_display_ready()) {
+    return HAL_EUNINIT;
+  }
+  if ((uint32_t)x + desc->width > (uint32_t)s_width ||
+      (uint32_t)y + desc->height > (uint32_t)s_height) {
+    return HAL_EINVAL;
+  }
+  if (desc->pitch != desc->width) {
+    return HAL_EUNSUPPORTED;
+  }
+  if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
+      desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
+    return HAL_EUNSUPPORTED;
+  }
+  if (desc->buf_size < (size_t)desc->width * desc->height * 2u) {
+    return HAL_EINVAL;
+  }
+  if (s_fail_next_io) {
+    s_fail_next_io = false;
+    return HAL_EIO;
+  }
+  s_stream_x = x;
+  s_stream_y = y;
+  s_stream_w = desc->width;
+  s_stream_h = desc->height;
+  return HAL_OK;
 }
 
 hal_status_t hal_display_fill_screen_ex(uint16_t color) {
@@ -851,6 +930,8 @@ void hal_mock_display_reset(void) {
   s_stream_be_bytes = 0;
   s_stream_dma_bytes = 0;
   s_fail_next_io = false;
+  s_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE;
+  s_rotation = HAL_DISPLAY_ROTATION_0;
 }
 
 void hal_mock_display_fail_next_io(void) { s_fail_next_io = true; }

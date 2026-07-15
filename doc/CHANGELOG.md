@@ -4,6 +4,25 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Zephyr-informed display driver ports
+
+- Added GC9A01 round-TFT support to the shared ST77xx-style SPI/GPIO display
+  backend. `HAL_ENABLE_GC9A01` now propagates `HAL_ENABLE_TFT`,
+  `HAL_ENABLE_DISPLAY` and `HAL_ENABLE_SPI`, and `HAL_DISPLAY_GC9A01` selects
+  it through the existing `hal_display` facade.
+- Added shared SSD1331 and SSD1351/SSD1357 RGB OLED drivers over HAL SPI/GPIO,
+  with Zephyr-derived init, contrast, remap/address-window and RGB565 write
+  behavior. The low-level RGB OLED driver currently accepts only native
+  orientation for raw RGB565 writes.
+- Added a shared ST7567 monochrome LCD driver over HAL I2C or SPI/GPIO, with
+  Zephyr-derived power/orientation/contrast setup and page-aligned framebuffer
+  writes.
+- Added public display capabilities, pixel-format selection and status-returning
+  raw area writes. SSD1331/SSD135x now participate in the RGB565 GFX/stream
+  facade; ST7567 is exposed as a page-aligned MONO01/MONO10 raw backend.
+- Added host coverage in `test_st77xx_driver`, `test_rgb_oled_driver`,
+  `test_st7567_driver` and dedicated real-facade dispatch tests.
+
 ### SSD1306-family OLED driver
 
 - Extended the shared OLED backend from SSD1306-only I2C support to an
@@ -72,6 +91,11 @@ All notable changes to this project will be documented in this file.
   thin compatibility wrappers, while missing fault snapshots and unsupported
   STM32 system services now report `HAL_ENOENT` and `HAL_EUNSUPPORTED`
   explicitly.
+- Added inline `hal_millis_interval_*` helpers for loop-driven non-blocking
+  scheduling over `hal_millis()` without hardware timers: elapsed-check and
+  callback-dispatch variants (`hal_millis_interval_elapsed(_now)` and
+  `hal_millis_interval_call(_now)`), including wrap-safe `uint32_t` overflow
+  semantics and host test coverage.
 - Expanded mock and STM32 host tests with success, invalid-argument, missing
   data, unsupported-backend and compatibility-wrapper coverage.
 

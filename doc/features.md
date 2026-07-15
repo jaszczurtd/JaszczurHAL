@@ -102,11 +102,13 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| Generic display facade | Common drawing/display surface for OLED and TFT backends, including explicit TFT pixel streaming, async DMA-capable RGB565 writes and status-returning (`hal_status_t`) drawing/text APIs. | [hal_display.h](../src/hal/hal_display.h) |
+| Generic display facade | Common drawing/display surface for TFT, RGB OLED and monochrome backends, including runtime capabilities, status-returning raw area writes, RGB565 streaming/DMA paths and drawing/text APIs where advertised. | [hal_display.h](../src/hal/hal_display.h) |
 | GFX engine and fonts | Shared graphics primitives and bundled bitmap fonts. | [display drivers](../src/hal/impl/shared/drivers/display/) |
 | ILI9341 TFT | SPI TFT display backend. | [ili9341 driver](../src/hal/impl/shared/drivers/display/ili9341_driver.h) |
-| ST7735/ST7789/ST7796S TFT | Shared ST77xx-family SPI TFT backend. | [st77xx driver](../src/hal/impl/shared/drivers/display/st77xx_driver.h) |
+| ST7735/ST7789/ST7796S/GC9A01 TFT | Shared ST77xx-family SPI TFT backend, including GC9A01 round TFT init/rotation support. | [st77xx driver](../src/hal/impl/shared/drivers/display/st77xx_driver.h) |
 | SSD1306-family OLED | OLED backend for `SSD1306`, `SSD1309`, `SSD1315`, `SH1106` and `CH1115` over HAL I2C/SPI. | [ssd1306 driver](../src/hal/impl/shared/drivers/display/ssd1306_driver.h) |
+| SSD1331/SSD135x RGB OLED | Public `hal_display` RGB565 backend over HAL SPI/GPIO with raw writes, streaming and GFX primitives; ported from Zephyr display-driver behavior. | [hal_display.h](../src/hal/hal_display.h) |
+| ST7567 LCD | Public `hal_display` raw MONO01/MONO10 backend over HAL I2C or SPI/GPIO with page-layout capabilities; ported from Zephyr display-driver behavior. | [hal_display.h](../src/hal/hal_display.h) |
 | HD44780 LCD | Parallel character LCD support over HAL GPIO/timing. | [hal_hd44780.h](../src/hal/hal_hd44780.h), [hd44780 driver](../src/hal/impl/shared/drivers/hd44780/) |
 | RGB / NeoPixel status LED | Shared NeoPixel-style RGB LED support with target-specific transport. | [hal_rgb_led.h](../src/hal/hal_rgb_led.h), [neopixel driver](../src/hal/impl/shared/drivers/neopixel/) |
 | Digital potentiometer facade | Common API for I2C digital potentiometers. | [hal_digipot.h](../src/hal/hal_digipot.h) |

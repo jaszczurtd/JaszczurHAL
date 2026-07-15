@@ -4,6 +4,16 @@
 
 #include <string.h>
 
+static int s_interval_cb_calls = 0;
+
+static void on_interval_tick(void *user_data) {
+  s_interval_cb_calls++;
+  if (user_data != NULL) {
+    int *counter = (int *)user_data;
+    (*counter)++;
+  }
+}
+
 void setUp(void) {
   hal_mock_set_millis(0);
   hal_mock_watchdog_reset_flag();
@@ -13,6 +23,7 @@ void setUp(void) {
   hal_mock_bootloader_reset_flag();
   hal_mock_reset_device_uid();
   hal_mock_fault_diagnostics_reset();
+  s_interval_cb_calls = 0;
 }
 
 void tearDown(void) {}
@@ -263,6 +274,75 @@ void test_countof_returns_static_array_size(void) {
   TEST_ASSERT_EQUAL_UINT32(3u, (uint32_t)COUNTOF(word));
 }
 
+void test_millis_interval_elapsed_matches_canonical_pattern(void) {
+  uint32_t last = 1000u;
+
+  TEST_ASSERT_FALSE(hal_millis_interval_elapsed(1099u, &last, 100u));
+  TEST_ASSERT_EQUAL_UINT32(1000u, last);
+
+  TEST_ASSERT_TRUE(hal_millis_interval_elapsed(1100u, &last, 100u));
+  TEST_ASSERT_EQUAL_UINT32(1100u, last);
+}
+
+void test_millis_interval_elapsed_is_wrap_safe(void) {
+  uint32_t last = 0xFFFFFFFAu;
+
+  TEST_ASSERT_FALSE(hal_millis_interval_elapsed(0x00000002u, &last, 10u));
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFFAu, last);
+
+  TEST_ASSERT_TRUE(hal_millis_interval_elapsed(0x00000005u, &last, 10u));
+  TEST_ASSERT_EQUAL_HEX32(0x00000005u, last);
+}
+
+void test_millis_interval_elapsed_now_uses_hal_millis(void) {
+  uint32_t last = 0u;
+
+  hal_mock_set_millis(49u);
+  TEST_ASSERT_FALSE(hal_millis_interval_elapsed_now(&last, 50u));
+  TEST_ASSERT_EQUAL_UINT32(0u, last);
+
+  hal_mock_set_millis(50u);
+  TEST_ASSERT_TRUE(hal_millis_interval_elapsed_now(&last, 50u));
+  TEST_ASSERT_EQUAL_UINT32(50u, last);
+}
+
+void test_millis_interval_call_invokes_callback_once_per_elapsed_interval(
+    void) {
+  uint32_t last = 100u;
+  int user_counter = 0;
+
+  TEST_ASSERT_FALSE(hal_millis_interval_call(120u, &last, 50u, on_interval_tick,
+                                             (void *)&user_counter));
+  TEST_ASSERT_EQUAL_INT(0, s_interval_cb_calls);
+  TEST_ASSERT_EQUAL_INT(0, user_counter);
+
+  TEST_ASSERT_TRUE(hal_millis_interval_call(150u, &last, 50u, on_interval_tick,
+                                            (void *)&user_counter));
+  TEST_ASSERT_EQUAL_INT(1, s_interval_cb_calls);
+  TEST_ASSERT_EQUAL_INT(1, user_counter);
+  TEST_ASSERT_EQUAL_UINT32(150u, last);
+}
+
+void test_millis_interval_call_accepts_null_callback(void) {
+  uint32_t last = 0u;
+
+  TEST_ASSERT_TRUE(hal_millis_interval_call(25u, &last, 25u, NULL, NULL));
+  TEST_ASSERT_EQUAL_UINT32(25u, last);
+  TEST_ASSERT_EQUAL_INT(0, s_interval_cb_calls);
+}
+
+void test_millis_interval_helpers_reject_invalid_arguments(void) {
+  uint32_t last = 0u;
+
+  TEST_ASSERT_FALSE(hal_millis_interval_elapsed(10u, NULL, 5u));
+  TEST_ASSERT_FALSE(hal_millis_interval_elapsed(10u, &last, 0u));
+  TEST_ASSERT_FALSE(
+      hal_millis_interval_call(10u, NULL, 5u, on_interval_tick, NULL));
+  TEST_ASSERT_FALSE(
+      hal_millis_interval_call_now(&last, 0u, on_interval_tick, NULL));
+  TEST_ASSERT_EQUAL_INT(0, s_interval_cb_calls);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_delay_ms_updates_millis_and_micros);
@@ -293,5 +373,12 @@ int main(void) {
   RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);
   RUN_TEST(test_get_device_uid_hex_null_buffer_is_safe);
   RUN_TEST(test_countof_returns_static_array_size);
+  RUN_TEST(test_millis_interval_elapsed_matches_canonical_pattern);
+  RUN_TEST(test_millis_interval_elapsed_is_wrap_safe);
+  RUN_TEST(test_millis_interval_elapsed_now_uses_hal_millis);
+  RUN_TEST(
+      test_millis_interval_call_invokes_callback_once_per_elapsed_interval);
+  RUN_TEST(test_millis_interval_call_accepts_null_callback);
+  RUN_TEST(test_millis_interval_helpers_reject_invalid_arguments);
   return UNITY_END();
 }

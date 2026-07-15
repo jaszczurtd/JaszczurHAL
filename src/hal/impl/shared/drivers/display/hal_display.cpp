@@ -10,9 +10,10 @@
  * A single implementation serving every register-level target (RP2040 and
  * STM32G474): all rendering goes through the portable GFX engine (jh_gfx) and
  * the shared panel drivers, which in turn talk to the panels exclusively over
- * the JaszczurHAL SPI / I2C / GPIO buses.  TFT panels (ILI9341, ST7735,
- * ST7789, ST7796S) are driven in immediate mode; the SSD1306 OLED is rendered
- * into an in-RAM framebuffer that hal_display_flush() pushes to the panel.
+ * the JaszczurHAL SPI / I2C / GPIO buses. TFT panels (ILI9341, ST7735,
+ * ST7789, ST7796S, GC9A01) are driven in immediate mode; the SSD1306 OLED is
+ * rendered into an in-RAM framebuffer that hal_display_flush() pushes to the
+ * panel.
  */
 
 #include "hal/hal_display.h"
@@ -30,7 +31,7 @@
 #if defined(HAL_DISPLAY_ILI9341)
 #include "ili9341_driver.h"
 #elif defined(HAL_DISPLAY_ST7735) || defined(HAL_DISPLAY_ST7789) ||            \
-    defined(HAL_DISPLAY_ST7796S)
+    defined(HAL_DISPLAY_ST7796S) || defined(HAL_DISPLAY_GC9A01)
 #include "st77xx_driver.h"
 #else
 #error                                                                         \
@@ -44,6 +45,19 @@
 #include <stdlib.h>
 #endif /* HAL_ENABLE_SSD1306 */
 
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+#include "rgb_oled_driver.h"
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+#include "st7567_driver.h"
+#endif
+
+#if defined(HAL_ENABLE_TFT) || defined(HAL_ENABLE_SSD1331) ||                  \
+    defined(HAL_ENABLE_SSD135X)
+#define JH_DISPLAY_HAS_IMMEDIATE_RGB 1
+#endif
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -54,11 +68,14 @@ typedef enum {
   DISPLAY_BACKEND_NONE = 0,
   DISPLAY_BACKEND_TFT,
   DISPLAY_BACKEND_SSD1306,
+  DISPLAY_BACKEND_RGB_OLED,
+  DISPLAY_BACKEND_ST7567,
 } display_backend_t;
 
 static display_backend_t s_backend = DISPLAY_BACKEND_NONE;
 static int s_width = 0;
 static int s_height = 0;
+static uint8_t s_rotation = HAL_DISPLAY_ROTATION_0;
 
 /* ---- TFT state ----------------------------------------------------------- */
 
@@ -66,12 +83,23 @@ static int s_height = 0;
 #if defined(HAL_DISPLAY_ILI9341)
 static jh_ili9341_t s_tft = {};
 #elif defined(HAL_DISPLAY_ST7735) || defined(HAL_DISPLAY_ST7789) ||            \
-    defined(HAL_DISPLAY_ST7796S)
+    defined(HAL_DISPLAY_ST7796S) || defined(HAL_DISPLAY_GC9A01)
 static jh_st77xx_t s_tft = {};
 static jh_st77xx_config_t s_tft_config = {};
 static bool s_tft_pins_configured = false;
 #endif
 static bool s_tft_ready = false;
+#endif /* HAL_ENABLE_TFT */
+
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+static jh_rgb_oled_t s_rgb_oled = {};
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+static jh_st7567_t s_st7567 = {};
+#endif
+
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
 static bool s_tft_stream_active = false;
 
 static bool draw_pixel_unlocked(int x, int y, uint16_t color);
@@ -105,7 +133,7 @@ public:
 };
 
 static TftGfx s_tft_gfx;
-#endif /* HAL_ENABLE_TFT */
+#endif /* JH_DISPLAY_HAS_IMMEDIATE_RGB */
 
 /* ---- SSD1306 state ------------------------------------------------------- */
 
@@ -320,8 +348,28 @@ static inline bool using_oled(void) {
 #endif
 }
 
+static inline bool using_rgb_oled(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  return s_backend == DISPLAY_BACKEND_RGB_OLED && s_rgb_oled.initialized;
+#else
+  return false;
+#endif
+}
+
+static inline bool using_st7567(void) {
+#ifdef HAL_ENABLE_ST7567
+  return s_backend == DISPLAY_BACKEND_ST7567 && s_st7567.initialized;
+#else
+  return false;
+#endif
+}
+
+static inline bool using_immediate_rgb(void) {
+  return using_tft() || using_rgb_oled();
+}
+
 static inline bool has_active_display(void) {
-  return using_oled() || using_tft();
+  return using_oled() || using_immediate_rgb() || using_st7567();
 }
 
 static bool ensure_display_ready(const char *fn) {
@@ -338,133 +386,286 @@ static JHGfx *active_gfx(void) {
     return &s_oled_gfx;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return &s_tft_gfx;
   }
 #endif
   return NULL;
 }
 
+static hal_status_t gfx_unavailable_status(const char *fn) {
+  if (has_active_display()) {
+    hal_derr("%s: active backend does not advertise legacy GFX", fn);
+    return HAL_EUNSUPPORTED;
+  }
+  (void)ensure_display_ready(fn);
+  return HAL_EUNINIT;
+}
+
 /* ---- TFT primitives (immediate mode) ------------------------------------- */
 
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
 static int iabs_int(int v) { return v < 0 ? -v : v; }
 
 static bool tft_fill_rect_driver(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                  uint16_t color) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_fill_rect(&s_rgb_oled, x, y, w, h, color);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_fill_rect(&s_tft, x, y, w, h, color);
 #else
   return jh_st77xx_fill_rect(&s_tft, x, y, w, h, color);
+#endif
+#else
+  return false;
 #endif
 }
 
 static bool tft_draw_rgb_bitmap_driver(uint16_t x, uint16_t y,
                                        const uint16_t *pixels, uint16_t w,
                                        uint16_t h) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_draw_rgb_bitmap(&s_rgb_oled, x, y, pixels, w, h);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_draw_rgb_bitmap(&s_tft, x, y, pixels, w, h);
 #else
   return jh_st77xx_draw_rgb_bitmap(&s_tft, x, y, pixels, w, h);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_begin_write_driver(uint16_t x, uint16_t y, uint16_t w,
                                    uint16_t h) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_begin_write(&s_rgb_oled, x, y, w, h);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_begin_write(&s_tft, x, y, w, h);
 #else
   return jh_st77xx_begin_write(&s_tft, x, y, w, h);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_fast_driver(const uint16_t *pixels, size_t count) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_write_pixels_fast(&s_rgb_oled, pixels, count);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_fast(&s_tft, pixels, count);
 #else
   return jh_st77xx_write_pixels_fast(&s_tft, pixels, count);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_be_driver(const uint8_t *pixels_be,
                                        size_t byte_count) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_write_pixels_be(&s_rgb_oled, pixels_be, byte_count);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_be(&s_tft, pixels_be, byte_count);
 #else
   return jh_st77xx_write_pixels_be(&s_tft, pixels_be, byte_count);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_dma_driver(const uint8_t *pixels_be,
                                         size_t byte_count) {
+  (void)pixels_be;
+  (void)byte_count;
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return false;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_dma(&s_tft, pixels_be, byte_count);
 #else
   return jh_st77xx_write_pixels_dma(&s_tft, pixels_be, byte_count);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_dma_async_start_driver(const uint8_t *pixels_be,
                                                     size_t byte_count) {
+  (void)pixels_be;
+  (void)byte_count;
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return false;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_dma_async_start(&s_tft, pixels_be, byte_count);
 #else
   return jh_st77xx_write_pixels_dma_async_start(&s_tft, pixels_be, byte_count);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_dma_async_busy_driver(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return false;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_dma_async_busy(&s_tft);
 #else
   return jh_st77xx_write_pixels_dma_async_busy(&s_tft);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_write_pixels_dma_async_wait_driver(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return true;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_write_pixels_dma_async_wait(&s_tft);
 #else
   return jh_st77xx_write_pixels_dma_async_wait(&s_tft);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_end_write_driver(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_end_write(&s_rgb_oled);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_end_write(&s_tft);
 #else
   return jh_st77xx_end_write(&s_tft);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_set_rotation_driver(uint8_t rotation) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_set_rotation(&s_rgb_oled, rotation);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_set_rotation(&s_tft, rotation);
 #else
   return jh_st77xx_set_rotation(&s_tft, rotation);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_invert_driver(bool invert) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_invert(&s_rgb_oled, invert);
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_invert(&s_tft, invert);
 #else
   return jh_st77xx_invert(&s_tft, invert);
 #endif
+#else
+  return false;
+#endif
 }
 
 static bool tft_soft_init_driver(uint32_t delay_ms) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    (void)delay_ms;
+    return true;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
   return jh_ili9341_soft_init(&s_tft, delay_ms);
 #else
   (void)delay_ms;
   return jh_st77xx_soft_init(&s_tft);
 #endif
+#else
+  return false;
+#endif
 }
 
-static uint16_t tft_native_width(void) { return s_tft.width; }
-static uint16_t tft_native_height(void) { return s_tft.height; }
+static uint16_t tft_native_width(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return s_rgb_oled.width;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
+  return s_tft.width;
+#else
+  return 0u;
+#endif
+}
+static uint16_t tft_native_height(void) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return s_rgb_oled.height;
+  }
+#endif
+#ifdef HAL_ENABLE_TFT
+  return s_tft.height;
+#else
+  return 0u;
+#endif
+}
 
 static bool draw_pixel_unlocked(int x, int y, uint16_t color) {
   if (x < 0 || y < 0 || x >= s_width || y >= s_height) {
@@ -607,7 +808,7 @@ static bool fill_round_rect_unlocked(int x, int y, int w, int h, int r,
   }
   return ok;
 }
-#endif /* HAL_ENABLE_TFT */
+#endif /* JH_DISPLAY_HAS_IMMEDIATE_RGB */
 
 /* ---- Init / control ------------------------------------------------------ */
 
@@ -738,6 +939,120 @@ hal_status_t hal_display_init_ssd1306_family_ex(
 }
 #endif /* HAL_ENABLE_SSD1306 */
 
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+hal_status_t
+hal_display_init_rgb_oled_ex(const hal_display_rgb_oled_config_t *config) {
+  DisplayLock guard;
+  if (config == NULL || config->dc_pin < 0 || config->width == 0u ||
+      config->height == 0u ||
+      config->controller > HAL_DISPLAY_RGB_OLED_SSD1357) {
+    return HAL_EINVAL;
+  }
+#ifndef HAL_ENABLE_SSD1331
+  if (config->controller == HAL_DISPLAY_RGB_OLED_SSD1331) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+#ifndef HAL_ENABLE_SSD135X
+  if (config->controller != HAL_DISPLAY_RGB_OLED_SSD1331) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+
+  jh_rgb_oled_config_t driver = {};
+  driver.controller = (jh_rgb_oled_controller_t)config->controller;
+  driver.bus = config->bus;
+  driver.cs_pin = config->cs_pin;
+  driver.dc_pin = config->dc_pin;
+  driver.rst_pin = config->rst_pin;
+  driver.clock_hz = config->clock_hz;
+  driver.spi_mode = config->spi_mode;
+  driver.width = config->width;
+  driver.height = config->height;
+  driver.start_line = config->start_line;
+  driver.display_offset = config->display_offset;
+  driver.multiplex_ratio = config->multiplex_ratio;
+  driver.phase_length = config->phase_length;
+  driver.oscillator_freq = config->oscillator_freq;
+  driver.precharge_time_a = config->precharge_time_a;
+  driver.precharge_time_b = config->precharge_time_b;
+  driver.precharge_time_c = config->precharge_time_c;
+  driver.precharge_time = config->precharge_time;
+  driver.precharge_voltage = config->precharge_voltage;
+  driver.vcomh_voltage = config->vcomh_voltage;
+  driver.current_att = config->current_att;
+  driver.remap_value = config->remap_value;
+  driver.column_offset = config->column_offset;
+  driver.contrast_a = config->contrast_a;
+  driver.contrast_b = config->contrast_b;
+  driver.contrast_c = config->contrast_c;
+  driver.power_save = config->power_save;
+  driver.inverted = config->inverted;
+
+  if (!jh_rgb_oled_init(&s_rgb_oled, &driver)) {
+    s_backend = DISPLAY_BACKEND_NONE;
+    return HAL_EIO;
+  }
+  s_backend = DISPLAY_BACKEND_RGB_OLED;
+  s_width = (int)s_rgb_oled.width;
+  s_height = (int)s_rgb_oled.height;
+  s_tft_gfx.configure((int16_t)s_width, (int16_t)s_height);
+  s_tft_gfx.setRotation(0u);
+  s_rotation = HAL_DISPLAY_ROTATION_0;
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+hal_status_t
+hal_display_init_st7567_ex(const hal_display_st7567_config_t *config) {
+  DisplayLock guard;
+  if (config == NULL || config->width == 0u || config->height == 0u ||
+      config->bus_type > HAL_DISPLAY_ST7567_BUS_SPI ||
+      (config->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO01 &&
+       config->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10)) {
+    return HAL_EINVAL;
+  }
+#ifndef HAL_ENABLE_SPI
+  if (config->bus_type == HAL_DISPLAY_ST7567_BUS_SPI) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+
+  jh_st7567_config_t driver = {};
+  driver.bus_type = (jh_st7567_bus_t)config->bus_type;
+  driver.bus = config->bus;
+  driver.i2c_addr = config->i2c_addr;
+  driver.rst_pin = config->rst_pin;
+  driver.spi_dc_pin = config->spi_dc_pin;
+  driver.spi_cs_pin = config->spi_cs_pin;
+  driver.clock_hz = config->clock_hz;
+  driver.spi_mode = config->spi_mode;
+  driver.width = config->width;
+  driver.height = config->height;
+  driver.column_offset = config->column_offset;
+  driver.line_offset = config->line_offset;
+  driver.regulation_ratio = config->regulation_ratio;
+  driver.segment_invdir = config->segment_invdir;
+  driver.com_invdir = config->com_invdir;
+  driver.inversion_on = config->inversion_on;
+  driver.bias = config->bias;
+  driver.pixel_format = config->pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO01
+                            ? JH_ST7567_PIXEL_MONO01
+                            : JH_ST7567_PIXEL_MONO10;
+
+  if (!jh_st7567_init(&s_st7567, &driver)) {
+    s_backend = DISPLAY_BACKEND_NONE;
+    return HAL_EIO;
+  }
+  s_backend = DISPLAY_BACKEND_ST7567;
+  s_width = (int)s_st7567.width;
+  s_height = (int)s_st7567.height;
+  s_rotation = HAL_DISPLAY_ROTATION_0;
+  return HAL_OK;
+}
+#endif
+
 hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
                                       bool invert, bool bgr) {
   DisplayLock guard;
@@ -755,6 +1070,31 @@ hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
     (void)bgr;
     s_width = s_oled_gfx.width();
     s_height = s_oled_gfx.height();
+    s_rotation = rotation & 0x03u;
+    return HAL_OK;
+  }
+#endif
+
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    if (width != s_width || height != s_height || bgr ||
+        (rotation & 0x03u) != HAL_DISPLAY_ROTATION_0) {
+      return HAL_EUNSUPPORTED;
+    }
+    if (!tft_set_rotation_driver(rotation) || !tft_invert_driver(invert)) {
+      return HAL_EIO;
+    }
+    s_rotation = rotation & 0x03u;
+    return HAL_OK;
+  }
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    if (width != s_width || height != s_height || rotation != 0u || bgr ||
+        invert != s_st7567.config.inversion_on) {
+      return HAL_EUNSUPPORTED;
+    }
     return HAL_OK;
   }
 #endif
@@ -788,6 +1128,8 @@ hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
   s_tft_config.chip = JH_ST77XX_CHIP_ST7789;
 #elif defined(HAL_DISPLAY_ST7796S)
   s_tft_config.chip = JH_ST77XX_CHIP_ST7796S;
+#elif defined(HAL_DISPLAY_GC9A01)
+  s_tft_config.chip = JH_ST77XX_CHIP_GC9A01;
 #endif
   s_tft_ready = jh_st77xx_init(&s_tft, &s_tft_config);
   if (!s_tft_ready) {
@@ -802,6 +1144,7 @@ hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
   s_width = (int)tft_native_width();
   s_height = (int)tft_native_height();
   s_tft_gfx.configure((int16_t)s_width, (int16_t)s_height);
+  s_rotation = rotation & 0x03u;
   return HAL_OK;
 #else
   (void)rotation;
@@ -820,8 +1163,8 @@ bool hal_display_configure(int width, int height, uint8_t rotation, bool invert,
 
 hal_status_t hal_display_soft_init(int delay_ms) {
   DisplayLock guard;
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return tft_soft_init_driver(delay_ms > 0 ? (uint32_t)delay_ms : 0u)
                ? HAL_OK
                : HAL_EIO;
@@ -841,6 +1184,16 @@ hal_status_t hal_display_suspend_ex(void) {
     return jh_ssd1306_suspend(&s_oled) ? HAL_OK : HAL_EIO;
   }
 #endif
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_suspend(&s_rgb_oled) ? HAL_OK : HAL_EIO;
+  }
+#endif
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    return jh_st7567_suspend(&s_st7567) ? HAL_OK : HAL_EIO;
+  }
+#endif
   return HAL_EUNSUPPORTED;
 }
 
@@ -854,10 +1207,21 @@ hal_status_t hal_display_resume_ex(void) {
     return jh_ssd1306_resume(&s_oled) ? HAL_OK : HAL_EIO;
   }
 #endif
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+  if (using_rgb_oled()) {
+    return jh_rgb_oled_resume(&s_rgb_oled) ? HAL_OK : HAL_EIO;
+  }
+#endif
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    return jh_st7567_resume(&s_st7567) ? HAL_OK : HAL_EIO;
+  }
+#endif
   return HAL_EUNSUPPORTED;
 }
 
 hal_status_t hal_display_set_rotation_ex(uint8_t r) {
+  (void)r;
   DisplayLock guard;
   if (!ensure_display_ready("hal_display_set_rotation")) {
     return HAL_EUNINIT;
@@ -867,17 +1231,24 @@ hal_status_t hal_display_set_rotation_ex(uint8_t r) {
     s_oled_gfx.setRotation(r);
     s_width = s_oled_gfx.width();
     s_height = s_oled_gfx.height();
+    s_rotation = r & 0x03u;
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
+#if defined(HAL_ENABLE_SSD1331) || defined(HAL_ENABLE_SSD135X)
+    if (using_rgb_oled() && (r & 0x03u) != HAL_DISPLAY_ROTATION_0) {
+      return HAL_EUNSUPPORTED;
+    }
+#endif
     if (!tft_set_rotation_driver(r)) {
       return HAL_EIO;
     }
     s_width = (int)tft_native_width();
     s_height = (int)tft_native_height();
     s_tft_gfx.configure((int16_t)s_width, (int16_t)s_height);
+    s_rotation = r & 0x03u;
     return HAL_OK;
   }
 #endif
@@ -889,6 +1260,7 @@ bool hal_display_set_rotation(uint8_t r) {
 }
 
 hal_status_t hal_display_invert_ex(bool invert) {
+  (void)invert;
   DisplayLock guard;
   if (!ensure_display_ready("hal_display_invert")) {
     return HAL_EUNINIT;
@@ -898,8 +1270,8 @@ hal_status_t hal_display_invert_ex(bool invert) {
     return jh_ssd1306_invert(&s_oled, invert) ? HAL_OK : HAL_EIO;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return tft_invert_driver(invert) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -929,9 +1301,174 @@ hal_status_t hal_display_get_height_ex(int *out_height) {
   return s_height > 0 ? HAL_OK : HAL_EUNINIT;
 }
 
+hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
+  if (out == NULL) {
+    return HAL_EINVAL;
+  }
+  DisplayLock guard;
+  memset(out, 0, sizeof(*out));
+  if (!has_active_display()) {
+    return HAL_EUNINIT;
+  }
+  out->width = (uint16_t)s_width;
+  out->height = (uint16_t)s_height;
+  out->current_rotation = s_rotation;
+  out->x_alignment = 1u;
+  out->y_alignment = 1u;
+  out->width_alignment = 1u;
+  out->height_alignment = 1u;
+
+  if (using_tft()) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE |
+                                   HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE;
+    out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
+    out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
+                 HAL_DISPLAY_CAP_DMA_WRITE | HAL_DISPLAY_CAP_ASYNC_DMA_WRITE |
+                 HAL_DISPLAY_CAP_LEGACY_GFX;
+    return HAL_OK;
+  }
+  if (using_rgb_oled()) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE |
+                                   HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE;
+    out->supported_rotations =
+        HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
+    out->flags = HAL_DISPLAY_CAP_RAW_WRITE | HAL_DISPLAY_CAP_STREAM_WRITE |
+                 HAL_DISPLAY_CAP_LEGACY_GFX;
+    return HAL_OK;
+  }
+  if (using_oled()) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO01;
+    out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
+    out->screen_info = HAL_DISPLAY_SCREEN_INFO_MONO_VTILED;
+    out->flags = HAL_DISPLAY_CAP_BUFFERED | HAL_DISPLAY_CAP_LEGACY_GFX;
+    return HAL_OK;
+  }
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    out->supported_pixel_formats =
+        HAL_DISPLAY_PIXEL_FORMAT_MONO01 | HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->current_pixel_format =
+        s_st7567.config.pixel_format == JH_ST7567_PIXEL_MONO01
+            ? HAL_DISPLAY_PIXEL_FORMAT_MONO01
+            : HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->supported_rotations =
+        HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
+    out->y_alignment = 8u;
+    out->height_alignment = 8u;
+    out->screen_info = HAL_DISPLAY_SCREEN_INFO_MONO_VTILED;
+    out->flags = HAL_DISPLAY_CAP_RAW_WRITE;
+    return HAL_OK;
+  }
+#endif
+  return HAL_EUNSUPPORTED;
+}
+
+hal_status_t
+hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format) {
+  DisplayLock guard;
+  if (!has_active_display()) {
+    return HAL_EUNINIT;
+  }
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    if (pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO01 &&
+        pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
+      return HAL_EUNSUPPORTED;
+    }
+    const jh_st7567_pixel_format_t format =
+        pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO01
+            ? JH_ST7567_PIXEL_MONO01
+            : JH_ST7567_PIXEL_MONO10;
+    return jh_st7567_set_pixel_format(&s_st7567, format) ? HAL_OK : HAL_EIO;
+  }
+#endif
+  if (using_immediate_rgb() &&
+      pixel_format == HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE) {
+    return HAL_OK;
+  }
+  if (using_oled() && pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO01) {
+    return HAL_OK;
+  }
+  return HAL_EUNSUPPORTED;
+}
+
+hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
+                                      const hal_display_buffer_desc_t *desc,
+                                      const void *buffer) {
+  DisplayLock guard;
+  if (desc == NULL || buffer == NULL || desc->width == 0u ||
+      desc->height == 0u || desc->pitch < desc->width) {
+    return HAL_EINVAL;
+  }
+  if (!has_active_display()) {
+    return HAL_EUNINIT;
+  }
+  const uint32_t writable_height =
+      using_st7567() ? ((uint32_t)s_height + 7u) & ~7u : (uint32_t)s_height;
+  if ((uint32_t)x + desc->width > (uint32_t)s_width ||
+      (uint32_t)y + desc->height > writable_height) {
+    return HAL_EINVAL;
+  }
+  if (desc->pitch != desc->width) {
+    return HAL_EUNSUPPORTED;
+  }
+
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
+    if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE &&
+        desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_RGB565_NATIVE) {
+      return HAL_EUNSUPPORTED;
+    }
+    const size_t pixel_count = (size_t)desc->width * desc->height;
+    const size_t required = pixel_count * sizeof(uint16_t);
+    if (desc->buf_size < required) {
+      return HAL_EINVAL;
+    }
+    if (!tft_begin_write_driver(x, y, desc->width, desc->height)) {
+      return HAL_EIO;
+    }
+    const bool write_ok =
+        desc->pixel_format == HAL_DISPLAY_PIXEL_FORMAT_RGB565_BE
+            ? tft_write_pixels_be_driver((const uint8_t *)buffer, required)
+            : tft_write_pixels_fast_driver((const uint16_t *)buffer,
+                                           pixel_count);
+    const bool end_ok = tft_end_write_driver();
+    return write_ok && end_ok ? HAL_OK : HAL_EIO;
+  }
+#endif
+
+#ifdef HAL_ENABLE_ST7567
+  if (using_st7567()) {
+    const hal_display_pixel_format_t current =
+        s_st7567.config.pixel_format == JH_ST7567_PIXEL_MONO01
+            ? HAL_DISPLAY_PIXEL_FORMAT_MONO01
+            : HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    if (desc->pixel_format != current) {
+      return HAL_EUNSUPPORTED;
+    }
+    if ((y & 7u) != 0u || (desc->height & 7u) != 0u) {
+      return HAL_EINVAL;
+    }
+    const size_t required = (size_t)desc->width * ((size_t)desc->height / 8u);
+    if (desc->buf_size < required) {
+      return HAL_EINVAL;
+    }
+    return jh_st7567_write(&s_st7567, x, y, desc->width, desc->height,
+                           (const uint8_t *)buffer, desc->buf_size)
+               ? HAL_OK
+               : HAL_EIO;
+  }
+#endif
+  return HAL_EUNSUPPORTED;
+}
+
 /* ---- Screen -------------------------------------------------------------- */
 
 hal_status_t hal_display_fill_screen_ex(uint16_t color) {
+  (void)color;
   DisplayLock guard;
   if (!ensure_display_ready("hal_display_fill_screen")) {
     return HAL_EUNINIT;
@@ -942,8 +1479,8 @@ hal_status_t hal_display_fill_screen_ex(uint16_t color) {
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     if (s_width <= 0 || s_height <= 0) {
       hal_derr("hal_display_fill_screen: display is not configured");
       return HAL_EUNINIT;
@@ -997,6 +1534,9 @@ bool hal_display_draw_image(int x, int y, int w, int h, uint16_t background,
 
 hal_status_t hal_display_fill_rect_ex(int x, int y, int w, int h,
                                       uint16_t color) {
+  (void)x;
+  (void)y;
+  (void)color;
   DisplayLock guard;
   if (w <= 0 || h <= 0) {
     hal_derr("hal_display_fill_rect: invalid size %dx%d", w, h);
@@ -1011,8 +1551,8 @@ hal_status_t hal_display_fill_rect_ex(int x, int y, int w, int h,
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return fill_rect_unlocked(x, y, w, h, color) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1025,6 +1565,9 @@ bool hal_display_fill_rect(int x, int y, int w, int h, uint16_t color) {
 
 hal_status_t hal_display_draw_rect_ex(int x, int y, int w, int h,
                                       uint16_t color) {
+  (void)x;
+  (void)y;
+  (void)color;
   DisplayLock guard;
   if (w <= 0 || h <= 0) {
     hal_derr("hal_display_draw_rect: invalid size %dx%d", w, h);
@@ -1039,8 +1582,8 @@ hal_status_t hal_display_draw_rect_ex(int x, int y, int w, int h,
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     bool ok = true;
     ok &= fill_rect_unlocked(x, y, w, 1, color);
     ok &= fill_rect_unlocked(x, y + h - 1, w, 1, color);
@@ -1057,6 +1600,9 @@ bool hal_display_draw_rect(int x, int y, int w, int h, uint16_t color) {
 }
 
 hal_status_t hal_display_fill_circle_ex(int x, int y, int r, uint16_t color) {
+  (void)x;
+  (void)y;
+  (void)color;
   DisplayLock guard;
   if (r < 0) {
     hal_derr("hal_display_fill_circle: invalid radius %d", r);
@@ -1071,8 +1617,8 @@ hal_status_t hal_display_fill_circle_ex(int x, int y, int r, uint16_t color) {
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return fill_circle_unlocked(x, y, r, color) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1084,6 +1630,9 @@ bool hal_display_fill_circle(int x, int y, int r, uint16_t color) {
 }
 
 hal_status_t hal_display_draw_circle_ex(int x, int y, int r, uint16_t color) {
+  (void)x;
+  (void)y;
+  (void)color;
   DisplayLock guard;
   if (r < 0) {
     hal_derr("hal_display_draw_circle: invalid radius %d", r);
@@ -1098,8 +1647,8 @@ hal_status_t hal_display_draw_circle_ex(int x, int y, int r, uint16_t color) {
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return draw_circle_unlocked(x, y, r, color) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1112,6 +1661,9 @@ bool hal_display_draw_circle(int x, int y, int r, uint16_t color) {
 
 hal_status_t hal_display_fill_round_rect_ex(int x, int y, int w, int h, int r,
                                             uint16_t color) {
+  (void)x;
+  (void)y;
+  (void)color;
   DisplayLock guard;
   if (w <= 0 || h <= 0 || r < 0) {
     hal_derr("hal_display_fill_round_rect: invalid size/radius w=%d h=%d r=%d",
@@ -1127,8 +1679,8 @@ hal_status_t hal_display_fill_round_rect_ex(int x, int y, int w, int h, int r,
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return fill_round_rect_unlocked(x, y, w, h, r, color) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1143,6 +1695,11 @@ bool hal_display_fill_round_rect(int x, int y, int w, int h, int r,
 
 hal_status_t hal_display_draw_line_ex(int x0, int y0, int x1, int y1,
                                       uint16_t color) {
+  (void)x0;
+  (void)y0;
+  (void)x1;
+  (void)y1;
+  (void)color;
   DisplayLock guard;
   if (!ensure_display_ready("hal_display_draw_line")) {
     return HAL_EUNINIT;
@@ -1153,8 +1710,8 @@ hal_status_t hal_display_draw_line_ex(int x0, int y0, int x1, int y1,
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     return draw_line_unlocked(x0, y0, x1, y1, color) ? HAL_OK : HAL_EIO;
   }
 #endif
@@ -1181,8 +1738,8 @@ hal_status_t hal_display_draw_rgb_bitmap_ex(int x, int y, uint16_t *data, int w,
   if (!ensure_display_ready("hal_display_draw_rgb_bitmap")) {
     return HAL_EUNINIT;
   }
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     if (x < 0 || y < 0 || x + w > s_width || y + h > s_height) {
       hal_derr("hal_display_draw_rgb_bitmap: out-of-bounds clipping is not "
                "supported");
@@ -1211,7 +1768,7 @@ hal_status_t hal_display_begin_write_ex(int x, int y, int w, int h) {
     hal_derr("hal_display_begin_write: invalid size %dx%d", w, h);
     return HAL_EINVAL;
   }
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   display_ensure_mutex();
   hal_mutex_lock(s_display_mutex);
 
@@ -1224,8 +1781,8 @@ hal_status_t hal_display_begin_write_ex(int x, int y, int w, int h) {
     hal_mutex_unlock(s_display_mutex);
     return HAL_EUNINIT;
   }
-  if (!using_tft()) {
-    hal_derr("hal_display_begin_write: supported only by TFT backends");
+  if (!using_immediate_rgb()) {
+    hal_derr("hal_display_begin_write: backend does not support streaming");
     hal_mutex_unlock(s_display_mutex);
     return HAL_EUNSUPPORTED;
   }
@@ -1259,8 +1816,8 @@ bool hal_display_begin_write(int x, int y, int w, int h) {
 }
 
 static bool ensure_tft_stream_ready(const char *fn) {
-#ifdef HAL_ENABLE_TFT
-  if (s_tft_stream_active && using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (s_tft_stream_active && using_immediate_rgb()) {
     return true;
   }
 #endif
@@ -1276,7 +1833,7 @@ hal_status_t hal_display_write_pixels_fast_ex(const uint16_t *pixels,
   if (!ensure_tft_stream_ready("hal_display_write_pixels_fast")) {
     return HAL_ESTATE;
   }
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   return tft_write_pixels_fast_driver(pixels, count) ? HAL_OK : HAL_EIO;
 #else
   (void)pixels;
@@ -1297,7 +1854,7 @@ hal_status_t hal_display_write_pixels_be_ex(const uint8_t *pixels_be,
   if (!ensure_tft_stream_ready("hal_display_write_pixels_be")) {
     return HAL_ESTATE;
   }
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   return tft_write_pixels_be_driver(pixels_be, byte_count) ? HAL_OK : HAL_EIO;
 #else
   (void)pixels_be;
@@ -1319,7 +1876,10 @@ hal_status_t hal_display_write_pixels_dma_ex(const uint8_t *pixels_be,
   if (!ensure_tft_stream_ready("hal_display_write_pixels_dma")) {
     return HAL_ESTATE;
   }
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_rgb_oled()) {
+    return HAL_EUNSUPPORTED;
+  }
   return tft_write_pixels_dma_driver(pixels_be, byte_count) ? HAL_OK : HAL_EIO;
 #else
   (void)pixels_be;
@@ -1345,7 +1905,10 @@ hal_display_write_pixels_dma_async_start_ex(const uint8_t *pixels_be,
   if (hal_display_write_pixels_dma_async_busy()) {
     return HAL_EBUSY;
   }
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_rgb_oled()) {
+    return HAL_EUNSUPPORTED;
+  }
   return tft_write_pixels_dma_async_start_driver(pixels_be, byte_count)
              ? HAL_OK
              : HAL_EIO;
@@ -1363,7 +1926,7 @@ bool hal_display_write_pixels_dma_async_start(const uint8_t *pixels_be,
 }
 
 bool hal_display_write_pixels_dma_async_busy(void) {
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   if (!s_tft_stream_active) {
     return false;
   }
@@ -1374,7 +1937,7 @@ bool hal_display_write_pixels_dma_async_busy(void) {
 }
 
 hal_status_t hal_display_write_pixels_dma_async_wait_ex(void) {
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   if (!s_tft_stream_active) {
     return HAL_OK;
   }
@@ -1389,7 +1952,7 @@ bool hal_display_write_pixels_dma_async_wait(void) {
 }
 
 hal_status_t hal_display_end_write_ex(void) {
-#ifdef HAL_ENABLE_TFT
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
   if (!s_tft_stream_active) {
     hal_derr("hal_display_end_write: no active TFT write stream");
     return HAL_ESTATE;
@@ -1430,8 +1993,7 @@ hal_status_t hal_display_set_font_ex(hal_font_id_t font) {
   DisplayLock guard;
   JHGfx *gfx = active_gfx();
   if (!gfx) {
-    (void)ensure_display_ready("hal_display_set_font");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_set_font");
   }
   s_font = font;
   apply_font_to(gfx, font);
@@ -1453,8 +2015,8 @@ hal_status_t hal_display_set_text_color_ex(uint16_t color) {
     return HAL_OK;
   }
 #endif
-#ifdef HAL_ENABLE_TFT
-  if (using_tft()) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (using_immediate_rgb()) {
     s_tft_gfx.setTextColor(color);
     return HAL_OK;
   }
@@ -1473,8 +2035,7 @@ hal_status_t hal_display_set_text_size_ex(uint8_t size) {
   }
   JHGfx *gfx = active_gfx();
   if (!gfx) {
-    (void)ensure_display_ready("hal_display_set_text_size");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_set_text_size");
   }
   s_text_size = size;
   gfx->setTextSize(size);
@@ -1488,8 +2049,7 @@ hal_status_t hal_display_set_cursor_ex(int x, int y) {
   DisplayLock guard;
   JHGfx *gfx = active_gfx();
   if (!gfx) {
-    (void)ensure_display_ready("hal_display_set_cursor");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_set_cursor");
   }
   s_cursor_x = x;
   s_cursor_y = y;
@@ -1508,8 +2068,7 @@ hal_status_t hal_display_print_ex(const char *s) {
   }
   JHGfx *gfx = active_gfx();
   if (!gfx) {
-    (void)ensure_display_ready("hal_display_print");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_print");
   }
   gfx->print(s);
   s_cursor_x = gfx->getCursorX();
@@ -1528,8 +2087,7 @@ hal_status_t hal_display_println_ex(const char *s) {
   }
   JHGfx *gfx = active_gfx();
   if (!gfx) {
-    (void)ensure_display_ready("hal_display_println");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_println");
   }
   gfx->print(s);
   gfx->write((uint8_t)'\n');
@@ -1664,8 +2222,7 @@ hal_status_t hal_display_get_text_bounds_ex(const char *s, int *w, int *h) {
   if (!gfx) {
     *out_w = 0;
     *out_h = 0;
-    (void)ensure_display_ready("hal_display_get_text_bounds");
-    return HAL_EUNINIT;
+    return gfx_unavailable_status("hal_display_get_text_bounds");
   }
 
   int16_t x1, y1;

@@ -7,8 +7,8 @@
 #include <string.h>
 
 typedef struct {
-  uint8_t commands[8];
-  uint8_t arg_lens[8];
+  uint8_t commands[64];
+  uint8_t arg_lens[64];
   uint8_t args[16];
   size_t command_count;
   size_t arg_count;
@@ -66,6 +66,20 @@ static jh_st77xx_config_t make_st7796s_config(void) {
   config.width = JH_ST7796S_TFTWIDTH;
   config.height = JH_ST7796S_TFTHEIGHT;
   config.bgr = true;
+  return config;
+}
+
+static jh_st77xx_config_t make_gc9a01_config(void) {
+  jh_st77xx_config_t config = {};
+  config.bus = 0u;
+  config.cs_pin = 10;
+  config.dc_pin = 11;
+  config.rst_pin = -1;
+  config.clock_hz = 32000000u;
+  config.spi_mode = HAL_SPI_MODE0;
+  config.chip = JH_ST77XX_CHIP_GC9A01;
+  config.width = JH_GC9A01_TFTWIDTH;
+  config.height = JH_GC9A01_TFTHEIGHT;
   return config;
 }
 
@@ -180,6 +194,67 @@ void test_st7796s_uses_standard_invert_commands(void) {
   TEST_ASSERT_TRUE(tx_has_tail(invert_off_tail, sizeof(invert_off_tail)));
 }
 
+void test_gc9a01_init_sequence_and_rotation(void) {
+  command_recorder_t rec = {};
+  const jh_st77xx_command_io_t io = {&rec, record_command, record_delay};
+
+  TEST_ASSERT_TRUE(jh_st77xx_run_gc9a01_init_sequence(&io));
+  TEST_ASSERT_GREATER_THAN_UINT(40u, rec.command_count);
+  TEST_ASSERT_EQUAL_HEX8(0xFEu, rec.commands[0]);
+  TEST_ASSERT_EQUAL_HEX8(0xEFu, rec.commands[1]);
+  TEST_ASSERT_EQUAL_HEX8(0x3Au, rec.commands[rec.command_count - 4u]);
+  TEST_ASSERT_EQUAL_HEX8(0x35u, rec.commands[rec.command_count - 3u]);
+  TEST_ASSERT_EQUAL_HEX8(0x11u, rec.commands[rec.command_count - 2u]);
+  TEST_ASSERT_EQUAL_HEX8(0x29u, rec.commands[rec.command_count - 1u]);
+  TEST_ASSERT_EQUAL_UINT(1u, rec.delay_count);
+  TEST_ASSERT_EQUAL_UINT32(150u, rec.delays[0]);
+
+  jh_st77xx_t dev = {};
+  const jh_st77xx_config_t config = make_gc9a01_config();
+  TEST_ASSERT_TRUE(jh_st77xx_init(&dev, &config));
+  TEST_ASSERT_EQUAL_UINT16(240u, dev.width);
+  TEST_ASSERT_EQUAL_UINT16(240u, dev.height);
+
+  hal_mock_spi_reset();
+  TEST_ASSERT_TRUE(jh_st77xx_set_rotation(&dev, 2u));
+  const uint8_t tail[] = {0x36u, 0xCCu};
+  TEST_ASSERT_TRUE(tx_has_tail(tail, sizeof(tail)));
+}
+
+void test_st77xx_init_reports_spi_write_failure(void) {
+  jh_st77xx_t dev = {};
+  const jh_st77xx_config_t config = make_st7789_config();
+
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_st77xx_init(&dev, &config));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
+void test_st77xx_stream_write_reports_spi_write_failure(void) {
+  jh_st77xx_t dev = {};
+  const jh_st77xx_config_t config = make_st7789_config();
+  const uint8_t pixels[] = {0x12u, 0x34u};
+
+  TEST_ASSERT_TRUE(jh_st77xx_init(&dev, &config));
+  TEST_ASSERT_TRUE(jh_st77xx_begin_write(&dev, 0u, 0u, 1u, 1u));
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_st77xx_write_pixels_be(&dev, pixels, sizeof(pixels)));
+  TEST_ASSERT_TRUE(jh_st77xx_end_write(&dev));
+}
+
+void test_st77xx_direct_pixel_write_reports_spi_write_failure(void) {
+  jh_st77xx_t dev = {};
+  const jh_st77xx_config_t config = make_st7789_config();
+  const uint16_t pixels[] = {0x1234u};
+
+  TEST_ASSERT_TRUE(jh_st77xx_init(&dev, &config));
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_st77xx_write_pixels(&dev, pixels, 1u));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_sequence_parser_handles_args_and_255_delay);
@@ -188,5 +263,9 @@ int main(void) {
       test_st7789_addr_window_applies_rotation_offsets_and_big_endian_pixels);
   RUN_TEST(test_st7789_fill_rect_falls_back_to_spi_write_when_dma_fails);
   RUN_TEST(test_st7796s_uses_standard_invert_commands);
+  RUN_TEST(test_gc9a01_init_sequence_and_rotation);
+  RUN_TEST(test_st77xx_init_reports_spi_write_failure);
+  RUN_TEST(test_st77xx_stream_write_reports_spi_write_failure);
+  RUN_TEST(test_st77xx_direct_pixel_write_reports_spi_write_failure);
   return UNITY_END();
 }

@@ -232,7 +232,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |
 | `test_hal_rgb_led` | status-first init/init_ex, invalid config, allocation/transport failure, retry, brightness clamp, off and pre-init guard |
-| `test_hal_display` | status-first display API, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
+| `test_hal_display` | status-first display API, capabilities/raw-write contract, text sizing/formatting, presets, drawing, SSD1306 init, streaming/async DMA state, validation and injected backend-I/O failures |
 | `test_hal_can` | send/receive, ring buffer, null-data guard, payload clamp, backend selection, classic-vs-FD frame validation, filter API, `hal_can_process_all`, `hal_can_create_with_retry`, `hal_can_encode_temp_i8` |
 | `test_hal_thermocouple` | MCP9600 + MAX6675 inject, unsupported-op NAN returns, ADC resolution, enable/disable, alert/status |
 | `test_max6675_driver` | Shared MAX6675 raw decode, open-circuit fault, GPIO pin setup and bit-bang read sequence |
@@ -248,7 +248,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
 | `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
-| `test_hal_system` | delay/millis/micros behavior, watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
+| `test_hal_system` | delay/millis/micros behavior, wrap-safe non-blocking `hal_millis_interval_*` helpers (elapsed + callback variants), watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |
 | `test_hal_net` | shared endpoint/status shape, network limits, IPv4 literal/localhost/mock-DNS resolver behavior |
@@ -288,8 +288,12 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_pcf8563_driver` | shared PCF8563 register encoding, datetime, alarm, timer, CLKOUT and integrity behavior |
 | `test_ds3231_driver` | shared DS3231 datetime, alarm, status, temperature and register behavior |
 | `test_ili9341_driver` | shared ILI9341 command/init sequence, address windows and pixel writes |
-| `test_st77xx_driver` | shared ST7735/ST7789/ST7796S initialization, offsets, windows and pixel writes |
+| `test_st77xx_driver` | shared ST7735/ST7789/ST7796S/GC9A01 initialization, offsets, windows and pixel writes |
 | `test_ssd1306_driver` | shared SSD1306-family initialization, framebuffer updates, controller addressing offsets, suspend/resume and I2C/SPI command/data transfers |
+| `test_rgb_oled_driver` | shared SSD1331/SSD135x initialization, contrast/remap command flow, address windows and RGB565 pixel writes |
+| `test_st7567_driver` | shared ST7567 initialization, page-buffer sizing, page-aligned writes and invalid-area validation |
+| `test_hal_display_rgb_oled_facade` | real shared-facade dispatch for SSD1331/SSD135x capabilities, RGB565 raw writes, GFX and rotation limits over mock SPI |
+| `test_hal_display_st7567_facade` | real shared-facade dispatch for ST7567 MONO01/MONO10 capabilities, format switching and page-aligned raw writes over mock SPI |
 | `test_jh_gfx_geometry` | shared GFX clipping, geometry primitives, bitmap and text-layout behavior |
 | `test_mcp2515_driver` | shared MCP2515 register/SPI transactions, bit timing, TX/RX, filters and errors |
 | `test_mfrc522_driver` | shared MFRC522 register transports, initialization and RFID protocol helpers |

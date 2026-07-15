@@ -93,13 +93,17 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/drivers/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/drivers/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/drivers/hd44780/hd44780.h` | `impl/shared/drivers/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs TFT or SSD1306 backend)* |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs TFT, SSD1306, SSD1331, SSD135X or ST7567 backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/drivers/display/ili9341_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7735` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7796S` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
+| `HAL_ENABLE_GC9A01` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO GC9A01 round-TFT core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_SSD1306` | `hal_display.h` + `impl/shared/drivers/display/ssd1306_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ssd1306_driver.cpp` | shared HAL SSD1306-family OLED core (`SSD1306`/`SSD1309`/`SSD1315`/`SH1106`/`CH1115`) + GFX engine; I2C is auto-enabled, SPI transport is available when `HAL_ENABLE_SPI` is also enabled (propagates DISPLAY + I2C) |
+| `HAL_ENABLE_SSD1331` | `hal_display.h` + `impl/shared/drivers/display/rgb_oled_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/rgb_oled_driver.cpp` | SSD1331 RGB565 OLED facade/backend over HAL SPI/GPIO (propagates DISPLAY + SPI) |
+| `HAL_ENABLE_SSD135X` | `hal_display.h` + `impl/shared/drivers/display/rgb_oled_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/rgb_oled_driver.cpp` | SSD1351/SSD1357 RGB565 OLED facade/backend over HAL SPI/GPIO (propagates DISPLAY + SPI) |
+| `HAL_ENABLE_ST7567` | `hal_display.h` + `impl/shared/drivers/display/st7567_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st7567_driver.cpp` | ST7567 raw monochrome facade/backend over HAL I2C or SPI/GPIO (propagates DISPLAY + I2C; SPI transport also needs SPI) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
@@ -162,9 +166,11 @@ HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_MCP2515     -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
 HAL_ENABLE_MCP251XFD   -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
 HAL_ENABLE_STM32G474_FDCAN -> HAL_ENABLE_CAN (STM32G474 only)
-HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
+HAL_ENABLE_{ILI9341,ST7789,ST7735,ST7796S,GC9A01} -> HAL_ENABLE_TFT -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
                            (SPI OLED transport additionally needs HAL_ENABLE_SPI)
+HAL_ENABLE_{SSD1331,SSD135X} -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
+HAL_ENABLE_ST7567      -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
