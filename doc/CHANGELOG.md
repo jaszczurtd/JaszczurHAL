@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### SSD1306-family OLED driver
+
+- Extended the shared OLED backend from SSD1306-only I2C support to an
+  SSD1306-family driver covering `SSD1306`, `SSD1309`, `SSD1315`, `SH1106` and
+  `CH1115`.
+- Added the status-returning `hal_display_init_ssd1306_family_ex()` config
+  entry point for controller selection, I2C/SPI transport, segment/page/display
+  offsets, hardware orientation and variant current-reference options.
+- Added OLED suspend/resume support through `hal_display_suspend_ex()` and
+  `hal_display_resume_ex()`, plus driver-level contrast/orientation/power tests
+  covering I2C and SPI command/data paths.
+
 ### Generic `hal_crc` checksums
 
 - Extracted the Dallas/Maxim CRC-8/CRC-16 routines out of `hal_onewire` into a

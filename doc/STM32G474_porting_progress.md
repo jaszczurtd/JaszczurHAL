@@ -197,8 +197,9 @@ The following modules are real, register-level backends under
   state/error counters. Target `hal_can.cpp` owns handle lifetime/dispatch.
 - `hal_display` - **ILI9341** plus **ST7735/ST7789/ST7796S** via shared
   HAL-only SPI/GPIO drivers (`impl/shared/drivers/display/ili9341_driver.*`,
-  `impl/shared/drivers/display/st77xx_driver.*`) and **SSD1306** via the shared HAL I2C
-  driver (`impl/shared/drivers/display/ssd1306_driver.*`). Rendering (geometry, text,
+  `impl/shared/drivers/display/st77xx_driver.*`) and **SSD1306-family OLEDs**
+  via the shared HAL I2C/SPI-capable driver
+  (`impl/shared/drivers/display/ssd1306_driver.*`). Rendering (geometry, text,
   bitmaps) runs through the portable GFX engine (`impl/shared/drivers/display/jh_gfx.*`).
   The whole stack lives in one shared `impl/shared/drivers/display/hal_display.cpp`
   used by both STM32G474 and RP2040. Init, rotation, inversion, fill, bitmap
@@ -287,7 +288,7 @@ thermocouples, CAN/MCP2515, CAN FD/MCP251XFD, digipot, BH1750, and PGA2311.
 `src/hal/impl/shared/drivers/onewire/`.
 
 `hal_display` has completed this path: ILI9341, ST7735/ST7789/ST7796S (SPI) and
-SSD1306 (I2C) now share one HAL-only stack under `src/hal/impl/shared/drivers/display/`,
+SSD1306-family OLEDs now share one HAL-only stack under `src/hal/impl/shared/drivers/display/`,
 used identically by STM32G474 and RP2040. MAX6675 is handled separately by the
 shared bit-bang HAL GPIO driver. The remaining display work is a bulk-write/DMA
 evaluation if TFT throughput needs it.

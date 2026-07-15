@@ -289,8 +289,11 @@ Display
                            core and GFX engine. Propagates: TFT, DISPLAY, SPI.
   HAL_ENABLE_ST7796S       ST7796S driver over the shared ST77xx HAL SPI/GPIO
                            core and GFX engine. Propagates: TFT, DISPLAY, SPI.
-  HAL_ENABLE_SSD1306       SSD1306 OLED over the shared HAL I2C driver and GFX
-                           engine. Propagates: DISPLAY, I2C.
+  HAL_ENABLE_SSD1306       SSD1306-family OLED (`SSD1306`, `SSD1309`,
+                           `SSD1315`, `SH1106`, `CH1115`) over the shared HAL
+                           I2C/SPI-capable driver and GFX engine. Propagates:
+                           DISPLAY, I2C. SPI OLED transport additionally needs
+                           HAL_ENABLE_SPI.
 
 Crypto / bundled libs
   HAL_ENABLE_CRYPTO
@@ -389,7 +392,7 @@ HAL_ENABLE_ILI9341     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7789      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7735      -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
 HAL_ENABLE_ST7796S     -> HAL_ENABLE_TFT, HAL_ENABLE_DISPLAY, HAL_ENABLE_SPI
-HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY
+HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY, HAL_ENABLE_I2C
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO, HAL_ENABLE_JPEG
 

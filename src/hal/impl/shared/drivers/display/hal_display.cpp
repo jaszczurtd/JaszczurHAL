@@ -208,6 +208,74 @@ static Ssd1306Gfx s_oled_gfx;
 static inline uint16_t oled_color(uint16_t color) {
   return (color == HAL_COLOR_BLACK) ? JH_SSD1306_BLACK : JH_SSD1306_WHITE;
 }
+
+static bool oled_controller_valid(hal_display_oled_controller_t controller) {
+  return controller >= HAL_DISPLAY_OLED_CONTROLLER_SSD1306 &&
+         controller <= HAL_DISPLAY_OLED_CONTROLLER_CH1115;
+}
+
+static bool oled_bus_type_valid(hal_display_oled_bus_t bus_type) {
+  return bus_type == HAL_DISPLAY_OLED_BUS_I2C ||
+         bus_type == HAL_DISPLAY_OLED_BUS_SPI;
+}
+
+static jh_ssd1306_controller_t
+map_oled_controller(hal_display_oled_controller_t controller) {
+  switch (controller) {
+  case HAL_DISPLAY_OLED_CONTROLLER_SSD1309:
+    return JH_SSD1306_CONTROLLER_SSD1309;
+  case HAL_DISPLAY_OLED_CONTROLLER_SSD1315:
+    return JH_SSD1306_CONTROLLER_SSD1315;
+  case HAL_DISPLAY_OLED_CONTROLLER_SH1106:
+    return JH_SSD1306_CONTROLLER_SH1106;
+  case HAL_DISPLAY_OLED_CONTROLLER_CH1115:
+    return JH_SSD1306_CONTROLLER_CH1115;
+  case HAL_DISPLAY_OLED_CONTROLLER_SSD1306:
+  default:
+    return JH_SSD1306_CONTROLLER_SSD1306;
+  }
+}
+
+static jh_ssd1306_bus_t map_oled_bus(hal_display_oled_bus_t bus_type) {
+  return bus_type == HAL_DISPLAY_OLED_BUS_SPI ? JH_SSD1306_BUS_SPI
+                                              : JH_SSD1306_BUS_I2C;
+}
+
+static jh_ssd1306_orientation_t
+map_oled_orientation(hal_display_oled_orientation_t orientation) {
+  return orientation == HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180
+             ? JH_SSD1306_ORIENTATION_ROTATED_180
+             : JH_SSD1306_ORIENTATION_NORMAL;
+}
+
+static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
+                                     const char *fn_name) {
+  if (config == NULL || config->width == 0u || config->height == 0u) {
+    hal_derr("%s: invalid size", fn_name);
+    return HAL_EINVAL;
+  }
+
+  if (!s_oled_gfx.allocate((int16_t)config->width, (int16_t)config->height)) {
+    hal_derr("%s: framebuffer allocation failed", fn_name);
+    return HAL_ENOMEM;
+  }
+
+  if (!jh_ssd1306_init(&s_oled, config)) {
+    s_oled_gfx.release();
+    s_backend = DISPLAY_BACKEND_NONE;
+    s_width = 0;
+    s_height = 0;
+    hal_derr("%s: SSD1306-family init failed", fn_name);
+    return HAL_EIO;
+  }
+
+  s_backend = DISPLAY_BACKEND_SSD1306;
+  s_oled_gfx.setRotation(0u);
+  s_oled_gfx.fillScreen(JH_SSD1306_BLACK);
+  s_width = s_oled_gfx.width();
+  s_height = s_oled_gfx.height();
+  return jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO;
+}
 #endif /* HAL_ENABLE_SSD1306 */
 
 /* ---- Shared text state --------------------------------------------------- */
@@ -609,12 +677,10 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
     hal_derr("hal_display_init_ssd1306_i2c: invalid size %dx%d", width, height);
     return HAL_EINVAL;
   }
-  if (!s_oled_gfx.allocate((int16_t)width, (int16_t)height)) {
-    hal_derr("hal_display_init_ssd1306_i2c: framebuffer allocation failed");
-    return HAL_ENOMEM;
-  }
 
   jh_ssd1306_config_t config = {};
+  config.controller = JH_SSD1306_CONTROLLER_SSD1306;
+  config.bus_type = JH_SSD1306_BUS_I2C;
   config.bus = i2c_bus;
   config.i2c_addr = i2c_addr;
   config.width = (uint16_t)width;
@@ -625,21 +691,50 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
   config.vccstate = switchvcc;
   config.clock_hz = JH_SSD1306_DEFAULT_I2C_HZ;
 
-  if (!jh_ssd1306_init(&s_oled, &config)) {
-    s_oled_gfx.release();
-    s_backend = DISPLAY_BACKEND_NONE;
-    s_width = 0;
-    s_height = 0;
-    hal_derr("hal_display_init_ssd1306_i2c: SSD1306 init failed");
-    return HAL_EIO;
-  }
+  return oled_init_locked(&config, "hal_display_init_ssd1306_i2c");
+}
 
-  s_backend = DISPLAY_BACKEND_SSD1306;
-  s_oled_gfx.setRotation(0u);
-  s_oled_gfx.fillScreen(JH_SSD1306_BLACK);
-  s_width = s_oled_gfx.width();
-  s_height = s_oled_gfx.height();
-  return jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO;
+hal_status_t hal_display_init_ssd1306_family_ex(
+    const hal_display_ssd1306_family_config_t *config) {
+  DisplayLock guard;
+  if (config == NULL) {
+    return HAL_EINVAL;
+  }
+  if (config->width <= 0 || config->height <= 0 ||
+      !oled_controller_valid(config->controller) ||
+      !oled_bus_type_valid(config->bus_type) ||
+      config->orientation > HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180) {
+    hal_derr("hal_display_init_ssd1306_family: invalid config");
+    return HAL_EINVAL;
+  }
+#ifndef HAL_ENABLE_SPI
+  if (config->bus_type == HAL_DISPLAY_OLED_BUS_SPI) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+
+  (void)config->periphBegin;
+
+  jh_ssd1306_config_t driver_config = {};
+  driver_config.controller = map_oled_controller(config->controller);
+  driver_config.bus_type = map_oled_bus(config->bus_type);
+  driver_config.bus = config->bus;
+  driver_config.i2c_addr = config->i2c_addr;
+  driver_config.width = (uint16_t)config->width;
+  driver_config.height = (uint16_t)config->height;
+  driver_config.rst_pin = config->rst_pin;
+  driver_config.vccstate = config->switchvcc;
+  driver_config.clock_hz = config->clock_hz;
+  driver_config.spi_dc_pin = config->spi_dc_pin;
+  driver_config.spi_cs_pin = config->spi_cs_pin;
+  driver_config.spi_mode = config->spi_mode;
+  driver_config.segment_offset = config->segment_offset;
+  driver_config.page_offset = config->page_offset;
+  driver_config.display_offset = config->display_offset;
+  driver_config.orientation = map_oled_orientation(config->orientation);
+  driver_config.internal_iref = config->internal_iref;
+
+  return oled_init_locked(&driver_config, "hal_display_init_ssd1306_family");
 }
 #endif /* HAL_ENABLE_SSD1306 */
 
@@ -734,6 +829,32 @@ hal_status_t hal_display_soft_init(int delay_ms) {
 #endif
   (void)delay_ms;
   return HAL_OK;
+}
+
+hal_status_t hal_display_suspend_ex(void) {
+  DisplayLock guard;
+  if (!ensure_display_ready("hal_display_suspend")) {
+    return HAL_EUNINIT;
+  }
+#ifdef HAL_ENABLE_SSD1306
+  if (using_oled()) {
+    return jh_ssd1306_suspend(&s_oled) ? HAL_OK : HAL_EIO;
+  }
+#endif
+  return HAL_EUNSUPPORTED;
+}
+
+hal_status_t hal_display_resume_ex(void) {
+  DisplayLock guard;
+  if (!ensure_display_ready("hal_display_resume")) {
+    return HAL_EUNINIT;
+  }
+#ifdef HAL_ENABLE_SSD1306
+  if (using_oled()) {
+    return jh_ssd1306_resume(&s_oled) ? HAL_OK : HAL_EIO;
+  }
+#endif
+  return HAL_EUNSUPPORTED;
 }
 
 hal_status_t hal_display_set_rotation_ex(uint8_t r) {

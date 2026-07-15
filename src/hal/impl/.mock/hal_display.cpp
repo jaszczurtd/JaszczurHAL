@@ -95,6 +95,25 @@ hal_display_init_ssd1306_i2c_status_ex(int width, int height, uint8_t i2c_bus,
   s_height = height;
   return HAL_OK;
 }
+
+hal_status_t hal_display_init_ssd1306_family_ex(
+    const hal_display_ssd1306_family_config_t *config) {
+  if (config == NULL || config->width <= 0 || config->height <= 0 ||
+      config->controller > HAL_DISPLAY_OLED_CONTROLLER_CH1115 ||
+      config->bus_type > HAL_DISPLAY_OLED_BUS_SPI ||
+      config->orientation > HAL_DISPLAY_OLED_ORIENTATION_ROTATED_180) {
+    hal_derr("hal_display_init_ssd1306_family: invalid config");
+    return HAL_EINVAL;
+  }
+#ifndef HAL_ENABLE_SPI
+  if (config->bus_type == HAL_DISPLAY_OLED_BUS_SPI) {
+    return HAL_EUNSUPPORTED;
+  }
+#endif
+  s_width = config->width;
+  s_height = config->height;
+  return HAL_OK;
+}
 #endif /* HAL_ENABLE_SSD1306 */
 
 hal_status_t hal_display_configure_ex(int w, int h, uint8_t r, bool inv,
@@ -118,6 +137,12 @@ bool hal_display_configure(int w, int h, uint8_t r, bool inv, bool bgr) {
 hal_status_t hal_display_soft_init(int delay_ms) {
   (void)delay_ms;
   return HAL_OK;
+}
+hal_status_t hal_display_suspend_ex(void) {
+  return s_display_ready() ? HAL_OK : HAL_EUNINIT;
+}
+hal_status_t hal_display_resume_ex(void) {
+  return s_display_ready() ? HAL_OK : HAL_EUNINIT;
 }
 hal_status_t hal_display_set_rotation_ex(uint8_t r) {
   (void)r;

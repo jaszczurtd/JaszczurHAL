@@ -340,6 +340,31 @@ void test_ex_ssd1306_status_init_sets_dimensions(void) {
                                         0, 64, 0, 0x3C, -1, 0x02, false));
 }
 
+void test_ex_ssd1306_family_init_and_power_status(void) {
+  hal_mock_display_reset();
+  hal_display_ssd1306_family_config_t config = {};
+  config.controller = HAL_DISPLAY_OLED_CONTROLLER_SH1106;
+  config.bus_type = HAL_DISPLAY_OLED_BUS_I2C;
+  config.width = 128;
+  config.height = 64;
+  config.bus = 1u;
+  config.i2c_addr = 0x3Cu;
+  config.rst_pin = -1;
+  config.switchvcc = HAL_DISPLAY_VCC_SWITCHCAP;
+  config.segment_offset = 2u;
+  config.page_offset = 1u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_ssd1306_family_ex(&config));
+  TEST_ASSERT_EQUAL_INT(128, hal_display_get_width());
+  TEST_ASSERT_EQUAL_INT(64, hal_display_get_height());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_suspend_ex());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_resume_ex());
+
+  config.width = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_display_init_ssd1306_family_ex(&config));
+}
+
 void test_ex_prepare_text_formats_and_reports_status(void) {
   char buf[32] = {};
   int width = 0;
@@ -413,6 +438,7 @@ int main(void) {
   RUN_TEST(test_ex_stream_write_flow_and_state);
   RUN_TEST(test_ex_text_helpers_report_status);
   RUN_TEST(test_ex_ssd1306_status_init_sets_dimensions);
+  RUN_TEST(test_ex_ssd1306_family_init_and_power_status);
   RUN_TEST(test_ex_prepare_text_formats_and_reports_status);
   RUN_TEST(test_status_init_and_soft_init_return_real_results);
   RUN_TEST(test_status_stream_distinguishes_busy_and_invalid_state);
