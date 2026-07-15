@@ -93,7 +93,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/drivers/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/drivers/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/drivers/hd44780/hd44780.h` | `impl/shared/drivers/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
-| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs TFT, SSD1306, SSD1331, SSD135X or ST7567 backend)* |
+| `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs a TFT, OLED, LCD or EPD backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
 | `HAL_ENABLE_ILI9341` | `hal_display.h` + `impl/shared/drivers/display/ili9341_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/ili9341_driver.cpp` | shared HAL SPI/GPIO ILI9341 core + GFX engine (propagates TFT + DISPLAY + SPI) |
 | `HAL_ENABLE_ST7789` | `hal_display.h` + `impl/shared/drivers/display/st77xx_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st77xx_driver.cpp` | shared HAL SPI/GPIO ST77xx core + GFX engine (propagates TFT + DISPLAY + SPI) |
@@ -104,6 +104,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_SSD1331` | `hal_display.h` + `impl/shared/drivers/display/rgb_oled_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/rgb_oled_driver.cpp` | SSD1331 RGB565 OLED facade/backend over HAL SPI/GPIO (propagates DISPLAY + SPI) |
 | `HAL_ENABLE_SSD135X` | `hal_display.h` + `impl/shared/drivers/display/rgb_oled_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/rgb_oled_driver.cpp` | SSD1351/SSD1357 RGB565 OLED facade/backend over HAL SPI/GPIO (propagates DISPLAY + SPI) |
 | `HAL_ENABLE_ST7567` | `hal_display.h` + `impl/shared/drivers/display/st7567_driver.h` | `impl/shared/drivers/display/hal_display.cpp` + `impl/shared/drivers/display/st7567_driver.cpp` | ST7567 raw monochrome facade/backend over HAL I2C or SPI/GPIO (propagates DISPLAY + I2C; SPI transport also needs SPI) |
+| `HAL_ENABLE_SSD16XX` | `hal_display.h` + `impl/shared/drivers/display/ssd16xx_driver.h` | display facade + shared EPD transport + SSD16xx driver | SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681 raw MONO10 EPD backend (propagates DISPLAY + SPI) |
+| `HAL_ENABLE_UC81XX` | `hal_display.h` + `impl/shared/drivers/display/uc81xx_driver.h` | display facade + shared EPD transport + UC81xx driver | UC8175/UC8176/UC8151D/UC8179 raw MONO10 EPD backend (propagates DISPLAY + SPI) |
 | `HAL_ENABLE_CRYPTO` | `hal_crypto.h` + `hal_sc_auth.h` | `hal_crypto.cpp` + `hal_sc_auth.cpp` | Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20-Poly1305 |
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
@@ -171,6 +173,7 @@ HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
                            (SPI OLED transport additionally needs HAL_ENABLE_SPI)
 HAL_ENABLE_{SSD1331,SSD135X} -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_ST7567      -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
+HAL_ENABLE_{SSD16XX,UC81XX} -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
@@ -272,8 +275,8 @@ mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
 interrupt mask for timing-sensitive code. The implementation includes atomic
 create-once fallbacks for singleton/per-bus mutexes and hardens the RP2040
 I2C-slave callback path. Timer callback context, Arduino-origin wrapper
-internals, and remaining per-module exceptions are summarized in
-[Thread-SafetyAudit.md](Thread-SafetyAudit.md).
+internals, and remaining per-module exceptions are tracked in the
+[future work backlog](../future_ideas.md).
 
 The supported VS Code project flow (`create-vscode-example.py` plus
 `jh-vscode`) adds the project include path automatically through the shared

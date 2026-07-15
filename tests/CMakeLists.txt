@@ -242,6 +242,19 @@ target_compile_definitions(test_st7567_driver PRIVATE HAL_ENABLE_ST7567)
 target_link_libraries(test_st7567_driver PRIVATE hal_mock)
 add_test(NAME test_st7567_driver COMMAND test_st7567_driver)
 
+add_executable(test_epd_drivers
+    test_epd_drivers.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/epd_spi_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd16xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/uc81xx_driver.cpp
+)
+target_compile_definitions(test_epd_drivers PRIVATE
+    HAL_ENABLE_SSD16XX
+    HAL_ENABLE_UC81XX
+)
+target_link_libraries(test_epd_drivers PRIVATE hal_mock)
+add_test(NAME test_epd_drivers COMMAND test_epd_drivers)
+
 add_executable(test_hal_display_rgb_oled_facade
     test_hal_display_rgb_oled_facade.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
@@ -293,6 +306,34 @@ target_link_libraries(test_hal_display_st7567_facade PRIVATE
 add_dependencies(test_hal_display_st7567_facade hal_mock)
 add_test(NAME test_hal_display_st7567_facade
          COMMAND test_hal_display_st7567_facade)
+
+add_executable(test_hal_display_epd_facade
+    test_hal_display_epd_facade.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/epd_spi_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd16xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/uc81xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+)
+target_include_directories(test_hal_display_epd_facade PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils
+)
+target_compile_definitions(test_hal_display_epd_facade PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_SSD16XX
+    HAL_ENABLE_UC81XX
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_hal_display_epd_facade PRIVATE -Wall -Wextra)
+target_link_libraries(test_hal_display_epd_facade PRIVATE
+    $<TARGET_FILE:hal_mock>
+    Threads::Threads
+)
+add_dependencies(test_hal_display_epd_facade hal_mock)
+add_test(NAME test_hal_display_epd_facade
+         COMMAND test_hal_display_epd_facade)
 add_executable(test_jh_gfx_geometry
     test_jh_gfx_geometry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp

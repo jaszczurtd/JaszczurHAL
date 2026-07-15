@@ -6,6 +6,18 @@ All notable changes to this project will be documented in this file.
 
 ### Zephyr-informed display driver ports
 
+- Added shared SSD16xx (`SSD1608`, `SSD1673`, `SSD1675A`, `SSD1680`,
+  `SSD1681`) and UC81xx (`UC8175`, `UC8176`, `UC8151D`, `UC8179`)
+  monochrome EPD drivers over a reusable HAL SPI/GPIO transport with bounded
+  BUSY waits, controller reset, full/partial waveform profiles and explicit
+  refresh sequencing.
+- Integrated both EPD families into `hal_display` as raw `MONO10` backends.
+  `frame_incomplete` batches RAM writes for a following full refresh,
+  `hal_display_flush_ex()` and `hal_display_epd_refresh_ex()` trigger panel
+  updates, and capabilities now expose EPD, MSB-first packing and
+  family-specific alignment requirements.
+- Added driver/facade host coverage and `examples/55_epd_display` for an
+  SSD1681 200x200 raw frame on RP2040 and STM32G474.
 - Added GC9A01 round-TFT support to the shared ST77xx-style SPI/GPIO display
   backend. `HAL_ENABLE_GC9A01` now propagates `HAL_ENABLE_TFT`,
   `HAL_ENABLE_DISPLAY` and `HAL_ENABLE_SPI`, and `HAL_DISPLAY_GC9A01` selects
@@ -22,6 +34,15 @@ All notable changes to this project will be documented in this file.
   facade; ST7567 is exposed as a page-aligned MONO01/MONO10 raw backend.
 - Added host coverage in `test_st77xx_driver`, `test_rgb_oled_driver`,
   `test_st7567_driver` and dedicated real-facade dispatch tests.
+
+### Quality gate reliability
+
+- Added profile-specific, deduplicated clang-tidy compile databases so shared
+  facade sources are analyzed once even when CMake compiles them under several
+  feature configurations. This removes clang-analyzer 18 state leakage and its
+  false uninitialized-`va_list` report.
+- Reworked ST7567 initialization to keep the required initialized-before-
+  contrast sequence explicit without an assignment inside an `if` condition.
 
 ### SSD1306-family OLED driver
 

@@ -199,8 +199,10 @@ The following modules are real, register-level backends under
   HAL-only SPI/GPIO drivers (`impl/shared/drivers/display/ili9341_driver.*`,
   `impl/shared/drivers/display/st77xx_driver.*`) and **SSD1306-family OLEDs**
   via the shared HAL I2C/SPI-capable driver
-  (`impl/shared/drivers/display/ssd1306_driver.*`). Rendering (geometry, text,
-  bitmaps) runs through the portable GFX engine (`impl/shared/drivers/display/jh_gfx.*`).
+  (`impl/shared/drivers/display/ssd1306_driver.*`). Shared raw backends also
+  cover SSD1331/SSD135x RGB OLEDs, ST7567 LCDs and SSD16xx/UC81xx monochrome
+  e-paper panels over HAL SPI/GPIO. Rendering (geometry, text, bitmaps) runs
+  through the portable GFX engine (`impl/shared/drivers/display/jh_gfx.*`).
   The whole stack lives in one shared `impl/shared/drivers/display/hal_display.cpp`
   used by both STM32G474 and RP2040. Init, rotation, inversion, fill, bitmap
   writes, geometry and text rendering are present; DMA/bulk-write optimization
@@ -273,7 +275,7 @@ a normal GPIO owned by each driver.
 ### Module gap on STM32
 Modules still missing a real STM32G474 backend, or still blocked by a missing
 STM32 storage/transport layer:
-`mqtt, ota, udp, wifi, wireguard`.
+`mqtt, ota, tcp, udp, wifi, wireguard`.
 
 ### Portability tiers
 
@@ -291,9 +293,11 @@ thermocouples, CAN/MCP2515, CAN FD/MCP251XFD, digipot, BH1750, and PGA2311.
 (SPI) and SSD1306-family OLEDs now share one HAL-only stack under
 `src/hal/impl/shared/drivers/display/`, used identically by STM32G474 and
 RP2040. SSD1331/SSD135x and ST7567 have shared-driver ports in the same folder
-and are exposed through the public raw write/capabilities facade. MAX6675 is
-handled separately by the shared bit-bang
-HAL GPIO driver. The remaining display work is a bulk-write/DMA evaluation if
+and are exposed through the public raw write/capabilities facade. SSD16xx and
+UC81xx monochrome e-paper families use the same facade with bounded BUSY waits,
+panel-provided full/partial waveform profiles and deferred refresh support.
+MAX6675 is handled separately by the shared bit-bang HAL GPIO driver. The
+remaining display work is hardware coverage and a bulk-write/DMA evaluation if
 TFT throughput needs it.
 
 `hal_rgb_led` has completed the shared-NeoPixel-core path on STM32G474 using a
@@ -305,7 +309,7 @@ shared HAL I2C drivers with STM32G474 and RP2040 wrappers using the same device
 logic.
 
 **🔴 Not a "driver port" - different effort entirely:**
-- `hal_wifi / hal_udp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
+- `hal_wifi / hal_udp / hal_tcp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
   PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio -> not a port
   but a different transport (e.g. via the already-portable SIMCom modem).
   Effectively N/A for a bare G474.
@@ -317,9 +321,10 @@ logic.
   backends on Nucleo-G474RE, especially GPIO IRQ routing, TIM6 alarm jitter,
   PWM channel mapping, SPI/I2C pin-map validation, RTC wiring, and RGB LED
   timing margins.
-2. **Widen STM32-targeted regression coverage** - add focused tests for the
-  STM32-specific backends beyond `hal_system` and `hal_timer`, especially
-  GPIO IRQ, PWM, I2C, SPI, CAN, and RTC integration seams.
+2. **Widen STM32-targeted regression coverage** - add focused tests beyond the
+  current `hal_system`, `hal_timer`, I2C-slave and PWM-clock host coverage,
+  especially for GPIO IRQ, I2C master, SPI, CAN/FDCAN, and RTC integration
+  seams.
 3. **Remaining peripheral gaps** - define a separate OTA/update strategy if
   firmware updates become part of the target requirements.
 4. **Optional performance follow-up** - evaluate display bulk-write and DMA
@@ -333,7 +338,7 @@ logic.
    `app_task0`/`app_task1` task entry mode.
 3. Add hardware smoke-tests (GPIO/UART/I2C/SPI/ADC/CAN/timer/RTC/display) on an
   STM32G474 board.
-4. Expand STM32-targeted regression coverage beyond the current `hal_system`
-  and `hal_timer` focused tests.
+4. Expand STM32-targeted regression coverage beyond the current system, timer,
+   I2C-slave and PWM-clock host tests.
 5. Gradually unlock further modules (`HAL_ENABLE_*`) where the missing STM32
   storage/transport/backend work is actually complete.

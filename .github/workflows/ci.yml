@@ -102,17 +102,21 @@ jobs:
 
       - name: "clang-tidy (portable HAL + shared + stm32 backend)"
         run: |
+          TIDY_HOST_BUILD=build/clang_tidy_db
           mapfile -t TIDY_HOST_FILES < <(
-            scripts/clang_tidy_files.py --build-dir build --repo-root "$PWD" --profile host
+            scripts/clang_tidy_files.py --build-dir build --repo-root "$PWD" --profile host \
+              --output-compile-db "$TIDY_HOST_BUILD/compile_commands.json"
           )
           test "${#TIDY_HOST_FILES[@]}" -gt 0
-          run-clang-tidy -p build -quiet "${TIDY_HOST_FILES[@]}" \
+          run-clang-tidy -p "$TIDY_HOST_BUILD" -quiet "${TIDY_HOST_FILES[@]}" \
             | tee tidy_host.log
+          TIDY_STM32_BUILD=build_stm32/clang_tidy_db
           mapfile -t TIDY_STM32_FILES < <(
-            scripts/clang_tidy_files.py --build-dir build_stm32 --repo-root "$PWD" --profile stm32
+            scripts/clang_tidy_files.py --build-dir build_stm32 --repo-root "$PWD" --profile stm32 \
+              --output-compile-db "$TIDY_STM32_BUILD/compile_commands.json"
           )
           test "${#TIDY_STM32_FILES[@]}" -gt 0
-          run-clang-tidy -p build_stm32 -quiet "${TIDY_STM32_FILES[@]}" \
+          run-clang-tidy -p "$TIDY_STM32_BUILD" -quiet "${TIDY_STM32_FILES[@]}" \
             | tee tidy_stm32.log
           if grep -qE ' (warning|error):' tidy_host.log tidy_stm32.log; then
             echo "::error::clang-tidy reported findings (see logs above)"

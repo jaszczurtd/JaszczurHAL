@@ -293,11 +293,12 @@ is not ISR-safe.
 
 ---
 
-## `hal_display` - TFT / OLED display  *(optional - `HAL_ENABLE_DISPLAY`)*
+## `hal_display` - TFT / OLED / LCD / EPD display  *(optional - `HAL_ENABLE_DISPLAY`)*
 
 Supports SPI TFT displays (ILI9341, ST7789, ST7735, ST7796S, GC9A01),
 SSD1331/SSD135x RGB OLEDs, SSD1306-family OLEDs (`SSD1306`, `SSD1309`,
-`SSD1315`, `SH1106`, `CH1115`) and ST7567 monochrome LCDs over I2C/SPI.
+`SSD1315`, `SH1106`, `CH1115`), ST7567 monochrome LCDs and SSD16xx/UC81xx
+monochrome e-paper controllers over I2C/SPI/GPIO.
 
 ```c
 // Define ONE of these before including hal_display.h (or in build flags):
@@ -358,7 +359,7 @@ typedef struct {
     uint16_t width;           // rectangle width in pixels
     uint16_t height;          // rectangle height in pixels
     size_t buf_size;          // available source-buffer bytes
-    bool frame_incomplete;    // future streaming hint
+    bool frame_incomplete;    // EPD: load RAM now and defer physical refresh
 } hal_display_buffer_desc_t;
 
 typedef struct {
@@ -446,6 +447,10 @@ hal_status_t hal_display_init_rgb_oled_ex(
     const hal_display_rgb_oled_config_t *config);
 hal_status_t hal_display_init_st7567_ex(
     const hal_display_st7567_config_t *config);
+hal_status_t hal_display_init_ssd16xx_ex(
+    const hal_display_ssd16xx_config_t *config);
+hal_status_t hal_display_init_uc81xx_ex(
+    const hal_display_uc81xx_config_t *config);
 
 // Configure dimensions, rotation, colour order. Must be called after init().
 bool hal_display_configure(int width, int height, uint8_t rotation, bool invert, bool bgr);
@@ -464,10 +469,12 @@ hal_status_t hal_display_set_pixel_format_ex(hal_display_pixel_format_t format);
 hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
                                       const hal_display_buffer_desc_t *desc,
                                       const void *buffer);
+hal_status_t hal_display_epd_refresh_ex(
+    hal_display_epd_refresh_mode_t refresh_mode);
 
 // --- Screen ---
 bool hal_display_fill_screen(uint16_t color);
-bool hal_display_flush(void);               // SSD1306: sends framebuffer; TFT: no-op
+bool hal_display_flush(void); // SSD1306: sends framebuffer; EPD: refreshes pending RAM
 bool hal_display_draw_image(int x, int y, int w, int h, uint16_t background, uint16_t *data);
 
 // --- Geometry ---
@@ -540,6 +547,50 @@ hardware backends require `pitch == width`; larger pitches return
 `HAL_DISPLAY_SCREEN_INFO_MONO_VTILED`, and requires `y` and `height` aligned
 to 8 pixels. Use `hal_display_set_pixel_format_ex()` before changing the
 ST7567 monochrome polarity.
+
+**SSD16xx / UC81xx e-paper:** Enable `HAL_ENABLE_SSD16XX` or
+`HAL_ENABLE_UC81XX`; both flags add DISPLAY and SPI. The shared transport uses
+SPI plus CS/DC, optional reset and optional BUSY GPIO. A configured BUSY pin is
+polled with `busy_timeout_ms`, returning `HAL_ETIMEOUT` instead of blocking
+forever. SSD16xx supports rotations 0/90/180/270 and uses vertical 8-pixel
+packing at rotations 0/180. UC81xx uses horizontal MSB-first packing and
+requires `x` and `width` aligned to 8 pixels. Both accept only `MONO10`.
+
+Set `frame_incomplete=true` when loading one or more areas without an immediate
+panel update. Finish the batch with `hal_display_flush_ex()`; deferred writes
+use a full refresh so the controller's old/new RAM stays coherent without the
+facade retaining caller buffers. With `frame_incomplete=false`, a configured
+partial profile is selected before the area write and refresh. The cycle can
+also be selected explicitly with
+`hal_display_epd_refresh_ex(HAL_DISPLAY_EPD_REFRESH_FULL/PARTIAL)`; requesting
+partial refresh for a pending full-refresh batch returns `HAL_ESTATE`, while a
+missing partial profile returns `HAL_EUNSUPPORTED`. LUT/profile bytes are
+panel-vendor data and their backing arrays must remain valid while the backend
+is active; do not reuse a LUT merely because two modules contain the same
+controller.
+
+```c
+hal_display_ssd16xx_config_t cfg = {0};
+cfg.controller = HAL_DISPLAY_SSD16XX_SSD1681;
+cfg.transport.bus = 0;
+cfg.transport.cs_pin = 17;
+cfg.transport.dc_pin = 20;
+cfg.transport.rst_pin = 21;
+cfg.transport.busy_pin = 22;
+cfg.transport.busy_active_high = true;
+cfg.transport.busy_timeout_ms = 30000;
+cfg.width = 200;
+cfg.height = 200;
+cfg.rotation = HAL_DISPLAY_ROTATION_0;
+
+hal_status_t status = hal_display_init_ssd16xx_ex(&cfg);
+if (status == HAL_OK) {
+    hal_display_buffer_desc_t frame = {
+        HAL_DISPLAY_PIXEL_FORMAT_MONO10, 200, 200, 200, 5000, false
+    };
+    status = hal_display_write_raw_ex(0, 0, &frame, framebuffer);
+}
+```
 **TFT streaming:** Immediate-mode TFT backends support an explicit streaming
 sequence for large contiguous updates:
 `hal_display_begin_write(x, y, w, h)`, one or more pixel writes, then

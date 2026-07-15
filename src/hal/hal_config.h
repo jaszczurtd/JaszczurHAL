@@ -349,6 +349,11 @@
        HAL_ENABLE_ST7567        - ST7567 monochrome LCD facade/backend
                                   (propagates: DISPLAY, I2C; SPI transport
                                   available when SPI is enabled).
+       HAL_ENABLE_SSD16XX       - SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681
+                                  monochrome EPD backend (propagates: DISPLAY,
+                                  SPI).
+       HAL_ENABLE_UC81XX        - UC8175/UC8176/UC8151D/UC8179 monochrome EPD
+                                  backend (propagates: DISPLAY, SPI).
 
      Crypto + bundled libs:
        HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
@@ -804,6 +809,15 @@
 #endif
 #endif
 
+#if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
+#ifndef HAL_ENABLE_DISPLAY
+#define HAL_ENABLE_DISPLAY
+#endif
+#ifndef HAL_ENABLE_SPI
+#define HAL_ENABLE_SPI
+#endif
+#endif
+
 /* ── Consistency checks for fasada modules that need a backend ──────── */
 /* Standalone modules (WIFI, I2C, I2C_SLAVE, SPI, SWSERIAL, UART, EEPROM,
   KV, SDLOGGER, GPS, DACLESS, DMA_PWM_AUDIO, PWM_FREQ, RGB_LED, DS18B20, DHT,
@@ -857,9 +871,9 @@
 
 #if defined(HAL_ENABLE_DISPLAY) && !defined(HAL_ENABLE_TFT) &&                 \
     !defined(HAL_ENABLE_SSD1306) && !defined(HAL_ENABLE_SSD1331) &&            \
-    !defined(HAL_ENABLE_SSD135X) && !defined(HAL_ENABLE_ST7567)
-#error                                                                         \
-    "HAL_ENABLE_DISPLAY requires a TFT, SSD1306, SSD1331, SSD135X, or ST7567 backend"
+    !defined(HAL_ENABLE_SSD135X) && !defined(HAL_ENABLE_ST7567) &&             \
+    !defined(HAL_ENABLE_SSD16XX) && !defined(HAL_ENABLE_UC81XX)
+#error "HAL_ENABLE_DISPLAY requires a TFT, OLED, LCD, or EPD backend"
 #endif
 
 #if defined(HAL_ENABLE_TFT) && !defined(HAL_ENABLE_ILI9341) &&                 \
@@ -1093,6 +1107,12 @@
 #endif
 #ifdef HAL_ENABLE_ST7567
 #pragma message("HAL_CONFIG: HAL_ENABLE_ST7567")
+#endif
+#ifdef HAL_ENABLE_SSD16XX
+#pragma message("HAL_CONFIG: HAL_ENABLE_SSD16XX")
+#endif
+#ifdef HAL_ENABLE_UC81XX
+#pragma message("HAL_CONFIG: HAL_ENABLE_UC81XX")
 #endif
 #ifdef HAL_ENABLE_CRYPTO
 #pragma message("HAL_CONFIG: HAL_ENABLE_CRYPTO")

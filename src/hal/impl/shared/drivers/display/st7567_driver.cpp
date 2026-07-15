@@ -201,8 +201,11 @@ bool jh_st7567_init(jh_st7567_t *dev, const jh_st7567_config_t *config) {
       (uint8_t)(config->com_invdir ? ST7567_SET_COM_OUTPUT_SCAN_FLIPPED
                                    : ST7567_SET_COM_OUTPUT_SCAN_NORMAL),
   };
-  if (!write_command(dev, orientation, sizeof(orientation)) ||
-      (dev->initialized = true, !jh_st7567_set_contrast(dev, 0x80u))) {
+  if (!write_command(dev, orientation, sizeof(orientation))) {
+    return false;
+  }
+  dev->initialized = true;
+  if (!jh_st7567_set_contrast(dev, 0x80u)) {
     dev->initialized = false;
     return false;
   }
