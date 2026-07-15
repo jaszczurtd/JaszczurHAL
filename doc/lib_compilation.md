@@ -322,8 +322,7 @@ HAL-provided task configuration with `HAL_FREERTOS_TASK0_STACK`,
 `HAL_FREERTOS_TASK1_STACK`, `HAL_FREERTOS_TASK0_PRIORITY`, and
 `HAL_FREERTOS_TASK1_PRIORITY`; stack values are FreeRTOS stack words.
 Module-level lazy singleton mutexes and broader task-safety claims remain
-tracked in
-[`Thread-SafetyAudit.md`](Thread-SafetyAudit.md).
+tracked in [`future_ideas.md`](future_ideas.md).
 
 ### Linking With an STM32G474 Project
 

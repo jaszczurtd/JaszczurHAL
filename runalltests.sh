@@ -243,26 +243,30 @@ cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
 pass "STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
+TIDY_HOST_BUILD="${BUILD_DIR}/clang_tidy_db"
 mapfile -t TIDY_HOST_FILES < <(
-    scripts/clang_tidy_files.py --build-dir "${BUILD_DIR}" --repo-root "${SCRIPT_DIR}" --profile host
+    scripts/clang_tidy_files.py --build-dir "${BUILD_DIR}" --repo-root "${SCRIPT_DIR}" --profile host \
+        --output-compile-db "${TIDY_HOST_BUILD}/compile_commands.json"
 )
 if [[ "${#TIDY_HOST_FILES[@]}" -eq 0 ]]; then
     fail "clang-tidy host file list is empty"
     exit 1
 fi
-run-clang-tidy -p "${BUILD_DIR}" -quiet "${TIDY_HOST_FILES[@]}" \
+run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" \
     | tee /tmp/jh_tidy_host.log
 pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
+TIDY_STM32_BUILD="${BUILD_STM32}/clang_tidy_db"
 mapfile -t TIDY_STM32_FILES < <(
-    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32}" --repo-root "${SCRIPT_DIR}" --profile stm32
+    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32}" --repo-root "${SCRIPT_DIR}" --profile stm32 \
+        --output-compile-db "${TIDY_STM32_BUILD}/compile_commands.json"
 )
 if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then
     fail "clang-tidy STM32 file list is empty"
     exit 1
 fi
-run-clang-tidy -p "${BUILD_STM32}" -quiet "${TIDY_STM32_FILES[@]}" \
+run-clang-tidy -p "${TIDY_STM32_BUILD}" -quiet "${TIDY_STM32_FILES[@]}" \
     | tee /tmp/jh_tidy_stm32.log
 pass "clang-tidy STM32 pass complete."
 

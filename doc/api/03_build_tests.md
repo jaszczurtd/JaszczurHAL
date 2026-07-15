@@ -94,6 +94,11 @@ Runs the complete quality-gate suite (7 gates, in order):
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
 
+The clang-tidy gate creates profile-specific analysis databases with one
+compile command per source file. This keeps facade tests that compile the same
+shared driver under several feature sets from triggering duplicate analyzer
+runs while normal target builds still compile every configured variant.
+
 This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
 
 ---

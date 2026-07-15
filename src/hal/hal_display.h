@@ -7,7 +7,8 @@
  * @file hal_display.h
  * @brief Hardware abstraction for TFT and OLED displays.
  *
- * Supports SPI TFT displays, RGB OLEDs and monochrome OLED/LCD panels.
+ * Supports SPI TFT displays, RGB OLEDs, monochrome OLED/LCD panels and
+ * monochrome electrophoretic displays.
  *
  * Backend selection (compile-time, opt-in):
  *
@@ -26,12 +27,13 @@
  *                         backends over SPI.
  *   HAL_ENABLE_ST7567  - enable the raw page-oriented monochrome LCD facade
  *                         backend over I2C or SPI.
+ *   HAL_ENABLE_SSD16XX / HAL_ENABLE_UC81XX - enable raw monochrome EPD
+ *                         backends over SPI/GPIO.
  *
  * Multiple backend flags may be enabled simultaneously; the runtime init
  * entry points select the active display. Enabling HAL_ENABLE_DISPLAY alone
- * (without a TFT
- * driver, SSD1306, RGB OLED or ST7567) triggers a compile-time #error from
- * hal_config.h.
+ * (without a TFT driver, SSD1306, RGB OLED, ST7567 or EPD backend) triggers a
+ * compile-time #error from hal_config.h.
  *
  * TFT drivers are selected at compile time (ignored when HAL_ENABLE_TFT is
  * unset): Define exactly one of the following before including this header (or
@@ -195,6 +197,10 @@ typedef enum {
   HAL_DISPLAY_SCREEN_INFO_NONE = 0u,
   /* Consecutive bytes are vertical 8-pixel columns, grouped by pages. */
   HAL_DISPLAY_SCREEN_INFO_MONO_VTILED = (1u << 0),
+  /* The most significant bit is the left/top-most pixel in a packed byte. */
+  HAL_DISPLAY_SCREEN_INFO_MONO_MSB_FIRST = (1u << 1),
+  /* Panel is electrophoretic; visible changes require a refresh cycle. */
+  HAL_DISPLAY_SCREEN_INFO_EPD = (1u << 2),
 } hal_display_screen_info_t;
 
 #define HAL_DISPLAY_ROTATION_MASK(rotation) (1u << (uint8_t)(rotation))
@@ -276,6 +282,103 @@ typedef struct {
 } hal_display_rgb_oled_config_t;
 #endif
 
+#if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
+typedef struct {
+  const uint8_t *data;
+  size_t len;
+} hal_display_epd_bytes_t;
+
+typedef enum {
+  HAL_DISPLAY_EPD_REFRESH_FULL = 0,
+  HAL_DISPLAY_EPD_REFRESH_PARTIAL,
+} hal_display_epd_refresh_mode_t;
+
+typedef struct {
+  uint8_t bus;
+  int16_t cs_pin;
+  int16_t dc_pin;
+  int16_t rst_pin;
+  int16_t busy_pin;
+  uint32_t clock_hz;
+  uint32_t busy_timeout_ms;
+  uint8_t spi_mode;
+  bool busy_active_high;
+} hal_display_epd_spi_config_t;
+#endif
+
+#ifdef HAL_ENABLE_SSD16XX
+typedef enum {
+  HAL_DISPLAY_SSD16XX_SSD1608 = 0,
+  HAL_DISPLAY_SSD16XX_SSD1673,
+  HAL_DISPLAY_SSD16XX_SSD1675A,
+  HAL_DISPLAY_SSD16XX_SSD1680,
+  HAL_DISPLAY_SSD16XX_SSD1681,
+} hal_display_ssd16xx_controller_t;
+
+typedef struct {
+  hal_display_epd_bytes_t lut;
+  hal_display_epd_bytes_t gate_voltage;
+  hal_display_epd_bytes_t source_voltage;
+  uint8_t vcom;
+  uint8_t border_waveform;
+  uint8_t dummy_line;
+  uint8_t gate_line_width;
+  bool override_vcom;
+  bool override_border_waveform;
+  bool override_dummy_line;
+  bool override_gate_line_width;
+} hal_display_ssd16xx_profile_t;
+
+typedef struct {
+  hal_display_ssd16xx_controller_t controller;
+  hal_display_epd_spi_config_t transport;
+  uint16_t width;
+  uint16_t height;
+  hal_display_rotation_t rotation;
+  uint8_t temperature_sensor_selection;
+  hal_display_epd_bytes_t softstart;
+  const hal_display_ssd16xx_profile_t *full_profile;
+  const hal_display_ssd16xx_profile_t *partial_profile;
+} hal_display_ssd16xx_config_t;
+#endif
+
+#ifdef HAL_ENABLE_UC81XX
+typedef enum {
+  HAL_DISPLAY_UC81XX_UC8175 = 0,
+  HAL_DISPLAY_UC81XX_UC8176,
+  HAL_DISPLAY_UC81XX_UC8151D,
+  HAL_DISPLAY_UC81XX_UC8179,
+} hal_display_uc81xx_controller_t;
+
+typedef struct {
+  hal_display_epd_bytes_t power;
+  hal_display_epd_bytes_t lut_vcom;
+  hal_display_epd_bytes_t lut_white_to_white;
+  hal_display_epd_bytes_t lut_black_to_white;
+  hal_display_epd_bytes_t lut_white_to_black;
+  hal_display_epd_bytes_t lut_black_to_black;
+  hal_display_epd_bytes_t lut_border;
+  uint8_t cdi;
+  uint8_t tcon;
+  uint8_t pll;
+  uint8_t vdcs;
+  bool override_cdi;
+  bool override_tcon;
+  bool override_pll;
+  bool override_vdcs;
+} hal_display_uc81xx_profile_t;
+
+typedef struct {
+  hal_display_uc81xx_controller_t controller;
+  hal_display_epd_spi_config_t transport;
+  uint16_t width;
+  uint16_t height;
+  hal_display_epd_bytes_t softstart;
+  const hal_display_uc81xx_profile_t *full_profile;
+  const hal_display_uc81xx_profile_t *partial_profile;
+} hal_display_uc81xx_config_t;
+#endif
+
 #ifdef HAL_ENABLE_ST7567
 typedef enum {
   HAL_DISPLAY_ST7567_BUS_I2C = 0,
@@ -302,6 +405,18 @@ typedef struct {
   bool bias;
   hal_display_pixel_format_t pixel_format;
 } hal_display_st7567_config_t;
+#endif
+
+#ifdef HAL_ENABLE_SSD16XX
+/** Initialise an SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681 EPD backend. */
+hal_status_t
+hal_display_init_ssd16xx_ex(const hal_display_ssd16xx_config_t *config);
+#endif
+
+#ifdef HAL_ENABLE_UC81XX
+/** Initialise a UC8175/UC8176/UC8151D/UC8179 EPD backend. */
+hal_status_t
+hal_display_init_uc81xx_ex(const hal_display_uc81xx_config_t *config);
 #endif
 
 /*
@@ -899,6 +1014,10 @@ hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format);
 hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
                                       const hal_display_buffer_desc_t *desc,
                                       const void *buffer);
+#if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
+hal_status_t
+hal_display_epd_refresh_ex(hal_display_epd_refresh_mode_t refresh_mode);
+#endif
 
 hal_status_t hal_display_fill_screen_ex(uint16_t color);
 hal_status_t hal_display_flush_ex(void);

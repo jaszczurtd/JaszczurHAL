@@ -352,8 +352,8 @@ Every push and pull request to `main` runs the CI workflow
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
 `tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
-`scripts/clang_tidy_files.py` (the clang-tidy include/exclude file lists). The
-same checks can be run locally:
+`scripts/clang_tidy_files.py` (the clang-tidy include/exclude file lists and
+deduplicated analysis databases). The same checks can be run locally:
 
 ```bash
 # memory safety (requires valgrind)
@@ -520,8 +520,9 @@ The Arduino footprint in this repository is a tooling detail, not the shape of t
   and the panel drivers (`ili9341_driver.*`, `st77xx_driver.*`,
   `ssd1306_driver.*`) adapt the controller command sequences from the
   corresponding Adafruit ILI9341 / ST7735-ST7789 / SSD1306 libraries by
-  Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). See the file
-  headers for the per-module attribution.
+  Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). The SSD16xx
+  and UC81xx e-paper protocol/state machines use the local Zephyr drivers as
+  an Apache-2.0 reference. See the file headers for per-module attribution.
 - Bundled, ported, or locally adapted third-party components:
   [cJSON / cJSON_Utils](src/hal/impl/shared/frameworks/cjson/),
   [LodePNG](src/hal/impl/shared/frameworks/lodepng/),

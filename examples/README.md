@@ -244,3 +244,4 @@ jh_example(10_mqtt TARGETS rp2040 FQBN "${JH_RP2040_WIFI_FQBN}")
 | 52 | http_files | rp2040 (WiFi) | Callback-backed HTTP file serving, ETag and multipart upload demo |
 | 53 | simple_io_chips | rp2040, stm32g474 | I2C/SPI, MCP23017/PCA9654E/PCF8574/74HC595/MCP3221/MCP4725 simple external I/O chips |
 | 54 | adp5360_pmic | rp2040, stm32g474 | I2C, ADP5360 PMIC charger/fuel-gauge/regulator status and BUCK setup |
+| 55 | epd_display | rp2040, stm32g474 | SPI/GPIO, SSD1681 monochrome e-paper raw frame write and refresh |

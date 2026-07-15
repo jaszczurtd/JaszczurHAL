@@ -53,6 +53,14 @@
 #include "st7567_driver.h"
 #endif
 
+#ifdef HAL_ENABLE_SSD16XX
+#include "ssd16xx_driver.h"
+#endif
+
+#ifdef HAL_ENABLE_UC81XX
+#include "uc81xx_driver.h"
+#endif
+
 #if defined(HAL_ENABLE_TFT) || defined(HAL_ENABLE_SSD1331) ||                  \
     defined(HAL_ENABLE_SSD135X)
 #define JH_DISPLAY_HAS_IMMEDIATE_RGB 1
@@ -70,6 +78,8 @@ typedef enum {
   DISPLAY_BACKEND_SSD1306,
   DISPLAY_BACKEND_RGB_OLED,
   DISPLAY_BACKEND_ST7567,
+  DISPLAY_BACKEND_SSD16XX,
+  DISPLAY_BACKEND_UC81XX,
 } display_backend_t;
 
 static display_backend_t s_backend = DISPLAY_BACKEND_NONE;
@@ -97,6 +107,18 @@ static jh_rgb_oled_t s_rgb_oled = {};
 
 #ifdef HAL_ENABLE_ST7567
 static jh_st7567_t s_st7567 = {};
+#endif
+
+#ifdef HAL_ENABLE_SSD16XX
+static jh_ssd16xx_t s_ssd16xx = {};
+static jh_ssd16xx_profile_t s_ssd16xx_full_profile = {};
+static jh_ssd16xx_profile_t s_ssd16xx_partial_profile = {};
+#endif
+
+#ifdef HAL_ENABLE_UC81XX
+static jh_uc81xx_t s_uc81xx = {};
+static jh_uc81xx_profile_t s_uc81xx_full_profile = {};
+static jh_uc81xx_profile_t s_uc81xx_partial_profile = {};
 #endif
 
 #ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
@@ -364,12 +386,30 @@ static inline bool using_st7567(void) {
 #endif
 }
 
+static inline bool using_ssd16xx(void) {
+#ifdef HAL_ENABLE_SSD16XX
+  return s_backend == DISPLAY_BACKEND_SSD16XX && s_ssd16xx.initialized;
+#else
+  return false;
+#endif
+}
+
+static inline bool using_uc81xx(void) {
+#ifdef HAL_ENABLE_UC81XX
+  return s_backend == DISPLAY_BACKEND_UC81XX && s_uc81xx.initialized;
+#else
+  return false;
+#endif
+}
+
+static inline bool using_epd(void) { return using_ssd16xx() || using_uc81xx(); }
+
 static inline bool using_immediate_rgb(void) {
   return using_tft() || using_rgb_oled();
 }
 
 static inline bool has_active_display(void) {
-  return using_oled() || using_immediate_rgb() || using_st7567();
+  return using_oled() || using_immediate_rgb() || using_st7567() || using_epd();
 }
 
 static bool ensure_display_ready(const char *fn) {
@@ -1053,6 +1093,151 @@ hal_display_init_st7567_ex(const hal_display_st7567_config_t *config) {
 }
 #endif
 
+#if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
+static jh_epd_spi_config_t
+map_epd_transport(const hal_display_epd_spi_config_t *transport) {
+  jh_epd_spi_config_t mapped = {};
+  mapped.bus = transport->bus;
+  mapped.cs_pin = transport->cs_pin;
+  mapped.dc_pin = transport->dc_pin;
+  mapped.rst_pin = transport->rst_pin;
+  mapped.busy_pin = transport->busy_pin;
+  mapped.clock_hz = transport->clock_hz;
+  mapped.busy_timeout_ms = transport->busy_timeout_ms;
+  mapped.spi_mode = transport->spi_mode;
+  mapped.busy_active_high = transport->busy_active_high;
+  return mapped;
+}
+#endif
+
+#ifdef HAL_ENABLE_SSD16XX
+static jh_ssd16xx_profile_t
+map_ssd16xx_profile(const hal_display_ssd16xx_profile_t *profile) {
+  jh_ssd16xx_profile_t mapped = {};
+  if (profile == NULL) {
+    return mapped;
+  }
+  mapped.lut = {profile->lut.data, profile->lut.len};
+  mapped.gate_voltage = {profile->gate_voltage.data, profile->gate_voltage.len};
+  mapped.source_voltage = {profile->source_voltage.data,
+                           profile->source_voltage.len};
+  mapped.vcom = profile->vcom;
+  mapped.border_waveform = profile->border_waveform;
+  mapped.dummy_line = profile->dummy_line;
+  mapped.gate_line_width = profile->gate_line_width;
+  mapped.override_vcom = profile->override_vcom;
+  mapped.override_border_waveform = profile->override_border_waveform;
+  mapped.override_dummy_line = profile->override_dummy_line;
+  mapped.override_gate_line_width = profile->override_gate_line_width;
+  return mapped;
+}
+
+hal_status_t
+hal_display_init_ssd16xx_ex(const hal_display_ssd16xx_config_t *config) {
+  DisplayLock guard;
+  if (config == NULL || config->width == 0u || config->height < 8u ||
+      config->rotation > HAL_DISPLAY_ROTATION_270 ||
+      config->controller > HAL_DISPLAY_SSD16XX_SSD1681) {
+    return HAL_EINVAL;
+  }
+  jh_ssd16xx_config_t driver = {};
+  driver.controller = (jh_ssd16xx_controller_t)config->controller;
+  driver.transport = map_epd_transport(&config->transport);
+  driver.width = config->width;
+  driver.height = config->height;
+  driver.rotation = (uint8_t)config->rotation;
+  driver.temperature_sensor_selection = config->temperature_sensor_selection;
+  driver.softstart = {config->softstart.data, config->softstart.len};
+  if (config->full_profile != NULL) {
+    s_ssd16xx_full_profile = map_ssd16xx_profile(config->full_profile);
+    driver.full_profile = &s_ssd16xx_full_profile;
+  }
+  if (config->partial_profile != NULL) {
+    s_ssd16xx_partial_profile = map_ssd16xx_profile(config->partial_profile);
+    driver.partial_profile = &s_ssd16xx_partial_profile;
+  }
+  const hal_status_t status = jh_ssd16xx_init(&s_ssd16xx, &driver);
+  if (hal_status_is_error(status)) {
+    s_backend = DISPLAY_BACKEND_NONE;
+    return status;
+  }
+  s_backend = DISPLAY_BACKEND_SSD16XX;
+  if (config->rotation == HAL_DISPLAY_ROTATION_90 ||
+      config->rotation == HAL_DISPLAY_ROTATION_270) {
+    s_width = (int)(config->height & ~7u);
+    s_height = config->width;
+  } else {
+    s_width = config->width;
+    s_height = (int)(config->height & ~7u);
+  }
+  s_rotation = (uint8_t)config->rotation;
+  return HAL_OK;
+}
+#endif
+
+#ifdef HAL_ENABLE_UC81XX
+static jh_uc81xx_profile_t
+map_uc81xx_profile(const hal_display_uc81xx_profile_t *profile) {
+  jh_uc81xx_profile_t mapped = {};
+  if (profile == NULL) {
+    return mapped;
+  }
+  mapped.power = {profile->power.data, profile->power.len};
+  mapped.lut_vcom = {profile->lut_vcom.data, profile->lut_vcom.len};
+  mapped.lut_white_to_white = {profile->lut_white_to_white.data,
+                               profile->lut_white_to_white.len};
+  mapped.lut_black_to_white = {profile->lut_black_to_white.data,
+                               profile->lut_black_to_white.len};
+  mapped.lut_white_to_black = {profile->lut_white_to_black.data,
+                               profile->lut_white_to_black.len};
+  mapped.lut_black_to_black = {profile->lut_black_to_black.data,
+                               profile->lut_black_to_black.len};
+  mapped.lut_border = {profile->lut_border.data, profile->lut_border.len};
+  mapped.cdi = profile->cdi;
+  mapped.tcon = profile->tcon;
+  mapped.pll = profile->pll;
+  mapped.vdcs = profile->vdcs;
+  mapped.override_cdi = profile->override_cdi;
+  mapped.override_tcon = profile->override_tcon;
+  mapped.override_pll = profile->override_pll;
+  mapped.override_vdcs = profile->override_vdcs;
+  return mapped;
+}
+
+hal_status_t
+hal_display_init_uc81xx_ex(const hal_display_uc81xx_config_t *config) {
+  DisplayLock guard;
+  if (config == NULL || config->width == 0u || config->height == 0u ||
+      config->controller > HAL_DISPLAY_UC81XX_UC8179) {
+    return HAL_EINVAL;
+  }
+  jh_uc81xx_config_t driver = {};
+  driver.controller = (jh_uc81xx_controller_t)config->controller;
+  driver.transport = map_epd_transport(&config->transport);
+  driver.width = config->width;
+  driver.height = config->height;
+  driver.softstart = {config->softstart.data, config->softstart.len};
+  if (config->full_profile != NULL) {
+    s_uc81xx_full_profile = map_uc81xx_profile(config->full_profile);
+    driver.full_profile = &s_uc81xx_full_profile;
+  }
+  if (config->partial_profile != NULL) {
+    s_uc81xx_partial_profile = map_uc81xx_profile(config->partial_profile);
+    driver.partial_profile = &s_uc81xx_partial_profile;
+  }
+  const hal_status_t status = jh_uc81xx_init(&s_uc81xx, &driver);
+  if (hal_status_is_error(status)) {
+    s_backend = DISPLAY_BACKEND_NONE;
+    return status;
+  }
+  s_backend = DISPLAY_BACKEND_UC81XX;
+  s_width = config->width;
+  s_height = config->height;
+  s_rotation = HAL_DISPLAY_ROTATION_0;
+  return HAL_OK;
+}
+#endif
+
 hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
                                       bool invert, bool bgr) {
   DisplayLock guard;
@@ -1098,6 +1283,14 @@ hal_status_t hal_display_configure_ex(int width, int height, uint8_t rotation,
     return HAL_OK;
   }
 #endif
+
+  if (using_epd()) {
+    if (width != s_width || height != s_height || bgr || invert ||
+        rotation != s_rotation) {
+      return HAL_EUNSUPPORTED;
+    }
+    return HAL_OK;
+  }
 
 #ifdef HAL_ENABLE_TFT
 #if defined(HAL_DISPLAY_ILI9341)
@@ -1194,6 +1387,16 @@ hal_status_t hal_display_suspend_ex(void) {
     return jh_st7567_suspend(&s_st7567) ? HAL_OK : HAL_EIO;
   }
 #endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    return jh_ssd16xx_suspend(&s_ssd16xx);
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    return jh_uc81xx_suspend(&s_uc81xx);
+  }
+#endif
   return HAL_EUNSUPPORTED;
 }
 
@@ -1215,6 +1418,16 @@ hal_status_t hal_display_resume_ex(void) {
 #ifdef HAL_ENABLE_ST7567
   if (using_st7567()) {
     return jh_st7567_resume(&s_st7567) ? HAL_OK : HAL_EIO;
+  }
+#endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    return jh_ssd16xx_resume(&s_ssd16xx);
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    return jh_uc81xx_resume(&s_uc81xx);
   }
 #endif
   return HAL_EUNSUPPORTED;
@@ -1250,6 +1463,23 @@ hal_status_t hal_display_set_rotation_ex(uint8_t r) {
     s_tft_gfx.configure((int16_t)s_width, (int16_t)s_height);
     s_rotation = r & 0x03u;
     return HAL_OK;
+  }
+#endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    const hal_status_t status = jh_ssd16xx_set_rotation(&s_ssd16xx, r & 0x03u);
+    if (hal_status_is_ok(status)) {
+      s_rotation = r & 0x03u;
+      if (s_rotation == HAL_DISPLAY_ROTATION_90 ||
+          s_rotation == HAL_DISPLAY_ROTATION_270) {
+        s_width = (int)(s_ssd16xx.config.height & ~7u);
+        s_height = s_ssd16xx.config.width;
+      } else {
+        s_width = s_ssd16xx.config.width;
+        s_height = (int)(s_ssd16xx.config.height & ~7u);
+      }
+    }
+    return status;
   }
 #endif
   return HAL_EUNSUPPORTED;
@@ -1363,6 +1593,40 @@ hal_status_t hal_display_get_capabilities_ex(hal_display_capabilities_t *out) {
     return HAL_OK;
   }
 #endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->supported_rotations = HAL_DISPLAY_ROTATION_MASK_ALL;
+    out->screen_info =
+        HAL_DISPLAY_SCREEN_INFO_MONO_MSB_FIRST | HAL_DISPLAY_SCREEN_INFO_EPD;
+    if (s_rotation == HAL_DISPLAY_ROTATION_0 ||
+        s_rotation == HAL_DISPLAY_ROTATION_180) {
+      out->y_alignment = 8u;
+      out->height_alignment = 8u;
+      out->screen_info |= HAL_DISPLAY_SCREEN_INFO_MONO_VTILED;
+    } else {
+      out->x_alignment = 8u;
+      out->width_alignment = 8u;
+    }
+    out->flags = HAL_DISPLAY_CAP_RAW_WRITE;
+    return HAL_OK;
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    out->supported_pixel_formats = HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->current_pixel_format = HAL_DISPLAY_PIXEL_FORMAT_MONO10;
+    out->supported_rotations =
+        HAL_DISPLAY_ROTATION_MASK(HAL_DISPLAY_ROTATION_0);
+    out->x_alignment = 8u;
+    out->width_alignment = 8u;
+    out->screen_info =
+        HAL_DISPLAY_SCREEN_INFO_MONO_MSB_FIRST | HAL_DISPLAY_SCREEN_INFO_EPD;
+    out->flags = HAL_DISPLAY_CAP_RAW_WRITE;
+    return HAL_OK;
+  }
+#endif
   return HAL_EUNSUPPORTED;
 }
 
@@ -1390,6 +1654,9 @@ hal_display_set_pixel_format_ex(hal_display_pixel_format_t pixel_format) {
     return HAL_OK;
   }
   if (using_oled() && pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO01) {
+    return HAL_OK;
+  }
+  if (using_epd() && pixel_format == HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
     return HAL_OK;
   }
   return HAL_EUNSUPPORTED;
@@ -1462,8 +1729,58 @@ hal_status_t hal_display_write_raw_ex(uint16_t x, uint16_t y,
                : HAL_EIO;
   }
 #endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
+      return HAL_EUNSUPPORTED;
+    }
+    const size_t required = (size_t)desc->width * desc->height / 8u;
+    if (required == 0u || desc->buf_size < required) {
+      return HAL_EINVAL;
+    }
+    return jh_ssd16xx_write(&s_ssd16xx, x, y, desc->width, desc->height,
+                            (const uint8_t *)buffer, desc->buf_size,
+                            !desc->frame_incomplete);
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    if (desc->pixel_format != HAL_DISPLAY_PIXEL_FORMAT_MONO10) {
+      return HAL_EUNSUPPORTED;
+    }
+    const size_t required = (size_t)desc->width * desc->height / 8u;
+    if (required == 0u || desc->buf_size < required) {
+      return HAL_EINVAL;
+    }
+    return jh_uc81xx_write(&s_uc81xx, x, y, desc->width, desc->height,
+                           (const uint8_t *)buffer, desc->buf_size,
+                           !desc->frame_incomplete);
+  }
+#endif
   return HAL_EUNSUPPORTED;
 }
+
+#if defined(HAL_ENABLE_SSD16XX) || defined(HAL_ENABLE_UC81XX)
+hal_status_t
+hal_display_epd_refresh_ex(hal_display_epd_refresh_mode_t refresh_mode) {
+  if (refresh_mode > HAL_DISPLAY_EPD_REFRESH_PARTIAL) {
+    return HAL_EINVAL;
+  }
+  DisplayLock guard;
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    return jh_ssd16xx_refresh(&s_ssd16xx,
+                              (jh_ssd16xx_refresh_mode_t)refresh_mode);
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    return jh_uc81xx_refresh(&s_uc81xx, (jh_uc81xx_refresh_mode_t)refresh_mode);
+  }
+#endif
+  return has_active_display() ? HAL_EUNSUPPORTED : HAL_EUNINIT;
+}
+#endif
 
 /* ---- Screen -------------------------------------------------------------- */
 
@@ -1504,6 +1821,22 @@ hal_status_t hal_display_flush_ex(void) {
 #ifdef HAL_ENABLE_SSD1306
   if (using_oled()) {
     return jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO;
+  }
+#endif
+#ifdef HAL_ENABLE_SSD16XX
+  if (using_ssd16xx()) {
+    if (!s_ssd16xx.refresh_pending) {
+      return HAL_OK;
+    }
+    return jh_ssd16xx_refresh(&s_ssd16xx, s_ssd16xx.pending_refresh_mode);
+  }
+#endif
+#ifdef HAL_ENABLE_UC81XX
+  if (using_uc81xx()) {
+    if (!s_uc81xx.refresh_pending) {
+      return HAL_OK;
+    }
+    return jh_uc81xx_refresh(&s_uc81xx, s_uc81xx.pending_refresh_mode);
   }
 #endif
   return HAL_OK;
