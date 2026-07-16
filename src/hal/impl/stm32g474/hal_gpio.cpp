@@ -21,6 +21,9 @@ static inline uint32_t pin_port(uint8_t pin) { return (uint32_t)(pin >> 4); }
 static inline uint32_t pin_num(uint8_t pin) { return (uint32_t)(pin & 0x0Fu); }
 
 static void (*s_exti_callback[16])(void) = {};
+static bool s_exti_attached[16] = {};
+static uint8_t s_exti_owner[16] = {};
+static uint8_t s_exti_pin[16] = {};
 static hal_irq_priority_t s_gpio_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
 
 static inline uint32_t exti_line_mask(uint32_t line) { return 1u << line; }
@@ -182,21 +185,28 @@ bool hal_gpio_read(uint8_t pin) {
   return (GPIO_IDR(port) & (1u << n)) != 0u;
 }
 
-void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
-                               hal_gpio_irq_mode_t mode) {
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
   const uint32_t port = pin_port(pin);
   const uint32_t line = pin_num(pin);
   if (!gpio_pin_valid(pin) || line > 15u) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid pin");
-    return;
+    return HAL_EINVAL;
   }
   if (callback == nullptr) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: callback is NULL");
-    return;
+    return HAL_EINVAL;
   }
   if (!gpio_irq_mode_valid(mode)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid IRQ mode");
-    return;
+    return HAL_EINVAL;
+  }
+  if (owner_core > 1u) {
+    return HAL_EINVAL;
+  }
+  if (owner_core != 0u) {
+    return HAL_ESTATE;
+  }
+  if (s_exti_attached[line] && s_exti_owner[line] != owner_core) {
+    return HAL_ESTATE;
   }
 
   const uint32_t mask = exti_line_mask(line);
@@ -232,16 +242,32 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
   EXTI_IMR1 |= mask;
   exti_apply_priority();
   exti_enable_irq(exti_irqn_for_line(line));
+  s_exti_pin[line] = pin;
+  s_exti_owner[line] = owner_core;
+  s_exti_attached[line] = true;
+  return HAL_OK;
 }
 
-void hal_gpio_detach_interrupt(uint8_t pin) {
+void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
+                               hal_gpio_irq_mode_t mode) {
+  const hal_status_t status =
+      hal_gpio_attach_interrupt_ex(pin, callback, mode, 0u);
+  HAL_ASSERT(status == HAL_OK, "hal_gpio_attach_interrupt: attach failed");
+}
+
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
   if (!gpio_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_detach_interrupt: invalid pin");
-    return;
+    return HAL_EINVAL;
   }
   const uint32_t line = pin_num(pin);
   if (line > 15u) {
-    return;
+    return HAL_EINVAL;
+  }
+  if (!s_exti_attached[line] || s_exti_pin[line] != pin) {
+    return HAL_ENOENT;
+  }
+  if (s_exti_owner[line] != 0u) {
+    return HAL_ESTATE;
   }
 
   const uint32_t mask = exti_line_mask(line);
@@ -250,6 +276,33 @@ void hal_gpio_detach_interrupt(uint8_t pin) {
   EXTI_FTSR1 &= ~mask;
   exti_clear_pending(mask);
   s_exti_callback[line] = nullptr;
+  s_exti_attached[line] = false;
+  s_exti_owner[line] = HAL_GPIO_IRQ_CORE_NONE;
+  s_exti_pin[line] = 0u;
+  return HAL_OK;
+}
+
+void hal_gpio_detach_interrupt(uint8_t pin) {
+  const hal_status_t status = hal_gpio_detach_interrupt_ex(pin);
+  HAL_ASSERT(status == HAL_OK || status == HAL_ENOENT,
+             "hal_gpio_detach_interrupt: detach failed");
+}
+
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core) {
+  if (out_owner_core == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_owner_core = HAL_GPIO_IRQ_CORE_NONE;
+  if (!gpio_pin_valid(pin)) {
+    return HAL_EINVAL;
+  }
+  const uint32_t line = pin_num(pin);
+  if (!s_exti_attached[line] || s_exti_pin[line] != pin) {
+    return HAL_ENOENT;
+  }
+  *out_owner_core = s_exti_owner[line];
+  return HAL_OK;
 }
 
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {
@@ -273,11 +326,15 @@ extern "C" void EXTI15_10_IRQHandler(void) { exti_dispatch_range(10u, 15u); }
 
 static bool s_state[128] = {};
 static hal_gpio_mode_t s_mode[128] = {};
-static void (*s_callback[128])(void) = {};
-static hal_gpio_irq_mode_t s_irq_mode[128] = {};
+static void (*s_callback[16])(void) = {};
+static hal_gpio_irq_mode_t s_irq_mode[16] = {};
+static bool s_irq_attached[16] = {};
+static uint8_t s_irq_owner[16] = {};
+static uint8_t s_irq_pin[16] = {};
 static hal_irq_priority_t s_gpio_irq_priority = HAL_IRQ_PRIORITY_DEFAULT;
 
 static bool gpio_pin_valid(uint8_t pin) { return pin < 128u; }
+static uint8_t pin_num(uint8_t pin) { return (uint8_t)(pin & 0x0Fu); }
 
 static bool gpio_mode_valid(hal_gpio_mode_t mode) {
   return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
@@ -323,30 +380,82 @@ bool hal_gpio_read(uint8_t pin) {
   return s_state[pin];
 }
 
-void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
-                               hal_gpio_irq_mode_t mode) {
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
+  const uint8_t line = pin_num(pin);
   if (!gpio_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid pin");
-    return;
+    return HAL_EINVAL;
   }
   if (callback == nullptr) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: callback is NULL");
-    return;
+    return HAL_EINVAL;
   }
   if (!gpio_irq_mode_valid(mode)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid IRQ mode");
-    return;
+    return HAL_EINVAL;
   }
-  s_callback[pin] = callback;
-  s_irq_mode[pin] = mode;
+  if (owner_core > 1u) {
+    return HAL_EINVAL;
+  }
+  if (owner_core != 0u) {
+    return HAL_ESTATE;
+  }
+  if (s_irq_attached[line] && s_irq_owner[line] != owner_core) {
+    return HAL_ESTATE;
+  }
+  s_callback[line] = callback;
+  s_irq_mode[line] = mode;
+  s_irq_pin[line] = pin;
+  s_irq_owner[line] = owner_core;
+  s_irq_attached[line] = true;
+  return HAL_OK;
+}
+
+void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
+                               hal_gpio_irq_mode_t mode) {
+  const hal_status_t status =
+      hal_gpio_attach_interrupt_ex(pin, callback, mode, 0u);
+  HAL_ASSERT(status == HAL_OK, "hal_gpio_attach_interrupt: attach failed");
+}
+
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
+  const uint8_t line = pin_num(pin);
+  if (!gpio_pin_valid(pin)) {
+    return HAL_EINVAL;
+  }
+  if (!s_irq_attached[line] || s_irq_pin[line] != pin) {
+    return HAL_ENOENT;
+  }
+  if (s_irq_owner[line] != 0u) {
+    return HAL_ESTATE;
+  }
+  s_callback[line] = nullptr;
+  s_irq_attached[line] = false;
+  s_irq_owner[line] = HAL_GPIO_IRQ_CORE_NONE;
+  s_irq_pin[line] = 0u;
+  return HAL_OK;
 }
 
 void hal_gpio_detach_interrupt(uint8_t pin) {
-  if (!gpio_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_detach_interrupt: invalid pin");
-    return;
+  const hal_status_t status = hal_gpio_detach_interrupt_ex(pin);
+  HAL_ASSERT(status == HAL_OK || status == HAL_ENOENT,
+             "hal_gpio_detach_interrupt: detach failed");
+}
+
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core) {
+  const uint8_t line = pin_num(pin);
+  if (out_owner_core == nullptr) {
+    return HAL_EINVAL;
   }
-  s_callback[pin] = nullptr;
+  *out_owner_core = HAL_GPIO_IRQ_CORE_NONE;
+  if (!gpio_pin_valid(pin)) {
+    return HAL_EINVAL;
+  }
+  if (!s_irq_attached[line] || s_irq_pin[line] != pin) {
+    return HAL_ENOENT;
+  }
+  *out_owner_core = s_irq_owner[line];
+  return HAL_OK;
 }
 
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {

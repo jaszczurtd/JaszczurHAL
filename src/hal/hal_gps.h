@@ -11,16 +11,17 @@ extern "C" {
  * @file hal_gps.h
  * @brief Hardware abstraction for GPS NMEA receivers.
  *
- * Wraps an NMEA parser (e.g. TinyGPS++) behind a platform-independent API.
- * The real implementation drives the parser from a software-serial stream;
- * the mock lets tests inject location, speed, date and time directly.
+ * Wraps an NMEA parser behind a platform-independent API. RP2040 supports a
+ * PIO/DMA SoftwareSerial transport and an interrupt-driven hardware UART
+ * transport; the mock lets tests inject location, speed, date and time
+ * directly.
  *
  * Only one GPS instance is supported (singleton).
  */
 
-#    include "hal_uart_config.h"
-#    include <stdbool.h>
-#    include <stdint.h>
+#include "hal_uart_config.h"
+#include <stdbool.h>
+#include <stdint.h>
 
 /**
  * @brief Initialise the GPS subsystem.
@@ -29,21 +30,27 @@ extern "C" {
  * automatically tries the alternate framing (8N1↔️7N1) if, after the first
  * ~500 received characters, every NMEA sentence fails its checksum.
  *
+ * @note On RP2040 with HAL_GPS_TRANSPORT_UART, the UART RX interrupt is
+ *       installed on the core executing this call. The current API does not
+ *       expose or validate that implicit owner. Call from a task pinned to the
+ *       intended core. HAL_GPS_TRANSPORT_SWSERIAL uses PIO/DMA and installs no
+ *       CPU RX interrupt.
+ *
  * @param rx_pin  GPIO pin for serial RX from the GPS module.
  * @param tx_pin  GPIO pin for serial TX to the GPS module.
  * @param baud    Baud rate (typically 9600).
  * @param config  UART frame format constant (e.g. HAL_UART_CFG_8N1).
  */
-void hal_gps_init(uint8_t rx_pin,
-                  uint8_t tx_pin,
-                  uint32_t baud,
+void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud,
                   uint16_t config);
 
 /**
  * @brief Drain all available bytes from the serial port into the NMEA parser.
  *
- * Should be called frequently (e.g. every main-loop iteration) to prevent
- * the PIO/SoftwareSerial receive buffer from overflowing.
+ * Should be called frequently (e.g. every main-loop iteration) to prevent the
+ * selected transport's receive buffer from overflowing. In multicore code,
+ * keeping this call in the task/core that initialized GPS makes transport
+ * ownership explicit.
  *
  * In the mock build this function is a no-op; use the inject helpers instead.
  */
@@ -52,8 +59,10 @@ void hal_gps_update(void);
 /**
  * @brief Feed one byte of raw NMEA data into the parser.
  *
- * In the real build this is called from the serial-RX interrupt.
- * In mock builds it is a no-op (use inject functions instead).
+ * Hardware transports feed bytes to this function while their buffered input
+ * is drained by hal_gps_update(); the NMEA parser itself does not run directly
+ * in the RP2040 UART ISR. In mock builds this is a no-op (use inject functions
+ * instead).
  *
  * @param c Byte received from the GPS module.
  */

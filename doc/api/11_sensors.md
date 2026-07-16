@@ -859,6 +859,27 @@ polled every loop iteration.
 internal `hal_mutex_t` protects the parser state, the byte feed and all accessor
 calls. Mock backend is unsynchronized and intended for single-threaded tests.
 
+**RP2040 transport and core affinity:**
+
+- With `HAL_GPS_TRANSPORT_SWSERIAL`, reception runs in PIO state machines and
+  DMA writes the raw ring. There is no GPS RX ISR on either CPU core;
+  `hal_gps_update()` consumes the DMA-backed buffer in its caller's task
+  context.
+- With `HAL_GPS_TRANSPORT_UART`, `hal_gps_init()` calls `hal_uart_begin()`.
+  The hardware UART RX IRQ is therefore installed on, and implicitly owned by,
+  the core executing `hal_gps_init()`.
+- The current GPS/UART API does not expose this implicit UART owner and does
+  not validate the caller core. Initialize GPS/UART from the intended core and
+  keep reinitialization or teardown on that same core. In FreeRTOS/SMP code,
+  call `hal_gps_init()` from the GPS service task after pinning that task to the
+  selected core; keeping `hal_gps_update()` in the same task makes the complete
+  transport/parsing ownership explicit.
+
+For example, an application that assigns GPS to core 0 must invoke both
+`hal_gps_init()` and its regular `hal_gps_update()` polling from the core-0
+service task. Merely protecting calls with a mutex does not move an already
+installed RP2040 UART IRQ between cores.
+
 **UART config default:**
 
 `HAL_GPS_DEFAULT_UART_CONFIG` (defined in `hal/hal_config.h`) defaults to

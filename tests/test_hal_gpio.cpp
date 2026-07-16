@@ -2,12 +2,16 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
-void setUp(void) {}
+void setUp(void) { hal_mock_gpio_set_current_core(0u); }
 void tearDown(void) {}
 
 static int s_gpio_irq_hits;
+static uint8_t s_gpio_irq_core_seen;
 
-static void gpio_irq_hit(void) { s_gpio_irq_hits++; }
+static void gpio_irq_hit(void) {
+  s_gpio_irq_hits++;
+  s_gpio_irq_core_seen = hal_mock_gpio_get_current_core();
+}
 
 void test_set_mode_output(void) {
   hal_gpio_set_mode(5, HAL_GPIO_OUTPUT);
@@ -118,6 +122,86 @@ void test_detach_interrupt_stops_mock_callback(void) {
   TEST_ASSERT_EQUAL_INT(1, s_gpio_irq_hits);
 }
 
+void test_interrupt_owner_status_and_same_core_reconfiguration(void) {
+  uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      hal_gpio_attach_interrupt_ex(18u, gpio_irq_hit, HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_get_interrupt_owner_ex(18u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(0u, owner);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_gpio_attach_interrupt_ex(18u, gpio_irq_hit,
+                                                     HAL_GPIO_IRQ_FALLING, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(18u));
+
+  owner = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_gpio_get_interrupt_owner_ex(18u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(HAL_GPIO_IRQ_CORE_NONE, owner);
+}
+
+void test_interrupt_owner_rejects_wrong_core_reconfigure_and_detach(void) {
+  s_gpio_irq_hits = 0;
+  s_gpio_irq_core_seen = HAL_GPIO_IRQ_CORE_NONE;
+  hal_mock_gpio_set_current_core(1u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK,
+      hal_gpio_attach_interrupt_ex(19u, gpio_irq_hit, HAL_GPIO_IRQ_CHANGE, 1u));
+
+  hal_mock_gpio_set_current_core(0u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ESTATE,
+      hal_gpio_attach_interrupt_ex(19u, gpio_irq_hit, HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE, hal_gpio_detach_interrupt_ex(19u));
+
+  uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_get_interrupt_owner_ex(19u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(1u, owner);
+
+  hal_mock_gpio_fire_interrupt(19u);
+  TEST_ASSERT_EQUAL_INT(1, s_gpio_irq_hits);
+  TEST_ASSERT_EQUAL_UINT8(1u, s_gpio_irq_core_seen);
+  TEST_ASSERT_EQUAL_UINT8(0u, hal_mock_gpio_get_current_core());
+
+  hal_mock_gpio_set_current_core(1u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_detach_interrupt_ex(19u));
+}
+
+void test_interrupt_owner_validates_arguments_and_caller_core(void) {
+  uint8_t owner = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      hal_gpio_attach_interrupt_ex(64u, gpio_irq_hit, HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_gpio_attach_interrupt_ex(
+                                        20u, nullptr, HAL_GPIO_IRQ_RISING, 0u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_gpio_attach_interrupt_ex(20u, gpio_irq_hit,
+                                               (hal_gpio_irq_mode_t)99, 0u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      hal_gpio_attach_interrupt_ex(20u, gpio_irq_hit, HAL_GPIO_IRQ_RISING, 2u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ESTATE,
+      hal_gpio_attach_interrupt_ex(20u, gpio_irq_hit, HAL_GPIO_IRQ_RISING, 1u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_gpio_get_interrupt_owner_ex(20u, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT,
+                        hal_gpio_get_interrupt_owner_ex(20u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(HAL_GPIO_IRQ_CORE_NONE, owner);
+  TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_gpio_detach_interrupt_ex(20u));
+}
+
+void test_legacy_attach_records_current_core_owner(void) {
+  hal_mock_gpio_set_current_core(1u);
+  hal_gpio_attach_interrupt(21u, gpio_irq_hit, HAL_GPIO_IRQ_RISING);
+
+  uint8_t owner = HAL_GPIO_IRQ_CORE_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_gpio_get_interrupt_owner_ex(21u, &owner));
+  TEST_ASSERT_EQUAL_UINT8(1u, owner);
+  hal_gpio_detach_interrupt(21u);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_set_mode_output);
@@ -134,5 +218,9 @@ int main(void) {
   RUN_TEST(test_drive_high_mode_then_write_drives_high);
   RUN_TEST(test_write_then_set_output_clobbers_high_to_low);
   RUN_TEST(test_detach_interrupt_stops_mock_callback);
+  RUN_TEST(test_interrupt_owner_status_and_same_core_reconfiguration);
+  RUN_TEST(test_interrupt_owner_rejects_wrong_core_reconfigure_and_detach);
+  RUN_TEST(test_interrupt_owner_validates_arguments_and_caller_core);
+  RUN_TEST(test_legacy_attach_records_current_core_owner);
   return UNITY_END();
 }

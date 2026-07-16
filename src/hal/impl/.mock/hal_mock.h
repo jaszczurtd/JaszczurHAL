@@ -34,6 +34,10 @@ void hal_mock_gpio_clear_read_sequence(uint8_t pin);
 /** @brief Fire the interrupt callback registered for pin (via
  * hal_gpio_attach_interrupt). */
 void hal_mock_gpio_fire_interrupt(uint8_t pin);
+/** @brief Select the simulated caller core used by GPIO IRQ ownership tests. */
+void hal_mock_gpio_set_current_core(uint8_t core);
+/** @brief Return the simulated caller core used by the GPIO mock. */
+uint8_t hal_mock_gpio_get_current_core(void);
 /** @brief Return the GPIO IRQ priority set via hal_gpio_set_irq_priority(). */
 hal_irq_priority_t hal_mock_gpio_get_irq_priority(void);
 /* NOTE on the "write-before-mode" antipattern: the mock faithfully models

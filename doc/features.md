@@ -24,7 +24,7 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| GPIO | Portable digital I/O, pull modes and interrupt-oriented usage. | [hal_gpio.h](../src/hal/hal_gpio.h) |
+| GPIO | Portable digital I/O, pull modes and interrupts, including explicit IRQ core ownership and diagnostics on multicore targets. | [hal_gpio.h](../src/hal/hal_gpio.h) |
 | ADC | Portable analog input abstraction. | [hal_adc.h](../src/hal/hal_adc.h) |
 | DAC | True DAC support with additional diagnostics. | [hal_dac.h](../src/hal/hal_dac.h) |
 | PWM | Portable PWM output plus frequency-controlled PWM helpers. | [hal_pwm.h](../src/hal/hal_pwm.h), [hal_pwm_freq.h](../src/hal/hal_pwm_freq.h) |
@@ -38,7 +38,7 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
-| UART | Hardware serial communication abstraction. | [hal_uart.h](../src/hal/hal_uart.h) |
+| UART | Hardware serial communication abstraction; RP2040 RX IRQ affinity follows the core that starts the UART. | [hal_uart.h](../src/hal/hal_uart.h) |
 | Serial/debug console | TX-serialized console output, RP2040 TinyUSB CDC transport, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
 | Software serial | Target-optimized software UART: native Pico SDK PIO/DMA on RP2040 and a shared HAL GPIO backend on other targets. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
@@ -83,7 +83,7 @@ For the target-selectable VS Code firmware project model, see
 | RTC facade | Common real-time-clock surface with multiple chip backends, including status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs. | [hal_rtc.h](../src/hal/hal_rtc.h) |
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/impl/shared/drivers/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/impl/shared/drivers/ds3231/) |
-| GPS / NMEA | Portable NMEA parser and GPS abstraction for UART/software-serial receivers. | [hal_gps.h](../src/hal/hal_gps.h), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |
+| GPS / NMEA | Portable NMEA parser and GPS abstraction for UART/software-serial receivers, with transport-specific RP2040 IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/hal_gps.h), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |
 | Thermocouple facade | Common temperature surface for thermocouple backends. | [hal_thermocouple.h](../src/hal/hal_thermocouple.h) |
 | MCP9600/MCP9601 | Shared I2C thermocouple amplifier driver. | [mcp9600 driver](../src/hal/impl/shared/drivers/mcp9600/) |
 | MAX6675 | Shared GPIO bit-banged thermocouple converter driver. | [max6675 driver](../src/hal/impl/shared/drivers/max6675/) |
