@@ -31,6 +31,16 @@ bool hal_gpio_read(uint8_t pin);
 void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void), hal_gpio_irq_mode_t mode);
 void hal_gpio_detach_interrupt(uint8_t pin);
 
+#define HAL_GPIO_IRQ_CORE_NONE UINT8_MAX
+
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin,
+                                          void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core);
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin);
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core);
+
 typedef enum {
     HAL_IRQ_PRIORITY_HIGHEST = 0,
     HAL_IRQ_PRIORITY_HIGH    = 1,
@@ -42,13 +52,48 @@ void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 ```
 
 **Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, `Serial`, or any blocking call inside it.
-**Validation:** Invalid GPIO modes, invalid IRQ modes, invalid pins and NULL interrupt callbacks trigger `HAL_ASSERT` in checked builds and return without configuring hardware.
+**Validation:** Invalid arguments passed to legacy `void` operations trigger
+`HAL_ASSERT` in checked builds. The status-returning IRQ operations report
+`HAL_EINVAL` (or `HAL_EUNSUPPORTED` for an unsupported backend/pin) without
+configuring hardware.
 **Output initial state:** `HAL_GPIO_OUTPUT_LOW/HIGH` and `HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW/HIGH` make the intended initial latch state explicit. `HAL_GPIO_OUTPUT` remains compatible and means push-pull output with initial low.
 **Open drain:** On STM32G474 this maps to hardware open-drain. On RP2040 (native pico-sdk) it is emulated by driving LOW for `false` and releasing the pin as input (high-Z) for `true`.
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
+**IRQ core ownership:** Use `hal_gpio_attach_interrupt_ex` in multicore code. It
+returns `HAL_ESTATE` unless the caller is currently running on `owner_core`, and
+atomically records that core as the pin's interrupt owner. Reconfiguration and
+`hal_gpio_detach_interrupt_ex` are accepted only from the recorded owner core;
+`hal_gpio_get_interrupt_owner_ex` is a read-only diagnostic and may be called
+from either core. A detached pin returns `HAL_ENOENT` and writes
+`HAL_GPIO_IRQ_CORE_NONE`. The legacy attach wrapper binds the IRQ to its current
+caller core, while the legacy detach wrapper asserts if ownership is violated.
+On the single-core STM32G474 backend the only valid caller/owner is core 0.
+The status APIs are intended for initialization/task diagnostics, not ISR
+context.
+This explicit ownership API covers GPIO interrupts only. Peripheral IRQs have
+their own backend contracts. In particular, the RP2040 hardware-UART RX IRQ is
+currently bound implicitly to the core that calls `hal_uart_begin()`; GPS
+inherits that behavior when built with `HAL_GPS_TRANSPORT_UART`. The UART API
+does not yet expose an owner query or reject wrong-core lifecycle operations,
+so begin/reconfigure/destroy must be serialized on the same core. See
+the [`hal_uart` bus documentation](09_buses.md) and
+[`hal_gps` sensor documentation](11_sensors.md).
+RP2040 SoftwareSerial instead receives through PIO/DMA and does not install a
+CPU RX interrupt.
 **STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
 **IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
 **Interrupt detach:** `hal_gpio_detach_interrupt` removes the registered callback and masks the pin/EXTI source where the backend supports hardware interrupt masking.
+
+For example, RPM capture intended for RP2040 core 1 can fail fast during
+initialization instead of silently registering on the wrong core:
+
+```c
+hal_status_t status = hal_gpio_attach_interrupt_ex(
+    rpm_pin, rpm_edge_isr, HAL_GPIO_IRQ_RISING, 1u);
+if (status != HAL_OK) {
+    /* Abort ECU startup or report a core-affinity configuration fault. */
+}
+```
 
 ---
 

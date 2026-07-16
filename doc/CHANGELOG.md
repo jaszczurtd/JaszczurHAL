@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### GPIO interrupt core ownership
+
+- Added status-returning GPIO interrupt attach/detach APIs with explicit core
+  ownership. RP2040 registration now fails with `HAL_ESTATE` when called from
+  the wrong core, rejects cross-core reconfiguration/detach, and atomically
+  reserves an unowned pin against concurrent claims.
+- Added cross-core diagnostic owner queries, mock core-affinity simulation and
+  host coverage for RP2040-style ownership plus STM32G474 single-core/EXTI-line
+  behavior. Legacy attach/detach APIs remain compatibility wrappers.
+- Documented the separate RP2040 peripheral-IRQ contract: hardware UART RX is
+  implicitly bound to the core that calls `hal_uart_begin()`, and GPS inherits
+  that affinity when `HAL_GPS_TRANSPORT_UART` is selected. The RP2040
+  SoftwareSerial GPS transport uses PIO/DMA and has no CPU IRQ owner.
+
 ### Zephyr-informed display driver ports
 
 - Added shared SSD16xx (`SSD1608`, `SSD1673`, `SSD1675A`, `SSD1680`,

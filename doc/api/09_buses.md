@@ -555,10 +555,20 @@ former `void` + `_ex` pair). The `bool`/value operations (`set_rx`, `set_tx`,
 signatures and each has an adjacent `_ex` status variant.
 
 **impl/rp2040:** RP2040 SDK UART (`uart0` / `uart1`) with interrupt-driven RX.
+`hal_uart_begin()` installs and enables `UARTx_IRQ` in the calling core's NVIC,
+so that core becomes the UART RX IRQ's implicit owner. Repeating
+`hal_uart_begin()` and calling `hal_uart_destroy()` must occur on the same core
+that performed the successful begin. The current UART API does not record an
+owner for diagnostics and does not return `HAL_ESTATE` for a wrong-core
+lifecycle call; cross-core serialization by itself does not change that IRQ
+affinity requirement. In FreeRTOS/SMP builds, perform UART lifecycle operations
+from a task pinned to the intended core and do not migrate that task while the
+UART is active.
 **impl/stm32g474:** register-level USART1/USART2, polled RX drain; counts ORE, PE, FE, NE, and explicit LIN-break flags when reported by USART_ISR.
 **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
 **Error counters:** cumulative since `hal_uart_begin()`; mock reset also clears them.
-**Thread safety:** Not thread-safe. All calls must be serialized by the caller.
+**Thread safety:** Not thread-safe. All calls must be serialized by the caller;
+on RP2040, serialization does not replace the same-core lifecycle rule above.
 
 **Mock helpers:**
 ```c

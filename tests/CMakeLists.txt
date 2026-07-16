@@ -61,6 +61,26 @@ function(add_stm32_i2c_slave_host_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+function(add_stm32_gpio_host_test NAME)
+    set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    add_executable(${NAME}
+        ${NAME}.cpp
+        ${SRC_DIR}/hal/impl/stm32g474/hal_gpio.cpp
+        ${SRC_DIR}/hal/hal_config.cpp
+        ${SRC_DIR}/utils/unity.c
+    )
+    target_include_directories(${NAME} PRIVATE
+        ${SRC_DIR}
+    )
+    target_compile_definitions(${NAME} PRIVATE
+        HAL_TARGET_STM32G474=1
+        UNITY_INCLUDE_CONFIG_H
+        HAL_ENABLE_UNITY
+    )
+    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    add_test(NAME ${NAME} COMMAND ${NAME})
+endfunction()
+
 # Exercise the real Fiesta-convention CMake generator, not a handwritten copy.
 # The secondary initializer must execute through Arduino setup1() on RP2040 so
 # its GPIO/IRQ setup retains core-1 affinity.
@@ -399,6 +419,7 @@ add_hal_test(test_hal_timer)
 add_stm32_host_test(test_stm32_hal_timer)
 add_stm32_host_test(test_stm32_hal_system)
 add_stm32_i2c_slave_host_test(test_stm32_hal_i2c_slave)
+add_stm32_gpio_host_test(test_stm32_hal_gpio)
 add_executable(test_stm32_pwm_clock
     test_stm32_pwm_clock.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp

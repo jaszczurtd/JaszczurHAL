@@ -22,7 +22,7 @@ JaszczurHAL introduces a practical boundary:
 - Optional connectivity/security/storage stack for connected firmware projects
 - Utility toolkit for common embedded patterns (timers, PID, watchdog, helpers)
 - mock layer: deterministic host-side testing,
-- reusable, thread-safe drivers shared across supported hardware targets,
+- reusable, thread-safe drivers shared across all supported hardware targets,
 - fully functional FreeRTOS support (V11.1.0).
 
 This reduces lock-in to one runtime and makes migration from other SDKs much easier.
@@ -519,8 +519,7 @@ The Arduino footprint in this repository is a tooling detail, not the shape of t
   `ssd1306_driver.*`) adapt the controller command sequences from the
   corresponding Adafruit ILI9341 / ST7735-ST7789 / SSD1306 libraries by
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). The SSD16xx
-  and UC81xx e-paper protocol/state machines use the local Zephyr drivers as
-  an Apache-2.0 reference. See the file headers for per-module attribution.
+  and UC81xx e-paper protocol/state machines use the Zephyr drivers logic (Apache-2.0-Clause). See the file headers for per-module attribution.
 - Bundled, ported, or locally adapted third-party components:
   [cJSON / cJSON_Utils](src/hal/impl/shared/frameworks/cjson/),
   [LodePNG](src/hal/impl/shared/frameworks/lodepng/),

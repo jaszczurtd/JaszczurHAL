@@ -6,10 +6,15 @@
 #endif
 #include <hardware/gpio.h>
 #include <hardware/irq.h>
+#include <pico/mutex.h>
 #include <pico/platform.h>
 
 static bool s_open_drain_mode[256] = {};
 static void (*s_gpio_callbacks[256])(void) = {};
+/* 0 = detached, 1 = core 0, 2 = core 1. The shared mutex prevents two cores
+ * from claiming an unowned pin concurrently. */
+static uint8_t s_gpio_irq_owner_state[256] = {};
+auto_init_mutex(s_gpio_irq_owner_mutex);
 
 static bool rp2040_pin_valid(uint8_t pin) { return pin < NUM_BANK0_GPIOS; }
 
@@ -215,42 +220,105 @@ bool hal_gpio_read(uint8_t pin) {
   return gpio_get(pin);
 }
 
-void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
-                               hal_gpio_irq_mode_t mode) {
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core) {
   if (!rp2040_hal_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid pin");
-    return;
+    return HAL_EINVAL;
   }
   if (rp2040_cyw43_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: unsupported on CYW43");
-    return;
+    return HAL_EUNSUPPORTED;
   }
   if (callback == nullptr) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: callback is NULL");
-    return;
+    return HAL_EINVAL;
   }
   if (!gpio_irq_mode_valid(mode)) {
-    HAL_ASSERT(false, "hal_gpio_attach_interrupt: invalid IRQ mode");
-    return;
+    return HAL_EINVAL;
+  }
+  if (owner_core > 1u) {
+    return HAL_EINVAL;
   }
 
-  s_gpio_callbacks[pin] = callback;
+  const uint8_t current_core = (uint8_t)get_core_num();
+  if (current_core != owner_core) {
+    return HAL_ESTATE;
+  }
+
+  const uint8_t desired_state = (uint8_t)(owner_core + 1u);
+  mutex_enter_blocking(&s_gpio_irq_owner_mutex);
+  if (s_gpio_irq_owner_state[pin] != 0u &&
+      s_gpio_irq_owner_state[pin] != desired_state) {
+    mutex_exit(&s_gpio_irq_owner_mutex);
+    return HAL_ESTATE;
+  }
+  s_gpio_irq_owner_state[pin] = desired_state;
+
   gpio_set_irq_enabled(pin, gpio_all_irq_events(), false);
+  s_gpio_callbacks[pin] = callback;
   gpio_set_irq_enabled_with_callback(pin, gpio_irq_events(mode), true,
                                      gpio_irq_dispatch);
+  mutex_exit(&s_gpio_irq_owner_mutex);
+  return HAL_OK;
 }
 
-void hal_gpio_detach_interrupt(uint8_t pin) {
+void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
+                               hal_gpio_irq_mode_t mode) {
+  const hal_status_t status = hal_gpio_attach_interrupt_ex(
+      pin, callback, mode, (uint8_t)get_core_num());
+  HAL_ASSERT(status == HAL_OK, "hal_gpio_attach_interrupt: attach failed");
+}
+
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin) {
   if (!rp2040_hal_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_detach_interrupt: invalid pin");
-    return;
+    return HAL_EINVAL;
   }
   if (rp2040_cyw43_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_detach_interrupt: unsupported on CYW43");
-    return;
+    return HAL_EUNSUPPORTED;
+  }
+  mutex_enter_blocking(&s_gpio_irq_owner_mutex);
+  const uint8_t owner_state = s_gpio_irq_owner_state[pin];
+  if (owner_state == 0u) {
+    mutex_exit(&s_gpio_irq_owner_mutex);
+    return HAL_ENOENT;
+  }
+  if ((uint8_t)(owner_state - 1u) != (uint8_t)get_core_num()) {
+    mutex_exit(&s_gpio_irq_owner_mutex);
+    return HAL_ESTATE;
   }
   gpio_set_irq_enabled(pin, gpio_all_irq_events(), false);
   s_gpio_callbacks[pin] = nullptr;
+  s_gpio_irq_owner_state[pin] = 0u;
+  mutex_exit(&s_gpio_irq_owner_mutex);
+  return HAL_OK;
+}
+
+void hal_gpio_detach_interrupt(uint8_t pin) {
+  const hal_status_t status = hal_gpio_detach_interrupt_ex(pin);
+  HAL_ASSERT(status == HAL_OK || status == HAL_ENOENT,
+             "hal_gpio_detach_interrupt: detach failed");
+}
+
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core) {
+  if (out_owner_core == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_owner_core = HAL_GPIO_IRQ_CORE_NONE;
+  if (!rp2040_hal_pin_valid(pin)) {
+    return HAL_EINVAL;
+  }
+  if (rp2040_cyw43_pin_valid(pin)) {
+    return HAL_EUNSUPPORTED;
+  }
+  mutex_enter_blocking(&s_gpio_irq_owner_mutex);
+  const uint8_t owner_state = s_gpio_irq_owner_state[pin];
+  if (owner_state == 0u) {
+    mutex_exit(&s_gpio_irq_owner_mutex);
+    return HAL_ENOENT;
+  }
+  *out_owner_core = (uint8_t)(owner_state - 1u);
+  mutex_exit(&s_gpio_irq_owner_mutex);
+  return HAL_OK;
 }
 
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority) {

@@ -6,6 +6,7 @@
  */
 
 #include "hal_config.h"
+#include "hal_status.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -44,6 +45,9 @@ typedef enum {
   HAL_IRQ_PRIORITY_LOW = 3,     /**< Below-default priority.         */
 } hal_irq_priority_t;
 
+/** @brief Sentinel returned when a GPIO pin has no interrupt owner. */
+#define HAL_GPIO_IRQ_CORE_NONE UINT8_MAX
+
 /**
  * @brief Configure a GPIO pin mode.
  * @param pin  Pin number.
@@ -75,10 +79,60 @@ void hal_gpio_attach_interrupt(uint8_t pin, void (*callback)(void),
                                hal_gpio_irq_mode_t mode);
 
 /**
+ * @brief Attach a GPIO interrupt owned by an explicit processor core.
+ *
+ * The operation succeeds only when the calling code is currently executing on
+ * @p owner_core. Reconfiguring an interrupt already owned by another core is
+ * rejected. Reconfiguration by the existing owner is allowed.
+ *
+ * @param pin        Pin number.
+ * @param callback   Function called from ISR context.
+ * @param mode       Edge trigger mode.
+ * @param owner_core Required core id for registration.
+ * @return HAL_OK on success, HAL_EINVAL for invalid arguments,
+ *         HAL_EUNSUPPORTED when the pin/backend cannot provide GPIO IRQs, or
+ *         HAL_ESTATE when the caller or existing owner does not match
+ *         @p owner_core.
+ * @note Call from initialization/task context, not from an ISR.
+ */
+hal_status_t hal_gpio_attach_interrupt_ex(uint8_t pin, void (*callback)(void),
+                                          hal_gpio_irq_mode_t mode,
+                                          uint8_t owner_core);
+
+/**
  * @brief Detach the interrupt handler from a GPIO pin.
  * @param pin Pin number.
  */
 void hal_gpio_detach_interrupt(uint8_t pin);
+
+/**
+ * @brief Detach a GPIO interrupt from its owning core.
+ *
+ * The caller must execute on the core recorded when the interrupt was
+ * attached.
+ *
+ * @param pin Pin number.
+ * @return HAL_OK on success, HAL_ENOENT when no interrupt is attached,
+ *         HAL_ESTATE when called from a non-owning core, or another
+ *         argument/backend status.
+ * @note Call from initialization/task context, not from an ISR.
+ */
+hal_status_t hal_gpio_detach_interrupt_ex(uint8_t pin);
+
+/**
+ * @brief Query the core that owns a GPIO interrupt.
+ *
+ * Diagnostic reads are allowed from any core.
+ *
+ * @param pin            Pin number.
+ * @param out_owner_core Receives the owner core or HAL_GPIO_IRQ_CORE_NONE when
+ *                       no interrupt is attached.
+ * @return HAL_OK when an owner is present, HAL_ENOENT when detached, or an
+ *         argument/backend status.
+ * @note Call from task/diagnostic context, not from an ISR.
+ */
+hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
+                                             uint8_t *out_owner_core);
 
 /**
  * @brief Set the NVIC priority of the GPIO interrupt bank.
