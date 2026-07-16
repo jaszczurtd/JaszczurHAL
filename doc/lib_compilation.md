@@ -321,8 +321,8 @@ STM32 FreeRTOS builds call `app_start()`, create `app_task0()` and optional
 HAL-provided task configuration with `HAL_FREERTOS_TASK0_STACK`,
 `HAL_FREERTOS_TASK1_STACK`, `HAL_FREERTOS_TASK0_PRIORITY`, and
 `HAL_FREERTOS_TASK1_PRIORITY`; stack values are FreeRTOS stack words.
-Module-level lazy singleton mutexes and broader task-safety claims remain
-tracked in [`future_ideas.md`](future_ideas.md).
+Module-level lazy singleton mutexes and broader task-safety claims still
+require explicit per-module audits and documentation.
 
 ### Linking With an STM32G474 Project
 
