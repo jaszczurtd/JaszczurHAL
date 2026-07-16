@@ -199,7 +199,7 @@ All notable changes to this project will be documented in this file.
 ### EEPROM status refactor (reference pattern for the revised migration)
 
 - Reworked `hal_eeprom` as the reference pattern for the revised status
-  direction (see `doc/future_ideas.md`): instead of adding parallel `_ex`
+  direction: instead of adding parallel `_ex`
   wrappers over the legacy `void` API, the historically `void` entry points
   (`init`, `set_progress_callback`, `write_byte`, `write_int`, `write_bytes`,
   `read_bytes`, `commit`, `reset`) now **return `hal_status_t` directly**. This

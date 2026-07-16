@@ -109,7 +109,6 @@ doc/
   STM32G474_porting_progress.md # STM32G474 backend status
   ESP32_porting_progress.md # ESP32 backend notes / future porting track
   datasheets/               # local reference PDFs and notes
-  future_ideas.md           # architecture roadmap and backlog
   security_supply_chain.md  # SBOM and vulnerability tracking process
 examples/                   # buildable example apps for RP2040 and STM32G474
 vscode/                     # shared jh-vscode entry, schema, docs, generator
@@ -497,7 +496,6 @@ Primary docs:
 - Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)
 - Linkable static library build guide: [lib_compilation.md](doc/lib_compilation.md)
 - STM32G474 backend status: [STM32G474_porting_progress.md](doc/STM32G474_porting_progress.md)
-- Architecture roadmap: [future_ideas.md](doc/future_ideas.md)
 - VS Code firmware workflow: [vscode/README.md](vscode/README.md)
 - Project generator: [vscode/tools/create-vscode-example.py](vscode/tools/create-vscode-example.py)
 

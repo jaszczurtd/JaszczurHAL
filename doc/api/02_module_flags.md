@@ -275,8 +275,8 @@ mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
 interrupt mask for timing-sensitive code. The implementation includes atomic
 create-once fallbacks for singleton/per-bus mutexes and hardens the RP2040
 I2C-slave callback path. Timer callback context, Arduino-origin wrapper
-internals, and remaining per-module exceptions are tracked in the
-[future work backlog](../future_ideas.md).
+internals, and remaining per-module exceptions require dedicated module-level
+audits before stronger thread-safety guarantees are documented.
 
 The supported VS Code project flow (`create-vscode-example.py` plus
 `jh-vscode`) adds the project include path automatically through the shared

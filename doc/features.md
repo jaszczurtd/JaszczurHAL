@@ -139,5 +139,5 @@ For the target-selectable VS Code firmware project model, see
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
 | Firmware project workflow | Manifest, target/board selection, source discovery, upload/debug-build behavior and generated files for dispatcher-backed projects. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
-| Porting/status notes | Target-specific progress notes and architecture roadmap. | [STM32G474 progress](STM32G474_porting_progress.md), [future ideas](future_ideas.md) |
+| Porting/status notes | Target-specific implementation progress. | [STM32G474 progress](STM32G474_porting_progress.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |
