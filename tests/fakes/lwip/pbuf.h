@@ -31,6 +31,7 @@ err_t pbuf_take(struct pbuf *packet, const void *source, size_t length);
 void pbuf_cat(struct pbuf *head, struct pbuf *tail);
 uint16_t pbuf_copy_partial(const struct pbuf *packet, void *destination,
                            uint16_t length, uint16_t offset);
+struct pbuf *pbuf_coalesce(struct pbuf *packet, pbuf_layer layer);
 struct pbuf *pbuf_free_header(struct pbuf *packet, uint16_t length);
 
 #ifdef __cplusplus

@@ -129,6 +129,21 @@ uint16_t pbuf_copy_partial(const struct pbuf *packet, void *destination,
   return copied;
 }
 
+struct pbuf *pbuf_coalesce(struct pbuf *packet, pbuf_layer layer) {
+  if (packet == nullptr || packet->next == nullptr) {
+    return packet;
+  }
+  pbuf *contiguous = pbuf_alloc(layer, packet->tot_len, PBUF_RAM);
+  if (contiguous == nullptr ||
+      pbuf_copy_partial(packet, contiguous->payload, packet->tot_len, 0u) !=
+          packet->tot_len) {
+    pbuf_free(contiguous);
+    return packet;
+  }
+  pbuf_free(packet);
+  return contiguous;
+}
+
 struct pbuf *pbuf_free_header(struct pbuf *packet, uint16_t length) {
   uint16_t remaining = length;
   while (packet != nullptr && remaining >= packet->len) {

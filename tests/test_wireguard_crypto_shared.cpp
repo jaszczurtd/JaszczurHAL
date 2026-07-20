@@ -313,16 +313,32 @@ void test_chacha20poly1305_ietf_detached_rejects_invalid_arguments(void) {
       NULL, NULL, 0u, tag, aad, sizeof(aad), nonce, key));
 }
 
-void test_wireguard_replay_window_accepts_zero_once_and_tracks_32_bits(void) {
-  uint32_t bitmap = 0u;
-  uint64_t counter = 0u;
+void test_wireguard_replay_window_accepts_zero_once_and_tracks_reordering(
+    void) {
+  wireguard_replay_state_t replay = {};
 
-  TEST_ASSERT_TRUE(wireguard_replay_check(&bitmap, &counter, 0u));
-  TEST_ASSERT_FALSE(wireguard_replay_check(&bitmap, &counter, 0u));
-  TEST_ASSERT_TRUE(wireguard_replay_check(&bitmap, &counter, 32u));
-  TEST_ASSERT_TRUE(wireguard_replay_check(&bitmap, &counter, 1u));
-  TEST_ASSERT_FALSE(wireguard_replay_check(&bitmap, &counter, 1u));
-  TEST_ASSERT_FALSE(wireguard_replay_check(&bitmap, &counter, 0u));
+  TEST_ASSERT_TRUE(wireguard_replay_check(&replay, 0u));
+  TEST_ASSERT_FALSE(wireguard_replay_check(&replay, 0u));
+  TEST_ASSERT_TRUE(wireguard_replay_check(&replay, 9000u));
+  TEST_ASSERT_TRUE(wireguard_replay_check(&replay, 1000u));
+  TEST_ASSERT_FALSE(wireguard_replay_check(&replay, 1000u));
+  TEST_ASSERT_FALSE(wireguard_replay_check(&replay, 839u));
+  TEST_ASSERT_TRUE(wireguard_replay_check(&replay, 840u));
+}
+
+void test_wireguard_replay_window_handles_word_wrap_and_protocol_limit(void) {
+  wireguard_replay_state_t replay = {};
+
+  for (uint64_t sequence = 1u; sequence <= 8300u; ++sequence) {
+    if (sequence != 140u) {
+      TEST_ASSERT_TRUE(wireguard_replay_check(&replay, sequence));
+    }
+  }
+  TEST_ASSERT_FALSE(wireguard_replay_check(&replay, 1u));
+  TEST_ASSERT_TRUE(wireguard_replay_check(&replay, 140u));
+  TEST_ASSERT_FALSE(wireguard_replay_check(&replay, 140u));
+  TEST_ASSERT_FALSE(
+      wireguard_replay_check(&replay, WIREGUARD_REPLAY_REJECT_AFTER_MESSAGES));
 }
 
 int main(void) {
@@ -334,6 +350,8 @@ int main(void) {
   RUN_TEST(test_chacha20poly1305_roundtrip_and_tag_validation);
   RUN_TEST(test_chacha20poly1305_ietf_detached_matches_rfc8439_vector);
   RUN_TEST(test_chacha20poly1305_ietf_detached_rejects_invalid_arguments);
-  RUN_TEST(test_wireguard_replay_window_accepts_zero_once_and_tracks_32_bits);
+  RUN_TEST(
+      test_wireguard_replay_window_accepts_zero_once_and_tracks_reordering);
+  RUN_TEST(test_wireguard_replay_window_handles_word_wrap_and_protocol_limit);
   return UNITY_END();
 }

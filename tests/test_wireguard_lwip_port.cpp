@@ -428,6 +428,29 @@ void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
                            extension_state.leave_count);
 }
 
+void test_repeated_begin_end_does_not_leak_route_or_backend_state(void) {
+  WireGuard wireguard;
+
+  for (unsigned cycle = 0u; cycle < 5u; ++cycle) {
+    TEST_ASSERT_TRUE(wireguard.beginAdvanced(
+        IPAddress(10u, 8u, 0u, 2u), "private", "wg.example", "public", 51820u,
+        IPAddress(10u, 20u, 0u, 0u), IPAddress(255u, 255u, 0u, 0u)));
+    TEST_ASSERT_TRUE(wireguard.is_initialized());
+    TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
+    wireguard.end();
+    TEST_ASSERT_FALSE(wireguard.is_initialized());
+    TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
+  }
+
+  TEST_ASSERT_EQUAL_UINT32(5u, netif_add_count);
+  TEST_ASSERT_EQUAL_UINT32(5u, netif_remove_count);
+  TEST_ASSERT_EQUAL_UINT32(5u, peer_add_count);
+  TEST_ASSERT_EQUAL_UINT32(5u, peer_remove_count);
+  TEST_ASSERT_EQUAL_UINT32(5u, shutdown_count);
+  TEST_ASSERT_EQUAL_UINT32(extension_state.enter_count,
+                           extension_state.leave_count);
+}
+
 void test_stack_and_resolver_failures_do_not_mutate_lwip(void) {
   WireGuard wireguard;
   extension_state.random_status = HAL_EHW;
@@ -512,6 +535,7 @@ int main(void) {
   RUN_TEST(test_full_tunnel_lifecycle_restores_route_and_resources);
   RUN_TEST(test_split_tunnel_keeps_default_route);
   RUN_TEST(test_peer_and_connect_failures_cleanup_then_reconnect);
+  RUN_TEST(test_repeated_begin_end_does_not_leak_route_or_backend_state);
   RUN_TEST(test_stack_and_resolver_failures_do_not_mutate_lwip);
   RUN_TEST(test_peer_endpoint_and_probe_retry_rate_limit);
   return UNITY_END();

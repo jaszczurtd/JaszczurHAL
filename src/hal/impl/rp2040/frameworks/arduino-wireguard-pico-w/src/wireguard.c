@@ -369,9 +369,8 @@ static void wireguard_kdf3(uint8_t *tau1, uint8_t *tau2, uint8_t *tau3,
 }
 
 bool wireguard_check_replay(struct wireguard_keypair *keypair, uint64_t seq) {
-  // Implementation of packet replay window, adapted from RFC 2401 Appendix C.
-  return wireguard_replay_check(&keypair->replay_bitmap,
-                                &keypair->replay_counter, seq);
+  // RFC 6479-style ring bitmap with the current WireGuard window size.
+  return keypair != NULL && wireguard_replay_check(&keypair->replay, seq);
 }
 
 struct wireguard_keypair *get_peer_keypair_for_idx(struct wireguard_peer *peer,
@@ -530,8 +529,7 @@ void wireguard_start_session(struct wireguard_peer *peer, bool initiator) {
                    handshake->chaining_key, NULL, 0);
   }
 
-  new_keypair.replay_bitmap = 0;
-  new_keypair.replay_counter = 0;
+  wireguard_replay_reset(&new_keypair.replay);
 
   new_keypair.last_tx = 0;
   new_keypair.last_rx = 0; // No packets received yet
