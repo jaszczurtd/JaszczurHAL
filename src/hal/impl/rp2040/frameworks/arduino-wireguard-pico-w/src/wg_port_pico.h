@@ -11,8 +11,6 @@ struct wireguard_handshake;
 
 #include <lwip/opt.h>
 
-#include <Arduino.h>
-
 #include "../../../../../hal_serial.h"
 #include "../../../../../hal_system.h"
 
@@ -54,25 +52,4 @@ struct wireguard_handshake;
 // ---- Helpers ----
 #ifndef WG_IP4_U32
 #define WG_IP4_U32(ip4) (ip4_addr_get_u32((const ip4_addr_t *)(ip4)))
-#endif
-
-/*
- * ESP32 code expects tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA) to return
- * the station netif. On Pico W (CYW43), we can expose a best-effort equivalent
- * when the CYW43 headers are available.
- */
-#ifndef TCPIP_ADAPTER_IF_STA
-#define TCPIP_ADAPTER_IF_STA 0
-#endif
-
-#if __has_include("pico/cyw43_arch.h")
-#include "pico/cyw43_arch.h"
-static inline struct netif *tcpip_adapter_get_netif(int /*ifx*/) {
-  // cyw43_state.netif is the lwIP netif for STA mode.
-  return &cyw43_state.netif[CYW43_ITF_STA];
-}
-#else
-static inline struct netif *tcpip_adapter_get_netif(int /*ifx*/) {
-  return NULL;
-}
 #endif

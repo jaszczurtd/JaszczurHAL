@@ -92,6 +92,60 @@
 #endif
 #endif
 
+/* -- Network backend selection ----------------------------------------- */
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+#if !HAL_TARGET_IS_RP2040
+#error "HAL_NETWORK_BACKEND_CYW43 currently requires HAL_TARGET_RP2040"
+#endif
+#if !defined(HAL_CYW43_BUS_PICO_PIO)
+#error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_BUS_PICO_PIO"
+#endif
+#if !defined(PICO_CYW43_SUPPORTED) || !(PICO_CYW43_SUPPORTED)
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 requires a build profile with PICO_CYW43_SUPPORTED=1"
+#endif
+#if !defined(CYW43_PIN_WL_DYNAMIC) || !(CYW43_PIN_WL_DYNAMIC)
+#error "HAL_NETWORK_BACKEND_CYW43 requires CYW43_PIN_WL_DYNAMIC=1"
+#endif
+#if !defined(CYW43_PIO_CLOCK_DIV_DYNAMIC) || !(CYW43_PIO_CLOCK_DIV_DYNAMIC)
+#error "HAL_NETWORK_BACKEND_CYW43 requires CYW43_PIO_CLOCK_DIV_DYNAMIC=1"
+#endif
+#endif
+
+#if defined(HAL_CYW43_PROFILE_PIM730)
+#ifndef HAL_CYW43_PIN_WL_ON
+#define HAL_CYW43_PIN_WL_ON 2u
+#endif
+#ifndef HAL_CYW43_PIN_CHIP_SELECT
+#define HAL_CYW43_PIN_CHIP_SELECT 3u
+#endif
+#ifndef HAL_CYW43_PIN_DATA
+#define HAL_CYW43_PIN_DATA 4u
+#endif
+#ifndef HAL_CYW43_PIN_CLOCK
+#define HAL_CYW43_PIN_CLOCK 5u
+#endif
+#ifndef HAL_CYW43_PIO_CLOCK_DIV_INT
+#define HAL_CYW43_PIO_CLOCK_DIV_INT 4u
+#endif
+#ifndef HAL_CYW43_PIO_CLOCK_DIV_FRAC8
+#define HAL_CYW43_PIO_CLOCK_DIV_FRAC8 0u
+#endif
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_CYW43) &&                                      \
+    (!defined(HAL_CYW43_PIN_WL_ON) || !defined(HAL_CYW43_PIN_CHIP_SELECT) ||   \
+     !defined(HAL_CYW43_PIN_DATA) || !defined(HAL_CYW43_PIN_CLOCK) ||          \
+     !defined(HAL_CYW43_PIO_CLOCK_DIV_INT) ||                                  \
+     !defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8))
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 requires a complete CYW43 board pin/clock profile"
+#endif
+
+#ifndef HAL_CYW43_COUNTRY_CODE
+#define HAL_CYW43_COUNTRY_CODE CYW43_COUNTRY_WORLDWIDE
+#endif
+
 /* -- Application entry opt-ins ----------------------------------------- */
 /* HAL_ENABLE_APP_TASK1 controls the optional app_task1 dispatch path when
    HAL_PROVIDE_APP_ENTRY is enabled. On RP2040 this emits Arduino loop1(),
@@ -448,6 +502,9 @@
 #ifndef HAL_ENABLE_WIFI
 #define HAL_ENABLE_WIFI
 #endif
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
 #endif
 
 #ifdef HAL_ENABLE_BSD_SOCKETS
@@ -528,6 +585,9 @@
 #ifdef HAL_ENABLE_WIREGUARD
 #ifndef HAL_ENABLE_WIFI
 #define HAL_ENABLE_WIFI
+#endif
+#ifndef HAL_ENABLE_UDP
+#define HAL_ENABLE_UDP
 #endif
 #endif
 

@@ -8,9 +8,9 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
+#include "../shared/network/mqtt/jh_pubsub_hal_client.h"
 #include "frameworks/PubSubClient/src/PubSubClient.h"
 
-#include <WiFiClient.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -19,8 +19,8 @@
 #define HAL_MQTT_PAYLOAD_BUF_SIZE 2048u
 #define HAL_MQTT_RX_QUEUE_DEPTH 8u
 
-static WiFiClient s_wifi_client;
-static PubSubClient s_client(s_wifi_client);
+static JHPubSubHalClient s_network_client;
+static PubSubClient s_client(s_network_client);
 
 static hal_mutex_t s_mqtt_mutex = NULL;
 static bool s_server_configured = false;
@@ -174,7 +174,7 @@ hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s) {
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.setSocketTimeout(timeout_s);
-  s_wifi_client.setTimeout((unsigned long)timeout_s * 1000UL);
+  s_network_client.setTimeout((unsigned long)timeout_s * 1000UL);
 
   hal_mutex_unlock(s_mqtt_mutex);
   return HAL_OK;

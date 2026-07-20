@@ -53,6 +53,7 @@
 
 #include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
 #include "wireguard.h"
+#include "wireguard_allowed_ip.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
@@ -143,11 +144,10 @@ static err_t wireguardif_peer_output(struct netif *netif, struct pbuf *q,
     return ERR_ARG;
   }
 
-  log_i(TAG "Calling udp_sendto...");
-  //    err_t result = udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port,
-  //    device->underlying_netif);
-  err_t result = udp_sendto(device->udp_pcb, q, &peer->ip, peer->port);
-  log_i(TAG "udp_sendto returned: %d", result);
+  log_i(TAG "Calling udp_sendto_if...");
+  err_t result = udp_sendto_if(device->udp_pcb, q, &peer->ip, peer->port,
+                               device->underlying_netif);
+  log_i(TAG "udp_sendto_if returned: %d", result);
 
   // DEBUG: check lwIP errors
   if (result != ERR_OK) {
@@ -376,9 +376,7 @@ static void wireguardif_process_data_message(
   size_t src_len;
   struct pbuf *pbuf;
   struct ip_hdr *iphdr;
-  ip_addr_t dest;
-  bool dest_ok = false;
-  int x;
+  bool source_ok = false;
   uint32_t now;
   uint16_t header_len = 0xFFFF;
   uint32_t idx = data_hdr->receiver;
@@ -440,33 +438,24 @@ static void wireguardif_process_data_message(
               // of the plaintext inner-packet routes correspondingly in the
               // cryptokey routing table Also check packet length!
 #if LWIP_IPV4
-              if (IPH_V(iphdr) == 4) {
-                ip_addr_copy_from_ip4(dest, iphdr->dest);
-                for (x = 0; x < WIREGUARD_MAX_SRC_IPS; x++) {
-                  if (peer->allowed_source_ips[x].valid) {
-                    if (ip_addr_netcmp(
-                            &dest, &peer->allowed_source_ips[x].ip,
-                            ip_2_ip4(&peer->allowed_source_ips[x].mask))) {
-                      dest_ok = true;
-                      header_len = PP_NTOHS(IPH_LEN(iphdr));
-                      break;
-                    }
-                  }
-                }
+              if ((IPH_V(iphdr) == 4) &&
+                  wireguard_ipv4_source_is_allowed(peer, iphdr)) {
+                source_ok = true;
+                header_len = PP_NTOHS(IPH_LEN(iphdr));
               }
 #endif /* LWIP_IPV4 */
 #if LWIP_IPV6
               if (IPH_V(iphdr) == 6) {
                 // TODO: IPV6 support for route filtering
                 header_len = PP_NTOHS(IPH_LEN(iphdr));
-                dest_ok = true;
+                source_ok = true;
               }
 #endif /* LWIP_IPV6 */
               if (header_len <= pbuf->tot_len) {
 
                 // 5. If the plaintext packet has not been dropped, it is
                 // inserted into the receive queue of the wg0 interface.
-                if (dest_ok) {
+                if (source_ok) {
                   // Send packet to be process by LWIP
                   ip_input(pbuf, device->netif);
                   // pbuf is owned by IP layer now
@@ -834,9 +823,9 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 // 		result = wireguardif_peer_output(netif, pbuf, peer);
 // 		log_i(TAG "start handshake %08x,%d - %d", WG_IP4_U32(&peer->ip),
 // peer->port, result); 		pbuf_free(pbuf);
-// peer->send_handshake = false; 		peer->last_initiation_tx = wireguard_sys_now();
-// 		memcpy(peer->handshake_mac1, msg.mac1, WIREGUARD_COOKIE_LEN);
-// 		peer->handshake_mac1_valid = true;
+// peer->send_handshake = false; 		peer->last_initiation_tx =
+// wireguard_sys_now(); 		memcpy(peer->handshake_mac1, msg.mac1,
+// WIREGUARD_COOKIE_LEN); 		peer->handshake_mac1_valid = true;
 // 	}
 // 	return result;
 // }
@@ -1112,22 +1101,18 @@ static bool should_reset_peer(struct wireguard_peer *peer) {
   return result;
 }
 
-static void wireguardif_tmr(void *arg) {
+static void wireguardif_service_device(struct wireguard_device *device) {
 #ifdef DEBUG_DEEP
   log_i(TAG "=== TIMER START (%dms intervalm timestamp: %ld) ===",
         WIREGUARDIF_TIMER_MSECS, millis());
 #endif
 
-  struct wireguard_device *device = (struct wireguard_device *)arg;
   struct wireguard_peer *peer;
   int x;
 
 #ifdef DEBUG_DEEP
   log_i(TAG "Device valid: %d", device->valid);
 #endif
-
-  // Reschedule this timer
-  sys_timeout(WIREGUARDIF_TIMER_MSECS, wireguardif_tmr, device);
 
   // Check periodic things
   bool link_up = false;
@@ -1193,6 +1178,26 @@ static void wireguardif_tmr(void *arg) {
 #endif
 }
 
+static void wireguardif_tmr(void *arg) {
+  struct wireguard_device *device = (struct wireguard_device *)arg;
+  sys_timeout(WIREGUARDIF_TIMER_MSECS, wireguardif_tmr, device);
+  wireguardif_service_device(device);
+}
+
+err_t wireguardif_poll(struct netif *netif) {
+  if (netif == NULL || netif->state == NULL) {
+    return ERR_ARG;
+  }
+
+  struct wireguard_device *device = (struct wireguard_device *)netif->state;
+  if (!device->valid) {
+    return ERR_ARG;
+  }
+
+  wireguardif_service_device(device);
+  return ERR_OK;
+}
+
 void wireguardif_shutdown(struct netif *netif) {
   // LWIP_ASSERT("netif != NULL", (netif != NULL));
   // LWIP_ASSERT("state != NULL", (netif->state != NULL));
@@ -1221,10 +1226,6 @@ err_t wireguardif_init(struct netif *netif) {
   uint8_t private_key[WIREGUARD_PRIVATE_KEY_LEN];
   size_t private_key_len = sizeof(private_key);
 
-  struct netif *underlying_netif;
-  underlying_netif = tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA);
-  log_i(TAG "underlying_netif = %p", underlying_netif);
-
   log_i(TAG "netif=%p state=%p netif_ok=%d state_ok=%d", (void *)netif,
         netif ? netif->state : NULL, (int)(netif != NULL),
         (int)(netif && netif->state));
@@ -1241,6 +1242,8 @@ err_t wireguardif_init(struct netif *netif) {
     // The init data is passed into the netif_add call as the 'state' - we will
     // replace this with our private state data
     init_data = (struct wireguardif_init_data *)netif->state;
+    struct netif *underlying_netif = init_data->bind_netif;
+    log_i(TAG "underlying_netif = %p", underlying_netif);
 
     // Clear out and set if function is successful
     netif->state = NULL;

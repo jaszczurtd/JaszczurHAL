@@ -240,6 +240,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
         ${SRC}/hal/hal_config.cpp
+        ${SRC}/hal/impl/shared/network/jh_network_service.cpp
         ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
         ${SRC}/utils/unity.c
     )

@@ -13,6 +13,7 @@
 class WireGuard {
 private:
   bool _is_initialized = false;
+  bool _has_kicked = false;
   uint32_t _lastKickMs = 0;
 
 public:
