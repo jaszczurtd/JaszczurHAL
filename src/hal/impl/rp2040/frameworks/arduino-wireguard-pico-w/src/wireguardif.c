@@ -54,6 +54,7 @@
 #include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
 #include "wireguard.h"
 #include "wireguard_allowed_ip.h"
+#include "wireguard_pbuf.h"
 
 #define WIREGUARDIF_TIMER_MSECS 400
 
@@ -385,8 +386,7 @@ static void wireguardif_process_data_message(
 
   if (keypair) {
     if ((keypair->receiving_valid) &&
-        !wireguard_expired(keypair->keypair_millis, REJECT_AFTER_TIME) &&
-        (keypair->sending_counter < REJECT_AFTER_MESSAGES)
+        !wireguard_expired(keypair->keypair_millis, REJECT_AFTER_TIME)
 
     ) {
 
@@ -703,7 +703,13 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p,
     return;
   }
 
-  if ((p->payload == NULL) || (p->len == 0u)) {
+  p = wireguard_pbuf_make_contiguous(p);
+  if (p == NULL) {
+    log_e(TAG "wireguardif_network_rx: could not coalesce pbuf chain");
+    return;
+  }
+
+  if (p->len == 0u) {
     log_e(TAG "wireguardif_network_rx: invalid pbuf payload=%p len=%u",
           p->payload, (unsigned)p->len);
     pbuf_free(p);
@@ -733,7 +739,7 @@ void wireguardif_network_rx(void *arg, struct udp_pcb *pcb, struct pbuf *p,
 
   // Log first bytes
   uint8_t *data = (uint8_t *)p->payload;
-  size_t len = p->len; // This buf, not chained ones
+  size_t len = p->tot_len;
   log_i(TAG "RX packet type: 0x%02X", data[0]);
 
   uint8_t type = wireguard_get_message_type(data, len);

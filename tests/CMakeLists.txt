@@ -477,6 +477,36 @@ target_include_directories(test_wireguard_crypto_shared PRIVATE
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
+add_executable(test_wireguard_pbuf
+    test_wireguard_pbuf.cpp
+    fakes/lwip_fake.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_wireguard_pbuf PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_wireguard_pbuf PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_wireguard_pbuf PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_wireguard_pbuf COMMAND test_wireguard_pbuf)
+add_executable(test_ntp_client
+    test_ntp_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_ntp_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_ntp_client PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_ntp_client PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_ntp_client COMMAND test_ntp_client)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/filesystem/ff16/ff.c
