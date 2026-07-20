@@ -38,6 +38,7 @@
 #if defined(HAL_ENABLE_WIREGUARD)
 
 #include "wireguard.h"
+#include "wireguard_replay.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -368,47 +369,9 @@ static void wireguard_kdf3(uint8_t *tau1, uint8_t *tau2, uint8_t *tau3,
 }
 
 bool wireguard_check_replay(struct wireguard_keypair *keypair, uint64_t seq) {
-  // Implementation of packet replay window - as per RFC2401
-  // Adapted from code in Appendix C at https://tools.ietf.org/html/rfc2401
-  uint32_t diff;
-  bool result = false;
-  size_t ReplayWindowSize = sizeof(keypair->replay_bitmap); // 32 bits
-
-  if (seq != 0) {
-    if (seq > keypair->replay_counter) {
-      // new larger sequence number
-      diff = seq - keypair->replay_counter;
-      if (diff < ReplayWindowSize) {
-        // In window
-        keypair->replay_bitmap <<= diff;
-        // set bit for this packet
-        keypair->replay_bitmap |= 1;
-      } else {
-        // This packet has a "way larger"
-        keypair->replay_bitmap = 1;
-      }
-      keypair->replay_counter = seq;
-      // larger is good
-      result = true;
-    } else {
-      diff = keypair->replay_counter - seq;
-      if (diff < ReplayWindowSize) {
-        if (keypair->replay_bitmap & ((uint32_t)1 << diff)) {
-          // already seen
-        } else {
-          // mark as seen
-          keypair->replay_bitmap |= ((uint32_t)1 << diff);
-          // out of order but good
-          result = true;
-        }
-      } else {
-        // too old or wrapped
-      }
-    }
-  } else {
-    // first == 0 or wrapped
-  }
-  return result;
+  // Implementation of packet replay window, adapted from RFC 2401 Appendix C.
+  return wireguard_replay_check(&keypair->replay_bitmap,
+                                &keypair->replay_counter, seq);
 }
 
 struct wireguard_keypair *get_peer_keypair_for_idx(struct wireguard_peer *peer,

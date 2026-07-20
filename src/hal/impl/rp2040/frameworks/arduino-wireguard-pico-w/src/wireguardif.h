@@ -148,6 +148,9 @@ err_t wireguardif_connect(struct netif *netif, u8_t peer_index);
 // Stop trying to connect to the given peer
 err_t wireguardif_disconnect(struct netif *netif, u8_t peer_index);
 
+// Service peer handshake, keepalive and key lifecycle state synchronously.
+err_t wireguardif_poll(struct netif *netif);
+
 // Is the given peer "up"? A peer is up if it has a valid session key it can
 // communicate with
 err_t wireguardif_peer_is_up(struct netif *netif, u8_t peer_index,

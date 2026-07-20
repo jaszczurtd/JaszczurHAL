@@ -66,6 +66,7 @@ static inline uint32_t hal_bsd_bswap32(uint32_t value) {
 #define HAL_BSD_SOCKET_NEEDS_SWAP 1
 #endif
 
+#ifndef htons
 static inline uint16_t htons(uint16_t hostshort) {
 #if HAL_BSD_SOCKET_NEEDS_SWAP
   return hal_bsd_bswap16(hostshort);
@@ -73,9 +74,13 @@ static inline uint16_t htons(uint16_t hostshort) {
   return hostshort;
 #endif
 }
+#endif
 
+#ifndef ntohs
 static inline uint16_t ntohs(uint16_t netshort) { return htons(netshort); }
+#endif
 
+#ifndef htonl
 static inline uint32_t htonl(uint32_t hostlong) {
 #if HAL_BSD_SOCKET_NEEDS_SWAP
   return hal_bsd_bswap32(hostlong);
@@ -83,8 +88,11 @@ static inline uint32_t htonl(uint32_t hostlong) {
   return hostlong;
 #endif
 }
+#endif
 
+#ifndef ntohl
 static inline uint32_t ntohl(uint32_t netlong) { return htonl(netlong); }
+#endif
 
 #ifdef __cplusplus
 }

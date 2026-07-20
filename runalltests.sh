@@ -168,6 +168,9 @@ pass "All unit tests passed."
 header "Gate 3/7: Memory safety (Valgrind memcheck)"
 
 MEMCHECK_REQUIRED_TESTS=(
+    test_lwip_raw_engines
+    test_pubsub_hal_client
+    test_wireguard_lwip_port
     test_max6675_driver
     test_mcp9600_driver
     test_ads1x15_driver

@@ -8,84 +8,60 @@
 
 #include "arduino-wireguard-pico-w.h"
 
-#include <WiFi.h>
-
-#include <lwip/inet.h>
+#include <lwip/ip.h>
 #include <lwip/ip4_addr.h>
 #include <lwip/ip_addr.h>
 #include <lwip/netif.h>
-#include <lwip/udp.h>
 
+#include "../../../../shared/network/jh_lwip_extension.h"
 #include "wg_port_pico.h"
 #include "wireguard-platform.h"
 #include "wireguardif.h"
-
-// ---- cyw43/lwIP lock (Pico W) ----------------------------------------------
-// On Pico W the cyw43/lwIP stack runs in async_context_threadsafe_background
-// mode: lwIP timers (incl. the self-rescheduling wireguardif_tmr) and udp RX
-// callbacks fire from a low-priority IRQ/alarm, preempting normal code.
-// begin()/beginAdvanced()/end() mutate lwIP state (netif list, udp_pcb,
-// sys_timeout list) and free the wireguard device, so they must run atomically
-// w.r.t. that background context. cyw43_arch_lwip_begin/end is the recursive
-// lock that defers it; the app-level mutex in hal_wireguard.cpp does NOT cover
-// this. (See JaszczurHAL notes: WG reconnect race -> watchdog reboots.)
-#if __has_include("pico/cyw43_arch.h")
-#include "pico/cyw43_arch.h"
-#define WG_HAS_LWIP_LOCK 1
-#endif
-
-// Compile-time guarantee: on RP2040 the lock MUST be compiled in. If
-// cyw43_arch.h is ever not found here, fail the build loudly instead of
-// silently degrading to a no-op (which would reintroduce the reconnect race).
-#if defined(ARDUINO_ARCH_RP2040) && !defined(WG_HAS_LWIP_LOCK)
-#error                                                                         \
-    "WireGuard: pico/cyw43_arch.h not found on RP2040 build; lwIP lock would be a silent no-op"
-#endif
-
-namespace {
-// RAII guard: acquires the cyw43/lwIP lock for its lifetime. Auto-releases on
-// every scope exit, including the early `return` paths in beginAdvanced().
-struct WgLwipLock {
-  WgLwipLock() {
-#ifdef WG_HAS_LWIP_LOCK
-    cyw43_arch_lwip_begin();
-#endif
-  }
-  ~WgLwipLock() {
-#ifdef WG_HAS_LWIP_LOCK
-    cyw43_arch_lwip_end();
-#endif
-  }
-  WgLwipLock(const WgLwipLock &) = delete;
-  WgLwipLock &operator=(const WgLwipLock &) = delete;
-};
-} // namespace
 
 // ---- Globals kept for backward-compat with the original library API ----
 static struct netif wg_netif_instance;
 static struct netif *wg_netif = &wg_netif_instance;
 static struct netif *previous_default_netif = nullptr;
 static uint8_t peer_index = WIREGUARDIF_INVALID_INDEX;
+static bool netif_added = false;
+static bool default_route_changed = false;
 
 static bool resolve_ipv4(const char *host_or_ip, ip4_addr_t *out) {
   if (host_or_ip == nullptr || out == nullptr) {
     return false;
   }
 
-  // Fast path: literal IPv4.
-  if (ip4addr_aton(host_or_ip, out)) {
-    return true;
-  }
-
-  // Fallback: use Arduino WiFi resolver.
-  IPAddress resolved;
-  // WiFi.hostByName returns 1 on success (Arduino convention).
-  if (WiFi.hostByName(host_or_ip, resolved) != 1) {
+  uint8_t resolved[JH_LWIP_EXTENSION_IPV4_SIZE] = {};
+  const hal_status_t status = jh_lwip_extension_resolve_ipv4(
+      jh_lwip_extension_platform_port(), host_or_ip, resolved);
+  if (status != HAL_OK) {
+    log_e(TAG "Failed to resolve endpoint '%s': %s", host_or_ip,
+          hal_status_to_string(status));
     return false;
   }
 
   IP4_ADDR(out, resolved[0], resolved[1], resolved[2], resolved[3]);
   return true;
+}
+
+static void teardown_locked() {
+  if (peer_index != WIREGUARDIF_INVALID_INDEX) {
+    (void)wireguardif_remove_peer(wg_netif, peer_index);
+  }
+  if (netif_added) {
+    netif_remove(wg_netif);
+  }
+  if (wg_netif->state != nullptr) {
+    wireguardif_shutdown(wg_netif);
+  }
+  if (default_route_changed && previous_default_netif != nullptr) {
+    netif_set_default(previous_default_netif);
+  }
+
+  peer_index = WIREGUARDIF_INVALID_INDEX;
+  netif_added = false;
+  default_route_changed = false;
+  previous_default_netif = nullptr;
 }
 
 bool WireGuard::begin(const IPAddress &localIP, const char *privateKey,
@@ -115,6 +91,38 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP, const char *privateKey,
   }
 
   log_d(TAG "initial parameters OK");
+
+  const jh_lwip_extension_port_t *extension = jh_lwip_extension_platform_port();
+  const hal_status_t extension_status = jh_lwip_extension_validate(extension);
+  if (extension_status != HAL_OK) {
+    log_e(TAG "Invalid lwIP extension port: %s",
+          hal_status_to_string(extension_status));
+    return false;
+  }
+
+  uint8_t entropy_preflight[sizeof(uint32_t)] = {};
+  const hal_status_t entropy_status = jh_lwip_extension_random_bytes(
+      extension, entropy_preflight, sizeof(entropy_preflight));
+  for (volatile uint8_t &byte : entropy_preflight) {
+    byte = 0u;
+  }
+  if (entropy_status != HAL_OK) {
+    log_e(TAG "WireGuard entropy preflight failed: %s",
+          hal_status_to_string(entropy_status));
+    return false;
+  }
+
+  uint8_t time_preflight[JH_LWIP_EXTENSION_TAI64N_SIZE] = {};
+  const hal_status_t time_status =
+      jh_lwip_extension_tai64n_now(extension, time_preflight);
+  for (volatile uint8_t &byte : time_preflight) {
+    byte = 0u;
+  }
+  if (time_status != HAL_OK) {
+    log_e(TAG "WireGuard wall-clock preflight failed: %s",
+          hal_status_to_string(time_status));
+    return false;
+  }
 
   // Initialize platform glue (timers, RNG, etc.).
   wireguard_platform_init();
@@ -151,11 +159,26 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP, const char *privateKey,
   IP4_ADDR(&gateway, 0, 0, 0, 0);
 
   // Capture the current default netif (Wi-Fi) so we can bind UDP traffic there.
-  // Hold the cyw43/lwIP lock for ALL lwIP mutations below so a firing WG timer
-  // / RX callback in the background context cannot observe half-built state.
+  // Hold the selected platform's lwIP context for ALL mutations below so a
+  // firing WG timer / RX callback cannot observe half-built state.
   // resolve_ipv4() above is intentionally left OUT of the lock: it may perform
   // a blocking DNS query that needs the background context running.
-  WgLwipLock _wg_lock;
+  JHLwipExtensionGuard stack_guard(extension, true);
+  if (stack_guard.status() != HAL_OK) {
+    log_e(TAG "Failed to enter lwIP context: %s",
+          hal_status_to_string(stack_guard.status()));
+    return false;
+  }
+
+  void *underlay = nullptr;
+  const hal_status_t underlay_status =
+      jh_lwip_extension_underlay_netif(extension, &underlay);
+  if (underlay_status != HAL_OK) {
+    log_e(TAG "No host-lwIP underlay netif: %s",
+          hal_status_to_string(underlay_status));
+    return false;
+  }
+
   previous_default_netif = netif_default;
 
   // Initialize lwIP netif.
@@ -169,23 +192,18 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP, const char *privateKey,
   wg_init.listen_port = 0;
 
   log_i(TAG "Previous default netif: %p", previous_default_netif);
-  log_i(TAG "WiFi STA netif: %p",
-        tcpip_adapter_get_netif(TCPIP_ADAPTER_IF_STA));
-
-  // Jeśli underlying_netif jest NULL, użyj poprzedniego:
-  if (previous_default_netif == NULL) {
-    log_e(TAG "No default netif!");
-    return false;
-  }
-  wg_init.bind_netif = previous_default_netif;
+  log_i(TAG "Underlay netif: %p", underlay);
+  wg_init.bind_netif = static_cast<struct netif *>(underlay);
 
   // Important: netif_add expects ip4_addr_t* in this Arduino-Pico (LWIP_IPV6=0)
   // build.
   if (netif_add(wg_netif, &ipaddr, &netmask, &gateway, &wg_init,
                 &wireguardif_init, &ip_input) == nullptr) {
     log_e(TAG "netif_add() failed");
+    previous_default_netif = nullptr;
     return false;
   }
+  netif_added = true;
 
   log_d(TAG "peer start");
 
@@ -194,14 +212,18 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP, const char *privateKey,
 
   peer.public_key = remotePeerPublicKey;
   peer.preshared_key = nullptr;
-  peer.allowed_ip = allowedIP;
-  peer.allowed_mask = allowedMask;
-  peer.endpoint_ip = endpoint4;
+  IP_ADDR4(&peer.allowed_ip, allowedIP[0], allowedIP[1], allowedIP[2],
+           allowedIP[3]);
+  IP_ADDR4(&peer.allowed_mask, allowedMask[0], allowedMask[1], allowedMask[2],
+           allowedMask[3]);
+  IP_ADDR4(&peer.endpoint_ip, ip4_addr1(&endpoint4), ip4_addr2(&endpoint4),
+           ip4_addr3(&endpoint4), ip4_addr4(&endpoint4));
   peer.endport_port = remotePeerPort;
 
   err_t perr = wireguardif_add_peer(wg_netif, &peer, &peer_index);
   if (perr != ERR_OK) {
     log_e(TAG "wireguardif_add_peer() failed err=%d", (int)perr);
+    teardown_locked();
     return false;
   }
 
@@ -209,13 +231,19 @@ bool WireGuard::beginAdvanced(const IPAddress &localIP, const char *privateKey,
 
   // Bring up WireGuard.
   netif_set_up(wg_netif);
-  wireguardif_connect(wg_netif, peer_index);
+  perr = wireguardif_connect(wg_netif, peer_index);
+  if (perr != ERR_OK) {
+    log_e(TAG "wireguardif_connect() failed err=%d", (int)perr);
+    teardown_locked();
+    return false;
+  }
 
   log_d(TAG "connected!...");
 
   // Route configuration.
   if (route_all) {
     netif_set_default(wg_netif);
+    default_route_changed = true;
   }
 
   _is_initialized = true;
@@ -236,26 +264,17 @@ void WireGuard::end() {
     return;
   }
 
-  WgLwipLock _wg_lock;
-  wireguardif_remove_peer(wg_netif, peer_index);
-  netif_remove(wg_netif);
-
-  // netif_remove() does NOT clean up the WireGuard device context. Without
-  // this, every begin()/end() cycle leaks the wireguard_device, leaves the
-  // UDP pcb registered in lwIP's demux list (with a dangling udp_recv arg)
-  // and keeps the self-rescheduling wireguardif_tmr timeout alive forever.
-  // Over repeated reconnects this exhausts lwIP MEMP pools and leads to
-  // asynchronous hardfaults. wireguardif_shutdown() cancels the timer,
-  // removes the pcb and frees the device. netif->state still points at the
-  // device here (netif_remove does not clear it), so this is safe.
-  wireguardif_shutdown(wg_netif);
-
-  if (previous_default_netif != nullptr) {
-    netif_set_default(previous_default_netif);
+  JHLwipExtensionGuard stack_guard(jh_lwip_extension_platform_port(), false);
+  if (stack_guard.status() != HAL_OK) {
+    log_e(TAG "Failed to enter lwIP context for teardown: %s",
+          hal_status_to_string(stack_guard.status()));
+    return;
   }
 
+  teardown_locked();
   _is_initialized = false;
-  peer_index = WIREGUARDIF_INVALID_INDEX;
+  _has_kicked = false;
+  _lastKickMs = 0u;
 }
 
 bool WireGuard::peerUp(IPAddress *currentEndpointIp,
@@ -268,7 +287,11 @@ bool WireGuard::peerUp(IPAddress *currentEndpointIp,
   ip_addr_t ep_ip;
   u16_t ep_port = 0;
 
-  WgLwipLock _wg_lock;
+  JHLwipExtensionGuard stack_guard(jh_lwip_extension_platform_port(), false);
+  if (stack_guard.status() != HAL_OK)
+    return false;
+  if (wireguardif_poll(wg_netif) != ERR_OK)
+    return false;
   err_t rc = wireguardif_peer_is_up(wg_netif, peer_index,
                                     (currentEndpointIp ? &ep_ip : nullptr),
                                     (currentEndpointPort ? &ep_port : nullptr));
@@ -295,23 +318,24 @@ bool WireGuard::kickHandshake(const IPAddress &probeIp, uint16_t probePort,
   if (!_is_initialized)
     return false;
 
-  const uint32_t now = millis();
-  if ((uint32_t)(now - _lastKickMs) < minIntervalMs) {
+  const jh_lwip_extension_port_t *extension = jh_lwip_extension_platform_port();
+  uint32_t now = 0u;
+  if (jh_lwip_extension_monotonic_ms(extension, &now) != HAL_OK) {
+    return false;
+  }
+  if (_has_kicked && (uint32_t)(now - _lastKickMs) < minIntervalMs) {
     return true; // rate-limited: already kicked recently
   }
+
+  (void)probeIp;
+  (void)probePort;
+  JHLwipExtensionGuard stack_guard(extension, false);
+  if (stack_guard.status() != HAL_OK || wireguardif_poll(wg_netif) != ERR_OK) {
+    return false;
+  }
+
+  _has_kicked = true;
   _lastKickMs = now;
-
-  // Non-blocking trigger: one small UDP datagram to an AllowedIPs address.
-  // Serialize the UDP send against the lwIP background context (recursive
-  // lock).
-  WgLwipLock _wg_lock;
-  WiFiUDP udp;
-  udp.begin(0); // ephemeral local port
-  udp.beginPacket(probeIp, probePort);
-  udp.write((uint8_t)0x00);
-  udp.endPacket();
-  udp.stop();
-
   return true;
 }
 

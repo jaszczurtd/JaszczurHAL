@@ -133,6 +133,85 @@ target_compile_definitions(test_jh_entry_adapter PRIVATE
 target_compile_options(test_jh_entry_adapter PRIVATE -Wall -Wextra)
 add_test(NAME test_jh_entry_adapter COMMAND test_jh_entry_adapter)
 
+add_executable(test_lwip_raw_engines
+    test_lwip_raw_engines.cpp
+    fakes/lwip_fake.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_udp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_tcp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_lwip_raw_engines PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_lwip_raw_engines PRIVATE
+    HAL_TARGET_MOCK=1
+    JH_LWIP_RAW_TEST=1
+    HAL_LWIP_UDP_RX_QUEUE_DEPTH=2
+    HAL_LWIP_UDP_MAX_PAYLOAD=8
+    HAL_LWIP_TCP_RX_LIMIT=8
+    HAL_LWIP_TCP_ACCEPT_QUEUE_DEPTH=2
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_lwip_raw_engines PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_lwip_raw_engines COMMAND test_lwip_raw_engines)
+
+add_executable(test_network_service
+    test_network_service.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_service.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_network_service PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_network_service PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_network_service PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_network_service COMMAND test_network_service)
+
+add_executable(test_pubsub_hal_client
+    test_pubsub_hal_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/mqtt/jh_pubsub_hal_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_pubsub_hal_client PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/arduino
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_pubsub_hal_client PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_MQTT
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_pubsub_hal_client PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_pubsub_hal_client COMMAND test_pubsub_hal_client)
+
+add_executable(test_wireguard_lwip_port
+    test_wireguard_lwip_port.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_extension.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/WireGuard.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_wireguard_lwip_port BEFORE PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/arduino
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_wireguard_lwip_port PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_ENABLE_WIREGUARD
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_wireguard_lwip_port PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_wireguard_lwip_port COMMAND test_wireguard_lwip_port)
+
 # RP2040 SoftwareSerial must stay on the native Pico SDK PIO backend.  This is a
 # source-selection contract rather than a host runtime test: the regression it
 # guards against is compiling the portable, GPIO-ISR bit-banger for RP2040.
@@ -143,6 +222,7 @@ add_test(NAME test_rp2040_swserial_backend
 )
 
 add_hal_test(test_hal_gpio)
+add_hal_test(test_cyw43_config)
 add_hal_test(test_hal_crc)
 add_hal_test(test_hal_can)
 add_hal_test(test_hal_thermocouple)
@@ -393,6 +473,7 @@ add_executable(test_wireguard_crypto_shared
 )
 target_include_directories(test_wireguard_crypto_shared PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/crypto
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
