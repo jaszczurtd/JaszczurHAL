@@ -52,6 +52,7 @@ int JHPubSubHalClient::connect(arduino::IPAddress ip, uint16_t port) {
 
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
+  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
   endpoint.addr[0] = ip[0];
   endpoint.addr[1] = ip[1];
   endpoint.addr[2] = ip[2];
@@ -68,6 +69,7 @@ int JHPubSubHalClient::connect(const char *host, uint16_t port) {
   stop();
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
+  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
   endpoint.port = port;
   const hal_status_t resolve_status =
       hal_net_resolve_ipv4_ex(host, endpoint.addr);

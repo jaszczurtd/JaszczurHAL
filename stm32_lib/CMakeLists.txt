@@ -31,6 +31,7 @@ list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
+    ${SRC}/hal/hal_tls.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/hal_crypto.cpp
     ${SRC}/hal/hal_crc.cpp
@@ -127,6 +128,14 @@ target_compile_definitions(JaszczurHAL PUBLIC
 
 if(_jh_extra_hal_defines)
     target_compile_definitions(JaszczurHAL PUBLIC ${_jh_extra_hal_defines})
+endif()
+
+jh_cmake_defines_contain(_jh_stm32_has_tls HAL_ENABLE_TLS
+    ${_jh_extra_hal_defines})
+if(_jh_stm32_has_tls)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
+    jh_add_bearssl_source_library(jh_bearssl_stm32)
+    target_link_libraries(JaszczurHAL PUBLIC jh_bearssl_stm32)
 endif()
 
 if(DEFINED HAL_PROJECT_CONFIG_DIR)

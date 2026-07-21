@@ -173,6 +173,75 @@ target_compile_definitions(test_network_service PRIVATE
 target_compile_options(test_network_service PRIVATE -Wall -Wextra -Werror)
 add_test(NAME test_network_service COMMAND test_network_service)
 
+add_executable(test_network_backend
+    test_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_network_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_network_backend PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_WIFI
+    HAL_ENABLE_TCP
+    HAL_ENABLE_UDP
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_network_backend PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_network_backend COMMAND test_network_backend)
+
+add_executable(test_network_backend_contract_host
+    test_network_backend_contract.cpp
+    fakes/network_contract_host_adapter.cpp
+)
+target_link_libraries(test_network_backend_contract_host PRIVATE hal_mock)
+target_include_directories(test_network_backend_contract_host PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_options(test_network_backend_contract_host PRIVATE
+    -Wall -Wextra -Werror
+)
+add_test(NAME test_network_backend_contract_host
+    COMMAND test_network_backend_contract_host
+)
+
+add_executable(test_network_backend_contract_offload
+    test_network_backend_contract.cpp
+    fakes/network_contract_offload_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_network_backend_contract_offload PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_network_backend_contract_offload PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_WIFI
+    HAL_ENABLE_TCP
+    HAL_ENABLE_UDP
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_network_backend_contract_offload PRIVATE
+    -Wall -Wextra -Werror
+)
+add_test(NAME test_network_backend_contract_offload
+    COMMAND test_network_backend_contract_offload
+)
+
+add_test(NAME test_network_backend_selection
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_CXX=${CMAKE_CXX_COMPILER}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_network_backend_selection.cmake
+)
+
 add_executable(test_pubsub_hal_client
     test_pubsub_hal_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/mqtt/jh_pubsub_hal_client.cpp
@@ -602,11 +671,17 @@ add_hal_test(test_hal_websocket)
 add_hal_test(test_hal_net_console)
 add_hal_test(test_hal_net_commands)
 add_hal_test(test_bsd_sockets)
+add_hal_test(test_hal_tls)
+add_hal_test(test_bearssl_provider)
 add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
 target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)
 set_target_properties(test_bsd_sockets_c_compile PROPERTIES
     LINKER_LANGUAGE CXX)
 add_test(NAME test_bsd_sockets_c_compile COMMAND test_bsd_sockets_c_compile)
+add_executable(test_hal_tls_c_compile test_hal_tls_c_compile.c)
+target_link_libraries(test_hal_tls_c_compile PRIVATE hal_mock)
+set_target_properties(test_hal_tls_c_compile PROPERTIES LINKER_LANGUAGE CXX)
+add_test(NAME test_hal_tls_c_compile COMMAND test_hal_tls_c_compile)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)
 add_hal_test(test_hal_network_status)

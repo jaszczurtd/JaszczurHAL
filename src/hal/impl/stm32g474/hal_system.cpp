@@ -3,6 +3,7 @@
 
 #include "../../hal_config.h"
 #include "../../hal_system.h"
+#include "../shared/network/jh_network_architecture.h"
 #include "drivers/stm32g474/stm32g474_fault.h"
 #include "drivers/stm32g474/stm32g474_system.h"
 #include "port/stm32g474_regs.h"
@@ -133,6 +134,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   info.heap_free_bytes = hal_get_free_heap();
   info.stack_total_bytes = stm32g474_system_main_stack_bytes();
   info.uid_bytes = HAL_DEVICE_UID_BYTES;
+  jh_network_architecture_fill(&info);
   *out = info;
   return HAL_OK;
 }

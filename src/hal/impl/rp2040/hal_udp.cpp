@@ -4,11 +4,29 @@
 
 #ifdef HAL_ENABLE_UDP
 
+#include "../shared/network/jh_network_backend.h"
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+#define hal_udp_socket_impl_t jh_cyw43_udp_socket_impl_t
+#define hal_udp_socket_t jh_cyw43_udp_socket_t
+#define hal_udp_socket_open_ex jh_cyw43_udp_socket_open_ex
+#define hal_udp_socket_open jh_cyw43_udp_socket_open
+#define hal_udp_socket_bind_ex jh_cyw43_udp_socket_bind_ex
+#define hal_udp_socket_bind jh_cyw43_udp_socket_bind
+#define hal_udp_socket_sendto_ex jh_cyw43_udp_socket_sendto_ex
+#define hal_udp_socket_sendto jh_cyw43_udp_socket_sendto
+#define hal_udp_socket_recvfrom_ex jh_cyw43_udp_socket_recvfrom_ex
+#define hal_udp_socket_recvfrom jh_cyw43_udp_socket_recvfrom
+#define hal_udp_socket_can_recv jh_cyw43_udp_socket_can_recv
+#define hal_udp_socket_can_send jh_cyw43_udp_socket_can_send
+#define hal_udp_socket_close jh_cyw43_udp_socket_close
+#endif
+
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
 #include "../../hal_udp.h"
 #include "../shared/hal_mutex_once.h"
+#include "../shared/network/jh_net_address_utils.h"
 
 #if defined(HAL_NETWORK_BACKEND_CYW43)
 #include "../shared/network/jh_lwip_udp.h"
@@ -88,21 +106,20 @@ static bool validate_non_empty(const char *value, const char *fn,
   return true;
 }
 
-static bool validate_endpoint(const hal_net_endpoint_t *endpoint,
-                              const char *fn, const char *name) {
-  if (!endpoint) {
-    hal_derr("%s: %s endpoint is NULL", fn, name);
-    return false;
+static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
+                                      bool allow_unspecified_address,
+                                      const char *fn, const char *name) {
+  const hal_status_t shape =
+      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
+  if (shape != HAL_OK) {
+    hal_derr("%s: %s endpoint is malformed", fn, name);
+    return shape;
   }
   if (endpoint->family != HAL_NET_AF_INET) {
     hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return false;
+    return HAL_EUNSUPPORTED;
   }
-  if (endpoint->port == 0u) {
-    hal_derr("%s: %s endpoint port must be > 0", fn, name);
-    return false;
-  }
-  return true;
+  return HAL_OK;
 }
 
 static bool ip_is_zero(const uint8_t ip[HAL_NET_IPV4_ADDR_LEN]) {
@@ -138,7 +155,9 @@ static void endpoint_from_ip_address(const uint8_t ip[HAL_NET_IPV4_ADDR_LEN],
   if (!out) {
     return;
   }
+  memset(out, 0, sizeof(*out));
   out->family = HAL_NET_AF_INET;
+  out->addr_len = HAL_NET_IPV4_ADDR_LEN;
   memcpy(out->addr, ip, HAL_NET_IPV4_ADDR_LEN);
   out->port = port;
 }
@@ -242,8 +261,10 @@ hal_udp_socket_t hal_udp_socket_open(void) {
 
 hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
                                     const hal_net_endpoint_t *local) {
-  if (!validate_endpoint(local, "hal_udp_socket_bind", "local")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(local, true, "hal_udp_socket_bind", "local");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
 
   udp_ensure_mutex();
@@ -323,8 +344,10 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
     hal_derr("hal_udp_socket_sendto: payload is too large");
     return HAL_EOVERFLOW;
   }
-  if (!validate_endpoint(remote, "hal_udp_socket_sendto", "remote")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(remote, false, "hal_udp_socket_sendto", "remote");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
 
   udp_ensure_mutex();
@@ -572,6 +595,7 @@ hal_status_t hal_udp_begin_ex(uint16_t local_port) {
 
   hal_net_endpoint_t local = {};
   local.family = HAL_NET_AF_INET;
+  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
   local.port = local_port;
 
   const hal_status_t status = hal_udp_socket_bind_ex(s_default_udp, &local);
@@ -988,6 +1012,62 @@ hal_status_t hal_udp_end_packet_ex(void) {
 bool hal_udp_end_packet(void) {
   return hal_status_to_bool(hal_udp_end_packet_ex());
 }
+
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+static hal_status_t backend_udp_open(void **out_socket) {
+  if (out_socket == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_udp_socket_t socket = nullptr;
+  const hal_status_t status = hal_udp_socket_open_ex(&socket);
+  *out_socket = socket;
+  return status;
+}
+
+static hal_status_t backend_udp_bind(void *socket,
+                                     const hal_net_endpoint_t *local) {
+  return hal_udp_socket_bind_ex(static_cast<hal_udp_socket_t>(socket), local);
+}
+
+static hal_status_t backend_udp_sendto(void *socket, const void *data,
+                                       size_t len,
+                                       const hal_net_endpoint_t *remote,
+                                       size_t *out_sent) {
+  return hal_udp_socket_sendto_ex(static_cast<hal_udp_socket_t>(socket), data,
+                                  len, remote, out_sent);
+}
+
+static hal_status_t backend_udp_recvfrom(void *socket, void *buffer,
+                                         size_t max_len,
+                                         hal_net_endpoint_t *remote,
+                                         uint32_t timeout_ms,
+                                         size_t *out_received) {
+  return hal_udp_socket_recvfrom_ex(static_cast<hal_udp_socket_t>(socket),
+                                    buffer, max_len, remote, timeout_ms,
+                                    out_received);
+}
+
+static bool backend_udp_can_recv(void *socket) {
+  return hal_udp_socket_can_recv(static_cast<hal_udp_socket_t>(socket));
+}
+
+static bool backend_udp_can_send(void *socket) {
+  return hal_udp_socket_can_send(static_cast<hal_udp_socket_t>(socket));
+}
+
+static void backend_udp_close(void *socket) {
+  hal_udp_socket_close(static_cast<hal_udp_socket_t>(socket));
+}
+
+extern "C" const jh_network_udp_ops_t *jh_rp2040_cyw43_udp_ops(void) {
+  static const jh_network_udp_ops_t ops = {
+      backend_udp_open,     backend_udp_bind,     backend_udp_sendto,
+      backend_udp_recvfrom, backend_udp_can_recv, backend_udp_can_send,
+      backend_udp_close,
+  };
+  return &ops;
+}
+#endif
 
 #endif /* HAL_ENABLE_UDP */
 #endif // HAL_TARGET_IS_RP2040

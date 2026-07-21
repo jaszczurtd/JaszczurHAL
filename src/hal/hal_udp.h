@@ -23,7 +23,7 @@ extern "C" {
 #include <stddef.h>
 #include <stdint.h>
 
-#define HAL_UDP_IP_STR_LEN 16u
+#define HAL_UDP_IP_STR_LEN 46u
 
 /** @brief Opaque UDP socket handle. */
 typedef struct hal_udp_socket_impl_t *hal_udp_socket_t;
@@ -61,20 +61,20 @@ hal_status_t hal_udp_end_packet_ex(void);
 hal_udp_socket_t hal_udp_socket_open(void);
 
 /**
- * @brief Bind a UDP socket to a local IPv4 endpoint.
+ * @brief Bind a UDP socket to a local family-tagged endpoint.
  * @param socket Socket handle returned by @ref hal_udp_socket_open.
- * @param local Local IPv4 endpoint. The port must be non-zero.
+ * @param local Local endpoint. The port must be non-zero.
  * @return true when the socket was bound.
  */
 bool hal_udp_socket_bind(hal_udp_socket_t socket,
                          const hal_net_endpoint_t *local);
 
 /**
- * @brief Send one UDP datagram to a remote IPv4 endpoint.
+ * @brief Send one UDP datagram to a remote family-tagged endpoint.
  * @param socket Bound UDP socket handle.
  * @param data Payload bytes. May be NULL only when @p len is zero.
  * @param len Payload length in bytes.
- * @param remote Remote IPv4 endpoint. The port must be non-zero.
+ * @param remote Remote endpoint. The port must be non-zero.
  * @return Number of bytes accepted for transmission, or <0 on error.
  */
 int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,

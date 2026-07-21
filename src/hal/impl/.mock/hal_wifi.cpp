@@ -129,6 +129,22 @@ bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
   return hal_status_to_bool(hal_wifi_set_timeout_ms_ex(timeout_ms));
 }
 
+hal_status_t hal_wifi_get_state_ex(hal_wifi_state_t *out_state) {
+  if (out_state == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (s_mode == HAL_WIFI_MODE_OFF) {
+    *out_state = HAL_WIFI_STATE_OFF;
+  } else if (s_connected && s_has_local_ip) {
+    *out_state = HAL_WIFI_STATE_CONNECTED;
+  } else if (s_connected) {
+    *out_state = HAL_WIFI_STATE_CONNECTED_NO_IP;
+  } else {
+    *out_state = HAL_WIFI_STATE_IDLE;
+  }
+  return HAL_OK;
+}
+
 bool hal_wifi_is_connected(void) { return s_connected; }
 
 int hal_wifi_status(void) { return s_status; }

@@ -101,6 +101,10 @@ void test_get_current_architecture_reports_mock_snapshot(void) {
   TEST_ASSERT_FALSE(arch.has_rtos);
   TEST_ASSERT_EQUAL_UINT32(123456u, arch.heap_free_bytes);
   TEST_ASSERT_EQUAL_UINT32(HAL_DEVICE_UID_BYTES, arch.uid_bytes);
+  TEST_ASSERT_EQUAL_STRING("mock-host-stack", arch.network_backend_name);
+  TEST_ASSERT_EQUAL_STRING("mock", arch.network_stack_name);
+  TEST_ASSERT_EQUAL_INT(HAL_SYSTEM_NETWORK_STACK_TYPE_HOST,
+                        arch.network_stack_type);
 }
 
 void test_enter_bootloader_sets_mock_flag(void) {

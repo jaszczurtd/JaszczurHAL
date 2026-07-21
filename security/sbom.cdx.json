@@ -85,6 +85,53 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:bearssl@aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "name": "BearSSL",
+      "version": "aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Thomas Pornin and bearssl-esp8266 contributors"
+      },
+      "purl": "pkg:github/earlephilhower/bearssl-esp8266@aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/earlephilhower/bearssl-esp8266"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/BearSSL",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "aca13833b6f9ddffaea2041a01facc76829dc03b"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Pinned BearSSL core. Host and STM32 builds compile the vendored sources; RP2040 reuses Arduino-Pico's archive built from the exact same commit to avoid duplicate br_* symbols."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_TLS"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "src/hal/impl/shared/frameworks/BearSSL"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:cjson@1.7.18",
       "name": "cJSON",
       "version": "1.7.18",
@@ -516,5 +563,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:f1b71b75-b465-00d1-d516-b9f524221c9c"
+  "serialNumber": "urn:uuid:01d52780-0d37-95a2-d28b-d4b99d6cb404"
 }

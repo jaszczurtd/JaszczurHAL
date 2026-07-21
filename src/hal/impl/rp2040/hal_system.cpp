@@ -1,6 +1,7 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_system.h"
+#include "../shared/network/jh_network_architecture.h"
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
 #include <hardware/clocks.h>
@@ -165,6 +166,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   info.heap_free_bytes = hal_get_free_heap();
   info.stack_total_bytes = stack_total;
   info.uid_bytes = HAL_DEVICE_UID_BYTES;
+  jh_network_architecture_fill(&info);
   *out = info;
   return HAL_OK;
 }

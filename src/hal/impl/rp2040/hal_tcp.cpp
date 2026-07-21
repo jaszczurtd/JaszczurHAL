@@ -4,11 +4,43 @@
 
 #ifdef HAL_ENABLE_TCP
 
+#include "../shared/network/jh_network_backend.h"
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+#define hal_tcp_socket_impl_t jh_cyw43_tcp_socket_impl_t
+#define hal_tcp_listener_impl_t jh_cyw43_tcp_listener_impl_t
+#define hal_tcp_socket_t jh_cyw43_tcp_socket_t
+#define hal_tcp_listener_t jh_cyw43_tcp_listener_t
+#define hal_tcp_socket_open_ex jh_cyw43_tcp_socket_open_ex
+#define hal_tcp_socket_open jh_cyw43_tcp_socket_open
+#define hal_tcp_socket_connect_ex jh_cyw43_tcp_socket_connect_ex
+#define hal_tcp_socket_connect jh_cyw43_tcp_socket_connect
+#define hal_tcp_socket_send_ex jh_cyw43_tcp_socket_send_ex
+#define hal_tcp_socket_send jh_cyw43_tcp_socket_send
+#define hal_tcp_socket_recv_ex jh_cyw43_tcp_socket_recv_ex
+#define hal_tcp_socket_recv jh_cyw43_tcp_socket_recv
+#define hal_tcp_socket_can_recv jh_cyw43_tcp_socket_can_recv
+#define hal_tcp_socket_can_send jh_cyw43_tcp_socket_can_send
+#define hal_tcp_socket_is_connected jh_cyw43_tcp_socket_is_connected
+#define hal_tcp_socket_shutdown jh_cyw43_tcp_socket_shutdown
+#define hal_tcp_socket_close jh_cyw43_tcp_socket_close
+#define hal_tcp_listener_open_ex jh_cyw43_tcp_listener_open_ex
+#define hal_tcp_listener_open jh_cyw43_tcp_listener_open
+#define hal_tcp_listener_bind_ex jh_cyw43_tcp_listener_bind_ex
+#define hal_tcp_listener_bind jh_cyw43_tcp_listener_bind
+#define hal_tcp_listener_listen_ex jh_cyw43_tcp_listener_listen_ex
+#define hal_tcp_listener_listen jh_cyw43_tcp_listener_listen
+#define hal_tcp_listener_accept_ex jh_cyw43_tcp_listener_accept_ex
+#define hal_tcp_listener_accept jh_cyw43_tcp_listener_accept
+#define hal_tcp_listener_can_accept jh_cyw43_tcp_listener_can_accept
+#define hal_tcp_listener_close jh_cyw43_tcp_listener_close
+#endif
+
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
 #include "../../hal_tcp.h"
 #include "../shared/hal_mutex_once.h"
+#include "../shared/network/jh_net_address_utils.h"
 
 #if defined(HAL_NETWORK_BACKEND_CYW43)
 #include "../shared/network/jh_lwip_tcp.h"
@@ -21,6 +53,7 @@
 #include <WiFiServer.h>
 #endif
 #include <limits.h>
+#include <string.h>
 
 struct hal_tcp_socket_impl_t {
 #if defined(HAL_NETWORK_BACKEND_CYW43)
@@ -93,29 +126,24 @@ static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   if (!endpoint) {
     return;
   }
+  memset(endpoint, 0, sizeof(*endpoint));
   endpoint->family = HAL_NET_AF_UNSPEC;
-  endpoint->addr[0] = 0u;
-  endpoint->addr[1] = 0u;
-  endpoint->addr[2] = 0u;
-  endpoint->addr[3] = 0u;
-  endpoint->port = 0u;
 }
 
-static bool validate_endpoint(const hal_net_endpoint_t *endpoint,
-                              const char *fn, const char *name) {
-  if (!endpoint) {
-    hal_derr("%s: %s endpoint is NULL", fn, name);
-    return false;
+static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
+                                      bool allow_unspecified_address,
+                                      const char *fn, const char *name) {
+  const hal_status_t shape =
+      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
+  if (shape != HAL_OK) {
+    hal_derr("%s: %s endpoint is malformed", fn, name);
+    return shape;
   }
   if (endpoint->family != HAL_NET_AF_INET) {
     hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return false;
+    return HAL_EUNSUPPORTED;
   }
-  if (endpoint->port == 0u) {
-    hal_derr("%s: %s endpoint port must be > 0", fn, name);
-    return false;
-  }
-  return true;
+  return HAL_OK;
 }
 
 static bool is_valid_socket_locked(hal_tcp_socket_t socket) {
@@ -147,7 +175,9 @@ static void endpoint_from_ip_address(const IPAddress &ip, uint16_t port,
   if (!out) {
     return;
   }
+  memset(out, 0, sizeof(*out));
   out->family = HAL_NET_AF_INET;
+  out->addr_len = HAL_NET_IPV4_ADDR_LEN;
   out->addr[0] = (uint8_t)ip[0];
   out->addr[1] = (uint8_t)ip[1];
   out->addr[2] = (uint8_t)ip[2];
@@ -250,8 +280,10 @@ hal_tcp_socket_t hal_tcp_socket_open(void) {
 hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
                                        const hal_net_endpoint_t *remote,
                                        uint32_t timeout_ms) {
-  if (!validate_endpoint(remote, "hal_tcp_socket_connect", "remote")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(remote, false, "hal_tcp_socket_connect", "remote");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
 
   tcp_ensure_mutex();
@@ -690,8 +722,10 @@ hal_tcp_listener_t hal_tcp_listener_open(void) {
 
 hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
                                       const hal_net_endpoint_t *local) {
-  if (!validate_endpoint(local, "hal_tcp_listener_bind", "local")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(local, true, "hal_tcp_listener_bind", "local");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
 
   tcp_ensure_mutex();
@@ -811,7 +845,10 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
           if (status == HAL_OK) {
             socket->connected =
                 jh_lwip_tcp_socket_is_connected(&socket->client);
+            memset(&socket->remote_endpoint, 0,
+                   sizeof(socket->remote_endpoint));
             socket->remote_endpoint.family = HAL_NET_AF_INET;
+            socket->remote_endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
             socket->remote_endpoint.addr[0] = ip4_addr1(&remote_address);
             socket->remote_endpoint.addr[1] = ip4_addr2(&remote_address);
             socket->remote_endpoint.addr[2] = ip4_addr3(&remote_address);
@@ -930,8 +967,10 @@ hal_tcp_listener_t hal_tcp_listener_open(void) {
 
 hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
                                       const hal_net_endpoint_t *local) {
-  if (!validate_endpoint(local, "hal_tcp_listener_bind", "local")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(local, true, "hal_tcp_listener_bind", "local");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
 
   tcp_ensure_mutex();
@@ -1120,6 +1159,115 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener) {
   hal_mutex_unlock(s_tcp_mutex);
 }
 
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+static hal_status_t backend_socket_open(void **out_socket) {
+  if (out_socket == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_tcp_socket_t socket = nullptr;
+  const hal_status_t status = hal_tcp_socket_open_ex(&socket);
+  *out_socket = socket;
+  return status;
+}
+
+static hal_status_t backend_socket_connect(void *socket,
+                                           const hal_net_endpoint_t *remote,
+                                           uint32_t timeout_ms) {
+  return hal_tcp_socket_connect_ex(static_cast<hal_tcp_socket_t>(socket),
+                                   remote, timeout_ms);
+}
+
+static hal_status_t backend_socket_send(void *socket, const void *data,
+                                        size_t len, size_t *out_sent) {
+  return hal_tcp_socket_send_ex(static_cast<hal_tcp_socket_t>(socket), data,
+                                len, out_sent);
+}
+
+static hal_status_t backend_socket_recv(void *socket, void *buffer,
+                                        size_t max_len, uint32_t timeout_ms,
+                                        size_t *out_received) {
+  return hal_tcp_socket_recv_ex(static_cast<hal_tcp_socket_t>(socket), buffer,
+                                max_len, timeout_ms, out_received);
+}
+
+static bool backend_socket_can_recv(void *socket) {
+  return hal_tcp_socket_can_recv(static_cast<hal_tcp_socket_t>(socket));
+}
+
+static bool backend_socket_can_send(void *socket) {
+  return hal_tcp_socket_can_send(static_cast<hal_tcp_socket_t>(socket));
+}
+
+static bool backend_socket_is_connected(void *socket) {
+  return hal_tcp_socket_is_connected(static_cast<hal_tcp_socket_t>(socket));
+}
+
+static void backend_socket_shutdown(void *socket) {
+  hal_tcp_socket_shutdown(static_cast<hal_tcp_socket_t>(socket));
+}
+
+static void backend_socket_close(void *socket) {
+  hal_tcp_socket_close(static_cast<hal_tcp_socket_t>(socket));
+}
+
+static hal_status_t backend_listener_open(void **out_listener) {
+  if (out_listener == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_tcp_listener_t listener = nullptr;
+  const hal_status_t status = hal_tcp_listener_open_ex(&listener);
+  *out_listener = listener;
+  return status;
+}
+
+static hal_status_t backend_listener_bind(void *listener,
+                                          const hal_net_endpoint_t *local) {
+  return hal_tcp_listener_bind_ex(static_cast<hal_tcp_listener_t>(listener),
+                                  local);
+}
+
+static hal_status_t backend_listener_listen(void *listener, uint8_t backlog) {
+  return hal_tcp_listener_listen_ex(static_cast<hal_tcp_listener_t>(listener),
+                                    backlog);
+}
+
+static hal_status_t backend_listener_accept(void *listener,
+                                            hal_net_endpoint_t *remote,
+                                            uint32_t timeout_ms,
+                                            void **out_socket) {
+  if (out_socket == nullptr) {
+    return HAL_EINVAL;
+  }
+  hal_tcp_socket_t socket = nullptr;
+  const hal_status_t status = hal_tcp_listener_accept_ex(
+      static_cast<hal_tcp_listener_t>(listener), remote, timeout_ms, &socket);
+  *out_socket = socket;
+  return status;
+}
+
+static bool backend_listener_can_accept(void *listener) {
+  return hal_tcp_listener_can_accept(static_cast<hal_tcp_listener_t>(listener));
+}
+
+static void backend_listener_close(void *listener) {
+  hal_tcp_listener_close(static_cast<hal_tcp_listener_t>(listener));
+}
+
+extern "C" const jh_network_tcp_ops_t *jh_rp2040_cyw43_tcp_ops(void) {
+  static const jh_network_tcp_ops_t ops = {
+      backend_socket_open,         backend_socket_connect,
+      backend_socket_send,         backend_socket_recv,
+      backend_socket_can_recv,     backend_socket_can_send,
+      backend_socket_is_connected, backend_socket_shutdown,
+      backend_socket_close,        backend_listener_open,
+      backend_listener_bind,       backend_listener_listen,
+      backend_listener_accept,     backend_listener_can_accept,
+      backend_listener_close,
+  };
+  return &ops;
+}
 #endif
 
 #endif /* HAL_ENABLE_TCP */

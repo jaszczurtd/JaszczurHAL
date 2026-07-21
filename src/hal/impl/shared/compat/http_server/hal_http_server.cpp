@@ -503,6 +503,7 @@ hal_status_t hal_http_server_start(uint16_t port) {
 
   hal_net_endpoint_t local = {};
   local.family = HAL_NET_AF_INET;
+  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
   local.addr[0] = 0u;
   local.addr[1] = 0u;
   local.addr[2] = 0u;

@@ -41,8 +41,15 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
+    ${SRC}/hal/hal_tls.cpp
+    ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
+    ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
+    ${SRC}/hal/impl/shared/network/jh_public_network_backend_adapter.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp
+    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
+    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
+    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp
     ${SRC}/hal/impl/shared/compat/http_server/hal_http_server.cpp
     ${SRC}/hal/impl/shared/compat/http_files/hal_http_files.cpp
     ${SRC}/hal/impl/shared/compat/websocket/hal_websocket.cpp
@@ -119,6 +126,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_NET_CONSOLE    # password-protected serial/debug mirror over TCP
     HAL_ENABLE_NET_COMMANDS   # HTTP/WebSocket JSON/text command dispatch
     HAL_ENABLE_BSD_SOCKETS    # minimal POSIX/BSD socket adapter
+    HAL_ENABLE_TLS            # portable TLS API + private BearSSL provider
     HAL_ENABLE_OTA
     HAL_ENABLE_WIREGUARD
     HAL_ENABLE_A7670          # propagates HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
@@ -180,6 +188,10 @@ target_compile_definitions(hal_mock PUBLIC
 # std::mutex on Linux requires pthreads
 find_package(Threads REQUIRED)
 target_link_libraries(hal_mock PUBLIC Threads::Threads)
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_bearssl.cmake)
+jh_add_bearssl_source_library(jh_bearssl_host)
+target_link_libraries(hal_mock PUBLIC jh_bearssl_host)
 
 target_compile_options(hal_mock PRIVATE -Wall -Wextra)
 

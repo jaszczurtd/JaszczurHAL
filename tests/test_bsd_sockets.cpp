@@ -39,10 +39,21 @@ static struct sockaddr_in make_any_sockaddr(uint16_t port) {
   return addr;
 }
 
+static struct sockaddr_in6 make_sockaddr6(const char *ip, uint16_t port,
+                                          uint32_t scope_id) {
+  struct sockaddr_in6 addr = {};
+  addr.sin6_family = AF_INET6;
+  addr.sin6_port = htons(port);
+  addr.sin6_scope_id = scope_id;
+  TEST_ASSERT_EQUAL_INT(1, inet_pton(AF_INET6, ip, &addr.sin6_addr));
+  return addr;
+}
+
 static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
                                         uint8_t d, uint16_t port) {
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
+  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
   endpoint.addr[0] = a;
   endpoint.addr[1] = b;
   endpoint.addr[2] = c;
@@ -74,6 +85,32 @@ void test_inet_helpers_translate_ipv4_and_byte_order(void) {
   errno = 0;
   TEST_ASSERT_NULL(inet_ntop(AF_INET, &addr, text, 4u));
   TEST_ASSERT_EQUAL_INT(ENOSPC, errno);
+}
+
+void test_inet_helpers_translate_ipv6_without_truncation(void) {
+  static const uint8_t expected[16] = {0x20u, 0x01u, 0x0du, 0xb8u, 0u, 0u,
+                                       0u,    0u,    0u,    0u,    0u, 0u,
+                                       0u,    0u,    0x12u, 0x34u};
+  struct in6_addr addr = {};
+  char text[INET6_ADDRSTRLEN] = {};
+
+  TEST_ASSERT_EQUAL_INT(1, inet_pton(AF_INET6, "2001:db8::1234", &addr));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(expected, addr.s6_addr, sizeof(expected));
+  TEST_ASSERT_EQUAL_STRING(
+      "2001:db8::1234",
+      inet_ntop(AF_INET6, &addr, text, (socklen_t)sizeof(text)));
+
+  errno = 0;
+  TEST_ASSERT_NULL(inet_ntop(AF_INET6, &addr, text, 8u));
+  TEST_ASSERT_EQUAL_INT(ENOSPC, errno);
+  TEST_ASSERT_EQUAL_INT(0, inet_pton(AF_INET6, "2001:::1", &addr));
+  TEST_ASSERT_EQUAL_INT(0, inet_pton(AF_INET6, "fe80::1%7", &addr));
+
+  static const uint8_t mapped_expected[16] = {
+      0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0xffu, 0xffu, 192u, 0u, 2u, 1u};
+  TEST_ASSERT_EQUAL_INT(1, inet_pton(AF_INET6, "::ffff:192.0.2.1", &addr));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(mapped_expected, addr.s6_addr,
+                                sizeof(mapped_expected));
 }
 
 void test_udp_sendto_autobinds_and_translates_remote_sockaddr(void) {
@@ -800,10 +837,109 @@ void test_getaddrinfo_passive_numeric_and_errors(void) {
                         getaddrinfo("127.0.0.1", "http", NULL, &resolved));
   TEST_ASSERT_NULL(resolved);
 
-  hints.ai_family = 10;
+  hints.ai_family = AF_INET6;
   TEST_ASSERT_EQUAL_INT(EAI_FAMILY,
                         getaddrinfo("127.0.0.1", "80", &hints, &resolved));
   TEST_ASSERT_NULL(resolved);
+
+  hints.ai_family = 999;
+  TEST_ASSERT_EQUAL_INT(EAI_FAMILY,
+                        getaddrinfo("127.0.0.1", "80", &hints, &resolved));
+  TEST_ASSERT_NULL(resolved);
+}
+
+void test_getaddrinfo_returns_bounded_mixed_a_aaaa_chain(void) {
+  const hal_net_capabilities_t dual =
+      HAL_NET_CAP_IPV4 | HAL_NET_CAP_IPV6 | HAL_NET_CAP_DUAL_STACK;
+  struct addrinfo hints = {};
+  struct addrinfo *resolved = NULL;
+  hal_net_endpoint_t captured_remote = {};
+  char text[INET6_ADDRSTRLEN] = {};
+
+  TEST_ASSERT_TRUE(hal_mock_net_set_capabilities(dual));
+  TEST_ASSERT_TRUE(hal_mock_net_add_dns_entry("dual.example", "192.0.2.25"));
+  TEST_ASSERT_TRUE(hal_mock_net_add_dns_entry("dual.example", "2001:db8::25"));
+  TEST_ASSERT_TRUE(hal_mock_net_add_dns_entry("dual.example", "fe80::abcd%11"));
+
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_flags = AI_CANONNAME;
+  TEST_ASSERT_EQUAL_INT(0,
+                        getaddrinfo("dual.example", "4242", &hints, &resolved));
+  TEST_ASSERT_NOT_NULL(resolved);
+  TEST_ASSERT_EQUAL_INT(AF_INET, resolved->ai_family);
+  TEST_ASSERT_EQUAL_UINT32(sizeof(struct sockaddr_in), resolved->ai_addrlen);
+  TEST_ASSERT_EQUAL_STRING("dual.example", resolved->ai_canonname);
+  TEST_ASSERT_EQUAL_UINT16(
+      4242u, ntohs(((const struct sockaddr_in *)resolved->ai_addr)->sin_port));
+
+  struct addrinfo *first_ipv6 = resolved->ai_next;
+  TEST_ASSERT_NOT_NULL(first_ipv6);
+  TEST_ASSERT_EQUAL_INT(AF_INET6, first_ipv6->ai_family);
+  TEST_ASSERT_EQUAL_UINT32(sizeof(struct sockaddr_in6), first_ipv6->ai_addrlen);
+  TEST_ASSERT_NULL(first_ipv6->ai_canonname);
+  const struct sockaddr_in6 *first_addr6 =
+      (const struct sockaddr_in6 *)first_ipv6->ai_addr;
+  TEST_ASSERT_EQUAL_UINT16(4242u, ntohs(first_addr6->sin6_port));
+  TEST_ASSERT_EQUAL_UINT32(0u, first_addr6->sin6_scope_id);
+  TEST_ASSERT_EQUAL_STRING(
+      "2001:db8::25",
+      inet_ntop(AF_INET6, &first_addr6->sin6_addr, text, sizeof(text)));
+
+  struct addrinfo *scoped_ipv6 = first_ipv6->ai_next;
+  TEST_ASSERT_NOT_NULL(scoped_ipv6);
+  TEST_ASSERT_EQUAL_INT(AF_INET6, scoped_ipv6->ai_family);
+  TEST_ASSERT_NULL(scoped_ipv6->ai_next);
+  const struct sockaddr_in6 *scoped_addr6 =
+      (const struct sockaddr_in6 *)scoped_ipv6->ai_addr;
+  TEST_ASSERT_EQUAL_UINT32(11u, scoped_addr6->sin6_scope_id);
+  TEST_ASSERT_EQUAL_STRING(
+      "fe80::abcd",
+      inet_ntop(AF_INET6, &scoped_addr6->sin6_addr, text, sizeof(text)));
+
+  int fd = socket(first_ipv6->ai_family, first_ipv6->ai_socktype,
+                  first_ipv6->ai_protocol);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+  TEST_ASSERT_EQUAL_INT(
+      0, connect(fd, scoped_ipv6->ai_addr, scoped_ipv6->ai_addrlen));
+  hal_tcp_socket_t tcp = hal_mock_bsd_socket_get_tcp_handle(fd);
+  TEST_ASSERT_NOT_NULL(tcp);
+  TEST_ASSERT_TRUE(hal_mock_tcp_get_remote_endpoint(tcp, &captured_remote));
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET6, captured_remote.family);
+  TEST_ASSERT_EQUAL_UINT8(HAL_NET_IPV6_ADDR_LEN, captured_remote.addr_len);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(scoped_addr6->sin6_addr.s6_addr,
+                                captured_remote.addr, HAL_NET_IPV6_ADDR_LEN);
+  TEST_ASSERT_EQUAL_UINT16(4242u, captured_remote.port);
+  TEST_ASSERT_EQUAL_UINT32(11u, captured_remote.scope_id);
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+  freeaddrinfo(resolved);
+}
+
+void test_ipv4_only_runtime_rejects_ipv6_without_fallback(void) {
+  struct addrinfo hints = {};
+  struct addrinfo *resolved = NULL;
+
+  TEST_ASSERT_EQUAL_UINT32(HAL_NET_CAP_IPV4, hal_net_get_capabilities());
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP));
+  TEST_ASSERT_EQUAL_INT(EAFNOSUPPORT, errno);
+
+  hints.ai_family = AF_INET6;
+  hints.ai_socktype = SOCK_STREAM;
+  TEST_ASSERT_TRUE(
+      hal_mock_net_add_dns_entry("only-v6.example", "2001:db8::80"));
+  TEST_ASSERT_EQUAL_INT(
+      EAI_FAMILY, getaddrinfo("only-v6.example", "80", &hints, &resolved));
+  TEST_ASSERT_NULL(resolved);
+
+  int fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+  TEST_ASSERT_GREATER_OR_EQUAL_INT(HAL_BSD_SOCKET_FD_BASE, fd);
+  struct sockaddr_in6 remote6 = make_sockaddr6("2001:db8::80", 80u, 0u);
+  errno = 0;
+  TEST_ASSERT_EQUAL_INT(-1, connect(fd, (const struct sockaddr *)&remote6,
+                                    (socklen_t)sizeof(remote6)));
+  TEST_ASSERT_EQUAL_INT(EAFNOSUPPORT, errno);
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
 void test_setsockopt_accepts_reuseaddr_and_reports_unsupported_options(void) {
@@ -911,6 +1047,7 @@ void test_errors_set_errno_for_invalid_and_unsupported_operations(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_inet_helpers_translate_ipv4_and_byte_order);
+  RUN_TEST(test_inet_helpers_translate_ipv6_without_truncation);
   RUN_TEST(test_udp_sendto_autobinds_and_translates_remote_sockaddr);
   RUN_TEST(test_udp_autobind_skips_ephemeral_port_already_bound);
   RUN_TEST(test_udp_bind_and_recvfrom_translate_sender_sockaddr);
@@ -929,6 +1066,8 @@ int main(void) {
   RUN_TEST(test_select_reports_tcp_exception_after_connected_socket_shutdown);
   RUN_TEST(test_getaddrinfo_hostname_result_connects_tcp_client);
   RUN_TEST(test_getaddrinfo_passive_numeric_and_errors);
+  RUN_TEST(test_getaddrinfo_returns_bounded_mixed_a_aaaa_chain);
+  RUN_TEST(test_ipv4_only_runtime_rejects_ipv6_without_fallback);
   RUN_TEST(test_setsockopt_accepts_reuseaddr_and_reports_unsupported_options);
   RUN_TEST(test_socket_timeouts_round_trip_through_sockopts);
   RUN_TEST(test_errors_set_errno_for_invalid_and_unsupported_operations);

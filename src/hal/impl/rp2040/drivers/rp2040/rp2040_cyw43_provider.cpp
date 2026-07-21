@@ -6,11 +6,11 @@
 #if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
 
 #include "../../../../impl/shared/hal_mutex_once.h"
-#include "../../../../impl/shared/network/jh_cyw43_config.h"
 #include "../../../../impl/shared/network/jh_cyw43_scan.h"
 #include "../../../../impl/shared/network/jh_dns_request_state.h"
 #include "../../../../impl/shared/network/jh_icmp_echo.h"
 #include "../../../../impl/shared/network/jh_network_service.h"
+#include "rp2040_cyw43_platform.h"
 #include "rp2040_cyw43_provider.h"
 
 extern "C" {
@@ -24,16 +24,9 @@ extern "C" {
 #include <lwip/raw.h>
 #include <lwip/timeouts.h>
 #include <pico/cyw43_arch.h>
-#include <pico/cyw43_driver.h>
 #include <pico/error.h>
-#include <pico/platform.h>
 #include <pico/time.h>
 #include <string.h>
-
-#if defined(HAL_ENABLE_FREERTOS)
-#include <FreeRTOS.h>
-#include <task.h>
-#endif
 
 extern "C" void __real_cyw43_cb_tcpip_init(cyw43_t *self, int itf);
 extern "C" void __real_cyw43_cb_tcpip_deinit(cyw43_t *self, int itf);
@@ -65,51 +58,6 @@ static void network_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_network_mutex);
 }
 
-static void network_service_state_lock(void *) {
-  network_ensure_mutex();
-  hal_mutex_lock(s_network_mutex);
-}
-
-static void network_service_state_unlock(void *) {
-  hal_mutex_unlock(s_network_mutex);
-}
-
-static jh_network_context_owner_t network_service_current_owner(void *) {
-#if defined(HAL_ENABLE_FREERTOS)
-  return reinterpret_cast<jh_network_context_owner_t>(
-      xTaskGetCurrentTaskHandle());
-#else
-  return (jh_network_context_owner_t)get_core_num() + 1u;
-#endif
-}
-
-static hal_status_t network_service_stack_enter(void *) {
-  cyw43_arch_lwip_begin();
-  return HAL_OK;
-}
-
-static void network_service_stack_leave(void *) { cyw43_arch_lwip_end(); }
-
-static void network_service_poll(void *) {
-  cyw43_arch_poll();
-  sys_check_timeouts();
-}
-
-static bool network_service_ipv4_ready(void *) {
-  return cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP;
-}
-
-static const jh_network_service_port_t s_network_service_port = {
-    nullptr,
-    network_service_state_lock,
-    network_service_state_unlock,
-    network_service_current_owner,
-    network_service_stack_enter,
-    network_service_stack_leave,
-    network_service_poll,
-    network_service_ipv4_ready,
-};
-
 static bool network_begin_radio_operation(void) {
   network_ensure_mutex();
   hal_mutex_lock(s_network_mutex);
@@ -126,31 +74,6 @@ static void network_end_radio_operation(void) {
   hal_mutex_lock(s_network_mutex);
   s_radio_operation_active = false;
   hal_mutex_unlock(s_network_mutex);
-}
-
-static hal_status_t pico_status_to_hal(int status) {
-  switch (status) {
-  case PICO_OK:
-    return HAL_OK;
-  case PICO_ERROR_TIMEOUT:
-    return HAL_ETIMEOUT;
-  case PICO_ERROR_INVALID_ARG:
-    return HAL_EINVAL;
-  case PICO_ERROR_BADAUTH:
-    return HAL_EAUTH;
-  case PICO_ERROR_INSUFFICIENT_RESOURCES:
-    return HAL_ENOMEM;
-  case PICO_ERROR_INVALID_STATE:
-  case PICO_ERROR_PRECONDITION_NOT_MET:
-    return HAL_ESTATE;
-  case PICO_ERROR_RESOURCE_IN_USE:
-    return HAL_EBUSY;
-  case PICO_ERROR_IO:
-  case PICO_ERROR_CONNECT_FAILED:
-    return HAL_EIO;
-  default:
-    return HAL_EHW;
-  }
 }
 
 static hal_status_t network_init_sta_netif(void) {
@@ -195,7 +118,8 @@ static hal_status_t network_reset_sta_netif(void) {
     return status;
   }
 
-  status = pico_status_to_hal(cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA));
+  status = jh_rp2040_cyw43_platform_status(
+      cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA));
   if (status == HAL_OK) {
     network_deinit_sta_netif();
   }
@@ -273,54 +197,57 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
     return HAL_OK;
   }
 
-  const jh_cyw43_bus_config_t config = {
-      HAL_CYW43_PIN_WL_ON,
-      HAL_CYW43_PIN_DATA,
-      HAL_CYW43_PIN_DATA,
-      HAL_CYW43_PIN_DATA,
-      HAL_CYW43_PIN_CLOCK,
-      HAL_CYW43_PIN_CHIP_SELECT,
-      NUM_BANK0_GPIOS,
-      HAL_CYW43_PIO_CLOCK_DIV_INT,
-      HAL_CYW43_PIO_CLOCK_DIV_FRAC8,
-  };
-  hal_status_t status = jh_cyw43_bus_config_validate(&config);
+  hal_status_t status = jh_rp2040_cyw43_platform_init(HAL_CYW43_COUNTRY_CODE);
   if (status != HAL_OK) {
     return status;
   }
-
-  uint pins[CYW43_PIN_INDEX_WL_COUNT] = {
-      config.pin_wl_on,     config.pin_data_out, config.pin_data_in,
-      config.pin_host_wake, config.pin_clock,    config.pin_chip_select,
-  };
-  int platform_status = cyw43_set_pins_wl(pins);
-  if (platform_status != PICO_OK) {
-    return pico_status_to_hal(platform_status);
-  }
-
-  cyw43_set_pio_clkdiv_int_frac8(config.pio_clock_div_int,
-                                 config.pio_clock_div_frac8);
-  platform_status = cyw43_arch_init_with_country(HAL_CYW43_COUNTRY_CODE);
-  if (platform_status != PICO_OK) {
-    return pico_status_to_hal(platform_status);
-  }
-
-  cyw43_arch_enable_sta_mode();
   network_ensure_mutex();
   hal_status_t service_status = HAL_OK;
   if (!s_network_service_initialized) {
-    service_status =
-        jh_network_service_init(&s_network_service, &s_network_service_port);
+    service_status = jh_network_service_init(
+        &s_network_service, jh_rp2040_cyw43_platform_service_port());
     s_network_service_initialized = service_status == HAL_OK;
   }
   if (service_status == HAL_OK) {
     service_status = jh_network_service_start(&s_network_service);
   }
   if (service_status != HAL_OK) {
-    cyw43_arch_deinit();
+    jh_rp2040_cyw43_platform_deinit();
     return service_status;
   }
   s_initialized = true;
+  return HAL_OK;
+}
+
+hal_status_t jh_rp2040_cyw43_provider_deinit_for_baseline(void) {
+  if (!s_initialized) {
+    return HAL_OK;
+  }
+  if (!network_begin_radio_operation()) {
+    return HAL_EBUSY;
+  }
+
+  hal_status_t status = jh_network_service_stop(&s_network_service);
+  if (status == HAL_OK) {
+    (void)cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
+    network_deinit_sta_netif();
+    jh_rp2040_cyw43_platform_deinit();
+    s_initialized = false;
+    s_ping_active = false;
+    s_scan_overflow = false;
+    s_scan_count = 0u;
+    memset(&s_dns_request, 0, sizeof(s_dns_request));
+  }
+  network_end_radio_operation();
+  return status;
+}
+
+hal_status_t jh_cyw43_provider_service(void) {
+  if (!s_initialized) {
+    return HAL_EUNINIT;
+  }
+  cyw43_arch_poll();
+  sys_check_timeouts();
   return HAL_OK;
 }
 
@@ -363,7 +290,7 @@ hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
       non_blocking ? cyw43_arch_wifi_connect_async(ssid, password, auth)
                    : network_join_blocking(ssid, password, auth, timeout_ms);
   network_end_radio_operation();
-  return pico_status_to_hal(platform_status);
+  return jh_rp2040_cyw43_platform_status(platform_status);
 }
 
 hal_status_t jh_rp2040_cyw43_provider_leave(void) {
@@ -442,8 +369,8 @@ hal_status_t jh_rp2040_cyw43_provider_get_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]) {
   if (!network_begin_radio_operation()) {
     return HAL_EBUSY;
   }
-  const hal_status_t mac_status =
-      pico_status_to_hal(cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac));
+  const hal_status_t mac_status = jh_rp2040_cyw43_platform_status(
+      cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac));
   network_end_radio_operation();
   return mac_status;
 }
@@ -463,8 +390,8 @@ hal_status_t jh_rp2040_cyw43_provider_get_rssi(int32_t *out_rssi) {
     network_end_radio_operation();
     return HAL_ESTATE;
   }
-  const hal_status_t rssi_status =
-      pico_status_to_hal(cyw43_wifi_get_rssi(&cyw43_state, out_rssi));
+  const hal_status_t rssi_status = jh_rp2040_cyw43_platform_status(
+      cyw43_wifi_get_rssi(&cyw43_state, out_rssi));
   network_end_radio_operation();
   return rssi_status;
 }
@@ -832,7 +759,7 @@ hal_status_t jh_rp2040_cyw43_provider_scan(uint32_t timeout_ms,
       cyw43_wifi_scan(&cyw43_state, &options, nullptr, scan_result_callback);
   if (platform_status != PICO_OK) {
     network_end_radio_operation();
-    return pico_status_to_hal(platform_status);
+    return jh_rp2040_cyw43_platform_status(platform_status);
   }
 
   const uint64_t deadline_us = time_us_64() + ((uint64_t)timeout_ms * 1000u);

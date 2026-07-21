@@ -11,6 +11,7 @@
 
 #include "hal_status.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -23,6 +24,20 @@ extern "C" {
  */
 #ifndef HAL_NET_IPV4_ADDR_LEN
 #define HAL_NET_IPV4_ADDR_LEN 4u
+#endif
+
+/** @brief Number of octets in an IPv6 address. */
+#ifndef HAL_NET_IPV6_ADDR_LEN
+#define HAL_NET_IPV6_ADDR_LEN 16u
+#endif
+
+/** @brief Storage capacity of the address field in a HAL endpoint. */
+#ifndef HAL_NET_MAX_ADDR_LEN
+#define HAL_NET_MAX_ADDR_LEN HAL_NET_IPV6_ADDR_LEN
+#endif
+
+#if HAL_NET_MAX_ADDR_LEN < HAL_NET_IPV6_ADDR_LEN
+#error "HAL_NET_MAX_ADDR_LEN must hold a complete IPv6 address"
 #endif
 
 /**
@@ -39,21 +54,32 @@ extern "C" {
  */
 typedef enum {
   HAL_NET_AF_UNSPEC = 0, /**< Unspecified or not-yet-bound endpoint. */
-  HAL_NET_AF_INET = 2    /**< IPv4 endpoint. */
+  HAL_NET_AF_INET = 2,   /**< IPv4 endpoint. */
+  HAL_NET_AF_INET6 = 10  /**< IPv6 endpoint. */
 } hal_net_family_t;
 
 /**
- * @brief IPv4 transport endpoint.
+ * @brief Family-tagged transport endpoint.
  *
- * The address is stored in network byte order as four octets. The port is
- * stored in host byte order; compatibility layers such as BSD sockets perform
- * their own htons()/ntohs() translation at their boundary.
+ * IPv4 addresses use the first four bytes and set @ref addr_len to
+ * HAL_NET_IPV4_ADDR_LEN. IPv6 addresses use all sixteen bytes and may carry an
+ * interface scope identifier. Address bytes are always in network byte order;
+ * the port is stored in host byte order.
  */
 typedef struct {
-  hal_net_family_t family;             /**< Address family. */
-  uint8_t addr[HAL_NET_IPV4_ADDR_LEN]; /**< IPv4 address octets. */
-  uint16_t port;                       /**< Transport port in host order. */
+  hal_net_family_t family;            /**< Address family. */
+  uint8_t addr[HAL_NET_MAX_ADDR_LEN]; /**< Address bytes in network order. */
+  uint8_t addr_len;                   /**< Meaningful bytes in @ref addr. */
+  uint16_t port;                      /**< Transport port in host order. */
+  uint32_t scope_id;                  /**< IPv6 interface scope, else zero. */
 } hal_net_endpoint_t;
+
+/** @brief Portable network address-family capability bits. */
+typedef uint32_t hal_net_capabilities_t;
+
+#define HAL_NET_CAP_IPV4 (1u << 0u)
+#define HAL_NET_CAP_IPV6 (1u << 1u)
+#define HAL_NET_CAP_DUAL_STACK (1u << 2u)
 
 /**
  * @brief Transport status values that can be mapped to errno by adapters.
@@ -70,6 +96,39 @@ typedef enum {
 } hal_net_status_t;
 
 #ifdef HAL_ENABLE_WIFI
+/** @brief Return address-family capabilities of the selected runtime backend.
+ */
+hal_status_t
+hal_net_get_capabilities_ex(hal_net_capabilities_t *out_capabilities);
+
+/** @brief Compatibility value-returning capability query. */
+hal_net_capabilities_t hal_net_get_capabilities(void);
+
+/**
+ * @brief Allow the selected backend to make bounded forward progress.
+ *
+ * Poll-driven backends perform one service pass. Worker/platform-owned
+ * backends return HAL_OK after draining any facade work that is safe in the
+ * caller context.
+ */
+hal_status_t hal_net_service(void);
+
+/**
+ * @brief Resolve a literal or hostname into bounded family-neutral results.
+ *
+ * @param host_or_ip Hostname or numeric address.
+ * @param family_hint HAL_NET_AF_UNSPEC, HAL_NET_AF_INET or HAL_NET_AF_INET6.
+ * @param results Caller-owned result array, or NULL when @p capacity is zero.
+ * @param capacity Number of entries available in @p results.
+ * @param out_count Actual required result count. On HAL_EOVERFLOW no result is
+ *        written and this value reports the necessary capacity.
+ * @return HAL_OK, HAL_EOVERFLOW, HAL_ENOENT, HAL_EUNSUPPORTED or HAL_EINVAL.
+ */
+hal_status_t hal_net_resolve_ex(const char *host_or_ip,
+                                hal_net_family_t family_hint,
+                                hal_net_endpoint_t *results, size_t capacity,
+                                size_t *out_count);
+
 hal_status_t hal_net_resolve_ipv4_ex(const char *host_or_ip,
                                      uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]);
 /**

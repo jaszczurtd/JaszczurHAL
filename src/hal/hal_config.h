@@ -92,8 +92,12 @@
 #endif
 #endif
 
-/* -- Network backend selection ----------------------------------------- */
+/* -- Network backend transport configuration --------------------------- */
 #if defined(HAL_NETWORK_BACKEND_CYW43)
+#if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 requires exactly one HAL_CYW43_BUS_* transport"
+#endif
 #if !HAL_TARGET_IS_RP2040
 #error "HAL_NETWORK_BACKEND_CYW43 currently requires HAL_TARGET_RP2040"
 #endif
@@ -268,8 +272,11 @@
                                   HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI).
        HAL_ENABLE_BSD_SOCKETS   - minimal POSIX/BSD socket adapter
                                   (propagates: UDP, TCP, WIFI).
+       HAL_ENABLE_TLS           - portable TLS client with a private BearSSL
+                                  provider (propagates: BSD sockets, TCP,
+                                  WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
-       HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI).
+       HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI, UDP).
        HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
                                   Requires at least one backend (e.g.
                                   HAL_ENABLE_A7670), otherwise a
@@ -507,6 +514,12 @@
 #endif
 #endif
 
+#ifdef HAL_ENABLE_TLS
+#ifndef HAL_ENABLE_BSD_SOCKETS
+#define HAL_ENABLE_BSD_SOCKETS
+#endif
+#endif
+
 #ifdef HAL_ENABLE_BSD_SOCKETS
 #ifndef HAL_ENABLE_UDP
 #define HAL_ENABLE_UDP
@@ -583,12 +596,147 @@
 #endif
 
 #ifdef HAL_ENABLE_WIREGUARD
-#ifndef HAL_ENABLE_WIFI
-#define HAL_ENABLE_WIFI
-#endif
 #ifndef HAL_ENABLE_UDP
 #define HAL_ENABLE_UDP
 #endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
+#endif
+
+/* -- Derived network core and exactly-one backend selection ------------ */
+/* Feature flags request behavior.  They do not select a radio or socket
+ * implementation.  A target may provide a compatibility default, but an
+ * explicit HAL_NETWORK_BACKEND_* definition always remains authoritative. */
+#if defined(HAL_ENABLE_WIFI) || defined(HAL_ENABLE_TCP) ||                     \
+    defined(HAL_ENABLE_UDP) || defined(HAL_ENABLE_MQTT) ||                     \
+    defined(HAL_ENABLE_BSD_SOCKETS) || defined(HAL_ENABLE_TLS) ||              \
+    defined(HAL_ENABLE_HTTP_SERVER) || defined(HAL_ENABLE_HTTP_FILES) ||       \
+    defined(HAL_ENABLE_WEBSOCKET) || defined(HAL_ENABLE_NET_CONSOLE) ||        \
+    defined(HAL_ENABLE_NET_COMMANDS) || defined(HAL_ENABLE_OTA) ||             \
+    defined(HAL_ENABLE_WIREGUARD) || defined(HAL_ENABLE_TIME)
+#define HAL_ENABLE_NETWORK_CORE 1
+#endif
+
+#if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
+    !defined(HAL_NETWORK_BACKEND_ARDUINO_PICO) &&                              \
+    !defined(HAL_NETWORK_BACKEND_MOCK) && !defined(HAL_NETWORK_BACKEND_ESP_AT)
+#if HAL_TARGET_IS_RP2040
+#define HAL_NETWORK_BACKEND_ARDUINO_PICO 1
+#elif HAL_TARGET_IS_MOCK
+#define HAL_NETWORK_BACKEND_MOCK 1
+#endif
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+#define HAL_NETWORK_BACKEND_CYW43_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_CYW43_SELECTED 0
+#endif
+#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
+#define HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED 0
+#endif
+#if defined(HAL_NETWORK_BACKEND_MOCK)
+#define HAL_NETWORK_BACKEND_MOCK_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_MOCK_SELECTED 0
+#endif
+#if defined(HAL_NETWORK_BACKEND_ESP_AT)
+#define HAL_NETWORK_BACKEND_ESP_AT_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_ESP_AT_SELECTED 0
+#endif
+
+#define HAL_NETWORK_BACKEND_SELECTION_COUNT                                    \
+  (HAL_NETWORK_BACKEND_CYW43_SELECTED +                                        \
+   HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED +                                 \
+   HAL_NETWORK_BACKEND_MOCK_SELECTED + HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
+
+#if defined(HAL_ENABLE_NETWORK_CORE) && HAL_NETWORK_BACKEND_SELECTION_COUNT == 0
+#error "JaszczurHAL network core requires exactly one HAL_NETWORK_BACKEND_*"
+#endif
+#if HAL_NETWORK_BACKEND_SELECTION_COUNT > 1
+#error "Select exactly one HAL_NETWORK_BACKEND_*"
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO) && !HAL_TARGET_IS_RP2040
+#error "HAL_NETWORK_BACKEND_ARDUINO_PICO requires HAL_TARGET_RP2040"
+#endif
+#if defined(HAL_NETWORK_BACKEND_MOCK) && !HAL_TARGET_IS_MOCK
+#error "HAL_NETWORK_BACKEND_MOCK requires HAL_TARGET_MOCK"
+#endif
+#if defined(HAL_NETWORK_BACKEND_ESP_AT) && !defined(HAL_ESP_AT_PROFILE_ESP8266)
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_ESP_AT requires an HAL_ESP_AT_PROFILE_* command profile"
+#endif
+
+/* Backend topology/capability flags consumed by common network code. */
+#if defined(HAL_NETWORK_BACKEND_CYW43)
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
+#elif defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+/* Arduino-Pico owns lwIP and exposes the existing private L3 extension used by
+ * the transitional WireGuard implementation. */
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
+#elif defined(HAL_NETWORK_BACKEND_MOCK)
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
+#elif defined(HAL_NETWORK_BACKEND_ESP_AT)
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 0
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 0
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 0
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 0
+#endif
+
+#if defined(HAL_ENABLE_WIFI) && !HAL_NETWORK_CORE_HAS_WIFI_CONTROL
+#error "HAL_ENABLE_WIFI requires backend WiFi-control capability"
+#endif
+#if defined(HAL_ENABLE_TCP) &&                                                 \
+    (!HAL_NETWORK_CORE_HAS_TCP_CLIENT || !HAL_NETWORK_CORE_HAS_TCP_LISTENER)
+#error "HAL_ENABLE_TCP requires backend TCP client and listener capabilities"
+#endif
+#if defined(HAL_ENABLE_UDP) && !HAL_NETWORK_CORE_HAS_UDP
+#error "HAL_ENABLE_UDP requires backend UDP capability"
+#endif
+#if defined(HAL_ENABLE_NETWORK_CORE) && !HAL_NETWORK_CORE_HAS_RESOLVER
+#error "The selected network backend must provide resolver capability"
+#endif
+#if defined(HAL_ENABLE_WIREGUARD) &&                                           \
+    (!HAL_NETWORK_CORE_HAS_HOST_STACK_L3 ||                                    \
+     !HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE ||                              \
+     !HAL_NETWORK_CORE_HAS_STACK_CONTEXT ||                                    \
+     !HAL_NETWORK_CORE_HAS_SECURE_ENTROPY)
+#error                                                                         \
+    "HAL_ENABLE_WIREGUARD requires a host-stack L3 backend with stack-context and virtual-netif/route capabilities"
 #endif
 
 /* Cellular modem backends. */
@@ -982,6 +1130,9 @@
 #ifdef HAL_ENABLE_BSD_SOCKETS
 #pragma message("HAL_CONFIG: HAL_ENABLE_BSD_SOCKETS")
 #endif
+#ifdef HAL_ENABLE_TLS
+#pragma message("HAL_CONFIG: HAL_ENABLE_TLS")
+#endif
 #ifdef HAL_ENABLE_OTA
 #pragma message("HAL_CONFIG: HAL_ENABLE_OTA")
 #endif
@@ -1346,6 +1497,42 @@
  */
 #ifndef HAL_BSD_SOCKET_MAX_FDS
 #define HAL_BSD_SOCKET_MAX_FDS 8u
+#endif
+
+/** Maximum number of concurrent portable TLS client handles. */
+#ifndef HAL_TLS_MAX_CLIENTS
+#define HAL_TLS_MAX_CLIENTS 2u
+#endif
+
+/** Maximum DNS hostname length retained for SNI and identity verification. */
+#ifndef HAL_TLS_HOSTNAME_MAX_LENGTH
+#define HAL_TLS_HOSTNAME_MAX_LENGTH 253u
+#endif
+
+/** Finite timeout used by the bounded-worker BearSSL BSD callbacks. */
+#ifndef HAL_TLS_DEFAULT_TRANSPORT_TIMEOUT_MS
+#define HAL_TLS_DEFAULT_TRANSPORT_TIMEOUT_MS 5000u
+#endif
+
+/** Default upper bound for a complete public TLS operation. */
+#ifndef HAL_TLS_DEFAULT_OPERATION_TIMEOUT_MS
+#define HAL_TLS_DEFAULT_OPERATION_TIMEOUT_MS 15000u
+#endif
+
+/** Maximum record transport actions performed by one poll call. */
+#ifndef HAL_TLS_DEFAULT_POLL_STEP_BUDGET
+#define HAL_TLS_DEFAULT_POLL_STEP_BUDGET 4u
+#endif
+#if HAL_TLS_MAX_CLIENTS < 1u
+#error "HAL_TLS_MAX_CLIENTS must be at least 1"
+#endif
+#if HAL_TLS_HOSTNAME_MAX_LENGTH < 1u
+#error "HAL_TLS_HOSTNAME_MAX_LENGTH must be at least 1"
+#endif
+#if HAL_TLS_DEFAULT_TRANSPORT_TIMEOUT_MS < 1u ||                               \
+    HAL_TLS_DEFAULT_OPERATION_TIMEOUT_MS < 1u ||                               \
+    HAL_TLS_DEFAULT_POLL_STEP_BUDGET < 1u
+#error "Default TLS time and poll budgets must be finite and non-zero"
 #endif
 
 /**

@@ -6,6 +6,7 @@
 
 #include "../../hal_serial.h"
 #include "../../hal_udp.h"
+#include "../shared/network/jh_net_address_utils.h"
 #include "hal_mock.h"
 
 #include <stdio.h>
@@ -65,54 +66,54 @@ static bool validate_non_empty(const char *value, const char *fn,
   return true;
 }
 
-static bool validate_endpoint(const hal_net_endpoint_t *endpoint,
-                              const char *fn, const char *name) {
-  if (!endpoint) {
-    hal_derr("%s: %s endpoint is NULL", fn, name);
-    return false;
+static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
+                                      bool allow_unspecified_address,
+                                      const char *fn, const char *name) {
+  const hal_status_t shape =
+      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
+  if (shape != HAL_OK) {
+    hal_derr("%s: %s endpoint is malformed", fn, name);
+    return shape;
   }
-  if (endpoint->family != HAL_NET_AF_INET) {
+  const hal_net_capabilities_t required =
+      endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
+  if ((hal_net_get_capabilities() & required) == 0u) {
     hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return false;
+    return HAL_EUNSUPPORTED;
   }
-  if (endpoint->port == 0u) {
-    hal_derr("%s: %s endpoint port must be > 0", fn, name);
-    return false;
-  }
-  return true;
+  return HAL_OK;
 }
 
 static void endpoint_to_ip_string(const hal_net_endpoint_t *endpoint, char *out,
                                   size_t out_size) {
-  (void)snprintf(out, out_size, "%u.%u.%u.%u", (unsigned)endpoint->addr[0],
-                 (unsigned)endpoint->addr[1], (unsigned)endpoint->addr[2],
-                 (unsigned)endpoint->addr[3]);
+  if (endpoint->family == HAL_NET_AF_INET6) {
+    (void)jh_net_format_ipv6(endpoint->addr, out, out_size);
+  } else {
+    (void)snprintf(out, out_size, "%u.%u.%u.%u", (unsigned)endpoint->addr[0],
+                   (unsigned)endpoint->addr[1], (unsigned)endpoint->addr[2],
+                   (unsigned)endpoint->addr[3]);
+  }
 }
 
 static hal_net_endpoint_t endpoint_from_ip_string(const char *ip,
                                                   uint16_t port) {
   hal_net_endpoint_t endpoint = {};
-  endpoint.family = HAL_NET_AF_INET;
   endpoint.port = port;
-
-  unsigned octets[HAL_NET_IPV4_ADDR_LEN] = {0u, 0u, 0u, 0u};
-  if (ip &&
-      sscanf(ip, "%u.%u.%u.%u", &octets[0], &octets[1], &octets[2],
-             &octets[3]) == 4 &&
-      octets[0] <= 255u && octets[1] <= 255u && octets[2] <= 255u &&
-      octets[3] <= 255u) {
-    endpoint.addr[0] = (uint8_t)octets[0];
-    endpoint.addr[1] = (uint8_t)octets[1];
-    endpoint.addr[2] = (uint8_t)octets[2];
-    endpoint.addr[3] = (uint8_t)octets[3];
+  if (jh_net_parse_ipv4_literal(ip, endpoint.addr)) {
+    endpoint.family = HAL_NET_AF_INET;
+    endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
+  } else if (jh_net_parse_ipv6_literal(ip, endpoint.addr, &endpoint.scope_id,
+                                       true)) {
+    endpoint.family = HAL_NET_AF_INET6;
+    endpoint.addr_len = HAL_NET_IPV6_ADDR_LEN;
   }
 
   return endpoint;
 }
 
-static bool endpoint_is_zero_ipv4(const hal_net_endpoint_t *endpoint) {
-  return endpoint->addr[0] == 0u && endpoint->addr[1] == 0u &&
-         endpoint->addr[2] == 0u && endpoint->addr[3] == 0u;
+static bool endpoint_is_unspecified(const hal_net_endpoint_t *endpoint) {
+  return !endpoint || endpoint->addr_len == 0u ||
+         jh_net_address_is_unspecified(endpoint->addr, endpoint->addr_len);
 }
 
 static void reset_remote(hal_udp_socket_impl_t *socket) {
@@ -217,8 +218,10 @@ hal_udp_socket_t hal_udp_socket_open(void) {
 
 hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
                                     const hal_net_endpoint_t *local) {
-  if (!validate_endpoint(local, "hal_udp_socket_bind", "local")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(local, true, "hal_udp_socket_bind", "local");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
   if (!is_valid_socket(socket)) {
     hal_derr("hal_udp_socket_bind: socket handle is invalid");
@@ -250,8 +253,10 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
     hal_derr("hal_udp_socket_sendto: data is NULL while len > 0");
     return HAL_EINVAL;
   }
-  if (!validate_endpoint(remote, "hal_udp_socket_sendto", "remote")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(remote, false, "hal_udp_socket_sendto", "remote");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
   if (!is_valid_socket(socket)) {
     hal_derr("hal_udp_socket_sendto: socket is invalid");
@@ -379,6 +384,7 @@ hal_status_t hal_udp_begin_ex(uint16_t local_port) {
 
   hal_net_endpoint_t local = {};
   local.family = HAL_NET_AF_INET;
+  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
   local.port = local_port;
   return hal_udp_socket_bind_ex(s_default_udp, &local);
 }
@@ -528,7 +534,7 @@ hal_status_t hal_udp_begin_packet_remote_ex(void) {
     return HAL_EUNINIT;
   }
   if (socket->remote_port == 0u ||
-      endpoint_is_zero_ipv4(&socket->remote_endpoint)) {
+      endpoint_is_unspecified(&socket->remote_endpoint)) {
     hal_derr("hal_udp_begin_packet_remote: remote endpoint is not available");
     return HAL_ENOENT;
   }
