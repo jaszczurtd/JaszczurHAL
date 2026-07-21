@@ -97,6 +97,17 @@ void test_stm32_system_status_reports_unsupported_services(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
 }
 
+void test_stm32_architecture_reports_no_network_stack(void) {
+  hal_system_architecture_t architecture = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_system_get_current_architecture(&architecture));
+  TEST_ASSERT_EQUAL_STRING("none", architecture.network_backend_name);
+  TEST_ASSERT_EQUAL_STRING("none", architecture.network_stack_name);
+  TEST_ASSERT_EQUAL_INT(HAL_SYSTEM_NETWORK_STACK_TYPE_NONE,
+                        architecture.network_stack_type);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_stm32_reset_reason_soft_reset_maps_to_soft);
@@ -106,5 +117,6 @@ int main(void) {
   RUN_TEST(test_stm32_fault_frame_overrides_rcc_reason);
   RUN_TEST(test_stm32_stack_overflow_marker_overrides_reason);
   RUN_TEST(test_stm32_system_status_reports_unsupported_services);
+  RUN_TEST(test_stm32_architecture_reports_no_network_stack);
   return UNITY_END();
 }

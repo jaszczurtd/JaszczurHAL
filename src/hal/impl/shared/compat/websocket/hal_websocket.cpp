@@ -632,6 +632,7 @@ hal_status_t hal_websocket_server_start(uint16_t port, const char *path) {
 
   hal_net_endpoint_t local = {};
   local.family = HAL_NET_AF_INET;
+  local.addr_len = HAL_NET_IPV4_ADDR_LEN;
   local.port = port;
 
   if (!hal_tcp_listener_bind(s_listener, &local) ||

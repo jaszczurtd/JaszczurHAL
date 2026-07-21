@@ -6,6 +6,7 @@
 
 void setUp(void) {
   hal_mock_serial_reset();
+  hal_mock_net_reset();
   hal_mock_udp_reset();
 }
 
@@ -15,12 +16,78 @@ static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
                                         uint8_t d, uint16_t port) {
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
+  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
   endpoint.addr[0] = a;
   endpoint.addr[1] = b;
   endpoint.addr[2] = c;
   endpoint.addr[3] = d;
   endpoint.port = port;
   return endpoint;
+}
+
+static hal_net_endpoint_t make_ipv6_endpoint(uint16_t port, uint32_t scope_id) {
+  static const uint8_t address[HAL_NET_IPV6_ADDR_LEN] = {
+      0xfeu, 0x80u, 0u, 0u, 0u, 0u, 0u,    0u,
+      0u,    0u,    0u, 0u, 0u, 0u, 0x12u, 0x34u};
+  hal_net_endpoint_t endpoint = {};
+  endpoint.family = HAL_NET_AF_INET6;
+  endpoint.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  memcpy(endpoint.addr, address, sizeof(address));
+  endpoint.port = port;
+  endpoint.scope_id = scope_id;
+  return endpoint;
+}
+
+void test_socket_validates_shape_and_keeps_full_ipv6_endpoints(void) {
+  const uint8_t payload[] = {'v', '6'};
+  const hal_net_capabilities_t dual =
+      HAL_NET_CAP_IPV4 | HAL_NET_CAP_IPV6 | HAL_NET_CAP_DUAL_STACK;
+  hal_udp_socket_t socket = hal_udp_socket_open();
+  TEST_ASSERT_NOT_NULL(socket);
+  hal_net_endpoint_t local6 = make_ipv6_endpoint(5300u, 9u);
+  memset(local6.addr, 0, sizeof(local6.addr));
+  hal_net_endpoint_t remote6 = make_ipv6_endpoint(9000u, 9u);
+  hal_net_endpoint_t malformed = make_endpoint(192u, 0u, 2u, 1u, 9000u);
+  malformed.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  size_t sent = 0u;
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_udp_socket_sendto_ex(socket, payload, sizeof(payload),
+                                           &malformed, &sent));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_udp_socket_bind_ex(socket, &local6));
+  TEST_ASSERT_TRUE(hal_mock_net_set_capabilities(dual));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_bind_ex(socket, &local6));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_sendto_ex(socket, payload,
+                                                         sizeof(payload),
+                                                         &remote6, &sent));
+  TEST_ASSERT_EQUAL_UINT32(sizeof(payload), sent);
+  hal_net_endpoint_t captured = {};
+  TEST_ASSERT_TRUE(hal_mock_udp_get_last_tx_remote_for(socket, &captured));
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET6, captured.family);
+  TEST_ASSERT_EQUAL_UINT8(HAL_NET_IPV6_ADDR_LEN, captured.addr_len);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(remote6.addr, captured.addr,
+                                HAL_NET_IPV6_ADDR_LEN);
+  TEST_ASSERT_EQUAL_UINT16(9000u, captured.port);
+  TEST_ASSERT_EQUAL_UINT32(9u, captured.scope_id);
+
+  hal_mock_udp_inject_packet_to(socket, "fe80::beef%12", 9001u, payload,
+                                (uint16_t)sizeof(payload));
+  uint8_t received[2] = {};
+  hal_net_endpoint_t sender = {};
+  size_t received_len = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_udp_socket_recvfrom_ex(socket, received, sizeof(received),
+                                         &sender, 0u, &received_len));
+  TEST_ASSERT_EQUAL_UINT32(sizeof(payload), received_len);
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET6, sender.family);
+  TEST_ASSERT_EQUAL_UINT8(HAL_NET_IPV6_ADDR_LEN, sender.addr_len);
+  TEST_ASSERT_EQUAL_UINT8(0xfeu, sender.addr[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x80u, sender.addr[1]);
+  TEST_ASSERT_EQUAL_UINT8(0xbeu, sender.addr[14]);
+  TEST_ASSERT_EQUAL_UINT8(0xefu, sender.addr[15]);
+  TEST_ASSERT_EQUAL_UINT32(12u, sender.scope_id);
+  hal_udp_socket_close(socket);
 }
 
 void test_socket_handles_bind_and_receive_independently(void) {
@@ -330,6 +397,7 @@ void test_end_packet_failure_is_propagated(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_socket_validates_shape_and_keeps_full_ipv6_endpoints);
   RUN_TEST(test_socket_handles_bind_and_receive_independently);
   RUN_TEST(test_socket_sendto_keeps_independent_tx_state);
   RUN_TEST(test_socket_pool_limit_and_reuse_after_close);

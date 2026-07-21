@@ -2,7 +2,7 @@
 
 /**
  * @file arpa/inet.h
- * @brief Minimal IPv4 text/binary conversion helpers for BSD sockets.
+ * @brief IPv4/IPv6 text and binary conversion helpers for BSD sockets.
  */
 
 #include "../hal/hal_config.h"
@@ -17,6 +17,9 @@ extern "C" {
 
 #ifndef INET_ADDRSTRLEN
 #define INET_ADDRSTRLEN 16
+#endif
+#ifndef INET6_ADDRSTRLEN
+#define INET6_ADDRSTRLEN 46
 #endif
 
 in_addr_t inet_addr(const char *cp);

@@ -9,6 +9,13 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include "hal/hal_net.h"
+
+_Static_assert(AF_INET6 == 10, "AF_INET6 value");
+_Static_assert(PF_INET6 == AF_INET6, "PF_INET6 alias");
+_Static_assert(sizeof(((hal_net_endpoint_t *)0)->addr) >= 16u,
+               "HAL endpoint must hold IPv6");
+
 static struct sockaddr_in endpoint(const char *ip, uint16_t port) {
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -146,11 +153,46 @@ static void compile_select_shape(void) {
   }
 }
 
+static void compile_ipv6_shape(void) {
+  char text[INET6_ADDRSTRLEN];
+  const struct in6_addr any = IN6ADDR_ANY_INIT;
+  const struct in6_addr loopback = IN6ADDR_LOOPBACK_INIT;
+  struct sockaddr_in6 local;
+  struct sockaddr_in6 remote;
+  struct addrinfo hints;
+  struct addrinfo *resolved = NULL;
+  memset(&local, 0, sizeof(local));
+  memset(&remote, 0, sizeof(remote));
+  memset(&hints, 0, sizeof(hints));
+  local.sin6_family = AF_INET6;
+  local.sin6_port = htons(9000u);
+  local.sin6_addr = any;
+  remote.sin6_family = AF_INET6;
+  remote.sin6_port = htons(9001u);
+  remote.sin6_addr = loopback;
+  remote.sin6_scope_id = 7u;
+  (void)inet_pton(AF_INET6, "2001:db8::1", &remote.sin6_addr);
+  (void)inet_ntop(AF_INET6, &remote.sin6_addr, text, (socklen_t)sizeof(text));
+  hints.ai_family = AF_INET6;
+  hints.ai_socktype = SOCK_STREAM;
+  if (getaddrinfo("2001:db8::1", "9001", &hints, &resolved) == 0) {
+    freeaddrinfo(resolved);
+  }
+  int fd = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+  if (fd >= 0) {
+    (void)bind(fd, (const struct sockaddr *)&local, (socklen_t)sizeof(local));
+    (void)connect(fd, (const struct sockaddr *)&remote,
+                  (socklen_t)sizeof(remote));
+    (void)close(fd);
+  }
+}
+
 int main(void) {
   compile_tcp_client_shape();
   compile_tcp_server_shape();
   compile_udp_client_shape();
   compile_udp_server_shape();
   compile_select_shape();
+  compile_ipv6_shape();
   return 0;
 }

@@ -6,6 +6,7 @@
 
 #include "../../hal_serial.h"
 #include "../../hal_tcp.h"
+#include "../shared/network/jh_net_address_utils.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -50,21 +51,22 @@ static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   endpoint->family = HAL_NET_AF_UNSPEC;
 }
 
-static bool validate_endpoint(const hal_net_endpoint_t *endpoint,
-                              const char *fn, const char *name) {
-  if (!endpoint) {
-    hal_derr("%s: %s endpoint is NULL", fn, name);
-    return false;
+static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
+                                      bool allow_unspecified_address,
+                                      const char *fn, const char *name) {
+  const hal_status_t shape =
+      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
+  if (shape != HAL_OK) {
+    hal_derr("%s: %s endpoint is malformed", fn, name);
+    return shape;
   }
-  if (endpoint->family != HAL_NET_AF_INET) {
+  const hal_net_capabilities_t required =
+      endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
+  if ((hal_net_get_capabilities() & required) == 0u) {
     hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return false;
+    return HAL_EUNSUPPORTED;
   }
-  if (endpoint->port == 0u) {
-    hal_derr("%s: %s endpoint port must be > 0", fn, name);
-    return false;
-  }
-  return true;
+  return HAL_OK;
 }
 
 static uint8_t capped_backlog(uint8_t backlog) {
@@ -184,8 +186,10 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
                                        uint32_t timeout_ms) {
   (void)timeout_ms;
 
-  if (!validate_endpoint(remote, "hal_tcp_socket_connect", "remote")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(remote, false, "hal_tcp_socket_connect", "remote");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
   if (!is_valid_socket(socket)) {
     hal_derr("hal_tcp_socket_connect: socket handle is invalid");
@@ -360,8 +364,10 @@ hal_tcp_listener_t hal_tcp_listener_open(void) {
 
 hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
                                       const hal_net_endpoint_t *local) {
-  if (!validate_endpoint(local, "hal_tcp_listener_bind", "local")) {
-    return HAL_EINVAL;
+  const hal_status_t endpoint_status =
+      validate_endpoint(local, true, "hal_tcp_listener_bind", "local");
+  if (endpoint_status != HAL_OK) {
+    return endpoint_status;
   }
   if (!is_valid_listener(listener)) {
     hal_derr("hal_tcp_listener_bind: listener handle is invalid");
@@ -510,8 +516,8 @@ bool hal_mock_tcp_get_remote_endpoint(hal_tcp_socket_t socket,
 
 bool hal_mock_tcp_listener_inject_client(hal_tcp_listener_t listener,
                                          const hal_net_endpoint_t *remote) {
-  if (!validate_endpoint(remote, "hal_mock_tcp_listener_inject_client",
-                         "remote")) {
+  if (validate_endpoint(remote, false, "hal_mock_tcp_listener_inject_client",
+                        "remote") != HAL_OK) {
     return false;
   }
   if (!is_valid_listener(listener) || !listener->listening) {

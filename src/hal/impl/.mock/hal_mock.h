@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../../hal_gpio.h"
+#include "../../hal_net.h"
 #include "../../hal_system.h"
 #include <stdbool.h>
 #include <stddef.h>
@@ -369,8 +370,12 @@ bool hal_mock_wifi_set_scan_result(size_t index, const char *ssid,
                                    int32_t channel, int32_t rssi);
 /** @brief Reset mock hostname resolver entries. */
 void hal_mock_net_reset(void);
+/** @brief Select address families advertised by the mock network backend. */
+bool hal_mock_net_set_capabilities(hal_net_capabilities_t capabilities);
 /** @brief Add or replace a mock DNS resolver entry. */
 bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
+/** @brief Append an A or AAAA result for a mock hostname. */
+bool hal_mock_net_add_dns_entry(const char *host, const char *ip);
 
 // ── SD logger ───────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_SDLOGGER

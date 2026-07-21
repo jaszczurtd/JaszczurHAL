@@ -2,19 +2,14 @@
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_WIFI
+#if !defined(HAL_NETWORK_BACKEND_CYW43)
 
 #include "../../hal_net.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_wifi.h"
 #include "../shared/hal_mutex_once.h"
-#if defined(HAL_NETWORK_BACKEND_CYW43)
-#include "drivers/rp2040/rp2040_cyw43_provider.h"
-#include "rp2040_network_lifecycle.h"
-#include <wl_definitions.h>
-#else
 #include <WiFi.h>
-#endif
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -306,6 +301,34 @@ hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms) {
 
 bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
   return hal_status_to_bool(hal_wifi_set_timeout_ms_ex(timeout_ms));
+}
+
+hal_status_t hal_wifi_get_state_ex(hal_wifi_state_t *out_state) {
+  if (out_state == nullptr) {
+    return HAL_EINVAL;
+  }
+  wifi_ensure_mutex();
+  hal_mutex_lock(s_wifi_mutex);
+  const int status = (int)WiFi.status();
+  hal_mutex_unlock(s_wifi_mutex);
+  switch (status) {
+  case WL_CONNECTED:
+    *out_state = HAL_WIFI_STATE_CONNECTED;
+    break;
+  case WL_NO_SSID_AVAIL:
+    *out_state = HAL_WIFI_STATE_NO_NETWORK;
+    break;
+  case WL_CONNECT_FAILED:
+    *out_state = HAL_WIFI_STATE_FAILED;
+    break;
+  case WL_DISCONNECTED:
+    *out_state = HAL_WIFI_STATE_CONNECTED_NO_IP;
+    break;
+  default:
+    *out_state = HAL_WIFI_STATE_IDLE;
+    break;
+  }
+  return HAL_OK;
 }
 
 bool hal_wifi_is_connected(void) {
@@ -701,4 +724,5 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption) {
 }
 
 #endif /* HAL_ENABLE_WIFI */
+#endif /* !HAL_NETWORK_BACKEND_CYW43 */
 #endif // HAL_TARGET_IS_RP2040

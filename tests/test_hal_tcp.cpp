@@ -6,6 +6,7 @@
 
 void setUp(void) {
   hal_mock_serial_reset();
+  hal_mock_net_reset();
   hal_mock_tcp_reset();
 }
 
@@ -15,12 +16,58 @@ static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
                                         uint8_t d, uint16_t port) {
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
+  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
   endpoint.addr[0] = a;
   endpoint.addr[1] = b;
   endpoint.addr[2] = c;
   endpoint.addr[3] = d;
   endpoint.port = port;
   return endpoint;
+}
+
+static hal_net_endpoint_t make_ipv6_endpoint(uint16_t port, uint32_t scope_id) {
+  static const uint8_t address[HAL_NET_IPV6_ADDR_LEN] = {
+      0x20u, 0x01u, 0x0du, 0xb8u, 0u, 0u, 0u, 0u,
+      0u,    0u,    0u,    0u,    0u, 0u, 0u, 0x42u};
+  hal_net_endpoint_t endpoint = {};
+  endpoint.family = HAL_NET_AF_INET6;
+  endpoint.addr_len = HAL_NET_IPV6_ADDR_LEN;
+  memcpy(endpoint.addr, address, sizeof(address));
+  endpoint.port = port;
+  endpoint.scope_id = scope_id;
+  return endpoint;
+}
+
+void test_connect_validates_family_length_scope_and_keeps_ipv6(void) {
+  const hal_net_capabilities_t dual =
+      HAL_NET_CAP_IPV4 | HAL_NET_CAP_IPV6 | HAL_NET_CAP_DUAL_STACK;
+  hal_tcp_socket_t socket = hal_tcp_socket_open();
+  TEST_ASSERT_NOT_NULL(socket);
+  hal_net_endpoint_t remote6 = make_ipv6_endpoint(443u, 9u);
+  hal_net_endpoint_t malformed = make_endpoint(192u, 0u, 2u, 1u, 443u);
+  malformed.addr_len = HAL_NET_IPV6_ADDR_LEN;
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tcp_socket_connect_ex(socket, &malformed, 100u));
+  malformed = make_endpoint(192u, 0u, 2u, 1u, 443u);
+  malformed.scope_id = 1u;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tcp_socket_connect_ex(socket, &malformed, 100u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_tcp_socket_connect_ex(socket, &remote6, 100u));
+
+  TEST_ASSERT_TRUE(hal_mock_net_set_capabilities(dual));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tcp_socket_connect_ex(socket, &remote6, 100u));
+  hal_net_endpoint_t captured = {};
+  TEST_ASSERT_TRUE(hal_mock_tcp_get_remote_endpoint(socket, &captured));
+  TEST_ASSERT_EQUAL_INT(HAL_NET_AF_INET6, captured.family);
+  TEST_ASSERT_EQUAL_UINT8(HAL_NET_IPV6_ADDR_LEN, captured.addr_len);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(remote6.addr, captured.addr,
+                                HAL_NET_IPV6_ADDR_LEN);
+  TEST_ASSERT_EQUAL_UINT16(443u, captured.port);
+  TEST_ASSERT_EQUAL_UINT32(9u, captured.scope_id);
+  hal_tcp_socket_close(socket);
 }
 
 void test_connect_success_records_remote_endpoint(void) {
@@ -354,6 +401,7 @@ void test_listener_api_rejects_invalid_inputs(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_connect_validates_family_length_scope_and_keeps_ipv6);
   RUN_TEST(test_connect_success_records_remote_endpoint);
   RUN_TEST(test_connect_failure_leaves_socket_disconnected);
   RUN_TEST(test_send_captures_payload);

@@ -21,6 +21,7 @@ void tearDown(void) {}
 static hal_net_endpoint_t endpoint(uint16_t port) {
   hal_net_endpoint_t value = {};
   value.family = HAL_NET_AF_INET;
+  value.addr_len = HAL_NET_IPV4_ADDR_LEN;
   value.addr[0] = 192u;
   value.addr[1] = 0u;
   value.addr[2] = 2u;

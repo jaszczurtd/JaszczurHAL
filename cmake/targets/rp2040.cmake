@@ -27,6 +27,8 @@ set(JH_EXTRA_DEFINES "" CACHE STRING "Extra compile definitions for the firmware
 set(JH_RP2040_BOARD_DEFINES "" CACHE STRING
     "Board-profile compile definitions for RP2040 (';'-separated)")
 set(JH_RP2040_FREERTOS OFF CACHE BOOL "Build with arduino-pico FreeRTOS FQBN option")
+set(JH_RP2040_EXTRA_LINK_FLAGS "" CACHE STRING
+    "Additional RP2040 firmware linker flags")
 
 function(_jh_rp2040_apply_freertos OUT_VAR FQBN)
     if(NOT JH_RP2040_FREERTOS)
@@ -120,6 +122,12 @@ set(ARDUINO_COMMON_ARGS
     --build-property "compiler.c.extra_flags=-I${SKETCH_DIR} -I${JH_PROJECT_DIR}${_entry_defs}"
     --warnings all
 )
+if(JH_RP2040_EXTRA_LINK_FLAGS)
+    list(APPEND ARDUINO_COMMON_ARGS
+        --build-property
+        "compiler.c.elf.extra_flags=${JH_RP2040_EXTRA_LINK_FLAGS}"
+    )
+endif()
 if(ARDUINO_LIBRARIES)
     list(APPEND ARDUINO_COMMON_ARGS --libraries "${ARDUINO_LIBRARIES}")
 endif()

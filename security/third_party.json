@@ -28,6 +28,20 @@
       "notes": "Pinned external checkout for STM32G474 FreeRTOS builds; RP2040 uses arduino-pico's bundled FreeRTOS mode."
     },
     {
+      "name": "BearSSL",
+      "version": "aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "commit": "aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Thomas Pornin and bearssl-esp8266 contributors",
+      "licenses": ["MIT"],
+      "purl": "pkg:github/earlephilhower/bearssl-esp8266@aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "paths": ["src/hal/impl/shared/frameworks/BearSSL"],
+      "upstream": "https://github.com/earlephilhower/bearssl-esp8266",
+      "feature_flags": ["HAL_ENABLE_TLS"],
+      "notes": "Pinned BearSSL core. Host and STM32 builds compile the vendored sources; RP2040 reuses Arduino-Pico's archive built from the exact same commit to avoid duplicate br_* symbols."
+    },
+    {
       "name": "cJSON",
       "version": "1.7.18",
       "type": "library",

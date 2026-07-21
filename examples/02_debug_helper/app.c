@@ -25,6 +25,8 @@ static void log_architecture_snapshot(void) {
   deb("heap total=%lu free=%lu stack=%lu uid_bytes=%lu",
       (unsigned long)arch.heap_total_bytes, (unsigned long)arch.heap_free_bytes,
       (unsigned long)arch.stack_total_bytes, (unsigned long)arch.uid_bytes);
+  deb("network backend=%s stack=%s type=%u", arch.network_backend_name,
+      arch.network_stack_name, (unsigned)arch.network_stack_type);
 }
 
 void app_start(void) {

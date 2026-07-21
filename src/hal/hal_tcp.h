@@ -54,9 +54,9 @@ hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener);
 hal_tcp_socket_t hal_tcp_socket_open(void);
 
 /**
- * @brief Connect a TCP client socket to a remote IPv4 endpoint.
+ * @brief Connect a TCP client socket to a remote family-tagged endpoint.
  * @param socket Socket handle returned by @ref hal_tcp_socket_open.
- * @param remote Remote IPv4 endpoint. The port must be non-zero.
+ * @param remote Remote endpoint. The port must be non-zero.
  * @param timeout_ms Connect timeout in milliseconds. Use
  *        @ref HAL_NET_TIMEOUT_FOREVER to wait without a fixed deadline.
  * @return true when the connection is established.
@@ -132,9 +132,9 @@ void hal_tcp_socket_close(hal_tcp_socket_t socket);
 hal_tcp_listener_t hal_tcp_listener_open(void);
 
 /**
- * @brief Bind a TCP listener to a local IPv4 endpoint.
+ * @brief Bind a TCP listener to a local family-tagged endpoint.
  * @param listener Listener handle returned by @ref hal_tcp_listener_open.
- * @param local Local IPv4 endpoint. The port must be non-zero.
+ * @param local Local endpoint. The port must be non-zero.
  * @return true when the listener is bound.
  */
 bool hal_tcp_listener_bind(hal_tcp_listener_t listener,

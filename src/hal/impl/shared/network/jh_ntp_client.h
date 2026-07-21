@@ -47,8 +47,11 @@ static inline hal_status_t jh_ntp_validate_response(
   *out_ntp_fraction = 0u;
 
   if (expected_server->family != HAL_NET_AF_INET ||
-      expected_server->port != JH_NTP_PORT ||
-      source->family != HAL_NET_AF_INET || source->port != JH_NTP_PORT ||
+      expected_server->addr_len != HAL_NET_IPV4_ADDR_LEN ||
+      expected_server->scope_id != 0u || expected_server->port != JH_NTP_PORT ||
+      source->family != HAL_NET_AF_INET ||
+      source->addr_len != HAL_NET_IPV4_ADDR_LEN || source->scope_id != 0u ||
+      source->port != JH_NTP_PORT ||
       memcmp(source->addr, expected_server->addr, HAL_NET_IPV4_ADDR_LEN) != 0) {
     return HAL_EPROTO;
   }

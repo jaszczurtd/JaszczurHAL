@@ -58,6 +58,13 @@ extern "C" {
 #define COUNTOF(arr) (sizeof(arr) / sizeof((arr)[0]))
 #endif
 
+/** @brief Ownership/topology of the active IP and socket stack. */
+typedef enum {
+  HAL_SYSTEM_NETWORK_STACK_TYPE_NONE = 0,
+  HAL_SYSTEM_NETWORK_STACK_TYPE_HOST,
+  HAL_SYSTEM_NETWORK_STACK_TYPE_SOCKET_OFFLOAD
+} hal_system_network_stack_type_t;
+
 /**
  * @brief Snapshot of the currently running HAL architecture/backend.
  *
@@ -93,6 +100,10 @@ typedef struct {
   uint32_t heap_free_bytes;   /**< Current free heap reported by backend. */
   uint32_t stack_total_bytes; /**< Main/core stack reservation if known. */
   uint32_t uid_bytes;         /**< Unique-device-ID width in bytes. */
+  const char *network_backend_name; /**< Selected network backend or "none". */
+  const char *network_stack_name;   /**< IP/socket stack name or "none". */
+  hal_system_network_stack_type_t
+      network_stack_type; /**< Host stack, socket offload, or none. */
 } hal_system_architecture_t;
 
 /**

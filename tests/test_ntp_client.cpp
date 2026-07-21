@@ -13,6 +13,7 @@ void make_valid_fixture(uint8_t request[JH_NTP_PACKET_SIZE],
                         hal_net_endpoint_t *source) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_ntp_prepare_request(request, request_token));
   server->family = HAL_NET_AF_INET;
+  server->addr_len = HAL_NET_IPV4_ADDR_LEN;
   server->addr[0] = 192u;
   server->addr[1] = 0u;
   server->addr[2] = 2u;

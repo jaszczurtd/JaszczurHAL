@@ -1,6 +1,7 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_MOCK
 #include "../../hal_system.h"
+#include "../shared/network/jh_network_architecture.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -70,6 +71,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   info.has_rtos = false;
   info.heap_free_bytes = hal_get_free_heap();
   info.uid_bytes = HAL_DEVICE_UID_BYTES;
+  jh_network_architecture_fill(&info);
   *out = info;
   return HAL_OK;
 }

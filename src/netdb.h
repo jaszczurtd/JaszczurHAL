@@ -2,7 +2,7 @@
 
 /**
  * @file netdb.h
- * @brief Minimal IPv4 getaddrinfo declarations for JaszczurHAL BSD sockets.
+ * @brief Bounded IPv4/IPv6 getaddrinfo declarations for JaszczurHAL sockets.
  */
 
 #include "hal/hal_config.h"

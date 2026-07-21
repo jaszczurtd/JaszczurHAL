@@ -4,8 +4,8 @@
  * @file sys/socket.h
  * @brief Minimal BSD/POSIX socket compatibility declarations for JaszczurHAL.
  *
- * The adapter is intentionally small: IPv4 stream and datagram sockets only.
- * Enable it with HAL_ENABLE_BSD_SOCKETS.
+ * Enable it with HAL_ENABLE_BSD_SOCKETS. IPv6 types are always declared; an
+ * IPv4-only runtime rejects AF_INET6 deterministically.
  */
 
 #include "../hal/hal_config.h"
@@ -34,8 +34,14 @@ typedef uint32_t socklen_t;
 #ifndef AF_INET
 #define AF_INET 2
 #endif
+#ifndef AF_INET6
+#define AF_INET6 10
+#endif
 #ifndef PF_INET
 #define PF_INET AF_INET
+#endif
+#ifndef PF_INET6
+#define PF_INET6 AF_INET6
 #endif
 
 #ifndef SOCK_STREAM

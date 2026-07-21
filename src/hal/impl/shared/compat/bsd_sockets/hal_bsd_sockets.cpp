@@ -9,6 +9,7 @@
 #include "hal/hal_tcp.h"
 #include "hal/hal_udp.h"
 #include "hal/impl/shared/hal_mutex_once.h"
+#include "hal/impl/shared/network/jh_net_address_utils.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -73,6 +74,7 @@
 #endif
 
 #define HAL_BSD_ADDRINFO_CANONNAME_MAX 256u
+#define HAL_BSD_ADDRINFO_MAX_RESULTS 8u
 #define HAL_BSD_UDP_EPHEMERAL_PORT_FIRST 49152u
 #define HAL_BSD_UDP_EPHEMERAL_PORT_COUNT 16384u
 
@@ -94,6 +96,7 @@ typedef struct {
   uint32_t send_timeout_ms;
   int status_flags;
   int last_error;
+  hal_net_family_t family;
   bool has_local_endpoint;
   bool has_remote_endpoint;
   bool udp_bound;
@@ -103,7 +106,11 @@ typedef struct {
 
 typedef struct {
   struct addrinfo info;
-  struct sockaddr_in addr;
+  union {
+    struct sockaddr generic;
+    struct sockaddr_in ipv4;
+    struct sockaddr_in6 ipv6;
+  } addr;
   char canonname[HAL_BSD_ADDRINFO_CANONNAME_MAX];
 } hal_bsd_addrinfo_node_t;
 
@@ -124,6 +131,7 @@ static void clear_entry(hal_bsd_fd_entry_t *entry) {
   }
   memset(entry, 0, sizeof(*entry));
   entry->kind = HAL_BSD_FD_UNUSED;
+  entry->family = HAL_NET_AF_UNSPEC;
   entry->local_endpoint.family = HAL_NET_AF_UNSPEC;
   entry->remote_endpoint.family = HAL_NET_AF_UNSPEC;
   entry->recv_timeout_ms = HAL_NET_TIMEOUT_FOREVER;
@@ -193,23 +201,40 @@ static bool sockaddr_to_endpoint(const struct sockaddr *addr, socklen_t addrlen,
     errno = EINVAL;
     return false;
   }
-  if (addrlen < (socklen_t)sizeof(struct sockaddr_in)) {
-    errno = EINVAL;
-    return false;
-  }
-  if (addr->sa_family != AF_INET) {
-    errno = EAFNOSUPPORT;
-    return false;
-  }
-
-  struct sockaddr_in sin = {};
-  memcpy(&sin, addr, sizeof(sin));
-
   memset(endpoint, 0, sizeof(*endpoint));
-  endpoint->family = HAL_NET_AF_INET;
-  endpoint->port = ntohs(sin.sin_port);
-  endpoint_addr_from_host_u32(endpoint, ntohl(sin.sin_addr.s_addr));
-  return true;
+  if (addr->sa_family == AF_INET) {
+    if (addrlen < (socklen_t)sizeof(struct sockaddr_in)) {
+      errno = EINVAL;
+      return false;
+    }
+    struct sockaddr_in sin = {};
+    memcpy(&sin, addr, sizeof(sin));
+    endpoint->family = HAL_NET_AF_INET;
+    endpoint->addr_len = HAL_NET_IPV4_ADDR_LEN;
+    endpoint->port = ntohs(sin.sin_port);
+    endpoint_addr_from_host_u32(endpoint, ntohl(sin.sin_addr.s_addr));
+    return true;
+  }
+  if (addr->sa_family == AF_INET6) {
+    if (addrlen < (socklen_t)sizeof(struct sockaddr_in6)) {
+      errno = EINVAL;
+      return false;
+    }
+    struct sockaddr_in6 sin6 = {};
+    memcpy(&sin6, addr, sizeof(sin6));
+    if (sin6.sin6_flowinfo != 0u) {
+      errno = EINVAL;
+      return false;
+    }
+    endpoint->family = HAL_NET_AF_INET6;
+    endpoint->addr_len = HAL_NET_IPV6_ADDR_LEN;
+    endpoint->port = ntohs(sin6.sin6_port);
+    endpoint->scope_id = sin6.sin6_scope_id;
+    memcpy(endpoint->addr, sin6.sin6_addr.s6_addr, HAL_NET_IPV6_ADDR_LEN);
+    return true;
+  }
+  errno = EAFNOSUPPORT;
+  return false;
 }
 
 static bool write_sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
@@ -222,21 +247,32 @@ static bool write_sockaddr_from_endpoint(const hal_net_endpoint_t *endpoint,
     errno = EINVAL;
     return false;
   }
-  if (!endpoint || endpoint->family != HAL_NET_AF_INET) {
+  if (jh_net_validate_endpoint_shape(endpoint, false, true) != HAL_OK) {
     errno = EAFNOSUPPORT;
     return false;
   }
-
-  struct sockaddr_in sin = {};
-  sin.sin_family = AF_INET;
-  sin.sin_port = htons(endpoint->port);
-  sin.sin_addr.s_addr = htonl(endpoint_addr_to_host_u32(endpoint));
-
   const socklen_t requested = *addrlen;
-  const socklen_t actual = (socklen_t)sizeof(sin);
+  socklen_t actual = 0u;
+  uint8_t storage[sizeof(struct sockaddr_in6)] = {};
+  if (endpoint->family == HAL_NET_AF_INET) {
+    struct sockaddr_in sin = {};
+    sin.sin_family = AF_INET;
+    sin.sin_port = htons(endpoint->port);
+    sin.sin_addr.s_addr = htonl(endpoint_addr_to_host_u32(endpoint));
+    actual = (socklen_t)sizeof(sin);
+    memcpy(storage, &sin, sizeof(sin));
+  } else {
+    struct sockaddr_in6 sin6 = {};
+    sin6.sin6_family = AF_INET6;
+    sin6.sin6_port = htons(endpoint->port);
+    memcpy(sin6.sin6_addr.s6_addr, endpoint->addr, HAL_NET_IPV6_ADDR_LEN);
+    sin6.sin6_scope_id = endpoint->scope_id;
+    actual = (socklen_t)sizeof(sin6);
+    memcpy(storage, &sin6, sizeof(sin6));
+  }
   const socklen_t to_copy = requested < actual ? requested : actual;
   if (to_copy > 0u) {
-    memcpy(addr, &sin, (size_t)to_copy);
+    memcpy(addr, storage, (size_t)to_copy);
   }
   *addrlen = actual;
   return true;
@@ -347,7 +383,9 @@ static bool ensure_udp_bound(hal_bsd_fd_entry_t *entry) {
   }
 
   hal_net_endpoint_t local = {};
-  local.family = HAL_NET_AF_INET;
+  local.family = entry->family;
+  local.addr_len = entry->family == HAL_NET_AF_INET ? HAL_NET_IPV4_ADDR_LEN
+                                                    : HAL_NET_IPV6_ADDR_LEN;
   bool bound = false;
   for (uint32_t attempts = 0u; attempts < HAL_BSD_UDP_EPHEMERAL_PORT_COUNT;
        ++attempts) {
@@ -482,49 +520,143 @@ static bool copy_canonname(hal_bsd_addrinfo_node_t *node,
   return true;
 }
 
-static bool format_ipv4_canonname(hal_bsd_addrinfo_node_t *node,
-                                  const uint8_t addr[HAL_NET_IPV4_ADDR_LEN]) {
-  if (!node || !addr) {
+static bool format_endpoint_canonname(hal_bsd_addrinfo_node_t *node,
+                                      const hal_net_endpoint_t *endpoint) {
+  if (!node || !endpoint) {
     return false;
   }
-
-  const int written =
-      snprintf(node->canonname, sizeof(node->canonname), "%u.%u.%u.%u",
-               (unsigned)addr[0], (unsigned)addr[1], (unsigned)addr[2],
-               (unsigned)addr[3]);
-  if (written < 0 || (size_t)written >= sizeof(node->canonname)) {
+  if (endpoint->family == HAL_NET_AF_INET) {
+    const int written =
+        snprintf(node->canonname, sizeof(node->canonname), "%u.%u.%u.%u",
+                 (unsigned)endpoint->addr[0], (unsigned)endpoint->addr[1],
+                 (unsigned)endpoint->addr[2], (unsigned)endpoint->addr[3]);
+    if (written < 0 || (size_t)written >= sizeof(node->canonname)) {
+      return false;
+    }
+  } else if (endpoint->family == HAL_NET_AF_INET6) {
+    if (!jh_net_format_ipv6(endpoint->addr, node->canonname,
+                            sizeof(node->canonname))) {
+      return false;
+    }
+  } else {
     return false;
   }
-
   node->info.ai_canonname = node->canonname;
   return true;
 }
 
-static int resolve_addrinfo_ipv4(const char *node, int flags,
-                                 uint8_t out_addr[HAL_NET_IPV4_ADDR_LEN]) {
-  if (!out_addr) {
+static bool bsd_family_supported(int family) {
+  const hal_net_capabilities_t capabilities = hal_net_get_capabilities();
+  if (family == AF_INET) {
+    return (capabilities & HAL_NET_CAP_IPV4) != 0u;
+  }
+  if (family == AF_INET6) {
+    return (capabilities & HAL_NET_CAP_IPV6) != 0u;
+  }
+  return false;
+}
+
+static int resolver_status_to_eai(hal_status_t status) {
+  switch (status) {
+  case HAL_OK:
+    return 0;
+  case HAL_EUNSUPPORTED:
+    return EAI_FAMILY;
+  case HAL_EBUSY:
+  case HAL_ETIMEOUT:
+    return EAI_AGAIN;
+  case HAL_ENOMEM:
+  case HAL_EOVERFLOW:
+    return EAI_MEMORY;
+  case HAL_ENOENT:
+    return EAI_NONAME;
+  default:
     return EAI_FAIL;
+  }
+}
+
+static bool append_null_node_result(hal_net_family_t family, int flags,
+                                    hal_net_endpoint_t *results,
+                                    size_t capacity, size_t *count) {
+  if (*count >= capacity) {
+    return false;
+  }
+  hal_net_endpoint_t *result = &results[(*count)++];
+  memset(result, 0, sizeof(*result));
+  result->family = family;
+  result->addr_len =
+      family == HAL_NET_AF_INET ? HAL_NET_IPV4_ADDR_LEN : HAL_NET_IPV6_ADDR_LEN;
+  if ((flags & AI_PASSIVE) == 0) {
+    result->addr[result->addr_len - 1u] = 1u;
+    if (family == HAL_NET_AF_INET) {
+      result->addr[0] = 127u;
+    }
+  }
+  return true;
+}
+
+static int resolve_addrinfo_results(
+    const char *node, int flags, int family,
+    hal_net_endpoint_t results[HAL_BSD_ADDRINFO_MAX_RESULTS],
+    size_t *out_count) {
+  *out_count = 0u;
+  if (family != AF_UNSPEC && !bsd_family_supported(family)) {
+    return EAI_FAMILY;
   }
 
   if (!node) {
-    const uint32_t host_addr =
-        (flags & AI_PASSIVE) != 0 ? INADDR_ANY : INADDR_LOOPBACK;
-    out_addr[0] = (uint8_t)((host_addr >> 24u) & 0xFFu);
-    out_addr[1] = (uint8_t)((host_addr >> 16u) & 0xFFu);
-    out_addr[2] = (uint8_t)((host_addr >> 8u) & 0xFFu);
-    out_addr[3] = (uint8_t)(host_addr & 0xFFu);
-    return 0;
+    if ((family == AF_UNSPEC || family == AF_INET) &&
+        bsd_family_supported(AF_INET) &&
+        !append_null_node_result(HAL_NET_AF_INET, flags, results,
+                                 HAL_BSD_ADDRINFO_MAX_RESULTS, out_count)) {
+      return EAI_MEMORY;
+    }
+    if ((family == AF_UNSPEC || family == AF_INET6) &&
+        bsd_family_supported(AF_INET6) &&
+        !append_null_node_result(HAL_NET_AF_INET6, flags, results,
+                                 HAL_BSD_ADDRINFO_MAX_RESULTS, out_count)) {
+      return EAI_MEMORY;
+    }
+    return *out_count > 0u ? 0 : EAI_FAMILY;
   }
-
   if (node[0] == '\0') {
     return EAI_NONAME;
   }
 
   if ((flags & AI_NUMERICHOST) != 0) {
-    return parse_ipv4_string(node, out_addr) ? 0 : EAI_NONAME;
+    hal_net_endpoint_t endpoint = {};
+    if ((family == AF_UNSPEC || family == AF_INET) &&
+        jh_net_parse_ipv4_literal(node, endpoint.addr)) {
+      if (!bsd_family_supported(AF_INET)) {
+        return EAI_FAMILY;
+      }
+      endpoint.family = HAL_NET_AF_INET;
+      endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
+      results[0] = endpoint;
+      *out_count = 1u;
+      return 0;
+    }
+    memset(&endpoint, 0, sizeof(endpoint));
+    if ((family == AF_UNSPEC || family == AF_INET6) &&
+        jh_net_parse_ipv6_literal(node, endpoint.addr, &endpoint.scope_id,
+                                  true)) {
+      if (!bsd_family_supported(AF_INET6)) {
+        return EAI_FAMILY;
+      }
+      endpoint.family = HAL_NET_AF_INET6;
+      endpoint.addr_len = HAL_NET_IPV6_ADDR_LEN;
+      results[0] = endpoint;
+      *out_count = 1u;
+      return 0;
+    }
+    return EAI_NONAME;
   }
 
-  return hal_net_resolve_ipv4(node, out_addr) ? 0 : EAI_NONAME;
+  const hal_net_family_t family_hint = family == AF_INET    ? HAL_NET_AF_INET
+                                       : family == AF_INET6 ? HAL_NET_AF_INET6
+                                                            : HAL_NET_AF_UNSPEC;
+  return resolver_status_to_eai(hal_net_resolve_ex(
+      node, family_hint, results, HAL_BSD_ADDRINFO_MAX_RESULTS, out_count));
 }
 
 in_addr_t inet_addr(const char *cp) {
@@ -540,13 +672,22 @@ in_addr_t inet_addr(const char *cp) {
 }
 
 int inet_pton(int af, const char *src, void *dst) {
-  if (af != AF_INET) {
+  if (af != AF_INET && af != AF_INET6) {
     errno = EAFNOSUPPORT;
     return -1;
   }
-  if (!dst) {
+  if (!src || !dst) {
     errno = EINVAL;
     return -1;
+  }
+
+  if (af == AF_INET6) {
+    uint8_t address[HAL_NET_IPV6_ADDR_LEN] = {};
+    if (!jh_net_parse_ipv6_literal(src, address, NULL, false)) {
+      return 0;
+    }
+    memcpy(dst, address, sizeof(address));
+    return 1;
   }
 
   uint8_t octets[4] = {};
@@ -563,13 +704,21 @@ int inet_pton(int af, const char *src, void *dst) {
 }
 
 const char *inet_ntop(int af, const void *src, char *dst, socklen_t size) {
-  if (af != AF_INET) {
+  if (af != AF_INET && af != AF_INET6) {
     errno = EAFNOSUPPORT;
     return NULL;
   }
   if (!src || !dst || size == 0u) {
     errno = EINVAL;
     return NULL;
+  }
+
+  if (af == AF_INET6) {
+    if (!jh_net_format_ipv6((const uint8_t *)src, dst, (size_t)size)) {
+      errno = ENOSPC;
+      return NULL;
+    }
+    return dst;
   }
 
   in_addr_t net_addr = 0u;
@@ -614,7 +763,7 @@ int getaddrinfo(const char *node, const char *service,
   if ((flags & ~supported_flags) != 0) {
     return EAI_BADFLAGS;
   }
-  if (family != AF_UNSPEC && family != AF_INET) {
+  if (family != AF_UNSPEC && family != AF_INET && family != AF_INET6) {
     return EAI_FAMILY;
   }
   if (!addrinfo_socktype_protocol_supported(socktype, protocol)) {
@@ -626,39 +775,64 @@ int getaddrinfo(const char *node, const char *service,
     return EAI_SERVICE;
   }
 
-  uint8_t addr[HAL_NET_IPV4_ADDR_LEN] = {};
-  const int resolve_result = resolve_addrinfo_ipv4(node, flags, addr);
+  hal_net_endpoint_t endpoints[HAL_BSD_ADDRINFO_MAX_RESULTS] = {};
+  size_t endpoint_count = 0u;
+  const int resolve_result =
+      resolve_addrinfo_results(node, flags, family, endpoints, &endpoint_count);
   if (resolve_result != 0) {
     return resolve_result;
   }
 
-  hal_bsd_addrinfo_node_t *out =
-      (hal_bsd_addrinfo_node_t *)calloc(1u, sizeof(*out));
-  if (!out) {
-    return EAI_MEMORY;
-  }
-
-  out->addr.sin_family = AF_INET;
-  out->addr.sin_port = htons(port);
-  out->addr.sin_addr.s_addr = htonl(ipv4_addr_to_host_u32(addr));
-
-  out->info.ai_family = AF_INET;
-  out->info.ai_socktype = socktype;
-  out->info.ai_protocol = addrinfo_protocol_for(socktype, protocol);
-  out->info.ai_addrlen = (socklen_t)sizeof(out->addr);
-  out->info.ai_addr = (struct sockaddr *)&out->addr;
-  out->info.ai_next = NULL;
-
-  if ((flags & AI_CANONNAME) != 0) {
-    const bool ok =
-        node ? copy_canonname(out, node) : format_ipv4_canonname(out, addr);
-    if (!ok) {
-      free(out);
+  struct addrinfo *head = NULL;
+  struct addrinfo *tail = NULL;
+  for (size_t index = 0u; index < endpoint_count; ++index) {
+    hal_bsd_addrinfo_node_t *out =
+        (hal_bsd_addrinfo_node_t *)calloc(1u, sizeof(*out));
+    if (!out) {
+      freeaddrinfo(head);
       return EAI_MEMORY;
     }
-  }
+    endpoints[index].port = port;
+    if (endpoints[index].family == HAL_NET_AF_INET) {
+      out->addr.ipv4.sin_family = AF_INET;
+      out->addr.ipv4.sin_port = htons(port);
+      out->addr.ipv4.sin_addr.s_addr =
+          htonl(ipv4_addr_to_host_u32(endpoints[index].addr));
+      out->info.ai_family = AF_INET;
+      out->info.ai_addrlen = (socklen_t)sizeof(out->addr.ipv4);
+      out->info.ai_addr = (struct sockaddr *)&out->addr.ipv4;
+    } else {
+      out->addr.ipv6.sin6_family = AF_INET6;
+      out->addr.ipv6.sin6_port = htons(port);
+      memcpy(out->addr.ipv6.sin6_addr.s6_addr, endpoints[index].addr,
+             HAL_NET_IPV6_ADDR_LEN);
+      out->addr.ipv6.sin6_scope_id = endpoints[index].scope_id;
+      out->info.ai_family = AF_INET6;
+      out->info.ai_addrlen = (socklen_t)sizeof(out->addr.ipv6);
+      out->info.ai_addr = (struct sockaddr *)&out->addr.ipv6;
+    }
+    out->info.ai_socktype = socktype;
+    out->info.ai_protocol = addrinfo_protocol_for(socktype, protocol);
+    out->info.ai_next = NULL;
 
-  *res = &out->info;
+    if (index == 0u && (flags & AI_CANONNAME) != 0) {
+      const bool ok = node ? copy_canonname(out, node)
+                           : format_endpoint_canonname(out, &endpoints[index]);
+      if (!ok) {
+        free(out);
+        freeaddrinfo(head);
+        return EAI_MEMORY;
+      }
+    }
+
+    if (!head) {
+      head = &out->info;
+    } else {
+      tail->ai_next = &out->info;
+    }
+    tail = &out->info;
+  }
+  *res = head;
   return 0;
 }
 
@@ -734,7 +908,15 @@ int fcntl(int fd, int cmd, ...) {
 }
 
 int socket(int domain, int type, int protocol) {
-  if (domain != AF_INET && domain != PF_INET) {
+  if (domain != AF_INET && domain != PF_INET && domain != AF_INET6 &&
+      domain != PF_INET6) {
+    errno = EAFNOSUPPORT;
+    return -1;
+  }
+  const hal_net_family_t family = domain == AF_INET6 || domain == PF_INET6
+                                      ? HAL_NET_AF_INET6
+                                      : HAL_NET_AF_INET;
+  if (!bsd_family_supported(domain)) {
     errno = EAFNOSUPPORT;
     return -1;
   }
@@ -757,6 +939,7 @@ int socket(int domain, int type, int protocol) {
 
     hal_bsd_fd_entry_t *entry = &s_fd_table[fd_to_index(fd)];
     entry->kind = HAL_BSD_FD_UDP;
+    entry->family = family;
     entry->udp = udp;
     fd_table_unlock();
     return fd;
@@ -780,6 +963,7 @@ int socket(int domain, int type, int protocol) {
 
     hal_bsd_fd_entry_t *entry = &s_fd_table[fd_to_index(fd)];
     entry->kind = HAL_BSD_FD_TCP_SOCKET;
+    entry->family = family;
     entry->tcp_socket = tcp;
     fd_table_unlock();
     return fd;
@@ -803,6 +987,11 @@ int bind(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   fd_table_lock();
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
+    fd_table_unlock();
+    return -1;
+  }
+  if (endpoint.family != entry->family) {
+    errno = EAFNOSUPPORT;
     fd_table_unlock();
     return -1;
   }
@@ -912,6 +1101,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
    * safe to keep operating on its entry until it is returned. */
   hal_bsd_fd_entry_t *accepted_entry = &s_fd_table[fd_to_index(accepted_fd)];
   accepted_entry->kind = HAL_BSD_FD_TCP_SOCKET;
+  accepted_entry->family = entry->family;
   accepted_entry->tcp_socket = accepted;
   accepted_entry->local_endpoint = entry->local_endpoint;
   accepted_entry->remote_endpoint = remote;
@@ -943,6 +1133,11 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
   fd_table_lock();
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
+    fd_table_unlock();
+    return -1;
+  }
+  if (endpoint.family != entry->family) {
+    errno = EAFNOSUPPORT;
     fd_table_unlock();
     return -1;
   }
@@ -1182,6 +1377,11 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
     fd_table_unlock();
     return -1;
   }
+  if (remote.family != entry->family) {
+    errno = EAFNOSUPPORT;
+    fd_table_unlock();
+    return -1;
+  }
   if (!ensure_udp_bound(entry)) {
     fd_table_unlock();
     return -1;
@@ -1370,7 +1570,9 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
   hal_net_endpoint_t local = entry->local_endpoint;
   if (!entry->has_local_endpoint) {
     memset(&local, 0, sizeof(local));
-    local.family = HAL_NET_AF_INET;
+    local.family = entry->family;
+    local.addr_len = entry->family == HAL_NET_AF_INET ? HAL_NET_IPV4_ADDR_LEN
+                                                      : HAL_NET_IPV6_ADDR_LEN;
   }
 
   const bool ok = write_sockaddr_from_endpoint(&local, addr, addrlen);
