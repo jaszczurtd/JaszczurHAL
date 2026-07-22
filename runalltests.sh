@@ -225,6 +225,7 @@ cppcheck --enable=warning,performance,portability \
     -i src/hal/impl/shared/frameworks/cjson \
     -i src/hal/impl/shared/frameworks/jpeg \
     -i src/hal/impl/shared/frameworks/lodepng \
+    -i src/hal/impl/shared/frameworks/lwip/vendor \
     -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src
