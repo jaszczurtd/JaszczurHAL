@@ -5,13 +5,10 @@
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43)
 
+#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../../impl/shared/hal_mutex_once.h"
 #include "../../../../impl/shared/network/jh_cyw43_config.h"
 #include "rp2040_cyw43_platform.h"
-
-extern "C" {
-#include <cyw43.h>
-}
 
 #include <hardware/gpio.h>
 #include <lwip/sys.h>

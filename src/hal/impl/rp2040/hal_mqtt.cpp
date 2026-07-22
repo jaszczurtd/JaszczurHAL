@@ -208,6 +208,25 @@ bool hal_mqtt_set_buffer_size(uint16_t size) {
   return hal_status_to_bool(hal_mqtt_set_buffer_size_ex(size));
 }
 
+#ifdef HAL_ENABLE_TLS
+hal_status_t
+hal_mqtt_configure_tls_ex(const hal_tls_security_config_t *security) {
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
+  const hal_status_t status = s_network_client.configure_tls(security);
+  hal_mutex_unlock(s_mqtt_mutex);
+  return status;
+}
+
+hal_status_t hal_mqtt_disable_tls_ex(void) {
+  mqtt_ensure_mutex();
+  hal_mutex_lock(s_mqtt_mutex);
+  s_network_client.disable_tls();
+  hal_mutex_unlock(s_mqtt_mutex);
+  return HAL_OK;
+}
+#endif
+
 uint16_t hal_mqtt_get_buffer_size(void) {
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);

@@ -4,10 +4,20 @@
 
 #include "hal_net.h"
 #include "hal_sync.h"
+#include "hal_system.h"
+#include "hal_time.h"
+#include "impl/shared/frameworks/BearSSL/jh_bearssl_engine.h"
+#include "impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
 #include "impl/shared/hal_mutex_once.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
 
+#include <algorithm>
+#include <cstdio>
+#include <netdb.h>
+#include <new>
 #include <string.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #define JH_TLS_HANDLE_KIND 7u
 
@@ -18,6 +28,14 @@ typedef struct {
   hal_tls_state_t state;
   hal_status_t last_status;
   int32_t provider_error;
+  hal_tls_security_config_t security;
+  jh_bearssl_client_t *provider;
+  int socket_fd;
+  uint32_t operation_started_ms;
+  bool security_configured;
+  bool has_server_key_pin;
+  uint8_t server_key_pin[32];
+  bool cancelled;
   bool allocated;
 } jh_tls_client_context_t;
 
@@ -26,6 +44,29 @@ static jh_network_handle_slot_t s_handle_slots[HAL_TLS_MAX_CLIENTS];
 static jh_network_handle_pool_t s_handle_pool;
 static hal_mutex_t s_tls_mutex = NULL;
 static bool s_pool_initialized = false;
+
+hal_status_t hal_tls_default_time(void *, uint64_t *out_unix_seconds) {
+  if (out_unix_seconds == NULL) {
+    return HAL_EINVAL;
+  }
+#ifdef HAL_ENABLE_TIME
+  *out_unix_seconds = hal_time_unix();
+  return *out_unix_seconds >= HAL_TLS_MIN_VALID_UNIX_TIME ? HAL_OK
+                                                          : HAL_ECONFIG;
+#else
+  *out_unix_seconds = 0u;
+  return HAL_EUNSUPPORTED;
+#endif
+}
+
+__attribute__((weak)) hal_status_t hal_tls_default_entropy(void *, void *buffer,
+                                                           size_t length) {
+  if (buffer == NULL || length == 0u) {
+    return HAL_EINVAL;
+  }
+  memset(buffer, 0, length);
+  return HAL_EUNSUPPORTED;
+}
 
 static void tls_lock(void) {
   (void)jh_hal_mutex_create_once(&s_tls_mutex);
@@ -59,6 +100,83 @@ static hal_status_t record_error(jh_tls_client_context_t *client,
   return status;
 }
 
+static void release_transport(jh_tls_client_context_t *client) {
+  if (client->socket_fd >= 0) {
+    (void)close(client->socket_fd);
+    client->socket_fd = -1;
+  }
+  delete client->provider;
+  client->provider = NULL;
+}
+
+static bool operation_timed_out(const jh_tls_client_context_t *client) {
+  return (uint32_t)(hal_millis() - client->operation_started_ms) >=
+         client->config.operation_timeout_ms;
+}
+
+static hal_status_t fail_client(jh_tls_client_context_t *client,
+                                hal_status_t status, int32_t provider_error) {
+  release_transport(client);
+  client->state = HAL_TLS_STATE_FAILED;
+  return record_error(client, status, provider_error);
+}
+
+static hal_status_t advance_client(jh_tls_client_context_t *client,
+                                   bool pending_read = false) {
+  if (client->cancelled ||
+      (client->security.is_cancelled != NULL &&
+       client->security.is_cancelled(client->security.callback_context))) {
+    return fail_client(client, HAL_ECANCELED, 0);
+  }
+  if (operation_timed_out(client)) {
+    return fail_client(client, HAL_ETIMEOUT, 0);
+  }
+  if (client->security.service != NULL) {
+    client->security.service(client->security.callback_context);
+  }
+
+  jh_bearssl_poll_result_t result = {};
+  hal_status_t status =
+      pending_read
+          ? jh_bearssl_engine_poll_for_read(
+                &client->provider->client.eng, client->socket_fd,
+                client->config.poll_step_budget, &result)
+          : jh_bearssl_engine_poll(&client->provider->client.eng,
+                                   client->socket_fd,
+                                   client->config.poll_step_budget, &result);
+  if (status == HAL_EAGAIN) {
+    return status;
+  }
+  if (status != HAL_OK || result.event == JH_BEARSSL_EVENT_FAILED) {
+    const hal_status_t mapped =
+        result.engine_error != 0 ? jh_bearssl_error_to_hal(result.engine_error)
+                                 : status;
+    return fail_client(client, mapped, result.engine_error);
+  }
+  if (result.event == JH_BEARSSL_EVENT_APPLICATION_READABLE ||
+      result.event == JH_BEARSSL_EVENT_APPLICATION_WRITABLE) {
+    if (client->state == HAL_TLS_STATE_CONNECTING) {
+      if (client->has_server_key_pin) {
+        const hal_status_t pin_status = jh_bearssl_verify_server_key_pin(
+            client->provider, client->server_key_pin);
+        if (pin_status != HAL_OK) {
+          return fail_client(client, pin_status, 0);
+        }
+      }
+      client->state = HAL_TLS_STATE_CONNECTED;
+    }
+    return HAL_OK;
+  }
+  if (result.event == JH_BEARSSL_EVENT_CLOSED) {
+    release_transport(client);
+    client->state = HAL_TLS_STATE_CLOSED;
+    client->last_status = HAL_OK;
+    client->provider_error = 0;
+    return HAL_OK;
+  }
+  return HAL_EAGAIN;
+}
+
 static bool config_is_valid(const hal_tls_client_config_t *config) {
   return config != NULL &&
          (config->execution_model == HAL_TLS_EXECUTION_POLL ||
@@ -68,6 +186,74 @@ static bool config_is_valid(const hal_tls_client_config_t *config) {
          config->operation_timeout_ms > 0u &&
          config->operation_timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
          config->poll_step_budget > 0u;
+}
+
+typedef struct {
+  hal_tls_trust_anchor_storage_t *storage;
+  size_t length;
+  bool overflow;
+} jh_tls_dn_collector_t;
+
+static void collect_subject_dn(void *context, const void *data, size_t length) {
+  jh_tls_dn_collector_t *collector =
+      static_cast<jh_tls_dn_collector_t *>(context);
+  if (length > sizeof(collector->storage->subject_dn) - collector->length) {
+    collector->overflow = true;
+    return;
+  }
+  memcpy(collector->storage->subject_dn + collector->length, data, length);
+  collector->length += length;
+}
+
+hal_status_t
+hal_tls_trust_anchor_from_der_ex(const void *certificate_der,
+                                 size_t certificate_der_length,
+                                 hal_tls_trust_anchor_storage_t *out_storage) {
+  if (certificate_der == NULL || certificate_der_length == 0u ||
+      out_storage == NULL) {
+    return HAL_EINVAL;
+  }
+  memset(out_storage, 0, sizeof(*out_storage));
+  jh_tls_dn_collector_t collector = {out_storage, 0u, false};
+  br_x509_decoder_context decoder = {};
+  br_x509_decoder_init(&decoder, collect_subject_dn, &collector, NULL, NULL);
+  br_x509_decoder_push(&decoder, certificate_der, certificate_der_length);
+  br_x509_pkey *key = br_x509_decoder_get_pkey(&decoder);
+  if (collector.overflow) {
+    return HAL_EOVERFLOW;
+  }
+  if (key == NULL || collector.length == 0u ||
+      br_x509_decoder_last_error(&decoder) != 0 ||
+      !br_x509_decoder_isCA(&decoder)) {
+    return HAL_EAUTH;
+  }
+  out_storage->anchor.subject_dn = out_storage->subject_dn;
+  out_storage->anchor.subject_dn_length = collector.length;
+  if (key->key_type == BR_KEYTYPE_RSA) {
+    if (key->key.rsa.nlen > sizeof(out_storage->key) ||
+        key->key.rsa.elen > sizeof(out_storage->rsa_exponent)) {
+      return HAL_EOVERFLOW;
+    }
+    memcpy(out_storage->key, key->key.rsa.n, key->key.rsa.nlen);
+    memcpy(out_storage->rsa_exponent, key->key.rsa.e, key->key.rsa.elen);
+    out_storage->anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
+    out_storage->anchor.key.rsa.modulus = out_storage->key;
+    out_storage->anchor.key.rsa.modulus_length = key->key.rsa.nlen;
+    out_storage->anchor.key.rsa.exponent = out_storage->rsa_exponent;
+    out_storage->anchor.key.rsa.exponent_length = key->key.rsa.elen;
+  } else if (key->key_type == BR_KEYTYPE_EC) {
+    if (key->key.ec.qlen > sizeof(out_storage->key)) {
+      return HAL_EOVERFLOW;
+    }
+    memcpy(out_storage->key, key->key.ec.q, key->key.ec.qlen);
+    out_storage->anchor.key_type = HAL_TLS_TRUST_KEY_EC;
+    out_storage->anchor.key.ec.curve = key->key.ec.curve;
+    out_storage->anchor.key.ec.point = out_storage->key;
+    out_storage->anchor.key.ec.point_length = key->key.ec.qlen;
+  } else {
+    return HAL_EAUTH;
+  }
+  return HAL_OK;
 }
 
 hal_status_t hal_tls_client_config_init(hal_tls_client_config_t *config) {
@@ -98,6 +284,7 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
       client = &s_clients[index];
       memset(client, 0, sizeof(*client));
       client->allocated = true;
+      client->socket_fd = -1;
       client->config = *config;
       client->state = HAL_TLS_STATE_CREATED;
       client->last_status = HAL_OK;
@@ -120,6 +307,38 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
   *out_client = static_cast<hal_tls_client_t>(handle);
   tls_unlock();
   return HAL_OK;
+}
+
+hal_status_t hal_tls_client_configure_security_ex(
+    hal_tls_client_t handle, const hal_tls_security_config_t *security) {
+  if (security == NULL || security->trust_anchors == NULL ||
+      security->trust_anchor_count == 0u ||
+      security->trust_anchor_count > HAL_TLS_MAX_TRUST_ANCHORS ||
+      security->get_time == NULL || security->get_entropy == NULL) {
+    return HAL_ECONFIG;
+  }
+  tls_lock();
+  jh_tls_client_context_t *client = NULL;
+  hal_status_t status = resolve_client(handle, &client);
+  if (status == HAL_OK && client->state != HAL_TLS_STATE_CREATED &&
+      client->state != HAL_TLS_STATE_CONFIGURED) {
+    status = HAL_ESTATE;
+  }
+  if (status == HAL_OK) {
+    client->security = *security;
+    client->has_server_key_pin = security->server_public_key_sha256 != NULL;
+    if (client->has_server_key_pin) {
+      memcpy(client->server_key_pin, security->server_public_key_sha256,
+             sizeof(client->server_key_pin));
+    } else {
+      memset(client->server_key_pin, 0, sizeof(client->server_key_pin));
+    }
+    client->security_configured = true;
+    client->last_status = HAL_OK;
+    client->provider_error = 0;
+  }
+  tls_unlock();
+  return status;
 }
 
 hal_status_t hal_tls_client_configure_server_ex(hal_tls_client_t handle,
@@ -159,10 +378,63 @@ hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
     status = HAL_ESTATE;
   }
   if (status == HAL_OK) {
-    /* Point 17 supplies trust anchors, SNI/hostname validation, time and
-     * entropy. Refuse to start a connection before that secure configuration
-     * exists; an implicit insecure client is deliberately impossible. */
-    status = record_error(client, HAL_ECONFIG, 0);
+    if (!client->security_configured) {
+      status = record_error(client, HAL_ECONFIG, 0);
+    } else {
+      uint64_t unix_seconds = 0u;
+      unsigned char entropy[JH_BEARSSL_ENTROPY_SIZE] = {};
+      status = client->security.get_time(client->security.callback_context,
+                                         &unix_seconds);
+      if (status == HAL_OK && unix_seconds < HAL_TLS_MIN_VALID_UNIX_TIME) {
+        status = HAL_ECONFIG;
+      }
+      if (status == HAL_OK) {
+        status = client->security.get_entropy(client->security.callback_context,
+                                              entropy, sizeof(entropy));
+      }
+      if (status == HAL_OK) {
+        struct addrinfo hints = {};
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        char service[6] = {};
+        (void)snprintf(service, sizeof(service), "%u", (unsigned)client->port);
+        struct addrinfo *resolved = NULL;
+        if (getaddrinfo(client->hostname, service, &hints, &resolved) != 0 ||
+            resolved == NULL) {
+          status = HAL_ENOENT;
+        } else {
+          client->socket_fd = socket(resolved->ai_family, resolved->ai_socktype,
+                                     resolved->ai_protocol);
+          if (client->socket_fd < 0 ||
+              connect(client->socket_fd, resolved->ai_addr,
+                      resolved->ai_addrlen) != 0) {
+            status = HAL_EIO;
+          }
+          freeaddrinfo(resolved);
+        }
+      }
+      if (status == HAL_OK) {
+        client->provider = new (std::nothrow) jh_bearssl_client_t;
+        if (client->provider == NULL) {
+          status = HAL_ENOMEM;
+        }
+      }
+      if (status == HAL_OK) {
+        status = jh_bearssl_client_init(
+            client->provider, client->security.trust_anchors,
+            client->security.trust_anchor_count, client->hostname, unix_seconds,
+            entropy, sizeof(entropy));
+      }
+      memset(entropy, 0, sizeof(entropy));
+      if (status == HAL_OK) {
+        client->cancelled = false;
+        client->state = HAL_TLS_STATE_CONNECTING;
+        client->operation_started_ms = hal_millis();
+        status = advance_client(client);
+      } else {
+        status = fail_client(client, status, 0);
+      }
+    }
   }
   tls_unlock();
   return status;
@@ -175,7 +447,7 @@ hal_status_t hal_tls_client_poll_ex(hal_tls_client_t handle) {
   if (status == HAL_OK) {
     status = client->state == HAL_TLS_STATE_CONNECTING ||
                      client->state == HAL_TLS_STATE_CLOSING
-                 ? HAL_EAGAIN
+                 ? advance_client(client)
                  : HAL_ESTATE;
   }
   tls_unlock();
@@ -192,7 +464,24 @@ hal_status_t hal_tls_client_read_ex(hal_tls_client_t handle, void *buffer,
   jh_tls_client_context_t *client = NULL;
   hal_status_t status = resolve_client(handle, &client);
   if (status == HAL_OK) {
-    status = client->state == HAL_TLS_STATE_CONNECTED ? HAL_EAGAIN : HAL_ESTATE;
+    if (client->state != HAL_TLS_STATE_CONNECTED) {
+      status = HAL_ESTATE;
+    } else {
+      size_t available = 0u;
+      unsigned char *source =
+          br_ssl_engine_recvapp_buf(&client->provider->client.eng, &available);
+      if (source == NULL || available == 0u) {
+        status = advance_client(client, true);
+        if (status == HAL_OK) {
+          status = HAL_EAGAIN;
+        }
+      } else {
+        *out_received = std::min(capacity, available);
+        memcpy(buffer, source, *out_received);
+        br_ssl_engine_recvapp_ack(&client->provider->client.eng, *out_received);
+        status = HAL_OK;
+      }
+    }
   }
   tls_unlock();
   return status;
@@ -208,7 +497,25 @@ hal_status_t hal_tls_client_write_ex(hal_tls_client_t handle, const void *data,
   jh_tls_client_context_t *client = NULL;
   hal_status_t status = resolve_client(handle, &client);
   if (status == HAL_OK) {
-    status = client->state == HAL_TLS_STATE_CONNECTED ? HAL_EAGAIN : HAL_ESTATE;
+    if (client->state != HAL_TLS_STATE_CONNECTED) {
+      status = HAL_ESTATE;
+    } else {
+      size_t available = 0u;
+      unsigned char *destination =
+          br_ssl_engine_sendapp_buf(&client->provider->client.eng, &available);
+      if (destination == NULL || available == 0u) {
+        status = advance_client(client);
+        if (status == HAL_OK) {
+          status = HAL_EAGAIN;
+        }
+      } else {
+        *out_written = std::min(length, available);
+        memcpy(destination, data, *out_written);
+        br_ssl_engine_sendapp_ack(&client->provider->client.eng, *out_written);
+        br_ssl_engine_flush(&client->provider->client.eng, 0);
+        status = HAL_OK;
+      }
+    }
   }
   tls_unlock();
   return status;
@@ -227,10 +534,28 @@ hal_status_t hal_tls_client_shutdown_ex(hal_tls_client_t handle) {
     } else if (client->state == HAL_TLS_STATE_CLOSED) {
       status = HAL_OK;
     } else if (client->state == HAL_TLS_STATE_CONNECTED) {
+      br_ssl_engine_close(&client->provider->client.eng);
       client->state = HAL_TLS_STATE_CLOSING;
+      client->operation_started_ms = hal_millis();
       status = HAL_EAGAIN;
     } else {
       status = HAL_ESTATE;
+    }
+  }
+  tls_unlock();
+  return status;
+}
+
+hal_status_t hal_tls_client_cancel_ex(hal_tls_client_t handle) {
+  tls_lock();
+  jh_tls_client_context_t *client = NULL;
+  hal_status_t status = resolve_client(handle, &client);
+  if (status == HAL_OK) {
+    client->cancelled = true;
+    if (client->state == HAL_TLS_STATE_CONNECTING ||
+        client->state == HAL_TLS_STATE_CONNECTED ||
+        client->state == HAL_TLS_STATE_CLOSING) {
+      status = fail_client(client, HAL_ECANCELED, 0);
     }
   }
   tls_unlock();
@@ -274,6 +599,7 @@ hal_status_t hal_tls_client_close_ex(hal_tls_client_t handle) {
   jh_tls_client_context_t *client = NULL;
   hal_status_t status = resolve_client(handle, &client);
   if (status == HAL_OK) {
+    release_transport(client);
     void *released = NULL;
     status = jh_network_handle_release(&s_handle_pool, handle, &released);
     if (status == HAL_OK) {

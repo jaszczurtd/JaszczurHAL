@@ -255,6 +255,7 @@ target_include_directories(test_pubsub_hal_client PRIVATE
 target_compile_definitions(test_pubsub_hal_client PRIVATE
     HAL_TARGET_RP2040=1
     HAL_ENABLE_MQTT
+    HAL_ENABLE_TLS
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
@@ -289,6 +290,28 @@ add_test(NAME test_rp2040_swserial_backend
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp2040_swserial_backend.cmake
 )
+
+add_test(NAME test_cyw43_dependency_boundary
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_cyw43_dependency_boundary.cmake
+)
+
+get_filename_component(_jh_workspace_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
+    ABSOLUTE)
+set(JH_CW43_FIXTURE_SETUP_SCRIPT
+    "${_jh_workspace_root}/context-providers/context_JaszczurHAL/cw43_test_host_setup.sh"
+    CACHE FILEPATH "Optional external CW43 hardware-fixture setup script")
+if(EXISTS "${JH_CW43_FIXTURE_SETUP_SCRIPT}")
+    add_test(NAME test_cw43_fixture_build_identity
+        COMMAND ${CMAKE_COMMAND}
+            "-DJH_CW43_FIXTURE_SETUP_SCRIPT=${JH_CW43_FIXTURE_SETUP_SCRIPT}"
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_cw43_fixture_build_identity.cmake
+    )
+else()
+    message(STATUS
+        "External CW43 fixture not found; fixture identity test is not registered")
+endif()
 
 add_hal_test(test_hal_gpio)
 add_hal_test(test_cyw43_config)
@@ -672,7 +695,27 @@ add_hal_test(test_hal_net_console)
 add_hal_test(test_hal_net_commands)
 add_hal_test(test_bsd_sockets)
 add_hal_test(test_hal_tls)
+add_hal_test(test_hal_http_client)
 add_hal_test(test_bearssl_provider)
+
+find_program(JH_OPENSSL_EXECUTABLE openssl)
+if(JH_OPENSSL_EXECUTABLE)
+    add_executable(test_bearssl_native_client
+        test_bearssl_native_client.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp)
+    target_compile_definitions(test_bearssl_native_client PRIVATE
+        HAL_ENABLE_TLS HAL_ENABLE_BSD_SOCKETS)
+    target_include_directories(test_bearssl_native_client PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/vendor/inc)
+    target_link_libraries(test_bearssl_native_client PRIVATE jh_bearssl_host)
+    add_test(NAME test_bearssl_native_integration
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_bearssl_native_integration.sh
+                $<TARGET_FILE:test_bearssl_native_client>
+                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/tls_native)
+endif()
 add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
 target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)
 set_target_properties(test_bsd_sockets_c_compile PROPERTIES
@@ -682,6 +725,12 @@ add_executable(test_hal_tls_c_compile test_hal_tls_c_compile.c)
 target_link_libraries(test_hal_tls_c_compile PRIVATE hal_mock)
 set_target_properties(test_hal_tls_c_compile PROPERTIES LINKER_LANGUAGE CXX)
 add_test(NAME test_hal_tls_c_compile COMMAND test_hal_tls_c_compile)
+add_executable(test_hal_http_client_c_compile test_hal_http_client_c_compile.c)
+target_link_libraries(test_hal_http_client_c_compile PRIVATE hal_mock)
+set_target_properties(test_hal_http_client_c_compile PROPERTIES
+    LINKER_LANGUAGE CXX)
+add_test(NAME test_hal_http_client_c_compile
+    COMMAND test_hal_http_client_c_compile)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)
 add_hal_test(test_hal_network_status)

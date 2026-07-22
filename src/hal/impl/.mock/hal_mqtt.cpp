@@ -29,6 +29,9 @@ static struct {
   uint16_t buffer_size;
   uint16_t keepalive;
   uint16_t socket_timeout;
+#ifdef HAL_ENABLE_TLS
+  bool tls_enabled;
+#endif
 
   hal_mqtt_message_callback_t callback;
   void *callback_user;
@@ -139,6 +142,25 @@ hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size) {
 bool hal_mqtt_set_buffer_size(uint16_t size) {
   return hal_status_to_bool(hal_mqtt_set_buffer_size_ex(size));
 }
+
+#ifdef HAL_ENABLE_TLS
+hal_status_t
+hal_mqtt_configure_tls_ex(const hal_tls_security_config_t *security) {
+  if (security == NULL || security->trust_anchors == NULL ||
+      security->trust_anchor_count == 0u || security->get_time == NULL ||
+      security->get_entropy == NULL) {
+    return HAL_ECONFIG;
+  }
+  s_mqtt.tls_enabled = true;
+  return HAL_OK;
+}
+
+hal_status_t hal_mqtt_disable_tls_ex(void) {
+  s_mqtt.connected = false;
+  s_mqtt.tls_enabled = false;
+  return HAL_OK;
+}
+#endif
 
 uint16_t hal_mqtt_get_buffer_size(void) { return s_mqtt.buffer_size; }
 

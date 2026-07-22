@@ -17,7 +17,13 @@ struct hal_tcp_socket_impl_t {
   bool connected;
 };
 
+struct hal_tls_client_impl_t {
+  bool allocated;
+  hal_tls_state_t state;
+};
+
 static hal_tcp_socket_impl_t s_socket = {};
+static hal_tls_client_impl_t s_tls_client = {};
 static unsigned long s_now_ms = 0UL;
 static hal_status_t s_resolve_status = HAL_OK;
 static hal_status_t s_connect_status = HAL_OK;
@@ -29,7 +35,12 @@ static unsigned s_close_count = 0u;
 static unsigned s_send_call_count = 0u;
 static uint32_t s_connect_timeout_ms = 0u;
 static std::string s_resolved_host;
+static std::string s_tls_host;
 static hal_net_endpoint_t s_connected_endpoint = {};
+static uint16_t s_tls_port = 0u;
+static unsigned s_tls_poll_count = 0u;
+static unsigned s_tls_shutdown_count = 0u;
+static unsigned s_tls_close_count = 0u;
 static std::vector<uint8_t> s_transmitted;
 static std::vector<uint8_t> s_received;
 static size_t s_receive_offset = 0u;
@@ -39,6 +50,7 @@ static std::vector<uint8_t> s_callback_payload;
 
 static void reset_fake_transport(void) {
   s_socket = {};
+  s_tls_client = {};
   s_now_ms = 0UL;
   s_resolve_status = HAL_OK;
   s_connect_status = HAL_OK;
@@ -50,7 +62,12 @@ static void reset_fake_transport(void) {
   s_send_call_count = 0u;
   s_connect_timeout_ms = 0u;
   s_resolved_host.clear();
+  s_tls_host.clear();
   s_connected_endpoint = {};
+  s_tls_port = 0u;
+  s_tls_poll_count = 0u;
+  s_tls_shutdown_count = 0u;
+  s_tls_close_count = 0u;
   s_transmitted.clear();
   s_received.clear();
   s_receive_offset = 0u;
@@ -189,6 +206,142 @@ void hal_tcp_socket_close(hal_tcp_socket_t socket) {
   }
 }
 
+hal_status_t hal_tls_client_config_init(hal_tls_client_config_t *config) {
+  if (config == NULL) {
+    return HAL_EINVAL;
+  }
+  *config = {};
+  config->execution_model = HAL_TLS_EXECUTION_POLL;
+  config->transport_timeout_ms = 15000u;
+  config->operation_timeout_ms = 15000u;
+  config->poll_step_budget = 8u;
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *,
+                                      hal_tls_client_t *out_client) {
+  if (out_client == NULL || s_tls_client.allocated) {
+    return HAL_EINVAL;
+  }
+  s_tls_client.allocated = true;
+  s_tls_client.state = HAL_TLS_STATE_CREATED;
+  *out_client = &s_tls_client;
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_configure_server_ex(hal_tls_client_t client,
+                                                const char *hostname,
+                                                uint16_t port) {
+  if (client != &s_tls_client || hostname == NULL || port == 0u) {
+    return HAL_EINVAL;
+  }
+  s_tls_host = hostname;
+  s_tls_port = port;
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_configure_security_ex(
+    hal_tls_client_t client, const hal_tls_security_config_t *security) {
+  return client == &s_tls_client && security != NULL ? HAL_OK : HAL_ECONFIG;
+}
+
+hal_status_t hal_tls_client_connect_ex(hal_tls_client_t client) {
+  if (client != &s_tls_client) {
+    return HAL_EINVAL;
+  }
+  s_tls_client.state = HAL_TLS_STATE_CONNECTING;
+  return HAL_EAGAIN;
+}
+
+hal_status_t hal_tls_client_poll_ex(hal_tls_client_t client) {
+  if (client != &s_tls_client) {
+    return HAL_EINVAL;
+  }
+  ++s_tls_poll_count;
+  if (s_tls_client.state == HAL_TLS_STATE_CONNECTING) {
+    s_tls_client.state = HAL_TLS_STATE_CONNECTED;
+    return HAL_OK;
+  }
+  if (s_tls_client.state == HAL_TLS_STATE_CLOSING) {
+    s_tls_client.state = HAL_TLS_STATE_CLOSED;
+    return HAL_OK;
+  }
+  return HAL_ESTATE;
+}
+
+hal_status_t hal_tls_client_read_ex(hal_tls_client_t client, void *buffer,
+                                    size_t capacity, size_t *out_received) {
+  if (client != &s_tls_client || out_received == NULL ||
+      (capacity > 0u && buffer == NULL)) {
+    return HAL_EINVAL;
+  }
+  *out_received = 0u;
+  const size_t available = s_received.size() - s_receive_offset;
+  size_t count = std::min(capacity, available);
+  count = std::min(count, s_max_receive_chunk);
+  if (count == 0u) {
+    return HAL_EAGAIN;
+  }
+  std::copy_n(s_received.data() + s_receive_offset, count,
+              static_cast<uint8_t *>(buffer));
+  s_receive_offset += count;
+  *out_received = count;
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_write_ex(hal_tls_client_t client, const void *data,
+                                     size_t size, size_t *out_written) {
+  if (client != &s_tls_client || out_written == NULL ||
+      (size > 0u && data == NULL)) {
+    return HAL_EINVAL;
+  }
+  ++s_send_call_count;
+  const size_t count = std::min(size, s_max_send_chunk);
+  const uint8_t *bytes = static_cast<const uint8_t *>(data);
+  s_transmitted.insert(s_transmitted.end(), bytes, bytes + count);
+  *out_written = count;
+  return count > 0u || size == 0u ? HAL_OK : HAL_EAGAIN;
+}
+
+hal_status_t hal_tls_client_shutdown_ex(hal_tls_client_t client) {
+  if (client != &s_tls_client) {
+    return HAL_EINVAL;
+  }
+  ++s_tls_shutdown_count;
+  s_tls_client.state = HAL_TLS_STATE_CLOSING;
+  return HAL_EAGAIN;
+}
+
+hal_status_t hal_tls_client_get_state_ex(hal_tls_client_t client,
+                                         hal_tls_state_t *out_state) {
+  if (client != &s_tls_client || out_state == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_state = s_tls_client.state;
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_get_last_error_ex(hal_tls_client_t,
+                                              hal_status_t *out_status,
+                                              int32_t *out_provider_error) {
+  if (out_status != NULL) {
+    *out_status = HAL_OK;
+  }
+  if (out_provider_error != NULL) {
+    *out_provider_error = 0;
+  }
+  return HAL_OK;
+}
+
+hal_status_t hal_tls_client_close_ex(hal_tls_client_t client) {
+  if (client != &s_tls_client) {
+    return HAL_EINVAL;
+  }
+  s_tls_client = {};
+  ++s_tls_close_count;
+  return HAL_OK;
+}
+
 void setUp(void) { reset_fake_transport(); }
 
 void tearDown(void) {}
@@ -269,6 +422,62 @@ void test_adapter_remote_close_and_connect_failure_allow_reconnect(void) {
   TEST_ASSERT_EQUAL_INT(0, client.connected());
 }
 
+static hal_status_t tls_test_time(void *, uint64_t *out_seconds) {
+  *out_seconds = 1800000000u;
+  return HAL_OK;
+}
+
+static hal_status_t tls_test_entropy(void *, void *buffer, size_t length) {
+  std::fill_n(static_cast<uint8_t *>(buffer), length, 0x5au);
+  return HAL_OK;
+}
+
+void test_tls_adapter_uses_tls_io_and_performs_bounded_shutdown(void) {
+  static const uint8_t dn[] = {0x30u, 0x00u};
+  static const uint8_t modulus[] = {0x01u};
+  static const uint8_t exponent[] = {0x03u};
+  hal_tls_trust_anchor_t anchor = {};
+  anchor.subject_dn = dn;
+  anchor.subject_dn_length = sizeof(dn);
+  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
+  anchor.key.rsa.modulus = modulus;
+  anchor.key.rsa.modulus_length = sizeof(modulus);
+  anchor.key.rsa.exponent = exponent;
+  anchor.key.rsa.exponent_length = sizeof(exponent);
+  hal_tls_security_config_t security = {};
+  security.trust_anchors = &anchor;
+  security.trust_anchor_count = 1u;
+  security.get_time = tls_test_time;
+  security.get_entropy = tls_test_entropy;
+
+  JHPubSubHalClient client;
+  client.setTimeout(25UL);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, client.configure_tls(&security));
+  TEST_ASSERT_EQUAL_INT(1, client.connect("secure.test", 8883u));
+  TEST_ASSERT_EQUAL_STRING("secure.test", s_tls_host.c_str());
+  TEST_ASSERT_EQUAL_UINT16(8883u, s_tls_port);
+  TEST_ASSERT_EQUAL_UINT(1u, s_tls_poll_count);
+
+  const uint8_t outgoing[] = {1u, 2u, 3u};
+  s_max_send_chunk = 1u;
+  TEST_ASSERT_EQUAL_UINT(sizeof(outgoing),
+                         client.write(outgoing, sizeof(outgoing)));
+  TEST_ASSERT_EQUAL_MEMORY(outgoing, s_transmitted.data(), sizeof(outgoing));
+
+  const uint8_t incoming[] = {0x11u, 0x22u};
+  inject_receive(incoming, sizeof(incoming));
+  s_max_receive_chunk = 1u;
+  TEST_ASSERT_EQUAL_INT(1, client.available());
+  TEST_ASSERT_EQUAL_HEX8(0x11u, client.peek());
+  TEST_ASSERT_EQUAL_HEX8(0x11u, client.read());
+  TEST_ASSERT_EQUAL_HEX8(0x22u, client.read());
+
+  client.stop();
+  TEST_ASSERT_EQUAL_UINT(1u, s_tls_shutdown_count);
+  TEST_ASSERT_EQUAL_UINT(2u, s_tls_poll_count);
+  TEST_ASSERT_EQUAL_UINT(1u, s_tls_close_count);
+}
+
 void test_pubsub_uses_hal_transport_for_partial_writes_and_fragmented_publish(
     void) {
   JHPubSubHalClient network;
@@ -324,6 +533,7 @@ int main(void) {
   RUN_TEST(test_adapter_resolves_connects_and_preserves_fragmented_reads);
   RUN_TEST(test_adapter_partial_write_timeout_closes_stream);
   RUN_TEST(test_adapter_remote_close_and_connect_failure_allow_reconnect);
+  RUN_TEST(test_tls_adapter_uses_tls_io_and_performs_bounded_shutdown);
   RUN_TEST(
       test_pubsub_uses_hal_transport_for_partial_writes_and_fragmented_publish);
   RUN_TEST(test_pubsub_connack_timeout_closes_and_reconnects);

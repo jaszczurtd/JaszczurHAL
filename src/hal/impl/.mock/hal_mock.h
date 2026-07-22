@@ -473,9 +473,13 @@ void hal_mock_tcp_reset(void);
 /** @brief Control result returned by hal_tcp_socket_connect() (default: true).
  */
 void hal_mock_tcp_set_connect_result(bool result);
+/** @brief Return the most recently allocated TCP socket. */
+hal_tcp_socket_t hal_mock_tcp_get_last_opened_socket(void);
 /** @brief Inject inbound bytes into a specific mock TCP socket. */
 void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
                             uint16_t len);
+/** @brief Queue inbound bytes for the next successful mock TCP connection. */
+void hal_mock_tcp_set_next_rx(const uint8_t *payload, uint16_t len);
 /** @brief Return payload captured from a specific mock TCP socket. */
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket);
 /** @brief Return captured payload length for a specific mock TCP socket. */

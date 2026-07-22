@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Project: Debug Firmware",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "runToEntryPoint": "setup",
+            "preLaunchTask": "Project: Build (Debug)"
+        }
+    ]
+}

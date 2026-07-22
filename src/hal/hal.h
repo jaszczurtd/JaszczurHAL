@@ -121,6 +121,9 @@
 #ifdef HAL_ENABLE_TLS
 #include "hal_tls.h"
 #endif
+#ifdef HAL_ENABLE_HTTP_CLIENT
+#include "hal_http_client.h"
+#endif
 #ifdef HAL_ENABLE_HTTP_SERVER
 #include "hal_http_server.h"
 #endif

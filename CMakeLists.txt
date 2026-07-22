@@ -42,6 +42,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
+    ${SRC}/hal/impl/shared/network/http/hal_http_client.cpp
     ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
     ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
     ${SRC}/hal/impl/shared/network/jh_public_network_backend_adapter.cpp
@@ -127,6 +128,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_NET_COMMANDS   # HTTP/WebSocket JSON/text command dispatch
     HAL_ENABLE_BSD_SOCKETS    # minimal POSIX/BSD socket adapter
     HAL_ENABLE_TLS            # portable TLS API + private BearSSL provider
+    HAL_ENABLE_HTTP_CLIENT    # portable HTTP/HTTPS client
     HAL_ENABLE_OTA
     HAL_ENABLE_WIREGUARD
     HAL_ENABLE_A7670          # propagates HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART

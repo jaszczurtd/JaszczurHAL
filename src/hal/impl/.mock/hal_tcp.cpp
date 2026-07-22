@@ -42,6 +42,9 @@ static hal_tcp_listener_impl_t
     s_tcp_listener_pool[HAL_TCP_LISTENER_MAX_INSTANCES];
 static bool s_connect_result = true;
 static hal_tcp_socket_t s_last_accepted_socket = NULL;
+static hal_tcp_socket_t s_last_opened_socket = NULL;
+static uint8_t s_next_rx_payload[MOCK_TCP_PAYLOAD_BUF_SIZE];
+static uint16_t s_next_rx_len = 0u;
 
 static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   if (!endpoint) {
@@ -159,6 +162,8 @@ void hal_mock_tcp_reset(void) {
   }
   s_connect_result = true;
   s_last_accepted_socket = NULL;
+  s_last_opened_socket = NULL;
+  s_next_rx_len = 0u;
 }
 
 void hal_mock_tcp_set_connect_result(bool result) { s_connect_result = result; }
@@ -172,6 +177,7 @@ hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket) {
     hal_derr("hal_tcp_socket_open: socket pool exhausted");
     return HAL_ENOMEM;
   }
+  s_last_opened_socket = *out_socket;
   return HAL_OK;
 }
 
@@ -207,6 +213,11 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
   }
 
   socket->connected = true;
+  if (s_next_rx_len > 0u) {
+    memcpy(socket->rx_payload, s_next_rx_payload, s_next_rx_len);
+    socket->rx_len = s_next_rx_len;
+    s_next_rx_len = 0u;
+  }
   return HAL_OK;
 }
 
@@ -491,6 +502,20 @@ void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
   socket->rx_pos = 0u;
 }
 
+void hal_mock_tcp_set_next_rx(const uint8_t *payload, uint16_t len) {
+  if (payload == NULL) {
+    s_next_rx_len = 0u;
+    return;
+  }
+  s_next_rx_len = len;
+  if (s_next_rx_len > MOCK_TCP_PAYLOAD_BUF_SIZE) {
+    s_next_rx_len = MOCK_TCP_PAYLOAD_BUF_SIZE;
+  }
+  if (s_next_rx_len > 0u) {
+    memcpy(s_next_rx_payload, payload, s_next_rx_len);
+  }
+}
+
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket) {
   if (!is_pool_socket(socket)) {
     return NULL;
@@ -568,6 +593,10 @@ hal_tcp_listener_t hal_mock_tcp_listener_find_by_port(uint16_t local_port) {
 
 hal_tcp_socket_t hal_mock_tcp_get_last_accepted_socket(void) {
   return s_last_accepted_socket;
+}
+
+hal_tcp_socket_t hal_mock_tcp_get_last_opened_socket(void) {
+  return s_last_opened_socket;
 }
 
 #endif /* HAL_ENABLE_TCP */

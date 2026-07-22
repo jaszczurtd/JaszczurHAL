@@ -24,9 +24,11 @@ static hal_status_t poll_failed(jh_bearssl_poll_result_t *result,
   return status;
 }
 
-hal_status_t jh_bearssl_engine_poll_with_ops(
-    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
-    uint16_t step_budget, jh_bearssl_poll_result_t *out_result) {
+static hal_status_t engine_poll_with_ops(void *engine,
+                                         const jh_bearssl_engine_ops_t *ops,
+                                         int fd, uint16_t step_budget,
+                                         bool prefer_application_writable,
+                                         jh_bearssl_poll_result_t *out_result) {
   if (out_result != NULL) {
     memset(out_result, 0, sizeof(*out_result));
   }
@@ -46,6 +48,18 @@ hal_status_t jh_bearssl_engine_poll_with_ops(
       out_result->event = error == BR_ERR_OK ? JH_BEARSSL_EVENT_CLOSED
                                              : JH_BEARSSL_EVENT_FAILED;
       return error == BR_ERR_OK ? HAL_OK : HAL_EPROTO;
+    }
+
+    /* Application readiness takes precedence when BearSSL also advertises
+     * record I/O. Otherwise a completed handshake can starve forever waiting
+     * for peer data while writable application space is already available. */
+    if ((state & BR_SSL_RECVAPP) != 0u) {
+      out_result->event = JH_BEARSSL_EVENT_APPLICATION_READABLE;
+      return HAL_OK;
+    }
+    if (prefer_application_writable && (state & BR_SSL_SENDAPP) != 0u) {
+      out_result->event = JH_BEARSSL_EVENT_APPLICATION_WRITABLE;
+      return HAL_OK;
     }
 
     if ((state & BR_SSL_SENDREC) != 0u) {
@@ -92,15 +106,6 @@ hal_status_t jh_bearssl_engine_poll_with_ops(
       return poll_failed(out_result, ops->last_error(engine), HAL_EPROTO);
     }
 
-    if ((state & BR_SSL_RECVAPP) != 0u) {
-      out_result->event = JH_BEARSSL_EVENT_APPLICATION_READABLE;
-      return HAL_OK;
-    }
-    if ((state & BR_SSL_SENDAPP) != 0u) {
-      out_result->event = JH_BEARSSL_EVENT_APPLICATION_WRITABLE;
-      return HAL_OK;
-    }
-
     return poll_failed(out_result, ops->last_error(engine), HAL_EINTERNAL);
   }
 
@@ -123,6 +128,18 @@ hal_status_t jh_bearssl_engine_poll_with_ops(
     return HAL_OK;
   }
   return HAL_EAGAIN;
+}
+
+hal_status_t jh_bearssl_engine_poll_with_ops(
+    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
+    uint16_t step_budget, jh_bearssl_poll_result_t *out_result) {
+  return engine_poll_with_ops(engine, ops, fd, step_budget, true, out_result);
+}
+
+hal_status_t jh_bearssl_engine_poll_for_read_with_ops(
+    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
+    uint16_t step_budget, jh_bearssl_poll_result_t *out_result) {
+  return engine_poll_with_ops(engine, ops, fd, step_budget, false, out_result);
 }
 
 static unsigned bearssl_current_state(const void *engine) {
@@ -164,6 +181,17 @@ hal_status_t jh_bearssl_engine_poll(void *engine, int fd, uint16_t step_budget,
       bearssl_receive_record_buffer, bearssl_receive_record_ack};
   return jh_bearssl_engine_poll_with_ops(engine, &ops, fd, step_budget,
                                          out_result);
+}
+
+hal_status_t
+jh_bearssl_engine_poll_for_read(void *engine, int fd, uint16_t step_budget,
+                                jh_bearssl_poll_result_t *out_result) {
+  static const jh_bearssl_engine_ops_t ops = {
+      bearssl_current_state,         bearssl_last_error,
+      bearssl_send_record_buffer,    bearssl_send_record_ack,
+      bearssl_receive_record_buffer, bearssl_receive_record_ack};
+  return jh_bearssl_engine_poll_for_read_with_ops(engine, &ops, fd, step_budget,
+                                                  out_result);
 }
 
 #endif
