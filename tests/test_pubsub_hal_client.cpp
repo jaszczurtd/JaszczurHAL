@@ -1,5 +1,5 @@
 #include "hal/hal_system.h"
-#include "hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.h"
+#include "hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.h"
 #include "hal/impl/shared/network/mqtt/jh_pubsub_hal_client.h"
 #include "utils/unity.h"
 
@@ -79,15 +79,13 @@ static void inject_receive(const uint8_t *data, size_t size) {
   s_received.insert(s_received.end(), data, data + size);
 }
 
-unsigned long millis(void) { return s_now_ms++; }
-
-void yield(void) { ++s_now_ms; }
-
 uint32_t hal_millis(void) { return (uint32_t)s_now_ms; }
 
 void hal_delay_ms(uint32_t delay_ms) { s_now_ms += delay_ms; }
 
-void hal_idle(void) {}
+void hal_idle(void) { ++s_now_ms; }
+
+hal_status_t hal_net_service(void) { return HAL_OK; }
 
 extern "C" void hal_derr(const char *, ...) {}
 
@@ -353,7 +351,7 @@ static void mqtt_callback(char *topic, uint8_t *payload, unsigned int length) {
 
 void test_adapter_resolves_connects_and_preserves_fragmented_reads(void) {
   JHPubSubHalClient client;
-  client.setTimeout(25UL);
+  client.set_timeout_ms(25u);
   TEST_ASSERT_EQUAL_INT(1, client.connect("broker.test", 1883u));
   TEST_ASSERT_EQUAL_STRING("broker.test", s_resolved_host.c_str());
   TEST_ASSERT_EQUAL_UINT8(10u, s_connected_endpoint.addr[0]);
@@ -386,13 +384,14 @@ void test_adapter_resolves_connects_and_preserves_fragmented_reads(void) {
 
   client.stop();
   TEST_ASSERT_EQUAL_UINT(1u, s_close_count);
-  TEST_ASSERT_FALSE((bool)client);
+  TEST_ASSERT_FALSE(client.connected());
 }
 
 void test_adapter_partial_write_timeout_closes_stream(void) {
   JHPubSubHalClient client;
-  client.setTimeout(3UL);
-  TEST_ASSERT_EQUAL_INT(1, client.connect(IPAddress(1u, 2u, 3u, 4u), 1883u));
+  client.set_timeout_ms(3u);
+  const uint8_t ipv4[] = {1u, 2u, 3u, 4u};
+  TEST_ASSERT_EQUAL_INT(1, client.connect(ipv4, 1883u));
 
   s_max_send_chunk = 1u;
   s_send_success_budget = 1u;
@@ -451,7 +450,7 @@ void test_tls_adapter_uses_tls_io_and_performs_bounded_shutdown(void) {
   security.get_entropy = tls_test_entropy;
 
   JHPubSubHalClient client;
-  client.setTimeout(25UL);
+  client.set_timeout_ms(25u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, client.configure_tls(&security));
   TEST_ASSERT_EQUAL_INT(1, client.connect("secure.test", 8883u));
   TEST_ASSERT_EQUAL_STRING("secure.test", s_tls_host.c_str());

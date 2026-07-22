@@ -326,14 +326,14 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/rp2040/frameworks/PubSubClient",
+          "url": "src/hal/impl/shared/frameworks/PubSubClient",
           "comment": "repository path"
         }
       ],
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "Vendored Arduino MQTT client used by the RP2040 MQTT backend. Record the exact upstream tag/commit at the next refresh."
+          "value": "Vendored MQTT protocol engine adapted to the native shared JaszczurHAL transport. Record the exact upstream tag/commit at the next refresh."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -341,7 +341,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/rp2040/frameworks/PubSubClient"
+          "value": "src/hal/impl/shared/frameworks/PubSubClient"
         }
       ]
     },
@@ -563,5 +563,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:01d52780-0d37-95a2-d28b-d4b99d6cb404"
+  "serialNumber": "urn:uuid:94704f35-1601-8e6f-9193-c330ec769ed5"
 }

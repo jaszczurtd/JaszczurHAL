@@ -12,9 +12,9 @@
 #include "../../../../hal_tls.h"
 #endif
 
-#include <Client.h>
+#include "../../frameworks/PubSubClient/src/PubSubClient.h"
 
-class JHPubSubHalClient final : public arduino::Client {
+class JHPubSubHalClient final : public JHPubSubTransport {
 public:
   JHPubSubHalClient();
   ~JHPubSubHalClient();
@@ -22,7 +22,7 @@ public:
   JHPubSubHalClient(const JHPubSubHalClient &) = delete;
   JHPubSubHalClient &operator=(const JHPubSubHalClient &) = delete;
 
-  int connect(arduino::IPAddress ip, uint16_t port) override;
+  int connect(const uint8_t ipv4[4], uint16_t port) override;
   int connect(const char *host, uint16_t port) override;
   size_t write(uint8_t data) override;
   size_t write(const uint8_t *buffer, size_t size) override;
@@ -32,8 +32,9 @@ public:
   int peek() override;
   void flush() override;
   void stop() override;
-  uint8_t connected() override;
-  operator bool() override;
+  bool connected() override;
+
+  void set_timeout_ms(uint32_t timeout_ms);
 
 #ifdef HAL_ENABLE_TLS
   hal_status_t configure_tls(const hal_tls_security_config_t *security);
@@ -49,6 +50,7 @@ private:
 #endif
 
   hal_tcp_socket_t socket_;
+  uint32_t timeout_ms_;
   bool has_peeked_byte_;
   uint8_t peeked_byte_;
 #ifdef HAL_ENABLE_TLS

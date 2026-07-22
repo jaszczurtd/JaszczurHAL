@@ -8,24 +8,26 @@
 #include "../../../../hal_system.h"
 
 #include <limits.h>
+#include <string.h>
 
 #define JH_PUBSUB_HAL_DEFAULT_TIMEOUT_MS 15000UL
 
 JHPubSubHalClient::JHPubSubHalClient()
-    : socket_(NULL), has_peeked_byte_(false), peeked_byte_(0u)
+    : socket_(NULL), timeout_ms_(JH_PUBSUB_HAL_DEFAULT_TIMEOUT_MS),
+      has_peeked_byte_(false), peeked_byte_(0u)
 #ifdef HAL_ENABLE_TLS
       ,
       tls_enabled_(false), tls_security_(), tls_client_(NULL)
 #endif
 {
-  setTimeout(JH_PUBSUB_HAL_DEFAULT_TIMEOUT_MS);
 }
 
 JHPubSubHalClient::~JHPubSubHalClient() { stop(); }
 
-uint32_t JHPubSubHalClient::timeout_ms() {
-  const unsigned long timeout = getTimeout();
-  return timeout > UINT32_MAX ? UINT32_MAX : (uint32_t)timeout;
+uint32_t JHPubSubHalClient::timeout_ms() { return timeout_ms_; }
+
+void JHPubSubHalClient::set_timeout_ms(uint32_t timeout_ms) {
+  timeout_ms_ = timeout_ms;
 }
 
 int JHPubSubHalClient::connect_endpoint(const hal_net_endpoint_t &endpoint) {
@@ -51,18 +53,15 @@ int JHPubSubHalClient::connect_endpoint(const hal_net_endpoint_t &endpoint) {
   return 1;
 }
 
-int JHPubSubHalClient::connect(arduino::IPAddress ip, uint16_t port) {
-  if (port == 0u) {
+int JHPubSubHalClient::connect(const uint8_t ipv4[4], uint16_t port) {
+  if (ipv4 == NULL || port == 0u) {
     return 0;
   }
 
   hal_net_endpoint_t endpoint = {};
   endpoint.family = HAL_NET_AF_INET;
   endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  endpoint.addr[0] = ip[0];
-  endpoint.addr[1] = ip[1];
-  endpoint.addr[2] = ip[2];
-  endpoint.addr[3] = ip[3];
+  memcpy(endpoint.addr, ipv4, HAL_NET_IPV4_ADDR_LEN);
   endpoint.port = port;
   return connect_endpoint(endpoint);
 }
@@ -269,21 +268,19 @@ void JHPubSubHalClient::stop() {
   peeked_byte_ = 0u;
 }
 
-uint8_t JHPubSubHalClient::connected() {
+bool JHPubSubHalClient::connected() {
 #ifdef HAL_ENABLE_TLS
   if (tls_enabled_) {
     hal_tls_state_t state = HAL_TLS_STATE_FAILED;
     return tls_client_ != NULL &&
                    hal_tls_client_get_state_ex(tls_client_, &state) == HAL_OK &&
                    state == HAL_TLS_STATE_CONNECTED
-               ? 1u
-               : 0u;
+               ? true
+               : false;
   }
 #endif
-  return socket_ != NULL && hal_tcp_socket_is_connected(socket_) ? 1u : 0u;
+  return socket_ != NULL && hal_tcp_socket_is_connected(socket_);
 }
-
-JHPubSubHalClient::operator bool() { return connected() != 0u; }
 
 #ifdef HAL_ENABLE_TLS
 hal_status_t

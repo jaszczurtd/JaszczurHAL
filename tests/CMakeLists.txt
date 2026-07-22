@@ -259,11 +259,10 @@ target_compile_options(test_hal_http_client_plaintext_compile PRIVATE
 add_executable(test_pubsub_hal_client
     test_pubsub_hal_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/mqtt/jh_pubsub_hal_client.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_pubsub_hal_client PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/arduino
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
 )
 target_compile_definitions(test_pubsub_hal_client PRIVATE
