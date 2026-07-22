@@ -14,6 +14,15 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
+# Optimize firmware for size unless the caller explicitly selects another
+# single-configuration build type.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
+        "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 # ── Locate Arduino root ─────────────────────────────────────────────────────
 if(NOT DEFINED ARDUINO_ROOT)
     set(ARDUINO_ROOT "$ENV{HOME}/.arduino15/packages/rp2040")

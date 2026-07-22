@@ -5,6 +5,8 @@ endif()
 set(_probe "${JH_ROOT}/tests/fixtures/network_config_probe.cpp")
 set(_architecture_probe
     "${JH_ROOT}/tests/fixtures/network_architecture_probe.cpp")
+set(_http_plaintext_probe
+    "${JH_ROOT}/tests/fixtures/http_client_plaintext_config_probe.cpp")
 set(_include "${JH_ROOT}/src")
 set(_object "${CMAKE_CURRENT_BINARY_DIR}/network_config_probe.o")
 set(_architecture_executable
@@ -56,8 +58,24 @@ function(check_architecture_identity NAME)
     endif()
 endfunction()
 
+function(check_http_plaintext_config)
+    execute_process(
+        COMMAND "${JH_CXX}" -std=c++17 "-I${_include}"
+                -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_HTTP_CLIENT=1
+                -c "${_http_plaintext_probe}" -o "${_object}"
+        RESULT_VARIABLE _result
+        OUTPUT_VARIABLE _stdout
+        ERROR_VARIABLE _stderr
+    )
+    if(NOT _result EQUAL 0)
+        message(FATAL_ERROR
+            "Plaintext HTTP configuration probe failed:\n${_stderr}")
+    endif()
+endfunction()
+
 check_config(default_mock TRUE ""
     -DHAL_TARGET_MOCK=1 -DHAL_ENABLE_TCP=1)
+check_http_plaintext_config()
 check_config(zero_backend FALSE "requires exactly one HAL_NETWORK_BACKEND"
     -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1)
 check_config(multiple_backends FALSE "Select exactly one HAL_NETWORK_BACKEND"
@@ -71,6 +89,22 @@ check_config(multiple_cyw43_buses FALSE "requires exactly one HAL_CYW43_BUS"
 check_config(wireguard_offload FALSE "requires a host-stack L3 backend"
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIREGUARD=1
     -DHAL_NETWORK_BACKEND_ESP_AT=1 -DHAL_ESP_AT_PROFILE_ESP8266=1)
+check_config(stm32_cyw43_gspi_lwip TRUE ""
+    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1 -DHAL_ENABLE_TCP=1
+    -DHAL_ENABLE_UDP=1 -DHAL_ENABLE_BSD_SOCKETS=1
+    -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
+    -DHAL_CYW43_STACK_LWIP=1 -DHAL_CYW43_PIN_WL_ON=30u
+    -DHAL_CYW43_PIN_CHIP_SELECT=28u -DHAL_CYW43_PIN_DATA=31u
+    -DHAL_CYW43_PIN_CLOCK=29u -DHAL_CYW43_MAX_TRANSACTION_BYTES=2052u)
+check_config(stm32_cyw43_missing_lwip FALSE
+    "requires HAL_CYW43_STACK_LWIP"
+    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1
+    -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1)
+check_config(stm32_cyw43_incomplete_gspi FALSE
+    "requires a complete CYW43 gSPI profile"
+    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1
+    -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
+    -DHAL_CYW43_STACK_LWIP=1)
 
 check_architecture_identity(no_network
     -DHAL_TARGET_STM32G474=1 -DJH_EXPECT_NETWORK_NONE=1)
@@ -84,6 +118,13 @@ check_architecture_identity(cyw43_host_stack
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_PICO_PIO=1
     -DHAL_CYW43_PROFILE_PIM730=1 -DPICO_CYW43_SUPPORTED=1
     -DCYW43_PIN_WL_DYNAMIC=1 -DCYW43_PIO_CLOCK_DIV_DYNAMIC=1
+    -DJH_EXPECT_NETWORK_CYW43=1)
+check_architecture_identity(stm32_cyw43_host_stack
+    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_TCP=1
+    -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
+    -DHAL_CYW43_STACK_LWIP=1 -DHAL_CYW43_PIN_WL_ON=30u
+    -DHAL_CYW43_PIN_CHIP_SELECT=28u -DHAL_CYW43_PIN_DATA=31u
+    -DHAL_CYW43_PIN_CLOCK=29u -DHAL_CYW43_MAX_TRANSACTION_BYTES=2052u
     -DJH_EXPECT_NETWORK_CYW43=1)
 check_architecture_identity(esp_at_socket_offload
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_TCP=1

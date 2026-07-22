@@ -97,7 +97,7 @@ hal_status_t hal_tls_default_time(void *context, uint64_t *out_unix_seconds);
 hal_status_t hal_tls_default_entropy(void *context, void *buffer,
                                      size_t length);
 
-typedef struct {
+typedef struct hal_tls_security_config_t {
   const hal_tls_trust_anchor_t *trust_anchors;
   size_t trust_anchor_count;
   hal_tls_time_fn get_time;

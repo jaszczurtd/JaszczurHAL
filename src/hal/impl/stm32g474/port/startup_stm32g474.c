@@ -6,7 +6,8 @@
  *   1. hardware loads the initial MSP from vector[0] and jumps to
  * Reset_Handler,
  *   2. Reset_Handler copies .data from flash to RAM, zeroes .bss,
- *   3. calls SystemInit() (clock/SysTick/FPU/fault enables), then main().
+ *   3. calls SystemInit() (clock/SysTick/FPU/fault enables), runs global C++
+ *      constructors, then calls main().
  *
  * Core exceptions are populated directly. Peripheral IRQ vectors are added as
  * drivers need them; EXTI lines are used by hal_gpio and TIM6 by hal_timer.
@@ -21,6 +22,23 @@ extern uint32_t _edata;  /* .data end in RAM                */
 extern uint32_t _sbss;   /* .bss start                      */
 extern uint32_t _ebss;   /* .bss end                        */
 extern uint32_t _estack; /* top of stack                    */
+
+typedef void (*init_function_t)(void);
+extern init_function_t __preinit_array_start[];
+extern init_function_t __preinit_array_end[];
+extern init_function_t __init_array_start[];
+extern init_function_t __init_array_end[];
+
+/* The bare-metal process never unloads a DSO and main() must not return.
+ * Supply the ABI anchor and accept destructor registrations without retaining
+ * an exit-time list that can never be executed. */
+void *__dso_handle = &__dso_handle;
+int __aeabi_atexit(void *object, void (*destructor)(void *), void *dso_handle) {
+  (void)object;
+  (void)destructor;
+  (void)dso_handle;
+  return 0;
+}
 
 extern int main(void);
 extern void SystemInit(void);
@@ -120,6 +138,15 @@ void Reset_Handler(void) {
   }
 
   SystemInit();
+
+  for (init_function_t *fn = __preinit_array_start; fn < __preinit_array_end;
+       ++fn) {
+    (*fn)();
+  }
+  for (init_function_t *fn = __init_array_start; fn < __init_array_end; ++fn) {
+    (*fn)();
+  }
+
   (void)main();
 
   /* main() should not return; trap if it does. */
