@@ -61,6 +61,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal/impl/shared/*.cpp"
         "${_jh_src}/hal/impl/shared/*.c"
     )
+    list(FILTER _shared EXCLUDE REGEX "/frameworks/lwip/vendor/")
     set(_littlefs
         "${_g474}/drivers/littlefs/lfs.c"
         "${_g474}/drivers/littlefs/lfs_util.c"

@@ -93,6 +93,15 @@
 #endif
 
 /* -- Network backend transport configuration --------------------------- */
+#if defined(HAL_CYW43_BUS_PICO_PIO) && defined(HAL_CYW43_BUS_STM32_GSPI)
+#error "JaszczurHAL CYW43 requires exactly one transport"
+#endif
+#if defined(HAL_CYW43_BUS_STM32_GSPI) && !HAL_TARGET_IS_STM32G474
+#error "HAL_CYW43_BUS_STM32_GSPI requires HAL_TARGET_STM32G474"
+#endif
+#if defined(HAL_CYW43_STACK_LWIP) && !defined(HAL_CYW43_BUS_STM32_GSPI)
+#error "HAL_CYW43_STACK_LWIP requires HAL_CYW43_BUS_STM32_GSPI"
+#endif
 #if defined(HAL_NETWORK_BACKEND_CYW43)
 #if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
 #error                                                                         \

@@ -20,6 +20,7 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.cpp
     ${SRC}/hal/impl/shared/*.c
 )
+list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 set(STM32_LITTLEFS_SOURCES
     ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs.c

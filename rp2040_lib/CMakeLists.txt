@@ -133,6 +133,7 @@ file(GLOB_RECURSE RP2040_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.cpp
     ${SRC}/hal/impl/shared/*.c
 )
+list(FILTER RP2040_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
 
 # ── Driver sources (third-party libraries bundled with HAL) ──────────────────
 file(GLOB_RECURSE DRIVER_SOURCES

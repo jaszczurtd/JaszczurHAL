@@ -58,6 +58,16 @@ static uintptr_t heap_limit(void) {
   return (stack_top - min_stack) & ~(uintptr_t)7u;
 }
 
+uint32_t stm32g474_runtime_heap_total_bytes(void) {
+  return (uint32_t)(heap_limit() - heap_base());
+}
+
+uint32_t stm32g474_runtime_heap_free_bytes(void) {
+  const uintptr_t current = s_heap_current == 0u ? heap_base() : s_heap_current;
+  const uintptr_t limit = heap_limit();
+  return current < limit ? (uint32_t)(limit - current) : 0u;
+}
+
 static void stm32g474_runtime_reset(void) __attribute__((noreturn));
 static void stm32g474_runtime_reset(void) {
   SCB_AIRCR =
@@ -177,30 +187,30 @@ void *_sbrk(ptrdiff_t incr) {
   }
 
   const uintptr_t current = s_heap_current;
-  uintptr_t next = current;
+  uintptr_t next;
 
   if (incr >= 0) {
     const uintptr_t add = (uintptr_t)incr;
     if (add > (UINTPTR_MAX - current)) {
       errno = ENOMEM;
-      return (void *)-1;
+      return (void *)-1; // NOLINT(performance-no-int-to-ptr): newlib ABI
     }
     next = align_up_uintptr(current + add, 8u);
     if ((next < current) || (next > limit)) {
       errno = ENOMEM;
-      return (void *)-1;
+      return (void *)-1; // NOLINT(performance-no-int-to-ptr): newlib ABI
     }
   } else {
     const uintptr_t sub = (uintptr_t)(-(incr + 1)) + 1u;
     if (sub > (current - base)) {
       errno = EINVAL;
-      return (void *)-1;
+      return (void *)-1; // NOLINT(performance-no-int-to-ptr): newlib ABI
     }
     next = current - sub;
   }
 
   s_heap_current = next;
-  return (void *)current;
+  return (void *)current; // NOLINT(performance-no-int-to-ptr): newlib ABI
 }
 
 void __malloc_lock(struct _reent *reent) {

@@ -130,7 +130,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   info.flash_reserved_bytes = flash_reserved;
   info.ram_total_bytes = arch_info.ram_total_bytes;
   info.ram_usable_bytes = arch_info.ram_usable_bytes;
-  info.heap_total_bytes = 0u;
+  info.heap_total_bytes = stm32g474_system_heap_total_bytes();
   info.heap_free_bytes = hal_get_free_heap();
   info.stack_total_bytes = stm32g474_system_main_stack_bytes();
   info.uid_bytes = HAL_DEVICE_UID_BYTES;

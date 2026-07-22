@@ -68,7 +68,10 @@ void stm32g474_system_idle(void);
  *  Compiled to a real @c MRS on ARM targets, returns @c false on host. */
 bool stm32g474_system_in_isr(void);
 
-/** @brief Free heap in bytes. Stub returns 0 until newlib/ChibiOS hookup. */
+/** @brief Runtime newlib heap capacity between `_end` and the stack guard. */
+uint32_t stm32g474_system_heap_total_bytes(void);
+
+/** @brief Free runtime newlib heap in bytes. */
 uint32_t stm32g474_system_get_free_heap(void);
 
 /** @brief On-die temperature in °C. Stub returns 0.0f. */
