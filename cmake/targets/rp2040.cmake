@@ -15,6 +15,13 @@
 
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
+        "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 set(ARDUINO_CLI "arduino-cli" CACHE STRING "arduino-cli executable")
 set(ARDUINO_FQBN "rp2040:rp2040:rpipico" CACHE STRING "Arduino fully qualified board name")
 set(ARDUINO_UPLOAD_PORT "" CACHE STRING "Arduino upload port")
@@ -146,8 +153,14 @@ function(_jh_rp2040_target target_name)
     cmake_parse_arguments(ARG "${options}" "" "" ${ARGN})
 
     set(_cmd "${ARDUINO_CLI}" ${ARDUINO_COMMON_ARGS})
-    if(ARG_DEBUG)
+    if(ARG_DEBUG OR CMAKE_BUILD_TYPE STREQUAL "Debug")
         list(APPEND _cmd --optimize-for-debug)
+    elseif(CMAKE_BUILD_TYPE STREQUAL "MinSizeRel")
+        list(APPEND _cmd --build-property "build.flags.optimize=-Os -DNDEBUG")
+    elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+        list(APPEND _cmd --build-property "build.flags.optimize=-O3 -DNDEBUG")
+    elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        list(APPEND _cmd --build-property "build.flags.optimize=-O2 -DNDEBUG")
     endif()
     if(ARG_COMPILE_DB)
         list(APPEND _cmd --only-compilation-database)

@@ -2,7 +2,7 @@
 
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
 #include "../../../../hal_config.h"
 
 #ifdef HAL_ENABLE_MQTT
@@ -59,4 +59,4 @@ private:
 };
 
 #endif /* HAL_ENABLE_MQTT */
-#endif /* HAL_TARGET_IS_RP2040 */
+#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */

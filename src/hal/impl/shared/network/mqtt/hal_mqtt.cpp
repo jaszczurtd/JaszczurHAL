@@ -1,15 +1,15 @@
-#include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
-#include "../../hal_config.h"
+#include "../../../../hal_target.h"
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#include "../../../../hal_config.h"
 
 #ifdef HAL_ENABLE_MQTT
 
-#include "../../hal_mqtt.h"
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
-#include "../shared/network/mqtt/jh_pubsub_hal_client.h"
-#include "frameworks/PubSubClient/src/PubSubClient.h"
+#include "../../../../hal_mqtt.h"
+#include "../../../../hal_serial.h"
+#include "../../../../hal_sync.h"
+#include "../../../rp2040/frameworks/PubSubClient/src/PubSubClient.h"
+#include "../../hal_mutex_once.h"
+#include "jh_pubsub_hal_client.h"
 
 #include <stdio.h>
 #include <string.h>

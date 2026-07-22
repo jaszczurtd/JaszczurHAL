@@ -107,9 +107,7 @@
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires exactly one HAL_CYW43_BUS_* transport"
 #endif
-#if !HAL_TARGET_IS_RP2040
-#error "HAL_NETWORK_BACKEND_CYW43 currently requires HAL_TARGET_RP2040"
-#endif
+#if HAL_TARGET_IS_RP2040
 #if !defined(HAL_CYW43_BUS_PICO_PIO)
 #error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_BUS_PICO_PIO"
 #endif
@@ -122,6 +120,17 @@
 #endif
 #if !defined(CYW43_PIO_CLOCK_DIV_DYNAMIC) || !(CYW43_PIO_CLOCK_DIV_DYNAMIC)
 #error "HAL_NETWORK_BACKEND_CYW43 requires CYW43_PIO_CLOCK_DIV_DYNAMIC=1"
+#endif
+#elif HAL_TARGET_IS_STM32G474
+#if !defined(HAL_CYW43_BUS_STM32_GSPI)
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 on STM32G474 requires HAL_CYW43_BUS_STM32_GSPI"
+#endif
+#if !defined(HAL_CYW43_STACK_LWIP)
+#error "HAL_NETWORK_BACKEND_CYW43 on STM32G474 requires HAL_CYW43_STACK_LWIP"
+#endif
+#else
+#error "HAL_NETWORK_BACKEND_CYW43 is unsupported on the selected target"
 #endif
 #endif
 
@@ -146,13 +155,21 @@
 #endif
 #endif
 
-#if defined(HAL_NETWORK_BACKEND_CYW43) &&                                      \
+#if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_RP2040 &&              \
     (!defined(HAL_CYW43_PIN_WL_ON) || !defined(HAL_CYW43_PIN_CHIP_SELECT) ||   \
      !defined(HAL_CYW43_PIN_DATA) || !defined(HAL_CYW43_PIN_CLOCK) ||          \
      !defined(HAL_CYW43_PIO_CLOCK_DIV_INT) ||                                  \
      !defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8))
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires a complete CYW43 board pin/clock profile"
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_STM32G474 &&           \
+    (!defined(HAL_CYW43_PIN_WL_ON) || !defined(HAL_CYW43_PIN_CHIP_SELECT) ||   \
+     !defined(HAL_CYW43_PIN_DATA) || !defined(HAL_CYW43_PIN_CLOCK) ||          \
+     !defined(HAL_CYW43_MAX_TRANSACTION_BYTES))
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 on STM32G474 requires a complete CYW43 gSPI profile"
 #endif
 
 #ifndef HAL_CYW43_COUNTRY_CODE
@@ -526,8 +543,8 @@
 #endif
 
 #ifdef HAL_ENABLE_HTTP_CLIENT
-#ifndef HAL_ENABLE_TLS
-#define HAL_ENABLE_TLS
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
 #endif
 #endif
 

@@ -84,6 +84,19 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/utils/multicoreWatchdog.cpp"
     )
 
+    set(_jh_mqtt_sources)
+    set(_jh_mqtt_includes)
+    foreach(_definition IN LISTS ARG_DEFINES)
+        if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
+            list(APPEND _jh_mqtt_sources
+                "${_jh_src}/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp")
+            list(APPEND _jh_mqtt_includes
+                "${_jh_src}/hal/impl/rp2040/frameworks/PubSubClient/src"
+                "${_jh_src}/hal/impl/shared/frameworks/arduino_compat")
+            break()
+        endif()
+    endforeach()
+
     add_executable(${TARGET}
         ${ARG_SOURCES}
         "${_g474}/port/startup_stm32g474.c"
@@ -98,6 +111,7 @@ function(jh_add_stm32g474_firmware TARGET)
         ${_shared}
         ${_hal_common}
         ${_utils}
+        ${_jh_mqtt_sources}
     )
 
     set_target_properties(${TARGET} PROPERTIES
@@ -111,6 +125,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal"
         "${_g474}"
         "${_g474}/drivers/littlefs"
+        ${_jh_mqtt_includes}
         ${ARG_INCLUDES}
     )
 
@@ -178,6 +193,7 @@ function(jh_stm32g474_add_openocd_upload UPLOAD_TARGET)
 
     add_custom_target(${UPLOAD_TARGET}
         COMMAND "${ARG_OPENOCD_BIN}" -f "${ARG_OPENOCD_INTERFACE}" -f "${ARG_OPENOCD_TARGET}"
+                -c "reset_config srst_only srst_nogate connect_assert_srst"
                 -c "program $<TARGET_FILE:${ARG_ELF_TARGET}> verify reset exit"
         DEPENDS ${ARG_ELF_TARGET}
         USES_TERMINAL

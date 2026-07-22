@@ -242,6 +242,20 @@ add_test(NAME test_network_backend_selection
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_network_backend_selection.cmake
 )
 
+add_library(test_hal_http_client_plaintext_compile OBJECT
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/http/hal_http_client.cpp
+)
+target_include_directories(test_hal_http_client_plaintext_compile PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_hal_http_client_plaintext_compile PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_HTTP_CLIENT=1
+)
+target_compile_options(test_hal_http_client_plaintext_compile PRIVATE
+    -Wall -Wextra -Werror
+)
+
 add_executable(test_pubsub_hal_client
     test_pubsub_hal_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/mqtt/jh_pubsub_hal_client.cpp
@@ -295,6 +309,12 @@ add_test(NAME test_cyw43_dependency_boundary
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_cyw43_dependency_boundary.cmake
+)
+
+add_test(NAME test_lwip_dependency_boundary
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_lwip_dependency_boundary.cmake
 )
 
 get_filename_component(_jh_workspace_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.."

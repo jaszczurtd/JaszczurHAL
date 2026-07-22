@@ -5,7 +5,11 @@
 #ifdef HAL_ENABLE_HTTP_CLIENT
 
 #include "hal_status.h"
+#ifdef HAL_ENABLE_TLS
 #include "hal_tls.h"
+#else
+typedef struct hal_tls_security_config_t hal_tls_security_config_t;
+#endif
 
 #include <stdbool.h>
 #include <stddef.h>

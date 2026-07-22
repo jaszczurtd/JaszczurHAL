@@ -433,7 +433,9 @@ jh_cyw43_lwip_get_snapshot(jh_cyw43_lwip_snapshot_t *out_snapshot) {
 #else
 
 extern "C" uint32_t jh_lwip_port_rand(void) { return 1u; }
+#if HAL_TARGET_IS_STM32G474
 extern "C" uint32_t sys_now(void) { return 0u; }
+#endif
 extern "C" __attribute__((noreturn)) void
 jh_lwip_port_assert(const char *, const char *, int) {
   __builtin_trap();

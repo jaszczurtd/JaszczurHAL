@@ -22,6 +22,18 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
 )
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
+set(STM32_MQTT_INCLUDE_DIRS)
+if(DEFINED EXTRA_HAL_DEFINES)
+    jh_cmake_defines_contain(_jh_stm32_has_mqtt HAL_ENABLE_MQTT
+        ${EXTRA_HAL_DEFINES})
+    if(_jh_stm32_has_mqtt)
+        list(APPEND STM32_IMPL_SOURCES
+            ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp)
+        list(APPEND STM32_MQTT_INCLUDE_DIRS
+            ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/src
+            ${SRC}/hal/impl/shared/frameworks/arduino_compat)
+    endif()
+endif()
 set(STM32_LITTLEFS_SOURCES
     ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs.c
     ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs_util.c
@@ -69,6 +81,7 @@ set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
     ${SRC}/hal/impl/stm32g474/drivers/littlefs
+    ${STM32_MQTT_INCLUDE_DIRS}
 )
 
 set(_jh_extra_hal_defines)

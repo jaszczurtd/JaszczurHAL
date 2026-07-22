@@ -15,6 +15,15 @@
 set(CMAKE_SYSTEM_NAME Generic)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
+# Optimize firmware for size unless the caller explicitly selects another
+# single-configuration build type.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
+        "Build type (Debug, Release, RelWithDebInfo, MinSizeRel)" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS
+        Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 set(ARM_GCC_PREFIX "arm-none-eabi" CACHE STRING "GNU Arm Embedded toolchain prefix")
 
 if(NOT CMAKE_C_COMPILER)

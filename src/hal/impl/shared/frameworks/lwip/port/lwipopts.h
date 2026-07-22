@@ -1,6 +1,8 @@
 #ifndef JASZCZURHAL_LWIPOPTS_H
 #define JASZCZURHAL_LWIPOPTS_H
 
+#include <hal/hal_config.h>
+
 /* Point 23 starts with one cooperatively serviced, IPv4-only CYW43 netif. */
 #define NO_SYS 1
 #define SYS_LIGHTWEIGHT_PROT 0
@@ -27,7 +29,19 @@
 
 #define LWIP_UDP 1
 #define MEMP_NUM_UDP_PCB 6
+#if defined(HAL_ENABLE_TCP)
+#define LWIP_TCP 1
+#define TCP_MSS 1460
+#define TCP_WND (4u * TCP_MSS)
+#define TCP_SND_BUF (4u * TCP_MSS)
+#define TCP_SND_QUEUELEN 16
+#define MEMP_NUM_TCP_PCB                                                       \
+  (HAL_TCP_SOCKET_MAX_INSTANCES + HAL_TCP_LISTENER_BACKLOG_MAX)
+#define MEMP_NUM_TCP_PCB_LISTEN HAL_TCP_LISTENER_MAX_INSTANCES
+#define MEMP_NUM_TCP_SEG 16
+#else
 #define LWIP_TCP 0
+#endif
 #define LWIP_NETCONN 0
 #define LWIP_SOCKET 0
 
@@ -56,6 +70,5 @@
 #define LWIP_STATS_DISPLAY 0
 
 #define LWIP_DEBUG 0
-#define LWIP_NOASSERT 0
 
 #endif

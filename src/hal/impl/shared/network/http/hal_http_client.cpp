@@ -19,7 +19,9 @@
 typedef struct {
   hal_http_client_transport_t kind;
   hal_tcp_socket_t tcp;
+#ifdef HAL_ENABLE_TLS
   hal_tls_client_t tls;
+#endif
 } jh_http_stream_t;
 
 typedef struct {
@@ -35,6 +37,7 @@ static bool token_is_valid(const char *value) {
 
 static hal_status_t stream_close(jh_http_stream_t *stream,
                                  uint32_t timeout_ms) {
+#ifdef HAL_ENABLE_TLS
   if (stream->tls != NULL) {
     hal_status_t status = hal_tls_client_shutdown_ex(stream->tls);
     const uint32_t started = hal_millis();
@@ -49,6 +52,9 @@ static hal_status_t stream_close(jh_http_stream_t *stream,
     (void)hal_tls_client_close_ex(stream->tls);
     stream->tls = NULL;
   }
+#else
+  (void)timeout_ms;
+#endif
   if (stream->tcp != NULL) {
     hal_tcp_socket_close(stream->tcp);
     stream->tcp = NULL;
@@ -56,6 +62,7 @@ static hal_status_t stream_close(jh_http_stream_t *stream,
   return HAL_OK;
 }
 
+#ifdef HAL_ENABLE_TLS
 static hal_status_t wait_tls_connected(hal_tls_client_t client,
                                        uint32_t timeout_ms) {
   const uint32_t started = hal_millis();
@@ -82,12 +89,14 @@ static hal_status_t wait_tls_connected(hal_tls_client_t client,
   }
   return HAL_ETIMEOUT;
 }
+#endif
 
 static hal_status_t stream_connect(const hal_http_client_request_t *request,
                                    jh_http_stream_t *stream) {
   memset(stream, 0, sizeof(*stream));
   stream->kind = request->transport;
   if (request->transport == HAL_HTTP_CLIENT_TRANSPORT_TLS) {
+#ifdef HAL_ENABLE_TLS
     if (request->tls_security == NULL) {
       return HAL_ECONFIG;
     }
@@ -114,6 +123,9 @@ static hal_status_t stream_connect(const hal_http_client_request_t *request,
       status = wait_tls_connected(stream->tls, request->timeout_ms);
     }
     return status;
+#else
+    return HAL_EUNSUPPORTED;
+#endif
   }
 
   hal_net_endpoint_t endpoint = {};
@@ -139,11 +151,14 @@ static hal_status_t stream_write_all(jh_http_stream_t *stream,
   while (offset < length) {
     size_t written = 0u;
     const hal_status_t status =
+#ifdef HAL_ENABLE_TLS
         stream->kind == HAL_HTTP_CLIENT_TRANSPORT_TLS
             ? hal_tls_client_write_ex(stream->tls, data + offset,
                                       length - offset, &written)
-            : hal_tcp_socket_send_ex(stream->tcp, data + offset,
-                                     length - offset, &written);
+            :
+#endif
+            hal_tcp_socket_send_ex(stream->tcp, data + offset, length - offset,
+                                   &written);
     offset += written;
     if (status != HAL_OK && status != HAL_EAGAIN) {
       return status;
@@ -164,6 +179,7 @@ static hal_status_t stream_read(jh_http_stream_t *stream, uint8_t *data,
                                 bool *closed) {
   *received = 0u;
   *closed = false;
+#ifdef HAL_ENABLE_TLS
   if (stream->kind == HAL_HTTP_CLIENT_TRANSPORT_TLS) {
     hal_status_t status =
         hal_tls_client_read_ex(stream->tls, data, capacity, received);
@@ -174,6 +190,7 @@ static hal_status_t stream_read(jh_http_stream_t *stream, uint8_t *data,
     }
     return status;
   }
+#endif
   const hal_status_t status =
       hal_tcp_socket_recv_ex(stream->tcp, data, capacity, 0u, received);
   *closed = !hal_tcp_socket_is_connected(stream->tcp);

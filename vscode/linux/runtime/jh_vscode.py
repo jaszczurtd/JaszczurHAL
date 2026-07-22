@@ -847,11 +847,29 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
     enabled = collect_hal_enables(config, project_dir)
     if target == "stm32g474":
         network = sorted(module for module in enabled if module in STM32G474_NETWORK_MODULES)
-        if network:
+        project_config = project_dir / "hal_project_config.h"
+        try:
+            project_defines = project_config.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            project_defines = ""
+        cmake = config.get("cmake")
+        cache = cmake.get("cache") if isinstance(cmake, dict) else {}
+        cache_defines = str(cache.get("JH_EXTRA_DEFINES", "")) if isinstance(cache, dict) else ""
+        configured_cyw43 = all(
+            symbol in project_defines or symbol in cache_defines
+            for symbol in (
+                "HAL_NETWORK_BACKEND_CYW43",
+                "HAL_CYW43_BUS_STM32_GSPI",
+                "HAL_CYW43_STACK_LWIP",
+            )
+        )
+        if network and not configured_cyw43:
             messages.append(
-                "axis-2: stm32g474 has no WiFi/network HAL backend yet; "
+                "axis-2: stm32g474 network modules require the explicit "
+                "CYW43 gSPI/lwIP backend profile; "
                 f"enabled modules: {', '.join(network)}. "
-                "Use an RP2040/Pico W target, disable those modules, or add a STM32 network backend."
+                "Define HAL_NETWORK_BACKEND_CYW43, HAL_CYW43_BUS_STM32_GSPI "
+                "and HAL_CYW43_STACK_LWIP, or disable those modules."
             )
     return messages
 
