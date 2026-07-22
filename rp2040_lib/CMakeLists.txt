@@ -134,6 +134,7 @@ file(GLOB_RECURSE RP2040_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.c
 )
 list(FILTER RP2040_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
+list(FILTER RP2040_SHARED_SOURCES EXCLUDE REGEX "/frameworks/PubSubClient/")
 
 # ── Driver sources (third-party libraries bundled with HAL) ──────────────────
 file(GLOB_RECURSE DRIVER_SOURCES
@@ -148,8 +149,8 @@ jh_hal_define_enabled(JH_RP2040_ENABLE_WIREGUARD HAL_ENABLE_WIREGUARD)
 
 if(JH_RP2040_ENABLE_MQTT)
     file(GLOB_RECURSE RP2040_PUBSUBCLIENT_SOURCES
-        ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/*.cpp
-        ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/*.c
+        ${SRC}/hal/impl/shared/frameworks/PubSubClient/*.cpp
+        ${SRC}/hal/impl/shared/frameworks/PubSubClient/*.c
     )
     list(APPEND FRAMEWORK_SOURCES ${RP2040_PUBSUBCLIENT_SOURCES})
 endif()

@@ -7,7 +7,7 @@
 #include "../../../../hal_mqtt.h"
 #include "../../../../hal_serial.h"
 #include "../../../../hal_sync.h"
-#include "../../../rp2040/frameworks/PubSubClient/src/PubSubClient.h"
+#include "../../frameworks/PubSubClient/src/PubSubClient.h"
 #include "../../hal_mutex_once.h"
 #include "jh_pubsub_hal_client.h"
 
@@ -174,7 +174,7 @@ hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s) {
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.setSocketTimeout(timeout_s);
-  s_network_client.setTimeout((unsigned long)timeout_s * 1000UL);
+  s_network_client.set_timeout_ms((uint32_t)timeout_s * 1000u);
 
   hal_mutex_unlock(s_mqtt_mutex);
   return HAL_OK;

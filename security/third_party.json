@@ -101,10 +101,10 @@
       "supplier": "Nicholas O'Leary",
       "licenses": ["MIT"],
       "purl": "pkg:github/knolleary/pubsubclient",
-      "paths": ["src/hal/impl/rp2040/frameworks/PubSubClient"],
+      "paths": ["src/hal/impl/shared/frameworks/PubSubClient"],
       "upstream": "https://github.com/knolleary/pubsubclient",
       "feature_flags": ["HAL_ENABLE_MQTT"],
-      "notes": "Vendored Arduino MQTT client used by the RP2040 MQTT backend. Record the exact upstream tag/commit at the next refresh."
+      "notes": "Vendored MQTT protocol engine adapted to the native shared JaszczurHAL transport. Record the exact upstream tag/commit at the next refresh."
     },
     {
       "name": "arduino-wireguard-pico-w",

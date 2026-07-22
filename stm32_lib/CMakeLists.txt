@@ -21,6 +21,7 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.c
 )
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
+list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/PubSubClient/")
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 set(STM32_MQTT_INCLUDE_DIRS)
 if(DEFINED EXTRA_HAL_DEFINES)
@@ -28,10 +29,9 @@ if(DEFINED EXTRA_HAL_DEFINES)
         ${EXTRA_HAL_DEFINES})
     if(_jh_stm32_has_mqtt)
         list(APPEND STM32_IMPL_SOURCES
-            ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp)
+            ${SRC}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp)
         list(APPEND STM32_MQTT_INCLUDE_DIRS
-            ${SRC}/hal/impl/rp2040/frameworks/PubSubClient/src
-            ${SRC}/hal/impl/shared/frameworks/arduino_compat)
+            ${SRC}/hal/impl/shared/frameworks/PubSubClient/src)
     endif()
 endif()
 set(STM32_LITTLEFS_SOURCES

@@ -62,6 +62,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal/impl/shared/*.c"
     )
     list(FILTER _shared EXCLUDE REGEX "/frameworks/lwip/vendor/")
+    list(FILTER _shared EXCLUDE REGEX "/frameworks/PubSubClient/")
     set(_littlefs
         "${_g474}/drivers/littlefs/lfs.c"
         "${_g474}/drivers/littlefs/lfs_util.c"
@@ -89,10 +90,9 @@ function(jh_add_stm32g474_firmware TARGET)
     foreach(_definition IN LISTS ARG_DEFINES)
         if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
             list(APPEND _jh_mqtt_sources
-                "${_jh_src}/hal/impl/rp2040/frameworks/PubSubClient/src/PubSubClient.cpp")
+                "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp")
             list(APPEND _jh_mqtt_includes
-                "${_jh_src}/hal/impl/rp2040/frameworks/PubSubClient/src"
-                "${_jh_src}/hal/impl/shared/frameworks/arduino_compat")
+                "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src")
             break()
         endif()
     endforeach()

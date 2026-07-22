@@ -7,10 +7,34 @@
 #ifndef PubSubClient_h
 #define PubSubClient_h
 
-#include "Client.h"
-#include "IPAddress.h"
-#include "Stream.h"
-#include <Arduino.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+
+typedef bool boolean;
+
+/**
+ * Native transport contract used by the vendored MQTT protocol engine.
+ *
+ * This deliberately mirrors only the operations PubSubClient actually needs;
+ * it is independent of Arduino Client/Stream/Print and can be implemented by
+ * any JaszczurHAL TCP or TLS backend.
+ */
+class JHPubSubTransport {
+public:
+  virtual ~JHPubSubTransport() = default;
+  virtual int connect(const uint8_t ipv4[4], uint16_t port) = 0;
+  virtual int connect(const char *host, uint16_t port) = 0;
+  virtual size_t write(uint8_t data) = 0;
+  virtual size_t write(const uint8_t *buffer, size_t size) = 0;
+  virtual int available() = 0;
+  virtual int read() = 0;
+  virtual int read(uint8_t *buffer, size_t size) = 0;
+  virtual int peek() = 0;
+  virtual void flush() = 0;
+  virtual void stop() = 0;
+  virtual bool connected() = 0;
+};
 
 #define MQTT_VERSION_3_1 3
 #define MQTT_VERSION_3_1_1 4
@@ -92,9 +116,9 @@
     return false;                                                              \
   }
 
-class PubSubClient : public Print {
+class PubSubClient {
 private:
-  Client *_client;
+  JHPubSubTransport *_client;
   uint8_t *buffer;
   uint16_t bufferSize;
   uint16_t keepAlive;
@@ -115,39 +139,21 @@ private:
   // bytes, so will start
   //       (MQTT_MAX_HEADER_SIZE - <returned size>) bytes into the buffer
   size_t buildHeader(uint8_t header, uint8_t *buf, uint16_t length);
-  IPAddress ip;
+  uint8_t ip[4];
   const char *domain;
   uint16_t port;
-  Stream *stream;
   int _state;
 
 public:
   PubSubClient();
-  PubSubClient(Client &client);
-  PubSubClient(IPAddress, uint16_t, Client &client);
-  PubSubClient(IPAddress, uint16_t, Client &client, Stream &);
-  PubSubClient(IPAddress, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client);
-  PubSubClient(IPAddress, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client,
-               Stream &);
-  PubSubClient(uint8_t *, uint16_t, Client &client);
-  PubSubClient(uint8_t *, uint16_t, Client &client, Stream &);
-  PubSubClient(uint8_t *, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client);
-  PubSubClient(uint8_t *, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client,
-               Stream &);
-  PubSubClient(const char *, uint16_t, Client &client);
-  PubSubClient(const char *, uint16_t, Client &client, Stream &);
-  PubSubClient(const char *, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client);
-  PubSubClient(const char *, uint16_t, MQTT_CALLBACK_SIGNATURE, Client &client,
-               Stream &);
+  explicit PubSubClient(JHPubSubTransport &client);
 
   ~PubSubClient();
 
-  PubSubClient &setServer(IPAddress ip, uint16_t port);
-  PubSubClient &setServer(uint8_t *ip, uint16_t port);
+  PubSubClient &setServer(const uint8_t ip[4], uint16_t port);
   PubSubClient &setServer(const char *domain, uint16_t port);
   PubSubClient &setCallback(MQTT_CALLBACK_SIGNATURE);
-  PubSubClient &setClient(Client &client);
-  PubSubClient &setStream(Stream &stream);
+  PubSubClient &setClient(JHPubSubTransport &client);
   PubSubClient &setKeepAlive(uint16_t keepAlive);
   PubSubClient &setSocketTimeout(uint16_t timeout);
 
@@ -189,10 +195,10 @@ public:
   int endPublish();
   // Write a single byte of payload (only to be used with
   // beginPublish/endPublish)
-  virtual size_t write(uint8_t);
+  size_t write(uint8_t);
   // Write size bytes from buffer into the payload (only to be used with
   // beginPublish/endPublish) Returns the number of bytes written
-  virtual size_t write(const uint8_t *buffer, size_t size);
+  size_t write(const uint8_t *buffer, size_t size);
   boolean subscribe(const char *topic);
   boolean subscribe(const char *topic, uint8_t qos);
   boolean unsubscribe(const char *topic);
