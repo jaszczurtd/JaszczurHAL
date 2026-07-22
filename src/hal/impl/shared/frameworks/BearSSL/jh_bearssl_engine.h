@@ -34,6 +34,10 @@ hal_status_t jh_bearssl_engine_poll_with_ops(
     void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
     uint16_t step_budget, jh_bearssl_poll_result_t *out_result);
 
+hal_status_t jh_bearssl_engine_poll_for_read_with_ops(
+    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
+    uint16_t step_budget, jh_bearssl_poll_result_t *out_result);
+
 /**
  * Advance a BearSSL engine through at most step_budget transport actions.
  * The descriptor is always treated as nonblocking. HAL_EAGAIN means that the
@@ -41,3 +45,9 @@ hal_status_t jh_bearssl_engine_poll_with_ops(
  */
 hal_status_t jh_bearssl_engine_poll(void *engine, int fd, uint16_t step_budget,
                                     jh_bearssl_poll_result_t *out_result);
+
+/** Progress records for a pending application read even when SENDAPP is also
+ * advertised. This prevents writable readiness from starving peer records. */
+hal_status_t
+jh_bearssl_engine_poll_for_read(void *engine, int fd, uint16_t step_budget,
+                                jh_bearssl_poll_result_t *out_result);

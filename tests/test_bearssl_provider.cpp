@@ -127,6 +127,30 @@ void test_poll_engine_honours_step_budget_and_partial_send(void) {
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
+void test_read_poll_does_not_let_sendapp_starve_received_records(void) {
+  const int fd = connected_socket();
+  hal_tcp_socket_t tcp = hal_mock_bsd_socket_get_tcp_handle(fd);
+  TEST_ASSERT_NOT_NULL(tcp);
+  static const uint8_t incoming[] = {0x16u, 0x03u, 0x03u};
+  hal_mock_tcp_inject_rx(tcp, incoming, (uint16_t)sizeof(incoming));
+
+  fake_engine_t engine = {};
+  engine.state = 0x0004u | 0x0008u;
+  engine.length = sizeof(incoming);
+  const jh_bearssl_engine_ops_t ops = {fake_state,          fake_error,
+                                       fake_send_buffer,    fake_send_ack,
+                                       fake_receive_buffer, fake_receive_ack};
+  jh_bearssl_poll_result_t result = {};
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_bearssl_engine_poll_for_read_with_ops(
+                                    &engine, &ops, fd, 1u, &result));
+  TEST_ASSERT_EQUAL_UINT16(1u, result.steps);
+  TEST_ASSERT_EQUAL_UINT32(sizeof(incoming), engine.acknowledged);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(incoming, engine.bytes, sizeof(incoming));
+  TEST_ASSERT_EQUAL_INT(JH_BEARSSL_EVENT_APPLICATION_WRITABLE, result.event);
+  TEST_ASSERT_EQUAL_INT(0, close(fd));
+}
+
 void test_provider_initializes_real_br_sslio_without_arduino_wrapper(void) {
   const int fd = connected_socket();
   br_ssl_engine_context engine = {};
@@ -139,11 +163,45 @@ void test_provider_initializes_real_br_sslio_without_arduino_wrapper(void) {
   TEST_ASSERT_EQUAL_INT(0, close(fd));
 }
 
+void test_secure_client_requires_complete_anchor_time_and_entropy(void) {
+  static const uint8_t dn[] = {0x30u, 0x00u};
+  static const uint8_t modulus[] = {0x01u, 0x02u, 0x03u};
+  static const uint8_t exponent[] = {0x01u, 0x00u, 0x01u};
+  hal_tls_trust_anchor_t anchor = {};
+  anchor.subject_dn = dn;
+  anchor.subject_dn_length = sizeof(dn);
+  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
+  anchor.key.rsa.modulus = modulus;
+  anchor.key.rsa.modulus_length = sizeof(modulus);
+  anchor.key.rsa.exponent = exponent;
+  anchor.key.rsa.exponent_length = sizeof(exponent);
+  uint8_t entropy[JH_BEARSSL_ENTROPY_SIZE] = {};
+  memset(entropy, 0xA5, sizeof(entropy));
+  jh_bearssl_client_t provider = {};
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ECONFIG, jh_bearssl_client_init(&provider, &anchor, 1u, "example.com",
+                                          HAL_TLS_MIN_VALID_UNIX_TIME - 1u,
+                                          entropy, sizeof(entropy)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ECONFIG, jh_bearssl_client_init(&provider, &anchor, 1u, "example.com",
+                                          HAL_TLS_MIN_VALID_UNIX_TIME, entropy,
+                                          sizeof(entropy) - 1u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_bearssl_client_init(&provider, &anchor, 1u, "example.com",
+                                     1704067200u, entropy, sizeof(entropy)));
+  TEST_ASSERT_EQUAL_STRING("example.com",
+                           br_ssl_engine_get_server_name(&provider.client.eng));
+  TEST_ASSERT_EQUAL_UINT32(719528u + 19723u, provider.x509.days);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_blocking_callbacks_preserve_partial_io_and_cancellation);
   RUN_TEST(test_blocking_callback_timeout_is_finite_and_services_runtime);
   RUN_TEST(test_poll_engine_honours_step_budget_and_partial_send);
+  RUN_TEST(test_read_poll_does_not_let_sendapp_starve_received_records);
   RUN_TEST(test_provider_initializes_real_br_sslio_without_arduino_wrapper);
+  RUN_TEST(test_secure_client_requires_complete_anchor_time_and_entropy);
   return UNITY_END();
 }

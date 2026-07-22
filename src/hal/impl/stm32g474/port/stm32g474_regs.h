@@ -509,11 +509,13 @@
   JH_REG32(SYSCFG_BASE + 0x08u + ((uint32_t)(idx) * 4u))
 
 #define EXTI_BASE 0x40010400u
-#define EXTI_RTSR1 JH_REG32(EXTI_BASE + 0x00u)
-#define EXTI_FTSR1 JH_REG32(EXTI_BASE + 0x04u)
-#define EXTI_RPR1 JH_REG32(EXTI_BASE + 0x0Cu)
-#define EXTI_FPR1 JH_REG32(EXTI_BASE + 0x10u)
-#define EXTI_IMR1 JH_REG32(EXTI_BASE + 0x80u)
+/* STM32G4 uses a combined pending register at 0x14. Do not substitute the
+ * split rising/falling pending layout used by newer STM32 families. */
+#define EXTI_IMR1 JH_REG32(EXTI_BASE + 0x00u)
+#define EXTI_RTSR1 JH_REG32(EXTI_BASE + 0x08u)
+#define EXTI_FTSR1 JH_REG32(EXTI_BASE + 0x0Cu)
+#define EXTI_SWIER1 JH_REG32(EXTI_BASE + 0x10u)
+#define EXTI_PR1 JH_REG32(EXTI_BASE + 0x14u)
 
 /* ── Generic USART (v2) register accessors by peripheral base ─────────────
  * Used by the hal_uart backend for USART1 (PORT_1) and USART2 (PORT_2). The

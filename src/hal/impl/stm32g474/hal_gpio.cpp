@@ -59,10 +59,7 @@ static inline uint32_t exti_irqn_for_line(uint32_t line) {
   return (line <= 9u) ? EXTI9_5_IRQn : EXTI15_10_IRQn;
 }
 
-static void exti_clear_pending(uint32_t mask) {
-  EXTI_RPR1 = mask;
-  EXTI_FPR1 = mask;
-}
+static void exti_clear_pending(uint32_t mask) { EXTI_PR1 = mask; }
 
 static void exti_apply_priority(void) {
   const uint8_t hw_prio = nvic_prio_from_hal(s_gpio_irq_priority);
@@ -84,7 +81,7 @@ static void exti_enable_irq(uint32_t irqn) {
 
 static void exti_dispatch_line(uint32_t line) {
   const uint32_t mask = exti_line_mask(line);
-  if (((EXTI_RPR1 | EXTI_FPR1) & mask) == 0u) {
+  if ((EXTI_PR1 & mask) == 0u) {
     return;
   }
 

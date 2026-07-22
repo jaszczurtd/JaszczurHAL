@@ -275,6 +275,8 @@
        HAL_ENABLE_TLS           - portable TLS client with a private BearSSL
                                   provider (propagates: BSD sockets, TCP,
                                   WIFI).
+       HAL_ENABLE_HTTP_CLIENT   - portable HTTP/HTTPS client (propagates:
+                                  TLS, TCP, WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
        HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI, UDP).
        HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
@@ -511,6 +513,12 @@
 #endif
 #ifndef HAL_ENABLE_TCP
 #define HAL_ENABLE_TCP
+#endif
+#endif
+
+#ifdef HAL_ENABLE_HTTP_CLIENT
+#ifndef HAL_ENABLE_TLS
+#define HAL_ENABLE_TLS
 #endif
 #endif
 
@@ -1504,6 +1512,16 @@
 #define HAL_TLS_MAX_CLIENTS 2u
 #endif
 
+/** Maximum number of CA trust anchors retained by one TLS client. */
+#ifndef HAL_TLS_MAX_TRUST_ANCHORS
+#define HAL_TLS_MAX_TRUST_ANCHORS 4u
+#endif
+
+/** Reject clocks older than 2020-01-01 UTC. */
+#ifndef HAL_TLS_MIN_VALID_UNIX_TIME
+#define HAL_TLS_MIN_VALID_UNIX_TIME 1577836800ULL
+#endif
+
 /** Maximum DNS hostname length retained for SNI and identity verification. */
 #ifndef HAL_TLS_HOSTNAME_MAX_LENGTH
 #define HAL_TLS_HOSTNAME_MAX_LENGTH 253u
@@ -1525,6 +1543,9 @@
 #endif
 #if HAL_TLS_MAX_CLIENTS < 1u
 #error "HAL_TLS_MAX_CLIENTS must be at least 1"
+#endif
+#if HAL_TLS_MAX_TRUST_ANCHORS < 1u
+#error "HAL_TLS_MAX_TRUST_ANCHORS must be at least 1"
 #endif
 #if HAL_TLS_HOSTNAME_MAX_LENGTH < 1u
 #error "HAL_TLS_HOSTNAME_MAX_LENGTH must be at least 1"

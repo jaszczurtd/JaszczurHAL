@@ -5,6 +5,7 @@
 
 #if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
 
+#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../../impl/shared/hal_mutex_once.h"
 #include "../../../../impl/shared/network/jh_cyw43_scan.h"
 #include "../../../../impl/shared/network/jh_dns_request_state.h"
@@ -12,10 +13,6 @@
 #include "../../../../impl/shared/network/jh_network_service.h"
 #include "rp2040_cyw43_platform.h"
 #include "rp2040_cyw43_provider.h"
-
-extern "C" {
-#include <cyw43.h>
-}
 
 #include <lwip/dns.h>
 #include <lwip/icmp.h>

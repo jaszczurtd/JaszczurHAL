@@ -8,6 +8,9 @@
 #ifdef HAL_ENABLE_MQTT
 
 #include "../../../../hal_tcp.h"
+#ifdef HAL_ENABLE_TLS
+#include "../../../../hal_tls.h"
+#endif
 
 #include <Client.h>
 
@@ -32,13 +35,27 @@ public:
   uint8_t connected() override;
   operator bool() override;
 
+#ifdef HAL_ENABLE_TLS
+  hal_status_t configure_tls(const hal_tls_security_config_t *security);
+  void disable_tls();
+#endif
+
 private:
   int connect_endpoint(const hal_net_endpoint_t &endpoint);
   uint32_t timeout_ms();
+#ifdef HAL_ENABLE_TLS
+  int connect_tls(const char *host, uint16_t port);
+  hal_status_t wait_for_tls_connection();
+#endif
 
   hal_tcp_socket_t socket_;
   bool has_peeked_byte_;
   uint8_t peeked_byte_;
+#ifdef HAL_ENABLE_TLS
+  bool tls_enabled_;
+  hal_tls_security_config_t tls_security_;
+  hal_tls_client_t tls_client_;
+#endif
 };
 
 #endif /* HAL_ENABLE_MQTT */

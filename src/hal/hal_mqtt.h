@@ -16,6 +16,9 @@ extern "C" {
  */
 
 #include "hal_status.h"
+#ifdef HAL_ENABLE_TLS
+#include "hal_tls.h"
+#endif
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -36,6 +39,14 @@ hal_status_t hal_mqtt_set_callback_ex(hal_mqtt_message_callback_t callback,
 hal_status_t hal_mqtt_set_keepalive_ex(uint16_t keepalive_s);
 hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s);
 hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size);
+#ifdef HAL_ENABLE_TLS
+/** Enable MQTTS for subsequent connections. Referenced security buffers must
+ * remain valid until TLS is disabled or MQTT is disconnected. */
+hal_status_t
+hal_mqtt_configure_tls_ex(const hal_tls_security_config_t *security);
+/** Return subsequent connections to the existing plaintext MQTT transport. */
+hal_status_t hal_mqtt_disable_tls_ex(void);
+#endif
 hal_status_t hal_mqtt_connect_ex(const char *client_id);
 hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
                                       const char *pass);
