@@ -22,6 +22,7 @@
 include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
 include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
+include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
 
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
 set(JH_EXTRA_DEFINES "" CACHE STRING "Extra compile definitions for the firmware")
@@ -88,6 +89,16 @@ jh_add_stm32g474_firmware(firmware
     DEFINES ${_defines}
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
+
+jh_cmake_defines_contain(_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI ${_defines})
+if(_stm32_has_cyw43_gspi)
+    jh_cmake_defines_contain(_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP ${_defines})
+    if(_stm32_has_cyw43_lwip)
+        jh_target_enable_cyw43_driver(firmware LWIP)
+    else()
+        jh_target_enable_cyw43_driver(firmware)
+    endif()
+endif()
 
 if(NOT "${_stm32_main_stack_size}" STREQUAL "")
     target_link_options(firmware PRIVATE

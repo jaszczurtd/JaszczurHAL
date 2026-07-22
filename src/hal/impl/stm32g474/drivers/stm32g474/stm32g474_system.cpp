@@ -25,6 +25,8 @@ extern uint8_t __jh_stm32_ram_start;
 extern uint8_t __jh_stm32_ram_end;
 extern uint8_t __jh_stm32_stack_top;
 extern uint8_t __jh_stm32_stack_limit;
+extern "C" uint32_t stm32g474_runtime_heap_total_bytes(void);
+extern "C" uint32_t stm32g474_runtime_heap_free_bytes(void);
 
 #ifdef HAL_ENABLE_FREERTOS
 static void stm32g474_delay_cycles(uint32_t cycles) {
@@ -65,7 +67,9 @@ uint8_t g_device_uid[8] = {0x47, 0x34, 0x74, 0x00, 0x00, 0x00, 0x00, 0x01};
 
 bool g_watchdog_fed = false;
 bool g_watchdog_caused_reboot = false;
+#ifndef JH_STM32G474_HW
 uint32_t g_free_heap = 0u;
+#endif
 float g_chip_temp_c = 0.0f;
 
 #if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
@@ -212,7 +216,21 @@ bool stm32g474_system_in_isr(void) {
 #endif
 }
 
-uint32_t stm32g474_system_get_free_heap(void) { return g_free_heap; }
+uint32_t stm32g474_system_heap_total_bytes(void) {
+#ifdef JH_STM32G474_HW
+  return stm32g474_runtime_heap_total_bytes();
+#else
+  return 0u;
+#endif
+}
+
+uint32_t stm32g474_system_get_free_heap(void) {
+#ifdef JH_STM32G474_HW
+  return stm32g474_runtime_heap_free_bytes();
+#else
+  return g_free_heap;
+#endif
+}
 
 float stm32g474_system_read_chip_temp(void) { return g_chip_temp_c; }
 
