@@ -2,7 +2,6 @@
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_config.h"
 #include "../../hal_sync.h"
-#include <Arduino.h>
 #include <hardware/sync.h>
 #include <pico/platform.h>
 

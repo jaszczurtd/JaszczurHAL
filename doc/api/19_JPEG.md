@@ -66,10 +66,9 @@ For C or C++ helper functions such as `jpegDecodeRgb565()` and
 
 ## Embedded Profile
 
-By default JaszczurHAL keeps the array/memory decode path and leaves SD/LittleFS
-file backends disabled in `JPEGDecoder_User_Config.h`. This keeps
-`HAL_ENABLE_JPEG` from pulling filesystem libraries into builds that only need
-firmware-embedded assets, RAM buffers or Base64-decoded JPEG bytes.
+JaszczurHAL integrates the decoder as a target-neutral, memory-only utility.
+Decode JPEG bytes with `JpegDec.decodeArray()` (or the `jpeg*` helpers below);
+file-based decoding, if ever needed, must go through the JaszczurHAL filesystem.
 
 The bundled decoder is based on `picojpeg` and does not support progressive JPEG
 files. Use baseline JPEG assets.

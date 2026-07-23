@@ -7,12 +7,19 @@
 
 #include "rp2040_system.h"
 
-#include <Arduino.h>
+#include <hardware/adc.h>
 #include <hardware/watchdog.h>
+#include <malloc.h>
 #include <pico/bootrom.h>
 #include <pico/stdlib.h>
 #include <pico/unique_id.h>
+#include <stddef.h>
 #include <string.h>
+
+// Heap region bounds provided by the (arduino-pico / pico-sdk) linker script:
+// the allocator hands out memory between the end of .bss and the stack limit.
+extern "C" char __StackLimit;
+extern "C" char __bss_end__;
 
 namespace {
 
@@ -83,9 +90,34 @@ bool rp2040_system_watchdog_caused_reboot(void) {
 
 void rp2040_system_idle(void) { tight_loop_contents(); }
 
-uint32_t rp2040_system_get_free_heap(void) { return rp2040.getFreeHeap(); }
+uint32_t rp2040_system_get_free_heap(void) {
+  // total heap span (end of .bss to the stack limit, from the linker)
+  // minus the bytes currently allocated by the newlib allocator. This is
+  // an upper bound; fragmentation can still make a single large
+  // allocation fail even when this reports enough free bytes.
+  const ptrdiff_t total = &__StackLimit - &__bss_end__;
+  const ptrdiff_t used = (ptrdiff_t)mallinfo().uordblks;
+  if (total <= used) {
+    return 0u;
+  }
+  return (uint32_t)(total - used);
+}
 
-float rp2040_system_read_chip_temp(void) { return analogReadTemp(); }
+float rp2040_system_read_chip_temp(void) {
+  // On-die temperature sensor read straight over the native ADC.
+  // ADC_TEMPERATURE_CHANNEL_NUM is input 4 (RP2040 / RP2350 QFN-60) or input 8
+  // (RP2350 QFN-80). Not mutually locked with hal_adc pin reads, matching the
+  // prior behaviour where the temperature read and hal_adc used separate locks.
+  const float vref = 3.3f;
+  adc_init();
+  adc_set_temp_sensor_enabled(true);
+  sleep_ms(1); // let the sensor and input mux settle, else readings are erratic
+  adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
+  const uint16_t raw = adc_read();
+  adc_set_temp_sensor_enabled(false);
+  const float voltage = (float)raw * vref / 4096.0f;
+  return 27.0f - (voltage - 0.706f) / 0.001721f;
+}
 
 void rp2040_system_enter_bootloader(void) {
   reset_usb_boot(0, 0);

@@ -14,7 +14,7 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef is_set
-#define is_set(x, mask)      (((x) & (mask)) != 0u)
+#define is_set(x, mask) (((x) & (mask)) != 0u)
 #endif
 
 /** @def set_bit
@@ -22,7 +22,10 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef set_bit
-#define set_bit(var, mask)   do { (var) |=  (mask); } while (0)
+#define set_bit(var, mask)                                                     \
+  do {                                                                         \
+    (var) |= (mask);                                                           \
+  } while (0)
 #endif
 
 /** @def clr_bit
@@ -30,24 +33,23 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef clr_bit
-#define clr_bit(var, mask)   do { (var) &= ~(mask); } while (0)
+#define clr_bit(var, mask)                                                     \
+  do {                                                                         \
+    (var) &= ~(mask);                                                          \
+  } while (0)
 #endif
 
-/* In Arduino C++ builds include Arduino.h first so its native bitSet/bitClear/
- * bitRead macros are visible and we avoid redefinition warnings. In non-Arduino
- * or C-only builds, provide local fallbacks when the macros are still missing. */
-#if defined(ARDUINO) && defined(__cplusplus) && defined(__has_include)
-	#if __has_include(<Arduino.h>)
-		#include <Arduino.h>
-	#endif
-#endif
+/* Arduino-compatible bit aliases. */
 
 /** @def bitSet
  *  @brief Arduino-compatible alias: set single bit in-place.
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef bitSet
-#define bitSet(var, bit)     do { (var) |=  (1u << (bit)); } while (0)
+#define bitSet(var, bit)                                                       \
+  do {                                                                         \
+    (var) |= (1u << (bit));                                                    \
+  } while (0)
 #endif
 
 /** @def bitClear
@@ -55,7 +57,10 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef bitClear
-#define bitClear(var, bit)   do { (var) &= ~(1u << (bit)); } while (0)
+#define bitClear(var, bit)                                                     \
+  do {                                                                         \
+    (var) &= ~(1u << (bit));                                                   \
+  } while (0)
 #endif
 
 /** @def bitRead
@@ -63,7 +68,7 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef bitRead
-#define bitRead(var, bit)    (((var) >> (bit)) & 1u)
+#define bitRead(var, bit) (((var) >> (bit)) & 1u)
 #endif
 
 /** @def set_bit_v
@@ -71,7 +76,10 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef set_bit_v
-#define set_bit_v(reg, mask) do { (*(reg)) |=  (mask); } while (0)
+#define set_bit_v(reg, mask)                                                   \
+  do {                                                                         \
+    (*(reg)) |= (mask);                                                        \
+  } while (0)
 #endif
 
 /** @def clr_bit_v
@@ -79,5 +87,8 @@
  *  @note Macro arguments may be evaluated more than once.
  */
 #ifndef clr_bit_v
-#define clr_bit_v(reg, mask) do { (*(reg)) &= ~(mask); } while (0)
+#define clr_bit_v(reg, mask)                                                   \
+  do {                                                                         \
+    (*(reg)) &= ~(mask);                                                       \
+  } while (0)
 #endif

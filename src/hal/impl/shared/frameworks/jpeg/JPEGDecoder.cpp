@@ -96,16 +96,6 @@ uint8_t JPEGDecoder::pjpeg_need_bytes_callback(uint8_t *pBuf, uint8_t buf_size,
     }
   }
 
-#ifdef LOAD_FLASH_FS
-  if (jpg_source == JPEG_FS_FILE)
-    g_pInFileFs.read(pBuf, n); // else we are handling a file
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  if (jpg_source == JPEG_SD_FILE)
-    g_pInFileSd.read(pBuf, n); // else we are handling a file
-#endif
-
   *pBytes_actually_read = (uint8_t)(n);
   g_nInFileOfs += n;
   return 0;
@@ -302,130 +292,6 @@ int JPEGDecoder::readSwappedBytes(void) {
   return 1;
 }
 
-// Generic file call for SD or Little_FS, uses leading / to distinguish
-// Little_FS files
-int JPEGDecoder::decodeFile(const char *pFilename) {
-  (void)pFilename;
-
-#if defined(ARDUINO_ARCH_ESP8266) || defined(ESP32)
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  if (*pFilename == '/')
-#endif
-    return decodeFsFile(pFilename);
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  return decodeSdFile(pFilename);
-#endif
-
-  return -1;
-}
-
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-int JPEGDecoder::decodeFile(const String &pFilename) {
-
-#if defined(ARDUINO_ARCH_ESP8266) || defined(ESP32)
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  if (pFilename.charAt(0) == '/')
-#endif
-    return decodeFsFile(pFilename);
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  return decodeSdFile(pFilename);
-#endif
-
-  return -1;
-}
-#endif
-
-#ifdef LOAD_FLASH_FS
-
-// Call specific to Little_FS
-int JPEGDecoder::decodeFsFile(const char *pFilename) {
-
-  fs::File pInFile = LittleFS.open(pFilename, "r");
-
-  return decodeFsFile(pInFile);
-}
-
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-int JPEGDecoder::decodeFsFile(const String &pFilename) {
-
-  fs::File pInFile = LittleFS.open(pFilename, "r");
-
-  return decodeFsFile(pInFile);
-}
-#endif
-
-int JPEGDecoder::decodeFsFile(
-    fs::File jpgFile) { // This is for the Little_FS library
-
-  g_pInFileFs = jpgFile;
-
-  jpg_source = JPEG_FS_FILE; // Flag to indicate a Little_FS file
-
-  if (!g_pInFileFs) {
-#ifdef DEBUG
-    Serial.println("ERROR: Little_FS file not found!");
-#endif
-
-    return -1;
-  }
-
-  g_nInFileOfs = 0;
-
-  g_nInFileSize = g_pInFileFs.size();
-
-  return decodeCommon();
-}
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-
-// Call specific to SD filing system in case leading / is used
-int JPEGDecoder::decodeSdFile(const char *pFilename) {
-
-  File pInFile = SD.open(pFilename, FILE_READ);
-
-  return decodeSdFile(pInFile);
-}
-
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-int JPEGDecoder::decodeSdFile(const String &pFilename) {
-#if !defined(ARDUINO_ARCH_SAM)
-
-  File pInFile = SD.open(pFilename.c_str(), FILE_READ);
-
-  return decodeSdFile(pInFile);
-#else
-  return -1;
-#endif
-}
-#endif
-
-int JPEGDecoder::decodeSdFile(File jpgFile) { // This is for the SD library
-
-  g_pInFileSd = jpgFile;
-
-  jpg_source = JPEG_SD_FILE; // Flag to indicate a SD file
-
-  if (!g_pInFileSd) {
-#ifdef DEBUG
-    Serial.println("ERROR: SD file not found!");
-#endif
-
-    return -1;
-  }
-
-  g_nInFileOfs = 0;
-
-  g_nInFileSize = g_pInFileSd.size();
-
-  return decodeCommon();
-}
-#endif
-
 int JPEGDecoder::decodeArray(const uint8_t array[], uint32_t array_size) {
 
   jpg_source = JPEG_ARRAY; // We are not processing a file, use arrays
@@ -501,18 +367,6 @@ void JPEGDecoder::abort(void) {
   if (pImage)
     delete[] pImage;
   pImage = NULL;
-
-#ifdef LOAD_FLASH_FS
-  if (jpg_source == JPEG_FS_FILE)
-    if (g_pInFileFs)
-      g_pInFileFs.close();
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  if (jpg_source == JPEG_SD_FILE)
-    if (g_pInFileSd)
-      g_pInFileSd.close();
-#endif
 }
 
 #endif /* HAL_ENABLE_JPEG */
