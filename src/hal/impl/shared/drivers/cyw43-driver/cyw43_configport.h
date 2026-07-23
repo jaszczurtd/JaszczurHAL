@@ -8,7 +8,9 @@
 #define static_assert _Static_assert
 #endif
 
+#ifndef MIN
 #define MIN(a, b) ((a) <= (b) ? (a) : (b))
+#endif
 #define CYW43_ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 
 #define CYW43_USE_SPI (1)
@@ -20,10 +22,15 @@
 #define CYW43_NETUTILS (0)
 #define CYW43_USE_STATS (0)
 #define CYW43_USE_OTP_MAC (0)
+#define CYW43_GPIO (1)
 #define CYW43_ENABLE_BLUETOOTH (0)
 #define CYW43_RESOURCE_VERIFY_DOWNLOAD (1)
+#ifndef CYW43_WL_GPIO_COUNT
+#define CYW43_WL_GPIO_COUNT (3)
+#endif
+#define CYW43_NUM_GPIOS CYW43_WL_GPIO_COUNT
 
-/* Logical pin identities. The STM32 port owns the physical board profile. */
+/* Logical pin identities. The target transport owns the physical profile. */
 #define CYW43_PIN_WL_REG_ON (0)
 #define CYW43_PIN_WL_HOST_WAKE (1)
 
@@ -51,10 +58,21 @@
 #define CYW43_HAL_MAC_WLAN0 (0)
 
 /* Point 22 is intentionally silent; the harness reports bounded status. */
+#ifndef CYW43_PRINTF
 #define CYW43_PRINTF(...) ((void)0)
+#endif
+#ifndef CYW43_VDEBUG
 #define CYW43_VDEBUG(...) ((void)0)
+#endif
+#ifndef CYW43_DEBUG
 #define CYW43_DEBUG(...) ((void)0)
+#endif
+#ifndef CYW43_INFO
 #define CYW43_INFO(...) ((void)0)
+#endif
+#ifdef CYW43_WARN
+#undef CYW43_WARN
+#endif
 #define CYW43_WARN(...) ((void)0)
 
 #ifdef __cplusplus

@@ -1,8 +1,10 @@
+#include "../../../../hal_config.h"
 #include "../../../../hal_target.h"
 
 #include "jh_cyw43_driver.h"
 
-#if HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI)
+#if (HAL_TARGET_IS_RP2040 && defined(HAL_CYW43_BUS_PICO_PIO)) ||               \
+    (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))
 
 #if defined(HAL_CYW43_STACK_LWIP)
 #include "jh_cyw43_lwip.h"
@@ -84,7 +86,8 @@ hal_status_t start_low_level(jh_cyw43_driver_result_t *result) {
     return wake_status;
   }
   result->stage = JH_CYW43_DRIVER_STAGE_BUS;
-  cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_STA, true, CYW43_COUNTRY_POLAND);
+  cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_STA, true,
+                    (uint32_t)HAL_CYW43_COUNTRY_CODE);
   const int error = cyw43_poll == nullptr ? -CYW43_EIO : 0;
 #else
   cyw43_ll_init(low_level(), nullptr);

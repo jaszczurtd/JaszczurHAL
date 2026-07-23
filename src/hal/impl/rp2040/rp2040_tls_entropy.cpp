@@ -11,11 +11,9 @@
 
 #include "../../hal_status.h"
 
-/* Arduino-Pico's pinned BearSSL archive expects this carrier ABI hook, but the
- * ordinary Pico variant does not provide WiFiClientSecureBearSSL.cpp. Keep the
- * definition weak so a carrier-owned implementation wins on Pico W. The Pico
- * SDK implementation uses the platform random source appropriate to RP2040 or
- * RP2350; hal_tls additionally injects caller-validated entropy explicitly. */
+/* The RP2040 BearSSL ABI expects this random hook. The Pico SDK implementation
+ * uses the platform random source appropriate to RP2040 or RP2350; hal_tls
+ * additionally injects caller-validated entropy explicitly. */
 extern "C" __attribute__((weak)) uint32_t __picoRand(void) {
   return get_rand_32();
 }

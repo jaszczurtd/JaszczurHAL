@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-function(jh_add_bearssl_source_library TARGET_NAME)
+function(jh_bearssl_source_manifest OUT_SOURCES OUT_INCLUDES)
     set(_jh_bearssl_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/BearSSL")
     set(_jh_bearssl_vendor "${_jh_bearssl_root}/vendor")
@@ -15,6 +15,19 @@ function(jh_add_bearssl_source_library TARGET_NAME)
         message(FATAL_ERROR "Pinned BearSSL source set is empty")
     endif()
 
+    set(${OUT_SOURCES} ${_jh_bearssl_upstream_sources} PARENT_SCOPE)
+    set(${OUT_INCLUDES}
+        "${_jh_bearssl_vendor}/inc"
+        "${_jh_bearssl_vendor}/src"
+        PARENT_SCOPE)
+endfunction()
+
+function(jh_add_bearssl_source_library TARGET_NAME)
+    jh_bearssl_source_manifest(
+        _jh_bearssl_upstream_sources
+        _jh_bearssl_include_dirs)
+    set(_jh_bearssl_vendor
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/BearSSL/vendor")
     set(_jh_bearssl_generated_sources)
     foreach(_jh_source IN LISTS _jh_bearssl_upstream_sources)
         file(RELATIVE_PATH _jh_relative "${_jh_bearssl_vendor}/src" "${_jh_source}")
@@ -28,15 +41,12 @@ function(jh_add_bearssl_source_library TARGET_NAME)
     endforeach()
 
     add_library(${TARGET_NAME} STATIC ${_jh_bearssl_generated_sources})
-    target_include_directories(${TARGET_NAME} PUBLIC
-        "${_jh_bearssl_vendor}/inc")
     target_include_directories(${TARGET_NAME} PRIVATE
-        "${_jh_bearssl_vendor}/src")
+        ${_jh_bearssl_include_dirs})
     set_target_properties(${TARGET_NAME} PROPERTIES
         C_STANDARD 11
         C_STANDARD_REQUIRED ON)
     target_compile_options(${TARGET_NAME} PRIVATE
         -ffunction-sections
-        -fdata-sections
-        -w)
+        -fdata-sections)
 endfunction()

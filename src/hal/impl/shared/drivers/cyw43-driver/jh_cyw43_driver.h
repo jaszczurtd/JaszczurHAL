@@ -15,8 +15,17 @@
 extern "C" {
 #endif
 
-#if defined(HAL_CYW43_BUS_STM32_GSPI)
+#if defined(HAL_CYW43_BUS_PICO_PIO) || defined(HAL_CYW43_BUS_STM32_GSPI)
+#ifndef CYW43_CONFIG_FILE
+#define CYW43_CONFIG_FILE "../../cyw43_configport.h"
+#define JH_CYW43_DRIVER_UNDEF_CONFIG_FILE
+#endif
 #include "vendor/src/cyw43.h"
+#include "vendor/src/cyw43_country.h"
+#ifdef JH_CYW43_DRIVER_UNDEF_CONFIG_FILE
+#undef JH_CYW43_DRIVER_UNDEF_CONFIG_FILE
+#undef CYW43_CONFIG_FILE
+#endif
 #endif
 
 typedef enum {
@@ -50,7 +59,7 @@ hal_status_t jh_cyw43_driver_restart(jh_cyw43_driver_result_t *result);
 bool jh_cyw43_driver_is_ready(void);
 const char *jh_cyw43_driver_stage_string(jh_cyw43_driver_stage_t stage);
 
-#if defined(HAL_CYW43_BUS_STM32_GSPI)
+#if defined(HAL_CYW43_BUS_PICO_PIO) || defined(HAL_CYW43_BUS_STM32_GSPI)
 /** Internal bridge for the following lwIP integration stage. */
 cyw43_ll_t *jh_cyw43_driver_low_level(void);
 jh_cyw43_gspi_transport_t *jh_cyw43_driver_transport_internal(void);

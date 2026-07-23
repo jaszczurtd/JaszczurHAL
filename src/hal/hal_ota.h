@@ -10,30 +10,33 @@ extern "C" {
 
 /**
  * @file hal_ota.h
- * @brief Thread-safe ArduinoOTA wrapper with callback dispatch from hal_ota_handle().
+ * @brief Thread-safe OTA service with HAL socket transport and callback
+ * dispatch from hal_ota_handle().
  */
 
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef enum {
-    HAL_OTA_COMMAND_SKETCH = 0,
-    HAL_OTA_COMMAND_FILESYSTEM = 1,
-    HAL_OTA_COMMAND_UNKNOWN = 255
+  HAL_OTA_COMMAND_SKETCH = 0,
+  HAL_OTA_COMMAND_FILESYSTEM = 1,
+  HAL_OTA_COMMAND_UNKNOWN = 255
 } hal_ota_command_t;
 
 typedef enum {
-    HAL_OTA_ERROR_AUTH = 1,
-    HAL_OTA_ERROR_BEGIN = 2,
-    HAL_OTA_ERROR_CONNECT = 3,
-    HAL_OTA_ERROR_RECEIVE = 4,
-    HAL_OTA_ERROR_END = 5,
-    HAL_OTA_ERROR_UNKNOWN = 255
+  HAL_OTA_ERROR_AUTH = 1,
+  HAL_OTA_ERROR_BEGIN = 2,
+  HAL_OTA_ERROR_CONNECT = 3,
+  HAL_OTA_ERROR_RECEIVE = 4,
+  HAL_OTA_ERROR_END = 5,
+  HAL_OTA_ERROR_UNKNOWN = 255
 } hal_ota_error_t;
 
-typedef void (*hal_ota_on_start_callback_t)(hal_ota_command_t command, void *user);
+typedef void (*hal_ota_on_start_callback_t)(hal_ota_command_t command,
+                                            void *user);
 typedef void (*hal_ota_on_end_callback_t)(void *user);
-typedef void (*hal_ota_on_progress_callback_t)(uint32_t progress, uint32_t total, void *user);
+typedef void (*hal_ota_on_progress_callback_t)(uint32_t progress,
+                                               uint32_t total, void *user);
 typedef void (*hal_ota_on_error_callback_t)(hal_ota_error_t error, void *user);
 
 /**

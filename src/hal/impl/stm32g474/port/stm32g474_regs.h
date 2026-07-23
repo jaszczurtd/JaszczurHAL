@@ -596,11 +596,7 @@
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
 #define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
-#define NVIC_IPR8(irqn)                                                        \
-  (*(volatile uint8_t                                                          \
-         *)(0xE000E400u +                                                      \
-            (uint32_t)(irqn))) /* NOLINT(performance-no-int-to-ptr)            \
-                                */
+#define NVIC_IPR8(irqn) JH_REG8(0xE000E400u + (uint32_t)(irqn))
 
 #define TIM6_DACUNDER_IRQn 54u
 #define DMA1_Channel1_IRQn 11u

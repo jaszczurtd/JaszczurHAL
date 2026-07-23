@@ -4,7 +4,8 @@
 
 #include <string.h>
 
-#if HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI) &&            \
+#if ((HAL_TARGET_IS_RP2040 && defined(HAL_CYW43_BUS_PICO_PIO)) ||              \
+     (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))) &&        \
     defined(HAL_CYW43_STACK_LWIP)
 
 #include "../../network/jh_icmp_echo.h"
@@ -167,12 +168,16 @@ extern "C" hal_status_t jh_cyw43_lwip_service(void) {
   }
   s_in_service = true;
   jh_cyw43_gspi_transport_t *transport = jh_cyw43_driver_transport_internal();
+  hal_status_t status = jh_cyw43_gspi_host_wake_refresh(transport);
+  if (status != HAL_OK) {
+    s_in_service = false;
+    return status;
+  }
   const bool host_wake = jh_cyw43_gspi_host_wake_pending(transport);
   if (cyw43_poll != nullptr) {
     cyw43_poll();
   }
   sys_check_timeouts();
-  hal_status_t status = HAL_OK;
   if (host_wake) {
     ++s_host_wake_services;
     status = jh_cyw43_gspi_host_wake_clear(transport);
@@ -372,18 +377,36 @@ extern "C" hal_status_t jh_cyw43_lwip_leave(void) {
   const int status = cyw43_wifi_leave(&cyw43_state, CYW43_ITF_STA);
   s_last_cyw43_error = status;
   if (status != 0) {
-    return status_from_cyw43(status);
-  }
-  const uint32_t started = hal_millis();
-  while (!deadline_expired(started, 2000u)) {
-    (void)jh_cyw43_lwip_service();
-    if (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) ==
-        CYW43_LINK_DOWN) {
-      return HAL_OK;
+    if (status != -CYW43_ETIMEDOUT) {
+      return status_from_cyw43(status);
     }
-    hal_delay_ms(1u);
+    /*
+     * A busy data path can delay the control response beyond the driver's
+     * ioctl timeout even though firmware accepted the disassociation.  Only
+     * recover that false timeout after the station demonstrably ceases to
+     * have a usable TCP/IP link.
+     */
+    const uint32_t started = hal_millis();
+    while (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) ==
+               CYW43_LINK_UP &&
+           !deadline_expired(started, 1000u)) {
+      (void)jh_cyw43_lwip_service();
+      hal_delay_ms(1u);
+    }
+    if (cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA) == CYW43_LINK_UP) {
+      return HAL_ETIMEOUT;
+    }
   }
-  return HAL_ETIMEOUT;
+  /*
+   * cyw43_wifi_leave() is a synchronous control ioctl.  CYW43439 does not
+   * guarantee a later DISASSOC event for a host-requested leave, so waiting
+   * for that event can report a false timeout while the station already has
+   * no usable link.  Mirror the accepted command in the local driver and
+   * lwIP state; a later link-down/DISASSOC event is then idempotent.
+   */
+  cyw43_state.wifi_join_state = 0u;
+  netif_set_link_down(&cyw43_state.netif[CYW43_ITF_STA]);
+  return HAL_OK;
 }
 
 extern "C" hal_status_t
@@ -433,7 +456,7 @@ jh_cyw43_lwip_get_snapshot(jh_cyw43_lwip_snapshot_t *out_snapshot) {
 #else
 
 extern "C" uint32_t jh_lwip_port_rand(void) { return 1u; }
-#if HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_RP2040
 extern "C" uint32_t sys_now(void) { return 0u; }
 #endif
 extern "C" __attribute__((noreturn)) void

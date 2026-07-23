@@ -14,6 +14,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
+include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
+include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
@@ -63,6 +65,24 @@ function(_jh_extract_define_value OUT_VAR KEY)
     set(${OUT_VAR} "${_value}" PARENT_SCOPE)
 endfunction()
 
+function(_jh_rp2040_project_define_enabled OUT_VAR KEY)
+    set(_enabled FALSE)
+    foreach(_def IN LISTS ARGN)
+        if("${_def}" STREQUAL "${KEY}" OR
+           "${_def}" MATCHES "^${KEY}=([1-9][0-9]*|true|TRUE|on|ON)$")
+            set(_enabled TRUE)
+        endif()
+    endforeach()
+    if(EXISTS "${JH_PROJECT_DIR}/hal_project_config.h")
+        file(STRINGS "${JH_PROJECT_DIR}/hal_project_config.h" _matching_lines
+            REGEX "^[ \t]*#[ \t]*define[ \t]+${KEY}([ \t]+.*)?$")
+        if(_matching_lines)
+            set(_enabled TRUE)
+        endif()
+    endif()
+    set(${OUT_VAR} ${_enabled} PARENT_SCOPE)
+endfunction()
+
 _jh_rp2040_apply_freertos(ARDUINO_FQBN "${ARDUINO_FQBN}")
 
 set(APP_NAME "${JH_MODULE_NAME}")
@@ -84,11 +104,19 @@ file(WRITE "${SKETCH_DIR}/${APP_NAME}.ino"
 )
 
 jh_resolve_project_sources(_project_files)
+set(_jh_project_include_dirs "${JH_PROJECT_DIR}")
 foreach(_src IN LISTS _project_files)
+    get_filename_component(_src_dir "${_src}" DIRECTORY)
+    list(APPEND _jh_project_include_dirs "${_src_dir}")
     get_filename_component(_file "${_src}" NAME)
     set(_dst "${SKETCH_DIR}/${_file}")
     file(REMOVE "${_dst}")
     file(CREATE_LINK "${_src}" "${_dst}" SYMBOLIC COPY_ON_ERROR)
+endforeach()
+list(REMOVE_DUPLICATES _jh_project_include_dirs)
+set(_jh_project_include_flags "-I${SKETCH_DIR}")
+foreach(_include_dir IN LISTS _jh_project_include_dirs)
+    string(APPEND _jh_project_include_flags " -I${_include_dir}")
 endforeach()
 
 # Fiesta-convention projects (firmware_entry.h present): generate the canonical
@@ -110,6 +138,61 @@ _jh_extract_define_value(_rp2040_core1_stack_size HAL_RP2040_CORE1_STACK_SIZE ${
 foreach(_def IN LISTS _extra_defines)
     string(APPEND _entry_defs " -D${_def}")
 endforeach()
+
+list(FIND _extra_defines HAL_CYW43_STACK_LWIP _jh_cyw43_lwip_index)
+set(_jh_owned_network FALSE)
+if(NOT _jh_cyw43_lwip_index EQUAL -1)
+    set(_jh_owned_network TRUE)
+    jh_cyw43_source_manifest(_jh_network_sources _jh_network_includes LWIP)
+    set(_jh_network_source_dir "${SKETCH_DIR}/src/jh_owned_network")
+    file(MAKE_DIRECTORY "${_jh_network_source_dir}")
+    set(_jh_network_source_index 0)
+    foreach(_jh_source IN LISTS _jh_network_sources)
+        get_filename_component(_jh_name "${_jh_source}" NAME)
+        string(REGEX REPLACE "\\.upstream$" "" _jh_name "${_jh_name}")
+        set(_jh_generated
+            "${_jh_network_source_dir}/${_jh_network_source_index}_${_jh_name}")
+        if("${_jh_source}" MATCHES "/cyw43-driver/")
+            set(_jh_cyw43_root
+                "${JH_ROOT}/src/hal/impl/shared/drivers/cyw43-driver")
+            file(WRITE "${_jh_generated}"
+                "#define CYW43_CONFIG_FILE \"${_jh_cyw43_root}/cyw43_configport.h\"\n"
+                "#define CYW43_CHIPSET_FIRMWARE_INCLUDE_FILE \"${_jh_cyw43_root}/vendor/firmware/w43439A0_7_95_49_00_combined.h\"\n"
+                "#define CYW43_WIFI_NVRAM_INCLUDE_FILE \"${_jh_cyw43_root}/vendor/firmware/wifi_nvram_43439.h\"\n"
+                "#include \"${_jh_source}\"\n")
+        else()
+            configure_file("${_jh_source}" "${_jh_generated}" COPYONLY)
+        endif()
+        math(EXPR _jh_network_source_index "${_jh_network_source_index} + 1")
+    endforeach()
+    foreach(_jh_include IN LISTS _jh_network_includes)
+        if(NOT "${_jh_include}" MATCHES "/cyw43-driver")
+            string(APPEND _jh_project_include_flags " -I${_jh_include}")
+        endif()
+    endforeach()
+endif()
+_jh_rp2040_project_define_enabled(
+    _jh_owned_tls
+    HAL_ENABLE_TLS
+    ${_extra_defines})
+if(_jh_owned_tls)
+    jh_bearssl_source_manifest(_jh_bearssl_sources _jh_bearssl_includes)
+    set(_jh_bearssl_source_dir "${SKETCH_DIR}/src/jh_owned_bearssl")
+    file(MAKE_DIRECTORY "${_jh_bearssl_source_dir}")
+    set(_jh_bearssl_source_index 0)
+    foreach(_jh_source IN LISTS _jh_bearssl_sources)
+        get_filename_component(_jh_name "${_jh_source}" NAME)
+        string(REGEX REPLACE "\\.upstream$" "" _jh_name "${_jh_name}")
+        set(_jh_generated
+            "${_jh_bearssl_source_dir}/${_jh_bearssl_source_index}_${_jh_name}")
+        file(WRITE "${_jh_generated}" "#include \"${_jh_source}\"\n")
+        math(EXPR _jh_bearssl_source_index
+            "${_jh_bearssl_source_index} + 1")
+    endforeach()
+    foreach(_jh_include IN LISTS _jh_bearssl_includes)
+        string(APPEND _jh_project_include_flags " -I${_jh_include}")
+    endforeach()
+endif()
 if(NOT "${_rp2040_stack_size}" STREQUAL "")
     string(APPEND _entry_defs " -DPICO_STACK_SIZE=${_rp2040_stack_size}")
 endif()
@@ -125,10 +208,28 @@ set(ARDUINO_COMMON_ARGS
     --fqbn "${ARDUINO_FQBN}"
     --build-path "${ARDUINO_BUILD_DIR}"
     --library "${JH_ROOT}"
-    --build-property "compiler.cpp.extra_flags=-I${SKETCH_DIR} -I${JH_PROJECT_DIR}${_entry_defs}"
-    --build-property "compiler.c.extra_flags=-I${SKETCH_DIR} -I${JH_PROJECT_DIR}${_entry_defs}"
+    --build-property "compiler.cpp.extra_flags=${_jh_project_include_flags}${_entry_defs}"
+    --build-property "compiler.c.extra_flags=${_jh_project_include_flags}${_entry_defs}"
     --warnings all
 )
+if(_jh_owned_network)
+    # Arduino-Pico's link recipe always emits the quoted build.libpicow slot.
+    # Point that mandatory slot at the already-required base runtime archive;
+    # an empty value would turn the containing directory into a linker input.
+    list(APPEND ARDUINO_COMMON_ARGS
+        --build-property
+        "compiler.wrap=\"@{runtime.platform.path}/lib/{build.chip}/platform_wrap.txt\" \"@${JH_ROOT}/cmake/rp2040_core_wrap_non_network.txt\""
+        --build-property "compiler.netdefines="
+        --build-property "build.libpicow=libpico.a"
+        --build-property "build.libpicowdefs="
+        --build-property "build.wificc="
+    )
+endif()
+if(_jh_owned_tls)
+    list(APPEND ARDUINO_COMMON_ARGS
+        --build-property "compiler.libbearssl="
+    )
+endif()
 if(JH_RP2040_EXTRA_LINK_FLAGS)
     list(APPEND ARDUINO_COMMON_ARGS
         --build-property

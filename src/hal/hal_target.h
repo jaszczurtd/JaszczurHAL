@@ -101,7 +101,9 @@ hal_project_config.h (or via a -D flag)."
  * Arduino-Pico's RP2350 sanity check. Use local board/MCU knowledge instead. */
 #ifndef HAL_LED_BUILTIN
 #if HAL_TARGET_IS_RP2040
-#if defined(PIN_LED)
+#if defined(HAL_CYW43_PROFILE_PICOW)
+#define HAL_LED_BUILTIN 64u
+#elif defined(PIN_LED)
 #define HAL_LED_BUILTIN PIN_LED
 #elif defined(ARDUINO_RASPBERRY_PI_PICO_W) ||                                  \
     defined(ARDUINO_RASPBERRY_PI_PICO_2W)

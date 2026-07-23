@@ -368,6 +368,24 @@ jh_cyw43_gspi_host_wake_pending(const jh_cyw43_gspi_transport_t *transport) {
 }
 
 extern "C" hal_status_t
+jh_cyw43_gspi_host_wake_refresh(jh_cyw43_gspi_transport_t *transport) {
+  if (transport == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!transport->initialized) {
+    return HAL_EUNINIT;
+  }
+  if (!transport->host_wake_attached) {
+    return HAL_ESTATE;
+  }
+  if (transport->host_wake_pending ||
+      transport->host_wake_suspend_depth != 0u) {
+    return HAL_OK;
+  }
+  return rearm_host_wake(transport);
+}
+
+extern "C" hal_status_t
 jh_cyw43_gspi_host_wake_clear(jh_cyw43_gspi_transport_t *transport) {
   if (transport == nullptr) {
     return HAL_EINVAL;

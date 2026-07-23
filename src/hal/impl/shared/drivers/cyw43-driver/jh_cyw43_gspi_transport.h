@@ -97,6 +97,8 @@ jh_cyw43_gspi_host_wake_resume(jh_cyw43_gspi_transport_t *transport);
 bool jh_cyw43_gspi_host_wake_pending(
     const jh_cyw43_gspi_transport_t *transport);
 hal_status_t
+jh_cyw43_gspi_host_wake_refresh(jh_cyw43_gspi_transport_t *transport);
+hal_status_t
 jh_cyw43_gspi_host_wake_clear(jh_cyw43_gspi_transport_t *transport);
 
 hal_status_t jh_cyw43_gspi_note_recovery(jh_cyw43_gspi_transport_t *transport);

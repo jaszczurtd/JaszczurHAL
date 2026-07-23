@@ -4,18 +4,29 @@
 
 #ifdef HAL_ENABLE_OTA
 
+#include "../../hal_crypto.h"
+#include "../../hal_net.h"
 #include "../../hal_ota.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
+#include "../../hal_system.h"
+#include "../../hal_tcp.h"
+#include "../../hal_udp.h"
 #include "../shared/hal_mutex_once.h"
+#include "../shared/network/ota/jh_ota_protocol.h"
 
-#include <ArduinoOTA.h>
+#include <Updater.h>
+#include <hardware/watchdog.h>
 #include <stdio.h>
 #include <string.h>
 
 #define HAL_OTA_TEXT_BUF_SIZE 96u
 #define HAL_OTA_EVENT_QUEUE_SIZE 12u
+#define HAL_OTA_UDP_BUFFER_SIZE 192u
+#define HAL_OTA_TCP_BUFFER_SIZE 1024u
 #define HAL_OTA_DEFAULT_PORT 8266u
+#define HAL_OTA_CONNECT_TIMEOUT_MS 5000u
+#define HAL_OTA_RECEIVE_TIMEOUT_MS 5000u
 
 typedef enum {
   HAL_OTA_EVENT_NONE = 0,
@@ -24,6 +35,13 @@ typedef enum {
   HAL_OTA_EVENT_PROGRESS,
   HAL_OTA_EVENT_ERROR
 } hal_ota_event_type_t;
+
+typedef enum {
+  HAL_OTA_STATE_IDLE = 0,
+  HAL_OTA_STATE_WAIT_AUTH,
+  HAL_OTA_STATE_BEGIN_TRANSFER,
+  HAL_OTA_STATE_RECEIVE
+} hal_ota_state_t;
 
 typedef struct {
   hal_ota_event_type_t type;
@@ -36,12 +54,21 @@ typedef struct {
 static struct {
   hal_mutex_t mutex;
   bool started;
+  bool password_set;
+  bool reboot_pending;
+  hal_ota_state_t state;
 
   uint16_t port;
-  bool password_set;
-
   char hostname[HAL_OTA_TEXT_BUF_SIZE];
-  char password[HAL_OTA_TEXT_BUF_SIZE];
+  char password_md5[JH_OTA_MD5_HEX_BUFFER_SIZE];
+  char nonce[JH_OTA_MD5_HEX_BUFFER_SIZE];
+
+  hal_udp_socket_t udp;
+  hal_tcp_socket_t tcp;
+  hal_net_endpoint_t remote_udp;
+  jh_ota_invitation_t invitation;
+  uint32_t received;
+  uint32_t last_activity_ms;
 
   hal_ota_on_start_callback_t on_start;
   void *on_start_user;
@@ -103,210 +130,275 @@ static bool queue_pop_no_lock(hal_ota_event_t *event_out) {
   return true;
 }
 
-static hal_ota_command_t map_arduino_command(void) {
-  const int command = (int)ArduinoOTA.getCommand();
-#ifdef U_FLASH
-  if (command == (int)U_FLASH) {
-    return HAL_OTA_COMMAND_SKETCH;
-  }
-#endif
-#ifdef U_FS
-  if (command == (int)U_FS) {
-    return HAL_OTA_COMMAND_FILESYSTEM;
-  }
-#endif
-  return HAL_OTA_COMMAND_UNKNOWN;
-}
-
-static hal_ota_error_t map_arduino_error(ota_error_t error) {
-  switch (error) {
-  case OTA_AUTH_ERROR:
-    return HAL_OTA_ERROR_AUTH;
-  case OTA_BEGIN_ERROR:
-    return HAL_OTA_ERROR_BEGIN;
-  case OTA_CONNECT_ERROR:
-    return HAL_OTA_ERROR_CONNECT;
-  case OTA_RECEIVE_ERROR:
-    return HAL_OTA_ERROR_RECEIVE;
-  case OTA_END_ERROR:
-    return HAL_OTA_ERROR_END;
-  default:
-    return HAL_OTA_ERROR_UNKNOWN;
-  }
-}
-
-static void ota_internal_on_start(void) {
-  hal_ota_event_t event{};
-  event.type = HAL_OTA_EVENT_START;
-  event.command = map_arduino_command();
-  queue_push_no_lock(&event);
-}
-
-static void ota_internal_on_end(void) {
-  hal_ota_event_t event{};
-  event.type = HAL_OTA_EVENT_END;
-  queue_push_no_lock(&event);
-}
-
-static void ota_internal_on_progress(unsigned int progress,
-                                     unsigned int total) {
-  hal_ota_event_t event{};
-  event.type = HAL_OTA_EVENT_PROGRESS;
-  event.progress = (uint32_t)progress;
-  event.total = (uint32_t)total;
-  queue_push_no_lock(&event);
-}
-
-static void ota_internal_on_error(ota_error_t error) {
+static void queue_error_no_lock(hal_ota_error_t error) {
   hal_ota_event_t event{};
   event.type = HAL_OTA_EVENT_ERROR;
-  event.error = map_arduino_error(error);
+  event.error = error;
   queue_push_no_lock(&event);
 }
 
-bool hal_ota_set_port(uint16_t port) {
-  if (port == 0u) {
-    hal_derr("hal_ota_set_port: port must be > 0");
+static bool udp_send_no_lock(const char *text) {
+  if (s_ota.udp == nullptr || text == nullptr) {
+    return false;
+  }
+  const size_t length = strlen(text);
+  size_t sent = 0u;
+  return hal_udp_socket_sendto_ex(s_ota.udp, text, length, &s_ota.remote_udp,
+                                  &sent) == HAL_OK &&
+         sent == length;
+}
+
+static bool tcp_send_no_lock(const char *text) {
+  if (s_ota.tcp == nullptr || text == nullptr) {
+    return false;
+  }
+  const size_t length = strlen(text);
+  size_t offset = 0u;
+  while (offset < length) {
+    size_t sent = 0u;
+    if (hal_tcp_socket_send_ex(s_ota.tcp, text + offset, length - offset,
+                               &sent) != HAL_OK ||
+        sent == 0u) {
+      return false;
+    }
+    offset += sent;
+  }
+  return true;
+}
+
+static void transfer_reset_no_lock(void) {
+  if (s_ota.tcp != nullptr) {
+    hal_tcp_socket_close(s_ota.tcp);
+    s_ota.tcp = nullptr;
+  }
+  s_ota.received = 0u;
+  memset(&s_ota.invitation, 0, sizeof(s_ota.invitation));
+  memset(&s_ota.remote_udp, 0, sizeof(s_ota.remote_udp));
+  s_ota.state = HAL_OTA_STATE_IDLE;
+}
+
+static void transfer_fail_no_lock(hal_ota_error_t error,
+                                  const char *udp_message) {
+  if (Update.isRunning()) {
+    (void)Update.end(false);
+  }
+  if (udp_message != nullptr) {
+    (void)udp_send_no_lock(udp_message);
+  }
+  queue_error_no_lock(error);
+  transfer_reset_no_lock();
+}
+
+static bool make_nonce_no_lock(void) {
+  char entropy[48]{};
+  const int length =
+      snprintf(entropy, sizeof(entropy), "%lu:%lu", (unsigned long)hal_millis(),
+               (unsigned long)hal_micros());
+  return length > 0 && (size_t)length < sizeof(entropy) &&
+         hal_md5_hex(reinterpret_cast<const uint8_t *>(entropy), (size_t)length,
+                     s_ota.nonce, sizeof(s_ota.nonce));
+}
+
+static bool authenticate_no_lock(const jh_ota_auth_response_t *response) {
+  if (response == nullptr) {
+    return false;
+  }
+  char challenge[3u * JH_OTA_MD5_HEX_BUFFER_SIZE]{};
+  const int length =
+      snprintf(challenge, sizeof(challenge), "%s:%s:%s", s_ota.password_md5,
+               s_ota.nonce, response->client_nonce);
+  if (length <= 0 || (size_t)length >= sizeof(challenge)) {
     return false;
   }
 
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  s_ota.port = port;
-  ArduinoOTA.setPort(port);
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_set_hostname(const char *hostname) {
-  if (!validate_non_empty(hostname, "hal_ota_set_hostname", "hostname")) {
+  char expected[JH_OTA_MD5_HEX_BUFFER_SIZE]{};
+  if (!hal_md5_hex(reinterpret_cast<const uint8_t *>(challenge), (size_t)length,
+                   expected, sizeof(expected))) {
     return false;
   }
-
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  snprintf(s_ota.hostname, sizeof(s_ota.hostname), "%s", hostname);
-  ArduinoOTA.setHostname(s_ota.hostname);
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
+  return jh_ota_hex_equal(expected, response->response);
 }
 
-bool hal_ota_set_password(const char *password) {
-  if (!password) {
-    hal_derr("hal_ota_set_password: password pointer is NULL");
-    return false;
-  }
-
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  snprintf(s_ota.password, sizeof(s_ota.password), "%s", password);
-  s_ota.password_set = true;
-  ArduinoOTA.setPassword(s_ota.password);
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user) {
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  s_ota.on_start = callback;
-  s_ota.on_start_user = user;
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_on_end(hal_ota_on_end_callback_t callback, void *user) {
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  s_ota.on_end = callback;
-  s_ota.on_end_user = user;
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user) {
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  s_ota.on_progress = callback;
-  s_ota.on_progress_user = user;
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user) {
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  s_ota.on_error = callback;
-  s_ota.on_error_user = user;
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-bool hal_ota_begin(void) {
-  ota_ensure_mutex();
-  hal_mutex_lock(s_ota.mutex);
-
-  if (s_ota.port == 0u) {
-    s_ota.port = HAL_OTA_DEFAULT_PORT;
-  }
-
-  ArduinoOTA.setPort(s_ota.port);
-  if (s_ota.hostname[0] != '\0') {
-    ArduinoOTA.setHostname(s_ota.hostname);
-  }
-  if (s_ota.password_set) {
-    ArduinoOTA.setPassword(s_ota.password);
-  }
-
-  queue_clear_no_lock();
-  ArduinoOTA.onStart(ota_internal_on_start);
-  ArduinoOTA.onEnd(ota_internal_on_end);
-  ArduinoOTA.onProgress(ota_internal_on_progress);
-  ArduinoOTA.onError(ota_internal_on_error);
-  ArduinoOTA.begin();
-
-  s_ota.started = true;
-
-  hal_mutex_unlock(s_ota.mutex);
-  return true;
-}
-
-void hal_ota_handle(void) {
-  ota_ensure_mutex();
-
-  hal_mutex_lock(s_ota.mutex);
-  if (!s_ota.started) {
-    hal_mutex_unlock(s_ota.mutex);
+static void invitation_received_no_lock(const jh_ota_invitation_t *invitation,
+                                        const hal_net_endpoint_t *remote) {
+  if (invitation == nullptr || remote == nullptr ||
+      remote->family != HAL_NET_AF_INET ||
+      remote->addr_len != HAL_NET_IPV4_ADDR_LEN) {
     return;
   }
-  ArduinoOTA.handle();
-  hal_mutex_unlock(s_ota.mutex);
+  s_ota.invitation = *invitation;
+  s_ota.remote_udp = *remote;
 
+  if (!s_ota.password_set) {
+    s_ota.state = HAL_OTA_STATE_BEGIN_TRANSFER;
+    return;
+  }
+  if (!make_nonce_no_lock()) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, "Authentication Failed");
+    return;
+  }
+
+  char response[5u + JH_OTA_MD5_HEX_BUFFER_SIZE]{};
+  const int length =
+      snprintf(response, sizeof(response), "AUTH %s", s_ota.nonce);
+  if (length <= 0 || (size_t)length >= sizeof(response) ||
+      !udp_send_no_lock(response)) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, nullptr);
+    return;
+  }
+  s_ota.state = HAL_OTA_STATE_WAIT_AUTH;
+}
+
+static void udp_service_no_lock(void) {
+  uint8_t packet[HAL_OTA_UDP_BUFFER_SIZE]{};
+  hal_net_endpoint_t remote{};
+  size_t received = 0u;
+  const hal_status_t status = hal_udp_socket_recvfrom_ex(
+      s_ota.udp, packet, sizeof(packet), &remote, 0u, &received);
+  if (status != HAL_OK || received == 0u) {
+    return;
+  }
+
+  if (s_ota.state == HAL_OTA_STATE_IDLE) {
+    jh_ota_invitation_t invitation{};
+    if (jh_ota_parse_invitation(packet, received, &invitation) == HAL_OK) {
+      invitation_received_no_lock(&invitation, &remote);
+    }
+    return;
+  }
+
+  if (s_ota.state == HAL_OTA_STATE_WAIT_AUTH) {
+    jh_ota_auth_response_t response{};
+    if (jh_ota_parse_auth_response(packet, received, &response) != HAL_OK ||
+        !authenticate_no_lock(&response)) {
+      transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, "Authentication Failed");
+      return;
+    }
+    s_ota.state = HAL_OTA_STATE_BEGIN_TRANSFER;
+  }
+}
+
+static hal_ota_command_t current_command_no_lock(void) {
+  return s_ota.invitation.command == 0u ? HAL_OTA_COMMAND_SKETCH
+                                        : HAL_OTA_COMMAND_FILESYSTEM;
+}
+
+static void begin_transfer_no_lock(void) {
+  if (!Update.begin(s_ota.invitation.image_size,
+                    (int)s_ota.invitation.command) ||
+      !Update.setMD5(s_ota.invitation.image_md5)) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_BEGIN, "ERR: Update Begin");
+    return;
+  }
+  if (!udp_send_no_lock("OK")) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_CONNECT, nullptr);
+    return;
+  }
+
+  hal_tcp_socket_t socket = nullptr;
+  if (hal_tcp_socket_open_ex(&socket) != HAL_OK) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_CONNECT, nullptr);
+    return;
+  }
+  hal_net_endpoint_t remote = s_ota.remote_udp;
+  remote.port = s_ota.invitation.tcp_port;
+  if (hal_tcp_socket_connect_ex(socket, &remote, HAL_OTA_CONNECT_TIMEOUT_MS) !=
+      HAL_OK) {
+    hal_tcp_socket_close(socket);
+    transfer_fail_no_lock(HAL_OTA_ERROR_CONNECT, nullptr);
+    return;
+  }
+  s_ota.tcp = socket;
+  s_ota.received = 0u;
+  s_ota.last_activity_ms = hal_millis();
+
+  hal_ota_event_t start{};
+  start.type = HAL_OTA_EVENT_START;
+  start.command = current_command_no_lock();
+  queue_push_no_lock(&start);
+
+  hal_ota_event_t progress{};
+  progress.type = HAL_OTA_EVENT_PROGRESS;
+  progress.total = s_ota.invitation.image_size;
+  queue_push_no_lock(&progress);
+  s_ota.state = HAL_OTA_STATE_RECEIVE;
+}
+
+static void receive_transfer_no_lock(void) {
+  const size_t remaining =
+      (size_t)(s_ota.invitation.image_size - s_ota.received);
+  uint8_t buffer[HAL_OTA_TCP_BUFFER_SIZE]{};
+  const size_t capacity =
+      remaining < sizeof(buffer) ? remaining : sizeof(buffer);
+  size_t received = 0u;
+  const hal_status_t status =
+      hal_tcp_socket_recv_ex(s_ota.tcp, buffer, capacity, 0u, &received);
+  if (status != HAL_OK && status != HAL_EAGAIN && status != HAL_ETIMEOUT) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
+    return;
+  }
+
+  if (received == 0u) {
+    if (!hal_tcp_socket_is_connected(s_ota.tcp) ||
+        (uint32_t)(hal_millis() - s_ota.last_activity_ms) >=
+            HAL_OTA_RECEIVE_TIMEOUT_MS) {
+      transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
+    }
+    return;
+  }
+
+  s_ota.last_activity_ms = hal_millis();
+  const size_t written = Update.write(buffer, received);
+  if (written != received) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
+    return;
+  }
+  s_ota.received += (uint32_t)written;
+
+  char acknowledgement[16]{};
+  const int acknowledgement_length = snprintf(
+      acknowledgement, sizeof(acknowledgement), "%lu", (unsigned long)written);
+  if (acknowledgement_length <= 0 ||
+      (size_t)acknowledgement_length >= sizeof(acknowledgement) ||
+      !tcp_send_no_lock(acknowledgement)) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
+    return;
+  }
+
+  hal_ota_event_t progress{};
+  progress.type = HAL_OTA_EVENT_PROGRESS;
+  progress.progress = s_ota.received;
+  progress.total = s_ota.invitation.image_size;
+  queue_push_no_lock(&progress);
+
+  if (s_ota.received < s_ota.invitation.image_size) {
+    return;
+  }
+  if (!Update.end(false)) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_END, nullptr);
+    return;
+  }
+  (void)tcp_send_no_lock("OK");
+
+  hal_ota_event_t end{};
+  end.type = HAL_OTA_EVENT_END;
+  queue_push_no_lock(&end);
+  s_ota.reboot_pending = true;
+  transfer_reset_no_lock();
+}
+
+static void dispatch_events(void) {
   for (;;) {
     hal_ota_event_t event{};
 
-    hal_ota_on_start_callback_t on_start = NULL;
-    void *on_start_user = NULL;
-    hal_ota_on_end_callback_t on_end = NULL;
-    void *on_end_user = NULL;
-    hal_ota_on_progress_callback_t on_progress = NULL;
-    void *on_progress_user = NULL;
-    hal_ota_on_error_callback_t on_error = NULL;
-    void *on_error_user = NULL;
+    hal_ota_on_start_callback_t on_start = nullptr;
+    void *on_start_user = nullptr;
+    hal_ota_on_end_callback_t on_end = nullptr;
+    void *on_end_user = nullptr;
+    hal_ota_on_progress_callback_t on_progress = nullptr;
+    void *on_progress_user = nullptr;
+    hal_ota_on_error_callback_t on_error = nullptr;
+    void *on_error_user = nullptr;
 
     hal_mutex_lock(s_ota.mutex);
     const bool has_event = queue_pop_no_lock(&event);
@@ -323,27 +415,26 @@ void hal_ota_handle(void) {
     hal_mutex_unlock(s_ota.mutex);
 
     if (!has_event) {
-      break;
+      return;
     }
-
     switch (event.type) {
     case HAL_OTA_EVENT_START:
-      if (on_start) {
+      if (on_start != nullptr) {
         on_start(event.command, on_start_user);
       }
       break;
     case HAL_OTA_EVENT_END:
-      if (on_end) {
+      if (on_end != nullptr) {
         on_end(on_end_user);
       }
       break;
     case HAL_OTA_EVENT_PROGRESS:
-      if (on_progress) {
+      if (on_progress != nullptr) {
         on_progress(event.progress, event.total, on_progress_user);
       }
       break;
     case HAL_OTA_EVENT_ERROR:
-      if (on_error) {
+      if (on_error != nullptr) {
         on_error(event.error, on_error_user);
       }
       break;
@@ -353,12 +444,157 @@ void hal_ota_handle(void) {
   }
 }
 
-bool hal_ota_is_started(void) {
+bool hal_ota_set_port(uint16_t port) {
+  if (port == 0u) {
+    hal_derr("hal_ota_set_port: port must be > 0");
+    return false;
+  }
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  const bool accepted = !s_ota.started;
+  if (accepted) {
+    s_ota.port = port;
+  }
+  hal_mutex_unlock(s_ota.mutex);
+  return accepted;
+}
+
+bool hal_ota_set_hostname(const char *hostname) {
+  if (!validate_non_empty(hostname, "hal_ota_set_hostname", "hostname")) {
+    return false;
+  }
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  const int length =
+      snprintf(s_ota.hostname, sizeof(s_ota.hostname), "%s", hostname);
+  const bool accepted = length > 0 && (size_t)length < sizeof(s_ota.hostname);
+  hal_mutex_unlock(s_ota.mutex);
+  return accepted;
+}
+
+bool hal_ota_set_password(const char *password) {
+  if (!password) {
+    hal_derr("hal_ota_set_password: password pointer is NULL");
+    return false;
+  }
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  const bool accepted =
+      hal_md5_hex(reinterpret_cast<const uint8_t *>(password), strlen(password),
+                  s_ota.password_md5, sizeof(s_ota.password_md5));
+  s_ota.password_set = accepted;
+  hal_mutex_unlock(s_ota.mutex);
+  return accepted;
+}
+
+bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  s_ota.on_start = callback;
+  s_ota.on_start_user = user;
+  hal_mutex_unlock(s_ota.mutex);
+  return true;
+}
+
+bool hal_ota_on_end(hal_ota_on_end_callback_t callback, void *user) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  s_ota.on_end = callback;
+  s_ota.on_end_user = user;
+  hal_mutex_unlock(s_ota.mutex);
+  return true;
+}
+
+bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  s_ota.on_progress = callback;
+  s_ota.on_progress_user = user;
+  hal_mutex_unlock(s_ota.mutex);
+  return true;
+}
+
+bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  s_ota.on_error = callback;
+  s_ota.on_error_user = user;
+  hal_mutex_unlock(s_ota.mutex);
+  return true;
+}
+
+bool hal_ota_begin(void) {
   ota_ensure_mutex();
   hal_mutex_lock(s_ota.mutex);
 
-  const bool started = s_ota.started;
+  if (s_ota.udp != nullptr) {
+    hal_udp_socket_close(s_ota.udp);
+    s_ota.udp = nullptr;
+  }
+  transfer_reset_no_lock();
+  queue_clear_no_lock();
+  s_ota.reboot_pending = false;
+  if (s_ota.port == 0u) {
+    s_ota.port = HAL_OTA_DEFAULT_PORT;
+  }
 
+  hal_udp_socket_t socket = nullptr;
+  hal_status_t status = hal_udp_socket_open_ex(&socket);
+  if (status == HAL_OK) {
+    hal_net_endpoint_t local{};
+    local.family = HAL_NET_AF_INET;
+    local.addr_len = HAL_NET_IPV4_ADDR_LEN;
+    local.port = s_ota.port;
+    status = hal_udp_socket_bind_ex(socket, &local);
+  }
+  if (status != HAL_OK) {
+    if (socket != nullptr) {
+      hal_udp_socket_close(socket);
+    }
+    s_ota.started = false;
+    hal_mutex_unlock(s_ota.mutex);
+    return false;
+  }
+
+  s_ota.udp = socket;
+  s_ota.started = true;
+  hal_mutex_unlock(s_ota.mutex);
+  return true;
+}
+
+void hal_ota_handle(void) {
+  ota_ensure_mutex();
+  (void)hal_net_service();
+
+  hal_mutex_lock(s_ota.mutex);
+  if (!s_ota.started) {
+    hal_mutex_unlock(s_ota.mutex);
+    return;
+  }
+  udp_service_no_lock();
+  if (s_ota.state == HAL_OTA_STATE_BEGIN_TRANSFER) {
+    begin_transfer_no_lock();
+  } else if (s_ota.state == HAL_OTA_STATE_RECEIVE) {
+    receive_transfer_no_lock();
+  }
+  hal_mutex_unlock(s_ota.mutex);
+
+  dispatch_events();
+
+  hal_mutex_lock(s_ota.mutex);
+  const bool reboot = s_ota.reboot_pending;
+  s_ota.reboot_pending = false;
+  hal_mutex_unlock(s_ota.mutex);
+  if (reboot) {
+    hal_delay_ms(100u);
+    watchdog_reboot(0u, 0u, 10u);
+  }
+}
+
+bool hal_ota_is_started(void) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  const bool started = s_ota.started;
   hal_mutex_unlock(s_ota.mutex);
   return started;
 }
