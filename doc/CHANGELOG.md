@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Shared WireGuard and STM32G474 NTP
+
+- Moved the bundled WireGuard protocol, crypto, lwIP netif and lifecycle code
+  out of the RP2040 Arduino framework tree into
+  `impl/shared/frameworks/wireguard`. The private client now uses HAL byte-array
+  IPv4 values and backend-provided lwIP context, resolver, entropy and time
+  hooks; public `hal_wireguard` signatures remain unchanged.
+- Added STM32G474 CYW43/lwIP WireGuard support with hardware RNG entropy,
+  split/full route installation, default-route restoration and bounded
+  peer/timer/PCB teardown. Unsupported offload backends remain rejected by the
+  existing capability checks.
+- Added asynchronous STM32G474 NTP over public HAL UDP with source/originate
+  validation, fractional time-of-day and a newlib `gettimeofday` bridge.
+- Included lwIP options before architecture defaults and guarded port macros to
+  avoid target `lwipopts.h` redefinition warnings.
+
 ### GPIO interrupt core ownership
 
 - Added status-returning GPIO interrupt attach/detach APIs with explicit core

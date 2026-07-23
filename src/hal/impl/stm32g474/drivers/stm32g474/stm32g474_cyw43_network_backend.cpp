@@ -1244,7 +1244,12 @@ jh_network_backend_selected(void) {
 #if defined(HAL_ENABLE_UDP)
           JH_NET_CAP_UDP |
 #endif
-          JH_NET_CAP_IPV4 | JH_NET_CAP_HOST_STACK_L3 | JH_NET_CAP_STACK_CONTEXT,
+#if defined(JH_STM32G474_HW) &&                                                \
+    (defined(HAL_ENABLE_TLS) || defined(HAL_ENABLE_WIREGUARD))
+          JH_NET_CAP_SECURE_ENTROPY |
+#endif
+          JH_NET_CAP_IPV4 | JH_NET_CAP_HOST_STACK_L3 |
+          JH_NET_CAP_VIRTUAL_NETIF_ROUTE | JH_NET_CAP_STACK_CONTEXT,
       JH_NETWORK_EXECUTION_POLL,
       &s_service_ops,
       &s_wifi_ops,

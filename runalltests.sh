@@ -240,11 +240,21 @@ header "Gate 5/7: Static analysis - clang-tidy"
 # Generate STM32 compile database
 BUILD_STM32="${SCRIPT_DIR}/build_stm32_host"
 rm -rf "${BUILD_STM32}"
-info "Generating STM32 compile database..."
+info "Generating host-compiler STM32 sanity build..."
 cmake -S stm32_lib -B "${BUILD_STM32}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-info "Building STM32 compile database..."
+info "Building host-compiler STM32 sanity library..."
 cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
-pass "STM32 compile database ready."
+pass "Host-compiler STM32 sanity library ready."
+
+BUILD_STM32_TARGET="${SCRIPT_DIR}/build_stm32_target"
+rm -rf "${BUILD_STM32_TARGET}"
+info "Generating real ARM STM32 compile database..."
+cmake -S stm32_lib -B "${BUILD_STM32_TARGET}" \
+    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+info "Building real ARM STM32 static library..."
+cmake --build "${BUILD_STM32_TARGET}" --parallel "${JOBS}"
+pass "ARM STM32 compile database ready."
 
 info "Running clang-tidy on host-compilable code..."
 TIDY_HOST_BUILD="${BUILD_DIR}/clang_tidy_db"
@@ -261,9 +271,9 @@ run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" \
 pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
-TIDY_STM32_BUILD="${BUILD_STM32}/clang_tidy_db"
+TIDY_STM32_BUILD="${BUILD_STM32_TARGET}/clang_tidy_db"
 mapfile -t TIDY_STM32_FILES < <(
-    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32}" --repo-root "${SCRIPT_DIR}" --profile stm32 \
+    scripts/clang_tidy_files.py --build-dir "${BUILD_STM32_TARGET}" --repo-root "${SCRIPT_DIR}" --profile stm32 \
         --output-compile-db "${TIDY_STM32_BUILD}/compile_commands.json"
 )
 if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then

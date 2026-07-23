@@ -1,19 +1,18 @@
-#include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
-#include "../../hal_config.h"
+#include "hal/hal_target.h"
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#include "hal/hal_config.h"
 
 #ifdef HAL_ENABLE_WIREGUARD
 
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../../hal_wireguard.h"
-#include "../shared/hal_mutex_once.h"
-#include "frameworks/arduino-wireguard-pico-w/src/arduino-wireguard-pico-w.h"
+#include "hal/hal_serial.h"
+#include "hal/hal_sync.h"
+#include "hal/hal_wireguard.h"
+#include "hal/impl/shared/frameworks/wireguard/jh_wireguard_client.h"
+#include "hal/impl/shared/hal_mutex_once.h"
 
-#include <IPAddress.h>
 #include <stdio.h>
 
-static WireGuard s_wireguard;
+static JHWireGuardClient s_wireguard;
 static hal_mutex_t s_wireguard_mutex = NULL;
 
 static inline void wireguard_ensure_mutex(void) {
@@ -36,10 +35,6 @@ static hal_status_t validate_ip_ptr(const uint8_t *ip, const char *fn,
     return HAL_EINVAL;
   }
   return HAL_OK;
-}
-
-static IPAddress ip_from_bytes(const uint8_t ip[HAL_WIREGUARD_IPV4_OCTETS]) {
-  return IPAddress(ip[0], ip[1], ip[2], ip[3]);
 }
 
 hal_status_t
@@ -132,9 +127,8 @@ hal_wireguard_begin_ex(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
   wireguard_ensure_mutex();
   hal_mutex_lock(s_wireguard_mutex);
 
-  const bool ok = s_wireguard.begin(ip_from_bytes(local_ip), private_key,
-                                    remote_peer_address, remote_peer_public_key,
-                                    remote_peer_port);
+  const bool ok = s_wireguard.begin(local_ip, private_key, remote_peer_address,
+                                    remote_peer_public_key, remote_peer_port);
 
   hal_mutex_unlock(s_wireguard_mutex);
   return ok ? HAL_OK : HAL_EIO;
@@ -221,10 +215,9 @@ hal_status_t hal_wireguard_begin_advanced_ex(
   wireguard_ensure_mutex();
   hal_mutex_lock(s_wireguard_mutex);
 
-  const bool ok = s_wireguard.beginAdvanced(
-      ip_from_bytes(local_ip), private_key, remote_peer_address,
-      remote_peer_public_key, remote_peer_port, ip_from_bytes(allowed_ip),
-      ip_from_bytes(allowed_mask));
+  const bool ok = s_wireguard.begin_advanced(
+      local_ip, private_key, remote_peer_address, remote_peer_public_key,
+      remote_peer_port, allowed_ip, allowed_mask);
 
   hal_mutex_unlock(s_wireguard_mutex);
   return ok ? HAL_OK : HAL_EIO;
@@ -313,7 +306,7 @@ hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
     return HAL_EINVAL;
   }
 
-  IPAddress endpoint_ip(0, 0, 0, 0);
+  uint8_t endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
   uint16_t endpoint_port = 0u;
 
   wireguard_ensure_mutex();
@@ -324,8 +317,9 @@ hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
     return HAL_EUNINIT;
   }
 
-  const bool up = s_wireguard.peerUp(endpoint_ip_out ? &endpoint_ip : NULL,
-                                     endpoint_port_out ? &endpoint_port : NULL);
+  const bool up =
+      s_wireguard.peer_up(endpoint_ip_out ? endpoint_ip : NULL,
+                          endpoint_port_out ? &endpoint_port : NULL);
 
   hal_mutex_unlock(s_wireguard_mutex);
 
@@ -394,8 +388,8 @@ hal_status_t hal_wireguard_kick_handshake_ex(
     return HAL_EUNINIT;
   }
 
-  const bool ok = s_wireguard.kickHandshake(ip_from_bytes(probe_ip), probe_port,
-                                            min_interval_ms);
+  const bool ok =
+      s_wireguard.kick_handshake(probe_ip, probe_port, min_interval_ms);
 
   hal_mutex_unlock(s_wireguard_mutex);
   return ok ? HAL_OK : HAL_EIO;
@@ -428,4 +422,4 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474

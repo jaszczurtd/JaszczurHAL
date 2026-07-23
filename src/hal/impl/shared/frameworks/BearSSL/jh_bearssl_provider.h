@@ -15,6 +15,14 @@ typedef struct {
   unsigned char io_buffer[BR_SSL_BUFSIZE_MONO];
 } jh_bearssl_client_t;
 
+/**
+ * Provider storage hook. Targets with non-contiguous SRAM may override the
+ * weak default implementation to place the large BearSSL record/context block
+ * in a suitable memory bank.
+ */
+jh_bearssl_client_t *jh_bearssl_client_allocate(void);
+void jh_bearssl_client_release(jh_bearssl_client_t *provider);
+
 hal_status_t jh_bearssl_client_init(jh_bearssl_client_t *provider,
                                     const hal_tls_trust_anchor_t *trust_anchors,
                                     size_t trust_anchor_count,

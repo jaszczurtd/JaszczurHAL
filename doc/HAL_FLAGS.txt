@@ -147,7 +147,9 @@ Connectivity
   HAL_ENABLE_OTA
     ArduinoOTA wrapper. Propagates: WIFI.
   HAL_ENABLE_WIREGUARD
-    arduino-wireguard-pico-w wrapper. Propagates: WIFI.
+    Shared host-lwIP WireGuard wrapper. Propagates: UDP, WIFI. Requires
+    host-stack L3, virtual-netif/route, stack-context and secure-entropy
+    backend capabilities.
   HAL_ENABLE_CELLULAR_MODEM
     Generic AT-command engine (hal_modem_at) for cellular / serial-AT
     modems. Requires at least one backend (e.g. HAL_ENABLE_A7670),

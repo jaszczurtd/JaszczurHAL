@@ -6,8 +6,8 @@
  *           storage and are not available to application code:
  *             - HAL_STM32_FLASH_LITTLEFS_SIZE for hal_littlefs
  *             - HAL_STM32_FLASH_EEPROM_SIZE for hal_eeprom/hal_kv
- *   RAM   : 96  KB @ 0x20000000 (SRAM1+SRAM2; CCM at 0x10000000 not used here
- *           to keep the first step conservative and universally correct)
+ *   RAM   : 96  KB @ 0x20000000 (SRAM1+SRAM2)
+ *   CCMRAM: 32  KB @ 0x10000000 (CPU-only data, not DMA-capable)
  *
  * Stack grows down from the top of RAM. A dedicated .noinit region holds the
  * retained exception record so it survives a fault-triggered reset.
@@ -28,6 +28,7 @@ MEMORY
     HAL_EEPROM_FLASH (r): ORIGIN = 0x08000000 + HAL_STM32_FLASH_SIZE - HAL_STM32_FLASH_EEPROM_SIZE,
                           LENGTH = HAL_STM32_FLASH_EEPROM_SIZE
     RAM   (xrw)         : ORIGIN = 0x20000000, LENGTH = 96K
+    CCMRAM (xrw)        : ORIGIN = 0x10000000, LENGTH = 32K
 }
 
 ASSERT(HAL_STM32_FLASH_LITTLEFS_SIZE == 0 ||
@@ -46,6 +47,8 @@ PROVIDE(__hal_stm32_eeprom_flash_start = ORIGIN(HAL_EEPROM_FLASH));
 PROVIDE(__hal_stm32_eeprom_flash_end = ORIGIN(HAL_EEPROM_FLASH) + LENGTH(HAL_EEPROM_FLASH));
 PROVIDE(__jh_stm32_ram_start = ORIGIN(RAM));
 PROVIDE(__jh_stm32_ram_end = ORIGIN(RAM) + LENGTH(RAM));
+PROVIDE(__jh_stm32_ccm_start = ORIGIN(CCMRAM));
+PROVIDE(__jh_stm32_ccm_end = ORIGIN(CCMRAM) + LENGTH(CCMRAM));
 
 /* Top of stack = top of RAM. */
 _estack = ORIGIN(RAM) + LENGTH(RAM);
@@ -134,6 +137,7 @@ SECTIONS
         . = ALIGN(4);
         _edata = .;
     } >RAM AT> FLASH
+    PROVIDE(__jh_stm32_flash_load_end = LOADADDR(.data) + SIZEOF(.data));
 
     .bss :
     {
@@ -171,6 +175,16 @@ SECTIONS
         . = . + _Min_Stack_Size;
         . = ALIGN(8);
     } >RAM
+
+    /* Large CPU-only working sets can opt into the second SRAM bank. */
+    .ccmram (NOLOAD) :
+    {
+        . = ALIGN(8);
+        *(.ccmram)
+        *(.ccmram*)
+        . = ALIGN(8);
+        PROVIDE(__jh_stm32_ccm_used_end = .);
+    } >CCMRAM
 
     /DISCARD/ : { libc.a ( * ) libm.a ( * ) libgcc.a ( * ) }
     .ARM.attributes 0 : { *(.ARM.attributes) }

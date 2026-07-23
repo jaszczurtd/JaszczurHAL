@@ -1381,7 +1381,7 @@ headers.
 
 ## `hal_wireguard` - WireGuard tunnel wrapper  *(opt-in - `HAL_ENABLE_WIREGUARD`)*
 
-Thread-safe wrapper around bundled `arduino-wireguard-pico-w` API.
+Thread-safe facade over the shared, Arduino-free WireGuard/lwIP engine.
 
 ```c
 #include <hal/hal_wireguard.h>
@@ -1450,11 +1450,15 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
-**impl/rp2040:** bundled `arduino-wireguard-pico-w` driver.
+**impl/shared:** bundled protocol/crypto engine plus a private lwIP-extension
+port used by capability-advertised host-stack backends.
+**impl/rp2040:** Arduino-Pico-owned lwIP extension and secure platform hooks.
+**impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
+HAL-synchronized NTP time.
 **impl/.mock:** deterministic stateful test double with captured configuration,
 peer endpoint injection and handshake-trigger observability.
-**Thread safety:** RP2040 backend is thread-safe and multicore-safe for public
-APIs. A singleton `hal_mutex_t` serializes all wrapper calls.
+**Thread safety:** a singleton `hal_mutex_t` serializes all public wrapper
+calls; the selected backend serializes private lwIP stack access.
 
 **Mock helpers:**
 ```c

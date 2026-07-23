@@ -1874,6 +1874,12 @@ def memory_region(address: int) -> str:
     return "OTHER"
 
 
+def section_memory_region(section: dict[str, Any]) -> str:
+    if str(section["name"]).startswith(".ccmram"):
+        return "SRAM"
+    return memory_region(int(section["vma"]))
+
+
 def format_size(size: int) -> str:
     if size < 1024:
         return f"{size} B"
@@ -1907,6 +1913,8 @@ def memory_section_note(section: dict[str, Any]) -> str:
         return "zeroed RAM"
     if name == ".noinit":
         return "retained/noinit RAM"
+    if name.startswith(".ccmram"):
+        return "CPU-only SRAM"
     if "heap" in name:
         return "reserved heap"
     if "stack" in name:
@@ -1941,7 +1949,7 @@ def print_memory_map_overview(config: dict[str, Any], project_dir: Path) -> None
 
     regions: dict[str, list[dict[str, Any]]] = {}
     for section in sections:
-        regions.setdefault(memory_region(int(section["vma"])), []).append(section)
+        regions.setdefault(section_memory_region(section), []).append(section)
 
     print("")
     print(f"Memory map overview: {elf}")
@@ -1979,14 +1987,14 @@ def print_memory_map_overview(config: dict[str, Any], project_dir: Path) -> None
     sram_static = sum(
         int(section["size"])
         for section in sections
-        if memory_region(int(section["vma"])) == "SRAM"
+        if section_memory_region(section) == "SRAM"
         and "heap" not in str(section["name"])
         and "stack" not in str(section["name"])
     )
     sram_reserved = sum(
         int(section["size"])
         for section in sections
-        if memory_region(int(section["vma"])) == "SRAM"
+        if section_memory_region(section) == "SRAM"
         and ("heap" in str(section["name"]) or "stack" in str(section["name"]))
     )
     print(

@@ -34,7 +34,7 @@
  * Author: Daniel Hope <daniel.hope@smartalock.com>
  */
 
-#include "../../../../../hal_config.h"
+#include "hal/hal_config.h"
 #if defined(HAL_ENABLE_WIREGUARD)
 
 #include "wireguard.h"
@@ -44,8 +44,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
-#include "wg_port_pico.h"
+#include "crypto/crypto.h"
+#include "wireguard_port.h"
 
 // For HMAC calculation
 #define WIREGUARD_BLAKE2S_BLOCK_SIZE (64)
@@ -798,6 +798,7 @@ bool wireguard_process_handshake_response(
 bool wireguard_process_cookie_message(struct wireguard_device *device,
                                       struct wireguard_peer *peer,
                                       struct message_cookie_reply *src) {
+  (void)device;
   uint8_t cookie[WIREGUARD_COOKIE_LEN];
   bool result = false;
 

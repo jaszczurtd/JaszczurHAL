@@ -3,7 +3,21 @@
 
 #if defined(HAL_ENABLE_TLS) && defined(HAL_ENABLE_BSD_SOCKETS)
 
+#include <stdlib.h>
 #include <string.h>
+
+__attribute__((weak)) jh_bearssl_client_t *jh_bearssl_client_allocate(void) {
+  return static_cast<jh_bearssl_client_t *>(
+      calloc(1u, sizeof(jh_bearssl_client_t)));
+}
+
+__attribute__((weak)) void
+jh_bearssl_client_release(jh_bearssl_client_t *provider) {
+  if (provider != NULL) {
+    memset(provider, 0, sizeof(*provider));
+    free(provider);
+  }
+}
 
 static bool anchor_is_valid(const hal_tls_trust_anchor_t *anchor) {
   if (anchor == NULL || anchor->subject_dn == NULL ||

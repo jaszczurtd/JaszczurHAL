@@ -145,7 +145,6 @@ file(GLOB_RECURSE DRIVER_SOURCES
 # ── Framework sources (bundled high-level integrations) ──────────────────────
 set(FRAMEWORK_SOURCES)
 jh_hal_define_enabled(JH_RP2040_ENABLE_MQTT HAL_ENABLE_MQTT)
-jh_hal_define_enabled(JH_RP2040_ENABLE_WIREGUARD HAL_ENABLE_WIREGUARD)
 
 if(JH_RP2040_ENABLE_MQTT)
     file(GLOB_RECURSE RP2040_PUBSUBCLIENT_SOURCES
@@ -153,14 +152,6 @@ if(JH_RP2040_ENABLE_MQTT)
         ${SRC}/hal/impl/shared/frameworks/PubSubClient/*.c
     )
     list(APPEND FRAMEWORK_SOURCES ${RP2040_PUBSUBCLIENT_SOURCES})
-endif()
-
-if(JH_RP2040_ENABLE_WIREGUARD)
-    file(GLOB_RECURSE RP2040_WIREGUARD_SOURCES
-        ${SRC}/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/*.cpp
-        ${SRC}/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/*.c
-    )
-    list(APPEND FRAMEWORK_SOURCES ${RP2040_WIREGUARD_SOURCES})
 endif()
 
 # ── Common HAL sources (not implementation-specific) ─────────────────────────

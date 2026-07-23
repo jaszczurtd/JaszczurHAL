@@ -87,13 +87,16 @@ function(jh_add_stm32g474_firmware TARGET)
 
     set(_jh_mqtt_sources)
     set(_jh_mqtt_includes)
+    set(_jh_has_tls FALSE)
     foreach(_definition IN LISTS ARG_DEFINES)
         if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
             list(APPEND _jh_mqtt_sources
                 "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp")
             list(APPEND _jh_mqtt_includes
                 "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src")
-            break()
+        endif()
+        if("${_definition}" MATCHES "^HAL_ENABLE_TLS(=|$)")
+            set(_jh_has_tls TRUE)
         endif()
     endforeach()
 
@@ -160,6 +163,14 @@ function(jh_add_stm32g474_firmware TARGET)
 
     if(ARG_LIBRARIES)
         target_link_libraries(${TARGET} PRIVATE ${ARG_LIBRARIES})
+    endif()
+
+    if(_jh_has_tls)
+        include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
+        set(_jh_bearssl_target "${TARGET}_jh_bearssl")
+        jh_add_bearssl_source_library("${_jh_bearssl_target}")
+        target_compile_options("${_jh_bearssl_target}" PRIVATE ${_arch})
+        target_link_libraries(${TARGET} PRIVATE "${_jh_bearssl_target}")
     endif()
 
     if(CMAKE_OBJCOPY)

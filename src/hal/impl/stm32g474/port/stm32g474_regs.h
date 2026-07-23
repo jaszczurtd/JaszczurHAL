@@ -27,7 +27,9 @@
 #define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
 #define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
 #define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
+#define RCC_CCIPR JH_REG32(RCC_BASE + 0x88u)    /* peripheral clock muxes  */
 #define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
+#define RCC_CRRCR JH_REG32(RCC_BASE + 0x98u)    /* HSI48 control/status    */
 
 #define RCC_AHB1ENR_DMA1EN (1u << 0)
 #define RCC_AHB1ENR_DMA2EN (1u << 1)
@@ -40,6 +42,7 @@
 #define RCC_AHB2ENR_GPIOEEN (1u << 4)
 #define RCC_AHB2ENR_GPIOFEN (1u << 5)
 #define RCC_AHB2ENR_GPIOGEN (1u << 6)
+#define RCC_AHB2ENR_RNGEN (1u << 26)
 
 #define RCC_APB1ENR1_TIM2EN (1u << 0)
 #define RCC_APB1ENR1_TIM3EN (1u << 1)
@@ -61,6 +64,11 @@
 
 #define RCC_AHB2ENR_DAC1EN (1u << 16)
 #define RCC_AHB2ENR_ADC12EN (1u << 13)
+
+#define RCC_CCIPR_CLK48SEL_MASK (0x3u << 26)
+#define RCC_CCIPR_CLK48SEL_HSI48 (0x0u << 26)
+#define RCC_CRRCR_HSI48ON (1u << 0)
+#define RCC_CRRCR_HSI48RDY (1u << 1)
 
 /* RCC_CSR reset flags (RM0440 / CMSIS stm32g474xx.h). */
 #define RCC_CSR_RMVF (1u << 23)
@@ -163,6 +171,21 @@
 
 /* Busy-poll bound for one conversion (matches the I2C backend's style). */
 #define ADC_POLL_TIMEOUT 200000u
+
+/* ── RNG (true-random generator, clocked from HSI48) ────────────────────── */
+#define RNG_BASE 0x50060800u
+#define RNG_CR JH_REG32(RNG_BASE + 0x00u)
+#define RNG_SR JH_REG32(RNG_BASE + 0x04u)
+#define RNG_DR JH_REG32(RNG_BASE + 0x08u)
+
+#define RNG_CR_RNGEN (1u << 2)
+#define RNG_SR_DRDY (1u << 0)
+#define RNG_SR_CECS (1u << 1)
+#define RNG_SR_SECS (1u << 2)
+#define RNG_SR_CEIS (1u << 5)
+#define RNG_SR_SEIS (1u << 6)
+#define RNG_SR_ERRORS (RNG_SR_CECS | RNG_SR_SECS | RNG_SR_CEIS | RNG_SR_SEIS)
+#define RNG_POLL_TIMEOUT 200000u
 
 /* ── DMA1 + DMAMUX1 (minimal Channel1 memory-to-peripheral support) ─────── */
 #define DMA1_BASE 0x40020000u
@@ -374,7 +397,9 @@
 #define SPI_CR2(base) JH_REG32((base) + 0x04u)
 #define SPI_SR(base) JH_REG32((base) + 0x08u)
 #define SPI_DR(base) JH_REG32((base) + 0x0Cu)
-#define SPI_DR8(base) (*(volatile uint8_t *)((base) + 0x0Cu))
+#define SPI_DR8(base)                                                          \
+  (*(volatile uint8_t *)((base) +                                              \
+                         0x0Cu)) /* NOLINT(performance-no-int-to-ptr) */
 
 #define SPI_CR1_CPHA (1u << 0)
 #define SPI_CR1_CPOL (1u << 1)
@@ -571,7 +596,9 @@
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
 #define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
-#define NVIC_IPR8(irqn) (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn)))
+#define NVIC_IPR8(irqn)                                                                        \
+  (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn))) /* NOLINT(performance-no-int-to-ptr) \
+                                                           */
 
 #define TIM6_DACUNDER_IRQn 54u
 #define DMA1_Channel1_IRQn 11u

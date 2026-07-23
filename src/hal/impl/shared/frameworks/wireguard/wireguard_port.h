@@ -1,18 +1,12 @@
 #pragma once
 
 struct wireguard_handshake;
-/*
- * Pico/RP2040 portability layer for the upstream WireGuard (lwIP) port.
- *
- * Notes:
- * - Keep this header C-friendly.
- * - Avoid pulling in ESP-IDF / FreeRTOS dependencies.
- */
+/* JaszczurHAL portability layer for the shared WireGuard/lwIP engine. */
 
 #include <lwip/opt.h>
 
-#include "../../../../../hal_serial.h"
-#include "../../../../../hal_system.h"
+#include "hal/hal_serial.h"
+#include "hal/hal_system.h"
 
 #include <lwip/inet.h>
 #include <lwip/ip4_addr.h>

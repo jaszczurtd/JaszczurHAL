@@ -107,17 +107,17 @@
       "notes": "Vendored MQTT protocol engine adapted to the native shared JaszczurHAL transport. Record the exact upstream tag/commit at the next refresh."
     },
     {
-      "name": "arduino-wireguard-pico-w",
+      "name": "Shared WireGuard/lwIP engine",
       "version": "0.1.8",
       "type": "library",
       "scope": "optional",
       "supplier": "Kenta Ida, Daniel Hope, Marcin Kielesinski",
-      "licenses": ["MIT"],
+      "licenses": ["BSD-3-Clause"],
       "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@0.1.8",
-      "paths": ["src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w"],
+      "paths": ["src/hal/impl/shared/frameworks/wireguard"],
       "upstream": "https://github.com/jaszczurtd/arduino-wireguard-pico-w",
       "feature_flags": ["HAL_ENABLE_WIREGUARD"],
-      "notes": "RP2040/Pico W port of WireGuard-ESP32 with lwIP/Pico compatibility glue."
+      "notes": "WireGuard-ESP32 and Arduino-Pico-derived protocol engine with target-neutral JaszczurHAL lwIP extension glue; shared by supported host-lwIP targets."
     },
     {
       "name": "WireGuard crypto core",

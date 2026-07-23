@@ -2,8 +2,11 @@
 """Prepare a deterministic compile database and emit clang-tidy file regexes."""
 
 import argparse
+import functools
 import json
 import re
+import shlex
+import subprocess
 from pathlib import Path
 
 
@@ -38,6 +41,99 @@ def _load_compile_entries(build_dir: Path) -> list[dict]:
     compile_db = build_dir / "compile_commands.json"
     with compile_db.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+def _entry_arguments(entry: dict) -> list[str]:
+    arguments = entry.get("arguments")
+    if arguments is not None:
+        return list(arguments)
+    return shlex.split(entry["command"])
+
+
+@functools.lru_cache(maxsize=None)
+def _compiler_system_includes(
+    compiler: str, architecture_flags: tuple[str, ...], language: str
+) -> tuple[str, ...]:
+    result = subprocess.run(
+        [
+            compiler,
+            *architecture_flags,
+            "-E",
+            "-v",
+            "-x",
+            language,
+            "/dev/null",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    include_paths: list[str] = []
+    in_search_list = False
+    for line in result.stderr.splitlines():
+        stripped = line.strip()
+        if stripped == "#include <...> search starts here:":
+            in_search_list = True
+            continue
+        if stripped == "End of search list.":
+            break
+        if in_search_list and stripped and not stripped.startswith("("):
+            include_paths.append(str(Path(stripped).resolve()))
+
+    if not include_paths:
+        raise RuntimeError(f"no system include paths reported by {compiler}")
+
+    # GCC's private stdint.h expects GCC-only __UINT*_C builtins that clang
+    # intentionally does not define. Prefer the target C library's public
+    # headers before GCC's private include/include-fixed directories, while
+    # retaining the original order of C++ standard-library directories.
+    cxx_paths = [path for path in include_paths if "/include/c++/" in path]
+    target_paths = [
+        path
+        for path in include_paths
+        if "/include/c++/" not in path
+        and "/lib/gcc/" not in path
+        and not path.endswith("/include-fixed")
+    ]
+    compiler_paths = [
+        path
+        for path in include_paths
+        if path not in cxx_paths and path not in target_paths
+    ]
+    return tuple([*cxx_paths, *target_paths, *compiler_paths])
+
+
+def _prepare_cross_entry(entry: dict, source: Path) -> dict:
+    arguments = _entry_arguments(entry)
+    compiler_name = Path(arguments[0]).name
+    if not compiler_name.startswith("arm-none-eabi-"):
+        return entry
+
+    language = "c++" if source.suffix == ".cpp" else "c"
+    architecture_flags = tuple(
+        argument
+        for argument in arguments[1:]
+        if argument == "-mthumb"
+        or argument.startswith("-mcpu=")
+        or argument.startswith("-mfpu=")
+        or argument.startswith("-mfloat-abi=")
+    )
+    include_paths = _compiler_system_includes(
+        arguments[0], architecture_flags, language
+    )
+    prepared = dict(entry)
+    prepared.pop("command", None)
+    prepared["arguments"] = [
+        arguments[0],
+        "--target=arm-none-eabi",
+        *[
+            argument
+            for path in include_paths
+            for argument in ("-isystem", path)
+        ],
+        *arguments[1:],
+    ]
+    return prepared
 
 
 def _entry_source(entry: dict, build_dir: Path) -> Path:
@@ -97,6 +193,8 @@ def main() -> int:
         if include(path, args.repo_root) and path not in selected:
             normalized_entry = dict(entry)
             normalized_entry["file"] = path.as_posix()
+            if args.profile == "stm32":
+                normalized_entry = _prepare_cross_entry(normalized_entry, path)
             selected[path] = normalized_entry
 
     files = sorted(selected, key=lambda path: path.as_posix())
