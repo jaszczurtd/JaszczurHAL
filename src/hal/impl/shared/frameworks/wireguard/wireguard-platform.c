@@ -4,11 +4,11 @@
  * Marcin Kielesinski (jaszczurtd@tlen.pl)
  */
 
-#include "../../../../../hal_config.h"
+#include "hal/hal_config.h"
 #if defined(HAL_ENABLE_WIREGUARD)
 
-#include "../../../../../hal_serial.h"
-#include "../../../../shared/network/jh_lwip_extension.h"
+#include "hal/hal_serial.h"
+#include "hal/impl/shared/network/jh_lwip_extension.h"
 #include "wireguard-platform.h"
 
 #include <stddef.h>
@@ -17,7 +17,7 @@
 
 static bool is_platform_initialized = false;
 
-void wireguard_platform_init() {
+void wireguard_platform_init(void) {
   if (is_platform_initialized)
     return;
 
@@ -43,7 +43,7 @@ void wireguard_random_bytes(void *bytes, size_t size) {
   }
 }
 
-uint32_t wireguard_sys_now() {
+uint32_t wireguard_sys_now(void) {
   uint32_t milliseconds = 0u;
   const hal_status_t status = jh_lwip_extension_monotonic_ms(
       jh_lwip_extension_platform_port(), &milliseconds);
@@ -65,6 +65,6 @@ void wireguard_tai64n_now(uint8_t *output) {
   }
 }
 
-bool wireguard_is_under_load() { return false; }
+bool wireguard_is_under_load(void) { return false; }
 
 #endif /* HAL_ENABLE_WIREGUARD */

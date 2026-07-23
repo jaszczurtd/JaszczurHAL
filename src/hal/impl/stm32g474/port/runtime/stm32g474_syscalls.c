@@ -24,6 +24,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <sys/types.h>
 
 #define JH_STDIN_FD 0
@@ -35,6 +36,13 @@ extern char _estack;
 extern char _Min_Stack_Size;
 
 static uintptr_t s_heap_current = 0u;
+
+__attribute__((weak)) int
+jh_stm32g474_runtime_gettimeofday(struct timeval *time_value) {
+  (void)time_value;
+  errno = ENOSYS;
+  return -1;
+}
 
 #if defined(HAL_ENABLE_FREERTOS)
 static int stm32g474_runtime_in_isr(void) {
@@ -106,6 +114,15 @@ int _isatty(int fd) {
   }
   errno = EBADF;
   return 0;
+}
+
+int _gettimeofday(struct timeval *time_value, void *timezone) {
+  (void)timezone;
+  if (time_value == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+  return jh_stm32g474_runtime_gettimeofday(time_value);
 }
 
 _off_t _lseek(int fd, _off_t offset, int whence) {

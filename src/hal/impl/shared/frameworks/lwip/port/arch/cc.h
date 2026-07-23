@@ -14,14 +14,22 @@ void jh_lwip_port_assert(const char *message, const char *file, int line);
 }
 #endif
 
+#ifndef BYTE_ORDER
 #define BYTE_ORDER LITTLE_ENDIAN
+#endif
+#ifndef LWIP_RAND
 #define LWIP_RAND() jh_lwip_port_rand()
+#endif
+#ifndef LWIP_PLATFORM_DIAG
 #define LWIP_PLATFORM_DIAG(message)                                            \
   do {                                                                         \
     (void)0;                                                                   \
   } while (0)
+#endif
+#ifndef LWIP_PLATFORM_ASSERT
 #define LWIP_PLATFORM_ASSERT(message)                                          \
   jh_lwip_port_assert((message), __FILE__, __LINE__)
+#endif
 
 typedef unsigned int sys_prot_t;
 

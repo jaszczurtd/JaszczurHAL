@@ -34,10 +34,10 @@
 | `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
 | `hal_littlefs` | Arduino-pico `LittleFS` on RP2040; upstream littlefs + STM32 internal flash partition on STM32G474 |
 | `hal_udp` | Arduino-pico `WiFiUDP` |
-| `hal_wireguard` | bundled `arduino-wireguard-pico-w` + Arduino-pico WiFi/lwIP stack |
+| `hal_wireguard` | shared WireGuard/lwIP engine + capability-advertised host-lwIP backend |
 | `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
 | `hal_ota` | Arduino-pico `ArduinoOTA` |
-| `hal_time` | Arduino-pico / lwIP SNTP (`configTime`) |
+| `hal_time` | backend time/NTP integration (`configTime` on Arduino-Pico; HAL UDP/NTP on STM32G474) |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
 | `hal_sdlogger` | shared FatFs file layer in `impl/shared/frameworks/filesystem/` |
 | `tools` | HAL APIs |

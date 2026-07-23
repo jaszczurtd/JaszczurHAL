@@ -53,6 +53,15 @@
 #define DNS_MAX_NAME_LENGTH 128
 #define LWIP_DNS_SUPPORT_MDNS_QUERIES 0
 
+/*
+ * The upstream default sizes this pool for lwIP's internal cyclic timers
+ * only.  A live WireGuard netif owns one additional periodic timeout and
+ * releases it in wireguardif_shutdown().
+ */
+#if defined(HAL_ENABLE_WIREGUARD) && HAL_ENABLE_WIREGUARD
+#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+#endif
+
 #define LWIP_NETIF_HOSTNAME 1
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK 1

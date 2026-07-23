@@ -62,11 +62,11 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/impl/rp2040/` - RP2040 backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.). Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/crypto/`).
+- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.). Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/`).
 - `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
-- `src/hal/impl/rp2040/frameworks/` - bundled high-level integration frameworks (`arduino-wireguard-pico-w`, `PubSubClient`).
+- `src/hal/impl/shared/frameworks/` - bundled target-neutral high-level engines, including PubSubClient and WireGuard.
 - `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and bundled Unity sources.
 
 `JaszczurHAL.h` is the current top-level public include and should be the

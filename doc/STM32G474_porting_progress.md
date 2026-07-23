@@ -308,12 +308,15 @@ later if WS2812 throughput or interrupt latency becomes a practical issue.
 shared HAL I2C drivers with STM32G474 and RP2040 wrappers using the same device
 logic.
 
-**🔴 Not a "driver port" - different effort entirely:**
-- `hal_wifi / hal_udp / hal_tcp / hal_mqtt / hal_wireguard` - tied to Pico-W (CYW43) +
-  PubSubClient + `arduino-wireguard-pico-w`. STM32G474 has no radio -> not a port
-  but a different transport (e.g. via the already-portable SIMCom modem).
-  Effectively N/A for a bare G474.
-- `hal_ota` - STM32 flash/update specific, not a vendor-driver port.
+**Network modules:**
+- `hal_wifi / hal_udp / hal_tcp / hal_mqtt / hal_wireguard` have an opt-in
+  STM32G474 path for an externally wired CYW43 carrier. The backend owns a
+  polling one-wire gSPI transport, shared CYW43/lwIP stack, hardware entropy,
+  NTP, TLS and the shared WireGuard engine. They remain unavailable on a bare
+  G474 without a selected network backend and carrier profile.
+- Pure socket-offload modem backends do not advertise the host-stack L3 and
+  virtual-netif capabilities required by WireGuard.
+- `hal_ota` remains a different STM32 flash/update effort.
 - `hal_swserial` - implemented through the shared HAL GPIO/timing/sync driver.
 
 ### Recommended order

@@ -8,7 +8,10 @@
 #include <string.h>
 
 #define JH_NTP_PACKET_SIZE 48u
-#define JH_NTP_PORT 123u
+#ifndef HAL_TIME_NTP_PORT
+#define HAL_TIME_NTP_PORT 123u
+#endif
+#define JH_NTP_PORT HAL_TIME_NTP_PORT
 
 static inline void jh_ntp_write_u64_be(uint8_t *output, uint64_t value) {
   size_t index;

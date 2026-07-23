@@ -14,7 +14,6 @@
 #include <algorithm>
 #include <cstdio>
 #include <netdb.h>
-#include <new>
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -105,7 +104,7 @@ static void release_transport(jh_tls_client_context_t *client) {
     (void)close(client->socket_fd);
     client->socket_fd = -1;
   }
-  delete client->provider;
+  jh_bearssl_client_release(client->provider);
   client->provider = NULL;
 }
 
@@ -414,7 +413,7 @@ hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
         }
       }
       if (status == HAL_OK) {
-        client->provider = new (std::nothrow) jh_bearssl_client_t;
+        client->provider = jh_bearssl_client_allocate();
         if (client->provider == NULL) {
           status = HAL_ENOMEM;
         }

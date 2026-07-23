@@ -278,11 +278,10 @@ add_test(NAME test_pubsub_hal_client COMMAND test_pubsub_hal_client)
 add_executable(test_wireguard_lwip_port
     test_wireguard_lwip_port.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_extension.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/WireGuard.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/jh_wireguard_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_wireguard_lwip_port BEFORE PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/arduino
     ${CMAKE_CURRENT_SOURCE_DIR}/fakes
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
 )
@@ -308,6 +307,12 @@ add_test(NAME test_cyw43_dependency_boundary
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_cyw43_dependency_boundary.cmake
+)
+
+add_test(NAME test_wireguard_dependency_boundary
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_wireguard_dependency_boundary.cmake
 )
 
 add_test(NAME test_lwip_dependency_boundary
@@ -587,7 +592,7 @@ add_executable(test_wireguard_crypto_shared
 )
 target_include_directories(test_wireguard_crypto_shared PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/crypto
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)

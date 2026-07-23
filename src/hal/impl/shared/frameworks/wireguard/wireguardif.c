@@ -34,10 +34,10 @@
  * Author: Daniel Hope <daniel.hope@smartalock.com>
  */
 
-#include "../../../../../hal_config.h"
+#include "hal/hal_config.h"
 #if defined(HAL_ENABLE_WIREGUARD)
 
-#include "wg_port_pico.h"
+#include "wireguard_port.h"
 #include "wireguardif.h"
 
 #include <stdlib.h>
@@ -51,7 +51,7 @@
 #include "lwip/timeouts.h"
 #include "lwip/udp.h"
 
-#include "hal/impl/shared/frameworks/wireguard/crypto/crypto.h"
+#include "crypto/crypto.h"
 #include "wireguard.h"
 #include "wireguard_allowed_ip.h"
 #include "wireguard_pbuf.h"
@@ -182,6 +182,7 @@ static err_t wireguardif_device_output(struct wireguard_device *device,
 static err_t wireguardif_output_to_peer(struct netif *netif, struct pbuf *q,
                                         const ip_addr_t *ipaddr,
                                         struct wireguard_peer *peer) {
+  (void)ipaddr;
   // The LWIP IP layer wants to send an IP packet out over the interface - we
   // need to encrypt and send it to the peer
   struct message_transport_data *hdr;

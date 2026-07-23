@@ -1,7 +1,7 @@
-#include "hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/arduino-wireguard-pico-w.h"
-#include "hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/wireguard-platform.h"
-#include "hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/wireguard_allowed_ip.h"
-#include "hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/src/wireguardif.h"
+#include "hal/impl/shared/frameworks/wireguard/jh_wireguard_client.h"
+#include "hal/impl/shared/frameworks/wireguard/wireguard-platform.h"
+#include "hal/impl/shared/frameworks/wireguard/wireguard_allowed_ip.h"
+#include "hal/impl/shared/frameworks/wireguard/wireguardif.h"
 #include "hal/impl/shared/network/jh_lwip_extension.h"
 #include "utils/unity.h"
 
@@ -365,9 +365,10 @@ void test_inbound_allowed_ips_validates_inner_source_not_destination(void) {
 }
 
 void test_full_tunnel_lifecycle_restores_route_and_resources(void) {
-  WireGuard wireguard;
-  TEST_ASSERT_TRUE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                   "wg.example", "public", 51820u));
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_TRUE(wireguard.is_initialized());
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, captured_bind_netif);
   TEST_ASSERT_TRUE(netif_default != &underlay_netif);
@@ -389,10 +390,13 @@ void test_full_tunnel_lifecycle_restores_route_and_resources(void) {
 }
 
 void test_split_tunnel_keeps_default_route(void) {
-  WireGuard wireguard;
-  TEST_ASSERT_TRUE(wireguard.beginAdvanced(
-      IPAddress(10u, 8u, 0u, 2u), "private", "wg.example", "public", 51820u,
-      IPAddress(10u, 20u, 0u, 0u), IPAddress(255u, 255u, 0u, 0u)));
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  const uint8_t allowed_ip[4] = {10u, 20u, 0u, 0u};
+  const uint8_t allowed_mask[4] = {255u, 255u, 0u, 0u};
+  TEST_ASSERT_TRUE(wireguard.begin_advanced(local_ip, "private", "wg.example",
+                                            "public", 51820u, allowed_ip,
+                                            allowed_mask));
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
   wireguard.end();
   TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
@@ -400,10 +404,11 @@ void test_split_tunnel_keeps_default_route(void) {
 }
 
 void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
-  WireGuard wireguard;
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
   add_peer_status = ERR_MEM;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_FALSE(wireguard.is_initialized());
   TEST_ASSERT_EQUAL_UINT32(1u, netif_remove_count);
   TEST_ASSERT_EQUAL_UINT32(1u, shutdown_count);
@@ -413,15 +418,15 @@ void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
 
   add_peer_status = ERR_OK;
   connect_status = ERR_RTE;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_EQUAL_UINT32(1u, peer_remove_count);
   TEST_ASSERT_EQUAL_UINT32(2u, netif_remove_count);
   TEST_ASSERT_EQUAL_UINT32(2u, shutdown_count);
 
   connect_status = ERR_OK;
-  TEST_ASSERT_TRUE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                   "wg.example", "public", 51820u));
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   wireguard.end();
   TEST_ASSERT_EQUAL_UINT32(3u, shutdown_count);
   TEST_ASSERT_EQUAL_UINT32(extension_state.enter_count,
@@ -429,12 +434,15 @@ void test_peer_and_connect_failures_cleanup_then_reconnect(void) {
 }
 
 void test_repeated_begin_end_does_not_leak_route_or_backend_state(void) {
-  WireGuard wireguard;
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  const uint8_t allowed_ip[4] = {10u, 20u, 0u, 0u};
+  const uint8_t allowed_mask[4] = {255u, 255u, 0u, 0u};
 
   for (unsigned cycle = 0u; cycle < 5u; ++cycle) {
-    TEST_ASSERT_TRUE(wireguard.beginAdvanced(
-        IPAddress(10u, 8u, 0u, 2u), "private", "wg.example", "public", 51820u,
-        IPAddress(10u, 20u, 0u, 0u), IPAddress(255u, 255u, 0u, 0u)));
+    TEST_ASSERT_TRUE(wireguard.begin_advanced(local_ip, "private", "wg.example",
+                                              "public", 51820u, allowed_ip,
+                                              allowed_mask));
     TEST_ASSERT_TRUE(wireguard.is_initialized());
     TEST_ASSERT_EQUAL_PTR(&underlay_netif, netif_default);
     wireguard.end();
@@ -452,33 +460,34 @@ void test_repeated_begin_end_does_not_leak_route_or_backend_state(void) {
 }
 
 void test_stack_and_resolver_failures_do_not_mutate_lwip(void) {
-  WireGuard wireguard;
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
   extension_state.random_status = HAL_EHW;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.resolve_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.random_status = HAL_OK;
   extension_state.tai64n_status = HAL_ESTATE;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.resolve_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.tai64n_status = HAL_OK;
   extension_state.resolve_status = HAL_ETIMEOUT;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
 
   extension_state.resolve_status = HAL_OK;
   extension_state.enter_status = HAL_EBUSY;
-  TEST_ASSERT_FALSE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                    "wg.example", "public", 51820u));
+  TEST_ASSERT_FALSE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
   TEST_ASSERT_EQUAL_UINT32(1u, extension_state.enter_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.leave_count);
   TEST_ASSERT_EQUAL_UINT32(0u, netif_add_count);
@@ -486,16 +495,17 @@ void test_stack_and_resolver_failures_do_not_mutate_lwip(void) {
 }
 
 void test_peer_endpoint_and_probe_retry_rate_limit(void) {
-  WireGuard wireguard;
-  TEST_ASSERT_TRUE(wireguard.begin(IPAddress(10u, 8u, 0u, 2u), "private",
-                                   "wg.example", "public", 51820u));
+  JHWireGuardClient wireguard;
+  const uint8_t local_ip[4] = {10u, 8u, 0u, 2u};
+  TEST_ASSERT_TRUE(
+      wireguard.begin(local_ip, "private", "wg.example", "public", 51820u));
 
   peer_up_status = ERR_OK;
   IP_ADDR4(&peer_endpoint, 198u, 51u, 100u, 9u);
   peer_endpoint_port = 41000u;
-  IPAddress endpoint;
+  uint8_t endpoint[4] = {};
   uint16_t endpoint_port = 0u;
-  TEST_ASSERT_TRUE(wireguard.peerUp(&endpoint, &endpoint_port));
+  TEST_ASSERT_TRUE(wireguard.peer_up(endpoint, &endpoint_port));
   TEST_ASSERT_EQUAL_UINT32(1u, poll_count);
   TEST_ASSERT_EQUAL_UINT8(198u, endpoint[0]);
   TEST_ASSERT_EQUAL_UINT8(51u, endpoint[1]);
@@ -504,24 +514,24 @@ void test_peer_endpoint_and_probe_retry_rate_limit(void) {
   TEST_ASSERT_EQUAL_UINT16(41000u, endpoint_port);
 
   poll_status = ERR_IF;
-  TEST_ASSERT_FALSE(wireguard.peerUp(nullptr, nullptr));
+  TEST_ASSERT_FALSE(wireguard.peer_up(nullptr, nullptr));
   TEST_ASSERT_EQUAL_UINT32(2u, poll_count);
   poll_status = ERR_OK;
 
-  const IPAddress probe(1u, 1u, 1u, 1u);
-  TEST_ASSERT_TRUE(wireguard.kickHandshake(probe, 53u, 250u));
+  const uint8_t probe[4] = {1u, 1u, 1u, 1u};
+  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(3u, poll_count);
   TEST_ASSERT_EQUAL_UINT32(0u, extension_state.probe_count);
   extension_state.now_ms = 20u;
-  TEST_ASSERT_TRUE(wireguard.kickHandshake(probe, 53u, 250u));
+  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(3u, poll_count);
 
   extension_state.now_ms = 300u;
   poll_status = ERR_IF;
-  TEST_ASSERT_FALSE(wireguard.kickHandshake(probe, 53u, 250u));
+  TEST_ASSERT_FALSE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(4u, poll_count);
   poll_status = ERR_OK;
-  TEST_ASSERT_TRUE(wireguard.kickHandshake(probe, 53u, 250u));
+  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(5u, poll_count);
 
   wireguard.end();

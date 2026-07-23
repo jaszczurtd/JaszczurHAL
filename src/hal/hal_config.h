@@ -638,6 +638,15 @@
 #endif
 #endif
 
+#ifdef HAL_ENABLE_TIME
+#ifndef HAL_ENABLE_UDP
+#define HAL_ENABLE_UDP
+#endif
+#ifndef HAL_ENABLE_WIFI
+#define HAL_ENABLE_WIFI
+#endif
+#endif
+
 /* -- Derived network core and exactly-one backend selection ------------ */
 /* Feature flags request behavior.  They do not select a radio or socket
  * implementation.  A target may provide a compatibility default, but an
@@ -723,8 +732,8 @@
 #define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
 #define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
 #define HAL_NETWORK_CORE_HAS_UDP 1
-/* Arduino-Pico owns lwIP and exposes the existing private L3 extension used by
- * the transitional WireGuard implementation. */
+/* Arduino-Pico owns lwIP and exposes the private L3 extension used by the
+ * shared WireGuard engine. */
 #define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
 #define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
 #define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1

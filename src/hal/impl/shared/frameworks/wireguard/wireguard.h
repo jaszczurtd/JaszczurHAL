@@ -42,9 +42,9 @@
 
 // Note: these are only required for definitions in device/peer for netif,
 // udp_pcb, ip_addr_t and u16_t
-// Arduino-Pico's lwipopts.h defines a few port hooks also defaulted by
-// arch/cc.h. Include lwIP options first so arch/cc.h sees the configured hooks
-// and does not emit macro redefinition warnings.
+// A target lwipopts.h may define port hooks also defaulted by arch/cc.h.
+// Include lwIP options first so arch/cc.h sees the configured hooks and does
+// not emit macro redefinition warnings.
 #include "lwip/arch.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"

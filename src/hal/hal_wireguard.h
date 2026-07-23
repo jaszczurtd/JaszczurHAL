@@ -10,7 +10,7 @@ extern "C" {
 
 /**
  * @file hal_wireguard.h
- * @brief Thread-safe HAL wrapper for arduino-wireguard-pico-w.
+ * @brief Thread-safe HAL wrapper for the shared WireGuard/lwIP engine.
  */
 
 #include "hal_status.h"

@@ -63,7 +63,7 @@ For the target-selectable VS Code firmware project model, see
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
 | OTA | ArduinoOTA-oriented update integration. | [hal_ota.h](../src/hal/hal_ota.h) |
 | NTP / time-of-day sync | Network time helpers for connected builds. | [hal_time.h](../src/hal/hal_time.h) |
-| WireGuard | Bundled WireGuard integration for secure connected firmware scenarios. | [hal_wireguard.h](../src/hal/hal_wireguard.h), [WireGuard port](../src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w/) |
+| WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/hal_wireguard.h), [WireGuard engine](../src/hal/impl/shared/frameworks/wireguard/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/hal_simcom_a76xx.h) |
 
 ## Storage, files and logging
