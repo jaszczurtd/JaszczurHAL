@@ -1,4 +1,5 @@
 #include "hal/hal_tls.h"
+#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.h"
 #include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.h"
 #include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
 
@@ -68,6 +69,11 @@ int main(int argc, char **argv) {
       connect(fd, reinterpret_cast<sockaddr *>(&remote), sizeof(remote)) != 0) {
     return 5;
   }
+  jh_bearssl_bsd_transport_t transport = {};
+  if (jh_bearssl_bsd_transport_init(&transport, fd) != HAL_OK) {
+    close(fd);
+    return 5;
+  }
 
   uint8_t entropy[JH_BEARSSL_ENTROPY_SIZE];
   for (size_t index = 0; index < sizeof(entropy); ++index) {
@@ -85,7 +91,8 @@ int main(int argc, char **argv) {
       std::chrono::steady_clock::now() + std::chrono::seconds(5);
   while (status == HAL_OK || status == HAL_EAGAIN) {
     jh_bearssl_poll_result_t result = {};
-    status = jh_bearssl_engine_poll(&provider.client.eng, fd, 8u, &result);
+    status = jh_bearssl_engine_poll(&provider.client.eng, &transport.transport,
+                                    8u, &result);
     if (status == HAL_OK &&
         (result.event == JH_BEARSSL_EVENT_APPLICATION_READABLE ||
          result.event == JH_BEARSSL_EVENT_APPLICATION_WRITABLE)) {

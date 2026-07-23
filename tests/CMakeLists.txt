@@ -725,6 +725,30 @@ add_hal_test(test_hal_tls)
 add_hal_test(test_hal_http_client)
 add_hal_test(test_bearssl_provider)
 
+add_library(test_tls_without_bsd_compile OBJECT
+    fixtures/tls_without_bsd_config_probe.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/hal_tls.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp)
+target_compile_definitions(test_tls_without_bsd_compile PRIVATE
+    HAL_TARGET_MOCK=1 HAL_ENABLE_TLS)
+target_include_directories(test_tls_without_bsd_compile PRIVATE
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/vendor/inc)
+target_compile_options(test_tls_without_bsd_compile PRIVATE
+    -Wall -Wextra -Werror)
+
+add_library(test_bsd_without_tls_compile OBJECT
+    fixtures/bsd_without_tls_config_probe.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp)
+target_compile_definitions(test_bsd_without_tls_compile PRIVATE
+    HAL_TARGET_MOCK=1 HAL_ENABLE_BSD_SOCKETS)
+target_include_directories(test_bsd_without_tls_compile PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_options(test_bsd_without_tls_compile PRIVATE
+    -Wall -Wextra -Werror)
+
 find_program(JH_OPENSSL_EXECUTABLE openssl)
 if(JH_OPENSSL_EXECUTABLE)
     add_executable(test_bearssl_native_client

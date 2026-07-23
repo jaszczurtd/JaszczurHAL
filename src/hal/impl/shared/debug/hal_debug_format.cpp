@@ -1,3 +1,4 @@
+/** @file Shared serial/debug formatting implementation. */
 #include "hal_debug_format.h"
 
 #include <limits.h>

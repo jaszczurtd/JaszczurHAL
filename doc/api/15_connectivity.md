@@ -432,7 +432,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/compat/http_server/hal_http_server.cpp`.
+**impl/shared:** `impl/shared/network/services/http_server/hal_http_server.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_http_server`.
 
@@ -567,7 +567,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_FILES_IO_BUFFER_SIZE 128u
 ```
 
-**impl/shared:** `impl/shared/compat/http_files/hal_http_files.cpp`.
+**impl/shared:** `impl/shared/network/services/http_files/hal_http_files.cpp`.
 **impl/.mock:** covered through mock HTTP/TCP and `test_hal_http_files`.
 
 ---
@@ -684,7 +684,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_WEBSOCKET_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/compat/websocket/hal_websocket.cpp`.
+**impl/shared:** `impl/shared/network/services/websocket/hal_websocket.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_websocket`.
 
@@ -785,7 +785,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_NET_CONSOLE_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/compat/net_console/hal_net_console.cpp`.
+**impl/shared:** `impl/shared/network/services/net_console/hal_net_console.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_net_console`.
 
@@ -964,7 +964,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE 512u
 ```
 
-**impl/shared:** `impl/shared/compat/net_commands/hal_net_commands.cpp`.
+**impl/shared:** `impl/shared/network/services/net_commands/hal_net_commands.cpp`.
 **impl/.mock:** covered through mock HTTP/WebSocket TCP backends and
 `test_hal_net_commands`.
 
@@ -1256,6 +1256,64 @@ uint8_t     hal_mock_tcp_listener_get_pending_count(hal_tcp_listener_t listener)
 
 ---
 
+## `hal_tls` - TLS client  *(opt-in - `HAL_ENABLE_TLS`)*
+
+`hal_tls` is a provider-neutral, generation-checked TLS client facade backed by
+the bundled BearSSL engine. Enabling it automatically enables TCP and WiFi, but
+does not enable or require the optional BSD sockets adapter.
+
+```c
+#include <hal/hal_tls.h>
+
+hal_tls_client_config_t config;
+hal_tls_client_t client = NULL;
+
+hal_tls_client_config_init(&config);
+hal_tls_client_create_ex(&config, &client);
+hal_tls_client_configure_server_ex(client, "example.com", 443u);
+hal_tls_client_configure_security_ex(client, &security);
+hal_tls_client_connect_ex(client);
+
+while (hal_tls_client_poll_ex(client) == HAL_EAGAIN) {
+  hal_net_service();
+}
+
+hal_tls_client_write_ex(client, request, request_length, &written);
+hal_tls_client_read_ex(client, response, sizeof(response), &received);
+hal_tls_client_shutdown_ex(client);
+hal_tls_client_close_ex(client);
+```
+
+The core TLS path resolves through `hal_net_resolve_ex()` and owns a native
+`hal_tcp_socket_t`. BearSSL record progression uses a small private transport
+contract rather than POSIX descriptors. This keeps TLS usable when
+`HAL_ENABLE_BSD_SOCKETS` is disabled.
+
+BSD sockets remain independently supported TLS transports. When both flags are
+enabled, the BearSSL BSD adapter maps an existing descriptor's non-blocking
+`send()`/`recv()` operations into the same private BearSSL transport contract.
+Applications and third-party TLS clients that use BSD I/O continue to operate
+over the public socket API; enabling native `hal_tls` does not change descriptor
+ownership or BSD semantics.
+
+**Implementation:**
+
+- `hal_tls.cpp` owns lifecycle, DNS resolution, native HAL TCP transport and
+  provider-independent security configuration;
+- `impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.*` adapts HAL TCP;
+- `impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.*` is the optional
+  TLS-over-BSD bridge;
+- `impl/shared/frameworks/BearSSL/jh_bearssl_engine.*` advances records through
+  either transport without depending on either socket representation.
+
+**Tests:** `test_hal_tls` covers the public lifecycle, `test_bearssl_provider`
+covers both native transport-independent engine behavior and TLS-over-BSD I/O,
+the configuration compile probes verify TLS without BSD and BSD without TLS,
+and `test_bearssl_native_integration` performs certificate/time validation
+against a loopback OpenSSL server through a BSD descriptor.
+
+---
+
 ## BSD sockets adapter  *(opt-in - `HAL_ENABLE_BSD_SOCKETS`)*
 
 Minimal IPv4 BSD/POSIX compatibility layer over `hal_udp` and `hal_tcp`.
@@ -1325,6 +1383,10 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   route/AllowedIPs is carried through the encrypted tunnel. This is network-layer
   tunneling and does not replace TLS sockets, which provide end-to-end
   application/session-layer encryption.
+- BSD sockets can be used as the transport for TLS libraries. The bundled
+  BearSSL BSD adapter remains available when both `HAL_ENABLE_BSD_SOCKETS` and
+  `HAL_ENABLE_TLS` are selected; the native `hal_tls` facade uses HAL TCP
+  directly and therefore does not force BSD sockets into unrelated builds.
 - UDP `sendto()` auto-binds to an ephemeral local port when the socket was not
   explicitly bound.
 - UDP `connect()` stores a default peer endpoint and auto-binds if needed.
@@ -1370,8 +1432,9 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   cancellable waits should use `O_NONBLOCK` plus `select()` polling.
 - Unsupported flags/operations fail with `errno`.
 
-**impl/shared:** fd-table adapter, IPv4 conversion helpers and minimal
-`netdb.h` resolver glue.
+**impl/shared:** `impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp`
+contains the fd-table adapter, address conversion helpers and `netdb.h`
+resolver glue.
 **impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
 `test_bsd_sockets_c_compile` verifies simple C TCP/UDP client/server shapes,
 `getaddrinfo()` and `setsockopt()` compile and link against the compatibility

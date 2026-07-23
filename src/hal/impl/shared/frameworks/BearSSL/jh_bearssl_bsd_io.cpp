@@ -46,6 +46,59 @@ static void io_wait_once(jh_bearssl_bsd_io_t *io) {
   hal_delay_ms(1u);
 }
 
+static hal_status_t bsd_transport_send(void *context, const void *data,
+                                       size_t length, size_t *out_sent) {
+  jh_bearssl_bsd_transport_t *adapter =
+      static_cast<jh_bearssl_bsd_transport_t *>(context);
+  if (adapter == nullptr || adapter->fd < 0 || out_sent == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_sent = 0u;
+  const ssize_t sent = send(adapter->fd, data, length, MSG_DONTWAIT);
+  if (sent > 0) {
+    *out_sent = (size_t)sent;
+    return HAL_OK;
+  }
+  if (sent < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+    return HAL_EAGAIN;
+  }
+  return HAL_EIO;
+}
+
+static hal_status_t bsd_transport_receive(void *context, void *buffer,
+                                          size_t capacity,
+                                          size_t *out_received) {
+  jh_bearssl_bsd_transport_t *adapter =
+      static_cast<jh_bearssl_bsd_transport_t *>(context);
+  if (adapter == nullptr || adapter->fd < 0 || out_received == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_received = 0u;
+  const ssize_t received = recv(adapter->fd, buffer, capacity, MSG_DONTWAIT);
+  if (received > 0) {
+    *out_received = (size_t)received;
+    return HAL_OK;
+  }
+  if (received < 0 &&
+      (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+    return HAL_EAGAIN;
+  }
+  return HAL_EPROTO;
+}
+
+hal_status_t jh_bearssl_bsd_transport_init(jh_bearssl_bsd_transport_t *adapter,
+                                           int fd) {
+  if (adapter == nullptr || fd < 0) {
+    return HAL_EINVAL;
+  }
+  memset(adapter, 0, sizeof(*adapter));
+  adapter->fd = fd;
+  adapter->transport.context = adapter;
+  adapter->transport.send = bsd_transport_send;
+  adapter->transport.receive = bsd_transport_receive;
+  return HAL_OK;
+}
+
 hal_status_t jh_bearssl_bsd_io_init(jh_bearssl_bsd_io_t *io, int fd,
                                     uint32_t timeout_ms,
                                     jh_bearssl_cancel_fn is_cancelled,
@@ -145,6 +198,28 @@ int jh_bearssl_bsd_write(void *context, const unsigned char *data,
     }
     io_wait_once(io);
   }
+}
+
+hal_status_t jh_bearssl_blocking_io_init(jh_bearssl_blocking_io_t *provider,
+                                         br_ssl_engine_context *engine, int fd,
+                                         uint32_t timeout_ms,
+                                         jh_bearssl_cancel_fn is_cancelled,
+                                         jh_bearssl_service_fn service,
+                                         void *callback_context) {
+  if (provider == NULL || engine == NULL) {
+    return HAL_EINVAL;
+  }
+  memset(provider, 0, sizeof(*provider));
+  hal_status_t status =
+      jh_bearssl_bsd_io_init(&provider->transport, fd, timeout_ms, is_cancelled,
+                             service, callback_context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  br_sslio_init(&provider->io, engine, jh_bearssl_bsd_read,
+                &provider->transport, jh_bearssl_bsd_write,
+                &provider->transport);
+  return HAL_OK;
 }
 
 #endif

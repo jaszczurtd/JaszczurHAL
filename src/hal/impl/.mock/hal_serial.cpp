@@ -5,7 +5,7 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
-#include "hal/impl/shared/compat/debug_format/hal_debug_format.h"
+#include "hal/impl/shared/debug/hal_debug_format.h"
 #include "hal_mock.h"
 #include <stdarg.h>
 #include <stdio.h>

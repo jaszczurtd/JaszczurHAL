@@ -132,9 +132,12 @@ src/
         drivers/rp2040/     # RP2040 SoC services (fault/system)
         frameworks/         # Arduino-origin integrations (frameworks & drivers)
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        compat/             # portable compatibility shims, e.g. BSD sockets/debug format
+        debug/              # shared serial/debug formatting
         drivers/            # hardware-oriented drivers: sensors, buses, displays
         frameworks/         # reusable engines/stacks and bundled portable libs
+        network/
+          adapters/bsd/     # public BSD/POSIX adapter over HAL UDP/TCP
+          services/         # HTTP, WebSocket, console and command services
       stm32g474/            # STM32G474 backend
         drivers/
           littlefs/         # STM32 LittleFS backend support
@@ -161,6 +164,12 @@ Shared implementations are split by role:
   `pga2311/`, and sensor/display backends.
 - `shared/frameworks/` contains larger reusable engines or protocol stacks,
   for example `filesystem/`, `gps/`, `irsmall_decoder/`, and `wireguard/`.
+- `shared/network/` contains target-neutral network adapters and services.
+  The BSD/POSIX API is a supported public adapter under `adapters/bsd/`;
+  HTTP server/files, WebSocket, net console and net commands are grouped under
+  `services/`.
+- `shared/debug/` contains formatting shared by target and mock serial
+  implementations.
 
 ## Quick start
 There are two common starting points:

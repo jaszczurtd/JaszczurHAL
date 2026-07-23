@@ -1,3 +1,4 @@
+/** @file Target-neutral HTTP server service over HAL TCP. */
 #include "hal/hal_http_server.h"
 
 #ifdef HAL_ENABLE_HTTP_SERVER

@@ -60,6 +60,7 @@ For the target-selectable VS Code firmware project model, see
 | Net console | Password-protected TCP console that mirrors `hal_serial`/debug output to authenticated clients while preserving local UART/USB logs, plus bidirectional command input. | [hal_net_console.h](../src/hal/hal_net_console.h) |
 | Network commands | Shared JSON/text command dispatcher for HTTP and WebSocket control channels, backed by cJSON and `hal_status_t` responses. | [hal_net_commands.h](../src/hal/hal_net_commands.h) |
 | BSD sockets adapter | Minimal IPv4 `sys/socket.h` / `netinet/in.h` / `arpa/inet.h` / `netdb.h` compatibility layer over HAL UDP/TCP handles, including `getaddrinfo()`, `setsockopt()`, `O_NONBLOCK`, `MSG_DONTWAIT` and `select()` readiness. | [socket.h](../src/sys/socket.h), [netdb.h](../src/netdb.h) |
+| TLS | Provider-neutral TLS client API backed by BearSSL and native HAL TCP, with trust anchors, time/entropy callbacks, cancellation, bounded polling and an optional BSD-socket transport bridge. | [hal_tls.h](../src/hal/hal_tls.h), [BearSSL transport](../src/hal/impl/shared/frameworks/BearSSL/) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
 | OTA | ArduinoOTA-oriented update integration. | [hal_ota.h](../src/hal/hal_ota.h) |
 | NTP / time-of-day sync | Network time helpers for connected builds. | [hal_time.h](../src/hal/hal_time.h) |

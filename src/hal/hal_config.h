@@ -299,8 +299,7 @@
        HAL_ENABLE_BSD_SOCKETS   - minimal POSIX/BSD socket adapter
                                   (propagates: UDP, TCP, WIFI).
        HAL_ENABLE_TLS           - portable TLS client with a private BearSSL
-                                  provider (propagates: BSD sockets, TCP,
-                                  WIFI).
+                                  provider (propagates: TCP, WIFI).
        HAL_ENABLE_HTTP_CLIENT   - portable HTTP/HTTPS client (propagates:
                                   TLS, TCP, WIFI).
        HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
@@ -549,8 +548,8 @@
 #endif
 
 #ifdef HAL_ENABLE_TLS
-#ifndef HAL_ENABLE_BSD_SOCKETS
-#define HAL_ENABLE_BSD_SOCKETS
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
 #endif
 #endif
 

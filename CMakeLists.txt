@@ -47,16 +47,17 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
     ${SRC}/hal/impl/shared/network/jh_public_network_backend_adapter.cpp
     ${SRC}/hal/hal_can_util.cpp
-    ${SRC}/hal/impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp
+    ${SRC}/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
+    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp
-    ${SRC}/hal/impl/shared/compat/http_server/hal_http_server.cpp
-    ${SRC}/hal/impl/shared/compat/http_files/hal_http_files.cpp
-    ${SRC}/hal/impl/shared/compat/websocket/hal_websocket.cpp
-    ${SRC}/hal/impl/shared/compat/net_console/hal_net_console.cpp
-    ${SRC}/hal/impl/shared/compat/net_commands/hal_net_commands.cpp
-    ${SRC}/hal/impl/shared/compat/debug_format/hal_debug_format.cpp
+    ${SRC}/hal/impl/shared/network/services/http_server/hal_http_server.cpp
+    ${SRC}/hal/impl/shared/network/services/http_files/hal_http_files.cpp
+    ${SRC}/hal/impl/shared/network/services/websocket/hal_websocket.cpp
+    ${SRC}/hal/impl/shared/network/services/net_console/hal_net_console.cpp
+    ${SRC}/hal/impl/shared/network/services/net_commands/hal_net_commands.cpp
+    ${SRC}/hal/impl/shared/debug/hal_debug_format.cpp
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp

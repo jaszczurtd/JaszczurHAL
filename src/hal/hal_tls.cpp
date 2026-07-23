@@ -5,20 +5,19 @@
 #include "hal_net.h"
 #include "hal_sync.h"
 #include "hal_system.h"
+#include "hal_tcp.h"
 #include "hal_time.h"
 #include "impl/shared/frameworks/BearSSL/jh_bearssl_engine.h"
+#include "impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.h"
 #include "impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
 #include "impl/shared/hal_mutex_once.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
 
 #include <algorithm>
-#include <cstdio>
-#include <netdb.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #define JH_TLS_HANDLE_KIND 7u
+#define JH_TLS_RESOLVE_MAX_RESULTS 8u
 
 typedef struct {
   hal_tls_client_config_t config;
@@ -29,7 +28,8 @@ typedef struct {
   int32_t provider_error;
   hal_tls_security_config_t security;
   jh_bearssl_client_t *provider;
-  int socket_fd;
+  hal_tcp_socket_t socket;
+  jh_bearssl_hal_tcp_transport_t transport;
   uint32_t operation_started_ms;
   bool security_configured;
   bool has_server_key_pin;
@@ -100,10 +100,11 @@ static hal_status_t record_error(jh_tls_client_context_t *client,
 }
 
 static void release_transport(jh_tls_client_context_t *client) {
-  if (client->socket_fd >= 0) {
-    (void)close(client->socket_fd);
-    client->socket_fd = -1;
+  if (client->socket != nullptr) {
+    hal_tcp_socket_close(client->socket);
+    client->socket = nullptr;
   }
+  memset(&client->transport, 0, sizeof(client->transport));
   jh_bearssl_client_release(client->provider);
   client->provider = NULL;
 }
@@ -138,10 +139,10 @@ static hal_status_t advance_client(jh_tls_client_context_t *client,
   hal_status_t status =
       pending_read
           ? jh_bearssl_engine_poll_for_read(
-                &client->provider->client.eng, client->socket_fd,
+                &client->provider->client.eng, &client->transport.transport,
                 client->config.poll_step_budget, &result)
           : jh_bearssl_engine_poll(&client->provider->client.eng,
-                                   client->socket_fd,
+                                   &client->transport.transport,
                                    client->config.poll_step_budget, &result);
   if (status == HAL_EAGAIN) {
     return status;
@@ -185,6 +186,46 @@ static bool config_is_valid(const hal_tls_client_config_t *config) {
          config->operation_timeout_ms > 0u &&
          config->operation_timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
          config->poll_step_budget > 0u;
+}
+
+static hal_status_t open_transport(jh_tls_client_context_t *client) {
+  hal_net_endpoint_t endpoints[JH_TLS_RESOLVE_MAX_RESULTS] = {};
+  size_t endpoint_count = 0u;
+  hal_status_t status =
+      hal_net_resolve_ex(client->hostname, HAL_NET_AF_UNSPEC, endpoints,
+                         JH_TLS_RESOLVE_MAX_RESULTS, &endpoint_count);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (endpoint_count == 0u) {
+    return HAL_ENOENT;
+  }
+
+  hal_status_t last_status = HAL_EIO;
+  for (size_t index = 0u; index < endpoint_count; ++index) {
+    endpoints[index].port = client->port;
+    hal_tcp_socket_t socket = nullptr;
+    status = hal_tcp_socket_open_ex(&socket);
+    if (status != HAL_OK) {
+      return status;
+    }
+    status = hal_tcp_socket_connect_ex(socket, &endpoints[index],
+                                       client->config.transport_timeout_ms);
+    if (status == HAL_OK) {
+      client->socket = socket;
+      status =
+          jh_bearssl_hal_tcp_transport_init(&client->transport, client->socket);
+      if (status == HAL_OK) {
+        return HAL_OK;
+      }
+      hal_tcp_socket_close(client->socket);
+      client->socket = nullptr;
+      return status;
+    }
+    last_status = status;
+    hal_tcp_socket_close(socket);
+  }
+  return last_status;
 }
 
 typedef struct {
@@ -283,7 +324,6 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
       client = &s_clients[index];
       memset(client, 0, sizeof(*client));
       client->allocated = true;
-      client->socket_fd = -1;
       client->config = *config;
       client->state = HAL_TLS_STATE_CREATED;
       client->last_status = HAL_OK;
@@ -392,25 +432,7 @@ hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
                                               entropy, sizeof(entropy));
       }
       if (status == HAL_OK) {
-        struct addrinfo hints = {};
-        hints.ai_family = AF_UNSPEC;
-        hints.ai_socktype = SOCK_STREAM;
-        char service[6] = {};
-        (void)snprintf(service, sizeof(service), "%u", (unsigned)client->port);
-        struct addrinfo *resolved = NULL;
-        if (getaddrinfo(client->hostname, service, &hints, &resolved) != 0 ||
-            resolved == NULL) {
-          status = HAL_ENOENT;
-        } else {
-          client->socket_fd = socket(resolved->ai_family, resolved->ai_socktype,
-                                     resolved->ai_protocol);
-          if (client->socket_fd < 0 ||
-              connect(client->socket_fd, resolved->ai_addr,
-                      resolved->ai_addrlen) != 0) {
-            status = HAL_EIO;
-          }
-          freeaddrinfo(resolved);
-        }
+        status = open_transport(client);
       }
       if (status == HAL_OK) {
         client->provider = jh_bearssl_client_allocate();

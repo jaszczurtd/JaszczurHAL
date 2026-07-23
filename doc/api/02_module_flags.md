@@ -39,12 +39,13 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
-| `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `impl/shared/compat/http_server/hal_http_server.cpp` | Small poll-driven HTTP/1.1 server over HAL TCP (propagates TCP + WIFI) |
-| `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `impl/shared/compat/http_files/hal_http_files.cpp` | Callback-backed file serving, ETag and upload helpers over HAL HTTP routes (propagates HTTP_SERVER + TCP + WIFI) |
-| `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `impl/shared/compat/websocket/hal_websocket.cpp` | Small poll-driven WebSocket server over HAL TCP (propagates TCP + WIFI) |
-| `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `impl/shared/compat/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
-| `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `impl/shared/compat/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
-| `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `impl/shared/compat/bsd_sockets/hal_bsd_sockets.cpp` | BSD/POSIX compatibility over HAL UDP/TCP, including IPv4 `getaddrinfo()` (propagates UDP + TCP + WIFI) |
+| `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `impl/shared/network/services/http_server/hal_http_server.cpp` | Small poll-driven HTTP/1.1 server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `impl/shared/network/services/http_files/hal_http_files.cpp` | Callback-backed file serving, ETag and upload helpers over HAL HTTP routes (propagates HTTP_SERVER + TCP + WIFI) |
+| `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `impl/shared/network/services/websocket/hal_websocket.cpp` | Small poll-driven WebSocket server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `impl/shared/network/services/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `impl/shared/network/services/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
+| `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp` | Public BSD/POSIX adapter over HAL UDP/TCP, including `getaddrinfo()` (propagates UDP + TCP + WIFI); remains usable with or without TLS |
+| `HAL_ENABLE_TLS` | `hal_tls.h` | `hal_tls.cpp` + `impl/shared/frameworks/BearSSL/*` | BearSSL TLS client over native HAL TCP (propagates TCP + WIFI); does not force BSD sockets, while the optional BearSSL BSD transport keeps TLS-over-BSD available |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp`  | ArduinoOTA (propagates WIFI) |
 | `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |

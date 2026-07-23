@@ -1,3 +1,4 @@
+/** @file Target-neutral WebSocket service over HAL TCP. */
 #include "hal/hal_websocket.h"
 
 #ifdef HAL_ENABLE_WEBSOCKET

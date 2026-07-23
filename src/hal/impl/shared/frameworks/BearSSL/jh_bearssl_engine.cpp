@@ -1,21 +1,11 @@
 #include "jh_bearssl_engine.h"
 #include "hal/hal_config.h"
 
-#if defined(HAL_ENABLE_TLS) && defined(HAL_ENABLE_BSD_SOCKETS)
+#ifdef HAL_ENABLE_TLS
 
 #include "vendor/inc/bearssl.h"
 
-#include <errno.h>
-#include <limits.h>
 #include <string.h>
-#include <sys/socket.h>
-
-#ifndef EWOULDBLOCK
-#define EWOULDBLOCK EAGAIN
-#endif
-#ifndef EINTR
-#define EINTR EAGAIN
-#endif
 
 static hal_status_t poll_failed(jh_bearssl_poll_result_t *result,
                                 int32_t engine_error, hal_status_t status) {
@@ -24,19 +14,20 @@ static hal_status_t poll_failed(jh_bearssl_poll_result_t *result,
   return status;
 }
 
-static hal_status_t engine_poll_with_ops(void *engine,
-                                         const jh_bearssl_engine_ops_t *ops,
-                                         int fd, uint16_t step_budget,
-                                         bool prefer_application_writable,
-                                         jh_bearssl_poll_result_t *out_result) {
+static hal_status_t
+engine_poll_with_ops(void *engine, const jh_bearssl_engine_ops_t *ops,
+                     const jh_bearssl_transport_t *transport,
+                     uint16_t step_budget, bool prefer_application_writable,
+                     jh_bearssl_poll_result_t *out_result) {
   if (out_result != NULL) {
     memset(out_result, 0, sizeof(*out_result));
   }
   if (engine == NULL || ops == NULL || ops->current_state == NULL ||
       ops->last_error == NULL || ops->send_record_buffer == NULL ||
       ops->send_record_ack == NULL || ops->receive_record_buffer == NULL ||
-      ops->receive_record_ack == NULL || fd < 0 || step_budget == 0u ||
-      out_result == NULL) {
+      ops->receive_record_ack == NULL || transport == NULL ||
+      transport->context == NULL || transport->send == NULL ||
+      transport->receive == NULL || step_budget == 0u || out_result == NULL) {
     return HAL_EINVAL;
   }
 
@@ -68,20 +59,20 @@ static hal_status_t engine_poll_with_ops(void *engine,
       if (buffer == NULL || length == 0u) {
         return poll_failed(out_result, ops->last_error(engine), HAL_EINTERNAL);
       }
-      if (length > (size_t)INT_MAX) {
-        length = (size_t)INT_MAX;
-      }
-      const ssize_t sent = send(fd, buffer, length, MSG_DONTWAIT);
-      if (sent > 0) {
-        ops->send_record_ack(engine, (size_t)sent);
+      size_t sent = 0u;
+      const hal_status_t transport_status =
+          transport->send(transport->context, buffer, length, &sent);
+      if (transport_status == HAL_OK && sent > 0u && sent <= length) {
+        ops->send_record_ack(engine, sent);
         ++out_result->steps;
         continue;
       }
-      if (sent < 0 &&
-          (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+      if (transport_status == HAL_EAGAIN) {
         return HAL_EAGAIN;
       }
-      return poll_failed(out_result, ops->last_error(engine), HAL_EIO);
+      return poll_failed(out_result, ops->last_error(engine),
+                         transport_status == HAL_OK ? HAL_EINTERNAL
+                                                    : transport_status);
     }
 
     if ((state & BR_SSL_RECVREC) != 0u) {
@@ -90,20 +81,20 @@ static hal_status_t engine_poll_with_ops(void *engine,
       if (buffer == NULL || length == 0u) {
         return poll_failed(out_result, ops->last_error(engine), HAL_EINTERNAL);
       }
-      if (length > (size_t)INT_MAX) {
-        length = (size_t)INT_MAX;
-      }
-      const ssize_t received = recv(fd, buffer, length, MSG_DONTWAIT);
-      if (received > 0) {
-        ops->receive_record_ack(engine, (size_t)received);
+      size_t received = 0u;
+      const hal_status_t transport_status =
+          transport->receive(transport->context, buffer, length, &received);
+      if (transport_status == HAL_OK && received > 0u && received <= length) {
+        ops->receive_record_ack(engine, received);
         ++out_result->steps;
         continue;
       }
-      if (received < 0 &&
-          (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+      if (transport_status == HAL_EAGAIN) {
         return HAL_EAGAIN;
       }
-      return poll_failed(out_result, ops->last_error(engine), HAL_EPROTO);
+      return poll_failed(out_result, ops->last_error(engine),
+                         transport_status == HAL_OK ? HAL_EINTERNAL
+                                                    : transport_status);
     }
 
     return poll_failed(out_result, ops->last_error(engine), HAL_EINTERNAL);
@@ -131,15 +122,19 @@ static hal_status_t engine_poll_with_ops(void *engine,
 }
 
 hal_status_t jh_bearssl_engine_poll_with_ops(
-    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
-    uint16_t step_budget, jh_bearssl_poll_result_t *out_result) {
-  return engine_poll_with_ops(engine, ops, fd, step_budget, true, out_result);
+    void *engine, const jh_bearssl_engine_ops_t *ops,
+    const jh_bearssl_transport_t *transport, uint16_t step_budget,
+    jh_bearssl_poll_result_t *out_result) {
+  return engine_poll_with_ops(engine, ops, transport, step_budget, true,
+                              out_result);
 }
 
 hal_status_t jh_bearssl_engine_poll_for_read_with_ops(
-    void *engine, const jh_bearssl_engine_ops_t *ops, int fd,
-    uint16_t step_budget, jh_bearssl_poll_result_t *out_result) {
-  return engine_poll_with_ops(engine, ops, fd, step_budget, false, out_result);
+    void *engine, const jh_bearssl_engine_ops_t *ops,
+    const jh_bearssl_transport_t *transport, uint16_t step_budget,
+    jh_bearssl_poll_result_t *out_result) {
+  return engine_poll_with_ops(engine, ops, transport, step_budget, false,
+                              out_result);
 }
 
 static unsigned bearssl_current_state(const void *engine) {
@@ -173,25 +168,27 @@ static void bearssl_receive_record_ack(void *engine, size_t length) {
                             length);
 }
 
-hal_status_t jh_bearssl_engine_poll(void *engine, int fd, uint16_t step_budget,
+hal_status_t jh_bearssl_engine_poll(void *engine,
+                                    const jh_bearssl_transport_t *transport,
+                                    uint16_t step_budget,
                                     jh_bearssl_poll_result_t *out_result) {
   static const jh_bearssl_engine_ops_t ops = {
       bearssl_current_state,         bearssl_last_error,
       bearssl_send_record_buffer,    bearssl_send_record_ack,
       bearssl_receive_record_buffer, bearssl_receive_record_ack};
-  return jh_bearssl_engine_poll_with_ops(engine, &ops, fd, step_budget,
+  return jh_bearssl_engine_poll_with_ops(engine, &ops, transport, step_budget,
                                          out_result);
 }
 
-hal_status_t
-jh_bearssl_engine_poll_for_read(void *engine, int fd, uint16_t step_budget,
-                                jh_bearssl_poll_result_t *out_result) {
+hal_status_t jh_bearssl_engine_poll_for_read(
+    void *engine, const jh_bearssl_transport_t *transport, uint16_t step_budget,
+    jh_bearssl_poll_result_t *out_result) {
   static const jh_bearssl_engine_ops_t ops = {
       bearssl_current_state,         bearssl_last_error,
       bearssl_send_record_buffer,    bearssl_send_record_ack,
       bearssl_receive_record_buffer, bearssl_receive_record_ack};
-  return jh_bearssl_engine_poll_for_read_with_ops(engine, &ops, fd, step_budget,
-                                                  out_result);
+  return jh_bearssl_engine_poll_for_read_with_ops(engine, &ops, transport,
+                                                  step_budget, out_result);
 }
 
 #endif
