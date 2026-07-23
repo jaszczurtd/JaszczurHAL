@@ -1,8 +1,9 @@
-#include "../../../../hal_net_console.h"
+/** @file Target-neutral network console service over HAL TCP. */
+#include "hal/hal_net_console.h"
 
 #ifdef HAL_ENABLE_NET_CONSOLE
 
-#include "../../../../hal_tcp.h"
+#include "hal/hal_tcp.h"
 
 #include <string.h>
 

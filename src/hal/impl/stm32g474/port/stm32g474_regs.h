@@ -18,6 +18,8 @@
 
 #include <stdint.h>
 
+#define JH_REG8(addr)                                                          \
+  (*(volatile uint8_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 #define JH_REG32(addr)                                                         \
   (*(volatile uint32_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 
@@ -397,9 +399,7 @@
 #define SPI_CR2(base) JH_REG32((base) + 0x04u)
 #define SPI_SR(base) JH_REG32((base) + 0x08u)
 #define SPI_DR(base) JH_REG32((base) + 0x0Cu)
-#define SPI_DR8(base)                                                          \
-  (*(volatile uint8_t *)((base) +                                              \
-                         0x0Cu)) /* NOLINT(performance-no-int-to-ptr) */
+#define SPI_DR8(base) JH_REG8((base) + 0x0Cu)
 
 #define SPI_CR1_CPHA (1u << 0)
 #define SPI_CR1_CPOL (1u << 1)
@@ -596,9 +596,11 @@
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
 #define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
-#define NVIC_IPR8(irqn)                                                                        \
-  (*(volatile uint8_t *)(0xE000E400u + (uint32_t)(irqn))) /* NOLINT(performance-no-int-to-ptr) \
-                                                           */
+#define NVIC_IPR8(irqn)                                                        \
+  (*(volatile uint8_t                                                          \
+         *)(0xE000E400u +                                                      \
+            (uint32_t)(irqn))) /* NOLINT(performance-no-int-to-ptr)            \
+                                */
 
 #define TIM6_DACUNDER_IRQn 54u
 #define DMA1_Channel1_IRQn 11u

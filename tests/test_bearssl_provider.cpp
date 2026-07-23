@@ -112,15 +112,19 @@ void test_poll_engine_honours_step_budget_and_partial_send(void) {
   const jh_bearssl_engine_ops_t ops = {fake_state,          fake_error,
                                        fake_send_buffer,    fake_send_ack,
                                        fake_receive_buffer, fake_receive_ack};
+  jh_bearssl_bsd_transport_t transport = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_bearssl_bsd_transport_init(&transport, fd));
   jh_bearssl_poll_result_t result = {};
 
-  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, jh_bearssl_engine_poll_with_ops(
-                                        &engine, &ops, fd, 1u, &result));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                        jh_bearssl_engine_poll_with_ops(
+                            &engine, &ops, &transport.transport, 1u, &result));
   TEST_ASSERT_EQUAL_UINT16(1u, result.steps);
   TEST_ASSERT_EQUAL_UINT32(512u, engine.acknowledged);
 
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, jh_bearssl_engine_poll_with_ops(&engine, &ops, fd, 1u, &result));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_bearssl_engine_poll_with_ops(
+                            &engine, &ops, &transport.transport, 1u, &result));
   TEST_ASSERT_EQUAL_UINT16(1u, result.steps);
   TEST_ASSERT_EQUAL_UINT32(sizeof(engine.bytes), engine.acknowledged);
   TEST_ASSERT_EQUAL_INT(JH_BEARSSL_EVENT_APPLICATION_WRITABLE, result.event);
@@ -140,10 +144,13 @@ void test_read_poll_does_not_let_sendapp_starve_received_records(void) {
   const jh_bearssl_engine_ops_t ops = {fake_state,          fake_error,
                                        fake_send_buffer,    fake_send_ack,
                                        fake_receive_buffer, fake_receive_ack};
+  jh_bearssl_bsd_transport_t transport = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_bearssl_bsd_transport_init(&transport, fd));
   jh_bearssl_poll_result_t result = {};
 
-  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_bearssl_engine_poll_for_read_with_ops(
-                                    &engine, &ops, fd, 1u, &result));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_bearssl_engine_poll_for_read_with_ops(
+                            &engine, &ops, &transport.transport, 1u, &result));
   TEST_ASSERT_EQUAL_UINT16(1u, result.steps);
   TEST_ASSERT_EQUAL_UINT32(sizeof(incoming), engine.acknowledged);
   TEST_ASSERT_EQUAL_UINT8_ARRAY(incoming, engine.bytes, sizeof(incoming));

@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Shared implementation layout and independent TLS transports
+
+- Removed the catch-all `impl/shared/compat` source category. Network services
+  now live under `impl/shared/network/services`, the public BSD/POSIX adapter
+  lives under `impl/shared/network/adapters/bsd`, and shared serial formatting
+  lives under `impl/shared/debug`.
+- Decoupled the native `hal_tls` client from POSIX descriptors. TLS now
+  resolves and connects through `hal_net`/`hal_tcp`, so `HAL_ENABLE_TLS`
+  propagates TCP/WiFi without forcing `HAL_ENABLE_BSD_SOCKETS`.
+- Preserved BSD sockets as a supported public adapter and retained the
+  independent BearSSL-over-BSD transport for clients using descriptor-based
+  TLS. Added compile coverage for TLS without BSD, BSD without TLS and runtime
+  coverage for the combined TLS-over-BSD path.
+
 ### Shared WireGuard and STM32G474 NTP
 
 - Moved the bundled WireGuard protocol, crypto, lwIP netif and lifecycle code

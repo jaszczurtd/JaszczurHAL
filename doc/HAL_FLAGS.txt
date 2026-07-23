@@ -143,7 +143,11 @@ Connectivity
     Propagates: HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI.
   HAL_ENABLE_BSD_SOCKETS
     Minimal POSIX/BSD socket adapter over HAL UDP/TCP. Propagates: UDP, TCP,
-    WIFI.
+    WIFI. May be combined with TLS, but does not require it.
+  HAL_ENABLE_TLS
+    Portable BearSSL TLS client over native HAL TCP. Propagates: TCP, WIFI.
+    Does not force BSD sockets; an optional BearSSL BSD transport remains
+    available when both modules are enabled.
   HAL_ENABLE_OTA
     ArduinoOTA wrapper. Propagates: WIFI.
   HAL_ENABLE_WIREGUARD
@@ -377,6 +381,7 @@ HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
                            HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM, HAL_ENABLE_UART

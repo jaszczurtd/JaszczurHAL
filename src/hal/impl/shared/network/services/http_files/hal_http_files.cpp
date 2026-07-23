@@ -1,3 +1,4 @@
+/** @file Target-neutral HTTP file service. */
 #include "hal/hal_http_files.h"
 
 #ifdef HAL_ENABLE_HTTP_FILES

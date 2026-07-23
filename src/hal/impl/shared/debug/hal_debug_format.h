@@ -1,5 +1,7 @@
 #pragma once
 
+/** @file Shared serial/debug formatting helpers. */
+
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>

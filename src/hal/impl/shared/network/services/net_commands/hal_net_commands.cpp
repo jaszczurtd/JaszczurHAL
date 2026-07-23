@@ -1,3 +1,4 @@
+/** @file Target-neutral network command dispatcher service. */
 #include "hal/hal_net_commands.h"
 
 #ifdef HAL_ENABLE_NET_COMMANDS

@@ -1,3 +1,4 @@
+/** @file Public BSD/POSIX socket adapter over the shared HAL network API. */
 #include "hal/hal_config.h"
 
 #ifdef HAL_ENABLE_BSD_SOCKETS
