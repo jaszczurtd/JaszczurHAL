@@ -68,24 +68,108 @@ endif()
 set(_backend_sources
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_gspi.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/hal_ota.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/hal_tcp.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/hal_time.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/hal_udp.cpp"
+    "${JH_ROOT}/src/hal/impl/rp2040/rp2040_lwip_extension_port.cpp"
+    "${JH_ROOT}/src/hal/hal_net.cpp"
+    "${JH_ROOT}/src/hal/hal_tcp.cpp"
+    "${JH_ROOT}/src/hal/hal_udp.cpp"
+    "${JH_ROOT}/src/hal/hal_wifi.cpp"
 )
 foreach(_source IN LISTS _backend_sources)
     file(READ "${_source}" _contents)
-    if(_contents MATCHES "#[ \t]*include[ \t]*[<\"](Arduino|WiFi|ClientContext)")
+    if(_contents MATCHES
+       "#[ \t]*include[ \t]*[<\"](Arduino|ArduinoOTA|WiFi|WiFiNTP|ClientContext|pico/cyw43_arch)")
         message(FATAL_ERROR "Arduino network API leaked into ${_source}")
     endif()
     if(_contents MATCHES "#[ \t]*include[ \t]*<cyw43\\.h>")
         message(FATAL_ERROR "Carrier-owned cyw43.h include leaked into ${_source}")
     endif()
-    if(NOT _contents MATCHES "drivers/cyw43-driver/jh_cyw43_driver\\.h")
+endforeach()
+
+foreach(_source IN ITEMS
+        "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
+        "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp")
+    file(READ "${_source}" _contents)
+    if(NOT _contents MATCHES
+       "drivers/cyw43-driver/jh_cyw43_driver\\.h")
         message(FATAL_ERROR "Pinned CYW43 include boundary missing in ${_source}")
     endif()
 endforeach()
 
-file(READ "${_driver}/jh_cyw43_namespace.h" _namespace)
-foreach(_symbol IN ITEMS cyw43_state cyw43_init cyw43_ll_bus_transfer
-                         cyw43_cb_process_ethernet)
-    if(NOT _namespace MATCHES "#define[ \t]+${_symbol}[ \t]+jh_${_symbol}")
-        message(FATAL_ERROR "Missing jh_* isolation for ${_symbol}")
+file(READ
+    "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
+    _rp2040_platform)
+foreach(_required IN ITEMS
+        "s_state_mutex"
+        "s_stack_mutex"
+        "platform_state_lock"
+        "platform_stack_enter")
+    if(NOT _rp2040_platform MATCHES "${_required}")
+        message(FATAL_ERROR
+            "RP2040 network-service lock separation is missing '${_required}'")
+    endif()
+endforeach()
+
+if(EXISTS "${_driver}/jh_cyw43_namespace.h")
+    message(FATAL_ERROR
+        "Obsolete carrier coexistence namespace must not remain")
+endif()
+if(EXISTS
+   "${JH_ROOT}/src/hal/impl/rp2040/rp2040_arduino_network_backend.cpp")
+    message(FATAL_ERROR
+        "Removed Arduino-Pico network backend source must not remain")
+endif()
+foreach(_removed_source IN ITEMS
+        "${JH_ROOT}/src/hal/impl/rp2040/hal_net.cpp"
+        "${JH_ROOT}/src/hal/impl/rp2040/hal_wifi.cpp")
+    if(EXISTS "${_removed_source}")
+        message(FATAL_ERROR
+            "Removed Arduino-Pico network implementation must not remain: ${_removed_source}")
+    endif()
+endforeach()
+if(NOT EXISTS
+   "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/CYW43_PIO_UPSTREAM.md")
+    message(FATAL_ERROR "RP2040 CYW43 PIO provenance metadata is missing")
+endif()
+
+file(READ "${JH_ROOT}/cmake/targets/rp2040.cmake" _rp2040_recipe)
+foreach(_required IN ITEMS
+        "jh_cyw43_source_manifest"
+        "jh_bearssl_source_manifest"
+        "compiler.netdefines="
+        "build.libpicow=libpico.a"
+        "compiler.libbearssl="
+        "rp2040_core_wrap_non_network.txt")
+    if(NOT _rp2040_recipe MATCHES "${_required}")
+        message(FATAL_ERROR
+            "RP2040 owned-network recipe is missing '${_required}'")
+    endif()
+endforeach()
+
+file(READ "${JH_ROOT}/vscode/targets/rp2040.json" _rp2040_profiles)
+foreach(_required IN ITEMS
+        "\"id\": \"pico-rm2\""
+        "\"id\": \"picow\""
+        "HAL_CYW43_PROFILE_PIM730"
+        "HAL_CYW43_PROFILE_PICOW"
+        "HAL_CYW43_STACK_LWIP")
+    if(NOT _rp2040_profiles MATCHES "${_required}")
+        message(FATAL_ERROR
+            "RP2040 board profiles are missing '${_required}'")
+    endif()
+endforeach()
+foreach(_forbidden IN ITEMS
+        "picow-shared"
+        "HAL_CYW43_STARTUP_OWNED"
+        "PICO_CYW43_SUPPORTED"
+        "CYW43_PIN_WL_DYNAMIC"
+        "CYW43_PIO_CLOCK_DIV_DYNAMIC")
+    if(_rp2040_profiles MATCHES "${_forbidden}")
+        message(FATAL_ERROR
+            "RP2040 board profiles retain carrier network token '${_forbidden}'")
     endif()
 endforeach()

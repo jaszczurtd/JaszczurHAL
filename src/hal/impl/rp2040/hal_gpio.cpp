@@ -1,7 +1,8 @@
 #include "../../hal_target.h"
 #if HAL_TARGET_IS_RP2040
 #include "../../hal_gpio.h"
-#if defined(PICO_CYW43_SUPPORTED) && defined(HAL_LED_BUILTIN)
+#if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
+    defined(HAL_LED_BUILTIN)
 #include "drivers/rp2040/rp2040_cyw43.h"
 #endif
 #include <hardware/gpio.h>
@@ -19,7 +20,8 @@ auto_init_mutex(s_gpio_irq_owner_mutex);
 static bool rp2040_pin_valid(uint8_t pin) { return pin < NUM_BANK0_GPIOS; }
 
 static bool rp2040_cyw43_pin_valid(uint8_t pin) {
-#if defined(PICO_CYW43_SUPPORTED) && defined(HAL_LED_BUILTIN)
+#if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
+    defined(HAL_LED_BUILTIN)
   return pin == (uint8_t)HAL_LED_BUILTIN && pin >= 64u;
 #else
   (void)pin;
@@ -32,7 +34,8 @@ static bool rp2040_hal_pin_valid(uint8_t pin) {
 }
 
 static void cyw43_gpio_set_output(uint8_t pin, bool high) {
-#if defined(PICO_CYW43_SUPPORTED) && defined(HAL_LED_BUILTIN)
+#if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
+    defined(HAL_LED_BUILTIN)
   hal_cyw43_pinMode(pin, HAL_CYW43_PIN_OUTPUT);
   hal_cyw43_digitalWrite(pin, high);
 #else
@@ -42,7 +45,8 @@ static void cyw43_gpio_set_output(uint8_t pin, bool high) {
 }
 
 static void cyw43_gpio_write(uint8_t pin, bool high) {
-#if defined(PICO_CYW43_SUPPORTED) && defined(HAL_LED_BUILTIN)
+#if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
+    defined(HAL_LED_BUILTIN)
   hal_cyw43_digitalWrite(pin, high);
 #else
   (void)pin;
@@ -51,7 +55,8 @@ static void cyw43_gpio_write(uint8_t pin, bool high) {
 }
 
 static bool cyw43_gpio_read(uint8_t pin) {
-#if defined(PICO_CYW43_SUPPORTED) && defined(HAL_LED_BUILTIN)
+#if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
+    defined(HAL_LED_BUILTIN)
   return hal_cyw43_digitalRead(pin);
 #else
   (void)pin;

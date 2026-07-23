@@ -16,11 +16,6 @@ int main(void) {
   const char *expected_stack = "mock";
   const hal_system_network_stack_type_t expected_type =
       HAL_SYSTEM_NETWORK_STACK_TYPE_HOST;
-#elif defined(JH_EXPECT_NETWORK_ARDUINO_PICO)
-  const char *expected_backend = "arduino-pico-lwip";
-  const char *expected_stack = "lwIP";
-  const hal_system_network_stack_type_t expected_type =
-      HAL_SYSTEM_NETWORK_STACK_TYPE_HOST;
 #elif defined(JH_EXPECT_NETWORK_CYW43)
   const char *expected_backend = "cyw43-host-lwip";
   const char *expected_stack = "lwIP";

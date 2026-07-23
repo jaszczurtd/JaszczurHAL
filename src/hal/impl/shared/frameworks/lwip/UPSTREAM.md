@@ -8,7 +8,7 @@
   Arduino-Pico 5.4.0 baseline.
 - Scope: the unchanged upstream `src/` tree and its BSD-style `COPYING` file.
 
-The STM32G474 CYW43 build uses an explicit source list from this snapshot. It
-does not discover or link lwIP from the locally installed Arduino-Pico carrier.
-The port configuration and JaszczurHAL lifecycle adapter live outside
-`vendor/`.
+The STM32G474 and RP2040 CYW43 builds use one explicit source list from this
+snapshot. Neither target discovers nor links its active lwIP implementation
+from the locally installed Arduino-Pico carrier. The port configuration and
+JaszczurHAL lifecycle adapter live outside `vendor/`.

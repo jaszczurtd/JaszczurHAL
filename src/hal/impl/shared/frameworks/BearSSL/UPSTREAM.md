@@ -15,11 +15,12 @@ provider.
   `479235694ffa393b05a95472602811ffc92884f94a52020c578ab7344c4cdbd7`
 
 Files imported from upstream `src/` carry the suffix `.upstream`. This keeps
-Arduino's recursive library builder from compiling a second BearSSL beside the
-platform archive and producing duplicate `br_*` symbols. CMake consumers use
-`cmake/jh_bearssl.cmake` to copy these files to their original `.c` names in
-the build tree and compile the pinned source. Arduino-Pico uses its platform
-archive, which is built from the exact commit pinned above.
+recursive source discovery from compiling them without an explicit target
+manifest. CMake consumers use `cmake/jh_bearssl.cmake` to compile the pinned
+source. RP2040 firmware with JaszczurHAL TLS generates wrappers for the same
+manifest in its private sketch build tree and clears the Arduino-Pico
+`libbearssl.a` link property, so the TLS implementation is owned by
+JaszczurHAL rather than the carrier core.
 
 The public JaszczurHAL API never exposes the upstream `br_*` C namespace. No
 Arduino `BearSSL::` wrapper, `WiFiClientSecure`, `ClientContext`, or

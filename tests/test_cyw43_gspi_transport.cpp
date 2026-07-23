@@ -233,6 +233,22 @@ void test_gspi_host_wake_is_one_shot_and_rearms_without_lost_level(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, s_transport.stats.host_wake_levels);
 }
 
+void test_gspi_host_wake_refresh_samples_unlatched_level(void) {
+  power_transport();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_gspi_host_wake_attach(&s_transport));
+  TEST_ASSERT_FALSE(jh_cyw43_gspi_host_wake_pending(&s_transport));
+
+  const uint32_t rearm_before = s_fake.rearm_calls;
+  s_fake.asserted = true;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_gspi_host_wake_refresh(&s_transport));
+  TEST_ASSERT_TRUE(jh_cyw43_gspi_host_wake_pending(&s_transport));
+  TEST_ASSERT_EQUAL_UINT32(rearm_before + 1u, s_fake.rearm_calls);
+  TEST_ASSERT_EQUAL_UINT32(1u, s_transport.stats.host_wake_levels);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_gspi_host_wake_refresh(&s_transport));
+  TEST_ASSERT_EQUAL_UINT32(rearm_before + 1u, s_fake.rearm_calls);
+}
+
 void test_gspi_transfer_errors_rearm_and_update_diagnostics(void) {
   power_transport();
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_gspi_host_wake_attach(&s_transport));
@@ -268,6 +284,7 @@ int main(void) {
   RUN_TEST(test_gspi_boot_words_match_verified_wire_order);
   RUN_TEST(test_gspi_normal_read_and_write_apply_padding_and_alignment);
   RUN_TEST(test_gspi_host_wake_is_one_shot_and_rearms_without_lost_level);
+  RUN_TEST(test_gspi_host_wake_refresh_samples_unlatched_level);
   RUN_TEST(test_gspi_transfer_errors_rearm_and_update_diagnostics);
   RUN_TEST(test_gspi_deinit_detaches_and_clears_state);
   return UNITY_END();

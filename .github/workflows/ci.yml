@@ -203,6 +203,8 @@ jobs:
   #   udp-wireguard - UDP without TCP plus WireGuard/lwIP. Catches network
   #                  helpers accidentally hidden behind HAL_ENABLE_TCP and
   #                  warning regressions in bundled lwIP include ordering.
+  #   picow-owned  - Pico W profile with JaszczurHAL-owned CYW43/lwIP and no
+  #                  Arduino-Pico network startup/backend selection.
   #   all-enabled  - every concrete HAL_ENABLE_* module/backend flag set
   #                  explicitly. Validates that no two backends collide
   #                  and that all consistency #error checks stay satisfied.
@@ -214,8 +216,10 @@ jobs:
       matrix:
         include:
           - profile: empty-core
+            board: rpipico
             flags: ""
           - profile: typical-set
+            board: rpipico
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_MQTT
@@ -226,11 +230,43 @@ jobs:
               -D HAL_ENABLE_GPS
               -D HAL_ENABLE_ILI9341
               -D HAL_ENABLE_PWM_FREQ
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: udp-wireguard
+            board: rpipico
             flags: >-
               -D HAL_ENABLE_UDP
               -D HAL_ENABLE_WIREGUARD
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+          - profile: picow-owned
+            board: rpipico
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_TCP
+              -D HAL_ENABLE_BSD_SOCKETS
+              -D HAL_ENABLE_TLS
+              -D HAL_ENABLE_HTTP_CLIENT
+              -D HAL_ENABLE_HTTP_SERVER
+              -D HAL_ENABLE_HTTP_FILES
+              -D HAL_ENABLE_WEBSOCKET
+              -D HAL_ENABLE_NET_CONSOLE
+              -D HAL_ENABLE_MQTT
+              -D HAL_ENABLE_WIREGUARD
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: all-enabled
+            board: rpipico
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_TIME
@@ -263,6 +299,11 @@ jobs:
               -D HAL_ENABLE_SSD1306
               -D HAL_ENABLE_CRYPTO
               -D HAL_ENABLE_CJSON
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
 
     name: "Arduino lib (${{ matrix.profile }})"
     steps:
@@ -281,7 +322,7 @@ jobs:
 
       - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
         run: |
-          ./scripts/build_rp2040_lib.sh --clean ${{ matrix.flags }}
+          ./scripts/build_rp2040_lib.sh --clean -b ${{ matrix.board }} ${{ matrix.flags }}
           test -f build_rp2040/libJaszczurHAL.a
 
   # ── Examples build gate ────────────────────────────────────────────────────

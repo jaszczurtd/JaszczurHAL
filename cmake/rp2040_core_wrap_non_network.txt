@@ -1,0 +1,8 @@
+-Wl,--wrap=__getreent
+-Wl,--wrap=malloc
+-Wl,--wrap=calloc
+-Wl,--wrap=realloc
+-Wl,--wrap=free
+-Wl,--wrap=mallinfo
+-Wl,--wrap=__stack_chk_fail
+-Wl,--wrap=btstack_run_loop_async_context_get_instance

@@ -338,15 +338,25 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_GPS
                 -D HAL_ENABLE_ILI9341
                 -D HAL_ENABLE_PWM_FREQ
+                -D HAL_NETWORK_BACKEND_CYW43
+                -D HAL_CYW43_BUS_PICO_PIO
+                -D HAL_CYW43_STACK_LWIP
+                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
         udp-wireguard)
             # Keep UDP independent from TCP. This catches shared network
             # helpers accidentally guarded by HAL_ENABLE_TCP and compiles the
-            # bundled WireGuard/lwIP headers with the Arduino-Pico core.
+            # bundled WireGuard/lwIP headers with the JaszczurHAL CYW43 stack.
             flags=(
                 -D HAL_ENABLE_UDP
                 -D HAL_ENABLE_WIREGUARD
+                -D HAL_NETWORK_BACKEND_CYW43
+                -D HAL_CYW43_BUS_PICO_PIO
+                -D HAL_CYW43_STACK_LWIP
+                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
         sdlogger)
@@ -389,6 +399,11 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_SSD1306
                 -D HAL_ENABLE_CRYPTO
                 -D HAL_ENABLE_CJSON
+                -D HAL_NETWORK_BACKEND_CYW43
+                -D HAL_CYW43_BUS_PICO_PIO
+                -D HAL_CYW43_STACK_LWIP
+                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
     esac

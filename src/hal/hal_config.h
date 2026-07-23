@@ -99,8 +99,16 @@
 #if defined(HAL_CYW43_BUS_STM32_GSPI) && !HAL_TARGET_IS_STM32G474
 #error "HAL_CYW43_BUS_STM32_GSPI requires HAL_TARGET_STM32G474"
 #endif
-#if defined(HAL_CYW43_STACK_LWIP) && !defined(HAL_CYW43_BUS_STM32_GSPI)
-#error "HAL_CYW43_STACK_LWIP requires HAL_CYW43_BUS_STM32_GSPI"
+#if defined(HAL_CYW43_STACK_LWIP) && !defined(HAL_CYW43_BUS_PICO_PIO) &&       \
+    !defined(HAL_CYW43_BUS_STM32_GSPI)
+#error "HAL_CYW43_STACK_LWIP requires a JaszczurHAL CYW43 bus"
+#endif
+#if defined(HAL_CYW43_STARTUP_OWNED)
+#error "HAL_CYW43_STARTUP_OWNED was removed; JaszczurHAL owns CYW43 startup"
+#endif
+#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_ARDUINO_PICO was removed; select a JaszczurHAL network backend"
 #endif
 #if defined(HAL_NETWORK_BACKEND_CYW43)
 #if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
@@ -111,15 +119,8 @@
 #if !defined(HAL_CYW43_BUS_PICO_PIO)
 #error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_BUS_PICO_PIO"
 #endif
-#if !defined(PICO_CYW43_SUPPORTED) || !(PICO_CYW43_SUPPORTED)
-#error                                                                         \
-    "HAL_NETWORK_BACKEND_CYW43 requires a build profile with PICO_CYW43_SUPPORTED=1"
-#endif
-#if !defined(CYW43_PIN_WL_DYNAMIC) || !(CYW43_PIN_WL_DYNAMIC)
-#error "HAL_NETWORK_BACKEND_CYW43 requires CYW43_PIN_WL_DYNAMIC=1"
-#endif
-#if !defined(CYW43_PIO_CLOCK_DIV_DYNAMIC) || !(CYW43_PIO_CLOCK_DIV_DYNAMIC)
-#error "HAL_NETWORK_BACKEND_CYW43 requires CYW43_PIO_CLOCK_DIV_DYNAMIC=1"
+#if !defined(HAL_CYW43_STACK_LWIP)
+#error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_STACK_LWIP"
 #endif
 #elif HAL_TARGET_IS_STM32G474
 #if !defined(HAL_CYW43_BUS_STM32_GSPI)
@@ -155,11 +156,33 @@
 #endif
 #endif
 
+#if defined(HAL_CYW43_PROFILE_PICOW)
+#ifndef HAL_CYW43_PIN_WL_ON
+#define HAL_CYW43_PIN_WL_ON 23u
+#endif
+#ifndef HAL_CYW43_PIN_CHIP_SELECT
+#define HAL_CYW43_PIN_CHIP_SELECT 25u
+#endif
+#ifndef HAL_CYW43_PIN_DATA
+#define HAL_CYW43_PIN_DATA 24u
+#endif
+#ifndef HAL_CYW43_PIN_CLOCK
+#define HAL_CYW43_PIN_CLOCK 29u
+#endif
+#ifndef HAL_CYW43_PIO_CLOCK_DIV_INT
+#define HAL_CYW43_PIO_CLOCK_DIV_INT 4u
+#endif
+#ifndef HAL_CYW43_PIO_CLOCK_DIV_FRAC8
+#define HAL_CYW43_PIO_CLOCK_DIV_FRAC8 0u
+#endif
+#endif
+
 #if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_RP2040 &&              \
     (!defined(HAL_CYW43_PIN_WL_ON) || !defined(HAL_CYW43_PIN_CHIP_SELECT) ||   \
      !defined(HAL_CYW43_PIN_DATA) || !defined(HAL_CYW43_PIN_CLOCK) ||          \
      !defined(HAL_CYW43_PIO_CLOCK_DIV_INT) ||                                  \
-     !defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8))
+     !defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8) ||                                \
+     !defined(HAL_CYW43_MAX_TRANSACTION_BYTES))
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires a complete CYW43 board pin/clock profile"
 #endif
@@ -277,11 +300,11 @@
                                   does not create a public hal_rtos_* API.
 
      Connectivity:
-       HAL_ENABLE_WIFI          - WiFi (arduino-pico; use a WiFi-capable
-                                  board/FQBN such as rpipicow at runtime).
+       HAL_ENABLE_WIFI          - WiFi through the selected JaszczurHAL
+                                  network backend and board profile.
        HAL_ENABLE_TIME          - NTP / system time (propagates: WIFI).
        HAL_ENABLE_MQTT          - PubSubClient wrapper (propagates: WIFI).
-       HAL_ENABLE_UDP           - WiFiUDP wrapper   (propagates: WIFI).
+       HAL_ENABLE_UDP           - UDP transport     (propagates: WIFI).
        HAL_ENABLE_TCP           - TCP client/listener transport
                                   (propagates: WIFI).
        HAL_ENABLE_HTTP_SERVER   - small poll-driven HTTP/1.1 server over
@@ -302,7 +325,8 @@
                                   provider (propagates: TCP, WIFI).
        HAL_ENABLE_HTTP_CLIENT   - portable HTTP/HTTPS client (propagates:
                                   TLS, TCP, WIFI).
-       HAL_ENABLE_OTA           - ArduinoOTA wrapper (propagates: WIFI).
+       HAL_ENABLE_OTA           - HAL-socket OTA service
+                                   (propagates: WIFI, UDP, TCP, CRYPTO).
        HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI, UDP).
        HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
                                   Requires at least one backend (e.g.
@@ -626,6 +650,15 @@
 #ifndef HAL_ENABLE_WIFI
 #define HAL_ENABLE_WIFI
 #endif
+#ifndef HAL_ENABLE_UDP
+#define HAL_ENABLE_UDP
+#endif
+#ifndef HAL_ENABLE_TCP
+#define HAL_ENABLE_TCP
+#endif
+#ifndef HAL_ENABLE_CRYPTO
+#define HAL_ENABLE_CRYPTO
+#endif
 #endif
 
 #ifdef HAL_ENABLE_WIREGUARD
@@ -661,11 +694,8 @@
 #endif
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
-    !defined(HAL_NETWORK_BACKEND_ARDUINO_PICO) &&                              \
     !defined(HAL_NETWORK_BACKEND_MOCK) && !defined(HAL_NETWORK_BACKEND_ESP_AT)
-#if HAL_TARGET_IS_RP2040
-#define HAL_NETWORK_BACKEND_ARDUINO_PICO 1
-#elif HAL_TARGET_IS_MOCK
+#if HAL_TARGET_IS_MOCK
 #define HAL_NETWORK_BACKEND_MOCK 1
 #endif
 #endif
@@ -674,11 +704,6 @@
 #define HAL_NETWORK_BACKEND_CYW43_SELECTED 1
 #else
 #define HAL_NETWORK_BACKEND_CYW43_SELECTED 0
-#endif
-#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
-#define HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED 1
-#else
-#define HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED 0
 #endif
 #if defined(HAL_NETWORK_BACKEND_MOCK)
 #define HAL_NETWORK_BACKEND_MOCK_SELECTED 1
@@ -692,9 +717,8 @@
 #endif
 
 #define HAL_NETWORK_BACKEND_SELECTION_COUNT                                    \
-  (HAL_NETWORK_BACKEND_CYW43_SELECTED +                                        \
-   HAL_NETWORK_BACKEND_ARDUINO_PICO_SELECTED +                                 \
-   HAL_NETWORK_BACKEND_MOCK_SELECTED + HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
+  (HAL_NETWORK_BACKEND_CYW43_SELECTED + HAL_NETWORK_BACKEND_MOCK_SELECTED +    \
+   HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && HAL_NETWORK_BACKEND_SELECTION_COUNT == 0
 #error "JaszczurHAL network core requires exactly one HAL_NETWORK_BACKEND_*"
@@ -703,9 +727,6 @@
 #error "Select exactly one HAL_NETWORK_BACKEND_*"
 #endif
 
-#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO) && !HAL_TARGET_IS_RP2040
-#error "HAL_NETWORK_BACKEND_ARDUINO_PICO requires HAL_TARGET_RP2040"
-#endif
 #if defined(HAL_NETWORK_BACKEND_MOCK) && !HAL_TARGET_IS_MOCK
 #error "HAL_NETWORK_BACKEND_MOCK requires HAL_TARGET_MOCK"
 #endif
@@ -721,18 +742,6 @@
 #define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
 #define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
 #define HAL_NETWORK_CORE_HAS_UDP 1
-#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
-#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
-#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
-#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
-#elif defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
-#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
-#define HAL_NETWORK_CORE_HAS_RESOLVER 1
-#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
-#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
-#define HAL_NETWORK_CORE_HAS_UDP 1
-/* Arduino-Pico owns lwIP and exposes the private L3 extension used by the
- * shared WireGuard engine. */
 #define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
 #define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
 #define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1

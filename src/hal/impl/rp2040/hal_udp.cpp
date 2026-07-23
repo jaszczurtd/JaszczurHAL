@@ -5,7 +5,6 @@
 #ifdef HAL_ENABLE_UDP
 
 #include "../shared/network/jh_network_backend.h"
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 #define hal_udp_socket_impl_t jh_cyw43_udp_socket_impl_t
 #define hal_udp_socket_t jh_cyw43_udp_socket_t
 #define hal_udp_socket_open_ex jh_cyw43_udp_socket_open_ex
@@ -19,7 +18,6 @@
 #define hal_udp_socket_can_recv jh_cyw43_udp_socket_can_recv
 #define hal_udp_socket_can_send jh_cyw43_udp_socket_can_send
 #define hal_udp_socket_close jh_cyw43_udp_socket_close
-#endif
 
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
@@ -28,24 +26,15 @@
 #include "../shared/hal_mutex_once.h"
 #include "../shared/network/jh_net_address_utils.h"
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 #include "../shared/network/jh_lwip_udp.h"
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
 #include "rp2040_network_lifecycle.h"
-#else
-#include <IPAddress.h>
-#include <WiFiUdp.h>
-#endif
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
 struct hal_udp_socket_impl_t {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_udp_socket_t udp;
-#else
-  WiFiUDP udp;
-#endif
   bool in_use;
   bool bound;
   bool packet_started;
@@ -62,7 +51,6 @@ static inline void udp_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_udp_mutex);
 }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 static void reset_socket_state(hal_udp_socket_impl_t *socket);
 
 extern "C" hal_status_t jh_rp2040_udp_reset_all(void) {
@@ -83,7 +71,6 @@ extern "C" hal_status_t jh_rp2040_udp_reset_all(void) {
   hal_mutex_unlock(s_udp_mutex);
   return status;
 }
-#endif
 
 static bool validate_out(char *out, size_t out_size, const char *fn) {
   if (!out) {
@@ -136,9 +123,7 @@ static void reset_socket_state(hal_udp_socket_impl_t *socket) {
   socket->packet_started = false;
   socket->pending_packet_size = 0;
   reset_last_remote(socket);
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_udp_socket_init(&socket->udp);
-#endif
 }
 
 static bool is_valid_socket_locked(hal_udp_socket_t socket) {
@@ -162,13 +147,6 @@ static void endpoint_from_ip_address(const uint8_t ip[HAL_NET_IPV4_ADDR_LEN],
   out->port = port;
 }
 
-#if !defined(HAL_NETWORK_BACKEND_CYW43)
-static IPAddress ip_address_from_endpoint(const hal_net_endpoint_t *endpoint) {
-  return IPAddress(endpoint->addr[0], endpoint->addr[1], endpoint->addr[2],
-                   endpoint->addr[3]);
-}
-#endif
-
 static int socket_parse_packet_locked(hal_udp_socket_impl_t *socket,
                                       bool *out_has_packet) {
   if (out_has_packet != nullptr) {
@@ -185,7 +163,6 @@ static int socket_parse_packet_locked(hal_udp_socket_impl_t *socket,
   }
 
   int packet_size = 0;
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   const hal_status_t context_status =
       jh_rp2040_cyw43_provider_lwip_begin(false);
   if (context_status != HAL_OK) {
@@ -207,20 +184,6 @@ static int socket_parse_packet_locked(hal_udp_socket_impl_t *socket,
     *out_has_packet = has_packet;
   }
   jh_rp2040_cyw43_provider_lwip_end();
-#else
-  packet_size = socket->udp.parsePacket();
-  if (packet_size > 0) {
-    socket->pending_packet_size = packet_size;
-    const IPAddress remote_ip = socket->udp.remoteIP();
-    for (size_t index = 0u; index < HAL_NET_IPV4_ADDR_LEN; ++index) {
-      socket->last_remote_ip[index] = (uint8_t)remote_ip[index];
-    }
-    socket->last_remote_port = socket->udp.remotePort();
-  }
-  if (out_has_packet != nullptr) {
-    *out_has_packet = packet_size > 0;
-  }
-#endif
   if (packet_size > 0) {
     socket->pending_packet_size = packet_size;
   }
@@ -277,7 +240,6 @@ hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
   }
 
   if (socket->bound) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status != HAL_OK) {
@@ -286,25 +248,18 @@ hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
     }
     jh_lwip_udp_socket_close(&socket->udp);
     jh_rp2040_cyw43_provider_lwip_end();
-#else
-    socket->udp.stop();
-#endif
   }
   socket->bound = false;
   socket->packet_started = false;
   socket->pending_packet_size = 0;
   reset_last_remote(socket);
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   hal_status_t bind_status = jh_rp2040_cyw43_provider_lwip_begin(false);
   if (bind_status == HAL_OK) {
     bind_status = jh_lwip_udp_socket_bind(&socket->udp, local->port);
     jh_rp2040_cyw43_provider_lwip_end();
   }
   const bool ok = bind_status == HAL_OK;
-#else
-  const bool ok = socket->udp.begin(local->port);
-#endif
   if (ok) {
     socket->bound = true;
   }
@@ -314,11 +269,7 @@ hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
   if (!ok) {
     hal_derr("hal_udp_socket_bind: begin(%u) failed", (unsigned)local->port);
   }
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return bind_status;
-#else
-  return ok ? HAL_OK : HAL_EIO;
-#endif
 }
 
 bool hal_udp_socket_bind(hal_udp_socket_t socket,
@@ -364,7 +315,6 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
     return HAL_ESTATE;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   ip4_addr_t remote_ip;
   IP4_ADDR(&remote_ip, remote->addr[0], remote->addr[1], remote->addr[2],
            remote->addr[3]);
@@ -376,32 +326,6 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
   }
   hal_mutex_unlock(s_udp_mutex);
   return send_status;
-#else
-  const IPAddress remote_ip = ip_address_from_endpoint(remote);
-  const bool begun = socket->udp.beginPacket(remote_ip, remote->port);
-  if (!begun) {
-    hal_mutex_unlock(s_udp_mutex);
-    hal_derr("hal_udp_socket_sendto: beginPacket failed");
-    return HAL_EIO;
-  }
-
-  size_t written = 0u;
-  if (len > 0u) {
-    written = socket->udp.write((const uint8_t *)data, len);
-  }
-
-  const int rc = socket->udp.endPacket();
-
-  hal_mutex_unlock(s_udp_mutex);
-
-  if (rc != 1) {
-    hal_derr("hal_udp_socket_sendto: endPacket failed (rc=%d)", rc);
-    return HAL_EIO;
-  }
-
-  *out_sent = written;
-  return HAL_OK;
-#endif
 }
 
 int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
@@ -458,7 +382,6 @@ hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
     if (has_packet) {
       endpoint_from_ip_address(socket->last_remote_ip, socket->last_remote_port,
                                remote);
-#if defined(HAL_NETWORK_BACKEND_CYW43)
       size_t received = 0u;
       hal_status_t read_status = HAL_OK;
       if (max_len > 0u) {
@@ -477,20 +400,6 @@ hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
       }
       *out_received = received;
       return HAL_OK;
-#else
-      int read_count = 0;
-      if (max_len > 0u) {
-        read_count = socket->udp.read((uint8_t *)buffer, max_len);
-        socket->pending_packet_size = 0;
-      }
-
-      hal_mutex_unlock(s_udp_mutex);
-      if (read_count < 0) {
-        return HAL_EIO;
-      }
-      *out_received = (size_t)read_count;
-      return HAL_OK;
-#endif
     }
 
     hal_mutex_unlock(s_udp_mutex);
@@ -555,16 +464,12 @@ void hal_udp_socket_close(hal_udp_socket_t socket) {
     return;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   const hal_status_t context_status =
       jh_rp2040_cyw43_provider_lwip_begin(false);
   if (context_status == HAL_OK) {
     jh_lwip_udp_socket_close(&socket->udp);
     jh_rp2040_cyw43_provider_lwip_end();
   }
-#else
-  socket->udp.stop();
-#endif
   socket->in_use = false;
   reset_socket_state(socket);
   if (s_default_udp == socket) {
@@ -664,7 +569,6 @@ hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
     return HAL_EUNINIT;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   size_t read_count = 0u;
   hal_status_t read_status = jh_rp2040_cyw43_provider_lwip_begin(false);
   if (read_status == HAL_OK) {
@@ -674,21 +578,11 @@ hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
         jh_lwip_udp_socket_parse(&s_default_udp->udp);
     jh_rp2040_cyw43_provider_lwip_end();
   }
-#else
-  const int read_count = s_default_udp->udp.read(buffer, max_len);
-  s_default_udp->pending_packet_size = 0;
-#endif
 
   hal_mutex_unlock(s_udp_mutex);
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   if (read_status != HAL_OK) {
     return read_status;
   }
-#else
-  if (read_count < 0) {
-    return HAL_EIO;
-  }
-#endif
   *out_read = (uint16_t)read_count;
   return HAL_OK;
 }
@@ -782,7 +676,6 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
   }
 
   udp_ensure_mutex();
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   hal_mutex_lock(s_udp_mutex);
   const bool default_ready =
       is_valid_socket_locked(s_default_udp) && s_default_udp->bound;
@@ -798,7 +691,6 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
   if (resolve_status != HAL_OK) {
     return resolve_status;
   }
-#endif
   hal_mutex_lock(s_udp_mutex);
 
   if (!is_valid_socket_locked(s_default_udp) || !s_default_udp->bound) {
@@ -807,7 +699,6 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
     return HAL_EUNINIT;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   ip4_addr_t remote_address;
   IP4_ADDR(&remote_address, resolved_address[0], resolved_address[1],
            resolved_address[2], resolved_address[3]);
@@ -818,9 +709,6 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
     jh_rp2040_cyw43_provider_lwip_end();
   }
   const bool ok = begin_status == HAL_OK;
-#else
-  const bool ok = s_default_udp->udp.beginPacket(host_or_ip, remote_port);
-#endif
   s_default_udp->packet_started = ok;
 
   hal_mutex_unlock(s_udp_mutex);
@@ -828,11 +716,7 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
   if (!ok) {
     hal_derr("hal_udp_begin_packet: beginPacket failed");
   }
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return begin_status;
-#else
-  return ok ? HAL_OK : HAL_EIO;
-#endif
 }
 
 bool hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port) {
@@ -856,7 +740,6 @@ hal_status_t hal_udp_begin_packet_remote_ex(void) {
     return HAL_ENOENT;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   ip4_addr_t remote_address;
   IP4_ADDR(&remote_address, s_default_udp->last_remote_ip[0],
            s_default_udp->last_remote_ip[1], s_default_udp->last_remote_ip[2],
@@ -868,13 +751,6 @@ hal_status_t hal_udp_begin_packet_remote_ex(void) {
     jh_rp2040_cyw43_provider_lwip_end();
   }
   const bool ok = begin_status == HAL_OK;
-#else
-  const IPAddress remote_address(
-      s_default_udp->last_remote_ip[0], s_default_udp->last_remote_ip[1],
-      s_default_udp->last_remote_ip[2], s_default_udp->last_remote_ip[3]);
-  const bool ok = s_default_udp->udp.beginPacket(
-      remote_address, s_default_udp->last_remote_port);
-#endif
   s_default_udp->packet_started = ok;
 
   hal_mutex_unlock(s_udp_mutex);
@@ -882,11 +758,7 @@ hal_status_t hal_udp_begin_packet_remote_ex(void) {
   if (!ok) {
     hal_derr("hal_udp_begin_packet_remote: beginPacket failed");
   }
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return begin_status;
-#else
-  return ok ? HAL_OK : HAL_EIO;
-#endif
 }
 
 bool hal_udp_begin_packet_remote(void) {
@@ -921,7 +793,6 @@ hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
     return HAL_ESTATE;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   size_t written = 0u;
   hal_status_t write_status = jh_rp2040_cyw43_provider_lwip_begin(false);
   if (write_status == HAL_OK) {
@@ -929,9 +800,6 @@ hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
         jh_lwip_udp_socket_write(&s_default_udp->udp, data, len, &written);
     jh_rp2040_cyw43_provider_lwip_end();
   }
-#else
-  size_t written = s_default_udp->udp.write(data, len);
-#endif
   if (written > 65535u) {
     written = 65535u;
   }
@@ -939,11 +807,7 @@ hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
   hal_mutex_unlock(s_udp_mutex);
 
   *out_written = (uint16_t)written;
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return write_status;
-#else
-  return written == len ? HAL_OK : HAL_EIO;
-#endif
 }
 
 uint16_t hal_udp_write(const uint8_t *data, uint16_t len) {
@@ -984,36 +848,22 @@ hal_status_t hal_udp_end_packet_ex(void) {
     return HAL_ESTATE;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   hal_status_t end_status = jh_rp2040_cyw43_provider_lwip_begin(true);
   if (end_status == HAL_OK) {
     end_status = jh_lwip_udp_socket_end_packet(&s_default_udp->udp);
     jh_rp2040_cyw43_provider_lwip_end();
   }
-#else
-  const int rc = s_default_udp->udp.endPacket();
-#endif
   s_default_udp->packet_started = false;
 
   hal_mutex_unlock(s_udp_mutex);
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return end_status;
-#else
-  if (rc != 1) {
-    hal_derr("hal_udp_end_packet: endPacket failed (rc=%d)", rc);
-    return HAL_EIO;
-  }
-
-  return HAL_OK;
-#endif
 }
 
 bool hal_udp_end_packet(void) {
   return hal_status_to_bool(hal_udp_end_packet_ex());
 }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 static hal_status_t backend_udp_open(void **out_socket) {
   if (out_socket == nullptr) {
     return HAL_EINVAL;
@@ -1067,7 +917,6 @@ extern "C" const jh_network_udp_ops_t *jh_rp2040_cyw43_udp_ops(void) {
   };
   return &ops;
 }
-#endif
 
 #endif /* HAL_ENABLE_UDP */
 #endif // HAL_TARGET_IS_RP2040

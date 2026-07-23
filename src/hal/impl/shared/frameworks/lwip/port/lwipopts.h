@@ -1,7 +1,7 @@
 #ifndef JASZCZURHAL_LWIPOPTS_H
 #define JASZCZURHAL_LWIPOPTS_H
 
-#include <hal/hal_config.h>
+#include "../../../../../hal_config.h"
 
 /* Point 23 starts with one cooperatively serviced, IPv4-only CYW43 netif. */
 #define NO_SYS 1
@@ -58,7 +58,7 @@
  * only.  A live WireGuard netif owns one additional periodic timeout and
  * releases it in wireguardif_shutdown().
  */
-#if defined(HAL_ENABLE_WIREGUARD) && HAL_ENABLE_WIREGUARD
+#if defined(HAL_ENABLE_WIREGUARD)
 #define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
 #endif
 
@@ -77,7 +77,5 @@
 #define UDP_STATS 1
 #define SYS_STATS 0
 #define LWIP_STATS_DISPLAY 0
-
-#define LWIP_DEBUG 0
 
 #endif

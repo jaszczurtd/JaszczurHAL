@@ -267,6 +267,11 @@ target_include_directories(test_pubsub_hal_client PRIVATE
 )
 target_compile_definitions(test_pubsub_hal_client PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_NETWORK_BACKEND_CYW43=1
+    HAL_CYW43_BUS_PICO_PIO=1
+    HAL_CYW43_STACK_LWIP=1
+    HAL_CYW43_PROFILE_PICOW=1
+    HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
     HAL_ENABLE_MQTT
     HAL_ENABLE_TLS
     HAL_ENABLE_UNITY
@@ -287,6 +292,11 @@ target_include_directories(test_wireguard_lwip_port BEFORE PRIVATE
 )
 target_compile_definitions(test_wireguard_lwip_port PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_NETWORK_BACKEND_CYW43=1
+    HAL_CYW43_BUS_PICO_PIO=1
+    HAL_CYW43_STACK_LWIP=1
+    HAL_CYW43_PROFILE_PICOW=1
+    HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
     HAL_ENABLE_WIREGUARD
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
@@ -626,6 +636,21 @@ target_compile_definitions(test_ntp_client PRIVATE
 )
 target_compile_options(test_ntp_client PRIVATE -Wall -Wextra -Werror)
 add_test(NAME test_ntp_client COMMAND test_ntp_client)
+add_executable(test_ota_protocol
+    test_ota_protocol.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/ota/jh_ota_protocol.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_ota_protocol PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_ota_protocol PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_ota_protocol PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_ota_protocol COMMAND test_ota_protocol)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/filesystem/ff16/ff.c

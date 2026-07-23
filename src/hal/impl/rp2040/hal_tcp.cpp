@@ -5,7 +5,6 @@
 #ifdef HAL_ENABLE_TCP
 
 #include "../shared/network/jh_network_backend.h"
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 #define hal_tcp_socket_impl_t jh_cyw43_tcp_socket_impl_t
 #define hal_tcp_listener_impl_t jh_cyw43_tcp_listener_impl_t
 #define hal_tcp_socket_t jh_cyw43_tcp_socket_t
@@ -33,7 +32,6 @@
 #define hal_tcp_listener_accept jh_cyw43_tcp_listener_accept
 #define hal_tcp_listener_can_accept jh_cyw43_tcp_listener_can_accept
 #define hal_tcp_listener_close jh_cyw43_tcp_listener_close
-#endif
 
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
@@ -42,44 +40,25 @@
 #include "../shared/hal_mutex_once.h"
 #include "../shared/network/jh_net_address_utils.h"
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 #include "../shared/network/jh_lwip_tcp.h"
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
 #include "rp2040_network_lifecycle.h"
-#else
-#include <Arduino.h>
-#include <IPAddress.h>
-#include <WiFiClient.h>
-#include <WiFiServer.h>
-#endif
 #include <limits.h>
 #include <string.h>
 
 struct hal_tcp_socket_impl_t {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_tcp_socket_t client;
-#else
-  WiFiClient client;
-#endif
   bool in_use;
   bool connected;
   hal_net_endpoint_t remote_endpoint;
 };
 
 struct hal_tcp_listener_impl_t {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_tcp_listener_t listener;
-#else
-  WiFiServer server;
-#endif
   bool in_use;
   bool bound;
   bool listening;
   hal_net_endpoint_t local_endpoint;
-#if !defined(HAL_NETWORK_BACKEND_CYW43)
-  WiFiClient pending_client;
-  bool has_pending_client;
-#endif
   uint8_t backlog;
 };
 
@@ -92,7 +71,6 @@ static inline void tcp_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_tcp_mutex);
 }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 static void reset_socket_state_locked(hal_tcp_socket_impl_t *socket);
 static void reset_listener_state_locked(hal_tcp_listener_impl_t *listener);
 
@@ -120,7 +98,6 @@ extern "C" hal_status_t jh_rp2040_tcp_reset_all(void) {
   hal_mutex_unlock(s_tcp_mutex);
   return status;
 }
-#endif
 
 static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   if (!endpoint) {
@@ -164,35 +141,6 @@ static bool is_valid_listener_locked(hal_tcp_listener_t listener) {
   return false;
 }
 
-#if !defined(HAL_NETWORK_BACKEND_CYW43)
-static IPAddress ip_address_from_endpoint(const hal_net_endpoint_t *endpoint) {
-  return IPAddress(endpoint->addr[0], endpoint->addr[1], endpoint->addr[2],
-                   endpoint->addr[3]);
-}
-
-static void endpoint_from_ip_address(const IPAddress &ip, uint16_t port,
-                                     hal_net_endpoint_t *out) {
-  if (!out) {
-    return;
-  }
-  memset(out, 0, sizeof(*out));
-  out->family = HAL_NET_AF_INET;
-  out->addr_len = HAL_NET_IPV4_ADDR_LEN;
-  out->addr[0] = (uint8_t)ip[0];
-  out->addr[1] = (uint8_t)ip[1];
-  out->addr[2] = (uint8_t)ip[2];
-  out->addr[3] = (uint8_t)ip[3];
-  out->port = port;
-}
-
-static unsigned long stream_timeout_from_ms(uint32_t timeout_ms) {
-  if (timeout_ms == HAL_NET_TIMEOUT_FOREVER) {
-    return ULONG_MAX;
-  }
-  return (unsigned long)timeout_ms;
-}
-#endif
-
 static uint8_t capped_backlog(uint8_t backlog) {
   if ((size_t)backlog > (size_t)HAL_TCP_LISTENER_BACKLOG_MAX) {
     return (uint8_t)HAL_TCP_LISTENER_BACKLOG_MAX;
@@ -201,11 +149,7 @@ static uint8_t capped_backlog(uint8_t backlog) {
 }
 
 static void reset_socket_state_locked(hal_tcp_socket_impl_t *socket) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_tcp_socket_init(&socket->client);
-#else
-  socket->client.stop();
-#endif
   socket->connected = false;
   reset_endpoint(&socket->remote_endpoint);
 }
@@ -221,31 +165,8 @@ static hal_tcp_socket_t allocate_socket_locked(void) {
   return NULL;
 }
 
-#if !defined(HAL_NETWORK_BACKEND_CYW43)
-static void drain_unaccepted_clients_locked(hal_tcp_listener_impl_t *listener) {
-  if (listener->has_pending_client) {
-    listener->pending_client.stop();
-    listener->pending_client = WiFiClient();
-    listener->has_pending_client = false;
-  }
-
-  for (;;) {
-    WiFiClient client = listener->server.accept();
-    if (!client) {
-      break;
-    }
-    client.stop();
-  }
-}
-#endif
-
 static void reset_listener_state_locked(hal_tcp_listener_impl_t *listener) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   jh_lwip_tcp_listener_init(&listener->listener);
-#else
-  listener->pending_client = WiFiClient();
-  listener->has_pending_client = false;
-#endif
   listener->backlog = 0u;
   listener->bound = false;
   listener->listening = false;
@@ -295,7 +216,6 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
     return HAL_EINVAL;
   }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   socket->connected = false;
   socket->remote_endpoint = *remote;
   ip4_addr_t remote_address;
@@ -350,23 +270,6 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
     hal_idle();
     hal_delay_ms(1u);
   }
-#else
-  socket->client.stop();
-  socket->connected = false;
-  socket->remote_endpoint = *remote;
-  socket->client.setTimeout(stream_timeout_from_ms(timeout_ms));
-
-  const IPAddress remote_ip = ip_address_from_endpoint(remote);
-  const int ok = socket->client.connect(remote_ip, remote->port);
-  socket->connected = (ok == 1);
-
-  hal_mutex_unlock(s_tcp_mutex);
-
-  if (ok != 1) {
-    hal_derr("hal_tcp_socket_connect: connect failed");
-  }
-  return ok == 1 ? HAL_OK : HAL_EIO;
-#endif
 }
 
 bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
@@ -401,7 +304,6 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
     hal_derr("hal_tcp_socket_send: socket is invalid");
     return HAL_EINVAL;
   }
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   hal_status_t send_status = jh_rp2040_cyw43_provider_lwip_begin(true);
   if (send_status != HAL_OK) {
     socket->connected = false;
@@ -425,25 +327,6 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
   jh_rp2040_cyw43_provider_lwip_end();
   hal_mutex_unlock(s_tcp_mutex);
   return send_status;
-#else
-  if (!socket->connected || !socket->client.connected()) {
-    if (is_valid_socket_locked(socket)) {
-      socket->connected = false;
-    }
-    hal_mutex_unlock(s_tcp_mutex);
-    hal_derr("hal_tcp_socket_send: socket is invalid or not connected");
-    return HAL_ESTATE;
-  }
-
-  size_t written = 0u;
-  if (len > 0u) {
-    written = socket->client.write((const uint8_t *)data, len);
-  }
-
-  hal_mutex_unlock(s_tcp_mutex);
-  *out_sent = written;
-  return HAL_OK;
-#endif
 }
 
 int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
@@ -482,7 +365,6 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
       return HAL_EINVAL;
     }
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     hal_status_t receive_status = jh_rp2040_cyw43_provider_lwip_begin(false);
     if (receive_status != HAL_OK) {
       hal_mutex_unlock(s_tcp_mutex);
@@ -505,35 +387,6 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
       hal_mutex_unlock(s_tcp_mutex);
       return HAL_OK;
     }
-#else
-    const int available = socket->client.available();
-    const bool backend_connected = socket->client.connected() != 0u;
-    socket->connected = backend_connected || available > 0;
-
-    if (!socket->connected) {
-      hal_mutex_unlock(s_tcp_mutex);
-      return HAL_OK;
-    }
-
-    if (available > 0) {
-      int to_read = available;
-      if ((size_t)to_read > max_len) {
-        to_read = (int)max_len;
-      }
-
-      int read_count = 0;
-      if (to_read > 0) {
-        read_count = socket->client.read((uint8_t *)buffer, (size_t)to_read);
-      }
-
-      hal_mutex_unlock(s_tcp_mutex);
-      if (read_count < 0) {
-        return HAL_EIO;
-      }
-      *out_received = (size_t)read_count;
-      return HAL_OK;
-    }
-#endif
 
     hal_mutex_unlock(s_tcp_mutex);
 
@@ -565,7 +418,6 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
 
   bool ready = false;
   if (is_valid_socket_locked(socket)) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status == HAL_OK) {
@@ -573,12 +425,6 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
       socket->connected = jh_lwip_tcp_socket_is_connected(&socket->client);
       jh_rp2040_cyw43_provider_lwip_end();
     }
-#else
-    const int available = socket->client.available();
-    const bool backend_connected = socket->client.connected() != 0u;
-    socket->connected = backend_connected || available > 0;
-    ready = available > 0;
-#endif
   }
 
   hal_mutex_unlock(s_tcp_mutex);
@@ -591,7 +437,6 @@ bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
 
   bool ready = false;
   if (is_valid_socket_locked(socket)) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status == HAL_OK) {
@@ -599,12 +444,6 @@ bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
       socket->connected = jh_lwip_tcp_socket_is_connected(&socket->client);
       jh_rp2040_cyw43_provider_lwip_end();
     }
-#else
-    const int available = socket->client.available();
-    const bool backend_connected = socket->client.connected() != 0u;
-    socket->connected = backend_connected || available > 0;
-    ready = socket->connected && backend_connected;
-#endif
   }
 
   hal_mutex_unlock(s_tcp_mutex);
@@ -617,7 +456,6 @@ bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket) {
 
   bool connected = false;
   if (is_valid_socket_locked(socket)) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status == HAL_OK) {
@@ -625,12 +463,6 @@ bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket) {
       socket->connected = connected;
       jh_rp2040_cyw43_provider_lwip_end();
     }
-#else
-    const int available = socket->client.available();
-    connected = socket->connected &&
-                (socket->client.connected() != 0u || available > 0);
-    socket->connected = connected;
-#endif
   }
 
   hal_mutex_unlock(s_tcp_mutex);
@@ -646,16 +478,12 @@ void hal_tcp_socket_shutdown(hal_tcp_socket_t socket) {
   hal_mutex_lock(s_tcp_mutex);
 
   if (is_valid_socket_locked(socket)) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status == HAL_OK) {
       jh_lwip_tcp_socket_close(&socket->client);
       jh_rp2040_cyw43_provider_lwip_end();
     }
-#else
-    socket->client.stop();
-#endif
     socket->connected = false;
     reset_endpoint(&socket->remote_endpoint);
   }
@@ -672,22 +500,18 @@ void hal_tcp_socket_close(hal_tcp_socket_t socket) {
   hal_mutex_lock(s_tcp_mutex);
 
   if (is_valid_socket_locked(socket)) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
     const hal_status_t context_status =
         jh_rp2040_cyw43_provider_lwip_begin(false);
     if (context_status == HAL_OK) {
       jh_lwip_tcp_socket_close(&socket->client);
       jh_rp2040_cyw43_provider_lwip_end();
     }
-#endif
     reset_socket_state_locked(socket);
     socket->in_use = false;
   }
 
   hal_mutex_unlock(s_tcp_mutex);
 }
-
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 
 hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener) {
   if (!out_listener) {
@@ -929,239 +753,6 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener) {
   hal_mutex_unlock(s_tcp_mutex);
 }
 
-#else
-
-hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener) {
-  if (!out_listener) {
-    return HAL_EINVAL;
-  }
-  *out_listener = NULL;
-  tcp_ensure_mutex();
-  hal_mutex_lock(s_tcp_mutex);
-
-  for (size_t i = 0u; i < HAL_TCP_LISTENER_MAX_INSTANCES; ++i) {
-    if (!s_tcp_listener_pool[i].in_use) {
-      drain_unaccepted_clients_locked(&s_tcp_listener_pool[i]);
-      s_tcp_listener_pool[i].server.stop();
-      reset_listener_state_locked(&s_tcp_listener_pool[i]);
-      s_tcp_listener_pool[i].in_use = true;
-      *out_listener = &s_tcp_listener_pool[i];
-      break;
-    }
-  }
-
-  hal_mutex_unlock(s_tcp_mutex);
-
-  if (!*out_listener) {
-    hal_derr("hal_tcp_listener_open: listener pool exhausted");
-    return HAL_ENOMEM;
-  }
-  return HAL_OK;
-}
-
-hal_tcp_listener_t hal_tcp_listener_open(void) {
-  hal_tcp_listener_t listener = NULL;
-  (void)hal_tcp_listener_open_ex(&listener);
-  return listener;
-}
-
-hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
-                                      const hal_net_endpoint_t *local) {
-  const hal_status_t endpoint_status =
-      validate_endpoint(local, true, "hal_tcp_listener_bind", "local");
-  if (endpoint_status != HAL_OK) {
-    return endpoint_status;
-  }
-
-  tcp_ensure_mutex();
-  hal_mutex_lock(s_tcp_mutex);
-
-  if (!is_valid_listener_locked(listener)) {
-    hal_mutex_unlock(s_tcp_mutex);
-    hal_derr("hal_tcp_listener_bind: listener handle is invalid");
-    return HAL_EINVAL;
-  }
-
-  drain_unaccepted_clients_locked(listener);
-  listener->server.stop();
-  reset_listener_state_locked(listener);
-  listener->local_endpoint = *local;
-  listener->bound = true;
-
-  hal_mutex_unlock(s_tcp_mutex);
-  return HAL_OK;
-}
-
-bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
-                           const hal_net_endpoint_t *local) {
-  return hal_status_to_bool(hal_tcp_listener_bind_ex(listener, local));
-}
-
-hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
-                                        uint8_t backlog) {
-  if (backlog == 0u) {
-    hal_derr("hal_tcp_listener_listen: backlog must be > 0");
-    return HAL_EINVAL;
-  }
-
-  tcp_ensure_mutex();
-  hal_mutex_lock(s_tcp_mutex);
-
-  if (!is_valid_listener_locked(listener)) {
-    hal_mutex_unlock(s_tcp_mutex);
-    hal_derr("hal_tcp_listener_listen: listener is invalid");
-    return HAL_EINVAL;
-  }
-  if (!listener->bound) {
-    hal_mutex_unlock(s_tcp_mutex);
-    hal_derr("hal_tcp_listener_listen: listener is not bound");
-    return HAL_ESTATE;
-  }
-
-  drain_unaccepted_clients_locked(listener);
-  listener->server.stop();
-  listener->backlog = capped_backlog(backlog);
-  listener->listening = false;
-  listener->server.begin(listener->local_endpoint.port, listener->backlog);
-  listener->listening = (bool)listener->server;
-  const bool listening = listener->listening;
-  const uint16_t local_port = listener->local_endpoint.port;
-
-  hal_mutex_unlock(s_tcp_mutex);
-
-  if (!listening) {
-    hal_derr("hal_tcp_listener_listen: begin(%u) failed", (unsigned)local_port);
-  }
-  return listening ? HAL_OK : HAL_EIO;
-}
-
-bool hal_tcp_listener_listen(hal_tcp_listener_t listener, uint8_t backlog) {
-  return hal_status_to_bool(hal_tcp_listener_listen_ex(listener, backlog));
-}
-
-hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
-                                        hal_net_endpoint_t *remote,
-                                        uint32_t timeout_ms,
-                                        hal_tcp_socket_t *out_socket) {
-  if (!out_socket) {
-    return HAL_EINVAL;
-  }
-  *out_socket = NULL;
-  const uint32_t start_ms = hal_millis();
-
-  for (;;) {
-    tcp_ensure_mutex();
-    hal_mutex_lock(s_tcp_mutex);
-
-    if (!is_valid_listener_locked(listener)) {
-      hal_mutex_unlock(s_tcp_mutex);
-      hal_derr("hal_tcp_listener_accept: listener is invalid");
-      return HAL_EINVAL;
-    }
-    if (!listener->listening) {
-      hal_mutex_unlock(s_tcp_mutex);
-      hal_derr("hal_tcp_listener_accept: listener is not listening");
-      return HAL_ESTATE;
-    }
-
-    WiFiClient accepted;
-    if (listener->has_pending_client) {
-      accepted = listener->pending_client;
-      listener->pending_client = WiFiClient();
-      listener->has_pending_client = false;
-    } else {
-      accepted = listener->server.accept();
-    }
-    if (accepted) {
-      hal_tcp_socket_t socket = allocate_socket_locked();
-      if (!socket) {
-        accepted.stop();
-        hal_mutex_unlock(s_tcp_mutex);
-        hal_derr("hal_tcp_listener_accept: socket pool exhausted");
-        return HAL_ENOMEM;
-      }
-
-      socket->client = accepted;
-      const int available = socket->client.available();
-      socket->connected = socket->client.connected() != 0u || available > 0;
-      endpoint_from_ip_address(socket->client.remoteIP(),
-                               socket->client.remotePort(),
-                               &socket->remote_endpoint);
-      if (remote) {
-        *remote = socket->remote_endpoint;
-      }
-
-      hal_mutex_unlock(s_tcp_mutex);
-      *out_socket = socket;
-      return HAL_OK;
-    }
-
-    hal_mutex_unlock(s_tcp_mutex);
-
-    if (timeout_ms == 0u) {
-      return HAL_EAGAIN;
-    }
-    if (timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
-        (uint32_t)(hal_millis() - start_ms) >= timeout_ms) {
-      return HAL_EAGAIN;
-    }
-
-    hal_idle();
-    hal_delay_ms(1u);
-  }
-}
-
-hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
-                                         hal_net_endpoint_t *remote,
-                                         uint32_t timeout_ms) {
-  hal_tcp_socket_t socket = NULL;
-  (void)hal_tcp_listener_accept_ex(listener, remote, timeout_ms, &socket);
-  return socket;
-}
-
-bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener) {
-  tcp_ensure_mutex();
-  hal_mutex_lock(s_tcp_mutex);
-
-  bool ready = false;
-  if (is_valid_listener_locked(listener) && listener->listening) {
-    if (listener->has_pending_client) {
-      ready = true;
-    } else {
-      WiFiClient accepted = listener->server.accept();
-      if (accepted) {
-        listener->pending_client = accepted;
-        listener->has_pending_client = true;
-        ready = true;
-      }
-    }
-  }
-
-  hal_mutex_unlock(s_tcp_mutex);
-  return ready;
-}
-
-void hal_tcp_listener_close(hal_tcp_listener_t listener) {
-  if (!listener) {
-    return;
-  }
-
-  tcp_ensure_mutex();
-  hal_mutex_lock(s_tcp_mutex);
-
-  if (is_valid_listener_locked(listener)) {
-    drain_unaccepted_clients_locked(listener);
-    listener->server.stop();
-    reset_listener_state_locked(listener);
-    listener->in_use = false;
-  }
-
-  hal_mutex_unlock(s_tcp_mutex);
-}
-
-#endif
-
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 static hal_status_t backend_socket_open(void **out_socket) {
   if (out_socket == nullptr) {
     return HAL_EINVAL;
@@ -1268,7 +859,6 @@ extern "C" const jh_network_tcp_ops_t *jh_rp2040_cyw43_tcp_ops(void) {
   };
   return &ops;
 }
-#endif
 
 #endif /* HAL_ENABLE_TCP */
 #endif /* HAL_TARGET_IS_RP2040 */

@@ -15,6 +15,7 @@ if(NOT DEFINED ARDUINO_VARIANT_PATH)
 endif()
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
 
 # ── Collect core include paths from Arduino platform files ───────────────────
 # The platform ships two @-response files listing -iwithprefixbefore paths.
@@ -192,6 +193,16 @@ add_library(JaszczurHAL STATIC
     ${HAL_COMMON_SOURCES}
     ${UTIL_SOURCES}
 )
+
+jh_hal_define_enabled(JH_RP2040_CYW43_PIO HAL_CYW43_BUS_PICO_PIO)
+jh_hal_define_enabled(JH_RP2040_CYW43_LWIP HAL_CYW43_STACK_LWIP)
+if(JH_RP2040_CYW43_PIO)
+    if(JH_RP2040_CYW43_LWIP)
+        jh_target_enable_cyw43_driver(JaszczurHAL LWIP)
+    else()
+        jh_target_enable_cyw43_driver(JaszczurHAL)
+    endif()
+endif()
 
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}

@@ -13,10 +13,17 @@
       "displayName": "Raspberry Pi Pico + external PIM730/RM2 (experimental)",
       "cache": {
         "ARDUINO_FQBN": "rp2040:rp2040:rpipico",
-        "JH_RP2040_BOARD_DEFINES": "PICO_CYW43_SUPPORTED=1;CYW43_PIN_WL_DYNAMIC=1;CYW43_PIO_CLOCK_DIV_DYNAMIC=1;HAL_NETWORK_BACKEND_CYW43;HAL_CYW43_BUS_PICO_PIO;HAL_CYW43_PROFILE_PIM730"
+        "JH_RP2040_BOARD_DEFINES": "HAL_NETWORK_BACKEND_CYW43;HAL_CYW43_BUS_PICO_PIO;HAL_CYW43_STACK_LWIP;HAL_CYW43_PROFILE_PIM730;HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"
       }
     },
-    { "id": "picow",  "displayName": "Raspberry Pi Pico W (RP2040)",  "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipicow" } },
+    {
+      "id": "picow",
+      "displayName": "Raspberry Pi Pico W (JaszczurHAL CYW43)",
+      "cache": {
+        "ARDUINO_FQBN": "rp2040:rp2040:rpipico",
+        "JH_RP2040_BOARD_DEFINES": "HAL_NETWORK_BACKEND_CYW43;HAL_CYW43_BUS_PICO_PIO;HAL_CYW43_STACK_LWIP;HAL_CYW43_PROFILE_PICOW;HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"
+      }
+    },
     { "id": "pico2",  "displayName": "Raspberry Pi Pico 2 (RP2350)",  "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipico2" } },
     { "id": "pico2w", "displayName": "Raspberry Pi Pico 2 W (RP2350)", "cache": { "ARDUINO_FQBN": "rp2040:rp2040:rpipico2w" } }
   ]

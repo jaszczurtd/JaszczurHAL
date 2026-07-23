@@ -10,11 +10,7 @@
 #include "../shared/network/jh_lwip_extension.h"
 #include "../shared/network/jh_lwip_status.h"
 
-#if defined(HAL_NETWORK_BACKEND_CYW43)
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
-#else
-#include <pico/cyw43_arch.h>
-#endif
 
 #include <hardware/regs/addressmap.h>
 #include <hardware/regs/rosc.h>
@@ -26,37 +22,17 @@
 #include <string.h>
 #include <sys/time.h>
 
-extern struct netif *__getCYW43Netif();
+extern "C" struct netif *__getCYW43Netif();
 
 namespace {
 
 constexpr time_t kMinimumWireGuardUnixTime = 1577836800; // 2020-01-01 UTC
 
 hal_status_t stack_enter(void *, bool require_ipv4) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
   return jh_rp2040_cyw43_provider_lwip_begin(require_ipv4);
-#else
-  cyw43_arch_poll();
-  sys_check_timeouts();
-  cyw43_arch_lwip_begin();
-  struct netif *underlay = __getCYW43Netif();
-  if (require_ipv4 && (underlay == nullptr || netif_is_up(underlay) == 0u ||
-                       netif_is_link_up(underlay) == 0u ||
-                       ip4_addr_isany_val(*netif_ip4_addr(underlay)))) {
-    cyw43_arch_lwip_end();
-    return HAL_ESTATE;
-  }
-  return HAL_OK;
-#endif
 }
 
-void stack_leave(void *) {
-#if defined(HAL_NETWORK_BACKEND_CYW43)
-  jh_rp2040_cyw43_provider_lwip_end();
-#else
-  cyw43_arch_lwip_end();
-#endif
-}
+void stack_leave(void *) { jh_rp2040_cyw43_provider_lwip_end(); }
 
 hal_status_t underlay_netif(void *, void **out_netif) {
   if (out_netif == nullptr) {
