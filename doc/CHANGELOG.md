@@ -607,6 +607,20 @@ All notable changes to this project will be documented in this file.
   `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
   `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
   `HAL_ENABLE_WIREGUARD`.
+- Replaced the last RP2040 SoC system/fault dependencies on the Arduino
+  `RP2040` class: `rp2040_system_get_free_heap()` now derives free heap from the
+  `__StackLimit`/`__bss_end__` linker symbols minus `mallinfo().uordblks`,
+  `rp2040_system_read_chip_temp()` reads the on-die sensor over the native ADC
+  (`ADC_TEMPERATURE_CHANNEL_NUM`), and `rp2040_fault` decodes the reset reason
+  straight from the watchdog reason and chip-reset registers
+  (`VREG_AND_CHIP_RESET` on RP2040, `POWMAN` on RP2350) - no
+  `rp2040.getFreeHeap()`, `analogReadTemp()`, `rp2040.getResetReason()` or
+  `<Arduino.h>` in the SoC drivers.
+- Tightened shared-layer header hygiene: the bundled `JPEGDecoder` is now a
+  target-neutral, memory-only decoder (dropped the Arduino/ESP/SD/LittleFS file
+  backends that pulled Arduino `FS`/`LittleFS` into RP2040 builds, keeping the
+  `decodeArray()` path), and removed the residual `<Arduino.h>` includes from
+  `hal_bits.h` and the RP2040 `hal_sync` backend.
 
 ## [1.8.0] - 2026-07-01
 

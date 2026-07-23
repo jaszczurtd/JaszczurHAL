@@ -9,6 +9,10 @@ Adapted by Bodmer for use with a TFT screen
 Latest version here:
 https://github.com/Bodmer/JPEGDecoder
 
+JaszczurHAL note: this decoder is integrated as a target-neutral, memory-only
+utility. Decode JPEG bytes from flash or RAM with decodeArray();
+file-based decoding, if ever needed, must go through the JaszczurHAL
+filesystem API.
 */
 
 #ifndef JPEGDECODER_H
@@ -18,69 +22,17 @@ https://github.com/Bodmer/JPEGDecoder
 
 #ifdef HAL_ENABLE_JPEG
 
-#ifndef JPEGDECODER_SETUP_LOADED //  Lets PlatformIO users define settings in
-                                 //  platformio.ini
-#include "JPEGDecoder_User_Config.h"
-#endif // JPEGDECODER_SETUP_LOADED
-
-#if defined(__has_include)
-#if __has_include(<Arduino.h>)
-#include <Arduino.h>
-#define HAL_JPEGDECODER_HAS_ARDUINO 1
-#endif
-#endif
-
-#ifndef HAL_JPEGDECODER_HAS_ARDUINO
 #include <stdint.h>
+
+/* picojpeg reads the compressed stream straight from the caller-provided array,
+ * so pgm_read_byte is a plain dereference on every JaszczurHAL target. */
 #ifndef pgm_read_byte
 #define pgm_read_byte(addr) (*(const uint8_t *)(addr))
-#endif
-#endif
-
-#ifdef __AVR__
-#include <avr/pgmspace.h>
-#undef PROGMEM
-#define PROGMEM __attribute__((section(".fini2")))
-#endif
-
-#ifdef ESP32 // SDFAT library not compatible with ESP32
-// #undef LOAD_SD_LIBRARY
-#undef LOAD_SDFAT_LIBRARY
-#endif
-
-// New ESP8266 board package uses ARDUINO_ARCH_ESP8266
-// old package defined ESP8266
-#if defined(ESP8266)
-#ifndef ARDUINO_ARCH_ESP8266
-#define ARDUINO_ARCH_ESP8266
-#endif
-#endif
-
-#if defined(ARDUINO_ARCH_ESP8266) || defined(ESP32)
-#define LOAD_FLASH_FS
-#include <FS.h>
-#include <LittleFS.h>
-#include <pgmspace.h>
-#define SPIFFS LittleFS
-#elif defined(ARDUINO_ARCH_RP2040)
-#define LOAD_FLASH_FS
-#include <FS.h>
-#include <LittleFS.h>
-#define SPIFFS LittleFS
-#define TJPGD_LOAD_FFS
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-#ifdef LOAD_SDFAT_LIBRARY
-#include <SdFat.h> // Alternative where we might need to bit bash the SPI
-#else
-#include <SD.h> // Default
-#endif
 #endif
 
 #include "picojpeg.h"
 
-enum { JPEG_ARRAY = 0, JPEG_FS_FILE, JPEG_SD_FILE };
+enum { JPEG_ARRAY = 0 };
 
 // #define DEBUG
 
@@ -97,12 +49,6 @@ typedef unsigned int uint;
 class JPEGDecoder {
 
 private:
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  File g_pInFileSd;
-#endif
-#ifdef LOAD_FLASH_FS
-  fs::File g_pInFileFs;
-#endif
   pjpeg_scan_type_t scan_type;
   pjpeg_image_info_t image_info;
 
@@ -148,27 +94,6 @@ public:
   int available(void);
   int read(void);
   int readSwappedBytes(void);
-
-  int decodeFile(const char *pFilename);
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-  int decodeFile(const String &pFilename);
-#endif
-
-#if defined(LOAD_SD_LIBRARY) || defined(LOAD_SDFAT_LIBRARY)
-  int decodeSdFile(const char *pFilename);
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-  int decodeSdFile(const String &pFilename);
-#endif
-  int decodeSdFile(File g_pInFile);
-#endif
-
-#ifdef LOAD_FLASH_FS
-  int decodeFsFile(const char *pFilename);
-#ifdef HAL_JPEGDECODER_HAS_ARDUINO
-  int decodeFsFile(const String &pFilename);
-#endif
-  int decodeFsFile(fs::File g_pInFile);
-#endif
 
   int decodeArray(const uint8_t array[], uint32_t array_size);
   void abort(void);

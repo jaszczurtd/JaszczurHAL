@@ -7,11 +7,14 @@
 
 #include "rp2040_fault.h"
 
-#include <Arduino.h>
-#include <RP2040Support.h>
 #include <hardware/structs/watchdog.h>
 #include <hardware/watchdog.h>
 #include <pico/stdlib.h>
+#if defined(PICO_RP2350)
+#include <hardware/structs/powman.h>
+#else
+#include <hardware/structs/vreg_and_chip_reset.h>
+#endif
 
 namespace {
 
@@ -30,11 +33,10 @@ constexpr uint32_t kStackOverflowSentinelPc = 0xDEADD000u;
 // stuck bit or zero-write does not look like the canary.
 constexpr uint32_t kStackCanary = 0xC4314EA5u;
 
-// arduino-pico's RP2040Support.h declares the linker symbol as
-// `extern "C" char __StackLimit;` (a single byte). We need to read a 32-bit
-// word at that address; route the address through an inline-asm "memory
-// operand" so the optimiser's -Warray-bounds analysis cannot reach the
-// underlying `char [1]` type.
+// The pico-sdk linker script exports the stack limit as a single byte
+// (`char __StackLimit`). We need to read a 32-bit word at that address; route
+// the address through an inline-asm "memory operand" so the optimiser's
+// -Warray-bounds analysis cannot reach the underlying `char [1]` type.
 extern "C" char __StackLimit;
 
 inline uint32_t *stack_canary_addr(void) {
@@ -65,35 +67,54 @@ inline bool state_signature_valid(uint32_t s) {
   return (s & kStateSignatureMask) == kStateSignature;
 }
 
+// Native reimplementation of arduino-pico's RP2040::getResetReason(): decode
+// the reset cause straight from the watchdog reason register and the SoC
+// chip-reset register (VREG_AND_CHIP_RESET on RP2040, POWMAN on RP2350) into
+// hal_reset_reason_t. Precedence matches the upstream: a genuine watchdog
+// timeout wins, then a soft reset()/reboot() routed through the watchdog
+// timer, then the chip-reset bits.
 void map_pico_reset_reason(void) {
-  using rrt = RP2040::resetReason_t;
-  rrt r = rp2040.getResetReason();
-  switch (r) {
-  case rrt::PWRON_RESET:
-    g_reset_reason = HAL_RESET_REASON_POWER_ON;
-    break;
-  case rrt::RUN_PIN_RESET:
-    g_reset_reason = HAL_RESET_REASON_RUN_PIN;
-    break;
-  case rrt::SOFT_RESET:
-    g_reset_reason = HAL_RESET_REASON_SOFT;
-    break;
-  case rrt::WDT_RESET:
+  if (watchdog_caused_reboot() && watchdog_enable_caused_reboot()) {
     g_reset_reason = HAL_RESET_REASON_WATCHDOG;
-    break;
-  case rrt::DEBUG_RESET:
-    g_reset_reason = HAL_RESET_REASON_DEBUG;
-    break;
-  case rrt::GLITCH_RESET:
-    g_reset_reason = HAL_RESET_REASON_GLITCH;
-    break;
-  case rrt::BROWNOUT_RESET:
-    g_reset_reason = HAL_RESET_REASON_BROWNOUT;
-    break;
-  default:
-    g_reset_reason = HAL_RESET_REASON_UNKNOWN;
-    break;
+    return;
   }
+
+  if ((watchdog_hw->reason & WATCHDOG_REASON_TIMER_BITS) != 0u) {
+    g_reset_reason = HAL_RESET_REASON_SOFT;
+    return;
+  }
+
+#if defined(PICO_RP2350)
+  const uint32_t chip_reset = powman_hw->chip_reset;
+  if (chip_reset & POWMAN_CHIP_RESET_HAD_POR_BITS) {
+    g_reset_reason = HAL_RESET_REASON_POWER_ON;
+  } else if (chip_reset & POWMAN_CHIP_RESET_HAD_RUN_LOW_BITS) {
+    g_reset_reason = HAL_RESET_REASON_RUN_PIN;
+  } else if ((chip_reset & POWMAN_CHIP_RESET_HAD_DP_RESET_REQ_BITS) ||
+             (chip_reset & POWMAN_CHIP_RESET_HAD_RESCUE_BITS) ||
+             (chip_reset & POWMAN_CHIP_RESET_HAD_HZD_SYS_RESET_REQ_BITS)) {
+    g_reset_reason = HAL_RESET_REASON_DEBUG;
+  } else if (chip_reset & POWMAN_CHIP_RESET_HAD_GLITCH_DETECT_BITS) {
+    g_reset_reason = HAL_RESET_REASON_GLITCH;
+  } else if (chip_reset & POWMAN_CHIP_RESET_HAD_BOR_BITS) {
+    g_reset_reason = HAL_RESET_REASON_BROWNOUT;
+  } else {
+    g_reset_reason = HAL_RESET_REASON_UNKNOWN;
+  }
+#else
+  const uint32_t chip_reset = vreg_and_chip_reset_hw->chip_reset;
+  if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_POR_BITS) {
+    // POR covers both power-on and brown-out on RP2040; brown-out is teased
+    // apart later in rp2040_fault_init() via the retained alive marker.
+    g_reset_reason = HAL_RESET_REASON_POWER_ON;
+  } else if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_RUN_BITS) {
+    g_reset_reason = HAL_RESET_REASON_RUN_PIN;
+  } else if (chip_reset & VREG_AND_CHIP_RESET_CHIP_RESET_HAD_PSM_RESTART_BITS) {
+    g_reset_reason = HAL_RESET_REASON_DEBUG;
+  } else {
+    g_reset_reason = HAL_RESET_REASON_UNKNOWN;
+  }
+#endif
 }
 
 } // namespace

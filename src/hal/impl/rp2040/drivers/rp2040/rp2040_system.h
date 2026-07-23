@@ -68,11 +68,12 @@ bool rp2040_system_watchdog_caused_reboot(void);
  *  but expresses intent and is a documented relax point for the SDK). */
 void rp2040_system_idle(void);
 
-/** @brief Free heap, in bytes. Wraps @c rp2040.getFreeHeap(). */
+/** @brief Free heap, in bytes. Computed natively from the linker heap bounds
+ *  (@c __StackLimit / @c __bss_end__) minus @c mallinfo().uordblks. */
 uint32_t rp2040_system_get_free_heap(void);
 
-/** @brief On-die temperature, in °C (±2 °C typical). Wraps @c analogReadTemp().
- */
+/** @brief On-die temperature, in °C (±2 °C typical). Reads the internal
+ *  temperature sensor over the native ADC (@c ADC_TEMPERATURE_CHANNEL_NUM). */
 float rp2040_system_read_chip_temp(void);
 
 /** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not
