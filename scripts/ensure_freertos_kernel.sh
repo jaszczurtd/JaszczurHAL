@@ -6,16 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CONFIG_FILE="${REPO_ROOT}/freertos_core_version.conf"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-info() { echo -e "${CYAN}[INFO]${NC} $*"; }
-ok() { echo -e "${GREEN}[OK]${NC} $*"; }
-warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
-die() { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
+# shellcheck source=lib/pinned_repo.sh
+source "${SCRIPT_DIR}/lib/pinned_repo.sh"
 
 usage() {
     sed -n '2,80p' "$0" | sed 's/^# \{0,1\}//'
@@ -145,44 +137,6 @@ REQUIRED_PATHS=(
     "stream_buffer.c"
 )
 
-fetch_ref() {
-    local dir="$1"
-    git -C "${dir}" fetch --depth 1 origin "${FREERTOS_KERNEL_REF}"
-    git -C "${dir}" checkout --detach FETCH_HEAD
-}
-
-clone_kernel() {
-    local dir="$1"
-    local parent
-    parent="$(dirname "${dir}")"
-    local base
-    base="$(basename "${dir}")"
-    local tmp="${parent}/.${base}.tmp.$$"
-
-    mkdir -p "${parent}"
-    rm -rf "${tmp}"
-    git init -q "${tmp}"
-    git -C "${tmp}" remote add origin "${FREERTOS_KERNEL_REPO}"
-    if ! fetch_ref "${tmp}"; then
-        rm -rf "${tmp}"
-        die "Could not fetch FreeRTOS-Kernel ref ${FREERTOS_KERNEL_REF} from ${FREERTOS_KERNEL_REPO}.
-If you are offline, pre-populate ${dir} or set JH_FREERTOS_KERNEL_DIR to a checkout at that ref."
-    fi
-    mv "${tmp}" "${dir}"
-}
-
-verify_required_paths() {
-    local dir="$1"
-    local missing=0
-    for path in "${REQUIRED_PATHS[@]}"; do
-        if [[ ! -e "${dir}/${path}" ]]; then
-            echo "  missing: ${dir}/${path}" >&2
-            missing=1
-        fi
-    done
-    [[ ${missing} -eq 0 ]] || die "FreeRTOS-Kernel checkout is incomplete. Required STM32G474 kernel/port/heap paths are missing."
-}
-
 kernel_version() {
     local dir="$1"
     sed -n 's/^[[:space:]]*#define[[:space:]]\+tskKERNEL_VERSION_NUMBER[[:space:]]\+"\([^"]*\)".*/\1/p' \
@@ -202,20 +156,6 @@ verify_version() {
     fi
 }
 
-verify_ref() {
-    local dir="$1"
-    if [[ ! -d "${dir}/.git" ]]; then
-        warn "${dir} is not a git checkout; exact ref ${FREERTOS_KERNEL_REF} cannot be verified."
-        return 0
-    fi
-
-    local actual
-    actual="$(git -C "${dir}" rev-parse HEAD)"
-    if [[ "${actual}" != "${FREERTOS_KERNEL_REF}" ]]; then
-        die "FreeRTOS-Kernel ref mismatch in ${dir}: expected ${FREERTOS_KERNEL_REF}, found ${actual}."
-    fi
-}
-
 if [[ ! -d "${KERNEL_DIR}" ]]; then
     if [[ ${USER_PROVIDED_DIR} -eq 1 ]]; then
         die "JH_FREERTOS_KERNEL_DIR points to a missing checkout: ${KERNEL_DIR}"
@@ -223,7 +163,7 @@ if [[ ! -d "${KERNEL_DIR}" ]]; then
     [[ ${VERIFY_ONLY} -eq 0 ]] || die "FreeRTOS-Kernel checkout missing: ${KERNEL_DIR}"
 
     info "Fetching FreeRTOS-Kernel ${FREERTOS_KERNEL_VERSION:-${FREERTOS_KERNEL_REF}} into ${KERNEL_DIR}"
-    clone_kernel "${KERNEL_DIR}"
+    jh_dep_clone_pinned "${FREERTOS_KERNEL_REPO}" "${FREERTOS_KERNEL_REF}" "${KERNEL_DIR}"
 elif [[ -d "${KERNEL_DIR}/.git" ]]; then
     actual="$(git -C "${KERNEL_DIR}" rev-parse HEAD)"
     if [[ "${actual}" != "${FREERTOS_KERNEL_REF}" ]]; then
@@ -232,7 +172,7 @@ elif [[ -d "${KERNEL_DIR}/.git" ]]; then
         fi
 
         info "Updating FreeRTOS-Kernel checkout in ${KERNEL_DIR} to ${FREERTOS_KERNEL_REF}"
-        if ! fetch_ref "${KERNEL_DIR}"; then
+        if ! jh_dep_fetch_ref "${KERNEL_DIR}" "${FREERTOS_KERNEL_REPO}" "${FREERTOS_KERNEL_REF}"; then
             die "Could not fetch FreeRTOS-Kernel ref ${FREERTOS_KERNEL_REF}.
 If you are offline, pre-populate ${KERNEL_DIR} or set JH_FREERTOS_KERNEL_DIR to a checkout at that ref."
         fi
@@ -241,7 +181,7 @@ else
     [[ ${VERIFY_ONLY} -eq 0 || ${USER_PROVIDED_DIR} -eq 1 ]] || die "FreeRTOS-Kernel path exists but is not a git checkout: ${KERNEL_DIR}"
 fi
 
-verify_required_paths "${KERNEL_DIR}"
+jh_dep_verify_paths "${KERNEL_DIR}" "${REQUIRED_PATHS[@]}"
 verify_version "${KERNEL_DIR}"
-verify_ref "${KERNEL_DIR}"
+jh_dep_verify_ref "${KERNEL_DIR}" "${FREERTOS_KERNEL_REF}"
 ok "FreeRTOS-Kernel ready: ${KERNEL_DIR} (${FREERTOS_KERNEL_VERSION:-${FREERTOS_KERNEL_REF}})"

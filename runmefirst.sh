@@ -44,6 +44,19 @@ clean_build_artifacts() {
 
 clean_build_artifacts
 
+# ── Why this script needs sudo (shown before the first password prompt) ──────
+cat <<'WHYSUDO'
+
+This setup needs sudo (you'll be prompted for your password) to:
+  - install system packages via apt: build tools, the arm-none-eabi toolchain,
+    host test/QA tooling (valgrind, clang-tidy, cppcheck, ...), openocd, and
+    libusb + pkg-config (picotool USB access),
+  - install arduino-cli and osv-scanner into /usr/local/bin,
+  - write a udev rule under /etc/udev/rules.d so you can flash RP2040/RP2350
+    boards over USB without sudo afterwards.
+
+WHYSUDO
+
 sudo apt-get update
 
 # Core build + host-test toolchain (required: without these `cmake -B build`
@@ -55,11 +68,24 @@ sudo apt-get install -y build-essential cmake git curl ca-certificates python3
 # Client/runtime tooling used by generated jh-vscode projects:
 # - openocd flashes/debugs STM32G474 targets,
 # - python3-serial powers the persistent serial monitor,
-# - psmisc provides fuser for safe serial monitor handoff before upload.
-sudo apt-get install -y openocd python3-serial psmisc
+# - psmisc provides fuser for safe serial monitor handoff before upload,
+# - libusb-1.0-0-dev + pkg-config let picotool talk to RP2040/RP2350 over USB.
+sudo apt-get install -y openocd python3-serial psmisc libusb-1.0-0-dev pkg-config
 
 # STM32 FreeRTOS dependency - fetched only as part of this explicit setup step.
 "${SCRIPT_DIR}/scripts/ensure_freertos_kernel.sh" --force --repo-root "${SCRIPT_DIR}"
+
+# Native RP2040/RP2350 Pico SDK dependency - upstream pico-sdk, independent of
+# the arduino-pico carrier. Fetched here alongside the FreeRTOS kernel.
+"${SCRIPT_DIR}/scripts/ensure_pico_sdk.sh" --force --repo-root "${SCRIPT_DIR}"
+
+# picotool for native RP2040/RP2350 flashing - fetched and built against the
+# pinned Pico SDK above (uses the libusb-1.0-0-dev + pkg-config installed here).
+"${SCRIPT_DIR}/scripts/ensure_picotool.sh" --force --repo-root "${SCRIPT_DIR}"
+
+# RISC-V toolchain for the rp2350-risc-v target (Hazard3). Prebuilt upstream
+# Raspberry Pi GCC (riscv32-unknown-elf); the ARM targets do not need it.
+"${SCRIPT_DIR}/scripts/ensure_riscv_toolchain.sh" --force --repo-root "${SCRIPT_DIR}"
 
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
@@ -111,8 +137,35 @@ install_cve_bin_tool() {
   python3 -m pipx install cve-bin-tool
 }
 
+# udev rule for sudo-less USB flashing of Raspberry Pi RP2040/RP2350 boards.
+# picotool and the native UF2 upload need write access to the USB device node;
+# without this rule that requires sudo on every flash. Vendor-wide 2e8a covers
+# both BOOTSEL (2e8a:0003) and the app-mode CDC/picotool interface. Idempotent
+# and skipped cleanly where udev is absent (minimal containers / non-udev CI).
+install_pico_udev_rule() {
+  local rule_file="/etc/udev/rules.d/99-jaszczurhal-pico.rules"
+  local rule='SUBSYSTEM=="usb", ATTRS{idVendor}=="2e8a", MODE="0666", GROUP="plugdev", TAG+="uaccess"'
+
+  if [ ! -d /etc/udev/rules.d ]; then
+    echo "  udev not present; skipping RP2040/RP2350 USB flashing rule."
+    return 0
+  fi
+
+  if [ -f "${rule_file}" ] && [ "$(cat "${rule_file}" 2>/dev/null)" = "${rule}" ]; then
+    return 0
+  fi
+
+  printf '%s\n' "${rule}" | sudo tee "${rule_file}" >/dev/null
+  if command -v udevadm >/dev/null 2>&1; then
+    sudo udevadm control --reload-rules >/dev/null 2>&1 || true
+    sudo udevadm trigger >/dev/null 2>&1 || true
+  fi
+  echo "  Installed ${rule_file} (sudo-less RP2040/RP2350 USB flashing; reattach device to apply)."
+}
+
 install_osv_scanner
 install_cve_bin_tool
+install_pico_udev_rule
 
 # ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
 # (scripts/build_stm32_lib.sh). The host-compiler STM32 build and the unit
