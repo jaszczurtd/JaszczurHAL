@@ -50,11 +50,25 @@ parse_platform_inc_file(
     PLATFORM_INC_DIRS
 )
 
-# ── Arduino platform libraries (Wire, SPI, EEPROM, WiFi, ...) ─────────────────
-# arduino-cli resolves these on the fly; we include all of them so that HAL
-# modules can find <Wire.h>, <SPI.h>, etc.
-file(GLOB _arduino_platform_lib_dirs "${ARDUINO_PLATFORM_DIR}/libraries/*/src")
-set(ARDUINO_LIB_INC_DIRS ${_arduino_platform_lib_dirs})
+# ── Arduino platform library include paths (explicit allowlist) ──────────────
+# Previously we globbed every libraries/*/src onto the include path, which
+# silently satisfied stray Arduino-Pico includes and masked accidental coupling.
+# Expose only the libraries the HAL actually needs, so unintended includes fail
+# to resolve. Static lib = header closure: FS.h/FSImpl.h from the core, bearssl
+# and tinyusb from the platform include dirs above; only these remain:
+#   EEPROM  <- hal_eeprom (<EEPROM.h>)      LittleFS   <- hal_littlefs (<LittleFS.h>)
+#   Updater <- hal_ota (<Updater.h>)        MD5Builder <- Updater.h transitive
+# Kept unconditional (not feature-gated): the enabling flags are propagated in
+# hal_config.h (e.g. KV/SDLOGGER -> EEPROM), which CMake does not see.
+set(ARDUINO_REQUIRED_LIBS EEPROM LittleFS Updater MD5Builder)
+set(ARDUINO_LIB_INC_DIRS "")
+foreach(_lib IN LISTS ARDUINO_REQUIRED_LIBS)
+    set(_lib_src "${ARDUINO_PLATFORM_DIR}/libraries/${_lib}/src")
+    if(NOT EXISTS "${_lib_src}")
+        message(FATAL_ERROR "Required Arduino-Pico library '${_lib}' missing: ${_lib_src}")
+    endif()
+    list(APPEND ARDUINO_LIB_INC_DIRS "${_lib_src}")
+endforeach()
 
 # ── Collect defines from platform def files ──────────────────────────────────
 function(parse_platform_def_file FILEPATH OUT_VAR)
