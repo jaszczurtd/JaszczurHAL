@@ -21,6 +21,9 @@ GRBHAL/
 
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/
+third_party/pico-sdk/
+third_party/picotool/
+third_party/riscv-toolchain/
 zephyr
 doc/zephyr_driver_candidates.md
 
