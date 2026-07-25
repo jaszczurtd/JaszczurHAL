@@ -116,9 +116,9 @@ void hal_serial_begin(uint32_t baud);
 /**
  * @brief Enable or disable flushing after serial writes.
  *
- * The RP2040 backend defaults to disabled. When enabled, it performs an
- * additional USB CDC flush/task poll after hal_serial_print() /
- * hal_serial_println() while still holding the backend TX mutex.
+ * RP USB-CDC backends default to disabled. When enabled, they perform an
+ * additional @ref hal_usb_cdc_flush after hal_serial_print() /
+ * hal_serial_println() while still holding the serial TX mutex.
  *
  * Backends without a USB CDC flush still accept the setting for portable code,
  * but it has no transport effect there.

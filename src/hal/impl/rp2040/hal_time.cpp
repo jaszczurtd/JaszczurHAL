@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #include "../../hal_serial.h"
 #include "../../hal_time.h"
@@ -257,4 +257,4 @@ bool hal_time_format_local(char *out, size_t out_size, const char *format) {
 }
 
 #endif /* HAL_ENABLE_TIME */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

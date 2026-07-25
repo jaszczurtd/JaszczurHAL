@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
 
 #include "hal/hal_config.h"
 #ifdef HAL_ENABLE_HD44780
@@ -672,5 +672,5 @@ void HD44780::write8bits(uint8_t value) {
 }
 
 #endif /* HAL_ENABLE_HD44780 */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 ||                   \
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 ||                       \
           HAL_TARGET_IS_MOCK */

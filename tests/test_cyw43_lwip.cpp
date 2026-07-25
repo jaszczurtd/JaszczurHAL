@@ -13,6 +13,8 @@ static void test_non_stm32_lwip_port_is_not_instantiated(void) {
 
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, jh_cyw43_lwip_service());
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        jh_cyw43_lwip_join_start("ssid", "password", 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
                         jh_cyw43_lwip_join("ssid", "password", 0u, 1000u));
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, jh_cyw43_lwip_resolve_ipv4(
                                               "example.test", &address, 1000u));

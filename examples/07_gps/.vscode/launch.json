@@ -6,10 +6,10 @@
             "type": "cortex-debug",
             "request": "launch",
             "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/.build/firmware.elf",
+            "executable": "${workspaceFolder}/../../.build/examples/07_gps/firmware.elf",
             "servertype": "openocd",
             "device": "RP2040",
-            "runToEntryPoint": "setup",
+            "runToEntryPoint": "main",
             "preLaunchTask": "Project: Build (Debug)"
         }
     ]

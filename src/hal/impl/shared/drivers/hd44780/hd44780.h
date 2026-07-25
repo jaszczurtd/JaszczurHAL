@@ -19,7 +19,7 @@
 
 #include "hal/hal_config.h"
 
-#if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) && \
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
     defined(HAL_ENABLE_HD44780)
 
 #include "hal/hal_sync.h"

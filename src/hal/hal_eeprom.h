@@ -8,9 +8,9 @@
  * @brief Unified EEPROM hardware abstraction layer.
  *
  * Provides a single API that works with target-native flash-backed EEPROM
- * emulation (RP2040 Arduino EEPROM / STM32G474 internal flash reservation)
- * and the external AT24C256 I2C EEPROM. The backing storage is selected at
- * runtime via hal_eeprom_init().
+ * emulation (native RP coordinated flash, RP Arduino compatibility EEPROM, or
+ * STM32G474 internal flash reservation) and the external AT24C256 I2C EEPROM.
+ * The backing storage is selected at runtime via hal_eeprom_init().
  * Use HAL_EEPROM_FLASH for portable internal-flash storage across targets.
  * HAL_EEPROM_RP2040 remains available for existing RP2040 applications.
  *

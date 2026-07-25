@@ -6,8 +6,9 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 echo "Removing build artifacts from ${REPO_ROOT}"
 
-find "${REPO_ROOT}" -maxdepth 1 -type d \
-    \( -name "build" -o -name "build_*" -o -name ".build" \) \
-    -print -exec rm -rf {} +
+if [[ -d "${REPO_ROOT}/.build" ]]; then
+    printf '%s\n' "${REPO_ROOT}/.build"
+    rm -rf -- "${REPO_ROOT}/.build"
+fi
 
 echo "Build artifacts removed."

@@ -35,6 +35,10 @@ typedef struct {
 /** Run the single NO_SYS lwIP/CYW43 execution context once. */
 hal_status_t jh_cyw43_lwip_service(void);
 
+/** Start a station join and return after CYW43 accepts the request. */
+hal_status_t jh_cyw43_lwip_join_start(const char *ssid, const char *password,
+                                      uint32_t auth_type);
+
 /** Join a station and wait for a DHCP lease while servicing CYW43/lwIP. */
 hal_status_t jh_cyw43_lwip_join(const char *ssid, const char *password,
                                 uint32_t auth_type, uint32_t timeout_ms);

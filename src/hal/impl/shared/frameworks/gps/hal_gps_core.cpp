@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 
 #include "hal/hal_config.h"
 #ifdef HAL_ENABLE_GPS
@@ -117,4 +117,4 @@ uint32_t hal_gps_sentences_with_fix(void) {
 }
 
 #endif /* HAL_ENABLE_GPS */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */

@@ -194,6 +194,11 @@ typedef struct {
 } hal_simcom_a76xx_mqtt_config_t;
 
 /**
+ * @brief Sentinel returned when no CMQTTCONNECT result code is available.
+ */
+#define HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN (-1)
+
+/**
  * @brief Callback signature for incoming MQTT subscribe messages.
  *
  * Invoked from hal_simcom_a76xx_mqtt_poll() once a full message
@@ -424,6 +429,25 @@ hal_modem_at_t hal_simcom_a76xx_get_at(hal_simcom_a76xx_t h);
 hal_simcom_a76xx_result_t
 hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
                               const hal_simcom_a76xx_mqtt_config_t *cfg);
+
+/**
+ * @brief Return the human-readable meaning of a SimCom CMQTT result code.
+ *
+ * The returned static string follows the A76xx MQTT(S) application-note
+ * result table. Unknown values return "unknown MQTT result".
+ */
+const char *hal_simcom_a76xx_mqtt_result_string(int result_code);
+
+/**
+ * @brief Return the most recent CMQTTCONNECT result for a client.
+ *
+ * @return 0 on the last successful connect, a positive SimCom result code on
+ *         a rejected/failed connect, or
+ *         @ref HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN when no result URC has
+ *         been received (also returned for an invalid handle/index).
+ */
+int hal_simcom_a76xx_mqtt_last_connect_result(hal_simcom_a76xx_t h,
+                                              int client_index);
 
 /**
  * @brief Disconnect the named CMQTT client and release its slot.

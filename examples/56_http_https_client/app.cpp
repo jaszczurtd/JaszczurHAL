@@ -7,7 +7,11 @@
 #include "ca_certificate.h"
 #endif
 
-static bool s_started;
+static bool s_http_complete;
+#ifdef HTTP_EXAMPLE_CA_AVAILABLE
+static bool s_ntp_requested;
+#endif
+static bool s_https_complete;
 
 static void perform_request(hal_http_client_transport_t transport,
                             uint16_t port,
@@ -37,14 +41,28 @@ extern "C" void app_start(void) {
 }
 
 extern "C" void app_task0(void) {
-  if (s_started || !hal_wifi_is_connected() || !hal_wifi_has_local_ip()) {
+  if (!hal_wifi_is_connected() || !hal_wifi_has_local_ip()) {
     hal_delay_ms(50u);
     return;
   }
-  s_started = true;
-  perform_request(HAL_HTTP_CLIENT_TRANSPORT_PLAINTEXT, 80u, NULL);
+  if (!s_http_complete) {
+    s_http_complete = true;
+    perform_request(HAL_HTTP_CLIENT_TRANSPORT_PLAINTEXT, 80u, NULL);
+  }
 
 #ifdef HTTP_EXAMPLE_CA_AVAILABLE
+  if (!s_ntp_requested) {
+    s_ntp_requested = hal_time_sync_ntp("pool.ntp.org", "time.google.com");
+  }
+  if (!hal_time_is_synced(HAL_TLS_MIN_VALID_UNIX_TIME)) {
+    hal_delay_ms(50u);
+    return;
+  }
+  if (s_https_complete) {
+    hal_delay_ms(1000u);
+    return;
+  }
+  s_https_complete = true;
   hal_tls_trust_anchor_storage_t anchor = {};
   if (hal_tls_trust_anchor_from_der_ex(
           http_example_ca_der, http_example_ca_der_len, &anchor) == HAL_OK) {
@@ -56,7 +74,10 @@ extern "C" void app_task0(void) {
     perform_request(HAL_HTTP_CLIENT_TRANSPORT_TLS, 443u, &security);
   }
 #else
-  deb("HTTPS skipped: provide ca_certificate.h and "
-      "HTTP_EXAMPLE_CA_AVAILABLE");
+  if (!s_https_complete) {
+    s_https_complete = true;
+    deb("HTTPS requires ca_certificate.h and HTTP_EXAMPLE_CA_AVAILABLE");
+  }
 #endif
+  hal_delay_ms(1000u);
 }

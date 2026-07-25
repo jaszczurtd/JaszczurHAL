@@ -33,6 +33,8 @@ static size_t s_send_success_budget = std::numeric_limits<size_t>::max();
 static unsigned s_open_count = 0u;
 static unsigned s_close_count = 0u;
 static unsigned s_send_call_count = 0u;
+static unsigned s_receive_call_count = 0u;
+static size_t s_last_receive_capacity = 0u;
 static uint32_t s_connect_timeout_ms = 0u;
 static std::string s_resolved_host;
 static std::string s_tls_host;
@@ -60,6 +62,8 @@ static void reset_fake_transport(void) {
   s_open_count = 0u;
   s_close_count = 0u;
   s_send_call_count = 0u;
+  s_receive_call_count = 0u;
+  s_last_receive_capacity = 0u;
   s_connect_timeout_ms = 0u;
   s_resolved_host.clear();
   s_tls_host.clear();
@@ -173,6 +177,8 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
   if (max_size > 0u && buffer == NULL) {
     return HAL_EINVAL;
   }
+  ++s_receive_call_count;
+  s_last_receive_capacity = max_size;
 
   const size_t available = s_received.size() - s_receive_offset;
   size_t count = std::min(max_size, available);
@@ -274,6 +280,8 @@ hal_status_t hal_tls_client_read_ex(hal_tls_client_t client, void *buffer,
     return HAL_EINVAL;
   }
   *out_received = 0u;
+  ++s_receive_call_count;
+  s_last_receive_capacity = capacity;
   const size_t available = s_received.size() - s_receive_offset;
   size_t count = std::min(capacity, available);
   count = std::min(count, s_max_receive_chunk);
@@ -384,6 +392,34 @@ void test_adapter_resolves_connects_and_preserves_fragmented_reads(void) {
 
   client.stop();
   TEST_ASSERT_EQUAL_UINT(1u, s_close_count);
+  TEST_ASSERT_FALSE(client.connected());
+}
+
+void test_adapter_caches_bulk_receive_and_drains_it_after_fin(void) {
+  JHPubSubHalClient client;
+  const uint8_t ipv4[] = {1u, 2u, 3u, 4u};
+  TEST_ASSERT_EQUAL_INT(1, client.connect(ipv4, 1883u));
+
+  std::vector<uint8_t> incoming(100u);
+  for (size_t index = 0u; index < incoming.size(); ++index) {
+    incoming[index] = (uint8_t)index;
+  }
+  inject_receive(incoming.data(), incoming.size());
+
+  TEST_ASSERT_EQUAL_INT(1, client.available());
+  TEST_ASSERT_EQUAL_UINT(1u, s_receive_call_count);
+  TEST_ASSERT_EQUAL_UINT(256u, s_last_receive_capacity);
+
+  s_socket.connected = false;
+  TEST_ASSERT_TRUE(client.connected());
+  for (size_t index = 0u; index < incoming.size(); ++index) {
+    TEST_ASSERT_EQUAL_INT(1, client.available());
+    TEST_ASSERT_EQUAL_HEX8(incoming[index], client.read());
+  }
+
+  TEST_ASSERT_EQUAL_UINT_MESSAGE(
+      1u, s_receive_call_count,
+      "Byte reads must be served from one bulk transport receive");
   TEST_ASSERT_FALSE(client.connected());
 }
 
@@ -509,6 +545,46 @@ void test_pubsub_uses_hal_transport_for_partial_writes_and_fragmented_publish(
   TEST_ASSERT_EQUAL_MEMORY(payload, s_callback_payload.data(), sizeof(payload));
 }
 
+void test_pubsub_buffers_complete_packet_in_one_transport_read(void) {
+  JHPubSubHalClient network;
+  PubSubClient mqtt(network);
+  mqtt.setServer("mqtt.test", 1883u);
+  mqtt.setCallback(mqtt_callback);
+
+  const uint8_t connack[] = {0x20u, 0x02u, 0x00u, 0x00u};
+  inject_receive(connack, sizeof(connack));
+  TEST_ASSERT_TRUE(mqtt.connect("node-buffered"));
+
+  s_receive_call_count = 0u;
+  static const char topic[] = "relay/command";
+  std::vector<uint8_t> payload(96u);
+  for (size_t index = 0u; index < payload.size(); ++index) {
+    payload[index] = (uint8_t)index;
+  }
+
+  const size_t topic_size = sizeof(topic) - 1u;
+  const size_t remaining_length = 2u + topic_size + payload.size();
+  TEST_ASSERT_LESS_THAN_UINT8(128u, remaining_length);
+  std::vector<uint8_t> packet;
+  packet.reserve(2u + remaining_length);
+  packet.push_back(0x30u);
+  packet.push_back((uint8_t)remaining_length);
+  packet.push_back((uint8_t)(topic_size >> 8u));
+  packet.push_back((uint8_t)topic_size);
+  packet.insert(packet.end(), topic, topic + topic_size);
+  packet.insert(packet.end(), payload.begin(), payload.end());
+  inject_receive(packet.data(), packet.size());
+
+  TEST_ASSERT_TRUE(mqtt.loop());
+  TEST_ASSERT_EQUAL_STRING(topic, s_callback_topic.c_str());
+  TEST_ASSERT_EQUAL_UINT(payload.size(), s_callback_payload.size());
+  TEST_ASSERT_EQUAL_MEMORY(payload.data(), s_callback_payload.data(),
+                           payload.size());
+  TEST_ASSERT_EQUAL_UINT_MESSAGE(
+      1u, s_receive_call_count,
+      "A complete MQTT packet must be consumed from one buffered TCP read");
+}
+
 void test_pubsub_connack_timeout_closes_and_reconnects(void) {
   JHPubSubHalClient network;
   PubSubClient mqtt(network);
@@ -530,11 +606,13 @@ void test_pubsub_connack_timeout_closes_and_reconnects(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_adapter_resolves_connects_and_preserves_fragmented_reads);
+  RUN_TEST(test_adapter_caches_bulk_receive_and_drains_it_after_fin);
   RUN_TEST(test_adapter_partial_write_timeout_closes_stream);
   RUN_TEST(test_adapter_remote_close_and_connect_failure_allow_reconnect);
   RUN_TEST(test_tls_adapter_uses_tls_io_and_performs_bounded_shutdown);
   RUN_TEST(
       test_pubsub_uses_hal_transport_for_partial_writes_and_fragmented_publish);
+  RUN_TEST(test_pubsub_buffers_complete_packet_in_one_transport_read);
   RUN_TEST(test_pubsub_connack_timeout_closes_and_reconnects);
   return UNITY_END();
 }

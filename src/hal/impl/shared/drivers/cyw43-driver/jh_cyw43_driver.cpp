@@ -3,7 +3,9 @@
 
 #include "jh_cyw43_driver.h"
 
-#if (HAL_TARGET_IS_RP2040 && defined(HAL_CYW43_BUS_PICO_PIO)) ||               \
+#include <string.h>
+
+#if (HAL_TARGET_IS_RP && defined(HAL_CYW43_BUS_PICO_PIO)) ||                   \
     (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))
 
 #if defined(HAL_CYW43_STACK_LWIP)
@@ -11,17 +13,15 @@
 #endif
 
 extern "C" {
+#include "vendor/src/cyw43_country.h"
 #include "vendor/src/cyw43_internal.h"
 #include "vendor/src/cyw43_spi.h"
 #if defined(HAL_CYW43_STACK_LWIP)
 #include "lwip/init.h"
-#include "vendor/src/cyw43_country.h"
 #endif
 }
 
 #include <hal/hal_system.h>
-
-#include <string.h>
 
 namespace {
 
@@ -30,22 +30,13 @@ constexpr uint32_t kConfiguredBusControl = 0x000200B3u;
 
 #if defined(HAL_CYW43_STACK_LWIP)
 bool s_lwip_initialized;
-#else
-cyw43_ll_t s_low_level{};
 #endif
 jh_cyw43_gspi_transport_t *s_transport;
-uint8_t s_mac[6];
 uint32_t s_generation;
 hal_status_t s_port_status = HAL_OK;
 bool s_ready;
 
-cyw43_ll_t *low_level(void) {
-#if defined(HAL_CYW43_STACK_LWIP)
-  return &cyw43_state.cyw43_ll;
-#else
-  return &s_low_level;
-#endif
-}
+cyw43_ll_t *low_level(void) { return &cyw43_state.cyw43_ll; }
 
 int cyw43_error(hal_status_t status) {
   if (status == HAL_OK) {
@@ -76,10 +67,14 @@ hal_status_t start_low_level(jh_cyw43_driver_result_t *result) {
     lwip_init();
     s_lwip_initialized = true;
   }
+#endif
+  /* Bring the chip up through the ctrl layer (cyw43_init + wifi_set_up), the
+   * same path Pico SDK uses for both networking and the on-board LED. The
+   * LED-only build compiles cyw43_ctrl without lwIP; driving
+   * cyw43_ll_bus_init directly (bypassing ctrl) is not a valid bring-up. */
   cyw43_init(&cyw43_state);
-  /* The SPI HOST_WAKE line is the only indication that an asynchronous
-   * SDPCM response is ready.  It must already be armed while wifi_set_up()
-   * performs its first control ioctls, not only after those ioctls return. */
+  /* HOST_WAKE must be armed while wifi_set_up() performs its first control
+   * ioctls, not only after they return. */
   const hal_status_t wake_status = jh_cyw43_gspi_host_wake_attach(s_transport);
   if (wake_status != HAL_OK) {
     cyw43_ll_deinit(low_level());
@@ -89,16 +84,9 @@ hal_status_t start_low_level(jh_cyw43_driver_result_t *result) {
   cyw43_wifi_set_up(&cyw43_state, CYW43_ITF_STA, true,
                     (uint32_t)HAL_CYW43_COUNTRY_CODE);
   const int error = cyw43_poll == nullptr ? -CYW43_EIO : 0;
-#else
-  cyw43_ll_init(low_level(), nullptr);
-  result->stage = JH_CYW43_DRIVER_STAGE_BUS;
-  const int error = cyw43_ll_bus_init(low_level(), s_mac);
-#endif
   result->cyw43_error = error;
   if (error != 0 || s_port_status != HAL_OK) {
-#if defined(HAL_CYW43_STACK_LWIP)
     (void)jh_cyw43_gspi_host_wake_detach(s_transport);
-#endif
     cyw43_ll_deinit(low_level());
     return s_port_status != HAL_OK ? s_port_status : HAL_EIO;
   }
@@ -118,8 +106,8 @@ hal_status_t start_low_level(jh_cyw43_driver_result_t *result) {
 
 extern "C" hal_status_t
 jh_cyw43_driver_start(jh_cyw43_gspi_transport_t *transport,
-                      const uint8_t mac[6], jh_cyw43_driver_result_t *result) {
-  if (transport == nullptr || mac == nullptr || result == nullptr) {
+                      jh_cyw43_driver_result_t *result) {
+  if (transport == nullptr || result == nullptr) {
     return HAL_EINVAL;
   }
   if (!transport->initialized) {
@@ -129,7 +117,6 @@ jh_cyw43_driver_start(jh_cyw43_gspi_transport_t *transport,
     return HAL_EEXIST;
   }
   s_transport = transport;
-  memcpy(s_mac, mac, sizeof(s_mac));
   const hal_status_t status = start_low_level(result);
   if (status != HAL_OK) {
     s_transport = nullptr;
@@ -141,13 +128,8 @@ extern "C" hal_status_t jh_cyw43_driver_stop(void) {
   if (s_transport == nullptr) {
     return HAL_EUNINIT;
   }
-#if defined(HAL_CYW43_STACK_LWIP)
   cyw43_deinit(&cyw43_state);
   const hal_status_t wake_status = jh_cyw43_gspi_host_wake_detach(s_transport);
-#else
-  cyw43_ll_deinit(low_level());
-  const hal_status_t wake_status = HAL_OK;
-#endif
   s_transport = nullptr;
   s_ready = false;
   return wake_status;
@@ -161,15 +143,11 @@ jh_cyw43_driver_restart(jh_cyw43_driver_result_t *result) {
   if (s_transport == nullptr) {
     return HAL_EUNINIT;
   }
-#if defined(HAL_CYW43_STACK_LWIP)
   cyw43_deinit(&cyw43_state);
   const hal_status_t wake_status = jh_cyw43_gspi_host_wake_detach(s_transport);
   if (wake_status != HAL_OK) {
     return wake_status;
   }
-#else
-  cyw43_ll_deinit(low_level());
-#endif
   s_ready = false;
   return start_low_level(result);
 }
@@ -215,22 +193,38 @@ extern "C" void cyw43_schedule_internal_poll_dispatch(void (*function)(void)) {
 }
 
 extern "C" void jh_cyw43_port_get_mac(int, uint8_t mac[6]) {
-  memcpy(mac, s_mac, sizeof(s_mac));
+  /*
+   * With CYW43_USE_OTP_MAC enabled, cyw43_ensure_up() stores the address read
+   * from the radio in cyw43_state.mac before lwIP initializes its netif.
+   * Mirror Pico SDK's cyw43_hal_get_mac() exactly: returning an independently
+   * generated cache here would replace the factory Raspberry Pi address in
+   * both the public API and lwIP's netif.
+   */
+  memcpy(mac, cyw43_state.mac, sizeof(cyw43_state.mac));
 }
 
 extern "C" void jh_cyw43_port_generate_laa_mac(int, uint8_t mac[6]) {
   uint8_t uid[HAL_DEVICE_UID_BYTES]{};
-  (void)hal_get_device_uid(uid);
-  mac[0] = 0x02u;
-  for (size_t index = 1u; index < 6u; ++index) {
-    mac[index] = uid[index - 1u];
+  if (hal_get_device_uid(uid) != HAL_OK ||
+      jh_cyw43_make_laa_mac_from_uid(uid, mac) != HAL_OK) {
+    memset(mac, 0, 6u);
+    mac[0] = 0x02u;
   }
 }
 
 extern "C" void jh_cyw43_port_pin_config(int, int, int, int) {}
 extern "C" void jh_cyw43_port_pin_config_irq_falling(int, int) {}
 extern "C" int jh_cyw43_port_pin_read(int) {
-  return s_transport != nullptr && jh_cyw43_gspi_host_wake_pending(s_transport);
+  if (s_transport == nullptr) {
+    return 0;
+  }
+
+  /* The RP2040 GSPI port polls the shared DATA/HOST_WAKE line.  A control
+   * response can assert it after the transfer's final rearm, so the cached
+   * latch alone is insufficient here and makes cyw43_do_ioctl() wait for its
+   * full timeout. */
+  (void)jh_cyw43_gspi_host_wake_refresh(s_transport);
+  return jh_cyw43_gspi_host_wake_pending(s_transport);
 }
 extern "C" void jh_cyw43_port_pin_low(int) {
   if (s_transport != nullptr) {
@@ -299,12 +293,14 @@ extern "C" int cyw43_spi_transfer(cyw43_int_t *self, const uint8_t *tx,
 }
 
 #if !defined(HAL_CYW43_STACK_LWIP)
-extern "C" int cyw43_cb_read_host_interrupt_pin(void *) {
-  return jh_cyw43_port_pin_read(CYW43_PIN_WL_HOST_WAKE);
-}
-extern "C" void cyw43_cb_ensure_awake(void *) {}
-extern "C" void cyw43_cb_process_async_event(void *,
-                                             const cyw43_async_event_t *) {}
+/* Without lwIP, cyw43_lwip.c is not compiled; supply the tcpip/ethernet
+ * callbacks that cyw43_ctrl.c and cyw43_ll.c reference as no-ops (the LED-only
+ * path carries no network traffic). host-wake / ensure-awake / async-event
+ * callbacks come from cyw43_ctrl.c, now compiled in this build too. */
+extern "C" void cyw43_cb_tcpip_init(cyw43_t *, int) {}
+extern "C" void cyw43_cb_tcpip_deinit(cyw43_t *, int) {}
+extern "C" void cyw43_cb_tcpip_set_link_up(cyw43_t *, int) {}
+extern "C" void cyw43_cb_tcpip_set_link_down(cyw43_t *, int) {}
 extern "C" void cyw43_cb_process_ethernet(void *, int, size_t,
                                           const uint8_t *) {}
 #endif
@@ -312,7 +308,6 @@ extern "C" void cyw43_cb_process_ethernet(void *, int, size_t,
 #else
 
 extern "C" hal_status_t jh_cyw43_driver_start(jh_cyw43_gspi_transport_t *,
-                                              const uint8_t *,
                                               jh_cyw43_driver_result_t *) {
   return HAL_EUNSUPPORTED;
 }
@@ -323,6 +318,20 @@ extern "C" hal_status_t jh_cyw43_driver_restart(jh_cyw43_driver_result_t *) {
 extern "C" bool jh_cyw43_driver_is_ready(void) { return false; }
 
 #endif
+
+extern "C" hal_status_t
+jh_cyw43_make_laa_mac_from_uid(const uint8_t uid[HAL_DEVICE_UID_BYTES],
+                               uint8_t mac[6]) {
+  if (uid == nullptr || mac == nullptr) {
+    return HAL_EINVAL;
+  }
+  static_assert(HAL_DEVICE_UID_BYTES >= 6u,
+                "CYW43 fallback MAC requires at least six UID bytes");
+  memcpy(mac, &uid[HAL_DEVICE_UID_BYTES - 6u], 6u);
+  mac[0] &= (uint8_t)~0x01u;
+  mac[0] |= 0x02u;
+  return HAL_OK;
+}
 
 extern "C" const char *
 jh_cyw43_driver_stage_string(jh_cyw43_driver_stage_t stage) {

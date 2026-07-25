@@ -4,6 +4,221 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Host OTA setup
+
+- Added an idempotent `runmefirst.sh` firewall preflight for the default
+  TCP/8266 OTA callback. It detects the default RFC1918 LAN, asks before any
+  change, uses active UFW/firewalld/iptables tooling, installs only missing
+  iptables persistence support, and verifies the resulting persistent rule.
+- Changed the host OTA callback default from an ephemeral port to TCP/8266;
+  projects can still request an ephemeral listener explicitly with
+  `ota.listenPort: 0`.
+
+### Declarative board profiles
+
+- Added versioned target, board, and capability descriptors for RP2040,
+  RP2350 ARM/RISC-V, NUCLEO-G474RE, host mock, RP2040-Zero, and the exact
+  RP2040-Plus 4 MB variant.
+- Added configure-time descriptor validation and deterministic generated
+  CMake/C headers, resolved diagnostics, physical board facts, and controlled
+  component selection.
+- Made native RP and STM32 static libraries board-aware and added a
+  target/board/feature link-time contract symbol that rejects incompatible
+  archives.
+- Added unit, golden, semantic-negative, determinism, flash, WS2812, and
+  positive/negative contract-link tests.
+- Switched jh-vscode, project generation, example dispatch, upload metadata,
+  config dumps, and artifact-layout tests to the declarative `boards/` registry;
+  removed the duplicate `vscode/targets/` descriptors and raw Pico board
+  selectors from resolved project cache.
+- Removed the legacy unknown-RP-board fallback to the Pico profile: builds
+  without generated board config now require an explicit
+  `HAL_BOARD_PROFILE_*` selector and fail with a hard compile error
+  otherwise.
+- Added the `cmake/jh_board_components.cmake` component registry mirrored
+  against the generator registry; every official flow validates resolved
+  components (unknown ID, provider mismatch, exclusive-slot conflict) and
+  exposes `JH_BOARD_COMPONENT_<ID>` flags.
+- Added a `pico`/`pico-rm2` descriptor drift test and a generator/CMake
+  component-registry synchronization test.
+
+### Official Pico SDK native build
+
+- Restored CYW43 factory-MAC selection from the radio OTP. Radios without a
+  programmed OTP address now use the Pico SDK-compatible locally administered
+  fallback derived from the unique UID suffix, avoiding collisions between
+  boards that share the same UID prefix. The public WiFi API and lwIP netif now
+  read the controller-owned MAC instead of a stale pre-initialization cache,
+  preserving Raspberry Pi addresses such as `28:CD:C1:xx:xx:xx`.
+- Implemented non-blocking RP CYW43 station join for
+  `hal_wifi_begin_station_ex(..., true)`; polling the WiFi state now advances
+  association and DHCP instead of the join returning `HAL_EUNSUPPORTED`.
+- Expanded the native RP quality gate from representative smoke/storage
+  projects to every declared example: 56 RP2040, 56 RP2350 ARM and 45 RP2350
+  RISC-V projects. The manifest contract now rejects unclassified targets,
+  boards and variants.
+- Added build-gated bare-metal/FreeRTOS hardware fixtures for concurrent CDC
+  producers on both RP cores and for SDLogger mount/write/close/reset/remount,
+  exact appended-content verification and EEPROM counter persistence.
+- Made hardware fixture manifests reproducible after clone by tracking only
+  `tests/hardware/*/.vscode/jaszczurhal.project.json` while keeping local VS
+  Code state ignored.
+- Fixed native example warnings exposed by the complete matrix: bounded
+  thermocouple diagnostics, the Pico SDK 2.2 PIO program metadata for
+  NeoPixel, unused BSD socket example helpers, and a GCC 15 RP2350 RISC-V
+  interprocedural false positive in the upstream LodePNG copy helper.
+- Added an explicit native OTA hardware fixture for Pico W, Pico 2 W and
+  Pico+PIM730 in bare-metal and FreeRTOS variants. All six hardware
+  combinations passed discovery, wrong-password rejection, acknowledged
+  transfer, trial confirmation, an unconfirmed second image, automatic
+  rollback, and USB/network recovery across reboots.
+- Fixed the native OTA boot applier handoff on RP2040 and RP2350 ARM by
+  transferring VTOR, MSP and control to the selected program reset vector
+  after clearing inherited interrupt state.
+- Replaced board-specific CYW43 PIO dividers with a target gSPI frequency.
+  The RP transport now derives its 16.8 divider from the live `clk_sys`,
+  selects the upstream high/low-speed sampling program, and reports the
+  effective clock to the hardware OTA fixture.
+- Completed the native USB hardware matrix on Pico W and Pico 2 W: 1 MiB CDC
+  echo with delayed-read backpressure, close/reopen, 1200-bps upload, monitor
+  handoff/reconnect, Linux runtime suspend/resume and post-resume echo.
+- Made native UF2 upload select only the BOOTSEL device created by the current
+  1200-bps touch, so an explicitly selected board cannot be confused with a
+  second board that was already waiting in BOOTSEL.
+- Enabled the shared FatFs `39_sdlogger` example for native RP2040, RP2350 ARM
+  and RP2350 RISC-V builds, made native RP2040 its default VS Code target and
+  added the complete native matrix to CI.
+- Added native RP OTA for RP2040 and RP2350: versioned target-bound images,
+  payload SHA-256, password-derived HMAC-SHA256, redundant boot state, equal
+  program/staging slots and a resumable sector swap with trial confirmation,
+  rollback and BOOTSEL recovery.
+- Added VS Code OTA discovery and authenticated upload, `ota` manifest
+  configuration, build-time `.ota` packaging, merged boot/application UF2
+  output, `Project: Upload (OTA)` / discovery tasks and documented keyboard
+  shortcuts. Example `57_ota` covers Pico W and Pico 2 W.
+- Preserved the top-level `ota` object while loading project manifests and
+  added an optional fixed host TCP `listenPort` for callback firewall rules.
+  OTA discovery now sends a direct query when `ota.host` is configured instead
+  of ignoring it and relying on broadcast.
+- Padded every touched non-final flash sector in merged OTA UF2 images, matching
+  the Pico SDK workaround for RP2040-E14 so a sparse boot-applier/application
+  boundary cannot prevent the application from being programmed by BOOTSEL.
+- Added exhaustive host failure-boundary tests for manifest/state persistence
+  and interrupted program/staging swaps, plus native OTA build coverage for
+  RP2040 and RP2350 ARM.
+- Added native Pico SDK EEPROM/KV and LittleFS storage for RP2040 and RP2350.
+  EEPROM uses a RAM mirror and one coordinated erase/program commit; LittleFS
+  routes every flash program and erase through the shared RP transaction
+  coordinator.
+- Added linker-enforced native RP storage reservations: 4 KiB EEPROM at the
+  physical flash tail and an opt-in 64 KiB LittleFS partition immediately
+  before it. The official Pico SDK still sees the physical flash size while
+  the firmware link region excludes both partitions.
+- Replaced the vendored littlefs core with a pinned v2.11.3 managed checkout
+  under `third_party/` and reused it on native RP and STM32G474 targets.
+- Added a repeatable physical storage fixture. EEPROM persistence, explicit
+  LittleFS format/remount and mount-after-reset pass on Pico/RP2040 and Pico 2
+  with both RP2350 ARM and RISC-V firmware; RISC-V also mounts the filesystem
+  previously written by the ARM image without formatting.
+- Consolidated repository-owned build artifacts below `.build/`: host and
+  target builds, examples, hardware fixtures, CMake compiler probes,
+  IntelliSense databases, and picotool no longer create root `build_*`,
+  per-example `.build`, source-checkout build, or root `.o` output.
+- Centralized BearSSL, lwIP, littlefs, FreeRTOS-Kernel, Pico SDK, picotool and
+  the RP2350 RISC-V toolchain under `third_party/`: tracked version files are
+  the source of truth, ignored installations are synchronized or replaced by
+  `update_components.sh`, and `runmefirst.sh` uses that single entry point.
+- Added an artifact-layout regression contract and constrained static/native
+  build helper `--output` paths to the managed `.build/` tree.
+- Added a shared native RP flash transaction coordinator for bare-metal and
+  FreeRTOS SMP firmware. It serializes callers, coordinates core 1 and local
+  IRQs, pauses TinyUSB, rejects active DMA and XIP callbacks/contexts, preserves
+  bounded timeouts, and restores runtime state after success or failure.
+- Added host sequencing/error-precedence tests plus a physical Pico/Pico 2
+  fixture covering both cores, USB quiesce/resume, active DMA rejection,
+  recursive/XIP rejection, erase/program verification and recovery after an
+  interrupted mutation. The fixture passes on RP2040 and RP2350 ARM/RISC-V
+  with both bare-metal and FreeRTOS SMP runtimes.
+- Propagated native FreeRTOS kernel usage requirements into final firmware
+  targets so Pico SDK interface sources such as `pico_flash` select their
+  scheduler-aware SMP implementation.
+- Added the pinned FreeRTOS V11.3.0 kernel and its release-matched community
+  ports for native RP2040, RP2350 ARM_NTZ and RP2350 RISC-V, with HAL-owned
+  scheduler startup and core-affined application tasks.
+- Added a FreeRTOS-aware core-0 TinyUSB worker, native heap/runtime reporting,
+  `29_freertos_smoke` support in all RP VS Code profiles and a repeatable
+  scheduler/SMP/mutex/USB hardware probe.
+- Corrected RP2350 RISC-V tick rescheduling by preserving the
+  `xTaskIncrementTick()` result across the community port's ISR critical
+  section, restoring delayed-task wakeups and preemption.
+- Added the status-first `hal_usb` API, a HAL-owned native TinyUSB CDC device
+  lifecycle, descriptors, background pump, bounded writes and 1200-bps BOOTSEL
+  reset for RP2040, RP2350 ARM and RP2350 RISC-V.
+- Made `hal_serial` a client of the HAL-owned `hal_usb` TinyUSB lifecycle and
+  added a deterministic USB mock.
+- Added native VS Code auto-upload through a verified serial port: release the
+  project monitor, perform the 1200-bps DTR touch, wait for one BOOTSEL drive,
+  copy UF2 and reconnect the monitor.
+- Added a reproducible RP USB CDC hardware probe. Physical Pico and Pico 2
+  validation covers RP2040, RP2350 ARM and RP2350 RISC-V enumeration, exact
+  1 MiB echo with delayed-read backpressure, reconnect, Linux runtime
+  suspend/resume, 1200-bps upload and monitor handoff.
+- Integrated native `rp2040`, `rp2350-arm` and `rp2350-riscv` targets with the
+  shared VS Code dispatcher, board selector and example manifests while keeping
+  the build/upload/monitor/clean tasks unchanged.
+- Added `rp_native_lib/` and `scripts/build_rp_native_lib.sh` for direct,
+  self-contained builds against the pinned official Pico SDK on RP2040, RP2350
+  ARM and RP2350 Hazard3 RISC-V.
+- Added a reusable native firmware CMake helper and build-only link probe that
+  verifies `libJaszczurHAL.a` plus ELF, BIN and UF2 generation for every native
+  platform.
+- Added the HAL-owned native `main()` and explicit core policy: `app_start()`
+  and `app_task0()` run on core 0, while `HAL_ENABLE_APP_TASK1` alone launches
+  core 1, registers it for multicore lockout and dispatches `app_task1()`.
+- Added HAL-only `01_blink` and core-1 entry builds for RP2040, RP2350 ARM
+  and RP2350 Hazard3 RISC-V to the local gate and GitHub CI.
+- Mapped official Pico SDK board selectors to HAL profiles and added native
+  `pico_w`/`pico2_w` built-in LED control through the pinned JaszczurHAL CYW43
+  driver without enabling lwIP or the full network backend.
+- Shared one RP source inventory across all three RP targets and added artifact
+  coverage to the local quality gate and GitHub CI.
+- Made RP system metadata ISA/profile-aware, used the Pico SDK portable
+  exception-context query and limited Cortex-M HardFault frame capture to ARM.
+
+### Board profiles and runtime capabilities
+
+- Added target-independent profiles for Pico, Pico W, Pico 2, Pico 2 W
+  and Pico+PIM730, including compatibility mapping from legacy CYW43 profiles
+  and board-owned built-in LED selection.
+- Added the public `hal_board` API for declared, available and failed USB,
+  CYW43 and external-radio capabilities. The RP CYW43 provider now publishes
+  runtime init, failure and deinit transitions.
+- Added public network preflight for RP CYW43 profiles: absent hardware returns
+  `HAL_EUNSUPPORTED`, inactive hardware returns `HAL_EUNINIT`, and failed
+  probe/init returns `HAL_EHW` without further backend or pin access.
+- Allowed CYW43 network modules to compile for plain Pico profiles and added
+  unit, static-build and CI coverage for Pico, Pico W and Pico+PIM730 runtime
+  behavior.
+- Fixed native Pico+PIM730 CYW43 initialization after divider 4 at 125 MHz
+  exposed a one-bit gSPI sampling shift. Added fixed-point clock calculation,
+  timing-program selection, compile-time profile regressions and
+  native/compatibility build gates.
+- Updated dispatcher profiles and CI to use `JH_RP_BOARD_DEFINES` and exact
+  board selectors, including an owned-CYW43 Pico 2 W build.
+
+### Explicit RP2040/RP2350 target model
+
+- Split the former RP2040/RP2350 umbrella target into exact
+  `HAL_TARGET_RP2040`, `HAL_TARGET_RP2350_ARM` and
+  `HAL_TARGET_RP2350_RISCV` selectors, with `HAL_TARGET_IS_RP` for shared
+  backend paths and explicit ARM/RISC-V ISA discriminators.
+- Made the Pico SDK platform, chip/ISA, and board selection orthogonal.
+  RP2350 RISC-V uses the Hazard3 Pico SDK platform.
+- Added compile coverage for explicit and auto-detected targets, invalid
+  target/profile combinations, and exact target names. The RP static
+  library gate now includes RP2350 ARM/Pico 2 alongside existing RP2040
+  profiles.
+
 ### Shared implementation layout and independent TLS transports
 
 - Removed the catch-all `impl/shared/compat` source category. Network services
@@ -21,7 +236,7 @@ All notable changes to this project will be documented in this file.
 ### Shared WireGuard and STM32G474 NTP
 
 - Moved the bundled WireGuard protocol, crypto, lwIP netif and lifecycle code
-  out of the RP2040 Arduino framework tree into
+  out of the RP2040-specific framework tree into
   `impl/shared/frameworks/wireguard`. The private client now uses HAL byte-array
   IPv4 values and backend-provided lwIP context, resolver, entropy and time
   hooks; public `hal_wireguard` signatures remain unchanged.
@@ -187,11 +402,10 @@ All notable changes to this project will be documented in this file.
   CAN processing.
 - Kept the legacy `hal_swserial` call shapes source-compatible and retained all
   5-8-bit, parity and stop-bit frame configurations. STM32G474 and mock builds
-  continue to use the shared HAL implementation. The RP2040 backend uses no
-  Arduino core, `SoftwareSerial` or `SerialPIO` dependency; each handle reserves
+  continue to use the shared HAL implementation. Each RP2040 handle reserves
   two PIO state machines and one DMA channel.
 - Added a source-selection regression test that requires the native PIO
-  backend on RP2040 and rejects Arduino wrappers, GPIO RX callbacks,
+  backend on RP2040 and rejects wrapper implementations, GPIO RX callbacks,
   microsecond bit delays and HAL critical sections in that backend.
 
 ### Network transport status refactor
@@ -380,8 +594,8 @@ All notable changes to this project will be documented in this file.
   VS Code firmware projects can build through one CMake entry for RP2040/RP2350
   and STM32G474.
 - Fixed the generated Fiesta entry adapter so RP2040 executes
-  `initialization1()` through Arduino `setup1()` instead of core-0
-  `app_start()`. This restores the core-1 affinity of GPIO/IRQ initialization
+  `initialization1()` from the generated core-1 entry. This restores the
+  core-1 affinity of GPIO/IRQ initialization
   without changing initialization order on other targets; a host regression
   test now verifies the generated RP2040 adapter's call mapping.
 - Added the `vscode/targets/` registry plus `jh-vscode select-board`, with
@@ -554,7 +768,7 @@ All notable changes to this project will be documented in this file.
 - Added small status helper functions (`hal_status_is_ok()`,
   `hal_status_is_error()`, `hal_status_from_bool()` and
   `hal_status_to_bool()`) so legacy `bool` wrappers and new `_ex` APIs use one
-  canonical conversion pattern.
+  shared conversion pattern.
 - Added `hal_status_t`-returning `_ex` APIs for BH1750, TSC2007 and STMPE610
   sensor/input drivers while keeping the existing `bool`, `float` and `void`
   compatibility wrappers unchanged.
@@ -569,7 +783,7 @@ All notable changes to this project will be documented in this file.
   JaszczurHAL SPI, I2C, GPIO, timing and mutex primitives, with
   `StatusCodeToHalStatus()` mapping driver outcomes to `hal_status_t`.
 - Added `examples/46_mfrc522_rfid`, module/API docs and host coverage in
-  `test_mfrc522_driver`; removed the old imported Arduino driver folder.
+  `test_mfrc522_driver`; removed the old imported driver folder.
 
 ### PN532 - shared NFC/RFID reader driver
 
@@ -582,44 +796,42 @@ All notable changes to this project will be documented in this file.
 - Added `examples/47_pn532_nfc`, API/docs entries and host coverage in
   `test_pn532_driver`; removed the old imported Adafruit_PN532 driver folder.
 
-### RP2040 backend - native pico-sdk migration (decouple from Arduino)
+### RP2040 backend - native Pico SDK migration
 
-- Migrated the RP2040 `hal_uart` backend to the native pico-sdk hardware UART
-  instead of the Arduino `Serial1`/`SerialPIO` path.
+- Migrated the RP2040 `hal_uart` backend to the native Pico SDK hardware UART
+  and removed the former `Serial1`/`SerialPIO` path.
 - Moved `hal_swserial` to a shared HAL GPIO/timing/sync implementation used by
   RP2040, STM32G474 and mock builds. The driver preserves the Serial-over-PIO
   frame handling model, adds per-instance locking, critical-section-protected
   bit timing, host coverage for GPIO framing, and `examples/45_swserial_loopback`.
-- Decoupled `hal_system` from Arduino as a cornerstone change: `hal_millis()`
+- Migrated `hal_system` to direct Pico SDK primitives: `hal_millis()`
   now uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/
   `hal_micros64()` use `time_us_64()`, and `hal_delay_ms()` selects pico
   `sleep_ms()` (interrupts enabled) or `busy_wait_ms()` (ISR / HAL-critical
-  context) - no Arduino `millis()`/`micros()`/`delay()`. The RP2040 assert path
+  context). The RP2040 assert path
   (`hal_assert_fail`) now writes through the native serial backend instead of
   `Serial.print()`.
 - Ported the RP2040 `hal_adc` and `hal_pwm` backends to native `hardware/adc.h`
   and `hardware/pwm.h` (no `analogRead`/`analogWrite`). ADC default resolution
   is 12 bits (consistent with STM32G474/mock), with the 12-bit hardware sample
   rescaled to the configured resolution; PWM uses hardware slices with an
-  Arduino-pico-compatible ~1 kHz best-effort default frequency derived from
-  `clk_sys`.
-- Made the optional Arduino-based RP2040 frameworks opt-in at build time:
-  `rp2040_lib/CMakeLists.txt` now compiles PubSubClient only under
-  `HAL_ENABLE_MQTT` and arduino-wireguard-pico-w only under
+  approximately 1 kHz best-effort default frequency derived from `clk_sys`.
+- Made the optional RP network frameworks opt-in at build time: PubSubClient
+  compiles only under `HAL_ENABLE_MQTT`, and WireGuard compiles only under
   `HAL_ENABLE_WIREGUARD`.
-- Replaced the last RP2040 SoC system/fault dependencies on the Arduino
-  `RP2040` class: `rp2040_system_get_free_heap()` now derives free heap from the
+- Replaced the last RP2040 SoC system/fault wrapper dependencies:
+  `rp2040_system_get_free_heap()` now derives free heap from the
   `__StackLimit`/`__bss_end__` linker symbols minus `mallinfo().uordblks`,
   `rp2040_system_read_chip_temp()` reads the on-die sensor over the native ADC
   (`ADC_TEMPERATURE_CHANNEL_NUM`), and `rp2040_fault` decodes the reset reason
   straight from the watchdog reason and chip-reset registers
   (`VREG_AND_CHIP_RESET` on RP2040, `POWMAN` on RP2350) - no
-  `rp2040.getFreeHeap()`, `analogReadTemp()`, `rp2040.getResetReason()` or
-  `<Arduino.h>` in the SoC drivers.
+  `rp2040.getFreeHeap()`, `analogReadTemp()` or `rp2040.getResetReason()` in the
+  SoC drivers.
 - Tightened shared-layer header hygiene: the bundled `JPEGDecoder` is now a
-  target-neutral, memory-only decoder (dropped the Arduino/ESP/SD/LittleFS file
-  backends that pulled Arduino `FS`/`LittleFS` into RP2040 builds, keeping the
-  `decodeArray()` path), and removed the residual `<Arduino.h>` includes from
+  target-neutral, memory-only decoder (dropped the platform-specific
+  ESP/SD/LittleFS file backends and kept the `decodeArray()` path), and removed
+  the residual platform includes from
   `hal_bits.h` and the RP2040 `hal_sync` backend.
 
 ## [1.8.0] - 2026-07-01
@@ -682,14 +894,13 @@ All notable changes to this project will be documented in this file.
   shared `hal_net_endpoint_t` IPv4 endpoints.
 - Added a deterministic mock TCP client backend with scripted connect result,
   injected RX bytes, captured TX payload and closed-socket error coverage.
-- Added an RP2040 backend backed by a static pool of Arduino-pico `WiFiClient`
-  instances, with connect/recv timeout handling and serialized access through
-  the HAL mutex layer.
+- Added an RP2040 TCP backend backed by a static socket pool, with
+  connect/receive timeout handling and serialized access through the HAL mutex
+  layer.
 - Added `hal_tcp_listener_t` and
   `hal_tcp_listener_open/bind/listen/accept/close` for inbound TCP servers.
-- Added mock listener queues with backlog coverage and RP2040 listener support
-  backed by Arduino-pico `WiFiServer`; accepted sockets remain independent when
-  the listener is closed.
+- Added mock listener queues with backlog coverage and RP2040 lwIP listener
+  support; accepted sockets remain independent when the listener is closed.
 
 ### BSD sockets compatibility adapter
 
@@ -732,8 +943,7 @@ All notable changes to this project will be documented in this file.
 ### hal_serial - native RP2040 CDC and streamed debug output
 
 - Reworked the RP2040 `hal_serial` backend to write through the native
-  TinyUSB CDC transport owned by the RP2040 core USB stack instead of the
-  Arduino `Serial.print()` / `Serial.println()` path, while keeping the public
+  TinyUSB CDC transport owned by the RP2040 USB stack, while keeping the public
   `hal_serial_*`, `hal_deb`, `hal_derr` and `hal_derr_limited` API unchanged.
 - `hal_serial_set_flush(false)` is now the RP2040 default. The backend still
   serializes every emitter with the shared TX mutex and kicks the CDC FIFO in
@@ -794,14 +1004,11 @@ All notable changes to this project will be documented in this file.
 
 ### build - RP2040 static-library paths
 
-- Renamed the default RP2040 static-library build directory from
-  `build_arduino/` to `build_rp2040/` in the helper script, full test runner
-  and current build documentation.
-- Renamed the RP2040 static-library CMake glue folder from `arduino_lib/` to
-  `rp2040_lib/`; Arduino-pico toolchain naming remains unchanged where it
-  refers to the actual core/API.
-- Renamed the pinned Arduino-pico core version file from
-  `arduino_core_version.conf` to `rp2040_core_version.conf`.
+- Standardized the default RP2040 static-library build directory as
+  `build_rp2040/` in the helper script, full test runner and build
+  documentation.
+- Consolidated RP static-library CMake glue under `rp_native_lib/` and aligned
+  dependency pins with the official Pico SDK toolchain.
 
 ### hal_irsmall_decoder - shared IR receiver decoder
 
@@ -853,7 +1060,7 @@ All notable changes to this project will be documented in this file.
 - Added `HAL_ENABLE_HD44780` with a shared `HD44780` class under
   `src/hal/impl/shared/drivers/hd44780/`, usable from RP2040, STM32G474 and host
   tests through HAL GPIO, system-timing and synchronization primitives.
-- Preserved the established HD44780 control flow from the Arduino
+- Preserved the established HD44780 control flow from the upstream
   LiquidCrystal driver: 4-bit/8-bit init retries, high-nibble-first transfers,
   row-offset defaults, display/cursor/blink/autoscroll commands, CGRAM writes,
   and command settle delays.
@@ -1028,7 +1235,7 @@ All notable changes to this project will be documented in this file.
 
 ### hal_rgb_led - shared portable NeoPixel driver
 
-- Replaced the bundled Arduino `Adafruit_NeoPixel` backend with a shared
+- Replaced the bundled `Adafruit_NeoPixel` backend with a shared
   NeoPixel core under `src/hal/impl/shared/drivers/neopixel/` (`jh_neopixel.{h,cpp}`),
   keeping the proven buffer layout, color-order mapping, latch timing and
   brightness scaling behavior from the upstream implementation.
@@ -1038,31 +1245,31 @@ All notable changes to this project will be documented in this file.
   cycle-timed GPIO bitstream output, so `HAL_ENABLE_RGB_LED` now works on both
   RP2040 and STM32G474.
 - Enabled `examples/18_rgb_led` for STM32G474 in addition to RP2040.
-- Removed the obsolete Arduino `drivers/Adafruit_NeoPixel` folder.
+- Removed the obsolete `drivers/Adafruit_NeoPixel` folder.
 - Moved NeoPixel attribution and license notice from README dependency list to
   the shared driver code/location (`impl/shared/drivers/neopixel/`).
 
 ### hal_rtc - shared portable DS3231 driver
 
-- Ported the DS3231 real-time clock driver from the bundled Arduino implementation to a shared HAL driver under `src/hal/impl/shared/drivers/ds3231/`.
-- The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while replacing Arduino Wire access with JaszczurHAL I2C primitives.
+- Ported the bundled DS3231 real-time clock driver to a shared HAL driver under `src/hal/impl/shared/drivers/ds3231/`.
+- The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while using JaszczurHAL I2C primitives.
 - RP2040 and STM32G474 `hal_rtc` wrappers now use the shared DS3231 driver, so both targets can select `HAL_ENABLE_DS3231` through the same code path.
 - Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and a dedicated `examples/27_rtc_ds3231` sample.
-- Removed the vendored Arduino DS3231 driver from `src/hal/impl/rp2040/drivers/DS3231/`.
+- Removed the vendored DS3231 driver from `src/hal/impl/rp2040/drivers/DS3231/`.
 
 ### hal_rtc - shared portable PCF8563 driver
 
-- Ported the PCF8563 I2C real-time clock driver from the bundled Arduino implementation to a shared, Arduino-free HAL driver under `src/hal/impl/shared/drivers/pcf8563/`.
-- The shared `pcf8563.{h,cpp}` implementation uses only JaszczurHAL I2C primitives, removing all Arduino Wire library dependencies while preserving full functional parity with the original.
-- RP2040 (via Arduino-pico) continues to use the shared driver through the existing `impl/rp2040/hal_rtc.cpp` wrapper.
+- Ported the bundled PCF8563 I2C real-time clock driver to a shared, HAL-only driver under `src/hal/impl/shared/drivers/pcf8563/`.
+- The shared `pcf8563.{h,cpp}` implementation uses only JaszczurHAL I2C primitives while preserving full functional parity with the original.
+- RP2040 continues to use the shared driver through the existing `impl/rp2040/hal_rtc.cpp` wrapper.
 - **STM32G474 now has full RTC support for the first time** through a new `impl/stm32g474/hal_rtc.cpp` backend using the same shared PCF8563 driver, enabling `HAL_ENABLE_RTC` and `HAL_ENABLE_PCF8563` on the STM32 platform.
 - All RTC functionality is preserved: date/time read/write, clock integrity check, alarms (minute/hour/day/weekday-independent matching), countdown timer (1/60Hz to 4096Hz), and CLKOUT output (disabled, 1Hz, 32Hz, 1024Hz, 32768Hz).
-- Removed the vendored Arduino PCF8563 driver from `src/hal/impl/rp2040/drivers/PCF8563/`.
+- Removed the vendored PCF8563 driver from `src/hal/impl/rp2040/drivers/PCF8563/`.
 - Added `examples/26_rtc_clock` demonstrating portable RTC usage on both RP2040 and STM32G474.
-- Updated `stm32_lib/STM32G474_porting_progress.md` to reflect RTC support now complete.
+- Documented that RTC support is complete for STM32G474.
 - Full test suite and both target static-library builds pass with no warnings.
 
-### hal_display - shared Arduino-free display stack
+### hal_display - shared HAL-only display stack
 
 - Added `src/hal/impl/shared/drivers/display/jh_gfx.{h,cpp}` - a portable graphics
   engine providing geometry primitives (line, circle, triangle, rounded rect),
@@ -1078,8 +1285,7 @@ All notable changes to this project will be documented in this file.
 - Replaced the two per-backend `hal_display.cpp` implementations with a single
   shared `shared/drivers/display/hal_display.cpp`. Both RP2040 and STM32G474 now drive
   ILI9341 / ST7735 / ST7789 / ST7796S (over the shared SPI/GPIO panel drivers)
-  and SSD1306 (over the shared I2C driver) through the same code path - no
-  Arduino dependencies remain in the display stack.
+  and SSD1306 (over the shared I2C driver) through the same code path.
 - SSD1306 is now supported on STM32G474 (previously stubbed out).
 - Removed the vendored Adafruit display libraries from
   `src/hal/impl/rp2040/drivers/`: `Adafruit_GFX_Library`, `Adafruit_ILI9341`,
@@ -1087,16 +1293,16 @@ All notable changes to this project will be documented in this file.
   `Adafruit_BusIO`.
 - `HAL_ENABLE_SSD1306` now propagates `HAL_ENABLE_I2C`.
 - Geometry/text tests migrated from the vendored Adafruit_GFX_Library to the
-  shared `jh_gfx.cpp` and renamed `test_jh_gfx_geometry`; no Arduino stubs
+  shared `jh_gfx.cpp` and renamed `test_jh_gfx_geometry`; no platform stubs
   required. Added `test_ssd1306_driver` alongside the existing
   `test_ili9341_driver` and `test_st77xx_driver`.
 - Example `09_display_tft` now targets both RP2040 and STM32G474; added
   `25_display_oled` (SSD1306) targeting both backends.
-- Removed `tests/arduino_gfx_stubs/` directory (no longer needed).
+- Removed the obsolete display-platform test stubs.
 
-### hal_can - shared Arduino-free MCP2515 driver
+### hal_can - shared HAL-only MCP2515 driver
 
-- Replaced the bundled Arduino MCP2515 backend with a shared HAL-only driver
+- Replaced the bundled MCP2515 backend with a shared HAL-only driver
   under `src/hal/impl/shared/drivers/mcp2515/`, built on JaszczurHAL SPI, GPIO,
   timing and synchronization primitives only.
 - RP2040 and STM32G474 `hal_can` wrappers now both delegate to the same shared
@@ -1107,7 +1313,7 @@ All notable changes to this project will be documented in this file.
   shared driver performs MCP2515 reset/config traffic through HAL SPI and
   configures the chip-select pin through HAL GPIO.
 - Added `examples/24_can_mcp2515` for RP2040 and STM32G474.
-- Removed the obsolete Arduino `drivers/MCP2515` folder. Upstream attribution
+- Removed the obsolete `drivers/MCP2515` folder. Upstream attribution
   and LGPL notice now live in the shared driver folder instead of README.
 - Confirmed the migration with a clean full local quality-gate run: host tests,
   Valgrind, cppcheck, clang-tidy, target static-library builds, and both
@@ -1115,8 +1321,8 @@ All notable changes to this project will be documented in this file.
 
 ### hal_onewire / hal_ds18b20 - shared OneWire driver and separated DS18B20 module
 
-- Replaced the bundled Arduino `OneWire` transport and `DallasTemperature`
-  dependency with shared Arduino-free code under
+- Replaced the bundled `OneWire` transport and `DallasTemperature`
+  dependency with shared HAL-only code under
   `src/hal/impl/shared/drivers/onewire/`, built only on JaszczurHAL GPIO, timing and
   synchronization primitives.
 - Separated DS18B20 implementation into a dedicated `src/hal/impl/shared/drivers/ds18b20/`
@@ -1132,22 +1338,21 @@ All notable changes to this project will be documented in this file.
   slots, parasite-power depower semantics, ROM select/skip, normal and
   conditional search state machine, target-family search, CRC8 and CRC16.
 - Added PRIMASK-backed `hal_critical_section_enter/exit()` for real STM32G474
-  ARM builds so timing-sensitive 1-Wire slots can be protected without Arduino
-  `noInterrupts()` / `interrupts()`.
+  ARM builds so timing-sensitive 1-Wire slots can be protected directly.
 - Preserved the DS18B20 flow from the existing backend: init-time address
   probing, ROM validation, scratchpad CRC checks, resolution writes, conversion
   deadline scheduling and cached fresh-sample semantics.
 - Added public `hal_onewire_crc16()` and `hal_onewire_check_crc16()` helpers,
   with host test coverage in `test_hal_onewire`.
 - Enabled `examples/06_ds18b20` for STM32G474 as well as RP2040.
-- Removed obsolete Arduino `drivers/OneWire`, `drivers/DallasTemperature`,
+- Removed obsolete `drivers/OneWire`, `drivers/DallasTemperature`,
   `impl/rp2040/hal_onewire.cpp` and `impl/rp2040/hal_ds18b20.cpp`. Upstream
   OneWire attribution and MIT notice now live in the shared driver source
   instead of README/docs dependency inventories.
 
 ### hal_external_adc - shared ADS1X15/ADS1115 driver
 
-- Replaced the bundled Arduino `ADS1X15` backend with a shared Arduino-free
+- Replaced the bundled `ADS1X15` backend with a shared HAL-only
   driver (`src/hal/impl/shared/drivers/ads1x15/ads1x15_driver.*`) that uses only JaszczurHAL
   I2C, timing and idle primitives.
 - RP2040 and STM32G474 now both use the same shared ADS1115 implementation
@@ -1161,7 +1366,7 @@ All notable changes to this project will be documented in this file.
 - Added `test_ads1x15_driver` coverage for register config writes, readback,
   ADS1015 shifting, comparator threshold endianness and I2C clock forwarding.
 - Added `examples/23_external_adc_ads1115` for RP2040 and STM32G474.
-- Removed the obsolete Arduino `drivers/ADS1X15` folder. The MIT notice and
+- Removed the obsolete `drivers/ADS1X15` folder. The MIT notice and
   upstream attribution now live in the shared driver source instead of
   README/docs dependency inventories.
 - Reorganized shared implementation files into per-module subfolders:
@@ -1170,8 +1375,8 @@ All notable changes to this project will be documented in this file.
 
 ### hal_thermocouple - shared MCP9600/MCP9601 driver
 
-- Replaced the bundled Arduino `Adafruit_MCP9600` / `Adafruit_MCP9601`
-  backend with a shared Arduino-free driver
+- Replaced the bundled `Adafruit_MCP9600` / `Adafruit_MCP9601`
+  backend with a shared HAL-only driver
   (`src/hal/impl/shared/drivers/mcp9600/mcp9600_driver.*`) that uses only JaszczurHAL I2C and
   synchronization primitives.
 - RP2040 and STM32G474 `hal_thermocouple` wrappers now both delegate MCP9600 /
@@ -1184,7 +1389,7 @@ All notable changes to this project will be documented in this file.
   for `0x40` and `0x41`, reset config write `0x80`, sleep-mode NAN returns,
   signed 0.0625 C fixed-point decoding, 24-bit ADC sign extension, alert
   register layout and the existing inverted ambient-resolution bit mapping.
-- Removed the obsolete Arduino `drivers/Adafruit_MCP9600` folder. The BSD
+- Removed the obsolete `drivers/Adafruit_MCP9600` folder. The BSD
   notice and upstream attribution now live in the shared driver source instead
   of README/docs dependency inventories.
 - Added `test_mcp9600_driver` coverage plus sequential mock I2C RX scripting
@@ -1209,14 +1414,13 @@ All notable changes to this project will be documented in this file.
   `impl/shared/frameworks/` are built and checked by RP2040,
   STM32G474 and host/mock targets.
 
-### hal_thermocouple / MAX6675 - shared Arduino-free driver
+### hal_thermocouple / MAX6675 - shared HAL-only driver
 
-- Replaced the Arduino `MAX6675` class backend with a shared in-tree driver
+- Replaced the `MAX6675` class backend with a shared in-tree driver
   (`src/hal/impl/shared/drivers/max6675/max6675_driver.*`) built only on JaszczurHAL GPIO and
   delay primitives. The RP2040 thermocouple wrapper now delegates MAX6675 reads
-  to this shared driver instead of including `Arduino.h` / `digitalRead()` /
-  `digitalWrite()` through the old bundled library.
-- Removed the obsolete Arduino `drivers/MAX6675` folder. The protocol
+  to this shared driver instead of using the old bundled GPIO wrappers.
+- Removed the obsolete `drivers/MAX6675` folder. The protocol
   attribution and BSD notice for the Adafruit MAX6675 reference now live in the
   shared driver source instead of README/docs inventory entries.
 - The shared driver preserves the working MAX6675 transaction logic from the
@@ -1226,17 +1430,15 @@ All notable changes to this project will be documented in this file.
   shared bit-bang driver as RP2040.
 - `HAL_ENABLE_MAX6675` now propagates only `HAL_ENABLE_THERMOCOUPLE`; it no
   longer pulls in `HAL_ENABLE_SPI`, because the MAX6675 path does not use HAL
-  SPI or Arduino SPI.
+  SPI.
 - Added `test_max6675_driver` plus mock GPIO read scripting to verify MAX6675
   raw-frame decoding, open-circuit detection, pin setup and 16-bit bit-bang
   reads on the host.
 
 ### examples - unified CMake build system + documentation
 
-- New unified `examples/CMakeLists.txt` build system compiles all 23 examples
-  for RP2040 (via `arduino-cli`) and 10 examples for STM32G474 (bare-metal ELF)
-  from a single CMake invocation. CMakePresets.json provides named presets for
-  both backends.
+- New unified example build system compiles the declared RP and STM32G474
+  matrices through one dispatcher. CMake presets provide named host profiles.
 - All 23 RP2040 examples and all 12 STM32G474 examples now compile cleanly
   (verified end-to-end).
 - Fixed `atomic_stubs_cm4.c` preprocessor guard: changed from
@@ -1252,21 +1454,20 @@ All notable changes to this project will be documented in this file.
 
 ### stm32g474 / hal_spi - hardware SPI transfer layer
 
-- Added Arduino-style SPI transaction/transfer primitives to `hal_spi`
+- Added structured SPI transaction/transfer primitives to `hal_spi`
   (`SPISettings`-equivalent settings, byte/word/buffer transfer, write-only
   helper, deinit).
 - STM32G474 now drives SPI1/SPI2 in hardware with register-level polling
   transfers, AF5 pin setup, software NSS, SPI modes 0-3, MSB/LSB order and
   clock prescaler selection.
-- Non-Arduino builds now expose a local `<SPI.h>` (`SPIClass`, `SPISettings`,
-  `SPI`, `SPI1`) backed by `hal_spi_*`, so Arduino SPI drivers can start
-  porting without pulling in the Arduino core.
+- Builds expose a local `<SPI.h>` (`SPIClass`, `SPISettings`, `SPI`, `SPI1`)
+  backed by `hal_spi_*` for source-compatible SPI driver integration.
 - Mock SPI gained scripted RX/TX capture and transaction-setting inspection,
   with expanded `test_hal_spi` coverage.
 
-### tools / hal_sdlogger - remove Arduino dependencies from tools
+### tools / hal_sdlogger - platform-independent tools
 
-- `scanNetworks()` now uses the HAL WiFi scan API instead of Arduino `WiFi.*`;
+- `scanNetworks()` now uses the HAL WiFi scan API;
   scan results are exposed by `hal_wifi_scan_networks()` /
   `hal_wifi_get_scan_result()` with mock coverage.
 - Legacy SD/crash logger helpers were moved out of `tools` into the new
@@ -1275,11 +1476,11 @@ All notable changes to this project will be documented in this file.
   deterministic mock backend and `test_hal_sdlogger` coverage.
 - Added `examples/39_sdlogger` for RP2040 and STM32G474, demonstrating SPI SD
   card setup, EEPROM-backed log/crash counters and FatFs 8.3 log filenames.
-- `tools` declarations no longer expose Arduino-only public types such as
+- `tools` declarations no longer expose platform-specific public types such as
   `String`, `File`, or `SPISettings`; the remaining utilities use portable C
   types and HAL APIs.
 - `PROGMEM` / `F()` compatibility fallbacks are centralized in `hal_config.h`
-  for non-Arduino builds and bundled Arduino-origin drivers; `tools_c.h` no
+  for portability shims and bundled upstream drivers; `tools_c.h` no
   longer defines its own copies.
 
 ### hal_gps - portable NMEA engine + STM32G474 support + richer fix data
@@ -1287,7 +1488,7 @@ All notable changes to this project will be documented in this file.
 - The GPS parser is now a dependency-free, in-tree NMEA engine
   (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`) wrapped by a shared facade
   (`impl/shared/frameworks/gps/hal_gps_core.cpp`). The tokenizer / checksum / RMC / GGA logic
-  is ported from TinyGPS++ (no longer linked, no Arduino/`millis()`
+  is ported from TinyGPS++ (no longer linked and without a platform timing
   dependency); GSA / GSV / GST decoding follows the minmea-kind GNSS parser.
   Position age is stamped via `hal_millis()` in the facade.
 - **STM32G474 now has a GPS backend** (the porting goal): the same engine runs
@@ -1369,14 +1570,13 @@ All notable changes to this project will be documented in this file.
 - Note: the register sequence follows RM0440 but is pending on-silicon
   validation (that is what the scanner example is for).
 
-### examples/portable_blink - fix include path for arduino-cli
+### examples/portable_blink - fix include path
 
 - `blink_app.c` now uses the `hal/`-prefixed includes (`<hal/hal_gpio.h>`,
-  ...) so the shared source resolves both under arduino-cli (library `src/` on
-  the path) and the G474 build; fixes the examples CI job. README updated:
+  ...) so the shared source resolves in RP and G474 builds; fixes the examples
+  CI job. README updated:
   the portable demo lives in `examples/portable_blink/` (replacing the removed
-  `stm32_lib/blink_g474/`), and the STM32G474 backend status now lists which
-  peripherals are real vs in progress.
+  `stm32_lib/blink_g474/`).
 
 ### hal_pcnt - edge / pulse counter (multiplatform, opt-in)
 
@@ -1414,22 +1614,20 @@ All notable changes to this project will be documented in this file.
 
 ### hal_target - explicit multiplatform backend selection
 
-- New `src/hal/hal_target.h`: a single, canonical compile-time switch that
+- New `src/hal/hal_target.h`: a single compile-time switch that
   selects the hardware backend. Define exactly one of `HAL_TARGET_RP2040`,
   `HAL_TARGET_STM32G474`, `HAL_TARGET_MOCK` in `hal_project_config.h` (or via
   `-D`).
 - If none is defined the target is auto-detected from the toolchain, so
-  existing RP2040/Arduino consumers need no change (bare `ARDUINO` is a
-  catch-all -> RP2040). Selecting two targets, or a bare-metal ARM build with no
+  existing RP2040 consumers need no change. Selecting two targets, or a bare-metal ARM build with no
   match, is a compile-time `#error`.
 - Exposes `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and
   `HAL_TARGET_NAME`; derives `JH_STM32G474_HW` (G474 + ARM) for register code
   vs host-stub builds.
-- Replaced the fuzzy per-file `#if !defined(ARDUINO) || defined(ARDUINO_ARCH_STM32)`
-  guards across all backend files (arduino / .mock / stm32g474) with explicit
+- Replaced the fuzzy per-file platform guards across all backend files with explicit
   `#if HAL_TARGET_IS_*` guards. Unused backends compile to nothing.
 - Wired the switch into `hal_config.h` and the build configs
-  (`CMakeLists.txt` -> MOCK, `rp2040_lib` -> RP2040, `stm32_lib` -> STM32G474).
+  (`CMakeLists.txt` -> MOCK, `rp_native_lib` -> RP, `stm32_lib` -> STM32G474).
   Documented in `doc/HAL_FLAGS.txt`.
 
 ### stm32g474 - first real (non-stub) backend bring-up
@@ -1582,7 +1780,7 @@ All notable changes to this project will be documented in this file.
 
 - New facade module `hal_modem_at` (`HAL_ENABLE_CELLULAR_MODEM`): generic
   transport-level AT-command engine sitting on top of `hal_uart`. Single
-  shared implementation works on both Arduino and mock backends.
+  shared implementation works on hardware and mock backends.
   - Public API: `hal_modem_at_create` / `_destroy`, `hal_modem_at_send`,
     `hal_modem_at_send_with_data` (3-phase: command -> `>` prompt ->
     payload -> OK/ERROR), `hal_modem_at_listen_until` (passive boot/URC
@@ -1666,7 +1864,7 @@ All notable changes to this project will be documented in this file.
   `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}` and
   `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`.
 - `hal_system.cpp` (STM32G474) is now pure dispatch (~120 lines), matching
-  the Arduino backend in structure. `hal_reset_reason_str` stays in the
+  the RP backend in structure. `hal_reset_reason_str` stays in the
   HAL layer as a pure enum-to-string mapping.
 - `stm32_lib/CMakeLists.txt` gained a recursive glob for
   `impl/stm32g474/drivers/*/*.cpp` so SoC driver sources are picked up
@@ -1684,8 +1882,7 @@ All notable changes to this project will be documented in this file.
   read backing `hal_in_isr()`, and the UID hex formatter moved out of
   `src/hal/impl/rp2040/hal_system.cpp` into a new SoC driver at
   `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. The HAL
-  file is now a pure dispatch surface containing only Arduino-generic
-  calls (`millis/micros/delay`) plus thin wrappers calling
+  file is now a pure dispatch surface containing timing calls plus thin wrappers calling
   `rp2040_system_*` / `rp2040_fault_*`.
 - The "watchdog timeout caused reboot" latch (C++ static-init
   `__attribute__((constructor))`) now lives inside the driver, keeping
@@ -1698,7 +1895,7 @@ All notable changes to this project will be documented in this file.
   `__StackLimit`, and the pico-sdk reset-reason mapping.
 - The `__StackLimit` address is laundered through inline asm
   (`__asm__("" : "+r"(p));`) to avoid the GCC `-Warray-bounds` false
-  positive caused by arduino-pico declaring `__StackLimit` as `char[1]`;
+  positive caused by the linker-symbol declaration;
   no `-Wno-array-bounds` waiver was added.
 
 ### Mock backend - fault-diagnostics test hooks
@@ -1722,7 +1919,7 @@ All notable changes to this project will be documented in this file.
 
 ### hal_can
 
-- `hal_can_destroy()` now releases its internal mutex on both Arduino and
+- `hal_can_destroy()` now releases its internal mutex on both hardware and
   mock backends (previously the mutex was left allocated after destroy).
 
 ### hal_serial / hal_system - ISR-safe debug logging
@@ -1735,7 +1932,7 @@ All notable changes to this project will be documented in this file.
 - ISR-safe debug logging: `hal_deb()`, `hal_derr()` and
   `hal_derr_limited()` may now be called from interrupt context. The
   callers detect ISR context via the new `hal_in_isr()` (ARM Cortex-M
-  `IPSR` read on Arduino/STM32, mock-injected flag on host) and on the
+  `IPSR` read on ARM, mock-injected flag on host) and on the
   ISR fast-path enqueue the formatted message into a per-backend
   single-producer / single-consumer (SPSC) lock-free ring instead of
   touching the UART. No mutex, no lazy init, no timestamp hook, no
@@ -1790,10 +1987,9 @@ All notable changes to this project will be documented in this file.
   automatically. `resolve_ipv4()` is intentionally left outside the
   lock (may perform a blocking DNS query that needs the background
   context running).
-- Compile-time guard: on `ARDUINO_ARCH_RP2040`, the absence of
-  `pico/cyw43_arch.h` is now a hard `#error` instead of silently
-  degrading the lock to a no-op (which would reintroduce the
-  reconnect race).
+- Added a compile-time RP2040 guard that requires `pico/cyw43_arch.h` instead
+  of silently degrading the lock to a no-op, which would reintroduce the
+  reconnect race.
 - `WireGuard::end()` now calls `wireguardif_shutdown(wg_netif)` after
   `netif_remove()`. `netif_remove()` does not clean up the WireGuard
   device context; without the shutdown call every `begin()/end()`
@@ -1815,7 +2011,7 @@ All notable changes to this project will be documented in this file.
   `wireguardif_init()`, so when `MEM_LIBC_MALLOC == 0` releasing it
   with libc `free()` corrupted the lwIP heap.
 
-### hal_mqtt (Arduino)
+### hal_mqtt
 
 - `hal_mqtt_set_socket_timeout()` now also propagates the timeout to
   the underlying `WiFiClient` (`s_wifi_client.setTimeout(timeout_s *
@@ -1891,7 +2087,7 @@ All notable changes to this project will be documented in this file.
   defines (now redundant - modules are off by default in the opt-in
   model); the STM32G474 skeleton now enables only `HAL_ENABLE_I2C` and
   `HAL_ENABLE_UART` that its current backend actually implements.
-- `rp2040_lib/CMakeLists.txt` and `stm32_lib/CMakeLists.txt`: the Unity
+- `rp_native_lib/CMakeLists.txt` and `stm32_lib/CMakeLists.txt`: the Unity
   inclusion check flipped from `if(NOT HAL_DISABLE_UNITY)` to
   `if(HAL_ENABLE_UNITY)`.
 - Root `CMakeLists.txt`: the host-test `hal_mock` target now enables the
@@ -1905,7 +2101,7 @@ All notable changes to this project will be documented in this file.
   interrupt enable mask (`HAL_RTC_IRQ_*`), read-clear event flags
   (`HAL_RTC_FLAG_*`), CLKOUT modes, timer source/count, and alarm
   field configuration (`hal_rtc_alarm_t`).
-- Arduino backend implementation for PCF8563 control/status features:
+- RP backend implementation for PCF8563 control/status features:
   alarm, timer, CLKOUT, IRQ-enable, and flag read-clear paths.
 - Added DS3231 RTC backend integration (vendored `DS3231` driver),
   selectable via `hal_rtc_config_t.chip = HAL_RTC_CHIP_DS3231`.
@@ -1929,7 +2125,7 @@ All notable changes to this project will be documented in this file.
 - New `hal_ds18b20` public API with non-blocking flow:
   `hal_ds18b20_request()`, `hal_ds18b20_poll()`,
   `hal_ds18b20_take_latest()`.
-- Arduino backend implementation of `hal_ds18b20` with software 1-Wire
+- RP backend implementation of `hal_ds18b20` with software 1-Wire
   timing (reset/presence, read/write slots, scratchpad CRC check).
 - Mock backend implementation + helper observability APIs in `hal_mock`
   for presence/CRC control and injected temperatures.
@@ -1966,15 +2162,14 @@ Next release.
 
 ### Added
 - New opt-in `HAL_ENABLE_LITTLEFS` feature flag and public `hal_littlefs` API.
-- Arduino backend implementation of `hal_littlefs` as a thread-safe wrapper
-  around Arduino-pico `LittleFS` mount/format/path helpers.
+- RP implementation of `hal_littlefs` as a thread-safe wrapper around the
+  pinned littlefs mount/format/path helpers.
 - Mock backend implementation + helper observability APIs in `hal_mock`
   for mount/format result control, file-existence injection and size stats.
 - New host unit test suite `test_hal_littlefs`.
 - New opt-in `HAL_ENABLE_OTA` feature flag and public `hal_ota` API.
-- Arduino backend implementation of `hal_ota` as a thread-safe wrapper
-  around Arduino-pico `ArduinoOTA`, with queued callback dispatch from
-  `hal_ota_handle()`.
+- RP implementation of `hal_ota` as an authenticated staging/applier service
+  with queued callback dispatch from `hal_ota_handle()`.
 - Mock backend implementation + helper observability APIs in `hal_mock`
   for OTA event injection and callback dispatch validation.
 - New host unit test suite `test_hal_ota`.
@@ -1998,8 +2193,8 @@ Next release.
 
 ### Added
 - New opt-in `HAL_ENABLE_UDP` feature flag and public `hal_udp` API.
-- Arduino backend implementation of `hal_udp` as a thread-safe wrapper around
-  Arduino-pico `WiFiUDP`.
+- RP implementation of `hal_udp` as a thread-safe facade over the shared lwIP
+  raw UDP engine.
 - Mock backend implementation + helper observability APIs in `hal_mock`
   for inbound packet injection and outbound packet capture.
 - New host unit test suite `test_hal_udp`.
@@ -2037,8 +2232,8 @@ Next release.
 
 ### Added
 - New opt-in `HAL_ENABLE_WIREGUARD` feature flag and public `hal_wireguard` API.
-- Arduino backend implementation of `hal_wireguard` as a thread-safe
-  wrapper around bundled `arduino-wireguard-pico-w` sources.
+- RP backend implementation of `hal_wireguard` as a thread-safe
+  wrapper around the bundled WireGuard sources.
 - Mock backend implementation + helper observability APIs in `hal_mock`
   for WireGuard config capture, endpoint inject and handshake trigger.
 - New host unit test suite `test_hal_wireguard`.
@@ -2059,7 +2254,7 @@ Next release.
 
 ### Added
 - New opt-in `HAL_ENABLE_MQTT` feature flag and public `hal_mqtt` API.
-- Arduino backend implementation of `hal_mqtt` as a thread-safe
+- RP backend implementation of `hal_mqtt` as a thread-safe
   wrapper around bundled PubSubClient (`frameworks/PubSubClient`).
 - Mock backend implementation + helper observability APIs in
   `hal_mock` for MQTT state, publish/subscribe capture and inbound
@@ -2279,7 +2474,7 @@ Next release.
 ### Build / tests
 - The host-test `hal_mock` library defines `HAL_ENABLE_CRYPTO` publicly
   so the existing `test_hal_crypto` and the auth cases in
-  `test_hal_serial_session` keep running. STM32 and Arduino builds keep
+  `test_hal_serial_session` keep running. Hardware builds keep
   the flag off by default; consumer projects opt in via their own
   `hal_project_config.h`.
 
@@ -2379,7 +2574,7 @@ Next release.
 ### Added
 - `hal_get_device_uid(uid[8])` and `hal_get_device_uid_hex(buf, buflen)` -
   read the RP2040 64-bit flash unique id, either as a raw 8-byte buffer or
-  as an uppercase 16-character hex string. Arduino backend wraps
+  as an uppercase 16-character hex string. The RP backend wraps
   `pico_get_unique_board_id()`; mock backend returns a deterministic default
   (`E661A4D1234567AB`), overridable via `hal_mock_set_device_uid()` and
   resettable via `hal_mock_reset_device_uid()`. New constants
@@ -2409,7 +2604,7 @@ Next release.
   `hal_deb_set_prefix()`. Intended to replace repetitive local-buffer +
   `concatStrings(..., MODULE_NAME, ":")` setup code in clients.
 - `hal_enter_bootloader()` - HAL entry point for RP2040 BOOTSEL/UF2 reboot.
-  Arduino backend calls `reset_usb_boot(0, 0)` and does not return;
+  The RP backend calls `reset_usb_boot(0, 0)` and does not return;
   mock backend sets an observable flag. Exposed via `hal_system.h`.
 - Mock helpers for bootloader observability:
   `hal_mock_bootloader_was_requested()` and
@@ -2513,7 +2708,7 @@ Next release.
 
 ### Fixed
 - stm32g474 backend source files now compile as symbol-empty units on
-  non-STM32 Arduino targets. This avoids duplicate-definition link failures
+  non-STM32 targets. This avoids duplicate-definition link failures
   when platform build systems compile all backend directories under `src/`.
 - stm32g474 mock serial RX path (`hal_serial.cpp`) now guards index ranges and
   normalizes requested lengths before buffer access, removing host-compiler

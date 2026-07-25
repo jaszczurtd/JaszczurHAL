@@ -16,36 +16,14 @@ SETTINGS_FILE="${VSCODE_DIR}/settings.json"
 
 mkdir -p "${VSCODE_DIR}"
 
-latest_dir() {
-    local pattern="$1"
-    find ${pattern} -maxdepth 0 -type d 2>/dev/null | sort -V | tail -1
-}
-
 configure_rp2040() {
-    local arduino_root="${ARDUINO_ROOT:-${HOME}/.arduino15/packages/rp2040}"
-    local build_dir="${REPO_ROOT}/build_rp2040"
-    local core_dir tc_dir
-
-    [[ -d "${arduino_root}" ]] || {
-        echo "Arduino RP2040 root not found: ${arduino_root}" >&2
-        exit 1
-    }
-
-    core_dir="$(latest_dir "${arduino_root}/hardware/rp2040/*")"
-    tc_dir="$(latest_dir "${arduino_root}/tools/pqt-gcc/*")"
-    [[ -n "${core_dir}" ]] || { echo "No Arduino RP2040 core found" >&2; exit 1; }
-    [[ -n "${tc_dir}" ]] || { echo "No pqt-gcc toolchain found" >&2; exit 1; }
-
-    cmake -S "${REPO_ROOT}/rp2040_lib" -B "${build_dir}" \
-        -DCMAKE_TOOLCHAIN_FILE="${REPO_ROOT}/rp2040_lib/toolchain_rp2040.cmake" \
-        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-        -DARDUINO_ROOT="${arduino_root}" \
-        -DARDUINO_CHIP="${ARDUINO_CHIP:-rp2040}" \
-        -DARDUINO_VARIANT="${ARDUINO_VARIANT:-rpipico}"
+    local build_dir="${REPO_ROOT}/.build/intellisense/rp2040"
+    "${REPO_ROOT}/scripts/build_rp_native_lib.sh" \
+        --platform rp2040 --board pico --clean --output "${build_dir}"
 }
 
 configure_stm32() {
-    local build_dir="${REPO_ROOT}/build_stm32"
+    local build_dir="${REPO_ROOT}/.build/intellisense/stm32g474"
 
     cmake -S "${REPO_ROOT}/stm32_lib" -B "${build_dir}" \
         -DCMAKE_TOOLCHAIN_FILE="${REPO_ROOT}/stm32_lib/toolchain_stm32g474.cmake" \
@@ -55,11 +33,11 @@ configure_stm32() {
 case "${TARGET}" in
     rp2040)
         configure_rp2040
-        COMPILE_COMMANDS="${REPO_ROOT}/build_rp2040/compile_commands.json"
+        COMPILE_COMMANDS="${REPO_ROOT}/.build/intellisense/rp2040/compile_commands.json"
         ;;
     stm32)
         configure_stm32
-        COMPILE_COMMANDS="${REPO_ROOT}/build_stm32/compile_commands.json"
+        COMPILE_COMMANDS="${REPO_ROOT}/.build/intellisense/stm32g474/compile_commands.json"
         ;;
     *)      usage ;;
 esac

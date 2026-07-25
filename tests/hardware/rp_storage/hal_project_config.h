@@ -1,0 +1,6 @@
+#pragma once
+
+#define HAL_ENABLE_EEPROM
+#define HAL_ENABLE_LITTLEFS
+#undef HAL_EEPROM_TYPE
+#define HAL_EEPROM_TYPE EEPROM_TYPE_FLASH

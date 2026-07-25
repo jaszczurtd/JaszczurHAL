@@ -9,6 +9,7 @@
 #include "impl/shared/network/jh_net_address_utils.h"
 #include "impl/shared/network/jh_network_backend.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
+#include "impl/shared/network/jh_network_runtime.h"
 
 static jh_network_handle_slot_t s_socket_slots[HAL_TCP_SOCKET_MAX_INSTANCES];
 static jh_network_handle_slot_t
@@ -70,8 +71,13 @@ static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
   }
   const hal_net_capabilities_t family =
       endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
-  return (hal_net_get_capabilities() & family) != 0u ? HAL_OK
-                                                     : HAL_EUNSUPPORTED;
+  hal_net_capabilities_t capabilities = 0u;
+  const hal_status_t capability_status =
+      hal_net_get_capabilities_ex(&capabilities);
+  if (capability_status != HAL_OK) {
+    return capability_status;
+  }
+  return (capabilities & family) != 0u ? HAL_OK : HAL_EUNSUPPORTED;
 }
 
 hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket) {
@@ -79,6 +85,10 @@ hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket) {
     return HAL_EINVAL;
   }
   *out_socket = nullptr;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   if (ops == nullptr || ops->socket_open == nullptr ||
       ops->socket_close == nullptr) {
@@ -115,6 +125,10 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
   if (endpoint_status != HAL_OK) {
     return endpoint_status;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -139,6 +153,10 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
   }
   if (out_sent == nullptr || (len > 0u && data == nullptr)) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
@@ -165,6 +183,10 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
   if (out_received == nullptr || (max_len > 0u && buffer == nullptr)) {
     return HAL_EINVAL;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -187,6 +209,9 @@ int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
 }
 
 bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_tcp_ops_t *ops = tcp_ops();
   return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
@@ -194,6 +219,9 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
 }
 
 bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_tcp_ops_t *ops = tcp_ops();
   return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
@@ -201,6 +229,9 @@ bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
 }
 
 bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_tcp_ops_t *ops = tcp_ops();
   return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
@@ -234,6 +265,10 @@ hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener) {
     return HAL_EINVAL;
   }
   *out_listener = nullptr;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   if (ops == nullptr || ops->listener_open == nullptr ||
       ops->listener_close == nullptr) {
@@ -269,6 +304,10 @@ hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
   if (endpoint_status != HAL_OK) {
     return endpoint_status;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_listener(listener, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -286,6 +325,13 @@ bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
 
 hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
                                         uint8_t backlog) {
+  if (backlog == 0u) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_listener(listener, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -308,6 +354,10 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
     return HAL_EINVAL;
   }
   *out_socket = nullptr;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *listener_token = nullptr;
   if (resolve_listener(listener, &listener_token) != HAL_OK) {
     return HAL_EINVAL;
@@ -345,6 +395,9 @@ hal_tcp_socket_t hal_tcp_listener_accept(hal_tcp_listener_t listener,
 }
 
 bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_tcp_ops_t *ops = tcp_ops();
   return resolve_listener(listener, &token) == HAL_OK && ops != nullptr &&

@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_UDP
@@ -25,6 +25,7 @@
 #include "../../hal_udp.h"
 #include "../shared/hal_mutex_once.h"
 #include "../shared/network/jh_net_address_utils.h"
+#include "../shared/network/jh_network_runtime.h"
 
 #include "../shared/network/jh_lwip_udp.h"
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
@@ -195,6 +196,10 @@ hal_status_t hal_udp_socket_open_ex(hal_udp_socket_t *out_socket) {
     return HAL_EINVAL;
   }
   *out_socket = NULL;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
 
@@ -521,6 +526,10 @@ hal_status_t hal_udp_parse_packet_ex(int *out_size) {
     return HAL_EINVAL;
   }
   *out_size = 0;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
 
@@ -560,6 +569,10 @@ hal_status_t hal_udp_read_ex(uint8_t *buffer, uint16_t max_len,
   if (max_len == 0u) {
     return HAL_OK;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
 
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
@@ -596,6 +609,10 @@ int hal_udp_read(uint8_t *buffer, uint16_t max_len) {
 hal_status_t hal_udp_remote_ip_ex(char *out, size_t out_size) {
   if (!validate_out(out, out_size, "hal_udp_remote_ip")) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
 
   udp_ensure_mutex();
@@ -643,6 +660,10 @@ hal_status_t hal_udp_remote_port_ex(uint16_t *out_port) {
     return HAL_EINVAL;
   }
   *out_port = 0u;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
 
@@ -673,6 +694,10 @@ hal_status_t hal_udp_begin_packet_ex(const char *host_or_ip,
   if (remote_port == 0u) {
     hal_derr("hal_udp_begin_packet: remote_port must be > 0");
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
 
   udp_ensure_mutex();
@@ -724,6 +749,10 @@ bool hal_udp_begin_packet(const char *host_or_ip, uint16_t remote_port) {
 }
 
 hal_status_t hal_udp_begin_packet_remote_ex(void) {
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
 
@@ -779,6 +808,10 @@ hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
   }
   if (len == 0u) {
     return HAL_OK;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
 
   udp_ensure_mutex();
@@ -839,6 +872,10 @@ uint16_t hal_udp_write_str(const char *text) {
 }
 
 hal_status_t hal_udp_end_packet_ex(void) {
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   udp_ensure_mutex();
   hal_mutex_lock(s_udp_mutex);
 
@@ -919,4 +956,4 @@ extern "C" const jh_network_udp_ops_t *jh_rp2040_cyw43_udp_ops(void) {
 }
 
 #endif /* HAL_ENABLE_UDP */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

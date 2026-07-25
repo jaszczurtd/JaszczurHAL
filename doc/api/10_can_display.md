@@ -192,7 +192,7 @@ uint8_t hal_can_encode_temp_i8(float temp_c);
 
 **impl/shared:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
 mutexing and backend dispatch. MCP2515-specific operations live in
-`impl/shared/drivers/mcp2515/hal_can_mcp2515.*`, backed by the Arduino-free MCP2515
+`impl/shared/drivers/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
 register/SPI driver in `impl/shared/drivers/mcp2515/mcp2515_driver.*`. MCP251XFD
 operations live in `impl/shared/drivers/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
 HAL-only polling register/SPI driver in `impl/shared/drivers/mcp251xfd/mcp251xfd_driver.*`.

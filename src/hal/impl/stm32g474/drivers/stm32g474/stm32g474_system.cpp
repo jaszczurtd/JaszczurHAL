@@ -3,7 +3,7 @@
  * @brief STM32G474 SoC-specific system services (host-stub implementation).
  *
  * See @c stm32g474_system.h for the contract. This file compiles on both
- * the host (CMake @c build_stm32_host gate) and on a real ARM toolchain;
+ * the host (CMake @c .build/gate/stm32-host gate) and on a real ARM toolchain;
  * Cortex-M specific bits are guarded by @c __arm__ / @c __thumb__.
  */
 

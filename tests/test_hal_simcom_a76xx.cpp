@@ -63,6 +63,7 @@ static void on_tx(hal_uart_t h, const char *text, void *user) {
 }
 
 void setUp(void) {
+  hal_mock_serial_reset();
   s_uart = hal_uart_create(HAL_UART_PORT_2, 5, 4);
   hal_mock_uart_reset(s_uart);
 
@@ -497,6 +498,11 @@ void test_mqtt_connect_happy_path(void) {
                     hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
   TEST_ASSERT_TRUE(hal_simcom_a76xx_mqtt_is_connected(s_modem, 0));
   TEST_ASSERT_FALSE(hal_simcom_a76xx_mqtt_is_connected(s_modem, 1));
+  TEST_ASSERT_EQUAL_INT(0,
+                        hal_simcom_a76xx_mqtt_last_connect_result(s_modem, 0));
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "connected successfully"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "code=0"));
 }
 
 void test_mqtt_connect_invalid_args(void) {
@@ -527,6 +533,45 @@ void test_mqtt_connect_start_fail(void) {
   TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_ERROR,
                     hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
   TEST_ASSERT_FALSE(hal_simcom_a76xx_mqtt_is_connected(s_modem, 0));
+}
+
+void test_mqtt_connect_failure_decodes_and_logs_result(void) {
+  script_push("AT+CMQTTDISC=0", "\r\nOK\r\n");
+  script_push("AT+CMQTTREL=0", "\r\nOK\r\n");
+  script_push("AT+CMQTTSTOP", "\r\nOK\r\n");
+  script_push("AT+CMQTTSTART", "\r\n+CMQTTSTART: 0\r\n\r\nOK\r\n");
+  script_push("AT+CMQTTACCQ=0", "\r\nOK\r\n");
+  script_push("AT+CMQTTCONNECT=0", "\r\n+CMQTTCONNECT: 0,3\r\n\r\nERROR\r\n");
+
+  hal_simcom_a76xx_mqtt_config_t cfg = {0};
+  cfg.broker_host = "h";
+  cfg.broker_port = 8883;
+  cfg.client_id = "c";
+  cfg.client_index = 0;
+
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_ERROR,
+                    hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
+  TEST_ASSERT_FALSE(hal_simcom_a76xx_mqtt_is_connected(s_modem, 0));
+  TEST_ASSERT_EQUAL_INT(3,
+                        hal_simcom_a76xx_mqtt_last_connect_result(s_modem, 0));
+  TEST_ASSERT_NOT_NULL(
+      strstr(hal_mock_serial_last_line(), "socket connect failed"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "code=3"));
+}
+
+void test_mqtt_result_strings_cover_auth_tls_and_unknown_codes(void) {
+  TEST_ASSERT_EQUAL_STRING("socket connect failed",
+                           hal_simcom_a76xx_mqtt_result_string(3));
+  TEST_ASSERT_EQUAL_STRING("connection refused: bad username or password",
+                           hal_simcom_a76xx_mqtt_result_string(30));
+  TEST_ASSERT_EQUAL_STRING("connection refused: not authorized",
+                           hal_simcom_a76xx_mqtt_result_string(31));
+  TEST_ASSERT_EQUAL_STRING("TLS handshake failed",
+                           hal_simcom_a76xx_mqtt_result_string(32));
+  TEST_ASSERT_EQUAL_STRING("unknown MQTT result",
+                           hal_simcom_a76xx_mqtt_result_string(999));
+  TEST_ASSERT_EQUAL_INT(HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN,
+                        hal_simcom_a76xx_mqtt_last_connect_result(NULL, 0));
 }
 
 void test_mqtt_disconnect_clears_flag(void) {
@@ -755,6 +800,8 @@ int main(void) {
   RUN_TEST(test_mqtt_connect_happy_path);
   RUN_TEST(test_mqtt_connect_invalid_args);
   RUN_TEST(test_mqtt_connect_start_fail);
+  RUN_TEST(test_mqtt_connect_failure_decodes_and_logs_result);
+  RUN_TEST(test_mqtt_result_strings_cover_auth_tls_and_unknown_codes);
   RUN_TEST(test_mqtt_disconnect_clears_flag);
 
   RUN_TEST(test_mqtt_publish_requires_connection);

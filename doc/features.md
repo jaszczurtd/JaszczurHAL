@@ -4,20 +4,22 @@ This document is a high-level inventory of what JaszczurHAL offers. It is meant
 as a compact feature map, not an API reference. For function signatures,
 configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL_API.md).
 For the target-selectable VS Code firmware project model, see
-[FwProjectWorkflow.md](FwProjectWorkflow.md).
+[FwProjectWorkflow.md](FwProjectWorkflow.md). For native RP OTA provisioning
+and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 ## Platform and build capabilities
 
 | Area | What it offers | Source |
 |---|---|---|
-| RP2040 / RP2350 backend | Arduino-Pico based backend for Raspberry Pi Pico-class boards, including GPIO, buses, storage, connectivity and many shared drivers. | [rp2040 backend](../src/hal/impl/rp2040/) |
-| STM32G474 backend | Bare-metal STM32G474 backend with startup/runtime glue, linker support, flash services and native peripheral implementations. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
+| RP2040 / RP2350 backend | Official Pico SDK backend for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
+| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040, NUCLEO-G474RE, and host profiles, with runtime state for USB, CYW43, and external radio hardware. | [board registry](../boards/README.md), [hal_board.h](../src/hal/hal_board.h) |
+| STM32G474 backend | Bare-metal and FreeRTOS STM32G474 backend with startup/runtime glue, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
 | Mock backend | Deterministic host backend for unit tests and simulation-oriented development without hardware. | [mock backend](../src/hal/impl/.mock/) |
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/hal_config.h) |
-| Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples. | [hal_app.h](../src/hal/hal_app.h) |
-| FreeRTOS integration | Native FreeRTOS-aware mutex, delay and app-task support for supported target builds. | [STM32 FreeRTOS glue](../src/hal/impl/stm32g474/freertos/) |
+| Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()` and opt-in RP core-1 startup. | [hal_app.h](../src/hal/hal_app.h) |
+| FreeRTOS integration | Pinned upstream kernel with native RP2040/RP2350 SMP ports, STM32G474 Cortex-M4F port, FreeRTOS-aware mutex/delay/runtime reporting and HAL-owned application-task startup. | [RP FreeRTOS glue](../src/hal/impl/rp2040/freertos/), [STM32 FreeRTOS glue](../src/hal/impl/stm32g474/freertos/) |
 | Dispatcher-backed firmware projects | Shared VS Code/CMake workflow for generated projects, migrated downstream modules and checked-in examples, with target/board selection and per-target CMake cache isolation. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
-| Static library builds | Dedicated CMake/helper flows for RP2040 and STM32G474 library builds. | [rp2040_lib](../rp2040_lib/), [stm32_lib](../stm32_lib/) |
+| Static library builds | Dedicated CMake/helper flows for official Pico SDK RP and STM32G474 builds; the RP flow also verifies ELF/BIN/UF2 generation and application-entry symbols. | [RP build](../rp_native_lib/), [STM32 build](../stm32_lib/) |
 | Validation gate | Full local gate for unit tests, Valgrind, static analysis, target builds and examples. | [runalltests.sh](../runalltests.sh) |
 
 ## Core HAL
@@ -26,10 +28,10 @@ For the target-selectable VS Code firmware project model, see
 |---|---|---|
 | GPIO | Portable digital I/O, pull modes and interrupts, including explicit IRQ core ownership and diagnostics on multicore targets. | [hal_gpio.h](../src/hal/hal_gpio.h) |
 | ADC | Portable analog input abstraction. | [hal_adc.h](../src/hal/hal_adc.h) |
-| DAC | True DAC support with additional diagnostics. | [hal_dac.h](../src/hal/hal_dac.h) |
+| DAC | True DAC output with additional diagnostics on STM32G474 and the host mock; targets without DAC hardware report `HAL_EUNSUPPORTED`. | [hal_dac.h](../src/hal/hal_dac.h) |
 | PWM | Portable PWM output plus frequency-controlled PWM helpers. | [hal_pwm.h](../src/hal/hal_pwm.h), [hal_pwm_freq.h](../src/hal/hal_pwm_freq.h) |
 | Pulse counting | Edge/pulse counting for signal measurement and simple counter applications. | [hal_pcnt.h](../src/hal/hal_pcnt.h) |
-| Timers and system time | Basic timers, extended timer helpers, idle/delay and system services. | [hal_timer.h](../src/hal/hal_timer.h), [hal_system.h](../src/hal/hal_system.h) |
+| Timers and system time | Basic timers, extended timer helpers, idle/delay, watchdog, unique device ID and crash/fault diagnostics with target fault handlers. | [hal_timer.h](../src/hal/hal_timer.h), [hal_system.h](../src/hal/hal_system.h) |
 | Synchronization | Mutexes and critical sections with target-specific implementations. | [hal_sync.h](../src/hal/hal_sync.h) |
 | Soft timers | Lightweight cooperative software timers. | [hal_soft_timer.h](../src/hal/hal_soft_timer.h) |
 | Utility primitives | Bit helpers, math helpers, PID control, watchdog support and common utility APIs. | [tools.h](../src/tools.h), [utils](../src/utils/) |
@@ -39,21 +41,22 @@ For the target-selectable VS Code firmware project model, see
 | Area | What it offers | Source |
 |---|---|---|
 | UART | Hardware serial communication abstraction; RP2040 RX IRQ affinity follows the core that starts the UART. | [hal_uart.h](../src/hal/hal_uart.h) |
-| Serial/debug console | TX-serialized console output, RP2040 TinyUSB CDC transport, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
+| USB device / CDC | Status-first USB lifecycle and CDC API with native RP TinyUSB ownership, descriptors, background pumping, bounded backpressure, 1200-bps BOOTSEL reset and a host mock. | [hal_usb.h](../src/hal/hal_usb.h) |
+| Serial/debug console | TX-serialized console output over `hal_usb` CDC on RP, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
 | Software serial | Target-optimized software UART: native Pico SDK PIO/DMA on RP2040 and a shared HAL GPIO backend on other targets. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
 | SPI | Portable SPI master/controller API used by displays, CAN, SD and audio drivers, including status-returning transfer APIs and blocking/asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h) |
-| Network status API | Additive `hal_status_t` operations for WiFi/DNS, TCP/UDP, MQTT and WireGuard with legacy wrappers preserved. | [connectivity API](api/15_connectivity.md) |
+| Network status API | Additive `hal_status_t` operations for WiFi/DNS, TCP/UDP, MQTT and WireGuard with legacy wrappers preserved and exact absent/inactive/failed board-hardware status mapping. | [connectivity API](api/15_connectivity.md) |
 | CAN facade | Backend-selectable CAN surface for classic CAN and CAN FD-capable backends. | [hal_can.h](../src/hal/hal_can.h) |
 | MCP2515 CAN | Shared SPI CAN backend. | [mcp2515 driver](../src/hal/impl/shared/drivers/mcp2515/) |
 | MCP2517FD/MCP2518FD CAN FD | Shared SPI CAN FD backend. | [mcp251xfd driver](../src/hal/impl/shared/drivers/mcp251xfd/) |
 | STM32G474 native FDCAN | Native STM32G474 FDCAN backend. | [STM32 FDCAN backend](../src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp) |
 | MFRC522 RFID | Shared RFID reader driver over HAL SPI/I2C. | [hal_mfrc522.h](../src/hal/hal_mfrc522.h), [mfrc522 driver](../src/hal/impl/shared/drivers/mfrc522/) |
 | PN532 NFC/RFID | Shared NFC/RFID reader driver over HAL SPI/I2C/UART. | [hal_pn532.h](../src/hal/hal_pn532.h), [pn532 driver](../src/hal/impl/shared/drivers/pn532/) |
-| WiFi | WiFi-capable RP2040/Pico W style connectivity surface. | [hal_wifi.h](../src/hal/hal_wifi.h) |
+| WiFi | CYW43/lwIP connectivity on Pico W, Pico 2 W, Pico+PIM730, and configured STM32G474+PIM730 hardware. | [hal_wifi.h](../src/hal/hal_wifi.h) |
 | UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
-| TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP2040 backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |
+| TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP-family backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |
 | HTTP server | Small poll-driven HTTP/1.1 server over HAL TCP with exact/prefix routes, request headers, buffered responses, automatic `Content-Length` and mock-testable request handling. | [hal_http_server.h](../src/hal/hal_http_server.h) |
 | HTTP files | Callback-backed static file serving, ETag/`If-None-Match`, raw PUT and multipart upload helpers over HAL HTTP routes. | [hal_http_files.h](../src/hal/hal_http_files.h) |
 | WebSocket server | Small poll-driven WebSocket server over HAL TCP with HTTP Upgrade handshake, callbacks, send helpers and broadcast. | [hal_websocket.h](../src/hal/hal_websocket.h) |
@@ -61,8 +64,9 @@ For the target-selectable VS Code firmware project model, see
 | Network commands | Shared JSON/text command dispatcher for HTTP and WebSocket control channels, backed by cJSON and `hal_status_t` responses. | [hal_net_commands.h](../src/hal/hal_net_commands.h) |
 | BSD sockets adapter | Minimal IPv4 `sys/socket.h` / `netinet/in.h` / `arpa/inet.h` / `netdb.h` compatibility layer over HAL UDP/TCP handles, including `getaddrinfo()`, `setsockopt()`, `O_NONBLOCK`, `MSG_DONTWAIT` and `select()` readiness. | [socket.h](../src/sys/socket.h), [netdb.h](../src/netdb.h) |
 | TLS | Provider-neutral TLS client API backed by BearSSL and native HAL TCP, with trust anchors, time/entropy callbacks, cancellation, bounded polling and an optional BSD-socket transport bridge. | [hal_tls.h](../src/hal/hal_tls.h), [BearSSL transport](../src/hal/impl/shared/frameworks/BearSSL/) |
+| HTTP/HTTPS client | Bounded one-shot HTTP/1.1 requests over HAL TCP or verified BearSSL TLS, with caller-owned headers/body and explicit response metadata. | [hal_http_client.h](../src/hal/hal_http_client.h), [connectivity API](api/15_connectivity.md#halhttpclient-httphttps-client-opt-in-halenablehttpclient) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
-| OTA | ArduinoOTA-oriented update integration. | [hal_ota.h](../src/hal/hal_ota.h) |
+| OTA | Authenticated RP firmware updates over HAL UDP/TCP with versioned images, resumable program/staging swap, boot confirmation, rollback, discovery, and VS Code upload. | [hal_ota.h](../src/hal/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
 | NTP / time-of-day sync | Network time helpers for connected builds. | [hal_time.h](../src/hal/hal_time.h) |
 | WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/hal_wireguard.h), [WireGuard engine](../src/hal/impl/shared/frameworks/wireguard/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/hal_simcom_a76xx.h) |
@@ -71,9 +75,10 @@ For the target-selectable VS Code firmware project model, see
 
 | Area | What it offers | Source |
 |---|---|---|
+| Flash transaction coordinator | Single internal coordinator for all native flash mutations: serializes callers, makes the other core safe, pauses TinyUSB, rejects XIP-resident callbacks and active DMA, applies bounded timeouts and restores runtime state. EEPROM/KV, LittleFS and OTA staging route through it on native RP; STM32G474 uses its coordinated flash services. | [rp flash drivers](../src/hal/impl/rp2040/drivers/flash/), [storage API](api/14_storage.md) |
 | EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade, including status-returning (`hal_status_t`) access APIs with range validation. | [hal_eeprom.h](../src/hal/hal_eeprom.h) |
 | Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../src/hal/hal_kv.h) |
-| LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; STM32G474 can use internal flash partitioning. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
+| LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; native RP and STM32G474 use linker-reserved internal flash partitions. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
 | FatFs / SD over SPI | Shared FatFs core and SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
 | SD logger | SD-card logging and crash-report logging support. | [hal_sdlogger.h](../src/hal/hal_sdlogger.h), [sdlogger](../src/hal/impl/shared/frameworks/filesystem/sdlogger/) |
 
@@ -118,7 +123,7 @@ For the target-selectable VS Code firmware project model, see
 | MAX5395 | Shared I2C digital potentiometer backend. | [digipot drivers](../src/hal/impl/shared/drivers/digipot/) |
 | PGA2311 audio volume | Shared SPI/GPIO stereo volume controller driver. | [hal_pga2311.h](../src/hal/hal_pga2311.h), [pga2311 driver](../src/hal/impl/shared/drivers/pga2311/) |
 | MCP23017 / PCA9654E / PCF8574 / 74HC595 / MCP4725 | Shared simple I/O expander and DAC drivers over HAL I2C/SPI/GPIO. | [simple I/O drivers](../src/hal/impl/shared/drivers/simple_io/) |
-| DACless PWM audio | Shared PWM-audio engine with DMA and polling paths, block/sample callbacks and ADC sampling. | [hal_dacless.h](../src/hal/hal_dacless.h), [hal_dma_pwm_audio.h](../src/hal/hal_dma_pwm_audio.h), [dacless driver](../src/hal/impl/shared/drivers/dacless/) |
+| DACless PWM audio | Shared full-duplex PWM-audio engine with DMA and polling paths and block/sample callbacks. The RP backend adds free-running round-robin ADC capture over DMA, so per-sample callbacks read microphone/analog inputs at the audio rate in the same clock domain as playback. | [hal_dacless.h](../src/hal/hal_dacless.h), [hal_dma_pwm_audio.h](../src/hal/hal_dma_pwm_audio.h), [dacless driver](../src/hal/impl/shared/drivers/dacless/) |
 
 ## Crypto, media and bundled libraries
 
@@ -140,5 +145,5 @@ For the target-selectable VS Code firmware project model, see
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
 | Firmware project workflow | Manifest, target/board selection, source discovery, upload/debug-build behavior and generated files for dispatcher-backed projects. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
-| Porting/status notes | Target-specific implementation progress. | [STM32G474 progress](STM32G474_porting_progress.md) |
+| Native RP OTA workflow | Firmware integration, build and first flash, VS Code upload, firewall, confirmation, rollback and recovery. | [OTAWorkflow.md](OTAWorkflow.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

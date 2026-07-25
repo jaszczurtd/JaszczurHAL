@@ -46,6 +46,48 @@ If you are offline, pre-populate ${dest} or point the ensure script at a checkou
     mv "${tmp}" "${dest}"
 }
 
+# jh_dep_sync_pinned REPO REF DEST VERIFY_ONLY
+# Keep a managed checkout exactly at REF. A missing, mismatched, or non-git
+# directory is replaced atomically; verify-only never changes it.
+jh_dep_sync_pinned() {
+    local repo="$1" ref="$2" dest="$3" verify_only="${4:-0}"
+    local actual=""
+
+    JH_DEP_CHANGED=0
+    if [[ ! -e "${dest}" ]]; then
+        [[ "${verify_only}" -eq 0 ]] ||
+            die "Pinned checkout missing at ${dest} (verify-only)."
+        jh_dep_clone_pinned "${repo}" "${ref}" "${dest}"
+        JH_DEP_CHANGED=1
+        return 0
+    fi
+
+    if [[ -d "${dest}/.git" ]]; then
+        actual="$(git -C "${dest}" rev-parse HEAD 2>/dev/null || true)"
+    fi
+    if [[ "${actual}" == "${ref}" ]]; then
+        return 0
+    fi
+
+    [[ "${verify_only}" -eq 0 ]] ||
+        die "Pinned checkout mismatch at ${dest}: expected ${ref}, found ${actual:-non-git directory}."
+    case "${dest}" in
+        ""|"/"|".")
+            die "Refusing unsafe component replacement path: ${dest:-empty}"
+            ;;
+    esac
+
+    local parent base replacement
+    parent="$(dirname "${dest}")"
+    base="$(basename "${dest}")"
+    replacement="${parent}/.${base}.replacement.$$"
+    rm -rf "${replacement}"
+    jh_dep_clone_pinned "${repo}" "${ref}" "${replacement}"
+    rm -rf "${dest}"
+    mv "${replacement}" "${dest}"
+    JH_DEP_CHANGED=1
+}
+
 # jh_dep_verify_ref DIR REF
 # Assert that the checkout at DIR is exactly REF (warns if DIR is not a git repo).
 jh_dep_verify_ref() {

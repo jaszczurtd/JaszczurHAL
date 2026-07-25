@@ -6,9 +6,39 @@
 - Add multi-target board selection: target registry descriptors, `target` /
   `board` / `targetProfiles` manifest fields, `select-board`, and gitignored
   `.vscode/jaszczurhal.local.json` persistence.
+- Add idempotent `sync-board-picker` handling and a trusted-workspace
+  `folderOpen` task so existing and generated projects refresh GUI board
+  options after the JaszczurHAL registry changes.
+- Add Pico SDK dispatcher targets for RP2040, RP2350 ARM and RP2350 RISC-V,
+  with shared build/upload/monitor/clean task labels and shortcuts.
+- Enable `29_freertos_smoke` on all native RP profiles through the same
+  dispatcher and VS Code tasks.
+- Route repository-owned examples, hardware fixtures, CMake probes, and the
+  picotool build below the single root `.build/` directory. Managed clean and
+  stale-cache reset operations accept only project-local output or this root.
+- Add native RP CDC auto-upload: 1200-bps DTR touch, bounded BOOTSEL wait,
+  single-drive safety checks and UF2 copy under the existing `upload` action.
+- Allow native RP `upload` to use the single visible BOOTSEL device when the
+  configured CDC path is stale because the board is already in BOOTSEL;
+  explicit `--port` selections remain strict.
+- Allow the same stale saved path to follow the single verified CDC identity
+  when a replacement board is already running; refuse zero or multiple matches
+  and keep explicit `--port` selections strict.
+- Let the persistent Pico monitor follow the single verified project CDC when
+  an implicit saved path disappears or a board is replaced; explicit ports stay
+  pinned and ambiguous identity matches remain unselected.
+- Add native RP OTA discovery and authenticated upload, direct-host automation,
+  manifest password/environment configuration, signed `.ota` staging and the
+  `Ctrl+Shift+8` upload / `Ctrl+Shift+Alt+3` discovery task references.
+- Use TCP/8266 as the default OTA callback listener so generated projects match
+  the persistent LAN-scoped firewall rule offered by `runmefirst.sh`; explicit
+  `ota.listenPort: 0` still selects an ephemeral listener.
 - Route generated and migrated firmware projects through the shared
-  `cmake/jh_firmware_project` dispatcher instead of per-project Arduino CMake
-  recipes; CMake caches are isolated per target/board.
+  `cmake/jh_firmware_project` dispatcher; CMake caches are isolated per
+  target/board.
+- Track manifest-managed CMake cache keys per target/board and unset removed
+  entries on the next configure, preventing stale options such as a temporary
+  FreeRTOS define from surviving a manifest change.
 - Make `tools/create-vscode-example.py` generate dispatcher-backed projects with
   `--target` / `--board`, target-neutral tasks, GUI/interactive board selection,
   and no generated firmware `CMakeLists.txt`.
@@ -17,7 +47,7 @@
   linker memory overflows.
 - Define the initial `jh-vscode` CLI contract and `--project` semantics.
 - Add a minimal project manifest schema.
-- Add a neutral RP2040 Arduino-Pico firmware sketch for USB identity cleanup.
+- Add neutral RP firmware for USB identity cleanup.
 - Add the Fiesta parity checklist placeholder before migrating Fiesta modules.
 - Implement Linux `build`, `build-debug`, `upload`, `upload-uf2`,
   `monitor`, `monitor-probe`, `monitor-any`, `refresh-intellisense`, `clean`,
@@ -34,8 +64,8 @@
 - Expand the identity-enabled upload failure message with the required
   verified serial, BOOTSEL, first-flash, and explicit-port conditions.
 - Highlight key upload/build status lines in yellow in terminal output:
-  verified serial port selection, own-monitor release, Arduino FQBN, generated
-  sketch path, and Arduino build directory.
+  verified serial port selection, own-monitor release, selected target/board,
+  generated firmware path, and build directory.
 - Print an ELF memory map overview after successful build/upload, grouped by
   FLASH/XIP, SRAM, and PSRAM with VMA/LMA ranges, section notes, and totals;
   set `JH_VSCODE_MEMORY_OVERVIEW=0` to disable it.
@@ -52,5 +82,5 @@
   Fiesta Clocks, persistent monitor reconnect, upload while monitor is active,
   single-drive BOOTSEL UF2 upload, and clear USB identity.
 - Clean the `router-reset/reseter` pilot to the new contract: project-owned
-  CMake sketch generation, `Project:*` VS Code tasks, root workspace delegation
-  to `--project reseter`, and no dead Arduino legacy file.
+  CMake firmware generation, `Project:*` VS Code tasks, root workspace delegation
+  to `--project reseter`, with obsolete project build files removed.

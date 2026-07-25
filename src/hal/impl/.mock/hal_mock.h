@@ -166,6 +166,14 @@ const char *hal_mock_deb_last_line(void);
 void hal_mock_serial_reset(void);
 void hal_mock_serial_inject_rx(const char *data, int len);
 
+// ── USB CDC ─────────────────────────────────────────────────────────────────
+void hal_mock_usb_reset(void);
+void hal_mock_usb_set_connected(bool connected);
+void hal_mock_usb_inject_rx(const uint8_t *data, size_t length);
+const uint8_t *hal_mock_usb_tx_data(void);
+size_t hal_mock_usb_tx_size(void);
+bool hal_mock_usb_reset_requested(void);
+
 // ── ISR-deferred debug ring (test introspection) ─────────────────────────────
 /** @brief Number of records currently pending in the ISR ring. */
 size_t hal_mock_debug_isr_used_slots(void);

@@ -1,0 +1,24 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "pico2w",
+  "displayName": "Raspberry Pi Pico 2 W",
+  "description": "RP2350 ARM board with 4 MB flash and on-board CYW43.",
+  "status": "supported",
+  "compatibleTargets": ["rp2350-arm"],
+  "build": { "provider": "pico-sdk", "board": "pico2_w" },
+  "hal": { "profileId": 4, "selector": "HAL_BOARD_PROFILE_RP_PICO_2_W", "runtimeName": "pico2w", "legacySelectors": ["HAL_CYW43_PROFILE_PICOW"] },
+  "memory": { "flash": { "source": "sdk", "expectedBytes": 4194304 } },
+  "gpio": {
+    "exposedPins": { "ranges": [{ "first": 0, "last": 22 }, { "first": 26, "last": 28 }] },
+    "reservations": {
+      "cyw43-bus": { "pins": [{ "domain": "soc-gpio", "id": 23 }, { "domain": "soc-gpio", "id": 24 }, { "domain": "soc-gpio", "id": 25 }, { "domain": "soc-gpio", "id": 29 }], "owner": "radio.cyw43", "strength": "hard", "reason": "On-board CYW43 transport and power control." }
+    },
+    "aliases": { "status-led": { "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 } } }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "external-radio-frontend": { "present": false } },
+  "devices": { "statusLed": { "kind": "component-gpio", "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 }, "activeLevel": "high" } },
+  "peripherals": { "defaultsSource": "pico-sdk" },
+  "components": { "cyw43-pico-pio": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" } }
+}

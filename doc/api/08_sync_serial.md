@@ -1,4 +1,4 @@
-# Sync, serial output, framing and auth
+# Sync, USB, serial output, framing and auth
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
@@ -11,6 +11,7 @@ typedef hal_mutex_impl_t* hal_mutex_t;   // opaque
 
 hal_mutex_t hal_mutex_create(void);
 void        hal_mutex_lock(hal_mutex_t mutex);
+bool        hal_mutex_try_lock(hal_mutex_t mutex);
 void        hal_mutex_unlock(hal_mutex_t mutex);
 void        hal_mutex_destroy(hal_mutex_t mutex);
 ```
@@ -18,12 +19,13 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
 **impl/rp2040:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
 **impl/stm32g474:** single-core atomic spinlock in non-FreeRTOS builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS` builds. Both are non-recursive.
 **impl/.mock:** `std::mutex`.
-**FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040 when
-`HAL_ENABLE_FREERTOS` and arduino-pico `__FREERTOS` are both defined, and on
-STM32G474 when `HAL_ENABLE_FREERTOS` pulls in the local kernel. `hal_mutex_*`
-remains task-context only; it is not an ISR API. Singleton/bus module mutexes
-use an internal atomic create-once helper where a defensive lazy fallback is
-still needed.
+**FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040/RP2350 and
+STM32G474 when `HAL_ENABLE_FREERTOS` selects the pinned kernel.
+`hal_mutex_*` remains task-context only; it is not an ISR API.
+Singleton/bus module mutexes use an internal atomic create-once helper where a
+defensive lazy fallback is still needed.
+`hal_mutex_try_lock()` never waits. Bare-metal interrupt workers may use it;
+FreeRTOS backends return `false` when it is called from interrupt context.
 
 ### Macros (tools.h)
 
@@ -103,6 +105,44 @@ bool consume_alarm_flag(void) {
   return fired;
 }
 ```
+
+---
+
+## `hal_usb` - USB device lifecycle and CDC
+
+```c
+#include <hal/hal_usb.h>
+
+hal_status_t hal_usb_init(void);
+hal_status_t hal_usb_deinit(void);
+hal_status_t hal_usb_task(void);
+hal_status_t hal_usb_cdc_is_connected(bool *out_connected);
+hal_status_t hal_usb_cdc_available(size_t *out_available);
+hal_status_t hal_usb_cdc_read(uint8_t *data, size_t capacity,
+                              size_t *out_read);
+hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
+                               uint32_t timeout_ms, size_t *out_written);
+hal_status_t hal_usb_cdc_flush(uint32_t timeout_ms);
+hal_status_t hal_usb_reset_to_bootloader(void);
+
+typedef void (*hal_usb_bootloader_reset_hook_t)(void *user);
+hal_status_t hal_usb_set_bootloader_reset_hook(
+    hal_usb_bootloader_reset_hook_t hook, void *user);
+```
+
+The native RP backend is the sole TinyUSB owner. It supplies CDC descriptors,
+serial identity, a mutex-protected foreground pump, a low-priority IRQ/timer
+background pump, bounded transmit backpressure and 1200-bps DTR-triggered
+BOOTSEL reset. `hal_usb_init()` publishes the USB runtime board capability.
+
+`hal_usb_set_bootloader_reset_hook()` registers an optional observer invoked
+immediately before a bootloader reset (both the 1200-bps DTR trigger and
+`hal_usb_reset_to_bootloader()`). It is intended for application shutdown
+bookkeeping and host/mock tests; the hook must not block. Passing `NULL`
+clears the registration.
+
+STM32G474 currently returns `HAL_EUNSUPPORTED`; the host mock provides
+deterministic RX/TX buffers and reset observation for unit tests.
 
 ---
 
@@ -231,7 +271,7 @@ error source tag (`source`) so errors from different modules do not suppress eac
 
 `hal_serial_print()` and `hal_serial_println()` take a single global TX
 mutex around the underlying debug-console write path. On RP2040 that path
-writes directly to TinyUSB CDC; STM32 / mock builds use their respective
+writes through `hal_usb` CDC; STM32 / mock builds use their respective
 stdio-style backends. This serialises every emitter that ever reaches the
 wire - the debug helpers (`hal_deb`, `hal_derr`,
 `hal_derr_limited`), the framed session helper
@@ -253,15 +293,15 @@ lock. It is strictly
 nested **inside** `s_deb_mutex` / `s_derr_mutex` / `s_rl_mutex`, never
 the other way around, so deadlock is impossible.
 
-On the RP2040 backend, the mutex window can additionally include an
-extra TinyUSB CDC flush/task poll after every `hal_serial_print()` /
+On RP USB-CDC backends, the mutex window can additionally include an
+extra `hal_usb_cdc_flush()` after every `hal_serial_print()` /
 `hal_serial_println()`. This is disabled by default and can be changed
 at runtime with `hal_serial_set_flush(bool enabled)`. The RP2040 write
 loop still kicks the CDC FIFO internally so short packets are actually
 started; the optional flush is the compatibility knob for applications
 that want an extra transport poll before the TX mutex is released.
 
-Leaving `hal_serial_set_flush(false)` keeps the RP2040 backend on its default
+Leaving `hal_serial_set_flush(false)` keeps the RP backend on its default
 path and avoids the optional extra poll/flush while preserving the TX mutex.
 It does not bypass the write loop's bounded retry when the CDC FIFO is full.
 STM32G474 and mock backends accept the same setter for portable code, but have
@@ -287,7 +327,9 @@ void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwar
 `setDebugPrefixWithColon(...)` truncates the module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
-**impl/rp2040:** TinyUSB CDC transport owned by the RP2040 core USB stack.
+**impl/rp2040:** `hal_serial` is a transport client of `hal_usb`. The Pico SDK
+runtime owns TinyUSB, CDC descriptors, synchronization, the background task
+pump and BOOTSEL reset. `hal_serial` writes through that shared USB runtime.
 **impl/stm32g474:** USART2 debug UART on hardware builds; stdio in host-style
 builds.
 **impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
@@ -403,7 +445,7 @@ Wire protocol (both directions):
 
     $SC,<seq>,<inner>*<crc8>\n
 
-See [`hal_serial_frame`](#hal_serial_frame---wire-framing-helpers) for the
+See [`hal_serial_frame`](#halserialframe-wire-framing-helpers) for the
 frame codec.
 
 Built-in command (always recognised, structural):
@@ -488,7 +530,7 @@ Authentication (Phase 3) - opt-in:
   `"SC_AUTH_PROVE"`; a different project can supply different names. A
   NULL token field disables that command and routes the inner line to
   the unknown handler.
-- See [`hal_sc_auth`](#hal_sc_auth---auth-handshake-helper--opt-in---hal_enable_crypto)
+- See [`hal_sc_auth`](#halscauth-auth-handshake-helper-opt-in-halenablecrypto)
   for the salt + key-derivation primitives.
 - The AUTH_BEGIN handler requires an active (HELLO-acknowledged) session
   and mints a fresh challenge derived from
@@ -778,7 +820,7 @@ both sides. Cross-vector checks catch divergence early and avoid
 runtime AUTH_FAILED mismatches during integration.
 
 The handshake itself is wired in
-[`hal_serial_session`](#hal_serial_session---framed-serial-session-helper)
+[`hal_serial_session`](#halserialsession-framed-serial-session-helper)
 behind the vocabulary's `cmd_auth_begin` / `cmd_auth_prove` slots
 (Fiesta names them `SC_AUTH_BEGIN` / `SC_AUTH_PROVE`). Modules consume
 authentication state through `hal_serial_session_is_authenticated(...)`

@@ -4,17 +4,25 @@
     "module": "05_modem_A7670E",
     "example": {
         "targets": [
-            "rp2040"
-        ]
+            "rp2040",
+            "rp2350-arm",
+            "rp2350-riscv"
+        ],
+        "boards": {
+            "rp2040": "pico",
+            "rp2350-arm": "pico2",
+            "rp2350-riscv": "pico2"
+        }
     },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "pico",
-    "buildDir": "${project}/.build",
-    "cmakeBuildDir": "${project}/.build/cmake",
+    "buildDir": "${jhRoot}/.build/examples/05_modem_A7670E",
+    "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../cmake/jh_firmware_project",
         "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "05_modem_A7670E"
         }

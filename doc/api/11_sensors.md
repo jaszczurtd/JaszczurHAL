@@ -42,11 +42,17 @@ typedef enum {
     HAL_THERMOCOUPLE_AMBIENT_RES_0_03125,       // 0.03125 °C/LSB
 } hal_thermocouple_ambient_res_t;
 
-// Config struct - fill chip, then the matching bus union member
+// Config struct - zero-initialize it, then fill chip and the matching bus member
 typedef struct {
     hal_thermocouple_chip_t chip;
     union {
-        struct { uint8_t sda_pin; uint8_t scl_pin; uint32_t clock_hz; uint8_t i2c_addr; } i2c;
+        struct {
+            uint8_t sda_pin;
+            uint8_t scl_pin;
+            uint32_t clock_hz;
+            uint8_t i2c_bus;   // 0 = primary, 1 = secondary
+            uint8_t i2c_addr;
+        } i2c;
         struct { uint8_t sclk_pin; uint8_t cs_pin; uint8_t miso_pin; } spi;
     } bus;
 } hal_thermocouple_config_t;
@@ -90,7 +96,27 @@ float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status register
 ```
 
-**impl/rp2040:** MCP9600/MCP9601 and MAX6675 delegate to shared Arduino-free drivers.
+Every field used by the selected chip must be initialized. Start with a
+zero-initialized descriptor and set `i2c_bus` explicitly for MCP9600:
+
+```c
+hal_thermocouple_config_t cfg = {0};
+cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
+cfg.bus.i2c.sda_pin = 4;
+cfg.bus.i2c.scl_pin = 5;
+cfg.bus.i2c.clock_hz = HAL_I2C_CLOCK_STANDARD_HZ;
+cfg.bus.i2c.i2c_bus = 0;
+cfg.bus.i2c.i2c_addr = 0x67;
+
+hal_thermocouple_t sensor = hal_thermocouple_init(&cfg);
+```
+
+An uninitialized `i2c_bus` can select an invalid or unintended controller.
+Native backends validate the bus index and initialization then fails. This
+also applies when migrating code that previously relied on permissive
+I2C defaults.
+
+**impl/rp2040:** MCP9600/MCP9601 and MAX6675 delegate to shared HAL-only drivers.
 **impl/stm32g474:** MCP9600/MCP9601 and MAX6675 delegate to the same shared drivers as RP2040.
 **Thread safety:** Thread-safe and multicore-safe. Each instance has its own per-instance `hal_mutex_t`. All read, configuration, and deinit operations are protected under this mutex.
 
@@ -152,7 +178,7 @@ allocation failure returns `HAL_ENOMEM`, a missing/non-matching sensor returns
 polling before the conversion deadline returns `HAL_EAGAIN`, polling while idle
 returns `HAL_ESTATE`, and scratchpad/CRC/decode failure returns `HAL_EPROTO`.
 
-**impl/rp2040 + impl/stm32g474:** Both use the shared Arduino-free
+**impl/rp2040 + impl/stm32g474:** Both use the shared HAL-only
 `src/hal/impl/shared/drivers/onewire/` implementation. The backend performs DS18B20
 presence/address probing, scratchpad CRC verification, resolution writes,
 non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
@@ -764,7 +790,7 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
 
-**impl/shared:** Arduino-free ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
+**impl/shared:** HAL-only ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
 **Thread safety:** RP2040/STM32G474: thread-safe and multicore-safe where the backend mutex implementation provides it. A dedicated internal `hal_mutex_t` serializes ADC channel selection and range access; HAL I2C transactions protect the bus. `hal_ext_adc_init()` / `hal_ext_adc_init_bus()` modify global singleton state and should be called during init. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**

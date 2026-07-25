@@ -29,8 +29,11 @@ bool hal_sd_file_is_mounted(void);
 bool hal_sd_file_open(hal_sd_file_t *file, const char *path,
                       hal_sd_file_mode_t mode);
 size_t hal_sd_file_write(hal_sd_file_t *file, const void *data, size_t len);
+size_t hal_sd_file_read(hal_sd_file_t *file, void *data, size_t len);
 size_t hal_sd_file_print(hal_sd_file_t *file, const char *text);
 size_t hal_sd_file_println(hal_sd_file_t *file, const char *text);
+size_t hal_sd_file_size(const hal_sd_file_t *file);
+bool hal_sd_file_seek(hal_sd_file_t *file, size_t offset);
 bool hal_sd_file_flush(hal_sd_file_t *file);
 bool hal_sd_file_close(hal_sd_file_t *file);
 bool hal_sd_file_is_open(const hal_sd_file_t *file);

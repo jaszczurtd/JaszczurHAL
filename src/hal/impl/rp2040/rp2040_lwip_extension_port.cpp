@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 
 #if defined(HAL_ENABLE_WIREGUARD)
@@ -159,4 +159,4 @@ jh_lwip_extension_platform_port(void) {
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
-#endif /* HAL_TARGET_IS_RP2040 */
+#endif /* HAL_TARGET_IS_RP */

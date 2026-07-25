@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG_FILE="${REPO_ROOT}/pico_sdk_version.conf"
+CONFIG_FILE="${REPO_ROOT}/third_party/pico_sdk_version.conf"
 
 # shellcheck source=lib/pinned_repo.sh
 source "${SCRIPT_DIR}/lib/pinned_repo.sh"
@@ -55,7 +55,7 @@ while [[ $# -gt 0 ]]; do
         --with-submodules) SUBMODULES_ARG="$2"; SUBMODULES_OVERRIDDEN=1; shift 2 ;;
         --repo-root)
             REPO_ROOT="$(cd "$2" && pwd)"
-            CONFIG_FILE="${REPO_ROOT}/pico_sdk_version.conf"
+            CONFIG_FILE="${REPO_ROOT}/third_party/pico_sdk_version.conf"
             shift 2
             ;;
         --sdk-dir) SDK_DIR_ARG="$2"; shift 2 ;;
@@ -65,7 +65,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -f "${CONFIG_FILE}" ]] || die "Pico SDK config not found: ${CONFIG_FILE}"
-# shellcheck source=../pico_sdk_version.conf
+# shellcheck source=../third_party/pico_sdk_version.conf
 source "${CONFIG_FILE}"
 
 if [[ ${ENABLE} -eq 0 && -n "${JH_ENABLE_PICO_SDK:-}" ]]; then
@@ -124,15 +124,14 @@ verify_version() {
     fi
 }
 
-if [[ ! -d "${SDK_DIR}" ]]; then
-    [[ ${USER_PROVIDED_DIR} -eq 0 ]] || die "Pico SDK dir not found: ${SDK_DIR}"
-    [[ ${VERIFY_ONLY} -eq 0 ]] || die "Pico SDK checkout missing at ${SDK_DIR} (verify-only; not fetching)."
-    info "Fetching Pico SDK ${PICO_SDK_VERSION} (${PICO_SDK_REF}) into ${SDK_DIR}"
-    jh_dep_clone_pinned "${PICO_SDK_REPO}" "${PICO_SDK_REF}" "${SDK_DIR}"
-fi
-
-if [[ ${VERIFY_ONLY} -eq 0 ]]; then
+if [[ ${USER_PROVIDED_DIR} -eq 1 ]]; then
+    [[ -d "${SDK_DIR}" ]] || die "Pico SDK dir not found: ${SDK_DIR}"
     jh_dep_verify_ref "${SDK_DIR}" "${PICO_SDK_REF}"
+else
+    jh_dep_sync_pinned \
+        "${PICO_SDK_REPO}" "${PICO_SDK_REF}" "${SDK_DIR}" "${VERIFY_ONLY}"
+fi
+if [[ ${VERIFY_ONLY} -eq 0 ]]; then
     jh_dep_init_submodules "${SDK_DIR}" "${SUBMODULES_ARG}"
 fi
 

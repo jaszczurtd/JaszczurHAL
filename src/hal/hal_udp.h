@@ -17,6 +17,9 @@ extern "C" {
  * New code should prefer the handle-based `hal_udp_socket_*` API, which can
  * model multiple independent UDP sockets. The older `hal_udp_*` functions are
  * kept as a source-compatible single-socket wrapper.
+ * On RP CYW43 backends, status-returning operations report HAL_EUNSUPPORTED,
+ * HAL_EUNINIT or HAL_EHW when the required board hardware is respectively
+ * absent, inactive or known to have failed.
  */
 
 #include <stdbool.h>

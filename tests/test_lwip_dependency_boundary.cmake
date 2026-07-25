@@ -1,21 +1,21 @@
-set(_lwip "${JH_ROOT}/src/hal/impl/shared/frameworks/lwip")
+set(_lwip "${JH_ROOT}/third_party/lwip")
 
-file(GLOB_RECURSE _implicit_sources "${_lwip}/vendor/*.c")
-if(_implicit_sources)
+if(NOT EXISTS "${_lwip}/src/include/lwip/init.h" OR
+   NOT EXISTS "${_lwip}/src/core/init.c")
     message(FATAL_ERROR
-        "Vendored lwIP .c files would be compiled implicitly by Arduino: ${_implicit_sources}")
+        "Pinned third_party/lwip checkout is missing")
 endif()
 
 set(_makefsdata
-    "${_lwip}/vendor/src/apps/http/makefsdata/makefsdata.c.upstream")
+    "${_lwip}/src/apps/http/makefsdata/makefsdata.c")
 if(NOT EXISTS "${_makefsdata}")
     message(FATAL_ERROR "Pinned lwIP makefsdata source is missing")
 endif()
 
 file(READ "${JH_ROOT}/cmake/jh_cyw43_driver.cmake" _cmake_helper)
-if(NOT _cmake_helper MATCHES "vendor/src/core/init\\.c\\.upstream")
+if(NOT _cmake_helper MATCHES "third_party/lwip")
     message(FATAL_ERROR "STM32 lwIP source selection bypasses the pinned boundary")
 endif()
-if(NOT _cmake_helper MATCHES "configure_file\\(.*COPYONLY")
+if(NOT _cmake_helper MATCHES "src/core/init\\.c")
     message(FATAL_ERROR "STM32 lwIP sources are not staged explicitly")
 endif()

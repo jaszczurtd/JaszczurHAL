@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_RGB_LED
 
@@ -207,4 +207,4 @@ hal_status_t hal_rgb_led_set_color(hal_rgb_led_color_t color) {
 }
 
 #endif /* HAL_ENABLE_RGB_LED */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

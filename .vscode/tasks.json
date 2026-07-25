@@ -5,7 +5,7 @@
             "label": "Build RP2040",
             "detail": "Ctrl+Shift+1 - compile RP2040 static library",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/build_rp2040_lib.sh",
+            "command": "${workspaceFolder}/scripts/build_rp_native_lib.sh",
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -102,7 +102,7 @@
         },
         {
             "label": "Clear Build Artifacts",
-            "detail": "Ctrl+Shift+7 - remove build, build_* and .build directories",
+            "detail": "Ctrl+Shift+7 - remove the repository .build artifact tree",
             "type": "shell",
             "command": "${workspaceFolder}/scripts/vscode_clear_build_artifacts.sh",
             "presentation": {

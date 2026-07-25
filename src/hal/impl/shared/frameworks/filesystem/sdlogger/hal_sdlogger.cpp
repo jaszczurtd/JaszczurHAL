@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 
 #include "hal/hal_config.h"
 
@@ -380,4 +380,4 @@ hal_status_t hal_sdlogger_crash_report(const char *format, ...) {
 }
 
 #endif /* HAL_ENABLE_SDLOGGER */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */

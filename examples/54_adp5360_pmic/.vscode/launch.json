@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Project: Debug Firmware",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/54_adp5360_pmic/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2040",
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug)"
+        }
+    ]
+}

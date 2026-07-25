@@ -56,7 +56,7 @@ static void check_connection(void) {
     }
 }
 
-void setup(void) {
+void app_start(void) {
     hal_debug_init(115200);
     hal_wifi_begin_station("MySSID", "password", false);
 
@@ -64,7 +64,7 @@ void setup(void) {
     hal_soft_timer_begin(status_timer, check_connection, 5000);
 }
 
-void loop(void) {
+void app_task0(void) {
     hal_soft_timer_tick(status_timer);
 }
 ```
@@ -125,7 +125,7 @@ static hal_pid_controller_t speed_pid;
 static float target_rpm = 1000.0f;
 static float current_rpm = 0.0f;
 
-void setup(void) {
+void app_start(void) {
     speed_pid = hal_pid_controller_create_with_gains(
         50.0f,    // Kp
         10.0f,    // Ki
@@ -136,7 +136,7 @@ void setup(void) {
     hal_pid_controller_update_time(speed_pid, 1.0f / 10.0f);
 }
 
-void loop(void) {
+void app_task0(void) {
     current_rpm = read_encoder_rpm();
     float error = target_rpm - current_rpm;
     float pwm = hal_pid_controller_update(speed_pid, error);
@@ -168,8 +168,8 @@ Utilities depend on HAL internally.
 
 ### Bit-manipulation helpers (`hal_bits`)
 
-Bit aliases are defined with `#ifndef` guards, so they are no-ops when the
-Arduino core already provides them.
+Bit aliases are defined with `#ifndef` guards so an application may provide
+equivalent definitions before including the header.
 
 ```c
 #include <hal/hal_bits.h>
@@ -178,7 +178,7 @@ Arduino core already provides them.
 #define set_bit(var, mask)   // OR mask into var
 #define clr_bit(var, mask)   // AND ~mask into var
 
-// Bit-index variants (Arduino-compatible names)
+// Bit-index variants (established public names)
 #define bitSet(var, bit)     // set bit number 'bit' in var
 #define bitClear(var, bit)   // clear bit number 'bit' in var
 #define bitRead(var, bit)    // read bit number 'bit' from var (returns 0 or 1)
@@ -356,7 +356,7 @@ static void on_led_blink(void) {
     hal_gpio_write(LED_PIN, !hal_gpio_read(LED_PIN));
 }
 
-void setup(void) {
+void app_start(void) {
     hal_debug_init(115200);
     hal_gpio_set_mode(LED_PIN, HAL_GPIO_OUTPUT);
 
@@ -366,7 +366,7 @@ void setup(void) {
     led_timer.begin(on_led_blink, 500);         // 500 ms
 }
 
-void loop(void) {
+void app_task0(void) {
     // Tick all timers
     heartbeat_timer.tick();
     status_timer.tick();
@@ -460,11 +460,11 @@ public:
 
 ThermostatController thermo;
 
-void setup() {
+extern "C" void app_start(void) {
     thermo.set_target(22.5f);
 }
 
-void loop() {
+extern "C" void app_task0(void) {
     float adc_reading = (float)hal_adc_read(TEMP_SENSOR_PIN);
     float temp_c = (adc_reading * 3.3f / 4096.0f - 0.5f) * 100.0f;
 
@@ -520,7 +520,7 @@ void on_watchdog_reboot(int *values, int size) {
     hal_derr("Watchdog triggered! Core flags: %d %d", values[0], values[1]);
 }
 
-void setup(void) {
+void app_start(void) {
     hal_debug_init(115200);
 
     bool was_watchdog = setupWatchdog(on_watchdog_reboot, 10000);  // 10 sec
@@ -531,7 +531,7 @@ void setup(void) {
     setStartedCore0();
 }
 
-void loop(void) {
+void app_task0(void) {
     // Perform core 0 work
     do_core0_tasks();
 
@@ -545,7 +545,7 @@ void loop(void) {
 
 char pad0[128];  // prevent core 1 in same stack frame
 
-void loop1(void) {
+void app_task1(void) {
     // Core 1 setup
     setStartedCore1();
 
@@ -583,16 +583,16 @@ int get7SegStringWidth(const char* str, int digitWidth, float thickness);
 
 Characters have proportional widths: `1` and space are narrower, `^` slightly wider.
 
-**Dependencies:** `hal_display.h` only. No Arduino SDK, no platform-specific types - `const char*` throughout.
+**Dependencies:** `hal_display.h` only. The interface uses no platform-specific types; all text parameters are `const char*`.
 
-**Thread safety:** Thread-safe when `hal_display` is thread-safe (RP2040 backend). Delegates all drawing to `hal_display_*` functions which are mutex-protected.
+**Thread safety:** Thread-safe when `hal_display` is thread-safe (RP-family backend). Delegates all drawing to `hal_display_*` functions which are mutex-protected.
 
 **Example: digital clock display**
 ```c
 #include <utils/draw7Segment.h>
 #include <hal/hal_display.h>
 
-void setup(void) {
+void app_start(void) {
     // Assume display is already initialized via hal_display_init(...)
     hal_display_fill_screen(HAL_COLOR_BLACK);
 }
@@ -609,7 +609,7 @@ void draw_time_display(int hours, int minutes, int seconds) {
     draw7SegString(time_str, x, 50, 32, 48, 3.0f, HAL_COLOR_RED);
 }
 
-void loop(void) {
+void app_task0(void) {
     uint32_t ms = hal_millis();
     uint32_t total_secs = ms / 1000;
 
@@ -636,7 +636,7 @@ void show_counter_7seg(int value) {
     draw7SegString(counter_str, 10, 100, 24, 36, 2.0f, HAL_COLOR_WHITE);
 }
 
-void loop(void) {
+void app_task0(void) {
     static int counter = 0;
 
     if (hal_gpio_read(BUTTON_PIN)) {  // button pressed

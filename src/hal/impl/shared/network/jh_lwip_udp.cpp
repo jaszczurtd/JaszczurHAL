@@ -1,11 +1,11 @@
 #include "../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 #include "../../../hal_config.h"
 #endif
 
 #if defined(JH_LWIP_RAW_TEST) ||                                               \
-    ((HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474) &&                      \
+    ((HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474) &&                          \
      defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_UDP))
 
 #include "jh_lwip_status.h"

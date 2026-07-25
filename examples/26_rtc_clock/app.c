@@ -11,7 +11,7 @@
  * - Outputting time via serial console
  *
  * Compatible targets:
- * - RP2040 (Arduino-Pico via I2C0: SDA=4, SCL=5)
+ * - RP2040 (Pico SDK via I2C0: SDA=4, SCL=5)
  * - STM32G474 (I2C1 via HAL)
  * - Host/Mock (deterministic testing)
  */

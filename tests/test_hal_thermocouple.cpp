@@ -82,6 +82,15 @@ void test_init_ex_reports_invalid_arguments(void) {
 void test_mcp_default_temp(void) {
   TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, hal_thermocouple_read(mcp));
 }
+
+void test_mcp_supports_consecutive_reads(void) {
+  float first = NAN;
+  float second = NAN;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_thermocouple_read_ex(mcp, &first));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_thermocouple_read_ex(mcp, &second));
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, first);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 25.0f, second);
+}
 #endif
 
 #ifdef HAL_ENABLE_MAX6675
@@ -231,6 +240,7 @@ int main(void) {
   RUN_TEST(test_init_ex_reports_invalid_arguments);
 #ifdef HAL_ENABLE_MCP9600
   RUN_TEST(test_mcp_default_temp);
+  RUN_TEST(test_mcp_supports_consecutive_reads);
 #endif
 #ifdef HAL_ENABLE_MAX6675
   RUN_TEST(test_max_default_temp);

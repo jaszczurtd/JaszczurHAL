@@ -2,13 +2,12 @@
 
 This directory contains the private WireGuard protocol engine used by
 JaszczurHAL host-lwIP network backends. It is not a separately discoverable
-Arduino library and does not expose Arduino, Pico SDK, RP2040, CYW43, or target
-network types.
+library and does not expose Pico SDK, RP2040, CYW43, or target network types.
 
 ## Provenance
 
 The protocol sources originate from the WireGuard-ESP32 port by Kenta Ida and
-the later Arduino-Pico/RP2040 adaptation by Marcin Kielesiński. Copyright,
+the later RP2040 adaptation by Marcin Kielesiński. Copyright,
 attribution, and redistribution terms are preserved in `LICENSE` and in the
 individual source headers.
 
@@ -40,7 +39,7 @@ private interface.
 
 ## Current target coverage
 
-- RP2040/RP2350 through the Arduino-Pico-owned lwIP extension;
+- RP2040/RP2350 through the shared JaszczurHAL lwIP extension;
 - STM32G474 with the shared CYW43/lwIP backend and hardware RNG entropy.
 
 The shared sources remain IPv4-only. Outer and inner IPv6 support require

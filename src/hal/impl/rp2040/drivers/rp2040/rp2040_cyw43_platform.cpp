@@ -1,9 +1,10 @@
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../../../hal_config.h"
 
-#if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43)
+#if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43) &&  \
+    HAL_BOARD_HAS_CYW43
 
 #include "../../../../hal_serial.h"
 #include "../../../../hal_sync.h"
@@ -78,15 +79,6 @@ const jh_network_service_port_t s_service_port = {
     platform_service, platform_ipv4_ready,
 };
 
-void make_mac(uint8_t mac[6]) {
-  uint8_t uid[HAL_DEVICE_UID_BYTES]{};
-  (void)hal_get_device_uid(uid);
-  mac[0] = 0x02u;
-  for (size_t index = 1u; index < 6u; ++index) {
-    mac[index] = uid[index - 1u];
-  }
-}
-
 } // namespace
 
 hal_status_t jh_rp2040_cyw43_platform_status(int status) {
@@ -128,8 +120,8 @@ hal_status_t jh_rp2040_cyw43_platform_init(uint32_t country_code) {
       (uint8_t)HAL_CYW43_PIN_CLOCK,
       (uint8_t)HAL_CYW43_PIN_WL_ON,
       (uint8_t)HAL_CYW43_PIN_DATA,
-      (uint16_t)HAL_CYW43_PIO_CLOCK_DIV_INT,
-      (uint8_t)HAL_CYW43_PIO_CLOCK_DIV_FRAC8,
+      (uint32_t)HAL_CYW43_GSPI_TARGET_HZ,
+      (uint32_t)HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256,
       (size_t)HAL_CYW43_MAX_TRANSACTION_BYTES,
   };
 #if defined(HAL_CW43_BASELINE_DIAGNOSTICS)
@@ -143,19 +135,26 @@ hal_status_t jh_rp2040_cyw43_platform_init(uint32_t country_code) {
     return status;
   }
 
-  uint8_t mac[6]{};
-  make_mac(mac);
   jh_cyw43_driver_result_t result{};
 #if defined(HAL_CW43_BASELINE_DIAGNOSTICS)
   hal_deb("CW43 init: driver start");
 #endif
-  status =
-      jh_cyw43_driver_start(jh_rp2040_cyw43_gspi_transport(), mac, &result);
+  status = jh_cyw43_driver_start(jh_rp2040_cyw43_gspi_transport(), &result);
 #if defined(HAL_CW43_BASELINE_DIAGNOSTICS)
   hal_deb("CW43 init: driver status=%s stage=%s cyw43=%d",
           hal_status_to_string(status),
           jh_cyw43_driver_stage_string(result.stage), result.cyw43_error);
 #endif
+  if (status == HAL_OK) {
+    /*
+     * Preserve the established WiFi startup latency. The prior implementation
+     * disabled CYW43 power saving after every successful start, whereas the
+     * native driver otherwise retains CYW43_DEFAULT_PM (PM2,
+     * 200 ms sleep-return window). PM2 noticeably delays inbound traffic
+     * such as MQTT commands on an otherwise idle connection.
+     */
+    (void)cyw43_wifi_pm(&cyw43_state, CYW43_NONE_PM);
+  }
   if (status != HAL_OK) {
     (void)jh_rp2040_cyw43_gspi_deinit();
   }

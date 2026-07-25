@@ -3,7 +3,7 @@
 
 #ifdef HAL_ENABLE_TLS
 
-#include "vendor/inc/bearssl.h"
+#include <bearssl.h>
 
 #include <string.h>
 

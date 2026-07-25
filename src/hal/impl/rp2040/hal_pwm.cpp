@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_pwm.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
@@ -125,4 +125,4 @@ void hal_pwm_write(uint8_t pin, uint32_t value) {
 
   hal_mutex_unlock(s_pwm_mutex);
 }
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

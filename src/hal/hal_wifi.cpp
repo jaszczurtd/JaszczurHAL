@@ -8,6 +8,7 @@
 #include "hal_wifi.h"
 #include "impl/shared/hal_mutex_once.h"
 #include "impl/shared/network/jh_network_backend.h"
+#include "impl/shared/network/jh_network_runtime.h"
 
 #include <stdio.h>
 
@@ -82,6 +83,13 @@ static hal_status_t format_ipv4(const hal_net_endpoint_t *endpoint, char *out,
 }
 
 hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode) {
+  if (mode < HAL_WIFI_MODE_OFF || mode > HAL_WIFI_MODE_AP_STA) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
+  }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->set_mode == nullptr) {
     return HAL_EUNSUPPORTED;
@@ -100,6 +108,10 @@ bool hal_wifi_set_mode(hal_wifi_mode_t mode) {
 }
 
 hal_status_t hal_wifi_disconnect_ex(bool erase_credentials) {
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
+  }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->disconnect == nullptr) {
     return HAL_EUNSUPPORTED;
@@ -122,6 +134,10 @@ hal_status_t hal_wifi_set_hostname_ex(const char *hostname) {
   if (hostname == nullptr || hostname[0] == '\0') {
     return HAL_EINVAL;
   }
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
+  }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   return ops != nullptr && ops->set_hostname != nullptr
              ? ops->set_hostname(hostname)
@@ -136,6 +152,10 @@ hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
                                        bool non_blocking) {
   if (ssid == nullptr || ssid[0] == '\0' || password == nullptr) {
     return HAL_EINVAL;
+  }
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
   }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->join == nullptr) {
@@ -160,6 +180,10 @@ bool hal_wifi_begin_station(const char *ssid, const char *password,
 }
 
 hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms) {
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
+  }
   ensure_mutex();
   hal_mutex_lock(s_wifi_mutex);
   s_timeout_ms = timeout_ms;
@@ -174,6 +198,10 @@ bool hal_wifi_set_timeout_ms(uint32_t timeout_ms) {
 hal_status_t hal_wifi_get_state_ex(hal_wifi_state_t *out_state) {
   if (out_state == nullptr) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   return ops != nullptr && ops->get_state != nullptr ? ops->get_state(out_state)
@@ -210,6 +238,9 @@ int hal_wifi_status(void) {
 }
 
 bool hal_wifi_has_local_ip(void) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   hal_net_endpoint_t address = {};
   const jh_network_wifi_ops_t *ops = wifi_ops();
   return ops != nullptr && ops->get_local_address != nullptr &&
@@ -219,6 +250,9 @@ bool hal_wifi_has_local_ip(void) {
 }
 
 int32_t hal_wifi_rssi(void) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return 0;
+  }
   int32_t rssi = 0;
   const jh_network_wifi_ops_t *ops = wifi_ops();
   return ops != nullptr && ops->get_rssi != nullptr &&
@@ -245,6 +279,13 @@ int hal_wifi_get_strength(void) {
 }
 
 hal_status_t hal_wifi_get_local_ip_ex(char *out, size_t out_size) {
+  if (out == nullptr || out_size == 0u) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   hal_net_endpoint_t address = {};
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->get_local_address == nullptr) {
@@ -259,6 +300,13 @@ bool hal_wifi_get_local_ip(char *out, size_t out_size) {
 }
 
 hal_status_t hal_wifi_get_dns_ip_ex(char *out, size_t out_size) {
+  if (out == nullptr || out_size == 0u) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   hal_net_endpoint_t address = {};
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->get_dns_address == nullptr) {
@@ -275,6 +323,10 @@ bool hal_wifi_get_dns_ip(char *out, size_t out_size) {
 hal_status_t hal_wifi_get_mac_ex(char *out, size_t out_size) {
   if (out == nullptr || out_size == 0u) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   uint8_t mac[HAL_WIFI_BSSID_LEN] = {};
   const jh_network_wifi_ops_t *ops = wifi_ops();
@@ -304,6 +356,10 @@ hal_status_t hal_wifi_ping_status_ex(const char *host_or_ip,
   if (host_or_ip == nullptr || host_or_ip[0] == '\0' || out_result == nullptr ||
       timeout_ms == 0u) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   hal_net_endpoint_t remote = {};
   size_t count = 0u;
@@ -336,6 +392,11 @@ hal_status_t hal_wifi_scan_networks_ex(int *out_count) {
   if (out_count == nullptr) {
     return HAL_EINVAL;
   }
+  *out_count = 0;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   if (ops == nullptr || ops->scan == nullptr) {
     return HAL_EUNSUPPORTED;
@@ -361,6 +422,10 @@ hal_status_t hal_wifi_get_scan_result_ex(size_t index,
                                          hal_wifi_scan_result_t *out) {
   if (out == nullptr) {
     return HAL_EINVAL;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   const jh_network_wifi_ops_t *ops = wifi_ops();
   return ops != nullptr && ops->get_scan_result != nullptr

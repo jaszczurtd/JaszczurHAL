@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "capabilities": {
+    "usb-device": {
+      "bit": 0,
+      "macro": "HAL_BOARD_CAP_USB_DEVICE",
+      "stateModel": "lifecycle",
+      "runtimeOwner": "usb"
+    },
+    "cyw43": {
+      "bit": 1,
+      "macro": "HAL_BOARD_CAP_CYW43",
+      "stateModel": "lifecycle",
+      "runtimeOwner": "network"
+    },
+    "external-radio-frontend": {
+      "bit": 2,
+      "macro": "HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND",
+      "stateModel": "static",
+      "runtimeOwner": null
+    },
+    "sx1262-radio": {
+      "bit": 3,
+      "macro": "HAL_BOARD_CAP_SX1262_RADIO",
+      "stateModel": "lifecycle",
+      "runtimeOwner": "lora",
+      "status": "reserved"
+    }
+  }
+}

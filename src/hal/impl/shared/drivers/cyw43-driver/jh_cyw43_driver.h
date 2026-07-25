@@ -2,6 +2,7 @@
 #define JASZCZURHAL_IMPL_SHARED_FRAMEWORKS_CYW43_DRIVER_H
 
 #include "../../../../hal_status.h"
+#include "../../../../hal_system.h"
 #include "jh_cyw43_gspi_transport.h"
 
 #include <stdbool.h>
@@ -45,9 +46,16 @@ typedef struct {
   bool f2_ready;
 } jh_cyw43_driver_result_t;
 
+/**
+ * Build a locally administered unicast MAC from the least-significant six
+ * bytes of a device UID, matching the Pico SDK fallback algorithm.
+ */
+hal_status_t
+jh_cyw43_make_laa_mac_from_uid(const uint8_t uid[HAL_DEVICE_UID_BYTES],
+                               uint8_t mac[6]);
+
 /** Start the single vendored CYW43 low-level driver instance on a gSPI bus. */
 hal_status_t jh_cyw43_driver_start(jh_cyw43_gspi_transport_t *transport,
-                                   const uint8_t mac[6],
                                    jh_cyw43_driver_result_t *result);
 
 /** Tear down the active low-level instance without destroying the transport. */

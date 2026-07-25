@@ -8,7 +8,7 @@
  * real silicon.
  *
  * Wiring (ADC1): A0 = PA0 (ADC1_IN1), A1 = PA1 (ADC1_IN2) on the Nucleo
- * Arduino header. See README.md.
+ * NUCLEO expansion header. See README.md.
  */
 
 #include <hal/hal_adc.h>

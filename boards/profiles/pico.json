@@ -1,0 +1,27 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "pico",
+  "displayName": "Raspberry Pi Pico",
+  "description": "RP2040 board with 2 MB flash and a GPIO status LED.",
+  "status": "supported",
+  "compatibleTargets": ["rp2040"],
+  "build": { "provider": "pico-sdk", "board": "pico" },
+  "hal": { "profileId": 1, "selector": "HAL_BOARD_PROFILE_RP_PICO", "runtimeName": "pico", "legacySelectors": [] },
+  "memory": { "flash": { "source": "sdk", "expectedBytes": 2097152 } },
+  "gpio": {
+    "exposedPins": { "ranges": [{ "first": 0, "last": 22 }, { "first": 26, "last": 28 }] },
+    "reservations": {
+      "smps-mode": { "pins": [{ "domain": "soc-gpio", "id": 23 }], "owner": "power.smps", "strength": "hard", "reason": "On-board SMPS mode control." },
+      "vbus-sense": { "pins": [{ "domain": "soc-gpio", "id": 24 }], "owner": "power.vbus-sense", "strength": "hard", "reason": "On-board VBUS sensing." },
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": 25 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board GPIO status LED." },
+      "vsys-sense": { "pins": [{ "domain": "soc-gpio", "id": 29 }], "owner": "power.vsys-sense", "strength": "hard", "reason": "On-board VSYS ADC sensing." }
+    },
+    "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false } },
+  "devices": { "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" } },
+  "peripherals": { "defaultsSource": "pico-sdk" },
+  "components": {}
+}

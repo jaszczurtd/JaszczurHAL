@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_RTC
 
@@ -1362,4 +1362,4 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm) {
 }
 
 #endif /* HAL_ENABLE_RTC */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

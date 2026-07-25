@@ -1,0 +1,18 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "host-mock",
+  "displayName": "Host mock board",
+  "description": "Technical board profile for deterministic host tests.",
+  "status": "supported",
+  "compatibleTargets": ["mock"],
+  "build": { "provider": "host" },
+  "hal": { "profileId": 7, "selector": "HAL_BOARD_PROFILE_HOST_MOCK", "runtimeName": "host-mock", "legacySelectors": [] },
+  "memory": { "flash": { "source": "none", "expectedBytes": 0 } },
+  "gpio": { "exposedPins": { "ranges": [{ "first": 0, "last": 255 }] }, "reservations": {}, "aliases": {} },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false } },
+  "devices": {},
+  "peripherals": { "defaults": {} },
+  "components": {}
+}

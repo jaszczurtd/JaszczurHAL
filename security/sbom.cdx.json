@@ -33,9 +33,9 @@
   "components": [
     {
       "type": "library",
-      "bom-ref": "pkg:freertos-kernel@V11.1.0+",
+      "bom-ref": "pkg:freertos-kernel@V11.3.0",
       "name": "FreeRTOS-Kernel",
-      "version": "V11.1.0+",
+      "version": "V11.3.0",
       "scope": "optional",
       "licenses": [
         {
@@ -47,7 +47,7 @@
       "supplier": {
         "name": "FreeRTOS"
       },
-      "purl": "pkg:github/FreeRTOS/FreeRTOS-Kernel@2e588af95bad29aef577373512883370c9408c1c",
+      "purl": "pkg:github/FreeRTOS/FreeRTOS-Kernel@9b777ae5c5b8e9e456065a00294d1e5f5f9facf5",
       "externalReferences": [
         {
           "type": "website",
@@ -60,18 +60,18 @@
         },
         {
           "type": "other",
-          "url": "freertos_core_version.conf",
+          "url": "third_party/freertos_core_version.conf",
           "comment": "repository path"
         }
       ],
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "2e588af95bad29aef577373512883370c9408c1c"
+          "value": "9b777ae5c5b8e9e456065a00294d1e5f5f9facf5"
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Pinned external checkout for STM32G474 FreeRTOS builds; RP2040 uses arduino-pico's bundled FreeRTOS mode."
+          "value": "Pinned external checkout for STM32G474 and native RP FreeRTOS builds; RP2350 uses its release-pinned Community-Supported-Ports submodule."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -79,7 +79,147 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/FreeRTOS-Kernel,freertos_core_version.conf"
+          "value": "third_party/FreeRTOS-Kernel,third_party/freertos_core_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "framework",
+      "bom-ref": "pkg:raspberry-pi-pico-sdk@2.2.0",
+      "name": "Raspberry Pi Pico SDK",
+      "version": "2.2.0",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Raspberry Pi Ltd"
+      },
+      "purl": "pkg:github/raspberrypi/pico-sdk@a1438dff1d38bd9c65dbd693f0e5db4b9ae91779",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/raspberrypi/pico-sdk"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pico-sdk",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pico_sdk_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "a1438dff1d38bd9c65dbd693f0e5db4b9ae91779"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Pinned official SDK for native RP2040, RP2350 ARM and RP2350 Hazard3 RISC-V builds. The configured checkout also initializes the upstream TinyUSB and Mbed TLS submodules used by later native USB work and picotool signing support."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/pico-sdk,third_party/pico_sdk_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:picotool@2.2.0",
+      "name": "picotool",
+      "version": "2.2.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Raspberry Pi Ltd"
+      },
+      "purl": "pkg:github/raspberrypi/picotool@a7eb3988f0645239185fadb4e25d8279478c2dbb",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/raspberrypi/picotool"
+        },
+        {
+          "type": "other",
+          "url": "third_party/picotool",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/picotool_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "a7eb3988f0645239185fadb4e25d8279478c2dbb"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Pinned host tool used by the official Pico SDK build for binary metadata, RP2350 post-processing and UF2 generation."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/picotool,third_party/picotool_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:raspberry-pi-risc-v-toolchain@v2.2.0-4-gcc15",
+      "name": "Raspberry Pi RISC-V toolchain",
+      "version": "v2.2.0-4-gcc15",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later WITH GCC-exception-3.1"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Raspberry Pi Ltd and GNU toolchain contributors"
+      },
+      "purl": "pkg:generic/raspberrypi-riscv-toolchain@v2.2.0-4-gcc15",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/raspberrypi/pico-sdk-tools"
+        },
+        {
+          "type": "other",
+          "url": "third_party/riscv-toolchain",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/riscv_toolchain_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Pinned prebuilt riscv32-unknown-elf GCC 15 toolchain for RP2350 Hazard3 firmware builds; distributed as part of the official Pico SDK tools release."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/riscv-toolchain,third_party/riscv_toolchain_version.conf"
         }
       ]
     },
@@ -107,6 +247,16 @@
         },
         {
           "type": "other",
+          "url": "third_party/BearSSL",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/bearssl_version.conf",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
           "url": "src/hal/impl/shared/frameworks/BearSSL",
           "comment": "repository path"
         }
@@ -118,7 +268,7 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Pinned BearSSL core. Host and STM32 builds compile the vendored sources; RP2040 reuses Arduino-Pico's archive built from the exact same commit to avoid duplicate br_* symbols."
+          "value": "Git-ignored exact-commit BearSSL checkout plus tracked JaszczurHAL transport/provider adapters. Host, RP and STM32 builds compile the managed upstream sources."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -126,7 +276,64 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/BearSSL"
+          "value": "third_party/BearSSL,third_party/bearssl_version.conf,src/hal/impl/shared/frameworks/BearSSL"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:lwip@2.2.1",
+      "name": "lwIP",
+      "version": "2.2.1",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "lwIP contributors"
+      },
+      "purl": "pkg:github/lwip-tcpip/lwip@77dcd25a72509eb83f72b033d219b1d40cd8eb95",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/lwip-tcpip/lwip"
+        },
+        {
+          "type": "other",
+          "url": "third_party/lwip",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/lwip_version.conf",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/lwip/port",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "77dcd25a72509eb83f72b033d219b1d40cd8eb95"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Git-ignored exact-commit lwIP checkout with tracked JaszczurHAL architecture and options port files. Native RP and STM32 CYW43 networking compile this managed source tree."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_WIFI,HAL_ENABLE_WIREGUARD"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/lwip,third_party/lwip_version.conf,src/hal/impl/shared/frameworks/lwip/port"
         }
       ]
     },
@@ -261,9 +468,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:littlefs@2.11",
+      "bom-ref": "pkg:littlefs@2.11.3",
       "name": "littlefs",
-      "version": "2.11",
+      "version": "2.11.3",
       "scope": "optional",
       "licenses": [
         {
@@ -275,7 +482,7 @@
       "supplier": {
         "name": "littlefs authors and Arm Limited"
       },
-      "purl": "pkg:github/littlefs-project/littlefs@v2.11",
+      "purl": "pkg:github/littlefs-project/littlefs@6cb4e86540eca0d9ba62500a298385c9d863c8be",
       "externalReferences": [
         {
           "type": "website",
@@ -283,14 +490,23 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/stm32g474/drivers/littlefs",
+          "url": "third_party/littlefs",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/littlefs_version.conf",
           "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "6cb4e86540eca0d9ba62500a298385c9d863c8be"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "STM32G474 internal-flash LittleFS backend support."
+          "value": "Git-ignored exact-commit littlefs checkout compiled by the native RP and STM32G474 internal-flash backends."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -298,7 +514,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/stm32g474/drivers/littlefs"
+          "value": "third_party/littlefs,third_party/littlefs_version.conf"
         }
       ]
     },
@@ -376,7 +592,7 @@
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "WireGuard-ESP32 and Arduino-Pico-derived protocol engine with target-neutral JaszczurHAL lwIP extension glue; shared by supported host-lwIP targets."
+          "value": "WireGuard-ESP32-derived protocol engine with target-neutral JaszczurHAL lwIP extension glue; shared by supported host-lwIP targets."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -563,5 +779,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:8a6c93e1-e90d-e2bd-5007-c8e8ee40c4c5"
+  "serialNumber": "urn:uuid:58f31747-f3f0-d29e-3020-f966445c8c63"
 }

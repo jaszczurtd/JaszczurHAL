@@ -1,45 +1,20 @@
 #!/usr/bin/env bash
 # One-time local setup for JaszczurHAL on Debian/Ubuntu-like systems.
 # Installs everything needed to build the library, run the host tests, run the
-# CI quality gates, and build both the Arduino/RP2040 and STM32 targets locally.
+# CI quality gates, and build the native RP and STM32 targets locally.
 # Safe to re-run.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# ── Single source of truth for RP2040 Arduino core version ────────────────────
-# shellcheck source=rp2040_core_version.conf
-source "${SCRIPT_DIR}/rp2040_core_version.conf"
-
-RP2040_INDEX="https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json"
-
 clean_build_artifacts() {
-  local candidate
-  local cleaned=0
-  local build_dirs=(
-    "${SCRIPT_DIR}/build"
-  )
-
-  for candidate in "${SCRIPT_DIR}"/build_*; do
-    [ -d "${candidate}" ] && build_dirs+=("${candidate}")
-  done
-
-  for candidate in "${build_dirs[@]}"; do
-    [ -d "${candidate}" ] || continue
-    case "${candidate}" in
-      "${SCRIPT_DIR}/build"|"${SCRIPT_DIR}/build_"*) ;;
-      *) continue ;;
-    esac
-
-    rm -rf -- "${candidate}"
-    cleaned=$((cleaned + 1))
-  done
-
-  if [ "${cleaned}" -eq 0 ]; then
+  if [ ! -d "${SCRIPT_DIR}/.build" ]; then
     echo "No existing build artifact directories to remove."
-  else
-    echo "Removed ${cleaned} build artifact directories."
+    return
   fi
+
+  rm -rf -- "${SCRIPT_DIR}/.build"
+  echo "Removed ${SCRIPT_DIR}/.build."
 }
 
 clean_build_artifacts
@@ -51,19 +26,21 @@ This setup needs sudo (you'll be prompted for your password) to:
   - install system packages via apt: build tools, the arm-none-eabi toolchain,
     host test/QA tooling (valgrind, clang-tidy, cppcheck, ...), openocd, and
     libusb + pkg-config (picotool USB access),
-  - install arduino-cli and osv-scanner into /usr/local/bin,
+  - install osv-scanner into /usr/local/bin,
   - write a udev rule under /etc/udev/rules.d so you can flash RP2040/RP2350
-    boards over USB without sudo afterwards.
+    boards over USB without sudo afterwards,
+  - inspect the host firewall and, only after separate confirmation, allow the
+    OTA TCP/8266 callback from the detected local IPv4 network persistently.
 
 WHYSUDO
 
 sudo apt-get update
 
-# Core build + host-test toolchain (required: without these `cmake -B build`
-# and `ctest` cannot run). build-essential provides gcc/g++/make; the host mock
-# backend links pthreads, which comes with glibc. curl fetches arduino-cli and
-# the security scanner below. Python runs repository helper scripts.
-sudo apt-get install -y build-essential cmake git curl ca-certificates python3
+# Core build + host-test toolchain (required: without `cmake -B .build/host`
+# and `ctest` the gate cannot run). build-essential provides gcc/g++/make; the host mock
+# backend links pthreads, which comes with glibc. curl fetches the security
+# scanner below. Python runs repository helper scripts.
+sudo apt-get install -y build-essential cmake git curl ca-certificates python3 iproute2
 
 # Client/runtime tooling used by generated jh-vscode projects:
 # - openocd flashes/debugs STM32G474 targets,
@@ -72,20 +49,9 @@ sudo apt-get install -y build-essential cmake git curl ca-certificates python3
 # - libusb-1.0-0-dev + pkg-config let picotool talk to RP2040/RP2350 over USB.
 sudo apt-get install -y openocd python3-serial psmisc libusb-1.0-0-dev pkg-config
 
-# STM32 FreeRTOS dependency - fetched only as part of this explicit setup step.
-"${SCRIPT_DIR}/scripts/ensure_freertos_kernel.sh" --force --repo-root "${SCRIPT_DIR}"
-
-# Native RP2040/RP2350 Pico SDK dependency - upstream pico-sdk, independent of
-# the arduino-pico carrier. Fetched here alongside the FreeRTOS kernel.
-"${SCRIPT_DIR}/scripts/ensure_pico_sdk.sh" --force --repo-root "${SCRIPT_DIR}"
-
-# picotool for native RP2040/RP2350 flashing - fetched and built against the
-# pinned Pico SDK above (uses the libusb-1.0-0-dev + pkg-config installed here).
-"${SCRIPT_DIR}/scripts/ensure_picotool.sh" --force --repo-root "${SCRIPT_DIR}"
-
-# RISC-V toolchain for the rp2350-risc-v target (Hazard3). Prebuilt upstream
-# Raspberry Pi GCC (riscv32-unknown-elf); the ARM targets do not need it.
-"${SCRIPT_DIR}/scripts/ensure_riscv_toolchain.sh" --force --repo-root "${SCRIPT_DIR}"
+# Synchronize all pinned source and toolchain components after their host build
+# prerequisites are installed.
+"${SCRIPT_DIR}/third_party/update_components.sh"
 
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
 # static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
@@ -166,20 +132,12 @@ install_pico_udev_rule() {
 install_osv_scanner
 install_cve_bin_tool
 install_pico_udev_rule
+python3 "${SCRIPT_DIR}/scripts/configure_ota_firewall.py"
 
 # ARM bare-metal toolchain - cross-compiles real STM32G474 firmware
 # (scripts/build_stm32_lib.sh). The host-compiler STM32 build and the unit
 # tests do not need it, but it is part of a complete JaszczurHAL setup.
 sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
-
-# Arduino/RP2040 toolchain - arduino-cli is not an apt package, so install it
-# via the official script (into /usr/local/bin) and then add the RP2040 core.
-if ! command -v arduino-cli >/dev/null 2>&1; then
-  curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh \
-    | sudo BINDIR=/usr/local/bin sh
-fi
-arduino-cli core update-index --additional-urls "$RP2040_INDEX"
-arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" --additional-urls "$RP2040_INDEX"
 
 # Git hooks for formatting and commit-message validation.
 if [ -d "${SCRIPT_DIR}/.githooks" ]; then
@@ -195,11 +153,11 @@ tool_exists() {
   command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
 }
 
-for tool in cmake g++ gcc make git python3 valgrind clang-tidy cppcheck \
+for tool in cmake g++ gcc make git python3 ip valgrind clang-tidy cppcheck \
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
             arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
             arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \
-            openocd fuser arduino-cli; do
+            openocd fuser; do
   if tool_exists "$tool"; then
     printf '  ok       %s\n' "$tool"
   else

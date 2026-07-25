@@ -2,7 +2,7 @@
 # CMake toolchain file for cross-compiling JaszczurHAL to STM32G474.
 #
 # Usage:
-#   cmake -S stm32_lib -B build_stm32 \
+#   cmake -S stm32_lib -B .build/manual/stm32g474 \
 #         -DCMAKE_TOOLCHAIN_FILE="$PWD/stm32_lib/toolchain_stm32g474.cmake"
 #
 # Optional cache variables:

@@ -4,7 +4,7 @@ Verifies the **real** `hal_i2c` backend on a **Nucleo-G474RE** by scanning the
 I2C bus and printing every address that ACKs. Use it to confirm the bare-metal
 I2C1 master works on silicon before relying on it.
 
-- **I2C1**: SCL = **PB8**, SDA = **PB9** (Arduino headers: D15 = SCL, D14 = SDA)
+- **I2C1**: SCL = **PB8**, SDA = **PB9** (NUCLEO expansion header: D15 = SCL, D14 = SDA)
 - 100 kHz standard mode (TIMINGR tuned for the 16 MHz HSI bring-up clock)
 - Uses `hal_i2c_scan()` and passes `hal_watchdog_feed` as the per-probe
   callback; formatting and the two-second repetition stay in the application.
@@ -36,15 +36,18 @@ sudo apt update
 sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi stlink-tools tio
 sudo usermod -aG dialout "$USER"      # then log out/in for serial access
 
-cd examples/g474_i2c_scan
-./build.sh                            # -> build/g474_i2c_scan.{elf,bin,hex}
+cd /path/to/JaszczurHAL
+vscode/entry/jh-vscode build \
+  --project examples/20_i2c_scan --target stm32g474
 
 st-info --probe                       # confirm the ST-Link sees the G474
-st-flash --reset write build/g474_i2c_scan.bin 0x08000000
+st-flash --reset write \
+  .build/examples/20_i2c_scan/firmware.bin 0x08000000
 tio /dev/ttyACM0 -b 115200
 ```
 
-(OpenOCD alternative: `openocd -f board/st_nucleo_g4.cfg -c "program build/g474_i2c_scan.elf verify reset exit"`.)
+(OpenOCD alternative:
+`vscode/entry/jh-vscode upload --project examples/20_i2c_scan --target stm32g474`.)
 
 ## Expected output
 

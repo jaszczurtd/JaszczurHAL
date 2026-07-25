@@ -119,8 +119,8 @@ lifetime matter. Default resolution is 8 bits.
 **impl/rp2040:** native pico-sdk `hardware/pwm.h` (`pwm_init`, `pwm_config_set_wrap`,
 `pwm_set_gpio_level`, `pwm_set_enabled`). The public duty range stays
 `0..2^bits-1`; internally the backend may increase the slice wrap at low
-resolutions to preserve the Arduino-pico-compatible ~1 kHz default frequency
-when `clkdiv` would otherwise exceed the hardware limit. Two GPIOs on the same
+resolutions to preserve the approximately 1 kHz default frequency when
+`clkdiv` would otherwise exceed the hardware limit. Two GPIOs on the same
 hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
 duty. Use `hal_pwm_freq` when exact frequency matters.
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;

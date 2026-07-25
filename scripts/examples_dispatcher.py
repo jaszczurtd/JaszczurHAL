@@ -17,6 +17,18 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
 JH_VSCODE = REPO_ROOT / "vscode" / "entry" / "jh-vscode"
 
+RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
+STM32_CYW43_PIM730_DEFINES = [
+    "HAL_NETWORK_BACKEND_CYW43",
+    "HAL_CYW43_BUS_STM32_GSPI",
+    "HAL_CYW43_STACK_LWIP",
+    "HAL_CYW43_PIN_WL_ON=30u",  # PB14
+    "HAL_CYW43_PIN_CHIP_SELECT=28u",  # PB12
+    "HAL_CYW43_PIN_DATA=31u",  # PB15
+    "HAL_CYW43_PIN_CLOCK=29u",  # PB13
+    "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
+]
+
 
 EXAMPLES: list[dict[str, Any]] = [
     {"dir": "01_blink", "targets": ["rp2040", "stm32g474"]},
@@ -28,12 +40,28 @@ EXAMPLES: list[dict[str, Any]] = [
     {"dir": "07_gps", "targets": ["rp2040"]},
     {"dir": "08_thermocouple", "targets": ["rp2040", "stm32g474"]},
     {"dir": "09_display_tft", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "10_mqtt", "targets": ["rp2040"], "board": "picow"},
-    {"dir": "11_wireguard", "targets": ["rp2040"], "board": "picow"},
+    {
+        "dir": "10_mqtt",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+        "stm32ExtraDefines": ["HAL_ENABLE_MQTT"],
+    },
+    {
+        "dir": "11_wireguard",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
     {"dir": "12_kv_store", "targets": ["rp2040", "stm32g474"]},
     {"dir": "13_i2c_slave", "targets": ["rp2040", "stm32g474"]},
     {"dir": "14_uart", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "15_wifi", "targets": ["rp2040"], "board": "picow"},
+    {
+        "dir": "15_wifi",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
     {"dir": "16_littlefs", "targets": ["rp2040", "stm32g474"], "extraDefines": ["HAL_ENABLE_LITTLEFS"]},
     {"dir": "17_pid_controller", "targets": ["rp2040", "stm32g474"]},
     {"dir": "18_rgb_led", "targets": ["rp2040", "stm32g474"]},
@@ -67,8 +95,9 @@ EXAMPLES: list[dict[str, Any]] = [
     {"dir": "41_jpeg_ili931_base64", "targets": ["rp2040", "stm32g474"]},
     {
         "dir": "42_bsd_sockets_tcp_udp",
-        "targets": ["rp2040"],
+        "targets": ["rp2040", "stm32g474"],
         "board": "picow",
+        "stm32Cyw43Pim730": True,
         "module": "42_bsd_sockets_tcp_server",
         "sources": ["tcp_server.c", "bsd_socket_example_common.h"],
         "variants": [
@@ -76,19 +105,19 @@ EXAMPLES: list[dict[str, Any]] = [
                 "id": "tcp_client",
                 "module": "42_bsd_sockets_tcp_client",
                 "sources": ["tcp_client.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040"],
+                "targets": ["rp2040", "stm32g474"],
             },
             {
                 "id": "udp_server",
                 "module": "42_bsd_sockets_udp_server",
                 "sources": ["udp_server.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040"],
+                "targets": ["rp2040", "stm32g474"],
             },
             {
                 "id": "udp_client",
                 "module": "42_bsd_sockets_udp_client",
                 "sources": ["udp_client.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040"],
+                "targets": ["rp2040", "stm32g474"],
             },
         ],
     },
@@ -108,14 +137,59 @@ EXAMPLES: list[dict[str, Any]] = [
     {"dir": "45_swserial_loopback", "targets": ["rp2040", "stm32g474"]},
     {"dir": "46_mfrc522_rfid", "targets": ["rp2040", "stm32g474"]},
     {"dir": "47_pn532_nfc", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "48_http_server", "targets": ["rp2040"], "board": "picow"},
-    {"dir": "49_websocket", "targets": ["rp2040"], "board": "picow"},
-    {"dir": "50_net_console", "targets": ["rp2040"], "board": "picow"},
-    {"dir": "51_net_commands", "targets": ["rp2040"], "board": "picow"},
-    {"dir": "52_http_files", "targets": ["rp2040"], "board": "picow"},
+    {
+        "dir": "48_http_server",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
+    {
+        "dir": "49_websocket",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
+    {
+        "dir": "50_net_console",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
+    {
+        "dir": "51_net_commands",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
+    {
+        "dir": "52_http_files",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+    },
     {"dir": "53_simple_io_chips", "targets": ["rp2040", "stm32g474"]},
     {"dir": "54_adp5360_pmic", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "56_http_https_client", "targets": ["rp2040"], "board": "picow"},
+    {"dir": "55_epd_display", "targets": ["rp2040", "stm32g474"]},
+    {
+        "dir": "56_http_https_client",
+        "targets": ["rp2040", "stm32g474"],
+        "board": "picow",
+        "stm32Cyw43Pim730": True,
+        "stm32ExtraDefines": ["HAL_ENABLE_TLS"],
+    },
+    {
+        "dir": "57_ota",
+        "targets": ["rp2040"],
+        "board": "picow",
+        "extraDefines": ["HAL_ENABLE_OTA"],
+        "cache": {"JH_OTA_GENERATION": 1, "JH_OTA_VERSION": "example"},
+        "ota": {
+            "hostname": "jaszczurhal-ota",
+            "port": 8266,
+            "listenPort": 8266,
+            "password": "change-this-ota-password",
+        },
+    },
 ]
 
 
@@ -124,34 +198,24 @@ def json_text(data: Any) -> str:
 
 
 def target_registry() -> dict[str, dict[str, Any]]:
-    registry: dict[str, dict[str, Any]] = {}
-    for path in sorted((REPO_ROOT / "vscode" / "targets").glob("*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(data, dict) and data.get("id"):
-            registry[str(data["id"])] = data
-    return registry
+    from board_registry import tooling_target_registry
+
+    return tooling_target_registry(REPO_ROOT)
 
 
 def board_selection_values(default_target: str, default_board: str) -> tuple[list[str], str]:
-    registry = target_registry()
-    options: list[str] = []
-    default = ""
-    for target, desc in sorted(registry.items(), key=lambda item: (item[1].get("status") == "skeleton", item[0])):
-        for board_desc in desc.get("boards") or []:
-            board = str(board_desc.get("id") or "")
-            if not board:
-                continue
-            label = f"{target}:{board} - {board_desc.get('displayName', board)}"
-            if desc.get("status") == "skeleton":
-                label += " (skeleton)"
-            options.append(label)
-            if target == default_target and board == default_board:
-                default = label
-    return options, default or (options[0] if options else "")
+    from vscode_task_config import board_selection_values as shared_board_selection_values
+
+    return shared_board_selection_values(
+        target_registry(),
+        default_target,
+        default_board,
+    )
 
 
 def example_cache(entry: dict[str, Any], module: str) -> dict[str, Any]:
     cache: dict[str, Any] = {
+        "JH_ARTIFACT_DIR": "${buildDir}",
         "JH_PROJECT_DIR": "${project}",
         "JH_MODULE_NAME": module,
     }
@@ -163,17 +227,65 @@ def example_cache(entry: dict[str, Any], module: str) -> dict[str, Any]:
     return cache
 
 
+def example_targets(entry: dict[str, Any], targets: list[str] | None = None) -> list[str]:
+    declared = [str(item) for item in (targets if targets is not None else entry["targets"])]
+    if "rp2040" not in declared:
+        return declared
+
+    expanded = [target for target in declared if target != "rp2040"]
+    expanded.extend(
+        target
+        for target in RP_NATIVE_TARGETS
+        if target != "rp2350-riscv" or entry.get("board") != "picow"
+    )
+    return expanded
+
+
+def example_boards(entry: dict[str, Any]) -> dict[str, str]:
+    boards: dict[str, str] = {}
+    targets = example_targets(entry)
+    rp_board = str(entry.get("board") or "pico")
+    if "rp2040" in targets:
+        boards["rp2040"] = rp_board
+    if "rp2350-arm" in targets:
+        boards["rp2350-arm"] = "pico2w" if rp_board == "picow" else "pico2"
+    if "rp2350-riscv" in targets:
+        boards["rp2350-riscv"] = "pico2"
+    if "stm32g474" in targets:
+        boards["stm32g474"] = "nucleo-g474re"
+    return boards
+
+
+def default_target_board(entry: dict[str, Any]) -> tuple[str, str]:
+    targets = example_targets(entry)
+    target = str(entry.get("target") or "rp2040")
+    if target not in targets:
+        target = targets[0]
+    return target, example_boards(entry).get(
+        target,
+        "nucleo-g474re" if target == "stm32g474" else "pico",
+    )
+
+
 def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
     name = str(entry["dir"])
     module = str(entry.get("module") or name)
-    target = str(entry.get("target") or "rp2040")
-    board = str(entry.get("board") or ("nucleo-g474re" if target == "stm32g474" else "pico"))
+    target, board = default_target_board(entry)
     example = {
-        "targets": entry["targets"],
+        "targets": example_targets(entry),
+        "boards": example_boards(entry),
     }
     if entry.get("variants"):
-        example["variants"] = entry["variants"]
-    return {
+        variants = []
+        for item in entry["variants"]:
+            variant = dict(item)
+            variant["targets"] = example_targets(
+                entry,
+                [str(target) for target in item.get("targets", entry["targets"])],
+            )
+            variants.append(variant)
+        example["variants"] = variants
+    manifest = {
         "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
         "project": "JaszczurHAL examples",
         "module": module,
@@ -181,8 +293,8 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
         "toolchain": "cmake",
         "target": target,
         "board": board,
-        "buildDir": "${project}/.build",
-        "cmakeBuildDir": "${project}/.build/cmake",
+        "buildDir": f"${{jhRoot}}/.build/examples/{name}",
+        "cmakeBuildDir": "${buildDir}/cmake",
         "cmake": {
             "sourceDir": "${project}/../../cmake/jh_firmware_project",
             "cache": example_cache(entry, module),
@@ -193,28 +305,51 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
             "compileCommands": "${buildDir}/compile_commands_patched.json",
         },
     }
+    if entry.get("stm32Cyw43Pim730"):
+        stm32_defines = list(
+            dict.fromkeys(
+                [
+                    *(str(item) for item in entry.get("extraDefines", [])),
+                    *(str(item) for item in entry.get("stm32ExtraDefines", [])),
+                    *STM32_CYW43_PIM730_DEFINES,
+                ]
+            )
+        )
+        manifest["targetProfiles"] = {
+            "stm32g474": {
+                "cmake": {
+                    "cache": {
+                        "JH_EXTRA_DEFINES": ";".join(stm32_defines),
+                    }
+                }
+            }
+        }
+    if entry.get("ota"):
+        manifest["ota"] = dict(entry["ota"])
+        manifest["artifacts"]["ota"] = "${buildDir}/firmware.ota"
+    return manifest
 
 
-def settings_for() -> dict[str, Any]:
+def settings_for(name: str) -> dict[str, Any]:
+    build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
     return {
-        "jaszczurhal.cliPath": "arduino-cli",
-        "jaszczurhal.sketchbookPath": "",
-        "jaszczurhal.buildDir": "${workspaceFolder}/.build",
+        "jaszczurhal.buildDir": build_dir,
         "jaszczurhal.verbose": False,
         "jaszczurhal.root": "../..",
         "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
         "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-        "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
+        "C_Cpp.default.compileCommands": f"{build_dir}/compile_commands_patched.json",
         "C_Cpp.errorSquiggles": "enabled",
         "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-        "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
-        "files.associations": {"*.ino": "cpp"},
+        "cmake.buildDirectory": f"{build_dir}/cmake",
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }
 
 
 def base_tasks(default_target: str, default_board: str, variants: list[dict[str, Any]]) -> dict[str, Any]:
+    from vscode_task_config import sync_board_picker_task
+
     options, default = board_selection_values(default_target, default_board)
     tasks: list[dict[str, Any]] = [
         {
@@ -249,6 +384,22 @@ def base_tasks(default_target: str, default_board: str, variants: list[dict[str,
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["upload-uf2", "--project", "${workspaceFolder}"],
+            "problemMatcher": [],
+        },
+        {
+            "label": "Project: Upload (OTA)",
+            "detail": "Build, authenticate, and upload to one discovered native RP device",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
+            "problemMatcher": [],
+        },
+        {
+            "label": "Project: Discover OTA devices",
+            "detail": "List JaszczurHAL devices advertising native OTA",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["ota-discover", "--project", "${workspaceFolder}"],
             "problemMatcher": [],
         },
         {
@@ -334,6 +485,7 @@ def base_tasks(default_target: str, default_board: str, variants: list[dict[str,
             "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
             "problemMatcher": [],
         },
+        sync_board_picker_task(),
     ]
     for variant in variants:
         variant_id = str(variant.get("id") or "")
@@ -365,7 +517,7 @@ def base_tasks(default_target: str, default_board: str, variants: list[dict[str,
     }
 
 
-def launch_for() -> dict[str, Any]:
+def launch_for(name: str) -> dict[str, Any]:
     return {
         "version": "0.2.0",
         "configurations": [
@@ -374,10 +526,12 @@ def launch_for() -> dict[str, Any]:
                 "type": "cortex-debug",
                 "request": "launch",
                 "cwd": "${workspaceFolder}",
-                "executable": "${workspaceFolder}/.build/firmware.elf",
+                "executable": (
+                    f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
+                ),
                 "servertype": "openocd",
                 "device": "RP2040",
-                "runToEntryPoint": "setup",
+                "runToEntryPoint": "main",
                 "preLaunchTask": "Project: Build (Debug)",
             }
         ],
@@ -393,9 +547,11 @@ def keybindings_for() -> list[dict[str, str]]:
         {"key": "ctrl+shift+5", "command": "workbench.action.tasks.runTask", "args": "Project: Debug Probe Monitor"},
         {"key": "ctrl+shift+6", "command": "workbench.action.tasks.runTask", "args": "Project: Refresh IntelliSense"},
         {"key": "ctrl+shift+7", "command": "workbench.action.tasks.runTask", "args": "Project: Clean"},
-        {"key": "ctrl+shift+8", "command": "workbench.action.tasks.runTask", "args": "Project: Config Dump"},
+        {"key": "ctrl+shift+8", "command": "workbench.action.tasks.runTask", "args": "Project: Upload (OTA)"},
+        {"key": "ctrl+shift+9", "command": "workbench.action.tasks.runTask", "args": "Project: Config Dump"},
         {"key": "ctrl+shift+alt+1", "command": "workbench.action.tasks.runTask", "args": "Project: Select board (GUI)"},
         {"key": "ctrl+shift+alt+2", "command": "workbench.action.tasks.runTask", "args": "Project: Select board"},
+        {"key": "ctrl+shift+alt+3", "command": "workbench.action.tasks.runTask", "args": "Project: Discover OTA devices"},
     ]
 
 
@@ -407,14 +563,13 @@ def generate() -> int:
             return 1
         vscode_dir = example_dir / ".vscode"
         vscode_dir.mkdir(exist_ok=True)
-        target = str(entry.get("target") or "rp2040")
-        board = str(entry.get("board") or ("nucleo-g474re" if target == "stm32g474" else "pico"))
+        target, board = default_target_board(entry)
         variants = entry.get("variants") if isinstance(entry.get("variants"), list) else []
         files = {
             "jaszczurhal.project.json": manifest_for(entry),
-            "settings.json": settings_for(),
+            "settings.json": settings_for(str(entry["dir"])),
             "tasks.json": base_tasks(target, board, variants),
-            "launch.json": launch_for(),
+            "launch.json": launch_for(str(entry["dir"])),
             "keybindings.reference.json": keybindings_for(),
         }
         for name, data in files.items():
@@ -446,12 +601,28 @@ def tail(path: Path, lines: int = 80) -> str:
     return "\n".join(data[-lines:])
 
 
-def run_one_example(example_dir: Path, target: str, variants: list[str], verbose: bool) -> tuple[bool, str, Path]:
+def run_one_example(
+    example_dir: Path,
+    target: str,
+    board: str | None,
+    variants: list[str],
+    verbose: bool,
+) -> tuple[bool, str, Path]:
     log_path = Path("/tmp") / f"jh_examples_dispatcher_{target}_{example_dir.name}.log"
     label = f"{example_dir.name}@{target}"
-    commands: list[list[str]] = [[str(JH_VSCODE), "build", "--project", str(example_dir), "--target", target]]
+    base_command = [
+        str(JH_VSCODE),
+        "build",
+        "--project",
+        str(example_dir),
+        "--target",
+        target,
+    ]
+    if board:
+        base_command.extend(["--board", board])
+    commands: list[list[str]] = [base_command]
     for variant in variants:
-        commands.append([str(JH_VSCODE), "build", "--project", str(example_dir), "--target", target, "--variant", variant])
+        commands.append([*base_command, "--variant", variant])
 
     with log_path.open("w", encoding="utf-8") as log:
         for cmd in commands:
@@ -474,7 +645,7 @@ def run_one_example(example_dir: Path, target: str, variants: list[str], verbose
 
 def build(args: argparse.Namespace) -> int:
     examples = selected_example_dirs(args.example or [])
-    groups: list[tuple[Path, list[str]]] = []
+    groups: list[tuple[Path, str | None, list[str]]] = []
     skipped: list[str] = []
     for example_dir in examples:
         if not example_dir.is_dir():
@@ -493,7 +664,9 @@ def build(args: argparse.Namespace) -> int:
             variant_targets = [str(item) for item in variant.get("targets", targets)]
             if args.target in variant_targets:
                 variants.append(str(variant["id"]))
-        groups.append((example_dir, variants))
+        boards = example_meta.get("boards")
+        board = str(boards.get(args.target)) if isinstance(boards, dict) and boards.get(args.target) else None
+        groups.append((example_dir, board, variants))
 
     if skipped:
         for item in skipped:
@@ -506,8 +679,15 @@ def build(args: argparse.Namespace) -> int:
     failures: list[tuple[str, Path]] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
-            pool.submit(run_one_example, example_dir, args.target, variants, args.verbose): example_dir
-            for example_dir, variants in groups
+            pool.submit(
+                run_one_example,
+                example_dir,
+                args.target,
+                board,
+                variants,
+                args.verbose,
+            ): example_dir
+            for example_dir, board, variants in groups
         }
         for future in as_completed(futures):
             ok, label, log_path = future.result()
@@ -528,7 +708,7 @@ def build(args: argparse.Namespace) -> int:
 
 def list_examples() -> int:
     for entry in EXAMPLES:
-        print(f"{entry['dir']}: {', '.join(entry['targets'])}")
+        print(f"{entry['dir']}: {', '.join(example_targets(entry))}")
     return 0
 
 
@@ -538,7 +718,16 @@ def main(argv: list[str]) -> int:
     sub.add_parser("generate", help="Generate .vscode project files for all examples.")
     sub.add_parser("list", help="List known examples and supported targets.")
     build_parser = sub.add_parser("build", help="Build examples through jh-vscode and the dispatcher.")
-    build_parser.add_argument("--target", required=True, choices=["rp2040", "stm32g474"])
+    build_parser.add_argument(
+        "--target",
+        required=True,
+        choices=[
+            "rp2040",
+            "rp2350-arm",
+            "rp2350-riscv",
+            "stm32g474",
+        ],
+    )
     build_parser.add_argument("--example", action="append", help="Build only this example directory name.")
     build_parser.add_argument("--jobs", type=int, default=1)
     build_parser.add_argument("--verbose", action="store_true")

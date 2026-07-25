@@ -2,6 +2,8 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
+#include <thread>
+
 void setUp(void) { hal_mock_critical_section_reset(); }
 void tearDown(void) {
   /* Every case must leave the section balanced and interrupts restored. */
@@ -61,10 +63,32 @@ void test_unbalanced_exit_is_safe(void) {
   TEST_ASSERT_TRUE(hal_mock_irq_enabled());
 }
 
+void test_mutex_try_lock_is_nonblocking_and_reusable(void) {
+  hal_mutex_t mutex = hal_mutex_create();
+  TEST_ASSERT_NOT_NULL(mutex);
+
+  hal_mutex_lock(mutex);
+  bool acquired_while_held = true;
+  std::thread contender([&]() {
+    acquired_while_held = hal_mutex_try_lock(mutex);
+    if (acquired_while_held) {
+      hal_mutex_unlock(mutex);
+    }
+  });
+  contender.join();
+  TEST_ASSERT_FALSE(acquired_while_held);
+  hal_mutex_unlock(mutex);
+
+  TEST_ASSERT_TRUE(hal_mutex_try_lock(mutex));
+  hal_mutex_unlock(mutex);
+  hal_mutex_destroy(mutex);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_single_enter_exit_toggles_irq);
   RUN_TEST(test_nested_reenables_only_on_outermost_exit);
   RUN_TEST(test_unbalanced_exit_is_safe);
+  RUN_TEST(test_mutex_try_lock_is_nonblocking_and_reusable);
   return UNITY_END();
 }

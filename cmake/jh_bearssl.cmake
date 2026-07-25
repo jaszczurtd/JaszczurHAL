@@ -2,23 +2,24 @@ include_guard(GLOBAL)
 
 function(jh_bearssl_source_manifest OUT_SOURCES OUT_INCLUDES)
     set(_jh_bearssl_root
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/BearSSL")
-    set(_jh_bearssl_vendor "${_jh_bearssl_root}/vendor")
-    if(NOT EXISTS "${_jh_bearssl_vendor}/inc/bearssl.h" OR
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/BearSSL")
+    if(NOT EXISTS "${_jh_bearssl_root}/inc/bearssl.h" OR
        NOT EXISTS "${_jh_bearssl_root}/LICENSE.txt")
-        message(FATAL_ERROR "Pinned BearSSL source or license is missing")
+        message(FATAL_ERROR
+            "Pinned BearSSL checkout is missing; run "
+            "third_party/update_components.sh")
     endif()
 
     file(GLOB_RECURSE _jh_bearssl_upstream_sources CONFIGURE_DEPENDS
-        "${_jh_bearssl_vendor}/src/*.c.upstream")
+        "${_jh_bearssl_root}/src/*.c")
     if(NOT _jh_bearssl_upstream_sources)
         message(FATAL_ERROR "Pinned BearSSL source set is empty")
     endif()
 
     set(${OUT_SOURCES} ${_jh_bearssl_upstream_sources} PARENT_SCOPE)
     set(${OUT_INCLUDES}
-        "${_jh_bearssl_vendor}/inc"
-        "${_jh_bearssl_vendor}/src"
+        "${_jh_bearssl_root}/inc"
+        "${_jh_bearssl_root}/src"
         PARENT_SCOPE)
 endfunction()
 
@@ -26,22 +27,8 @@ function(jh_add_bearssl_source_library TARGET_NAME)
     jh_bearssl_source_manifest(
         _jh_bearssl_upstream_sources
         _jh_bearssl_include_dirs)
-    set(_jh_bearssl_vendor
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/BearSSL/vendor")
-    set(_jh_bearssl_generated_sources)
-    foreach(_jh_source IN LISTS _jh_bearssl_upstream_sources)
-        file(RELATIVE_PATH _jh_relative "${_jh_bearssl_vendor}/src" "${_jh_source}")
-        string(REGEX REPLACE "\\.upstream$" "" _jh_relative "${_jh_relative}")
-        set(_jh_generated
-            "${CMAKE_CURRENT_BINARY_DIR}/jh_bearssl/${TARGET_NAME}/${_jh_relative}")
-        get_filename_component(_jh_generated_dir "${_jh_generated}" DIRECTORY)
-        file(MAKE_DIRECTORY "${_jh_generated_dir}")
-        configure_file("${_jh_source}" "${_jh_generated}" COPYONLY)
-        list(APPEND _jh_bearssl_generated_sources "${_jh_generated}")
-    endforeach()
-
-    add_library(${TARGET_NAME} STATIC ${_jh_bearssl_generated_sources})
-    target_include_directories(${TARGET_NAME} PRIVATE
+    add_library(${TARGET_NAME} STATIC ${_jh_bearssl_upstream_sources})
+    target_include_directories(${TARGET_NAME} PUBLIC
         ${_jh_bearssl_include_dirs})
     set_target_properties(${TARGET_NAME} PROPERTIES
         C_STANDARD 11

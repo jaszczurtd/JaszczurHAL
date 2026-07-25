@@ -67,8 +67,7 @@ inline bool state_signature_valid(uint32_t s) {
   return (s & kStateSignatureMask) == kStateSignature;
 }
 
-// Native reimplementation of arduino-pico's RP2040::getResetReason(): decode
-// the reset cause straight from the watchdog reason register and the SoC
+// Decode the reset cause straight from the watchdog reason register and the SoC
 // chip-reset register (VREG_AND_CHIP_RESET on RP2040, POWMAN on RP2350) into
 // hal_reset_reason_t. Precedence matches the upstream: a genuine watchdog
 // timeout wins, then a soft reset()/reboot() routed through the watchdog
@@ -131,6 +130,7 @@ void map_pico_reset_reason(void) {
 // rp2040_fault_init() picks the values up on the next boot.
 // ─────────────────────────────────────────────────────────────────────────────
 
+#if HAL_RP_ARCH_ARM
 extern "C" __attribute__((used, noreturn)) void
 rp2040_fault_capture_c(const uint32_t *frame) {
   uint32_t pc = (frame != nullptr) ? frame[6] : 0u;
@@ -167,6 +167,7 @@ extern "C" __attribute__((naked, used)) void isr_hardfault(void) {
                    "ldr  r1, =rp2040_fault_capture_c \n"
                    "bx   r1                  \n");
 }
+#endif
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public driver API

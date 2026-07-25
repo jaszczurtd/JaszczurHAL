@@ -5,8 +5,8 @@
  *
  * Compiled into libJaszczurHAL.a on all backends but emits code ONLY when
  * HAL_PROVIDE_APP_ENTRY is defined. Without the flag, this translation unit
- * produces zero symbols, so existing projects with their own setup()/loop()
- * or main() are unaffected.
+ * produces zero symbols, so existing projects with their own main() are
+ * unaffected.
  *
  * See src/hal/hal_app.h for the full contract and backend mapping.
  */
@@ -25,26 +25,121 @@ extern "C" __attribute__((weak)) void app_task1(void) {
   /* intentionally empty */
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════════
- * RP2040 / Arduino-pico backend
- *
- * The Arduino core provides main() (in cores/rp2040/main.cpp) which calls
- * setup() once, then loop() in an infinite loop on core 0. If loop1() is
- * defined, arduino-pico starts the core-1 path, so HAL emits loop1() only
- * when the application explicitly defines HAL_ENABLE_APP_TASK1.
- * ═══════════════════════════════════════════════════════════════════════════════
- */
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 
-#include <Arduino.h>
+#include "hal/hal_usb.h"
+#include "hal/impl/rp2040/drivers/flash/rp_flash_transaction.h"
 
-void setup(void) { app_start(); }
+#if defined(HAL_ENABLE_FREERTOS)
 
-void loop(void) { app_task0(); }
+#include <FreeRTOS.h>
+#include <task.h>
+
+#ifndef HAL_FREERTOS_TASK0_STACK
+#define HAL_FREERTOS_TASK0_STACK 512u
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_STACK
+#define HAL_FREERTOS_TASK1_STACK 512u
+#endif
+
+#ifndef HAL_FREERTOS_TASK0_PRIORITY
+#define HAL_FREERTOS_TASK0_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_PRIORITY
+#define HAL_FREERTOS_TASK1_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+static void hal_rp_freertos_app_task0(void *arg) {
+  (void)arg;
+
+  for (;;) {
+    app_task0();
+  }
+}
 
 #ifdef HAL_ENABLE_APP_TASK1
-void loop1(void) { app_task1(); }
+static void hal_rp_freertos_app_task1(void *arg) {
+  (void)arg;
+
+  for (;;) {
+    app_task1();
+  }
+}
 #endif
+
+int main(void) {
+  const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
+  HAL_ASSERT(flash_status == HAL_OK,
+             "hal_app_entry: flash coordinator init failed");
+  (void)hal_usb_init();
+  app_start();
+
+#if configNUMBER_OF_CORES > 1
+  BaseType_t created = xTaskCreateAffinitySet(
+      hal_rp_freertos_app_task0, "jh_app0",
+      (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
+      (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, 1u << 0u, nullptr);
+#else
+  BaseType_t created =
+      xTaskCreate(hal_rp_freertos_app_task0, "jh_app0",
+                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
+                  (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, nullptr);
+#endif
+  HAL_ASSERT(created == pdPASS, "hal_app_entry: xTaskCreate app_task0 failed");
+
+#ifdef HAL_ENABLE_APP_TASK1
+#if configNUMBER_OF_CORES == 1
+#error "HAL_ENABLE_APP_TASK1 requires HAL_FREERTOS_CORE_COUNT=2"
+#endif
+  created = xTaskCreateAffinitySet(
+      hal_rp_freertos_app_task1, "jh_app1",
+      (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK1_STACK, nullptr,
+      (UBaseType_t)HAL_FREERTOS_TASK1_PRIORITY, 1u << 1u, nullptr);
+  HAL_ASSERT(created == pdPASS, "hal_app_entry: xTaskCreate app_task1 failed");
+#endif
+
+  vTaskStartScheduler();
+  HAL_ASSERT(false, "hal_app_entry: vTaskStartScheduler returned");
+
+  for (;;) {
+  }
+}
+
+#else
+
+#include <pico/multicore.h>
+
+#ifdef HAL_ENABLE_APP_TASK1
+static void hal_rp_native_core1_entry(void) {
+  const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
+  HAL_ASSERT(flash_status == HAL_OK,
+             "hal_app_entry: core1 flash coordinator init failed");
+
+  for (;;) {
+    app_task1();
+  }
+}
+#endif
+
+int main(void) {
+  const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
+  HAL_ASSERT(flash_status == HAL_OK,
+             "hal_app_entry: flash coordinator init failed");
+  (void)hal_usb_init();
+  app_start();
+
+#ifdef HAL_ENABLE_APP_TASK1
+  multicore_launch_core1(hal_rp_native_core1_entry);
+#endif
+
+  for (;;) {
+    app_task0();
+  }
+}
+
+#endif /* HAL_ENABLE_FREERTOS */
 
 /* ═══════════════════════════════════════════════════════════════════════════════
  * STM32G474 backend

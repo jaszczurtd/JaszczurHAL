@@ -1,8 +1,12 @@
 #pragma once
 
+#include "hal/hal_config.h"
+
+#if defined(HAL_ENABLE_TLS) && defined(HAL_ENABLE_BSD_SOCKETS)
+
 #include "hal/hal_status.h"
 #include "jh_bearssl_transport.h"
-#include "vendor/inc/bearssl.h"
+#include <bearssl.h>
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -47,3 +51,5 @@ hal_status_t jh_bearssl_blocking_io_init(jh_bearssl_blocking_io_t *provider,
                                          jh_bearssl_cancel_fn is_cancelled,
                                          jh_bearssl_service_fn service,
                                          void *callback_context);
+
+#endif

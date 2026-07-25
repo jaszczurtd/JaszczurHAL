@@ -1,25 +1,18 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_net_console.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
+#include "../../hal_usb.h"
 #include "../shared/hal_mutex_once.h"
 #include "hal/impl/shared/debug/hal_debug_format.h"
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "../../hal_config.h"
-
-#ifndef NO_USB
-#include <pico/time.h>
-#include <tusb.h>
-#if !defined(USE_TINYUSB)
-#include "CoreMutex.h"
-#include "USB.h"
-#endif
-#endif
 
 static char s_prefix[HAL_DEBUG_PREFIX_SIZE] = {};
 static hal_mutex_t s_deb_mutex = NULL;
@@ -260,101 +253,10 @@ static void hal_serial_ensure_tx_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_tx_mutex);
 }
 
-#ifndef NO_USB
-
-#define HAL_SERIAL_USB_WRITE_TIMEOUT_US 1000000ULL
-
-#if !defined(USE_TINYUSB)
-#define HAL_SERIAL_USB_LOCK_GUARD(name) CoreMutex name(&USB.mutex, false)
-#define HAL_SERIAL_USB_LOCK_OK(name) ((bool)(name))
-#else
-#define HAL_SERIAL_USB_LOCK_GUARD(name) bool name = true
-#define HAL_SERIAL_USB_LOCK_OK(name) (name)
-#endif
-
-static inline bool hal_serial_usb_inited(void) { return tud_inited(); }
-
-static inline void hal_serial_usb_task_locked(void) {
-  if (hal_serial_usb_inited()) {
-    tud_task();
-  }
-}
-
-static inline bool hal_serial_usb_connected_locked(void) {
-  return hal_serial_usb_inited() && tud_cdc_connected();
-}
-
-static void hal_serial_usb_flush_locked(void) {
-  if (!hal_serial_usb_inited()) {
-    return;
-  }
-
-  (void)tud_cdc_write_flush();
-  tud_task();
-}
-
-static size_t hal_serial_usb_write_locked(const char *buf, size_t length) {
-  if (buf == NULL || length == 0u || !hal_serial_usb_inited()) {
-    return 0u;
-  }
-
-  if (tud_suspended()) {
-    (void)tud_remote_wakeup();
-  }
-
-  size_t written_total = 0u;
-  uint64_t last_available_time = time_us_64();
-
-  if (hal_serial_usb_connected_locked()) {
-    while (written_total < length) {
-      hal_serial_usb_task_locked();
-
-      if (!hal_serial_usb_connected_locked()) {
-        break;
-      }
-
-      uint32_t available = tud_cdc_write_available();
-      uint32_t remaining = (uint32_t)(length - written_total);
-      uint32_t chunk = (remaining < available) ? remaining : available;
-
-      if (chunk > 0u) {
-        uint32_t written = tud_cdc_write(buf + written_total, chunk);
-        hal_serial_usb_flush_locked();
-
-        if (written > 0u) {
-          written_total += written;
-          last_available_time = time_us_64();
-          continue;
-        }
-      } else {
-        hal_serial_usb_flush_locked();
-      }
-
-      if (!hal_serial_usb_connected_locked() ||
-          (!tud_cdc_write_available() &&
-           time_us_64() >
-               last_available_time + HAL_SERIAL_USB_WRITE_TIMEOUT_US)) {
-        break;
-      }
-    }
-  }
-
-  hal_serial_usb_task_locked();
-  return written_total;
-}
-
-#endif /* NO_USB */
-
 void hal_serial_begin(uint32_t baud) {
   (void)baud;
-#ifndef NO_USB
-  if (hal_serial_usb_inited()) {
-    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
-    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
-      hal_serial_usb_task_locked();
-    }
-  }
-#endif
+  (void)hal_usb_init();
+  (void)hal_usb_task();
 }
 
 void hal_serial_set_flush(bool enabled) {
@@ -371,32 +273,13 @@ static void hal_serial_write_locked(const char *data, size_t len) {
   }
   hal_net_console_write_from_serial(data, len);
 
-#ifndef NO_USB
-  if (!hal_serial_usb_inited()) {
-    return;
-  }
-
-  HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
-  if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
-    (void)hal_serial_usb_write_locked(data, len);
-  }
-#else
-  (void)data;
-  (void)len;
-#endif
+  size_t written = 0u;
+  (void)hal_usb_cdc_write((const uint8_t *)data, len,
+                          HAL_USB_CDC_WRITE_TIMEOUT_MS, &written);
 }
 
 static void hal_serial_flush_tx_locked(void) {
-#ifndef NO_USB
-  if (!hal_serial_usb_inited()) {
-    return;
-  }
-
-  HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
-  if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
-    hal_serial_usb_flush_locked();
-  }
-#endif
+  (void)hal_usb_cdc_flush(HAL_USB_CDC_WRITE_TIMEOUT_MS);
 }
 
 static void hal_serial_finish_line_locked(void) {
@@ -420,9 +303,9 @@ static void hal_debug_stream_write(void *ctx, const char *data, size_t len) {
 
 /* Keep CDC writes inside the TX mutex window: every HAL emitter shares this
  * path, so message boundaries cannot interleave even when debug/session output
- * comes from different cores. The TinyUSB write loop still kicks the CDC FIFO
- * to start short USB packets; hal_serial_set_flush(true) adds one extra flush
- * and USB task poll before releasing the mutex. */
+ * comes from different cores. hal_usb owns TinyUSB, its device mutex and task
+ * pump; hal_serial_set_flush(true) adds an explicit CDC flush before releasing
+ * the serial message-boundary mutex. */
 void hal_serial_print(const char *s) {
   const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
@@ -444,47 +327,17 @@ void hal_serial_println(const char *s) {
 }
 
 int hal_serial_available(void) {
-#ifndef NO_USB
-  hal_serial_ensure_tx_mutex();
-  hal_mutex_lock(s_tx_mutex);
-  int available = 0;
-
-  if (hal_serial_usb_inited()) {
-    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
-    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
-      hal_serial_usb_task_locked();
-      available = (int)tud_cdc_available();
-    }
-  }
-
-  hal_mutex_unlock(s_tx_mutex);
-  return available;
-#else
-  return 0;
-#endif
+  size_t available = 0u;
+  (void)hal_usb_cdc_available(&available);
+  return available > (size_t)INT_MAX ? INT_MAX : (int)available;
 }
 
 int hal_serial_read(void) {
-#ifndef NO_USB
-  hal_serial_ensure_tx_mutex();
-  hal_mutex_lock(s_tx_mutex);
-  int value = -1;
-
-  if (hal_serial_usb_inited()) {
-    HAL_SERIAL_USB_LOCK_GUARD(usb_lock);
-    if (HAL_SERIAL_USB_LOCK_OK(usb_lock)) {
-      hal_serial_usb_task_locked();
-      if (tud_cdc_available()) {
-        value = (int)tud_cdc_read_char();
-      }
-    }
-  }
-
-  hal_mutex_unlock(s_tx_mutex);
-  return value;
-#else
-  return -1;
-#endif
+  uint8_t value = 0u;
+  size_t read = 0u;
+  return hal_usb_cdc_read(&value, 1u, &read) == HAL_OK && read == 1u
+             ? (int)value
+             : -1;
 }
 
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void) {
@@ -775,4 +628,4 @@ void hal_debug_loop(void) {
     hal_serial_println(drop_line);
   }
 }
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

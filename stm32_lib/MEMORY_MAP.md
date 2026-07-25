@@ -1,7 +1,7 @@
 # STM32G474 Memory Map
 
-This document describes the memory layout currently used by the STM32G474
-bare-metal backend. The authoritative source is
+This document describes the memory layout used by the STM32G474 bare-metal and
+FreeRTOS backends. The authoritative source is
 `stm32_lib/STM32G474RETx_FLASH.ld`.
 
 ## Device Profile
@@ -92,6 +92,12 @@ Important symbols and sections:
 
 The runtime `_sbrk` heap starts at `end`, grows upward, and refuses to cross
 `_estack - _Min_Stack_Size`. The stack grows downward from `_estack`.
+
+FreeRTOS builds link `heap_4.c`; its `configTOTAL_HEAP_SIZE` defaults to 24 KiB
+and the backing array resides in `.bss`. The HAL-provided `app_task0()` and
+optional `app_task1()` stacks default to 512 FreeRTOS stack words each and are
+allocated from that heap. The linker `_Min_Stack_Size` reservation remains the
+exception/boot stack guard rather than the FreeRTOS task-stack pool.
 
 `HAL_STM32_MAIN_STACK_SIZE` can be passed by the examples build and is converted
 to:

@@ -1,5 +1,5 @@
 #include "../../../../hal_target.h"
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 #include "../../../../hal_config.h"
 
 #ifdef HAL_ENABLE_MQTT
@@ -9,6 +9,7 @@
 #include "../../../../hal_sync.h"
 #include "../../frameworks/PubSubClient/src/PubSubClient.h"
 #include "../../hal_mutex_once.h"
+#include "../jh_network_runtime.h"
 #include "jh_pubsub_hal_client.h"
 
 #include <stdio.h>
@@ -243,6 +244,10 @@ hal_status_t hal_mqtt_connect_ex(const char *client_id) {
   if (status != HAL_OK) {
     return status;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
@@ -278,6 +283,10 @@ hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
   if (pass == NULL) {
     hal_derr("hal_mqtt_connect_auth_ex: pass is NULL");
     return HAL_EINVAL;
+  }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
   }
 
   mqtt_ensure_mutex();
@@ -331,6 +340,10 @@ int hal_mqtt_state(void) {
 }
 
 hal_status_t hal_mqtt_loop_ex(void) {
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
 
@@ -388,6 +401,10 @@ hal_status_t hal_mqtt_publish_ex(const char *topic, const uint8_t *payload,
     hal_derr("hal_mqtt_publish_ex: payload is NULL while payload_len > 0");
     return HAL_EINVAL;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
@@ -421,6 +438,10 @@ hal_status_t hal_mqtt_publish_str_ex(const char *topic, const char *payload,
     hal_derr("hal_mqtt_publish_str_ex: payload is NULL");
     return HAL_EINVAL;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
@@ -451,6 +472,10 @@ hal_status_t hal_mqtt_subscribe_ex(const char *topic, uint8_t qos) {
     hal_derr("hal_mqtt_subscribe_ex: qos must be 0 or 1");
     return HAL_EINVAL;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
@@ -475,6 +500,10 @@ hal_status_t hal_mqtt_unsubscribe_ex(const char *topic) {
   if (status != HAL_OK) {
     return status;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   mqtt_ensure_mutex();
   hal_mutex_lock(s_mqtt_mutex);
@@ -494,4 +523,4 @@ bool hal_mqtt_unsubscribe(const char *topic) {
 }
 
 #endif /* HAL_ENABLE_MQTT */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_OTA
@@ -15,7 +15,7 @@
 #include "../shared/hal_mutex_once.h"
 #include "../shared/network/ota/jh_ota_protocol.h"
 
-#include <Updater.h>
+#include "drivers/flash/rp_ota_storage.h"
 #include <hardware/watchdog.h>
 #include <stdio.h>
 #include <string.h>
@@ -84,6 +84,29 @@ static struct {
   uint8_t tail;
   uint8_t count;
 } s_ota;
+
+static bool update_begin_no_lock(void) {
+  if (s_ota.invitation.command != 0u) {
+    return false;
+  }
+  const uint8_t *key =
+      s_ota.password_set ? reinterpret_cast<const uint8_t *>(s_ota.password_md5)
+                         : nullptr;
+  const size_t key_size = s_ota.password_set ? strlen(s_ota.password_md5) : 0u;
+  return jh_rp_ota_storage_begin(s_ota.invitation.image_size, key, key_size) ==
+         HAL_OK;
+}
+
+static size_t update_write_no_lock(const uint8_t *data, size_t size) {
+  size_t written = 0u;
+  return jh_rp_ota_storage_write(data, size, &written) == HAL_OK ? written : 0u;
+}
+
+static bool update_end_no_lock(void) {
+  return jh_rp_ota_storage_finish() == HAL_OK;
+}
+
+static void update_abort_no_lock(void) { jh_rp_ota_storage_abort(); }
 
 static inline void ota_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_ota.mutex);
@@ -179,9 +202,7 @@ static void transfer_reset_no_lock(void) {
 
 static void transfer_fail_no_lock(hal_ota_error_t error,
                                   const char *udp_message) {
-  if (Update.isRunning()) {
-    (void)Update.end(false);
-  }
+  update_abort_no_lock();
   if (udp_message != nullptr) {
     (void)udp_send_no_lock(udp_message);
   }
@@ -228,6 +249,7 @@ static void invitation_received_no_lock(const jh_ota_invitation_t *invitation,
   }
   s_ota.invitation = *invitation;
   s_ota.remote_udp = *remote;
+  s_ota.last_activity_ms = hal_millis();
 
   if (!s_ota.password_set) {
     s_ota.state = HAL_OTA_STATE_BEGIN_TRANSFER;
@@ -260,6 +282,27 @@ static void udp_service_no_lock(void) {
   }
 
   if (s_ota.state == HAL_OTA_STATE_IDLE) {
+    static const char discovery[] = "JHOTA DISCOVER 1";
+    if (received == sizeof(discovery) - 1u &&
+        memcmp(packet, discovery, sizeof(discovery) - 1u) == 0) {
+      s_ota.remote_udp = remote;
+      jh_ota_boot_state_t boot_state{};
+      const hal_status_t state_status =
+          jh_rp_ota_storage_get_state(&boot_state);
+      char response[HAL_OTA_UDP_BUFFER_SIZE]{};
+      const int length = snprintf(
+          response, sizeof(response), "JHOTA 1 %s %s %u %lu %lu %u",
+          s_ota.hostname, HAL_TARGET_NAME, (unsigned)s_ota.port,
+          (unsigned long)HAL_RP_OTA_SLOT_SIZE,
+          (unsigned long)(state_status == HAL_OK ? boot_state.program_generation
+                                                 : 0u),
+          (unsigned)(state_status == HAL_OK ? boot_state.mode
+                                            : JH_OTA_BOOT_RECOVERY));
+      if (length > 0 && (size_t)length < sizeof(response)) {
+        (void)udp_send_no_lock(response);
+      }
+      return;
+    }
     jh_ota_invitation_t invitation{};
     if (jh_ota_parse_invitation(packet, received, &invitation) == HAL_OK) {
       invitation_received_no_lock(&invitation, &remote);
@@ -284,9 +327,7 @@ static hal_ota_command_t current_command_no_lock(void) {
 }
 
 static void begin_transfer_no_lock(void) {
-  if (!Update.begin(s_ota.invitation.image_size,
-                    (int)s_ota.invitation.command) ||
-      !Update.setMD5(s_ota.invitation.image_md5)) {
+  if (!update_begin_no_lock()) {
     transfer_fail_no_lock(HAL_OTA_ERROR_BEGIN, "ERR: Update Begin");
     return;
   }
@@ -348,7 +389,7 @@ static void receive_transfer_no_lock(void) {
   }
 
   s_ota.last_activity_ms = hal_millis();
-  const size_t written = Update.write(buffer, received);
+  const size_t written = update_write_no_lock(buffer, received);
   if (written != received) {
     transfer_fail_no_lock(HAL_OTA_ERROR_RECEIVE, nullptr);
     return;
@@ -356,8 +397,9 @@ static void receive_transfer_no_lock(void) {
   s_ota.received += (uint32_t)written;
 
   char acknowledgement[16]{};
-  const int acknowledgement_length = snprintf(
-      acknowledgement, sizeof(acknowledgement), "%lu", (unsigned long)written);
+  const int acknowledgement_length =
+      snprintf(acknowledgement, sizeof(acknowledgement), "%lu\n",
+               (unsigned long)written);
   if (acknowledgement_length <= 0 ||
       (size_t)acknowledgement_length >= sizeof(acknowledgement) ||
       !tcp_send_no_lock(acknowledgement)) {
@@ -374,7 +416,7 @@ static void receive_transfer_no_lock(void) {
   if (s_ota.received < s_ota.invitation.image_size) {
     return;
   }
-  if (!Update.end(false)) {
+  if (!update_end_no_lock()) {
     transfer_fail_no_lock(HAL_OTA_ERROR_END, nullptr);
     return;
   }
@@ -537,6 +579,10 @@ bool hal_ota_begin(void) {
   if (s_ota.port == 0u) {
     s_ota.port = HAL_OTA_DEFAULT_PORT;
   }
+  if (s_ota.hostname[0] == '\0') {
+    (void)snprintf(s_ota.hostname, sizeof(s_ota.hostname), "%s",
+                   HAL_TARGET_NAME);
+  }
 
   hal_udp_socket_t socket = nullptr;
   hal_status_t status = hal_udp_socket_open_ex(&socket);
@@ -576,6 +622,10 @@ void hal_ota_handle(void) {
     begin_transfer_no_lock();
   } else if (s_ota.state == HAL_OTA_STATE_RECEIVE) {
     receive_transfer_no_lock();
+  } else if (s_ota.state == HAL_OTA_STATE_WAIT_AUTH &&
+             (uint32_t)(hal_millis() - s_ota.last_activity_ms) >=
+                 HAL_OTA_CONNECT_TIMEOUT_MS) {
+    transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, "Authentication Timeout");
   }
   hal_mutex_unlock(s_ota.mutex);
 
@@ -599,5 +649,38 @@ bool hal_ota_is_started(void) {
   return started;
 }
 
+hal_status_t hal_ota_confirm_boot_ex(void) {
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  const hal_status_t status = jh_rp_ota_storage_confirm_boot();
+  hal_mutex_unlock(s_ota.mutex);
+  return status;
+}
+
+hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info) {
+  if (out_info == nullptr) {
+    return HAL_EINVAL;
+  }
+  ota_ensure_mutex();
+  hal_mutex_lock(s_ota.mutex);
+  jh_ota_boot_state_t state{};
+  const hal_status_t status = jh_rp_ota_storage_get_state(&state);
+  hal_mutex_unlock(s_ota.mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
+  memset(out_info, 0, sizeof(*out_info));
+  out_info->mode = (hal_ota_boot_mode_t)state.mode;
+  out_info->attempts = state.attempts;
+  out_info->max_attempts = state.max_attempts;
+  out_info->program_generation = state.program_generation;
+  out_info->staging_generation = state.staging_generation;
+  memcpy(out_info->program_version, state.program_version,
+         sizeof(out_info->program_version));
+  memcpy(out_info->staging_version, state.staging_version,
+         sizeof(out_info->staging_version));
+  return HAL_OK;
+}
+
 #endif /* HAL_ENABLE_OTA */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

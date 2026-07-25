@@ -1,7 +1,6 @@
 #include "hal/hal_target.h"
 
-#if defined(HAL_TARGET_RP2040) || defined(HAL_TARGET_STM32G474) ||             \
-    defined(HAL_TARGET_MOCK)
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK
 
 #include "hal/hal_config.h"
 

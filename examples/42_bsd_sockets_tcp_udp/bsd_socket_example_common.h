@@ -12,8 +12,9 @@
 #include <string.h>
 #include <tools_c.h>
 
-static bool bsd_example_resolve_server(const char *host, uint16_t port,
-                                       int socktype, struct sockaddr_in *out) {
+static inline bool bsd_example_resolve_server(const char *host, uint16_t port,
+                                              int socktype,
+                                              struct sockaddr_in *out) {
   if (!host || !out) {
     return false;
   }
@@ -40,7 +41,7 @@ static bool bsd_example_resolve_server(const char *host, uint16_t port,
   return true;
 }
 
-static bool bsd_example_wait_for_wifi(const char *hostname) {
+static inline bool bsd_example_wait_for_wifi(const char *hostname) {
   static bool connecting = false;
   static bool announced_ip = false;
   static uint32_t last_attempt_ms = 0u;

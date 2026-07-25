@@ -169,9 +169,7 @@ def _include_stm32(path: Path, root: Path) -> bool:
 
     if not _is_c_or_cpp(path):
         return False
-    if not rel.startswith("src/hal/impl/stm32g474/"):
-        return False
-    return "/drivers/littlefs/" not in rel
+    return rel.startswith("src/hal/impl/stm32g474/")
 
 
 def main() -> int:

@@ -1,18 +1,13 @@
 {
-    "jaszczurhal.cliPath": "arduino-cli",
-    "jaszczurhal.sketchbookPath": "",
-    "jaszczurhal.buildDir": "${workspaceFolder}/.build",
+    "jaszczurhal.buildDir": "${workspaceFolder}/../../.build/examples/24_can_mcp2515",
     "jaszczurhal.verbose": false,
     "jaszczurhal.root": "../..",
     "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
-    "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
+    "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/24_can_mcp2515/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
     "cmake.sourceDirectory": "${workspaceFolder}/../../cmake/jh_firmware_project",
-    "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
-    "files.associations": {
-        "*.ino": "cpp"
-    },
+    "cmake.buildDirectory": "${workspaceFolder}/../../.build/examples/24_can_mcp2515/cmake",
     "files.exclude": {
         "**/.build": true
     },

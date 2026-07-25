@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #include "../../hal_sync.h"
 #include <hardware/sync.h>
@@ -68,6 +68,22 @@ void hal_mutex_lock(hal_mutex_t mutex) {
   (void)ok;
 #else
   mutex_enter_blocking(&mutex->mtx);
+#endif
+}
+
+bool hal_mutex_try_lock(hal_mutex_t mutex) {
+  HAL_ASSERT(mutex != NULL, "hal_mutex_try_lock: mutex is NULL");
+  if (mutex == NULL) {
+    return false;
+  }
+
+#if JH_RP2040_HAL_SYNC_FREERTOS
+  if (portCHECK_IF_IN_ISR()) {
+    return false;
+  }
+  return xSemaphoreTake(mutex->handle, 0u) == pdTRUE;
+#else
+  return mutex_try_enter(&mutex->mtx, NULL);
 #endif
 }
 
@@ -144,4 +160,4 @@ void hal_critical_section_exit(void) {
     restore_interrupts(s_saved_irq[core]);
   }
 }
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

@@ -1,7 +1,7 @@
 #include "hal_config.h"
 
 #ifndef HAL_DISABLE_ASSERTS
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 extern "C" void hal_rp2040_serial_write_assert_fail(const char *text);
 #elif HAL_TARGET_IS_STM32G474 && defined(JH_STM32G474_HW)
 #include "hal/impl/stm32g474/port/g474_debug_uart.h"
@@ -24,7 +24,7 @@ extern "C" void hal_rp2040_serial_write_assert_fail(const char *text);
 extern "C" void hal_assert_fail(const char *msg) {
   const char *text = msg ? msg : "(null)";
 
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
   hal_rp2040_serial_write_assert_fail(text);
   for (;;) {
   }

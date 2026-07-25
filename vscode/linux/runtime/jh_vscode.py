@@ -4,14 +4,22 @@
 from __future__ import annotations
 
 import argparse
+import binascii
+import copy
 from contextlib import contextmanager
+import errno
 import fcntl
+import hashlib
+import hmac
 import json
 import os
 import re
 import signal
 import shutil
+import socket
+import struct
 import subprocess
+import tempfile
 import time
 import sys
 from pathlib import Path
@@ -35,6 +43,7 @@ MODULE_ACTIONS = {
     "debug",
     "upload",
     "upload-uf2",
+    "upload-ota",
     "refresh-intellisense",
     "clean",
     "clear-identity",
@@ -47,19 +56,49 @@ SUPPORTED_ACTIONS = {
     "debug",
     "upload",
     "upload-uf2",
+    "upload-ota",
     "monitor",
     "monitor-probe",
     "monitor-any",
     "refresh-intellisense",
     "clean",
     "select-board",
+    "sync-board-picker",
     "list-ports",
+    "ota-discover",
     "change-port",
     "clear-identity",
     "config-dump",
 }
 
 BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
+NATIVE_RP_TARGETS = {
+    "rp2040",
+    "rp2350-arm",
+    "rp2350-riscv",
+}
+UF2_TARGETS = {
+    *NATIVE_RP_TARGETS,
+}
+CMAKE_CACHE_KEYS_FILE = ".jh-vscode-cache-keys.json"
+DEFAULT_OTA_PORT = 8266
+DEFAULT_OTA_LISTEN_PORT = 8266
+CMAKE_TRANSIENT_CACHE_KEYS = {
+    "JH_ARTIFACT_DIR",
+    "JH_EXTRA_DEFINES",
+    "JH_EXTRA_INCLUDES",
+    "JH_EXTRA_LIBRARIES",
+    "JH_EXTRA_SOURCES",
+    "JH_LINK_LIBRARIES",
+    "JH_PROJECT_RECIPE",
+    "JH_PROJECT_SOURCES",
+    "JH_OTA_GENERATION",
+    "JH_OTA_VERSION",
+    "JH_RP2040_EXTRA_LINK_FLAGS",
+    "JH_RP2040_FREERTOS",
+    "JH_USB_MANUFACTURER",
+    "JH_USB_PRODUCT",
+}
 
 SECTION_HEADER_RE = re.compile(
     r"^\s*\d+\s+"
@@ -98,9 +137,6 @@ ANSI_RESET = "\033[0m"
 YELLOW_OUTPUT_PREFIXES = (
     "Using verified serial port:",
     "released own serial monitor PID ",
-    "-- Arduino FQBN:",
-    "-- Generated sketch:",
-    "-- Arduino build dir:",
 )
 
 
@@ -190,6 +226,7 @@ def expand_project_vars(value: Any, project_dir: Path, config: dict[str, Any]) -
         return value
     build_dir = str(config.get("buildDir", project_dir / ".build"))
     replacements = {
+        "${jhRoot}": str(jaszczurhal_root()),
         "${project}": str(project_dir),
         "${projectDir}": str(project_dir),
         "${workspaceFolder}": str(project_dir),
@@ -212,7 +249,7 @@ def expand_config_sections(config: dict[str, Any], project_dir: Path) -> None:
         config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
     if "cmakeBuildDir" in config:
         config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
-    for section_name in ("artifacts", "upload", "hooks"):
+    for section_name in ("artifacts", "upload", "ota", "hooks"):
         section = config.get(section_name)
         if isinstance(section, dict):
             config[section_name] = {
@@ -379,27 +416,17 @@ def jaszczurhal_root() -> Path:
 
 
 def target_registry_dir() -> Path:
-    return jaszczurhal_root() / "vscode" / "targets"
+    return jaszczurhal_root() / "boards"
 
 
 def load_target_registry() -> dict[str, dict[str, Any]]:
-    """Load every target descriptor in vscode/targets/*.json, keyed by target id.
-    Malformed / unreadable files are skipped so one bad descriptor cannot break
-    the CLI."""
-    registry: dict[str, dict[str, Any]] = {}
-    directory = target_registry_dir()
-    if not directory.is_dir():
-        return registry
-    for path in sorted(directory.glob("*.json")):
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        target_id = str(data.get("id") or path.stem)
-        registry[target_id] = data
-    return registry
+    """Load the tooling view generated in memory from authoritative ``boards/``."""
+    scripts_dir = jaszczurhal_root() / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from board_registry import tooling_target_registry
+
+    return tooling_target_registry(jaszczurhal_root())
 
 
 def resolve_registry_board_cache(target_desc: dict[str, Any], board_id: str | None) -> dict[str, Any]:
@@ -429,13 +456,13 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "target",
         "board",
         "targetProfiles",
-        "fqbn",
         "buildDir",
         "cmakeBuildDir",
         "cmake",
         "identity",
         "artifacts",
         "upload",
+        "ota",
         "hooks",
     ):
         if key in data:
@@ -498,15 +525,11 @@ def apply_example_variant(config: dict[str, Any], variant_id: str | None) -> Non
 
 def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
     jh_key = f"jaszczurhal.{semantic_key}"
-    arduino_key = f"arduino.{semantic_key}"
 
     aliases = {
-        "fqbn": ("jaszczurhal.fqbn", "arduino.fqbn"),
-        "uploadPort": ("jaszczurhal.uploadPort", "arduino.uploadPort"),
-        "sketchbookPath": ("jaszczurhal.sketchbookPath", "arduino.sketchbookPath"),
-        "cliPath": ("jaszczurhal.cliPath", "arduino.cliPath"),
-        "buildDir": ("jaszczurhal.buildDir", "arduino.buildDir"),
-        "verbose": ("jaszczurhal.verbose", "arduino.verbose"),
+        "uploadPort": ("jaszczurhal.uploadPort",),
+        "buildDir": ("jaszczurhal.buildDir",),
+        "verbose": ("jaszczurhal.verbose",),
         "projectName": ("jaszczurhal.projectName",),
         "moduleName": ("jaszczurhal.moduleName",),
         "usbManufacturer": ("jaszczurhal.usbManufacturer",),
@@ -516,7 +539,7 @@ def settings_value(settings: dict[str, Any], semantic_key: str) -> Any:
         "root": ("jaszczurhal.root",),
     }
 
-    for key in aliases.get(semantic_key, (jh_key, arduino_key)):
+    for key in aliases.get(semantic_key, (jh_key,)):
         if key in settings:
             return settings[key]
     return None
@@ -530,7 +553,6 @@ def load_project_config(
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
     settings = load_json_file(vscode_dir / "settings.json")
-    legacy_arduino = load_json_file(vscode_dir / "arduino.json")
 
     config = normalize_manifest(manifest)
     sources: dict[str, str] = {}
@@ -538,10 +560,7 @@ def load_project_config(
         sources[key] = ".vscode/jaszczurhal.project.json"
 
     setting_map = {
-        "fqbn": "fqbn",
         "uploadPort": "uploadPort",
-        "sketchbookPath": "sketchbookPath",
-        "cliPath": "cliPath",
         "buildDir": "buildDir",
         "verbose": "verbose",
         "projectName": "project",
@@ -550,7 +569,7 @@ def load_project_config(
         "root": "root",
     }
     for semantic, target in setting_map.items():
-        if target in config and target in {"project", "module", "fqbn", "buildDir"}:
+        if target in config and target in {"project", "module", "buildDir"}:
             continue
         value = settings_value(settings, semantic)
         if value is not None:
@@ -573,13 +592,6 @@ def load_project_config(
     if identity:
         config["identity"] = identity
 
-    if "fqbn" not in config and "fqbn" in legacy_arduino:
-        config["fqbn"] = legacy_arduino["fqbn"]
-        sources["fqbn"] = ".vscode/arduino.json"
-    if "uploadPort" not in config and "port" in legacy_arduino:
-        config["uploadPort"] = legacy_arduino["port"]
-        sources["uploadPort"] = ".vscode/arduino.json"
-
     if "project" not in config:
         config["project"] = project_dir.parent.name
         sources["project"] = "directory-fallback"
@@ -587,7 +599,7 @@ def load_project_config(
         config["module"] = project_dir.name
         sources["module"] = "directory-fallback"
     if "toolchain" not in config:
-        config["toolchain"] = "arduino-cli" if (project_dir / f"{project_dir.name}.ino").exists() else "custom"
+        config["toolchain"] = "custom"
         sources["toolchain"] = "directory-fallback"
     if "buildDir" not in config:
         config["buildDir"] = str(project_dir / ".build")
@@ -644,9 +656,6 @@ def resolve_project(args: argparse.Namespace) -> Path | None:
 
 def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> None:
     sources = config.setdefault("_sources", {})
-    if args.fqbn:
-        config["fqbn"] = args.fqbn
-        sources["fqbn"] = "cli"
     if args.port:
         config["uploadPort"] = args.port
         upload = dict(config.get("upload") or {})
@@ -1130,6 +1139,102 @@ def command_select_board(args: argparse.Namespace) -> int:
     return persist_board_selection(project_dir, local_state, str(target), selected_board)
 
 
+def json_indent_width(text: str) -> int:
+    for line in text.splitlines()[1:]:
+        stripped = line.lstrip()
+        if stripped.startswith('"'):
+            width = len(line) - len(stripped)
+            if width > 0:
+                return width
+    return 4
+
+
+def write_text_atomic(path: Path, content: str) -> None:
+    mode = path.stat().st_mode & 0o777
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as handle:
+            temp_path = Path(handle.name)
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(temp_path, mode)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
+
+
+def command_sync_board_picker(args: argparse.Namespace) -> int:
+    project_dir = resolve_project(args)
+    if project_dir is None:
+        print("error: sync-board-picker requires --project <path>", file=sys.stderr)
+        return EXIT_USAGE
+    if not project_dir.is_dir():
+        print(f"error: project directory does not exist: {project_dir}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    tasks_path = project_dir / ".vscode" / "tasks.json"
+    manifest_path = project_dir / ".vscode" / "jaszczurhal.project.json"
+    if not tasks_path.is_file():
+        print(f"error: VS Code tasks file does not exist: {tasks_path}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    try:
+        tasks_text = tasks_path.read_text(encoding="utf-8")
+        tasks_document = load_json_file(tasks_path)
+        manifest = load_json_file(manifest_path)
+        registry = load_target_registry()
+        selected_target, selected_board, _ = current_board_selection(
+            registry,
+            {},
+            manifest,
+        )
+        if selected_board is None:
+            raise ValueError(
+                f"target '{selected_target}' does not define a selectable board"
+            )
+
+        from vscode_task_config import sync_board_picker_document
+
+        changed = sync_board_picker_document(
+            tasks_document,
+            registry,
+            selected_target,
+            selected_board,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: cannot synchronize {tasks_path}: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+
+    if not changed:
+        print(f"Board picker is current: {tasks_path}")
+        return 0
+
+    content = (
+        json.dumps(
+            tasks_document,
+            indent=json_indent_width(tasks_text),
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+    try:
+        write_text_atomic(tasks_path, content)
+    except OSError as exc:
+        print(f"error: cannot update {tasks_path}: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    print(f"Updated board picker from the JaszczurHAL registry: {tasks_path}")
+    return 0
+
+
 def as_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
@@ -1137,93 +1242,6 @@ def as_bool(value: Any) -> bool:
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
 
-
-def resolve_cli(cli: str | None) -> str:
-    if cli:
-        expanded = os.path.expanduser(cli)
-        if os.path.isabs(expanded) or "/" in expanded:
-            return expanded
-        found = shutil.which(expanded)
-        if found:
-            return found
-        return expanded
-    found = shutil.which("arduino-cli")
-    return found or "arduino-cli"
-
-
-def require_arduino_sketch(project_dir: Path, module: str) -> Path:
-    native = project_dir / f"{module}.ino"
-    if native.is_file():
-        return project_dir
-    raise ValueError(
-        f"arduino-cli toolchain requires {native}; "
-        "use toolchain 'cmake' for projects that generate the Arduino sketch via CMake"
-    )
-
-
-def build_arduino_compile_command(
-    config: dict[str, Any],
-    project_dir: Path,
-    *,
-    debug: bool = False,
-    upload: bool = False,
-    only_compilation_database: bool = False,
-) -> list[str]:
-    cli = resolve_cli(config.get("cliPath"))
-    fqbn = config.get("fqbn")
-    if not fqbn:
-        raise ValueError("missing fqbn; set jaszczurhal.fqbn or arduino.fqbn")
-
-    build_dir = get_build_dir(config, project_dir)
-    sketch_dir = require_arduino_sketch(project_dir, str(config.get("module") or project_dir.name))
-
-    cmd = [
-        cli,
-        "compile",
-        "--fqbn",
-        str(fqbn),
-        "--build-path",
-        str(build_dir),
-    ]
-
-    sketchbook = str(config.get("sketchbookPath") or "")
-    if sketchbook:
-        libraries_dir = Path(os.path.expanduser(sketchbook)) / "libraries"
-        if libraries_dir.is_dir():
-            cmd.extend(["--libraries", str(libraries_dir)])
-
-    cmd.extend(
-        [
-            "--build-property",
-            f"compiler.cpp.extra_flags=-I '{project_dir}'",
-            "--build-property",
-            f"compiler.c.extra_flags=-I '{project_dir}'",
-        ]
-    )
-
-    identity = config.get("identity")
-    if isinstance(identity, dict) and as_bool(identity.get("enabled")):
-        manufacturer = identity.get("usbManufacturer")
-        product = identity.get("usbProduct")
-        if manufacturer and product:
-            cmd.extend(["--build-property", f'build.usb_manufacturer="{manufacturer}"'])
-            cmd.extend(["--build-property", f'build.usb_product="{product}"'])
-
-    if debug:
-        cmd.append("--optimize-for-debug")
-    if upload:
-        cmd.append("--upload")
-        port = config.get("uploadPort") or (config.get("upload") or {}).get("port")
-        if port:
-            cmd.extend(["--port", str(port)])
-    if only_compilation_database:
-        cmd.append("--only-compilation-database")
-
-    cmd.extend(["--warnings", "all"])
-    if as_bool(config.get("verbose")):
-        cmd.append("-v")
-    cmd.append(str(sketch_dir))
-    return cmd
 
 
 def normalize_identity_text(value: str) -> str:
@@ -1382,7 +1400,11 @@ def serial_port_records(config: dict[str, Any] | None = None) -> list[dict[str, 
 def bootsel_candidates_without_mount() -> list[str]:
     mounts = find_bootsel_mounts()
     blocks = find_bootsel_blocks()
-    block_mounts = [mount for mount in (bootsel_mountpoint(block) for block in blocks) if mount]
+    block_mounts = [
+        mount
+        for mount in (bootsel_mountpoint(block) for block in blocks)
+        if mount
+    ]
     for mount in block_mounts:
         if mount not in mounts:
             mounts.append(mount)
@@ -1567,6 +1589,12 @@ def resolve_upload_port_for_tool(port: str) -> str:
     if resolved.parent == Path("/dev") and resolved.name.startswith("tty"):
         return str(resolved)
     return port
+
+
+def upload_port_path_exists(port: str) -> bool:
+    if not port:
+        return False
+    return Path(port).expanduser().exists()
 
 
 def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: bool = False) -> int:
@@ -2064,6 +2092,12 @@ def path_within(child: Path, parent: Path) -> bool:
     return child_resolved == parent_resolved or parent_resolved in child_resolved.parents
 
 
+def managed_build_dir_allowed(build_dir: Path, project_dir: Path) -> bool:
+    return path_within(build_dir, project_dir) or path_within(
+        build_dir, jaszczurhal_root() / ".build"
+    )
+
+
 def cmake_cache_home_directory(cache_path: Path) -> Path | None:
     try:
         text = cache_path.read_text(encoding="utf-8", errors="replace")
@@ -2078,6 +2112,44 @@ def cmake_cache_home_directory(cache_path: Path) -> Path | None:
     return None
 
 
+def configured_cmake_cache_keys(config: dict[str, Any]) -> set[str]:
+    cmake = config.get("cmake")
+    if not isinstance(cmake, dict) or not isinstance(cmake.get("cache"), dict):
+        return set()
+    return {
+        str(key)
+        for key, value in cmake["cache"].items()
+        if value is not None
+    }
+
+
+def recorded_cmake_cache_keys(build_dir: Path) -> set[str]:
+    path = build_dir / CMAKE_CACHE_KEYS_FILE
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return set(CMAKE_TRANSIENT_CACHE_KEYS)
+    if not isinstance(value, list):
+        return set(CMAKE_TRANSIENT_CACHE_KEYS)
+    return {str(key) for key in value}
+
+
+def removed_cmake_cache_args(
+    config: dict[str, Any], build_dir: Path
+) -> list[str]:
+    current = configured_cmake_cache_keys(config)
+    removed = recorded_cmake_cache_keys(build_dir) - current
+    return [f"-U{key}" for key in sorted(removed)]
+
+
+def record_cmake_cache_keys(config: dict[str, Any], build_dir: Path) -> None:
+    path = build_dir / CMAKE_CACHE_KEYS_FILE
+    temporary = path.with_name(f"{path.name}.tmp")
+    keys = sorted(configured_cmake_cache_keys(config))
+    temporary.write_text(json.dumps(keys, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
+
+
 def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project_dir: Path) -> int:
     cache_path = build_dir / "CMakeCache.txt"
     if not cache_path.is_file():
@@ -2089,9 +2161,10 @@ def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project
     if cached_source.resolve() == source_dir.resolve():
         return 0
 
-    if not path_within(build_dir, project_dir):
+    if not managed_build_dir_allowed(build_dir, project_dir):
         print(
-            f"error: refusing to reset stale CMake cache outside project directory: {build_dir}",
+            f"error: refusing to reset stale CMake cache outside managed "
+            f"artifact roots: {build_dir}",
             file=sys.stderr,
         )
         print(
@@ -2134,14 +2207,7 @@ def cmake_targets(config: dict[str, Any]) -> dict[str, str]:
 
 
 def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
-    args = [
-        f"-DARDUINO_CLI={resolve_cli(config.get('cliPath'))}",
-        f"-DARDUINO_FQBN={config.get('fqbn') or ''}",
-        f"-DARDUINO_SKETCHBOOK={config.get('sketchbookPath') or ''}",
-        f"-DARDUINO_UPLOAD_PORT={config.get('uploadPort') or (config.get('upload') or {}).get('port') or ''}",
-        f"-DARDUINO_VERBOSE={'ON' if as_bool(config.get('verbose')) else 'OFF'}",
-    ]
-
+    args: list[str] = []
     root = config.get("root")
     if isinstance(root, str) and root:
         root_path = Path(os.path.expanduser(root))
@@ -2189,8 +2255,21 @@ def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
     if reset_status != 0:
         return reset_status
     cmd = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
+    cmd.extend(removed_cmake_cache_args(config, build_dir))
     cmd.extend(cmake_cache_args(config, project_dir))
-    return run_command(cmd, verbose=as_bool(config.get("verbose")))
+    status = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    if status != 0:
+        return status
+    try:
+        record_cmake_cache_keys(config, build_dir)
+    except OSError as exc:
+        print(
+            f"error: failed to record managed CMake cache keys in "
+            f"{build_dir}: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_GENERIC
+    return 0
 
 
 def run_cmake_target(config: dict[str, Any], project_dir: Path, target: str) -> int:
@@ -2220,39 +2299,40 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
                 print_memory_map_overview(config, project_dir)
             return 0
         return EXIT_BUILD
-    if config.get("toolchain") not in {"arduino-cli", "custom"}:
-        print(f"error: build for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
-        return EXIT_UNSUPPORTED
-    with build_lock(config, project_dir):
-        try:
-            cmd = build_arduino_compile_command(config, project_dir, debug=debug)
-        except ValueError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return EXIT_CONFIG
-        rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
-    if rc == 0:
-        if show_memory_overview:
-            print_memory_map_overview(config, project_dir)
-        return 0
-    return EXIT_BUILD
+    print(
+        f"error: build for toolchain '{config.get('toolchain')}' is not implemented",
+        file=sys.stderr,
+    )
+    return EXIT_UNSUPPORTED
+
+
+def native_rp_upload_uses_serial_bootsel(
+    config: dict[str, Any], upload_strategy: str | None
+) -> bool:
+    return (
+        config.get("target") in NATIVE_RP_TARGETS
+        and upload_strategy in {None, "serial", "uf2"}
+    )
 
 
 def command_upload(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
-    if config.get("toolchain") not in {"arduino-cli", "custom", "cmake"}:
+    if config.get("toolchain") != "cmake":
         print(f"error: upload for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
         return EXIT_UNSUPPORTED
-    if config.get("toolchain") == "cmake":
-        diagnostics = build_preflight_diagnostics(config, project_dir)
-        if diagnostics:
-            print_build_diagnostics(diagnostics)
-            return EXIT_UPLOAD
+    diagnostics = build_preflight_diagnostics(config, project_dir)
+    if diagnostics:
+        print_build_diagnostics(diagnostics)
+        return EXIT_UPLOAD
     port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
     upload_config = config.get("upload") or {}
     upload_strategy = upload_config.get("strategy") if isinstance(upload_config, dict) else None
-    if config.get("toolchain") == "cmake" and upload_strategy == "openocd":
+    native_rp_serial_upload = native_rp_upload_uses_serial_bootsel(
+        config, upload_strategy
+    )
+    if upload_strategy == "openocd":
         # SWD/JTAG flashers (e.g. STM32 via OpenOCD): no serial port, BOOTSEL,
         # by-id identity guard, port release, or monitor handoff applies. Delegate
         # straight to the CMake firmware_upload target after config resolution.
@@ -2262,9 +2342,26 @@ def command_upload(args: argparse.Namespace) -> int:
             print_memory_map_overview(config, project_dir)
             return 0
         return EXIT_UPLOAD
-    if config.get("toolchain") == "cmake" and not port:
-        if upload_strategy == "uf2":
-            return command_upload_uf2(args)
+    if native_rp_serial_upload and not args.port and port:
+        if not upload_port_path_exists(str(port)):
+            _, bootsel_candidates = find_single_bootsel_mount()
+            if bootsel_candidates:
+                print(
+                    "Configured serial upload port is unavailable; "
+                    "BOOTSEL device detected, using UF2 upload."
+                )
+                return command_upload_uf2(args)
+            if identity_enabled(config):
+                detected_port, detect_status = select_verified_identity_port(config)
+                if detect_status != 0:
+                    return detect_status
+                if detected_port:
+                    print(
+                        "Configured serial upload port is unavailable; "
+                        "using the single verified CDC device."
+                    )
+                    port = detected_port
+    if not port:
         _, bootsel_candidates = find_single_bootsel_mount()
         if bootsel_candidates:
             print("No serial upload port configured; BOOTSEL device detected, using UF2 upload.")
@@ -2273,6 +2370,8 @@ def command_upload(args: argparse.Namespace) -> int:
             port, detect_status = select_verified_identity_port(config)
             if detect_status != 0:
                 return detect_status
+        if native_rp_serial_upload and not port:
+            return command_upload_uf2(args)
 
     verify_status = verify_upload_port(config, str(port or ""), allow_unverified=args.allow_unverified_port)
     if verify_status != 0:
@@ -2286,24 +2385,25 @@ def command_upload(args: argparse.Namespace) -> int:
         release_status = release_port_for_upload(upload_port, project_dir)
         if release_status != 0:
             return release_status
-    if config.get("toolchain") == "cmake":
-        try:
-            target = cmake_targets(config)["upload"]
-            rc = run_cmake_target(config, project_dir, target)
-        finally:
-            end_upload_release(project_dir)
-        if rc == 0:
-            print_memory_map_overview(config, project_dir)
-            return 0
-        return EXIT_UPLOAD
     try:
-        with build_lock(config, project_dir):
-            try:
-                cmd = build_arduino_compile_command(config, project_dir, upload=True)
-            except ValueError as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                return EXIT_CONFIG
-            rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+        if native_rp_serial_upload:
+            build_status = command_build(
+                args, debug=False, show_memory_overview=False
+            )
+            if build_status != 0:
+                return build_status
+            existing_bootsel_ids = bootsel_candidate_ids()
+            touch_status = touch_rp_bootloader_port(str(config["uploadPort"]))
+            if touch_status != 0:
+                return touch_status
+            return command_upload_uf2(
+                args,
+                build_first=False,
+                bootsel_wait_s=8.0,
+                excluded_bootsel_ids=existing_bootsel_ids,
+            )
+        target = cmake_targets(config)["upload"]
+        rc = run_cmake_target(config, project_dir, target)
     finally:
         end_upload_release(project_dir)
     if rc == 0:
@@ -2432,9 +2532,48 @@ def mount_bootsel_block(block: dict[str, Any]) -> Path | None:
     return None
 
 
-def find_single_bootsel_mount() -> tuple[Path | None, list[str]]:
-    mounts = find_bootsel_mounts()
+def bootsel_candidate_ids() -> set[str]:
     blocks = find_bootsel_blocks()
+    ids = {
+        f"block:{block.get('path')}"
+        for block in blocks
+        if block.get("path")
+    }
+    block_mounts = {
+        mount
+        for mount in (bootsel_mountpoint(block) for block in blocks)
+        if mount is not None
+    }
+    ids.update(
+        f"mount:{mount}"
+        for mount in find_bootsel_mounts()
+        if mount not in block_mounts
+    )
+    return ids
+
+
+def find_single_bootsel_mount(
+    excluded_ids: set[str] | None = None,
+) -> tuple[Path | None, list[str]]:
+    excluded = excluded_ids or set()
+    all_blocks = find_bootsel_blocks()
+    blocks = [
+        block
+        for block in all_blocks
+        if f"block:{block.get('path')}" not in excluded
+    ]
+    excluded_mounts = {
+        mount
+        for block in all_blocks
+        if f"block:{block.get('path')}" in excluded
+        for mount in [bootsel_mountpoint(block)]
+        if mount is not None
+    }
+    mounts = [
+        mount
+        for mount in find_bootsel_mounts()
+        if f"mount:{mount}" not in excluded and mount not in excluded_mounts
+    ]
     block_mounts = [mount for mount in (bootsel_mountpoint(block) for block in blocks) if mount]
     for mount in block_mounts:
         if mount not in mounts:
@@ -2452,23 +2591,83 @@ def find_single_bootsel_mount() -> tuple[Path | None, list[str]]:
     return mount_bootsel_block(unmounted[0]), candidates
 
 
-def command_upload_uf2(args: argparse.Namespace) -> int:
+def wait_for_single_bootsel_mount(
+    timeout_s: float,
+    excluded_ids: set[str] | None = None,
+) -> tuple[Path | None, list[str]]:
+    deadline = time.monotonic() + timeout_s
+    last_candidates: list[str] = []
+    while True:
+        mount, candidates = find_single_bootsel_mount(excluded_ids)
+        last_candidates = candidates
+        if mount is not None or len(candidates) > 1:
+            return mount, candidates
+        if time.monotonic() >= deadline:
+            return None, last_candidates
+        time.sleep(0.1)
+
+
+def touch_rp_bootloader_port(port: str) -> int:
+    try:
+        import serial
+    except ImportError:
+        print(
+            "error: native RP auto-upload requires pyserial for the 1200-bps bootloader touch",
+            file=sys.stderr,
+        )
+        return EXIT_UPLOAD
+
+    print(f"Requesting BOOTSEL via 1200-bps touch on {port}", flush=True)
+    try:
+        with serial.Serial(
+            port=port,
+            baudrate=1200,
+            timeout=0.25,
+            write_timeout=0.25,
+        ) as touch:
+            touch.dtr = True
+            time.sleep(0.05)
+            touch.dtr = False
+            time.sleep(0.05)
+    except (OSError, serial.SerialException) as exc:
+        if getattr(exc, "errno", None) in {errno.EIO, errno.ENODEV}:
+            print(
+                "Serial port disconnected during the bootloader touch; "
+                "waiting for BOOTSEL."
+            )
+            return 0
+        print(f"error: 1200-bps bootloader touch failed on {port}: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
+    return 0
+
+
+def command_upload_uf2(
+    args: argparse.Namespace,
+    *,
+    build_first: bool = True,
+    bootsel_wait_s: float = 0.0,
+    excluded_bootsel_ids: set[str] | None = None,
+) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
 
     target = config.get("target")
-    if target and str(target) != "rp2040":
+    if target and str(target) not in UF2_TARGETS:
         print(
-            f"error: upload-uf2 is RP2040/UF2 only; active target is {target_display_name(config)}",
+            f"error: upload-uf2 is RP-family/UF2 only; active target is {target_display_name(config)}",
             file=sys.stderr,
         )
-        print("       Use 'select-board --target rp2040' or the target-neutral 'upload' action.", file=sys.stderr)
+        print(
+            "       Select an RP target or use the target-neutral 'upload' action.",
+            file=sys.stderr,
+        )
         return EXIT_UNSUPPORTED
 
-    build_status = command_build(args, debug=False, show_memory_overview=False)
-    if build_status != 0:
-        return build_status
+    if build_first:
+        build_status = command_build(args, debug=False, show_memory_overview=False)
+        if build_status != 0:
+            return build_status
 
     build_dir = Path(str(config.get("buildDir") or project_dir / ".build")).expanduser()
     if not build_dir.is_absolute():
@@ -2478,7 +2677,30 @@ def command_upload_uf2(args: argparse.Namespace) -> int:
         print(f"error: no unique UF2 artifact found in {build_dir}", file=sys.stderr)
         return EXIT_UPLOAD
 
-    mount, bootsel_candidates = find_single_bootsel_mount()
+    return upload_uf2_artifact(
+        uf2,
+        config,
+        project_dir,
+        bootsel_wait_s=bootsel_wait_s,
+        excluded_bootsel_ids=excluded_bootsel_ids,
+    )
+
+
+def upload_uf2_artifact(
+    uf2: Path,
+    config: dict[str, Any],
+    project_dir: Path,
+    *,
+    bootsel_wait_s: float = 0.0,
+    excluded_bootsel_ids: set[str] | None = None,
+) -> int:
+    if bootsel_wait_s > 0.0:
+        mount, bootsel_candidates = wait_for_single_bootsel_mount(
+            bootsel_wait_s,
+            excluded_bootsel_ids,
+        )
+    else:
+        mount, bootsel_candidates = find_single_bootsel_mount()
     if not bootsel_candidates:
         print("error: BOOTSEL drive not found", file=sys.stderr)
         return EXIT_UNSAFE_DEVICE
@@ -2504,87 +2726,463 @@ def command_upload_uf2(args: argparse.Namespace) -> int:
     return 0
 
 
-def neutral_firmware_source_dir() -> Path:
-    return Path(__file__).resolve().parents[2] / "neutral_fw" / "rp2040_arduino_pico"
+def parse_ota_discovery_response(payload: bytes, address: tuple[str, int]) -> dict[str, Any] | None:
+    try:
+        fields = payload.decode("utf-8").strip().split()
+    except UnicodeDecodeError:
+        return None
+    if len(fields) != 8 or fields[:2] != ["JHOTA", "1"]:
+        return None
+    try:
+        port = int(fields[4])
+        slot_size = int(fields[5])
+        generation = int(fields[6])
+        mode = int(fields[7])
+    except ValueError:
+        return None
+    if not (1 <= port <= 65535) or slot_size <= 0:
+        return None
+    return {
+        "address": address[0],
+        "hostname": fields[2],
+        "target": fields[3],
+        "port": port,
+        "slotSize": slot_size,
+        "generation": generation,
+        "bootMode": mode,
+    }
 
 
-def prepare_neutral_sketch(build_dir: Path) -> Path:
-    source = neutral_firmware_source_dir() / "neutral_identity.ino"
-    if not source.is_file():
-        raise FileNotFoundError(f"neutral firmware source not found: {source}")
+def discover_ota_devices(port: int, broadcast: str, timeout_s: float = 1.0) -> list[dict[str, Any]]:
+    devices: dict[tuple[str, int], dict[str, Any]] = {}
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        udp.bind(("", 0))
+        udp.settimeout(0.1)
+        udp.sendto(b"JHOTA DISCOVER 1", (broadcast, port))
+        deadline = time.monotonic() + timeout_s
+        while time.monotonic() < deadline:
+            try:
+                payload, address = udp.recvfrom(512)
+            except socket.timeout:
+                continue
+            device = parse_ota_discovery_response(payload, address)
+            if device is not None:
+                devices[(device["address"], device["port"])] = device
+    return sorted(
+        devices.values(),
+        key=lambda device: (device["hostname"], device["address"], device["port"]),
+    )
 
-    sketch_dir = build_dir / "_jh_neutral_identity" / "neutral_identity"
-    sketch_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, sketch_dir / "neutral_identity.ino")
-    return sketch_dir
+
+def resolved_ota_config(config: dict[str, Any]) -> dict[str, Any]:
+    ota = config.get("ota")
+    return dict(ota) if isinstance(ota, dict) else {}
 
 
-def build_neutral_compile_command(config: dict[str, Any], sketch_dir: Path, build_dir: Path) -> list[str]:
-    cli = resolve_cli(config.get("cliPath"))
-    fqbn = config.get("fqbn")
-    if not fqbn:
-        raise ValueError("missing fqbn; set jaszczurhal.fqbn or arduino.fqbn")
+def ota_listen_port(ota: dict[str, Any]) -> int:
+    configured = ota.get("listenPort")
+    return DEFAULT_OTA_LISTEN_PORT if configured is None else int(configured)
 
-    cmd = [
-        cli,
-        "compile",
-        "--fqbn",
-        str(fqbn),
-        "--build-path",
-        str(build_dir),
-        "--upload",
+
+def ota_password(ota: dict[str, Any]) -> str:
+    env_name = ota.get("passwordEnv")
+    if env_name:
+        value = os.environ.get(str(env_name))
+        if value is None:
+            raise ValueError(f"OTA password environment variable is not set: {env_name}")
+        return value
+    return str(ota.get("password") or "")
+
+
+def print_ota_devices(devices: list[dict[str, Any]], *, as_json: bool) -> None:
+    if as_json:
+        print(json.dumps(devices, indent=2))
+        return
+    if not devices:
+        print("No JaszczurHAL OTA devices found.")
+        return
+    print("JaszczurHAL OTA devices:")
+    for index, device in enumerate(devices, start=1):
+        print(
+            f"  {index}. {device['hostname']}  {device['address']}:{device['port']}  "
+            f"{device['target']}  generation={device['generation']}  "
+            f"slot={device['slotSize']} bytes  bootMode={device['bootMode']}"
+        )
+
+
+def command_ota_discover(args: argparse.Namespace) -> int:
+    _, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    ota = resolved_ota_config(config)
+    port = int(ota.get("port") or DEFAULT_OTA_PORT)
+    destination = str(
+        args.host
+        or ota.get("host")
+        or ota.get("broadcast")
+        or "255.255.255.255"
+    )
+    try:
+        devices = discover_ota_devices(port, destination)
+    except OSError as exc:
+        print(f"error: OTA discovery failed: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
+    print_ota_devices(devices, as_json=args.json)
+    return 0
+
+
+def find_configured_ota(config: dict[str, Any]) -> Path | None:
+    artifacts = config.get("artifacts")
+    if not isinstance(artifacts, dict) or not artifacts.get("ota"):
+        return None
+    path = Path(str(artifacts["ota"])).expanduser()
+    return path if path.is_file() else None
+
+
+def find_ota(build_dir: Path) -> Path | None:
+    matches = sorted(
+        path for path in build_dir.rglob("*.ota") if not path.name.endswith(".signed.ota")
+    )
+    if len(matches) == 1:
+        return matches[0]
+    exact = [path for path in matches if path.parent == build_dir]
+    return exact[0] if len(exact) == 1 else None
+
+
+def sign_ota_container(source: Path, password: str, output: Path) -> bytes:
+    container = bytearray(source.read_bytes())
+    if len(container) <= 160 or container[:8] != b"JHOTA1\r\n":
+        raise ValueError(f"{source}: invalid JaszczurHAL OTA container")
+    version, header_size = struct.unpack_from("<HH", container, 8)
+    payload_size = struct.unpack_from("<I", container, 20)[0]
+    if version != 1 or header_size != 160 or len(container) != header_size + payload_size:
+        raise ValueError(f"{source}: unsupported OTA container shape")
+    if hashlib.sha256(container[header_size:]).digest() != bytes(container[32:64]):
+        raise ValueError(f"{source}: payload SHA-256 mismatch")
+    key = hashlib.md5(password.encode("utf-8")).hexdigest().encode("ascii") if password else b""
+    container[96:128] = hmac.new(key, container[:96], hashlib.sha256).digest()
+    struct.pack_into("<I", container, header_size - 4, binascii.crc32(container[: header_size - 4]) & 0xFFFFFFFF)
+    output.write_bytes(container)
+    return bytes(container)
+
+
+def choose_ota_device(
+    devices: list[dict[str, Any]],
+    config: dict[str, Any],
+    ota: dict[str, Any],
+    args: argparse.Namespace,
+) -> dict[str, Any] | None:
+    target = str(config.get("target") or "rp2040")
+    hostname = str(ota.get("hostname") or "")
+    configured_host = str(args.host or ota.get("host") or "")
+    candidates = [
+        device
+        for device in devices
+        if device["target"] == target
+        and (not hostname or device["hostname"] == hostname)
     ]
-    port = config.get("uploadPort") or (config.get("upload") or {}).get("port")
-    if port:
-        cmd.extend(["--port", str(port)])
-    cmd.extend(["--warnings", "all"])
-    if as_bool(config.get("verbose")):
-        cmd.append("-v")
-    cmd.append(str(sketch_dir))
-    return cmd
+    if configured_host:
+        return {
+            "address": configured_host,
+            "hostname": hostname or configured_host,
+            "target": target,
+            "port": int(ota.get("port") or DEFAULT_OTA_PORT),
+        }
+    if len(candidates) == 1:
+        return candidates[0]
+    print_ota_devices(candidates, as_json=False)
+    if len(candidates) > 1 and args.interactive and sys.stdin.isatty():
+        try:
+            selected = int(input("Select OTA device: ").strip())
+        except (EOFError, ValueError):
+            return None
+        if 1 <= selected <= len(candidates):
+            return candidates[selected - 1]
+    return None
+
+
+def upload_ota_container(
+    device: dict[str, Any],
+    container: bytes,
+    password: str,
+    listen_port: int = DEFAULT_OTA_LISTEN_PORT,
+) -> None:
+    if not 0 <= listen_port <= 65535:
+        raise ValueError("OTA TCP listen port must be in range 0..65535")
+    udp_address = (str(device["address"]), int(device["port"]))
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server.bind(("", listen_port))
+        server.listen(1)
+        server.settimeout(8.0)
+        tcp_port = server.getsockname()[1]
+        invitation = (
+            f"0 {tcp_port} {len(container)} {hashlib.md5(container).hexdigest()}\n"
+        ).encode("ascii")
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.bind(("", 0))
+            udp.settimeout(5.0)
+            udp.sendto(invitation, udp_address)
+            try:
+                response, _ = udp.recvfrom(256)
+            except socket.timeout as exc:
+                raise TimeoutError(
+                    "timed out waiting for the OTA invitation response"
+                ) from exc
+            text = response.decode("ascii", errors="strict").strip()
+            if text.startswith("AUTH "):
+                nonce = text.split(maxsplit=1)[1]
+                password_md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+                client_nonce = os.urandom(16).hex()
+                challenge = f"{password_md5}:{nonce}:{client_nonce}".encode("ascii")
+                digest = hashlib.md5(challenge).hexdigest()
+                udp.sendto(f"200 {client_nonce} {digest}\n".encode("ascii"), udp_address)
+                try:
+                    response, _ = udp.recvfrom(256)
+                except socket.timeout as exc:
+                    raise TimeoutError(
+                        "timed out waiting for the OTA authentication response"
+                    ) from exc
+                text = response.decode("ascii", errors="strict").strip()
+            if text != "OK":
+                raise RuntimeError(f"device rejected OTA invitation: {text}")
+
+        try:
+            connection, peer = server.accept()
+        except socket.timeout as exc:
+            raise TimeoutError(
+                "timed out waiting for the device's OTA TCP connection"
+            ) from exc
+        with connection:
+            connection.settimeout(8.0)
+            reader = connection.makefile("rb")
+            sent = 0
+            while sent < len(container):
+                chunk = container[sent : sent + 1024]
+                connection.sendall(chunk)
+                acknowledged = 0
+                while acknowledged < len(chunk):
+                    line = reader.readline(32)
+                    if not line:
+                        raise RuntimeError("device closed OTA connection during transfer")
+                    acknowledged += int(line.strip())
+                if acknowledged != len(chunk):
+                    raise RuntimeError("invalid OTA byte acknowledgement")
+                sent += len(chunk)
+                print(f"\rOTA {sent}/{len(container)} bytes", end="", flush=True)
+            final = reader.read(2)
+            if final != b"OK":
+                raise RuntimeError(f"device did not confirm OTA completion: {final!r}")
+        print(f"\nOTA image accepted by {peer[0]}; device is rebooting.")
+
+
+def command_upload_ota(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    if str(config.get("target") or "") not in NATIVE_RP_TARGETS:
+        print("error: upload-ota requires a native RP target", file=sys.stderr)
+        return EXIT_UNSUPPORTED
+    build_status = command_build(args, debug=False, show_memory_overview=False)
+    if build_status != 0:
+        return build_status
+    ota = resolved_ota_config(config)
+    try:
+        password = ota_password(ota)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    if not password and not as_bool(ota.get("allowEmptyPassword")):
+        print(
+            "error: OTA password is empty; configure ota.passwordEnv "
+            "or explicitly set ota.allowEmptyPassword=true",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
+    port = int(ota.get("port") or DEFAULT_OTA_PORT)
+    broadcast = str(ota.get("broadcast") or "255.255.255.255")
+    configured_host = str(args.host or ota.get("host") or "")
+    try:
+        devices = (
+            [] if configured_host else discover_ota_devices(port, broadcast)
+        )
+        device = choose_ota_device(devices, config, ota, args)
+    except OSError as exc:
+        print(f"error: OTA discovery failed: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
+    if device is None:
+        print(
+            "error: no unique matching OTA device; use --host or --interactive",
+            file=sys.stderr,
+        )
+        return EXIT_UNSAFE_DEVICE
+    build_dir = get_build_dir(config, project_dir)
+    source = find_configured_ota(config) or find_ota(build_dir)
+    if source is None:
+        print(f"error: no unique OTA artifact found in {build_dir}", file=sys.stderr)
+        return EXIT_UPLOAD
+    signed = build_dir / f"{source.stem}.signed.ota"
+    try:
+        container = sign_ota_container(source, password, signed)
+        listen_port = ota_listen_port(ota)
+        upload_ota_container(device, container, password, listen_port)
+    except (OSError, RuntimeError, ValueError, socket.timeout) as exc:
+        print(f"error: OTA upload failed: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
+    print_memory_map_overview(config, project_dir)
+    return 0
+
+
+def neutral_firmware_source_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "neutral_fw" / "rp_native"
+
+
+def neutral_firmware_config(
+    config: dict[str, Any], project_dir: Path
+) -> dict[str, Any]:
+    neutral = copy.deepcopy(config)
+    source_dir = neutral_firmware_source_dir()
+    build_dir = get_build_dir(config, project_dir) / "neutral_identity"
+
+    neutral["module"] = "neutral_identity"
+    neutral["root"] = str(jaszczurhal_root())
+    neutral["buildDir"] = str(build_dir)
+    neutral["cmakeBuildDir"] = str(build_dir / "cmake")
+    neutral["identity"] = {"enabled": False}
+    neutral["artifacts"] = {
+        "elf": str(build_dir / "firmware.elf"),
+        "uf2": str(build_dir / "firmware.uf2"),
+    }
+
+    cmake = dict(neutral.get("cmake") or {})
+    cmake["sourceDir"] = str(
+        jaszczurhal_root() / "cmake" / "jh_firmware_project"
+    )
+    cmake.pop("targets", None)
+    cache = dict(cmake.get("cache") or {})
+    for key in CMAKE_TRANSIENT_CACHE_KEYS:
+        cache.pop(key, None)
+    cache.update(
+        {
+            "JH_ARTIFACT_DIR": str(build_dir),
+            "JH_MODULE_NAME": "neutral_identity",
+            "JH_PROJECT_DIR": str(source_dir),
+        }
+    )
+    cmake["cache"] = cache
+    neutral["cmake"] = cmake
+    return neutral
 
 
 def command_clear_identity(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
-    if config.get("toolchain") not in {"arduino-cli", "custom", "cmake"}:
-        print(f"error: clear-identity for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
+    upload = config.get("upload") or {}
+    if (
+        config.get("toolchain") != "cmake"
+        or config.get("target") not in NATIVE_RP_TARGETS
+        or upload.get("strategy") != "uf2"
+    ):
+        print(
+            "error: clear-identity requires a native RP target with UF2 upload",
+            file=sys.stderr,
+        )
         return EXIT_UNSUPPORTED
 
-    port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
-    verify_status = verify_upload_port(config, str(port or ""), allow_unverified=args.allow_unverified_port)
-    if verify_status != 0:
-        return verify_status
+    source_dir = neutral_firmware_source_dir()
+    if not (source_dir / "app.c").is_file():
+        print(
+            f"error: neutral firmware source not found: {source_dir}",
+            file=sys.stderr,
+        )
+        return EXIT_CONFIG
+
+    port = args.port or config.get("uploadPort") or upload.get("port")
+    bootsel_candidates: list[str] = []
+    if not port:
+        _, bootsel_candidates = find_single_bootsel_mount()
+        if not bootsel_candidates and identity_enabled(config):
+            port, detect_status = select_verified_identity_port(config)
+            if detect_status != 0:
+                return detect_status
+
+    if port or not bootsel_candidates:
+        verify_status = verify_upload_port(
+            config,
+            str(port or ""),
+            allow_unverified=args.allow_unverified_port,
+        )
+        if verify_status != 0:
+            return verify_status
+
+    upload_port = ""
+    port_released = False
     if port:
         upload_port = resolve_upload_port_for_tool(str(port))
-        config["uploadPort"] = upload_port
-        upload = dict(config.get("upload") or {})
-        upload["port"] = upload_port
-        config["upload"] = upload
         release_status = release_port_for_upload(upload_port, project_dir)
         if release_status != 0:
             return release_status
+        port_released = True
 
-    neutral_build_dir = get_build_dir(config, project_dir) / "neutral_identity"
+    neutral = neutral_firmware_config(config, project_dir)
+    uf2 = Path(neutral["artifacts"]["uf2"])
     try:
-        with build_lock(config, project_dir):
-            try:
-                sketch_dir = prepare_neutral_sketch(get_build_dir(config, project_dir))
-                cmd = build_neutral_compile_command(config, sketch_dir, neutral_build_dir)
-            except (OSError, ValueError) as exc:
-                print(f"error: {exc}", file=sys.stderr)
-                return EXIT_CONFIG
-            rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
+        with build_lock(neutral, project_dir):
+            rc = run_cmake_target(
+                neutral,
+                project_dir,
+                cmake_targets(neutral)["build"],
+            )
+        if rc != 0:
+            return EXIT_BUILD
+        if not uf2.is_file():
+            print(f"error: neutral UF2 artifact not found: {uf2}", file=sys.stderr)
+            return EXIT_BUILD
+
+        if upload_port:
+            existing_bootsel_ids = bootsel_candidate_ids()
+            touch_status = touch_rp_bootloader_port(upload_port)
+            if touch_status != 0:
+                return touch_status
+            return upload_uf2_artifact(
+                uf2,
+                neutral,
+                project_dir,
+                bootsel_wait_s=8.0,
+                excluded_bootsel_ids=existing_bootsel_ids,
+            )
+        return upload_uf2_artifact(uf2, neutral, project_dir)
     finally:
-        end_upload_release(project_dir)
-    return 0 if rc == 0 else EXIT_UPLOAD
+        if port_released:
+            end_upload_release(project_dir)
 
 
 def command_monitor(args: argparse.Namespace, mode: str) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
+
+    port = (
+        args.port
+        or config.get("uploadPort")
+        or (config.get("upload") or {}).get("port")
+    )
+    identity_tokens: list[str] = []
+    if mode == "pico" and not args.port and identity_enabled(config):
+        identity_tokens = list(dict.fromkeys(expected_identity_tokens(config)))
+        if not port or not upload_port_path_exists(str(port)):
+            detected_port, detect_status = select_verified_identity_port(config)
+            if detect_status != 0:
+                return detect_status
+            if detected_port:
+                if port:
+                    print(
+                        "Configured serial monitor port is unavailable; "
+                        "using the single verified CDC device."
+                    )
+                port = detected_port
 
     runtime = Path(__file__).resolve().parent / "serial_persistent.py"
     cmd = [
@@ -2599,7 +3197,10 @@ def command_monitor(args: argparse.Namespace, mode: str) -> int:
         "--lock-policy",
         args.lock_policy,
     ]
-    port = args.port or config.get("uploadPort") or (config.get("upload") or {}).get("port")
+    if identity_tokens:
+        cmd.append("--follow-identity")
+        for token in identity_tokens:
+            cmd.extend(["--identity-token", token])
     if port:
         cmd.append(str(port))
     rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
@@ -2616,10 +3217,7 @@ def get_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
 def find_compile_database(*base_dirs: Path) -> Path | None:
     seen: set[Path] = set()
     for base_dir in base_dirs:
-        for candidate in (
-            base_dir / "arduino" / "compile_commands.json",
-            base_dir / "compile_commands.json",
-        ):
+        for candidate in (base_dir / "compile_commands.json",):
             key = candidate.resolve(strict=False)
             if key in seen:
                 continue
@@ -2627,35 +3225,6 @@ def find_compile_database(*base_dirs: Path) -> Path | None:
             if candidate.is_file():
                 return candidate
     return None
-
-
-def remap_project_compile_commands(compile_db: Any, project_dir: Path) -> Any:
-    """Point Arduino sketch-copy entries back at the editable project sources."""
-    if not isinstance(compile_db, list):
-        return compile_db
-
-    project_dir = project_dir.resolve()
-    for entry in compile_db:
-        if not isinstance(entry, dict) or not isinstance(entry.get("file"), str):
-            continue
-        generated_source = Path(entry["file"])
-        if generated_source.parent.name != "sketch":
-            continue
-        project_source = project_dir / generated_source.name
-        if not project_source.is_file():
-            continue
-
-        generated_text = str(generated_source)
-        project_text = str(project_source)
-        entry["file"] = project_text
-        if isinstance(entry.get("arguments"), list):
-            entry["arguments"] = [
-                project_text if argument == generated_text else argument
-                for argument in entry["arguments"]
-            ]
-        if isinstance(entry.get("command"), str):
-            entry["command"] = entry["command"].replace(generated_text, project_text)
-    return compile_db
 
 
 @contextmanager
@@ -2688,9 +3257,7 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
         if raw_compile_db is None:
             print(
                 "error: compile database was not generated; checked: "
-                f"{cmake_build_dir / 'arduino' / 'compile_commands.json'}, "
                 f"{cmake_build_dir / 'compile_commands.json'}, "
-                f"{build_dir / 'arduino' / 'compile_commands.json'}, "
                 f"{build_dir / 'compile_commands.json'}",
                 file=sys.stderr,
             )
@@ -2698,7 +3265,6 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
 
         try:
             compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
-            compile_db = remap_project_compile_commands(compile_db, project_dir)
             patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
         except (OSError, json.JSONDecodeError) as exc:
             print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
@@ -2727,64 +3293,12 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
         print(f"Wrote {patched_compile_db}")
         print(f"Wrote {cpp_props_path}")
         return 0
-    if config.get("toolchain") not in {"arduino-cli", "custom"}:
-        print(f"error: refresh-intellisense for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
-        return EXIT_UNSUPPORTED
-
-    with build_lock(config, project_dir):
-        try:
-            cmd = build_arduino_compile_command(config, project_dir, only_compilation_database=True)
-        except ValueError as exc:
-            print(f"error: {exc}", file=sys.stderr)
-            return EXIT_CONFIG
-
-        rc = run_command(cmd, verbose=as_bool(config.get("verbose")))
-    if rc != 0:
-        return EXIT_BUILD
-
-    build_dir = get_build_dir(config, project_dir)
-    raw_compile_db = find_compile_database(build_dir)
-    patched_compile_db = build_dir / "compile_commands_patched.json"
-    if raw_compile_db is None:
-        print(
-            "error: compile database was not generated; checked: "
-            f"{build_dir / 'arduino' / 'compile_commands.json'}, "
-            f"{build_dir / 'compile_commands.json'}",
-            file=sys.stderr,
-        )
-        return EXIT_BUILD
-
-    try:
-        compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
-        compile_db = remap_project_compile_commands(compile_db, project_dir)
-        patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
-    except (OSError, json.JSONDecodeError) as exc:
-        print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
-        return EXIT_GENERIC
-
-    cpp_props = {
-        "configurations": [
-            {
-                "name": str(config.get("module") or project_dir.name),
-                "compileCommands": str(patched_compile_db),
-                "intelliSenseMode": "gcc-arm",
-                "compilerPath": "",
-                "cStandard": "c11",
-                "cppStandard": "gnu++17",
-            }
-        ],
-        "version": 4,
-    }
-    cpp_props_path = project_dir / ".vscode" / "c_cpp_properties.json"
-    try:
-        cpp_props_path.write_text(json.dumps(cpp_props, indent=4) + "\n", encoding="utf-8")
-    except OSError as exc:
-        print(f"error: failed to write {cpp_props_path}: {exc}", file=sys.stderr)
-        return EXIT_GENERIC
-
-    print(f"Wrote {patched_compile_db}")
-    print(f"Wrote {cpp_props_path}")
-    return 0
+    print(
+        f"error: refresh-intellisense for toolchain "
+        f"'{config.get('toolchain')}' is not implemented",
+        file=sys.stderr,
+    )
+    return EXIT_UNSUPPORTED
 
 
 def command_clean(args: argparse.Namespace) -> int:
@@ -2795,8 +3309,11 @@ def command_clean(args: argparse.Namespace) -> int:
     if not build_dir.exists():
         print(f"Nothing to clean: {build_dir}")
         return 0
-    if project_dir not in build_dir.resolve().parents and build_dir.resolve() != project_dir:
-        print(f"error: refusing to clean outside project directory: {build_dir}", file=sys.stderr)
+    if not managed_build_dir_allowed(build_dir, project_dir):
+        print(
+            f"error: refusing to clean outside managed artifact roots: {build_dir}",
+            file=sys.stderr,
+        )
         return EXIT_UNSAFE_DEVICE
     try:
         shutil.rmtree(build_dir)
@@ -2829,13 +3346,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("action", nargs="?", help="Action to run.")
     parser.add_argument("--project", help="Firmware module directory.")
-    parser.add_argument("--fqbn", help="Override board FQBN.")
-    parser.add_argument("--target", help="Override active target family (e.g. rp2040, stm32g474).")
+    parser.add_argument(
+        "--target",
+        help="Override active target family (e.g. rp2040, rp2350-arm, stm32g474).",
+    )
     parser.add_argument("--board", help="Override active board/variant within the target.")
     parser.add_argument("--variant", help="Example variant id from the manifest's example.variants list.")
     parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
     parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")
+    parser.add_argument("--host", help="Override OTA device IPv4 address or hostname.")
     parser.add_argument(
         "--allow-unverified-port",
         action="store_true",
@@ -2879,6 +3399,8 @@ def main(argv: list[str]) -> int:
         return command_upload(args)
     if args.action == "upload-uf2":
         return command_upload_uf2(args)
+    if args.action == "upload-ota":
+        return command_upload_ota(args)
     if args.action == "monitor":
         return command_monitor(args, "pico")
     if args.action == "monitor-probe":
@@ -2887,6 +3409,8 @@ def main(argv: list[str]) -> int:
         return command_monitor(args, "any")
     if args.action == "list-ports":
         return command_list_ports(args)
+    if args.action == "ota-discover":
+        return command_ota_discover(args)
     if args.action == "change-port":
         return command_change_port(args)
     if args.action == "refresh-intellisense":
@@ -2897,6 +3421,8 @@ def main(argv: list[str]) -> int:
         return command_clear_identity(args)
     if args.action == "select-board":
         return command_select_board(args)
+    if args.action == "sync-board-picker":
+        return command_sync_board_picker(args)
     return command_stub(args)
 
 

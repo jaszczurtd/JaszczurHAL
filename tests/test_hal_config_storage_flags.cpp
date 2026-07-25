@@ -22,6 +22,14 @@
 #error "AT24C256 EEPROM must propagate HAL_ENABLE_I2C"
 #endif
 
+#if HAL_RP_FLASH_EEPROM_SIZE == 0
+#error "Native RP flash EEPROM must have a non-zero default reservation"
+#endif
+
+#if HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS == 0
+#error "Native RP flash transactions must have a bounded non-zero timeout"
+#endif
+
 void setUp(void) {}
 void tearDown(void) {}
 

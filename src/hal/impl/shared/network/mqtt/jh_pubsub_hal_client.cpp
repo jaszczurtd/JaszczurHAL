@@ -1,7 +1,6 @@
 #include "jh_pubsub_hal_client.h"
 
-#if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474) &&                       \
-    defined(HAL_ENABLE_MQTT)
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474) && defined(HAL_ENABLE_MQTT)
 
 #include "../../../../hal_net.h"
 #include "../../../../hal_serial.h"
@@ -14,7 +13,7 @@
 
 JHPubSubHalClient::JHPubSubHalClient()
     : socket_(NULL), timeout_ms_(JH_PUBSUB_HAL_DEFAULT_TIMEOUT_MS),
-      has_peeked_byte_(false), peeked_byte_(0u)
+      receive_buffer_{}, receive_offset_(0u), receive_size_(0u)
 #ifdef HAL_ENABLE_TLS
       ,
       tls_enabled_(false), tls_security_(), tls_client_(NULL)
@@ -28,6 +27,51 @@ uint32_t JHPubSubHalClient::timeout_ms() { return timeout_ms_; }
 
 void JHPubSubHalClient::set_timeout_ms(uint32_t timeout_ms) {
   timeout_ms_ = timeout_ms;
+}
+
+size_t JHPubSubHalClient::buffered_receive_bytes() const {
+  return receive_size_ - receive_offset_;
+}
+
+void JHPubSubHalClient::reset_receive_buffer() {
+  receive_offset_ = 0u;
+  receive_size_ = 0u;
+}
+
+int JHPubSubHalClient::fill_receive_buffer() {
+  const size_t buffered = buffered_receive_bytes();
+  if (buffered > 0u) {
+    return (int)buffered;
+  }
+  if (
+#ifdef HAL_ENABLE_TLS
+      tls_enabled_ ? tls_client_ == NULL :
+#endif
+                   socket_ == NULL) {
+    return -1;
+  }
+
+  reset_receive_buffer();
+  size_t received = 0u;
+  const hal_status_t status =
+#ifdef HAL_ENABLE_TLS
+      tls_enabled_
+          ? hal_tls_client_read_ex(tls_client_, receive_buffer_,
+                                   sizeof(receive_buffer_), &received)
+          :
+#endif
+          hal_tcp_socket_recv_ex(socket_, receive_buffer_,
+                                 sizeof(receive_buffer_), 0u, &received);
+  if (status == HAL_EAGAIN || status == HAL_ETIMEOUT) {
+    return 0;
+  }
+  if (status != HAL_OK || received > sizeof(receive_buffer_)) {
+    stop();
+    return -1;
+  }
+
+  receive_size_ = received;
+  return (int)received;
 }
 
 int JHPubSubHalClient::connect_endpoint(const hal_net_endpoint_t &endpoint) {
@@ -152,15 +196,20 @@ size_t JHPubSubHalClient::write(const uint8_t *buffer, size_t size) {
 }
 
 int JHPubSubHalClient::available() {
-  if (has_peeked_byte_) {
+  const size_t buffered = buffered_receive_bytes();
+  if (buffered > 0u) {
     return 1;
   }
+  if (
 #ifdef HAL_ENABLE_TLS
-  if (tls_enabled_) {
-    return peek() >= 0 ? 1 : 0;
-  }
+      tls_enabled_ ? tls_client_ == NULL :
 #endif
-  return socket_ != NULL && hal_tcp_socket_can_recv(socket_) ? 1 : 0;
+                   socket_ == NULL) {
+    return 0;
+  }
+
+  const int filled = fill_receive_buffer();
+  return filled > 0 ? 1 : 0;
 }
 
 int JHPubSubHalClient::read() {
@@ -179,66 +228,33 @@ int JHPubSubHalClient::read(uint8_t *buffer, size_t size) {
   }
 
   size_t copied = 0u;
-  if (has_peeked_byte_) {
-    buffer[copied++] = peeked_byte_;
-    has_peeked_byte_ = false;
-  }
-  if (copied == size) {
-    return (int)copied;
+  while (copied < size) {
+    if (buffered_receive_bytes() == 0u) {
+      const int filled = fill_receive_buffer();
+      if (filled <= 0) {
+        return copied > 0u ? (int)copied : -1;
+      }
+    }
+
+    const size_t remaining = size - copied;
+    const size_t buffered = buffered_receive_bytes();
+    const size_t count = remaining < buffered ? remaining : buffered;
+    memcpy(buffer + copied, receive_buffer_ + receive_offset_, count);
+    receive_offset_ += count;
+    copied += count;
+    if (receive_offset_ == receive_size_) {
+      reset_receive_buffer();
+    }
   }
 
-  size_t received = 0u;
-  const hal_status_t status =
-#ifdef HAL_ENABLE_TLS
-      tls_enabled_ ? hal_tls_client_read_ex(tls_client_, buffer + copied,
-                                            size - copied, &received)
-                   :
-#endif
-                   hal_tcp_socket_recv_ex(socket_, buffer + copied,
-                                          size - copied, 0u, &received);
-  if (status == HAL_EAGAIN) {
-    return copied > 0u ? (int)copied : -1;
-  }
-  if (status != HAL_OK) {
-    stop();
-    return copied > 0u ? (int)copied : -1;
-  }
-  copied += received;
-  return copied > 0u ? (int)copied : -1;
+  return (int)copied;
 }
 
 int JHPubSubHalClient::peek() {
-  if (has_peeked_byte_) {
-    return (int)peeked_byte_;
-  }
-  if (
-#ifdef HAL_ENABLE_TLS
-      tls_enabled_ ? tls_client_ == NULL :
-#endif
-                   socket_ == NULL) {
+  if (available() <= 0) {
     return -1;
   }
-
-  size_t received = 0u;
-  const hal_status_t status =
-#ifdef HAL_ENABLE_TLS
-      tls_enabled_
-          ? hal_tls_client_read_ex(tls_client_, &peeked_byte_, 1u, &received)
-          :
-#endif
-          hal_tcp_socket_recv_ex(socket_, &peeked_byte_, 1u, 0u, &received);
-  if (status == HAL_EAGAIN) {
-    return -1;
-  }
-  if (status != HAL_OK) {
-    stop();
-    return -1;
-  }
-  if (received != 1u) {
-    return -1;
-  }
-  has_peeked_byte_ = true;
-  return (int)peeked_byte_;
+  return (int)receive_buffer_[receive_offset_];
 }
 
 void JHPubSubHalClient::flush() {}
@@ -264,11 +280,13 @@ void JHPubSubHalClient::stop() {
     hal_tcp_socket_close(socket_);
     socket_ = NULL;
   }
-  has_peeked_byte_ = false;
-  peeked_byte_ = 0u;
+  reset_receive_buffer();
 }
 
 bool JHPubSubHalClient::connected() {
+  if (buffered_receive_bytes() > 0u) {
+    return true;
+  }
 #ifdef HAL_ENABLE_TLS
   if (tls_enabled_) {
     hal_tls_state_t state = HAL_TLS_STATE_FAILED;

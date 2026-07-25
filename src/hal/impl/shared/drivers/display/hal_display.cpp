@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 
 #include "hal/hal_config.h"
 #ifdef HAL_ENABLE_DISPLAY
@@ -2722,4 +2722,4 @@ hal_status_t hal_display_prepare_text_ex(char *display_txt,
 }
 
 #endif /* HAL_ENABLE_DISPLAY */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */

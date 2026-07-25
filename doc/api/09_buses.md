@@ -435,7 +435,7 @@ HAL_UART_CFG_5O1  HAL_UART_CFG_6O1  HAL_UART_CFG_7O1  HAL_UART_CFG_8O1
 HAL_UART_CFG_5O2  HAL_UART_CFG_6O2  HAL_UART_CFG_7O2  HAL_UART_CFG_8O2
 ```
 
-The numeric values remain Arduino-compatible.
+The numeric values retain their established public values.
 
 ```c
 #include <hal/hal_swserial.h>
@@ -589,7 +589,7 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 ## `hal_onewire` - 1-Wire bus  *(optional - `HAL_ENABLE_ONEWIRE`)*
 
 Thread-safe wrapper for one 1-Wire bus bound to a single GPIO pin. Hardware
-builds use the shared Arduino-free bit-bang driver in
+builds use the shared HAL-only bit-bang driver in
 `src/hal/impl/shared/drivers/onewire/`; the mock backend keeps deterministic scripted
 responses for host tests.
 

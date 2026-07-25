@@ -14,7 +14,7 @@
  * Include this from any source that needs library configuration.
  */
 
-#include "hal_target.h" /* canonical backend/target selection */
+#include "hal_target.h" /* exact backend/target selection */
 #include "hal_uart_config.h"
 #include <stdint.h>
 
@@ -72,6 +72,54 @@
 #define HAL_STM32_FLASH_LITTLEFS_SIZE 0u
 #endif
 
+#ifndef HAL_RP_FLASH_EEPROM_SIZE
+#define HAL_RP_FLASH_EEPROM_SIZE 4096u
+#endif
+
+#ifndef HAL_RP_FLASH_LITTLEFS_SIZE
+#define HAL_RP_FLASH_LITTLEFS_SIZE 0u
+#endif
+
+#ifndef HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS
+#define HAL_RP_FLASH_TRANSACTION_TIMEOUT_MS 10000u
+#endif
+
+#ifndef HAL_RP_OTA_BOOT_SIZE
+#define HAL_RP_OTA_BOOT_SIZE 0u
+#endif
+
+#ifndef HAL_RP_OTA_PROGRAM_OFFSET
+#define HAL_RP_OTA_PROGRAM_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_SLOT_SIZE
+#define HAL_RP_OTA_SLOT_SIZE 0u
+#endif
+
+#ifndef HAL_RP_OTA_STAGING_OFFSET
+#define HAL_RP_OTA_STAGING_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_PHASE_OFFSET
+#define HAL_RP_OTA_PHASE_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_SCRATCH_OFFSET
+#define HAL_RP_OTA_SCRATCH_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_STATE_A_OFFSET
+#define HAL_RP_OTA_STATE_A_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_STATE_B_OFFSET
+#define HAL_RP_OTA_STATE_B_OFFSET 0u
+#endif
+
+#ifndef HAL_RP_OTA_MAX_BOOT_ATTEMPTS
+#define HAL_RP_OTA_MAX_BOOT_ATTEMPTS 3u
+#endif
+
 /* Uncomment (or define via -D) to enable optional features:
  *   #define RESET_EEPROM
  *   #define PICO_W     // board/core define; HAL WiFi uses HAL_ENABLE_WIFI
@@ -92,6 +140,8 @@
 #endif
 #endif
 
+#include "hal_board.h" /* physical board profile and runtime capabilities */
+
 /* -- Network backend transport configuration --------------------------- */
 #if defined(HAL_CYW43_BUS_PICO_PIO) && defined(HAL_CYW43_BUS_STM32_GSPI)
 #error "JaszczurHAL CYW43 requires exactly one transport"
@@ -103,24 +153,17 @@
     !defined(HAL_CYW43_BUS_STM32_GSPI)
 #error "HAL_CYW43_STACK_LWIP requires a JaszczurHAL CYW43 bus"
 #endif
-#if defined(HAL_CYW43_STARTUP_OWNED)
-#error "HAL_CYW43_STARTUP_OWNED was removed; JaszczurHAL owns CYW43 startup"
-#endif
-#if defined(HAL_NETWORK_BACKEND_ARDUINO_PICO)
-#error                                                                         \
-    "HAL_NETWORK_BACKEND_ARDUINO_PICO was removed; select a JaszczurHAL network backend"
-#endif
 #if defined(HAL_NETWORK_BACKEND_CYW43)
 #if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires exactly one HAL_CYW43_BUS_* transport"
 #endif
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #if !defined(HAL_CYW43_BUS_PICO_PIO)
-#error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_BUS_PICO_PIO"
+#error "HAL_NETWORK_BACKEND_CYW43 on RP targets requires HAL_CYW43_BUS_PICO_PIO"
 #endif
 #if !defined(HAL_CYW43_STACK_LWIP)
-#error "HAL_NETWORK_BACKEND_CYW43 on RP2040 requires HAL_CYW43_STACK_LWIP"
+#error "HAL_NETWORK_BACKEND_CYW43 on RP targets requires HAL_CYW43_STACK_LWIP"
 #endif
 #elif HAL_TARGET_IS_STM32G474
 #if !defined(HAL_CYW43_BUS_STM32_GSPI)
@@ -148,11 +191,9 @@
 #ifndef HAL_CYW43_PIN_CLOCK
 #define HAL_CYW43_PIN_CLOCK 5u
 #endif
-#ifndef HAL_CYW43_PIO_CLOCK_DIV_INT
-#define HAL_CYW43_PIO_CLOCK_DIV_INT 4u
-#endif
-#ifndef HAL_CYW43_PIO_CLOCK_DIV_FRAC8
-#define HAL_CYW43_PIO_CLOCK_DIV_FRAC8 0u
+/* The PIO divider is derived from the live clk_sys by the RP transport. */
+#ifndef HAL_CYW43_GSPI_TARGET_HZ
+#define HAL_CYW43_GSPI_TARGET_HZ 31250000u
 #endif
 #endif
 
@@ -169,19 +210,37 @@
 #ifndef HAL_CYW43_PIN_CLOCK
 #define HAL_CYW43_PIN_CLOCK 29u
 #endif
-#ifndef HAL_CYW43_PIO_CLOCK_DIV_INT
-#define HAL_CYW43_PIO_CLOCK_DIV_INT 4u
-#endif
-#ifndef HAL_CYW43_PIO_CLOCK_DIV_FRAC8
-#define HAL_CYW43_PIO_CLOCK_DIV_FRAC8 0u
+/* Keep the validated gSPI rate independent of RP2040/RP2350 clk_sys. */
+#ifndef HAL_CYW43_GSPI_TARGET_HZ
+#define HAL_CYW43_GSPI_TARGET_HZ 31250000u
 #endif
 #endif
 
-#if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_RP2040 &&              \
+#if defined(HAL_CYW43_PIO_CLOCK_DIV_INT) !=                                    \
+    defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8)
+#error                                                                         \
+    "HAL_CYW43_PIO_CLOCK_DIV_INT and HAL_CYW43_PIO_CLOCK_DIV_FRAC8 must be set together"
+#endif
+
+#if defined(HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256) &&                          \
+    defined(HAL_CYW43_PIO_CLOCK_DIV_INT)
+#error                                                                         \
+    "Select either HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256 or the legacy INT/FRAC8 pair"
+#endif
+
+#if defined(HAL_CYW43_PIO_CLOCK_DIV_INT)
+#define HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256                                  \
+  ((HAL_CYW43_PIO_CLOCK_DIV_INT) * 256u + (HAL_CYW43_PIO_CLOCK_DIV_FRAC8))
+#elif !defined(HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256)
+#define HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256 0u
+#endif
+
+#if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_RP &&                  \
+    HAL_BOARD_HAS_CYW43 &&                                                     \
     (!defined(HAL_CYW43_PIN_WL_ON) || !defined(HAL_CYW43_PIN_CHIP_SELECT) ||   \
      !defined(HAL_CYW43_PIN_DATA) || !defined(HAL_CYW43_PIN_CLOCK) ||          \
-     !defined(HAL_CYW43_PIO_CLOCK_DIV_INT) ||                                  \
-     !defined(HAL_CYW43_PIO_CLOCK_DIV_FRAC8) ||                                \
+     !defined(HAL_CYW43_GSPI_TARGET_HZ) ||                                     \
+     !defined(HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256) ||                        \
      !defined(HAL_CYW43_MAX_TRANSACTION_BYTES))
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires a complete CYW43 board pin/clock profile"
@@ -201,8 +260,8 @@
 
 /* -- Application entry opt-ins ----------------------------------------- */
 /* HAL_ENABLE_APP_TASK1 controls the optional app_task1 dispatch path when
-   HAL_PROVIDE_APP_ENTRY is enabled. On RP2040 this emits Arduino loop1(),
-   which starts the core-1 path, so it is intentionally explicit.         */
+   HAL_PROVIDE_APP_ENTRY is enabled. On the RP family this starts the core-1
+   path through Pico SDK multicore startup, so it is intentionally explicit. */
 
 /* -- FreeRTOS opt-in ---------------------------------------------------- */
 /* HAL_ENABLE_FREERTOS is a configuration flag for native FreeRTOS support.
@@ -211,12 +270,9 @@
    where each target has implemented them.
 
    Current target status:
-     - RP2040 must use arduino-pico's FreeRTOS mode (__FREERTOS).
-       Under that configuration, hal_mutex_*, hal_delay_ms(), and hal_idle()
-       are FreeRTOS-aware. hal_critical_section_* remains a hard, per-core
-       interrupt mask for timing-sensitive code. arduino-pico still owns
-       scheduler startup; HAL maps app_task1() to loop1() only when
-       HAL_ENABLE_APP_TASK1 is defined.
+     - RP targets link the pinned local FreeRTOS-Kernel and the matching
+       RP2040/RP2350 SMP port. HAL owns scheduler startup,
+       app_task0 runs on core 0, and optional app_task1 runs on core 1.
      - STM32G474 must have the local FreeRTOS-Kernel include path configured.
        STM32 CMake builds compile the Cortex-M4F port, heap_4, and kernel
        source list when FreeRTOS mode is enabled. hal_mutex_*,
@@ -224,7 +280,7 @@
        hal_critical_section_* still masks interrupts for timing-sensitive
        code. With HAL_PROVIDE_APP_ENTRY, app_task0() and optional app_task1()
        are created as FreeRTOS tasks before vTaskStartScheduler().
-   HAL-provided STM32 FreeRTOS entry defaults:
+   HAL-provided native FreeRTOS entry defaults:
      - HAL_FREERTOS_TASK0_STACK: 512 FreeRTOS stack words
      - HAL_FREERTOS_TASK1_STACK: 512 FreeRTOS stack words
      - HAL_FREERTOS_TASK0_PRIORITY: tskIDLE_PRIORITY + 1
@@ -240,10 +296,19 @@
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 
 #ifdef HAL_ENABLE_FREERTOS
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #ifndef __FREERTOS
 #error                                                                         \
-    "JaszczurHAL: HAL_ENABLE_FREERTOS on RP2040 requires arduino-pico FreeRTOS mode. Select 'Operating System -> FreeRTOS SMP' or use an FQBN option such as ':os=freertos' so __FREERTOS is defined."
+    "JaszczurHAL: HAL_ENABLE_FREERTOS on RP requires the local FreeRTOS port and __FREERTOS build definition."
+#endif
+#if defined(__has_include)
+#if !__has_include(<FreeRTOS.h>)
+#error                                                                         \
+    "JaszczurHAL: native RP FreeRTOS requires the local third_party/FreeRTOS-Kernel include path."
+#endif
+#if !__has_include("FreeRTOSConfig.h")
+#error "JaszczurHAL: native RP FreeRTOS requires its target FreeRTOSConfig.h."
+#endif
 #endif
 #elif HAL_TARGET_IS_STM32G474
 #if defined(__has_include)
@@ -261,7 +326,7 @@
 #endif
 #else
 #error                                                                         \
-    "JaszczurHAL: HAL_ENABLE_FREERTOS is currently supported only for HAL_TARGET_RP2040 with arduino-pico FreeRTOS mode or HAL_TARGET_STM32G474 with a local FreeRTOS-Kernel configuration."
+    "JaszczurHAL: HAL_ENABLE_FREERTOS is supported only for RP targets or HAL_TARGET_STM32G474."
 #endif
 #endif
 
@@ -272,20 +337,19 @@
    the project-local `hal_project_config.h`. Both the header declarations
    and the implementation file are compiled out unless the corresponding
    flag is defined, so unused modules cost zero code/RAM and any
-   third-party libraries they depend on are not pulled in by the
-   arduino-cli library resolver.
+   third-party libraries they depend on are not linked.
 
    Supported module flags:
 
      Application entry:
        HAL_ENABLE_APP_TASK1   - Dispatch optional app_task1() from the
-                                  HAL-provided entry path. On RP2040 this
-                                  emits loop1() and starts the core-1 path.
+                                  HAL-provided entry path. On the RP family
+                                  this explicitly starts the core-1 path.
 
      FreeRTOS:
        HAL_ENABLE_FREERTOS    - Opt in to native FreeRTOS availability.
-                                  RP2040 uses arduino-pico FreeRTOS mode
-                                  (__FREERTOS) and has FreeRTOS-aware
+                                  RP uses the pinned local kernel and has
+                                  FreeRTOS-aware
                                   mutex/delay/idle primitives. STM32G474
                                   uses a local FreeRTOS-Kernel checkout,
                                   target FreeRTOSConfig.h, Cortex-M4F port,
@@ -324,9 +388,9 @@
        HAL_ENABLE_TLS           - portable TLS client with a private BearSSL
                                   provider (propagates: TCP, WIFI).
        HAL_ENABLE_HTTP_CLIENT   - portable HTTP/HTTPS client (propagates:
-                                  TLS, TCP, WIFI).
+                                  TCP, WIFI; select TLS explicitly for HTTPS).
        HAL_ENABLE_OTA           - HAL-socket OTA service
-                                   (propagates: WIFI, UDP, TCP, CRYPTO).
+                                   (propagates: WIFI, UDP, TCP, CRYPTO, CRC).
        HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI, UDP).
        HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
                                   Requires at least one backend (e.g.
@@ -658,6 +722,9 @@
 #endif
 #ifndef HAL_ENABLE_CRYPTO
 #define HAL_ENABLE_CRYPTO
+#endif
+#ifndef HAL_ENABLE_CRC
+#define HAL_ENABLE_CRC
 #endif
 #endif
 
@@ -1399,19 +1466,13 @@
 #endif
 #endif /* HAL_CONFIG_VERBOSE */
 
-/* ── Platform-independent Arduino-compat macros ──────────────────────── */
-/* Only define fallbacks when building WITHOUT Arduino - on Arduino the
-   real F()/PROGMEM come from the core headers included later.          */
-
-#ifndef ARDUINO
+/* ── Portable source-compatibility macros ───────────────────────────── */
 
 /**
  * @def PROGMEM
  * @brief No-op on platforms without a separate flash address space.
  *
- * On AVR/Arduino the real PROGMEM qualifier places data in flash.
- * On RP2040 and PC mock builds it expands to nothing, allowing the same
- * source files to compile without modification.
+ * JaszczurHAL targets use a unified address space, so this expands to nothing.
  */
 #ifndef PROGMEM
 #define PROGMEM /* no-op on platforms without separate flash address space */
@@ -1419,17 +1480,14 @@
 
 /**
  * @def F(s)
- * @brief No-op identity macro for flash-string literals on non-AVR builds.
+ * @brief No-op identity macro for flash-string literals.
  *
- * On AVR Arduino, F() wraps a string literal so it is stored in flash.
- * On RP2040 and PC mock builds there is no Harvard architecture, so F()
- * simply returns the string pointer unchanged.
+ * JaszczurHAL targets use a unified address space, so this returns the string
+ * pointer unchanged.
  */
 #ifndef F
-#define F(s) (s) /* mock build: F() is a no-op identity */
+#define F(s) (s)
 #endif
-
-#endif /* !ARDUINO */
 
 /**
  * @def hal_min(a, b)
@@ -1621,8 +1679,8 @@
 /**
  * @def HAL_UART_MAX_INSTANCES
  * Maximum number of hardware UART handles.
- * Each slot stores lightweight metadata only; the hardware peripheral is owned
- * by the Arduino core.
+ * Each slot stores lightweight metadata only; the target backend owns the
+ * hardware peripheral.
  */
 #ifndef HAL_UART_MAX_INSTANCES
 #define HAL_UART_MAX_INSTANCES 2
@@ -1776,7 +1834,7 @@ const hal_config_t *hal_get_config(void);
  * Lightweight assert for HAL resource exhaustion.
  *
  * When the condition is false the macro calls @c hal_assert_fail(), whose
- * implementation is selected by the canonical HAL target. Hardware builds
+ * implementation is selected by the exact HAL target. Hardware builds
  * print @p msg through the target debug channel and enter an infinite loop
  * so the watchdog can reset the system; mock/test builds call @c abort().
  *

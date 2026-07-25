@@ -42,6 +42,7 @@ struct hal_simcom_a76xx_impl_s {
 
   bool mqtt_connected[2];
   int mqtt_active_client;
+  int mqtt_last_connect_result[2];
 
   /* MQTT-RX URC reassembly. The CMQTTRX* family delivers a single
      message as a four-URC sequence:
@@ -107,6 +108,74 @@ static hal_simcom_a76xx_result_t map_at(hal_modem_at_result_t r) {
   default:
     return HAL_SIMCOM_A76XX_ERROR;
   }
+}
+
+static bool parse_cmqtt_result(const char *line, const char *prefix,
+                               int *client_index, int *result_code) {
+  if (!line || !prefix || !client_index || !result_code)
+    return false;
+  const size_t prefix_len = strlen(prefix);
+  if (strncmp(line, prefix, prefix_len) != 0)
+    return false;
+
+  int parsed_client = -1;
+  int parsed_result = HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
+  if (sscanf(line + prefix_len, " %d,%d", &parsed_client, &parsed_result) !=
+      2) {
+    return false;
+  }
+  if (parsed_client < 0 || parsed_client > 1 || parsed_result < 0)
+    return false;
+
+  *client_index = parsed_client;
+  *result_code = parsed_result;
+  return true;
+}
+
+const char *hal_simcom_a76xx_mqtt_result_string(int result_code) {
+  static const char *const result_text[] = {
+      "operation succeeded",
+      "operation failed",
+      "bad UTF-8 string",
+      "socket connect failed",
+      "socket create failed",
+      "socket close failed",
+      "message receive failed",
+      "network open failed",
+      "network close failed",
+      "network not opened",
+      "client index error",
+      "no connection",
+      "invalid parameter",
+      "operation not supported",
+      "client is busy",
+      "connection acquisition failed",
+      "socket send failed",
+      "timeout",
+      "topic is empty",
+      "client is already in use",
+      "client not acquired",
+      "client not released",
+      "length out of range",
+      "network is already open",
+      "packet error",
+      "DNS error",
+      "socket closed by server",
+      "connection refused: unsupported protocol version",
+      "connection refused: client identifier rejected",
+      "connection refused: server unavailable",
+      "connection refused: bad username or password",
+      "connection refused: not authorized",
+      "TLS handshake failed",
+      "certificate not configured",
+      "TLS session open failed",
+      "server disconnect failed",
+  };
+
+  const size_t result_count = sizeof(result_text) / sizeof(result_text[0]);
+  if (result_code < 0 || (size_t)result_code >= result_count)
+    return "unknown MQTT result";
+  return result_text[result_code];
 }
 
 /* Copy the +CLBS payload into `out`. Some modem firmwares fragment
@@ -736,12 +805,28 @@ static void on_urc_disconn(const char *line, void *user) {
   }
 }
 
+static void on_urc_mqtt_connect(const char *line, void *user) {
+  hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
+  int client_index = -1;
+  int result_code = HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
+  if (!h || !parse_cmqtt_result(line, "+CMQTTCONNECT:", &client_index,
+                                &result_code)) {
+    return;
+  }
+
+  h->mqtt_last_connect_result[client_index] = result_code;
+  if (result_code != 0) {
+    h->mqtt_connected[client_index] = false;
+  }
+}
+
 static void install_mqtt_urcs(hal_simcom_a76xx_impl_t *h) {
   hal_modem_at_urc_register(h->at, "+CMQTTRXSTART:", on_urc_rxstart, h);
   hal_modem_at_urc_register(h->at, "+CMQTTRXTOPIC:", on_urc_rxtopic, h);
   hal_modem_at_urc_register(h->at, "+CMQTTRXPAYLOAD:", on_urc_rxpayload, h);
   hal_modem_at_urc_register(h->at, "+CMQTTRXEND:", on_urc_rxend, h);
   hal_modem_at_urc_register(h->at, "+CMQTTCONNLOST:", on_urc_disconn, h);
+  hal_modem_at_urc_register(h->at, "+CMQTTCONNECT:", on_urc_mqtt_connect, h);
   /* Raw line observer captures the bare topic/payload lines that the
      SimCom CMQTTRX family emits between the announcement URCs. */
   hal_modem_at_set_line_observer(h->at, on_urc_any, h);
@@ -773,6 +858,8 @@ hal_simcom_a76xx_create(const hal_simcom_a76xx_config_t *cfg) {
   h->in_use = true;
   h->cfg = *cfg;
   h->mqtt_active_client = -1;
+  h->mqtt_last_connect_result[0] = HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
+  h->mqtt_last_connect_result[1] = HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
   h->gnss_supported = true;
   rx_reset(h);
 
@@ -1228,6 +1315,7 @@ hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
   char cmd[320];
   int n;
   int ci = cfg->client_index;
+  h->mqtt_last_connect_result[ci] = HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
 
   /* Tear down any previous session (errors ignored). */
   n = snprintf(cmd, sizeof(cmd), "AT+CMQTTDISC=%d,10", ci);
@@ -1285,12 +1373,31 @@ hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
   r = hal_modem_at_send(h->at, cmd, expected, 15000u);
   if (r != HAL_MODEM_AT_OK) {
     h->mqtt_connected[ci] = false;
+    const int result_code = h->mqtt_last_connect_result[ci];
+    if (result_code == HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN) {
+      hal_derr("[SIMCOM][MQTT] connect failed before result URC "
+               "(client=%d, AT result=%d)",
+               ci, (int)r);
+    } else {
+      hal_derr("[SIMCOM][MQTT] connect failed: %s (client=%d, code=%d)",
+               hal_simcom_a76xx_mqtt_result_string(result_code), ci,
+               result_code);
+    }
     return map_at(r);
   }
 
+  h->mqtt_last_connect_result[ci] = 0;
   h->mqtt_connected[ci] = true;
   h->mqtt_active_client = ci;
+  hal_deb("[SIMCOM][MQTT] connected successfully (client=%d, code=0)", ci);
   return HAL_SIMCOM_A76XX_OK;
+}
+
+int hal_simcom_a76xx_mqtt_last_connect_result(hal_simcom_a76xx_t h,
+                                              int client_index) {
+  if (!h || client_index < 0 || client_index > 1)
+    return HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
+  return h->mqtt_last_connect_result[client_index];
 }
 
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_disconnect(hal_simcom_a76xx_t h,

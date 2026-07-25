@@ -4,7 +4,7 @@
  * HAL-only MCP2515 driver derived from the working register/SPI logic of the
  * Seeed/Loovee MCP_CAN library, with contributions by Cory J. Fowler.
  * The behavior and register programming flow are intentionally kept aligned
- * with the upstream implementation while removing Arduino runtime dependencies.
+ * with the upstream implementation while using only HAL runtime dependencies.
  */
 
 #include "hal/hal_spi.h"

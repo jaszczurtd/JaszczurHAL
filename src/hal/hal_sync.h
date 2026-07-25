@@ -12,6 +12,8 @@
  * std::mutex.
  */
 
+#include <stdbool.h>
+
 typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 #ifdef __cplusplus
 extern "C" {
@@ -31,6 +33,18 @@ hal_mutex_t hal_mutex_create(void);
  * @param mutex Handle from hal_mutex_create().
  */
 void hal_mutex_lock(hal_mutex_t mutex);
+
+/**
+ * @brief Try to lock the mutex without waiting.
+ *
+ * This is the only mutex operation permitted by bare-metal interrupt workers.
+ * FreeRTOS mutexes remain task-only and return false in interrupt context.
+ *
+ * @param mutex Handle from hal_mutex_create().
+ * @return true when the lock was acquired, false when it is already held or
+ *         the handle is invalid.
+ */
+bool hal_mutex_try_lock(hal_mutex_t mutex);
 
 /**
  * @brief Unlock the mutex.

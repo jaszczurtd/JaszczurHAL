@@ -1,0 +1,20 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "target",
+  "id": "rp2040",
+  "displayName": "Raspberry Pi RP2040",
+  "description": "RP2040 Cortex-M0+ target built with the pinned Pico SDK.",
+  "status": "supported",
+  "architecture": { "vendor": "raspberry-pi", "family": "rp", "soc": "rp2040", "isa": "armv6-m", "cores": 2 },
+  "hal": { "targetSelector": "HAL_TARGET_RP2040" },
+  "build": { "provider": "pico-sdk", "recipe": "rp-native", "platform": "rp2040" },
+  "gpio": {
+    "pinIdFormat": "integer",
+    "validPins": { "ranges": [{ "first": 0, "last": 29 }] },
+    "halEncoding": { "kind": "identity-u8" }
+  },
+  "memory": { "regions": { "sram": { "kind": "ram", "sizeBytes": 270336, "dmaCapable": true } } },
+  "defaultBoard": "pico",
+  "components": { "rp-native": { "mode": "required" } }
+}

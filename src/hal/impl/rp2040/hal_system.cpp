@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_system.h"
 #include "../shared/network/jh_network_architecture.h"
 #include "drivers/rp2040/rp2040_fault.h"
@@ -65,13 +65,8 @@ void hal_delay_ms(uint32_t ms) {
 }
 
 void hal_delay_us(uint32_t us) {
-  /* busy_wait_us(), NOT delayMicroseconds(): on this core delayMicroseconds()
-   * resolves to sleep_us(), which arms a hardware timer ALARM (interrupt) and
-   * parks the core on __wfe(). Called inside a critical section (interrupts
-   * masked) - as the OneWire bit timing does - that alarm can never fire and
-   * the core deadlocks. busy_wait_us() is a pure TIMER-register poll: it is
-   * interrupt-independent and therefore safe inside hal_critical_section_*,
-   * matching the cycle-counting delayMicroseconds() the ported code assumes. */
+  /* busy_wait_us() is interrupt-independent and therefore safe inside
+   * hal_critical_section_*(), including OneWire bit timing. */
   busy_wait_us(us);
 }
 
@@ -116,20 +111,15 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   const uint32_t flash_total = 0u;
 #endif
 
-#if defined(FS_START)
-  const uint32_t flash_xip_base = (uint32_t)XIP_BASE;
-  const uint32_t flash_layout_limit = flash_xip_base + flash_total;
-  const uint32_t flash_fs_start = (uint32_t)FS_START;
-  const bool flash_layout_known = flash_total > 0u &&
-                                  flash_fs_start >= flash_xip_base &&
-                                  flash_fs_start <= flash_layout_limit;
-  const uint32_t flash_usable =
-      flash_layout_known ? flash_fs_start - flash_xip_base : 0u;
+#if HAL_RP_OTA_SLOT_SIZE > 0u
+  const uint32_t flash_usable = (uint32_t)HAL_RP_OTA_SLOT_SIZE;
   const uint32_t flash_reserved =
-      flash_layout_known ? flash_total - flash_usable : 0u;
+      flash_usable <= flash_total ? flash_total - flash_usable : flash_total;
 #else
-  const uint32_t flash_usable = 0u;
-  const uint32_t flash_reserved = 0u;
+  const uint32_t flash_reserved =
+      (uint32_t)HAL_RP_FLASH_EEPROM_SIZE + (uint32_t)HAL_RP_FLASH_LITTLEFS_SIZE;
+  const uint32_t flash_usable =
+      flash_reserved <= flash_total ? flash_total - flash_reserved : 0u;
 #endif
 
 #if defined(PICO_STACK_SIZE)
@@ -149,7 +139,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
 #if JH_RP2040_HAL_SYSTEM_FREERTOS
   info.rtos_name = "FreeRTOS SMP";
 #else
-  info.rtos_name = "arduino-pico";
+  info.rtos_name = "none";
 #endif
   info.cpu_cores = arch_info.cpu_cores;
   info.is_hardware = true;
@@ -162,7 +152,11 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
   info.flash_reserved_bytes = flash_reserved;
   info.ram_total_bytes = arch_info.ram_total_bytes;
   info.ram_usable_bytes = arch_info.ram_usable_bytes;
+#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  info.heap_total_bytes = (uint32_t)configTOTAL_HEAP_SIZE;
+#else
   info.heap_total_bytes = 0u;
+#endif
   info.heap_free_bytes = hal_get_free_heap();
   info.stack_total_bytes = stack_total;
   info.uid_bytes = HAL_DEVICE_UID_BYTES;
@@ -296,4 +290,4 @@ bool hal_stack_guard_init(void) {
 }
 
 void hal_stack_guard_check(void) { rp2040_fault_stack_guard_check(); }
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

@@ -1,0 +1,20 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "target",
+  "id": "rp2350-riscv",
+  "displayName": "Raspberry Pi RP2350 RISC-V",
+  "description": "RP2350 Hazard3 RISC-V target built with the pinned Pico SDK.",
+  "status": "supported",
+  "architecture": { "vendor": "raspberry-pi", "family": "rp", "soc": "rp2350", "isa": "riscv32", "cores": 2 },
+  "hal": { "targetSelector": "HAL_TARGET_RP2350_RISCV" },
+  "build": { "provider": "pico-sdk", "recipe": "rp-native", "platform": "rp2350-riscv" },
+  "gpio": {
+    "pinIdFormat": "integer",
+    "validPins": { "ranges": [{ "first": 0, "last": 47 }] },
+    "halEncoding": { "kind": "identity-u8" }
+  },
+  "memory": { "regions": { "sram": { "kind": "ram", "sizeBytes": 532480, "dmaCapable": true } } },
+  "defaultBoard": "pico2",
+  "components": { "rp-native": { "mode": "required" } }
+}

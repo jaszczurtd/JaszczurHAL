@@ -4,9 +4,17 @@
     "module": "44_dacless_audio",
     "example": {
         "targets": [
+            "stm32g474",
             "rp2040",
-            "stm32g474"
+            "rp2350-arm",
+            "rp2350-riscv"
         ],
+        "boards": {
+            "rp2040": "pico",
+            "rp2350-arm": "pico2",
+            "rp2350-riscv": "pico2",
+            "stm32g474": "nucleo-g474re"
+        },
         "variants": [
             {
                 "id": "polling",
@@ -16,8 +24,10 @@
                     "DACLESS_EXAMPLE_USE_DMA=0"
                 ],
                 "targets": [
+                    "stm32g474",
                     "rp2040",
-                    "stm32g474"
+                    "rp2350-arm",
+                    "rp2350-riscv"
                 ]
             }
         ]
@@ -25,11 +35,12 @@
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "pico",
-    "buildDir": "${project}/.build",
-    "cmakeBuildDir": "${project}/.build/cmake",
+    "buildDir": "${jhRoot}/.build/examples/44_dacless_audio",
+    "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../cmake/jh_firmware_project",
         "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "44_dacless_audio"
         }

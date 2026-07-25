@@ -6,6 +6,12 @@
 /**
  * @file hal_wifi.h
  * @brief Thread-safe HAL wrapper for WiFi operations.
+ *
+ * On RP CYW43 backends, status-returning operations report
+ * HAL_EUNSUPPORTED when the board profile has no required radio hardware,
+ * HAL_EUNINIT before successful initialization, and HAL_EHW after a failed
+ * probe or initialization. Station mode and station join are initialization
+ * entry points; state queries and scans never initialize the radio implicitly.
  */
 
 #include "hal_status.h"
@@ -95,7 +101,8 @@ bool hal_wifi_set_hostname(const char *hostname);
  * @brief Start station connection.
  * @param ssid WiFi SSID.
  * @param password WiFi password.
- * @param non_blocking true uses non-blocking begin when available.
+ * @param non_blocking true starts the join and returns after the backend
+ * accepts the request; query the connection state separately.
  */
 bool hal_wifi_begin_station(const char *ssid, const char *password,
                             bool non_blocking);

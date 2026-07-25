@@ -202,10 +202,10 @@ hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c) {
 #ifdef HAL_ENABLE_MCP9600
   if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) {
     *out_c = hal_mcp9600_read_thermocouple(as_mcp(h));
-  } else
+  }
 #endif
 #ifdef HAL_ENABLE_MAX6675
-      if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
+  if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
     *out_c = hal_max6675_read_celsius(as_max(h));
   }
 #endif

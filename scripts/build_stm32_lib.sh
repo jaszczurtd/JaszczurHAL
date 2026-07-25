@@ -14,9 +14,11 @@
 # Options:
 #   -p, --project-config DIR   Path to dir with hal_project_config.h
 #   -D KEY=VALUE               Extra compile definitions (repeatable)
+#   --board NAME               Board profile (default: nucleo-g474re)
 #   --freertos                 Define HAL_ENABLE_FREERTOS and ensure FreeRTOS-Kernel
 #   --freertos-kernel PATH     Path to FreeRTOS-Kernel checkout
-#   -o, --output DIR           Output directory (default: ./build_stm32)
+#   -o, --output DIR           Output directory below .build/
+#                              (default: .build/static/stm32g474/<board>)
 #   -t, --toolchain FILE       CMake toolchain file
 #                              (default: ./stm32_lib/toolchain_stm32g474.cmake)
 #   --clean                    Remove build directory before building
@@ -27,6 +29,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# shellcheck source=lib/build_artifacts.sh
+source "${SCRIPT_DIR}/lib/build_artifacts.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -40,10 +45,11 @@ warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 die()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 PROJECT_CONFIG_DIR=""
+BOARD="nucleo-g474re"
 EXTRA_DEFS=()
 FREERTOS=0
 FREERTOS_KERNEL_DIR=""
-OUTPUT_DIR="${REPO_ROOT}/build_stm32"
+OUTPUT_DIR=""
 TOOLCHAIN_FILE="${REPO_ROOT}/stm32_lib/toolchain_stm32g474.cmake"
 CLEAN=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -52,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
+        --board) BOARD="$2"; shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
         --freertos-kernel) FREERTOS_KERNEL_DIR="$2"; shift 2 ;;
         -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
@@ -67,6 +74,11 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if ! OUTPUT_DIR="$(jh_resolve_build_output \
+    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/stm32g474/${BOARD}")"; then
+    die "Build output must be inside ${REPO_ROOT}/.build"
+fi
 
 [[ -f "${TOOLCHAIN_FILE}" ]] || die "Toolchain file not found: ${TOOLCHAIN_FILE}"
 
@@ -121,6 +133,8 @@ fi
 info "Configuring CMake..."
 cmake -S "${REPO_ROOT}/stm32_lib" -B "${OUTPUT_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+    -DJH_TARGET=stm32g474 \
+    -DJH_BOARD="${BOARD}" \
     "${CMAKE_EXTRA_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
@@ -128,6 +142,15 @@ cmake --build "${OUTPUT_DIR}" -j "${JOBS}"
 
 LIB_FILE=$(find "${OUTPUT_DIR}" -name "libJaszczurHAL.a" -print -quit 2>/dev/null)
 if [[ -n "${LIB_FILE}" ]]; then
+    GENERATED_SOURCE="${OUTPUT_DIR}/generated/boards/stm32g474/${BOARD}"
+    GENERATED_INCLUDE="${OUTPUT_DIR}/include/generated"
+    mkdir -p "${GENERATED_INCLUDE}"
+    for generated_header in \
+        jh_board_config.h jh_board_registry.h jh_link_contract.h; do
+        [[ -f "${GENERATED_SOURCE}/${generated_header}" ]] ||
+            die "Generated board header not found: ${GENERATED_SOURCE}/${generated_header}"
+        cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"
+    done
     SIZE=$(stat --printf="%s" "${LIB_FILE}" 2>/dev/null || stat -f "%z" "${LIB_FILE}" 2>/dev/null || echo "?")
     ok "Library built: ${LIB_FILE}  (${SIZE} bytes)"
     echo ""

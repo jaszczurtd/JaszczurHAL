@@ -5,7 +5,7 @@ All optional functionality is gated by `HAL_ENABLE_*` macros that follow an
 OPT-IN model: by default *no* optional module is compiled in. To use a
 module, define its `HAL_ENABLE_*` flag either:
 
-- in your sketch's `hal_project_config.h` (auto-included via __has_include),
+- in the project's `hal_project_config.h` (auto-included via __has_include),
   e.g. `#define HAL_ENABLE_WIFI`, or
 - as a compiler define, e.g. `-DHAL_ENABLE_WIFI`.
 
@@ -23,32 +23,92 @@ Separate from the per-module HAL_ENABLE_* flags, JaszczurHAL selects exactly
 one hardware backend via a single switch (see src/hal/hal_target.h). Define ONE
 of the following in your `hal_project_config.h` (or via -D):
 
-    HAL_TARGET_RP2040       Raspberry Pi RP2040 / arduino-pico
-    HAL_TARGET_STM32G474    STM32G474 (bare-metal backend)
-    HAL_TARGET_MOCK         host unit-test / simulation backend
+    HAL_TARGET_RP2040        RP2040 / Cortex-M0+
+    HAL_TARGET_RP2350_ARM    RP2350 / Cortex-M33
+    HAL_TARGET_RP2350_RISCV  RP2350 / Hazard3 RISC-V
+    HAL_TARGET_STM32G474     STM32G474 (bare-metal or FreeRTOS backend)
+    HAL_TARGET_MOCK          host unit-test / simulation backend
 
 If you define none, the target is AUTO-DETECTED from the toolchain, so existing
 projects need no change:
 
-    arduino-pico / RP2040 SDK   -> HAL_TARGET_RP2040
-    STM32G474xx (CubeG4 / -D)   -> HAL_TARGET_STM32G474
-    any host compiler           -> HAL_TARGET_MOCK
-    bare-metal ARM, no match    -> compile-time #error (real misconfiguration)
+    PICO_RP2040 / RP2040 board       -> HAL_TARGET_RP2040
+    PICO_RP2350 + ARM / Pico 2 board -> HAL_TARGET_RP2350_ARM
+    PICO_RP2350 + RISC-V             -> HAL_TARGET_RP2350_RISCV
+    STM32G474xx (CubeG4 / -D)        -> HAL_TARGET_STM32G474
+    any host compiler                -> HAL_TARGET_MOCK
+    bare-metal target, no match      -> compile-time #error
 
 Selecting two targets at once is a compile-time #error. The rest of the library
-tests `HAL_TARGET_IS_RP2040 / _IS_STM32G474 / _IS_MOCK` and the string
-`HAL_TARGET_NAME`. Backend implementation files compile only for their own
-target, so unused backends cost zero code.
+uses `HAL_TARGET_IS_RP` for the RP family, exact `HAL_TARGET_IS_RP2040 /
+_IS_RP2350_ARM / _IS_RP2350_RISCV` discriminators for chip-specific code,
+`HAL_RP_ARCH_ARM / _RISCV` for ISA-specific code and `HAL_TARGET_NAME` for the
+exact target string.
+
+`rp_native_lib/` supports RP2040, RP2350 ARM and RP2350 RISC-V and generates
+ELF/BIN/UF2 artifacts. The HAL provides `main()` and starts core 1 only when
+`HAL_ENABLE_APP_TASK1` is defined. It owns USB, the optional FreeRTOS SMP
+scheduler, coordinated EEPROM/LittleFS storage, and staged OTA.
+
+
+Board profile selection
+-----------------------
+
+Board wiring and fitted hardware are independent from the target. Select a
+profile with `JH_BOARD`; the board generator emits one selector:
+
+    HAL_BOARD_PROFILE_RP_PICO
+    HAL_BOARD_PROFILE_RP_PICO_W
+    HAL_BOARD_PROFILE_RP_PICO_2
+    HAL_BOARD_PROFILE_RP_PICO_2_W
+    HAL_BOARD_PROFILE_RP_PICO_PIM730
+    HAL_BOARD_PROFILE_RP2040_PLUS_4MB
+    HAL_BOARD_PROFILE_RP2040_ZERO
+    HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE
+
+Pico/Pico W/PIM730 require HAL_TARGET_RP2040. Pico 2/Pico 2 W require an
+RP2350 target; Pico 2 W currently requires RP2350 ARM. HAL_BOARD_HAS_USB_DEVICE,
+HAL_BOARD_HAS_CYW43 and
+HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND expose compile-time physical facts.
+The CMake registry resolves the matching Pico SDK board and validates expected
+flash size. Wireless builds can control HAL_LED_BUILTIN through the pinned
+JaszczurHAL CYW43 driver without enabling lwIP or the full network backend.
+The Pico+PIM730 profile defaults to WL_ON=GP2, CS=GP3, combined DAT=GP4 and
+CLK=GP5. HAL_CYW43_GSPI_TARGET_HZ defaults to 31250000 for both onboard and
+external radios. The native transport reads the live clk_sys, computes the PIO
+16.8 divider without exceeding that target and selects the matching upstream
+high/low-speed sampling program. At the standard clocks this gives divider
+2.0 on RP2040/125 MHz and approximately 2.402 on RP2350/150 MHz.
+Changing clk_sys while CYW43 is initialized is rejected; deinitialize the
+network owner, change the clock, then initialize it again.
+HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256 remains an explicit diagnostic escape
+hatch. The legacy HAL_CYW43_PIO_CLOCK_DIV_INT/FRAC8 pair maps to that override
+when both values are supplied; it is no longer a board default.
+
+The public hal_board API reports runtime states for:
+
+    HAL_BOARD_CAP_USB_DEVICE
+    HAL_BOARD_CAP_CYW43
+    HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
+
+Use hal_board_get_info(), hal_board_get_capability_state() and
+hal_board_require_capabilities(). A declared device starts inactive and moves
+to available or failed when its owning driver probes/initialises it.
+RP CYW43 network modules may be compiled for a board profile without radio.
+Their public status APIs then return HAL_EUNSUPPORTED without hardware access.
+Declared but not initialized hardware returns HAL_EUNINIT; a failed probe or
+initialization returns HAL_EHW. Pico+PIM730 additionally requires the external
+radio frontend capability.
 
 
 Application entry flags
 -----------------------
 
   HAL_ENABLE_APP_TASK1
-    Dispatch optional app_task1() from the HAL-provided entry path. On RP2040,
-    this emits Arduino loop1(), which starts the core-1 path. On STM32G474
-    FreeRTOS entry builds, this creates the second application task. Leave it
-    undefined for single-loop/single-task applications.
+    Dispatch optional app_task1() from the HAL-provided entry path. Bare RP
+    launches core 1; RP FreeRTOS creates a task pinned to core 1. STM32G474
+    FreeRTOS creates the second application task. Leave it undefined for
+    single-loop/single-task applications.
 
 
 FreeRTOS integration flag
@@ -59,24 +119,18 @@ FreeRTOS integration flag
     hal_rtos_* wrapper; applications include and use native FreeRTOS headers
     directly. Current validation/build support is staged by target:
 
-      RP2040:
-        Requires arduino-pico FreeRTOS mode so __FREERTOS is defined
-        (board menu "Operating System -> FreeRTOS SMP", or an equivalent
-        FQBN option such as os=freertos). scripts/build_rp2040_lib.sh
-        --freertos and the 29_freertos_smoke example manifest configure this
-        mode for their builds.
-        The local third_party/FreeRTOS-Kernel tree is not used on RP2040 with the
-        RP2040 backend. In HAL_ENABLE_FREERTOS + __FREERTOS builds,
-        hal_mutex_* uses a FreeRTOS mutex and hal_delay_ms()/hal_idle() yield
-        to the scheduler from task context. hal_critical_section_* remains a
-        hard per-core interrupt mask for timing-sensitive code. arduino-pico
-        owns scheduler startup and HAL app_task1() dispatch is represented by
-        loop1() only when HAL_ENABLE_APP_TASK1 is defined.
+      RP2040/RP2350:
+        Uses the pinned third_party/FreeRTOS-Kernel checkout and the official
+        SMP ports for RP2040, RP2350_ARM_NTZ and RP2350_RISC-V. The native
+        entry creates app_task0() pinned to core 0, optional app_task1() pinned
+        to core 1, and then starts the scheduler. The native TinyUSB pump runs
+        as a separate task pinned to core 0. scripts/build_rp_native_lib.sh
+        --freertos and the 29_freertos_smoke manifest configure this mode.
 
       STM32G474:
         Uses the local third_party/FreeRTOS-Kernel checkout, or the path set
         with JH_FREERTOS_KERNEL_DIR. scripts/ensure_freertos_kernel.sh reads
-        freertos_core_version.conf and fetches/verifies the pinned upstream
+        third_party/freertos_core_version.conf and fetches/verifies the pinned upstream
         kernel ref before STM32 FreeRTOS CMake configuration needs sources.
         STM32 CMake builds compile an explicit kernel source list
         (tasks/queue/list/timers/event_groups/stream_buffer, ARM_CM4F port.c,
@@ -90,11 +144,24 @@ FreeRTOS integration flag
         app_task0() and optional app_task1() FreeRTOS tasks, then starts the
         scheduler.
 
-        HAL-provided STM32 entry task defaults can be overridden with:
+        HAL-provided native entry task defaults can be overridden with:
+          HAL_FREERTOS_CORE_COUNT       default 2 on native RP; allowed 1 or 2
           HAL_FREERTOS_TASK0_STACK      default 512 FreeRTOS stack words
           HAL_FREERTOS_TASK1_STACK      default 512 FreeRTOS stack words
           HAL_FREERTOS_TASK0_PRIORITY   default tskIDLE_PRIORITY + 1
           HAL_FREERTOS_TASK1_PRIORITY   default tskIDLE_PRIORITY + 1
+          HAL_FREERTOS_HEAP_SIZE        RP heap_4 bytes; default 164 KiB
+          HAL_USB_FREERTOS_TASK_STACK   RP USB worker; default 512 words
+          HAL_USB_FREERTOS_TASK_PRIORITY
+                                        RP USB worker; default
+                                        tskIDLE_PRIORITY + 2
+
+        HAL_FREERTOS_CORE_COUNT applies to native RP builds. Setting it to 1
+        selects the upstream single-core scheduler path and requires
+        HAL_ENABLE_APP_TASK1 to remain undefined.
+
+        STM32G474 uses a 24 KiB heap_4 pool from its target-local
+        FreeRTOSConfig.h.
 
         Platform stack-size overrides:
           HAL_STM32_MAIN_STACK_SIZE     bytes; overrides STM32 linker
@@ -104,14 +171,14 @@ FreeRTOS integration flag
           HAL_RP2040_CORE1_STACK_SIZE   bytes; mapped to
                                         PICO_CORE1_STACK_SIZE
 
-	    Full module task-safety remains conservative. Singleton/per-bus mutex
-	    creation uses atomic create-once fallbacks where defensive lazy creation is
-	    still needed; timer callback context, Arduino-origin wrapper internals, and
-	    documented single-owner modules follow the FreeRTOS plan and thread-safety
-	    audit. The normal mock backend does not support HAL_ENABLE_FREERTOS, but
-	    runalltests.sh enables the host FreeRTOS POSIX scheduler test target
-	    (JH_ENABLE_FREERTOS_POSIX_TESTS) to cover the FreeRTOS HAL mutex/delay and
-	    lazy create-once paths in ctest without hardware.
+        Full module task-safety remains conservative. Singleton/per-bus mutex
+        creation uses atomic create-once fallbacks where defensive lazy creation
+        is still needed; timer callback context and documented single-owner
+        modules follow the FreeRTOS plan and thread-safety audit. The mock backend
+        does not support HAL_ENABLE_FREERTOS. runalltests.sh enables the host
+        FreeRTOS POSIX scheduler test target (JH_ENABLE_FREERTOS_POSIX_TESTS) to
+        cover HAL mutex/delay and lazy create-once paths in ctest without
+        hardware.
 
 
 Module enable flags
@@ -119,13 +186,15 @@ Module enable flags
 
 Connectivity
   HAL_ENABLE_WIFI
-    WiFi (arduino-pico; use a WiFi-capable board/FQBN such as rpipicow).
+    WiFi. A profile without the selected network hardware compiles but public
+    runtime access returns HAL_EUNSUPPORTED.
   HAL_ENABLE_TIME
     NTP / system time. Propagates: WIFI.
   HAL_ENABLE_MQTT
     PubSubClient wrapper. Propagates: WIFI.
   HAL_ENABLE_UDP
-    Thread-safe WiFiUDP wrapper. Propagates: WIFI.
+    Thread-safe UDP transport over the selected network backend. Propagates:
+    WIFI.
   HAL_ENABLE_TCP
     TCP client/listener transport. Propagates: WIFI.
   HAL_ENABLE_HTTP_SERVER
@@ -148,8 +217,13 @@ Connectivity
     Portable BearSSL TLS client over native HAL TCP. Propagates: TCP, WIFI.
     Does not force BSD sockets; an optional BearSSL BSD transport remains
     available when both modules are enabled.
+  HAL_ENABLE_HTTP_CLIENT
+    Bounded one-shot HTTP/1.1 client over HAL TCP. Propagates: TCP, WIFI.
+    HAL_ENABLE_TLS adds the verified HTTPS transport.
   HAL_ENABLE_OTA
-    ArduinoOTA wrapper. Propagates: WIFI.
+    Authenticated RP update service over HAL UDP/TCP with image staging,
+    trial boot, confirmation, rollback, discovery, and VS Code upload.
+    Propagates: WIFI, UDP, TCP, CRYPTO, CRC.
   HAL_ENABLE_WIREGUARD
     Shared host-lwIP WireGuard wrapper. Propagates: UDP, WIFI. Requires
     host-stack L3, virtual-netif/route, stack-context and secure-entropy
@@ -168,8 +242,9 @@ Storage
   HAL_ENABLE_KV
     Key-value store. Propagates: EEPROM.
   HAL_ENABLE_LITTLEFS
-    LittleFS lifecycle and basic filesystem helpers. On STM32G474 this uses
-    an internal flash partition controlled by HAL_STM32_FLASH_LITTLEFS_SIZE.
+    LittleFS lifecycle and basic filesystem helpers. Native RP targets use
+    HAL_RP_FLASH_LITTLEFS_SIZE; STM32G474 uses
+    HAL_STM32_FLASH_LITTLEFS_SIZE.
   HAL_ENABLE_FAT
     FatFs core plus shared SD-over-SPI disk I/O and file helpers.
   HAL_ENABLE_SDLOGGER
@@ -209,6 +284,9 @@ Sensors
                            over HAL GPIO.
   HAL_ENABLE_BH1750        Shared BH1750 ambient-light sensor over HAL I2C.
                            Propagates: I2C.
+  HAL_ENABLE_ADP5360       Shared ADP5360 PMIC over HAL I2C: MFD
+                           init/reset/shipment, charger, fuel-gauge and
+                           buck/buck-boost regulator control. Propagates: I2C.
   HAL_ENABLE_MCP3221       Shared MCP3221 12-bit ADC over HAL I2C.
                            Propagates: I2C.
   HAL_ENABLE_TSC2007       Shared TSC2007 resistive touch controller over HAL I2C.
@@ -382,11 +460,13 @@ HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
                            HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
-HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI
+HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI + HAL_ENABLE_UDP + HAL_ENABLE_TCP +
+                          HAL_ENABLE_CRYPTO + HAL_ENABLE_CRC
 HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM, HAL_ENABLE_UART
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
+HAL_ENABLE_ADP5360     -> HAL_ENABLE_I2C
 HAL_ENABLE_MCP3221     -> HAL_ENABLE_I2C
 HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C, HAL_ENABLE_SPI

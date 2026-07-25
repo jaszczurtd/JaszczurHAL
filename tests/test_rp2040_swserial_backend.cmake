@@ -17,8 +17,7 @@ endif()
 
 file(READ "${_rp2040_impl}" _rp2040_source)
 
-# The RP2040 implementation is intentionally independent of Arduino core.  It
-# must drive PIO through the Pico SDK directly.
+# The RP2040 implementation must drive PIO through the Pico SDK directly.
 if(NOT _rp2040_source MATCHES
        "#[ \t]*include[ \t]*[<\"]hardware/pio\\.h[>\"]")
     message(FATAL_ERROR
@@ -113,9 +112,9 @@ file(READ "${_shared_impl}" _shared_source)
 
 # Arduino library builds discover implementation files recursively, so CMake
 # source-list filtering alone is insufficient: the portable GPIO driver must
-# guard itself out when the selected target is RP2040.
+# guard itself out for the complete RP family.
 if(NOT _shared_source MATCHES
-       "#[ \t]*if[^\r\n]*![ \t]*HAL_TARGET_IS_RP2040")
+       "#[ \t]*if[^\r\n]*![ \t]*HAL_TARGET_IS_RP")
     message(FATAL_ERROR
-        "Shared GPIO SoftwareSerial must be excluded for HAL_TARGET_RP2040")
+        "Shared GPIO SoftwareSerial must be excluded for HAL_TARGET_IS_RP")
 endif()

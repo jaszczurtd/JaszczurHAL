@@ -6,8 +6,8 @@
  */
 
 #include "rp2040_system.h"
+#include "../../rp2040_adc_shared.h"
 
-#include <hardware/adc.h>
 #include <hardware/watchdog.h>
 #include <malloc.h>
 #include <pico/bootrom.h>
@@ -16,20 +16,25 @@
 #include <stddef.h>
 #include <string.h>
 
-// Heap region bounds provided by the (arduino-pico / pico-sdk) linker script:
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+#include <FreeRTOS.h>
+#include <portable.h>
+#endif
+
+// Heap region bounds provided by the Pico SDK linker script:
 // the allocator hands out memory between the end of .bss and the stack limit.
 extern "C" char __StackLimit;
 extern "C" char __bss_end__;
 
 namespace {
 
-// Latched once during C++ static initialization -- i.e. BEFORE setup() runs
+// Latched once during C++ static initialization, before app_start() runs,
 // and therefore before any rp2040_system_watchdog_enable() call can rewrite
 // watchdog scratch register 4. This lets us tell apart a genuine application
 // watchdog *timeout* (the watchdog was armed via watchdog_enable(), which
 // writes WATCHDOG_NON_REBOOT_MAGIC into scratch[4]) from a *commanded*
-// reboot through watchdog_reboot() -- used by picotool upload, BOOTSEL/UF2
-// relaunch and rp2040.reboot() -- which sets scratch[4] to 0xb007c0d3 or 0.
+// reboot through watchdog_reboot() -- used by picotool upload and BOOTSEL/UF2
+// relaunch -- which sets scratch[4] to 0xb007c0d3 or 0.
 // watchdog_reboot also uses the watchdog hardware, so plain
 // watchdog_caused_reboot() reports true for a fresh flash and makes every
 // upload look like a watchdog starvation. watchdog_enable_caused_reboot()
@@ -58,7 +63,6 @@ void rp2040_system_get_arch_info(rp2040_system_arch_info_t *out) {
 #else
   out->mcu_subtype = "RP2350";
 #endif
-  out->cpu_arch = "ARM Cortex-M33";
   out->ram_total_bytes = 520u * 1024u;
   out->ram_usable_bytes = 520u * 1024u;
 #else
@@ -69,7 +73,13 @@ void rp2040_system_get_arch_info(rp2040_system_arch_info_t *out) {
   out->ram_usable_bytes = 256u * 1024u;
 #endif
 
-  out->backend_name = "rp2040/arduino-pico+pico-sdk";
+#if HAL_TARGET_IS_RP2350_RISCV
+  out->cpu_arch = "Hazard3 RISC-V";
+#elif HAL_TARGET_IS_RP2350_ARM
+  out->cpu_arch = "ARM Cortex-M33";
+#endif
+
+  out->backend_name = "rp/pico-sdk";
   out->cpu_cores = 2u;
 #if defined(__ARM_FP) && (__ARM_FP != 0)
   out->has_fpu = true;
@@ -91,6 +101,9 @@ bool rp2040_system_watchdog_caused_reboot(void) {
 void rp2040_system_idle(void) { tight_loop_contents(); }
 
 uint32_t rp2040_system_get_free_heap(void) {
+#if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
+  return (uint32_t)xPortGetFreeHeapSize();
+#else
   // total heap span (end of .bss to the stack limit, from the linker)
   // minus the bytes currently allocated by the newlib allocator. This is
   // an upper bound; fragmentation can still make a single large
@@ -101,20 +114,12 @@ uint32_t rp2040_system_get_free_heap(void) {
     return 0u;
   }
   return (uint32_t)(total - used);
+#endif
 }
 
 float rp2040_system_read_chip_temp(void) {
-  // On-die temperature sensor read straight over the native ADC.
-  // ADC_TEMPERATURE_CHANNEL_NUM is input 4 (RP2040 / RP2350 QFN-60) or input 8
-  // (RP2350 QFN-80). Not mutually locked with hal_adc pin reads, matching the
-  // prior behaviour where the temperature read and hal_adc used separate locks.
   const float vref = 3.3f;
-  adc_init();
-  adc_set_temp_sensor_enabled(true);
-  sleep_ms(1); // let the sensor and input mux settle, else readings are erratic
-  adc_select_input(ADC_TEMPERATURE_CHANNEL_NUM);
-  const uint16_t raw = adc_read();
-  adc_set_temp_sensor_enabled(false);
+  const uint16_t raw = rp2040_adc_read_temperature_raw();
   const float voltage = (float)raw * vref / 4096.0f;
   return 27.0f - (voltage - 0.706f) / 0.001721f;
 }
@@ -156,10 +161,4 @@ bool rp2040_system_get_device_uid_hex(char *buf, size_t buflen) {
   return true;
 }
 
-bool rp2040_system_in_isr(void) {
-  /* Cortex-M IPSR: zero in Thread mode, equal to the active exception
-   * number in Handler mode. RP2040 is Cortex-M0+. */
-  uint32_t ipsr;
-  __asm__ __volatile__("MRS %0, ipsr" : "=r"(ipsr));
-  return (ipsr & 0x1FFu) != 0u;
-}
+bool rp2040_system_in_isr(void) { return __get_current_exception() != 0u; }
