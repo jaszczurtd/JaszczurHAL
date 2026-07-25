@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 
 #include "../../hal_config.h"
 #include "../../hal_spi.h"
@@ -469,4 +469,4 @@ bool hal_spi_write_dma_async_wait(uint8_t bus) {
   return hal_status_to_bool(hal_spi_write_dma_async_wait_ex(bus));
 }
 
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

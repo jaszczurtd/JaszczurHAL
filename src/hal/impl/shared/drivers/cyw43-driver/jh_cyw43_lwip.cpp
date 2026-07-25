@@ -4,7 +4,7 @@
 
 #include <string.h>
 
-#if ((HAL_TARGET_IS_RP2040 && defined(HAL_CYW43_BUS_PICO_PIO)) ||              \
+#if ((HAL_TARGET_IS_RP && defined(HAL_CYW43_BUS_PICO_PIO)) ||                  \
      (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))) &&        \
     defined(HAL_CYW43_STACK_LWIP)
 
@@ -187,11 +187,10 @@ extern "C" hal_status_t jh_cyw43_lwip_service(void) {
   return status;
 }
 
-extern "C" hal_status_t jh_cyw43_lwip_join(const char *ssid,
-                                           const char *password,
-                                           uint32_t auth_type,
-                                           uint32_t timeout_ms) {
-  if (ssid == nullptr || password == nullptr || timeout_ms == 0u) {
+extern "C" hal_status_t jh_cyw43_lwip_join_start(const char *ssid,
+                                                 const char *password,
+                                                 uint32_t auth_type) {
+  if (ssid == nullptr || password == nullptr) {
     return HAL_EINVAL;
   }
   const size_t ssid_length = strlen(ssid);
@@ -210,6 +209,21 @@ extern "C" hal_status_t jh_cyw43_lwip_join(const char *ssid,
   s_last_cyw43_error = join_status;
   if (join_status != 0) {
     return status_from_cyw43(join_status);
+  }
+  return HAL_OK;
+}
+
+extern "C" hal_status_t jh_cyw43_lwip_join(const char *ssid,
+                                           const char *password,
+                                           uint32_t auth_type,
+                                           uint32_t timeout_ms) {
+  if (timeout_ms == 0u) {
+    return HAL_EINVAL;
+  }
+  const hal_status_t start_status =
+      jh_cyw43_lwip_join_start(ssid, password, auth_type);
+  if (start_status != HAL_OK) {
+    return start_status;
   }
 
   const uint32_t started = hal_millis();
@@ -456,7 +470,7 @@ jh_cyw43_lwip_get_snapshot(jh_cyw43_lwip_snapshot_t *out_snapshot) {
 #else
 
 extern "C" uint32_t jh_lwip_port_rand(void) { return 1u; }
-#if HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_RP
 extern "C" uint32_t sys_now(void) { return 0u; }
 #endif
 extern "C" __attribute__((noreturn)) void
@@ -466,6 +480,10 @@ jh_lwip_port_assert(const char *, const char *, int) {
   }
 }
 extern "C" hal_status_t jh_cyw43_lwip_service(void) { return HAL_EUNSUPPORTED; }
+extern "C" hal_status_t jh_cyw43_lwip_join_start(const char *, const char *,
+                                                 uint32_t) {
+  return HAL_EUNSUPPORTED;
+}
 extern "C" hal_status_t jh_cyw43_lwip_join(const char *, const char *, uint32_t,
                                            uint32_t) {
   return HAL_EUNSUPPORTED;

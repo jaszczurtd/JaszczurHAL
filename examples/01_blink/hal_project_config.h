@@ -4,14 +4,11 @@
 #define HAL_DEBUG_DEFAULT_BAUD 115200u
 #endif
 
-/* Entry point is selected by the build system:
- * RP2040 generates setup()/loop(); STM32 defines HAL_PROVIDE_APP_ENTRY. */
+/* Entry point is selected by the build system. */
 
 /* ── Target (backend) selection ───────────────────────────────────────────
- * JaszczurHAL picks one hardware backend via a single switch. On arduino-pico
- * the RP2040 target is AUTO-DETECTED, so this example needs nothing here.
- *
- * To pin it explicitly (recommended for non-Arduino or multi-target projects),
+ * JaszczurHAL picks one hardware backend via a single switch.
+ * To pin it explicitly,
  * uncomment exactly one:
  *
  *   #define HAL_TARGET_RP2040

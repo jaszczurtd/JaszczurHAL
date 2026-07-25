@@ -10,7 +10,9 @@
   `src/rp2_common/pico_cyw43_driver/cyw43_bus_pio_spi.c`
 - license: BSD-3-Clause
 
-The generated PIO instruction words are kept in JaszczurHAL source so the
-firmware build does not require `pioasm` or the Arduino-Pico CYW43 transport
-objects. JaszczurHAL supplies its own transport lifecycle, timeout handling and
-generic gSPI bridge around the program.
+The generated instruction words for upstream's `spi_gap01_sample0` (high-speed)
+and `spi_gap0_sample1` (low-speed) programs are kept in JaszczurHAL source so
+the firmware build does not require `pioasm` or prebuilt CYW43 transport
+objects. JaszczurHAL derives the 16.8 PIO divider from the live
+`clk_sys`, selects the timing program, and supplies its own transport
+lifecycle, timeout handling and generic gSPI bridge.

@@ -21,7 +21,7 @@
 #endif
 #define CYW43_NETUTILS (0)
 #define CYW43_USE_STATS (0)
-#define CYW43_USE_OTP_MAC (0)
+#define CYW43_USE_OTP_MAC (1)
 #define CYW43_GPIO (1)
 #define CYW43_ENABLE_BLUETOOTH (0)
 #define CYW43_RESOURCE_VERIFY_DOWNLOAD (1)

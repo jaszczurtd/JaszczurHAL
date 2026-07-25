@@ -6,7 +6,7 @@ estimate). Use it to confirm the bare-metal ADC1 polled conversion works on
 silicon before relying on it.
 
 - **ADC1**, single-ended, 12-bit, polled (one regular conversion per read)
-- Inputs: **PA0 = ADC1_IN1** (Arduino **A0**), **PA1 = ADC1_IN2** (Arduino **A1**)
+- Inputs: **PA0 = ADC1_IN1** (NUCLEO **A0**), **PA1 = ADC1_IN2** (NUCLEO **A1**)
 - ADC clock = HCLK/1 = 16 MHz (HSI bring-up clock); sample time 247.5 cycles
 - Console: USART2 / ST-Link Virtual COM Port @ **115200 8N1**
 
@@ -36,15 +36,18 @@ sudo apt update
 sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi stlink-tools tio
 sudo usermod -aG dialout "$USER"      # then log out/in for serial access
 
-cd examples/g474_adc_read
-./build.sh                            # -> build/g474_adc_read.{elf,bin,hex}
+cd /path/to/JaszczurHAL
+vscode/entry/jh-vscode build \
+  --project examples/21_adc_read --target stm32g474
 
 st-info --probe                       # confirm the ST-Link sees the G474
-st-flash --reset write build/g474_adc_read.bin 0x08000000
+st-flash --reset write \
+  .build/examples/21_adc_read/firmware.bin 0x08000000
 tio /dev/ttyACM0 -b 115200
 ```
 
-(OpenOCD alternative: `openocd -f board/st_nucleo_g4.cfg -c "program build/g474_adc_read.elf verify reset exit"`.)
+(OpenOCD alternative:
+`vscode/entry/jh-vscode upload --project examples/21_adc_read --target stm32g474`.)
 
 ## Expected output
 

@@ -16,7 +16,7 @@
 #include "hal/hal_config.h"
 #include "hal/hal_target.h"
 
-#if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) && \
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK) &&     \
     defined(HAL_ENABLE_DACLESS)
 
 #include "hal/hal_dma_pwm_audio.h"

@@ -3,7 +3,7 @@
 #ifdef HAL_ENABLE_CRC
 
 /*
- * Table-free reference implementations. Each routine is the canonical bitwise
+ * Table-free reference implementations. Each routine is the standard bitwise
  * form of its catalog variant; correctness is pinned by the "123456789" check
  * values documented in hal_crc.h and exercised by tests/test_hal_crc.cpp.
  */

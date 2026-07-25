@@ -64,7 +64,14 @@ typedef enum {
 /* ── Bus configuration ───────────────────────────────────────────────────── */
 
 #ifdef HAL_ENABLE_MCP9600
-/** @brief I2C bus parameters for MCP9600. */
+/**
+ * @brief I2C bus parameters for MCP9600.
+ *
+ * Initialise every field before calling @ref hal_thermocouple_init or
+ * @ref hal_thermocouple_init_ex. In particular, set @p i2c_bus explicitly;
+ * zero-initialising the complete @ref hal_thermocouple_config_t first is the
+ * recommended pattern.
+ */
 typedef struct {
   uint8_t sda_pin;   /**< SDA GPIO pin.                                  */
   uint8_t scl_pin;   /**< SCL GPIO pin.                                  */
@@ -86,9 +93,16 @@ typedef struct {
 /**
  * @brief Complete initialisation descriptor passed to hal_thermocouple_init().
  *
- * Fill in @p chip, then populate the matching union member:
+ * Zero-initialise the complete descriptor, fill in @p chip, then populate the
+ * matching union member:
  *   - bus.i2c  for HAL_THERMOCOUPLE_CHIP_MCP9600
  *   - bus.spi  for HAL_THERMOCOUPLE_CHIP_MAX6675
+ *
+ * @code
+ * hal_thermocouple_config_t cfg = {0};
+ * cfg.chip = HAL_THERMOCOUPLE_CHIP_MCP9600;
+ * cfg.bus.i2c.i2c_bus = 0;
+ * @endcode
  */
 typedef struct {
   hal_thermocouple_chip_t chip; /**< Which chip to drive.               */
@@ -180,7 +194,11 @@ typedef struct {
  * For MAX6675: configures the bit-bang SPI GPIO pins through the shared,
  * Arduino-free MAX6675 driver.
  *
- * @param cfg  Pointer to the filled-in configuration struct.
+ * Every field used by the selected chip must be initialised. Zero-initialise
+ * the complete descriptor first and set `bus.i2c.i2c_bus` explicitly for an
+ * MCP9600.
+ *
+ * @param cfg  Pointer to the fully initialised configuration struct.
  * @return Handle on success; NULL if the pool is exhausted or the chip
  *         does not respond.
  */

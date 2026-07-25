@@ -8,7 +8,8 @@ extern "C" {
 #endif
 
 uint32_t jh_lwip_port_rand(void);
-void jh_lwip_port_assert(const char *message, const char *file, int line);
+__attribute__((noreturn)) void jh_lwip_port_assert(const char *message,
+                                                   const char *file, int line);
 
 #ifdef __cplusplus
 }

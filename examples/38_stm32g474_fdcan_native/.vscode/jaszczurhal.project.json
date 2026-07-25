@@ -5,16 +5,20 @@
     "example": {
         "targets": [
             "stm32g474"
-        ]
+        ],
+        "boards": {
+            "stm32g474": "nucleo-g474re"
+        }
     },
     "toolchain": "cmake",
     "target": "stm32g474",
     "board": "nucleo-g474re",
-    "buildDir": "${project}/.build",
-    "cmakeBuildDir": "${project}/.build/cmake",
+    "buildDir": "${jhRoot}/.build/examples/38_stm32g474_fdcan_native",
+    "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../cmake/jh_firmware_project",
         "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "38_stm32g474_fdcan_native"
         }

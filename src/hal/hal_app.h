@@ -5,30 +5,32 @@
  * @brief Portable application entry-point contract.
  *
  * When the library is built with @c HAL_PROVIDE_APP_ENTRY defined, JaszczurHAL
- * supplies the platform-specific entry point (Arduino @c setup()/@c loop() or
- * bare-metal @c main()) and dispatches to the three user-defined functions
- * declared below. The client never writes @c main(), @c setup(), @c loop(),
- * or a @c .ino file - only portable application logic.
+ * supplies @c main() and dispatches to the three user-defined functions
+ * declared below. The client writes only portable application logic.
  *
  * ── Required ─────────────────────────────────────────────────────────────────
  *   @ref app_start  - one-time initialisation (called once before any task).
- *   @ref app_task0  - primary super-loop iteration (core 0 on RP2040).
+ *   @ref app_task0  - primary super-loop iteration (core 0 on RP targets).
  *
  * -- Optional ----------------------------------------------------------------
  *   @ref app_task1  - secondary loop. It is dispatched only when
- *                     @c HAL_ENABLE_APP_TASK1 is defined. On RP2040 this emits
- *                     Arduino @c loop1(), which starts the core-1 path.
- *                     On STM32 FreeRTOS builds it runs as a second FreeRTOS
- *                     task. On STM32 non-FreeRTOS and mock builds it runs
- *                     cooperatively after task0. If enabled but not implemented
- *                     by the client, a weak empty default is linked.
+ *                     @c HAL_ENABLE_APP_TASK1 is defined. On RP it starts the
+ *                     core-1 path. On STM32 FreeRTOS builds it runs as a second
+ *                     FreeRTOS task. On STM32 bare-metal and mock builds it
+ * runs cooperatively after task0. If enabled but not implemented by the client,
+ * a weak empty default is linked.
  *
  * ── Backend mapping ──────────────────────────────────────────────────────────
  *
- *   RP2040 (Arduino-pico):
- *       setup()  -> app_start()
- *       loop()   -> app_task0()
- *       loop1()  -> app_task1()        [only with HAL_ENABLE_APP_TASK1]
+ *   RP family:
+ *       bare: main() -> app_start()
+ *                    -> core 0 super-loop with app_task0()
+ *                    -> optional core 1 super-loop with app_task1()
+ *       FreeRTOS: main() -> app_start()
+ *                         -> create app_task0 pinned to core 0
+ *                         -> optional app_task1 pinned to core 1
+ *                         -> vTaskStartScheduler()
+ *       The bare core-1 path registers as a multicore-lockout victim.
  *
  *   STM32G474 (bare-metal):
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
@@ -46,14 +48,13 @@
  *   Mock / host:
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
  *       (useful for standalone host demo apps; unit tests provide their own
- *       main and should NOT define HAL_PROVIDE_APP_ENTRY.)
+ *       main without HAL_PROVIDE_APP_ENTRY.)
  *
  * ── How to enable ────────────────────────────────────────────────────────────
  *   Define @c HAL_PROVIDE_APP_ENTRY in your @c hal_project_config.h or pass
  *   @c -DHAL_PROVIDE_APP_ENTRY via the build system, for example through a
- *   @c scripts/build_*_lib.sh @c -D option. Define @c HAL_ENABLE_APP_TASK1
- *   only when the application intentionally uses @c app_task1. On RP2040 this
- *   is also the opt-in for @c loop1/core 1.
+ *   @c JH_EXTRA_DEFINES. Define @c HAL_ENABLE_APP_TASK1 when the application
+ *   intentionally uses @c app_task1. On RP targets this also opts into core 1.
  */
 
 #include <stdbool.h>
@@ -72,7 +73,7 @@ extern "C" {
 void app_start(void);
 
 /**
- * @brief Primary application loop iteration (core 0 on RP2040).
+ * @brief Primary application loop iteration (core 0 on RP targets).
  *
  * Called repeatedly in an infinite loop. Must not block indefinitely.
  */
@@ -81,8 +82,9 @@ void app_task0(void);
 /**
  * @brief Secondary application loop iteration (optional).
  *
- * On RP2040: runs on core 1 (true hardware parallelism via loop1()) when
- *            @c HAL_ENABLE_APP_TASK1 is defined.
+ * On RP family: runs on core 1 when @c HAL_ENABLE_APP_TASK1 is defined.
+ *               Pico SDK uses @c multicore_launch_core1() in bare mode or
+ *               a core-affined FreeRTOS task in FreeRTOS mode.
  * On STM32:  runs as a second FreeRTOS task when @c HAL_ENABLE_FREERTOS is
  *            defined, otherwise called cooperatively after app_task0() in the
  *            same super-loop.

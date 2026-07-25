@@ -8,9 +8,9 @@
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
 #include "../shared/hal_mutex_once.h"
-#include "drivers/littlefs/lfs.h"
 #include "drivers/stm32g474/stm32g474_flash.h"
 
+#include <lfs.h>
 #include <stdint.h>
 #include <string.h>
 

@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_DAC
 
@@ -37,4 +37,4 @@ hal_status_t hal_dac_write_millivolts(uint8_t channel, uint16_t millivolts) {
   return HAL_EUNSUPPORTED;
 }
 #endif // HAL_ENABLE_DAC
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

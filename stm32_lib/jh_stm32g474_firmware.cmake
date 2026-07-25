@@ -53,6 +53,14 @@ function(jh_add_stm32g474_firmware TARGET)
     set(_jh_src "${ARG_JH_ROOT}/src")
     set(_g474 "${_jh_src}/hal/impl/stm32g474")
     set(_ldscript "${ARG_JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
+    include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
+    include("${ARG_JH_ROOT}/cmake/jh_littlefs.cmake")
+    jh_bearssl_source_manifest(
+        _jh_bearssl_sources
+        _jh_bearssl_include_dirs)
+    jh_littlefs_source_manifest(
+        _littlefs
+        _jh_littlefs_include_dirs)
 
     # Backend + shared driver/engine sources (mirrors the proven examples recipe).
     file(GLOB _impl CONFIGURE_DEPENDS "${_g474}/*.cpp")
@@ -61,12 +69,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal/impl/shared/*.cpp"
         "${_jh_src}/hal/impl/shared/*.c"
     )
-    list(FILTER _shared EXCLUDE REGEX "/frameworks/lwip/vendor/")
     list(FILTER _shared EXCLUDE REGEX "/frameworks/PubSubClient/")
-    set(_littlefs
-        "${_g474}/drivers/littlefs/lfs.c"
-        "${_g474}/drivers/littlefs/lfs_util.c"
-    )
     # All top-level HAL module facades (hal/*.cpp). Each module wrapper is guarded
     # by its own HAL_ENABLE_* flag, so unused ones compile to empty TUs and are
     # stripped by --gc-sections. Globbing (rather than a hand-picked list) means a
@@ -127,7 +130,8 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}"
         "${_jh_src}/hal"
         "${_g474}"
-        "${_g474}/drivers/littlefs"
+        ${_jh_littlefs_include_dirs}
+        ${_jh_bearssl_include_dirs}
         ${_jh_mqtt_includes}
         ${ARG_INCLUDES}
     )
@@ -166,7 +170,6 @@ function(jh_add_stm32g474_firmware TARGET)
     endif()
 
     if(_jh_has_tls)
-        include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
         set(_jh_bearssl_target "${TARGET}_jh_bearssl")
         jh_add_bearssl_source_library("${_jh_bearssl_target}")
         target_compile_options("${_jh_bearssl_target}" PRIVATE ${_arch})

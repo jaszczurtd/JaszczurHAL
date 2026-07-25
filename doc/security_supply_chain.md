@@ -8,12 +8,33 @@ used by JaszczurHAL.
 The tracked supply-chain surface includes:
 
 - bundled third-party source copied into `src/`,
-- pinned external checkouts used by build helpers, such as FreeRTOS-Kernel,
+- pinned external checkouts used by the component updater, including BearSSL,
+  lwIP, littlefs, FreeRTOS-Kernel and the Pico SDK,
 - adapted upstream code where local changes may affect security behavior.
 
 The inventory does not replace per-product firmware analysis. Downstream
 firmware should generate or retain its own SBOM because active `HAL_ENABLE_*`
 flags decide which optional modules are actually compiled.
+
+## Native OTA Security Boundary
+
+Native RP OTA authenticates the versioned image header with HMAC-SHA256 and
+verifies payload SHA-256 plus header CRC before activation. The symmetric HMAC
+key is derived from the same application password used by transport
+authentication. Anyone who knows that password can produce an accepted image,
+so products should use a unique, high-entropy secret supplied to the VS Code
+dispatcher through `ota.passwordEnv`, not a tracked inline password.
+
+The transport and image are not encrypted; firmware confidentiality is outside
+this mechanism. Image generation is authenticated metadata, not an
+anti-rollback counter: an older image signed with the current secret can be
+replayed unless the application or product provisioning layer imposes a
+stricter version policy. BOOTSEL access likewise remains a physical
+recovery/provisioning boundary.
+
+Operational secret placement, firewall scope, first installation, rollback,
+and recovery are documented in
+[Native RP OTA Workflow](OTAWorkflow.md#security-boundary).
 
 ## Files
 
@@ -75,7 +96,7 @@ GitHub Actions run a dedicated `security-scan` job on pull requests, pushes to
 
 - installs `osv-scanner` and `cve-bin-tool`,
 - verifies that `security/sbom.cdx.json` is current,
-- runs `osv-scanner` against the repository source tree and SBOM,
+- runs `osv-scanner` against the repository source tree,
 - runs `cve-bin-tool` against the CycloneDX SBOM.
 
 The job is intentionally separate from build/test/static-analysis jobs. Security
@@ -93,9 +114,12 @@ Policy for findings:
 - Opt-in module findings should state the affected `HAL_ENABLE_*` flags and
   supported targets.
 
-## Updating a bundled component
+## Updating a component
 
-1. Update the component source in its existing location.
+1. For a managed external component, update its tracked
+   `third_party/*_version.conf` pin and run
+   `./third_party/update_components.sh`. For bundled code, update the source in
+   its existing location.
 2. Preserve upstream license files and attribution.
 3. Update `security/third_party.json` with the new version, tag, commit, purl
    or upstream reference.

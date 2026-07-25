@@ -1,17 +1,14 @@
 # JaszczurHAL - API Reference
 
 Hardware Abstraction Layer for embedded projects.
-The primary backend is RP2040 via Arduino-pico, with STM32G474 available as a
-real bare-metal backend for core domains and an expanding shared-driver stack,
-while keeping the application-facing HAL API stable across targets.
+The RP2040/RP2350 backend builds against the official Pico SDK. STM32G474 is
+available as a bare-metal or FreeRTOS backend with native peripheral support
+and the shared driver stack. The application-facing HAL API stays stable
+across targets.
 
 This document is the established, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
 here for full behavior/contracts.
-
-Current RP2040 backend requirement: Earle Philhower Arduino core for RP2040/RP2350
-(arduino-pico): https://github.com/earlephilhower/arduino-pico
-Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 
 **Author:** Marcin 'Jaszczur' Kielesiński
 
@@ -25,12 +22,14 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 ## Library structure
 
 - `CMakeLists.txt` - repository-root host/mock tests build.
-- `rp2040_lib/` - RP2040 Arduino-pico static-library CMake glue.
+- `rp_native_lib/` - official Pico SDK static library and firmware probes.
 - `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
-- `scripts/build_rp2040_lib.sh` - RP2040 static-library helper.
+- `scripts/build_rp_native_lib.sh` - RP2040/RP2350 native build helper,
+  including the optional pinned FreeRTOS SMP matrix.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
-- `scripts/ensure_freertos_kernel.sh` - shared helper for fetching/verifying
-  the pinned `third_party/FreeRTOS-Kernel` checkout.
+- `third_party/update_components.sh` - synchronizes BearSSL, lwIP, littlefs,
+  FreeRTOS, Pico SDK, picotool and the RP2350 RISC-V toolchain to their tracked
+  `third_party/*_version.conf` pins.
 - `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
   security inventory.
 - `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
@@ -38,11 +37,20 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `scripts/check_vulnerabilities.sh` - optional local vulnerability scanner
   wrapper that regenerates the SBOM and runs available source/vendored
   dependency scanners.
+- `doc/api/00_scripts.md` - essential operational architecture reference for
+  repository process scripts, orchestration entrypoints, options, artifacts,
+  and their relationships.
 - `runalltests.sh` - full local validation gate.
 - `runmefirst.sh` - one-time local toolchain setup.
 - `doc/FwProjectWorkflow.md` - dispatcher-backed firmware project workflow:
   manifest model, target/board selection, source discovery, upload/debug-build
   behavior, build directories, and generated files.
+- `doc/boards_profiles_howto.md` - declarative target/board descriptors,
+  generated configuration, board-aware static libraries, and the procedure
+  for adding a physical board.
+- `doc/OTAWorkflow.md` - complete native RP OTA contract: firmware
+  integration, build artifacts, VS Code upload, firewall, trial confirmation,
+  rollback, and recovery.
 - `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
 - `security/third_party.json` - human-maintained third-party inventory.
 - `security/sbom.cdx.json` - generated CycloneDX SBOM.
@@ -59,7 +67,9 @@ Minimum version for RP2350 support: 4.0.0 (latest stable recommended).
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/hal_status.h` - shared `hal_status_t` result codes for new public
   APIs.
-- `src/hal/impl/rp2040/` - RP2040 backend.
+- `src/hal/hal_board.h` and `src/hal/hal_board.cpp` - board-profile identity,
+  compile-time physical facts and thread-safe runtime capability state.
+- `src/hal/impl/rp2040/` - RP-family backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
 - `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.). Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/`).
@@ -81,8 +91,8 @@ metadata.
 Target-specific memory layout notes live next to the build glue for each
 backend:
 
-- [RP2040 memory map](../rp2040_lib/MEMORY_MAP.md) - arduino-pico generated
-  linker layout, flash/FS/EEPROM markers, SRAM regions, and stack overrides.
+- [RP memory map](../rp_native_lib/MEMORY_MAP.md) - application and OTA linker
+  layouts, persistent flash regions, SRAM, heap, and stacks.
 - [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) - bare-metal linker
   regions, reserved flash EEPROM/KV pages, RAM sections, heap, and stack.
 
@@ -95,13 +105,20 @@ This file is the API-oriented companion to [README.md](../README.md).
 Recommended split of responsibilities:
 
 - [README.md](../README.md): overview, architecture, quick start, build/test entry points, practical examples
+- [00_scripts.md](api/00_scripts.md): an essential part of the JaszczurHAL
+  documentation that explains how setup, dependency management, builds,
+  examples, validation, security tooling, and VS Code orchestration work
+  together; read it to understand how the library operates as a complete
+  development system
 - [FwProjectWorkflow.md](FwProjectWorkflow.md): dispatcher-backed firmware
   project workflow, including manifest/target/source/build/upload behavior
+- [OTAWorkflow.md](OTAWorkflow.md): native RP OTA configuration, provisioning,
+  upload, network/firewall, confirmation, rollback, and recovery
 - `doc/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
-Where both documents touch the same topic, [README.md](../README.md) should be
-treated as the short onboarding guide, while this file stays focused on
-reference material.
+Each document owns the details in its assigned scope. The others should provide
+short context and link to that owner instead of repeating commands, contracts,
+or configuration examples.
 
 ---
 
@@ -112,10 +129,12 @@ The repository contains both the HAL itself and a set of utility modules.
 ### HAL public API
 
 These are the portability-oriented interfaces intended to decouple application
-logic from Arduino and other board-specific SDK calls:
+logic from board-specific SDK calls:
 
 - `hal_gpio`, `hal_adc`, `hal_pwm`, `hal_pwm_freq`
-- `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`, `hal_serial`
+- `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`,
+  `hal_usb`, `hal_serial`
+- `hal_board` for target-independent board identity and runtime hardware state
 - `hal_crypto`, `hal_crc`
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
@@ -142,25 +161,89 @@ boundary conceptually.
 
 ---
 
+## Board profiles and runtime capabilities
+
+`HAL_TARGET_*` identifies the MCU and ISA. `JH_BOARD` selects the physical
+profile from `boards/profiles/`; the generator emits the matching
+`HAL_BOARD_PROFILE_*` selector and target configuration. Supported profiles
+include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
+`rp2040-plus-4mb`, `rp2040-zero`, and `nucleo-g474re`.
+
+`HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
+Runtime users should query `hal_board_get_info()` or
+`hal_board_get_capability_state()`, then use
+`hal_board_require_capabilities()` before operations that require one or more
+of `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`, and
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`. A declared capability is initially
+`HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
+The RP CYW43 provider publishes these transitions during init/deinit.
+
+Public types and functions (`hal/hal_board.h`):
+
+```c
+typedef uint32_t hal_board_capabilities_t;   /* HAL_BOARD_CAP_* bitmask */
+
+typedef enum {                               /* stable board identity */
+  HAL_BOARD_RP_PICO = 1, HAL_BOARD_RP_PICO_W, HAL_BOARD_RP_PICO_2,
+  HAL_BOARD_RP_PICO_2_W, HAL_BOARD_RP_PICO_PIM730,
+  HAL_BOARD_STM32G474_GENERIC, HAL_BOARD_HOST_MOCK
+} hal_board_profile_t;
+
+typedef enum {                               /* runtime state of one capability */
+  HAL_BOARD_CAP_NOT_PRESENT = 0,
+  HAL_BOARD_CAP_INACTIVE = 1,
+  HAL_BOARD_CAP_AVAILABLE = 2,
+  HAL_BOARD_CAP_FAILED = 3
+} hal_board_capability_state_t;
+
+typedef struct {                             /* consistent snapshot */
+  hal_board_profile_t profile;
+  const char *name;                          /* e.g. "pico-2-w" */
+  hal_board_capabilities_t declared;
+  hal_board_capabilities_t available;
+  hal_board_capabilities_t failed;
+} hal_board_info_t;
+
+hal_status_t hal_board_get_info(hal_board_info_t *out_info);
+hal_status_t hal_board_get_capability_state(
+    hal_board_capabilities_t capability,
+    hal_board_capability_state_t *out_state);
+hal_status_t hal_board_require_capabilities(
+    hal_board_capabilities_t capabilities);
+```
+
+`hal_board_require_capabilities()` returns `HAL_OK` when every requested
+capability is available, `HAL_EUNSUPPORTED` when the board does not declare
+one, `HAL_EUNINIT` while a declared capability is still inactive, and
+`HAL_EHW` when its owner reported a failure:
+
+```c
+if (hal_status_is_ok(hal_board_require_capabilities(HAL_BOARD_CAP_CYW43))) {
+    /* radio paths are safe to use on this board */
+}
+```
+
 ---
 
 ## API reference sections
 
-Detailed per-module reference is split across the following files in the `api/` subfolder:
+The complete reference is split across the following focused documents:
 
 | # | File | Contents |
 |---|------|----------|
-| 1 | [Library compilation guide](lib_compilation.md) | Building for all targets (host/mock, RP2040/Arduino, STM32G474 bare-metal), static-library helpers, FreeRTOS build variants, CMake presets, stack-size overrides, linking with a firmware project |
+| 0 | [Process scripts and orchestration](api/00_scripts.md) | Essential operational architecture: workstation setup, managed dependencies, build entrypoints, examples, validation, security tooling, VS Code integration, artifact ownership, and the relationships between these processes |
+| 1 | [Library compilation guide](lib_compilation.md) | Building for all targets, generated board contracts, static-library helpers, FreeRTOS build variants, and firmware integration |
 | P | [Firmware project workflow](FwProjectWorkflow.md) | Dispatcher-backed VS Code firmware projects: manifest model, target/board selection, source discovery, per-target CMake cache layout, upload/debug-build behavior and generated files |
-| 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS flag, stack-size overrides, core modules, `library.properties` note |
+| O | [Native RP OTA workflow](OTAWorkflow.md) | End-to-end OTA project/firmware configuration, artifacts, first flash, VS Code integration, firewall, confirmation, rollback, recovery and security boundary |
+| 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS selection, stack-size overrides, and core modules |
 | A | [Status API](api/01_status_api.md) | Foundational, cross-cutting: `hal_status_t` result codes, in-place migration of fallible `void` operations, `_ex` companions for retained value/handle/`bool` APIs, output-parameter forms and collision fallback. |
 | 3 | [Build dependencies and unit tests](api/03_build_tests.md) | Hardware and mock/PC dependency tables, ctest build/run instructions, full test-suite inventory, how to add a new test suite, mock time control |
-| 4 | [Multicore safety, drivers, migration](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, migration table from Arduino/pico SDK |
+| 4 | [Multicore safety and drivers](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, and portable API mapping |
 | S | [Security supply chain](security_supply_chain.md) | Third-party inventory, CycloneDX SBOM generation, vulnerability scanning and CVE/CVSS assessment workflow |
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Sync, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
+| 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi` (status `_ex` transfer and DMA helpers), `hal_i2c` (status-first master API, bounded scanner with watchdog callback, one-shot helpers and bus clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (status-first TFT/OLED/LCD/EPD facade, raw writes, EPD refresh, GFX primitives, streaming, text and fonts) |
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
@@ -230,6 +313,7 @@ Detailed per-module reference is split across the following files in the `api/` 
 | `hal_system` | [Timers and system](api/06_timers_system.md) |
 | `hal_thermocouple` | [Sensors](api/11_sensors.md) |
 | `hal_time` | [Network connectivity](api/15_connectivity.md) |
+| `hal_usb` | [Sync, USB, serial, framing](api/08_sync_serial.md) |
 | `hal_timer` | [Timers and system](api/06_timers_system.md) |
 | `hal_uart` | [Communication buses](api/09_buses.md) |
 | `hal_udp` | [Network connectivity](api/15_connectivity.md) |

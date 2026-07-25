@@ -6,14 +6,15 @@
 
 | HAL module | External dependency |
 |---|---|
-| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Arduino-pico core (`Arduino.h`) on RP2040; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
-| `hal_serial` | RP2040: TinyUSB CDC / pico SDK headers provided by the arduino-pico toolchain, with a native HAL transport instead of Arduino `Serial.print()`. STM32G474: debug UART / stdio backend. Mock: stdio capture helpers. |
-| `hal_sync` | RP2040: pico SDK `pico/mutex.h` in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. STM32G474: atomic spinlock in normal builds, FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds |
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
+| `hal_usb` | HAL-owned TinyUSB device on RP: CDC descriptors, IRQ/timer pump in bare builds, core-0 worker task in FreeRTOS builds, and BOOTSEL reset. STM32G474 is currently unsupported. Mock provides deterministic CDC buffers and a reset observer. |
+| `hal_serial` | RP console client of `hal_usb` CDC. STM32G474 debug UART / stdio backend. Mock stdio capture helpers. |
+| `hal_sync` | RP: Pico SDK `pico/mutex.h` in bare builds and FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds. STM32G474: atomic spinlock in bare builds and FreeRTOS mutex/task APIs in `HAL_ENABLE_FREERTOS` builds |
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/drivers/mcp2515/*`), MCP251XFD (`impl/shared/drivers/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
-| `hal_display` | Shared Arduino-free display stack (`impl/shared/drivers/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
+| `hal_display` | Shared display stack (`impl/shared/drivers/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
 | `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/drivers/hd44780/hd44780.*`) over HAL GPIO/system timing |
 | `hal_dma_pwm_audio` | timer-paced PWM-audio DMA helper used by DACless on RP2040, STM32G474 and mock |
 | `hal_dacless` | shared DACless PWM-audio engine (`impl/shared/drivers/dacless/dacless.*`) over HAL DMA/PWM-freq, ADC, timing and synchronization |
@@ -25,21 +26,21 @@
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
 | `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
-| `hal_thermocouple` (MCP9600/MCP9601) | shared Arduino-free driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
-| `hal_thermocouple` (MAX6675) | shared Arduino-free driver (`impl/shared/drivers/max6675/max6675_driver.*`) |
-| `hal_onewire` | shared Arduino-free bit-bang driver (`impl/shared/drivers/onewire/onewire_driver.*`) over HAL GPIO/time |
-| `hal_ds18b20` | shared Arduino-free DS18B20 backend (`impl/shared/drivers/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
-| `hal_external_adc` | shared Arduino-free ADS1X15/ADS1115 driver (`impl/shared/drivers/ads1x15/ads1x15_driver.*`) |
-| `hal_pga2311` | shared Arduino-free PGA2311 stereo volume driver (`impl/shared/drivers/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
-| `hal_wifi` | Arduino-pico WiFi stack (`WiFi.h`) |
-| `hal_littlefs` | Arduino-pico `LittleFS` on RP2040; upstream littlefs + STM32 internal flash partition on STM32G474 |
-| `hal_udp` | Arduino-pico `WiFiUDP` |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | shared driver (`impl/shared/drivers/max6675/max6675_driver.*`) |
+| `hal_onewire` | shared bit-bang driver (`impl/shared/drivers/onewire/onewire_driver.*`) over HAL GPIO/time |
+| `hal_ds18b20` | shared DS18B20 backend (`impl/shared/drivers/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
+| `hal_external_adc` | shared ADS1X15/ADS1115 driver (`impl/shared/drivers/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | shared PGA2311 stereo volume driver (`impl/shared/drivers/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
+| `hal_wifi` | pinned CYW43 driver and lwIP; RP uses PIO gSPI, while STM32G474 uses the configured gSPI bus |
+| `hal_littlefs` | pinned `third_party/littlefs` core plus coordinated internal flash on RP and STM32G474 |
+| `hal_udp` | shared lwIP raw UDP engine over the selected CYW43 network backend |
 | `hal_tls` | bundled BearSSL over native `hal_tcp`; the optional BSD transport adapter is built only when `HAL_ENABLE_BSD_SOCKETS` is also enabled |
 | BSD sockets adapter | shared `impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp` over HAL UDP/TCP; remains independently selectable without TLS |
 | `hal_wireguard` | shared WireGuard/lwIP engine + capability-advertised host-lwIP backend |
-| `hal_mqtt` | bundled `PubSubClient` + Arduino-pico `WiFiClient` |
-| `hal_ota` | Arduino-pico `ArduinoOTA` |
-| `hal_time` | backend time/NTP integration (`configTime` on Arduino-Pico; HAL UDP/NTP on STM32G474) |
+| `hal_mqtt` | bundled `PubSubClient` over HAL TCP, with optional BearSSL MQTTS transport |
+| `hal_ota` | RP staging/applier with authenticated VS Code transport over HAL UDP/TCP |
+| `hal_time` | HAL UDP/NTP client and target timekeeping integration |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
 | `hal_sdlogger` | shared FatFs file layer in `impl/shared/frameworks/filesystem/` |
 | `tools` | HAL APIs |
@@ -47,8 +48,9 @@
 
 ## Dependencies (mock / PC build)
 
-All `impl/.mock/` files depend only on: `<cstdio>`, `<cstring>`, `<mutex>`, `<queue>`, `<stdarg.h>`.
-No Arduino SDK, no pico SDK required.
+All `impl/.mock/` files depend only on standard host headers such as
+`<cstdio>`, `<cstring>`, `<mutex>`, `<queue>`, and `<stdarg.h>`. No embedded
+SDK is required.
 
 ---
 
@@ -62,9 +64,9 @@ No Arduino SDK, no pico SDK required.
 ### Build and run
 
 ```bash
-cmake -B build -DCMAKE_BUILD_TYPE=Debug
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -B .build/host -DCMAKE_BUILD_TYPE=Debug
+cmake --build .build/host
+ctest --test-dir .build/host --output-on-failure
 ```
 
 ### Quick start scripts
@@ -77,7 +79,8 @@ Two convenience scripts in the repository root simplify local development:
 ```
 Configures your local environment for the first time:
 - Installs git hooks (pre-commit and commit-msg from `.githooks/`)
-- Verifies/downloads FreeRTOS-Kernel if needed
+- Synchronizes all pinned components through `third_party/update_components.sh`
+- Offers persistent, LAN-scoped TCP/8266 firewall setup for OTA callbacks
 - Sets up build directories and initial CMake configuration
 - Run this once when cloning the repository or after environment changes
 
@@ -87,14 +90,23 @@ Configures your local environment for the first time:
 ```
 Runs the complete quality-gate suite (7 gates, in order):
 1. Tool-presence check
-2. Host/mock unit tests (`build_test/` + ctest, incl. FreeRTOS POSIX)
+2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
 3. Memory safety (Valgrind memcheck on `MEMCHECK_REQUIRED_TESTS`)
 4. Static analysis: cppcheck
-5. Static analysis: clang-tidy (host + STM32 compile databases; `build_stm32_host/`)
-6. Target static-library builds (STM32G474 + RP2040 flag matrix)
-7. Examples build (RP2040 + STM32G474, via dispatcher-backed example manifests)
+5. Static analysis: clang-tidy (host + STM32 compile databases below
+   `.build/gate/`)
+6. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
+   entry/core probes, RP feature profiles, `01_blink`, and FreeRTOS SMP
+   ELF/BIN/UF2 matrices)
+7. Examples build (every declared native RP example, the USB multicore and
+   SDLogger target/runtime fixture matrix, and STM32G474, through
+   dispatcher-backed manifests)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
+
+All repository-owned compilation output is kept below the single ignored
+`.build/` root. CMake script-mode compiler probes use `.build/tests/`; they do
+not emit `.o` files into the repository root.
 
 The clang-tidy gate creates profile-specific analysis databases with one
 compile command per source file. This keeps facade tests that compile the same
@@ -102,6 +114,25 @@ shared driver under several feature sets from triggering duplicate analyzer
 runs while normal target builds still compile every configured variant.
 
 This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
+
+### Native RP hardware fixtures
+
+The repeatable physical-device probes use the same VS Code dispatcher as
+applications and keep their artifacts below `.build/hardware/`:
+
+| Fixture | Coverage |
+|---|---|
+| `tests/hardware/rp_usb_cdc_echo` | Native TinyUSB CDC enumeration, backpressure, reconnect and throughput |
+| `tests/hardware/rp_usb_multicore` | Concurrent CDC producers on both RP cores, record integrity, completeness and affinity in bare-metal/FreeRTOS |
+| `tests/hardware/rp_freertos_smp` | Scheduler, both cores, mutex/delay, heap and USB under FreeRTOS SMP |
+| `tests/hardware/rp_flash_transaction` | Flash coordinator sequencing, rejection paths, erase/program and recovery |
+| `tests/hardware/rp_storage` | EEPROM commit/persistence, LittleFS format/remount and cross-reset mounting |
+| `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
+| `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
+
+Each fixture contains its exact build, upload and verifier commands in its
+local `README.md`. The storage probe supports `rp2040`, `rp2350-arm` and
+`rp2350-riscv`.
 
 ---
 
@@ -119,7 +150,7 @@ The CMake build at the project root compiles a static library `hal_mock` from:
 The exact list is the `UTIL_SOURCES` set in `CMakeLists.txt` - treat that as the
 source of truth.
 
-Each test executable in `tests/` links against `hal_mock` only - no Arduino
+Each test executable in `tests/` links against `hal_mock` only, with no
 headers, no pico SDK, no hardware.
 
 The bundled Unity test framework lives in:
@@ -211,8 +242,8 @@ add_test(NAME test_my_driver COMMAND test_my_driver)
 Run only the new suite:
 
 ```bash
-cmake --build build --target test_my_module
-ctest --test-dir build -R test_my_module --output-on-failure
+cmake --build .build/host --target test_my_module
+ctest --test-dir .build/host -R test_my_module --output-on-failure
 ```
 
 ### Test suites
@@ -232,7 +263,7 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_serial` | `println` capture, `deb`/`derr` capture, streamed debug formatter coverage beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred log ring behavior, mute semantics, RX inject + `available`/`read` |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART status success/failure paths, pool exhaustion, RX inject, TX capture, frame format and pin reassignment |
-| `test_rp2040_swserial_backend` | RP2040 source-selection guard: native Pico SDK PIO programs required; Arduino serial wrappers, GPIO RX callbacks, microsecond bit delays and HAL critical sections forbidden |
+| `test_rp2040_swserial_backend` | RP2040 source-selection guard: Pico SDK PIO programs required; wrapper serial implementations, GPIO RX callbacks, microsecond bit delays and HAL critical sections forbidden |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_pga2311` | PGA2311 status/config validation, pool exhaustion, injected SPI failures and retry, frame writes, dB/code conversion, soft/hardware mute behavior |
@@ -275,10 +306,13 @@ ctest --test-dir build -R test_my_module --output-on-failure
 | `test_hal_wireguard` | IPv4 parser validation, byte-array and text WireGuard begin/begin_advanced/kick paths, peer-up endpoint reporting (`hal_wireguard_peer_up` + `hal_wireguard_peer_up_quick`), handshake kick trigger, input validation |
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_network_status` | Cross-module WiFi/DNS, TCP/UDP, MQTT and WireGuard status API validation, output initialization, pool exhaustion, state and failure mapping |
-| `test_hal_ota` | OTA config setters, begin/is_started flow, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
+| `test_hal_ota` | OTA config setters, begin/is_started flow, boot status/confirmation, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
+| `test_ota_image` | Versioned OTA manifest and redundant boot-state encoding, CRC/HMAC validation, corruption handling, sequence wraparound and newest-record selection |
+| `test_ota_swap_engine` | Resumable program/staging sector swap across every simulated pre/post-mutation failure boundary, reverse swap rollback and corrupt phase rejection |
+| `test_rp_ota_artifacts` | Native RP OTA packaging helper, including RP2040-E14 sector padding, real-page preservation, UF2 renumbering and overlap rejection |
 | `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates, direct EEPROM-status propagation, uninitialised/range/capacity errors and output initialization |
-| `test_hal_crypto` | Base64/MD5/SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
+| `test_hal_crypto` | Base64/MD5/one-shot and incremental SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
 | `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |
 | `test_hal_soft_timer` | C wrapper coverage: create/begin/tick/abort/restart, table setup/tick helpers, delay/idle callback path, invalid input validation (`NULL` table / `count==0`) |
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
@@ -325,7 +359,8 @@ ctest --test-dir build -R test_my_module --output-on-failure
 2. Add `add_hal_test(test_<name>)` to `tests/CMakeLists.txt`.
     For suites that compile extra sources (for example `test_tools` and
     `test_multicoreWatchdog`), create a dedicated `add_executable(...)` entry.
-3. Rebuild: `cmake --build build && ctest --test-dir build`.
+3. Rebuild:
+   `cmake --build .build/host && ctest --test-dir .build/host`.
 
 ### Mock time control
 

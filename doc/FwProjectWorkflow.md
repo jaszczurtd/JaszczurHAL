@@ -1,84 +1,114 @@
 # Firmware Project Workflow
 
-This document describes the dispatcher-backed firmware project model used by
-JaszczurHAL VS Code projects and checked-in examples. It is the practical
-workflow companion to the API reference: use it when creating or migrating a
-firmware project, adding source files, changing target/board selection, or
-debugging build-directory/cache behavior.
+This document defines the dispatcher-backed firmware project model used by
+JaszczurHAL projects and checked-in examples. It covers the tracked manifest,
+target and board resolution, project source discovery, generated files, cache
+ownership, and build/upload integration.
 
-## Scope
+Use [JaszczurHAL VS Code Entry](../vscode/README.md) for CLI actions and device
+safeguards, [Target and board profiles](boards_profiles_howto.md) for descriptor
+fields and generated contracts, and [Native RP OTA Workflow](OTAWorkflow.md)
+for the complete network-update path.
 
-A dispatcher-backed firmware project:
+## Project layout
 
-- has a project-local `.vscode/jaszczurhal.project.json`,
-- calls the stable `vscode/entry/jh-vscode` entrypoint from VS Code tasks or
-  shell commands,
-- sets `toolchain: "cmake"`,
-- points `cmake.sourceDir` at
-  `libraries/JaszczurHAL/cmake/jh_firmware_project`,
-- passes the firmware directory as `JH_PROJECT_DIR`,
-- normally has no project-local firmware `CMakeLists.txt` and no hand-written
-  `.ino` file.
+A firmware project normally contains:
 
-Legacy Arduino projects can still use the older Arduino CLI path, but new and
-migrated multi-target projects should use the dispatcher.
+```text
+my-device/
+  app.c or app.cpp
+  hal_project_config.h
+  .vscode/
+    jaszczurhal.project.json
+    settings.json
+    tasks.json
+    launch.json
+    keybindings.reference.json
+```
 
-## Core Terms
+The tracked manifest selects `toolchain: "cmake"` and points
+`cmake.sourceDir` at `libraries/JaszczurHAL/cmake/jh_firmware_project`.
+`JH_PROJECT_DIR` identifies the application directory. The shared dispatcher
+selects the target recipe and compiles the project sources together with
+JaszczurHAL.
 
-- **Project directory** is the path passed as `--project`. It is also the usual
-  value of `JH_PROJECT_DIR`.
-- **Manifest** is `.vscode/jaszczurhal.project.json`. It is tracked and should
-  describe stable project behavior.
-- **Local selection** is `.vscode/jaszczurhal.local.json`. It stores the
-  developer's current target/board selection and should be gitignored.
-- **Target family** is a backend family id such as `rp2040` or `stm32g474`.
-- **Board** is a selectable board/profile inside the target family, such as
-  `pico`, `picow`, or `nucleo-g474re`.
-- **Target registry** is `vscode/targets/<target>.json`. It supplies family and
-  board defaults, including CMake cache defaults and upload strategy.
-- **`JH_TARGET`** is the CMake dispatcher cache value selected from the active
-  target family.
-- **`HAL_TARGET_*`** macros are HAL compile-time backend selectors. They are
-  normally auto-detected from the selected toolchain/backend; projects should
-  only define them manually for special builds.
+Generate a working standalone project with:
 
-## Target And Configuration Resolution
+```bash
+libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
+  --output my-device --target rp2040 --board pico
+```
 
-Target selection and manifest merging are separate concepts.
+Generated `tasks.json` contains GUI and terminal board selection, OTA upload
+and discovery, and `Project: Sync board picker`. The synchronization task runs
+on `folderOpen`, reads the current JaszczurHAL board registry, and updates the
+tracked GUI options only when they changed. VS Code requires a trusted
+workspace and may request one-time approval for automatic tasks. The terminal
+`Project: Select board` task always reads the registry at invocation time.
+
+## Core terms
+
+- **Project directory**: path passed to `--project` and normally stored as
+  `JH_PROJECT_DIR`.
+- **Manifest**: tracked `.vscode/jaszczurhal.project.json`.
+- **Local state**: gitignored `.vscode/jaszczurhal.local.json`, containing a
+  developer's selected target, board, and serial port.
+- **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
+  `stm32g474`, or `mock`.
+- **Board**: stable physical profile ID such as `pico`, `picow`, `pico2`,
+  `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, or
+  `nucleo-g474re`.
+- **Board registry**: generated tooling view of `boards/targets/*.json`,
+  `boards/profiles/*.json`, and `boards/capabilities.json`.
+- **`JH_TARGET` / `JH_BOARD`**: CMake cache values selected by the dispatcher
+  before SDK/toolchain import.
+- **`HAL_TARGET_*`**: compile-time HAL backend selector generated or inferred
+  from the resolved build target.
+
+## Target and configuration resolution
 
 The active target/board pair is selected in this order:
 
-1. Explicit CLI override, for example `--target stm32g474 --board nucleo-g474re`.
-2. Gitignored `.vscode/jaszczurhal.local.json`, written by `select-board`.
-3. Tracked manifest `target` / `board`.
-4. Default `rp2040` and the registry default board for that target.
+1. invocation overrides such as `--target rp2040 --board picow`;
+2. `.vscode/jaszczurhal.local.json`;
+3. tracked manifest `target` and `board`;
+4. registry default `rp2040/pico`.
 
-After the active pair is known, the effective dispatcher configuration is built
-from low to high precedence:
+The effective configuration then merges from low to high precedence:
 
-1. Target-registry family defaults and selected-board cache.
-2. Base `.vscode/jaszczurhal.project.json`.
-3. Active `targetProfiles.<target>` overlay from the manifest.
-4. Final active target/board pinning, including `cmake.cache.JH_TARGET`.
-5. Per-invocation CLI flags such as `--port`, `--fqbn`, `--verbose`, or
+1. target and board registry defaults;
+2. base manifest;
+3. active `targetProfiles.<target>` overlay;
+4. resolved `JH_TARGET` and `JH_BOARD`;
+5. action-specific options such as `--port`, `--host`, `--verbose`, and
    `--allow-unverified-port`.
 
-`.vscode/settings.json` is a compatibility/fill-in source, not a target-profile
-layer. It may provide local values such as tool paths, upload port, sketchbook,
-verbosity, or legacy Arduino settings. Stable project identity, source layout,
-target profiles, and dispatcher cache values belong in the manifest.
+`.vscode/settings.json` supplies editor-local paths and display preferences.
+Stable identity, build cache, source layout, target profiles, artifacts, and
+OTA settings belong in the manifest.
 
-For keys exposed through both `jaszczurhal.*` and `arduino.*` settings,
-`jaszczurhal.*` wins. Legacy `.vscode/arduino.json` is only a fallback for
-projects that still need it.
-
-Use this command to inspect what the dispatcher will actually use:
+Inspect the complete resolved view before diagnosing a build or upload:
 
 ```bash
-../libraries/JaszczurHAL/vscode/entry/jh-vscode config-dump --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode \
+  config-dump --project "$PWD"
 ```
 
-## Minimal Manifest Shape
+## Target matrix
+
+| Target | ISA | Default board | Firmware format | Upload |
+|---|---|---|---|---|
+| `rp2040` | Cortex-M0+ | `pico` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX | OpenOCD |
+| `mock` | host | `host-mock` | host executable/library | none |
+
+The board registry validates target compatibility and supplies provider
+platform, physical flash size, GPIO domain, board components, capabilities,
+and upload defaults. Unknown target/board pairs fail before the compiler runs.
+
+## Minimal manifest
 
 ```json
 {
@@ -88,13 +118,12 @@ Use this command to inspect what the dispatcher will actually use:
   "target": "rp2040",
   "board": "pico",
   "buildDir": "${project}/.build",
-  "cmakeBuildDir": "${project}/.build/cmake",
+  "cmakeBuildDir": "${buildDir}/cmake",
   "cmake": {
     "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
     "cache": {
       "JH_PROJECT_DIR": "${project}",
-      "JH_MODULE_NAME": "tracker",
-      "ARDUINO_LIBRARIES": "${project}/../libraries"
+      "JH_MODULE_NAME": "tracker"
     }
   },
   "identity": {
@@ -106,8 +135,8 @@ Use this command to inspect what the dispatcher will actually use:
 }
 ```
 
-For target-specific differences, keep the common values in the base manifest
-and add only the changed values under `targetProfiles`:
+Keep common values in the base manifest and express target-specific changes as
+small overlays:
 
 ```json
 {
@@ -124,14 +153,12 @@ and add only the changed values under `targetProfiles`:
 }
 ```
 
-The selected registry target still pins `JH_TARGET`, so a stale hard-coded
-`JH_TARGET` entry in a manifest cannot silently keep building the wrong backend.
+The resolved registry values always pin the final `JH_TARGET` and `JH_BOARD`.
 
-## Adding Project Source Files
+## Adding project source files
 
-For a flat project layout, place `*.c`, `*.cpp`, `*.h`, and `*.hpp` files
-directly in `JH_PROJECT_DIR`. The dispatcher discovers those files
-automatically on the next CMake configure/build.
+The shared CMake project automatically discovers `*.c`, `*.cpp`, `*.h`, and
+`*.hpp` directly under `JH_PROJECT_DIR`.
 
 ```text
 tracker/
@@ -141,142 +168,159 @@ tracker/
   gps_filter.h
 ```
 
-For source files in subdirectories, define the complete explicit source list in
-`.vscode/jaszczurhal.project.json`:
+Projects with source subdirectories declare the complete list:
 
 ```json
 {
   "cmake": {
     "cache": {
-      "JH_PROJECT_SOURCES": "app.cpp;hal_project_config.h;paradygmat/filter.c;paradygmat/filter.h;paradygmat/state.cpp;paradygmat/state.h"
+      "JH_PROJECT_SOURCES": "app.cpp;hal_project_config.h;filters/gps.c;filters/gps.h"
     }
   }
 }
 ```
 
-`JH_PROJECT_SOURCES` is a semicolon-separated CMake list stored as a JSON
-string. Relative paths resolve from `JH_PROJECT_DIR`. When this option is
-present, it replaces automatic source discovery, so list the whole firmware
-project, not just the new subdirectory.
+`JH_PROJECT_SOURCES` is a semicolon-separated list relative to
+`JH_PROJECT_DIR`. It replaces root discovery.
 
-Prefer project-root-relative includes from code outside the subdirectory:
+Additional shared files can be appended with `JH_EXTRA_SOURCES`:
+
+```json
+{
+  "cmake": {
+    "cache": {
+      "JH_EXTRA_SOURCES": "../common/product_identity.cpp"
+    }
+  }
+}
+```
+
+The dispatcher normalizes and de-duplicates resolved paths.
+
+## Feature and runtime configuration
+
+Project-owned feature flags live in `hal_project_config.h`:
 
 ```c
-#include "paradygmat/filter.h"
+#pragma once
+
+#define HAL_ENABLE_WIFI
+#define HAL_ENABLE_MQTT
+#define HAL_ENABLE_APP_TASK1
 ```
 
-Run `Project: Build` after changing the list. If a stale generated RP2040
-sketch still appears to use the old source set, run `Project: Clean` once and
-build again.
+`JH_EXTRA_DEFINES` is useful for target profiles, build variants, and CI:
 
-## Build Directories And Generated Files
+```json
+{
+  "cmake": {
+    "cache": {
+      "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS;APP_DIAGNOSTICS=1"
+    }
+  }
+}
+```
 
-`buildDir` is the project artifact root, usually `${project}/.build`.
-`cmakeBuildDir` is the base CMake cache directory, usually
-`${project}/.build/cmake`.
+Physical board selection remains in `target` and `board`. Application wiring,
+USB identity, secrets, partition policy, and feature selection remain
+project-owned.
 
-When an active target is resolved, `jh-vscode` isolates CMake caches by target
-and board:
+## Build directories and generated files
+
+External firmware projects own `${project}/.build`. Checked-in examples and
+hardware fixtures use the JaszczurHAL root:
 
 ```text
-.build/cmake/<target>/<board>/
+.build/examples/<example>/<target>/<board>/
+.build/hardware/<fixture>/cmake/<target>/<board>/
 ```
 
-For example:
+The project CMake cache is isolated by target and board:
 
 ```text
-.build/cmake/rp2040/pico/
-.build/cmake/stm32g474/nucleo-g474re/
+<cmakeBuildDir>/<target>/<board>/
 ```
 
-This prevents an RP2040 Arduino-Pico CMake cache and an STM32 cross-toolchain
-cache from sharing one directory.
+This prevents toolchains, provider platforms, board-generated headers, and
+linker layouts from sharing one cache.
 
-If the cached CMake source directory no longer matches the requested
-`cmake.sourceDir`, `jh-vscode` resets the stale cache when it is safely inside
-the project directory. This handles common migration errors such as an old
-project-local CMake source being replaced by the shared dispatcher source.
+`jh-vscode` tracks manifest-owned cache keys in
+`.jh-vscode-cache-keys.json`. A removed key is unset on the next configure.
+When the requested CMake source directory changes, a stale cache located
+inside the managed artifact root is recreated.
 
-Generated files include:
+Generated outputs include:
 
-- `.build/compile_commands_patched.json` from `Project: Refresh IntelliSense`,
-- `.vscode/c_cpp_properties.json` as a generated VS Code cpptools adapter,
-- target-specific generated RP2040 sketch files under the CMake build tree.
+- resolved board CMake/header/JSON and link-contract translation units;
+- `compile_commands.json` and `compile_commands_patched.json`;
+- `.vscode/c_cpp_properties.json`;
+- ELF/BIN/UF2 or ELF/BIN/HEX target artifacts;
+- OTA container and merged recovery UF2 when OTA is enabled.
 
-These files are generated artifacts. Keep stable project behavior in the
-manifest, not in generated IntelliSense output.
+Tracked configuration remains in the manifest and `hal_project_config.h`.
 
-## Upload And Debug Build
-
-`Project: Upload` is target-neutral. It uses the active target's upload backend:
-
-- RP2040/RP2350 commonly uses the registry `uf2` strategy, with serial identity
-  checks where serial upload is configured.
-- STM32G474 uses the OpenOCD-backed CMake `firmware_upload` target.
-
-`Project: Upload (UF2 / BOOTSEL)` and `upload-uf2` are RP2040/UF2-only. Use
-them for manual BOOTSEL flashing, especially the first flash of a blank RP2040
-board. They are not the STM32 upload path.
-
-`Project: Build (Debug)` / `build-debug` builds the dispatcher
-`firmware_debug` target. It does not, by itself, guarantee a complete debugger
-launch configuration for every backend. The checked-in generic Cortex-Debug
-launch template is currently RP2040-oriented; STM32 debug sessions should be
-documented or configured per project until a shared STM32 launch profile exists.
-
-## Board Selection
-
-`Project: Select board (GUI)` and `Project: Select board` both write the same
-local target/board state. The GUI task uses a VS Code pick list; the terminal
-task should use `--interactive` so the CLI can prompt in the terminal.
-
-The selector intentionally does not rewrite the tracked manifest. Commit the
-manifest default when a project should start on a different board for everyone;
-use local selection for personal hardware on a workstation.
-
-## Examples And Variants
-
-Each numbered directory in `examples/` is also a dispatcher-backed firmware
-project. The examples quality gate builds those manifests through
-`scripts/examples_dispatcher.py`, which in turn calls `vscode/entry/jh-vscode`.
-
-Example manifests may declare `example.targets` and `example.variants`.
-Variants can override module name, source list, extra defines, target support,
-and CMake cache entries. The examples runner builds the base example plus every
-variant supported by the selected target.
-
-## Reserved Or Experimental Fields
-
-The manifest schema is intentionally a little ahead of the fully stable public
-surface. Treat these as reserved unless a project-specific migration explicitly
-uses them:
-
-- `hooks.*` fields are parsed as configuration data but are not a guaranteed
-  executed hook system.
-- `upload.strategy` values `custom` and `esptool` are schema-level reservation
-  points; the stable implemented dispatcher paths are currently RP2040 UF2 /
-  serial-style upload and STM32 OpenOCD.
-- ESP32 is listed as a skeleton target until its HAL backend and build recipe
-  are completed.
-- `change-port` is a reserved CLI action and should not be used by default
-  project tasks.
-
-## Quality Gates
-
-Use the same dispatcher path locally and in CI:
+## Build and upload actions
 
 ```bash
-# Build all RP2040 examples.
-scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
-
-# Build all STM32G474 examples.
-scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
-
-# Run the full repository gate.
-./runalltests.sh
+../libraries/JaszczurHAL/vscode/entry/jh-vscode build --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode upload --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode monitor --project "$PWD"
+../libraries/JaszczurHAL/vscode/entry/jh-vscode clean --project "$PWD"
 ```
 
-The repository pre-commit hook normalizes staged text files at commit time. It
-does not format unstaged files and it is not an editor-on-save formatter. To
-make punctuation/whitespace normalization visible before committing, stage the
-files first and run the hook through Git or execute `.githooks/pre-commit`.
+`Project: Upload` selects the registry upload strategy. RP targets use
+identity-verified USB CDC followed by BOOTSEL/UF2 when firmware is running; a
+blank board uses `Project: Upload (UF2 / BOOTSEL)`. STM32G474 delegates to the
+OpenOCD upload target.
+
+Upload releases the project's persistent serial monitor and lets it reconnect
+after enumeration. Ambiguous BOOTSEL volumes or serial identities stop the
+action.
+
+## OTA manifest configuration
+
+```json
+{
+  "cmake": {
+    "cache": {
+      "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
+      "JH_OTA_GENERATION": 7,
+      "JH_OTA_VERSION": "1.4.0"
+    }
+  },
+  "artifacts": {
+    "ota": "${buildDir}/firmware.ota"
+  },
+  "ota": {
+    "hostname": "tracker-office",
+    "port": 8266,
+    "listenPort": 8266,
+    "passwordEnv": "TRACKER_OTA_PASSWORD"
+  }
+}
+```
+
+`ota.broadcast` selects the UDP discovery destination. `ota.host` pins a
+device address. `ota.listenPort` selects the host TCP callback listener; it
+defaults to `8266` so it matches the persistent LAN-scoped firewall rule
+prepared by `runmefirst.sh`. An explicit zero requests an ephemeral port.
+`ota.passwordEnv` keeps the host secret outside the tracked manifest.
+
+The device hostname, UDP port, and password must match firmware configuration.
+See [Native RP OTA Workflow](OTAWorkflow.md) for provisioning, tasks,
+authentication, host firewall rules, trial confirmation, rollback, and
+recovery.
+
+## Examples and variants
+
+Example manifests may declare `example.targets` and `example.variants`.
+Variants can override module name, sources, feature definitions, supported
+targets, and CMake cache entries.
+
+```bash
+scripts/examples_dispatcher.py list
+scripts/examples_dispatcher.py build --target rp2040 --example 01_blink
+```
+
+The generated example manifests are the build inputs used by the quality gate.
+See [JaszczurHAL Examples](../examples/README.md).

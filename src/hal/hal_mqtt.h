@@ -13,6 +13,10 @@ extern "C" {
  * @brief Thread-safe MQTT client wrapper based on PubSubClient.
  *
  * This module is opt-in and is compiled only when HAL_ENABLE_MQTT is defined.
+ * Operations that access the transport report HAL_EUNSUPPORTED, HAL_EUNINIT
+ * or HAL_EHW when the RP CYW43 board hardware is respectively absent,
+ * inactive or known to have failed. Configuration setters remain available
+ * before network initialization.
  */
 
 #include "hal_status.h"

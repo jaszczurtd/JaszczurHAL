@@ -481,12 +481,7 @@ namespace {
 
 constexpr size_t kSha256BlockBytes = 64u;
 
-struct Sha256Ctx {
-  uint32_t state[8];
-  uint64_t bit_count;
-  uint8_t buffer[kSha256BlockBytes];
-  size_t buffer_len;
-};
+using Sha256Ctx = hal_sha256_context_t;
 
 constexpr uint32_t kSha256K[64] = {
     0x428a2f98u, 0x71374491u, 0xb5c0fbcfu, 0xe9b5dba5u, 0x3956c25bu,
@@ -518,6 +513,7 @@ inline void sha256_init(Sha256Ctx &ctx) {
   ctx.state[7] = 0x5be0cd19u;
   ctx.bit_count = 0u;
   ctx.buffer_len = 0u;
+  ctx.initialized = true;
 }
 
 inline void sha256_compress(Sha256Ctx &ctx,
@@ -628,6 +624,7 @@ inline void sha256_final(Sha256Ctx &ctx,
     out_digest[i * 4u + 2u] = (uint8_t)(v >> 8);
     out_digest[i * 4u + 3u] = (uint8_t)v;
   }
+  ctx.initialized = false;
 }
 
 inline void bytes_to_hex_lower(const uint8_t *bytes, size_t bytes_len,
@@ -649,19 +646,39 @@ inline void bytes_to_hex_lower(const uint8_t *bytes, size_t bytes_len,
 
 } // namespace
 
+hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context) {
+  if (context == nullptr) {
+    return HAL_EINVAL;
+  }
+  sha256_init(*context);
+  return HAL_OK;
+}
+
+hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
+                                  const uint8_t *input, size_t input_len) {
+  if (context == nullptr || !context->initialized ||
+      (input == nullptr && input_len > 0u)) {
+    return HAL_EINVAL;
+  }
+  sha256_update(*context, input, input_len);
+  return HAL_OK;
+}
+
+hal_status_t hal_sha256_final_ex(hal_sha256_context_t *context,
+                                 uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]) {
+  if (context == nullptr || !context->initialized || out_digest == nullptr) {
+    return HAL_EINVAL;
+  }
+  sha256_final(*context, out_digest);
+  return HAL_OK;
+}
+
 bool hal_sha256(const uint8_t *input, size_t input_len,
                 uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]) {
-  if (out_digest == nullptr) {
-    return false;
-  }
-  if (input == nullptr && input_len > 0u) {
-    return false;
-  }
   Sha256Ctx ctx;
-  sha256_init(ctx);
-  sha256_update(ctx, input, input_len);
-  sha256_final(ctx, out_digest);
-  return true;
+  return hal_sha256_init_ex(&ctx) == HAL_OK &&
+         hal_sha256_update_ex(&ctx, input, input_len) == HAL_OK &&
+         hal_sha256_final_ex(&ctx, out_digest) == HAL_OK;
 }
 
 bool hal_sha256_hex(const uint8_t *input, size_t input_len, char *output,

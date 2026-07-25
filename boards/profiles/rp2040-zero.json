@@ -1,0 +1,26 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "rp2040-zero",
+  "displayName": "Waveshare RP2040-Zero compatible",
+  "description": "RP2040-Zero form factor with 2 MB flash and WS2812 on GPIO16.",
+  "status": "supported",
+  "compatibleTargets": ["rp2040"],
+  "build": { "provider": "pico-sdk", "board": "waveshare_rp2040_zero" },
+  "hal": { "profileId": 8, "selector": "HAL_BOARD_PROFILE_RP2040_ZERO", "runtimeName": "rp2040-zero", "legacySelectors": [] },
+  "memory": { "flash": { "source": "sdk", "expectedBytes": 2097152 } },
+  "gpio": {
+    "exposedPins": { "ranges": [{ "first": 0, "last": 15 }, { "first": 17, "last": 29 }] },
+    "connectors": {
+      "headers": { "pins": [{ "domain": "soc-gpio", "id": 0 }, { "domain": "soc-gpio", "id": 1 }, { "domain": "soc-gpio", "id": 2 }, { "domain": "soc-gpio", "id": 3 }, { "domain": "soc-gpio", "id": 4 }, { "domain": "soc-gpio", "id": 5 }, { "domain": "soc-gpio", "id": 6 }, { "domain": "soc-gpio", "id": 7 }, { "domain": "soc-gpio", "id": 8 }, { "domain": "soc-gpio", "id": 9 }, { "domain": "soc-gpio", "id": 10 }, { "domain": "soc-gpio", "id": 11 }, { "domain": "soc-gpio", "id": 12 }, { "domain": "soc-gpio", "id": 13 }, { "domain": "soc-gpio", "id": 14 }, { "domain": "soc-gpio", "id": 15 }, { "domain": "soc-gpio", "id": 26 }, { "domain": "soc-gpio", "id": 27 }, { "domain": "soc-gpio", "id": 28 }, { "domain": "soc-gpio", "id": 29 }] },
+      "pads": { "pins": [{ "domain": "soc-gpio", "id": 17 }, { "domain": "soc-gpio", "id": 18 }, { "domain": "soc-gpio", "id": 19 }, { "domain": "soc-gpio", "id": 20 }, { "domain": "soc-gpio", "id": 21 }, { "domain": "soc-gpio", "id": 22 }, { "domain": "soc-gpio", "id": 23 }, { "domain": "soc-gpio", "id": 24 }, { "domain": "soc-gpio", "id": 25 }] }
+    },
+    "reservations": { "status-led": { "pins": [{ "domain": "soc-gpio", "id": 16 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board addressable LED data input." } },
+    "aliases": { "status-led-data": { "endpoint": { "domain": "soc-gpio", "id": 16 } } }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false } },
+  "devices": { "statusLed": { "kind": "addressable", "endpoint": { "domain": "soc-gpio", "id": 16 }, "protocol": "ws2812", "pixelOrder": { "source": "project", "value": null, "allowed": ["RGB", "GRB"] } } },
+  "peripherals": { "defaultsSource": "pico-sdk" },
+  "components": {}
+}

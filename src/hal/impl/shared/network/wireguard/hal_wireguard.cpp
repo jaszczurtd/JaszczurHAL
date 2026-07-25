@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 #include "hal/hal_config.h"
 
 #ifdef HAL_ENABLE_WIREGUARD
@@ -9,6 +9,7 @@
 #include "hal/hal_wireguard.h"
 #include "hal/impl/shared/frameworks/wireguard/jh_wireguard_client.h"
 #include "hal/impl/shared/hal_mutex_once.h"
+#include "hal/impl/shared/network/jh_network_runtime.h"
 
 #include <stdio.h>
 
@@ -123,6 +124,10 @@ hal_wireguard_begin_ex(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
     hal_derr("hal_wireguard_begin_ex: remote_peer_port must be > 0");
     return HAL_EINVAL;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   wireguard_ensure_mutex();
   hal_mutex_lock(s_wireguard_mutex);
@@ -208,6 +213,10 @@ hal_status_t hal_wireguard_begin_advanced_ex(
   }
   status = validate_ip_ptr(allowed_mask, "hal_wireguard_begin_advanced_ex",
                            "allowed_mask");
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = jh_network_require_ready();
   if (status != HAL_OK) {
     return status;
   }
@@ -305,6 +314,10 @@ hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
     hal_derr("hal_wireguard_peer_up_ex: endpoint_ip_out_size is 0");
     return HAL_EINVAL;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
 
   uint8_t endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
   uint16_t endpoint_port = 0u;
@@ -379,6 +392,10 @@ hal_status_t hal_wireguard_kick_handshake_ex(
     hal_derr("hal_wireguard_kick_handshake_ex: probe_port must be > 0");
     return HAL_EINVAL;
   }
+  status = jh_network_require_ready();
+  if (status != HAL_OK) {
+    return status;
+  }
 
   wireguard_ensure_mutex();
   hal_mutex_lock(s_wireguard_mutex);
@@ -422,4 +439,4 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
-#endif // HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#endif // HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474

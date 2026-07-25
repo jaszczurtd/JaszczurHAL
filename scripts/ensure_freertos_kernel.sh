@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Fetch or verify the pinned FreeRTOS-Kernel dependency for STM32G474 builds.
+# Fetch or verify the pinned FreeRTOS-Kernel dependency.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG_FILE="${REPO_ROOT}/freertos_core_version.conf"
+CONFIG_FILE="${REPO_ROOT}/third_party/freertos_core_version.conf"
 
 # shellcheck source=lib/pinned_repo.sh
 source "${SCRIPT_DIR}/lib/pinned_repo.sh"
 
 usage() {
-    sed -n '2,80p' "$0" | sed 's/^# \{0,1\}//'
     cat <<'USAGE'
+Fetch or verify the pinned FreeRTOS-Kernel dependency.
 
 Usage:
   scripts/ensure_freertos_kernel.sh [options]
@@ -57,7 +57,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --repo-root)
             REPO_ROOT="$(cd "$2" && pwd)"
-            CONFIG_FILE="${REPO_ROOT}/freertos_core_version.conf"
+            CONFIG_FILE="${REPO_ROOT}/third_party/freertos_core_version.conf"
             shift 2
             ;;
         --kernel-dir)
@@ -75,7 +75,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -f "${CONFIG_FILE}" ]] || die "FreeRTOS config not found: ${CONFIG_FILE}"
-# shellcheck source=../freertos_core_version.conf
+# shellcheck source=../third_party/freertos_core_version.conf
 source "${CONFIG_FILE}"
 
 defs_contain_hal_freertos() {
@@ -135,6 +135,9 @@ REQUIRED_PATHS=(
     "timers.c"
     "event_groups.c"
     "stream_buffer.c"
+    "portable/ThirdParty/GCC/RP2040/port.c"
+    "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_ARM_NTZ/non_secure/port.c"
+    "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_RISC-V/port.c"
 )
 
 kernel_version() {
@@ -156,31 +159,19 @@ verify_version() {
     fi
 }
 
-if [[ ! -d "${KERNEL_DIR}" ]]; then
-    if [[ ${USER_PROVIDED_DIR} -eq 1 ]]; then
+if [[ ${USER_PROVIDED_DIR} -eq 1 ]]; then
+    [[ -d "${KERNEL_DIR}" ]] ||
         die "JH_FREERTOS_KERNEL_DIR points to a missing checkout: ${KERNEL_DIR}"
-    fi
-    [[ ${VERIFY_ONLY} -eq 0 ]] || die "FreeRTOS-Kernel checkout missing: ${KERNEL_DIR}"
-
-    info "Fetching FreeRTOS-Kernel ${FREERTOS_KERNEL_VERSION:-${FREERTOS_KERNEL_REF}} into ${KERNEL_DIR}"
-    jh_dep_clone_pinned "${FREERTOS_KERNEL_REPO}" "${FREERTOS_KERNEL_REF}" "${KERNEL_DIR}"
-elif [[ -d "${KERNEL_DIR}/.git" ]]; then
-    actual="$(git -C "${KERNEL_DIR}" rev-parse HEAD)"
-    if [[ "${actual}" != "${FREERTOS_KERNEL_REF}" ]]; then
-        if [[ ${USER_PROVIDED_DIR} -eq 1 || ${VERIFY_ONLY} -eq 1 ]]; then
-            die "FreeRTOS-Kernel ref mismatch in ${KERNEL_DIR}: expected ${FREERTOS_KERNEL_REF}, found ${actual}."
-        fi
-
-        info "Updating FreeRTOS-Kernel checkout in ${KERNEL_DIR} to ${FREERTOS_KERNEL_REF}"
-        if ! jh_dep_fetch_ref "${KERNEL_DIR}" "${FREERTOS_KERNEL_REPO}" "${FREERTOS_KERNEL_REF}"; then
-            die "Could not fetch FreeRTOS-Kernel ref ${FREERTOS_KERNEL_REF}.
-If you are offline, pre-populate ${KERNEL_DIR} or set JH_FREERTOS_KERNEL_DIR to a checkout at that ref."
-        fi
-    fi
+    jh_dep_verify_ref "${KERNEL_DIR}" "${FREERTOS_KERNEL_REF}"
 else
-    [[ ${VERIFY_ONLY} -eq 0 || ${USER_PROVIDED_DIR} -eq 1 ]] || die "FreeRTOS-Kernel path exists but is not a git checkout: ${KERNEL_DIR}"
+    jh_dep_sync_pinned \
+        "${FREERTOS_KERNEL_REPO}" "${FREERTOS_KERNEL_REF}" \
+        "${KERNEL_DIR}" "${VERIFY_ONLY}"
 fi
 
+if [[ ${VERIFY_ONLY} -eq 0 ]]; then
+    jh_dep_init_submodules "${KERNEL_DIR}" "${FREERTOS_KERNEL_SUBMODULES:-}"
+fi
 jh_dep_verify_paths "${KERNEL_DIR}" "${REQUIRED_PATHS[@]}"
 verify_version "${KERNEL_DIR}"
 jh_dep_verify_ref "${KERNEL_DIR}" "${FREERTOS_KERNEL_REF}"

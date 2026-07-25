@@ -1,9 +1,10 @@
 #pragma once
 
 #include "hal/hal_tls.h"
-#include "vendor/inc/bearssl.h"
 
 #ifdef HAL_ENABLE_TLS
+
+#include <bearssl.h>
 
 #define JH_BEARSSL_ENTROPY_SIZE 32u
 

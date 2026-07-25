@@ -5,7 +5,7 @@
 #endif
 
 /* Entry point is selected by the build system:
- * RP2040 generates setup()/loop(). */
+ * RP and STM32 use the HAL-owned application entry point. */
 
 #define HAL_ENABLE_BSD_SOCKETS
 

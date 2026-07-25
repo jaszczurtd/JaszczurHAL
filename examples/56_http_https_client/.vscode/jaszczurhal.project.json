@@ -4,17 +4,25 @@
     "module": "56_http_https_client",
     "example": {
         "targets": [
-            "rp2040"
-        ]
+            "stm32g474",
+            "rp2040",
+            "rp2350-arm"
+        ],
+        "boards": {
+            "rp2040": "picow",
+            "rp2350-arm": "pico2w",
+            "stm32g474": "nucleo-g474re"
+        }
     },
     "toolchain": "cmake",
     "target": "rp2040",
     "board": "picow",
-    "buildDir": "${project}/.build",
-    "cmakeBuildDir": "${project}/.build/cmake",
+    "buildDir": "${jhRoot}/.build/examples/56_http_https_client",
+    "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {
         "sourceDir": "${project}/../../cmake/jh_firmware_project",
         "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "56_http_https_client"
         }
@@ -23,5 +31,14 @@
         "elf": "${buildDir}/firmware.elf",
         "uf2": "${buildDir}/firmware.uf2",
         "compileCommands": "${buildDir}/compile_commands_patched.json"
+    },
+    "targetProfiles": {
+        "stm32g474": {
+            "cmake": {
+                "cache": {
+                    "JH_EXTRA_DEFINES": "HAL_ENABLE_TLS;HAL_NETWORK_BACKEND_CYW43;HAL_CYW43_BUS_STM32_GSPI;HAL_CYW43_STACK_LWIP;HAL_CYW43_PIN_WL_ON=30u;HAL_CYW43_PIN_CHIP_SELECT=28u;HAL_CYW43_PIN_DATA=31u;HAL_CYW43_PIN_CLOCK=29u;HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"
+                }
+            }
+        }
     }
 }

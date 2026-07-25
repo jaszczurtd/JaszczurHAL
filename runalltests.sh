@@ -11,8 +11,8 @@
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. Target static-library builds (STM32 + RP2040 flag matrix)
-#   7. Examples build (RP2040 + STM32G474, via dispatcher-backed manifests)
+#   6. Target builds (STM32 + native Pico SDK matrix)
+#   7. Examples build (native RP + STM32G474)
 #
 # Usage:
 #   ./runalltests.sh          # run everything
@@ -25,6 +25,10 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BUILD_ROOT="${SCRIPT_DIR}/.build"
+GATE_BUILD_ROOT="${BUILD_ROOT}/gate"
+LOG_ROOT="${GATE_BUILD_ROOT}/logs"
+export PYTHONPYCACHEPREFIX="${BUILD_ROOT}/python-cache"
 cd "${SCRIPT_DIR}"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
@@ -55,20 +59,19 @@ run_logged() {
 }
 
 clean_build_artifacts() {
-    local candidate
     local cleaned=0
     local build_dirs=(
-        "${SCRIPT_DIR}/build"
+        "${GATE_BUILD_ROOT}"
+        "${BUILD_ROOT}/examples"
+        "${BUILD_ROOT}/python-cache"
+        "${BUILD_ROOT}/tests"
     )
 
-    for candidate in "${SCRIPT_DIR}"/build_*; do
-        [[ -d "${candidate}" ]] && build_dirs+=("${candidate}")
-    done
-
+    local candidate
     for candidate in "${build_dirs[@]}"; do
         [[ -d "${candidate}" ]] || continue
         case "${candidate}" in
-            "${SCRIPT_DIR}/build"|"${SCRIPT_DIR}/build_"*) ;;
+            "${GATE_BUILD_ROOT}"|"${BUILD_ROOT}/examples"|"${BUILD_ROOT}/python-cache"|"${BUILD_ROOT}/tests") ;;
             *) continue ;;
         esac
 
@@ -81,6 +84,7 @@ clean_build_artifacts() {
     else
         info "Removed ${cleaned} build artifact directories."
     fi
+    mkdir -p "${LOG_ROOT}"
 }
 
 # ── Args ─────────────────────────────────────────────────────────────────────
@@ -113,7 +117,6 @@ header "Gate 1/7: Checking required tools"
 REQUIRED_TOOLS=(
     cmake g++ gcc make
     valgrind clang-tidy cppcheck run-clang-tidy
-    arduino-cli
     arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib arm-none-eabi-objcopy
 )
 missing=0
@@ -133,20 +136,16 @@ if [[ "$missing" -ne 0 ]]; then
 fi
 pass "All required tools present."
 
-rp2040_core="$(arduino-cli core list 2>/dev/null | grep -m1 -E '^rp2040:rp2040([[:space:]]|$)' || true)"
-if [[ -z "${rp2040_core}" ]]; then
-    fail "Arduino RP2040 core is not installed. Run ./runmefirst.sh first."
-    exit 1
-fi
-printf '  %-20s %s\n' "rp2040:rp2040" "${rp2040_core}"
-pass "Arduino RP2040 core present."
+info "Verifying pinned third-party components..."
+"${SCRIPT_DIR}/third_party/update_components.sh" --verify-only
+pass "Pinned third-party components are ready."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 2: Host unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
 header "Gate 2/7: Host unit tests (build + ctest + FreeRTOS POSIX)"
 
-BUILD_DIR="${SCRIPT_DIR}/build_test"
+BUILD_DIR="${GATE_BUILD_ROOT}/host"
 rm -rf "${BUILD_DIR}"
 
 info "Configuring..."
@@ -169,6 +168,9 @@ header "Gate 3/7: Memory safety (Valgrind memcheck)"
 
 MEMCHECK_REQUIRED_TESTS=(
     test_lwip_raw_engines
+    test_network_board_runtime_absent
+    test_network_board_runtime_picow
+    test_network_board_runtime_pim730
     test_pubsub_hal_client
     test_wireguard_lwip_port
     test_max6675_driver
@@ -197,14 +199,15 @@ done
 
 info "Running tests under Valgrind..."
 ctest --test-dir "${BUILD_DIR}" -T memcheck -LE no_memcheck --output-on-failure 2>&1 \
-    | tee /tmp/jh_memcheck.log | grep -E '(^[0-9]|Memory|passed|failed|Defects)'
+    | tee "${LOG_ROOT}/jh_memcheck.log" \
+    | grep -E '(^[0-9]|Memory|passed|failed|Defects)'
 
 # Check for defects in the memcheck output
-if grep -q "Memory checking results:" /tmp/jh_memcheck.log; then
-    defects=$(grep "Memory checking results:" /tmp/jh_memcheck.log | grep -oP '\d+ defect' | head -1 || true)
+if grep -q "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log"; then
+    defects=$(grep "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log" | grep -oP '\d+ defect' | head -1 || true)
     if [[ -n "$defects" && "$defects" != "0 defect" ]]; then
         fail "Valgrind found memory defects!"
-        grep -A5 "Memory checking results:" /tmp/jh_memcheck.log
+        grep -A5 "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log"
         exit 1
     fi
 fi
@@ -225,7 +228,6 @@ cppcheck --enable=warning,performance,portability \
     -i src/hal/impl/shared/frameworks/cjson \
     -i src/hal/impl/shared/frameworks/jpeg \
     -i src/hal/impl/shared/frameworks/lodepng \
-    -i src/hal/impl/shared/frameworks/lwip/vendor \
     -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src
@@ -238,7 +240,7 @@ pass "cppcheck: no issues found."
 header "Gate 5/7: Static analysis - clang-tidy"
 
 # Generate STM32 compile database
-BUILD_STM32="${SCRIPT_DIR}/build_stm32_host"
+BUILD_STM32="${GATE_BUILD_ROOT}/stm32-host"
 rm -rf "${BUILD_STM32}"
 info "Generating host-compiler STM32 sanity build..."
 cmake -S stm32_lib -B "${BUILD_STM32}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
@@ -246,7 +248,7 @@ info "Building host-compiler STM32 sanity library..."
 cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
 pass "Host-compiler STM32 sanity library ready."
 
-BUILD_STM32_TARGET="${SCRIPT_DIR}/build_stm32_target"
+BUILD_STM32_TARGET="${GATE_BUILD_ROOT}/stm32-target"
 rm -rf "${BUILD_STM32_TARGET}"
 info "Generating real ARM STM32 compile database..."
 cmake -S stm32_lib -B "${BUILD_STM32_TARGET}" \
@@ -267,7 +269,7 @@ if [[ "${#TIDY_HOST_FILES[@]}" -eq 0 ]]; then
     exit 1
 fi
 run-clang-tidy -p "${TIDY_HOST_BUILD}" -quiet "${TIDY_HOST_FILES[@]}" \
-    | tee /tmp/jh_tidy_host.log
+    | tee "${LOG_ROOT}/jh_tidy_host.log"
 pass "clang-tidy host pass complete."
 
 info "Running clang-tidy on STM32 backend..."
@@ -281,12 +283,16 @@ if [[ "${#TIDY_STM32_FILES[@]}" -eq 0 ]]; then
     exit 1
 fi
 run-clang-tidy -p "${TIDY_STM32_BUILD}" -quiet "${TIDY_STM32_FILES[@]}" \
-    | tee /tmp/jh_tidy_stm32.log
+    | tee "${LOG_ROOT}/jh_tidy_stm32.log"
 pass "clang-tidy STM32 pass complete."
 
-if grep -qE ':[0-9]+:[0-9]+: (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null; then
+if grep -qE ':[0-9]+:[0-9]+: (warning|error):' \
+        "${LOG_ROOT}/jh_tidy_host.log" "${LOG_ROOT}/jh_tidy_stm32.log" \
+        2>/dev/null; then
     fail "clang-tidy reported findings:"
-    grep -E ':[0-9]+:[0-9]+: (warning|error):' /tmp/jh_tidy_host.log /tmp/jh_tidy_stm32.log 2>/dev/null | head -20
+    grep -E ':[0-9]+:[0-9]+: (warning|error):' \
+        "${LOG_ROOT}/jh_tidy_host.log" "${LOG_ROOT}/jh_tidy_stm32.log" \
+        2>/dev/null | head -20
     exit 1
 fi
 
@@ -307,27 +313,65 @@ else
     exit 1
 fi
 
-BUILD_RP2040="${SCRIPT_DIR}/build_rp2040"
-info "Building libJaszczurHAL.a (RP2040 backend)..."
-run_logged /tmp/jh_rp2040_lib_build.log \
-    "${SCRIPT_DIR}/scripts/build_rp2040_lib.sh" --clean --jobs "${JOBS}"
+info "Building native Pico SDK artifact matrix..."
+NATIVE_RP_PLATFORMS=(
+    rp2040
+    rp2350-arm-s
+    rp2350-riscv
+)
+for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
+    info "Building native Pico SDK platform: ${platform}"
+    run_logged "${LOG_ROOT}/jh_rp_native_${platform}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
+            --platform "${platform}" --example 01_blink \
+            --clean --jobs "${JOBS}" \
+            --output "${GATE_BUILD_ROOT}/rp-native/${platform}/bare"
+done
+pass "Native Pico SDK matrix built HAL entry/core probes and 01_blink artifacts successfully."
 
-if [[ -f "${BUILD_RP2040}/libJaszczurHAL.a" ]]; then
-    SIZE=$(stat --printf="%s" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || stat -f "%z" "${BUILD_RP2040}/libJaszczurHAL.a" 2>/dev/null || echo "?")
-    pass "RP2040 libJaszczurHAL.a built successfully (${SIZE} bytes)"
-else
-    fail "RP2040 libJaszczurHAL.a not found!"
-    exit 1
-fi
+info "Building native FreeRTOS SMP artifact matrix..."
+for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
+    info "Building native FreeRTOS SMP platform: ${platform}"
+    run_logged "${LOG_ROOT}/jh_rp_native_freertos_${platform}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
+            --platform "${platform}" --example 29_freertos_smoke \
+            --freertos --clean --jobs "${JOBS}" \
+            --output "${GATE_BUILD_ROOT}/rp-native/${platform}/freertos"
+done
+pass "Native FreeRTOS SMP matrix built for RP2040 and both RP2350 ISAs."
 
 info "Building RP2040 flag matrix..."
-ARDUINO_FLAG_PROFILES=(empty-core typical-set udp-wireguard sdlogger all-enabled)
-for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
+RP_FLAG_PROFILES=(
+    empty-core
+    no-radio-network
+    typical-set
+    udp-wireguard
+    pim730-owned
+    sdlogger
+    all-enabled
+)
+for profile in "${RP_FLAG_PROFILES[@]}"; do
     flags=()
+    board=pico
     case "${profile}" in
         empty-core)
             ;;
+        no-radio-network)
+            # Compile the complete public transport surface for a Pico profile
+            # without CYW43. Runtime preflight must reject hardware access.
+            flags=(
+                -D HAL_ENABLE_WIFI
+                -D HAL_ENABLE_TCP
+                -D HAL_ENABLE_UDP
+                -D HAL_NETWORK_BACKEND_CYW43
+                -D HAL_CYW43_BUS_PICO_PIO
+                -D HAL_CYW43_STACK_LWIP
+                -D HAL_BOARD_PROFILE_RP_PICO
+                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+            )
+            ;;
         typical-set)
+            board=picow
             flags=(
                 -D HAL_ENABLE_WIFI
                 -D HAL_ENABLE_MQTT
@@ -337,15 +381,17 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_DS18B20
                 -D HAL_ENABLE_GPS
                 -D HAL_ENABLE_ILI9341
+                -D HAL_DISPLAY_ILI9341
                 -D HAL_ENABLE_PWM_FREQ
                 -D HAL_NETWORK_BACKEND_CYW43
                 -D HAL_CYW43_BUS_PICO_PIO
                 -D HAL_CYW43_STACK_LWIP
-                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_BOARD_PROFILE_RP_PICO_W
                 -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
         udp-wireguard)
+            board=picow
             # Keep UDP independent from TCP. This catches shared network
             # helpers accidentally guarded by HAL_ENABLE_TCP and compiles the
             # bundled WireGuard/lwIP headers with the JaszczurHAL CYW43 stack.
@@ -355,7 +401,20 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_NETWORK_BACKEND_CYW43
                 -D HAL_CYW43_BUS_PICO_PIO
                 -D HAL_CYW43_STACK_LWIP
-                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_BOARD_PROFILE_RP_PICO_W
+                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+            )
+            ;;
+        pim730-owned)
+            board=pico-rm2
+            flags=(
+                -D HAL_ENABLE_WIFI
+                -D HAL_ENABLE_TCP
+                -D HAL_ENABLE_UDP
+                -D HAL_NETWORK_BACKEND_CYW43
+                -D HAL_CYW43_BUS_PICO_PIO
+                -D HAL_CYW43_STACK_LWIP
+                -D HAL_BOARD_PROFILE_RP_PICO_PIM730
                 -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
@@ -365,12 +424,21 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
             )
             ;;
         all-enabled)
+            board=picow
             flags=(
                 -D HAL_ENABLE_WIFI
                 -D HAL_ENABLE_TIME
                 -D HAL_ENABLE_MQTT
                 -D HAL_ENABLE_UDP
                 -D HAL_ENABLE_TCP
+                -D HAL_ENABLE_BSD_SOCKETS
+                -D HAL_ENABLE_TLS
+                -D HAL_ENABLE_HTTP_CLIENT
+                -D HAL_ENABLE_HTTP_SERVER
+                -D HAL_ENABLE_HTTP_FILES
+                -D HAL_ENABLE_WEBSOCKET
+                -D HAL_ENABLE_NET_CONSOLE
+                -D HAL_ENABLE_NET_COMMANDS
                 -D HAL_ENABLE_OTA
                 -D HAL_ENABLE_WIREGUARD
                 -D HAL_ENABLE_EEPROM
@@ -396,22 +464,24 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
                 -D HAL_ENABLE_PWM_FREQ
                 -D HAL_ENABLE_RGB_LED
                 -D HAL_ENABLE_ILI9341
+                -D HAL_DISPLAY_ILI9341
                 -D HAL_ENABLE_SSD1306
                 -D HAL_ENABLE_CRYPTO
                 -D HAL_ENABLE_CJSON
                 -D HAL_NETWORK_BACKEND_CYW43
                 -D HAL_CYW43_BUS_PICO_PIO
                 -D HAL_CYW43_STACK_LWIP
-                -D HAL_CYW43_PROFILE_PICOW
+                -D HAL_BOARD_PROFILE_RP_PICO_W
                 -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
             )
             ;;
     esac
 
-    matrix_build_dir="${SCRIPT_DIR}/build_rp2040_${profile//-/_}"
+    matrix_build_dir="${GATE_BUILD_ROOT}/rp-native-flags/${profile}"
     info "Building RP2040 flag profile: ${profile}"
-    run_logged "/tmp/jh_rp2040_lib_${profile}.log" \
-        "${SCRIPT_DIR}/scripts/build_rp2040_lib.sh" --clean --jobs "${JOBS}" \
+    run_logged "${LOG_ROOT}/jh_rp_native_${profile}.log" \
+        "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
+            --platform rp2040 --board "${board}" --clean --jobs "${JOBS}" \
             --output "${matrix_build_dir}" "${flags[@]}"
 
     if [[ ! -f "${matrix_build_dir}/libJaszczurHAL.a" ]]; then
@@ -421,18 +491,42 @@ for profile in "${ARDUINO_FLAG_PROFILES[@]}"; do
 done
 pass "RP2040 flag matrix built successfully."
 
+info "Verifying native RP link inputs..."
+if find "${GATE_BUILD_ROOT}/rp-native" "${GATE_BUILD_ROOT}/rp-native-flags" \
+        -type f -name core.a -print -quit | grep -q .; then
+    fail "Native RP build produced an unexpected core.a"
+    exit 1
+fi
+if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
+        "${GATE_BUILD_ROOT}/rp-native" "${GATE_BUILD_ROOT}/rp-native-flags" \
+        --include='link.txt' --include='*.map' --include='compile_commands.json' \
+        --include='CMakeCache.txt'; then
+    fail "Native RP build metadata references the removed carrier"
+    exit 1
+fi
+pass "Native RP images contain no removed carrier link inputs."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 7: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 7/7: Examples build (RP2040 + STM32G474)"
+header "Gate 7/7: Examples build (native RP + STM32G474)"
 
-info "Building RP2040 examples through dispatcher-backed VS Code manifests..."
-run_logged /tmp/jh_examples_rp2040_build.log \
-    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build --target rp2040 --jobs "${JOBS}"
-pass "RP2040 examples built successfully."
+for target in rp2040 rp2350-arm rp2350-riscv; do
+    info "Building every declared native VS Code example for ${target}..."
+    run_logged "${LOG_ROOT}/jh_examples_${target}_native_build.log" \
+        "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
+            --target "${target}" --jobs "${JOBS}"
+done
+pass "Complete native RP example matrix built successfully."
+
+info "Building native RP USB-multicore and SDLogger parity fixtures..."
+run_logged "${LOG_ROOT}/jh_rp_native_parity_fixtures.log" \
+    "${SCRIPT_DIR}/scripts/build_rp_native_parity_fixtures.sh" \
+        --jobs "${JOBS}"
+pass "Native RP parity fixtures built for all target/runtime combinations."
 
 info "Building STM32G474 examples through dispatcher-backed VS Code manifests..."
-run_logged /tmp/jh_examples_stm32g474_build.log \
+run_logged "${LOG_ROOT}/jh_examples_stm32g474_build.log" \
     "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build --target stm32g474 --jobs "${JOBS}"
 pass "STM32G474 examples built successfully."
 
@@ -449,8 +543,8 @@ echo "  FreeRTOS POSIX:   PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
-echo "  Target builds:    PASS (RP2040 flag matrix + STM32G474)"
-echo "  Examples builds:  PASS (RP2040 + STM32G474)"
+echo "  Target builds:    PASS (native Pico SDK + STM32G474)"
+echo "  Examples builds:  PASS (native RP + STM32G474)"
 echo ""
 echo "  Total time: ${SECONDS}s"
 echo ""

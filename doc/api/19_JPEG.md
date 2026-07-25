@@ -11,7 +11,7 @@ abstract hardware. JaszczurHAL gates the upstream header/source behind
 `HAL_ENABLE_JPEG`, keeps the default profile memory-oriented, and adds small
 helpers for decoding JPEG bytes or Base64 JPEG assets directly to RGB565.
 
-Author/license: upstream `JPEGDecoder` is based on the Arduino library by
+Author/license: upstream `JPEGDecoder` is based on the implementation by
 Makoto Kurauchi and Bodmer. The bundled source carries its original license in
 `src/hal/impl/shared/frameworks/jpeg/LICENSE`.
 

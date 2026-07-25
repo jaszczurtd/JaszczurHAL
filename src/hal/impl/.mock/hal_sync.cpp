@@ -37,6 +37,20 @@ void hal_mutex_lock(hal_mutex_t mutex) {
   }
 }
 
+bool hal_mutex_try_lock(hal_mutex_t mutex) {
+  HAL_ASSERT(mutex != NULL, "hal_mutex_try_lock: mutex is NULL");
+  if (mutex == NULL || !mutex->mtx.try_lock()) {
+    return false;
+  }
+
+  s_mutex_lock_count++;
+  s_mutex_depth++;
+  if (s_mutex_depth > s_mutex_max_depth) {
+    s_mutex_max_depth = s_mutex_depth;
+  }
+  return true;
+}
+
 void hal_mutex_unlock(hal_mutex_t mutex) {
   HAL_ASSERT(mutex != NULL, "hal_mutex_unlock: mutex is NULL");
   if (mutex == NULL) {

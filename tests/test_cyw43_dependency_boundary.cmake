@@ -1,5 +1,36 @@
 set(_driver "${JH_ROOT}/src/hal/impl/shared/drivers/cyw43-driver")
 
+file(READ "${_driver}/cyw43_configport.h" _cyw43_port_config)
+if(NOT _cyw43_port_config MATCHES
+   "#define[ \t]+CYW43_USE_OTP_MAC[ \t]+\\(1\\)")
+    message(FATAL_ERROR
+        "CYW43 port must prefer the radio OTP MAC before the UID fallback")
+endif()
+
+file(READ "${_driver}/jh_cyw43_driver.cpp" _cyw43_driver_wrapper)
+if(NOT _cyw43_driver_wrapper MATCHES
+   "memcpy\\(mac,[ \t]*cyw43_state\\.mac,[ \t]*sizeof\\(cyw43_state\\.mac\\)\\)")
+    message(FATAL_ERROR
+        "CYW43 port must expose the OTP/fallback MAC stored by the controller")
+endif()
+if(_cyw43_driver_wrapper MATCHES "uint8_t[ \t]+s_mac\\[6\\]")
+    message(FATAL_ERROR
+        "CYW43 port must not shadow the controller MAC with a separate cache")
+endif()
+
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_port_pin_read" _cyw43_pin_read_begin)
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_port_pin_low" _cyw43_pin_read_end)
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_gspi_host_wake_refresh(s_transport)" _cyw43_refresh)
+if(_cyw43_pin_read_begin LESS 0 OR _cyw43_pin_read_end LESS 0 OR
+   _cyw43_refresh LESS _cyw43_pin_read_begin OR
+   _cyw43_refresh GREATER _cyw43_pin_read_end)
+    message(FATAL_ERROR
+        "CYW43 pin read must refresh polled HOST_WAKE before testing its latch")
+endif()
+
 set(_pinned_files
     "vendor/src/cyw43.h|d315bcfe96ca96b0309d760fe93a60f11ed8b44b7da2472f5ba395ef19985ba0"
     "vendor/src/cyw43_btbus.h|4e7d8ac7e49e328d957f4166fcffe7cdae56b784fbdcafc59641969ab9f2de30"
@@ -91,6 +122,20 @@ foreach(_source IN LISTS _backend_sources)
 endforeach()
 
 foreach(_source IN ITEMS
+        "${JH_ROOT}/src/hal/hal_wifi.cpp"
+        "${JH_ROOT}/src/hal/hal_net.cpp"
+        "${JH_ROOT}/src/hal/hal_tcp.cpp"
+        "${JH_ROOT}/src/hal/hal_udp.cpp"
+        "${JH_ROOT}/src/hal/impl/shared/network/mqtt/hal_mqtt.cpp"
+        "${JH_ROOT}/src/hal/impl/shared/network/wireguard/hal_wireguard.cpp")
+    file(READ "${_source}" _contents)
+    if(NOT _contents MATCHES "jh_network_require_(hardware|ready)")
+        message(FATAL_ERROR
+            "Public CYW43 runtime preflight is missing in ${_source}")
+    endif()
+endforeach()
+
+foreach(_source IN ITEMS
         "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
         "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp")
     file(READ "${_source}" _contents)
@@ -121,14 +166,14 @@ endif()
 if(EXISTS
    "${JH_ROOT}/src/hal/impl/rp2040/rp2040_arduino_network_backend.cpp")
     message(FATAL_ERROR
-        "Removed Arduino-Pico network backend source must not remain")
+        "Removed RP network backend source must not remain")
 endif()
 foreach(_removed_source IN ITEMS
         "${JH_ROOT}/src/hal/impl/rp2040/hal_net.cpp"
         "${JH_ROOT}/src/hal/impl/rp2040/hal_wifi.cpp")
     if(EXISTS "${_removed_source}")
         message(FATAL_ERROR
-            "Removed Arduino-Pico network implementation must not remain: ${_removed_source}")
+            "Removed RP network implementation must not remain: ${_removed_source}")
     endif()
 endforeach()
 if(NOT EXISTS
@@ -136,27 +181,33 @@ if(NOT EXISTS
     message(FATAL_ERROR "RP2040 CYW43 PIO provenance metadata is missing")
 endif()
 
-file(READ "${JH_ROOT}/cmake/targets/rp2040.cmake" _rp2040_recipe)
-foreach(_required IN ITEMS
-        "jh_cyw43_source_manifest"
-        "jh_bearssl_source_manifest"
-        "compiler.netdefines="
-        "build.libpicow=libpico.a"
-        "compiler.libbearssl="
-        "rp2040_core_wrap_non_network.txt")
-    if(NOT _rp2040_recipe MATCHES "${_required}")
-        message(FATAL_ERROR
-            "RP2040 owned-network recipe is missing '${_required}'")
+foreach(_removed_path IN ITEMS
+        "${JH_ROOT}/cmake/targets/rp2040.cmake"
+        "${JH_ROOT}/cmake/rp2040_core_wrap_non_network.txt"
+        "${JH_ROOT}/library.properties"
+        "${JH_ROOT}/rp2040_core_version.conf"
+        "${JH_ROOT}/rp2040_lib"
+        "${JH_ROOT}/scripts/build_rp2040_lib.sh"
+        "${JH_ROOT}/vscode/neutral_fw/rp2040_arduino_pico"
+        "${JH_ROOT}/vscode/targets/rp2040-arduino.json")
+    if(EXISTS "${_removed_path}")
+        message(FATAL_ERROR "Removed RP carrier path remains: ${_removed_path}")
     endif()
 endforeach()
 
-file(READ "${JH_ROOT}/vscode/targets/rp2040.json" _rp2040_profiles)
+file(READ "${JH_ROOT}/boards/profiles/pico-rm2.json" _rp2040_profiles)
+file(READ "${JH_ROOT}/boards/profiles/picow.json" _picow_profile)
+file(READ "${JH_ROOT}/boards/profiles/pico2w.json" _pico2w_profile)
+string(APPEND _rp2040_profiles
+    "\n${_picow_profile}\n${_pico2w_profile}")
 foreach(_required IN ITEMS
         "\"id\": \"pico-rm2\""
         "\"id\": \"picow\""
-        "HAL_CYW43_PROFILE_PIM730"
-        "HAL_CYW43_PROFILE_PICOW"
-        "HAL_CYW43_STACK_LWIP")
+        "\"id\": \"pico2w\""
+        "HAL_BOARD_PROFILE_RP_PICO_PIM730"
+        "HAL_BOARD_PROFILE_RP_PICO_W"
+        "HAL_BOARD_PROFILE_RP_PICO_2_W"
+        "\"cyw43-lwip\"")
     if(NOT _rp2040_profiles MATCHES "${_required}")
         message(FATAL_ERROR
             "RP2040 board profiles are missing '${_required}'")
@@ -164,7 +215,7 @@ foreach(_required IN ITEMS
 endforeach()
 foreach(_forbidden IN ITEMS
         "picow-shared"
-        "HAL_CYW43_STARTUP_OWNED"
+        "JH_RP2040_BOARD_DEFINES"
         "PICO_CYW43_SUPPORTED"
         "CYW43_PIN_WL_DYNAMIC"
         "CYW43_PIO_CLOCK_DIV_DYNAMIC")

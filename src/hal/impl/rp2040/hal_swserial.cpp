@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_SWSERIAL
@@ -825,4 +825,4 @@ void hal_swserial_destroy(hal_swserial_t h) {
 }
 
 #endif /* HAL_ENABLE_SWSERIAL */
-#endif /* HAL_TARGET_IS_RP2040 */
+#endif /* HAL_TARGET_IS_RP */

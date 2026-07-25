@@ -18,9 +18,8 @@
 #error "29_freertos_smoke requires HAL_ENABLE_APP_TASK1"
 #endif
 
-#if HAL_TARGET_IS_RP2040 && !defined(__FREERTOS)
-#error                                                                         \
-    "29_freertos_smoke on RP2040 requires arduino-pico FreeRTOS mode (__FREERTOS)"
+#if HAL_TARGET_IS_RP && !defined(__FREERTOS)
+#error "29_freertos_smoke on RP targets requires FreeRTOS mode (__FREERTOS)"
 #endif
 
 static hal_mutex_t s_smoke_mutex;

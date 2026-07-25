@@ -6,7 +6,7 @@
 # Cortex-M startup copies .data / zeroes .bss by iterating between linker
 # symbols (while (dst < &_edata)). cppcheck cannot know these symbols are
 # contiguous, so its "comparing pointers to different objects" is a false
-# positive for this canonical startup idiom.
+# positive for this established startup idiom.
 comparePointers:src/hal/impl/stm32g474/port/startup_stm32g474.c
 
 # hal_mutex_impl_t is defined separately in each backend (.mock / rp2040 /
@@ -20,7 +20,7 @@ ctuOneDefinitionRuleViolation
 # zero-initialising HAL handles this way is intentional and portable in practice.
 memsetClassFloat
 
-# Noise unrelated to our code: cppcheck cannot resolve toolchain/Arduino headers,
+# Noise unrelated to our code: cppcheck cannot resolve all toolchain headers,
 # and the #ifdef space is larger than it checks by default.
 missingInclude
 missingIncludeSystem

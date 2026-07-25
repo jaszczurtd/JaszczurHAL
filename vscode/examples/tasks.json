@@ -8,10 +8,13 @@
             "options": [
                 "rp2040:pico - Raspberry Pi Pico (RP2040)",
                 "rp2040:picow - Raspberry Pi Pico W (RP2040)",
-                "rp2040:pico2 - Raspberry Pi Pico 2 (RP2350)",
-                "rp2040:pico2w - Raspberry Pi Pico 2 W (RP2350)",
-                "stm32g474:nucleo-g474re - NUCLEO-G474RE (512 KB flash / 128 KB RAM)",
-                "esp32:esp32-devkitc - ESP32-DevKitC (skeleton)"
+                "rp2040:rp2040-zero - Waveshare RP2040-Zero",
+                "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB",
+                "rp2040:pico-rm2 - Raspberry Pi Pico RM2",
+                "rp2350-arm:pico2 - Raspberry Pi Pico 2 (RP2350 Arm)",
+                "rp2350-arm:pico2w - Raspberry Pi Pico 2 W (RP2350 Arm)",
+                "rp2350-riscv:pico2 - Raspberry Pi Pico 2 (RP2350 RISC-V)",
+                "stm32g474:nucleo-g474re - NUCLEO-G474RE (512 KB flash / 128 KB RAM)"
             ],
             "default": "rp2040:pico - Raspberry Pi Pico (RP2040)"
         }
@@ -52,6 +55,22 @@
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["upload-uf2", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Upload (OTA)",
+            "detail": "Build, authenticate, and upload to a discovered native RP device",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Discover OTA devices",
+            "detail": "List JaszczurHAL devices advertising native OTA",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["ota-discover", "--project", "${workspaceFolder}"],
             "problemMatcher": []
         },
         {
@@ -151,6 +170,27 @@
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Sync board picker",
+            "detail": "Refresh target/board options from the JaszczurHAL registry",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": [
+                "sync-board-picker",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "runOptions": {
+                "runOn": "folderOpen",
+                "instanceLimit": 1
+            },
+            "presentation": {
+                "reveal": "never",
+                "panel": "shared",
+                "showReuseMessage": false
+            },
             "problemMatcher": []
         }
     ]

@@ -4,6 +4,8 @@
 
 #ifdef HAL_ENABLE_OTA
 
+#include "hal_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,6 +40,26 @@ typedef void (*hal_ota_on_end_callback_t)(void *user);
 typedef void (*hal_ota_on_progress_callback_t)(uint32_t progress,
                                                uint32_t total, void *user);
 typedef void (*hal_ota_on_error_callback_t)(hal_ota_error_t error, void *user);
+
+#define HAL_OTA_VERSION_TEXT_SIZE 32u
+
+typedef enum {
+  HAL_OTA_BOOT_STABLE = 0,
+  HAL_OTA_BOOT_PENDING = 1,
+  HAL_OTA_BOOT_TRIAL = 2,
+  HAL_OTA_BOOT_ROLLBACK = 3,
+  HAL_OTA_BOOT_RECOVERY = 4
+} hal_ota_boot_mode_t;
+
+typedef struct {
+  hal_ota_boot_mode_t mode;
+  uint8_t attempts;
+  uint8_t max_attempts;
+  uint32_t program_generation;
+  uint32_t staging_generation;
+  char program_version[HAL_OTA_VERSION_TEXT_SIZE];
+  char staging_version[HAL_OTA_VERSION_TEXT_SIZE];
+} hal_ota_boot_info_t;
 
 /**
  * @brief Set OTA UDP port.
@@ -102,6 +124,20 @@ void hal_ota_handle(void);
 
 /** @brief Return true when OTA service was started. */
 bool hal_ota_is_started(void);
+
+/**
+ * @brief Confirm that a native trial image booted successfully.
+ *
+ * Call this only after the application has completed its own startup checks.
+ * @return HAL_OK when confirmed or already stable.
+ */
+hal_status_t hal_ota_confirm_boot_ex(void);
+
+/**
+ * @brief Read the native OTA boot/rollback state.
+ * @param out_info Destination for the current state.
+ */
+hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
 
 #ifdef __cplusplus
 }

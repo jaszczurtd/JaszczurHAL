@@ -13,6 +13,7 @@
 #pragma once
 
 #include "hal_bits.h"
+#include "hal_board.h"
 #include "hal_config.h"
 #include "hal_gpio.h"
 #include "hal_math.h"
@@ -45,6 +46,7 @@
 #include "hal_sync.h"
 #include "hal_system.h"
 #include "hal_timer.h"
+#include "hal_usb.h"
 #ifdef HAL_ENABLE_UART
 #include "hal_uart.h"
 #endif

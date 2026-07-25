@@ -1,0 +1,14 @@
+#pragma once
+
+#ifndef HAL_ENABLE_APP_TASK1
+#define HAL_ENABLE_APP_TASK1
+#endif
+
+#if defined(HAL_ENABLE_FREERTOS)
+#ifndef HAL_FREERTOS_TASK0_STACK
+#define HAL_FREERTOS_TASK0_STACK 768u
+#endif
+#ifndef HAL_FREERTOS_TASK1_STACK
+#define HAL_FREERTOS_TASK1_STACK 768u
+#endif
+#endif

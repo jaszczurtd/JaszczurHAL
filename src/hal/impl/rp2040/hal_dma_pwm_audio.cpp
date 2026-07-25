@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
@@ -405,4 +405,4 @@ bool hal_dma_pwm_audio_is_paused(hal_dma_pwm_audio_t audio) {
 }
 
 #endif /* HAL_ENABLE_DMA_PWM_AUDIO */
-#endif /* HAL_TARGET_IS_RP2040 */
+#endif /* HAL_TARGET_IS_RP */

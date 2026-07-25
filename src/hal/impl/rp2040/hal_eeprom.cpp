@@ -1,16 +1,17 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_EEPROM
 
 #include "../../hal_eeprom.h"
+#ifdef HAL_ENABLE_I2C
 #include "../../hal_i2c.h"
+#endif
 #include "../../hal_sync.h"
 #include "../../hal_system.h"
 #include "../shared/hal_mutex_once.h"
 
-#include <Arduino.h>
-#include <EEPROM.h>
+#include "drivers/flash/rp_flash_storage.h"
 #include <string.h>
 
 /* ── Internal state
@@ -22,6 +23,10 @@ static uint8_t s_i2c_addr = EEPROM_I2C_ADDRESS;
 static hal_mutex_t s_eeprom_mutex = NULL;
 static hal_eeprom_progress_callback_t s_progress_callback = NULL;
 static void *s_progress_ctx = NULL;
+static uint8_t s_flash_mirror[HAL_RP_FLASH_EEPROM_SIZE];
+static jh_rp_flash_partition_t s_flash_partition = {};
+static bool s_flash_ready = false;
+static bool s_dirty = false;
 
 static void eeprom_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_eeprom_mutex);
@@ -48,7 +53,58 @@ static void notify_progress(void) {
   }
 }
 
+static uint16_t bounded_flash_size(uint16_t requested) {
+  uint32_t max_size = s_flash_partition.size;
+  if (max_size > sizeof(s_flash_mirror)) {
+    max_size = sizeof(s_flash_mirror);
+  }
+  if (max_size > UINT16_MAX) {
+    max_size = UINT16_MAX;
+  }
+  if (requested == 0u) {
+    return (uint16_t)max_size;
+  }
+  return requested <= max_size ? requested : 0u;
+}
+
+static hal_status_t flash_load_mirror(void) {
+  s_flash_ready = false;
+  const hal_status_t partition_status = jh_rp_flash_storage_partition(
+      JH_RP_FLASH_PARTITION_EEPROM, &s_flash_partition);
+  if (partition_status != HAL_OK ||
+      s_flash_partition.size > sizeof(s_flash_mirror)) {
+    return HAL_ECONFIG;
+  }
+
+  const hal_status_t read_status = jh_rp_flash_storage_read(
+      &s_flash_partition, 0u, s_flash_mirror, s_flash_partition.size);
+  if (read_status == HAL_OK) {
+    s_flash_ready = true;
+  }
+  return read_status;
+}
+
+static hal_status_t flash_commit_mirror(void) {
+  if (!s_flash_ready) {
+    return HAL_EUNINIT;
+  }
+  if (!s_dirty) {
+    return HAL_OK;
+  }
+
+  notify_progress();
+  const hal_status_t status = jh_rp_flash_storage_replace(
+      &s_flash_partition, s_flash_mirror, s_flash_partition.size);
+  notify_progress();
+  if (status == HAL_OK) {
+    s_dirty = false;
+  }
+  return status;
+}
+
 /* ── AT24C256 helpers ───────────────────────────────────────────────────── */
+
+#ifdef HAL_ENABLE_I2C
 
 static bool at24_wait_ready(void) {
   uint32_t waited_us = 0u;
@@ -119,6 +175,25 @@ static bool at24_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
   return true;
 }
 
+#else
+
+static bool at24_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len) {
+  (void)addr;
+  (void)data;
+  (void)len;
+  return false;
+}
+
+static bool at24_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
+  (void)addr;
+  if (out != NULL && len > 0u) {
+    memset(out, 0, len);
+  }
+  return false;
+}
+
+#endif
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 /*
@@ -144,15 +219,27 @@ hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
   if (type < HAL_EEPROM_DEFAULT || type > HAL_EEPROM_FLASH) {
     return HAL_EINVAL;
   }
+#if !defined(HAL_ENABLE_I2C)
+  if (type == HAL_EEPROM_AT24C256) {
+    return HAL_ECONFIG;
+  }
+#endif
   eeprom_ensure_mutex();
+  hal_mutex_lock(s_eeprom_mutex);
   s_type = normalize_type(type);
   if (s_type == HAL_EEPROM_RP2040) {
-    s_size = size;
-    EEPROM.begin(size);
+    s_dirty = false;
+    const hal_status_t flash_status = flash_load_mirror();
+    s_size = flash_status == HAL_OK ? bounded_flash_size(size) : 0u;
+    if (flash_status != HAL_OK || s_size == 0u) {
+      hal_mutex_unlock(s_eeprom_mutex);
+      return flash_status != HAL_OK ? flash_status : HAL_EINVAL;
+    }
   } else {
     s_size = 32768U;
     s_i2c_addr = (i2c_addr != 0) ? i2c_addr : EEPROM_I2C_ADDRESS;
   }
+  hal_mutex_unlock(s_eeprom_mutex);
   return HAL_OK;
 }
 
@@ -178,9 +265,11 @@ static bool write_clipped_nolock(uint16_t addr, const uint8_t *data,
     return true;
   }
   if (s_type == HAL_EEPROM_RP2040) {
-    for (uint16_t i = 0u; i < n; i++) {
-      EEPROM.write((uint16_t)(addr + i), data[i]);
+    if (!s_flash_ready) {
+      return false;
     }
+    memcpy(s_flash_mirror + addr, data, n);
+    s_dirty = true;
     return true;
   }
   return at24_write_bytes(addr, data, n);
@@ -191,9 +280,10 @@ static bool read_clipped_nolock(uint16_t addr, uint8_t *out, uint16_t n) {
     return true;
   }
   if (s_type == HAL_EEPROM_RP2040) {
-    for (uint16_t i = 0u; i < n; i++) {
-      out[i] = EEPROM.read((uint16_t)(addr + i));
+    if (!s_flash_ready) {
+      return false;
     }
+    memcpy(out, s_flash_mirror + addr, n);
     return true;
   }
   return at24_read_bytes(addr, out, n);
@@ -338,13 +428,14 @@ hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len) {
 
 hal_status_t hal_eeprom_commit(void) {
   eeprom_ensure_mutex();
+  hal_status_t status = HAL_OK;
   if (s_type == HAL_EEPROM_RP2040) {
     hal_mutex_lock(s_eeprom_mutex);
-    EEPROM.commit();
+    status = flash_commit_mirror();
     hal_mutex_unlock(s_eeprom_mutex);
   }
   /* AT24C256: no-op - writes are already committed to the chip */
-  return HAL_OK;
+  return status;
 }
 
 hal_status_t hal_eeprom_reset(void) {
@@ -352,9 +443,11 @@ hal_status_t hal_eeprom_reset(void) {
   hal_mutex_lock(s_eeprom_mutex);
   hal_status_t st = (s_size == 0u) ? HAL_EUNINIT : HAL_OK;
   if (s_type == HAL_EEPROM_RP2040) {
-    for (uint32_t a = 0; a < s_size; a++) {
-      EEPROM.write((uint16_t)a, 0u);
-      notify_progress();
+    if (s_flash_ready) {
+      memset(s_flash_mirror, 0, s_size);
+      s_dirty = true;
+    } else {
+      st = HAL_EUNINIT;
     }
   } else {
     uint8_t zeros[HAL_AT24C256_PAGE_SIZE] = {0u};
@@ -389,4 +482,4 @@ hal_status_t hal_eeprom_size_ex(uint16_t *out_size) {
 }
 
 #endif /* HAL_ENABLE_EEPROM */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

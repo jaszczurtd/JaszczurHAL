@@ -16,6 +16,9 @@ extern "C" {
  * This module is opt-in and is compiled only when HAL_ENABLE_TCP is defined.
  * The API exposes opaque socket/listener handles and plain HAL network value
  * types; backend TCP/IP stack objects stay private to implementation files.
+ * On RP CYW43 backends, status-returning operations report HAL_EUNSUPPORTED,
+ * HAL_EUNINIT or HAL_EHW when the required board hardware is respectively
+ * absent, inactive or known to have failed.
  */
 
 #include <stdbool.h>

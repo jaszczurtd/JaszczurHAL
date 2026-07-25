@@ -3,7 +3,7 @@ set(JH_REPO_ROOT "${_jh_repo_root}" CACHE INTERNAL "JaszczurHAL repository root"
 
 function(jh_read_shell_conf OUT_VAR KEY DEFAULT_VALUE)
     set(_value "${DEFAULT_VALUE}")
-    set(_conf "${JH_REPO_ROOT}/freertos_core_version.conf")
+    set(_conf "${JH_REPO_ROOT}/third_party/freertos_core_version.conf")
     if(EXISTS "${_conf}")
         file(STRINGS "${_conf}" _lines REGEX "^${KEY}=")
         foreach(_line IN LISTS _lines)

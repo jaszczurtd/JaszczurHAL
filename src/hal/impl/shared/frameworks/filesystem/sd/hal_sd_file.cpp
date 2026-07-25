@@ -101,6 +101,21 @@ size_t hal_sd_file_write(hal_sd_file_t *file, const void *data, size_t len) {
   return (res == FR_OK) ? (size_t)written : 0u;
 }
 
+size_t hal_sd_file_read(hal_sd_file_t *file, void *data, size_t len) {
+  if (file == NULL || !file->open || data == NULL || len == 0u) {
+    return 0u;
+  }
+
+  sd_file_ensure_mutex();
+  hal_mutex_lock(s_sd_mutex);
+
+  UINT read = 0u;
+  const FRESULT res = f_read(&file->fil, data, (UINT)len, &read);
+
+  hal_mutex_unlock(s_sd_mutex);
+  return (res == FR_OK) ? (size_t)read : 0u;
+}
+
 size_t hal_sd_file_print(hal_sd_file_t *file, const char *text) {
   const char *s = (text != NULL) ? text : "";
   return hal_sd_file_write(file, s, strlen(s));
@@ -110,6 +125,30 @@ size_t hal_sd_file_println(hal_sd_file_t *file, const char *text) {
   size_t written = hal_sd_file_print(file, text);
   written += hal_sd_file_write(file, "\n", 1u);
   return written;
+}
+
+size_t hal_sd_file_size(const hal_sd_file_t *file) {
+  if (file == NULL || !file->open) {
+    return 0u;
+  }
+
+  sd_file_ensure_mutex();
+  hal_mutex_lock(s_sd_mutex);
+  const size_t size = (size_t)f_size(&file->fil);
+  hal_mutex_unlock(s_sd_mutex);
+  return size;
+}
+
+bool hal_sd_file_seek(hal_sd_file_t *file, size_t offset) {
+  if (file == NULL || !file->open) {
+    return false;
+  }
+
+  sd_file_ensure_mutex();
+  hal_mutex_lock(s_sd_mutex);
+  const bool ok = (f_lseek(&file->fil, (FSIZE_t)offset) == FR_OK);
+  hal_mutex_unlock(s_sd_mutex);
+  return ok;
 }
 
 bool hal_sd_file_flush(hal_sd_file_t *file) {

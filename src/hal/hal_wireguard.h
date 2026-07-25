@@ -11,6 +11,11 @@ extern "C" {
 /**
  * @file hal_wireguard.h
  * @brief Thread-safe HAL wrapper for the shared WireGuard/lwIP engine.
+ *
+ * Operations that access the transport report HAL_EUNSUPPORTED, HAL_EUNINIT
+ * or HAL_EHW when the RP CYW43 board hardware is respectively absent,
+ * inactive or known to have failed. Pure IPv4 parsing remains available
+ * without initialized network hardware.
  */
 
 #include "hal_status.h"

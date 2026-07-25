@@ -1,0 +1,23 @@
+{
+    "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL hardware tests",
+    "module": "rp_usb_cdc_echo",
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${jhRoot}/.build/hardware/rp_usb_cdc_echo",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "rp_usb_cdc_echo"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

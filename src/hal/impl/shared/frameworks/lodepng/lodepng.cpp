@@ -141,12 +141,25 @@ void lodepng_free(void *ptr);
 platforms where a full C library is not available. The compiler can recognize
 them and compile to something as fast. */
 
-static void lodepng_memcpy(void *LODEPNG_RESTRICT dst,
-                           const void *LODEPNG_RESTRICT src, size_t size) {
+#if defined(__GNUC__) && !defined(__clang__) && defined(__riscv)
+/*
+GCC 15 for 32-bit RISC-V reports a false one-byte stringop overflow after
+inlining this upstream checked copy through the PNG chunk allocator. Isolating
+the helper from interprocedural optimization retains per-byte bounds and keeps
+the warning enabled for every other source.
+*/
+#define LODEPNG_MEMCPY_NOIPA __attribute__((noipa))
+#else
+#define LODEPNG_MEMCPY_NOIPA
+#endif
+static LODEPNG_MEMCPY_NOIPA void
+lodepng_memcpy(void *LODEPNG_RESTRICT dst, const void *LODEPNG_RESTRICT src,
+               size_t size) {
   size_t i;
   for (i = 0; i < size; i++)
     ((char *)dst)[i] = ((const char *)src)[i];
 }
+#undef LODEPNG_MEMCPY_NOIPA
 
 static void lodepng_memset(void *LODEPNG_RESTRICT dst, int value, size_t num) {
   size_t i;

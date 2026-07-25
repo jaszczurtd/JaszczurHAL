@@ -67,7 +67,7 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 ```
 
 **Backend:** single implementation (`src/hal/hal_modem_at.cpp`) shared
-between Arduino and mock targets - sits entirely on `hal_uart` +
+between hardware and mock targets - sits entirely on `hal_uart` +
 `hal_millis` + `hal_mutex`.
 **Thread safety:** every handle serialises access internally via a
 per-instance mutex. Safe to call from multiple threads/cores.
@@ -222,6 +222,9 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(hal_simcom_a76xx_t 
 /* MQTT */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
                                                         const hal_simcom_a76xx_mqtt_config_t *cfg);
+const char *hal_simcom_a76xx_mqtt_result_string(int result_code);
+int hal_simcom_a76xx_mqtt_last_connect_result(hal_simcom_a76xx_t h,
+                                              int client_index);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_disconnect(hal_simcom_a76xx_t h,
                                                            int client_index);
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_publish(hal_simcom_a76xx_t h,
@@ -258,6 +261,26 @@ sequence (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` /
 driver reassembles the message internally; the application receives
 a single `hal_simcom_a76xx_mqtt_message_cb_t` invocation from inside
 `hal_simcom_a76xx_mqtt_poll()`.
+
+`+CMQTTCONNECT: <client>,<result>` is decoded by the driver. Failed
+connections produce a readable console diagnostic, for example:
+
+```text
+ERROR! [SIMCOM][MQTT] connect failed: socket connect failed (client=0, code=3)
+```
+
+Successful connections are also confirmed after the raw modem response:
+
+```text
+[SIMCOM][MQTT] connected successfully (client=0, code=0)
+```
+
+The numeric result remains available through
+`hal_simcom_a76xx_mqtt_last_connect_result()`, while
+`hal_simcom_a76xx_mqtt_result_string()` exposes the complete SimCom result
+table for application diagnostics. A result of `3` is a socket-connect
+failure before MQTT authentication; bad username/password is `30`, rejected
+authorization is `31`, and a TLS handshake failure is `32`.
 
 **Thread safety:** every handle serialises on the underlying
 `hal_modem_at` mutex. Safe to call from multiple threads/cores.

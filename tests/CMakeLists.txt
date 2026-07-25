@@ -81,9 +81,27 @@ function(add_stm32_gpio_host_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+add_executable(test_rp2040_adc_shared
+    test_rp2040_adc_shared.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/rp2040/rp2040_adc_shared.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_rp2040_adc_shared PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp2040_adc_sdk
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_rp2040_adc_shared PRIVATE
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_rp2040_adc_shared PRIVATE
+    -Wall -Wextra -Werror
+)
+target_link_libraries(test_rp2040_adc_shared PRIVATE Threads::Threads)
+add_test(NAME test_rp2040_adc_shared COMMAND test_rp2040_adc_shared)
+
 # Exercise the real Fiesta-convention CMake generator, not a handwritten copy.
-# The secondary initializer must execute through Arduino setup1() on RP2040 so
-# its GPIO/IRQ setup retains core-1 affinity.
+# The secondary initializer must execute on the first native core-1 task call.
 include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_entry_adapter.cmake")
 set(_entry_fixture_dir
     "${CMAKE_CURRENT_BINARY_DIR}/jh_entry_adapter_fixture")
@@ -127,6 +145,7 @@ target_include_directories(test_jh_entry_adapter PRIVATE
 )
 target_compile_definitions(test_jh_entry_adapter PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
@@ -242,6 +261,138 @@ add_test(NAME test_network_backend_selection
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_network_backend_selection.cmake
 )
 
+add_test(NAME test_target_selection
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_CXX=${CMAKE_CXX_COMPILER}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_target_selection.cmake
+)
+
+add_test(NAME test_board_selection
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_CXX=${CMAKE_CXX_COMPILER}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_selection.cmake
+)
+
+add_test(NAME test_rp_native_build_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_native_build_contract.cmake
+)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_vscode_native_workflow
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_workflow.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_vscode_native_upload
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_upload.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_vscode_serial_persistent
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_serial_persistent.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_build_artifact_layout
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_build_artifact_layout.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_rp_ota_artifacts
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_ota_artifacts.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_component_management
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_component_management.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_ota_firewall_config
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_ota_firewall_config.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_board_generator
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_board_generator.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_documentation_links
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_documentation_links.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+
+add_executable(test_hal_board_runtime
+    test_hal_board_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/hal_board.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_hal_board_runtime PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_hal_board_runtime PRIVATE
+    HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO_W=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+target_compile_options(test_hal_board_runtime PRIVATE -Wall -Wextra -Werror)
+add_test(NAME test_hal_board_runtime COMMAND test_hal_board_runtime)
+
+function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
+    set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
+    add_executable(${NAME}
+        test_network_board_runtime.cpp
+        ${SRC_DIR}/hal/hal_board.cpp
+        ${SRC_DIR}/hal/hal_net.cpp
+        ${SRC_DIR}/hal/hal_tcp.cpp
+        ${SRC_DIR}/hal/hal_udp.cpp
+        ${SRC_DIR}/hal/hal_wifi.cpp
+        ${SRC_DIR}/hal/impl/shared/network/jh_network_backend.cpp
+        ${SRC_DIR}/hal/impl/shared/network/jh_network_handle_pool.cpp
+        ${SRC_DIR}/utils/unity.c
+    )
+    target_include_directories(${NAME} PRIVATE ${SRC_DIR})
+    target_compile_definitions(${NAME} PRIVATE
+        HAL_TARGET_RP2040=1
+        ${BOARD_DEFINE}=1
+        ${TEST_DEFINE}=1
+        HAL_ENABLE_WIFI=1
+        HAL_ENABLE_TCP=1
+        HAL_ENABLE_UDP=1
+        HAL_NETWORK_BACKEND_CYW43=1
+        HAL_CYW43_BUS_PICO_PIO=1
+        HAL_CYW43_STACK_LWIP=1
+        HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+        HAL_ENABLE_UNITY
+        UNITY_INCLUDE_CONFIG_H
+    )
+    target_compile_options(${NAME} PRIVATE -Wall -Wextra -Werror)
+    add_test(NAME ${NAME} COMMAND ${NAME})
+endfunction()
+
+add_network_board_runtime_test(
+    test_network_board_runtime_absent
+    HAL_BOARD_PROFILE_RP_PICO
+    JH_TEST_NETWORK_BOARD_ABSENT
+)
+add_network_board_runtime_test(
+    test_network_board_runtime_picow
+    HAL_BOARD_PROFILE_RP_PICO_W
+    JH_TEST_NETWORK_BOARD_PICOW
+)
+add_network_board_runtime_test(
+    test_network_board_runtime_pim730
+    HAL_BOARD_PROFILE_RP_PICO_PIM730
+    JH_TEST_NETWORK_BOARD_PIM730
+)
+
 add_library(test_hal_http_client_plaintext_compile OBJECT
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/http/hal_http_client.cpp
 )
@@ -349,6 +500,7 @@ endif()
 
 add_hal_test(test_hal_gpio)
 add_hal_test(test_cyw43_config)
+add_hal_test(test_rp2040_cyw43_gspi_clock)
 add_hal_test(test_cyw43_driver)
 add_hal_test(test_cyw43_gspi_transport)
 add_hal_test(test_cyw43_lwip)
@@ -496,6 +648,7 @@ target_include_directories(test_hal_display_rgb_oled_facade PRIVATE
 )
 target_compile_definitions(test_hal_display_rgb_oled_facade PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
     HAL_ENABLE_SSD1331
     HAL_ENABLE_SSD135X
     HAL_ENABLE_UNITY
@@ -522,6 +675,7 @@ target_include_directories(test_hal_display_st7567_facade PRIVATE
 )
 target_compile_definitions(test_hal_display_st7567_facade PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
     HAL_ENABLE_ST7567
     HAL_ENABLE_SPI
     HAL_ENABLE_UNITY
@@ -550,6 +704,7 @@ target_include_directories(test_hal_display_epd_facade PRIVATE
 )
 target_compile_definitions(test_hal_display_epd_facade PRIVATE
     HAL_TARGET_RP2040=1
+    HAL_BOARD_PROFILE_RP_PICO=1
     HAL_ENABLE_SSD16XX
     HAL_ENABLE_UC81XX
     HAL_ENABLE_UNITY
@@ -706,6 +861,8 @@ add_hal_test(test_hal_serial)
 add_hal_test(test_hal_serial_session)
 add_hal_test(test_hal_serial_session_vocabulary)
 add_hal_test(test_hal_status)
+add_hal_test(test_hal_usb)
+add_hal_test(test_flash_transaction_engine)
 add_hal_test(test_hal_swserial)
 add_hal_test(test_hal_onewire)
 # Real bit-banging driver (JHOneWire) compiled straight in, run against mock GPIO
@@ -760,7 +917,7 @@ target_compile_definitions(test_tls_without_bsd_compile PRIVATE
     HAL_TARGET_MOCK=1 HAL_ENABLE_TLS)
 target_include_directories(test_tls_without_bsd_compile PRIVATE
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/vendor/inc)
+    ${CMAKE_SOURCE_DIR}/third_party/BearSSL/inc)
 target_compile_options(test_tls_without_bsd_compile PRIVATE
     -Wall -Wextra -Werror)
 
@@ -785,7 +942,7 @@ if(JH_OPENSSL_EXECUTABLE)
         HAL_ENABLE_TLS HAL_ENABLE_BSD_SOCKETS)
     target_include_directories(test_bearssl_native_client PRIVATE
         ${CMAKE_SOURCE_DIR}/src
-        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/vendor/inc)
+        ${CMAKE_SOURCE_DIR}/third_party/BearSSL/inc)
     target_link_libraries(test_bearssl_native_client PRIVATE jh_bearssl_host)
     add_test(NAME test_bearssl_native_integration
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_bearssl_native_integration.sh
@@ -813,6 +970,8 @@ add_hal_test(test_hal_network_status)
 add_hal_test(test_hal_modem_at)
 add_hal_test(test_hal_simcom_a76xx)
 add_hal_test(test_hal_ota)
+add_hal_test(test_ota_image)
+add_hal_test(test_ota_swap_engine)
 add_hal_test(test_hal_time)
 add_hal_test(test_hal_rtc)
 add_hal_test(test_hal_kv)

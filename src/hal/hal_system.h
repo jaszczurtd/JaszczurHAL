@@ -77,7 +77,7 @@ typedef enum {
  * @c flash_usable_bytes after HAL storage reservations are subtracted.
  */
 typedef struct {
-  const char *target_name;  /**< Canonical HAL target name. */
+  const char *target_name;  /**< Exact HAL target name. */
   const char *backend_name; /**< Backend/runtime carrier name. */
   const char *mcu;          /**< MCU or host family name. */
   const char *mcu_subtype;  /**< Board/chip/package subtype if known. */
@@ -144,7 +144,7 @@ typedef void (*hal_millis_interval_callback_t)(void *user_data);
 /**
  * @brief Check whether a non-blocking millis interval elapsed.
  *
- * This helper implements the canonical wrap-safe pattern:
+ * This helper implements the established wrap-safe pattern:
  *
  * @code
  * if ((now_ms - last_ms) >= interval_ms) { ... }
@@ -286,7 +286,7 @@ bool hal_watchdog_caused_reboot(void);
  * collapse it into @ref HAL_RESET_REASON_UNKNOWN or the closest superset.
  *
  * Notes per backend:
- * - RP2040 (arduino-pico): @ref HAL_RESET_REASON_BROWNOUT is *not* reported
+ * - RP2040: @ref HAL_RESET_REASON_BROWNOUT is *not* reported
  *   by silicon (POR and BOR share one flag). See
  *   @ref hal_last_boot_was_brownout for a heuristic that flags suspected
  *   brown-outs using a retained alive marker.
@@ -329,7 +329,7 @@ typedef struct {
 /**
  * @brief Initialise the fault-diagnostic subsystem.
  *
- * Call this as the very first thing in @c setup() (before any code that may
+ * Call this as the very first thing in @c app_start() (before any code that may
  * write to retained scratch storage or arm the watchdog with custom magic).
  * On backends that need it, this installs the HardFault handler, latches the
  * boot reason, snapshots any captured fault info into RAM, and clears the
@@ -436,7 +436,7 @@ hal_status_t hal_stack_guard_init_ex(void);
  *
  * Compatibility wrapper over @ref hal_stack_guard_init_ex.
  * Implementation strategy depends on the backend:
- * - RP2040 (arduino-pico): writes a canary word at the bottom of the linker
+ * - RP2040: writes a canary word at the bottom of the linker
  *   stack region (@c __StackLimit). @ref hal_stack_guard_check verifies the
  *   canary; corruption indicates the stack grew past its allocation. On
  *   detection the HAL synthesises a HardFault-equivalent reset with reason
@@ -507,13 +507,12 @@ hal_status_t hal_read_chip_temp_ex(float *out_celsius);
 /**
  * @brief Read the on-chip temperature sensor.
  *
- * Compatibility wrapper over @ref hal_read_chip_temp_ex. On RP2040 this
- * wraps the Arduino-pico @c analogReadTemp() function which samples the
- * internal ADC channel connected to the die temperature sensor and converts
- * the raw reading to degrees Celsius.
+ * Compatibility wrapper over @ref hal_read_chip_temp_ex. On RP targets this
+ * samples the native ADC channel connected to the die temperature sensor and
+ * converts the raw reading to degrees Celsius.
  *
- * The value is approximate (+/-2 C typical) and reflects the silicon
- * temperature, not the ambient air temperature.
+ * The value is approximate and reflects the silicon temperature. Its accuracy
+ * depends on the chip sensor and the board's ADC reference voltage.
  *
  * @return Die temperature in degrees Celsius, or 0.0f when unsupported.
  */
@@ -522,7 +521,7 @@ float hal_read_chip_temp(void);
 /**
  * @brief Reboot into USB bootloader mode (UF2 mass-storage mode).
  *
- * On RP2040 targets this calls the ROM bootloader entry path (BOOTSEL mode),
+ * On RP targets this calls the ROM bootloader entry path (BOOTSEL mode),
  * disconnecting the running application and exposing the USB UF2 flashing
  * interface.
  *

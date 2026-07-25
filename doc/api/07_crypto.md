@@ -72,6 +72,21 @@ bool hal_chacha20_poly1305_decrypt(
     uint8_t *plaintext);
 
 // SHA-256 / HMAC-SHA256 (FIPS 180-4 + RFC 2104)
+typedef struct {
+    uint32_t state[8];
+    uint64_t bit_count;
+    uint8_t buffer[HAL_HMAC_SHA256_BLOCK_BYTES];
+    size_t buffer_len;
+    bool initialized;
+} hal_sha256_context_t;
+
+hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);
+hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
+                                  const uint8_t *input, size_t input_len);
+hal_status_t hal_sha256_final_ex(
+    hal_sha256_context_t *context,
+    uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
+
 bool hal_sha256(const uint8_t *input, size_t input_len,
                 uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
 bool hal_sha256_hex(const uint8_t *input, size_t input_len,
@@ -92,6 +107,9 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - ChaCha20 / Poly1305 paths are delegated to the shared `impl/shared/frameworks/wireguard/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
+- The `_ex` SHA-256 API supports bounded-memory streaming. `final_ex`
+  invalidates the context; update/final calls before initialization or after
+  finalization return `HAL_ESTATE`.
 - SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).
 
 **Security note:** MD5 is provided for legacy checksum compatibility and non-security fingerprints. Do not use MD5 where collision resistance is required. Prefer SHA-256 / HMAC-SHA256 for any new integrity or authentication need.

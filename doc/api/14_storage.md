@@ -4,6 +4,14 @@
 
 Covers: `hal_eeprom`, `hal_kv`, `hal_littlefs`, `hal_sdlogger`.
 
+Internal-flash layouts reserve application, OTA, LittleFS, and EEPROM regions
+at link time. RP erase/program operations share the flash transaction
+coordinator, which makes the other core safe, pauses USB work, rejects active
+DMA conflicts, masks local interrupts, and restores runtime state on exit.
+STM32G474 uses page-aligned linker reservations and its target flash service.
+See [RP memory map](../../rp_native_lib/MEMORY_MAP.md) and
+[STM32G474 memory map](../../stm32_lib/MEMORY_MAP.md).
+
 ## `hal_eeprom` - Unified EEPROM  *(optional - `HAL_ENABLE_EEPROM`)*
 
 Single API for persistent byte-addressable storage. The back-end is selected at
@@ -13,11 +21,11 @@ For portable application code, prefer `HAL_EEPROM_FLASH`: it means "use the
 target-native internal flash EEPROM emulation". Existing RP2040 code that uses
 `HAL_EEPROM_RP2040` remains valid.
 
-| Back-end selector | RP2040 / RP2350 Arduino-pico | STM32G474 |
+| Back-end selector | RP2040/RP2350 | STM32G474 |
 |---|---|---|
-| `HAL_EEPROM_FLASH` | Internal flash-backed EEPROM via Arduino `EEPROM` | Internal STM32 flash reservation |
-| `HAL_EEPROM_RP2040` | Same as RP2040 internal flash; kept for compatibility | Accepted as a compatibility alias for target-native flash |
-| `HAL_EEPROM_STM32_FLASH` | STM32-specific selector; use `HAL_EEPROM_FLASH` for portable code | STM32 internal flash reservation |
+| `HAL_EEPROM_FLASH` | Coordinated internal flash reservation | Internal flash reservation |
+| `HAL_EEPROM_RP2040` | Same as target flash; retained API name | Alias for target-native flash |
+| `HAL_EEPROM_STM32_FLASH` | STM32-specific selector; use `HAL_EEPROM_FLASH` for portable code | Internal flash reservation |
 | `HAL_EEPROM_AT24C256` | External AT24C256 over HAL I2C | External AT24C256 over HAL I2C |
 
 Both RP2040 and STM32G474 can therefore use either their own internal flash or
@@ -40,27 +48,29 @@ typedef enum {
 //           reservation. Ignored for HAL_EEPROM_AT24C256 (always 32768 bytes).
 // i2c_addr: 7-bit I2C address of the AT24C256 chip; ignored for flash.
 //           Pass 0 to use the default EEPROM_I2C_ADDRESS (0x50 from hal_config.h).
-void hal_eeprom_init(hal_eeprom_type_t type, uint16_t size, uint8_t i2c_addr);
+hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
+                             uint8_t i2c_addr);
 
 // Byte-level access
-void    hal_eeprom_write_byte(uint16_t addr, uint8_t val);
+hal_status_t hal_eeprom_write_byte(uint16_t addr, uint8_t val);
 uint8_t hal_eeprom_read_byte(uint16_t addr);
 
 // 32-bit integer access (little-endian, 4 bytes starting at addr)
-void    hal_eeprom_write_int(uint16_t addr, int32_t val);
+hal_status_t hal_eeprom_write_int(uint16_t addr, int32_t val);
 int32_t hal_eeprom_read_int(uint16_t addr);
 
 // Batched byte access under one internal lock.
-void hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data, uint16_t len);
-void hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
+hal_status_t hal_eeprom_write_bytes(uint16_t addr, const uint8_t *data,
+                                    uint16_t len);
+hal_status_t hal_eeprom_read_bytes(uint16_t addr, uint8_t *out, uint16_t len);
 
 // Flush buffered writes to non-volatile storage.
 // HAL_EEPROM_FLASH / native flash: flushes the RAM mirror to flash.
 // HAL_EEPROM_AT24C256: no-op.
-void hal_eeprom_commit(void);
+hal_status_t hal_eeprom_commit(void);
 
 // Zero-fill entire EEPROM (slow - do not use in time-critical code).
-void hal_eeprom_reset(void);
+hal_status_t hal_eeprom_reset(void);
 
 // Return EEPROM size in bytes.
 uint16_t hal_eeprom_size(void);
@@ -75,8 +85,13 @@ Call `hal_eeprom_commit()` once after a group of writes to persist them to
 flash. For `HAL_EEPROM_AT24C256`, writes are committed synchronously to the
 chip in page-sized chunks; `hal_eeprom_commit()` is a no-op.
 
-**RP2040 implementation:** `HAL_EEPROM_FLASH` and `HAL_EEPROM_RP2040` use
-`<EEPROM.h>` from Arduino-pico.
+**Native RP implementation:** `HAL_EEPROM_FLASH` and `HAL_EEPROM_RP2040` use
+the final `HAL_RP_FLASH_EEPROM_SIZE` bytes of physical flash (4096 bytes by
+default). Writes update a RAM mirror. A dirty commit performs the complete
+partition erase and program inside one `jh_rp_flash_transaction_execute()`
+operation, so core 1, interrupts, DMA and TinyUSB follow the same safety policy
+as every other native flash mutation. The generated linker region excludes the
+reservation from firmware.
 
 **STM32G474 implementation:** `HAL_EEPROM_FLASH`,
 `HAL_EEPROM_STM32_FLASH`, and the compatibility alias `HAL_EEPROM_RP2040` use
@@ -134,8 +149,7 @@ void              hal_mock_eeprom_reset(void);
 
 **Usage example:**
 ```c
-// Target-native internal flash EEPROM:
-// RP2040 -> Arduino-pico EEPROM; STM32G474 -> reserved internal flash pages.
+// Target-native internal flash EEPROM reservation.
 hal_eeprom_init(HAL_EEPROM_FLASH, 512, 0);
 hal_eeprom_write_int(0, my_value);
 hal_eeprom_commit();
@@ -381,16 +395,23 @@ size_t       hal_littlefs_used_bytes(void);
 - The public HAL API currently exposes lifecycle, path removal/existence and
   size stats only. It does not provide portable file open/read/write wrappers.
 
-**RP2040 implementation:** uses Arduino-pico `LittleFS`.
+**Native RP implementation:** uses the pinned upstream littlefs v2.11.3
+checkout under `third_party/littlefs/` and an internal flash partition
+controlled by `HAL_RP_FLASH_LITTLEFS_SIZE`. The native CMake recipe reserves
+64 KiB when `HAL_ENABLE_LITTLEFS` is enabled without an explicit size. The
+partition sits immediately before the final 4 KiB EEPROM sector. Every
+256-byte program and 4096-byte erase callback goes through the native RP flash
+transaction coordinator; reads use the XIP mapping. The linker prevents the
+firmware image from overlapping either partition.
 
-**STM32G474 implementation:** uses the upstream littlefs C core under
-`src/hal/impl/stm32g474/drivers/littlefs/` and the internal STM32 flash
-reservation exposed by the linker script. `HAL_STM32_FLASH_LITTLEFS_SIZE`
-controls the reservation size and must be a multiple of
-`HAL_STM32_FLASH_PAGE_SIZE` (2048 bytes). The size may be zero when the backend
-is compiled but not used; mounting then fails safely. The STM32 CMake helpers
-reserve 64 KB automatically when `HAL_ENABLE_LITTLEFS` is passed through their
-define lists and no explicit size is provided.
+**STM32G474 implementation:** uses the same managed littlefs checkout under
+`third_party/littlefs/` and the internal STM32 flash reservation exposed by the
+linker script. `HAL_STM32_FLASH_LITTLEFS_SIZE` controls the reservation size
+and must be a multiple of `HAL_STM32_FLASH_PAGE_SIZE` (2048 bytes). The size
+may be zero when the backend is compiled but not used; mounting then fails
+safely. The STM32 CMake helpers reserve 64 KB automatically when
+`HAL_ENABLE_LITTLEFS` is passed through their define lists and no explicit
+size is provided.
 
 LittleFS erase block size is one STM32 flash page; program granularity is one
 STM32 doubleword (8 bytes). `hal_littlefs_total_bytes()` reports the reserved

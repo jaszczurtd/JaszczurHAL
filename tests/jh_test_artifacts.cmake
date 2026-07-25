@@ -1,0 +1,5 @@
+function(jh_test_artifact_dir OUT_VAR GROUP)
+    set(_dir "${JH_ROOT}/.build/tests/${GROUP}")
+    file(MAKE_DIRECTORY "${_dir}")
+    set(${OUT_VAR} "${_dir}" PARENT_SCOPE)
+endfunction()

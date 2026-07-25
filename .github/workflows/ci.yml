@@ -20,14 +20,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Prepare host source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+
       - name: Configure
-        run: cmake -B build
+        run: cmake -B .build/ci/host
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build .build/ci/host --parallel
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir .build/ci/host --output-on-failure
 
   # ── Valgrind memcheck gate ─────────────────────────────────────────────────
   # Runs the host unit-test suite under Valgrind to catch memory defects
@@ -43,25 +49,30 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Prepare host source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+
       - name: Install Valgrind
         run: sudo apt-get update && sudo apt-get install -y valgrind
 
       - name: Configure
-        run: cmake -B build
+        run: cmake -B .build/ci/memcheck
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build .build/ci/memcheck --parallel
 
       - name: Run tests under Valgrind
-        run: ctest --test-dir build -T memcheck --output-on-failure
+        run: ctest --test-dir .build/ci/memcheck -T memcheck --output-on-failure
 
   # ── Static analysis gate ───────────────────────────────────────────────────
   # Two complementary analyzers on the project's OWN code (vendored libraries
   # excluded). They reach layers the host valgrind gate cannot run:
   #
   #   cppcheck    - parses standalone, so it scans ALL own code: portable logic,
-  #                 the mock/arduino/stm32 backends. This is the only gate that
-  #                 covers the Arduino backend adapters (never host-executable).
+  #                 the mock/RP/STM32 backends.
   #   clang-tidy  - needs a compile database, so it covers the host-compilable
   #                 production code: portable HAL (src/hal/hal_*.cpp), shared/,
   #                 and the stm32g474 backend. The mock backend (test scaffolding)
@@ -69,7 +80,7 @@ jobs:
   #
   # Tool configs live in .clang-tidy and tests/cppcheck-suppressions.txt. Pinned
   # to the analyzers shipped on ubuntu-latest (clang-tidy 18, cppcheck 2.13) so
-  # CI and local runs agree. Vendored code excluded: arduino drivers/frameworks,
+  # CI and local runs agree. Vendored code excluded: bundled drivers/frameworks,
   # cJSON, JPEGDecoder/picojpeg, LodePNG, lwIP, Unity.
   static-analysis:
     runs-on: ubuntu-latest
@@ -78,13 +89,19 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Prepare analysis source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+
       - name: Install analyzers
         run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck clang-tools
 
       - name: Generate compile databases
         run: |
-          cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          cmake -S stm32_lib -B build_stm32 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -B .build/ci/static-host -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -S stm32_lib -B .build/ci/static-stm32 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: "cppcheck (all own code; vendored excluded)"
         run: |
@@ -96,30 +113,32 @@ jobs:
             -i src/hal/impl/shared/frameworks/cjson \
             -i src/hal/impl/shared/frameworks/jpeg \
             -i src/hal/impl/shared/frameworks/lodepng \
-            -i src/hal/impl/shared/frameworks/lwip/vendor \
             -i src/utils/unity.c \
             --error-exitcode=1 --quiet \
             src
 
       - name: "clang-tidy (portable HAL + shared + stm32 backend)"
         run: |
-          TIDY_HOST_BUILD=build/clang_tidy_db
+          mkdir -p .build/ci/static-analysis
+          TIDY_HOST_BUILD=.build/ci/static-host/clang_tidy_db
           mapfile -t TIDY_HOST_FILES < <(
-            scripts/clang_tidy_files.py --build-dir build --repo-root "$PWD" --profile host \
+            scripts/clang_tidy_files.py --build-dir .build/ci/static-host --repo-root "$PWD" --profile host \
               --output-compile-db "$TIDY_HOST_BUILD/compile_commands.json"
           )
           test "${#TIDY_HOST_FILES[@]}" -gt 0
           run-clang-tidy -p "$TIDY_HOST_BUILD" -quiet "${TIDY_HOST_FILES[@]}" \
-            | tee tidy_host.log
-          TIDY_STM32_BUILD=build_stm32/clang_tidy_db
+            | tee .build/ci/static-analysis/tidy_host.log
+          TIDY_STM32_BUILD=.build/ci/static-stm32/clang_tidy_db
           mapfile -t TIDY_STM32_FILES < <(
-            scripts/clang_tidy_files.py --build-dir build_stm32 --repo-root "$PWD" --profile stm32 \
+            scripts/clang_tidy_files.py --build-dir .build/ci/static-stm32 --repo-root "$PWD" --profile stm32 \
               --output-compile-db "$TIDY_STM32_BUILD/compile_commands.json"
           )
           test "${#TIDY_STM32_FILES[@]}" -gt 0
           run-clang-tidy -p "$TIDY_STM32_BUILD" -quiet "${TIDY_STM32_FILES[@]}" \
-            | tee tidy_stm32.log
-          if grep -qE ' (warning|error):' tidy_host.log tidy_stm32.log; then
+            | tee .build/ci/static-analysis/tidy_stm32.log
+          if grep -qE ' (warning|error):' \
+            .build/ci/static-analysis/tidy_host.log \
+            .build/ci/static-analysis/tidy_stm32.log; then
             echo "::error::clang-tidy reported findings (see logs above)"
             exit 1
           fi
@@ -127,10 +146,10 @@ jobs:
   # ── Security supply-chain gate ─────────────────────────────────────────────
   # Regenerates the repository CycloneDX SBOM from security/third_party.json and
   # verifies that the committed SBOM is up to date. Then runs osv-scanner against
-  # the source tree/SBOM and cve-bin-tool against the generated SBOM. cve-bin-tool
-  # intentionally does not scan the whole repository tree because local build*
-  # artifacts and object files create excessive noise; the SBOM is the source of
-  # truth for tracked bundled and pinned dependencies.
+  # the source tree and cve-bin-tool against the generated SBOM. cve-bin-tool
+  # intentionally does not scan the managed .build artifact tree because object
+  # files create excessive noise; the SBOM is the source of truth for tracked
+  # bundled and pinned dependencies.
   security-scan:
     runs-on: ubuntu-latest
     needs: test
@@ -167,7 +186,7 @@ jobs:
 
   # ── STM32 skeleton compile gate ────────────────────────────────────────────
   # This job builds the STM32G474 static-library target with the host compiler
-  # (no Arduino core). It catches backend regressions in src/hal/impl/stm32g474
+  # It catches backend regressions in src/hal/impl/stm32g474
   # and contributes directly to CI quality scoring.
   stm32-build:
     runs-on: ubuntu-latest
@@ -176,25 +195,106 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Prepare STM32 source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+
       - name: Configure STM32 host build
-        run: cmake -S stm32_lib -B build_stm32_host
+        run: cmake -S stm32_lib -B .build/ci/stm32-host
 
       - name: Build STM32 host static library
-        run: cmake --build build_stm32_host --parallel
+        run: cmake --build .build/ci/stm32-host --parallel
+
+  # ── Official Pico SDK native build gate ───────────────────────────────────
+  # Builds the HAL source inventory for RP2040,
+  # RP2350 ARM and RP2350 Hazard3 RISC-V. Each build must produce the library,
+  # native entry/core probes, portable 01_blink firmware and the pinned
+  # FreeRTOS SMP integration.
+  native-pico-build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install native Pico build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-none-eabi binutils-arm-none-eabi \
+            libusb-1.0-0-dev pkg-config
+
+      - name: Prepare pinned Pico SDK tools
+        run: ./third_party/update_components.sh
+
+      - name: Build RP2040, RP2350 ARM and RP2350 RISC-V artifacts
+        run: |
+          for platform in rp2040 rp2350-arm-s rp2350-riscv; do
+            ./scripts/build_rp_native_lib.sh \
+              --platform "${platform}" --example 01_blink \
+              --clean --jobs 4
+            ./scripts/build_rp_native_lib.sh \
+              --platform "${platform}" --example 29_freertos_smoke \
+              --freertos --clean --jobs 4 \
+              --output ".build/ci/native/${platform}/freertos"
+          done
+
+      - name: Build native VS Code workflow matrix
+        run: |
+          for target in rp2040 rp2350-arm rp2350-riscv; do
+            scripts/examples_dispatcher.py build \
+              --target "${target}" --jobs 2
+          done
+
+      - name: Verify native RP link inputs
+        run: |
+          if find .build/native .build/ci/native .build/examples \
+              -type f -name core.a -print -quit | grep -q .; then
+            echo "::error::Native RP build produced an unexpected core.a"
+            exit 1
+          fi
+          if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
+              .build/native .build/ci/native .build/examples \
+              --include='link.txt' --include='*.map' \
+              --include='compile_commands.json' --include='CMakeCache.txt'; then
+            echo "::error::Native RP build metadata references the removed carrier"
+            exit 1
+          fi
+
+      - name: Build native parity hardware fixtures
+        run: scripts/build_rp_native_parity_fixtures.sh --jobs 4
+
+      - name: Build native OTA hardware fixture matrix
+        run: |
+          for selection in \
+            "rp2040 picow" \
+            "rp2040 pico-rm2" \
+            "rp2350-arm pico2w"; do
+            set -- ${selection}
+            vscode/entry/jh-vscode build \
+              --project tests/hardware/rp_ota \
+              --target "$1" --board "$2"
+            vscode/entry/jh-vscode build \
+              --project tests/hardware/rp_ota \
+              --target "$1" --board "$2" --variant freertos
+          done
 
   # ── Flag-propagation regression matrix ─────────────────────────────────────
   # JaszczurHAL uses an opt-in HAL_ENABLE_* model with automatic upstream
   # dependency propagation (e.g. HAL_ENABLE_PCF8563 implies HAL_ENABLE_RTC
-  # and HAL_ENABLE_I2C). The three matrix profiles below exercise the
+  # and HAL_ENABLE_I2C). The matrix profiles below exercise the
   # extreme corners of the flag space so any regression in
   # src/hal/hal_config.h (broken propagation, missing #ifdef guard in a
-  # backend TU, stale consistency #error) shows up as a failed Arduino
+  # backend TU, stale consistency #error) shows up as a failed native RP
   # static-library build.
   #
   #   empty-core   - no HAL_ENABLE_* flags at all. Validates that the
   #                  bare-core library still compiles when every optional
-  #                  module is off (catches missing #ifdef guards in
-  #                  arduino backend TUs).
+  #                  module is off (catches missing #ifdef guards).
+  #   no-radio-network - public WiFi/TCP/UDP surface on a plain Pico profile.
+  #                  Validates runtime rejection without touching CYW43 pins.
   #   typical-set  - a realistic subset chosen so that *every*
   #                  propagation chain in hal_config.h fires at least
   #                  once (KV->EEPROM, MQTT->WIFI, PCF8563->RTC+I2C,
@@ -203,12 +303,13 @@ jobs:
   #   udp-wireguard - UDP without TCP plus WireGuard/lwIP. Catches network
   #                  helpers accidentally hidden behind HAL_ENABLE_TCP and
   #                  warning regressions in bundled lwIP include ordering.
-  #   picow-owned  - Pico W profile with JaszczurHAL-owned CYW43/lwIP and no
-  #                  Arduino-Pico network startup/backend selection.
+  #   picow-owned  - Pico W profile with JaszczurHAL-owned CYW43/lwIP.
+  #   pim730-owned - Pico+PIM730 profile with the external radio frontend and
+  #                  JaszczurHAL-owned CYW43/lwIP.
   #   all-enabled  - every concrete HAL_ENABLE_* module/backend flag set
   #                  explicitly. Validates that no two backends collide
   #                  and that all consistency #error checks stay satisfied.
-  arduino-flag-matrix:
+  native-flag-matrix:
     runs-on: ubuntu-latest
     needs: [test, stm32-build]
     strategy:
@@ -216,10 +317,28 @@ jobs:
       matrix:
         include:
           - profile: empty-core
-            board: rpipico
-            flags: ""
+            board: pico
+            platform: rp2040
+            flags: -D HAL_BOARD_PROFILE_RP_PICO
+          - profile: rp2350-arm-empty
+            board: pico2
+            platform: rp2350-arm-s
+            flags: -D HAL_BOARD_PROFILE_RP_PICO_2
+          - profile: no-radio-network
+            board: pico
+            platform: rp2040
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_TCP
+              -D HAL_ENABLE_UDP
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_BOARD_PROFILE_RP_PICO
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: typical-set
-            board: rpipico
+            board: picow
+            platform: rp2040
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_MQTT
@@ -229,24 +348,27 @@ jobs:
               -D HAL_ENABLE_DS18B20
               -D HAL_ENABLE_GPS
               -D HAL_ENABLE_ILI9341
+              -D HAL_DISPLAY_ILI9341
               -D HAL_ENABLE_PWM_FREQ
               -D HAL_NETWORK_BACKEND_CYW43
               -D HAL_CYW43_BUS_PICO_PIO
               -D HAL_CYW43_STACK_LWIP
-              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_BOARD_PROFILE_RP_PICO_W
               -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: udp-wireguard
-            board: rpipico
+            board: picow
+            platform: rp2040
             flags: >-
               -D HAL_ENABLE_UDP
               -D HAL_ENABLE_WIREGUARD
               -D HAL_NETWORK_BACKEND_CYW43
               -D HAL_CYW43_BUS_PICO_PIO
               -D HAL_CYW43_STACK_LWIP
-              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_BOARD_PROFILE_RP_PICO_W
               -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: picow-owned
-            board: rpipico
+            board: picow
+            platform: rp2040
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_UDP
@@ -263,21 +385,56 @@ jobs:
               -D HAL_NETWORK_BACKEND_CYW43
               -D HAL_CYW43_BUS_PICO_PIO
               -D HAL_CYW43_STACK_LWIP
-              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_BOARD_PROFILE_RP_PICO_W
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+          - profile: pico2w-owned
+            board: pico2w
+            platform: rp2350-arm-s
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_TCP
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_BOARD_PROFILE_RP_PICO_2_W
+              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+          - profile: pim730-owned
+            board: pico-rm2
+            platform: rp2040
+            flags: >-
+              -D HAL_ENABLE_WIFI
+              -D HAL_ENABLE_UDP
+              -D HAL_ENABLE_TCP
+              -D HAL_NETWORK_BACKEND_CYW43
+              -D HAL_CYW43_BUS_PICO_PIO
+              -D HAL_CYW43_STACK_LWIP
+              -D HAL_BOARD_PROFILE_RP_PICO_PIM730
               -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
           - profile: all-enabled
-            board: rpipico
+            board: picow
+            platform: rp2040
             flags: >-
               -D HAL_ENABLE_WIFI
               -D HAL_ENABLE_TIME
               -D HAL_ENABLE_MQTT
               -D HAL_ENABLE_UDP
               -D HAL_ENABLE_TCP
+              -D HAL_ENABLE_BSD_SOCKETS
+              -D HAL_ENABLE_TLS
+              -D HAL_ENABLE_HTTP_CLIENT
+              -D HAL_ENABLE_HTTP_SERVER
+              -D HAL_ENABLE_HTTP_FILES
+              -D HAL_ENABLE_WEBSOCKET
+              -D HAL_ENABLE_NET_CONSOLE
+              -D HAL_ENABLE_NET_COMMANDS
               -D HAL_ENABLE_OTA
               -D HAL_ENABLE_WIREGUARD
               -D HAL_ENABLE_EEPROM
               -D HAL_ENABLE_KV
               -D HAL_ENABLE_LITTLEFS
+              -D HAL_ENABLE_FAT
+              -D HAL_ENABLE_SDLOGGER
               -D HAL_ENABLE_UART
               -D HAL_ENABLE_SWSERIAL
               -D HAL_ENABLE_I2C
@@ -296,63 +453,86 @@ jobs:
               -D HAL_ENABLE_PWM_FREQ
               -D HAL_ENABLE_RGB_LED
               -D HAL_ENABLE_ILI9341
+              -D HAL_DISPLAY_ILI9341
               -D HAL_ENABLE_SSD1306
               -D HAL_ENABLE_CRYPTO
               -D HAL_ENABLE_CJSON
               -D HAL_NETWORK_BACKEND_CYW43
               -D HAL_CYW43_BUS_PICO_PIO
               -D HAL_CYW43_STACK_LWIP
-              -D HAL_CYW43_PROFILE_PICOW
+              -D HAL_BOARD_PROFILE_RP_PICO_W
               -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
 
-    name: "Arduino lib (${{ matrix.profile }})"
+    name: "Native RP lib (${{ matrix.profile }})"
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup Arduino CLI
-        uses: arduino/setup-arduino-cli@v2
-
-      - name: Install Arduino RP2040 core
+      - name: Prepare RP source dependencies
         run: |
-          source rp2040_core_version.conf
-          arduino-cli core update-index \
-            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
-            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-arm-none-eabi binutils-arm-none-eabi \
+            libusb-1.0-0-dev pkg-config
+          ./third_party/update_components.sh
 
-      - name: "Quality Gate: Build Arduino static library (${{ matrix.profile }})"
+      - name: "Quality Gate: Build native RP static library (${{ matrix.profile }})"
         run: |
-          ./scripts/build_rp2040_lib.sh --clean -b ${{ matrix.board }} ${{ matrix.flags }}
-          test -f build_rp2040/libJaszczurHAL.a
+          ./scripts/build_rp_native_lib.sh --clean \
+            --platform ${{ matrix.platform }} \
+            --board ${{ matrix.board }} \
+            --output ".build/ci/flags/${{ matrix.profile }}" \
+            ${{ matrix.flags }}
+          test -f ".build/ci/flags/${{ matrix.profile }}/libJaszczurHAL.a"
+          if find ".build/ci/flags/${{ matrix.profile }}" \
+              -type f -name core.a -print -quit | grep -q .; then
+            echo "::error::Native RP flag build produced an unexpected core.a"
+            exit 1
+          fi
+          if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
+              ".build/ci/flags/${{ matrix.profile }}" \
+              --include='link.txt' --include='*.map' \
+              --include='compile_commands.json' --include='CMakeCache.txt'; then
+            echo "::error::Native RP flag build references the removed carrier"
+            exit 1
+          fi
 
   # ── Examples build gate ────────────────────────────────────────────────────
   # Compile all examples through dispatcher-backed VS Code manifests. The
   # manifests are the source of truth for app.c/app.cpp examples, variants, and
   # supported targets.
-  arduino-examples:
+  stm32-examples:
     runs-on: ubuntu-latest
-    needs: arduino-flag-matrix
-    name: "Examples (RP2040 + STM32G474)"
+    needs: native-flag-matrix
+    name: "Examples (STM32G474)"
 
     steps:
       - uses: actions/checkout@v5
 
+      - name: Prepare example source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+
       - name: Install STM32 toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
 
-      - name: Setup Arduino CLI
-        uses: arduino/setup-arduino-cli@v2
-
-      - name: Install Arduino RP2040 core
+      - name: Compile STM32G474 CYW43 static library
         run: |
-          source rp2040_core_version.conf
-          arduino-cli core update-index \
-            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-          arduino-cli core install "rp2040:rp2040@${RP2040_CORE_VERSION}" \
-            --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
-
-      - name: Compile RP2040 examples
-        run: scripts/examples_dispatcher.py build --target rp2040 --jobs 4
+          scripts/build_stm32_lib.sh \
+            --output .build/ci/stm32-cyw43 \
+            -D HAL_ENABLE_WIFI \
+            -D HAL_ENABLE_TCP \
+            -D HAL_ENABLE_UDP \
+            -D HAL_NETWORK_BACKEND_CYW43 \
+            -D HAL_CYW43_BUS_STM32_GSPI \
+            -D HAL_CYW43_STACK_LWIP \
+            -D HAL_CYW43_PIN_WL_ON=30u \
+            -D HAL_CYW43_PIN_CHIP_SELECT=28u \
+            -D HAL_CYW43_PIN_DATA=31u \
+            -D HAL_CYW43_PIN_CLOCK=29u \
+            -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u \
+            --jobs 4
 
       - name: Compile STM32G474 examples
         run: scripts/examples_dispatcher.py build --target stm32g474 --jobs 4

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JaszczurHAL target or board descriptor",
+  "type": "object",
+  "required": ["schemaVersion", "kind", "id", "displayName", "description", "status"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "kind": { "enum": ["target", "board"] },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "displayName": { "type": "string" },
+    "description": { "type": "string" },
+    "status": { "enum": ["supported", "experimental", "skeleton", "deprecated"] }
+  }
+}

@@ -7,14 +7,16 @@ project(JaszczurHAL_Examples_Dispatcher NONE)
 # projects under examples/*/.vscode/jaszczurhal.project.json. This CMake entry
 # remains only so older muscle-memory commands such as:
 #
-#   cmake -S examples -B build_examples_rp2040 -DJH_EXAMPLE_TARGET=rp2040
-#   cmake --build build_examples_rp2040
+#   cmake -S examples -B .build/examples-cmake/rp2040
+#       -DJH_EXAMPLE_TARGET=rp2040
+#   cmake --build .build/examples-cmake/rp2040
 #
-# still exercise the same new path instead of the retired examples-local Arduino
-# and STM32 recipes.
+# still exercise the same dispatcher path.
 
-set(JH_EXAMPLE_TARGET "rp2040" CACHE STRING "Example backend: rp2040 or stm32g474")
-set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS rp2040 stm32g474)
+set(JH_EXAMPLE_TARGET "rp2040" CACHE STRING
+    "Example backend: rp2040, rp2350-arm, rp2350-riscv or stm32g474")
+set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS
+    rp2040 rp2350-arm rp2350-riscv stm32g474)
 set(JH_EXAMPLE_JOBS "1" CACHE STRING "Parallel example project builds used by the dispatcher runner")
 
 if(DEFINED JH_STM32_FREERTOS OR DEFINED JH_RP2040_FREERTOS OR DEFINED EXTRA_HAL_DEFINES)

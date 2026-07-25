@@ -2,7 +2,8 @@
 
 /**
  * @file hal_crypto.h
- * @brief Backend-agnostic Base64, MD5, SHA-256 / HMAC-SHA256 and ChaCha20 helpers.
+ * @brief Backend-agnostic Base64, MD5, SHA-256 / HMAC-SHA256 and ChaCha20
+ * helpers.
  *
  * Implements RFC 4648 "base64" alphabet (`A-Z`, `a-z`, `0-9`, `+`, `/`)
  * with `=` padding, RFC 1321 MD5 hashing, FIPS 180-4 SHA-256 with the
@@ -15,6 +16,7 @@
  */
 
 #include "hal_config.h"
+#include "hal_status.h"
 
 #ifdef HAL_ENABLE_CRYPTO
 
@@ -57,13 +59,14 @@ bool hal_chacha20_block(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
 /**
  * @brief Encrypt/decrypt data using ChaCha20 stream XOR.
  *
- * Encryption and decryption are identical operations: `output = input XOR stream`.
- * In-place operation is supported (`output == input`).
+ * Encryption and decryption are identical operations: `output = input XOR
+ * stream`. In-place operation is supported (`output == input`).
  *
  * @param key             32-byte key.
  * @param counter         Initial block counter.
  * @param nonce           12-byte nonce.
- * @param input           Input buffer (may be NULL only when @p input_len is 0).
+ * @param input           Input buffer (may be NULL only when @p input_len is
+ * 0).
  * @param input_len       Number of bytes to process.
  * @param output          Output buffer (must have at least @p input_len bytes).
  * @return true on success, false on invalid args.
@@ -71,9 +74,7 @@ bool hal_chacha20_block(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
 bool hal_chacha20_xor(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
                       uint32_t counter,
                       const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
-                      const uint8_t *input,
-                      size_t input_len,
-                      uint8_t *output);
+                      const uint8_t *input, size_t input_len, uint8_t *output);
 
 /**
  * @brief Encrypt data with ChaCha20-Poly1305 (AEAD, RFC 8439).
@@ -82,24 +83,23 @@ bool hal_chacha20_xor(const uint8_t key[HAL_CHACHA20_KEY_BYTES],
  *
  * @param key         32-byte key.
  * @param nonce       12-byte nonce (must be unique per key).
- * @param aad         Associated data pointer (may be NULL only when @p aad_len is 0).
+ * @param aad         Associated data pointer (may be NULL only when @p aad_len
+ * is 0).
  * @param aad_len     Associated data length in bytes.
- * @param plaintext   Plaintext pointer (may be NULL only when @p text_len is 0).
+ * @param plaintext   Plaintext pointer (may be NULL only when @p text_len is
+ * 0).
  * @param text_len    Plaintext length in bytes.
  * @param ciphertext  Output ciphertext buffer (at least @p text_len bytes).
  *                    May be NULL only when @p text_len is 0.
- * @param tag         Output tag buffer of @ref HAL_CHACHA20_POLY1305_TAG_BYTES bytes.
+ * @param tag         Output tag buffer of @ref HAL_CHACHA20_POLY1305_TAG_BYTES
+ * bytes.
  * @return true on success, false on invalid args or counter overflow.
  */
 bool hal_chacha20_poly1305_encrypt(
     const uint8_t key[HAL_CHACHA20_KEY_BYTES],
-    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
-    const uint8_t *aad,
-    size_t aad_len,
-    const uint8_t *plaintext,
-    size_t text_len,
-    uint8_t *ciphertext,
-    uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES]);
+    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES], const uint8_t *aad,
+    size_t aad_len, const uint8_t *plaintext, size_t text_len,
+    uint8_t *ciphertext, uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES]);
 
 /**
  * @brief Decrypt and authenticate data with ChaCha20-Poly1305 (AEAD, RFC 8439).
@@ -109,24 +109,23 @@ bool hal_chacha20_poly1305_encrypt(
  *
  * @param key         32-byte key.
  * @param nonce       12-byte nonce used during encryption.
- * @param aad         Associated data pointer (may be NULL only when @p aad_len is 0).
+ * @param aad         Associated data pointer (may be NULL only when @p aad_len
+ * is 0).
  * @param aad_len     Associated data length in bytes.
- * @param ciphertext  Ciphertext pointer (may be NULL only when @p text_len is 0).
+ * @param ciphertext  Ciphertext pointer (may be NULL only when @p text_len is
+ * 0).
  * @param text_len    Ciphertext/plaintext length in bytes.
- * @param tag         Input tag buffer of @ref HAL_CHACHA20_POLY1305_TAG_BYTES bytes.
+ * @param tag         Input tag buffer of @ref HAL_CHACHA20_POLY1305_TAG_BYTES
+ * bytes.
  * @param plaintext   Output plaintext buffer (at least @p text_len bytes).
  *                    May be NULL only when @p text_len is 0.
  * @return true on success, false on invalid args, tag mismatch, or overflow.
  */
 bool hal_chacha20_poly1305_decrypt(
     const uint8_t key[HAL_CHACHA20_KEY_BYTES],
-    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES],
-    const uint8_t *aad,
-    size_t aad_len,
-    const uint8_t *ciphertext,
-    size_t text_len,
-    const uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES],
-    uint8_t *plaintext);
+    const uint8_t nonce[HAL_CHACHA20_NONCE_BYTES], const uint8_t *aad,
+    size_t aad_len, const uint8_t *ciphertext, size_t text_len,
+    const uint8_t tag[HAL_CHACHA20_POLY1305_TAG_BYTES], uint8_t *plaintext);
 
 /** @brief MD5 digest length in bytes. */
 #define HAL_MD5_DIGEST_BYTES 16u
@@ -142,8 +141,7 @@ bool hal_chacha20_poly1305_decrypt(
  * @param out_digest Output buffer of @ref HAL_MD5_DIGEST_BYTES bytes.
  * @return true on success, false on invalid args.
  */
-bool hal_md5(const uint8_t *input,
-             size_t input_len,
+bool hal_md5(const uint8_t *input, size_t input_len,
              uint8_t out_digest[HAL_MD5_DIGEST_BYTES]);
 
 /**
@@ -157,9 +155,7 @@ bool hal_md5(const uint8_t *input,
  * @param out_size   Size of @p output in bytes.
  * @return true on success, false on invalid args or insufficient buffer.
  */
-bool hal_md5_hex(const uint8_t *input,
-                 size_t input_len,
-                 char *output,
+bool hal_md5_hex(const uint8_t *input, size_t input_len, char *output,
                  size_t out_size);
 
 /**
@@ -193,11 +189,8 @@ size_t hal_base64_decoded_max_len(size_t input_len);
  * @param out_len    Optional: receives Base64 text length (without NUL).
  * @return true on success, false on invalid args or insufficient buffer.
  */
-bool hal_base64_encode(const uint8_t *input,
-                       size_t input_len,
-                       char *output,
-                       size_t out_size,
-                       size_t *out_len);
+bool hal_base64_encode(const uint8_t *input, size_t input_len, char *output,
+                       size_t out_size, size_t *out_len);
 
 /**
  * @brief Decode Base64 text to binary data.
@@ -214,20 +207,47 @@ bool hal_base64_encode(const uint8_t *input,
  * @param out_len    Optional: receives decoded byte count.
  * @return true on success, false on invalid input or insufficient buffer.
  */
-bool hal_base64_decode(const char *input,
-                       size_t input_len,
-                       uint8_t *output,
-                       size_t out_size,
-                       size_t *out_len);
+bool hal_base64_decode(const char *input, size_t input_len, uint8_t *output,
+                       size_t out_size, size_t *out_len);
 
 /** @brief SHA-256 digest length in bytes. */
 #define HAL_SHA256_DIGEST_BYTES 32u
 
-/** @brief Required buffer size for SHA-256 lowercase hex string (`64 + NUL`). */
+/** @brief Required buffer size for SHA-256 lowercase hex string (`64 + NUL`).
+ */
 #define HAL_SHA256_HEX_BUF_SIZE 65u
 
 /** @brief HMAC-SHA256 block size in bytes (matches the inner SHA-256 block). */
 #define HAL_HMAC_SHA256_BLOCK_BYTES 64u
+
+/**
+ * @brief Incremental SHA-256 context.
+ *
+ * Treat the fields as private implementation state. The concrete layout keeps
+ * the context allocation deterministic on embedded targets.
+ */
+typedef struct {
+  uint32_t state[8];
+  uint64_t bit_count;
+  uint8_t buffer[HAL_HMAC_SHA256_BLOCK_BYTES];
+  size_t buffer_len;
+  bool initialized;
+} hal_sha256_context_t;
+
+/** @brief Initialise an incremental SHA-256 calculation. */
+hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);
+
+/** @brief Add bytes to an incremental SHA-256 calculation. */
+hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
+                                  const uint8_t *input, size_t input_len);
+
+/**
+ * @brief Finish an incremental SHA-256 calculation.
+ *
+ * The context is invalidated after this call.
+ */
+hal_status_t hal_sha256_final_ex(hal_sha256_context_t *context,
+                                 uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
 
 /**
  * @brief Compute SHA-256 digest of input data (FIPS 180-4).
@@ -237,24 +257,23 @@ bool hal_base64_decode(const char *input,
  * @param out_digest Output buffer of @ref HAL_SHA256_DIGEST_BYTES bytes.
  * @return true on success, false on invalid args.
  */
-bool hal_sha256(const uint8_t *input,
-                size_t input_len,
+bool hal_sha256(const uint8_t *input, size_t input_len,
                 uint8_t out_digest[HAL_SHA256_DIGEST_BYTES]);
 
 /**
  * @brief Compute SHA-256 digest and format it as lowercase hex.
  *
- * Example output: `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`.
+ * Example output:
+ * `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`.
  *
  * @param input      Input data pointer (may be NULL only when @p input_len=0).
  * @param input_len  Input size in bytes.
- * @param output     Output string buffer (at least @ref HAL_SHA256_HEX_BUF_SIZE bytes).
+ * @param output     Output string buffer (at least @ref HAL_SHA256_HEX_BUF_SIZE
+ * bytes).
  * @param out_size   Size of @p output in bytes.
  * @return true on success, false on invalid args or insufficient buffer.
  */
-bool hal_sha256_hex(const uint8_t *input,
-                    size_t input_len,
-                    char *output,
+bool hal_sha256_hex(const uint8_t *input, size_t input_len, char *output,
                     size_t out_size);
 
 /**
@@ -268,9 +287,7 @@ bool hal_sha256_hex(const uint8_t *input,
  * @param out_mac     Output buffer of @ref HAL_SHA256_DIGEST_BYTES bytes.
  * @return true on success, false on invalid args.
  */
-bool hal_hmac_sha256(const uint8_t *key,
-                     size_t key_len,
-                     const uint8_t *message,
+bool hal_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *message,
                      size_t message_len,
                      uint8_t out_mac[HAL_SHA256_DIGEST_BYTES]);
 
@@ -281,16 +298,14 @@ bool hal_hmac_sha256(const uint8_t *key,
  * @param key_len     Key size in bytes.
  * @param message     Message bytes (may be NULL only when @p message_len=0).
  * @param message_len Message size in bytes.
- * @param output      Output string buffer (at least @ref HAL_SHA256_HEX_BUF_SIZE bytes).
+ * @param output      Output string buffer (at least @ref
+ * HAL_SHA256_HEX_BUF_SIZE bytes).
  * @param out_size    Size of @p output in bytes.
  * @return true on success, false on invalid args or insufficient buffer.
  */
-bool hal_hmac_sha256_hex(const uint8_t *key,
-                         size_t key_len,
-                         const uint8_t *message,
-                         size_t message_len,
-                         char *output,
-                         size_t out_size);
+bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
+                         const uint8_t *message, size_t message_len,
+                         char *output, size_t out_size);
 
 #ifdef __cplusplus
 }

@@ -1,0 +1,13 @@
+#pragma once
+
+#ifndef HAL_ENABLE_SDLOGGER
+#define HAL_ENABLE_SDLOGGER
+#endif
+
+#ifndef HAL_SDLOGGER_WRITE_INTERVAL_MS
+#define HAL_SDLOGGER_WRITE_INTERVAL_MS 60000u
+#endif
+
+#if defined(HAL_ENABLE_FREERTOS) && !defined(HAL_FREERTOS_TASK0_STACK)
+#define HAL_FREERTOS_TASK0_STACK 1536u
+#endif

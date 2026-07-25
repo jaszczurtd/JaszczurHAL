@@ -5,6 +5,7 @@
 #include "hal_net.h"
 #include "impl/shared/network/jh_net_address_utils.h"
 #include "impl/shared/network/jh_network_backend.h"
+#include "impl/shared/network/jh_network_runtime.h"
 
 #include <string.h>
 
@@ -12,6 +13,11 @@ hal_status_t
 hal_net_get_capabilities_ex(hal_net_capabilities_t *out_capabilities) {
   if (out_capabilities == nullptr) {
     return HAL_EINVAL;
+  }
+  *out_capabilities = 0u;
+  const hal_status_t hardware_status = jh_network_require_hardware();
+  if (hardware_status != HAL_OK) {
+    return hardware_status;
   }
   const jh_network_capabilities_t caps =
       jh_network_backend_selected()->capabilities;
@@ -37,6 +43,10 @@ hal_net_capabilities_t hal_net_get_capabilities(void) {
 }
 
 hal_status_t hal_net_service(void) {
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_backend_descriptor_t *backend =
       jh_network_backend_selected();
   const hal_status_t validation = jh_network_backend_validate(backend, 0u);
@@ -80,6 +90,10 @@ hal_status_t hal_net_resolve_ex(const char *host_or_ip,
     return HAL_EUNSUPPORTED;
   }
 
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_backend_descriptor_t *backend =
       jh_network_backend_selected();
   const hal_status_t validation =

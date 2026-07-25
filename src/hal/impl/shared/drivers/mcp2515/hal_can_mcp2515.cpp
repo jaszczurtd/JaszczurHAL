@@ -1,5 +1,5 @@
 #include "hal/hal_target.h"
-#if (HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474)
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474)
 
 #include "hal/hal_config.h"
 #if defined(HAL_ENABLE_CAN) && defined(HAL_ENABLE_MCP2515)
@@ -370,4 +370,4 @@ bool hal_can_mcp2515_get_error_counters(JHMCP2515 *mcp,
 }
 
 #endif /* HAL_ENABLE_CAN && HAL_ENABLE_MCP2515 */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */

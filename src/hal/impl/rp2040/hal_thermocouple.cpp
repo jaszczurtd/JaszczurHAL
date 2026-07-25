@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_THERMOCOUPLE
 
@@ -78,7 +78,7 @@ static const char *chip_name(hal_thermocouple_chip_t chip) {
 }
 
 static void not_supported(const char *fn, hal_thermocouple_chip_t chip) {
-  char buf[80];
+  char buf[96];
   snprintf(buf, sizeof(buf), "%s: %s is not supporting this functionality", fn,
            chip_name(chip));
   hal_serial_println(buf);
@@ -141,10 +141,13 @@ hal_status_t hal_thermocouple_init_ex(const hal_thermocouple_config_t *cfg,
       hal_serial_println("hal_thermocouple_init: MCP9600 not found");
       return HAL_EIO;
     }
-  } else
+    *out_handle = h;
+    return HAL_OK;
+  }
 #endif
+
 #ifdef HAL_ENABLE_MAX6675
-      if (cfg->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
+  if (cfg->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
     const hal_thermocouple_spi_cfg_t &sc = cfg->bus.spi;
     hal_max6675_t *max = new (h->storage.max_mem) hal_max6675_t();
     const hal_max6675_config_t max_cfg = {sc.sclk_pin, sc.cs_pin, sc.miso_pin};
@@ -153,16 +156,14 @@ hal_status_t hal_thermocouple_init_ex(const hal_thermocouple_config_t *cfg,
       hal_serial_println("hal_thermocouple_init: MAX6675 init failed");
       return HAL_EIO;
     }
-  } else
-#endif
-  {
-    release_slot(h);
-    hal_serial_println("hal_thermocouple_init: unknown chip type");
-    return HAL_EUNSUPPORTED;
+    *out_handle = h;
+    return HAL_OK;
   }
+#endif
 
-  *out_handle = h;
-  return HAL_OK;
+  release_slot(h);
+  hal_serial_println("hal_thermocouple_init: unknown chip type");
+  return HAL_EUNSUPPORTED;
 }
 
 void hal_thermocouple_deinit(hal_thermocouple_t h) {
@@ -204,13 +205,14 @@ hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c) {
   }
   hal_mutex_lock(h->mutex);
 #ifdef HAL_ENABLE_MCP9600
-  if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600)
+  if (h->chip == HAL_THERMOCOUPLE_CHIP_MCP9600) {
     *out_c = hal_mcp9600_read_thermocouple(as_mcp(h));
-  else
+  }
 #endif
 #ifdef HAL_ENABLE_MAX6675
-      if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675)
+  if (h->chip == HAL_THERMOCOUPLE_CHIP_MAX6675) {
     *out_c = hal_max6675_read_celsius(as_max(h));
+  }
 #endif
   hal_mutex_unlock(h->mutex);
   return isnan(*out_c) ? HAL_EIO : HAL_OK;
@@ -580,4 +582,4 @@ hal_status_t hal_thermocouple_get_status_ex(hal_thermocouple_t h,
 #endif /* HAL_ENABLE_MCP9600 */
 
 #endif /* HAL_ENABLE_THERMOCOUPLE */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

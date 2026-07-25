@@ -96,7 +96,13 @@ typedef enum {
 } hal_net_status_t;
 
 #ifdef HAL_ENABLE_WIFI
-/** @brief Return address-family capabilities of the selected runtime backend.
+/**
+ * @brief Return address-family capabilities of the selected runtime backend.
+ *
+ * On RP CYW43 backends this reports HAL_EUNSUPPORTED when the selected board
+ * profile has no required radio hardware and HAL_EHW after a failed probe or
+ * initialization. Declared but inactive hardware may still report its
+ * backend's address-family capabilities.
  */
 hal_status_t
 hal_net_get_capabilities_ex(hal_net_capabilities_t *out_capabilities);
@@ -109,7 +115,8 @@ hal_net_capabilities_t hal_net_get_capabilities(void);
  *
  * Poll-driven backends perform one service pass. Worker/platform-owned
  * backends return HAL_OK after draining any facade work that is safe in the
- * caller context.
+ * caller context. RP CYW43 backends report HAL_EUNSUPPORTED, HAL_EUNINIT or
+ * HAL_EHW for absent, inactive or failed required hardware.
  */
 hal_status_t hal_net_service(void);
 
@@ -122,7 +129,11 @@ hal_status_t hal_net_service(void);
  * @param capacity Number of entries available in @p results.
  * @param out_count Actual required result count. On HAL_EOVERFLOW no result is
  *        written and this value reports the necessary capacity.
- * @return HAL_OK, HAL_EOVERFLOW, HAL_ENOENT, HAL_EUNSUPPORTED or HAL_EINVAL.
+ * Numeric literals are parsed without requiring initialized radio hardware.
+ * Hostname lookup requires the backend to be ready and may additionally
+ * return HAL_EUNINIT or HAL_EHW.
+ * @return HAL_OK, HAL_EOVERFLOW, HAL_ENOENT, HAL_EUNSUPPORTED, HAL_EUNINIT,
+ *         HAL_EHW or HAL_EINVAL.
  */
 hal_status_t hal_net_resolve_ex(const char *host_or_ip,
                                 hal_net_family_t family_hint,

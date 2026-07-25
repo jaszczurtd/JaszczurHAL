@@ -5,12 +5,15 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
     set(_jh_cyw43_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/drivers/cyw43-driver")
     set(_jh_cyw43_vendor "${_jh_cyw43_root}/vendor")
+    # The ctrl layer (cyw43_init/cyw43_ensure_up/cyw43_gpio_set) is required for
+    # every CYW43 bring-up, including the no-lwIP LED-only path; only the lwIP
+    # glue is gated by JH_CYW43_LWIP.
     set(_jh_cyw43_sources
         "${_jh_cyw43_vendor}/src/cyw43_ll.c.upstream"
-        "${_jh_cyw43_vendor}/src/cyw43_spi.c.upstream")
+        "${_jh_cyw43_vendor}/src/cyw43_spi.c.upstream"
+        "${_jh_cyw43_vendor}/src/cyw43_ctrl.c.upstream")
     if(JH_CYW43_LWIP)
         list(APPEND _jh_cyw43_sources
-            "${_jh_cyw43_vendor}/src/cyw43_ctrl.c.upstream"
             "${_jh_cyw43_vendor}/src/cyw43_lwip.c.upstream")
     endif()
 
@@ -20,44 +23,48 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
         "${_jh_cyw43_vendor}/src")
 
     if(JH_CYW43_LWIP)
+        set(_jh_lwip_port
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/lwip/port")
         set(_jh_lwip_root
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/lwip")
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/lwip")
         list(APPEND _jh_cyw43_sources
-            "${_jh_lwip_root}/vendor/src/core/def.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/dns.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/inet_chksum.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/init.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ip.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/mem.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/memp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/netif.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/pbuf.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/raw.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/stats.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/sys.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/tcp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/tcp_in.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/tcp_out.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/timeouts.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/udp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/acd.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/autoip.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/dhcp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/etharp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/icmp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/igmp.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/ip4.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/ip4_addr.c.upstream"
-            "${_jh_lwip_root}/vendor/src/core/ipv4/ip4_frag.c.upstream"
-            "${_jh_lwip_root}/vendor/src/netif/ethernet.c.upstream")
+            "${_jh_lwip_root}/src/core/def.c"
+            "${_jh_lwip_root}/src/core/dns.c"
+            "${_jh_lwip_root}/src/core/inet_chksum.c"
+            "${_jh_lwip_root}/src/core/init.c"
+            "${_jh_lwip_root}/src/core/ip.c"
+            "${_jh_lwip_root}/src/core/mem.c"
+            "${_jh_lwip_root}/src/core/memp.c"
+            "${_jh_lwip_root}/src/core/netif.c"
+            "${_jh_lwip_root}/src/core/pbuf.c"
+            "${_jh_lwip_root}/src/core/raw.c"
+            "${_jh_lwip_root}/src/core/stats.c"
+            "${_jh_lwip_root}/src/core/sys.c"
+            "${_jh_lwip_root}/src/core/tcp.c"
+            "${_jh_lwip_root}/src/core/tcp_in.c"
+            "${_jh_lwip_root}/src/core/tcp_out.c"
+            "${_jh_lwip_root}/src/core/timeouts.c"
+            "${_jh_lwip_root}/src/core/udp.c"
+            "${_jh_lwip_root}/src/core/ipv4/acd.c"
+            "${_jh_lwip_root}/src/core/ipv4/autoip.c"
+            "${_jh_lwip_root}/src/core/ipv4/dhcp.c"
+            "${_jh_lwip_root}/src/core/ipv4/etharp.c"
+            "${_jh_lwip_root}/src/core/ipv4/icmp.c"
+            "${_jh_lwip_root}/src/core/ipv4/igmp.c"
+            "${_jh_lwip_root}/src/core/ipv4/ip4.c"
+            "${_jh_lwip_root}/src/core/ipv4/ip4_addr.c"
+            "${_jh_lwip_root}/src/core/ipv4/ip4_frag.c"
+            "${_jh_lwip_root}/src/netif/ethernet.c")
         list(APPEND _jh_cyw43_includes
-            "${_jh_lwip_root}/port"
-            "${_jh_lwip_root}/vendor/src/include")
+            "${_jh_lwip_port}"
+            "${_jh_lwip_root}/src/include")
     endif()
 
     foreach(_jh_source IN LISTS _jh_cyw43_sources)
         if(NOT EXISTS "${_jh_source}")
-            message(FATAL_ERROR "Pinned CYW43/lwIP source is missing: ${_jh_source}")
+            message(FATAL_ERROR
+                "Pinned CYW43/lwIP source is missing: ${_jh_source}; run "
+                "third_party/update_components.sh")
         endif()
     endforeach()
     set(${OUT_SOURCES} ${_jh_cyw43_sources} PARENT_SCOPE)
@@ -87,6 +94,6 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
     set_source_files_properties(${_jh_generated_sources} PROPERTIES
         COMPILE_OPTIONS "-Wno-unused-parameter")
     # The pinned JaszczurHAL headers must win over any CYW43/lwIP headers
-    # exposed by the surrounding SDK or Arduino core.
+    # exposed by the surrounding SDK.
     target_include_directories(${TARGET_NAME} BEFORE PRIVATE ${_jh_cyw43_includes})
 endfunction()

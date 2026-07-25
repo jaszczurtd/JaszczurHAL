@@ -8,7 +8,9 @@ The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
 call `entry/jh-vscode` and keep project-specific behavior in configuration.
 Files under `linux/runtime/` and `windows/runtime/` are implementation details.
 For the full firmware project model, see
-[`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md).
+[`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
+native RP OTA contract, including firewall and recovery, see
+[`doc/OTAWorkflow.md`](../doc/OTAWorkflow.md).
 
 ## CLI Contract
 
@@ -23,13 +25,17 @@ build
 build-debug
 upload
 upload-uf2
+upload-ota
+ota-discover
 monitor
 monitor-probe
 monitor-any
 refresh-intellisense
 clean
 select-board
+sync-board-picker
 list-ports
+change-port
 clear-identity
 config-dump
 ```
@@ -37,20 +43,26 @@ config-dump
 Compatibility note: `debug` is accepted as an alias for `build-debug` only for
 early migration work. New tasks should use `build-debug`.
 
-Reserved compatibility action: `change-port` is part of the historical CLI
-contract but is not implemented as a stable project action. Do not use it in
-default project tasks.
+`change-port` selects a serial port interactively or through `--port` and saves
+it as user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
+
+`sync-board-picker` refreshes the `boardSelection` input and its automatic
+folder-open task from the current `boards/` registry. Generated projects run it
+when a trusted workspace opens. VS Code may require one-time approval through
+`Tasks: Manage Automatic Tasks`; `Project: Select board` remains the dynamic
+terminal fallback.
 
 Common options:
 
 ```text
 --project <path>       Firmware module directory.
---fqbn <fqbn>          Override configured board FQBN for this invocation.
 --target <id>          Override active target family for this invocation.
 --board <id>           Override active board within the target.
+--variant <id>         Select an example variant declared by the manifest.
 --selection <t:b>      Persist target/board selection; GUI labels are accepted.
 --interactive          Prompt for target/board selection in the terminal.
 --port <port>          Override configured upload/monitor port.
+--host <address>       Bypass OTA discovery and use this device address.
 --baud <baud>          Serial monitor baud rate, default 115200.
 --lock-policy <mode>   Serial monitor lock policy: wait, replace-own, replace-any.
 --allow-unverified-port
@@ -71,16 +83,14 @@ jh-vscode build --project /home/user/projects/Fiesta/src/Clocks
 jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
 ```
 
-`build`, `build-debug`, `upload`, `upload-uf2`, `refresh-intellisense`, `clean`,
-and `clear-identity` require `--project`. Actions that touch a device must fail
-before accessing serial ports, BOOTSEL disks, or build artifacts when the target
-module is ambiguous.
+`build`, `build-debug`, `upload`, `upload-uf2`, `upload-ota`, `ota-discover`,
+`refresh-intellisense`, `clean`, `change-port`, and `clear-identity` require
+`--project`. Actions that touch a device must fail before accessing serial
+ports, BOOTSEL disks, or build artifacts when the target module is ambiguous.
 
-Legacy Arduino CLI mode requires a real project sketch file named
-`<module>.ino`. New and migrated firmware projects should use
-`toolchain: "cmake"` and the shared JaszczurHAL dispatcher. In that mode
-`jh-vscode` resolves the active target/board, configures CMake, and runs the
-canonical firmware targets:
+Firmware projects use `toolchain: "cmake"` and the shared JaszczurHAL
+dispatcher. `jh-vscode` resolves the active target/board, configures CMake, and
+runs the maintained firmware targets:
 
 ```text
 firmware
@@ -95,57 +105,18 @@ to the shared multi-target dispatcher, for example
 `${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project`, and pass the
 module directory as `JH_PROJECT_DIR`.
 
-For RP2040, the dispatcher generates the Arduino compatibility sketch under the
-target/board CMake build directory. STM32G474 uses the bare-metal recipe and
-OpenOCD upload target from the registry.
+The `rp2040`, `rp2350-arm`, and `rp2350-riscv` targets build directly with the
+official Pico SDK. RP firmware exposes HAL-owned USB CDC. With a selected
+serial port, normal `upload` releases the project monitor,
+performs a 1200-bps DTR touch, waits for the single BOOTSEL drive and copies the
+UF2. STM32G474 uses the registry's native target recipe, supports bare-metal
+and FreeRTOS firmware variants, and uploads through OpenOCD.
 
 ## Adding Project Source Files
 
-Dispatcher-backed projects do not keep a project-local firmware `CMakeLists.txt`
-and do not list source files in `.vscode/tasks.json`. Source discovery is owned
-by the shared dispatcher through `JH_PROJECT_DIR` and, when needed,
-`JH_PROJECT_SOURCES`.
-
-For the common flat project layout, add new `*.c`, `*.cpp`, `*.h`, or `*.hpp`
-files directly under the project directory. They are discovered automatically on
-the next build:
-
-```text
-my-firmware/
-  hal_project_config.h
-  tracker.cpp
-  tracker.h
-  new_module.c
-  new_module.h
-```
-
-For source files in subdirectories, add a complete explicit source list to
-`.vscode/jaszczurhal.project.json` under `cmake.cache`:
-
-```json
-"cmake": {
-  "sourceDir": "${project}/../libraries/JaszczurHAL/cmake/jh_firmware_project",
-  "cache": {
-    "JH_PROJECT_DIR": "${project}",
-    "ARDUINO_LIBRARIES": "${project}/../libraries",
-    "JH_PROJECT_SOURCES": "tracker.cpp;tracker.h;hal_project_config.h;paradygmat/paradygmat.c;paradygmat/paradygmat.h;paradygmat/filter.cpp;paradygmat/filter.h"
-  }
-}
-```
-
-`JH_PROJECT_SOURCES` is a semicolon-separated CMake list stored as a JSON string.
-Relative paths resolve from `JH_PROJECT_DIR`. When this option is present, it
-replaces automatic source discovery, so list the whole firmware project, not only
-the new subdirectory files.
-
-Prefer project-root-relative includes from code outside the subdirectory:
-
-```c
-#include "paradygmat/paradygmat.h"
-```
-
-After changing the explicit list, run `Project: Build`. If an RP2040 build still
-uses stale generated sketch links, run `Project: Clean` once and build again.
+Source discovery and the complete `JH_PROJECT_SOURCES` contract are defined in
+[Adding Project Source Files](../doc/FwProjectWorkflow.md#adding-project-source-files).
+That document is the only source for project layout and manifest examples.
 
 ## New Project Generator
 
@@ -196,7 +167,7 @@ present in the real VS Code user file:
 ~/.config/Code/User/keybindings.json
 ```
 
-After migrating a project, make sure that global shortcuts call the canonical
+After migrating a project, make sure that global shortcuts call the maintained
 task labels:
 
 ```text
@@ -207,8 +178,11 @@ Ctrl+Shift+4  Project: Upload (UF2 / BOOTSEL)
 Ctrl+Shift+5  Project: Debug Probe Monitor
 Ctrl+Shift+6  Project: Refresh IntelliSense
 Ctrl+Shift+7  Project: Clean
+Ctrl+Shift+8  Project: Upload (OTA)
+Ctrl+Shift+9  Project: Config Dump
 Ctrl+Shift+Alt+1  Project: Select board (GUI)
 Ctrl+Shift+Alt+2  Project: Select board
+Ctrl+Shift+Alt+3  Project: Discover OTA devices
 ```
 
 Old bindings such as `Project: Monitor (persistent)` or
@@ -240,6 +214,13 @@ The serial monitor defaults to `--lock-policy wait`. `replace-own` may stop only
 another JaszczurHAL monitor for the same project. `replace-any` is an explicit
 emergency option and should not be used in default VS Code tasks.
 
+For identity-enabled Pico projects, an implicitly configured monitor port may
+follow the single CDC device matching the project's verified USB identity when
+the saved path disappears or the kernel assigns a different `ttyACM` number.
+This also covers replacing a board with another unit running the same firmware.
+The monitor waits instead of guessing when zero or multiple devices match. An
+explicit `--port` remains pinned to the requested path.
+
 For identity-enabled serial uploads, `upload` verifies the selected serial port
 before running the upload backend. A port is considered verified when its
 `/dev/serial/by-id` name matches the configured identity. First flashing a clean
@@ -249,70 +230,15 @@ this flag.
 
 ## Configuration Precedence
 
-Configuration is loaded relative to `--project`, but target selection and
-manifest merging are separate steps.
-
-Active target/board selection:
-
-1. Explicit CLI `--target` / `--board`.
-2. User-local `.vscode/jaszczurhal.local.json`, written by `select-board`.
-3. Manifest `target` / `board`.
-4. Default `rp2040` plus the registry default board.
-
-Effective dispatcher configuration is then merged from low to high precedence:
-
-1. Target registry family defaults and selected-board cache.
-2. Base `.vscode/jaszczurhal.project.json`.
-3. Active `targetProfiles.<target>` overlay.
-4. Final active target/board pinning, including `cmake.cache.JH_TARGET`.
-5. Per-invocation CLI flags such as `--port`, `--fqbn`, or `--verbose`.
-
-`.vscode/settings.json` is a compatibility/fill-in source for local tool paths,
-ports and legacy Arduino settings. For the same semantic value,
-`jaszczurhal.*` wins over `arduino.*`, and manifest values for stable project
-identity/source/build behavior should be treated as authoritative. Legacy
-`.vscode/arduino.json` is only a fallback for projects that still need it.
-
-Stable project data should move to `.vscode/jaszczurhal.project.json` during
-migration. Developer-local preferences, such as a temporary serial port or a
-local `arduino-cli` path, may remain in `.vscode/settings.json`.
-The active target/board selected by `select-board` is stored in
-`.vscode/jaszczurhal.local.json`; this file is user-local and should be ignored
-by Git.
+Target/board selection, manifest overlays, settings fallback, and local state
+precedence are defined only in
+[Target And Configuration Resolution](../doc/FwProjectWorkflow.md#target-and-configuration-resolution).
 
 ## Minimal Project Manifest
 
-The manifest intentionally starts small. The current schema lives in
-`schema/jh_vscode_project.schema.json`.
-
-```json
-{
-  "project": "router-reset",
-  "module": "reseter",
-  "toolchain": "cmake",
-  "target": "rp2040",
-  "board": "picow",
-  "buildDir": "${project}/.build",
-  "cmakeBuildDir": "${project}/.build/cmake",
-  "cmake": {
-    "sourceDir": "${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project",
-    "cache": {
-      "JH_PROJECT_DIR": "${project}",
-      "JH_MODULE_NAME": "reseter"
-    }
-  },
-  "identity": {
-    "enabled": true,
-    "usbManufacturer": "Jaszczur",
-    "usbProduct": "Router Reset",
-    "byIdHint": "Router_Reset"
-  },
-  "artifacts": {
-    "elf": "${buildDir}/firmware.elf",
-    "uf2": "${buildDir}/firmware.uf2"
-  }
-}
-```
+The maintained manifest example and overlay rules live in
+[Minimal Manifest](../doc/FwProjectWorkflow.md#minimal-manifest).
+Machine validation uses `schema/jh_vscode_project.schema.json`.
 
 ## USB Identity
 
@@ -320,30 +246,83 @@ USB identity means firmware descriptors visible to the host as
 manufacturer/product, for example in `lsusb`, `dmesg`, VS Code Serial Monitor,
 and `/dev/serial/by-id`.
 
-For Arduino-Pico builds, identity is injected through build properties:
+For native RP builds, identity is injected through CMake cache entries:
 
 ```text
---build-property build.usb_manufacturer="Jaszczur"
---build-property build.usb_product="Router Reset"
+-DJH_USB_MANUFACTURER="Jaszczur"
+-DJH_USB_PRODUCT="Router Reset"
 ```
 
-If identity is disabled or incomplete, the build must not pass custom USB
-manufacturer/product properties.
+If identity is disabled or incomplete, the build uses JaszczurHAL's default USB
+descriptors.
 
 `clear-identity` is a separate action. It requires `--project`, builds the
-neutral firmware from `neutral_fw/`, does not pass custom USB identity build
-properties, and flashes only a verified serial target.
+neutral firmware from `neutral_fw/rp_native/` through the selected native Pico
+SDK target and board, omits custom USB identity cache entries, and flashes a
+verified serial target or one unambiguous BOOTSEL device.
 
-`upload-uf2` is RP2040/UF2-only and intentionally keeps manual BOOTSEL simple:
+`upload-uf2` is RP-family/UF2-only and intentionally keeps manual BOOTSEL simple:
 it builds the project, requires exactly one BOOTSEL drive or `RPI-RP2` block
 device, mounts it with `udisksctl` when needed, copies the UF2, and refuses to
 guess when multiple BOOTSEL drives are visible. Use target-neutral `upload` for
 STM32/OpenOCD.
 
+For native RP targets, target-neutral `upload` uses the configured/verified CDC
+port for the 1200-bps reset and then follows the same single-drive UF2 safety
+rules. When the configured CDC path is stale because the selected board is
+already in BOOTSEL, `upload` falls back to the single visible BOOTSEL device
+instead of rejecting the missing serial identity. When a replacement board is
+already running compatible firmware, a stale saved path may instead be replaced
+by the single CDC port matching the project's verified USB identity. Zero or
+multiple identity matches remain an error. An explicit `--port` never uses
+either fallback. The first flash still requires manual BOOTSEL because blank
+firmware has no CDC reset endpoint.
+
 When `upload` finds this project's persistent serial monitor on the upload
 port, it asks the monitor to release the port, keeps a short-lived project
 marker while the upload is in progress, and lets the monitor reconnect
 automatically after the board returns.
+
+## Native RP OTA
+
+`upload-ota` is the network update path for native `rp2040` and `rp2350-arm`
+WiFi board builds with `HAL_ENABLE_OTA`. It builds the project, locates its
+`.ota` artifact, signs the image header with the configured password, transfers
+it into the device's staging slot and waits for device acceptance. The password
+is not embedded in the unsigned build artifact. The `rp2350-riscv` target can
+build the OTA container and boot applier, but the current RISC-V board profile
+has no CYW43 transport, so it has no operational network upload path.
+
+`ota-discover` broadcasts a JaszczurHAL discovery request and lists hostname,
+address, target, port, slot size, image generation and boot mode. Upload
+automatically selects one device matching the active target and configured
+hostname. If several match, the generated task uses `--interactive`; automation
+should set manifest `ota.host` or pass `--host <address>` explicitly.
+
+The `ota` and `artifacts.ota` manifest fields are defined in
+[OTA Manifest Configuration](../doc/FwProjectWorkflow.md#ota-manifest-configuration).
+Keep secrets outside the tracked manifest with `ota.passwordEnv`. An inline
+`ota.password` is intended only for development examples. Empty passwords are
+rejected unless `ota.allowEmptyPassword` is explicitly true.
+The host callback defaults to TCP/8266. `runmefirst.sh` offers a persistent,
+LAN-scoped firewall rule for that port after explicit confirmation.
+
+Firmware integration, first installation, host firewall rules, keyboard
+shortcuts, trial confirmation, rollback, recovery, and troubleshooting are
+owned by [Native RP OTA Workflow](../doc/OTAWorkflow.md).
+
+The first installation still uses the merged UF2 through BOOTSEL. That image
+contains the boot applier and application. Later OTA boots are trials:
+application code must call `hal_ota_confirm_boot_ex()` only after its startup
+self-tests and required services succeed. Otherwise the boot applier rolls
+back after the configured attempt limit. Manual BOOTSEL remains the recovery
+path.
+
+The reference application is
+[`examples/57_ota`](../examples/57_ota/README.md). Its built-in WiFi transport
+supports Pico W/RP2040 and Pico 2 W/RP2350 ARM. The RP2350 RISC-V image and boot
+applier are buildable, but the repository does not yet provide a supported
+CYW43 network backend for that ISA.
 
 ## Exit Codes
 
@@ -361,18 +340,6 @@ automatically after the board returns.
 
 ## Generated Files And Build Cache
 
-`refresh-intellisense` uses compile database output as the source of truth:
-
-```text
-<buildDir>/compile_commands_patched.json
-```
-
-`.vscode/c_cpp_properties.json` is treated as a generated adapter for VS Code
-cpptools. It should not be the long-term hand-edited contract of a project.
-
-For dispatcher-backed projects with an active target, the base `cmakeBuildDir`
-is isolated by target and board, for example
-`.build/cmake/rp2040/pico/` or `.build/cmake/stm32g474/nucleo-g474re/`. If the
-cached CMake source directory changes during migration, `jh-vscode` resets the
-stale in-project cache before configuring again. See
-[`FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md#build-directories-and-generated-files).
+Artifact roots, compile databases, generated adapters, target/board cache
+isolation, stale-cache reset, and cache-key ownership are defined only in
+[Build Directories And Generated Files](../doc/FwProjectWorkflow.md#build-directories-and-generated-files).

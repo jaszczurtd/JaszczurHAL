@@ -17,7 +17,7 @@ extern "C" {
  *
  * Thread-safety model:
  * - Every public operation is protected by an internal handle mutex.
- * - RP2040 backend additionally serializes hardware-timing-critical
+ * - The RP-family backend additionally serializes hardware-timing-critical
  *   driver calls through a shared internal bus mutex.
  */
 

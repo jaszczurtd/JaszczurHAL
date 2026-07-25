@@ -71,6 +71,34 @@ def format_port_info(port_info) -> str:
     return f"{port_info.device}[{classify_port(port_info)}|{uid}|{desc}]"
 
 
+def normalize_identity_text(value: str) -> str:
+    return "".join(char.lower() for char in value if char.isalnum())
+
+
+def port_matches_identity(port_info, identity_tokens: list[str]) -> bool:
+    fields = (
+        getattr(port_info, "description", ""),
+        getattr(port_info, "manufacturer", ""),
+        getattr(port_info, "product", ""),
+        getattr(port_info, "interface", ""),
+        getattr(port_info, "hwid", ""),
+    )
+    identity = normalize_identity_text(" ".join(value or "" for value in fields))
+    return bool(
+        identity
+        and any(token in identity for token in identity_tokens if token)
+    )
+
+
+def matching_identity_ports(mode: str, identity_tokens: list[str]):
+    return [
+        port
+        for port in list_serial_ports()
+        if port_matches_mode(port, mode)
+        and port_matches_identity(port, identity_tokens)
+    ]
+
+
 def load_settings(project_dir: Path | None) -> dict:
     if project_dir is None:
         return {}
@@ -90,7 +118,6 @@ def get_preferred_port(cli_port: str, project_dir: Path | None) -> str:
     for port in (
         settings.get("jaszczurhal.uploadPort", ""),
         settings.get("persistentSerialMonitor.port", ""),
-        settings.get("arduino.uploadPort", ""),
         settings.get("serial.port", ""),
     ):
         if isinstance(port, str) and port.strip():
@@ -112,10 +139,22 @@ def wait_for_upload_marker(project_dir: Path | None) -> None:
         time.sleep(0.5)
 
 
-def find_port(mode: str, preferred_port: str = "") -> tuple[str | None, str]:
+def find_port(
+    mode: str,
+    preferred_port: str = "",
+    identity_tokens: list[str] | None = None,
+    follow_identity: bool = False,
+) -> tuple[str | None, str]:
     if preferred_port:
         if os.path.exists(preferred_port):
             return preferred_port, f"preferred:{preferred_port}"
+        if follow_identity and identity_tokens:
+            matches = matching_identity_ports(mode, identity_tokens)
+            if len(matches) == 1:
+                match = matches[0]
+                return match.device, f"verified-identity:{format_port_info(match)}"
+            if len(matches) > 1:
+                return None, "identity-ambiguous"
         return None, f"preferred-missing:{preferred_port}"
     for port in list_serial_ports():
         if port_matches_mode(port, mode):
@@ -123,11 +162,21 @@ def find_port(mode: str, preferred_port: str = "") -> tuple[str | None, str]:
     return None, "not-found"
 
 
-def wait_for_device(mode: str, preferred_port: str = "") -> str:
+def wait_for_device(
+    mode: str,
+    preferred_port: str = "",
+    identity_tokens: list[str] | None = None,
+    follow_identity: bool = False,
+) -> str:
     spinner = ["|", "/", "-", "\\"]
     i = 0
     while True:
-        port, reason = find_port(mode, preferred_port)
+        port, reason = find_port(
+            mode,
+            preferred_port,
+            identity_tokens,
+            follow_identity,
+        )
         if port:
             print(f"\r{' ' * 140}\r", end="", flush=True)
             time.sleep(0.3)
@@ -338,6 +387,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-b", "--baud", type=int, default=115200, help="Baud rate.")
     parser.add_argument("-m", "--mode", choices=["pico", "probe", "any"], default="pico")
     parser.add_argument("--lock-policy", choices=["wait", "replace-own", "replace-any"], default="wait")
+    parser.add_argument(
+        "--follow-identity",
+        action="store_true",
+        help="Follow one serial device matching the supplied project identity.",
+    )
+    parser.add_argument(
+        "--identity-token",
+        action="append",
+        default=[],
+        help="Normalized USB identity token accepted by --follow-identity.",
+    )
     return parser.parse_args()
 
 
@@ -345,12 +405,18 @@ def main() -> int:
     args = parse_args()
     project_dir = Path(args.project).resolve() if args.project else None
     preferred = get_preferred_port(args.port, project_dir)
+    identity_tokens = [
+        normalize_identity_text(token) for token in args.identity_token if token
+    ]
+    follow_identity = args.follow_identity and bool(identity_tokens)
 
     print()
     print(f"{BOLD}{CYAN}Persistent Serial Monitor{NC}")
     print(f"  Baud:        {GREEN}{args.baud}{NC}")
     print(f"  Mode:        {GREEN}{args.mode}{NC}")
     print(f"  Port:        {GREEN}{preferred if preferred else 'auto'}{NC}")
+    if follow_identity:
+        print(f"  Follow USB:  {GREEN}verified project identity{NC}")
     print(f"  Lock policy: {GREEN}{args.lock_policy}{NC}")
     if project_dir:
         print(f"  Project:     {GREEN}{project_dir}{NC}")
@@ -358,9 +424,19 @@ def main() -> int:
     print()
 
     while True:
-        port, _ = find_port(args.mode, preferred)
+        port, _ = find_port(
+            args.mode,
+            preferred,
+            identity_tokens,
+            follow_identity,
+        )
         if not port:
-            port = wait_for_device(args.mode, preferred)
+            port = wait_for_device(
+                args.mode,
+                preferred,
+                identity_tokens,
+                follow_identity,
+            )
         result = monitor(port, args.baud, args.lock_policy, project_dir)
         if result == "quit":
             print(f"\n{CYAN}Done.{NC}")

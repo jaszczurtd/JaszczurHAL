@@ -1,8 +1,8 @@
 # STM32G474 GPS reader
 
 Reads a live NMEA GPS receiver on a **Nucleo-G474RE** and prints the decoded
-fix. This is the STM32 counterpart of the RP2040 `07_gps` sketch (which is an
-Arduino `.ino`); it is built with the bare-metal `stm32_lib` toolchain.
+fix. This is the STM32 counterpart of the RP2040 `07_gps` example and is built
+with the bare-metal `stm32_lib` toolchain.
 
 - Parsing is the shared portable engine (`impl/shared/frameworks/gps/gps_nmea_parser.cpp` +
   `hal_gps_core.cpp`).
@@ -27,11 +27,13 @@ The receiver's **TX** must reach the board's **PA10**. Share a common ground.
 sudo apt update
 sudo apt install gcc-arm-none-eabi binutils-arm-none-eabi stlink-tools tio
 
-cd examples/g474_gps
-./build.sh                            # -> build/g474_gps.{elf,bin,hex}
+cd /path/to/JaszczurHAL
+vscode/entry/jh-vscode build \
+  --project examples/22_gps_uart --target stm32g474
 
 st-info --probe
-st-flash --reset write build/g474_gps.bin 0x08000000
+st-flash --reset write \
+  .build/examples/22_gps_uart/firmware.bin 0x08000000
 tio /dev/ttyACM0 -b 115200
 ```
 

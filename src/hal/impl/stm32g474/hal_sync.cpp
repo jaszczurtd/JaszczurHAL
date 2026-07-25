@@ -116,6 +116,24 @@ void hal_mutex_lock(hal_mutex_t mutex) {
 #endif
 }
 
+bool hal_mutex_try_lock(hal_mutex_t mutex) {
+  HAL_ASSERT(mutex != NULL, "hal_mutex_try_lock: mutex is NULL");
+  if (!mutex) {
+    return false;
+  }
+
+#if JH_STM32_HAL_SYNC_FREERTOS
+  if (stm32_in_isr()) {
+    return false;
+  }
+  return xSemaphoreTake(mutex->handle, 0u) == pdTRUE;
+#else
+  uint8_t expected = 0u;
+  return __atomic_compare_exchange_n(&mutex->locked, &expected, 1u, false,
+                                     __ATOMIC_ACQUIRE, __ATOMIC_RELAXED);
+#endif
+}
+
 void hal_mutex_unlock(hal_mutex_t mutex) {
   HAL_ASSERT(mutex != NULL, "hal_mutex_unlock: mutex is NULL");
   if (!mutex) {

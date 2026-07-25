@@ -2,7 +2,7 @@
 
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
 #include "../../../../hal_config.h"
 
 #ifdef HAL_ENABLE_MQTT
@@ -42,8 +42,13 @@ public:
 #endif
 
 private:
+  static constexpr size_t kReceiveBufferSize = 256u;
+
   int connect_endpoint(const hal_net_endpoint_t &endpoint);
   uint32_t timeout_ms();
+  size_t buffered_receive_bytes() const;
+  void reset_receive_buffer();
+  int fill_receive_buffer();
 #ifdef HAL_ENABLE_TLS
   int connect_tls(const char *host, uint16_t port);
   hal_status_t wait_for_tls_connection();
@@ -51,8 +56,9 @@ private:
 
   hal_tcp_socket_t socket_;
   uint32_t timeout_ms_;
-  bool has_peeked_byte_;
-  uint8_t peeked_byte_;
+  uint8_t receive_buffer_[kReceiveBufferSize];
+  size_t receive_offset_;
+  size_t receive_size_;
 #ifdef HAL_ENABLE_TLS
   bool tls_enabled_;
   hal_tls_security_config_t tls_security_;
@@ -61,4 +67,4 @@ private:
 };
 
 #endif /* HAL_ENABLE_MQTT */
-#endif /* HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 */
+#endif /* HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 */

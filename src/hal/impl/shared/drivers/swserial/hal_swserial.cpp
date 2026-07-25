@@ -1,5 +1,5 @@
 #include "hal/hal_config.h"
-#if !HAL_TARGET_IS_RP2040
+#if !HAL_TARGET_IS_RP
 #ifdef HAL_ENABLE_SWSERIAL
 
 #include "hal/hal_swserial.h"
@@ -588,4 +588,4 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h) {
 #endif
 
 #endif /* HAL_ENABLE_SWSERIAL */
-#endif /* !HAL_TARGET_IS_RP2040 */
+#endif /* !HAL_TARGET_IS_RP */

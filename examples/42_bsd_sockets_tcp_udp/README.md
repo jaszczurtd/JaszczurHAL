@@ -23,7 +23,7 @@ available as example variants:
 ```
 
 The manifest defaults to `rp2040:picow`, so the registry supplies a WiFi-capable
-Arduino-Pico FQBN for all four builds.
+native board profile for all four builds.
 
 ## Configuration
 

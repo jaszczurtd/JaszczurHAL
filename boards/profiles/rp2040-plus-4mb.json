@@ -1,0 +1,22 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "rp2040-plus-4mb",
+  "displayName": "Waveshare RP2040-Plus 4 MB",
+  "description": "RP2040-Plus board with an exact 4 MB flash variant.",
+  "status": "supported",
+  "compatibleTargets": ["rp2040"],
+  "build": { "provider": "pico-sdk", "board": "waveshare_rp2040_plus_4mb" },
+  "hal": { "profileId": 9, "selector": "HAL_BOARD_PROFILE_RP2040_PLUS_4MB", "runtimeName": "rp2040-plus-4mb", "legacySelectors": [] },
+  "memory": { "flash": { "source": "sdk", "expectedBytes": 4194304 } },
+  "gpio": {
+    "exposedPins": { "ranges": [{ "first": 0, "last": 22 }, { "first": 26, "last": 29 }] },
+    "reservations": { "status-led": { "pins": [{ "domain": "soc-gpio", "id": 25 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board GPIO status LED." } },
+    "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false } },
+  "devices": { "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" } },
+  "peripherals": { "defaultsSource": "pico-sdk" },
+  "components": {}
+}

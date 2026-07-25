@@ -1,12 +1,14 @@
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 
 #include "rp2040_cyw43_gspi.h"
 
 #include "../../../../hal_system.h"
+#include "rp2040_cyw43_gspi_clock.h"
 #include "rp2040_cyw43_pio_program.h"
 
+#include <hardware/clocks.h>
 #include <hardware/dma.h>
 #include <hardware/gpio.h>
 #include <hardware/pio.h>
@@ -21,8 +23,12 @@ constexpr uint32_t kTransferTimeoutUs = 1000000u;
 
 struct rp2040_gspi_context_t {
   jh_rp2040_cyw43_gspi_config_t config;
+  jh_rp2040_cyw43_gspi_clock_t clock;
   PIO pio;
+  const pio_program *program_definition;
   uint pio_offset;
+  uint pio_offset_lp1_end;
+  uint pio_offset_end;
   int pio_sm;
   int dma_out;
   int dma_in;
@@ -37,7 +43,9 @@ bool config_valid(const jh_rp2040_cyw43_gspi_config_t *config) {
   if (config == nullptr || config->pin_chip_select >= NUM_BANK0_GPIOS ||
       config->pin_clock >= NUM_BANK0_GPIOS ||
       config->pin_wl_on >= NUM_BANK0_GPIOS ||
-      config->pin_data >= NUM_BANK0_GPIOS || config->pio_clock_div_int == 0u ||
+      config->pin_data >= NUM_BANK0_GPIOS || config->target_gspi_hz == 0u ||
+      (config->pio_clock_div_override_x256 != 0u &&
+       config->pio_clock_div_override_x256 < 256u) ||
       config->max_transaction_bytes < 8u ||
       (config->max_transaction_bytes & 3u) != 0u) {
     return false;
@@ -65,9 +73,12 @@ void stop_comms(rp2040_gspi_context_t *context) {
 }
 
 hal_status_t claim_pio(rp2040_gspi_context_t *context) {
+  if (context->program_definition == nullptr) {
+    return HAL_ECONFIG;
+  }
   const PIO candidates[] = {pio0, pio1};
   for (PIO candidate : candidates) {
-    if (!pio_can_add_program(candidate, &jh_cyw43_pio_program)) {
+    if (!pio_can_add_program(candidate, context->program_definition)) {
       continue;
     }
     const int sm = pio_claim_unused_sm(candidate, false);
@@ -76,7 +87,8 @@ hal_status_t claim_pio(rp2040_gspi_context_t *context) {
     }
     context->pio = candidate;
     context->pio_sm = sm;
-    context->pio_offset = pio_add_program(candidate, &jh_cyw43_pio_program);
+    context->pio_offset =
+        pio_add_program(candidate, context->program_definition);
     return HAL_OK;
   }
   return HAL_EBUSY;
@@ -87,16 +99,39 @@ void release_pio(rp2040_gspi_context_t *context) {
     return;
   }
   pio_sm_set_enabled(context->pio, (uint)context->pio_sm, false);
-  pio_remove_program(context->pio, &jh_cyw43_pio_program, context->pio_offset);
+  pio_remove_program(context->pio, context->program_definition,
+                     context->pio_offset);
   pio_sm_unclaim(context->pio, (uint)context->pio_sm);
   context->pio = nullptr;
   context->pio_sm = -1;
+}
+
+bool configure_clock(rp2040_gspi_context_t *context) {
+  if (!jh_rp2040_cyw43_gspi_clock_calculate(
+          clock_get_hz(clk_sys), context->config.target_gspi_hz,
+          context->config.pio_clock_div_override_x256, &context->clock)) {
+    return false;
+  }
+
+  if (context->clock.program == JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED) {
+    context->program_definition = &jh_cyw43_pio_low_speed_program;
+    context->pio_offset_lp1_end = jh_cyw43_pio_low_speed_offset_lp1_end;
+    context->pio_offset_end = jh_cyw43_pio_low_speed_offset_end;
+  } else {
+    context->program_definition = &jh_cyw43_pio_high_speed_program;
+    context->pio_offset_lp1_end = jh_cyw43_pio_high_speed_offset_lp1_end;
+    context->pio_offset_end = jh_cyw43_pio_high_speed_offset_end;
+  }
+  return true;
 }
 
 hal_status_t platform_initialize(void *opaque_context) {
   auto *context = static_cast<rp2040_gspi_context_t *>(opaque_context);
   if (context == nullptr) {
     return HAL_EINVAL;
+  }
+  if (!configure_clock(context)) {
+    return HAL_ECONFIG;
   }
   hal_status_t status = claim_pio(context);
   if (status != HAL_OK) {
@@ -119,9 +154,13 @@ hal_status_t platform_initialize(void *opaque_context) {
   }
 
   pio_sm_config sm_config =
-      jh_cyw43_pio_program_get_default_config(context->pio_offset);
-  sm_config_set_clkdiv_int_frac8(&sm_config, context->config.pio_clock_div_int,
-                                 context->config.pio_clock_div_frac8);
+      context->clock.program == JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED
+          ? jh_cyw43_pio_low_speed_program_get_default_config(
+                context->pio_offset)
+          : jh_cyw43_pio_high_speed_program_get_default_config(
+                context->pio_offset);
+  sm_config_set_clkdiv_int_frac8(&sm_config, context->clock.divider_int,
+                                 context->clock.divider_frac8);
   sm_config_set_out_pins(&sm_config, context->config.pin_data, 1u);
   sm_config_set_in_pins(&sm_config, context->config.pin_data);
   sm_config_set_set_pins(&sm_config, context->config.pin_data, 1u);
@@ -208,6 +247,9 @@ hal_status_t platform_transfer(void *opaque_context, const uint8_t *tx,
       (rx != nullptr && ((uintptr_t)rx & 3u) != 0u)) {
     return HAL_EINVAL;
   }
+  if (clock_get_hz(clk_sys) != context->clock.clk_sys_hz) {
+    return HAL_ECONFIG;
+  }
 
   const uint sm = (uint)context->pio_sm;
   const auto pio_function = (gpio_function_t)pio_get_funcsel(context->pio);
@@ -219,8 +261,8 @@ hal_status_t platform_transfer(void *opaque_context, const uint8_t *tx,
   pio_sm_set_enabled(context->pio, sm, false);
   pio_sm_set_wrap(context->pio, sm, context->pio_offset,
                   context->pio_offset +
-                      (rx_length == 0u ? jh_cyw43_pio_offset_lp1_end
-                                       : jh_cyw43_pio_offset_end) -
+                      (rx_length == 0u ? context->pio_offset_lp1_end
+                                       : context->pio_offset_end) -
                       1u);
   pio_sm_clear_fifos(context->pio, sm);
   pio_sm_set_pindirs_with_mask(context->pio, sm, 1u << context->config.pin_data,
@@ -362,6 +404,18 @@ jh_rp2040_cyw43_gspi_init(const jh_rp2040_cyw43_gspi_config_t *config) {
 
 extern "C" hal_status_t jh_rp2040_cyw43_gspi_deinit(void) {
   return jh_cyw43_gspi_transport_deinit(&s_transport);
+}
+
+extern "C" hal_status_t
+jh_rp2040_cyw43_gspi_get_clock(jh_rp2040_cyw43_gspi_clock_t *clock_config) {
+  if (clock_config == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (!s_transport.initialized) {
+    return HAL_EUNINIT;
+  }
+  *clock_config = s_context.clock;
+  return HAL_OK;
 }
 
 extern "C" jh_cyw43_gspi_transport_t *jh_rp2040_cyw43_gspi_transport(void) {

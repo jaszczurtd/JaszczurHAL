@@ -1,0 +1,51 @@
+{
+    "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL hardware tests",
+    "module": "rp_sdlogger",
+    "example": {
+        "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "rp2350-riscv"
+        ],
+        "boards": {
+            "rp2040": "pico",
+            "rp2350-arm": "pico2",
+            "rp2350-riscv": "pico2"
+        },
+        "variants": [
+            {
+                "id": "freertos",
+                "module": "rp_sdlogger_freertos",
+                "targets": [
+                    "rp2040",
+                    "rp2350-arm",
+                    "rp2350-riscv"
+                ],
+                "extraDefines": [
+                    "HAL_ENABLE_SDLOGGER",
+                    "HAL_ENABLE_FREERTOS"
+                ]
+            }
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${jhRoot}/.build/hardware/rp_sdlogger",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "rp_sdlogger",
+            "JH_EXTRA_DEFINES": "HAL_ENABLE_SDLOGGER"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

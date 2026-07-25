@@ -4,10 +4,10 @@
 # Included by cmake/jh_firmware_project after enable_language(C CXX ASM) with the
 # STM32 cross toolchain (CMAKE_TOOLCHAIN_FILE=stm32_lib/toolchain_stm32g474.cmake,
 # passed via the manifest cache). Delegates the link to the reusable L1 recipe
-# and exposes the canonical firmware* targets.
+# and exposes the stable firmware* targets.
 #
 # Entry contract:
-#   - Projects that define app_start/app_task0[/app_task1] directly (canonical)
+#   - Projects that define app_start/app_task0[/app_task1] directly
 #     are built as-is; HAL_ENABLE_APP_TASK1 comes from their hal_project_config.h.
 #   - Projects using the Fiesta initialization/looper convention (they ship a
 #     firmware_entry.h) get a generated adapter (build dir only), with core1
@@ -25,7 +25,6 @@ include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
 
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
-set(JH_EXTRA_DEFINES "" CACHE STRING "Extra compile definitions for the firmware")
 set(JH_EXTRA_LIBRARIES "" CACHE STRING "Extra flat library dirs to compile+include (';'-separated), e.g. Credentials")
 set(JH_LINK_LIBRARIES "" CACHE STRING "Precompiled static archives or CMake library targets (';'-separated)")
 set(OPENOCD_BIN "openocd" CACHE STRING "OpenOCD executable")
@@ -37,7 +36,7 @@ jh_resolve_project_sources(_sources)
 # Extra flat libraries (the STM32 counterpart of the RP2040 recipe's
 # --libraries): each dir's C/C++ sources are compiled and its root is added to
 # the include path. This is how an external library like Credentials is linked
-# into a bare-metal STM32 build (arduino-cli discovers it automatically on RP2040).
+# into a bare-metal STM32 build.
 set(_extra_lib_includes "")
 foreach(_lib IN LISTS JH_EXTRA_LIBRARIES)
     if(_lib AND IS_DIRECTORY "${_lib}")
@@ -51,6 +50,8 @@ foreach(_lib IN LISTS JH_EXTRA_LIBRARIES)
 endforeach()
 
 set(_defines HAL_PROVIDE_APP_ENTRY=1 ${JH_EXTRA_DEFINES})
+list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
+list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 function(_jh_extract_define_value OUT_VAR KEY)
     set(_value "")
     foreach(_def IN LISTS ARGN)
@@ -73,7 +74,7 @@ if(NOT "${_stm32_littlefs_size}" STREQUAL "")
 endif()
 
 # Fiesta-convention projects: bridge initialization/looper -> app_* via the
-# shared generated adapter. Canonical-entry projects define app_start directly.
+# shared generated adapter. Direct-entry projects define app_start directly.
 jh_generate_entry_adapter("${JH_PROJECT_DIR}" "${CMAKE_BINARY_DIR}/generated" _adapter _core1)
 if(_adapter)
     if(_core1)
@@ -85,7 +86,8 @@ endif()
 jh_add_stm32g474_firmware(firmware
     JH_ROOT "${JH_ROOT}"
     SOURCES ${_sources}
-    INCLUDES "${JH_PROJECT_DIR}" ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
+    INCLUDES "${JH_PROJECT_DIR}" "${JH_BOARD_GENERATED_DIR}"
+        ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
@@ -114,6 +116,19 @@ jh_cmake_defines_contain(_stm32_has_freertos HAL_ENABLE_FREERTOS ${_defines})
 if(_stm32_has_freertos)
     jh_stm32g474_enable_freertos(firmware)
 endif()
+
+add_custom_command(TARGET firmware POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${JH_ARTIFACT_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:firmware>" "${JH_ARTIFACT_DIR}/firmware.elf"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE_DIR:firmware>/firmware.bin"
+            "${JH_ARTIFACT_DIR}/firmware.bin"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE_DIR:firmware>/firmware.hex"
+            "${JH_ARTIFACT_DIR}/firmware.hex"
+    VERBATIM
+)
 
 add_custom_target(firmware_debug DEPENDS firmware)
 add_custom_target(firmware_compile_db COMMAND "${CMAKE_COMMAND}" -E true)

@@ -157,15 +157,6 @@ hal_status_t stack_enter(bool require_ipv4) {
 
 void stack_leave(void) { (void)jh_network_service_leave(&s_network_service); }
 
-void make_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]) {
-  uint8_t uid[HAL_DEVICE_UID_BYTES]{};
-  (void)hal_get_device_uid(uid);
-  mac[0] = 0x02u;
-  for (size_t index = 1u; index < HAL_WIFI_BSSID_LEN; ++index) {
-    mac[index] = uid[index - 1u];
-  }
-}
-
 void endpoint_from_ipv4(uint32_t address, uint16_t port,
                         hal_net_endpoint_t *out) {
   ip4_addr_t ipv4{};
@@ -227,11 +218,8 @@ hal_status_t service_initialize(void) {
     return status;
   }
 
-  uint8_t mac[HAL_WIFI_BSSID_LEN]{};
-  make_mac(mac);
   jh_cyw43_driver_result_t result{};
-  status =
-      jh_cyw43_driver_start(jh_stm32g474_cyw43_gspi_transport(), mac, &result);
+  status = jh_cyw43_driver_start(jh_stm32g474_cyw43_gspi_transport(), &result);
   if (status != HAL_OK) {
     (void)jh_stm32g474_cyw43_gspi_deinit();
     hal_mutex_unlock(s_lifecycle_mutex);

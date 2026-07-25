@@ -61,15 +61,12 @@ def json_text(data: dict) -> str:
 
 
 def load_target_registry(jh_root: Path) -> dict[str, dict]:
-    registry_dir = jh_root / "vscode" / "targets"
-    registry: dict[str, dict] = {}
-    for path in sorted(registry_dir.glob("*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict):
-            raise RuntimeError(f"target descriptor must be a JSON object: {path}")
-        target_id = str(data.get("id") or path.stem)
-        registry[target_id] = data
-    return registry
+    scripts_dir = jh_root / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from board_registry import tooling_target_registry
+
+    return tooling_target_registry(jh_root)
 
 
 def resolve_target_board(registry: dict[str, dict], target: str, board: str | None) -> tuple[str, str]:
@@ -89,35 +86,6 @@ def resolve_target_board(registry: dict[str, dict], target: str, board: str | No
             f"unknown board '{selected}' for target '{target}'. Known boards: {', '.join(board_ids)}"
         )
     return target, selected
-
-
-def board_selection_label(target: str, board: str, desc: dict, board_desc: dict) -> str:
-    label = f"{target}:{board} - {board_desc.get('displayName', board)}"
-    if desc.get("status") == "skeleton":
-        label += " (skeleton)"
-    return label
-
-
-def board_selection_values(registry: dict[str, dict], selected_target: str, selected_board: str) -> tuple[str, str]:
-    options: list[str] = []
-    default = ""
-    sorted_targets = sorted(registry.items(), key=lambda item: (item[1].get("status") == "skeleton", item[0]))
-    for target, desc in sorted_targets:
-        boards = [item for item in (desc.get("boards") or []) if isinstance(item, dict)]
-        for board_desc in boards:
-            board = board_desc.get("id")
-            if not board:
-                continue
-            board = str(board)
-            label = board_selection_label(target, board, desc, board_desc)
-            options.append(label)
-            if target == selected_target and board == selected_board:
-                default = label
-    if not options:
-        raise RuntimeError("target registry has no selectable boards")
-    if not default:
-        default = options[0]
-    return json.dumps(options, indent=16), json.dumps(default)
 
 
 def ensure_writable_output(output_dir: Path, force: bool) -> None:
@@ -153,7 +121,12 @@ def build_files(
     vscode_dir = output_dir / ".vscode"
     registry = load_target_registry(jh_root)
     target, board = resolve_target_board(registry, target, board)
-    board_options_json, board_default_json = board_selection_values(registry, target, board)
+    from vscode_task_config import board_selection_values, sync_board_picker_task
+
+    try:
+        board_options, board_default = board_selection_values(registry, target, board)
+    except ValueError as exc:
+        raise RuntimeError(str(exc)) from exc
     values = {
         "PROJECT_NAME": project_name,
         "MODULE": module,
@@ -166,8 +139,15 @@ def build_files(
         "JH_DISPATCHER_REL": relpath(output_dir, jh_root / "cmake" / "jh_firmware_project"),
         "JH_ENTRY_REL": relpath(output_dir, jh_root / "vscode" / "entry" / "jh-vscode"),
         "SCHEMA_REL": relpath(vscode_dir, jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json"),
-        "BOARD_OPTIONS_JSON": board_options_json,
-        "BOARD_DEFAULT_JSON": board_default_json,
+        "BOARD_OPTIONS_JSON": json.dumps(board_options, indent=16),
+        "BOARD_DEFAULT_JSON": json.dumps(board_default),
+        "SYNC_BOARD_PICKER_TASK_JSON": "\n".join(
+            f"        {line}"
+            for line in json.dumps(
+                sync_board_picker_task(),
+                indent=4,
+            ).splitlines()
+        ),
     }
 
     files: dict[str, str] = {
@@ -207,8 +187,6 @@ def build_files(
         ),
         ".vscode/settings.json": json_text(
             {
-                "jaszczurhal.cliPath": "arduino-cli",
-                "jaszczurhal.sketchbookPath": "",
                 "jaszczurhal.buildDir": "${workspaceFolder}/.build",
                 "jaszczurhal.verbose": False,
                 "jaszczurhal.root": values["JH_ROOT_REL"],
@@ -336,7 +314,7 @@ The project demonstrates the current firmware workflow:
 - The manifest points CMake at JaszczurHAL's shared firmware dispatcher.
 - Target/board selection starts at `@@TARGET@@:@@BOARD@@` and can be changed
   without editing tracked files.
-- `jh-vscode` owns build, debug build, upload, UF2 upload, monitor, clean, and IntelliSense refresh.
+- `jh-vscode` owns build, debug build, upload, UF2/OTA upload, discovery, monitor, clean, and IntelliSense refresh.
 - The firmware identity is `@@USB_MANUFACTURER@@ @@USB_PRODUCT@@`.
 - Application code lives in `app.cpp` and uses `app_start` / `app_task0`.
 
@@ -357,7 +335,9 @@ The project demonstrates the current firmware workflow:
 ```
 
 The selection is stored in `.vscode/jaszczurhal.local.json`, which is ignored by
-the generated `.gitignore`.
+the generated `.gitignore`. `Project: Sync board picker` refreshes the tracked
+GUI options from the current JaszczurHAL registry when a trusted workspace
+opens. VS Code may request one-time approval for automatic tasks.
 
 ## Flashing
 
@@ -388,6 +368,11 @@ or make an explicit serial decision:
 
 The explicit-port path is intentionally manual because it can overwrite any
 board connected on that port.
+
+The generated task set also contains `Project: Upload (OTA)` and
+`Project: Discover OTA devices`. Configure `HAL_ENABLE_OTA`, OTA artifact
+metadata, and credentials according to
+[`OTAWorkflow.md`](@@JH_ROOT_REL@@/doc/OTAWorkflow.md) before using them.
 """
 
 
@@ -470,6 +455,22 @@ TASKS_TEMPLATE = """{
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["upload-uf2", "--project", "${workspaceFolder}"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Upload (OTA)",
+            "detail": "Build, authenticate, and upload @@MODULE@@ to a discovered native RP device",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Discover OTA devices",
+            "detail": "List JaszczurHAL devices advertising native OTA",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "args": ["ota-discover", "--project", "${workspaceFolder}"],
             "problemMatcher": []
         },
         {
@@ -570,7 +571,8 @@ TASKS_TEMPLATE = """{
             "command": "${config:jaszczurhal.vscodeEntry}",
             "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
             "problemMatcher": []
-        }
+        },
+@@SYNC_BOARD_PICKER_TASK_JSON@@
     ]
 }
 """
@@ -634,6 +636,11 @@ KEYBINDINGS_TEMPLATE = """[
     {
         "key": "ctrl+shift+8",
         "command": "workbench.action.tasks.runTask",
+        "args": "Project: Upload (OTA)"
+    },
+    {
+        "key": "ctrl+shift+9",
+        "command": "workbench.action.tasks.runTask",
         "args": "Project: Config Dump"
     },
     {
@@ -645,6 +652,11 @@ KEYBINDINGS_TEMPLATE = """[
         "key": "ctrl+shift+alt+2",
         "command": "workbench.action.tasks.runTask",
         "args": "Project: Select board"
+    },
+    {
+        "key": "ctrl+shift+alt+3",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Discover OTA devices"
     }
 ]
 """

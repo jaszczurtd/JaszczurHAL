@@ -1,15 +1,18 @@
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../../../hal_config.h"
 
 #if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
+
+#if HAL_BOARD_HAS_CYW43
 
 #include "../../../../hal_sync.h"
 #include "../../../../hal_system.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
 #include "../../../../impl/shared/hal_mutex_once.h"
+#include "../../../../impl/shared/jh_board_runtime.h"
 #include "../../../../impl/shared/network/jh_cyw43_scan.h"
 #include "../../../../impl/shared/network/jh_network_service.h"
 #include "rp2040_cyw43_platform.h"
@@ -39,6 +42,11 @@ size_t s_scan_count;
 char s_hostname[64]{};
 hal_wifi_scan_result_t s_scan_results[HAL_CYW43_SCAN_RESULT_CAPACITY]{};
 jh_network_service_t s_network_service{};
+
+constexpr hal_board_capabilities_t kCyw43Capabilities =
+    HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
+                               ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
+                               : 0u);
 
 void ensure_mutex(void) { (void)jh_hal_mutex_create_once(&s_operation_mutex); }
 
@@ -124,8 +132,14 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
   if (s_initialized) {
     return HAL_OK;
   }
+  const hal_status_t capability_status =
+      hal_board_require_capabilities(kCyw43Capabilities);
+  if (capability_status != HAL_EUNINIT) {
+    return capability_status;
+  }
   hal_status_t status = jh_rp2040_cyw43_platform_init(HAL_CYW43_COUNTRY_CODE);
   if (status != HAL_OK) {
+    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     return status;
   }
   if (!s_service_created) {
@@ -133,6 +147,7 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
                                      jh_rp2040_cyw43_platform_service_port());
     if (status != HAL_OK) {
       jh_rp2040_cyw43_platform_deinit();
+      (void)jh_board_runtime_set_failed(kCyw43Capabilities);
       return status;
     }
     s_service_created = true;
@@ -140,9 +155,17 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
   status = jh_network_service_start(&s_network_service);
   if (status != HAL_OK) {
     jh_rp2040_cyw43_platform_deinit();
+    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     return status;
   }
   s_initialized = true;
+  status = jh_board_runtime_set_available(kCyw43Capabilities);
+  if (status != HAL_OK) {
+    (void)jh_network_service_stop(&s_network_service);
+    jh_rp2040_cyw43_platform_deinit();
+    s_initialized = false;
+    return status;
+  }
   if (s_hostname[0] != '\0') {
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
   }
@@ -166,13 +189,16 @@ hal_status_t jh_rp2040_cyw43_provider_deinit_for_baseline(void) {
     s_initialized = false;
     s_scan_count = 0u;
     s_scan_overflow = false;
+    status = jh_board_runtime_set_inactive(kCyw43Capabilities);
   }
   operation_end();
   return status;
 }
 
 hal_status_t jh_cyw43_provider_service(void) {
-  return s_initialized ? jh_cyw43_lwip_service() : HAL_EUNINIT;
+  const hal_status_t status =
+      hal_board_require_capabilities(kCyw43Capabilities);
+  return status == HAL_OK ? jh_cyw43_lwip_service() : status;
 }
 
 hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
@@ -182,9 +208,6 @@ hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
   if (ssid == nullptr || ssid[0] == '\0' || password == nullptr ||
       timeout_ms == 0u) {
     return HAL_EINVAL;
-  }
-  if (non_blocking) {
-    return HAL_EUNSUPPORTED;
   }
   hal_status_t status = jh_rp2040_cyw43_provider_init();
   if (status != HAL_OK) {
@@ -205,7 +228,9 @@ hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
       if (status == HAL_OK) {
         const uint32_t auth =
             password[0] == '\0' ? CYW43_AUTH_OPEN : CYW43_AUTH_WPA2_AES_PSK;
-        status = jh_cyw43_lwip_join(ssid, password, auth, timeout_ms);
+        status = non_blocking
+                     ? jh_cyw43_lwip_join_start(ssid, password, auth)
+                     : jh_cyw43_lwip_join(ssid, password, auth, timeout_ms);
       }
     }
     (void)jh_network_service_leave(&s_network_service);
@@ -236,7 +261,7 @@ jh_rp2040_cyw43_provider_link_status(jh_cyw43_link_status_t *out_link_status) {
   if (out_link_status == nullptr) {
     return HAL_EINVAL;
   }
-  hal_status_t status = jh_rp2040_cyw43_provider_init();
+  hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status != HAL_OK) {
     return status;
   }
@@ -280,7 +305,7 @@ hal_status_t jh_rp2040_cyw43_provider_get_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]) {
   if (mac == nullptr) {
     return HAL_EINVAL;
   }
-  hal_status_t status = jh_rp2040_cyw43_provider_init();
+  hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status == HAL_OK) {
     status = jh_network_service_enter(&s_network_service, false);
   }
@@ -296,7 +321,7 @@ hal_status_t jh_rp2040_cyw43_provider_get_rssi(int32_t *out_rssi) {
   if (out_rssi == nullptr) {
     return HAL_EINVAL;
   }
-  hal_status_t status = jh_rp2040_cyw43_provider_init();
+  hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status == HAL_OK) {
     status = jh_network_service_enter(&s_network_service, true);
   }
@@ -330,7 +355,8 @@ hal_status_t jh_rp2040_cyw43_provider_set_hostname(const char *hostname) {
 }
 
 hal_status_t jh_rp2040_cyw43_provider_lwip_begin(bool require_ipv4) {
-  const hal_status_t status = jh_rp2040_cyw43_provider_init();
+  const hal_status_t status =
+      hal_board_require_capabilities(kCyw43Capabilities);
   return status == HAL_OK
              ? jh_network_service_enter(&s_network_service, require_ipv4)
              : status;
@@ -423,7 +449,7 @@ hal_status_t jh_rp2040_cyw43_provider_scan(uint32_t timeout_ms,
     return HAL_EINVAL;
   }
   *out_count = 0;
-  hal_status_t status = jh_rp2040_cyw43_provider_init();
+  hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status != HAL_OK) {
     return status;
   }
@@ -478,5 +504,71 @@ jh_rp2040_cyw43_provider_get_scan_result(size_t index,
   return HAL_OK;
 }
 
+#else
+
+#include "../../../../impl/shared/network/jh_cyw43_provider.h"
+
+struct netif;
+extern "C" struct netif *__getCYW43Netif(void) { return nullptr; }
+
+hal_status_t jh_cyw43_provider_init(void) { return HAL_EUNSUPPORTED; }
+hal_status_t jh_cyw43_provider_deinit(void) { return HAL_EUNSUPPORTED; }
+hal_status_t jh_cyw43_provider_join(const char *, const char *, bool,
+                                    uint32_t) {
+  return HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_leave(void) { return HAL_EUNSUPPORTED; }
+hal_status_t
+jh_cyw43_provider_link_status(jh_cyw43_link_status_t *out_link_status) {
+  if (out_link_status == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_link_status = JH_CYW43_LINK_UNKNOWN;
+  return HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_get_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]) {
+  return mac == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_get_rssi(int32_t *out_rssi) {
+  return out_rssi == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_set_hostname(const char *hostname) {
+  return hostname == nullptr || hostname[0] == '\0' ? HAL_EINVAL
+                                                    : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_stack_enter(bool) { return HAL_EUNSUPPORTED; }
+void jh_cyw43_provider_stack_leave(void) {}
+hal_status_t jh_cyw43_provider_service(void) { return HAL_EUNSUPPORTED; }
+hal_status_t jh_cyw43_provider_get_local_ipv4(uint8_t out_address[4]) {
+  return out_address == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_get_dns_ipv4(uint8_t out_address[4]) {
+  return out_address == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+void jh_cyw43_provider_set_timeout_ms(uint32_t) {}
+hal_status_t
+jh_cyw43_provider_resolve_ipv4(const char *hostname,
+                               uint8_t out_address[HAL_NET_IPV4_ADDR_LEN]) {
+  return hostname == nullptr || hostname[0] == '\0' || out_address == nullptr
+             ? HAL_EINVAL
+             : HAL_EUNSUPPORTED;
+}
+hal_status_t
+jh_cyw43_provider_ping_ipv4(const uint8_t address[HAL_NET_IPV4_ADDR_LEN],
+                            uint32_t timeout_ms, int *out_result) {
+  return address == nullptr || timeout_ms == 0u || out_result == nullptr
+             ? HAL_EINVAL
+             : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_scan(uint32_t timeout_ms, int *out_count) {
+  return timeout_ms == 0u || out_count == nullptr ? HAL_EINVAL
+                                                  : HAL_EUNSUPPORTED;
+}
+hal_status_t jh_cyw43_provider_get_scan_result(size_t,
+                                               hal_wifi_scan_result_t *out) {
+  return out == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+
+#endif
 #endif
 #endif

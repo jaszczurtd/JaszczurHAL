@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_GPS
 
@@ -173,4 +173,4 @@ int hal_gps_serial_available(void) {
 #endif /* GPS_RP2040_UART */
 
 #endif /* HAL_ENABLE_GPS */
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

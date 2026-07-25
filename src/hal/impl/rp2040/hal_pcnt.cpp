@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 #ifdef HAL_ENABLE_PCNT
 
@@ -114,4 +114,4 @@ uint32_t hal_pcnt_read_and_reset(uint8_t channel) {
 }
 
 #endif // HAL_ENABLE_PCNT
-#endif // HAL_TARGET_IS_RP2040
+#endif // HAL_TARGET_IS_RP

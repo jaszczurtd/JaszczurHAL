@@ -1,9 +1,8 @@
 /*
  * FatFs disk I/O glue for SD cards on SPI.
  *
- * The SD command sequence and token handling follow the battle-tested SdFat
- * SdSpiCard flow used by arduino-pico, but the transport is pure JaszczurHAL:
- * hal_spi + hal_gpio + hal_system.
+ * The SD command sequence and token handling follow the SdFat SdSpiCard flow.
+ * The transport uses hal_spi, hal_gpio and hal_system.
  */
 
 #include "hal/hal_config.h"

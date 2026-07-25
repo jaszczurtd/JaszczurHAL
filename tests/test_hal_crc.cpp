@@ -6,7 +6,7 @@
 void setUp(void) {}
 void tearDown(void) {}
 
-/* Canonical "123456789" catalog check string. */
+/* Standard "123456789" catalog check string. */
 static const uint8_t kCheck[9] = {'1', '2', '3', '4', '5', '6', '7', '8', '9'};
 
 /* ── CRC-8/MAXIM-DOW ────────────────────────────────────────────────────────

@@ -8,6 +8,7 @@
 #include "impl/shared/network/jh_net_address_utils.h"
 #include "impl/shared/network/jh_network_backend.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
+#include "impl/shared/network/jh_network_runtime.h"
 
 static jh_network_handle_slot_t s_slots[HAL_UDP_SOCKET_MAX_INSTANCES];
 static jh_network_handle_pool_t s_pool = {};
@@ -51,8 +52,13 @@ static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
   }
   const hal_net_capabilities_t family =
       endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
-  return (hal_net_get_capabilities() & family) != 0u ? HAL_OK
-                                                     : HAL_EUNSUPPORTED;
+  hal_net_capabilities_t capabilities = 0u;
+  const hal_status_t capability_status =
+      hal_net_get_capabilities_ex(&capabilities);
+  if (capability_status != HAL_OK) {
+    return capability_status;
+  }
+  return (capabilities & family) != 0u ? HAL_OK : HAL_EUNSUPPORTED;
 }
 
 hal_status_t hal_udp_socket_open_ex(hal_udp_socket_t *out_socket) {
@@ -60,6 +66,10 @@ hal_status_t hal_udp_socket_open_ex(hal_udp_socket_t *out_socket) {
     return HAL_EINVAL;
   }
   *out_socket = nullptr;
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   const jh_network_udp_ops_t *ops = udp_ops();
   if (ops == nullptr || ops->socket_open == nullptr ||
       ops->socket_close == nullptr) {
@@ -95,6 +105,10 @@ hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
   if (endpoint_status != HAL_OK) {
     return endpoint_status;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -123,6 +137,10 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
   const hal_status_t endpoint_status = validate_endpoint(remote, false);
   if (endpoint_status != HAL_OK) {
     return endpoint_status;
+  }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
   }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
@@ -153,6 +171,10 @@ hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
   if (out_received == nullptr || (max_len > 0u && buffer == nullptr)) {
     return HAL_EINVAL;
   }
+  const hal_status_t runtime_status = jh_network_require_ready();
+  if (runtime_status != HAL_OK) {
+    return runtime_status;
+  }
   void *token = nullptr;
   if (resolve_socket(socket, &token) != HAL_OK) {
     return HAL_EINVAL;
@@ -176,6 +198,9 @@ int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
 }
 
 bool hal_udp_socket_can_recv(hal_udp_socket_t socket) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_udp_ops_t *ops = udp_ops();
   return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
@@ -183,6 +208,9 @@ bool hal_udp_socket_can_recv(hal_udp_socket_t socket) {
 }
 
 bool hal_udp_socket_can_send(hal_udp_socket_t socket) {
+  if (jh_network_require_ready() != HAL_OK) {
+    return false;
+  }
   void *token = nullptr;
   const jh_network_udp_ops_t *ops = udp_ops();
   return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&

@@ -1,6 +1,25 @@
 cmake_minimum_required(VERSION 3.16)
 project(JaszczurHAL_STM32G474 C CXX)
 
+set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
+set(JH_TARGET "stm32g474" CACHE STRING "JaszczurHAL target ID")
+set(JH_BOARD "nucleo-g474re" CACHE STRING "Physical board profile")
+set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
+include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
+jh_generate_board_config(
+    ROOT "${JH_ROOT}"
+    TARGET "${JH_TARGET}"
+    BOARD "${JH_BOARD}"
+    OUTPUT_DIR
+        "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
+    DEFINES ${EXTRA_HAL_DEFINES})
+if(NOT JH_RESOLVED_TARGET STREQUAL "stm32g474")
+    message(FATAL_ERROR "stm32_lib requires target stm32g474")
+endif()
+
+include("${JH_ROOT}/cmake/jh_board_components.cmake")
+jh_apply_board_components(PROVIDER "${JH_BOARD_PROVIDER}")
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -8,6 +27,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
+jh_bearssl_source_manifest(
+    _jh_stm32_bearssl_sources
+    _jh_stm32_bearssl_include_dirs)
+jh_littlefs_source_manifest(
+    STM32_LITTLEFS_SOURCES
+    STM32_LITTLEFS_INCLUDE_DIRS)
 
 # ── HAL implementation sources (STM32G474 skeleton) ────────────────────────
 file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
@@ -20,7 +48,6 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.cpp
     ${SRC}/hal/impl/shared/*.c
 )
-list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/lwip/vendor/")
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/PubSubClient/")
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 set(STM32_MQTT_INCLUDE_DIRS)
@@ -34,14 +61,11 @@ if(DEFINED EXTRA_HAL_DEFINES)
             ${SRC}/hal/impl/shared/frameworks/PubSubClient/src)
     endif()
 endif()
-set(STM32_LITTLEFS_SOURCES
-    ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs.c
-    ${SRC}/hal/impl/stm32g474/drivers/littlefs/lfs_util.c
-)
 list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES
+    ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
@@ -57,7 +81,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal_app_entry.cpp
 )
 
-# ── Utility sources safe outside Arduino ────────────────────────────────────
+# ── Target-independent utility sources ──────────────────────────────────────
 set(UTIL_SOURCES
     ${SRC}/utils/pidController.cpp
     ${SRC}/utils/draw7Segment.cpp
@@ -72,6 +96,7 @@ add_library(JaszczurHAL STATIC
     ${STM32_IMPL_SOURCES}
     ${HAL_COMMON_SOURCES}
     ${UTIL_SOURCES}
+    "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c"
 )
 
 set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
@@ -80,13 +105,24 @@ set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
 
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
-    ${SRC}/hal/impl/stm32g474/drivers/littlefs
+    ${JH_BOARD_GENERATED_DIR}
+    ${STM32_LITTLEFS_INCLUDE_DIRS}
     ${STM32_MQTT_INCLUDE_DIRS}
+    ${_jh_stm32_bearssl_include_dirs}
 )
+add_custom_command(TARGET JaszczurHAL POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E make_directory
+        "${CMAKE_BINARY_DIR}/include/generated"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+        "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
+        "${JH_BOARD_GENERATED_DIR}/jh_board_registry.h"
+        "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
+        "${CMAKE_BINARY_DIR}/include/generated"
+    VERBATIM)
 
-set(_jh_extra_hal_defines)
+set(_jh_extra_hal_defines ${JH_BOARD_COMPILE_DEFINITIONS})
 if(DEFINED EXTRA_HAL_DEFINES)
-    set(_jh_extra_hal_defines ${EXTRA_HAL_DEFINES})
+    list(APPEND _jh_extra_hal_defines ${EXTRA_HAL_DEFINES})
 endif()
 
 jh_cmake_defines_contain(_jh_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_jh_extra_hal_defines})
@@ -115,7 +151,7 @@ endif()
 # EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_MCP2515) once their
 # STM32G474 backend lands.
 target_compile_definitions(JaszczurHAL PUBLIC
-    HAL_TARGET_STM32G474=1   # canonical backend selection (see src/hal/hal_target.h)
+    HAL_TARGET_STM32G474=1   # exact backend selection (see src/hal/hal_target.h)
     JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     HAL_ENABLE_I2C
     HAL_ENABLE_I2C_SLAVE
@@ -144,10 +180,21 @@ if(_jh_extra_hal_defines)
     target_compile_definitions(JaszczurHAL PUBLIC ${_jh_extra_hal_defines})
 endif()
 
+jh_cmake_defines_contain(_jh_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
+    ${_jh_extra_hal_defines})
+if(_jh_stm32_has_cyw43_gspi)
+    jh_cmake_defines_contain(_jh_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP
+        ${_jh_extra_hal_defines})
+    if(_jh_stm32_has_cyw43_lwip)
+        jh_target_enable_cyw43_driver(JaszczurHAL LWIP)
+    else()
+        jh_target_enable_cyw43_driver(JaszczurHAL)
+    endif()
+endif()
+
 jh_cmake_defines_contain(_jh_stm32_has_tls HAL_ENABLE_TLS
     ${_jh_extra_hal_defines})
 if(_jh_stm32_has_tls)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
     jh_add_bearssl_source_library(jh_bearssl_stm32)
     target_link_libraries(JaszczurHAL PUBLIC jh_bearssl_stm32)
 endif()

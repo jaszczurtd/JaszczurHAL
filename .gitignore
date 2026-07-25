@@ -1,31 +1,18 @@
-# CMake build output
-build/
-cmake-build-*/
-build_*/
+# Managed build output
 .build/
-
-# CMake cache files
-CMakeCache.txt
-CMakeFiles/
-cmake_install.cmake
-CTestTestfile.cmake
-Makefile
-install_manifest.txt
-
-# Compiled objects and archives
-*.o
-*.a
+build/
+build*/
 *__pycache__*
 *.py[cod]
-GRBHAL/
 
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/
+third_party/BearSSL/
+third_party/lwip/
+third_party/littlefs/
 third_party/pico-sdk/
 third_party/picotool/
 third_party/riscv-toolchain/
-zephyr
-doc/zephyr_driver_candidates.md
 
 # IDE / editor
 .vscode/
@@ -35,6 +22,11 @@ doc/zephyr_driver_candidates.md
 !examples/*/.vscode/
 !examples/*/.vscode/**
 examples/*/.vscode/jaszczurhal.local.json
+examples/56_http_https_client/ca_certificate.h
+# Keep hardware project manifests tracked, but ignore per-user VS Code state.
+!tests/hardware/*/.vscode/
+tests/hardware/*/.vscode/*
+!tests/hardware/*/.vscode/jaszczurhal.project.json
 .idea/
 .codex
 *.swp

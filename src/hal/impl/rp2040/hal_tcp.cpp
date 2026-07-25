@@ -1,5 +1,5 @@
 #include "../../hal_target.h"
-#if HAL_TARGET_IS_RP2040
+#if HAL_TARGET_IS_RP
 #include "../../hal_config.h"
 
 #ifdef HAL_ENABLE_TCP
@@ -861,4 +861,4 @@ extern "C" const jh_network_tcp_ops_t *jh_rp2040_cyw43_tcp_ops(void) {
 }
 
 #endif /* HAL_ENABLE_TCP */
-#endif /* HAL_TARGET_IS_RP2040 */
+#endif /* HAL_TARGET_IS_RP */

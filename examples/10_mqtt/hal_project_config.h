@@ -5,6 +5,8 @@
 #endif
 
 /* Entry point is selected by the build system:
- * RP2040 generates setup()/loop(); STM32 defines HAL_PROVIDE_APP_ENTRY. */
+ * RP and STM32 use the HAL-owned application entry point. */
 
+#ifndef HAL_ENABLE_MQTT
 #define HAL_ENABLE_MQTT
+#endif

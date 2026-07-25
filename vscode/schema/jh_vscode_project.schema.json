@@ -22,6 +22,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "boards": {
+          "type": "object",
+          "description": "Default board id used by the automated example dispatcher for each declared target.",
+          "additionalProperties": { "type": "string" }
+        },
         "variants": {
           "type": "array",
           "items": {
@@ -50,21 +55,17 @@
     },
     "toolchain": {
       "type": "string",
-      "enum": ["arduino-cli", "cmake", "custom"]
+      "enum": ["cmake", "custom"]
     },
     "target": {
       "type": "string",
       "minLength": 1,
-      "description": "Active target family id (e.g. rp2040, stm32g474). Absent = rp2040 (current behaviour)."
+      "description": "Active target family id (e.g. rp2040, rp2350-arm, rp2350-riscv, stm32g474). Absent = rp2040."
     },
     "board": {
       "type": "string",
       "minLength": 1,
-      "description": "Active board/variant id within the active target (resolved against the target registry in vscode/targets/<target>.json)."
-    },
-    "fqbn": {
-      "type": "string",
-      "minLength": 1
+      "description": "Active physical board profile id within the active target (resolved against boards/targets and boards/profiles)."
     },
     "buildDir": {
       "type": "string",
@@ -99,21 +100,22 @@
     },
     "targetProfiles": {
       "type": "object",
-      "description": "Per-target overlay manifests, keyed by target id (rp2040, stm32g474, ...). Deliberately NOT named 'targets' to avoid colliding with cmake.targets. The active target's overlay is deep-merged over the base manifest during resolution; absent = single implicit rp2040 profile (current behaviour).",
+      "description": "Per-target overlay manifests, keyed by target id (rp2040, rp2350-arm, stm32g474, ...). Deliberately NOT named 'targets' to avoid colliding with cmake.targets. The active target's overlay is deep-merged over the base manifest during resolution; absent = single implicit native rp2040 profile.",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": true,
         "properties": {
           "toolchain": {
             "type": "string",
-            "enum": ["arduino-cli", "cmake", "custom"]
+            "enum": ["cmake", "custom"]
           },
           "buildDir": { "type": "string" },
           "cmakeBuildDir": { "type": "string" },
           "cmake": { "type": "object", "additionalProperties": true },
           "upload": { "type": "object", "additionalProperties": true },
           "identity": { "type": "object", "additionalProperties": true },
-          "artifacts": { "type": "object", "additionalProperties": true }
+          "artifacts": { "type": "object", "additionalProperties": true },
+          "ota": { "type": "object", "additionalProperties": true }
         }
       }
     },
@@ -145,6 +147,9 @@
         "uf2": {
           "type": "string"
         },
+        "ota": {
+          "type": "string"
+        },
         "compileCommands": {
           "type": "string"
         }
@@ -152,7 +157,7 @@
     },
     "upload": {
       "type": "object",
-      "description": "Upload configuration. Stable dispatcher paths currently cover RP2040 UF2/serial-style upload and STM32 OpenOCD; custom/esptool are reserved extension points.",
+      "description": "Upload configuration. Stable dispatcher paths cover RP-family UF2/serial-style upload and STM32 OpenOCD; custom/esptool are reserved extension points.",
       "additionalProperties": true,
       "properties": {
         "strategy": {
@@ -175,6 +180,35 @@
             "target": { "type": "string" }
           }
         }
+      }
+    },
+    "ota": {
+      "type": "object",
+      "description": "Native RP OTA discovery and authenticated upload settings.",
+      "additionalProperties": true,
+      "properties": {
+        "hostname": { "type": "string" },
+        "host": { "type": "string" },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 8266
+        },
+        "listenPort": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535,
+          "default": 8266,
+          "description": "Host TCP callback port. Set zero explicitly to request an ephemeral port."
+        },
+        "broadcast": { "type": "string" },
+        "password": {
+          "type": "string",
+          "description": "Inline development-only password; prefer passwordEnv."
+        },
+        "passwordEnv": { "type": "string" },
+        "allowEmptyPassword": { "type": "boolean" }
       }
     },
     "hooks": {

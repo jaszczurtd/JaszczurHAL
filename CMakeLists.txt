@@ -8,7 +8,7 @@ set(CMAKE_C_STANDARD 11)
 # Host-only dynamic analysis for the unit-test suite (NOT firmware - Valgrind
 # cannot run on MCU targets). Run locally or in CI with:
 #
-#     ctest --test-dir build -T memcheck --output-on-failure
+#     ctest --test-dir .build/host -T memcheck --output-on-failure
 #
 # These variables must be set *before* include(CTest) so the CTest module bakes
 # them into DartConfiguration.tcl. --error-exitcode=1 makes Valgrind fail the
@@ -39,6 +39,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 # Excluded sources are compiled by dedicated tests when they need local stubs or
 # extra fixtures.
 set(UTIL_SOURCES
+    ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
@@ -46,6 +47,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
     ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
     ${SRC}/hal/impl/shared/network/jh_public_network_backend_adapter.cpp
+    ${SRC}/hal/impl/shared/network/ota/jh_ota_image.cpp
+    ${SRC}/hal/impl/shared/network/ota/jh_ota_swap_engine.cpp
     ${SRC}/hal/hal_can_util.cpp
     ${SRC}/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
@@ -88,6 +91,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_gspi_transport.cpp
     ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.cpp
     ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
+    ${SRC}/hal/impl/shared/drivers/flash/jh_flash_transaction_engine.cpp
     ${SRC}/hal/hal_kv.cpp
     ${SRC}/hal/hal_modem_at.cpp
     ${SRC}/hal/hal_simcom_a76xx.cpp

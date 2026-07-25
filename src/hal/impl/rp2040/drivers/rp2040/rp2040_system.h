@@ -4,7 +4,7 @@
  * @file rp2040_system.h
  * @brief RP2040 SoC-specific system services driver.
  *
- * Owns the pico-sdk / arduino-pico bindings that the @c hal_system layer
+ * Owns the Pico SDK bindings that the @c hal_system layer
  * would otherwise have to call directly: hardware watchdog, USB-boot
  * bootloader entry, on-die temperature sensor, free-heap query, unique
  * board id and the @c tight_loop_contents() idle hint.
@@ -13,7 +13,7 @@
  * never reaches for any RP2040 register or pico-sdk symbol directly.
  *
  * The "watchdog caused reboot" flag is latched once, during C++ static
- * initialization (BEFORE @c setup() runs) so a later @c
+ * initialization (before @c app_start runs) so a later
  * rp2040_system_watchdog_enable() call -- which clobbers the watchdog
  * scratch marker -- cannot lose the information.
  */
@@ -72,8 +72,8 @@ void rp2040_system_idle(void);
  *  (@c __StackLimit / @c __bss_end__) minus @c mallinfo().uordblks. */
 uint32_t rp2040_system_get_free_heap(void);
 
-/** @brief On-die temperature, in °C (±2 °C typical). Reads the internal
- *  temperature sensor over the native ADC (@c ADC_TEMPERATURE_CHANNEL_NUM). */
+/** @brief Approximate on-die temperature in °C. Reads the internal temperature
+ *  sensor through the shared native ADC path. */
 float rp2040_system_read_chip_temp(void);
 
 /** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not
