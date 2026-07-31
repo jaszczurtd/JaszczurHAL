@@ -9,6 +9,22 @@ from typing import Any
 BOARD_SELECTION_INPUT_ID = "boardSelection"
 SYNC_BOARD_PICKER_LABEL = "Project: Sync board picker"
 
+# Single source of truth for .vscode/extensions.json across every generator.
+# cpptools drives IntelliSense over the patched compile database, cmake-tools is
+# the C_Cpp.default.configurationProvider written into settings.json,
+# cortex-debug owns the launch.json configuration and serial-monitor sits beside
+# the jh-vscode monitor actions.
+VSCODE_EXTENSION_RECOMMENDATIONS = [
+    "ms-vscode.cpptools",
+    "ms-vscode.cmake-tools",
+    "marus25.cortex-debug",
+    "ms-vscode.vscode-serial-monitor",
+]
+
+
+def extensions_recommendations() -> dict[str, Any]:
+    return {"recommendations": list(VSCODE_EXTENSION_RECOMMENDATIONS)}
+
 
 def board_selection_values(
     registry: dict[str, dict[str, Any]],

@@ -24,7 +24,15 @@ my-device/
     tasks.json
     launch.json
     keybindings.reference.json
+    extensions.json
 ```
+
+`extensions.json` recommends the extensions the project files depend on:
+`ms-vscode.cpptools` for IntelliSense, `ms-vscode.cmake-tools` as the
+`C_Cpp.default.configurationProvider` set in `settings.json`,
+`marus25.cortex-debug` for the `launch.json` debug configuration and
+`ms-vscode.vscode-serial-monitor` alongside the `jh-vscode` monitor actions.
+VS Code offers to install missing entries when the folder is opened.
 
 The tracked manifest selects `toolchain: "cmake"` and points
 `cmake.sourceDir` at `libraries/JaszczurHAL/cmake/jh_firmware_project`.
