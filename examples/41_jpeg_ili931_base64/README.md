@@ -14,5 +14,5 @@ Enabled modules:
 - `HAL_ENABLE_JPEG_AS_BASE64` (propagates `HAL_ENABLE_CRYPTO` and
   `HAL_ENABLE_JPEG`)
 
-JPEGDecoder/picojpeg does not support progressive JPEG files. Use baseline JPEG
+TJpgDec does not support progressive JPEG files. Use baseline JPEG
 assets for this workflow.

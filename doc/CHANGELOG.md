@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Managed media, JSON, storage and test dependencies
+
+- Replaced the tracked cJSON, LodePNG and picojpeg source copies with pinned,
+  git-ignored checkouts under `third_party/`, each controlled by its own
+  version file and `ensure_*` helper.
+- Switched BearSSL and LodePNG to project-owned forks and replaced picojpeg with
+  the clean `jaszczurtd/TJpg_Decoder` Tiny JPEG Decompressor core.
+- Preserved the C LodePNG ABI through a thin wrapper and isolated the GCC 15
+  RISC-V optimizer false positive with a source-specific build option.
+- Added clean-checkout enforcement to the cJSON, LodePNG and JPEG dependency
+  helpers; no managed component requires a tracked patch file.
+- Replaced the formatted FatFs source copy with ChaN's unchanged official R0.16
+  archive, authenticated by SHA-256 and integrated through tracked feature and
+  configuration wrappers.
+- Replaced the tracked Unity source copy with a clean exact-commit checkout from
+  the project fork while preserving `HAL_ENABLE_UNITY` and project configuration
+  through thin integration wrappers.
+- Updated the component inventory, generated SBOM, dependency documentation
+  and CI preparation steps for the managed components.
+
 ### Host OTA setup
 
 - Added an idempotent `runmefirst.sh` firewall preflight for the default

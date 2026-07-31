@@ -2,16 +2,22 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: bundled `LodePNG` enabled by `HAL_ENABLE_PNG` and Base64 PNG helpers
+Covers: managed `LodePNG` enabled by `HAL_ENABLE_PNG` and Base64 PNG helpers
 enabled by `HAL_ENABLE_PNG_AS_BASE64`.
 
-`LodePNG` is a standalone PNG encoder/decoder bundled in
-`src/hal/impl/shared/frameworks/lodepng/`. It is not a HAL wrapper and does not
-abstract hardware. JaszczurHAL only gates the upstream header/source behind
-`HAL_ENABLE_PNG` and exposes the memory-based API through the normal include
+`LodePNG` is a standalone PNG encoder/decoder fetched into
+`third_party/lodepng` at the commit pinned by
+`third_party/lodepng_version.conf`. Thin integration wrappers in
+`src/hal/impl/shared/frameworks/lodepng/` gate the upstream source behind
+`HAL_ENABLE_PNG` and expose the memory-based API through the existing include
 path.
 
-Bundled version: `LodePNG` 20260119.
+Managed version: `LodePNG` 20260119 from the `jaszczurtd/lodepng` fork.
+
+The tracked wrapper preserves the C ABI when the source is compiled as C++.
+GCC 15 for RP2350 RISC-V compiles this source with `-fno-inline` to avoid an
+interprocedural optimizer false positive while retaining the complete warning
+policy. The managed checkout remains unchanged.
 
 Author/license: upstream `LodePNG` is authored by Lode Vandevenne and
 distributed under the zlib license.

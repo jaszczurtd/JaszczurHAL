@@ -55,16 +55,21 @@ dependencies, so it requires network access. The focused firewall helper is
 
 ### `third_party/update_components.sh`
 
-The normal dependency-management entrypoint. It invokes all seven
+The normal dependency-management entrypoint. It invokes all twelve
 `scripts/ensure_*.sh` helpers in dependency order:
 
 1. BearSSL
-2. lwIP
-3. littlefs
-4. FreeRTOS-Kernel
-5. Pico SDK
-6. picotool
-7. RISC-V toolchain
+2. cJSON
+3. LodePNG
+4. TJpg_Decoder
+5. FatFs
+6. Unity
+7. lwIP
+8. littlefs
+9. FreeRTOS-Kernel
+10. Pico SDK
+11. picotool
+12. RISC-V toolchain
 
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
@@ -181,6 +186,10 @@ directory is cloned at the pinned ref. A directory at another commit, or a
 non-Git directory in the managed location, is replaced. `--verify-only`
 reports a mismatch without modifying it.
 
+Archive-backed managed directories use an exact SHA-256 pin and a deterministic
+manifest of the extracted files. A missing or modified installation is replaced
+in normal mode and rejected by `--verify-only`.
+
 User-provided FreeRTOS, Pico SDK, and picotool paths are treated as externally
 managed. They are verified and are not replaced by their focused helpers.
 
@@ -190,6 +199,37 @@ Synchronizes `third_party/BearSSL` from
 `third_party/bearssl_version.conf`, verifies the exact commit and required
 headers/sources, and supports `--verify-only`, `--repo-root`, and `--dir`.
 `--enable` and `--force` are accepted for a uniform updater interface.
+
+### `scripts/ensure_cjson.sh`
+
+Synchronizes `third_party/cJSON` from `third_party/cjson_version.conf` and
+verifies the exact commit, license, core sources and utility sources. Options
+mirror the BearSSL helper.
+
+### `scripts/ensure_lodepng.sh`
+
+Synchronizes `third_party/lodepng` from `third_party/lodepng_version.conf` and
+verifies the clean exact commit, license, header and implementation. Options
+mirror the BearSSL helper.
+
+### `scripts/ensure_jpeg.sh`
+
+Synchronizes `third_party/TJpg_Decoder` from `third_party/jpeg_version.conf`
+and verifies the clean exact commit, license and Tiny JPEG Decompressor core.
+Options mirror the BearSSL helper.
+
+### `scripts/ensure_fatfs.sh`
+
+Synchronizes `third_party/FatFs` from ChaN's official R0.16 archive recorded in
+`third_party/fatfs_version.conf`. It authenticates the download with SHA-256,
+verifies the complete extracted tree plus required source and license files,
+and supports `--verify-only`, `--repo-root`, and `--dir`.
+
+### `scripts/ensure_unity.sh`
+
+Synchronizes `third_party/Unity` from `third_party/unity_version.conf` and
+verifies the clean exact commit, repository origin, license and core framework
+sources. Options mirror the BearSSL helper.
 
 ### `scripts/ensure_lwip.sh`
 

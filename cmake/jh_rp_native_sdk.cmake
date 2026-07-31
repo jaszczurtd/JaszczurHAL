@@ -23,10 +23,13 @@ set(SRC "${JH_ROOT}/src")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
 include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 include("${JH_ROOT}/cmake/jh_bearssl.cmake")
+include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
 include("${JH_ROOT}/cmake/jh_littlefs.cmake")
 jh_bearssl_source_manifest(
     _jh_native_bearssl_sources
     _jh_native_bearssl_include_dirs)
+jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
+jh_managed_framework_configure_sources()
 
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
 jh_hal_define_enabled(_jh_native_kv HAL_ENABLE_KV)
@@ -155,7 +158,8 @@ endif()
 target_include_directories(JaszczurHAL PUBLIC
     "${SRC}"
     "${SRC}/hal/impl/rp2040/drivers/usb"
-    ${_jh_native_bearssl_include_dirs})
+    ${_jh_native_bearssl_include_dirs}
+    ${_jh_native_framework_include_dirs})
 if(DEFINED HAL_PROJECT_CONFIG_DIR)
     target_include_directories(JaszczurHAL PUBLIC ${HAL_PROJECT_CONFIG_DIR})
 endif()

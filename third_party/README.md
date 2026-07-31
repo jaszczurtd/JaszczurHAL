@@ -29,17 +29,29 @@ but the central updater is the normal entry point.
 | Component | Pin | Managed checkout | Purpose |
 |-----------|-----|------------------|---------|
 | BearSSL | `bearssl_version.conf` | `BearSSL/` | TLS engine used by host, RP and STM32 builds |
+| cJSON | `cjson_version.conf` | `cJSON/` | JSON parser and utility API |
+| LodePNG | `lodepng_version.conf` | `lodepng/` | Memory-oriented PNG codec |
+| TJpg_Decoder | `jpeg_version.conf` | `TJpg_Decoder/` | Tiny JPEG Decompressor core for RGB565 output |
+| FatFs | `fatfs_version.conf` | `FatFs/` | FAT filesystem core used by shared SD storage |
+| Unity | `unity_version.conf` | `Unity/` | Test framework used by host and target-side test builds |
 | lwIP | `lwip_version.conf` | `lwip/` | TCP/IP stack used by the JaszczurHAL CYW43 integration |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by native RP and STM32G474 storage |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 
-JaszczurHAL-owned BearSSL adapters and lwIP port configuration remain tracked
-under `src/hal/impl/shared/frameworks/`. Only their upstream source trees are
-managed here. The littlefs checkout is consumed directly by the native RP and
-STM32G474 CMake recipes; target-specific flash adapters remain tracked in
-their respective backend directories.
+JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG, FatFs and Unity integration wrappers,
+along with the lwIP port configuration, remain tracked under
+`src/hal/impl/shared/frameworks/`. Their upstream source trees are managed
+here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean exact-commit
+checkouts; verify-only mode rejects local or untracked changes. Their configured
+repository origins are also enforced, including the project-owned BearSSL and
+LodePNG and Unity forks. FatFs comes from ChaN's official R0.16 archive, authenticated by
+the SHA-256 value in `fatfs_version.conf`; the helper verifies the complete
+extracted file tree and rejects changes in verify-only mode. The littlefs
+checkout is consumed directly by the native RP and STM32G474 CMake recipes;
+target-specific flash adapters remain tracked in their respective backend
+directories.
 
 The Pico SDK submodules required by native builds are listed in
 `PICO_SDK_SUBMODULES` in `pico_sdk_version.conf`. JaszczurHAL deliberately uses

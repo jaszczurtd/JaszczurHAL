@@ -15,7 +15,7 @@
 #endif
 
 #ifdef HAL_ENABLE_JPEG
-#include "hal/impl/shared/frameworks/jpeg/JPEGDecoder.h"
+#include "hal/impl/shared/frameworks/jpeg/tjpgd.h"
 #endif
 
 void debugInit(void) { hal_debug_init(HAL_DEBUG_DEFAULT_BAUD); }
@@ -551,6 +551,71 @@ bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
 #endif
 
 #ifdef HAL_ENABLE_JPEG
+typedef struct {
+  const uint8_t *input;
+  size_t input_size;
+  size_t input_offset;
+  uint16_t *output;
+  size_t output_pixels;
+  size_t output_width;
+  bool output_valid;
+} hal_tools_jpeg_context_t;
+
+static size_t hal_tools_jpeg_input(JDEC *decoder, uint8_t *buffer,
+                                   size_t length) {
+  hal_tools_jpeg_context_t *context =
+      (hal_tools_jpeg_context_t *)decoder->device;
+  if (context == NULL || context->input_offset > context->input_size) {
+    return 0u;
+  }
+
+  const size_t remaining = context->input_size - context->input_offset;
+  if (length > remaining) {
+    length = remaining;
+  }
+  if (buffer != NULL && length != 0u) {
+    memcpy(buffer, context->input + context->input_offset, length);
+  }
+  context->input_offset += length;
+  return length;
+}
+
+static int hal_tools_jpeg_output(JDEC *decoder, void *bitmap,
+                                 JRECT *rectangle) {
+  hal_tools_jpeg_context_t *context =
+      (hal_tools_jpeg_context_t *)decoder->device;
+  if (context == NULL || bitmap == NULL || rectangle == NULL ||
+      rectangle->right < rectangle->left ||
+      rectangle->bottom < rectangle->top) {
+    return 0;
+  }
+
+  const size_t block_width =
+      (size_t)rectangle->right - (size_t)rectangle->left + 1u;
+  const size_t block_height =
+      (size_t)rectangle->bottom - (size_t)rectangle->top + 1u;
+  const uint16_t *source = (const uint16_t *)bitmap;
+
+  for (size_t row = 0u; row < block_height; ++row) {
+    const size_t output_row = (size_t)rectangle->top + row;
+    size_t output_offset = 0u;
+    if (!hal_tools_mul_size(output_row, context->output_width,
+                            &output_offset) ||
+        output_offset > context->output_pixels ||
+        (size_t)rectangle->left > context->output_pixels - output_offset ||
+        block_width >
+            context->output_pixels - output_offset - (size_t)rectangle->left) {
+      context->output_valid = false;
+      return 0;
+    }
+    output_offset += (size_t)rectangle->left;
+    memcpy(context->output + output_offset, source + (row * block_width),
+           block_width * sizeof(*source));
+  }
+
+  return 1;
+}
+
 bool jpegDecodeRgb565(const uint8_t *jpeg, size_t jpegSize,
                       unsigned short *rgb565, size_t rgb565Pixels,
                       unsigned *width, unsigned *height) {
@@ -561,52 +626,49 @@ bool jpegDecodeRgb565(const uint8_t *jpeg, size_t jpegSize,
     *height = 0u;
   }
 
-  if (jpeg == NULL || jpegSize == 0u || jpegSize > UINT32_MAX ||
-      rgb565 == NULL || width == NULL || height == NULL) {
+  if (jpeg == NULL || jpegSize == 0u || rgb565 == NULL || width == NULL ||
+      height == NULL) {
     return false;
   }
 
-  if (JpegDec.decodeArray(jpeg, (uint32_t)jpegSize) != 1) {
-    JpegDec.abort();
+  void *workspace = malloc(TJPGD_WORKSPACE_SIZE);
+  if (workspace == NULL) {
+    return false;
+  }
+
+  hal_tools_jpeg_context_t context = {};
+  context.input = jpeg;
+  context.input_size = jpegSize;
+  context.output = rgb565;
+  context.output_pixels = rgb565Pixels;
+  context.output_valid = true;
+
+  JDEC decoder = {};
+  decoder.swap = 0u;
+  JRESULT result = jd_prepare(&decoder, hal_tools_jpeg_input, workspace,
+                              TJPGD_WORKSPACE_SIZE, &context);
+  if (result != JDR_OK) {
+    free(workspace);
     return false;
   }
 
   size_t pixels = 0u;
-  if (!hal_tools_mul_size((size_t)JpegDec.width, (size_t)JpegDec.height,
+  if (!hal_tools_mul_size((size_t)decoder.width, (size_t)decoder.height,
                           &pixels) ||
       pixels > rgb565Pixels) {
-    JpegDec.abort();
+    free(workspace);
     return false;
   }
 
-  *width = (unsigned)JpegDec.width;
-  *height = (unsigned)JpegDec.height;
-
-  while (JpegDec.available()) {
-    if (JpegDec.read() != 1) {
-      JpegDec.abort();
-      return false;
-    }
-
-    const int mcu_x0 = JpegDec.MCUx * JpegDec.MCUWidth;
-    const int mcu_y0 = JpegDec.MCUy * JpegDec.MCUHeight;
-    for (int y = 0; y < JpegDec.MCUHeight; ++y) {
-      const int dst_y = mcu_y0 + y;
-      if (dst_y >= JpegDec.height) {
-        break;
-      }
-      for (int x = 0; x < JpegDec.MCUWidth; ++x) {
-        const int dst_x = mcu_x0 + x;
-        if (dst_x >= JpegDec.width) {
-          break;
-        }
-        rgb565[((size_t)dst_y * (size_t)JpegDec.width) + (size_t)dst_x] =
-            JpegDec.pImage[((size_t)y * (size_t)JpegDec.MCUWidth) + (size_t)x];
-      }
-    }
+  context.output_width = (size_t)decoder.width;
+  result = jd_decomp(&decoder, hal_tools_jpeg_output, 0u);
+  free(workspace);
+  if (result != JDR_OK || !context.output_valid) {
+    return false;
   }
 
-  JpegDec.abort();
+  *width = (unsigned)decoder.width;
+  *height = (unsigned)decoder.height;
   return true;
 }
 #endif

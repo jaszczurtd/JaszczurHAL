@@ -2,6 +2,6 @@
 
 #include "hal/hal_config.h"
 
-#ifdef HAL_ENABLE_CJSON
-#include <cJSON.h>
+#ifdef HAL_ENABLE_JPEG
+#include <tjpgd.h>
 #endif

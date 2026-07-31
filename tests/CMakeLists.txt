@@ -813,6 +813,7 @@ add_executable(test_ff16_memdisk
 )
 target_include_directories(test_ff16_memdisk PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${JH_MANAGED_FRAMEWORK_INCLUDE_DIRS}
 )
 target_compile_definitions(test_ff16_memdisk PRIVATE
     HAL_TARGET_MOCK=1
@@ -820,7 +821,7 @@ target_compile_definitions(test_ff16_memdisk PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_ff16_memdisk PRIVATE -Wall -Wextra)
+target_compile_options(test_ff16_memdisk PRIVATE -Wall -Wextra -Werror)
 add_test(NAME test_ff16_memdisk COMMAND test_ff16_memdisk)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_dht)

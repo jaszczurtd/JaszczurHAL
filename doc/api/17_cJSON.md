@@ -2,14 +2,14 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: bundled `cJSON` and `cJSON_Utils` enabled by `HAL_ENABLE_CJSON`.
+Covers: managed `cJSON` and `cJSON_Utils` enabled by `HAL_ENABLE_CJSON`.
 
-`cJSON` is a small C JSON parser/generator bundled in
-`src/hal/impl/shared/frameworks/cjson/`. It is not a HAL wrapper and does not
-abstract hardware. JaszczurHAL only gates the upstream headers/sources behind
-`HAL_ENABLE_CJSON` and makes them available through the normal include path.
+`cJSON` is a small C JSON parser/generator fetched into `third_party/cJSON` at
+the commit pinned by `third_party/cjson_version.conf`. Thin integration wrappers
+in `src/hal/impl/shared/frameworks/cjson/` gate the upstream headers and sources
+behind `HAL_ENABLE_CJSON` while preserving the public include path.
 
-Bundled version: `cJSON` 1.7.18.
+Managed version: `cJSON` 1.7.18.
 
 Author/license: upstream `cJSON` is authored by Dave Gamble and contributors
 and distributed under the MIT license.
@@ -333,7 +333,7 @@ module:
 
 ## Author And License
 
-The bundled cJSON/cJSON_Utils sources are from upstream `cJSON`, authored by
-Dave Gamble and contributors, and distributed under the MIT license. See the
-source headers in `src/hal/impl/shared/frameworks/cjson/` and the top-level
-README third-party notices.
+The managed cJSON/cJSON_Utils sources are from upstream `cJSON`, authored by
+Dave Gamble and contributors, and distributed under the MIT license. The
+checkout retains upstream `third_party/cJSON/LICENSE`; the exact commit is
+recorded in `third_party/cjson_version.conf`.

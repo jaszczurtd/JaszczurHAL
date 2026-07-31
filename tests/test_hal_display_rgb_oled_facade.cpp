@@ -1,5 +1,5 @@
 #include "hal/hal_display.h"
-#include "unity.h"
+#include "utils/unity.h"
 
 void hal_mock_spi_reset(void);
 uint32_t hal_mock_spi_get_transfer_count(uint8_t bus);

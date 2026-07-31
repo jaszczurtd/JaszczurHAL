@@ -249,8 +249,7 @@ bool pngBase64DecodeRgb565(const char *base64, size_t base64Len,
 /**
  * @brief Decode JPEG bytes from memory directly to RGB565.
  *
- * Uses the bundled JPEGDecoder/picojpeg array path. Progressive JPEG files are
- * not supported by picojpeg.
+ * Uses the managed TJpgDec array path. Progressive JPEG files are unsupported.
  *
  * @param jpeg Input JPEG byte buffer.
  * @param jpegSize Size of @p jpeg in bytes.
