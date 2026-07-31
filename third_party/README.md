@@ -40,18 +40,17 @@ but the central updater is the normal entry point.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 
-JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG, FatFs and Unity integration wrappers,
-along with the lwIP port configuration, remain tracked under
+JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG, FatFs and Unity integration
+wrappers, along with the lwIP port configuration, remain tracked under
 `src/hal/impl/shared/frameworks/`. Their upstream source trees are managed
-here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean exact-commit
-checkouts; verify-only mode rejects local or untracked changes. Their configured
-repository origins are also enforced, including the project-owned BearSSL and
-LodePNG and Unity forks. FatFs comes from ChaN's official R0.16 archive, authenticated by
-the SHA-256 value in `fatfs_version.conf`; the helper verifies the complete
-extracted file tree and rejects changes in verify-only mode. The littlefs
-checkout is consumed directly by the native RP and STM32G474 CMake recipes;
-target-specific flash adapters remain tracked in their respective backend
-directories.
+here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean
+exact-commit checkouts; verify-only mode rejects local or untracked changes.
+Configured repository origins are enforced, including the project-owned
+BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout
+is a direct mirror of ChaN's unchanged R0.16 archive and replaces the unreliable
+runtime download from `elm-chan.org`. The littlefs checkout is consumed directly
+by the native RP and STM32G474 CMake recipes; target-specific flash adapters
+remain tracked in their respective backend directories.
 
 The Pico SDK submodules required by native builds are listed in
 `PICO_SDK_SUBMODULES` in `pico_sdk_version.conf`. JaszczurHAL deliberately uses

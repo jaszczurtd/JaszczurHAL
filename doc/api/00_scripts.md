@@ -220,10 +220,11 @@ Options mirror the BearSSL helper.
 
 ### `scripts/ensure_fatfs.sh`
 
-Synchronizes `third_party/FatFs` from ChaN's official R0.16 archive recorded in
-`third_party/fatfs_version.conf`. It authenticates the download with SHA-256,
-verifies the complete extracted tree plus required source and license files,
-and supports `--verify-only`, `--repo-root`, and `--dir`.
+Synchronizes `third_party/FatFs` from the exact commit of the project-owned
+`jaszczurtd/ff16` repository recorded in `third_party/fatfs_version.conf`.
+That repository mirrors ChaN's unchanged R0.16 archive. The helper verifies the
+repository origin, exact commit, required source and license files, and supports
+`--verify-only`, `--repo-root`, and `--dir`.
 
 ### `scripts/ensure_unity.sh`
 

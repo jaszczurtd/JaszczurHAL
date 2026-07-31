@@ -471,7 +471,7 @@
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://elm-chan.org/fsw/ff/"
+          "url": "https://github.com/jaszczurtd/ff16"
         },
         {
           "type": "other",
@@ -491,8 +491,12 @@
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "5a2def719940c2fbe3f6592a220ec4e3f2fb9e6b"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Unchanged official R0.16 archive authenticated by SHA-256 99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
+          "value": "Exact-commit checkout of the project-owned mirror of ChaN's unchanged R0.16 archive, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -859,5 +863,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:c945e4d2-0ec6-f13c-abe2-ce5aba7dbb7d"
+  "serialNumber": "urn:uuid:29105828-8d44-dc17-9e75-a29d4b86a673"
 }

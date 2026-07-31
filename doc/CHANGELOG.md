@@ -15,9 +15,10 @@ All notable changes to this project will be documented in this file.
   RISC-V optimizer false positive with a source-specific build option.
 - Added clean-checkout enforcement to the cJSON, LodePNG and JPEG dependency
   helpers; no managed component requires a tracked patch file.
-- Replaced the formatted FatFs source copy with ChaN's unchanged official R0.16
-  archive, authenticated by SHA-256 and integrated through tracked feature and
-  configuration wrappers.
+- Replaced the formatted FatFs source copy with an exact-commit checkout of the
+  project-owned `jaszczurtd/ff16` mirror of ChaN's unchanged R0.16 archive,
+  avoiding the unreliable runtime download from `elm-chan.org` while retaining
+  tracked feature and configuration wrappers.
 - Replaced the tracked Unity source copy with a clean exact-commit checkout from
   the project fork while preserving `HAL_ENABLE_UNITY` and project configuration
   through thin integration wrappers.

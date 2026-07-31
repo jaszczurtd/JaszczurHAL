@@ -126,13 +126,16 @@ require(
 )
 fatfs_pin = (THIRD_PARTY / "fatfs_version.conf").read_text(encoding="utf-8")
 require(
-    "https://elm-chan.org/fsw/ff/arc/ff16.zip" in fatfs_pin,
-    "FatFs pin does not use the official R0.16 archive",
+    "FATFS_REPO=https://github.com/jaszczurtd/ff16.git" in fatfs_pin,
+    "FatFs pin does not use the project ff16 repository",
 )
 require(
-    "FATFS_SHA256=99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e"
-    in fatfs_pin,
-    "FatFs archive checksum is not pinned",
+    "FATFS_REF=5a2def719940c2fbe3f6592a220ec4e3f2fb9e6b" in fatfs_pin,
+    "FatFs commit is not pinned",
+)
+require(
+    "FATFS_URL=" not in fatfs_pin and "FATFS_SHA256=" not in fatfs_pin,
+    "FatFs pin still uses the unreliable archive download",
 )
 require(
     not tuple(THIRD_PARTY.glob("*.patch")),
@@ -143,6 +146,7 @@ for helper_name in (
     "ensure_cjson.sh",
     "ensure_lodepng.sh",
     "ensure_jpeg.sh",
+    "ensure_fatfs.sh",
     "ensure_unity.sh",
 ):
     helper_text = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
@@ -150,7 +154,7 @@ for helper_name in (
         "jh_dep_ensure_origin" in helper_text,
         f"{helper_name} does not enforce the pinned repository origin",
     )
-    if helper_name == "ensure_bearssl.sh":
+    if helper_name in {"ensure_bearssl.sh", "ensure_fatfs.sh"}:
         continue
     require(
         "jh_dep_ensure_clean" in helper_text,
@@ -158,8 +162,16 @@ for helper_name in (
     )
 fatfs_helper = (ROOT / "scripts/ensure_fatfs.sh").read_text(encoding="utf-8")
 require(
-    "jh_dep_sync_archive" in fatfs_helper,
-    "ensure_fatfs.sh does not authenticate and synchronize the archive",
+    "jh_dep_sync_pinned" in fatfs_helper,
+    "ensure_fatfs.sh does not synchronize the pinned checkout",
+)
+require(
+    "jh_dep_verify_ref" in fatfs_helper,
+    "ensure_fatfs.sh does not verify the pinned commit",
+)
+require(
+    "jh_dep_sync_archive" not in fatfs_helper,
+    "ensure_fatfs.sh still uses archive synchronization",
 )
 
 for component in (

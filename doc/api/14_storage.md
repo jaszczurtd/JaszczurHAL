@@ -640,8 +640,9 @@ void watchdog_reboot_handler(void) {
 ---
 **impl/shared/frameworks/filesystem:** SD file helpers and the portable SD logger
 implementation used by RP2040 and STM32G474. The unchanged FatFs R0.16 core is
-loaded from the SHA-256-pinned official archive in `third_party/FatFs`; tracked
-wrappers provide the feature gate and the project-owned `ffconf.h`.
+loaded from an exact-commit checkout of the project-owned `jaszczurtd/ff16`
+mirror in `third_party/FatFs`; tracked wrappers provide the feature gate and the
+project-owned `ffconf.h`.
 **impl/.mock:** deterministic test double with injectable SD/open results,
 captured filenames/content, flush counts, and close flags.
 **Thread safety:** shared backend serializes public calls with a singleton
