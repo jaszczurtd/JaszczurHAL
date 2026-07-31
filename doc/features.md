@@ -79,7 +79,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade, including status-returning (`hal_status_t`) access APIs with range validation. | [hal_eeprom.h](../src/hal/hal_eeprom.h) |
 | Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../src/hal/hal_kv.h) |
 | LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; native RP and STM32G474 use linker-reserved internal flash partitions. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
-| FatFs / SD over SPI | SHA-256-pinned FatFs R0.16 core and shared SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
+| FatFs / SD over SPI | Exact-commit FatFs R0.16 checkout and shared SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
 | SD logger | SD-card logging and crash-report logging support. | [hal_sdlogger.h](../src/hal/hal_sdlogger.h), [sdlogger](../src/hal/impl/shared/frameworks/filesystem/sdlogger/) |
 
 ## Sensors, input devices and timekeeping

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch or replace the pinned FatFs archive.
+# Fetch or replace the pinned FatFs checkout.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,18 +34,18 @@ done
 # shellcheck source=../third_party/fatfs_version.conf
 source "${CONFIG_FILE}"
 
-for var in FATFS_VERSION FATFS_URL FATFS_SHA256 FATFS_DIR; do
+for var in FATFS_REPO FATFS_REF FATFS_VERSION FATFS_DIR; do
     [[ -n "${!var:-}" ]] || die "${var} missing in ${CONFIG_FILE}"
 done
-[[ "${FATFS_SHA256}" =~ ^[0-9a-f]{64}$ ]] ||
-    die "FATFS_SHA256 must be a lowercase SHA-256 digest"
 
 COMPONENT_DIR="${DIR_ARG:-${FATFS_DIR}}"
 [[ "${COMPONENT_DIR}" == /* ]] || COMPONENT_DIR="${REPO_ROOT}/${COMPONENT_DIR}"
-jh_dep_sync_archive \
-    "${FATFS_URL}" "${FATFS_SHA256}" "${COMPONENT_DIR}" "${VERIFY_ONLY}"
+jh_dep_sync_pinned \
+    "${FATFS_REPO}" "${FATFS_REF}" "${COMPONENT_DIR}" "${VERIFY_ONLY}"
+jh_dep_ensure_origin "${COMPONENT_DIR}" "${FATFS_REPO}" "${VERIFY_ONLY}"
 jh_dep_verify_paths "${COMPONENT_DIR}" \
     "LICENSE.txt" "source/00history.txt" "source/00readme.txt" \
     "source/diskio.h" "source/ff.c" "source/ff.h" \
     "source/ffsystem.c" "source/ffunicode.c"
-ok "FatFs ready: ${COMPONENT_DIR} (${FATFS_VERSION}, ${FATFS_SHA256})"
+jh_dep_verify_ref "${COMPONENT_DIR}" "${FATFS_REF}"
+ok "FatFs ready: ${COMPONENT_DIR} (${FATFS_VERSION}, ${FATFS_REF})"

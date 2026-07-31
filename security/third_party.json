@@ -148,14 +148,15 @@
       "supplier": "ChaN",
       "licenses": ["BSD-1-Clause"],
       "purl": "pkg:generic/fatfs@R0.16",
+      "commit": "5a2def719940c2fbe3f6592a220ec4e3f2fb9e6b",
       "paths": [
         "third_party/FatFs",
         "third_party/fatfs_version.conf",
         "src/hal/impl/shared/frameworks/filesystem/ff16"
       ],
-      "upstream": "https://elm-chan.org/fsw/ff/",
+      "upstream": "https://github.com/jaszczurtd/ff16",
       "feature_flags": ["HAL_ENABLE_FAT", "HAL_ENABLE_SDLOGGER"],
-      "notes": "Unchanged official R0.16 archive authenticated by SHA-256 99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
+      "notes": "Exact-commit checkout of the project-owned mirror of ChaN's unchanged R0.16 archive, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
     },
     {
       "name": "littlefs",
