@@ -60,13 +60,24 @@ def json_text(data: dict) -> str:
     return json.dumps(data, indent=4, sort_keys=False) + "\n"
 
 
-def load_target_registry(jh_root: Path) -> dict[str, dict]:
+def add_scripts_to_path(jh_root: Path) -> None:
     scripts_dir = jh_root / "scripts"
     if str(scripts_dir) not in sys.path:
         sys.path.insert(0, str(scripts_dir))
+
+
+def load_target_registry(jh_root: Path) -> dict[str, dict]:
+    add_scripts_to_path(jh_root)
     from board_registry import tooling_target_registry
 
     return tooling_target_registry(jh_root)
+
+
+def load_extension_recommendations(jh_root: Path) -> dict:
+    add_scripts_to_path(jh_root)
+    from vscode_task_config import extensions_recommendations
+
+    return extensions_recommendations()
 
 
 def resolve_target_board(registry: dict[str, dict], target: str, board: str | None) -> tuple[str, str]:
@@ -199,15 +210,7 @@ def build_files(
         ),
         ".vscode/tasks.json": render_template(TASKS_TEMPLATE, values),
         ".vscode/launch.json": render_template(LAUNCH_TEMPLATE, values),
-        ".vscode/extensions.json": json_text(
-            {
-                "recommendations": [
-                    "ms-vscode.cpptools",
-                    "ms-vscode.cmake-tools",
-                    "marus25.cortex-debug",
-                ]
-            }
-        ),
+        ".vscode/extensions.json": json_text(load_extension_recommendations(jh_root)),
         ".vscode/keybindings.reference.json": render_template(KEYBINDINGS_TEMPLATE, values),
     }
     return files

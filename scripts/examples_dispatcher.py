@@ -538,6 +538,12 @@ def launch_for(name: str) -> dict[str, Any]:
     }
 
 
+def extensions_for() -> dict[str, Any]:
+    from vscode_task_config import extensions_recommendations
+
+    return extensions_recommendations()
+
+
 def keybindings_for() -> list[dict[str, str]]:
     return [
         {"key": "ctrl+shift+1", "command": "workbench.action.tasks.runTask", "args": "Project: Build"},
@@ -571,6 +577,7 @@ def generate() -> int:
             "tasks.json": base_tasks(target, board, variants),
             "launch.json": launch_for(str(entry["dir"])),
             "keybindings.reference.json": keybindings_for(),
+            "extensions.json": extensions_for(),
         }
         for name, data in files.items():
             (vscode_dir / name).write_text(json_text(data), encoding="utf-8")
