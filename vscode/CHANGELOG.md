@@ -3,6 +3,14 @@
 ## 0.1.0 - Unreleased
 
 - Start the shared VS Code entry layer under `libraries/JaszczurHAL/vscode/`.
+- Move the Python CLI and persistent-monitor logic into a shared runtime with a
+  lazy platform protocol, Linux adapter, compatibility entrypoints, and
+  import-safe behavior on hosts without `fcntl`.
+- Keep the monitor core importable on hosts without pyserial and report the
+  missing dependency through exit code 7 at run time.
+- Report host operations missing from the active platform adapter through exit
+  code 8 instead of an unhandled error.
+- Define the CLI and monitor exit codes in one shared module.
 - Add multi-target board selection: target registry descriptors, `target` /
   `board` / `targetProfiles` manifest fields, `select-board`, and gitignored
   `.vscode/jaszczurhal.local.json` persistence.

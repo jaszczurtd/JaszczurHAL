@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import errno
-import importlib.util
 import hashlib
 import hmac
 import inspect
@@ -17,13 +16,9 @@ from unittest.mock import patch
 
 
 ROOT = Path(sys.argv[1]).resolve()
-RUNTIME = ROOT / "vscode" / "linux" / "runtime" / "jh_vscode.py"
+sys.path.insert(0, str(ROOT))
 
-spec = importlib.util.spec_from_file_location("jh_vscode_native_upload_test", RUNTIME)
-if spec is None or spec.loader is None:
-    raise RuntimeError(f"cannot load {RUNTIME}")
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
+from vscode.runtime import jh_vscode as module
 
 assert module.NATIVE_RP_TARGETS == {"rp2040", "rp2350-arm", "rp2350-riscv"}
 assert "upload-ota" in module.SUPPORTED_ACTIONS
@@ -263,6 +258,11 @@ monitor_args = SimpleNamespace(
     lock_policy="replace-own",
     port=None,
 )
+monitor_platform = SimpleNamespace(
+    persistent_monitor_path=lambda: (
+        ROOT / "vscode" / "linux" / "runtime" / "serial_persistent.py"
+    )
+)
 with patch.object(
     module,
     "load_config_for_action",
@@ -275,7 +275,9 @@ with patch.object(
     return_value=(replacement_port, 0),
 ) as monitor_select, patch.object(
     module, "run_command", return_value=0
-) as monitor_run:
+) as monitor_run, patch.object(
+    module, "get_platform_adapter", return_value=monitor_platform
+):
     assert module.command_monitor(monitor_args, "pico") == 0
 
 monitor_select.assert_called_once_with(monitor_config)
@@ -299,7 +301,9 @@ with patch.object(
     module, "select_verified_identity_port"
 ) as explicit_monitor_select, patch.object(
     module, "run_command", return_value=0
-) as explicit_monitor_run:
+) as explicit_monitor_run, patch.object(
+    module, "get_platform_adapter", return_value=monitor_platform
+):
     assert module.command_monitor(explicit_monitor_args, "pico") == 0
 
 explicit_monitor_exists.assert_not_called()

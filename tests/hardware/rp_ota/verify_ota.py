@@ -18,7 +18,8 @@ import serial
 
 
 ROOT = Path(__file__).resolve().parents[3]
-RUNTIME_PATH = ROOT / "vscode" / "linux" / "runtime" / "jh_vscode.py"
+sys.path.insert(0, str(ROOT))
+RUNTIME_PATH = ROOT / "vscode" / "runtime" / "jh_vscode.py"
 ARTIFACT_SCRIPT_PATH = ROOT / "scripts" / "rp_ota_artifacts.py"
 HAL_OK = 1
 HAL_ENOENT = -6

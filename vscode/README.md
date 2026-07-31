@@ -6,7 +6,13 @@ IntelliSense refresh, board/port helpers, and USB identity cleanup.
 
 The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
 call `entry/jh-vscode` and keep project-specific behavior in configuration.
-Files under `linux/runtime/` and `windows/runtime/` are implementation details.
+Portable CLI, configuration, CMake, artifact, OTA, and persistent-monitor logic
+lives under `runtime/`. Host operations use a lazy platform adapter; the Linux
+implementation and compatibility entrypoints live under `linux/runtime/`.
+The reserved `windows/runtime/` directory does not provide a Windows launcher
+or device adapter yet. These runtime directories are implementation details.
+They ship as regular Python packages with an `__init__.py` in every level, so
+`vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
 [`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
 native RP OTA contract, including firewall and recovery, see
@@ -334,9 +340,14 @@ CYW43 network backend for that ISA.
 4   Ambiguous or unsafe device selection.
 5   Build failed.
 6   Upload failed.
-7   Monitor failed.
+7   Monitor failed, including a host without pyserial.
 8   Unsupported action or platform path.
 ```
+
+Exit code 7 also covers a host without pyserial: the monitor core stays
+importable and reports the missing dependency instead of failing at import
+time. Exit code 8 covers every host operation the active platform adapter does
+not implement.
 
 ## Generated Files And Build Cache
 
