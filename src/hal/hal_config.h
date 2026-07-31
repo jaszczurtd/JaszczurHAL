@@ -550,10 +550,8 @@
                                   HAL_LODEPNG_ENABLE_CPP to opt them back in.
        HAL_ENABLE_PNG_AS_BASE64 - Base64-encoded PNG helpers in tools
                                   (propagates: CRYPTO, PNG).
-       HAL_ENABLE_JPEG          - bundled JPEGDecoder/picojpeg memory-based
-                                  baseline JPEG decoder. SD/LittleFS backends
-                                  are disabled in the default HAL utility
-                                  profile.
+       HAL_ENABLE_JPEG          - managed TJpgDec memory-based baseline JPEG
+                                  decoder with RGB565 output.
        HAL_ENABLE_JPEG_AS_BASE64 - Base64-encoded JPEG helpers in tools
                                   (propagates: CRYPTO, JPEG).
 

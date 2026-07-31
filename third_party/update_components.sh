@@ -24,6 +24,11 @@ if [[ ${VERIFY_ONLY} -eq 1 ]]; then
 fi
 
 "${REPO_ROOT}/scripts/ensure_bearssl.sh" "${ARGS[@]}"
+"${REPO_ROOT}/scripts/ensure_cjson.sh" "${ARGS[@]}"
+"${REPO_ROOT}/scripts/ensure_lodepng.sh" "${ARGS[@]}"
+"${REPO_ROOT}/scripts/ensure_jpeg.sh" "${ARGS[@]}"
+"${REPO_ROOT}/scripts/ensure_fatfs.sh" "${ARGS[@]}"
+"${REPO_ROOT}/scripts/ensure_unity.sh" "${ARGS[@]}"
 "${REPO_ROOT}/scripts/ensure_lwip.sh" "${ARGS[@]}"
 "${REPO_ROOT}/scripts/ensure_littlefs.sh" "${ARGS[@]}"
 "${REPO_ROOT}/scripts/ensure_freertos_kernel.sh" "${ARGS[@]}"

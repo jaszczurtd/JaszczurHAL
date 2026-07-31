@@ -2,18 +2,18 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: bundled `JPEGDecoder` / `picojpeg` enabled by `HAL_ENABLE_JPEG` and
-Base64 JPEG helpers enabled by `HAL_ENABLE_JPEG_AS_BASE64`.
+Covers: managed `TJpgDec` enabled by `HAL_ENABLE_JPEG` and Base64 JPEG helpers
+enabled by `HAL_ENABLE_JPEG_AS_BASE64`.
 
-`JPEGDecoder` is a standalone baseline JPEG decoder bundled in
-`src/hal/impl/shared/frameworks/jpeg/`. It is not a HAL wrapper and does not
-abstract hardware. JaszczurHAL gates the upstream header/source behind
-`HAL_ENABLE_JPEG`, keeps the default profile memory-oriented, and adds small
-helpers for decoding JPEG bytes or Base64 JPEG assets directly to RGB565.
+The `jaszczurtd/TJpg_Decoder` fork is fetched into
+`third_party/TJpg_Decoder` at the commit pinned by
+`third_party/jpeg_version.conf`. JaszczurHAL compiles only its target-neutral
+Tiny JPEG Decompressor C core. The Arduino wrapper, filesystem adapters and
+display facade from that repository are outside the build.
 
-Author/license: upstream `JPEGDecoder` is based on the implementation by
-Makoto Kurauchi and Bodmer. The bundled source carries its original license in
-`src/hal/impl/shared/frameworks/jpeg/LICENSE`.
+Managed version: `TJpg_Decoder` 1.1.0, including TJpgDec R0.03. The clean
+checkout retains the ChaN decoder terms and Bodmer FreeBSD license in
+`third_party/TJpg_Decoder/license.txt` and the source headers.
 
 ## Enable
 
@@ -34,59 +34,55 @@ For Base64-encoded JPEG assets, enable the helper flag instead:
 ```
 
 `HAL_ENABLE_JPEG_AS_BASE64` propagates both `HAL_ENABLE_CRYPTO` and
-`HAL_ENABLE_JPEG`, so the Base64 decoder and JPEG decoder are compiled
-together.
+`HAL_ENABLE_JPEG`.
 
-The JPEG source files are part of the shared framework source list, but their
-contents compile to nothing unless `HAL_ENABLE_JPEG` is defined. The public
-header is also guarded, so code that uses `JPEGDecoder`, `JpegDec` or
-`jpeg*` helper symbols must be compiled with the same flag.
+The core source and tracked wrapper compile to empty translation units unless
+`HAL_ENABLE_JPEG` is defined. Code that uses the raw core or `jpeg*` helper
+symbols must be compiled with the same flag.
 
 ## Include
 
-Direct include for the bundled C++ decoder:
-
-```cpp
-#include <hal/impl/shared/frameworks/jpeg/JPEGDecoder.h>
-```
-
-For C++ files that already use the utility aggregator, `tools.h` also exposes
-`JPEGDecoder` when `HAL_ENABLE_JPEG` is defined:
-
-```cpp
-#include <tools.h>
-```
-
-For C or C++ helper functions such as `jpegDecodeRgb565()` and
-`jpegBase64DecodeRgb565()`, include:
+For the C or C++ RGB565 helpers, include:
 
 ```c
 #include <tools_c.h>
 ```
 
+The managed TJpgDec C API is available through:
+
+```c
+#include <hal/impl/shared/frameworks/jpeg/tjpgd.h>
+```
+
+`tools.h` also exposes that header when `HAL_ENABLE_JPEG` is defined.
+
 ## Embedded Profile
 
-JaszczurHAL integrates the decoder as a target-neutral, memory-only utility.
-Decode JPEG bytes with `JpegDec.decodeArray()` (or the `jpeg*` helpers below);
-file-based decoding, if ever needed, must go through the JaszczurHAL filesystem.
+JaszczurHAL feeds compressed bytes from memory and receives decoded rectangles
+through the TJpgDec callback API. The configured core:
 
-The bundled decoder is based on `picojpeg` and does not support progressive JPEG
-files. Use baseline JPEG assets.
+- emits RGB565 pixels;
+- uses a temporary 3500-byte decoder workspace;
+- allocates no memory internally;
+- supports baseline grayscale and YCbCr JPEG data;
+- supports 4:4:4, 4:2:0 and horizontal 4:2:2 sampling;
+- rejects progressive JPEG data;
+- provides 1:1, 1:2, 1:4 and 1:8 decoding in the raw TJpgDec API.
+
+The high-level JaszczurHAL helpers currently decode at 1:1 scale. File input,
+if needed, should be implemented through JaszczurHAL storage APIs.
 
 ## API Surface
 
-Common APIs:
-
-| Category | Functions / objects |
+| Category | Functions |
 |---|---|
-| Array decode | `JpegDec.decodeArray`, `JpegDec.available`, `JpegDec.read`, `JpegDec.abort` |
-| MCU output | `JpegDec.pImage`, `JpegDec.width`, `JpegDec.height`, `JpegDec.MCUWidth`, `JpegDec.MCUHeight`, `JpegDec.MCUx`, `JpegDec.MCUy` |
 | RGB565 helper | `jpegDecodeRgb565` |
 | Base64 helpers | `jpegBase64DecodedSize`, `jpegBase64DecodeRgb565` |
+| Raw decoder | `jd_prepare`, `jd_decomp` |
 
 ## Memory Ownership
 
-The high-level JaszczurHAL helpers use caller-provided buffers:
+The high-level helpers use caller-provided input and output buffers:
 
 - `jpegDecodeRgb565()` reads JPEG bytes from memory and writes RGB565 pixels to
   a caller-provided output buffer.
@@ -95,10 +91,10 @@ The high-level JaszczurHAL helpers use caller-provided buffers:
 - `jpegBase64DecodeRgb565()` decodes Base64 into a caller-provided JPEG work
   buffer, then decodes the JPEG into a caller-provided RGB565 output buffer.
 - The RGB565 output buffer must hold at least `width * height` pixels.
+- The decoder adapter allocates and releases its 3500-byte TJpgDec workspace
+  for each high-level decode.
 - The helpers return `false` for invalid arguments, invalid Base64, unsupported
-  JPEG data, decode errors or too-small buffers.
-- If using `JpegDec` directly, call `JpegDec.abort()` when stopping early or
-  after an error so internal decoder state is released/reset.
+  JPEG data, allocation failure, decode errors or too-small buffers.
 
 ## Example: Decode JPEG Bytes To RGB565
 

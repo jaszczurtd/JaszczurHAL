@@ -42,7 +42,7 @@
 | `hal_ota` | RP staging/applier with authenticated VS Code transport over HAL UDP/TCP |
 | `hal_time` | HAL UDP/NTP client and target timekeeping integration |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
-| `hal_sdlogger` | shared FatFs file layer in `impl/shared/frameworks/filesystem/` |
+| `hal_sdlogger` | pinned FatFs R0.16 core plus the shared file layer in `impl/shared/frameworks/filesystem/` |
 | `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 
@@ -145,7 +145,7 @@ The CMake build at the project root compiles a static library `hal_mock` from:
   including remaining shared MQTT/WireGuard status adapters in
   `hal_network_status.cpp`, HAL facades, compatibility layers, portable
   device drivers and bundled frameworks,
-- `src/utils/unity.c` (Unity framework).
+- `src/utils/unity.c` (Unity integration wrapper).
 
 The exact list is the `UTIL_SOURCES` set in `CMakeLists.txt` - treat that as the
 source of truth.
@@ -153,18 +153,20 @@ source of truth.
 Each test executable in `tests/` links against `hal_mock` only, with no
 headers, no pico SDK, no hardware.
 
-The bundled Unity test framework lives in:
+The managed Unity 2.5.4 framework lives in `third_party/Unity/src`. The tracked
+JaszczurHAL integration consists of:
 
 - `src/utils/unity.c`
 - `src/utils/unity.h`
 - `src/utils/unity_internals.h`
 - `src/utils/unity_config.h`
 
-The host CMake build compiles `src/utils/unity.c` into `hal_mock` and enables
-`HAL_ENABLE_UNITY` plus `UNITY_INCLUDE_CONFIG_H`. Test sources include
-`"utils/unity.h"` and use the repository-local `unity_config.h`; no external
-Unity package is fetched or required. Outside the test/support build, Unity is
-inactive unless `HAL_ENABLE_UNITY` is explicitly enabled.
+The host CMake build compiles the `src/utils/unity.c` wrapper into `hal_mock`
+and enables `HAL_ENABLE_UNITY` plus `UNITY_INCLUDE_CONFIG_H`. Test sources
+include `"utils/unity.h"` and use the repository-local `unity_config.h`. Run
+`scripts/ensure_unity.sh` or the central component updater to reconstruct the
+pinned checkout. Outside the test/support build, Unity is inactive unless
+`HAL_ENABLE_UNITY` is explicitly enabled.
 
 `tools.cpp` is covered by `test_tools` using HAL mocks.
 `multicoreWatchdog.cpp` is covered by `test_multicoreWatchdog` using a local
@@ -341,12 +343,12 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_mcp2515_driver` | shared MCP2515 register/SPI transactions, bit timing, TX/RX, filters and errors |
 | `test_mfrc522_driver` | shared MFRC522 register transports, initialization and RFID protocol helpers |
 | `test_pn532_driver` | shared PN532 SPI/I2C/UART framing, ACK/response parsing and NFC commands |
-| `test_ff16_memdisk` | FatFs ff16 integration over an in-memory disk, mount and file I/O behavior |
+| `test_ff16_memdisk` | managed FatFs R0.16 integration over an in-memory disk, mount and file I/O behavior |
 | `test_stm32_pwm_clock` | STM32G474 PWM timer-clock, prescaler and period calculation coverage |
 | `test_hal_onewire_driver` | shared bit-bang OneWire timing, reset/presence, bit/byte I/O and search behavior |
 | `test_hal_config_storage_flags` | compile/runtime coverage for storage feature-flag propagation and configuration |
-| `test_jpeg` | bundled JPEGDecoder/picojpeg decode, dimensions, RGB conversion and malformed input |
-| `test_lodepng` | bundled LodePNG encode/decode, memory ownership, conversion and error handling |
+| `test_jpeg` | managed TJpgDec decode, dimensions, RGB565 conversion and malformed input |
+| `test_lodepng` | managed LodePNG encode/decode, memory ownership, conversion and error handling |
 | `test_gps_nmea_parser` | NMEA framing/checksum, fix/date/time/speed parsing and invalid-input recovery |
 | `test_stm32_hal_system` | STM32G474 system clock, reset/fault state and backend system-service simulation |
 | `test_stm32_hal_i2c_slave` | STM32G474 I2C-slave register backend, events, callbacks and error handling |

@@ -161,7 +161,7 @@ src/
           stm32g474/        # STM32G474 SoC services (fault/system)
         freertos/           # STM32 FreeRTOSConfig and hooks
         port/               # startup, SystemInit, linker-facing low-level glue
-  utils/                    # tools, PID, watchdog, draw helpers, Unity
+  utils/                    # tools, PID, watchdog, draw helpers, Unity integration
 tests/                      # host unit tests (CMake + Unity)
   freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
   hardware/                 # tracked RP fixture sources/manifests and host verifiers
@@ -406,7 +406,8 @@ explicitly implemented.
 ## Managed dependencies
 
 Tracked pins for Pico SDK, picotool, the RP2350 RISC-V toolchain, FreeRTOS,
-BearSSL, lwIP, and littlefs live in `third_party/*_version.conf`:
+BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, and littlefs live in
+`third_party/*_version.conf`:
 
 ```bash
 ./third_party/update_components.sh
@@ -435,8 +436,8 @@ Primary docs:
 
 - SmartTimers is based on [Nettigo Timers](https://github.com/nettigo/Timers)
   (fork of [garthoff/Timers](https://github.com/garthoff/Timers)).
-- Unity test framework sources are bundled in src/:
-  [ThrowTheSwitch/Unity](https://github.com/ThrowTheSwitch/Unity)
+- Unity test framework is pinned to the project fork:
+  [Unity pin](third_party/unity_version.conf)
 - The shared display stack (`src/hal/impl/shared/drivers/display/`) is a portable,
   HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
   algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
@@ -446,10 +447,11 @@ Primary docs:
   Limor Fried (Ladyada) for Adafruit Industries (BSD-2-Clause). The SSD16xx
   and UC81xx e-paper protocol/state machines use the Zephyr drivers logic (Apache-2.0-Clause). See the file headers for per-module attribution.
 - Bundled, ported, or locally adapted third-party components:
-  [cJSON / cJSON_Utils](src/hal/impl/shared/frameworks/cjson/),
-  [LodePNG](src/hal/impl/shared/frameworks/lodepng/),
-  [JPEGDecoder / picojpeg](src/hal/impl/shared/frameworks/jpeg/),
-  [FatFs](src/hal/impl/shared/frameworks/filesystem/ff16/),
+  [cJSON pin](third_party/cjson_version.conf),
+  [LodePNG pin](third_party/lodepng_version.conf),
+  [TJpgDec pin](third_party/jpeg_version.conf),
+  [FatFs pin](third_party/fatfs_version.conf),
+  [Unity pin](third_party/unity_version.conf),
   [FreeRTOS-Kernel pin](third_party/freertos_core_version.conf),
   [BearSSL pin](third_party/bearssl_version.conf),
   [lwIP pin](third_party/lwip_version.conf),

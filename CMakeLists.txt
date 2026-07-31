@@ -27,6 +27,9 @@ set(MEMORYCHECK_SUPPRESSIONS_FILE
 include(CTest)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_managed_frameworks.cmake)
+jh_managed_framework_include_dirs(JH_MANAGED_FRAMEWORK_INCLUDE_DIRS)
+jh_managed_framework_configure_sources()
 
 option(JH_ENABLE_FREERTOS_POSIX_TESTS
     "Build host FreeRTOS POSIX scheduler regression tests"
@@ -102,8 +105,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/frameworks/cjson/cJSON.c
     ${SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c
     ${SRC}/hal/impl/shared/frameworks/lodepng/lodepng.cpp
-    ${SRC}/hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp
-    ${SRC}/hal/impl/shared/frameworks/jpeg/picojpeg.c
+    ${SRC}/hal/impl/shared/frameworks/jpeg/tjpgd.c
 )
 
 # ── hal_mock static library ───────────────────────────────────────────────────
@@ -115,6 +117,7 @@ add_library(hal_mock STATIC
 
 target_include_directories(hal_mock PUBLIC
     ${SRC}
+    ${JH_MANAGED_FRAMEWORK_INCLUDE_DIRS}
 )
 
 target_compile_definitions(hal_mock PUBLIC

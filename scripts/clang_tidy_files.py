@@ -20,8 +20,7 @@ HOST_SHARED_EXCLUDES = {
     "src/hal/impl/shared/frameworks/filesystem/ff16/ff.c",
     "src/hal/impl/shared/frameworks/filesystem/ff16/ffsystem.c",
     "src/hal/impl/shared/frameworks/filesystem/ff16/ffunicode.c",
-    "src/hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp",
-    "src/hal/impl/shared/frameworks/jpeg/picojpeg.c",
+    "src/hal/impl/shared/frameworks/jpeg/tjpgd.c",
     "src/hal/impl/shared/frameworks/lodepng/lodepng.cpp",
 }
 

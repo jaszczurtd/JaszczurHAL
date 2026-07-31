@@ -112,12 +112,12 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_CRC` | `hal_crc.h` | `hal_crc.cpp` | generic CRC-8/16/32 checksums for integrity (auto-enabled by ONEWIRE/DS18B20) |
 | `HAL_ENABLE_CELLULAR_MODEM` | `hal_modem_at.h` | `hal_modem_at.cpp` | *(facade - needs a modem-family backend such as `HAL_ENABLE_A7670`)* |
 | `HAL_ENABLE_A7670` | `hal_simcom_a76xx.h` | `hal_simcom_a76xx.cpp` | SimCom A76xx-family driver (propagates CELLULAR_MODEM + UART) |
-| `HAL_ENABLE_CJSON` | `hal/impl/shared/frameworks/cjson/cJSON.h`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/cjson/cJSON.c`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.c` | bundled cJSON |
-| `HAL_ENABLE_PNG` | `hal/impl/shared/frameworks/lodepng/lodepng.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/lodepng/lodepng.cpp` | bundled LodePNG memory-based PNG encoder/decoder |
+| `HAL_ENABLE_CJSON` | `hal/impl/shared/frameworks/cjson/cJSON.h`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/cjson/cJSON.c`, `hal/impl/shared/frameworks/cjson/cJSON_Utils.c` | managed cJSON checkout with tracked wrappers |
+| `HAL_ENABLE_PNG` | `hal/impl/shared/frameworks/lodepng/lodepng.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/lodepng/lodepng.cpp` | managed LodePNG checkout with a tracked embedded-profile wrapper |
 | `HAL_ENABLE_PNG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/impl/shared/frameworks/lodepng/lodepng.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/impl/shared/frameworks/lodepng/lodepng.cpp` + `hal_crypto.cpp` | Base64-encoded PNG decode helpers (propagates CRYPTO + PNG) |
-| `HAL_ENABLE_JPEG` | `hal/impl/shared/frameworks/jpeg/JPEGDecoder.h`, `hal/impl/shared/frameworks/jpeg/picojpeg.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp`, `hal/impl/shared/frameworks/jpeg/picojpeg.c` | bundled baseline JPEG decoder |
-| `HAL_ENABLE_JPEG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/impl/shared/frameworks/jpeg/JPEGDecoder.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/impl/shared/frameworks/jpeg/JPEGDecoder.cpp` + `hal/impl/shared/frameworks/jpeg/picojpeg.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
-| `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | bundled Unity framework |
+| `HAL_ENABLE_JPEG` | `hal/impl/shared/frameworks/jpeg/tjpgd.h` (`tools.h` from C++) | `hal/impl/shared/frameworks/jpeg/tjpgd.c` + `utils/tools.cpp` | managed TJpgDec core with memory input and RGB565 output |
+| `HAL_ENABLE_JPEG_AS_BASE64` | `utils/tools_api.h` helpers + `hal/impl/shared/frameworks/jpeg/tjpgd.h` + `hal_crypto.h` | `utils/tools.cpp` + `hal/impl/shared/frameworks/jpeg/tjpgd.c` + `hal_crypto.cpp` | Base64-encoded JPEG decode helpers (propagates CRYPTO + JPEG) |
+| `HAL_ENABLE_UNITY` | utility headers/sources | `utils/unity.*` | managed Unity framework |
 
 ### Opt-out flag
 

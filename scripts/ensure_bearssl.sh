@@ -42,6 +42,7 @@ COMPONENT_DIR="${DIR_ARG:-${BEARSSL_DIR}}"
 [[ "${COMPONENT_DIR}" == /* ]] || COMPONENT_DIR="${REPO_ROOT}/${COMPONENT_DIR}"
 jh_dep_sync_pinned \
     "${BEARSSL_REPO}" "${BEARSSL_REF}" "${COMPONENT_DIR}" "${VERIFY_ONLY}"
+jh_dep_ensure_origin "${COMPONENT_DIR}" "${BEARSSL_REPO}" "${VERIFY_ONLY}"
 jh_dep_verify_paths "${COMPONENT_DIR}" \
     "LICENSE.txt" "inc/bearssl.h" "src/inner.h" "src/ssl/ssl_client.c"
 jh_dep_verify_ref "${COMPONENT_DIR}" "${BEARSSL_REF}"

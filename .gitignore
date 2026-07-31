@@ -8,6 +8,11 @@ build*/
 # Fetched third-party dependencies
 third_party/FreeRTOS-Kernel/
 third_party/BearSSL/
+third_party/cJSON/
+third_party/lodepng/
+third_party/TJpg_Decoder/
+third_party/FatFs/
+third_party/Unity/
 third_party/lwip/
 third_party/littlefs/
 third_party/pico-sdk/

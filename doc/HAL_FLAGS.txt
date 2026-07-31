@@ -406,22 +406,22 @@ Crypto / bundled libs
     handlers are simply compiled out and the session never enters the
     authenticated state.
   HAL_ENABLE_CJSON
-    Bundled cJSON / cJSON_Utils sources.
+    Managed cJSON / cJSON_Utils sources.
   HAL_ENABLE_PNG
-    Bundled LodePNG memory-based PNG encoder/decoder. JaszczurHAL disables
+    Managed LodePNG memory-based PNG encoder/decoder. JaszczurHAL disables
     LodePNG disk helpers and the C++ std wrapper by default; define
     HAL_LODEPNG_ENABLE_DISK or HAL_LODEPNG_ENABLE_CPP to opt them back in.
   HAL_ENABLE_PNG_AS_BASE64
     Base64-encoded PNG helpers in tools. Propagates: CRYPTO, PNG.
   HAL_ENABLE_JPEG
-    Bundled JPEGDecoder/picojpeg memory-based baseline JPEG decoder.
+    Managed TJpgDec memory-based baseline JPEG decoder with RGB565 output.
     JaszczurHAL keeps SD/LittleFS backends disabled in this utility profile.
   HAL_ENABLE_JPEG_AS_BASE64
     Base64-encoded JPEG helpers in tools. Propagates: CRYPTO, JPEG.
 
 Test framework
   HAL_ENABLE_UNITY
-    Bundled Unity framework. Typically enabled only by the host-test
+    Managed Unity framework. Typically enabled only by the host-test
     CMake (root CMakeLists.txt).
 
 

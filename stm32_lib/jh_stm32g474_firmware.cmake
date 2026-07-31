@@ -54,10 +54,13 @@ function(jh_add_stm32g474_firmware TARGET)
     set(_g474 "${_jh_src}/hal/impl/stm32g474")
     set(_ldscript "${ARG_JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
     include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
+    include("${ARG_JH_ROOT}/cmake/jh_managed_frameworks.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_littlefs.cmake")
     jh_bearssl_source_manifest(
         _jh_bearssl_sources
         _jh_bearssl_include_dirs)
+    jh_managed_framework_include_dirs(_jh_framework_include_dirs)
+    jh_managed_framework_configure_sources()
     jh_littlefs_source_manifest(
         _littlefs
         _jh_littlefs_include_dirs)
@@ -132,6 +135,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_g474}"
         ${_jh_littlefs_include_dirs}
         ${_jh_bearssl_include_dirs}
+        ${_jh_framework_include_dirs}
         ${_jh_mqtt_includes}
         ${ARG_INCLUDES}
     )

@@ -79,7 +79,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade, including status-returning (`hal_status_t`) access APIs with range validation. | [hal_eeprom.h](../src/hal/hal_eeprom.h) |
 | Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../src/hal/hal_kv.h) |
 | LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; native RP and STM32G474 use linker-reserved internal flash partitions. | [hal_littlefs.h](../src/hal/hal_littlefs.h) |
-| FatFs / SD over SPI | Shared FatFs core and SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
+| FatFs / SD over SPI | SHA-256-pinned FatFs R0.16 core and shared SD-over-SPI disk I/O. | [filesystem framework](../src/hal/impl/shared/frameworks/filesystem/) |
 | SD logger | SD-card logging and crash-report logging support. | [hal_sdlogger.h](../src/hal/hal_sdlogger.h), [sdlogger](../src/hal/impl/shared/frameworks/filesystem/sdlogger/) |
 
 ## Sensors, input devices and timekeeping
@@ -133,10 +133,10 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | CRC checksums | Generic CRC-8/16/32 for data integrity: CRC-8/MAXIM, Maxim 1-Wire CRC-16, CRC-16/CCITT-FALSE and CRC-32/ISO-HDLC. | [hal_crc.h](../src/hal/hal_crc.h) |
 | Session authentication helpers | Optional serial-session authentication support. | [hal_sc_auth.h](../src/hal/hal_sc_auth.h) |
 | Serial framing/session tools | Reusable serial frame/session vocabulary helpers for embedded protocols. | [hal_serial_frame.h](../src/hal/hal_serial_frame.h), [hal_serial_session.h](../src/hal/hal_serial_session.h) |
-| cJSON | Bundled cJSON/cJSON_Utils for constrained JSON work. | [cjson framework](../src/hal/impl/shared/frameworks/cjson/) |
-| PNG | Bundled memory-oriented LodePNG support plus optional Base64 helpers. | [lodepng framework](../src/hal/impl/shared/frameworks/lodepng/) |
-| JPEG | Bundled JPEGDecoder/picojpeg baseline JPEG decoding plus optional Base64 helpers. | [jpeg framework](../src/hal/impl/shared/frameworks/jpeg/) |
-| Unity | Bundled Unity framework for host-side tests. | [unity sources](../src/utils/unity.h) |
+| cJSON | Managed cJSON/cJSON_Utils for constrained JSON work. | [cJSON API](api/17_cJSON.md) |
+| PNG | Managed memory-oriented LodePNG support plus optional Base64 helpers. | [LodePNG API](api/18_LodePNG.md) |
+| JPEG | Managed TJpgDec baseline JPEG decoding to RGB565 plus optional Base64 helpers. | [JPEG API](api/19_JPEG.md) |
+| Unity | Managed Unity 2.5.4 framework for host and target-side tests. | [Unity pin](../third_party/unity_version.conf) |
 
 ## Examples and documentation
 

@@ -20,7 +20,7 @@
  *   aggregator.
  * - define `HAL_ENABLE_PNG_AS_BASE64` to expose Base64 PNG helper functions;
  *   this flag propagates `HAL_ENABLE_CRYPTO` and `HAL_ENABLE_PNG`.
- * - define `HAL_ENABLE_JPEG` to expose bundled JPEGDecoder headers through
+ * - define `HAL_ENABLE_JPEG` to expose the managed TJpgDec core header through
  *   this aggregator.
  * - define `HAL_ENABLE_JPEG_AS_BASE64` to expose Base64 JPEG helper functions;
  *   this flag propagates `HAL_ENABLE_CRYPTO` and `HAL_ENABLE_JPEG`.
@@ -42,6 +42,5 @@
 #endif
 
 #ifdef HAL_ENABLE_JPEG
-#include "hal/impl/shared/frameworks/jpeg/JPEGDecoder.h"
-#include "hal/impl/shared/frameworks/jpeg/picojpeg.h"
+#include "hal/impl/shared/frameworks/jpeg/tjpgd.h"
 #endif

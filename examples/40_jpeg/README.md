@@ -1,7 +1,7 @@
 # Example 40: JPEG
 
-Decodes a small baseline JPEG asset to RGB565 in memory using the bundled
-JPEGDecoder/picojpeg integration.
+Decodes a small baseline JPEG asset to RGB565 in memory using the managed
+TJpgDec integration.
 
 Enabled module:
 

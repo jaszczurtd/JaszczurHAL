@@ -89,13 +89,28 @@ void test_jpeg_decode_rejects_too_small_output(void) {
   unsigned height = 456u;
   TEST_ASSERT_FALSE(
       jpegDecodeRgb565(jpeg_work, decoded_size, rgb565, 4u, &width, &height));
+  TEST_ASSERT_EQUAL_UINT(0u, width);
+  TEST_ASSERT_EQUAL_UINT(0u, height);
 
   free(jpeg_work);
+}
+
+void test_jpeg_decode_rejects_invalid_input(void) {
+  static const uint8_t invalid_jpeg[] = {0xFFu, 0xD8u, 0x00u, 0x01u};
+  unsigned short rgb565[4] = {};
+  unsigned width = 123u;
+  unsigned height = 456u;
+
+  TEST_ASSERT_FALSE(jpegDecodeRgb565(invalid_jpeg, sizeof(invalid_jpeg), rgb565,
+                                     4u, &width, &height));
+  TEST_ASSERT_EQUAL_UINT(0u, width);
+  TEST_ASSERT_EQUAL_UINT(0u, height);
 }
 
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_jpeg_base64_decode_rgb565);
   RUN_TEST(test_jpeg_decode_rejects_too_small_output);
+  RUN_TEST(test_jpeg_decode_rejects_invalid_input);
   return UNITY_END();
 }

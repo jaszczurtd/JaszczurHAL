@@ -28,11 +28,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
 jh_bearssl_source_manifest(
     _jh_stm32_bearssl_sources
     _jh_stm32_bearssl_include_dirs)
+jh_managed_framework_include_dirs(_jh_stm32_framework_include_dirs)
+jh_managed_framework_configure_sources()
 jh_littlefs_source_manifest(
     STM32_LITTLEFS_SOURCES
     STM32_LITTLEFS_INCLUDE_DIRS)
@@ -109,6 +112,7 @@ target_include_directories(JaszczurHAL PUBLIC
     ${STM32_LITTLEFS_INCLUDE_DIRS}
     ${STM32_MQTT_INCLUDE_DIRS}
     ${_jh_stm32_bearssl_include_dirs}
+    ${_jh_stm32_framework_include_dirs}
 )
 add_custom_command(TARGET JaszczurHAL POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory

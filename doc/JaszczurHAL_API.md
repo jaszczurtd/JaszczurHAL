@@ -27,9 +27,9 @@ here for full behavior/contracts.
 - `scripts/build_rp_native_lib.sh` - RP2040/RP2350 native build helper,
   including the optional pinned FreeRTOS SMP matrix.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
-- `third_party/update_components.sh` - synchronizes BearSSL, lwIP, littlefs,
-  FreeRTOS, Pico SDK, picotool and the RP2350 RISC-V toolchain to their tracked
-  `third_party/*_version.conf` pins.
+- `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
+  TJpgDec, FatFs, Unity, lwIP, littlefs, FreeRTOS, Pico SDK, picotool and the RP2350
+  RISC-V toolchain to their tracked `third_party/*_version.conf` pins.
 - `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
   security inventory.
 - `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
@@ -77,7 +77,7 @@ here for full behavior/contracts.
 - `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
 - `src/hal/impl/shared/frameworks/` - bundled target-neutral high-level engines, including PubSubClient and WireGuard.
-- `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and bundled Unity sources.
+- `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and managed Unity integration.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
 default include in project code. `hal/hal.h` remains available as a HAL-only
@@ -252,9 +252,9 @@ The complete reference is split across the following focused documents:
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
 | 15 | [Network connectivity](api/15_connectivity.md) | status-returning `_ex` APIs for `hal_wifi`, resolver, `hal_udp`, `hal_tcp`, `hal_tls`, `hal_mqtt` and `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, independent BSD sockets adapter with `getaddrinfo()` and optional TLS transport, `hal_ota`, `hal_time` (NTP/local time) |
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `hal_crc` (generic CRC-8/16/32 checksums), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
-| 17 | [cJSON](api/17_cJSON.md) | Bundled `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
-| 18 | [LodePNG](api/18_LodePNG.md) | Bundled `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
-| 19 | [JPEG](api/19_JPEG.md) | Bundled `JPEGDecoder` / `picojpeg`, include patterns, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
+| 17 | [cJSON](api/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
+| 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
+| 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 
 ---
 
@@ -271,7 +271,7 @@ The complete reference is split across the following focused documents:
 | `hal_crypto` | [Cryptography](api/07_crypto.md) |
 | `cJSON` / `cJSON_Utils` | [cJSON](api/17_cJSON.md) |
 | `LodePNG` | [LodePNG](api/18_LodePNG.md) |
-| `JPEGDecoder` / `picojpeg` | [JPEG](api/19_JPEG.md) |
+| `TJpgDec` | [JPEG](api/19_JPEG.md) |
 | `hal_digipot` | [Output devices](api/13_output_devices.md) |
 | `hal_display` | [CAN and display](api/10_can_display.md) |
 | `hal_ds18b20` | [Sensors](api/11_sensors.md) |

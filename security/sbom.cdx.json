@@ -239,11 +239,11 @@
       "supplier": {
         "name": "Thomas Pornin and bearssl-esp8266 contributors"
       },
-      "purl": "pkg:github/earlephilhower/bearssl-esp8266@aca13833b6f9ddffaea2041a01facc76829dc03b",
+      "purl": "pkg:github/jaszczurtd/bearssl-esp8266@aca13833b6f9ddffaea2041a01facc76829dc03b",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/earlephilhower/bearssl-esp8266"
+          "url": "https://github.com/jaszczurtd/bearssl-esp8266"
         },
         {
           "type": "other",
@@ -353,11 +353,21 @@
       "supplier": {
         "name": "Dave Gamble and cJSON contributors"
       },
-      "purl": "pkg:github/DaveGamble/cJSON@v1.7.18",
+      "purl": "pkg:github/DaveGamble/cJSON@acc76239bee01d8e9c858ae2cab296704e52d916",
       "externalReferences": [
         {
           "type": "website",
           "url": "https://github.com/DaveGamble/cJSON"
+        },
+        {
+          "type": "other",
+          "url": "third_party/cJSON",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/cjson_version.conf",
+          "comment": "repository path"
         },
         {
           "type": "other",
@@ -367,8 +377,12 @@
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "acc76239bee01d8e9c858ae2cab296704e52d916"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Bundled cJSON and cJSON_Utils sources."
+          "value": "Git-ignored exact-commit cJSON checkout plus tracked JaszczurHAL feature-gating wrappers."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -376,7 +390,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/cjson"
+          "value": "third_party/cJSON,third_party/cjson_version.conf,src/hal/impl/shared/frameworks/cjson"
         }
       ]
     },
@@ -396,11 +410,21 @@
       "supplier": {
         "name": "Lode Vandevenne"
       },
-      "purl": "pkg:generic/lodepng@20260119",
+      "purl": "pkg:github/jaszczurtd/lodepng@ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/lvandeve/lodepng"
+          "url": "https://github.com/jaszczurtd/lodepng"
+        },
+        {
+          "type": "other",
+          "url": "third_party/lodepng",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/lodepng_version.conf",
+          "comment": "repository path"
         },
         {
           "type": "other",
@@ -410,8 +434,12 @@
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "ed6fe5825c6a4fbb7f58ab35a4231c7543cd452a"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Bundled memory-oriented PNG encoder/decoder with disk and C++ std wrappers disabled by default."
+          "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork plus tracked wrappers that keep disk and C++ std APIs disabled by default. The GCC 15 RISC-V optimizer workaround is scoped to the wrapper source in CMake."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -419,7 +447,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/lodepng"
+          "value": "third_party/lodepng,third_party/lodepng_version.conf,src/hal/impl/shared/frameworks/lodepng"
         }
       ]
     },
@@ -443,7 +471,17 @@
       "externalReferences": [
         {
           "type": "website",
-          "url": "http://elm-chan.org/fsw/ff/00index_e.html"
+          "url": "https://elm-chan.org/fsw/ff/"
+        },
+        {
+          "type": "other",
+          "url": "third_party/FatFs",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/fatfs_version.conf",
+          "comment": "repository path"
         },
         {
           "type": "other",
@@ -454,7 +492,7 @@
       "properties": [
         {
           "name": "jaszczurhal:notes",
-          "value": "Generic FAT filesystem core used by shared SD/FatFs support."
+          "value": "Unchanged official R0.16 archive authenticated by SHA-256 99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e, plus tracked JaszczurHAL feature, configuration and SD-over-SPI integration wrappers."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -462,7 +500,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/filesystem/ff16"
+          "value": "third_party/FatFs,third_party/fatfs_version.conf,src/hal/impl/shared/frameworks/filesystem/ff16"
         }
       ]
     },
@@ -649,25 +687,40 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:jpegdecoder-picojpeg@unknown-vendored",
-      "name": "JPEGDecoder / picojpeg",
-      "version": "unknown-vendored",
+      "bom-ref": "pkg:tjpg_decoder-tjpgdec@1.1.0",
+      "name": "TJpg_Decoder / TJpgDec",
+      "version": "1.1.0",
       "scope": "optional",
       "licenses": [
         {
           "license": {
-            "name": "BSD-style"
+            "id": "LicenseRef-ChaN-TJpgDec"
+          }
+        },
+        {
+          "license": {
+            "id": "BSD-2-Clause"
           }
         }
       ],
       "supplier": {
-        "name": "Makoto Kurauchi, Bodmer, Rich Geldreich"
+        "name": "ChaN, Bodmer and TJpg_Decoder contributors"
       },
-      "purl": "pkg:generic/jpegdecoder-picojpeg",
+      "purl": "pkg:github/jaszczurtd/TJpg_Decoder@71bfc2607b6963ee3334ff6f601345c5d2b7a8da",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/Bodmer/JPEGDecoder"
+          "url": "https://github.com/jaszczurtd/TJpg_Decoder"
+        },
+        {
+          "type": "other",
+          "url": "third_party/TJpg_Decoder",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/jpeg_version.conf",
+          "comment": "repository path"
         },
         {
           "type": "other",
@@ -677,8 +730,12 @@
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "71bfc2607b6963ee3334ff6f601345c5d2b7a8da"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Bundled JPEGDecoder and picojpeg sources for memory-based embedded JPEG decode."
+          "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork. Builds compile only the TJpgDec core through tracked memory-input and RGB565-output wrappers; the library's Arduino-facing wrapper is excluded."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -686,15 +743,15 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/jpeg"
+          "value": "third_party/TJpg_Decoder,third_party/jpeg_version.conf,src/hal/impl/shared/frameworks/jpeg"
         }
       ]
     },
     {
       "type": "library",
-      "bom-ref": "pkg:unity@unknown-vendored",
+      "bom-ref": "pkg:unity@2.5.4",
       "name": "Unity",
-      "version": "unknown-vendored",
+      "version": "2.5.4",
       "scope": "development",
       "licenses": [
         {
@@ -706,11 +763,21 @@
       "supplier": {
         "name": "ThrowTheSwitch"
       },
-      "purl": "pkg:github/ThrowTheSwitch/Unity",
+      "purl": "pkg:github/jaszczurtd/Unity@f9879bf7d82108c3eefd5fc378983317898616f3",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://github.com/ThrowTheSwitch/Unity"
+          "url": "https://github.com/jaszczurtd/Unity"
+        },
+        {
+          "type": "other",
+          "url": "third_party/Unity",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/unity_version.conf",
+          "comment": "repository path"
         },
         {
           "type": "other",
@@ -726,16 +793,29 @@
           "type": "other",
           "url": "src/utils/unity_internals.h",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/utils/unity_config.h",
+          "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "f9879bf7d82108c3eefd5fc378983317898616f3"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Bundled test framework sources used by host/unit tests."
+          "value": "Clean git-ignored exact-commit checkout from the JaszczurHAL fork plus tracked feature-gating and configuration wrappers used by host and target-side test builds."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_UNITY"
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/utils/unity.c,src/utils/unity.h,src/utils/unity_internals.h"
+          "value": "third_party/Unity,third_party/unity_version.conf,src/utils/unity.c,src/utils/unity.h,src/utils/unity_internals.h,src/utils/unity_config.h"
         }
       ]
     },
@@ -779,5 +859,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:58f31747-f3f0-d29e-3020-f966445c8c63"
+  "serialNumber": "urn:uuid:c945e4d2-0ec6-f13c-abe2-ce5aba7dbb7d"
 }

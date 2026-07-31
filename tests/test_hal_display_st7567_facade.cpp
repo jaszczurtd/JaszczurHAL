@@ -1,5 +1,5 @@
 #include "hal/hal_display.h"
-#include "unity.h"
+#include "utils/unity.h"
 
 void hal_mock_spi_reset(void);
 
