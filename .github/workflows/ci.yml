@@ -12,8 +12,219 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  PYTHONUTF8: "1"
 
 jobs:
+  windows-tooling:
+    runs-on: windows-2025
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache authenticated Windows tools
+        uses: actions/cache@v4
+        with:
+          path: C:\jh\tools
+          key: windows-tools-${{ hashFiles('third_party/windows_tools_version.conf', 'third_party/riscv_toolchain_version.conf', 'third_party/windows_requirements.txt') }}
+
+      - name: Prepare native Windows environment
+        shell: powershell
+        run: >-
+          .\runmefirst.ps1 -Force -ConfigureHost -FirmwareOnly
+          -ToolsRoot C:\jh\tools
+          -BuildRoot C:\jh\build
+
+      - name: Verify idempotent component and tool state
+        shell: powershell
+        run: >-
+          .\runmefirst.ps1 -VerifyOnly -FirmwareOnly
+          -ToolsRoot C:\jh\tools
+          -BuildRoot C:\jh\build
+
+      - name: Test Python runtime, platform, launchers and generators
+        shell: powershell
+        run: |
+          $python = '.\.build\windows\venv\Scripts\python.exe'
+          $tests = @(
+            'tests/test_vscode_platform_adapter.py',
+            'tests/test_vscode_windows_tooling.py',
+            'tests/test_vscode_build_environment.py',
+            'tests/test_component_manager.py',
+            'tests/test_board_generator.py'
+          )
+          foreach ($test in $tests) {
+            & $python $test .
+            if ($LASTEXITCODE -ne 0) {
+              throw "$test failed with exit code $LASTEXITCODE"
+            }
+          }
+
+      - name: Validate MSVC warning profile and Windows test classification
+        shell: powershell
+        run: |
+          $state = Get-Content .build/windows/host-environment.json -Raw |
+            ConvertFrom-Json
+          & $state.tools.cmake "-DJH_ROOT=$env:GITHUB_WORKSPACE" `
+            -P tests/test_host_warning_profiles.cmake
+          if ($LASTEXITCODE -ne 0) { throw 'Warning-profile test failed.' }
+
+          $build = 'C:\jh\build\host-msvc'
+          & $state.tools.cmake -S . -B $build `
+            -G 'Visual Studio 17 2022' -A x64 `
+            -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host configure failed.' }
+
+          $probe = Get-ChildItem -LiteralPath $build -Recurse `
+            -File -Filter 'test_tls_without_bsd_compile.vcxproj' |
+            Select-Object -First 1
+          if (-not $probe) { throw 'MSVC warning probe project is missing.' }
+          $probeText = Get-Content -LiteralPath $probe.FullName -Raw
+          $strictWarnings = (
+            $probeText -match '<TreatWarningAsError>true</TreatWarningAsError>' -or
+            $probeText -match '/WX'
+          )
+          $conformance = (
+            $probeText -match '<ConformanceMode>true</ConformanceMode>' -or
+            $probeText -match '/permissive-'
+          )
+          if ($probeText -notmatch '<WarningLevel>Level4</WarningLevel>' -or
+              -not $conformance -or -not $strictWarnings) {
+            throw 'MSVC /W4 /permissive- /WX warning profile was not generated.'
+          }
+
+          & $state.tools.cmake --build $build --config Release --parallel 2 `
+            --target test_hal_crc test_tls_without_bsd_compile
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host warning probes failed to compile.' }
+
+          $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
+          & $ctest --test-dir $build -C Release --output-on-failure `
+            -R '^test_hal_crc$'
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host smoke test failed.' }
+          $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
+            Out-String) | ConvertFrom-Json
+          $disabled = @(
+            'test_bsd_sockets',
+            'test_bsd_sockets_c_compile',
+            'test_bsd_without_tls_compile',
+            'test_bearssl_native_integration',
+            'test_freertos_posix_runtime'
+          )
+          foreach ($name in $disabled) {
+            $test = $inventory.tests | Where-Object name -eq $name
+            $property = $test.properties |
+              Where-Object { $_.name -eq 'DISABLED' -and $_.value -eq $true }
+            if (-not $test -or -not $property) {
+              throw "$name is not visible as a disabled Windows test."
+            }
+          }
+
+  windows-firmware:
+    runs-on: windows-2025
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: rp2040
+            board: pico
+            uf2: true
+          - target: rp2350-arm
+            board: pico2
+            uf2: true
+          - target: rp2350-riscv
+            board: pico2
+            uf2: true
+          - target: stm32g474
+            board: nucleo-g474re
+            uf2: false
+    name: "Windows firmware (${{ matrix.target }})"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Cache authenticated Windows tools
+        uses: actions/cache@v4
+        with:
+          path: C:\jh\tools
+          key: windows-tools-${{ hashFiles('third_party/windows_tools_version.conf', 'third_party/riscv_toolchain_version.conf', 'third_party/windows_requirements.txt') }}
+
+      - name: Prepare native Windows environment
+        shell: powershell
+        run: >-
+          .\runmefirst.ps1 -Force -ConfigureHost -FirmwareOnly
+          -ToolsRoot C:\jh\tools
+          -BuildRoot C:\jh\build
+
+      - name: Generate consumer project in a path with spaces
+        shell: powershell
+        run: |
+          $python = '.\.build\windows\venv\Scripts\python.exe'
+          $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
+          & $python vscode/tools/create-vscode-example.py `
+            --output $project `
+            --name 'Stage 5 Windows Consumer' `
+            --target '${{ matrix.target }}' `
+            --board '${{ matrix.board }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Consumer project generation failed.' }
+
+      - name: Build static library and representative firmware with Ninja
+        shell: powershell
+        run: |
+          $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
+          $entry = Join-Path $env:GITHUB_WORKSPACE 'vscode\entry\jh-vscode.cmd'
+          & $entry build --project $project `
+            --target '${{ matrix.target }}' --board '${{ matrix.board }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Representative firmware build failed.' }
+          & $entry refresh-intellisense --project $project `
+            --target '${{ matrix.target }}' --board '${{ matrix.board }}'
+          if ($LASTEXITCODE -ne 0) { throw 'Compile database refresh failed.' }
+
+          $artifactRoot = Join-Path $project '.build'
+          $expected = @('firmware.elf', 'firmware.bin', 'firmware.hex', 'firmware.map')
+          if ('${{ matrix.uf2 }}' -eq 'true') { $expected += 'firmware.uf2' }
+          $expected += 'compile_commands_patched.json'
+          foreach ($name in $expected) {
+            $path = Join-Path $artifactRoot $name
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "Missing managed artifact: $path"
+            }
+          }
+
+          $archives = Get-ChildItem -LiteralPath C:\jh\build -Recurse `
+            -File -Filter 'libJaszczurHAL.a'
+          if ('${{ matrix.target }}' -ne 'stm32g474' -and -not $archives) {
+            throw 'Native RP build did not produce libJaszczurHAL.a.'
+          }
+
+      - name: Build STM32G474 static library
+        if: matrix.target == 'stm32g474'
+        shell: powershell
+        run: |
+          $state = Get-Content .build/windows/host-environment.json -Raw | ConvertFrom-Json
+          $toolDirs = $state.tools.PSObject.Properties |
+            ForEach-Object { Split-Path -Parent $_.Value } |
+            Select-Object -Unique
+          $env:Path = ($toolDirs -join ';') + ';' + $env:Path
+          $env:JH_MANAGED_BUILD_ROOT = $state.buildRoot
+          $build = 'C:\jh\build\static-stm32g474'
+          & $state.tools.cmake -S stm32_lib -B $build -G Ninja `
+            "-DCMAKE_MAKE_PROGRAM=$($state.tools.ninja)" `
+            "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\stm32_lib\toolchain_stm32g474.cmake" `
+            "-DPython3_EXECUTABLE=$($state.python)" `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          if ($LASTEXITCODE -ne 0) { throw 'STM32 static-library configure failed.' }
+          & $state.tools.cmake --build $build --target JaszczurHAL
+          if ($LASTEXITCODE -ne 0) { throw 'STM32 static-library build failed.' }
+          if (-not (Test-Path "$build\libJaszczurHAL.a" -PathType Leaf)) {
+            throw 'STM32 static-library archive is missing.'
+          }
+
+      - name: Upload representative firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.target }}-firmware
+          path: stage5 consumer with spaces/.build/*
+          if-no-files-found: error
+
   test:
     runs-on: ubuntu-latest
 
@@ -116,7 +327,8 @@ jobs:
       - name: Generate compile databases
         run: |
           cmake -B .build/ci/static-host -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          cmake -S stm32_lib -B .build/ci/static-stm32 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -S stm32_lib -B .build/ci/static-stm32 \
+            -DJH_STM32_HOST_SANITY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
       - name: "cppcheck (all own code; vendored excluded)"
         run: |
@@ -222,7 +434,7 @@ jobs:
           ./scripts/ensure_littlefs.sh --force
 
       - name: Configure STM32 host build
-        run: cmake -S stm32_lib -B .build/ci/stm32-host
+        run: cmake -S stm32_lib -B .build/ci/stm32-host -DJH_STM32_HOST_SANITY=ON
 
       - name: Build STM32 host static library
         run: cmake --build .build/ci/stm32-host --parallel

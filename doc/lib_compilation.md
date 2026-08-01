@@ -206,6 +206,22 @@ cmake -S stm32_lib -B .build/manual/stm32g474-nucleo \
 cmake --build .build/manual/stm32g474-nucleo --parallel
 ```
 
+The same backend also compiles with the host compiler for sanity checks and the
+clang-tidy STM32 compile database. That mode leaves `JH_STM32G474_HW` undefined
+and is opt-in, so a missing cross toolchain cannot silently produce a host
+library instead of firmware:
+
+```bash
+cmake -S stm32_lib -B .build/manual/stm32g474-host \
+  -DJH_STM32_HOST_SANITY=ON \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake --build .build/manual/stm32g474-host --parallel
+```
+
+Without either `CMAKE_TOOLCHAIN_FILE` or `JH_STM32_HOST_SANITY` the
+configuration stops and names both options. Generated board files stay inside
+the CMake build tree, so keep the build directory under a `.build` root.
+
 Pass project features through `EXTRA_HAL_DEFINES` or use
 `scripts/build_stm32_lib.sh -D ...`. `HAL_ENABLE_FREERTOS` selects the pinned
 kernel integration. Bare-metal firmware calls the generated HAL application

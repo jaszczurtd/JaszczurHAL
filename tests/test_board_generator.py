@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -207,6 +208,17 @@ require(
 
 compiler = shutil.which("cc")
 archiver = shutil.which("ar")
+cross_link = False
+if (compiler is None or archiver is None) and sys.platform == "win32":
+    host_state_path = ROOT / ".build/windows/host-environment.json"
+    if host_state_path.is_file():
+        host_state = load(host_state_path)
+        arm_gcc = Path(str(host_state.get("tools", {}).get("gnu-arm", "")))
+        arm_ar = arm_gcc.with_name("arm-none-eabi-ar.exe")
+        if arm_gcc.is_file() and arm_ar.is_file():
+            compiler = str(arm_gcc)
+            archiver = str(arm_ar)
+            cross_link = True
 require(compiler is not None and archiver is not None, "host C toolchain missing")
 link_root = TEST_ROOT / "link-contract"
 link_root.mkdir(parents=True)
@@ -230,7 +242,15 @@ compile_object(main_source, main_object, first_output)
 matching_archive = link_root / "libmatching.a"
 subprocess.run([archiver, "rcs", str(matching_archive), str(definition_object)], check=True)
 subprocess.run(
-    [compiler, str(main_object), str(reference_object), str(matching_archive), "-o", str(link_root / "matching")],
+    [
+        compiler,
+        *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        str(main_object),
+        str(reference_object),
+        str(matching_archive),
+        "-o",
+        str(link_root / "matching"),
+    ],
     check=True,
 )
 
@@ -243,7 +263,15 @@ compile_object(
 wrong_archive = link_root / "libwrong-board.a"
 subprocess.run([archiver, "rcs", str(wrong_archive), str(wrong_definition)], check=True)
 wrong_link = subprocess.run(
-    [compiler, str(main_object), str(reference_object), str(wrong_archive), "-o", str(link_root / "wrong-board")],
+    [
+        compiler,
+        *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        str(main_object),
+        str(reference_object),
+        str(wrong_archive),
+        "-o",
+        str(link_root / "wrong-board"),
+    ],
     check=False,
     capture_output=True,
     text=True,
@@ -361,6 +389,25 @@ with tempfile.TemporaryDirectory(prefix="jh-board-generator-") as temporary:
         str(Path(temporary) / "generated"),
         expected_success=False,
     )
+    managed_host_root = Path(temporary) / "short-host-root"
+    previous_host_root = os.environ.get("JH_MANAGED_BUILD_ROOT")
+    os.environ["JH_MANAGED_BUILD_ROOT"] = str(managed_host_root)
+    try:
+        run(
+            "--target",
+            "rp2040",
+            "--board",
+            "rp2040-zero",
+            "--output-root",
+            str(managed_host_root / "project/cmake"),
+            "--output-dir",
+            str(managed_host_root / "project/cmake/generated"),
+        )
+    finally:
+        if previous_host_root is None:
+            os.environ.pop("JH_MANAGED_BUILD_ROOT", None)
+        else:
+            os.environ["JH_MANAGED_BUILD_ROOT"] = previous_host_root
 run(
     "--target",
     "rp2040",

@@ -84,7 +84,16 @@ NATIVE_RP_TARGETS = {
 UF2_TARGETS = {
     *NATIVE_RP_TARGETS,
 }
+STABLE_FIRMWARE_ARTIFACTS = (
+    "firmware.elf",
+    "firmware.bin",
+    "firmware.hex",
+    "firmware.map",
+    "firmware.uf2",
+    "firmware.ota",
+)
 CMAKE_CACHE_KEYS_FILE = ".jh-vscode-cache-keys.json"
+WINDOWS_HOST_ENVIRONMENT_FILE = "host-environment.json"
 DEFAULT_OTA_PORT = 8266
 DEFAULT_OTA_LISTEN_PORT = 8266
 CMAKE_TRANSIENT_CACHE_KEYS = {
@@ -417,6 +426,93 @@ def jaszczurhal_root() -> Path:
     """Absolute JaszczurHAL repo root, located relative to this script:
     <root>/vscode/runtime/jh_vscode.py."""
     return Path(__file__).resolve().parents[2]
+
+
+def windows_host_environment_path() -> Path:
+    override = os.environ.get("JH_WINDOWS_HOST_ENVIRONMENT")
+    if override:
+        return Path(override).expanduser()
+    return (
+        jaszczurhal_root()
+        / ".build"
+        / "windows"
+        / WINDOWS_HOST_ENVIRONMENT_FILE
+    )
+
+
+def load_windows_host_environment() -> dict[str, Any]:
+    """Load the bootstrap-produced native Windows build environment."""
+    if sys.platform != "win32" and os.environ.get("JH_TEST_WINDOWS_HOST") != "1":
+        return {}
+    return load_json_file(windows_host_environment_path())
+
+
+def windows_project_build_key(project_dir: Path) -> str:
+    normalized = os.path.normcase(str(project_dir.resolve()))
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    stem = re.sub(r"[^A-Za-z0-9_.-]+", "-", project_dir.name).strip("-.")
+    return f"{(stem or 'firmware')[:24]}-{digest}"
+
+
+def resolved_windows_tools() -> dict[str, str]:
+    environment = load_windows_host_environment()
+    tools = environment.get("tools")
+    if not isinstance(tools, dict):
+        return {}
+    return {
+        str(name): str(path)
+        for name, path in tools.items()
+        if isinstance(path, str) and path
+    }
+
+
+def objdump_program(config: dict[str, Any]) -> str | None:
+    """Resolve objdump from the same verified toolchain used by the build."""
+    tools = resolved_windows_tools()
+    if config.get("target") == "rp2350-riscv":
+        riscv = tools.get("riscv")
+        if riscv:
+            candidate = Path(riscv).with_name("riscv32-unknown-elf-objdump.exe")
+            if candidate.is_file():
+                return str(candidate)
+        return shutil.which("riscv32-unknown-elf-objdump") or shutil.which("objdump")
+
+    gnu_arm = tools.get("gnu-arm")
+    if gnu_arm:
+        candidate = Path(gnu_arm).with_name("arm-none-eabi-objdump.exe")
+        if candidate.is_file():
+            return str(candidate)
+    return shutil.which("arm-none-eabi-objdump") or shutil.which("objdump")
+
+
+def cmake_program(config: dict[str, Any]) -> str:
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict) and cmake.get("executable"):
+        return str(cmake["executable"])
+    return resolved_windows_tools().get("cmake", "cmake")
+
+
+def cmake_generator(config: dict[str, Any]) -> str:
+    cmake = config.get("cmake")
+    if isinstance(cmake, dict) and cmake.get("generator"):
+        return str(cmake["generator"])
+    return "Ninja"
+
+
+def cmake_process_environment() -> dict[str, str] | None:
+    tools = resolved_windows_tools()
+    if not tools:
+        return None
+    host_environment = load_windows_host_environment()
+    environment = os.environ.copy()
+    directories = [str(Path(path).parent) for path in tools.values()]
+    environment["PATH"] = os.pathsep.join(
+        [*dict.fromkeys(directories), environment.get("PATH", "")]
+    )
+    build_root = host_environment.get("buildRoot")
+    if isinstance(build_root, str) and build_root:
+        environment["JH_MANAGED_BUILD_ROOT"] = str(Path(build_root).expanduser())
+    return environment
 
 
 def target_registry_dir() -> Path:
@@ -1613,10 +1709,15 @@ def release_port_for_upload(port: str, project_dir: Path) -> int:
     return EXIT_UNSAFE_DEVICE
 
 
-def run_command(cmd: list[str], *, verbose: bool = False) -> int:
+def run_command(
+    cmd: list[str],
+    *,
+    verbose: bool = False,
+    environment: dict[str, str] | None = None,
+) -> int:
     if verbose:
         print("+ " + " ".join(cmd), flush=True)
-    if Path(cmd[0]).name == "cmake":
+    if Path(cmd[0]).name.lower() in {"cmake", "cmake.exe"}:
         try:
             process = subprocess.Popen(
                 cmd,
@@ -1624,6 +1725,7 @@ def run_command(cmd: list[str], *, verbose: bool = False) -> int:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env=environment,
             )
         except FileNotFoundError:
             print(f"error: command not found: {cmd[0]}", file=sys.stderr)
@@ -1639,7 +1741,7 @@ def run_command(cmd: list[str], *, verbose: bool = False) -> int:
         return int(process.wait())
 
     try:
-        completed = subprocess.run(cmd, check=False)
+        completed = subprocess.run(cmd, check=False, env=environment)
     except FileNotFoundError:
         print(f"error: command not found: {cmd[0]}", file=sys.stderr)
         return EXIT_CONFIG
@@ -1649,7 +1751,13 @@ def run_command(cmd: list[str], *, verbose: bool = False) -> int:
     return int(completed.returncode)
 
 
-def run_command_capture(cmd: list[str], *, verbose: bool = False, capture_limit: int = 250_000) -> tuple[int, str]:
+def run_command_capture(
+    cmd: list[str],
+    *,
+    verbose: bool = False,
+    capture_limit: int = 250_000,
+    environment: dict[str, str] | None = None,
+) -> tuple[int, str]:
     if verbose:
         print("+ " + " ".join(cmd), flush=True)
     try:
@@ -1659,6 +1767,7 @@ def run_command_capture(cmd: list[str], *, verbose: bool = False, capture_limit:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            env=environment,
         )
     except FileNotFoundError:
         print(f"error: command not found: {cmd[0]}", file=sys.stderr)
@@ -1854,9 +1963,9 @@ def print_memory_map_overview(config: dict[str, Any], project_dir: Path) -> None
     if elf is None:
         return
 
-    objdump = shutil.which("arm-none-eabi-objdump") or shutil.which("objdump")
+    objdump = objdump_program(config)
     if objdump is None:
-        print("warning: memory map overview skipped; arm-none-eabi-objdump not found", file=sys.stderr)
+        print("warning: memory map overview skipped; target objdump not found", file=sys.stderr)
         return
 
     sections = parse_objdump_sections(elf, objdump)
@@ -1948,9 +2057,20 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
 
 
 def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
-    build_dir = Path(str(config.get("cmakeBuildDir") or project_dir / ".build" / "cmake")).expanduser()
-    if not build_dir.is_absolute():
-        build_dir = project_dir / build_dir
+    host_environment = load_windows_host_environment()
+    managed_root = host_environment.get("buildRoot")
+    if isinstance(managed_root, str) and managed_root:
+        build_dir = (
+            Path(managed_root).expanduser()
+            / windows_project_build_key(project_dir)
+            / "cmake"
+        )
+    else:
+        build_dir = Path(
+            str(config.get("cmakeBuildDir") or project_dir / ".build" / "cmake")
+        ).expanduser()
+        if not build_dir.is_absolute():
+            build_dir = project_dir / build_dir
     # When a target is active, isolate the CMake cache per target/board: RP2040
     # (project NONE) and STM32 (cross toolchain) must never share one cache dir.
     # Manifests without a resolved target keep the flat path -> pico parity.
@@ -1981,23 +2101,32 @@ def path_within(child: Path, parent: Path) -> bool:
 
 
 def managed_build_dir_allowed(build_dir: Path, project_dir: Path) -> bool:
-    return path_within(build_dir, project_dir) or path_within(
+    if path_within(build_dir, project_dir) or path_within(
         build_dir, jaszczurhal_root() / ".build"
+    ):
+        return True
+    host_environment = load_windows_host_environment()
+    managed_root = host_environment.get("buildRoot")
+    return isinstance(managed_root, str) and bool(managed_root) and path_within(
+        build_dir, Path(managed_root).expanduser()
     )
 
 
-def cmake_cache_home_directory(cache_path: Path) -> Path | None:
+def cmake_cache_value(cache_path: Path, key: str) -> str | None:
     try:
         text = cache_path.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return None
     for line in text.splitlines():
-        if line.startswith("CMAKE_HOME_DIRECTORY:INTERNAL="):
+        if line.startswith(f"{key}:") and "=" in line:
             value = line.split("=", 1)[1].strip()
-            if value:
-                return Path(value).expanduser()
-            return None
+            return value or None
     return None
+
+
+def cmake_cache_home_directory(cache_path: Path) -> Path | None:
+    value = cmake_cache_value(cache_path, "CMAKE_HOME_DIRECTORY")
+    return Path(value).expanduser() if value else None
 
 
 def configured_cmake_cache_keys(config: dict[str, Any]) -> set[str]:
@@ -2038,7 +2167,12 @@ def record_cmake_cache_keys(config: dict[str, Any], build_dir: Path) -> None:
     temporary.replace(path)
 
 
-def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project_dir: Path) -> int:
+def reset_stale_cmake_cache_if_needed(
+    source_dir: Path,
+    build_dir: Path,
+    project_dir: Path,
+    generator: str,
+) -> int:
     cache_path = build_dir / "CMakeCache.txt"
     if not cache_path.is_file():
         return 0
@@ -2046,7 +2180,10 @@ def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project
     cached_source = cmake_cache_home_directory(cache_path)
     if cached_source is None:
         return 0
-    if cached_source.resolve() == source_dir.resolve():
+    cached_generator = cmake_cache_value(cache_path, "CMAKE_GENERATOR")
+    source_matches = cached_source.resolve() == source_dir.resolve()
+    generator_matches = cached_generator in {None, generator}
+    if source_matches and generator_matches:
         return 0
 
     if not managed_build_dir_allowed(build_dir, project_dir):
@@ -2067,8 +2204,9 @@ def reset_stale_cmake_cache_if_needed(source_dir: Path, build_dir: Path, project
 
     print(
         yellow_text(
-            "warning: stale CMake cache source changed; resetting "
-            f"{build_dir} ({cached_source.resolve()} -> {source_dir.resolve()})"
+            "warning: stale CMake cache contract changed; resetting "
+            f"{build_dir} (source {cached_source.resolve()} -> {source_dir.resolve()}, "
+            f"generator {cached_generator or '?'} -> {generator})"
         ),
         file=sys.stderr,
     )
@@ -2104,7 +2242,11 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
         args.append(f"-DJH_ROOT={root_path.resolve()}")
 
     identity = config.get("identity")
-    if isinstance(identity, dict) and as_bool(identity.get("enabled")):
+    if (
+        config.get("target") in NATIVE_RP_TARGETS
+        and isinstance(identity, dict)
+        and as_bool(identity.get("enabled"))
+    ):
         manufacturer = identity.get("usbManufacturer")
         product = identity.get("usbProduct")
         if manufacturer and product:
@@ -2136,16 +2278,56 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
     return args
 
 
+def platform_cmake_cache_args(config: dict[str, Any]) -> list[str]:
+    args = [
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        f"-DPython3_EXECUTABLE={Path(sys.executable).resolve()}",
+    ]
+    tools = resolved_windows_tools()
+    ninja = tools.get("ninja")
+    picotool = os.environ.get("JH_PICOTOOL_EXECUTABLE") or tools.get("picotool")
+    if not picotool and config.get("target") in NATIVE_RP_TARGETS:
+        executable = "picotool.exe" if sys.platform == "win32" else "picotool"
+        picotool = str(jaszczurhal_root() / ".build" / "tools" / "picotool" / executable)
+    riscv = tools.get("riscv")
+    openocd = tools.get("openocd")
+    if ninja and cmake_generator(config).lower() == "ninja":
+        args.append(f"-DCMAKE_MAKE_PROGRAM={ninja}")
+    if picotool and config.get("target") in NATIVE_RP_TARGETS:
+        args.append(f"-DJH_PICOTOOL_EXECUTABLE={picotool}")
+    if riscv and config.get("target") == "rp2350-riscv":
+        args.append(f"-DPICO_TOOLCHAIN_PATH={Path(riscv).parent.parent}")
+    if openocd and config.get("target") == "stm32g474":
+        args.append(f"-DOPENOCD_BIN={openocd}")
+    return args
+
+
 def configure_cmake_project(config: dict[str, Any], project_dir: Path) -> int:
     source_dir = get_cmake_source_dir(config, project_dir)
     build_dir = get_cmake_build_dir(config, project_dir)
-    reset_status = reset_stale_cmake_cache_if_needed(source_dir, build_dir, project_dir)
+    generator = cmake_generator(config)
+    reset_status = reset_stale_cmake_cache_if_needed(
+        source_dir, build_dir, project_dir, generator
+    )
     if reset_status != 0:
         return reset_status
-    cmd = ["cmake", "-S", str(source_dir), "-B", str(build_dir)]
+    cmd = [
+        cmake_program(config),
+        "-S",
+        str(source_dir),
+        "-B",
+        str(build_dir),
+        "-G",
+        generator,
+    ]
     cmd.extend(removed_cmake_cache_args(config, build_dir))
     cmd.extend(cmake_cache_args(config, project_dir))
-    status = run_command(cmd, verbose=as_bool(config.get("verbose")))
+    cmd.extend(platform_cmake_cache_args(config))
+    status = run_command(
+        cmd,
+        verbose=as_bool(config.get("verbose")),
+        environment=cmake_process_environment(),
+    )
     if status != 0:
         return status
     try:
@@ -2164,11 +2346,90 @@ def run_cmake_target(config: dict[str, Any], project_dir: Path, target: str) -> 
     configure_status = configure_cmake_project(config, project_dir)
     if configure_status != 0:
         return configure_status
-    cmd = ["cmake", "--build", str(get_cmake_build_dir(config, project_dir)), "--target", target]
-    rc, output = run_command_capture(cmd, verbose=as_bool(config.get("verbose")))
+    cmd = [
+        cmake_program(config),
+        "--build",
+        str(get_cmake_build_dir(config, project_dir)),
+        "--target",
+        target,
+    ]
+    rc, output = run_command_capture(
+        cmd,
+        verbose=as_bool(config.get("verbose")),
+        environment=cmake_process_environment(),
+    )
     if rc != 0:
         print_build_diagnostics(diagnose_build_output(output, config))
     return rc
+
+
+def synchronize_cmake_firmware_artifacts(
+    config: dict[str, Any], project_dir: Path
+) -> int:
+    """Refresh stable artifacts even when the selected CMake tree is a no-op."""
+    target = str(config.get("target") or "")
+    cmake_build_dir = get_cmake_build_dir(config, project_dir)
+    artifact_dir = get_build_dir(config, project_dir)
+    sources: dict[str, tuple[str, ...]] = {
+        "firmware.elf": ("firmware.elf",),
+        "firmware.bin": ("firmware.bin",),
+        "firmware.hex": ("firmware.hex",),
+        "firmware.map": ("firmware.map", "firmware.elf.map"),
+    }
+    if target in UF2_TARGETS:
+        sources["firmware.uf2"] = ("firmware.uf2",)
+        if "HAL_ENABLE_OTA" in collect_hal_enables(config, project_dir):
+            sources["firmware.ota"] = ("firmware.ota",)
+
+    resolved: dict[str, Path] = {}
+    for artifact, candidates in sources.items():
+        source = next(
+            (
+                cmake_build_dir / candidate
+                for candidate in candidates
+                if (cmake_build_dir / candidate).is_file()
+            ),
+            None,
+        )
+        if source is None:
+            print(
+                f"error: successful {target} build omitted {artifact} in "
+                f"{cmake_build_dir}",
+                file=sys.stderr,
+            )
+            return EXIT_BUILD
+        resolved[artifact] = source
+
+    try:
+        artifact_dir.mkdir(parents=True, exist_ok=True)
+        for artifact, source in resolved.items():
+            destination = artifact_dir / artifact
+            if source.resolve() != destination.resolve():
+                shutil.copy2(source, destination)
+        for stale in {"firmware.uf2", "firmware.ota"} - set(resolved):
+            stale_path = artifact_dir / stale
+            if stale_path.is_file():
+                stale_path.unlink()
+    except OSError as exc:
+        print(f"error: failed to synchronize firmware artifacts: {exc}", file=sys.stderr)
+        return EXIT_BUILD
+    return 0
+
+
+def invalidate_stable_firmware_artifacts(
+    config: dict[str, Any], project_dir: Path
+) -> int:
+    """Remove uploadable output before attempting the selected target build."""
+    artifact_dir = get_build_dir(config, project_dir)
+    try:
+        for artifact in STABLE_FIRMWARE_ARTIFACTS:
+            path = artifact_dir / artifact
+            if path.is_file():
+                path.unlink()
+    except OSError as exc:
+        print(f"error: failed to invalidate firmware artifacts: {exc}", file=sys.stderr)
+        return EXIT_BUILD
+    return 0
 
 
 def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_overview: bool = True) -> int:
@@ -2176,6 +2437,9 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
     if status != 0:
         return status
     if config.get("toolchain") == "cmake":
+        invalidate_status = invalidate_stable_firmware_artifacts(config, project_dir)
+        if invalidate_status != 0:
+            return invalidate_status
         diagnostics = build_preflight_diagnostics(config, project_dir)
         if diagnostics:
             print_build_diagnostics(diagnostics)
@@ -2183,6 +2447,9 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
         target = cmake_targets(config)["buildDebug" if debug else "build"]
         rc = run_cmake_target(config, project_dir, target)
         if rc == 0:
+            sync_status = synchronize_cmake_firmware_artifacts(config, project_dir)
+            if sync_status != 0:
+                return sync_status
             if show_memory_overview:
                 print_memory_map_overview(config, project_dir)
             return 0
@@ -3123,21 +3390,30 @@ def command_clean(args: argparse.Namespace) -> int:
     if status != 0:
         return status
     build_dir = get_build_dir(config, project_dir)
-    if not build_dir.exists():
+    cmake_build_dir = get_cmake_build_dir(config, project_dir)
+    candidates = [path for path in (build_dir, cmake_build_dir) if path.exists()]
+    existing = [
+        path
+        for path in candidates
+        if not any(path != other and path_within(path, other) for other in candidates)
+    ]
+    if not existing:
         print(f"Nothing to clean: {build_dir}")
         return 0
-    if not managed_build_dir_allowed(build_dir, project_dir):
-        print(
-            f"error: refusing to clean outside managed artifact roots: {build_dir}",
-            file=sys.stderr,
-        )
-        return EXIT_UNSAFE_DEVICE
-    try:
-        shutil.rmtree(build_dir)
-    except OSError as exc:
-        print(f"error: failed to remove {build_dir}: {exc}", file=sys.stderr)
-        return EXIT_GENERIC
-    print(f"Removed {build_dir}")
+    for path in dict.fromkeys(existing):
+        if not managed_build_dir_allowed(path, project_dir):
+            print(
+                f"error: refusing to clean outside managed artifact roots: {path}",
+                file=sys.stderr,
+            )
+            return EXIT_UNSAFE_DEVICE
+    for path in dict.fromkeys(existing):
+        try:
+            shutil.rmtree(path)
+        except OSError as exc:
+            print(f"error: failed to remove {path}: {exc}", file=sys.stderr)
+            return EXIT_GENERIC
+        print(f"Removed {path}")
     return 0
 
 

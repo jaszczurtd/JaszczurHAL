@@ -13,10 +13,11 @@ document and the code disagree.
 | Goal | Command | Result |
 |---|---|---|
 | Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites; synchronizes managed components; configures Git hooks. |
+| Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, built picotool, and the RISC-V toolchain stamp. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, target builds, and example builds. |
-| Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
+| Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
@@ -37,7 +38,7 @@ workflow entrypoints.
 One-time, idempotent setup for Debian/Ubuntu-like systems. It:
 
 - removes the repository `.build/` tree before setup;
-- installs compiler, CMake, Python, Valgrind, clang-tidy, cppcheck, OpenOCD,
+- installs compiler, CMake, Ninja, Python, Valgrind, clang-tidy, cppcheck, OpenOCD,
   serial, libusb, and other host packages;
 - invokes `third_party/update_components.sh`;
 - installs `osv-scanner` and `cve-bin-tool`;
@@ -53,10 +54,31 @@ dependencies, so it requires network access. The focused firewall helper is
 `scripts/configure_ota_firewall.py`; it supports `--check`, explicit
 `--interface` / `--network`, and confirmed or `--yes` provisioning.
 
+### `runmefirst.ps1`
+
+Idempotent native Windows setup. It prints its complete plan before making a
+change, uses short user-local tool/build roots, creates the pinned Python 3.12
+environment with hash-verified pyserial, synchronizes source components, and
+resolves CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, and picotool. Compatible
+system tools are reused unless `-Force` is selected. A system OpenOCD is reused
+only when its required interface and target scripts can also be resolved;
+otherwise setup falls back to the authenticated managed archive.
+It records the verified executable set, managed Python, and short build root in
+`.build/windows/host-environment.json` for the shared firmware runtime.
+
+`-VerifyOnly` is read-only. `-ConfigureHost` explicitly allows the documented
+long-path settings to be repaired, and `-InstallExtensions` explicitly allows
+VS Code profile changes. `-FirmwareOnly` keeps editor checks visible but
+optional for headless firmware builders and CI. The script never elevates
+itself. See
+[Native Windows Setup](../windows_setup.md) for host requirements, commands,
+paths, and the current support boundary.
+
 ### `third_party/update_components.sh`
 
-The normal dependency-management entrypoint. It invokes all twelve
-`scripts/ensure_*.sh` helpers in dependency order:
+The normal dependency-management entrypoint. It is a compatibility launcher
+for `scripts/component_manager.py all`, which processes all twelve components
+in dependency order:
 
 1. BearSSL
 2. cJSON
@@ -73,6 +95,8 @@ The normal dependency-management entrypoint. It invokes all twelve
 
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
+picotool verification includes its required commands and the USB/signing
+capabilities enabled by the currently available dependencies.
 See [Managed Third-Party Components](../../third_party/README.md) for the pin and
 directory contract.
 
@@ -85,7 +109,8 @@ parallelism. The seven gates are:
 2. host tests, including the optional FreeRTOS POSIX suite;
 3. Valgrind memcheck;
 4. cppcheck;
-5. clang-tidy for host/shared code and the STM32 backend;
+5. clang-tidy for host/shared code and the STM32 backend, using both the
+   `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
 6. STM32, RP2040/RP2350, native FreeRTOS, and RP feature-profile builds;
 7. every declared RP example, native parity fixture builds, and STM32
    examples.
@@ -93,11 +118,16 @@ parallelism. The seven gates are:
 The script removes only its managed `.build/gate`, `.build/examples`, and
 `.build/tests` trees at startup. It exits on the first failed gate.
 
-### `vscode/entry/jh-vscode`
+### `vscode/entry/jh-vscode` and `jh-vscode.cmd`
 
-The stable firmware-project CLI used by project tasks and the example
-dispatcher. Its actions, options, exit codes, device safeguards, and monitor
-behavior are documented only in
+The Unix and Windows launchers start one public Python entrypoint and shared
+firmware-project CLI. The Windows launcher validates Python 3 plus pyserial and
+preserves the CLI argument and exit-code contract. Firmware configuration uses
+Ninja by default, passes the active Python interpreter, exports compile
+commands, and resolves platform picotool/toolchain paths. Native Windows CMake
+trees use the bootstrap's short build root while final artifacts keep their
+manifest paths. Actions, options, device
+safeguards, and monitor behavior are documented only in
 [JaszczurHAL VS Code Entry](../../vscode/README.md). Manifest, source-discovery,
 target, board, cache, and artifact semantics belong to
 [Firmware Project Workflow](../FwProjectWorkflow.md).
@@ -174,6 +204,12 @@ For full target requirements, options, outputs, and manual CMake equivalents,
 see [JaszczurHAL Library Compilation](../lib_compilation.md).
 
 ## Managed-Component Scripts
+
+`scripts/component_manager.py` owns the cross-platform implementation for Git
+clone/fetch/ref/origin/submodule checks, archive download and SHA-256,
+ZIP/`tar.gz` extraction, atomic replacement, content manifests, and version
+stamps. The focused `ensure_*.sh` files are Unix compatibility launchers that
+forward their existing CLI to this Python manager.
 
 The focused helpers read tracked pins from `third_party/*_version.conf`.
 Normally use `third_party/update_components.sh`; call an individual helper only
@@ -294,39 +330,29 @@ the host architecture to the matching release asset, extracts the archive into
 `third_party/riscv-toolchain`, records a component stamp, and verifies the GCC
 major version.
 
-If the executable or stamp differs from the tracked configuration, normal mode
-replaces the installation. `--verify-only` performs no download or extraction.
-The helper supports x86-64 and AArch64 Linux release assets.
-
-### `scripts/lib/pinned_repo.sh`
-
-Internal shell library shared by the Git-backed component helpers. It provides
-colored diagnostics and functions to:
-
-- shallow-fetch an exact ref;
-- clone a pinned checkout;
-- synchronize or replace a managed checkout;
-- verify a checkout ref and required paths;
-- initialize selected submodules.
-
-It has no side effects when sourced and is not a standalone command.
+If the executable, content manifest, archive identity, or stamp differs from
+the tracked configuration, normal mode replaces the installation.
+`--verify-only` performs no download or extraction. Authenticated assets cover
+x86-64 and AArch64 Linux plus native AMD64 Windows.
 
 ## Example And VS Code Support Scripts
 
 ### `scripts/examples_dispatcher.py`
 
-Owns the checked-in example registry and exposes three subcommands:
+Owns the checked-in example registry and exposes five subcommands:
 
 | Command | Behavior |
 |---|---|
 | `generate` | Regenerates each example's manifest, VS Code settings, tasks, launch configuration, and keybinding reference. |
+| `generate-template` | Regenerates the shared settings, tasks, extension, and keybinding snippets under `vscode/examples`. |
+| `check-template` | Fails when the shared snippets or any checked-in example `.vscode` file differs from the shared generators. |
 | `list` | Prints every registered example and its expanded target list. |
 | `build` | Builds supported examples and variants through `vscode/entry/jh-vscode`. |
 
 `build` requires `--target` with one of `rp2040`, `rp2350-arm`,
 `rp2350-riscv`, or `stm32g474`. Repeatable `--example` limits the run,
 `--jobs` controls parallel example projects, and `--verbose` records invoked
-commands in per-example logs under `/tmp`.
+commands in managed per-example logs below `.build/examples`.
 
 The Python registry is the source used by `generate`; the generated manifests
 are the source consumed by `build`. RISC-V WiFi examples remain excluded while
@@ -334,6 +360,25 @@ RP2350 RISC-V + CYW43 is unsupported.
 
 See [JaszczurHAL Examples](../../examples/README.md) for the target matrix,
 application contract, and build commands.
+
+### `vscode/tools/create-vscode-example.py`
+
+Generates a standalone dispatcher-backed firmware project with a manifest,
+blink application, HAL project configuration, launch configuration, shared
+Unix/Windows task commands, extension recommendations, and keybinding
+reference. `--target` and `--board` select the initial profile. `--force`
+replaces only files owned by the generator in the requested project directory;
+`--dry-run` lists the paths without writing them.
+
+### `vscode/tools/manage_vscode_extensions.py`
+
+Reads the shared extension recommendation list and checks the selected VS Code
+profile with `code --list-extensions`. The default mode is read-only and exits
+nonzero when recommendations are missing. `--install` prints the missing list
+and requests confirmation before invoking `code --install-extension`.
+`--install --yes` records explicit non-interactive consent. The command verifies
+the complete list after installation. `--code` and `JH_VSCODE_CODE` select a
+specific VS Code command.
 
 ### `scripts/configure_ota_firewall.py`
 
@@ -480,8 +525,8 @@ JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
   fields and how registry defaults merge with project manifests.
 - [VS Code Entry Changelog](../../vscode/CHANGELOG.md) records implemented
   workflow capabilities and compatibility decisions.
-- [Windows Runtime](../../vscode/windows/runtime/README.md) records the current
-  Windows-runtime boundary; Linux remains the implemented runtime.
+- [Windows Runtime](../../vscode/windows/runtime/README.md) records the native
+  Windows runtime boundary and remaining device-adapter work.
 - [Native RP Neutral Firmware](../../vscode/neutral_fw/rp_native/README.md)
   explains the default-identity image used by `jh-vscode clear-identity`.
 - [JaszczurHAL Examples](../../examples/README.md) documents the example registry,

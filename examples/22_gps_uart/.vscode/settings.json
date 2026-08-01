@@ -3,6 +3,7 @@
     "jaszczurhal.verbose": false,
     "jaszczurhal.root": "../..",
     "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
+    "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/22_gps_uart/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",

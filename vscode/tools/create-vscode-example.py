@@ -80,6 +80,13 @@ def load_extension_recommendations(jh_root: Path) -> dict:
     return extensions_recommendations()
 
 
+def load_keybindings(jh_root: Path) -> list[dict[str, str]]:
+    add_scripts_to_path(jh_root)
+    from vscode_task_config import keybindings_reference
+
+    return keybindings_reference()
+
+
 def resolve_target_board(registry: dict[str, dict], target: str, board: str | None) -> tuple[str, str]:
     if target not in registry:
         known = ", ".join(sorted(registry)) or "(none)"
@@ -132,10 +139,19 @@ def build_files(
     vscode_dir = output_dir / ".vscode"
     registry = load_target_registry(jh_root)
     target, board = resolve_target_board(registry, target, board)
-    from vscode_task_config import board_selection_values, sync_board_picker_task
+    from vscode_task_config import (
+        project_tasks_document,
+        vscode_entry_settings,
+    )
 
     try:
-        board_options, board_default = board_selection_values(registry, target, board)
+        tasks_document = project_tasks_document(
+            registry,
+            target,
+            board,
+            module=module,
+            usb_product=usb_product,
+        )
     except ValueError as exc:
         raise RuntimeError(str(exc)) from exc
     values = {
@@ -150,15 +166,6 @@ def build_files(
         "JH_DISPATCHER_REL": relpath(output_dir, jh_root / "cmake" / "jh_firmware_project"),
         "JH_ENTRY_REL": relpath(output_dir, jh_root / "vscode" / "entry" / "jh-vscode"),
         "SCHEMA_REL": relpath(vscode_dir, jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json"),
-        "BOARD_OPTIONS_JSON": json.dumps(board_options, indent=16),
-        "BOARD_DEFAULT_JSON": json.dumps(board_default),
-        "SYNC_BOARD_PICKER_TASK_JSON": "\n".join(
-            f"        {line}"
-            for line in json.dumps(
-                sync_board_picker_task(),
-                indent=4,
-            ).splitlines()
-        ),
     }
 
     files: dict[str, str] = {
@@ -201,17 +208,21 @@ def build_files(
                 "jaszczurhal.buildDir": "${workspaceFolder}/.build",
                 "jaszczurhal.verbose": False,
                 "jaszczurhal.root": values["JH_ROOT_REL"],
-                "jaszczurhal.vscodeEntry": values["JH_ENTRY_REL"],
+                **vscode_entry_settings(values["JH_ENTRY_REL"]),
                 "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
                 "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
                 "cmake.sourceDirectory": f"${{workspaceFolder}}/{values['JH_DISPATCHER_REL']}",
                 "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
             }
         ),
-        ".vscode/tasks.json": render_template(TASKS_TEMPLATE, values),
+        ".vscode/tasks.json": json_text(tasks_document),
         ".vscode/launch.json": render_template(LAUNCH_TEMPLATE, values),
         ".vscode/extensions.json": json_text(load_extension_recommendations(jh_root)),
-        ".vscode/keybindings.reference.json": render_template(KEYBINDINGS_TEMPLATE, values),
+        ".vscode/keybindings.reference.json": json.dumps(
+            load_keybindings(jh_root),
+            indent=4,
+        )
+        + "\n",
     }
     return files
 
@@ -411,176 +422,6 @@ HAL_PROJECT_CONFIG_TEMPLATE = """#pragma once
 """
 
 
-TASKS_TEMPLATE = """{
-    "version": "2.0.0",
-    "inputs": [
-        {
-            "id": "boardSelection",
-            "description": "Target/board",
-            "type": "pickString",
-            "options": @@BOARD_OPTIONS_JSON@@,
-            "default": @@BOARD_DEFAULT_JSON@@
-        }
-    ],
-    "tasks": [
-        {
-            "label": "Project: Build",
-            "detail": "Compile @@MODULE@@ through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["build", "--project", "${workspaceFolder}"],
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Project: Build (Debug)",
-            "detail": "Debug build @@MODULE@@ through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["build-debug", "--project", "${workspaceFolder}"],
-            "group": "build",
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Project: Upload",
-            "detail": "Upload @@MODULE@@ through the active target backend",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload", "--project", "${workspaceFolder}"],
-            "problemMatcher": "$gcc"
-        },
-        {
-            "label": "Project: Upload (UF2 / BOOTSEL)",
-            "detail": "RP2040 only: build @@MODULE@@ and copy UF2 to the single visible BOOTSEL drive",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload-uf2", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Upload (OTA)",
-            "detail": "Build, authenticate, and upload @@MODULE@@ to a discovered native RP device",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Discover OTA devices",
-            "detail": "List JaszczurHAL devices advertising native OTA",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["ota-discover", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: List ports",
-            "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["list-ports", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Change port",
-            "detail": "Interactively persist the upload/monitor serial port",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["change-port", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Serial Monitor",
-            "detail": "Persistent @@MODULE@@ serial monitor",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor", "--project", "${workspaceFolder}", "--lock-policy", "replace-own"],
-            "isBackground": true,
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Debug Probe Monitor",
-            "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor-probe", "--project", "${workspaceFolder}", "--lock-policy", "replace-own"],
-            "isBackground": true,
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Serial Monitor (Any)",
-            "detail": "Any serial monitor through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor-any", "--project", "${workspaceFolder}", "--lock-policy", "wait"],
-            "isBackground": true,
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Refresh IntelliSense",
-            "detail": "Refresh @@MODULE@@ IntelliSense through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["refresh-intellisense", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Clean",
-            "detail": "Clean @@MODULE@@ build directory",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["clean", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Clear USB Identity",
-            "detail": "Flash neutral firmware after verifying current @@USB_PRODUCT@@ identity",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["clear-identity", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Config Dump",
-            "detail": "Show resolved JaszczurHAL VS Code project configuration",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["config-dump", "--project", "${workspaceFolder}"],
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Select board",
-            "detail": "Interactive target/board selection",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["select-board", "--project", "${workspaceFolder}", "--interactive"],
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": true,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            },
-            "problemMatcher": []
-        },
-        {
-            "label": "Project: Select board (GUI)",
-            "detail": "Pick target/board from the VS Code input menu",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
-            "problemMatcher": []
-        },
-@@SYNC_BOARD_PICKER_TASK_JSON@@
-    ]
-}
-"""
-
-
 LAUNCH_TEMPLATE = """{
     "version": "0.2.0",
     "configurations": [
@@ -597,71 +438,6 @@ LAUNCH_TEMPLATE = """{
         }
     ]
 }
-"""
-
-
-KEYBINDINGS_TEMPLATE = """[
-    {
-        "key": "ctrl+shift+1",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Build"
-    },
-    {
-        "key": "ctrl+shift+2",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Upload"
-    },
-    {
-        "key": "ctrl+shift+3",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Serial Monitor"
-    },
-    {
-        "key": "ctrl+shift+4",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Upload (UF2 / BOOTSEL)"
-    },
-    {
-        "key": "ctrl+shift+5",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Debug Probe Monitor"
-    },
-    {
-        "key": "ctrl+shift+6",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Refresh IntelliSense"
-    },
-    {
-        "key": "ctrl+shift+7",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Clean"
-    },
-    {
-        "key": "ctrl+shift+8",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Upload (OTA)"
-    },
-    {
-        "key": "ctrl+shift+9",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Config Dump"
-    },
-    {
-        "key": "ctrl+shift+alt+1",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board (GUI)"
-    },
-    {
-        "key": "ctrl+shift+alt+2",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Select board"
-    },
-    {
-        "key": "ctrl+shift+alt+3",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Project: Discover OTA devices"
-    }
-]
 """
 
 

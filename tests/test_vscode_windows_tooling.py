@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Validate cross-platform VS Code launchers and generated project files."""
+
+from __future__ import annotations
+
+from contextlib import redirect_stderr, redirect_stdout
+import io
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+
+ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = ROOT / "scripts"
+TOOLS_DIR = ROOT / "vscode" / "tools"
+for import_dir in (str(SCRIPTS_DIR), str(TOOLS_DIR)):
+    if import_dir not in sys.path:
+        sys.path.insert(0, import_dir)
+
+import examples_dispatcher
+import manage_vscode_extensions
+from board_registry import tooling_target_registry
+from vscode_task_config import (
+    VSCODE_ENTRY_CONFIG,
+    VSCODE_ENTRY_WINDOWS_CONFIG,
+    VSCODE_EXTENSION_RECOMMENDATIONS,
+    project_tasks_document,
+)
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def load_json(path: Path):
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        command,
+        check=True,
+        capture_output=True,
+        text=True,
+        **kwargs,
+    )
+
+
+entry_python = ROOT / "vscode" / "entry" / "jh_vscode.py"
+entry_unix = ROOT / "vscode" / "entry" / "jh-vscode"
+entry_windows = ROOT / "vscode" / "entry" / "jh-vscode.cmd"
+
+with tempfile.TemporaryDirectory(prefix="jh entry spacje ") as temp_dir:
+    unicode_cwd = Path(temp_dir) / "ścieżka robocza"
+    unicode_cwd.mkdir()
+    python_version = run_checked(
+        [sys.executable, str(entry_python), "--version"],
+        cwd=unicode_cwd,
+    )
+    require(python_version.stdout.strip() == "jh-vscode 0.1.0", "Python entrypoint failed")
+
+    if os.name != "nt":
+        unix_version = run_checked([str(entry_unix), "--version"], cwd=unicode_cwd)
+        require(
+            unix_version.stdout == python_version.stdout,
+            "Unix launcher selected another runtime",
+        )
+
+unsupported = subprocess.run(
+    (
+        [str(entry_unix), "unsupported action"]
+        if os.name != "nt"
+        else [sys.executable, str(entry_python), "unsupported action"]
+    ),
+    check=False,
+    capture_output=True,
+    text=True,
+)
+require(unsupported.returncode == 8, "public launcher did not preserve exit code 8")
+require(
+    "unsupported action 'unsupported action'" in unsupported.stderr,
+    "quoted argument was split",
+)
+
+cmd_text = entry_windows.read_text(encoding="utf-8")
+managed_index = cmd_text.index('if exist "%JH_MANAGED_PYTHON%"')
+py_index = cmd_text.index("where py")
+python_index = cmd_text.index("where python")
+require(managed_index < py_index < python_index, "Windows Python detection order changed")
+require('"%JH_ENTRY_PY%" %*' in cmd_text, "Windows launcher does not forward all arguments")
+require("exit /b %ERRORLEVEL%" in cmd_text, "Windows launcher does not forward exit codes")
+
+if os.name == "nt":
+    with tempfile.TemporaryDirectory(prefix="jh cmd spacje ") as temp_dir:
+        serial_stub = Path(temp_dir) / "serial" / "tools"
+        serial_stub.mkdir(parents=True)
+        (serial_stub.parent / "__init__.py").write_text("", encoding="utf-8")
+        (serial_stub / "__init__.py").write_text("", encoding="utf-8")
+        (serial_stub / "list_ports.py").write_text("", encoding="utf-8")
+        env = os.environ.copy()
+        env["JH_VSCODE_PYTHON"] = sys.executable
+        env["PYTHONPATH"] = os.pathsep.join(
+            item for item in (str(serial_stub.parents[1]), env.get("PYTHONPATH", "")) if item
+        )
+        version_command = subprocess.list2cmdline(
+            [str(entry_windows), "--version"]
+        )
+        version = subprocess.run(
+            version_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+            shell=True,
+        )
+        require(version.returncode == 0, f"Windows launcher failed: {version.stderr}")
+        require(version.stdout.strip() == "jh-vscode 0.1.0", "Windows launcher output changed")
+
+        bad_command = subprocess.list2cmdline([str(entry_windows), "unsupported action"])
+        bad = subprocess.run(
+            bad_command,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=env,
+            shell=True,
+        )
+        require(bad.returncode == 8, "Windows launcher did not preserve exit code 8")
+        require("unsupported action 'unsupported action'" in bad.stderr, "Windows quoting changed")
+
+attributes = {
+    "vscode/entry/jh-vscode": "lf",
+    "vscode/entry/jh-vscode.cmd": "crlf",
+    "vscode/entry/jh_vscode.py": "lf",
+    "src/hal/impl/shared/drivers/cyw43-driver/vendor/src/cyw43_ll.c.upstream": "lf",
+    "src/hal/impl/rp2040/drivers/swserial/swserial.pio": "lf",
+    "tests/fixtures/tls_test_ca_der.inc": "lf",
+    "src/hal/impl/shared/drivers/cyw43-driver/LICENSE.RP": "lf",
+}
+for path, expected in attributes.items():
+    result = run_checked(["git", "check-attr", "eol", "--", path], cwd=ROOT)
+    require(result.stdout.strip().endswith(f"eol: {expected}"), f"wrong eol policy for {path}")
+upstream_files = sorted(
+    ROOT.glob("src/hal/impl/shared/drivers/cyw43-driver/vendor/src/*.upstream")
+)
+require(len(upstream_files) == 7, "CYW43 upstream fixture set changed unexpectedly")
+for path in upstream_files:
+    result = run_checked(
+        ["git", "check-attr", "eol", "--", path.relative_to(ROOT).as_posix()],
+        cwd=ROOT,
+    )
+    require(result.stdout.strip().endswith("eol: lf"), f"wrong eol policy for {path}")
+pdf_attr = run_checked(
+    ["git", "check-attr", "text", "--", "doc/datasheets/RP2040.pdf"],
+    cwd=ROOT,
+)
+require(pdf_attr.stdout.strip().endswith("text: unset"), "PDF files are not marked binary")
+
+registry = tooling_target_registry(ROOT)
+expected_tasks = project_tasks_document(registry, "rp2040", "pico")
+require(
+    examples_dispatcher.base_tasks("rp2040", "pico", []) == expected_tasks,
+    "example dispatcher bypasses the shared task builder",
+)
+for task in expected_tasks["tasks"]:
+    require(task.get("command") == VSCODE_ENTRY_CONFIG, f"Unix command missing in {task['label']}")
+    require(
+        task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG,
+        f"Windows command missing in {task['label']}",
+    )
+
+run_checked([sys.executable, str(SCRIPTS_DIR / "examples_dispatcher.py"), "check-template"])
+require(
+    not examples_dispatcher.generated_file_mismatches(),
+    "checked-in example VS Code files are outside the generator drift gate",
+)
+require(len(examples_dispatcher.EXAMPLES) == 57, "example registry size changed unexpectedly")
+for entry in examples_dispatcher.EXAMPLES:
+    vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
+    tasks = load_json(vscode_dir / "tasks.json")
+    settings = load_json(vscode_dir / "settings.json")
+    require(
+        all(task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG
+            for task in tasks["tasks"]),
+        f"checked-in example {entry['dir']} omits Windows task commands",
+    )
+    require(
+        settings.get("jaszczurhal.vscodeEntryWindows", "").endswith("jh-vscode.cmd"),
+        f"checked-in example {entry['dir']} omits the Windows launcher setting",
+    )
+reference_tasks = load_json(ROOT / "vscode" / "examples" / "tasks.json")
+require(reference_tasks == expected_tasks, "checked-in VS Code task template drifted")
+reference_settings = load_json(ROOT / "vscode" / "examples" / "settings.json")
+require(
+    reference_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
+    "checked-in VS Code settings omit the Windows launcher",
+)
+
+with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
+    project_dir = Path(temp_dir) / "Projekt żółw"
+    generate_command = [
+        sys.executable,
+        str(TOOLS_DIR / "create-vscode-example.py"),
+        "--output",
+        str(project_dir),
+        "--name",
+        "Generated Windows workflow",
+    ]
+    run_checked(generate_command)
+    first = {
+        path.relative_to(project_dir).as_posix(): path.read_bytes()
+        for path in project_dir.rglob("*")
+        if path.is_file()
+    }
+    run_checked([*generate_command, "--force"])
+    second = {
+        path.relative_to(project_dir).as_posix(): path.read_bytes()
+        for path in project_dir.rglob("*")
+        if path.is_file()
+    }
+    require(first == second, "standalone project generator is not idempotent")
+    generated_tasks = load_json(project_dir / ".vscode" / "tasks.json")
+    for task in generated_tasks["tasks"]:
+        require(
+            task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG,
+            f"standalone generator omitted Windows command in {task['label']}",
+        )
+    generated_settings = load_json(project_dir / ".vscode" / "settings.json")
+    require(
+        generated_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
+        "standalone generator omitted Windows entry setting",
+    )
+
+with tempfile.TemporaryDirectory(prefix="jh code fixture ") as temp_dir:
+    code_fixture = Path(temp_dir) / "code-fixture"
+    code_fixture.write_text("fixture\n", encoding="utf-8")
+    installed = {VSCODE_EXTENSION_RECOMMENDATIONS[0].lower()}
+    install_calls: list[str] = []
+
+    def fake_runner(command, **_kwargs):
+        if "--list-extensions" in command:
+            stdout = "\n".join(sorted(installed)) + "\n"
+            return subprocess.CompletedProcess(command, 0, stdout=stdout, stderr="")
+        if "--install-extension" in command:
+            extension = command[command.index("--install-extension") + 1]
+            installed.add(extension.lower())
+            install_calls.append(extension)
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr="unexpected command")
+
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        check_result = manage_vscode_extensions.main(
+            ["--code", str(code_fixture)],
+            runner=fake_runner,
+        )
+        require(check_result == 1, "extension check accepted missing recommendations")
+        cancelled = manage_vscode_extensions.main(
+            ["--code", str(code_fixture), "--install"],
+            runner=fake_runner,
+            input_fn=lambda _prompt: "n",
+        )
+        require(
+            cancelled == 1 and not install_calls,
+            "extension installation bypassed consent",
+        )
+        installed_result = manage_vscode_extensions.main(
+            ["--code", str(code_fixture), "--install", "--yes"],
+            runner=fake_runner,
+        )
+    require(installed_result == 0, "extension installation did not verify its result")
+    require(
+        installed == {item.lower() for item in VSCODE_EXTENSION_RECOMMENDATIONS},
+        "extension installer and recommendation list diverged",
+    )

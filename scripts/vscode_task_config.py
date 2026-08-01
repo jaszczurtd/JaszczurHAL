@@ -8,6 +8,8 @@ from typing import Any
 
 BOARD_SELECTION_INPUT_ID = "boardSelection"
 SYNC_BOARD_PICKER_LABEL = "Project: Sync board picker"
+VSCODE_ENTRY_CONFIG = "${config:jaszczurhal.vscodeEntry}"
+VSCODE_ENTRY_WINDOWS_CONFIG = "${config:jaszczurhal.vscodeEntryWindows}"
 
 # Single source of truth for .vscode/extensions.json across every generator.
 # cpptools drives IntelliSense over the patched compile database, cmake-tools is
@@ -24,6 +26,57 @@ VSCODE_EXTENSION_RECOMMENDATIONS = [
 
 def extensions_recommendations() -> dict[str, Any]:
     return {"recommendations": list(VSCODE_EXTENSION_RECOMMENDATIONS)}
+
+
+def keybindings_reference() -> list[dict[str, str]]:
+    bindings = [
+        ("ctrl+shift+1", "Project: Build"),
+        ("ctrl+shift+2", "Project: Upload"),
+        ("ctrl+shift+3", "Project: Serial Monitor"),
+        ("ctrl+shift+4", "Project: Upload (UF2 / BOOTSEL)"),
+        ("ctrl+shift+5", "Project: Debug Probe Monitor"),
+        ("ctrl+shift+6", "Project: Refresh IntelliSense"),
+        ("ctrl+shift+7", "Project: Clean"),
+        ("ctrl+shift+8", "Project: Upload (OTA)"),
+        ("ctrl+shift+9", "Project: Config Dump"),
+        ("ctrl+shift+alt+1", "Project: Select board (GUI)"),
+        ("ctrl+shift+alt+2", "Project: Select board"),
+        ("ctrl+shift+alt+3", "Project: Discover OTA devices"),
+    ]
+    return [
+        {
+            "key": key,
+            "command": "workbench.action.tasks.runTask",
+            "args": label,
+        }
+        for key, label in bindings
+    ]
+
+
+def vscode_entry_settings(unix_entry: str) -> dict[str, str]:
+    return {
+        "jaszczurhal.vscodeEntry": unix_entry,
+        "jaszczurhal.vscodeEntryWindows": f"{unix_entry}.cmd",
+    }
+
+
+def vscode_entry_task(
+    *,
+    label: str,
+    detail: str,
+    args: list[str],
+    **extra: Any,
+) -> dict[str, Any]:
+    task: dict[str, Any] = {
+        "label": label,
+        "detail": detail,
+        "type": "shell",
+        "command": VSCODE_ENTRY_CONFIG,
+        "windows": {"command": VSCODE_ENTRY_WINDOWS_CONFIG},
+        "args": args,
+    }
+    task.update(extra)
+    return task
 
 
 def board_selection_values(
@@ -74,26 +127,221 @@ def board_selection_input(
 
 
 def sync_board_picker_task() -> dict[str, Any]:
-    return {
-        "label": SYNC_BOARD_PICKER_LABEL,
-        "detail": "Refresh target/board options from the JaszczurHAL registry",
-        "type": "shell",
-        "command": "${config:jaszczurhal.vscodeEntry}",
-        "args": [
+    return vscode_entry_task(
+        label=SYNC_BOARD_PICKER_LABEL,
+        detail="Refresh target/board options from the JaszczurHAL registry",
+        args=[
             "sync-board-picker",
             "--project",
             "${workspaceFolder}",
         ],
-        "runOptions": {
+        runOptions={
             "runOn": "folderOpen",
             "instanceLimit": 1,
         },
-        "presentation": {
+        presentation={
             "reveal": "never",
             "panel": "shared",
             "showReuseMessage": False,
         },
-        "problemMatcher": [],
+        problemMatcher=[],
+    )
+
+
+def project_tasks_document(
+    registry: dict[str, dict[str, Any]],
+    selected_target: str,
+    selected_board: str,
+    *,
+    module: str = "",
+    usb_product: str = "",
+    variants: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    subject = f" {module}" if module else ""
+    tasks = [
+        vscode_entry_task(
+            label="Project: Build",
+            detail=f"Compile{subject} through JaszczurHAL VS Code entry",
+            args=["build", "--project", "${workspaceFolder}"],
+            group={"kind": "build", "isDefault": True},
+            problemMatcher="$gcc",
+        ),
+        vscode_entry_task(
+            label="Project: Build (Debug)",
+            detail=f"Debug build{subject} through JaszczurHAL VS Code entry",
+            args=["build-debug", "--project", "${workspaceFolder}"],
+            group="build",
+            problemMatcher="$gcc",
+        ),
+        vscode_entry_task(
+            label="Project: Upload",
+            detail=(
+                f"Upload{subject} through the active target backend"
+                if module
+                else "Upload through the active target backend"
+            ),
+            args=["upload", "--project", "${workspaceFolder}"],
+            problemMatcher="$gcc",
+        ),
+        vscode_entry_task(
+            label="Project: Upload (UF2 / BOOTSEL)",
+            detail=(
+                f"RP2040 only: build{subject} and copy UF2 to the single visible "
+                "BOOTSEL drive"
+            ),
+            args=["upload-uf2", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Upload (OTA)",
+            detail=(
+                f"Build, authenticate, and upload{subject} to a discovered native RP device"
+                if module
+                else "Build, authenticate, and upload to one discovered native RP device"
+            ),
+            args=["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Discover OTA devices",
+            detail="List JaszczurHAL devices advertising native OTA",
+            args=["ota-discover", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: List ports",
+            detail="Show serial ports, identity matches, and BOOTSEL candidates",
+            args=["list-ports", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Change port",
+            detail="Interactively persist the upload/monitor serial port",
+            args=["change-port", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Serial Monitor",
+            detail=f"Persistent{subject} serial monitor" if module else "Persistent serial monitor",
+            args=[
+                "monitor",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "replace-own",
+            ],
+            isBackground=True,
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Debug Probe Monitor",
+            detail="Debug Probe monitor through JaszczurHAL VS Code entry",
+            args=[
+                "monitor-probe",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "replace-own",
+            ],
+            isBackground=True,
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Serial Monitor (Any)",
+            detail="Any serial monitor through JaszczurHAL VS Code entry",
+            args=[
+                "monitor-any",
+                "--project",
+                "${workspaceFolder}",
+                "--lock-policy",
+                "wait",
+            ],
+            isBackground=True,
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Refresh IntelliSense",
+            detail=(
+                f"Refresh{subject} IntelliSense through JaszczurHAL VS Code entry"
+                if module
+                else "Refresh IntelliSense through JaszczurHAL VS Code entry"
+            ),
+            args=["refresh-intellisense", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Clean",
+            detail=f"Clean{subject} build directory" if module else "Clean build directory",
+            args=["clean", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Clear USB Identity",
+            detail=(
+                f"Flash neutral firmware after verifying current {usb_product} identity"
+                if usb_product
+                else "Flash neutral firmware after verifying current USB identity"
+            ),
+            args=["clear-identity", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Config Dump",
+            detail="Show resolved JaszczurHAL VS Code project configuration",
+            args=["config-dump", "--project", "${workspaceFolder}"],
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Select board",
+            detail="Interactive target/board selection",
+            args=["select-board", "--project", "${workspaceFolder}", "--interactive"],
+            presentation={
+                "echo": True,
+                "reveal": "always",
+                "focus": True,
+                "panel": "shared",
+                "showReuseMessage": False,
+                "clear": True,
+            },
+            problemMatcher=[],
+        ),
+        vscode_entry_task(
+            label="Project: Select board (GUI)",
+            detail="Pick target/board from the VS Code input menu",
+            args=[
+                "select-board",
+                "--project",
+                "${workspaceFolder}",
+                "--selection",
+                "${input:boardSelection}",
+            ],
+            problemMatcher=[],
+        ),
+        sync_board_picker_task(),
+    ]
+    for variant in variants or []:
+        variant_id = str(variant.get("id") or "")
+        if not variant_id:
+            continue
+        tasks.append(
+            vscode_entry_task(
+                label=f"Project: Build variant: {variant_id}",
+                detail=f"Compile example variant {variant_id}",
+                args=[
+                    "build",
+                    "--project",
+                    "${workspaceFolder}",
+                    "--variant",
+                    variant_id,
+                ],
+                group="build",
+                problemMatcher="$gcc",
+            )
+        )
+    return {
+        "version": "2.0.0",
+        "inputs": [board_selection_input(registry, selected_target, selected_board)],
+        "tasks": tasks,
     }
 
 

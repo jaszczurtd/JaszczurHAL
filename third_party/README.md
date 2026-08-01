@@ -20,9 +20,11 @@ current installations without changing them, run:
 ./third_party/update_components.sh --verify-only
 ```
 
-`runmefirst.sh` invokes the updater after installing its host prerequisites.
-Individual `scripts/ensure_*.sh` helpers remain available for focused workflows,
-but the central updater is the normal entry point.
+`runmefirst.sh` invokes the updater after installing its Linux host
+prerequisites. `runmefirst.ps1` uses the same Python component manager for
+native Windows. Individual `scripts/ensure_*.sh` helpers remain available as
+focused Unix compatibility launchers, while the central updater is the normal
+entry point.
 
 ## Source dependencies
 
@@ -76,10 +78,20 @@ The `rp2350-riscv` target uses the prebuilt toolchain pinned by
 third_party/riscv-toolchain/bin/riscv32-unknown-elf-gcc
 ```
 
-Its release identity is recorded inside the ignored installation so the updater
-can replace a stale or unidentifiable toolchain. Native ARM targets continue to
-use `arm-none-eabi`; they do not consume this RISC-V toolchain.
+Its release identity and complete extracted-file manifest are recorded inside
+the ignored installation so the updater can replace stale or modified content.
+The pin includes authenticated x86-64/AArch64 Linux assets and the native AMD64
+Windows ZIP. Native ARM targets continue to use `arm-none-eabi`; they do not
+consume this RISC-V toolchain.
+
+Native Windows host archives are pinned in `windows_tools_version.conf`.
+`runmefirst.ps1` places managed Python, CMake, Ninja, GNU Arm, OpenOCD,
+picotool, and RISC-V tools below a short user-local root and records resolved
+executables in `resolved-tools.json`.
 
 picotool needs `libusb-1.0-0-dev` and `pkg-config` for USB access. It builds
 against the pinned Pico SDK and uses the SDK's Mbed TLS submodule for RP2350
-hashing and signing support.
+hashing and signing support. On both Linux and Windows, verification requires
+the expected `load`, `verify`, and `reboot` commands. A Linux installation is
+rebuilt when newly available libusb or SDK Mbed TLS support exposes a missing
+USB or `seal` capability instead of accepting a version-only match.

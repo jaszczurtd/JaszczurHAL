@@ -4,6 +4,61 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Cross-platform VS Code launchers
+
+- Added `jh-vscode.cmd` and a public Python entrypoint so Windows and Unix
+  launch the same shared runtime with preserved arguments and exit codes.
+- Added generated Windows task overrides, a shared task/keybinding registry,
+  standalone-generator idempotence coverage, and a drift gate for both the
+  shared snippets and every checked-in example project.
+- Added explicit line-ending and binary-file attributes, including forced LF
+  for hash-pinned upstream sources, plus a consent-gated, verified VS Code
+  extension installer.
+
+### Native Windows bootstrap
+
+- Added a cross-platform Python component manager for exact Git refs,
+  submodules, authenticated ZIP/`tar.gz` archives, atomic replacement, content
+  manifests, version stamps, custom directories, and verify-only operation.
+- Converted the Unix `ensure_*` scripts and central updater into compatibility
+  launchers for the shared manager.
+- Added a plan-first Windows PowerShell bootstrap with pinned Python 3.12 and
+  hash-verified pyserial, short managed roots, compatible system-tool reuse,
+  pinned CMake/Ninja/GNU Arm/GNU RISC-V/OpenOCD/picotool fallbacks, and an Arm
+  RP2040-multilib `<cstdlib>` compiler self-check. Incomplete system OpenOCD
+  installations fall back to the managed archive.
+- Added the public Windows host inventory, CMake 3.20 contract, registry build
+  fallback, explicit host/extension consent switches, and verify-only tests for
+  idempotency and damaged content/stamps.
+- Added a firmware-only inventory scope for headless builders and CI while
+  retaining visible optional editor diagnostics, and made CI repair and verify
+  the required Windows long-path settings explicitly.
+- Preserved Linux picotool self-repair when USB or signing support becomes
+  available, with the same command-capability checks used on Windows.
+
+### Cross-platform firmware builds and Windows CI
+
+- Made Ninja the firmware default with a manifest override, passed the active
+  Python interpreter and compile-database option explicitly, and replaced the
+  registry's fixed picotool path with runtime host resolution.
+- Added a bootstrap-recorded short Windows CMake root while retaining stable
+  project artifact and patched compile-database locations, including paths with
+  spaces and semicolon-separated cache lists.
+- Added ELF/BIN/HEX/UF2/MAP artifact gates, compiler-aware GNU/MSVC host warning
+  policy, visible Windows-disabled CTest entries for POSIX/FreeRTOS/BearSSL
+  cases, and native Windows CI builds for all four target families.
+- Refresh stable artifacts after every selected-target build, including Ninja
+  no-op target switches, and make STM32 flash segments read/execute without an
+  RWX linker warning.
+- Invalidated uploadable stable firmware before each build attempt so a failed
+  target switch cannot expose an older image, installed and verified Ninja in
+  the Unix bootstrap and gate 1, and made the MSVC CI probe compile and run
+  real code.
+- Kept the STM32G474 host-compiler sanity configuration available through the
+  explicit `JH_STM32_HOST_SANITY` option, so the clang-tidy gate and the
+  static-analysis and STM32 CI jobs keep their host database while a firmware
+  configuration without a cross toolchain still stops.
+
 ### Managed media, JSON, storage and test dependencies
 
 - Replaced the tracked cJSON, LodePNG and picojpeg source copies with pinned,

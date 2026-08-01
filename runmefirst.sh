@@ -40,7 +40,7 @@ sudo apt-get update
 # and `ctest` the gate cannot run). build-essential provides gcc/g++/make; the host mock
 # backend links pthreads, which comes with glibc. curl fetches the security
 # scanner below. Python runs repository helper scripts.
-sudo apt-get install -y build-essential cmake git curl ca-certificates python3 iproute2
+sudo apt-get install -y build-essential cmake ninja-build git curl ca-certificates python3 iproute2
 
 # Client/runtime tooling used by generated jh-vscode projects:
 # - openocd flashes/debugs STM32G474 targets,
@@ -153,7 +153,7 @@ tool_exists() {
   command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
 }
 
-for tool in cmake g++ gcc make git python3 ip valgrind clang-tidy cppcheck \
+for tool in cmake ninja g++ gcc make git python3 ip valgrind clang-tidy cppcheck \
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
             arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
             arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \

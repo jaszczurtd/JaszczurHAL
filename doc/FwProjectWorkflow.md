@@ -53,6 +53,28 @@ on `folderOpen`, reads the current JaszczurHAL board registry, and updates the
 tracked GUI options only when they changed. VS Code requires a trusted
 workspace and may request one-time approval for automatic tasks. The terminal
 `Project: Select board` task always reads the registry at invocation time.
+Every generated task uses `jaszczurhal.vscodeEntry` on Unix and the
+`jaszczurhal.vscodeEntryWindows` platform override on Windows. The two settings
+select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which execute one
+shared Python runtime.
+
+Check all tracked VS Code files, regenerate the shared snippets, or regenerate
+every checked-in example project with:
+
+```bash
+scripts/examples_dispatcher.py check-template
+scripts/examples_dispatcher.py generate-template
+scripts/examples_dispatcher.py generate
+```
+
+Recommended extensions can be checked without changing the VS Code profile:
+
+```bash
+python3 vscode/tools/manage_vscode_extensions.py
+```
+
+Passing `--install` requests confirmation before installing missing entries.
+Automation can use `--install --yes` after obtaining consent.
 
 ## Core terms
 
@@ -106,10 +128,10 @@ Inspect the complete resolved view before diagnosing a build or upload:
 
 | Target | ISA | Default board | Firmware format | Upload |
 |---|---|---|---|---|
-| `rp2040` | Cortex-M0+ | `pico` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
-| `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
-| `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/UF2 | verified CDC to BOOTSEL, or direct BOOTSEL |
-| `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX | OpenOCD |
+| `rp2040` | Cortex-M0+ | `pico` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
+| `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX/MAP | OpenOCD |
 | `mock` | host | `host-mock` | host executable/library | none |
 
 The board registry validates target compatibility and supplies provider
@@ -142,6 +164,13 @@ and upload defaults. Unknown target/board pairs fail before the compiler runs.
   }
 }
 ```
+
+Firmware builds use Ninja unless `cmake.generator` selects another CMake
+generator explicitly. The runtime always enables the compile database and
+passes its current Python interpreter to CMake. Native Windows keeps the CMake
+working tree below the short root recorded by `runmefirst.ps1`; the manifest's
+`buildDir` remains the stable location for final artifacts and
+`compile_commands_patched.json`.
 
 Keep common values in the base manifest and express target-specific changes as
 small overlays:
@@ -236,21 +265,32 @@ project-owned.
 ## Build directories and generated files
 
 External firmware projects own `${project}/.build`. Checked-in examples and
-hardware fixtures use the JaszczurHAL root:
+hardware fixtures use the JaszczurHAL root for stable artifacts:
 
 ```text
-.build/examples/<example>/<target>/<board>/
-.build/hardware/<fixture>/cmake/<target>/<board>/
+.build/examples/<example>/
+.build/hardware/<fixture>/
 ```
 
-The project CMake cache is isolated by target and board:
+On Unix, each project CMake cache is isolated by target and board below the
+manifest `cmakeBuildDir`:
 
 ```text
 <cmakeBuildDir>/<target>/<board>/
 ```
 
 This prevents toolchains, provider platforms, board-generated headers, and
-linker layouts from sharing one cache.
+linker layouts from sharing one cache. Native Windows instead uses the short
+bootstrap root:
+
+```text
+<BuildRoot>/<project-name>-<path-hash>/cmake/<target>/<board>/
+```
+
+The raw `compile_commands.json` follows that CMake tree. The runtime writes
+`compile_commands_patched.json` to the stable manifest `buildDir` and refreshes
+the selected target's firmware artifacts after every build, including a Ninja
+no-op after switching between previously configured targets.
 
 `jh-vscode` tracks manifest-owned cache keys in
 `.jh-vscode-cache-keys.json`. A removed key is unset on the next configure.
@@ -260,9 +300,10 @@ inside the managed artifact root is recreated.
 Generated outputs include:
 
 - resolved board CMake/header/JSON and link-contract translation units;
-- `compile_commands.json` and `compile_commands_patched.json`;
+- raw `compile_commands.json` in the CMake tree and stable
+  `compile_commands_patched.json` in `buildDir`;
 - `.vscode/c_cpp_properties.json`;
-- ELF/BIN/UF2 or ELF/BIN/HEX target artifacts;
+- ELF/BIN/HEX/UF2/MAP or ELF/BIN/HEX/MAP target artifacts;
 - OTA container and merged recovery UF2 when OTA is enabled.
 
 Tracked configuration remains in the manifest and `hal_project_config.h`.

@@ -14,10 +14,10 @@ feature definitions. The quality gate builds those manifests through
 
 | Target | Default board | Toolchain | Firmware artifacts |
 |---|---|---|---|
-| `rp2040` | `pico` | official Pico SDK + GNU Arm | ELF, BIN, UF2 |
-| `rp2350-arm` | `pico2` | official Pico SDK + GNU Arm | ELF, BIN, UF2 |
-| `rp2350-riscv` | `pico2` | official Pico SDK + pinned Hazard3 toolchain | ELF, BIN, UF2 |
-| `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX |
+| `rp2040` | `pico` | official Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
+| `rp2350-arm` | `pico2` | official Pico SDK + GNU Arm | ELF, BIN, HEX, UF2, MAP |
+| `rp2350-riscv` | `pico2` | official Pico SDK + pinned Hazard3 toolchain | ELF, BIN, HEX, UF2, MAP |
+| `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
 
 WiFi examples select `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V examples that require CYW43 remain excluded because that network
@@ -71,8 +71,9 @@ Regenerate manifests and VS Code support files after changing the registry:
 scripts/examples_dispatcher.py generate
 ```
 
-Repository-owned example outputs stay below
-`.build/examples/<example>/<target>/<board>/`.
+Repository-owned final artifacts stay below `.build/examples/<example>/`.
+Target-specific CMake trees use
+`.build/examples/<example>/cmake/<target>/<board>/`.
 
 `examples/CMakeLists.txt` is a thin entry to the same dispatcher:
 

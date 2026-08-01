@@ -4,11 +4,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-import hashlib
 import subprocess
 import sys
-import tempfile
-import zipfile
 
 
 ROOT = Path(sys.argv[1]).resolve()
@@ -33,27 +30,17 @@ configs = (
     "picotool_version.conf",
     "riscv_toolchain_version.conf",
     "unity_version.conf",
+    "windows_tools_version.conf",
 )
 for name in configs:
     require((THIRD_PARTY / name).is_file(), f"missing tracked component pin: {name}")
     require(not (ROOT / name).exists(), f"component pin remains in repository root: {name}")
 
 updater = (THIRD_PARTY / "update_components.sh").read_text(encoding="utf-8")
-for helper in (
-    "ensure_bearssl.sh",
-    "ensure_cjson.sh",
-    "ensure_fatfs.sh",
-    "ensure_lodepng.sh",
-    "ensure_jpeg.sh",
-    "ensure_lwip.sh",
-    "ensure_littlefs.sh",
-    "ensure_freertos_kernel.sh",
-    "ensure_pico_sdk.sh",
-    "ensure_picotool.sh",
-    "ensure_riscv_toolchain.sh",
-    "ensure_unity.sh",
-):
-    require(helper in updater, f"central updater does not invoke {helper}")
+require(
+    "scripts/component_manager.py" in updater and " all " in updater,
+    "central updater does not invoke the cross-platform component manager",
+)
 
 runmefirst = (ROOT / "runmefirst.sh").read_text(encoding="utf-8")
 require(
@@ -141,37 +128,37 @@ require(
     not tuple(THIRD_PARTY.glob("*.patch")),
     "managed components use tracked patch files",
 )
-for helper_name in (
-    "ensure_bearssl.sh",
-    "ensure_cjson.sh",
-    "ensure_lodepng.sh",
-    "ensure_jpeg.sh",
-    "ensure_fatfs.sh",
-    "ensure_unity.sh",
-):
+wrapper_components = {
+    "ensure_bearssl.sh": "bearssl",
+    "ensure_cjson.sh": "cjson",
+    "ensure_fatfs.sh": "fatfs",
+    "ensure_freertos_kernel.sh": "freertos",
+    "ensure_jpeg.sh": "jpeg",
+    "ensure_littlefs.sh": "littlefs",
+    "ensure_lodepng.sh": "lodepng",
+    "ensure_lwip.sh": "lwip",
+    "ensure_pico_sdk.sh": "pico-sdk",
+    "ensure_picotool.sh": "picotool",
+    "ensure_riscv_toolchain.sh": "riscv-toolchain",
+    "ensure_unity.sh": "unity",
+}
+for helper_name, component_name in wrapper_components.items():
     helper_text = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")
     require(
-        "jh_dep_ensure_origin" in helper_text,
-        f"{helper_name} does not enforce the pinned repository origin",
+        "component_manager.py" in helper_text
+        and f"component {component_name}" in helper_text,
+        f"{helper_name} is not a thin component-manager wrapper",
     )
-    if helper_name in {"ensure_bearssl.sh", "ensure_fatfs.sh"}:
-        continue
-    require(
-        "jh_dep_ensure_clean" in helper_text,
-        f"{helper_name} does not enforce a clean checkout",
-    )
-fatfs_helper = (ROOT / "scripts/ensure_fatfs.sh").read_text(encoding="utf-8")
 require(
-    "jh_dep_sync_pinned" in fatfs_helper,
-    "ensure_fatfs.sh does not synchronize the pinned checkout",
+    all(
+        "pinned_repo.sh" not in (ROOT / "scripts" / name).read_text(encoding="utf-8")
+        for name in wrapper_components
+    ),
+    "a production component wrapper still uses the Bash-only manager",
 )
 require(
-    "jh_dep_verify_ref" in fatfs_helper,
-    "ensure_fatfs.sh does not verify the pinned commit",
-)
-require(
-    "jh_dep_sync_archive" not in fatfs_helper,
-    "ensure_fatfs.sh still uses archive synchronization",
+    not (ROOT / "scripts/lib/pinned_repo.sh").exists(),
+    "unused Bash component manager was retained",
 )
 
 for component in (
@@ -216,233 +203,3 @@ for name in configs:
         check=False,
     )
     require(ignored.returncode != 0, f"tracked pin is ignored: {name}")
-
-
-def git(*args: str, cwd: Path) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    return result.stdout.strip()
-
-
-with tempfile.TemporaryDirectory(prefix="jh-component-sync-") as temporary:
-    temp = Path(temporary)
-    upstream = temp / "upstream"
-    checkout = temp / "checkout"
-    upstream.mkdir()
-    git("init", "-q", cwd=upstream)
-    git("config", "user.name", "JaszczurHAL Test", cwd=upstream)
-    git("config", "user.email", "test@jaszczurhal.invalid", cwd=upstream)
-
-    payload = upstream / "payload.txt"
-    payload.write_text("version-one\n", encoding="utf-8")
-    git("add", "payload.txt", cwd=upstream)
-    git("commit", "-q", "-m", "version one", cwd=upstream)
-    first_ref = git("rev-parse", "HEAD", cwd=upstream)
-
-    payload.write_text("version-two\n", encoding="utf-8")
-    git("commit", "-q", "-am", "version two", cwd=upstream)
-    second_ref = git("rev-parse", "HEAD", cwd=upstream)
-
-    sync_command = (
-        'source "$1"; '
-        'jh_dep_sync_pinned "$2" "$3" "$4" "$5"; '
-        'git -C "$4" rev-parse HEAD'
-    )
-    helper = ROOT / "scripts/lib/pinned_repo.sh"
-    repo_url = upstream.resolve().as_uri()
-
-    first = subprocess.run(
-        [
-            "bash",
-            "-c",
-            sync_command,
-            "bash",
-            str(helper),
-            repo_url,
-            first_ref,
-            str(checkout),
-            "0",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    require(first.stdout.strip() == first_ref, "initial pinned checkout failed")
-
-    alternate_url = (temp / "alternate").resolve().as_uri()
-    git("remote", "set-url", "origin", alternate_url, cwd=checkout)
-    origin_command = (
-        'source "$1"; '
-        'jh_dep_ensure_origin "$2" "$3" "$4"; '
-        'git -C "$2" remote get-url origin'
-    )
-    rejected_origin = subprocess.run(
-        [
-            "bash",
-            "-c",
-            origin_command,
-            "bash",
-            str(helper),
-            str(checkout),
-            repo_url,
-            "1",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(rejected_origin.returncode != 0, "verify-only accepted a wrong origin")
-    require(
-        git("remote", "get-url", "origin", cwd=checkout) == alternate_url,
-        "verify-only modified a mismatched origin",
-    )
-    corrected_origin = subprocess.run(
-        [
-            "bash",
-            "-c",
-            origin_command,
-            "bash",
-            str(helper),
-            str(checkout),
-            repo_url,
-            "0",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    require(corrected_origin.stdout.strip() == repo_url, "wrong origin was not corrected")
-
-    replaced = subprocess.run(
-        [
-            "bash",
-            "-c",
-            sync_command,
-            "bash",
-            str(helper),
-            repo_url,
-            second_ref,
-            str(checkout),
-            "0",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    require(replaced.stdout.strip() == second_ref, "mismatched checkout was not replaced")
-    require(
-        (checkout / "payload.txt").read_text(encoding="utf-8") == "version-two\n",
-        "replacement did not install the pinned component content",
-    )
-
-    rejected = subprocess.run(
-        [
-            "bash",
-            "-c",
-            sync_command,
-            "bash",
-            str(helper),
-            repo_url,
-            first_ref,
-            str(checkout),
-            "1",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(rejected.returncode != 0, "verify-only accepted a mismatched component")
-    require(
-        git("rev-parse", "HEAD", cwd=checkout) == second_ref,
-        "verify-only modified a mismatched component",
-    )
-
-
-with tempfile.TemporaryDirectory(prefix="jh-archive-sync-") as temporary:
-    temp = Path(temporary)
-    archive = temp / "component.zip"
-    install = temp / "install"
-    with zipfile.ZipFile(archive, "w") as package:
-        package.writestr("source/payload.txt", "archive-version\n")
-        package.writestr("LICENSE.txt", "test license\n")
-    archive_sha256 = hashlib.sha256(archive.read_bytes()).hexdigest()
-    archive_command = (
-        'source "$1"; '
-        'jh_dep_sync_archive "$2" "$3" "$4" "$5"'
-    )
-
-    subprocess.run(
-        [
-            "bash",
-            "-c",
-            archive_command,
-            "bash",
-            str(helper),
-            archive.resolve().as_uri(),
-            archive_sha256,
-            str(install),
-            "0",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        (install / "source/payload.txt").read_text(encoding="utf-8")
-        == "archive-version\n",
-        "initial pinned archive installation failed",
-    )
-
-    (install / "source/payload.txt").write_text("modified\n", encoding="utf-8")
-    rejected_archive = subprocess.run(
-        [
-            "bash",
-            "-c",
-            archive_command,
-            "bash",
-            str(helper),
-            archive.resolve().as_uri(),
-            archive_sha256,
-            str(install),
-            "1",
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        rejected_archive.returncode != 0,
-        "verify-only accepted modified archive content",
-    )
-    require(
-        (install / "source/payload.txt").read_text(encoding="utf-8")
-        == "modified\n",
-        "verify-only changed modified archive content",
-    )
-
-    subprocess.run(
-        [
-            "bash",
-            "-c",
-            archive_command,
-            "bash",
-            str(helper),
-            archive.resolve().as_uri(),
-            archive_sha256,
-            str(install),
-            "0",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    require(
-        (install / "source/payload.txt").read_text(encoding="utf-8")
-        == "archive-version\n",
-        "modified archive installation was not restored",
-    )

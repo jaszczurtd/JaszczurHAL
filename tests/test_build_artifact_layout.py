@@ -74,9 +74,8 @@ tooling_registry = tooling_target_registry(ROOT)
 for target in ("rp2040", "rp2350-arm", "rp2350-riscv"):
     descriptor = tooling_registry[target]
     require(
-        descriptor.get("cache", {}).get("JH_PICOTOOL_EXECUTABLE")
-        == "${jhRoot}/.build/tools/picotool/picotool",
-        f"{target}: picotool build escapes the central .build tree",
+        "JH_PICOTOOL_EXECUTABLE" not in descriptor.get("cache", {}),
+        f"{target}: registry hardcodes a host-specific picotool executable",
     )
 
 for script in (
@@ -97,6 +96,10 @@ require(
 require(
     'PYTHONPYCACHEPREFIX="${BUILD_ROOT}/python-cache"' in quality_gate,
     "runalltests.sh Python cache is not below .build",
+)
+require(
+    "cmake ninja g++ gcc make" in quality_gate,
+    "runalltests.sh gate 1 does not verify the default Ninja generator",
 )
 require(
     "/tmp/jh_" not in quality_gate,
@@ -151,6 +154,43 @@ for probe in (
         "CMAKE_CURRENT_BINARY_DIR" not in text,
         f"{probe}: script-mode output still depends on the caller directory",
     )
+
+target_artifacts = {
+    "cmake/targets/rp-native.cmake": ("firmware.elf", "firmware.bin", "firmware.uf2", "firmware.hex", "firmware.map"),
+    "cmake/targets/stm32g474.cmake": ("firmware.elf", "firmware.bin", "firmware.hex", "firmware.map"),
+}
+for recipe, artifacts in target_artifacts.items():
+    text = (ROOT / recipe).read_text(encoding="utf-8")
+    for artifact in artifacts:
+        require(
+            artifact in text,
+            f"{recipe}: managed artifact layout omits {artifact}",
+        )
+
+stm32_linker_script = (ROOT / "stm32_lib" / "STM32G474RETx_FLASH.ld").read_text(
+    encoding="utf-8"
+)
+for section in (".preinit_array", ".init_array"):
+    require(
+        f"{section} (READONLY)" in stm32_linker_script,
+        f"STM32 linker script leaves {section} writable in the executable segment",
+    )
+stm32_recipe = (ROOT / "stm32_lib" / "jh_stm32g474_firmware.cmake").read_text(
+    encoding="utf-8"
+)
+require(
+    'LINK_DEPENDS "${_ldscript}"' in stm32_recipe,
+    "STM32 firmware does not relink when its linker script changes",
+)
+stm32_library = (ROOT / "stm32_lib" / "CMakeLists.txt").read_text(encoding="utf-8")
+require(
+    'OUTPUT_ROOT "${CMAKE_BINARY_DIR}"' in stm32_library,
+    "STM32 static-library generator is not scoped to its CMake build tree",
+)
+require(
+    'set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH' in stm32_library,
+    "STM32 static-library configuration does not consume its toolchain cache value",
+)
 
 gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
 require("build_*/" not in gitignore, ".gitignore hides legacy root build directories")

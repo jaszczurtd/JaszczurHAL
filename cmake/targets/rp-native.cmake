@@ -61,6 +61,12 @@ add_custom_command(TARGET firmware POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "${CMAKE_CURRENT_BINARY_DIR}/firmware.uf2"
             "${_jh_out_dir}/firmware.uf2"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_BINARY_DIR}/firmware.hex"
+            "${_jh_out_dir}/firmware.hex"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "${CMAKE_CURRENT_BINARY_DIR}/firmware.elf.map"
+            "${_jh_out_dir}/firmware.map"
     VERBATIM
 )
 if(_jh_native_ota)

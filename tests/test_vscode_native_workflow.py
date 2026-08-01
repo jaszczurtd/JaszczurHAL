@@ -92,9 +92,8 @@ for target, (board, toolchain) in expected.items():
         f"{target}: Pico SDK path mismatch",
     )
     require(
-        cache["JH_PICOTOOL_EXECUTABLE"]
-        == str(ROOT / ".build" / "tools" / "picotool" / "picotool"),
-        f"{target}: picotool path escaped the central artifact tree",
+        "JH_PICOTOOL_EXECUTABLE" not in cache,
+        f"{target}: target registry leaked a host-specific picotool path",
     )
     if toolchain is not None:
         require(

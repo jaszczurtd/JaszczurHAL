@@ -1,6 +1,24 @@
 cmake_minimum_required(VERSION 3.16)
 project(JaszczurHAL_STM32G474 C CXX)
 
+# The backend also compiles with the host compiler for sanity and static
+# analysis (hal_target.h leaves JH_STM32G474_HW undefined there). That mode is
+# opt-in so a missing cross toolchain cannot silently yield a host library.
+option(JH_STM32_HOST_SANITY
+    "Configure the STM32G474 backend with the host compiler for analysis"
+    OFF)
+if(CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH
+        "STM32 toolchain used by the static-library build" FORCE)
+elseif(JH_STM32_HOST_SANITY)
+    message(STATUS
+        "stm32_lib: host-compiler sanity build; JH_STM32G474_HW stays undefined")
+else()
+    message(FATAL_ERROR
+        "CMAKE_TOOLCHAIN_FILE is required for stm32_lib. Pass "
+        "-DJH_STM32_HOST_SANITY=ON for the host-compiler analysis build.")
+endif()
+
 set(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(JH_TARGET "stm32g474" CACHE STRING "JaszczurHAL target ID")
 set(JH_BOARD "nucleo-g474re" CACHE STRING "Physical board profile")
@@ -12,6 +30,7 @@ jh_generate_board_config(
     BOARD "${JH_BOARD}"
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
+    OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
     DEFINES ${EXTRA_HAL_DEFINES})
 if(NOT JH_RESOLVED_TARGET STREQUAL "stm32g474")
     message(FATAL_ERROR "stm32_lib requires target stm32g474")

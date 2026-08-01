@@ -2,5 +2,4 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec python3 "$SCRIPT_DIR/../linux/runtime/jh_vscode.py" "$@"
-
+exec python3 "$SCRIPT_DIR/jh_vscode.py" "$@"
