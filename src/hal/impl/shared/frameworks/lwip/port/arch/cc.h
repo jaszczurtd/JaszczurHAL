@@ -1,6 +1,8 @@
 #ifndef JASZCZURHAL_LWIP_ARCH_CC_H
 #define JASZCZURHAL_LWIP_ARCH_CC_H
 
+#include "hal/hal_compiler.h"
+
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -8,8 +10,8 @@ extern "C" {
 #endif
 
 uint32_t jh_lwip_port_rand(void);
-__attribute__((noreturn)) void jh_lwip_port_assert(const char *message,
-                                                   const char *file, int line);
+HAL_NORETURN void jh_lwip_port_assert(const char *message, const char *file,
+                                      int line);
 
 #ifdef __cplusplus
 }

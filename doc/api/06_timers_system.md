@@ -739,6 +739,51 @@ void hal_mock_fault_diagnostics_reset(void);
 **Note:** All helpers are macros (type-width independent). Avoid passing expressions with side effects (`i++`, stateful function calls), because arguments may be evaluated more than once. `bitSet/bitClear/bitRead` remain guarded with `#ifndef` so existing definitions take precedence.
 **Thread safety:** Stateless helpers; thread-safe by themselves. When multiple contexts touch the same variable/register, synchronization is the caller's responsibility.
 
+---
+
+## `hal_compiler` - Compiler attributes and builtins
+
+```c
+#include <hal/hal_compiler.h>
+
+#define HAL_COMPILER_IS_GNU_LIKE  0 or 1
+#define HAL_COMPILER_IS_MSVC      0 or 1
+
+#define HAL_NORETURN          ...  // function never returns
+#define HAL_FORCE_INLINE      ...  // inline specifier plus a forced-inline request
+#define HAL_TRAP()            ...  // stop immediately at an unrecoverable point
+#define HAL_UNREACHABLE()     ...  // path the program must never take
+#define HAL_PACKED            ...  // structure suffix, empty on MSVC
+#define HAL_PACKED_BEGIN      ...  // pragma pack(push, 1) on MSVC
+#define HAL_PACKED_END        ...  // pragma pack(pop) on MSVC
+
+uint32_t hal_clz32(uint32_t value);  // leading zero count, value must be non-zero
+```
+
+Firmware always builds with GNU toolchains; host targets also build with Clang and MSVC. This header is the single place where those differences are resolved, so adding a host compiler is a change in one file. It depends on nothing else in the HAL and can be included directly from runtime, port and test translation units. `hal_config.h` includes it, so most sources already have it.
+
+Placement matters for both compilers:
+
+```c
+static HAL_NORETURN void fatal(int code);        // storage class first
+static HAL_FORCE_INLINE uint32_t span(uint32_t); // no separate inline keyword
+
+HAL_PACKED_BEGIN
+struct wire_header {
+  uint8_t kind;
+  uint32_t length;
+} HAL_PACKED;
+HAL_PACKED_END
+```
+
+Writing `inline` next to `HAL_FORCE_INLINE` duplicates the specifier on GNU and raises C4141 on MSVC, so the macro carries it.
+
+Both identity macros can be pre-defined to `0`, which selects the portable fallback: `HAL_TRAP()` becomes `abort()`, `hal_clz32()` uses a loop, and the attribute macros expand to nothing. The host compiler test builds one translation unit that way and compares its `hal_clz32()` against the builtin path, so the branch no real compiler selects stays covered. An exotic port can use the same switch before its own mapping exists.
+
+**Out of scope by design:** linker-level attributes (`section`, `naked`, `constructor`) and inline assembly stay explicit at their target-specific call sites, where a wrong mapping would silently corrupt the memory map; vendored third-party sources keep their upstream form. Atomics remain direct `__atomic_*` calls, because every translation unit that uses them is compiled by a GNU toolchain.
+
+**Thread safety:** Macros and `hal_clz32()` are stateless and safe from any context.
+
 ### Examples
 
 **Example: Bit manipulation with masks**

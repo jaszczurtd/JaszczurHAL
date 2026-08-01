@@ -5,6 +5,8 @@
 #include "../../port/stm32g474_regs.h"
 #include "stm32g474_flash.h"
 
+#include <string.h>
+
 static constexpr uintptr_t STM32_FLASH_BASE_ADDR = 0x08000000u;
 static constexpr uint32_t STM32_FLASH_BANK_SIZE = 256u * 1024u;
 static constexpr uint32_t STM32_FLASH_TIMEOUT = 2000000u;
@@ -85,8 +87,8 @@ bool jh_stm32g474_flash_program_doubleword(uintptr_t address,
       (volatile uint32_t *)address; // NOLINT(performance-no-int-to-ptr)
   uint32_t low = 0u;
   uint32_t high = 0u;
-  __builtin_memcpy(&low, data, sizeof(low));
-  __builtin_memcpy(&high, data + sizeof(low), sizeof(high));
+  memcpy(&low, data, sizeof(low));
+  memcpy(&high, data + sizeof(low), sizeof(high));
   dst[0] = low;
   dst[1] = high;
 

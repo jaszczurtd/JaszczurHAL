@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+import importlib.util
 import io
 import json
 import os
@@ -11,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).resolve().parents[1]
@@ -41,13 +43,19 @@ def load_json(path: Path):
 
 
 def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
+    result = subprocess.run(
         command,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
         **kwargs,
     )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"command failed with exit code {result.returncode}: {command!r}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
+    return result
 
 
 entry_python = ROOT / "vscode" / "entry" / "jh_vscode.py"
@@ -201,7 +209,7 @@ require(
 )
 
 with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
-    project_dir = Path(temp_dir) / "Projekt żółw"
+    project_dir = Path(temp_dir) / "Projekt modułu"
     generate_command = [
         sys.executable,
         str(TOOLS_DIR / "create-vscode-example.py"),
@@ -233,6 +241,51 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
     require(
         generated_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
         "standalone generator omitted Windows entry setting",
+    )
+
+    generator_path = TOOLS_DIR / "create-vscode-example.py"
+    generator_spec = importlib.util.spec_from_file_location(
+        "jh_standalone_generator", generator_path
+    )
+    require(
+        generator_spec is not None and generator_spec.loader is not None,
+        "standalone generator module could not be loaded",
+    )
+    generator = importlib.util.module_from_spec(generator_spec)
+    generator_spec.loader.exec_module(generator)
+    with mock.patch.object(
+        generator.os.path,
+        "relpath",
+        side_effect=ValueError("path is on another Windows volume"),
+    ):
+        cross_volume = generator.build_files(
+            output_dir=project_dir,
+            project_name="Cross-volume fixture",
+            module="example",
+            target="rp2040",
+            board="pico",
+            usb_manufacturer="Jaszczur",
+            usb_product="Cross-volume board",
+            by_id_hint="Cross_volume_board",
+        )
+    cross_manifest = json.loads(
+        cross_volume[".vscode/jaszczurhal.project.json"]
+    )
+    cross_settings = json.loads(cross_volume[".vscode/settings.json"])
+    expected_dispatcher = (
+        ROOT / "cmake" / "jh_firmware_project"
+    ).resolve().as_posix()
+    require(
+        cross_manifest["cmake"]["sourceDir"] == expected_dispatcher,
+        "cross-volume manifest prefixed an absolute dispatcher path",
+    )
+    require(
+        cross_settings["cmake.sourceDirectory"] == expected_dispatcher,
+        "cross-volume settings prefixed an absolute dispatcher path",
+    )
+    require(
+        cross_manifest["$schema"].startswith("file:"),
+        "cross-volume schema reference is not a file URI",
     )
 
 with tempfile.TemporaryDirectory(prefix="jh code fixture ") as temp_dir:

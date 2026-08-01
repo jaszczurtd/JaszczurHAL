@@ -121,9 +121,10 @@ The gate checks Ninja configuration, the target static library where
 applicable, representative firmware, declared artifacts, the patched compile
 database, MSVC warning settings, and the visible disabled classification of
 Windows-incompatible POSIX/FreeRTOS/BearSSL host tests. The MSVC job builds and
-runs a representative host test under the MSVC warning profile and separately
-compiles the TLS-without-BSD probe with `/W4 /permissive- /WX`; generated
-project-file inspection is not its only warning-policy check.
+runs a focused HAL CRC smoke test with `/W4 /permissive- /WX`. The smoke target
+is independent from the GNU-oriented full mock backend, so firmware support
+does not imply that every historical host mock is portable to MSVC; generated
+project-file inspection is not the only warning-policy check.
 
 ## Current support boundary
 

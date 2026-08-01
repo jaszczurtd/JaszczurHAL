@@ -14,7 +14,8 @@
  * Include this from any source that needs library configuration.
  */
 
-#include "hal_target.h" /* exact backend/target selection */
+#include "hal_compiler.h" /* compiler attributes and builtins */
+#include "hal_target.h"   /* exact backend/target selection */
 #include "hal_uart_config.h"
 #include <stdint.h>
 
@@ -1850,21 +1851,11 @@ const hal_config_t *hal_get_config(void);
 
 #else /* asserts enabled (default) */
 
-#ifndef JH_HAL_NORETURN
-#if defined(__GNUC__) || defined(__clang__)
-#define JH_HAL_NORETURN __attribute__((noreturn))
-#elif defined(_MSC_VER)
-#define JH_HAL_NORETURN __declspec(noreturn)
-#else
-#define JH_HAL_NORETURN
-#endif
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-JH_HAL_NORETURN void hal_assert_fail(const char *msg);
+HAL_NORETURN void hal_assert_fail(const char *msg);
 
 #ifdef __cplusplus
 }

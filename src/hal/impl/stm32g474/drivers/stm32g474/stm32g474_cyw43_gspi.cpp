@@ -1,3 +1,4 @@
+#include "../../../../hal_compiler.h"
 #include "../../../../hal_target.h"
 
 #if HAL_TARGET_IS_STM32G474
@@ -55,18 +56,17 @@ bool config_valid(const jh_stm32g474_cyw43_gspi_config_t *config) {
 
 #ifdef JH_STM32G474_HW
 
-inline __attribute__((always_inline)) void
-fast_write_pin(uint32_t port, uint32_t mask, bool high) {
+HAL_FORCE_INLINE void fast_write_pin(uint32_t port, uint32_t mask, bool high) {
   GPIO_BSRR(port) = high ? mask : (mask << 16u);
 }
 
-inline __attribute__((always_inline)) void gspi_half_period(void) {
+HAL_FORCE_INLINE void gspi_half_period(void) {
   /* HSI16 plus GPIO/register overhead gives the verified polling baseline. */
   __asm volatile("nop\n\tnop\n\tnop\n\tnop" ::: "memory");
 }
 
-inline __attribute__((always_inline)) void
-set_data_mode(stm32g474_gspi_context_t *context, uint32_t mode) {
+HAL_FORCE_INLINE void set_data_mode(stm32g474_gspi_context_t *context,
+                                    uint32_t mode) {
   GPIO_MODER(context->data_port) =
       (GPIO_MODER(context->data_port) & ~(0x3u << context->data_mode_shift)) |
       (mode << context->data_mode_shift);

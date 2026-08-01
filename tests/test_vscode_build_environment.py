@@ -32,7 +32,7 @@ require(
 
 with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_text:
     temporary = Path(temporary_text)
-    project = temporary / "Projekt żółw" / "firmware module"
+    project = temporary / "Projekt modułu" / "firmware module"
     source = project / "cmake source"
     source.mkdir(parents=True)
     state_path = temporary / "host environment.json"
