@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
+import io
 from pathlib import Path
 import subprocess
 import sys
@@ -83,18 +84,25 @@ assert core.serial is None
 assert core.list_ports is None
 assert core.run() == EXIT_MONITOR
 """
-subprocess.run(
+monitor_result = subprocess.run(
     [sys.executable, "-c", monitor_probe],
     cwd=ROOT,
-    check=True,
+    check=False,
+    capture_output=True,
+    text=True,
 )
+assert monitor_result.returncode == 0, monitor_result.stderr
+assert "pyserial is not installed" in monitor_result.stderr
 
 
 # Unsupported host operations surface as the documented exit code, never as a
 # traceback.
 set_platform_adapter(UnsupportedPlatformAdapter())
 try:
-    assert runtime.main(["list-ports"]) == runtime.EXIT_UNSUPPORTED
+    unsupported_error = io.StringIO()
+    with redirect_stderr(unsupported_error):
+        assert runtime.main(["list-ports"]) == runtime.EXIT_UNSUPPORTED
+    assert "serial_candidate_paths" in unsupported_error.getvalue()
 finally:
     set_platform_adapter(None)
 
@@ -102,7 +110,7 @@ finally:
 class FakePlatformAdapter:
     def __init__(self, root: Path):
         self.root = root
-        self.mixed_port = Path("C:\\JH builds/żółw board/COM17")
+        self.mixed_port = Path("C:\\JH builds/moduł testowy/COM17")
         self.lock_paths: list[Path] = []
         self.copy_calls: list[tuple[Path, Path]] = []
 
@@ -116,19 +124,19 @@ class FakePlatformAdapter:
         return "COM17" if port else port
 
     def serial_by_id_links(self, port: str) -> list[Path]:
-        return [Path("usb-Jaszczur_Żółw-if00")] if port else []
+        return [Path("usb-Jaszczur_Moduł-if00")] if port else []
 
     def serial_identity_text(self, port: Path) -> str:
-        return f"Jaszczur Żółw {port.name}"
+        return f"Jaszczur Moduł {port.name}"
 
     def verified_identity_ports(
         self,
         expected_tokens: list[str],
         normalize: Callable[[str], str],
     ) -> list[tuple[Path, Path | None]]:
-        identity = normalize("Jaszczur Żółw")
+        identity = normalize("Jaszczur Moduł")
         if any(token in identity for token in expected_tokens):
-            return [(self.mixed_port, Path("usb-Jaszczur_Żółw-if00"))]
+            return [(self.mixed_port, Path("usb-Jaszczur_Moduł-if00"))]
         return []
 
     def serial_fallback_candidates(self) -> list[str]:
@@ -161,11 +169,11 @@ class FakePlatformAdapter:
 
     def find_bootsel_mounts(self, labels: set[str]) -> list[Path]:
         assert "RPI-RP2" in labels
-        return [self.root / "BOOT SEL żółw"]
+        return [self.root / "BOOT SEL modułu"]
 
     def find_bootsel_blocks(self, labels: set[str]) -> list[dict[str, Any]]:
         assert "RPI-RP2" in labels
-        return [{"path": "volume://żółw", "mountpoints": [None]}]
+        return [{"path": "volume://moduł", "mountpoints": [None]}]
 
     def mount_bootsel_block(
         self,
@@ -173,10 +181,10 @@ class FakePlatformAdapter:
         labels: set[str],
         mountpoint: Callable[[dict[str, Any]], Path | None],
     ) -> Path | None:
-        assert block["path"] == "volume://żółw"
+        assert block["path"] == "volume://moduł"
         assert "RPI-RP2" in labels
         assert mountpoint(block) is None
-        return self.root / "BOOT SEL żółw"
+        return self.root / "BOOT SEL modułu"
 
     def durable_copy(self, source: Path, destination: Path) -> None:
         self.copy_calls.append((source, destination))
@@ -187,13 +195,13 @@ class FakePlatformAdapter:
         yield
 
     def temporary_directory(self) -> Path:
-        return self.root / "temp dir żółw"
+        return self.root / "temp dir modułu"
 
     def persistent_monitor_path(self) -> Path:
         return self.root / "runtime dir" / "serial_persistent.py"
 
 
-with TemporaryDirectory(prefix="jh platform żółw ") as temp_dir:
+with TemporaryDirectory(prefix="jh platform modułu ") as temp_dir:
     root = Path(temp_dir)
     fake = FakePlatformAdapter(root)
     set_platform_adapter(fake)
@@ -202,8 +210,8 @@ with TemporaryDirectory(prefix="jh platform żółw ") as temp_dir:
         assert runtime.serial_candidate_paths() == [fake.mixed_port]
         assert runtime.upload_port_path_exists(str(fake.mixed_port))
         assert runtime.resolve_upload_port_for_tool(str(fake.mixed_port)) == "COM17"
-        assert runtime.by_id_links_for_port("COM17")[0].name == "usb-Jaszczur_Żółw-if00"
-        assert "Żółw" in runtime.tty_usb_identity_text(fake.mixed_port)
+        assert runtime.by_id_links_for_port("COM17")[0].name == "usb-Jaszczur_Moduł-if00"
+        assert "Moduł" in runtime.tty_usb_identity_text(fake.mixed_port)
         assert runtime.process_cmdline(42).endswith("42")
         assert runtime.port_owner_pids("COM17") == [17]
 
@@ -211,26 +219,26 @@ with TemporaryDirectory(prefix="jh platform żółw ") as temp_dir:
             "identity": {
                 "enabled": True,
                 "usbManufacturer": "Jaszczur",
-                "usbProduct": "Żółw",
+                "usbProduct": "Moduł",
             }
         }
         assert runtime.verified_identity_ports(config) == [
-            (fake.mixed_port, Path("usb-Jaszczur_Żółw-if00"))
+            (fake.mixed_port, Path("usb-Jaszczur_Moduł-if00"))
         ]
 
         mounts = runtime.find_bootsel_mounts()
         blocks = runtime.find_bootsel_blocks()
-        assert mounts == [root / "BOOT SEL żółw"]
+        assert mounts == [root / "BOOT SEL modułu"]
         assert runtime.bootsel_mountpoint(blocks[0]) is None
         assert runtime.mount_bootsel_block(blocks[0]) == mounts[0]
 
-        build_dir = root / "build dir żółw"
+        build_dir = root / "build dir modułu"
         with runtime.build_lock({"buildDir": str(build_dir)}, root):
             pass
         assert fake.lock_paths == [build_dir / ".jh-build.lock"]
-        assert runtime.temporary_directory().name == "temp dir żółw"
+        assert runtime.temporary_directory().name == "temp dir modułu"
 
-        uf2 = root / "firmware żółw.uf2"
+        uf2 = root / "firmware modułu.uf2"
         with patch.object(
             runtime,
             "find_single_bootsel_mount",

@@ -37,7 +37,7 @@ jobs:
       - name: Verify idempotent component and tool state
         shell: powershell
         run: >-
-          .\runmefirst.ps1 -VerifyOnly -FirmwareOnly
+          .\runmefirst.ps1 -VerifyOnly -Force -FirmwareOnly
           -ToolsRoot C:\jh\tools
           -BuildRoot C:\jh\build
 
@@ -68,37 +68,64 @@ jobs:
             -P tests/test_host_warning_profiles.cmake
           if ($LASTEXITCODE -ne 0) { throw 'Warning-profile test failed.' }
 
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
+            'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path -LiteralPath $vswhere -PathType Leaf)) {
+            throw "vswhere.exe is missing: $vswhere"
+          }
+          $vsInstall = (& $vswhere -latest -products '*' `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath | Select-Object -First 1)
+          if (-not $vsInstall) {
+            throw 'A Visual Studio installation with the MSVC x64 tools is missing.'
+          }
+          $devShell = Join-Path $vsInstall `
+            'Common7\Tools\Microsoft.VisualStudio.DevShell.dll'
+          Import-Module $devShell
+          Enter-VsDevShell -VsInstallPath $vsInstall `
+            -SkipAutomaticLocation `
+            -DevCmdArguments '-arch=x64 -host_arch=x64'
+          if (-not (Get-Command cl.exe -CommandType Application `
+                    -ErrorAction SilentlyContinue)) {
+            throw 'MSVC cl.exe is unavailable after Enter-VsDevShell.'
+          }
+
           $build = 'C:\jh\build\host-msvc'
           & $state.tools.cmake -S . -B $build `
-            -G 'Visual Studio 17 2022' -A x64 `
+            -G Ninja `
+            "-DCMAKE_MAKE_PROGRAM=$($state.tools.ninja)" `
+            -DCMAKE_C_COMPILER=cl.exe `
+            -DCMAKE_CXX_COMPILER=cl.exe `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON `
             -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host configure failed.' }
 
-          $probe = Get-ChildItem -LiteralPath $build -Recurse `
-            -File -Filter 'test_tls_without_bsd_compile.vcxproj' |
+          $commands = Get-Content `
+            (Join-Path $build 'compile_commands.json') -Raw |
+            ConvertFrom-Json
+          $probe = $commands |
+            Where-Object { $_.file -like '*test_host_compiler_smoke.cpp' } |
             Select-Object -First 1
-          if (-not $probe) { throw 'MSVC warning probe project is missing.' }
-          $probeText = Get-Content -LiteralPath $probe.FullName -Raw
-          $strictWarnings = (
-            $probeText -match '<TreatWarningAsError>true</TreatWarningAsError>' -or
-            $probeText -match '/WX'
-          )
-          $conformance = (
-            $probeText -match '<ConformanceMode>true</ConformanceMode>' -or
-            $probeText -match '/permissive-'
-          )
-          if ($probeText -notmatch '<WarningLevel>Level4</WarningLevel>' -or
-              -not $conformance -or -not $strictWarnings) {
-            throw 'MSVC /W4 /permissive- /WX warning profile was not generated.'
+          if (-not $probe) { throw 'MSVC warning probe command is missing.' }
+          $probeText = if ($probe.command) {
+            $probe.command
+          } else {
+            $probe.arguments -join ' '
+          }
+          foreach ($flag in @('/W4', '/permissive-', '/WX')) {
+            if ($probeText -notmatch [regex]::Escape($flag)) {
+              throw "MSVC warning probe omitted $flag."
+            }
           }
 
-          & $state.tools.cmake --build $build --config Release --parallel 2 `
-            --target test_hal_crc test_tls_without_bsd_compile
-          if ($LASTEXITCODE -ne 0) { throw 'MSVC host warning probes failed to compile.' }
+          & $state.tools.cmake --build $build --parallel 2 `
+            --target test_host_compiler_smoke
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host smoke test failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
-          & $ctest --test-dir $build -C Release --output-on-failure `
-            -R '^test_hal_crc$'
+          & $ctest --test-dir $build --output-on-failure `
+            -R '^test_host_compiler_smoke$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host smoke test failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json
@@ -224,6 +251,7 @@ jobs:
           name: windows-${{ matrix.target }}-firmware
           path: stage5 consumer with spaces/.build/*
           if-no-files-found: error
+          include-hidden-files: true
 
   test:
     runs-on: ubuntu-latest

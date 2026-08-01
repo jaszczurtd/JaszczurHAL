@@ -58,6 +58,31 @@ All notable changes to this project will be documented in this file.
   explicit `JH_STM32_HOST_SANITY` option, so the clang-tidy gate and the
   static-analysis and STM32 CI jobs keep their host database while a firmware
   configuration without a cross toolchain still stops.
+- Kept forced managed-tool resolution during the CI verify-only pass and
+  included the hidden stable artifact directory in Windows firmware uploads.
+- Made standalone project generation use absolute repository references when
+  the destination and JaszczurHAL checkout are on different Windows volumes.
+- Made the MSVC host gate enter the installed developer environment explicitly
+  and build with Ninja instead of relying on CMake's Visual Studio discovery.
+- Scoped the strict MSVC host smoke gate to a standalone HAL CRC target instead
+  of requiring the complete GNU-oriented mock backend to compile on Windows.
+
+### Compiler portability layer
+
+- Added `hal/hal_compiler.h` as the single source for the compiler extensions
+  the HAL relies on: `HAL_NORETURN`, `HAL_FORCE_INLINE`, `HAL_TRAP()`,
+  `HAL_UNREACHABLE()`, the `HAL_PACKED` structure trio and `hal_clz32()`, each
+  resolved for GNU, Clang and MSVC.
+- Replaced the raw `noreturn`, `always_inline`, `__builtin_trap()` and
+  `__builtin_clz()` uses in JaszczurHAL code with those macros, and moved the
+  former `JH_HAL_NORETURN` ladder out of `hal_config.h`. Linker-level
+  attributes, inline assembly and vendored sources keep their explicit form on
+  purpose.
+- Extended the host compiler smoke test to compile and run the new macros, so
+  both the Linux gate and the MSVC CI job validate them. One translation unit
+  forces the portable fallback through the overridable identity macros and
+  compares its leading-zero count against the builtin path, keeping the branch
+  no real compiler selects under test.
 
 ### Managed media, JSON, storage and test dependencies
 

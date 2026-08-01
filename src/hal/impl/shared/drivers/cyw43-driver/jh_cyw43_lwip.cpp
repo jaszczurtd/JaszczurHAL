@@ -1,3 +1,4 @@
+#include "../../../../hal_compiler.h"
 #include "../../../../hal_target.h"
 
 #include "jh_cyw43_lwip.h"
@@ -152,9 +153,9 @@ extern "C" uint32_t jh_lwip_port_rand(void) {
 
 extern "C" uint32_t sys_now(void) { return hal_millis(); }
 
-extern "C" __attribute__((noreturn)) void
-jh_lwip_port_assert(const char *, const char *, int) {
-  __builtin_trap();
+extern "C" HAL_NORETURN void jh_lwip_port_assert(const char *, const char *,
+                                                 int) {
+  HAL_TRAP();
   for (;;) {
   }
 }
@@ -473,9 +474,9 @@ extern "C" uint32_t jh_lwip_port_rand(void) { return 1u; }
 #if HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_RP
 extern "C" uint32_t sys_now(void) { return 0u; }
 #endif
-extern "C" __attribute__((noreturn)) void
-jh_lwip_port_assert(const char *, const char *, int) {
-  __builtin_trap();
+extern "C" HAL_NORETURN void jh_lwip_port_assert(const char *, const char *,
+                                                 int) {
+  HAL_TRAP();
   for (;;) {
   }
 }

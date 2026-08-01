@@ -6,6 +6,7 @@
  * bare-metal port primitives such as g474_debug_uart and linker symbols, but it
  * must not call app-facing HAL modules such as hal_serial.
  */
+#include "hal/hal_compiler.h"
 #include "hal/hal_target.h"
 
 #ifdef JH_STM32G474_HW
@@ -76,7 +77,7 @@ uint32_t stm32g474_runtime_heap_free_bytes(void) {
   return current < limit ? (uint32_t)(limit - current) : 0u;
 }
 
-static void stm32g474_runtime_reset(void) __attribute__((noreturn));
+static HAL_NORETURN void stm32g474_runtime_reset(void);
 static void stm32g474_runtime_reset(void) {
   SCB_AIRCR =
       (SCB_AIRCR & 0x00000700u) | SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;

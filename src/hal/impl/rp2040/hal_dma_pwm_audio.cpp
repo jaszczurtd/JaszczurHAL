@@ -59,7 +59,7 @@ static uint8_t ring_bits_for_bytes(uint32_t bytes) {
   if (bytes == 0u) {
     return 0u;
   }
-  return (uint8_t)(31u - (uint32_t)__builtin_clz(bytes));
+  return (uint8_t)(31u - hal_clz32(bytes));
 }
 
 static bool adc_pins_match_dacless_scan(const hal_dma_pwm_audio_config_t *cfg) {

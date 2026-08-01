@@ -18,6 +18,8 @@
  * scratch marker -- cannot lose the information.
  */
 
+#include "hal/hal_compiler.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -78,7 +80,7 @@ float rp2040_system_read_chip_temp(void);
 
 /** @brief Jump to the RP2040 USB bootloader (BOOTSEL/UF2 mode). Does not
  * return. Wraps @c reset_usb_boot(0, 0). */
-void rp2040_system_enter_bootloader(void) __attribute__((noreturn));
+HAL_NORETURN void rp2040_system_enter_bootloader(void);
 
 /** @brief Fill @p uid (exactly 8 bytes) with the QSPI flash unique id.
  *  Safe no-op if @p uid is @c NULL. Wraps @c pico_get_unique_board_id(). */

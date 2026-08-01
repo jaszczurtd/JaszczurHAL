@@ -33,7 +33,26 @@ GENERATED_FILES = (
 
 
 def relpath(from_dir: Path, to_path: Path) -> str:
-    return os.path.relpath(to_path.resolve(), start=from_dir.resolve()).replace(os.sep, "/")
+    destination = to_path.resolve()
+    try:
+        reference = os.path.relpath(destination, start=from_dir.resolve())
+    except ValueError:
+        # Windows cannot express a relative path between different volumes.
+        reference = str(destination)
+    return reference.replace(os.sep, "/")
+
+
+def variable_path(variable: str, reference: str) -> str:
+    if Path(reference).is_absolute():
+        return reference
+    return f"${{{variable}}}/{reference}"
+
+
+def schema_reference(from_dir: Path, to_path: Path) -> str:
+    reference = relpath(from_dir, to_path)
+    if Path(reference).is_absolute():
+        return to_path.resolve().as_uri()
+    return reference
 
 
 def sanitize_module(value: str) -> str:
@@ -165,7 +184,10 @@ def build_files(
         "JH_ROOT_REL": relpath(output_dir, jh_root),
         "JH_DISPATCHER_REL": relpath(output_dir, jh_root / "cmake" / "jh_firmware_project"),
         "JH_ENTRY_REL": relpath(output_dir, jh_root / "vscode" / "entry" / "jh-vscode"),
-        "SCHEMA_REL": relpath(vscode_dir, jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json"),
+        "SCHEMA_REL": schema_reference(
+            vscode_dir,
+            jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json",
+        ),
     }
 
     files: dict[str, str] = {
@@ -184,7 +206,9 @@ def build_files(
                 "buildDir": "${project}/.build",
                 "cmakeBuildDir": "${project}/.build/cmake",
                 "cmake": {
-                    "sourceDir": f"${{project}}/{values['JH_DISPATCHER_REL']}",
+                    "sourceDir": variable_path(
+                        "project", values["JH_DISPATCHER_REL"]
+                    ),
                     "cache": {
                         "JH_PROJECT_DIR": "${project}",
                         "JH_MODULE_NAME": module,
@@ -211,7 +235,9 @@ def build_files(
                 **vscode_entry_settings(values["JH_ENTRY_REL"]),
                 "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
                 "C_Cpp.default.compileCommands": "${workspaceFolder}/.build/compile_commands_patched.json",
-                "cmake.sourceDirectory": f"${{workspaceFolder}}/{values['JH_DISPATCHER_REL']}",
+                "cmake.sourceDirectory": variable_path(
+                    "workspaceFolder", values["JH_DISPATCHER_REL"]
+                ),
                 "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
             }
         ),

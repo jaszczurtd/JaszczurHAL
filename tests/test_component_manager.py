@@ -441,9 +441,17 @@ class TrackedContractTests(unittest.TestCase):
             workflow.count("-ConfigureHost -FirmwareOnly"),
             2,
         )
-        self.assertIn("test_tls_without_bsd_compile.vcxproj", workflow)
-        self.assertIn("<TreatWarningAsError>true</TreatWarningAsError>", workflow)
-        self.assertIn("--target test_hal_crc test_tls_without_bsd_compile", workflow)
+        self.assertIn(
+            ".\\runmefirst.ps1 -VerifyOnly -Force -FirmwareOnly",
+            workflow,
+        )
+        self.assertIn("include-hidden-files: true", workflow)
+        self.assertIn("Enter-VsDevShell", workflow)
+        self.assertIn("-G Ninja", workflow)
+        self.assertIn("compile_commands.json", workflow)
+        self.assertIn("test_host_compiler_smoke.cpp", workflow)
+        self.assertIn("@('/W4', '/permissive-', '/WX')", workflow)
+        self.assertIn("--target test_host_compiler_smoke", workflow)
 
     def test_source_component_command_excludes_host_tool_archives(self) -> None:
         parser = manager.build_parser()

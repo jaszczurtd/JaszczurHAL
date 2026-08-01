@@ -27,6 +27,26 @@ add_test(NAME test_host_warning_profiles
         "-DJH_ROOT=${CMAKE_SOURCE_DIR}"
         -P "${CMAKE_CURRENT_SOURCE_DIR}/test_host_warning_profiles.cmake")
 
+# Keep the native compiler gate independent from the monolithic mock backend.
+# Windows firmware support does not imply that every GNU-oriented host mock is
+# portable to MSVC; this target still compiles and runs real HAL code under the
+# strict warning profile.
+add_executable(test_host_compiler_smoke
+    test_host_compiler_smoke.cpp
+    test_host_compiler_portable.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/hal_crc.cpp)
+target_compile_definitions(test_host_compiler_smoke PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_CRC)
+# One translation unit forces the portable fallback, so the branch no real
+# compiler selects is compiled and compared against this compiler's builtins.
+set_source_files_properties(test_host_compiler_portable.cpp PROPERTIES
+    COMPILE_DEFINITIONS "HAL_COMPILER_IS_GNU_LIKE=0;HAL_COMPILER_IS_MSVC=0")
+target_include_directories(test_host_compiler_smoke PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
+add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)
+
 function(add_stm32_host_test NAME)
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
