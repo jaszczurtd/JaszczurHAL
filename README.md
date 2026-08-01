@@ -127,7 +127,9 @@ doc/
   security_supply_chain.md  # SBOM and vulnerability tracking process
 examples/                   # buildable example apps for RP2040 and STM32G474
 vscode/                     # shared jh-vscode entry, schema, docs, generator
+  entry/                    # Unix, Windows and public Python launchers
   tools/create-vscode-example.py # standalone VS Code firmware project generator
+  tools/manage_vscode_extensions.py # checked/consented extension setup
 security/
   third_party.json          # third-party component inventory
   sbom.cdx.json             # generated CycloneDX SBOM
@@ -384,6 +386,7 @@ use JaszczurHAL. Projects call the stable entrypoint:
 
 ```text
 libraries/JaszczurHAL/vscode/entry/jh-vscode
+libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd
 ```
 
 The entrypoint resolves project configuration, selects the active target/board,
@@ -399,9 +402,12 @@ starts persistent serial monitors, and refreshes IntelliSense.
 - Native RP network updates, first flash, and firewall requirements:
   [OTAWorkflow.md](doc/OTAWorkflow.md)
 
-Linux is the primary supported environment for this workflow. Windows users
-should prefer WSL2 or a Bash-backed VS Code shell until native Windows parity is
-explicitly implemented.
+Linux remains the complete device-workflow environment. Native Windows now has
+the launcher, generated task override, shared component manager, authenticated
+toolchain bootstrap, short-root Ninja builds for the four target families, and
+CI coverage. COM/BOOTSEL adapters and hardware upload gates remain under
+development. See [Native Windows Setup](doc/windows_setup.md) for setup and
+verification.
 
 ## Managed dependencies
 

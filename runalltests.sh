@@ -115,7 +115,7 @@ clean_build_artifacts
 header "Gate 1/7: Checking required tools"
 
 REQUIRED_TOOLS=(
-    cmake g++ gcc make
+    cmake ninja g++ gcc make
     valgrind clang-tidy cppcheck run-clang-tidy
     arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib arm-none-eabi-objcopy
 )
@@ -243,7 +243,8 @@ header "Gate 5/7: Static analysis - clang-tidy"
 BUILD_STM32="${GATE_BUILD_ROOT}/stm32-host"
 rm -rf "${BUILD_STM32}"
 info "Generating host-compiler STM32 sanity build..."
-cmake -S stm32_lib -B "${BUILD_STM32}" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+cmake -S stm32_lib -B "${BUILD_STM32}" \
+    -DJH_STM32_HOST_SANITY=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 info "Building host-compiler STM32 sanity library..."
 cmake --build "${BUILD_STM32}" --parallel "${JOBS}"
 pass "Host-compiler STM32 sanity library ready."

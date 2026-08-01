@@ -36,9 +36,6 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
         upload: dict[str, Any]
         if provider == "pico-sdk":
             cache["PICO_SDK_PATH"] = "${jhRoot}/third_party/pico-sdk"
-            cache["JH_PICOTOOL_EXECUTABLE"] = (
-                "${jhRoot}/.build/tools/picotool/picotool"
-            )
             if target["architecture"]["isa"] == "riscv32":
                 cache["PICO_TOOLCHAIN_PATH"] = (
                     "${jhRoot}/third_party/riscv-toolchain"

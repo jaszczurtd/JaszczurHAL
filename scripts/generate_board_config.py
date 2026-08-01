@@ -983,10 +983,22 @@ def main() -> int:
             if args.output_root is not None
             else repository_root / ".build"
         )
-        if ".build" not in managed_root.parts:
+        host_build_root = os.environ.get("JH_MANAGED_BUILD_ROOT")
+        matches_host_build_root = False
+        if host_build_root:
+            normalized_managed = os.path.normcase(str(managed_root))
+            normalized_host = os.path.normcase(str(Path(host_build_root).resolve()))
+            try:
+                matches_host_build_root = (
+                    os.path.commonpath((normalized_managed, normalized_host))
+                    == normalized_host
+                )
+            except ValueError:
+                matches_host_build_root = False
+        if ".build" not in managed_root.parts and not matches_host_build_root:
             raise DescriptorError(
-                f"output root must be a .build directory or one of its "
-                f"descendants, got {managed_root}"
+                f"output root must be a .build directory, one of its "
+                f"descendants, or the runtime-managed build root; got {managed_root}"
             )
         if output_dir != managed_root and managed_root not in output_dir.parents:
             raise DescriptorError(

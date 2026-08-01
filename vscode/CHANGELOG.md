@@ -11,6 +11,16 @@
 - Report host operations missing from the active platform adapter through exit
   code 8 instead of an unhandled error.
 - Define the CLI and monitor exit codes in one shared module.
+- Add thin Unix and Windows launchers over one public Python entrypoint. The
+  Windows launcher verifies pyserial, supports a managed interpreter override,
+  preserves arguments and exit codes, and handles paths with spaces and Unicode.
+- Add repository line-ending policy for Unix scripts, Windows launchers,
+  source text, and binary datasheets/artifacts.
+- Generate every standard VS Code task from one shared helper with a Windows
+  command override, add a drift gate for the shared template and all checked-in
+  examples, and test standalone generator idempotence.
+- Add an opt-in VS Code extension installer with interactive or explicit
+  non-interactive consent and post-install verification.
 - Add multi-target board selection: target registry descriptors, `target` /
   `board` / `targetProfiles` manifest fields, `select-board`, and gitignored
   `.vscode/jaszczurhal.local.json` persistence.
@@ -24,6 +34,17 @@
 - Route repository-owned examples, hardware fixtures, CMake probes, and the
   picotool build below the single root `.build/` directory. Managed clean and
   stale-cache reset operations accept only project-local output or this root.
+- Use Ninja as the default firmware generator, pass the active Python
+  interpreter and compile-database setting to CMake, and resolve Windows tools
+  from the bootstrap state. Native Windows keeps CMake work below a short
+  managed root while artifacts and patched compile commands stay at stable
+  project paths.
+- Refresh the stable firmware artifact set from the selected target's isolated
+  CMake tree after every build, including target switches that Ninja reports as
+  having no work.
+- Remove stable uploadable firmware before a build attempt so configuration or
+  compilation failure cannot leave an image from the previously selected
+  target available for upload.
 - Add native RP CDC auto-upload: 1200-bps DTR touch, bounded BOOTSEL wait,
   single-drive safety checks and UF2 copy under the existing `upload` action.
 - Allow native RP `upload` to use the single visible BOOTSEL device when the

@@ -16,6 +16,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
 JH_VSCODE = REPO_ROOT / "vscode" / "entry" / "jh-vscode"
+REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
 RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
 STM32_CYW43_PIM730_DEFINES = [
@@ -203,16 +204,6 @@ def target_registry() -> dict[str, dict[str, Any]]:
     return tooling_target_registry(REPO_ROOT)
 
 
-def board_selection_values(default_target: str, default_board: str) -> tuple[list[str], str]:
-    from vscode_task_config import board_selection_values as shared_board_selection_values
-
-    return shared_board_selection_values(
-        target_registry(),
-        default_target,
-        default_board,
-    )
-
-
 def example_cache(entry: dict[str, Any], module: str) -> dict[str, Any]:
     cache: dict[str, Any] = {
         "JH_ARTIFACT_DIR": "${buildDir}",
@@ -331,12 +322,14 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
 
 
 def settings_for(name: str) -> dict[str, Any]:
+    from vscode_task_config import vscode_entry_settings
+
     build_dir = f"${{workspaceFolder}}/../../.build/examples/{name}"
     return {
         "jaszczurhal.buildDir": build_dir,
         "jaszczurhal.verbose": False,
         "jaszczurhal.root": "../..",
-        "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
+        **vscode_entry_settings("../../vscode/entry/jh-vscode"),
         "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
         "C_Cpp.default.compileCommands": f"{build_dir}/compile_commands_patched.json",
         "C_Cpp.errorSquiggles": "enabled",
@@ -348,173 +341,14 @@ def settings_for(name: str) -> dict[str, Any]:
 
 
 def base_tasks(default_target: str, default_board: str, variants: list[dict[str, Any]]) -> dict[str, Any]:
-    from vscode_task_config import sync_board_picker_task
+    from vscode_task_config import project_tasks_document
 
-    options, default = board_selection_values(default_target, default_board)
-    tasks: list[dict[str, Any]] = [
-        {
-            "label": "Project: Build",
-            "detail": "Compile through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["build", "--project", "${workspaceFolder}"],
-            "group": {"kind": "build", "isDefault": True},
-            "problemMatcher": "$gcc",
-        },
-        {
-            "label": "Project: Build (Debug)",
-            "detail": "Debug build through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["build-debug", "--project", "${workspaceFolder}"],
-            "group": "build",
-            "problemMatcher": "$gcc",
-        },
-        {
-            "label": "Project: Upload",
-            "detail": "Upload through the active target backend",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload", "--project", "${workspaceFolder}"],
-            "problemMatcher": "$gcc",
-        },
-        {
-            "label": "Project: Upload (UF2 / BOOTSEL)",
-            "detail": "RP2040 only: build and copy UF2 to the single visible BOOTSEL drive",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload-uf2", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Upload (OTA)",
-            "detail": "Build, authenticate, and upload to one discovered native RP device",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["upload-ota", "--project", "${workspaceFolder}", "--interactive"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Discover OTA devices",
-            "detail": "List JaszczurHAL devices advertising native OTA",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["ota-discover", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: List ports",
-            "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["list-ports", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Serial Monitor",
-            "detail": "Persistent serial monitor",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor", "--project", "${workspaceFolder}", "--lock-policy", "replace-own"],
-            "isBackground": True,
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Debug Probe Monitor",
-            "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor-probe", "--project", "${workspaceFolder}", "--lock-policy", "replace-own"],
-            "isBackground": True,
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Serial Monitor (Any)",
-            "detail": "Any serial monitor through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["monitor-any", "--project", "${workspaceFolder}", "--lock-policy", "wait"],
-            "isBackground": True,
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Refresh IntelliSense",
-            "detail": "Refresh IntelliSense through JaszczurHAL VS Code entry",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["refresh-intellisense", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Clean",
-            "detail": "Clean build directory",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["clean", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Config Dump",
-            "detail": "Show resolved JaszczurHAL VS Code project configuration",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["config-dump", "--project", "${workspaceFolder}"],
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Select board",
-            "detail": "Interactive target/board selection",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["select-board", "--project", "${workspaceFolder}", "--interactive"],
-            "presentation": {
-                "echo": True,
-                "reveal": "always",
-                "focus": True,
-                "panel": "shared",
-                "showReuseMessage": False,
-                "clear": True,
-            },
-            "problemMatcher": [],
-        },
-        {
-            "label": "Project: Select board (GUI)",
-            "detail": "Pick target/board from the VS Code input menu",
-            "type": "shell",
-            "command": "${config:jaszczurhal.vscodeEntry}",
-            "args": ["select-board", "--project", "${workspaceFolder}", "--selection", "${input:boardSelection}"],
-            "problemMatcher": [],
-        },
-        sync_board_picker_task(),
-    ]
-    for variant in variants:
-        variant_id = str(variant.get("id") or "")
-        if not variant_id:
-            continue
-        tasks.append(
-            {
-                "label": f"Project: Build variant: {variant_id}",
-                "detail": f"Compile example variant {variant_id}",
-                "type": "shell",
-                "command": "${config:jaszczurhal.vscodeEntry}",
-                "args": ["build", "--project", "${workspaceFolder}", "--variant", variant_id],
-                "group": "build",
-                "problemMatcher": "$gcc",
-            }
-        )
-    return {
-        "version": "2.0.0",
-        "inputs": [
-            {
-                "id": "boardSelection",
-                "description": "Target/board",
-                "type": "pickString",
-                "options": options,
-                "default": default,
-            }
-        ],
-        "tasks": tasks,
-    }
+    return project_tasks_document(
+        target_registry(),
+        default_target,
+        default_board,
+        variants=variants,
+    )
 
 
 def launch_for(name: str) -> dict[str, Any]:
@@ -545,20 +379,96 @@ def extensions_for() -> dict[str, Any]:
 
 
 def keybindings_for() -> list[dict[str, str]]:
-    return [
-        {"key": "ctrl+shift+1", "command": "workbench.action.tasks.runTask", "args": "Project: Build"},
-        {"key": "ctrl+shift+2", "command": "workbench.action.tasks.runTask", "args": "Project: Upload"},
-        {"key": "ctrl+shift+3", "command": "workbench.action.tasks.runTask", "args": "Project: Serial Monitor"},
-        {"key": "ctrl+shift+4", "command": "workbench.action.tasks.runTask", "args": "Project: Upload (UF2 / BOOTSEL)"},
-        {"key": "ctrl+shift+5", "command": "workbench.action.tasks.runTask", "args": "Project: Debug Probe Monitor"},
-        {"key": "ctrl+shift+6", "command": "workbench.action.tasks.runTask", "args": "Project: Refresh IntelliSense"},
-        {"key": "ctrl+shift+7", "command": "workbench.action.tasks.runTask", "args": "Project: Clean"},
-        {"key": "ctrl+shift+8", "command": "workbench.action.tasks.runTask", "args": "Project: Upload (OTA)"},
-        {"key": "ctrl+shift+9", "command": "workbench.action.tasks.runTask", "args": "Project: Config Dump"},
-        {"key": "ctrl+shift+alt+1", "command": "workbench.action.tasks.runTask", "args": "Project: Select board (GUI)"},
-        {"key": "ctrl+shift+alt+2", "command": "workbench.action.tasks.runTask", "args": "Project: Select board"},
-        {"key": "ctrl+shift+alt+3", "command": "workbench.action.tasks.runTask", "args": "Project: Discover OTA devices"},
-    ]
+    from vscode_task_config import keybindings_reference
+
+    return keybindings_reference()
+
+
+def reference_settings() -> dict[str, Any]:
+    from vscode_task_config import vscode_entry_settings
+
+    return {
+        "jaszczurhal.root": "../../libraries/JaszczurHAL",
+        **vscode_entry_settings(
+            "../../libraries/JaszczurHAL/vscode/entry/jh-vscode"
+        ),
+        "jaszczurhal.buildDir": "${workspaceFolder}/.build",
+        "jaszczurhal.verbose": False,
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        "C_Cpp.default.compileCommands": (
+            "${workspaceFolder}/.build/compile_commands_patched.json"
+        ),
+        "C_Cpp.errorSquiggles": "enabled",
+        "cmake.sourceDirectory": (
+            "${workspaceFolder}/../../libraries/JaszczurHAL/cmake/jh_firmware_project"
+        ),
+        "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
+        "files.exclude": {"**/.build": True},
+        "search.exclude": {"**/.build": True},
+    }
+
+
+def reference_template_files() -> dict[str, Any]:
+    return {
+        "settings.json": reference_settings(),
+        "tasks.json": base_tasks("rp2040", "pico", []),
+        "extensions.json": extensions_for(),
+        "keybindings.reference.json": keybindings_for(),
+    }
+
+
+def example_vscode_files(entry: dict[str, Any]) -> dict[str, Any]:
+    target, board = default_target_board(entry)
+    variants = entry.get("variants") if isinstance(entry.get("variants"), list) else []
+    return {
+        "jaszczurhal.project.json": manifest_for(entry),
+        "settings.json": settings_for(str(entry["dir"])),
+        "tasks.json": base_tasks(target, board, variants),
+        "launch.json": launch_for(str(entry["dir"])),
+        "keybindings.reference.json": keybindings_for(),
+        "extensions.json": extensions_for(),
+    }
+
+
+def generated_file_mismatches() -> list[str]:
+    mismatches: list[str] = []
+    for name, data in reference_template_files().items():
+        path = REFERENCE_VSCODE_DIR / name
+        actual = path.read_text(encoding="utf-8") if path.is_file() else ""
+        if actual != json_text(data):
+            mismatches.append(path.relative_to(REPO_ROOT).as_posix())
+    for entry in EXAMPLES:
+        vscode_dir = EXAMPLES_DIR / str(entry["dir"]) / ".vscode"
+        for name, data in example_vscode_files(entry).items():
+            path = vscode_dir / name
+            actual = path.read_text(encoding="utf-8") if path.is_file() else ""
+            if actual != json_text(data):
+                mismatches.append(path.relative_to(REPO_ROOT).as_posix())
+    return mismatches
+
+
+def sync_reference_template(*, check: bool) -> int:
+    if check:
+        mismatches = generated_file_mismatches()
+        if mismatches:
+            print(
+                "error: generated VS Code file drift: " + ", ".join(mismatches),
+                file=sys.stderr,
+            )
+            print(
+                "Run: scripts/examples_dispatcher.py generate-template && "
+                "scripts/examples_dispatcher.py generate",
+                file=sys.stderr,
+            )
+            return 1
+        return 0
+
+    for name, data in reference_template_files().items():
+        path = REFERENCE_VSCODE_DIR / name
+        expected = json_text(data)
+        path.write_text(expected, encoding="utf-8")
+        print(f"generated {path.relative_to(REPO_ROOT)}", flush=True)
+    return 0
 
 
 def generate() -> int:
@@ -569,17 +479,7 @@ def generate() -> int:
             return 1
         vscode_dir = example_dir / ".vscode"
         vscode_dir.mkdir(exist_ok=True)
-        target, board = default_target_board(entry)
-        variants = entry.get("variants") if isinstance(entry.get("variants"), list) else []
-        files = {
-            "jaszczurhal.project.json": manifest_for(entry),
-            "settings.json": settings_for(str(entry["dir"])),
-            "tasks.json": base_tasks(target, board, variants),
-            "launch.json": launch_for(str(entry["dir"])),
-            "keybindings.reference.json": keybindings_for(),
-            "extensions.json": extensions_for(),
-        }
-        for name, data in files.items():
+        for name, data in example_vscode_files(entry).items():
             (vscode_dir / name).write_text(json_text(data), encoding="utf-8")
         print(f"generated {example_dir.relative_to(REPO_ROOT)}", flush=True)
     return 0
@@ -723,6 +623,14 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("generate", help="Generate .vscode project files for all examples.")
+    sub.add_parser(
+        "generate-template",
+        help="Regenerate shared files under vscode/examples.",
+    )
+    sub.add_parser(
+        "check-template",
+        help="Fail when shared or checked-in example VS Code files have drifted.",
+    )
     sub.add_parser("list", help="List known examples and supported targets.")
     build_parser = sub.add_parser("build", help="Build examples through jh-vscode and the dispatcher.")
     build_parser.add_argument(
@@ -742,6 +650,10 @@ def main(argv: list[str]) -> int:
 
     if args.command == "generate":
         return generate()
+    if args.command == "generate-template":
+        return sync_reference_template(check=False)
+    if args.command == "check-template":
+        return sync_reference_template(check=True)
     if args.command == "build":
         return build(args)
     if args.command == "list":

@@ -205,6 +205,12 @@ if(JH_PROJECT_RECIPE)
     message(STATUS "jh-firmware: project recipe=${JH_PROJECT_RECIPE}")
     include("${JH_PROJECT_RECIPE}")
 elseif(JH_TARGET STREQUAL "stm32g474")
+    if(NOT CMAKE_TOOLCHAIN_FILE)
+        message(FATAL_ERROR
+            "CMAKE_TOOLCHAIN_FILE is required for target stm32g474")
+    endif()
+    set(CMAKE_TOOLCHAIN_FILE "${CMAKE_TOOLCHAIN_FILE}" CACHE FILEPATH
+        "STM32 toolchain selected for ${JH_TARGET}" FORCE)
     enable_language(C CXX ASM)
     include("${JH_ROOT}/cmake/targets/stm32g474.cmake")
 elseif(_jh_native_rp)

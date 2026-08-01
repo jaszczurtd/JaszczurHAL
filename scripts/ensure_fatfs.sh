@@ -1,51 +1,7 @@
 #!/usr/bin/env bash
-# Fetch or replace the pinned FatFs checkout.
+# Compatibility launcher for the cross-platform fatfs component manager.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CONFIG_FILE="${REPO_ROOT}/third_party/fatfs_version.conf"
-
-# shellcheck source=lib/pinned_repo.sh
-source "${SCRIPT_DIR}/lib/pinned_repo.sh"
-
-VERIFY_ONLY=0
-DIR_ARG=""
-
-while [[ $# -gt 0 ]]; do
-    case "$1" in
-        --enable|--force) shift ;;
-        --verify-only) VERIFY_ONLY=1; shift ;;
-        --repo-root)
-            REPO_ROOT="$(cd "$2" && pwd)"
-            CONFIG_FILE="${REPO_ROOT}/third_party/fatfs_version.conf"
-            shift 2
-            ;;
-        --dir) DIR_ARG="$2"; shift 2 ;;
-        -h|--help)
-            echo "Usage: scripts/ensure_fatfs.sh [--verify-only] [--repo-root PATH] [--dir PATH]"
-            exit 0
-            ;;
-        *) die "Unknown option: $1" ;;
-    esac
-done
-
-[[ -f "${CONFIG_FILE}" ]] || die "FatFs config not found: ${CONFIG_FILE}"
-# shellcheck source=../third_party/fatfs_version.conf
-source "${CONFIG_FILE}"
-
-for var in FATFS_REPO FATFS_REF FATFS_VERSION FATFS_DIR; do
-    [[ -n "${!var:-}" ]] || die "${var} missing in ${CONFIG_FILE}"
-done
-
-COMPONENT_DIR="${DIR_ARG:-${FATFS_DIR}}"
-[[ "${COMPONENT_DIR}" == /* ]] || COMPONENT_DIR="${REPO_ROOT}/${COMPONENT_DIR}"
-jh_dep_sync_pinned \
-    "${FATFS_REPO}" "${FATFS_REF}" "${COMPONENT_DIR}" "${VERIFY_ONLY}"
-jh_dep_ensure_origin "${COMPONENT_DIR}" "${FATFS_REPO}" "${VERIFY_ONLY}"
-jh_dep_verify_paths "${COMPONENT_DIR}" \
-    "LICENSE.txt" "source/00history.txt" "source/00readme.txt" \
-    "source/diskio.h" "source/ff.c" "source/ff.h" \
-    "source/ffsystem.c" "source/ffunicode.c"
-jh_dep_verify_ref "${COMPONENT_DIR}" "${FATFS_REF}"
-ok "FatFs ready: ${COMPONENT_DIR} (${FATFS_VERSION}, ${FATFS_REF})"
+PYTHON="${JH_COMPONENT_PYTHON:-python3}"
+exec "${PYTHON}" "${SCRIPT_DIR}/component_manager.py" component fatfs "$@"

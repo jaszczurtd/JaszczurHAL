@@ -28,12 +28,25 @@ include(CTest)
 
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_managed_frameworks.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_host_warnings.cmake)
 jh_managed_framework_include_dirs(JH_MANAGED_FRAMEWORK_INCLUDE_DIRS)
 jh_managed_framework_configure_sources()
 
 option(JH_ENABLE_FREERTOS_POSIX_TESTS
     "Build host FreeRTOS POSIX scheduler regression tests"
     OFF)
+if(WIN32)
+    if(JH_ENABLE_FREERTOS_POSIX_TESTS)
+        message(STATUS
+            "FreeRTOS GCC/Posix tests requested on Windows; disabling them "
+            "because the upstream host port requires POSIX APIs.")
+    else()
+        message(STATUS
+            "FreeRTOS GCC/Posix tests: disabled on native Windows hosts.")
+    endif()
+    set(JH_ENABLE_FREERTOS_POSIX_TESTS OFF CACHE BOOL
+        "Build host FreeRTOS POSIX scheduler regression tests" FORCE)
+endif()
 
 # ── Mock implementations ───────────────────────────────────────────────────────
 file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
@@ -53,8 +66,6 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/network/ota/jh_ota_image.cpp
     ${SRC}/hal/impl/shared/network/ota/jh_ota_swap_engine.cpp
     ${SRC}/hal/hal_can_util.cpp
-    ${SRC}/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp
-    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp
@@ -114,6 +125,12 @@ add_library(hal_mock STATIC
     ${UTIL_SOURCES}
     ${SRC}/utils/unity.c
 )
+if(NOT WIN32)
+    target_sources(hal_mock PRIVATE
+        ${SRC}/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp
+        ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
+    )
+endif()
 
 target_include_directories(hal_mock PUBLIC
     ${SRC}
@@ -137,7 +154,6 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_WEBSOCKET      # small WebSocket server over HAL TCP
     HAL_ENABLE_NET_CONSOLE    # password-protected serial/debug mirror over TCP
     HAL_ENABLE_NET_COMMANDS   # HTTP/WebSocket JSON/text command dispatch
-    HAL_ENABLE_BSD_SOCKETS    # minimal POSIX/BSD socket adapter
     HAL_ENABLE_TLS            # portable TLS API + private BearSSL provider
     HAL_ENABLE_HTTP_CLIENT    # portable HTTP/HTTPS client
     HAL_ENABLE_OTA
@@ -197,6 +213,9 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_JPEG_AS_BASE64
     HAL_ENABLE_UNITY
 )
+if(NOT WIN32)
+    target_compile_definitions(hal_mock PUBLIC HAL_ENABLE_BSD_SOCKETS)
+endif()
 
 # std::mutex on Linux requires pthreads
 find_package(Threads REQUIRED)
@@ -206,7 +225,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_bearssl.cmake)
 jh_add_bearssl_source_library(jh_bearssl_host)
 target_link_libraries(hal_mock PUBLIC jh_bearssl_host)
 
-target_compile_options(hal_mock PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(hal_mock)
 
 # ── Host FreeRTOS POSIX test library ──────────────────────────────────────────
 if(JH_ENABLE_FREERTOS_POSIX_TESTS)
@@ -279,7 +298,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         HAL_ENABLE_UNITY
         UNITY_INCLUDE_CONFIG_H
     )
-    target_compile_options(hal_freertos_posix PRIVATE -Wall -Wextra)
+    jh_enable_host_warnings(hal_freertos_posix)
     target_link_libraries(hal_freertos_posix PUBLIC freertos_posix_kernel)
 endif()
 

@@ -127,6 +127,9 @@ add_custom_command(TARGET firmware POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "$<TARGET_FILE_DIR:firmware>/firmware.hex"
             "${JH_ARTIFACT_DIR}/firmware.hex"
+    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE_DIR:firmware>/firmware.map"
+            "${JH_ARTIFACT_DIR}/firmware.map"
     VERBATIM
 )
 

@@ -14,7 +14,15 @@ function(jh_generate_board_config)
         endif()
     endforeach()
 
-    find_program(_jh_board_python NAMES python3 python REQUIRED)
+    if(Python3_EXECUTABLE)
+        if(NOT EXISTS "${Python3_EXECUTABLE}")
+            message(FATAL_ERROR
+                "Python3_EXECUTABLE does not exist: ${Python3_EXECUTABLE}")
+        endif()
+        set(_jh_board_python "${Python3_EXECUTABLE}")
+    else()
+        find_program(_jh_board_python NAMES python3 python REQUIRED)
+    endif()
     if(NOT JH_BOARD_BOARD)
         execute_process(
             COMMAND

@@ -1,0 +1,36 @@
+* text=auto
+
+# Executable scripts and source text use stable LF checkouts.
+*.sh text eol=lf
+*.py text eol=lf
+*.cmake text eol=lf
+CMakeLists.txt text eol=lf
+.githooks/* text eol=lf
+vscode/entry/jh-vscode text eol=lf
+*.c text eol=lf
+*.cpp text eol=lf
+*.h text eol=lf
+*.upstream text eol=lf
+*.pio text eol=lf
+*.inc text eol=lf
+LICENSE* text eol=lf
+*.ld text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.conf text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Native Windows launchers keep Windows line endings on Windows checkouts.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Datasheets and generated firmware artifacts are binary.
+*.pdf binary
+*.a binary
+*.bin binary
+*.elf binary
+*.hex binary
+*.uf2 binary

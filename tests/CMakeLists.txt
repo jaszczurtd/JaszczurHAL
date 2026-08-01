@@ -14,6 +14,19 @@ function(add_hal_freertos_posix_test NAME)
         TIMEOUT 20)
 endfunction()
 
+function(add_platform_disabled_test NAME REASON LABEL)
+    add_test(NAME ${NAME}
+        COMMAND ${CMAKE_COMMAND} -E echo "${NAME}: ${REASON}")
+    set_tests_properties(${NAME} PROPERTIES
+        DISABLED TRUE
+        LABELS "${LABEL}")
+endfunction()
+
+add_test(NAME test_host_warning_profiles
+    COMMAND ${CMAKE_COMMAND}
+        "-DJH_ROOT=${CMAKE_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/test_host_warning_profiles.cmake")
+
 function(add_stm32_host_test NAME)
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
@@ -35,7 +48,7 @@ function(add_stm32_host_test NAME)
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
-    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    jh_enable_host_warnings(${NAME})
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -57,7 +70,7 @@ function(add_stm32_i2c_slave_host_test NAME)
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
-    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    jh_enable_host_warnings(${NAME})
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -77,7 +90,7 @@ function(add_stm32_gpio_host_test NAME)
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
-    target_compile_options(${NAME} PRIVATE -Wall -Wextra)
+    jh_enable_host_warnings(${NAME})
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -94,9 +107,7 @@ target_compile_definitions(test_rp2040_adc_shared PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_rp2040_adc_shared PRIVATE
-    -Wall -Wextra -Werror
-)
+jh_enable_host_warnings(test_rp2040_adc_shared ERRORS)
 target_link_libraries(test_rp2040_adc_shared PRIVATE Threads::Threads)
 add_test(NAME test_rp2040_adc_shared COMMAND test_rp2040_adc_shared)
 
@@ -149,7 +160,7 @@ target_compile_definitions(test_jh_entry_adapter PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_jh_entry_adapter PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_jh_entry_adapter)
 add_test(NAME test_jh_entry_adapter COMMAND test_jh_entry_adapter)
 
 add_executable(test_lwip_raw_engines
@@ -173,7 +184,7 @@ target_compile_definitions(test_lwip_raw_engines PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_lwip_raw_engines PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_lwip_raw_engines ERRORS)
 add_test(NAME test_lwip_raw_engines COMMAND test_lwip_raw_engines)
 
 add_executable(test_network_service
@@ -189,7 +200,7 @@ target_compile_definitions(test_network_service PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_network_service PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_network_service ERRORS)
 add_test(NAME test_network_service COMMAND test_network_service)
 
 add_executable(test_network_backend
@@ -209,7 +220,7 @@ target_compile_definitions(test_network_backend PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_network_backend PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_network_backend ERRORS)
 add_test(NAME test_network_backend COMMAND test_network_backend)
 
 add_executable(test_network_backend_contract_host
@@ -221,9 +232,7 @@ target_include_directories(test_network_backend_contract_host PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
 )
-target_compile_options(test_network_backend_contract_host PRIVATE
-    -Wall -Wextra -Werror
-)
+jh_enable_host_warnings(test_network_backend_contract_host ERRORS)
 add_test(NAME test_network_backend_contract_host
     COMMAND test_network_backend_contract_host
 )
@@ -247,9 +256,7 @@ target_compile_definitions(test_network_backend_contract_offload PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_network_backend_contract_offload PRIVATE
-    -Wall -Wextra -Werror
-)
+jh_enable_host_warnings(test_network_backend_contract_offload ERRORS)
 add_test(NAME test_network_backend_contract_offload
     COMMAND test_network_backend_contract_offload
 )
@@ -302,9 +309,24 @@ add_test(NAME test_vscode_platform_adapter
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_platform_adapter.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_vscode_windows_tooling
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_windows_tooling.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_vscode_build_environment
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_build_environment.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_build_artifact_layout
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_build_artifact_layout.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_stm32_host_sanity_build
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_stm32_host_sanity_build.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_rp_ota_artifacts
@@ -315,6 +337,11 @@ add_test(NAME test_rp_ota_artifacts
 add_test(NAME test_component_management
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_management.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_component_manager
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_component_manager.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_ota_firewall_config
@@ -347,7 +374,7 @@ target_compile_definitions(test_hal_board_runtime PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_hal_board_runtime PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_hal_board_runtime ERRORS)
 add_test(NAME test_hal_board_runtime COMMAND test_hal_board_runtime)
 
 function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
@@ -378,7 +405,7 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
         HAL_ENABLE_UNITY
         UNITY_INCLUDE_CONFIG_H
     )
-    target_compile_options(${NAME} PRIVATE -Wall -Wextra -Werror)
+    jh_enable_host_warnings(${NAME} ERRORS)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -408,9 +435,7 @@ target_compile_definitions(test_hal_http_client_plaintext_compile PRIVATE
     HAL_TARGET_MOCK=1
     HAL_ENABLE_HTTP_CLIENT=1
 )
-target_compile_options(test_hal_http_client_plaintext_compile PRIVATE
-    -Wall -Wextra -Werror
-)
+jh_enable_host_warnings(test_hal_http_client_plaintext_compile ERRORS)
 
 add_executable(test_pubsub_hal_client
     test_pubsub_hal_client.cpp
@@ -433,7 +458,7 @@ target_compile_definitions(test_pubsub_hal_client PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_pubsub_hal_client PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_pubsub_hal_client ERRORS)
 add_test(NAME test_pubsub_hal_client COMMAND test_pubsub_hal_client)
 
 add_executable(test_wireguard_lwip_port
@@ -457,7 +482,7 @@ target_compile_definitions(test_wireguard_lwip_port PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_wireguard_lwip_port PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_wireguard_lwip_port ERRORS)
 add_test(NAME test_wireguard_lwip_port COMMAND test_wireguard_lwip_port)
 
 # RP2040 SoftwareSerial must stay on the native Pico SDK PIO backend.  This is a
@@ -659,7 +684,7 @@ target_compile_definitions(test_hal_display_rgb_oled_facade PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_hal_display_rgb_oled_facade PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_hal_display_rgb_oled_facade)
 target_link_libraries(test_hal_display_rgb_oled_facade PRIVATE
     $<TARGET_FILE:hal_mock>
     Threads::Threads
@@ -686,7 +711,7 @@ target_compile_definitions(test_hal_display_st7567_facade PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_hal_display_st7567_facade PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_hal_display_st7567_facade)
 target_link_libraries(test_hal_display_st7567_facade PRIVATE
     $<TARGET_FILE:hal_mock>
     Threads::Threads
@@ -715,7 +740,7 @@ target_compile_definitions(test_hal_display_epd_facade PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_hal_display_epd_facade PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_hal_display_epd_facade)
 target_link_libraries(test_hal_display_epd_facade PRIVATE
     $<TARGET_FILE:hal_mock>
     Threads::Threads
@@ -780,7 +805,7 @@ target_compile_definitions(test_wireguard_pbuf PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_wireguard_pbuf PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_wireguard_pbuf ERRORS)
 add_test(NAME test_wireguard_pbuf COMMAND test_wireguard_pbuf)
 add_executable(test_ntp_client
     test_ntp_client.cpp
@@ -794,7 +819,7 @@ target_compile_definitions(test_ntp_client PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_ntp_client PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_ntp_client ERRORS)
 add_test(NAME test_ntp_client COMMAND test_ntp_client)
 add_executable(test_ota_protocol
     test_ota_protocol.cpp
@@ -809,7 +834,7 @@ target_compile_definitions(test_ota_protocol PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_ota_protocol PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_ota_protocol ERRORS)
 add_test(NAME test_ota_protocol COMMAND test_ota_protocol)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp
@@ -826,7 +851,7 @@ target_compile_definitions(test_ff16_memdisk PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_ff16_memdisk PRIVATE -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_ff16_memdisk ERRORS)
 add_test(NAME test_ff16_memdisk COMMAND test_ff16_memdisk)
 add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_dht)
@@ -850,7 +875,7 @@ target_compile_definitions(test_stm32_pwm_clock PRIVATE
     UNITY_INCLUDE_CONFIG_H
     HAL_ENABLE_UNITY
 )
-target_compile_options(test_stm32_pwm_clock PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_stm32_pwm_clock)
 add_test(NAME test_stm32_pwm_clock COMMAND test_stm32_pwm_clock)
 add_hal_test(test_hal_pwm)
 add_hal_test(test_hal_adc)
@@ -899,7 +924,7 @@ target_compile_definitions(test_hal_config_storage_flags PRIVATE
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
-target_compile_options(test_hal_config_storage_flags PRIVATE -Wall -Wextra)
+jh_enable_host_warnings(test_hal_config_storage_flags)
 add_test(NAME test_hal_config_storage_flags COMMAND test_hal_config_storage_flags)
 add_hal_test(test_hal_udp)
 add_hal_test(test_hal_tcp)
@@ -908,7 +933,13 @@ add_hal_test(test_hal_http_files)
 add_hal_test(test_hal_websocket)
 add_hal_test(test_hal_net_console)
 add_hal_test(test_hal_net_commands)
-add_hal_test(test_bsd_sockets)
+if(WIN32)
+    add_platform_disabled_test(test_bsd_sockets
+        "POSIX socket facade is pending a Winsock port"
+        "posix_socket;windows_disabled")
+else()
+    add_hal_test(test_bsd_sockets)
+endif()
 add_hal_test(test_hal_tls)
 add_hal_test(test_hal_http_client)
 add_hal_test(test_bearssl_provider)
@@ -924,21 +955,25 @@ target_compile_definitions(test_tls_without_bsd_compile PRIVATE
 target_include_directories(test_tls_without_bsd_compile PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/third_party/BearSSL/inc)
-target_compile_options(test_tls_without_bsd_compile PRIVATE
-    -Wall -Wextra -Werror)
+jh_enable_host_warnings(test_tls_without_bsd_compile ERRORS)
 
-add_library(test_bsd_without_tls_compile OBJECT
-    fixtures/bsd_without_tls_config_probe.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp)
-target_compile_definitions(test_bsd_without_tls_compile PRIVATE
-    HAL_TARGET_MOCK=1 HAL_ENABLE_BSD_SOCKETS)
-target_include_directories(test_bsd_without_tls_compile PRIVATE
-    ${CMAKE_SOURCE_DIR}/src)
-target_compile_options(test_bsd_without_tls_compile PRIVATE
-    -Wall -Wextra -Werror)
+if(NOT WIN32)
+    add_library(test_bsd_without_tls_compile OBJECT
+        fixtures/bsd_without_tls_config_probe.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp)
+    target_compile_definitions(test_bsd_without_tls_compile PRIVATE
+        HAL_TARGET_MOCK=1 HAL_ENABLE_BSD_SOCKETS)
+    target_include_directories(test_bsd_without_tls_compile PRIVATE
+        ${CMAKE_SOURCE_DIR}/src)
+    jh_enable_host_warnings(test_bsd_without_tls_compile ERRORS)
+else()
+    add_platform_disabled_test(test_bsd_without_tls_compile
+        "POSIX socket facade is pending a Winsock port"
+        "posix_socket;compile_probe;windows_disabled")
+endif()
 
 find_program(JH_OPENSSL_EXECUTABLE openssl)
-if(JH_OPENSSL_EXECUTABLE)
+if(JH_OPENSSL_EXECUTABLE AND NOT WIN32)
     add_executable(test_bearssl_native_client
         test_bearssl_native_client.cpp
         ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
@@ -954,12 +989,26 @@ if(JH_OPENSSL_EXECUTABLE)
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_bearssl_native_integration.sh
                 $<TARGET_FILE:test_bearssl_native_client>
                 ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/tls_native)
+elseif(WIN32)
+    add_platform_disabled_test(test_bearssl_native_integration
+        "native integration uses the POSIX socket transport and Bash harness"
+        "bearssl;posix_socket;windows_disabled")
+else()
+    add_platform_disabled_test(test_bearssl_native_integration
+        "OpenSSL executable is unavailable"
+        "bearssl;dependency_disabled")
 endif()
-add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
-target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)
-set_target_properties(test_bsd_sockets_c_compile PROPERTIES
-    LINKER_LANGUAGE CXX)
-add_test(NAME test_bsd_sockets_c_compile COMMAND test_bsd_sockets_c_compile)
+if(WIN32)
+    add_platform_disabled_test(test_bsd_sockets_c_compile
+        "POSIX socket C facade is pending a Winsock port"
+        "posix_socket;windows_disabled")
+else()
+    add_executable(test_bsd_sockets_c_compile test_bsd_sockets_c_compile.c)
+    target_link_libraries(test_bsd_sockets_c_compile PRIVATE hal_mock)
+    set_target_properties(test_bsd_sockets_c_compile PROPERTIES
+        LINKER_LANGUAGE CXX)
+    add_test(NAME test_bsd_sockets_c_compile COMMAND test_bsd_sockets_c_compile)
+endif()
 add_executable(test_hal_tls_c_compile test_hal_tls_c_compile.c)
 target_link_libraries(test_hal_tls_c_compile PRIVATE hal_mock)
 set_target_properties(test_hal_tls_c_compile PROPERTIES LINKER_LANGUAGE CXX)
@@ -1004,6 +1053,10 @@ add_hal_test(test_pidController)
 
 if(TARGET hal_freertos_posix)
     add_hal_freertos_posix_test(test_freertos_posix_runtime)
+elseif(WIN32)
+    add_platform_disabled_test(test_freertos_posix_runtime
+        "upstream FreeRTOS GCC/Posix host port is unavailable on Windows"
+        "freertos_posix;windows_disabled")
 endif()
 
 # test_multicoreWatchdog: compiles multicoreWatchdog.cpp directly to validate

@@ -5,18 +5,45 @@ use JaszczurHAL: build, debug build, upload, UF2 upload, serial monitor,
 IntelliSense refresh, board/port helpers, and USB identity cleanup.
 
 The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
-call `entry/jh-vscode` and keep project-specific behavior in configuration.
+call `entry/jh-vscode` on Unix and `entry/jh-vscode.cmd` on Windows, and keep
+project-specific behavior in configuration.
 Portable CLI, configuration, CMake, artifact, OTA, and persistent-monitor logic
 lives under `runtime/`. Host operations use a lazy platform adapter; the Linux
 implementation and compatibility entrypoints live under `linux/runtime/`.
-The reserved `windows/runtime/` directory does not provide a Windows launcher
-or device adapter yet. These runtime directories are implementation details.
+The Windows launcher is available while the Windows serial, process, and
+BOOTSEL adapter remains pending. These runtime directories are implementation details.
 They ship as regular Python packages with an `__init__.py` in every level, so
 `vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
 [`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
 native RP OTA contract, including firewall and recovery, see
 [`doc/OTAWorkflow.md`](../doc/OTAWorkflow.md).
+
+## Host Launchers
+
+Both host launchers execute `entry/jh_vscode.py`, which imports the shared
+runtime. The Unix launcher uses `python3`. The Windows launcher selects the
+first Python 3 interpreter that imports `pyserial` in this order:
+
+1. `JH_VSCODE_PYTHON`, when explicitly configured;
+2. `.build/windows/venv/Scripts/python.exe` under the JaszczurHAL root;
+3. `py -3`;
+4. `python`.
+
+An explicit `JH_VSCODE_PYTHON` must name the interpreter executable, without
+extra arguments. A missing suitable interpreter reports exit code 8 with a
+host-setup diagnostic. The component bootstrap added by the Windows setup
+track will own the managed environment; the launcher already accepts its
+resolved interpreter through `JH_VSCODE_PYTHON`.
+
+Generated `tasks.json` files keep the Unix command in `command` and add a
+Windows override that reads `jaszczurhal.vscodeEntryWindows`. Generated
+`settings.json` files point that setting at the adjacent `jh-vscode.cmd`.
+This keeps task labels and arguments identical on both hosts.
+
+Windows device actions currently report exit code 8 because the Windows host
+adapter is still under development. Native Windows CMake/toolchain validation
+and CI are tracked separately from the launcher.
 
 ## CLI Contract
 
@@ -105,11 +132,20 @@ firmware_upload
 firmware_compile_db
 ```
 
-By default, `jh-vscode` configures CMake with `-S <project>`. Generated and
+By default, `jh-vscode` configures CMake with Ninja, exports compile commands,
+and passes the currently running Python interpreter explicitly. Generated and
 migrated projects set `cmake.sourceDir` in `.vscode/jaszczurhal.project.json`
 to the shared multi-target dispatcher, for example
 `${project}/../../libraries/JaszczurHAL/cmake/jh_firmware_project`, and pass the
-module directory as `JH_PROJECT_DIR`.
+module directory as `JH_PROJECT_DIR`. `cmake.generator` provides an explicit
+generator override.
+
+Native Windows reads the verified tool and short build-root state produced by
+`runmefirst.ps1`. CMake caches stay below that short root, while final firmware
+artifacts remain in the manifest `buildDir`. `refresh-intellisense` writes the
+patched database to the stable artifact location used by VS Code. A build
+attempt first removes stable uploadable firmware, then republishes artifacts
+only after the selected target succeeds.
 
 The `rp2040`, `rp2350-arm`, and `rp2350-riscv` targets build directly with the
 official Pico SDK. RP firmware exposes HAL-owned USB CDC. With a selected
@@ -161,6 +197,38 @@ projects:
 The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration
 snippets, not a checked-in firmware project.
+
+The shared snippets and all checked-in example `.vscode` files have one drift
+check:
+
+```bash
+scripts/examples_dispatcher.py check-template
+scripts/examples_dispatcher.py generate-template
+scripts/examples_dispatcher.py generate
+```
+
+The first command is suitable for CI. The second rewrites the shared snippets
+from the task and extension registries. The third rewrites the generated VS
+Code files for every example declared in the example registry.
+
+## VS Code Extensions
+
+Check the active VS Code profile against the shared recommendation list:
+
+```bash
+python3 vscode/tools/manage_vscode_extensions.py
+```
+
+Install missing entries interactively:
+
+```bash
+python3 vscode/tools/manage_vscode_extensions.py --install
+```
+
+`--install --yes` provides explicit non-interactive consent for bootstrap or
+automation. Every installation is followed by `code --list-extensions`
+verification. Use `--code <path>` or `JH_VSCODE_CODE` when the VS Code command
+is outside `PATH`.
 
 ## VS Code Keyboard Shortcuts
 
@@ -341,13 +409,13 @@ CYW43 network backend for that ISA.
 5   Build failed.
 6   Upload failed.
 7   Monitor failed, including a host without pyserial.
-8   Unsupported action or platform path.
+8   Unsupported action, platform path, or incomplete launcher dependencies.
 ```
 
 Exit code 7 also covers a host without pyserial: the monitor core stays
 importable and reports the missing dependency instead of failing at import
 time. Exit code 8 covers every host operation the active platform adapter does
-not implement.
+not implement and a Windows launcher without a usable Python 3 plus pyserial.
 
 ## Generated Files And Build Cache
 

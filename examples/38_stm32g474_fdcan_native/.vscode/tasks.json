@@ -25,6 +25,9 @@
             "detail": "Compile through JaszczurHAL VS Code entry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "build",
                 "--project",
@@ -41,6 +44,9 @@
             "detail": "Debug build through JaszczurHAL VS Code entry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "build-debug",
                 "--project",
@@ -54,6 +60,9 @@
             "detail": "Upload through the active target backend",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "upload",
                 "--project",
@@ -66,6 +75,9 @@
             "detail": "RP2040 only: build and copy UF2 to the single visible BOOTSEL drive",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "upload-uf2",
                 "--project",
@@ -78,6 +90,9 @@
             "detail": "Build, authenticate, and upload to one discovered native RP device",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "upload-ota",
                 "--project",
@@ -91,6 +106,9 @@
             "detail": "List JaszczurHAL devices advertising native OTA",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "ota-discover",
                 "--project",
@@ -103,8 +121,26 @@
             "detail": "Show serial ports, identity matches, and BOOTSEL candidates",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "list-ports",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Change port",
+            "detail": "Interactively persist the upload/monitor serial port",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "change-port",
                 "--project",
                 "${workspaceFolder}"
             ],
@@ -115,6 +151,9 @@
             "detail": "Persistent serial monitor",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "monitor",
                 "--project",
@@ -130,6 +169,9 @@
             "detail": "Debug Probe monitor through JaszczurHAL VS Code entry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "monitor-probe",
                 "--project",
@@ -145,6 +187,9 @@
             "detail": "Any serial monitor through JaszczurHAL VS Code entry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "monitor-any",
                 "--project",
@@ -160,6 +205,9 @@
             "detail": "Refresh IntelliSense through JaszczurHAL VS Code entry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "refresh-intellisense",
                 "--project",
@@ -172,8 +220,26 @@
             "detail": "Clean build directory",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "clean",
+                "--project",
+                "${workspaceFolder}"
+            ],
+            "problemMatcher": []
+        },
+        {
+            "label": "Project: Clear USB Identity",
+            "detail": "Flash neutral firmware after verifying current USB identity",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "clear-identity",
                 "--project",
                 "${workspaceFolder}"
             ],
@@ -184,6 +250,9 @@
             "detail": "Show resolved JaszczurHAL VS Code project configuration",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "config-dump",
                 "--project",
@@ -196,6 +265,9 @@
             "detail": "Interactive target/board selection",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "select-board",
                 "--project",
@@ -217,6 +289,9 @@
             "detail": "Pick target/board from the VS Code input menu",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "select-board",
                 "--project",
@@ -231,6 +306,9 @@
             "detail": "Refresh target/board options from the JaszczurHAL registry",
             "type": "shell",
             "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
             "args": [
                 "sync-board-picker",
                 "--project",

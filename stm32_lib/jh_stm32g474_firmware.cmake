@@ -163,11 +163,13 @@ function(jh_add_stm32g474_firmware TARGET)
     target_link_options(${TARGET} PRIVATE
         ${_arch}
         "-T${_ldscript}"
+        "-Wl,-Map,$<TARGET_FILE_DIR:${TARGET}>/${TARGET}.map"
         -nostartfiles
         -Wl,--gc-sections
         --specs=nano.specs
         --specs=nosys.specs
     )
+    set_property(TARGET ${TARGET} APPEND PROPERTY LINK_DEPENDS "${_ldscript}")
 
     if(ARG_LIBRARIES)
         target_link_libraries(${TARGET} PRIVATE ${ARG_LIBRARIES})
