@@ -5,9 +5,7 @@ Author: Marcin 'Jaszczur' Kielesinski
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
 
 RP2040 and RP2350 firmware builds directly against the official Pico SDK.
-STM32G474 is supported through the repository's bare-metal and FreeRTOS
-runtimes and linker flow. The mock backend provides deterministic host-side
-validation.
+STM32G474 is supported through the repository's bare-metal implementation and linker flow. All targets are supported by optionally enabled FreeRTOS. The mock backend provides deterministic host-side validation.
 
 ## How do you even pronounce this library name?
 
@@ -142,7 +140,10 @@ src/
   arpa/, netinet/, sys/     # host/embedded socket compatibility headers
   hal/                      # HAL public headers + common wrappers
     hal_target.h            # backend selection
-    hal_config.h            # feature flags, dependency propagation, project hook
+    hal_config.h            # compile-time configuration compatibility facade
+    hal_runtime_config.h    # runtime pool-limit configuration API
+    hal_assert.h            # portable HAL assertion API
+    hal_compat.h            # portable source-compatibility helpers
     impl/
       .mock/                # deterministic host/test backend
       rp2040/               # RP-family backend
@@ -242,6 +243,7 @@ For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` o
 see:
 
 - [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
+- [doc/api/02_module_flags.md](doc/api/02_module_flags.md)
 - [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
 
 ## Target selection (multiplatform)

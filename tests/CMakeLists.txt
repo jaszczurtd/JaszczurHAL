@@ -47,6 +47,20 @@ target_include_directories(test_host_compiler_smoke PRIVATE
 jh_enable_host_warnings(test_host_compiler_smoke ERRORS)
 add_test(NAME test_host_compiler_smoke COMMAND test_host_compiler_smoke)
 
+# These public headers must remain standalone in both supported source
+# languages. They intentionally do not link the monolithic mock backend.
+add_executable(test_hal_config_headers_c test_hal_config_headers_c.c)
+target_include_directories(test_hal_config_headers_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_config_headers_c ERRORS)
+add_test(NAME test_hal_config_headers_c COMMAND test_hal_config_headers_c)
+
+add_executable(test_hal_config_headers_cpp test_hal_config_headers.cpp)
+target_include_directories(test_hal_config_headers_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_config_headers_cpp ERRORS)
+add_test(NAME test_hal_config_headers_cpp COMMAND test_hal_config_headers_cpp)
+
 function(add_stm32_host_test NAME)
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
@@ -57,6 +71,7 @@ function(add_stm32_host_test NAME)
         ${SRC_DIR}/hal/impl/stm32g474/hal_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
+        ${SRC_DIR}/hal/hal_assert.cpp
         ${SRC_DIR}/hal/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )
@@ -78,6 +93,7 @@ function(add_stm32_i2c_slave_host_test NAME)
         ${NAME}.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_i2c_slave.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_sync.cpp
+        ${SRC_DIR}/hal/hal_assert.cpp
         ${SRC_DIR}/hal/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )
@@ -99,6 +115,7 @@ function(add_stm32_gpio_host_test NAME)
     add_executable(${NAME}
         ${NAME}.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_gpio.cpp
+        ${SRC_DIR}/hal/hal_assert.cpp
         ${SRC_DIR}/hal/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )

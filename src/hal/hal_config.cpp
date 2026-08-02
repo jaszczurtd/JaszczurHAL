@@ -1,16 +1,5 @@
 #include "hal_config.h"
 
-#ifndef HAL_DISABLE_ASSERTS
-#if HAL_TARGET_IS_RP
-extern "C" void hal_rp2040_serial_write_assert_fail(const char *text);
-#elif HAL_TARGET_IS_STM32G474 && defined(JH_STM32G474_HW)
-#include "hal/impl/stm32g474/port/g474_debug_uart.h"
-#else
-#include <stdio.h>
-#include <stdlib.h>
-#endif
-#endif
-
 /**
  * @file hal_config.cpp
  * @brief Runtime HAL configuration implementation.
@@ -19,28 +8,6 @@ extern "C" void hal_rp2040_serial_write_assert_fail(const char *text);
  * override pool-size limits at startup.  When hal_setup() is never
  * called the compile-time #define defaults are used.
  */
-
-#ifndef HAL_DISABLE_ASSERTS
-extern "C" void hal_assert_fail(const char *msg) {
-  const char *text = msg ? msg : "(null)";
-
-#if HAL_TARGET_IS_RP
-  hal_rp2040_serial_write_assert_fail(text);
-  for (;;) {
-  }
-#elif HAL_TARGET_IS_STM32G474 && defined(JH_STM32G474_HW)
-  g474_debug_uart_init();
-  g474_debug_uart_puts("HAL ASSERT FAIL: ");
-  g474_debug_uart_puts(text);
-  g474_debug_uart_puts("\r\n");
-  for (;;) {
-  }
-#else
-  fprintf(stderr, "HAL ASSERT FAIL: %s\n", text);
-  abort();
-#endif
-}
-#endif
 
 static hal_config_t s_config = {
     HAL_PWM_FREQ_MAX_CHANNELS, HAL_CAN_MAX_INSTANCES,

@@ -87,6 +87,7 @@ list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES
+    ${SRC}/hal/hal_assert.cpp
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp

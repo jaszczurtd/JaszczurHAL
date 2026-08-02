@@ -84,6 +84,17 @@ All notable changes to this project will be documented in this file.
   compares its leading-zero count against the builtin path, keeping the branch
   no real compiler selects under test.
 
+### Configuration header boundaries
+
+- Split source-compatibility helpers, assertions and runtime configuration
+  into standalone `hal_compat.h`, `hal_assert.h` and `hal_runtime_config.h`
+  public headers while retaining `hal_config.h` as a compatible facade.
+- Moved the target-aware `hal_assert_fail()` implementation from
+  `hal_config.cpp` into its matching `hal_assert.cpp` translation unit.
+- Moved the maintained `HAL_ENABLE_*` catalog out of the compile-time header
+  and into the configuration documentation, and added strict C, C++ and MSVC
+  coverage for the new standalone public headers.
+
 ### Managed media, JSON, storage and test dependencies
 
 - Replaced the tracked cJSON, LodePNG and picojpeg source copies with pinned,
