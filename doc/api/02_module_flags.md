@@ -20,6 +20,10 @@ third-party dependencies into the target build.
 
 ### Available flags
 
+This section is the maintained public catalog of `HAL_ENABLE_*` flags.
+`hal_config.h` keeps only the compile-time propagation and validation logic;
+`doc/HAL_FLAGS.txt` provides a concise text summary.
+
 Application entry flags are separate from optional HAL modules:
 
 | Flag | Effect |

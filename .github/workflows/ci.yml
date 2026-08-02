@@ -120,13 +120,14 @@ jobs:
           }
 
           & $state.tools.cmake --build $build --parallel 2 `
-            --target test_host_compiler_smoke
-          if ($LASTEXITCODE -ne 0) { throw 'MSVC host smoke test failed to compile.' }
+            --target test_host_compiler_smoke `
+              test_hal_config_headers_c test_hal_config_headers_cpp
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^test_host_compiler_smoke$'
-          if ($LASTEXITCODE -ne 0) { throw 'MSVC host smoke test failed.' }
+            -R '^(test_host_compiler_smoke|test_hal_config_headers_c|test_hal_config_headers_cpp)$'
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json
           $disabled = @(

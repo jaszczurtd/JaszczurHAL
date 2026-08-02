@@ -2,14 +2,13 @@
 
 /**
  * @file hal_config.h
- * @brief Centralised compile-time and runtime configuration for JaszczurHAL.
+ * @brief Compile-time configuration facade for JaszczurHAL.
  *
  * This file contains:
  *  1. Application-level feature toggles (formerly libConfig.h).
  *  2. Static-pool size defaults - override with project-level -D flags.
- *  3. Runtime configuration via hal_setup() - allows changing effective
- *     pool limits at startup (cannot exceed compile-time max).
- *  4. HAL_ASSERT debug mechanism.
+ *  3. Compatibility includes for runtime configuration, assertions and
+ *     portable source helpers.
  *
  * Include this from any source that needs library configuration.
  */
@@ -332,241 +331,10 @@
 #endif
 
 /* ── Module enable flags (opt-in) ────────────────────────────────────── */
-/* JaszczurHAL uses an OPT-IN flag model: by default *nothing* beyond the
-   bare core is compiled. Each module must be explicitly enabled with a
-   HAL_ENABLE_* macro - either via compiler -D flags or by defining it in
-   the project-local `hal_project_config.h`. Both the header declarations
-   and the implementation file are compiled out unless the corresponding
-   flag is defined, so unused modules cost zero code/RAM and any
-   third-party libraries they depend on are not linked.
-
-   Supported module flags:
-
-     Application entry:
-       HAL_ENABLE_APP_TASK1   - Dispatch optional app_task1() from the
-                                  HAL-provided entry path. On the RP family
-                                  this explicitly starts the core-1 path.
-
-     FreeRTOS:
-       HAL_ENABLE_FREERTOS    - Opt in to native FreeRTOS availability.
-                                  RP uses the pinned local kernel and has
-                                  FreeRTOS-aware
-                                  mutex/delay/idle primitives. STM32G474
-                                  uses a local FreeRTOS-Kernel checkout,
-                                  target FreeRTOSConfig.h, Cortex-M4F port,
-                                  heap_4, FreeRTOS-owned SVC/PendSV/SysTick
-                                  vectors, and FreeRTOS-aware
-                                  mutex/delay/idle primitives. With
-                                  HAL_PROVIDE_APP_ENTRY, STM32 creates
-                                  app_task0() and optional app_task1() tasks;
-                                  override stack/priority with
-                                  HAL_FREERTOS_TASK{0,1}_STACK and
-                                  HAL_FREERTOS_TASK{0,1}_PRIORITY. This flag
-                                  does not create a public hal_rtos_* API.
-
-     Connectivity:
-       HAL_ENABLE_WIFI          - WiFi through the selected JaszczurHAL
-                                  network backend and board profile.
-       HAL_ENABLE_TIME          - NTP / system time (propagates: WIFI).
-       HAL_ENABLE_MQTT          - PubSubClient wrapper (propagates: WIFI).
-       HAL_ENABLE_UDP           - UDP transport     (propagates: WIFI).
-       HAL_ENABLE_TCP           - TCP client/listener transport
-                                  (propagates: WIFI).
-       HAL_ENABLE_HTTP_SERVER   - small poll-driven HTTP/1.1 server over
-                                  hal_tcp (propagates: TCP, WIFI).
-       HAL_ENABLE_HTTP_FILES    - small file serving/upload adapter over
-                                  HAL HTTP routes (propagates: HTTP_SERVER,
-                                  TCP, WIFI).
-       HAL_ENABLE_WEBSOCKET     - small WebSocket server over hal_tcp
-                                  (propagates: TCP, WIFI).
-       HAL_ENABLE_NET_CONSOLE   - password-protected serial/debug mirror over
-                                  hal_tcp (propagates: TCP, WIFI).
-       HAL_ENABLE_NET_COMMANDS  - JSON/text command dispatcher for HTTP and
-                                  WebSocket control channels (propagates:
-                                  HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI).
-       HAL_ENABLE_BSD_SOCKETS   - minimal POSIX/BSD socket adapter
-                                  (propagates: UDP, TCP, WIFI).
-       HAL_ENABLE_TLS           - portable TLS client with a private BearSSL
-                                  provider (propagates: TCP, WIFI).
-       HAL_ENABLE_HTTP_CLIENT   - portable HTTP/HTTPS client (propagates:
-                                  TCP, WIFI; select TLS explicitly for HTTPS).
-       HAL_ENABLE_OTA           - HAL-socket OTA service
-                                   (propagates: WIFI, UDP, TCP, CRYPTO, CRC).
-       HAL_ENABLE_WIREGUARD     - WireGuard wrapper (propagates: WIFI, UDP).
-       HAL_ENABLE_CELLULAR_MODEM - generic AT-modem engine (hal_modem_at).
-                                  Requires at least one backend (e.g.
-                                  HAL_ENABLE_A7670), otherwise a
-                                  compile-time #error is emitted.
-       HAL_ENABLE_A7670         - SimCom A7670 LTE Cat-1 cellular modem
-                                  backend (propagates: CELLULAR_MODEM,
-                                  UART).
-
-     Storage:
-       HAL_ENABLE_EEPROM        - EEPROM (AT24C256 / target flash).
-       HAL_ENABLE_KV            - Key-value store (propagates: EEPROM).
-       HAL_ENABLE_LITTLEFS      - LittleFS lifecycle + basic FS helpers.
-       HAL_ENABLE_FAT           - FatFs core + shared SD-over-SPI disk I/O
-                                  and file helpers.
-       HAL_ENABLE_SDLOGGER      - SD-card logger/crash logger
-                                  (propagates: FAT, EEPROM, SPI).
-
-     Buses:
-       HAL_ENABLE_UART          - Hardware UART.
-      HAL_ENABLE_SWSERIAL      - software UART (RP2040 PIO/DMA; shared GPIO
-                                  fallback on other targets).
-       HAL_ENABLE_I2C           - I2C master/controller.
-       HAL_ENABLE_I2C_SLAVE     - I2C slave/target with register map.
-       HAL_ENABLE_SPI           - SPI master/controller.
-       HAL_ENABLE_CAN           - generic CAN API facade.
-       HAL_ENABLE_MCP2515       - MCP2515 CAN backend
-       HAL_ENABLE_MCP251XFD     - MCP2517FD/MCP2518FD CAN FD backend
-       HAL_ENABLE_STM32G474_FDCAN - native STM32G474 FDCAN backend
-                                  (propagates: CAN; STM32G474 only).
-
-     Time-of-day:
-       HAL_ENABLE_RTC           - generic RTC API (requires at least one
-                                  backend: PCF8563 or DS3231).
-       HAL_ENABLE_PCF8563       - PCF8563 RTC backend (propagates: RTC, I2C).
-       HAL_ENABLE_DS3231        - DS3231 RTC backend  (propagates: RTC, I2C).
-
-     Sensors:
-       HAL_ENABLE_THERMOCOUPLE  - generic thermocouple API (requires at
-                                  least one backend: MCP9600 or MAX6675).
-       HAL_ENABLE_MCP9600       - MCP9600/MCP9601 shared HAL I2C backend
-                                  (propagates: THERMOCOUPLE, I2C).
-       HAL_ENABLE_MAX6675       - MAX6675 backend       (propagates:
-                                  THERMOCOUPLE; shared bit-bang over HAL GPIO).
-       HAL_ENABLE_DS18B20       - shared DS18B20 1-Wire temperature sensor
-                                  (propagates: ONEWIRE).
-       HAL_ENABLE_BH1750        - shared BH1750 ambient-light sensor over
-                                  HAL I2C (propagates: I2C).
-       HAL_ENABLE_ADP5360       - shared ADP5360 PMIC over HAL I2C:
-                                  MFD init/reset/shipment, charger,
-                                  fuel-gauge and buck/buck-boost regulator
-                                  control (propagates: I2C).
-       HAL_ENABLE_TSC2007       - shared TSC2007 resistive touch controller
-                                  over HAL I2C (propagates: I2C).
-       HAL_ENABLE_STMPE610      - shared STMPE610 resistive touch controller
-                                  over HAL I2C/SPI (propagates: I2C, SPI).
-       HAL_ENABLE_IRSMALL_DECODER - shared IRsmallDecoder-compatible infrared
-                                  receiver decoder over HAL GPIO interrupts.
-       HAL_ENABLE_ONEWIRE       - shared generic 1-Wire bus API wrapper
-                                  (propagates: CRC).
-       HAL_ENABLE_CRC           - generic CRC-8/16/32 checksums (hal_crc);
-                                  auto-enabled by ONEWIRE/DS18B20.
-       HAL_ENABLE_EXTERNAL_ADC  - ADS1115 external ADC via shared ADS1X15
-                                  HAL I2C driver (propagates: I2C).
-       HAL_ENABLE_MCP3221       - MCP3221 12-bit ADC over HAL I2C
-                                  (propagates: I2C).
-       HAL_ENABLE_GPS           - GPS / NMEA receiver (requires a serial
-                                  transport: HAL_ENABLE_UART or
-                                  HAL_ENABLE_SWSERIAL; does NOT auto-enable
-   one).
-
-     Digital potentiometers:
-       HAL_ENABLE_DIGIPOT       - generic digital-potentiometer API (requires
-                                  at least one backend: MCP401X or MAX5395).
-       HAL_ENABLE_MCP401X       - MCP4017/4018/4019 backend (propagates:
-                                  DIGIPOT, I2C).
-       HAL_ENABLE_MAX5395       - MAX5395 backend       (propagates:
-                                  DIGIPOT, I2C).
-
-     Audio volume control:
-       HAL_ENABLE_PGA2311       - PGA2311 stereo volume controller over SPI
-                                  (propagates: SPI).
-
-     Simple I/O chips:
-       HAL_ENABLE_MCP23017      - MCP23017 I2C GPIO expander
-                                  (propagates: I2C).
-       HAL_ENABLE_PCA9654E      - PCA9654E I2C output expander
-                                  (propagates: I2C).
-       HAL_ENABLE_PCF8574       - PCF8574 quasi-bidirectional I2C GPIO
-                                  expander (propagates: I2C).
-       HAL_ENABLE_HC595         - 74HC595 SPI shift-register output expander
-                                  (propagates: SPI).
-       HAL_ENABLE_MCP4725       - MCP4725 12-bit DAC over HAL I2C
-                                  (propagates: I2C).
-
-     RFID:
-       HAL_ENABLE_MFRC522       - shared MFRC522 RFID reader driver over HAL
-                                  SPI/I2C (propagates: SPI).
-       HAL_ENABLE_PN532         - shared PN532 NFC/RFID reader driver over
-                                  HAL SPI/I2C/UART (propagates: SPI).
-
-     PWM audio:
-       HAL_ENABLE_DACLESS       - DACless PWM-audio engine with block/sample
-                                  callbacks and ADC sampling (propagates:
-                                  DMA_PWM_AUDIO, PWM_FREQ).
-       HAL_ENABLE_DMA_PWM_AUDIO - Narrow DMA helper API for timer-paced
-                                  PWM-audio buffers.
-
-     PWM / status:
-       HAL_ENABLE_PWM_FREQ      - Frequency-controlled PWM.
-       HAL_ENABLE_RGB_LED       - NeoPixel RGB status LED.
-
-     Display (fasada + backend):
-       HAL_ENABLE_DISPLAY       - generic display API (requires at least
-                                  one backend: TFT or SSD1306).
-       HAL_ENABLE_HD44780 - HD44780-compatible parallel character LCD
-                                  driver over HAL GPIO/system timing.
-       HAL_ENABLE_TFT           - SPI TFT family (requires at least one
-                                  driver below; propagates: DISPLAY, SPI).
-       HAL_ENABLE_ILI9341       - ILI9341 TFT driver (propagates: TFT, SPI).
-       HAL_ENABLE_ST7789        - ST7789 TFT driver  (propagates: TFT, SPI).
-       HAL_ENABLE_ST7735        - ST7735 TFT driver  (propagates: TFT, SPI).
-       HAL_ENABLE_ST7796S       - ST7796S TFT driver (propagates: TFT, SPI).
-       HAL_ENABLE_GC9A01        - GC9A01 round TFT driver (propagates: TFT,
-                                  SPI).
-       HAL_ENABLE_SSD1331       - SSD1331 RGB OLED facade/backend
-                                  (propagates: DISPLAY, SPI).
-       HAL_ENABLE_SSD135X       - SSD1351/SSD1357 RGB OLED facade/backend
-                                  (propagates: DISPLAY, SPI).
-       HAL_ENABLE_SSD1306       - SSD1306 OLED driver (propagates: DISPLAY,
-   I2C).
-       HAL_ENABLE_ST7567        - ST7567 monochrome LCD facade/backend
-                                  (propagates: DISPLAY, I2C; SPI transport
-                                  available when SPI is enabled).
-       HAL_ENABLE_SSD16XX       - SSD1608/SSD1673/SSD1675A/SSD1680/SSD1681
-                                  monochrome EPD backend (propagates: DISPLAY,
-                                  SPI).
-       HAL_ENABLE_UC81XX        - UC8175/UC8176/UC8151D/UC8179 monochrome EPD
-                                  backend (propagates: DISPLAY, SPI).
-
-     Crypto + bundled libs:
-       HAL_ENABLE_CRYPTO        - hal_crypto (Base64, MD5, SHA-256,
-                                  HMAC-SHA256, ChaCha20 / -Poly1305) and
-                                  the dependent hal_sc_auth helper.
-                                  Without this flag the headers expand
-                                  to nothing and the implementation TUs
-                                  produce empty objects. hal_serial_session
-                                  keeps working - the SC_AUTH_BEGIN /
-                                  SC_AUTH_PROVE handlers are simply
-                                  compiled out and the session never
-                                  enters the authenticated state.
-       HAL_ENABLE_CJSON         - bundled cJSON / cJSON_Utils sources.
-       HAL_ENABLE_PNG           - bundled LodePNG memory-based PNG encoder /
-                                  decoder. JaszczurHAL disables LodePNG disk
-                                  helpers and C++ std wrapper by default; define
-                                  HAL_LODEPNG_ENABLE_DISK or
-                                  HAL_LODEPNG_ENABLE_CPP to opt them back in.
-       HAL_ENABLE_PNG_AS_BASE64 - Base64-encoded PNG helpers in tools
-                                  (propagates: CRYPTO, PNG).
-       HAL_ENABLE_JPEG          - managed TJpgDec memory-based baseline JPEG
-                                  decoder with RGB565 output.
-       HAL_ENABLE_JPEG_AS_BASE64 - Base64-encoded JPEG helpers in tools
-                                  (propagates: CRYPTO, JPEG).
-
-     Test framework:
-       HAL_ENABLE_UNITY         - bundled Unity framework. Typically
-                                  enabled only by the host-test CMake.
-
-   Special opt-OUT flag (kept for compatibility with assert.h/NDEBUG
-   convention):
-     HAL_DISABLE_ASSERTS        - compile HAL_ASSERT() to no-ops.
-                                  Asserts are ON by default.
-
-   Dependency propagation - enabling a dependent module automatically
-   enables every module it requires.                                     */
+/* JaszczurHAL uses an opt-in model: only explicitly enabled modules and their
+   propagated dependencies are compiled. The maintained public flag catalog is
+   in doc/api/02_module_flags.md; doc/HAL_FLAGS.txt provides a concise summary.
+   The logic below remains the source of truth for dependency propagation. */
 
 /* ── Dependency propagation (enabling a child enables its parents) ──── */
 
@@ -1465,50 +1233,8 @@
 #endif
 #endif /* HAL_CONFIG_VERBOSE */
 
-/* ── Portable source-compatibility macros ───────────────────────────── */
-
-/**
- * @def PROGMEM
- * @brief No-op on platforms without a separate flash address space.
- *
- * JaszczurHAL targets use a unified address space, so this expands to nothing.
- */
-#ifndef PROGMEM
-#define PROGMEM /* no-op on platforms without separate flash address space */
-#endif
-
-/**
- * @def F(s)
- * @brief No-op identity macro for flash-string literals.
- *
- * JaszczurHAL targets use a unified address space, so this returns the string
- * pointer unchanged.
- */
-#ifndef F
-#define F(s) (s)
-#endif
-
-/**
- * @def hal_min(a, b)
- * @brief Type-generic minimum of two values.
- *
- * Safe drop-in for Arduino's min() macro; does not suffer from
- * double-evaluation when arguments have no side-effects.
- */
-#ifndef hal_min
-#define hal_min(a, b) (((a) < (b)) ? (a) : (b))
-#endif
-
-/**
- * @def hal_max(a, b)
- * @brief Type-generic maximum of two values.
- *
- * Safe drop-in for Arduino's max() macro; does not suffer from
- * double-evaluation when arguments have no side-effects.
- */
-#ifndef hal_max
-#define hal_max(a, b) (((a) > (b)) ? (a) : (b))
-#endif
+/* Keep source-compatibility helpers available through hal_config.h. */
+#include "hal_compat.h"
 
 /* ── GPS UART frame config ────────────────────────────────────────────── */
 
@@ -1765,107 +1491,8 @@
 #define HAL_DEBUG_DEFAULT_BAUD 9600
 #endif
 
-/* ── Runtime configuration ───────────────────────────────────────────── */
+/* Keep the runtime API available through hal_config.h. */
+#include "hal_runtime_config.h"
 
-/**
- * @brief Runtime HAL configuration.
- *
- * All fields are initialised to the compile-time defaults by
- * hal_config_defaults().  The application may override individual fields
- * and pass the struct to hal_setup() before using any HAL create
- * functions.
- *
- * Values must not exceed the compile-time #define maximums (the static
- * arrays are sized at compile time).  hal_setup() caps any oversized
- * values automatically.
- *
- * @code
- *   hal_config_t cfg = hal_config_defaults();
- *   cfg.pwm_freq_max_channels = 4;   // use only 4 of the 8 slots
- *   cfg.can_max_instances     = 1;
- *   hal_setup(&cfg);
- * @endcode
- */
-typedef struct {
-  int pwm_freq_max_channels;  /**< Effective PWM-freq channel limit.  */
-  int can_max_instances;      /**< Effective CAN instance limit.      */
-  int uart_max_instances;     /**< Effective hardware UART limit.     */
-  int swserial_max_instances; /**< Effective software UART limit.      */
-  int mock_can_max_inst;      /**< Mock CAN instance limit.           */
-  int mock_can_buf_size;      /**< Mock CAN ring-buffer depth.        */
-  int mock_max_alarms;        /**< Mock timer alarm limit.            */
-} hal_config_t;
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/**
- * @brief Return a hal_config_t with all fields set to compile-time defaults.
- */
-hal_config_t hal_config_defaults(void);
-
-/**
- * @brief Initialise the HAL with the given configuration.
- *
- * Must be called before any hal_*_create() function.  If never called,
- * compile-time defaults are used.  Values exceeding the compile-time
- * maximum are silently capped.
- *
- * @param cfg Pointer to the configuration struct.
- */
-void hal_setup(const hal_config_t *cfg);
-
-/**
- * @brief Get a pointer to the active HAL configuration (read-only).
- * @return Pointer to the internal config struct.
- */
-const hal_config_t *hal_get_config(void);
-
-#ifdef __cplusplus
-}
-#endif
-
-/* ── Debug-assert mechanism ──────────────────────────────────────────── */
-
-/**
- * @def HAL_ASSERT(cond, msg)
- * Lightweight assert for HAL resource exhaustion.
- *
- * When the condition is false the macro calls @c hal_assert_fail(), whose
- * implementation is selected by the exact HAL target. Hardware builds
- * print @p msg through the target debug channel and enter an infinite loop
- * so the watchdog can reset the system; mock/test builds call @c abort().
- *
- * Define @c HAL_DISABLE_ASSERTS before including this header (or via
- * a compiler flag) to compile all HAL_ASSERTs to no-ops, removing
- * both the text overhead and the branch from release builds.
- *
- * @code
- *   HAL_ASSERT(ptr != NULL, "hal_can: pool exhausted");
- * @endcode
- */
-#ifdef HAL_DISABLE_ASSERTS
-
-#define HAL_ASSERT(cond, msg) ((void)0)
-
-#else /* asserts enabled (default) */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-HAL_NORETURN void hal_assert_fail(const char *msg);
-
-#ifdef __cplusplus
-}
-#endif
-
-#define HAL_ASSERT(cond, msg)                                                  \
-  do {                                                                         \
-    if (!(cond)) {                                                             \
-      hal_assert_fail((msg));                                                  \
-    }                                                                          \
-  } while (0)
-
-#endif /* HAL_DISABLE_ASSERTS */
+/* Keep the assertion API available through hal_config.h. */
+#include "hal_assert.h"

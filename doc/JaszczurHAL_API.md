@@ -61,7 +61,14 @@ here for full behavior/contracts.
 - `src/tools.h` - C++ utility aggregator.
 - `src/tools_c.h` - C-compatible utility declarations.
 - `src/hal/hal.h` - HAL-only umbrella include.
-- `src/hal/hal_config.h` and `src/hal/hal_config.cpp` - build-time feature flags and runtime config helpers.
+- `src/hal/hal_config.h` - compatibility facade for build-time feature
+  selection, dependency propagation and project configuration.
+- `src/hal/hal_runtime_config.h` and `src/hal/hal_config.cpp` - runtime
+  pool-limit configuration API and implementation.
+- `src/hal/hal_assert.h` and `src/hal/hal_assert.cpp` - portable assertion API
+  and target-aware failure implementation.
+- `src/hal/hal_compat.h` - `PROGMEM`, `F()`, `hal_min()` and `hal_max()`
+  source-compatibility helpers.
 - `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, simple external I/O chips, WiFi, UDP, WireGuard, MQTT, and time.
 - `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_crc.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.

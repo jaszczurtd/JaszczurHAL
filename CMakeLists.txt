@@ -55,6 +55,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 # Excluded sources are compiled by dedicated tests when they need local stubs or
 # extra fixtures.
 set(UTIL_SOURCES
+    ${SRC}/hal/hal_assert.cpp
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
@@ -279,6 +280,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         COMPILE_OPTIONS "-w")
 
     add_library(hal_freertos_posix STATIC
+        ${SRC}/hal/hal_assert.cpp
         ${SRC}/hal/impl/stm32g474/hal_sync.cpp
         ${SRC}/hal/impl/stm32g474/hal_system.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
