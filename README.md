@@ -51,141 +51,11 @@ There are also smaller (but not trivial) projects, for example:
 * https://github.com/jaszczurtd/Ford-Mondeo-MK-DPF-Tracker (DPF regeneration cycles tracking device)
 * https://github.com/jaszczurtd/lights-timer (Remote management of aquarium lighting using an Android application)
 
-## Public include
-
-Use:
-
-```cpp
-#include <JaszczurHAL.h>
-```
-
-The internal header can be used for advanced/internal usage.
-
-```cpp
-#include <hal/hal.h>
-```
-
-Utility-only includes are also available:
-
-```cpp
-#include <tools.h>    // C++ utility aggregator
-```
-
-```c
-#include <tools_c.h>  // C-compatible utility API
-```
-
-## Thread safety (overview)
-
-Thread safety is a core design principle across all targets. Initialization
-and teardown paths (`init` / `create` / `destroy` / `deinit`) are treated as
-single-core operations; singleton and per-bus locks are created atomically on
-first use through defensive lazy mutex creation. The mock backend targets
-deterministic single-threaded tests, and the optional
-`JH_ENABLE_FREERTOS_POSIX_TESTS` flag adds host-side FreeRTOS scheduler
-coverage on top of it.
-
-For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
-see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
-
-## Library structure
-
-```text
-CMakeLists.txt              # host/mock tests build
-VERSION                     # project version
-.build/                     # ignored root for all managed build artifacts
-boards/                     # target, board and capability descriptors
-rp_native_lib/              # Pico SDK RP2040/RP2350 static-library build
-  MEMORY_MAP.md             # native RP firmware/storage/OTA layout
-cmake/
-  jh_rp_native_sdk.cmake    # shared RP library/firmware CMake glue
-  targets/                  # VS Code dispatcher target recipes
-stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
-scripts/
-  # See doc/api/00_scripts.md for the complete process-script reference.
-  build_rp_native_lib.sh    # RP ELF/BIN/UF2 build helper
-  build_stm32_lib.sh        # STM32G474 static-library helper
-  check_documentation_links.py # local Markdown link/anchor validation
-  ensure_*.sh               # focused pinned-component fetch/verify helpers
-  generate_sbom.py          # CycloneDX SBOM generator
-  check_vulnerabilities.sh  # optional local vulnerability scanner wrapper
-runalltests.sh              # full local validation gate
-runmefirst.sh               # one-time local toolchain setup
-doc/
-  JaszczurHAL_API.md        # detailed API/reference
-  api/                      # split API chapters
-    00_scripts.md           # essential process and orchestration architecture
-  FwProjectWorkflow.md      # dispatcher-backed firmware project workflow
-  OTAWorkflow.md            # native RP OTA build, upload, firewall and recovery
-  HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
-  lib_compilation.md        # static-library build guide
-  features.md               # high-level feature matrix
-  CHANGELOG.md              # project changelog
-  datasheets/               # local reference PDFs and notes
-  security_supply_chain.md  # SBOM and vulnerability tracking process
-examples/                   # buildable example apps for RP2040 and STM32G474
-vscode/                     # shared jh-vscode entry, schema, docs, generator
-  entry/                    # Unix, Windows and public Python launchers
-  tools/create-vscode-example.py # standalone VS Code firmware project generator
-  tools/manage_vscode_extensions.py # checked/consented extension setup
-security/
-  third_party.json          # third-party component inventory
-  sbom.cdx.json             # generated CycloneDX SBOM
-  vulnerability_log.md      # CVE/CVSS assessment and patch log
-src/
-  JaszczurHAL.h             # primary public include
-  hal_app_entry.cpp         # optional portable app entry wrapper
-  libConfig.h               # backward-compat include
-  tools.h, tools_c.h        # utility aggregators (C++ / C)
-  arpa/, netinet/, sys/     # host/embedded socket compatibility headers
-  hal/                      # HAL public headers + common wrappers
-    hal_target.h            # backend selection
-    hal_config.h            # compile-time configuration compatibility facade
-    hal_runtime_config.h    # runtime pool-limit configuration API
-    hal_assert.h            # portable HAL assertion API
-    hal_compat.h            # portable source-compatibility helpers
-    impl/
-      .mock/                # deterministic host/test backend
-      rp2040/               # RP-family backend
-        drivers/flash/      # native RP flash coordinator and storage partitions
-        drivers/rp2040/     # RP2040 SoC services (fault/system)
-        drivers/usb/        # native TinyUSB CDC configuration/descriptors
-        freertos/           # native RP FreeRTOSConfig and hooks
-        frameworks/         # RP-specific framework integrations
-      shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        debug/              # shared serial/debug formatting
-        drivers/            # hardware-oriented drivers and transaction engines
-        frameworks/         # reusable engines/stacks and bundled portable libs
-        network/
-          adapters/bsd/     # public BSD/POSIX adapter over HAL UDP/TCP
-          services/         # HTTP, WebSocket, console and command services
-      stm32g474/            # STM32G474 backend
-        drivers/
-          stm32g474/        # STM32G474 SoC services (fault/system)
-        freertos/           # STM32 FreeRTOSConfig and hooks
-        port/               # startup, SystemInit, linker-facing low-level glue
-  utils/                    # tools, PID, watchdog, draw helpers, Unity integration
-tests/                      # host unit tests (CMake + Unity)
-  freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
-  hardware/                 # tracked RP fixture sources/manifests and host verifiers
-third_party/                # tracked pins + ignored managed component installs
-  update_components.sh      # synchronize every component to its tracked pin
-  *_version.conf            # tracked source/tool/toolchain version definitions
-  littlefs/                 # ignored pinned upstream filesystem checkout
-```
-
-`src/hal/impl/shared/` contains internal, backend-agnostic implementation code
-reused by at least two hardware backends. It depends only on HAL-level
-contracts, behaves identically across supported targets, and keeps per-target
-`#if HAL_TARGET_IS_*` branches out of shared implementation files. The role
-split (`drivers/`, `frameworks/`, `network/`, `debug/`) is described in
-[JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
-
 ## Quick start
 
 There are two common starting points:
 
-- To explore HAL APIs, portability patterns, and backend coverage, start with
+- To explore [HAL APIs](doc/JaszczurHAL_API.md), portability patterns, and backend coverage, start with
   the checked-in examples: [examples/README.md](examples/README.md).
 - To create a new target-selectable firmware project for day-to-day work in
   VS Code, use the project generator:
@@ -209,19 +79,6 @@ modules. Each example is a portable `app.c`/`app.cpp` with a matching
 `app_start()`, `app_task0()`, and optional `app_task1()`
 (`HAL_ENABLE_APP_TASK1`, mapped to dual-core execution on RP and cooperative
 calls on STM32G474).
-
-Each numbered example is also a dispatcher-backed VS Code firmware project:
-open any `examples/NN_name/` directory directly in VS Code to get the standard
-JaszczurHAL tasks.
-
-```bash
-# full example matrix per target
-scripts/examples_dispatcher.py build --target rp2040 --jobs "$(nproc)"
-scripts/examples_dispatcher.py build --target stm32g474 --jobs "$(nproc)"
-
-# single example
-vscode/entry/jh-vscode build --project examples/01_blink --target rp2040
-```
 
 The build matrix, requirements, and per-example target coverage are maintained
 in [examples/README.md](examples/README.md).
@@ -261,14 +118,7 @@ of the following in `hal_project_config.h` (or via `-D`):
 ```
 
 If you define none, the target is **auto-detected** from the toolchain.
-Selecting two targets - or a
-bare-metal build with no detectable target - is a compile-time `#error`.
 Backend files compile only for their selected target, so unused backends cost zero code.
-
-RP code uses `HAL_TARGET_IS_RP` for family-wide paths and the exact
-`HAL_TARGET_IS_RP2040`, `HAL_TARGET_IS_RP2350_ARM`, or
-`HAL_TARGET_IS_RP2350_RISCV` only for real chip differences.
-`HAL_RP_ARCH_ARM`/`HAL_RP_ARCH_RISCV` select ISA-specific paths.
 
 Official builds select a stable target and board ID through the generated board
 registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
@@ -276,15 +126,6 @@ registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
 `host-mock`. The build generator validates target compatibility, flash size,
 pins, components, and feature contracts before toolchain import. See
 [Target and board profiles](doc/boards_profiles_howto.md).
-
-Runtime board capabilities (USB, CYW43, external radio) are exposed through the
-`hal_board` API, described in [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
-Native RP details live next to their subsystems: TinyUSB CDC ownership and the
-flash transaction coordinator in [JaszczurHAL_API.md](doc/JaszczurHAL_API.md),
-the firmware/storage/OTA flash layout in
-[rp_native_lib/MEMORY_MAP.md](rp_native_lib/MEMORY_MAP.md), and the staged OTA
-contract (boot applier, trial confirmation, rollback) in
-[OTAWorkflow.md](doc/OTAWorkflow.md).
 
 Dispatcher-backed VS Code projects select the active family/board with the
 manifest, `.vscode/jaszczurhal.local.json`, or `--target`/`--board`; the
@@ -314,13 +155,6 @@ The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`), including example-application builds and the core/entry
 policy: [lib_compilation.md](doc/lib_compilation.md)
 
-```bash
-./scripts/build_rp_native_lib.sh --target rp2040
-./scripts/build_rp_native_lib.sh --target rp2350-arm
-./scripts/build_rp_native_lib.sh --target rp2350-riscv
-./scripts/build_stm32_lib.sh
-```
-
 ## Tests and quality gates
 
 Host unit tests run against the deterministic mock backend:
@@ -349,24 +183,18 @@ Tool configuration lives alongside the sources: `.clang-tidy`,
 `scripts/clang_tidy_files.py`. Suite layout, dependencies, and instructions for
 adding tests are in [doc/api/03_build_tests.md](doc/api/03_build_tests.md).
 
-## Git hooks (format + commit message)
+## Thread safety (overview)
 
-The repository ships versioned hooks in `.githooks/`: `pre-commit` (staged-file
-normalization and `clang-format`) and `commit-msg` (conventional commits).
-Install them once per clone together with the required tools:
+Thread safety is a core design principle across all targets. Initialization
+and teardown paths (`init` / `create` / `destroy` / `deinit`) are treated as
+single-core operations; singleton and per-bus locks are created atomically on
+first use through defensive lazy mutex creation. The mock backend targets
+deterministic single-threaded tests, and the optional
+`JH_ENABLE_FREERTOS_POSIX_TESTS` flag adds host-side FreeRTOS scheduler
+coverage on top of it.
 
-```bash
-./runmefirst.sh
-```
-
-During setup, the script checks the host OTA callback rule and asks before
-persistently allowing LAN-scoped TCP/8266 traffic. It uses the active UFW,
-firewalld, or iptables backend and leaves the firewall unchanged when the
-request is declined.
-
-Setup details are in [doc/api/00_scripts.md](doc/api/00_scripts.md); the manual
-equivalent is `git config core.hooksPath .githooks` with `clang-format`
-installed.
+For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
+see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Security and SBOM
 

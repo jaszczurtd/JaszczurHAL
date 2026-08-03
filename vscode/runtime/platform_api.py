@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import AbstractContextManager
+from dataclasses import dataclass
 import importlib
 from pathlib import Path
 import sys
@@ -13,8 +14,66 @@ class PlatformOperationUnsupported(RuntimeError):
     """Raised when the active host has no adapter for an operation."""
 
 
+@dataclass(frozen=True)
+class SerialPortRecord:
+    """Platform-neutral serial and USB metadata used by safety checks."""
+
+    device: str
+    vid: int | None = None
+    pid: int | None = None
+    serial_number: str = ""
+    manufacturer: str = ""
+    product: str = ""
+    interface: str = ""
+    location: str = ""
+    hwid: str = ""
+    description: str = ""
+    aliases: tuple[str, ...] = ()
+    platform_identity: str = ""
+    platform: str = ""
+
+    @classmethod
+    def from_port_info(
+        cls,
+        port_info: Any,
+        *,
+        device: str | None = None,
+        aliases: tuple[str, ...] = (),
+        platform_identity: str = "",
+        platform: str = "",
+    ) -> "SerialPortRecord":
+        """Copy pyserial ListPortInfo fields without retaining its object."""
+
+        def text_field(name: str) -> str:
+            value = getattr(port_info, name, "")
+            return str(value) if value is not None else ""
+
+        return cls(
+            device=device or text_field("device"),
+            vid=getattr(port_info, "vid", None),
+            pid=getattr(port_info, "pid", None),
+            serial_number=text_field("serial_number"),
+            manufacturer=text_field("manufacturer"),
+            product=text_field("product"),
+            interface=text_field("interface"),
+            location=text_field("location"),
+            hwid=text_field("hwid"),
+            description=text_field("description"),
+            aliases=aliases,
+            platform_identity=platform_identity,
+            platform=platform,
+        )
+
+
 class PlatformAdapter(Protocol):
     """Host operations required by the shared runtime and monitor."""
+
+    @property
+    def platform_name(self) -> str: ...
+
+    def list_serial_ports(self) -> list[SerialPortRecord]: ...
+
+    def serial_port_record(self, port: str) -> SerialPortRecord | None: ...
 
     def serial_candidate_paths(self) -> list[Path]: ...
 
@@ -22,21 +81,13 @@ class PlatformAdapter(Protocol):
 
     def resolve_serial_port(self, port: str) -> str: ...
 
-    def serial_by_id_links(self, port: str) -> list[Path]: ...
-
-    def serial_identity_text(self, port: Path) -> str: ...
-
-    def verified_identity_ports(
-        self,
-        expected_tokens: list[str],
-        normalize: Callable[[str], str],
-    ) -> list[tuple[Path, Path | None]]: ...
-
     def serial_fallback_candidates(self) -> list[str]: ...
 
     def is_serial_candidate(self, port: str) -> bool: ...
 
     def process_cmdline(self, pid: int) -> str: ...
+
+    def process_start_identity(self, pid: int) -> str: ...
 
     def port_owner_pids(self, port: str) -> list[int]: ...
 
@@ -98,6 +149,9 @@ def get_platform_adapter() -> PlatformAdapter:
     if _adapter is None:
         if sys.platform.startswith("linux"):
             module = importlib.import_module("vscode.linux.runtime.adapter")
+            _adapter = module.PLATFORM
+        elif sys.platform == "win32":
+            module = importlib.import_module("vscode.windows.runtime.adapter")
             _adapter = module.PLATFORM
         else:
             _adapter = cast(PlatformAdapter, UnsupportedPlatformAdapter())

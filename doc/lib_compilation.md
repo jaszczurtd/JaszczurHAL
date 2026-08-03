@@ -1,5 +1,14 @@
 # JaszczurHAL Library Compilation
 
+## TL;DR
+
+```bash
+./scripts/build_rp_native_lib.sh --target rp2040
+./scripts/build_rp_native_lib.sh --target rp2350-arm
+./scripts/build_rp_native_lib.sh --target rp2350-riscv
+./scripts/build_stm32_lib.sh
+```
+
 > **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
 
 JaszczurHAL uses CMake for host tests and for every supported embedded target.

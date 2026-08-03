@@ -31,9 +31,22 @@ with patch.dict(
 ):
     from vscode.runtime.monitor import core as module
     from vscode.linux.runtime import serial_persistent as compatibility
+    from vscode.runtime.platform_api import SerialPortRecord
 
 
 assert compatibility.find_port is module.find_port
+
+
+ordered_ports = [
+    SerialPortRecord(device="COM2", platform="windows"),
+    SerialPortRecord(device="COM10", platform="windows"),
+]
+order_adapter = SimpleNamespace(
+    list_serial_ports=lambda: ordered_ports,
+    is_serial_candidate=lambda device: device.startswith("COM"),
+)
+with patch.object(module, "get_platform_adapter", return_value=order_adapter):
+    assert [port.device for port in module.list_serial_ports()] == ["COM2", "COM10"]
 
 
 def pico_port(device: str, product: str = "Router Reset - JaszczurHAL CDC"):

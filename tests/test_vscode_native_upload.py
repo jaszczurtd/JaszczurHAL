@@ -7,6 +7,7 @@ import errno
 import hashlib
 import hmac
 import inspect
+import json
 from pathlib import Path
 import struct
 import sys
@@ -284,6 +285,11 @@ monitor_select.assert_called_once_with(monitor_config)
 monitor_command = monitor_run.call_args.args[0]
 assert "--follow-identity" in monitor_command
 assert "--identity-token" in monitor_command
+assert "--identity-json" in monitor_command
+identity_json_index = monitor_command.index("--identity-json")
+monitor_identity = json.loads(monitor_command[identity_json_index + 1])
+assert monitor_identity["usbManufacturer"] == "Fixture"
+assert monitor_identity["usbProduct"] == "Named module"
 assert monitor_command[-1] == replacement_port
 
 explicit_monitor_args = SimpleNamespace(

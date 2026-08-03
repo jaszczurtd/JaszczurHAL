@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 import fcntl
 import glob
 import json
@@ -15,6 +16,8 @@ import subprocess
 import sys
 import tempfile
 from typing import Any, Callable, Iterator
+
+from vscode.runtime.platform_api import SerialPortRecord
 
 
 def _read_optional_text(path: Path) -> str:
@@ -34,8 +37,119 @@ def _iter_lsblk_devices(devices: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return flat
 
 
+def _serial_identity_metadata(port: Path) -> dict[str, str]:
+    try:
+        resolved = port.resolve(strict=True)
+    except OSError:
+        resolved = port
+    sys_tty = Path("/sys/class/tty") / resolved.name / "device"
+    try:
+        device = sys_tty.resolve(strict=True)
+    except OSError:
+        return {}
+
+    metadata: dict[str, str] = {}
+    current = device
+    sys_root = Path("/sys")
+    for _ in range(8):
+        for name in (
+            "manufacturer",
+            "product",
+            "interface",
+            "serial",
+            "idVendor",
+            "idProduct",
+        ):
+            value = _read_optional_text(current / name)
+            if value and name not in metadata:
+                metadata[name] = value
+                if name == "idVendor" and "location" not in metadata:
+                    metadata["location"] = current.name
+        if current == sys_root or current.parent == current:
+            break
+        current = current.parent
+    return metadata
+
+
+def _usb_id(metadata: dict[str, str], key: str) -> int | None:
+    try:
+        return int(metadata.get(key, ""), 16)
+    except ValueError:
+        return None
+
+
 class LinuxPlatformAdapter:
     """Linux implementations of serial, process, volume, and lock operations."""
+
+    @property
+    def platform_name(self) -> str:
+        return "linux"
+
+    def list_serial_ports(self) -> list[SerialPortRecord]:
+        port_info_by_device: dict[str, Any] = {}
+        try:
+            from serial.tools import list_ports
+
+            for port_info in list_ports.comports():
+                port_info_by_device[str(port_info.device)] = port_info
+        except ImportError:
+            pass
+
+        records: list[SerialPortRecord] = []
+        for path in self.serial_candidate_paths():
+            device = str(path)
+            aliases = tuple(link.name for link in self._serial_by_id_links(device))
+            metadata = _serial_identity_metadata(path)
+            platform_identity = " ".join(metadata.values())
+            port_info = port_info_by_device.get(device)
+            if port_info is None:
+                records.append(
+                    SerialPortRecord(
+                        device=device,
+                        vid=_usb_id(metadata, "idVendor"),
+                        pid=_usb_id(metadata, "idProduct"),
+                        serial_number=metadata.get("serial", ""),
+                        manufacturer=metadata.get("manufacturer", ""),
+                        product=metadata.get("product", ""),
+                        interface=metadata.get("interface", ""),
+                        location=metadata.get("location", ""),
+                        aliases=aliases,
+                        platform_identity=platform_identity,
+                        platform="linux",
+                    )
+                )
+            else:
+                record = SerialPortRecord.from_port_info(
+                    port_info,
+                    device=device,
+                    aliases=aliases,
+                    platform_identity=platform_identity,
+                    platform="linux",
+                )
+                records.append(
+                    replace(
+                        record,
+                        manufacturer=record.manufacturer
+                        or metadata.get("manufacturer", ""),
+                        product=record.product or metadata.get("product", ""),
+                        interface=record.interface or metadata.get("interface", ""),
+                        serial_number=record.serial_number
+                        or metadata.get("serial", ""),
+                        location=record.location or metadata.get("location", ""),
+                        vid=record.vid if record.vid is not None else _usb_id(metadata, "idVendor"),
+                        pid=record.pid if record.pid is not None else _usb_id(metadata, "idProduct"),
+                    )
+                )
+        return records
+
+    def serial_port_record(self, port: str) -> SerialPortRecord | None:
+        resolved = self.resolve_serial_port(port)
+        for record in self.list_serial_ports():
+            if self.resolve_serial_port(record.device) == resolved:
+                return record
+            if port in record.aliases:
+                return record
+        return None
 
     def serial_candidate_paths(self) -> list[Path]:
         candidates: set[Path] = set()
@@ -69,7 +183,7 @@ class LinuxPlatformAdapter:
             return str(resolved)
         return port
 
-    def serial_by_id_links(self, port: str) -> list[Path]:
+    def _serial_by_id_links(self, port: str) -> list[Path]:
         try:
             resolved_port = Path(port).resolve()
         except OSError:
@@ -88,69 +202,6 @@ class LinuxPlatformAdapter:
                 continue
         return matches
 
-    def serial_identity_text(self, port: Path) -> str:
-        try:
-            port = port.resolve(strict=True)
-        except OSError:
-            pass
-        sys_tty = Path("/sys/class/tty") / port.name / "device"
-        try:
-            device = sys_tty.resolve(strict=True)
-        except OSError:
-            return ""
-
-        parts: list[str] = []
-        current = device
-        sys_root = Path("/sys")
-        for _ in range(8):
-            for name in ("manufacturer", "product", "interface", "serial"):
-                value = _read_optional_text(current / name)
-                if value:
-                    parts.append(value)
-            if current == sys_root or current.parent == current:
-                break
-            current = current.parent
-        return " ".join(parts)
-
-    def verified_identity_ports(
-        self,
-        expected_tokens: list[str],
-        normalize: Callable[[str], str],
-    ) -> list[tuple[Path, Path | None]]:
-        if not expected_tokens:
-            return []
-
-        matches: list[tuple[Path, Path | None]] = []
-        seen: set[Path] = set()
-        by_id_dir = Path("/dev/serial/by-id")
-        if by_id_dir.is_dir():
-            for link in sorted(by_id_dir.iterdir()):
-                normalized = normalize(link.name)
-                if not any(token in normalized for token in expected_tokens):
-                    continue
-                try:
-                    resolved = link.resolve(strict=True)
-                except OSError:
-                    continue
-                if resolved in seen:
-                    continue
-                seen.add(resolved)
-                matches.append((resolved, link))
-
-        for pattern in ("ttyACM*", "ttyUSB*"):
-            for tty in sorted(Path("/dev").glob(pattern)):
-                try:
-                    resolved = tty.resolve(strict=True)
-                except OSError:
-                    continue
-                if resolved in seen:
-                    continue
-                normalized = normalize(self.serial_identity_text(tty))
-                if normalized and any(token in normalized for token in expected_tokens):
-                    seen.add(resolved)
-                    matches.append((resolved, None))
-        return matches
-
     def serial_fallback_candidates(self) -> list[str]:
         return sorted(glob.glob("/dev/ttyACM*") + glob.glob("/dev/ttyUSB*"))
 
@@ -162,6 +213,17 @@ class LinuxPlatformAdapter:
             raw = Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").strip()
             return raw.decode("utf-8", errors="replace")
         except Exception:
+            return ""
+
+    def process_start_identity(self, pid: int) -> str:
+        try:
+            stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+            close_paren = stat.rfind(")")
+            fields = stat[close_paren + 2 :].split()
+            start_ticks = fields[19]
+            boot_id = _read_optional_text(Path("/proc/sys/kernel/random/boot_id"))
+            return f"linux:{boot_id}:{start_ticks}"
+        except (OSError, IndexError, ValueError):
             return ""
 
     def port_owner_pids(self, port: str) -> list[int]:

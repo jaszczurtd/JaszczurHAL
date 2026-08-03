@@ -83,6 +83,27 @@
   and `clear-identity`.
 - Add identity-guarded serial upload, simple one-drive BOOTSEL UF2 upload,
   persistent monitor port handoff, and automatic monitor reconnect after upload.
+- Add native Windows COM enumeration through pyserial with shared structured
+  identity scoring across VID/PID, serial number, manufacturer, product,
+  interface, location, HWID, and platform aliases. Normalize `COM10+`, keep the
+  chosen COM port in gitignored local state, and distinguish stale, incomplete,
+  unmatched, unique, and ambiguous selections.
+- Preserve adapter-defined numeric COM ordering, retain structured sysfs
+  identity when Linux pyserial has no matching record, and include validated
+  monitor-marker PIDs in Windows busy-port diagnostics.
+- Add versioned per-port monitor ownership with PID plus process-start identity,
+  cooperative release requests, stale/crash cleanup, bounded verified fallback,
+  and Windows `msvcrt` build locks. Foreign processes and reused PIDs are never
+  terminated.
+- Add native Windows BOOTSEL discovery through drive, volume-information, and
+  volume-GUID WinAPI calls. Snapshot volume GUIDs before the 1200-bps touch,
+  accept only the RP boot labels on FAT media, and support explicit drive/GUID
+  selection through user-local configuration or `--bootsel-volume`.
+- Validate complete UF2 block groups, including the RP2350 absolute-ignore
+  record and merged OTA images with one global sequence across family IDs,
+  before upload. Stream the Windows copy without metadata, detect short writes
+  and source changes, flush and close the destination, and report read-only,
+  removed-volume, and write failures.
 - Implement read-only `list-ports`, including project identity matching and
   BOOTSEL candidate reporting, so device checks do not require a risky upload.
 - Implement `change-port`: interactive or `--port` selection persisted as the
