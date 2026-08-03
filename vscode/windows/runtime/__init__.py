@@ -1,0 +1,1 @@
+"""Windows runtime adapter package."""

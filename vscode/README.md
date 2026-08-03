@@ -10,8 +10,9 @@ project-specific behavior in configuration.
 Portable CLI, configuration, CMake, artifact, OTA, and persistent-monitor logic
 lives under `runtime/`. Host operations use a lazy platform adapter; the Linux
 implementation and compatibility entrypoints live under `linux/runtime/`.
-The Windows launcher is available while the Windows serial, process, and
-BOOTSEL adapter remains pending. These runtime directories are implementation details.
+The native Windows adapter provides COM identity, process ownership, BOOTSEL
+volume discovery, durable UF2 upload, and build locks. These runtime directories
+are implementation details.
 They ship as regular Python packages with an `__init__.py` in every level, so
 `vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
@@ -32,18 +33,17 @@ first Python 3 interpreter that imports `pyserial` in this order:
 
 An explicit `JH_VSCODE_PYTHON` must name the interpreter executable, without
 extra arguments. A missing suitable interpreter reports exit code 8 with a
-host-setup diagnostic. The component bootstrap added by the Windows setup
-track will own the managed environment; the launcher already accepts its
-resolved interpreter through `JH_VSCODE_PYTHON`.
+host-setup diagnostic. `runmefirst.ps1` owns the managed environment, and the
+launcher also accepts an explicitly resolved interpreter through
+`JH_VSCODE_PYTHON`.
 
 Generated `tasks.json` files keep the Unix command in `command` and add a
 Windows override that reads `jaszczurhal.vscodeEntryWindows`. Generated
 `settings.json` files point that setting at the adjacent `jh-vscode.cmd`.
 This keeps task labels and arguments identical on both hosts.
 
-Windows device actions currently report exit code 8 because the Windows host
-adapter is still under development. Native Windows CMake/toolchain validation
-and CI are tracked separately from the launcher.
+Windows device actions use native COM and volume APIs; they do not require WSL,
+Git Bash, or a POSIX compatibility layer.
 
 ## CLI Contract
 
@@ -95,6 +95,7 @@ Common options:
 --selection <t:b>      Persist target/board selection; GUI labels are accepted.
 --interactive          Prompt for target/board selection in the terminal.
 --port <port>          Override configured upload/monitor port.
+--bootsel-volume <id>  Select one BOOTSEL drive root or Windows volume GUID.
 --host <address>       Bypass OTA discovery and use this device address.
 --baud <baud>          Serial monitor baud rate, default 115200.
 --lock-policy <mode>   Serial monitor lock policy: wait, replace-own, replace-any.
@@ -285,20 +286,27 @@ section sizes, and short notes. Set `JH_VSCODE_MEMORY_OVERVIEW=0` to suppress
 this extra console output.
 
 The serial monitor defaults to `--lock-policy wait`. `replace-own` may stop only
-another JaszczurHAL monitor for the same project. `replace-any` is an explicit
-emergency option and should not be used in default VS Code tasks.
+another JaszczurHAL monitor for the same project after validating its versioned
+ownership marker, PID, and process start identity. The legacy `replace-any`
+spelling follows the same ownership restriction and never terminates an
+unrelated process.
 
 For identity-enabled Pico projects, an implicitly configured monitor port may
 follow the single CDC device matching the project's verified USB identity when
-the saved path disappears or the kernel assigns a different `ttyACM` number.
+the saved path disappears or the host assigns a different `ttyACM` or COM
+number.
 This also covers replacing a board with another unit running the same firmware.
 The monitor waits instead of guessing when zero or multiple devices match. An
 explicit `--port` remains pinned to the requested path.
 
 For identity-enabled serial uploads, `upload` verifies the selected serial port
-before running the upload backend. A port is considered verified when its
-`/dev/serial/by-id` name matches the configured identity. First flashing a clean
-serial-only board must be an explicit operation with
+before opening it. Linux combines pyserial metadata with by-id aliases and
+structured sysfs descriptors, including when pyserial has no matching record.
+Windows enumerates COM ports through pyserial and uses VID, PID, serial number,
+manufacturer, product, interface, location, and HWID.
+Every configured stable field must match; incomplete metadata remains
+unverified. First flashing a clean serial-only board must be an explicit
+operation with
 `--allow-unverified-port --port <port>`. Default VS Code tasks must not pass
 this flag.
 
@@ -318,7 +326,10 @@ Machine validation uses `schema/jh_vscode_project.schema.json`.
 
 USB identity means firmware descriptors visible to the host as
 manufacturer/product, for example in `lsusb`, `dmesg`, VS Code Serial Monitor,
-and `/dev/serial/by-id`.
+`/dev/serial/by-id`, or Windows COM metadata. Manifests may additionally pin
+`usbVid`, `usbPid`, `usbSerialNumber`, `usbInterface`, or `usbLocation`. A COM
+number is only a local selection stored in
+`.vscode/jaszczurhal.local.json`; it is never treated as stable identity.
 
 For native RP builds, identity is injected through CMake cache entries:
 
@@ -336,15 +347,25 @@ SDK target and board, omits custom USB identity cache entries, and flashes a
 verified serial target or one unambiguous BOOTSEL device.
 
 `upload-uf2` is RP-family/UF2-only and intentionally keeps manual BOOTSEL simple:
-it builds the project, requires exactly one BOOTSEL drive or `RPI-RP2` block
-device, mounts it with `udisksctl` when needed, copies the UF2, and refuses to
-guess when multiple BOOTSEL drives are visible. Use target-neutral `upload` for
-STM32/OpenOCD.
+it builds the project, validates every 512-byte UF2 block, requires exactly one
+allowed BOOTSEL volume, and refuses to guess when multiple devices are visible.
+Linux mounts a single unmounted FAT candidate through `udisksctl` when needed.
+Windows reads drive label and filesystem through WinAPI and uses the volume GUID
+as the snapshot identity. Both hosts accept only `RPI-RP2`, `RP2350`, or
+`RPI-RP2350`. Use target-neutral `upload` for STM32/OpenOCD.
+
+When multiple BOOTSEL volumes are intentionally connected, pass
+`--bootsel-volume <drive-root-or-volume-guid>`. The same value may be stored as
+`bootselVolume` in the gitignored `.vscode/jaszczurhal.local.json`; a drive root
+such as `E:\` is local to one Windows host. The upload still verifies the label
+and FAT filesystem before using the selection.
 
 For native RP targets, target-neutral `upload` uses the configured/verified CDC
 port for the 1200-bps reset and then follows the same single-drive UF2 safety
-rules. When the configured CDC path is stale because the selected board is
-already in BOOTSEL, `upload` falls back to the single visible BOOTSEL device
+rules. The runtime snapshots volume GUIDs before the touch and waits only for a
+new allowed volume or an explicitly selected volume. When the configured CDC
+path is stale because the selected board is already in BOOTSEL, `upload` falls
+back to the single visible BOOTSEL device
 instead of rejecting the missing serial identity. When a replacement board is
 already running compatible firmware, a stale saved path may instead be replaced
 by the single CDC port matching the project's verified USB identity. Zero or
@@ -353,9 +374,21 @@ either fallback. The first flash still requires manual BOOTSEL because blank
 firmware has no CDC reset endpoint.
 
 When `upload` finds this project's persistent serial monitor on the upload
-port, it asks the monitor to release the port, keeps a short-lived project
-marker while the upload is in progress, and lets the monitor reconnect
-automatically after the board returns.
+port, it sends a per-port cooperative release request, waits for the monitor to
+close the handle, keeps a short-lived project marker while the upload is in
+progress, and lets the monitor reconnect after the board returns. A bounded
+fallback may stop only the process whose PID and start identity still match the
+ownership marker. Stale markers, PID reuse, and foreign port owners are never
+terminated. Busy-port diagnostics include the validated marker PID when an OS
+owner lookup is unavailable, as it is for COM ports on Windows.
+
+Windows copies UF2 data as a plain stream, flushes the destination handle, and
+closes it before reporting success. Read-only media, a disappearing drive,
+short writes, and truncated or inconsistent UF2 artifacts fail with upload exit
+code 6. The validator accepts both ordinary per-family sequences and merged OTA
+images whose single global block sequence spans multiple family IDs. Native
+WinAPI, merged-OTA, and copy-path automation is covered in CI; real-device
+Windows BOOTSEL smoke on RP2040 and RP2350 remains pending.
 
 ## Native RP OTA
 

@@ -351,6 +351,16 @@ add_test(NAME test_vscode_windows_tooling
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_windows_tooling.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_vscode_windows_serial
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_windows_serial.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_vscode_windows_bootsel
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_windows_bootsel.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_vscode_build_environment
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_build_environment.py

@@ -6,6 +6,7 @@ from __future__ import annotations
 from contextlib import contextmanager, redirect_stderr
 import io
 from pathlib import Path
+import struct
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -19,9 +20,14 @@ sys.path.insert(0, str(ROOT))
 from vscode.runtime import exit_codes
 from vscode.runtime import jh_vscode as runtime
 from vscode.runtime.platform_api import (
+    SerialPortRecord,
     UnsupportedPlatformAdapter,
     get_platform_adapter,
     set_platform_adapter,
+)
+from vscode.runtime.serial_identity import (
+    SerialIdentityExpectation,
+    match_serial_identity,
 )
 from vscode.linux.runtime import jh_vscode as linux_compatibility
 
@@ -39,6 +45,8 @@ for package in (
     "vscode/linux/runtime",
     "vscode/runtime",
     "vscode/runtime/monitor",
+    "vscode/windows",
+    "vscode/windows/runtime",
 ):
     assert (ROOT / package / "__init__.py").is_file(), f"missing package marker in {package}"
 
@@ -81,7 +89,6 @@ from vscode.runtime.monitor import core
 from vscode.runtime.exit_codes import EXIT_MONITOR
 
 assert core.serial is None
-assert core.list_ports is None
 assert core.run() == EXIT_MONITOR
 """
 monitor_result = subprocess.run(
@@ -102,9 +109,62 @@ try:
     unsupported_error = io.StringIO()
     with redirect_stderr(unsupported_error):
         assert runtime.main(["list-ports"]) == runtime.EXIT_UNSUPPORTED
-    assert "serial_candidate_paths" in unsupported_error.getvalue()
+    assert "list_serial_ports" in unsupported_error.getvalue()
 finally:
     set_platform_adapter(None)
+
+
+if sys.platform.startswith("linux"):
+    from vscode.linux.runtime import adapter as linux_adapter
+
+    linux_fallback = linux_adapter.LinuxPlatformAdapter()
+    linux_fallback_path = Path("/dev/ttyACM77")
+    fallback_metadata = {
+        "manufacturer": "Jaszczur",
+        "product": "Fallback Module",
+        "interface": "JaszczurHAL CDC",
+        "serial": "SYSFS-77",
+        "idVendor": "2e8a",
+        "idProduct": "000a",
+        "location": "1-7.7",
+    }
+    with patch.object(
+        linux_fallback,
+        "serial_candidate_paths",
+        return_value=[linux_fallback_path],
+    ), patch.object(
+        linux_fallback,
+        "_serial_by_id_links",
+        return_value=[],
+    ), patch.object(
+        linux_adapter,
+        "_serial_identity_metadata",
+        return_value=fallback_metadata,
+    ), patch(
+        "serial.tools.list_ports.comports",
+        return_value=[],
+    ):
+        fallback_record = linux_fallback.list_serial_ports()[0]
+
+    assert fallback_record.manufacturer == "Jaszczur"
+    assert fallback_record.product == "Fallback Module"
+    assert fallback_record.interface == "JaszczurHAL CDC"
+    assert fallback_record.serial_number == "SYSFS-77"
+    assert fallback_record.vid == 0x2E8A
+    assert fallback_record.pid == 0x000A
+    assert fallback_record.location == "1-7.7"
+    assert match_serial_identity(
+        fallback_record,
+        SerialIdentityExpectation.from_config(
+            {
+                "usbManufacturer": "Jaszczur",
+                "usbProduct": "Fallback Module",
+                "usbSerialNumber": "SYSFS-77",
+                "usbVid": "2e8a",
+                "usbPid": "000a",
+            }
+        ),
+    ).verified
 
 
 class FakePlatformAdapter:
@@ -113,6 +173,25 @@ class FakePlatformAdapter:
         self.mixed_port = Path("C:\\JH builds/moduł testowy/COM17")
         self.lock_paths: list[Path] = []
         self.copy_calls: list[tuple[Path, Path]] = []
+
+    @property
+    def platform_name(self) -> str:
+        return "fake"
+
+    def list_serial_ports(self) -> list[SerialPortRecord]:
+        return [
+            SerialPortRecord(
+                device=str(self.mixed_port),
+                manufacturer="Jaszczur",
+                product="Moduł",
+                aliases=("usb-Jaszczur_Moduł-if00",),
+                platform_identity="Jaszczur Moduł",
+                platform="fake",
+            )
+        ]
+
+    def serial_port_record(self, port: str) -> SerialPortRecord | None:
+        return self.list_serial_ports()[0] if self.serial_port_exists(port) else None
 
     def serial_candidate_paths(self) -> list[Path]:
         return [self.mixed_port]
@@ -123,22 +202,6 @@ class FakePlatformAdapter:
     def resolve_serial_port(self, port: str) -> str:
         return "COM17" if port else port
 
-    def serial_by_id_links(self, port: str) -> list[Path]:
-        return [Path("usb-Jaszczur_Moduł-if00")] if port else []
-
-    def serial_identity_text(self, port: Path) -> str:
-        return f"Jaszczur Moduł {port.name}"
-
-    def verified_identity_ports(
-        self,
-        expected_tokens: list[str],
-        normalize: Callable[[str], str],
-    ) -> list[tuple[Path, Path | None]]:
-        identity = normalize("Jaszczur Moduł")
-        if any(token in identity for token in expected_tokens):
-            return [(self.mixed_port, Path("usb-Jaszczur_Moduł-if00"))]
-        return []
-
     def serial_fallback_candidates(self) -> list[str]:
         return [str(self.mixed_port)]
 
@@ -147,6 +210,9 @@ class FakePlatformAdapter:
 
     def process_cmdline(self, pid: int) -> str:
         return f"python monitor --pid {pid}"
+
+    def process_start_identity(self, pid: int) -> str:
+        return f"fake-start:{pid}"
 
     def port_owner_pids(self, port: str) -> list[int]:
         return [17] if port else []
@@ -210,8 +276,10 @@ with TemporaryDirectory(prefix="jh platform modułu ") as temp_dir:
         assert runtime.serial_candidate_paths() == [fake.mixed_port]
         assert runtime.upload_port_path_exists(str(fake.mixed_port))
         assert runtime.resolve_upload_port_for_tool(str(fake.mixed_port)) == "COM17"
-        assert runtime.by_id_links_for_port("COM17")[0].name == "usb-Jaszczur_Moduł-if00"
-        assert "Moduł" in runtime.tty_usb_identity_text(fake.mixed_port)
+        fake_record = fake.serial_port_record("COM17")
+        assert fake_record is not None
+        assert fake_record.aliases == ("usb-Jaszczur_Moduł-if00",)
+        assert "Moduł" in fake_record.platform_identity
         assert runtime.process_cmdline(42).endswith("42")
         assert runtime.port_owner_pids("COM17") == [17]
 
@@ -239,6 +307,22 @@ with TemporaryDirectory(prefix="jh platform modułu ") as temp_dir:
         assert runtime.temporary_directory().name == "temp dir modułu"
 
         uf2 = root / "firmware modułu.uf2"
+        block = bytearray(runtime.UF2_BLOCK_SIZE)
+        struct.pack_into(
+            "<IIIIIIII",
+            block,
+            0,
+            runtime.UF2_MAGIC_START0,
+            runtime.UF2_MAGIC_START1,
+            0,
+            0x10000000,
+            256,
+            0,
+            1,
+            0,
+        )
+        struct.pack_into("<I", block, 508, runtime.UF2_MAGIC_END)
+        uf2.write_bytes(block)
         with patch.object(
             runtime,
             "find_single_bootsel_mount",

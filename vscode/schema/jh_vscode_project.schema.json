@@ -142,6 +142,27 @@
         "usbProduct": {
           "type": "string"
         },
+        "usbSerialNumber": {
+          "type": "string"
+        },
+        "usbInterface": {
+          "type": "string"
+        },
+        "usbLocation": {
+          "type": "string"
+        },
+        "usbVid": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 65535 },
+            { "type": "string" }
+          ]
+        },
+        "usbPid": {
+          "oneOf": [
+            { "type": "integer", "minimum": 0, "maximum": 65535 },
+            { "type": "string" }
+          ]
+        },
         "byIdHint": {
           "type": "string"
         }
@@ -176,6 +197,10 @@
         },
         "port": {
           "type": "string"
+        },
+        "bootselVolume": {
+          "type": "string",
+          "description": "Optional user-local BOOTSEL drive root or Windows volume GUID used to disambiguate UF2 upload."
         },
         "byId": {
           "type": "string"

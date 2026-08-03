@@ -47,6 +47,11 @@ jobs:
           $python = '.\.build\windows\venv\Scripts\python.exe'
           $tests = @(
             'tests/test_vscode_platform_adapter.py',
+            'tests/test_vscode_native_upload.py',
+            'tests/test_vscode_serial_persistent.py',
+            'tests/test_vscode_windows_serial.py',
+            'tests/test_vscode_windows_bootsel.py',
+            'tests/test_rp_ota_artifacts.py',
             'tests/test_vscode_windows_tooling.py',
             'tests/test_vscode_build_environment.py',
             'tests/test_component_manager.py',

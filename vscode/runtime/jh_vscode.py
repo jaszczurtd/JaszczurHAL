@@ -37,6 +37,18 @@ from vscode.runtime.platform_api import (
     PlatformOperationUnsupported,
     get_platform_adapter,
 )
+from vscode.runtime.serial_identity import (
+    IDENTITY_MISSING_METADATA,
+    SerialIdentityExpectation,
+    match_serial_identity,
+    normalize_identity_text as normalize_serial_identity_text,
+    verified_serial_records,
+)
+from vscode.runtime.monitor.ownership import (
+    RELEASE_UPLOAD,
+    load_monitor_ownership,
+    request_monitor_release,
+)
 
 
 VERSION = "0.1.0"
@@ -76,6 +88,15 @@ SUPPORTED_ACTIONS = {
 }
 
 BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
+UF2_BLOCK_SIZE = 512
+UF2_MAGIC_START0 = 0x0A324655
+UF2_MAGIC_START1 = 0x9E5D5157
+UF2_MAGIC_END = 0x0AB16F30
+UF2_MAX_PAYLOAD_SIZE = 476
+UF2_FLAG_FAMILY_ID_PRESENT = 0x00002000
+UF2_FLAG_EXTENSION_FLAGS_PRESENT = 0x00008000
+UF2_ABSOLUTE_FAMILY_ID = 0xE48BFF57
+UF2_EXTENSION_RP2_IGNORE_BLOCK = 0x9957E304
 NATIVE_RP_TARGETS = {
     "rp2040",
     "rp2350-arm",
@@ -96,6 +117,8 @@ CMAKE_CACHE_KEYS_FILE = ".jh-vscode-cache-keys.json"
 WINDOWS_HOST_ENVIRONMENT_FILE = "host-environment.json"
 DEFAULT_OTA_PORT = 8266
 DEFAULT_OTA_LISTEN_PORT = 8266
+MONITOR_RELEASE_TIMEOUT_S = 3.0
+MONITOR_TERMINATE_TIMEOUT_S = 1.0
 CMAKE_TRANSIENT_CACHE_KEYS = {
     "JH_ARTIFACT_DIR",
     "JH_EXTRA_DEFINES",
@@ -690,6 +713,10 @@ def load_project_config(
             identity[target] = value
             sources[f"identity.{target}"] = ".vscode/settings.json"
     if identity:
+        try:
+            SerialIdentityExpectation.from_config(identity)
+        except ValueError as exc:
+            raise ValueError(f"invalid USB identity configuration: {exc}") from exc
         config["identity"] = identity
 
     if "project" not in config:
@@ -712,12 +739,20 @@ def load_project_config(
     local_target = local_state.get("target") if isinstance(local_state, dict) else None
     local_board = local_state.get("board") if isinstance(local_state, dict) else None
     local_port = local_state.get("uploadPort") if isinstance(local_state, dict) else None
+    local_bootsel_volume = (
+        local_state.get("bootselVolume") if isinstance(local_state, dict) else None
+    )
     if local_port:
         config["uploadPort"] = str(local_port)
         upload = dict(config.get("upload") or {})
         upload["port"] = str(local_port)
         config["upload"] = upload
         sources["uploadPort"] = ".vscode/jaszczurhal.local.json"
+    if local_bootsel_volume:
+        upload = dict(config.get("upload") or {})
+        upload["bootselVolume"] = str(local_bootsel_volume)
+        config["upload"] = upload
+        sources["upload.bootselVolume"] = ".vscode/jaszczurhal.local.json"
     eff_target = target_override or local_target
     eff_board = board_override or local_board
     if target_override or board_override:
@@ -756,13 +791,20 @@ def resolve_project(args: argparse.Namespace) -> Path | None:
 
 def apply_cli_overrides(config: dict[str, Any], args: argparse.Namespace) -> None:
     sources = config.setdefault("_sources", {})
-    if args.port:
-        config["uploadPort"] = args.port
+    port = getattr(args, "port", None)
+    if port:
+        config["uploadPort"] = port
         upload = dict(config.get("upload") or {})
-        upload["port"] = args.port
+        upload["port"] = port
         config["upload"] = upload
         sources["uploadPort"] = "cli"
-    if args.verbose:
+    bootsel_volume = getattr(args, "bootsel_volume", None)
+    if bootsel_volume:
+        upload = dict(config.get("upload") or {})
+        upload["bootselVolume"] = bootsel_volume
+        config["upload"] = upload
+        sources["upload.bootselVolume"] = "cli"
+    if getattr(args, "verbose", False):
         config["verbose"] = True
         sources["verbose"] = "cli"
 
@@ -1349,7 +1391,7 @@ def as_bool(value: Any) -> bool:
 
 
 def normalize_identity_text(value: str) -> str:
-    return "".join(ch.lower() if ch.isalnum() else "_" for ch in value).strip("_")
+    return normalize_serial_identity_text(value)
 
 
 def identity_enabled(config: dict[str, Any]) -> bool:
@@ -1370,23 +1412,33 @@ def expected_identity_tokens(config: dict[str, Any]) -> list[str]:
     if isinstance(manufacturer, str) and isinstance(product, str) and manufacturer.strip() and product.strip():
         tokens.append(normalize_identity_text(f"{manufacturer}_{product}"))
         tokens.append(normalize_identity_text(f"{manufacturer} {product}"))
+    for key in ("usbSerialNumber", "usbInterface", "usbLocation"):
+        value = identity.get(key)
+        if isinstance(value, str) and value.strip():
+            tokens.append(normalize_identity_text(value))
     return [token for token in tokens if token]
 
 
-def by_id_links_for_port(port: str) -> list[Path]:
-    return get_platform_adapter().serial_by_id_links(port)
-
-
-def tty_usb_identity_text(tty: Path) -> str:
-    return get_platform_adapter().serial_identity_text(tty)
+def expected_serial_identity(config: dict[str, Any]) -> SerialIdentityExpectation:
+    identity = config.get("identity")
+    return SerialIdentityExpectation.from_config(
+        identity if isinstance(identity, dict) else None
+    )
 
 
 def verified_identity_ports(config: dict[str, Any]) -> list[tuple[Path, Path | None]]:
-    expected = expected_identity_tokens(config)
-    return get_platform_adapter().verified_identity_ports(
+    expected = expected_serial_identity(config)
+    matches = verified_serial_records(
+        get_platform_adapter().list_serial_ports(),
         expected,
-        normalize_identity_text,
     )
+    return [
+        (
+            Path(record.device),
+            Path(record.aliases[0]) if record.aliases else None,
+        )
+        for record, _match in matches
+    ]
 
 
 def serial_candidate_paths() -> list[Path]:
@@ -1394,22 +1446,29 @@ def serial_candidate_paths() -> list[Path]:
 
 
 def serial_port_records(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-    expected = expected_identity_tokens(config or {})
+    expected = expected_serial_identity(config or {})
     records: list[dict[str, Any]] = []
-    for port in serial_candidate_paths():
-        links = by_id_links_for_port(str(port))
-        link_names = [link.name for link in links]
-        sysfs_identity = tty_usb_identity_text(port)
-        haystacks = [normalize_identity_text(name) for name in link_names]
-        if sysfs_identity:
-            haystacks.append(normalize_identity_text(sysfs_identity))
-        verified = bool(expected and any(token in text for token in expected for text in haystacks))
+    for port in get_platform_adapter().list_serial_ports():
+        match = match_serial_identity(port, expected)
         records.append(
             {
-                "port": str(port),
-                "byId": link_names,
-                "sysfsIdentity": sysfs_identity,
-                "verifiedForProject": verified,
+                "port": port.device,
+                "platform": port.platform,
+                "aliases": list(port.aliases),
+                "platformIdentity": port.platform_identity or None,
+                "vid": port.vid,
+                "pid": port.pid,
+                "serialNumber": port.serial_number or None,
+                "manufacturer": port.manufacturer or None,
+                "product": port.product or None,
+                "interface": port.interface or None,
+                "location": port.location or None,
+                "hwid": port.hwid or None,
+                "description": port.description or None,
+                "identityStatus": match.status,
+                "identityScore": match.score,
+                "identityReason": match.reason(),
+                "verifiedForProject": match.verified,
             }
         )
     return records
@@ -1453,7 +1512,12 @@ def command_list_ports(args: argparse.Namespace) -> int:
         apply_cli_overrides(config, args)
 
     records = serial_port_records(config if config else None)
-    bootsel = bootsel_candidates_without_mount()
+    bootsel_supported = True
+    try:
+        bootsel = bootsel_candidates_without_mount()
+    except PlatformOperationUnsupported:
+        bootsel = []
+        bootsel_supported = False
 
     if args.json:
         print(
@@ -1463,6 +1527,7 @@ def command_list_ports(args: argparse.Namespace) -> int:
                     "expectedIdentity": identity_display_text(config) if identity_enabled(config) else None,
                     "serial": records,
                     "bootsel": bootsel,
+                    "bootselSupported": bootsel_supported,
                 },
                 indent=2,
                 sort_keys=True,
@@ -1475,16 +1540,40 @@ def command_list_ports(args: argparse.Namespace) -> int:
     if records:
         print("Serial ports:")
         for record in records:
-            label = "verified" if record["verifiedForProject"] else "unverified"
+            label = record["identityStatus"] if config else "detected"
             print(f"  {record['port']} [{label}]")
-            for link in record["byId"]:
-                print(f"    by-id: {link}")
-            if record["sysfsIdentity"]:
-                print(f"    sysfs: {record['sysfsIdentity']}")
+            for alias in record["aliases"]:
+                print(f"    alias: {alias}")
+            if record["platformIdentity"]:
+                print(f"    platform identity: {record['platformIdentity']}")
+            usb_id = (
+                f"{record['vid']:04x}:{record['pid']:04x}"
+                if record["vid"] is not None and record["pid"] is not None
+                else "?:????"
+            )
+            metadata = [
+                f"USB {usb_id}",
+                *(
+                    f"{name}={record[key]}"
+                    for name, key in (
+                        ("serial", "serialNumber"),
+                        ("manufacturer", "manufacturer"),
+                        ("product", "product"),
+                        ("interface", "interface"),
+                        ("location", "location"),
+                    )
+                    if record[key]
+                ),
+            ]
+            print(f"    {', '.join(metadata)}")
+            if config and not record["verifiedForProject"]:
+                print(f"    identity: {record['identityReason']}")
     else:
         print("Serial ports: none")
 
-    if bootsel:
+    if not bootsel_supported:
+        print("BOOTSEL candidates: unavailable on this host")
+    elif bootsel:
         print("BOOTSEL candidates:")
         for candidate in bootsel:
             print(f"  {candidate}")
@@ -1510,7 +1599,7 @@ def command_change_port(args: argparse.Namespace) -> int:
             return EXIT_CONFIG
         print("Select serial port:")
         for index, record in enumerate(records, start=1):
-            suffix = f" ({', '.join(record['byId'])})" if record["byId"] else ""
+            suffix = f" ({', '.join(record['aliases'])})" if record["aliases"] else ""
             print(f"  {index:2d}. {record['port']}{suffix}")
         print("  q. cancel")
         try:
@@ -1531,7 +1620,7 @@ def command_change_port(args: argparse.Namespace) -> int:
                 return EXIT_USAGE
             selected = records[index - 1]["port"]
 
-    selected_value = str(Path(str(selected)).expanduser())
+    selected_value = get_platform_adapter().resolve_serial_port(str(selected))
     if not get_platform_adapter().serial_port_exists(selected_value):
         print(f"error: serial port does not exist: {selected_value}", file=sys.stderr)
         return EXIT_CONFIG
@@ -1556,12 +1645,12 @@ def select_verified_identity_port(config: dict[str, Any]) -> tuple[str | None, i
         if link is not None:
             print(yellow_text(f"Using verified serial port: {port} ({link.name})"))
         else:
-            print(yellow_text(f"Using verified serial port: {port} (matched USB identity from sysfs)"))
+            print(yellow_text(f"Using verified serial port: {port} (matched USB metadata)"))
         return str(port), 0
     if len(matches) > 1:
         print("error: multiple verified serial ports match this project identity:", file=sys.stderr)
         for port, link in matches:
-            suffix = f" ({link.name})" if link is not None else " (matched USB identity from sysfs)"
+            suffix = f" ({link.name})" if link is not None else " (matched USB metadata)"
             print(f"  {port}{suffix}", file=sys.stderr)
         print("error: pass --port explicitly to choose one", file=sys.stderr)
         return None, EXIT_UNSAFE_DEVICE
@@ -1575,7 +1664,19 @@ def identity_display_text(config: dict[str, Any]) -> str:
     by_id_hint = identity.get("byIdHint")
     label = f"{manufacturer} {product}"
     if by_id_hint:
-        label = f"{label} (by-id hint: {by_id_hint})"
+        hint_name = (
+            "identity hint"
+            if get_platform_adapter().platform_name == "windows"
+            else "by-id hint"
+        )
+        label = f"{label} ({hint_name}: {by_id_hint})"
+    serial_number = identity.get("usbSerialNumber")
+    if serial_number:
+        label = f"{label}, serial: {serial_number}"
+    vid = identity.get("usbVid")
+    pid = identity.get("usbPid")
+    if vid is not None or pid is not None:
+        label = f"{label}, VID:PID {vid if vid is not None else '?'}:{pid if pid is not None else '?'}"
     return label
 
 
@@ -1584,7 +1685,10 @@ def print_identity_upload_requirements(config: dict[str, Any]) -> None:
     print(f"error: expected USB identity: {identity_display_text(config)}", file=sys.stderr)
     print("error: requirements for the default 'upload' flow:", file=sys.stderr)
     print("  1. For normal reflashing, the running firmware must expose a USB serial port", file=sys.stderr)
-    print("     whose /dev/serial/by-id link or sysfs USB descriptors match the expected identity.", file=sys.stderr)
+    if get_platform_adapter().platform_name == "windows":
+        print("     whose COM metadata matches the expected USB descriptors.", file=sys.stderr)
+    else:
+        print("     whose by-id link or sysfs USB descriptors match the expected identity.", file=sys.stderr)
     print("  2. If no serial port is configured, exactly one BOOTSEL UF2 drive may be visible", file=sys.stderr)
     print("     so the tool can safely fall back to UF2 upload.", file=sys.stderr)
     print("  3. For the first flash of a clean board, either use BOOTSEL/UF2 or pass", file=sys.stderr)
@@ -1611,25 +1715,27 @@ def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: b
         print_identity_upload_requirements(config)
         return EXIT_UNSAFE_DEVICE
 
-    expected = expected_identity_tokens(config)
-    links = by_id_links_for_port(port)
-    normalized_names = [normalize_identity_text(link.name) for link in links]
+    adapter = get_platform_adapter()
+    resolved = adapter.resolve_serial_port(port)
+    record = adapter.serial_port_record(resolved)
+    if record is None:
+        print(f"error: selected serial port is stale or unavailable: {resolved}", file=sys.stderr)
+        return EXIT_UNSAFE_DEVICE
 
-    if expected and any(token in name for token in expected for name in normalized_names):
+    match = match_serial_identity(record, expected_serial_identity(config))
+    if match.verified:
         return 0
 
-    normalized_sysfs = normalize_identity_text(tty_usb_identity_text(Path(port)))
-    if expected and normalized_sysfs and any(token in normalized_sysfs for token in expected):
-        return 0
-
-    print(f"error: refusing upload to unverified port: {port}", file=sys.stderr)
+    print(f"error: refusing upload to unverified port: {resolved}", file=sys.stderr)
     print(f"error: expected USB identity: {identity_display_text(config)}", file=sys.stderr)
-    if links:
-        print("error: matching /dev/serial/by-id links for this port:", file=sys.stderr)
-        for link in links:
-            print(f"  {link.name}", file=sys.stderr)
+    if match.status == IDENTITY_MISSING_METADATA:
+        print(f"error: port metadata is incomplete: {match.reason()}", file=sys.stderr)
     else:
-        print("error: no /dev/serial/by-id link resolves to this port", file=sys.stderr)
+        print(f"error: port identity {match.reason()}", file=sys.stderr)
+    if record.aliases:
+        print("error: serial aliases for this port:", file=sys.stderr)
+        for alias in record.aliases:
+            print(f"  {alias}", file=sys.stderr)
     print("error: for first flash of a clean board, pass --allow-unverified-port with an explicit --port", file=sys.stderr)
     return EXIT_UNSAFE_DEVICE
 
@@ -1640,13 +1746,6 @@ def process_cmdline(pid: int) -> str:
 
 def port_owner_pids(port: str) -> list[int]:
     return get_platform_adapter().port_owner_pids(port)
-
-
-def owns_jh_monitor(pid: int, project_dir: Path) -> bool:
-    cmdline = process_cmdline(pid)
-    if "serial_persistent.py" not in cmdline and "serial-persistent.py" not in cmdline:
-        return False
-    return str(project_dir) in cmdline
 
 
 def upload_marker(project_dir: Path) -> Path:
@@ -1670,38 +1769,85 @@ def end_upload_release(project_dir: Path) -> None:
 
 
 def release_port_for_upload(port: str, project_dir: Path) -> int:
-    owners = [pid for pid in port_owner_pids(port) if pid != os.getpid()]
-    if not owners:
-        return 0
-
-    own_monitors = [pid for pid in owners if owns_jh_monitor(pid, project_dir)]
-    foreign = [pid for pid in owners if pid not in own_monitors]
+    adapter = get_platform_adapter()
+    ownership = load_monitor_ownership(adapter, project_dir, port)
+    owners = {
+        pid for pid in port_owner_pids(port) if pid != os.getpid()
+    }
+    if ownership is not None:
+        owners.add(ownership.pid)
+    foreign = sorted(
+        pid
+        for pid in owners
+        if ownership is None or pid != ownership.pid
+    )
     if foreign:
         print(f"error: serial port is busy and not owned by this project monitor: {port}", file=sys.stderr)
         for pid in foreign:
             print(f"  PID {pid}: {process_cmdline(pid) or '?'}", file=sys.stderr)
         return EXIT_UNSAFE_DEVICE
+    if ownership is None:
+        return 0
 
     begin_upload_release(project_dir)
-    for pid in own_monitors:
-        try:
-            get_platform_adapter().request_monitor_release(pid)
-            print(yellow_text(f"released own serial monitor PID {pid}"))
-        except ProcessLookupError:
-            pass
-        except PermissionError:
-            print(f"error: cannot stop own serial monitor PID {pid}: permission denied", file=sys.stderr)
-            end_upload_release(project_dir)
-            return EXIT_UNSAFE_DEVICE
+    try:
+        request_monitor_release(adapter, ownership, RELEASE_UPLOAD)
+        print(yellow_text(f"requested release from own serial monitor PID {ownership.pid}"))
+    except ProcessLookupError:
+        print(
+            "error: monitor ownership changed before the release request; "
+            "refusing automatic handoff",
+            file=sys.stderr,
+        )
+        end_upload_release(project_dir)
+        return EXIT_UNSAFE_DEVICE
+    except PermissionError:
+        print(
+            f"error: cannot signal own serial monitor PID {ownership.pid}: permission denied",
+            file=sys.stderr,
+        )
+        end_upload_release(project_dir)
+        return EXIT_UNSAFE_DEVICE
 
-    deadline = time.time() + 3.0
-    while time.time() < deadline:
-        remaining = [pid for pid in port_owner_pids(port) if pid != os.getpid()]
-        if not remaining:
+    deadline = time.monotonic() + MONITOR_RELEASE_TIMEOUT_S
+    while time.monotonic() < deadline:
+        current = load_monitor_ownership(adapter, project_dir, port)
+        remaining = {
+            pid for pid in port_owner_pids(port) if pid != os.getpid()
+        }
+        if current is None and not remaining:
             return 0
         time.sleep(0.1)
 
-    print(f"error: serial port stayed busy after stopping own monitor: {port}", file=sys.stderr)
+    current = load_monitor_ownership(adapter, project_dir, port)
+    if current is not None and (
+        current.pid == ownership.pid
+        and current.process_start == ownership.process_start
+        and adapter.process_start_identity(current.pid) == current.process_start
+    ):
+        try:
+            adapter.terminate_process(current.pid)
+            print(yellow_text(f"stopped unresponsive own serial monitor PID {current.pid}"))
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            print(
+                f"error: cannot stop own serial monitor PID {current.pid}: permission denied",
+                file=sys.stderr,
+            )
+            end_upload_release(project_dir)
+            return EXIT_UNSAFE_DEVICE
+        fallback_deadline = time.monotonic() + MONITOR_TERMINATE_TIMEOUT_S
+        while time.monotonic() < fallback_deadline:
+            current_after_stop = load_monitor_ownership(adapter, project_dir, port)
+            remaining = {
+                pid for pid in port_owner_pids(port) if pid != os.getpid()
+            }
+            if current_after_stop is None and not remaining:
+                return 0
+            time.sleep(0.1)
+
+    print(f"error: serial port stayed busy after requesting release from own monitor: {port}", file=sys.stderr)
     for pid in port_owner_pids(port):
         if pid != os.getpid():
             print(f"  PID {pid}: {process_cmdline(pid) or '?'}", file=sys.stderr)
@@ -2470,6 +2616,14 @@ def native_rp_upload_uses_serial_bootsel(
     )
 
 
+def configured_bootsel_volume(config: dict[str, Any]) -> str | None:
+    upload = config.get("upload")
+    if not isinstance(upload, dict):
+        return None
+    value = str(upload.get("bootselVolume") or "").strip()
+    return value or None
+
+
 def command_upload(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
@@ -2487,6 +2641,7 @@ def command_upload(args: argparse.Namespace) -> int:
     native_rp_serial_upload = native_rp_upload_uses_serial_bootsel(
         config, upload_strategy
     )
+    bootsel_volume = configured_bootsel_volume(config)
     if upload_strategy == "openocd":
         # SWD/JTAG flashers (e.g. STM32 via OpenOCD): no serial port, BOOTSEL,
         # by-id identity guard, port release, or monitor handoff applies. Delegate
@@ -2497,9 +2652,21 @@ def command_upload(args: argparse.Namespace) -> int:
             print_memory_map_overview(config, project_dir)
             return 0
         return EXIT_UPLOAD
+    if native_rp_serial_upload and bootsel_volume:
+        _, selected_candidates = find_single_bootsel_mount(
+            selected_id=bootsel_volume
+        )
+        if selected_candidates:
+            print(
+                "Explicit BOOTSEL volume detected, using UF2 upload: "
+                f"{bootsel_volume}"
+            )
+            return command_upload_uf2(args)
     if native_rp_serial_upload and not args.port and port:
         if not upload_port_path_exists(str(port)):
-            _, bootsel_candidates = find_single_bootsel_mount()
+            _, bootsel_candidates = find_single_bootsel_mount(
+                selected_id=bootsel_volume
+            )
             if bootsel_candidates:
                 print(
                     "Configured serial upload port is unavailable; "
@@ -2517,7 +2684,9 @@ def command_upload(args: argparse.Namespace) -> int:
                     )
                     port = detected_port
     if not port:
-        _, bootsel_candidates = find_single_bootsel_mount()
+        _, bootsel_candidates = find_single_bootsel_mount(
+            selected_id=bootsel_volume
+        )
         if bootsel_candidates:
             print("No serial upload port configured; BOOTSEL device detected, using UF2 upload.")
             return command_upload_uf2(args)
@@ -2641,27 +2810,67 @@ def bootsel_candidate_ids() -> set[str]:
     return ids
 
 
+def _normalized_bootsel_selection(value: str | Path) -> str:
+    return str(value).strip().rstrip("\\/").casefold()
+
+
+def bootsel_selection_matches(block: dict[str, Any], selected_id: str) -> bool:
+    selected = _normalized_bootsel_selection(selected_id)
+    if not selected:
+        return False
+    identities = [
+        block.get("path"),
+        block.get("volumeGuid"),
+        bootsel_mountpoint(block),
+    ]
+    return any(
+        identity is not None
+        and _normalized_bootsel_selection(identity) == selected
+        for identity in identities
+    )
+
+
 def find_single_bootsel_mount(
     excluded_ids: set[str] | None = None,
+    selected_id: str | None = None,
 ) -> tuple[Path | None, list[str]]:
     excluded = excluded_ids or set()
     all_blocks = find_bootsel_blocks()
-    blocks = [
-        block
-        for block in all_blocks
-        if f"block:{block.get('path')}" not in excluded
-    ]
-    excluded_mounts = {
-        mount
-        for block in all_blocks
-        if f"block:{block.get('path')}" in excluded
-        for mount in [bootsel_mountpoint(block)]
-        if mount is not None
-    }
+    if selected_id:
+        blocks = [
+            block
+            for block in all_blocks
+            if bootsel_selection_matches(block, selected_id)
+        ]
+        excluded_mounts: set[Path] = set()
+    else:
+        blocks = [
+            block
+            for block in all_blocks
+            if f"block:{block.get('path')}" not in excluded
+        ]
+        excluded_mounts = {
+            mount
+            for block in all_blocks
+            if f"block:{block.get('path')}" in excluded
+            for mount in [bootsel_mountpoint(block)]
+            if mount is not None
+        }
     mounts = [
         mount
         for mount in find_bootsel_mounts()
-        if f"mount:{mount}" not in excluded and mount not in excluded_mounts
+        if (
+            (
+                not selected_id
+                and f"mount:{mount}" not in excluded
+                and mount not in excluded_mounts
+            )
+            or (
+                selected_id
+                and _normalized_bootsel_selection(mount)
+                == _normalized_bootsel_selection(selected_id)
+            )
+        )
     ]
     block_mounts = [mount for mount in (bootsel_mountpoint(block) for block in blocks) if mount]
     for mount in block_mounts:
@@ -2683,11 +2892,15 @@ def find_single_bootsel_mount(
 def wait_for_single_bootsel_mount(
     timeout_s: float,
     excluded_ids: set[str] | None = None,
+    selected_id: str | None = None,
 ) -> tuple[Path | None, list[str]]:
     deadline = time.monotonic() + timeout_s
     last_candidates: list[str] = []
     while True:
-        mount, candidates = find_single_bootsel_mount(excluded_ids)
+        mount, candidates = find_single_bootsel_mount(
+            excluded_ids,
+            selected_id,
+        )
         last_candidates = candidates
         if mount is not None or len(candidates) > 1:
             return mount, candidates
@@ -2707,6 +2920,7 @@ def touch_rp_bootloader_port(port: str) -> int:
         return EXIT_UPLOAD
 
     print(f"Requesting BOOTSEL via 1200-bps touch on {port}", flush=True)
+    opened = False
     try:
         with serial.Serial(
             port=port,
@@ -2714,12 +2928,19 @@ def touch_rp_bootloader_port(port: str) -> int:
             timeout=0.25,
             write_timeout=0.25,
         ) as touch:
+            opened = True
             touch.dtr = True
             time.sleep(0.05)
             touch.dtr = False
             time.sleep(0.05)
     except (OSError, serial.SerialException) as exc:
-        if getattr(exc, "errno", None) in {errno.EIO, errno.ENODEV}:
+        expected_disconnect = getattr(exc, "errno", None) in {
+            errno.EIO,
+            errno.ENODEV,
+        }
+        if opened and get_platform_adapter().platform_name == "windows":
+            expected_disconnect = True
+        if expected_disconnect:
             print(
                 "Serial port disconnected during the bootloader touch; "
                 "waiting for BOOTSEL."
@@ -2772,7 +2993,112 @@ def command_upload_uf2(
         project_dir,
         bootsel_wait_s=bootsel_wait_s,
         excluded_bootsel_ids=excluded_bootsel_ids,
+        selected_bootsel_id=configured_bootsel_volume(config),
     )
+
+
+def validate_uf2_artifact(uf2: Path) -> str | None:
+    try:
+        file_size = uf2.stat().st_size
+    except OSError as exc:
+        return f"cannot read artifact metadata: {exc}"
+    if file_size == 0:
+        return "artifact is empty"
+    if file_size % UF2_BLOCK_SIZE != 0:
+        return f"size {file_size} is not a multiple of {UF2_BLOCK_SIZE} bytes"
+
+    block_count = file_size // UF2_BLOCK_SIZE
+    group_counts: dict[int, int] = {}
+    group_blocks: dict[int, set[int]] = {}
+    try:
+        with uf2.open("rb") as artifact:
+            for index in range(block_count):
+                block = artifact.read(UF2_BLOCK_SIZE)
+                if len(block) != UF2_BLOCK_SIZE:
+                    return f"block {index} is truncated"
+                (
+                    magic0,
+                    magic1,
+                    flags,
+                    _target_address,
+                    payload_size,
+                    block_number,
+                    declared_count,
+                    family_id,
+                ) = struct.unpack_from("<IIIIIIII", block, 0)
+                magic_end = struct.unpack_from("<I", block, 508)[0]
+                if (
+                    magic0 != UF2_MAGIC_START0
+                    or magic1 != UF2_MAGIC_START1
+                    or magic_end != UF2_MAGIC_END
+                ):
+                    return f"block {index} has invalid UF2 magic"
+                if payload_size == 0 or payload_size > UF2_MAX_PAYLOAD_SIZE:
+                    return f"block {index} has invalid payload size {payload_size}"
+                if declared_count == 0 or block_number >= declared_count:
+                    return f"block {index} has invalid sequence number {block_number}"
+                is_rp2350_absolute_ignore = (
+                    family_id == UF2_ABSOLUTE_FAMILY_ID
+                    and flags
+                    == UF2_FLAG_FAMILY_ID_PRESENT
+                    | UF2_FLAG_EXTENSION_FLAGS_PRESENT
+                    and payload_size == 256
+                    and block_number == 0
+                    and declared_count == 2
+                    and all(value == 0xEF for value in block[32:288])
+                    and struct.unpack_from("<I", block, 32 + payload_size)[0]
+                    == UF2_EXTENSION_RP2_IGNORE_BLOCK
+                )
+                if is_rp2350_absolute_ignore:
+                    continue
+
+                group_key = (
+                    family_id
+                    if flags & UF2_FLAG_FAMILY_ID_PRESENT
+                    else -1
+                )
+                previous_count = group_counts.setdefault(group_key, declared_count)
+                if previous_count != declared_count:
+                    return f"block {index} changes its UF2 group block count"
+                seen = group_blocks.setdefault(group_key, set())
+                if block_number in seen:
+                    return f"block {index} duplicates sequence number {block_number}"
+                seen.add(block_number)
+            if artifact.read(1):
+                return "artifact changed while it was being validated"
+    except OSError as exc:
+        return f"cannot read artifact: {exc}"
+
+    if not group_counts:
+        return "artifact has no programmable UF2 blocks"
+
+    grouped_block_total = sum(len(blocks) for blocks in group_blocks.values())
+    if (
+        grouped_block_total == block_count
+        and all(count == block_count for count in group_counts.values())
+    ):
+        global_blocks: set[int] = set()
+        for blocks in group_blocks.values():
+            overlap = global_blocks.intersection(blocks)
+            if overlap:
+                duplicate = min(overlap)
+                return f"merged UF2 duplicates global sequence number {duplicate}"
+            global_blocks.update(blocks)
+        if len(global_blocks) != block_count:
+            return (
+                f"merged UF2 declares {block_count} blocks but contains "
+                f"{len(global_blocks)} unique sequence numbers"
+            )
+        return None
+
+    for group_key, declared_count in group_counts.items():
+        seen = group_blocks.get(group_key, set())
+        if len(seen) != declared_count:
+            return (
+                f"UF2 group 0x{group_key & 0xFFFFFFFF:08x} declares "
+                f"{declared_count} blocks but contains {len(seen)}"
+            )
+    return None
 
 
 def upload_uf2_artifact(
@@ -2782,14 +3108,25 @@ def upload_uf2_artifact(
     *,
     bootsel_wait_s: float = 0.0,
     excluded_bootsel_ids: set[str] | None = None,
+    selected_bootsel_id: str | None = None,
 ) -> int:
+    validation_error = validate_uf2_artifact(uf2)
+    if validation_error:
+        print(
+            f"error: invalid or incomplete UF2 artifact {uf2}: {validation_error}",
+            file=sys.stderr,
+        )
+        return EXIT_UPLOAD
     if bootsel_wait_s > 0.0:
         mount, bootsel_candidates = wait_for_single_bootsel_mount(
             bootsel_wait_s,
             excluded_bootsel_ids,
+            selected_bootsel_id,
         )
     else:
-        mount, bootsel_candidates = find_single_bootsel_mount()
+        mount, bootsel_candidates = find_single_bootsel_mount(
+            selected_id=selected_bootsel_id
+        )
     if not bootsel_candidates:
         print("error: BOOTSEL drive not found", file=sys.stderr)
         return EXIT_UNSAFE_DEVICE
@@ -2806,6 +3143,15 @@ def upload_uf2_artifact(
     print(f"Copying {uf2} -> {destination}")
     try:
         get_platform_adapter().durable_copy(uf2, destination)
+    except PermissionError as exc:
+        print(
+            f"error: BOOTSEL drive is read-only or access was denied: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_UPLOAD
+    except FileNotFoundError as exc:
+        print(f"error: BOOTSEL drive disappeared during UF2 copy: {exc}", file=sys.stderr)
+        return EXIT_UPLOAD
     except OSError as exc:
         print(f"error: UF2 copy failed: {exc}", file=sys.stderr)
         return EXIT_UPLOAD
@@ -3188,8 +3534,15 @@ def command_clear_identity(args: argparse.Namespace) -> int:
         return EXIT_CONFIG
 
     port = args.port or config.get("uploadPort") or upload.get("port")
+    bootsel_volume = configured_bootsel_volume(config)
     bootsel_candidates: list[str] = []
-    if not port:
+    if bootsel_volume:
+        _, bootsel_candidates = find_single_bootsel_mount(
+            selected_id=bootsel_volume
+        )
+        if bootsel_candidates:
+            port = None
+    if not port and not bootsel_candidates:
         _, bootsel_candidates = find_single_bootsel_mount()
         if not bootsel_candidates and identity_enabled(config):
             port, detect_status = select_verified_identity_port(config)
@@ -3240,8 +3593,14 @@ def command_clear_identity(args: argparse.Namespace) -> int:
                 project_dir,
                 bootsel_wait_s=8.0,
                 excluded_bootsel_ids=existing_bootsel_ids,
+                selected_bootsel_id=bootsel_volume,
             )
-        return upload_uf2_artifact(uf2, neutral, project_dir)
+        return upload_uf2_artifact(
+            uf2,
+            neutral,
+            project_dir,
+            selected_bootsel_id=bootsel_volume,
+        )
     finally:
         if port_released:
             end_upload_release(project_dir)
@@ -3287,6 +3646,16 @@ def command_monitor(args: argparse.Namespace, mode: str) -> int:
     ]
     if identity_tokens:
         cmd.append("--follow-identity")
+        cmd.extend(
+            [
+                "--identity-json",
+                json.dumps(
+                    expected_serial_identity(config).as_dict(),
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
+            ]
+        )
         for token in identity_tokens:
             cmd.extend(["--identity-token", token])
     if port:
@@ -3448,6 +3817,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--selection", help="Board selection in '<target>:<board>' form (for VS Code pickers).")
     parser.add_argument("--interactive", action="store_true", help="Prompt for a target/board selection in the terminal.")
     parser.add_argument("--port", help="Override serial upload/monitor port.")
+    parser.add_argument(
+        "--bootsel-volume",
+        help="Select one BOOTSEL drive root or volume GUID for UF2 upload.",
+    )
     parser.add_argument("--host", help="Override OTA device IPv4 address or hostname.")
     parser.add_argument(
         "--allow-unverified-port",
