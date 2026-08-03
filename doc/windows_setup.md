@@ -93,6 +93,11 @@ path. OpenOCD reuse additionally requires a complete adjacent or conventional
 in favor of the managed archive. Running setup again leaves valid components
 unchanged.
 
+HTTPS downloads on Windows use the operating system's `curl.exe` and Schannel
+trust store with HTTPS-only redirects and TLS 1.2 or newer. This supports
+managed enterprise TLS inspection without disabling certificate validation.
+Every downloaded archive must still match its pinned SHA-256 before extraction.
+
 ## Firmware build layout
 
 Firmware configuration uses Ninja by default on both Windows and Unix. A

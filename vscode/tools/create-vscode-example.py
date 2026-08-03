@@ -254,13 +254,23 @@ def build_files(
 
 
 def write_files(output_dir: Path, files: dict[str, str], dry_run: bool) -> None:
+    add_scripts_to_path(Path(__file__).resolve().parents[2])
+    from vscode_task_config import write_text_lf
+
     for rel, content in files.items():
         path = output_dir / rel
         if dry_run:
             print(path)
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        write_text_lf(path, content)
+
+
+def configure_console_streams() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(errors="backslashreplace")
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -302,6 +312,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 
 def main(argv: list[str]) -> int:
+    configure_console_streams()
     args = parse_args(argv)
     output_dir = args.output.expanduser().resolve()
     module = sanitize_module(args.module)

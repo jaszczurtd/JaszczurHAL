@@ -72,6 +72,10 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
             "sourceDir": str(source),
             "cache": {
                 "JH_EXTRA_INCLUDES": f"{project / 'include one'};{project / 'include two'}",
+                "JH_EXTRA_SOURCES": (
+                    r"C:\development\Fiesta\src\common\fiesta_app_entry.cpp;"
+                    r"D:\consumer path\extra.cpp"
+                ),
                 "JH_USB_PRODUCT": "Fiesta board with spaces",
             },
         },
@@ -107,6 +111,22 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
             "verified GNU RISC-V objdump was ignored",
         )
 
+        debug_config = runtime.cmake_build_config(config, debug=True)
+        require(
+            runtime.get_cmake_build_dir(debug_config, project)
+            == build_dir / "debug",
+            "debug and optimized builds share one CMake cache",
+        )
+        require(
+            "-DCMAKE_BUILD_TYPE=Debug"
+            in runtime.cmake_cache_args(debug_config, project),
+            "debug build did not select the CMake Debug configuration",
+        )
+        require(
+            runtime.cmake_build_config(config, debug=False) is config,
+            "optimized build configuration was needlessly replaced",
+        )
+
     command, environment = captured[0]
     require(command[0] == tools["cmake"], "verified CMake executable was ignored")
     require(command[command.index("-G") + 1] == "Ninja", "Ninja was not selected")
@@ -125,6 +145,14 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
     require(
         any(item.startswith("-DJH_EXTRA_INCLUDES=") and ";" in item for item in command),
         "CMake list cache value was split into multiple process arguments",
+    )
+    require(
+        (
+            "-DJH_EXTRA_SOURCES=C:/development/Fiesta/src/common/"
+            "fiesta_app_entry.cpp;D:/consumer path/extra.cpp"
+        )
+        in command,
+        "Windows paths in CMake cache values were not normalized",
     )
     require(
         "-DJH_USB_PRODUCT=Fiesta board with spaces" in command,

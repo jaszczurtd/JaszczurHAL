@@ -171,6 +171,29 @@ require(pdf_attr.stdout.strip().endswith("text: unset"), "PDF files are not mark
 registry = tooling_target_registry(ROOT)
 expected_tasks = project_tasks_document(registry, "rp2040", "pico")
 require(
+    examples_dispatcher.JH_VSCODE.name
+    == ("jh-vscode.cmd" if os.name == "nt" else "jh-vscode"),
+    "example dispatcher selected the wrong host launcher",
+)
+with tempfile.TemporaryDirectory(prefix="jh dispatcher logs ") as temp_dir:
+    with mock.patch.object(
+        examples_dispatcher.tempfile,
+        "gettempdir",
+        return_value=temp_dir,
+    ):
+        dispatcher_log = examples_dispatcher.dispatcher_log_path(
+            "rp2350-arm",
+            "01_blink",
+        )
+    require(
+        dispatcher_log.parent == Path(temp_dir),
+        "example dispatcher bypasses the host temporary directory",
+    )
+    require(
+        dispatcher_log.name == "jh_examples_dispatcher_rp2350-arm_01_blink.log",
+        "example dispatcher log name changed unexpectedly",
+    )
+require(
     examples_dispatcher.base_tasks("rp2040", "pico", []) == expected_tasks,
     "example dispatcher bypasses the shared task builder",
 )
@@ -218,13 +241,23 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
         "--name",
         "Generated Windows workflow",
     ]
-    run_checked(generate_command)
+    narrow_console_env = os.environ.copy()
+    narrow_console_env["PYTHONIOENCODING"] = "ascii:strict"
+    generated = run_checked(generate_command, env=narrow_console_env)
+    require(
+        "Projekt modu\\u0142u" in generated.stdout,
+        "generator did not preserve a Unicode path on a narrow console",
+    )
     first = {
         path.relative_to(project_dir).as_posix(): path.read_bytes()
         for path in project_dir.rglob("*")
         if path.is_file()
     }
-    run_checked([*generate_command, "--force"])
+    require(
+        all(b"\r\n" not in content for content in first.values()),
+        "standalone generator wrote Windows CRLF into LF-controlled files",
+    )
+    run_checked([*generate_command, "--force"], env=narrow_console_env)
     second = {
         path.relative_to(project_dir).as_posix(): path.read_bytes()
         for path in project_dir.rglob("*")

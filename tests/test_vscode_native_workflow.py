@@ -11,7 +11,9 @@ import tempfile
 
 
 ROOT = Path(sys.argv[1]).resolve()
-ENTRY = ROOT / "vscode" / "entry" / "jh-vscode"
+ENTRY = ROOT / "vscode" / "entry" / (
+    "jh-vscode.cmd" if sys.platform == "win32" else "jh-vscode"
+)
 
 
 def require(condition: bool, message: str) -> None:
@@ -21,6 +23,10 @@ def require(condition: bool, message: str) -> None:
 
 def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def same_path(actual: str, expected: str | Path) -> bool:
+    return Path(actual).resolve() == Path(expected).resolve()
 
 
 def resolved(target: str, board: str) -> dict:
@@ -72,7 +78,7 @@ for target, (board, toolchain) in expected.items():
     config = resolved(target, board)
     cache = config["cmake"]["cache"]
     require(
-        config["buildDir"] == str(ROOT / ".build" / "examples" / "01_blink"),
+        same_path(config["buildDir"], ROOT / ".build" / "examples" / "01_blink"),
         f"{target}: buildDir escaped the central artifact tree",
     )
     require(
@@ -88,7 +94,7 @@ for target, (board, toolchain) in expected.items():
         f"{target}: raw Pico SDK selectors leaked from the authoritative registry",
     )
     require(
-        cache["PICO_SDK_PATH"] == str(ROOT / "third_party" / "pico-sdk"),
+        same_path(cache["PICO_SDK_PATH"], ROOT / "third_party" / "pico-sdk"),
         f"{target}: Pico SDK path mismatch",
     )
     require(
@@ -97,7 +103,7 @@ for target, (board, toolchain) in expected.items():
     )
     if toolchain is not None:
         require(
-            cache["PICO_TOOLCHAIN_PATH"] == toolchain,
+            same_path(cache["PICO_TOOLCHAIN_PATH"], toolchain),
             f"{target}: RISC-V toolchain path mismatch",
         )
 
@@ -108,8 +114,10 @@ require(
     "stm32g474: JH_BOARD mismatch",
 )
 require(
-    stm32_cache["CMAKE_TOOLCHAIN_FILE"]
-    == str(ROOT / "stm32_lib" / "toolchain_stm32g474.cmake"),
+    same_path(
+        stm32_cache["CMAKE_TOOLCHAIN_FILE"],
+        ROOT / "stm32_lib" / "toolchain_stm32g474.cmake",
+    ),
     "stm32g474: cross toolchain must be selected before CMake project()",
 )
 
@@ -401,6 +409,7 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
     project_dir = Path(temp_dir) / "generated"
     subprocess.run(
         [
+            sys.executable,
             str(ROOT / "vscode" / "tools" / "create-vscode-example.py"),
             "--output",
             str(project_dir),

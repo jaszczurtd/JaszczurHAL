@@ -35,6 +35,10 @@ All notable changes to this project will be documented in this file.
   the required Windows long-path settings explicitly.
 - Preserved Linux picotool self-repair when USB or signing support becomes
   available, with the same command-capability checks used on Windows.
+- Routed managed Windows HTTPS downloads through the operating system's
+  `curl.exe` and Schannel trust store while retaining HTTPS-only redirects,
+  TLS validation, and pinned SHA-256 verification, so enterprise-inspected
+  hosts can complete the bootstrap.
 
 ### Cross-platform firmware builds and Windows CI
 
@@ -66,6 +70,20 @@ All notable changes to this project will be documented in this file.
   and build with Ninja instead of relying on CMake's Visual Studio discovery.
 - Scoped the strict MSVC host smoke gate to a standalone HAL CRC target instead
   of requiring the complete GNU-oriented mock backend to compile on Windows.
+- Added structured BOOTSEL records to `list-ports --json`, including the mount,
+  volume GUID, label, and filesystem used by the Windows upload safety checks,
+  while preserving the existing path list for compatibility.
+- Enriched Windows `usbser` COM records with the parent PnP product and added a
+  strict product plus configured VID/PID fallback when Windows exposes only the
+  driver manufacturer, preserving identity-guarded consumer uploads.
+- Routed STM32G474 FreeRTOS dependency preparation through the shared Python
+  component manager so native Windows configuration does not require Bash.
+- Normalized Windows drive paths embedded in CMake cache strings and lists so
+  migrated consumer sources do not become invalid CMake escape sequences.
+- Made `build-debug` select `CMAKE_BUILD_TYPE=Debug` in an isolated CMake cache
+  while retaining the stable artifact paths consumed by upload tasks.
+- Initialized the MFRC522 cascade response state exposed by the strict Debug
+  warning policy.
 
 ### Compiler portability layer
 

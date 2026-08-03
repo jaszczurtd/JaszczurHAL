@@ -467,7 +467,47 @@ def _extract_tar(archive: Path, destination: Path) -> None:
             os.chmod(target, member.mode & 0o777)
 
 
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        while True:
+            block = source.read(1024 * 1024)
+            if not block:
+                break
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _download_windows_https(url: str, destination: Path) -> str:
+    system_root = os.environ.get("SystemRoot")
+    curl = Path(system_root) / "System32/curl.exe" if system_root else None
+    if curl is None or not curl.is_file():
+        raise ComponentError(
+            "Windows system curl.exe is required for authenticated HTTPS downloads."
+        )
+    command = (
+        str(curl), "--fail", "--location", "--silent", "--show-error",
+        "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
+        "--output", str(destination), url,
+    )
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise ComponentError(
+            f"Windows HTTPS download failed for {url}: {detail or result.returncode}"
+        )
+    if not destination.is_file():
+        raise ComponentError(f"Windows HTTPS download produced no file for {url}.")
+    return _sha256_file(destination)
+
+
 def _download(url: str, destination: Path) -> str:
+    if (
+        sys.platform == "win32"
+        and urllib.parse.urlparse(url).scheme.lower() == "https"
+    ):
+        return _download_windows_https(url, destination)
+
     digest = hashlib.sha256()
     try:
         with urllib.request.urlopen(url) as response, destination.open("wb") as output:

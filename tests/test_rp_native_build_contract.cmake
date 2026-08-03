@@ -367,7 +367,9 @@ endforeach()
 foreach(_ota_target_contract IN ITEMS
         "if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL \"rp2350-riscv\")"
         "HAL_ENABLE_OTA is not supported for rp2350-riscv"
-        "use rp2040 or rp2350-arm")
+        "use rp2040 or rp2350-arm"
+        "PICOTOOL_EXTRA_UF2_ARGS"
+        "--platform \"\${_jh_picotool_platform}\"")
     string(FIND "${_native_common_text}" "${_ota_target_contract}"
         _ota_target_at)
     if(_ota_target_at EQUAL -1)

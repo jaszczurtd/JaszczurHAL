@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from dataclasses import replace
 import os
 from pathlib import Path
 import re
@@ -22,6 +23,77 @@ _WINDOWS_BOOTSEL_FILESYSTEMS = {"FAT", "FAT32"}
 _COPY_CHUNK_SIZE = 1024 * 1024
 
 
+def windows_bus_reported_product(port_info: Any) -> str:
+    """Read the USB parent product that usbser metadata omits on Windows."""
+
+    if sys.platform != "win32":
+        return ""
+    vid = getattr(port_info, "vid", None)
+    pid = getattr(port_info, "pid", None)
+    serial_number = str(getattr(port_info, "serial_number", "") or "").strip()
+    if vid is None or pid is None or not serial_number:
+        return ""
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class DevPropKey(ctypes.Structure):
+            _fields_ = [
+                ("fmtid_data1", wintypes.DWORD),
+                ("fmtid_data2", wintypes.WORD),
+                ("fmtid_data3", wintypes.WORD),
+                ("fmtid_data4", wintypes.BYTE * 8),
+                ("pid", wintypes.DWORD),
+            ]
+
+        cfgmgr32 = ctypes.WinDLL("cfgmgr32", use_last_error=True)
+        cfgmgr32.CM_Locate_DevNodeW.argtypes = [
+            ctypes.POINTER(wintypes.ULONG),
+            wintypes.LPCWSTR,
+            wintypes.ULONG,
+        ]
+        cfgmgr32.CM_Locate_DevNodeW.restype = wintypes.ULONG
+        cfgmgr32.CM_Get_DevNode_PropertyW.argtypes = [
+            wintypes.ULONG,
+            ctypes.POINTER(DevPropKey),
+            ctypes.POINTER(wintypes.ULONG),
+            ctypes.POINTER(wintypes.BYTE),
+            ctypes.POINTER(wintypes.ULONG),
+            wintypes.ULONG,
+        ]
+        cfgmgr32.CM_Get_DevNode_PropertyW.restype = wintypes.ULONG
+
+        instance_id = (
+            f"USB\\VID_{int(vid):04X}&PID_{int(pid):04X}\\{serial_number}"
+        )
+        devinst = wintypes.ULONG()
+        if cfgmgr32.CM_Locate_DevNodeW(ctypes.byref(devinst), instance_id, 0) != 0:
+            return ""
+
+        key = DevPropKey(
+            0x540B947E,
+            0x8B40,
+            0x45BC,
+            (wintypes.BYTE * 8)(0xA8, 0xA2, 0x6A, 0x0B, 0x89, 0x4C, 0xBD, 0xA2),
+            4,
+        )
+        property_type = wintypes.ULONG()
+        buffer = ctypes.create_unicode_buffer(512)
+        buffer_size = wintypes.ULONG(ctypes.sizeof(buffer))
+        result = cfgmgr32.CM_Get_DevNode_PropertyW(
+            devinst,
+            ctypes.byref(key),
+            ctypes.byref(property_type),
+            ctypes.cast(buffer, ctypes.POINTER(wintypes.BYTE)),
+            ctypes.byref(buffer_size),
+            0,
+        )
+        return buffer.value.strip() if result == 0 else ""
+    except (AttributeError, OSError, TypeError, ValueError):
+        return ""
+
+
 def normalize_com_port(port: str) -> str:
     """Return the stable pyserial spelling for COM ports, including COM10+."""
 
@@ -37,9 +109,11 @@ class WindowsPlatformAdapter:
         self,
         port_enumerator: Callable[[], list[Any]] | None = None,
         volume_enumerator: Callable[[], list[dict[str, Any]]] | None = None,
+        pnp_product_resolver: Callable[[Any], str] | None = None,
     ):
         self._port_enumerator = port_enumerator
         self._volume_enumerator = volume_enumerator
+        self._pnp_product_resolver = pnp_product_resolver
 
     @property
     def platform_name(self) -> str:
@@ -55,15 +129,31 @@ class WindowsPlatformAdapter:
         return list(list_ports.comports())
 
     def list_serial_ports(self) -> list[SerialPortRecord]:
-        records = [
-            SerialPortRecord.from_port_info(
+        records: list[SerialPortRecord] = []
+        for port_info in self._port_infos():
+            if not self.is_serial_candidate(str(port_info.device)):
+                continue
+            record = SerialPortRecord.from_port_info(
                 port_info,
                 device=normalize_com_port(str(port_info.device)),
                 platform="windows",
             )
-            for port_info in self._port_infos()
-            if self.is_serial_candidate(str(port_info.device))
-        ]
+            bus_product = (
+                self._pnp_product_resolver(port_info)
+                if self._pnp_product_resolver is not None
+                else windows_bus_reported_product(port_info)
+            )
+            manufacturer = record.manufacturer
+            if bus_product and manufacturer.casefold() == "microsoft":
+                manufacturer = ""
+            records.append(
+                replace(
+                    record,
+                    manufacturer=manufacturer,
+                    product=bus_product or record.product,
+                    platform_identity=bus_product or record.platform_identity,
+                )
+            )
         return sorted(records, key=lambda record: int(record.device[3:]))
 
     def serial_port_record(self, port: str) -> SerialPortRecord | None:
