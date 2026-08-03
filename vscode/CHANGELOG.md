@@ -9,8 +9,9 @@
   the full example matrix works on native Windows as well as POSIX hosts.
 - Select `jh-vscode.cmd` for dispatcher builds on Windows instead of passing
   the extensionless POSIX launcher to CreateProcess.
-- Pass the target platform explicitly when converting offset OTA application
-  images to UF2 so picotool validates RP2040 and RP2350 memory maps correctly.
+- Let the Pico SDK select picotool's UF2 family when converting offset OTA
+  application images, avoiding an unsupported extra argument in clean RP2040
+  and RP2350 builds.
 - Enrich generic Windows `usbser` ports with the parent PnP product and allow a
   product plus configured VID/PID to verify identity when the USB manufacturer
   descriptor is unavailable through Windows device metadata.
