@@ -235,6 +235,19 @@ def match_serial_identity(
             tuple(missing),
             tuple(mismatched),
         )
+    if (
+        record.platform == "windows"
+        and missing == ["manufacturer"]
+        and {"product", "vid", "pid"}.issubset(matched)
+        and normalize_identity_text(expected.product)
+        == normalize_identity_text(record.product)
+    ):
+        return SerialIdentityMatch(
+            IDENTITY_VERIFIED,
+            score,
+            tuple(matched),
+            tuple(missing),
+        )
     if missing:
         return SerialIdentityMatch(
             IDENTITY_MISSING_METADATA,

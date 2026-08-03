@@ -1474,7 +1474,7 @@ def serial_port_records(config: dict[str, Any] | None = None) -> list[dict[str, 
     return records
 
 
-def bootsel_candidates_without_mount() -> list[str]:
+def bootsel_inventory() -> tuple[list[str], list[dict[str, str | None]]]:
     mounts = find_bootsel_mounts()
     blocks = find_bootsel_blocks()
     block_mounts = [
@@ -1488,9 +1488,50 @@ def bootsel_candidates_without_mount() -> list[str]:
 
     unique_mounts = sorted(set(mounts))
     unmounted = [block for block in blocks if bootsel_mountpoint(block) is None]
-    return [str(mount) for mount in unique_mounts] + [
+    candidates = [str(mount) for mount in unique_mounts] + [
         str(block.get("path")) for block in unmounted if block.get("path")
     ]
+    records = [
+        {
+            "path": str(block.get("path")) if block.get("path") else None,
+            "mount": str(mount) if mount else None,
+            "volumeGuid": (
+                str(block.get("volumeGuid")) if block.get("volumeGuid") else None
+            ),
+            "label": str(block.get("label")) if block.get("label") else None,
+            "filesystem": str(block.get("fstype")) if block.get("fstype") else None,
+        }
+        for block in blocks
+        for mount in [bootsel_mountpoint(block)]
+    ]
+    known_mounts = {
+        mount
+        for block in blocks
+        for mount in [bootsel_mountpoint(block)]
+        if mount is not None
+    }
+    records.extend(
+        {
+            "path": None,
+            "mount": str(mount),
+            "volumeGuid": None,
+            "label": None,
+            "filesystem": None,
+        }
+        for mount in unique_mounts
+        if mount not in known_mounts
+    )
+    records.sort(
+        key=lambda record: str(
+            record["mount"] or record["volumeGuid"] or record["path"] or ""
+        ).casefold()
+    )
+    return candidates, records
+
+
+def bootsel_candidates_without_mount() -> list[str]:
+    candidates, _records = bootsel_inventory()
+    return candidates
 
 
 def command_list_ports(args: argparse.Namespace) -> int:
@@ -1514,9 +1555,10 @@ def command_list_ports(args: argparse.Namespace) -> int:
     records = serial_port_records(config if config else None)
     bootsel_supported = True
     try:
-        bootsel = bootsel_candidates_without_mount()
+        bootsel, bootsel_records = bootsel_inventory()
     except PlatformOperationUnsupported:
         bootsel = []
+        bootsel_records = []
         bootsel_supported = False
 
     if args.json:
@@ -1527,6 +1569,7 @@ def command_list_ports(args: argparse.Namespace) -> int:
                     "expectedIdentity": identity_display_text(config) if identity_enabled(config) else None,
                     "serial": records,
                     "bootsel": bootsel,
+                    "bootselRecords": bootsel_records,
                     "bootselSupported": bootsel_supported,
                 },
                 indent=2,
@@ -2226,6 +2269,9 @@ def get_cmake_build_dir(config: dict[str, Any], project_dir: Path) -> Path:
         board = config.get("board")
         if board:
             build_dir = build_dir / str(board)
+    configuration = config.get("_cmakeBuildConfiguration")
+    if configuration:
+        build_dir = build_dir / str(configuration)
     return build_dir
 
 
@@ -2378,6 +2424,25 @@ def cmake_targets(config: dict[str, Any]) -> dict[str, str]:
     return defaults
 
 
+def cmake_build_config(config: dict[str, Any], *, debug: bool) -> dict[str, Any]:
+    if not debug:
+        return config
+    configured = copy.deepcopy(config)
+    configured["_cmakeBuildConfiguration"] = "debug"
+    cmake = dict(configured.get("cmake") or {})
+    cache = dict(cmake.get("cache") or {})
+    cache["CMAKE_BUILD_TYPE"] = "Debug"
+    cmake["cache"] = cache
+    configured["cmake"] = cmake
+    return configured
+
+
+def normalize_cmake_cli_value(value: str) -> str:
+    if re.search(r"(?:^|;)[A-Za-z]:[\\/]", value) or value.startswith("\\\\"):
+        return value.replace("\\", "/")
+    return value
+
+
 def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
     args: list[str] = []
     root = config.get("root")
@@ -2385,7 +2450,7 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
         root_path = Path(os.path.expanduser(root))
         if not root_path.is_absolute():
             root_path = project_dir / root_path
-        args.append(f"-DJH_ROOT={root_path.resolve()}")
+        args.append(f"-DJH_ROOT={normalize_cmake_cli_value(str(root_path.resolve()))}")
 
     identity = config.get("identity")
     if (
@@ -2406,7 +2471,7 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
                 continue
             if isinstance(value, bool):
                 value = "ON" if value else "OFF"
-            args.append(f"-D{key}={value}")
+            args.append(f"-D{key}={normalize_cmake_cli_value(str(value))}")
 
     upload = config.get("upload")
     openocd = upload.get("openocd") if isinstance(upload, dict) else None
@@ -2419,7 +2484,9 @@ def cmake_cache_args(config: dict[str, Any], project_dir: Path) -> list[str]:
         for semantic, cache_key in openocd_cache_keys.items():
             value = openocd.get(semantic)
             if value:
-                args.append(f"-D{cache_key}={value}")
+                args.append(
+                    f"-D{cache_key}={normalize_cmake_cli_value(str(value))}"
+                )
 
     return args
 
@@ -2590,14 +2657,15 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
         if diagnostics:
             print_build_diagnostics(diagnostics)
             return EXIT_BUILD
-        target = cmake_targets(config)["buildDebug" if debug else "build"]
-        rc = run_cmake_target(config, project_dir, target)
+        build_config = cmake_build_config(config, debug=debug)
+        target = cmake_targets(build_config)["buildDebug" if debug else "build"]
+        rc = run_cmake_target(build_config, project_dir, target)
         if rc == 0:
-            sync_status = synchronize_cmake_firmware_artifacts(config, project_dir)
+            sync_status = synchronize_cmake_firmware_artifacts(build_config, project_dir)
             if sync_status != 0:
                 return sync_status
             if show_memory_overview:
-                print_memory_map_overview(config, project_dir)
+                print_memory_map_overview(build_config, project_dir)
             return 0
         return EXIT_BUILD
     print(

@@ -46,18 +46,19 @@ function(jh_ensure_freertos_kernel)
         return()
     endif()
 
-    set(_helper "${JH_REPO_ROOT}/scripts/ensure_freertos_kernel.sh")
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(_helper "${JH_REPO_ROOT}/scripts/component_manager.py")
     if(NOT EXISTS "${_helper}")
         message(FATAL_ERROR "Missing FreeRTOS dependency helper: ${_helper}")
     endif()
 
-    set(_ensure_args --enable --repo-root "${JH_REPO_ROOT}")
+    set(_ensure_args component freertos --enable --repo-root "${JH_REPO_ROOT}")
     if(NOT "${JH_FREERTOS_KERNEL_DIR}" STREQUAL "${_jh_freertos_kernel_dir_default}")
         list(APPEND _ensure_args --kernel-dir "${JH_FREERTOS_KERNEL_DIR}")
     endif()
 
     execute_process(
-        COMMAND "${_helper}" ${_ensure_args}
+        COMMAND "${Python3_EXECUTABLE}" "${_helper}" ${_ensure_args}
         RESULT_VARIABLE _ensure_result
     )
     if(NOT _ensure_result EQUAL 0)
@@ -99,7 +100,7 @@ function(jh_stm32g474_enable_freertos TARGET_NAME)
             message(FATAL_ERROR
                 "HAL_ENABLE_FREERTOS for STM32G474 requires a local FreeRTOS-Kernel checkout. "
                 "Missing: ${_path}\n"
-                "Run scripts/ensure_freertos_kernel.sh --enable, or pass "
+                "Run scripts/component_manager.py component freertos --enable, or pass "
                 "-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel.")
         endif()
     endforeach()

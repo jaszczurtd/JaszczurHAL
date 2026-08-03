@@ -161,6 +161,16 @@ require(
     "unused Bash component manager was retained",
 )
 
+stm32_freertos_cmake = (
+    ROOT / "stm32_lib/freertos_stm32g474.cmake"
+).read_text(encoding="utf-8")
+require(
+    '"${Python3_EXECUTABLE}" "${_helper}"' in stm32_freertos_cmake
+    and "scripts/component_manager.py" in stm32_freertos_cmake
+    and "component freertos" in stm32_freertos_cmake,
+    "STM32 FreeRTOS CMake still invokes a host-specific dependency helper",
+)
+
 for component in (
     "BearSSL",
     "cJSON",

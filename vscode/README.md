@@ -79,6 +79,10 @@ early migration work. New tasks should use `build-debug`.
 `change-port` selects a serial port interactively or through `--port` and saves
 it as user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
 
+`list-ports --json` reports the compatibility `bootsel` path list and structured
+`bootselRecords`. Each structured record includes the mount, device path,
+Windows volume GUID, label, and filesystem when the platform exposes them.
+
 `sync-board-picker` refreshes the `boardSelection` input and its automatic
 folder-open task from the current `boards/` registry. Generated projects run it
 when a trusted workspace opens. VS Code may require one-time approval through
@@ -194,6 +198,11 @@ projects:
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode refresh-intellisense --project "$PWD"
 ../libraries/JaszczurHAL/vscode/entry/jh-vscode select-board --project "$PWD" --interactive
 ```
+
+`build-debug` configures `CMAKE_BUILD_TYPE=Debug` in a separate per-target and
+per-board CMake cache. It publishes the result through the same stable artifact
+paths as `build`, so upload tasks always use the most recently successful
+build.
 
 The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration

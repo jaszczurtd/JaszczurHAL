@@ -2,6 +2,20 @@
 
 ## 0.1.0 - Unreleased
 
+- Make `build-debug` use an isolated CMake cache with
+  `CMAKE_BUILD_TYPE=Debug`, while preserving the stable firmware artifact
+  paths used by upload and IntelliSense workflows.
+- Store parallel example-dispatcher logs in the host temporary directory so
+  the full example matrix works on native Windows as well as POSIX hosts.
+- Select `jh-vscode.cmd` for dispatcher builds on Windows instead of passing
+  the extensionless POSIX launcher to CreateProcess.
+- Pass the target platform explicitly when converting offset OTA application
+  images to UF2 so picotool validates RP2040 and RP2350 memory maps correctly.
+- Enrich generic Windows `usbser` ports with the parent PnP product and allow a
+  product plus configured VID/PID to verify identity when the USB manufacturer
+  descriptor is unavailable through Windows device metadata.
+- Prepare STM32G474 FreeRTOS dependencies through the shared Python component
+  manager so firmware configuration does not execute a Bash helper on Windows.
 - Start the shared VS Code entry layer under `libraries/JaszczurHAL/vscode/`.
 - Move the Python CLI and persistent-monitor logic into a shared runtime with a
   lazy platform protocol, Linux adapter, compatibility entrypoints, and
@@ -99,6 +113,13 @@
   volume-GUID WinAPI calls. Snapshot volume GUIDs before the 1200-bps touch,
   accept only the RP boot labels on FAT media, and support explicit drive/GUID
   selection through user-local configuration or `--bootsel-volume`.
+- Include structured BOOTSEL records in `list-ports --json`, preserving the
+  existing path list while exposing the mount, volume GUID, label, and
+  filesystem used by the upload safety checks.
+- Keep standalone project generation successful when a Unicode output path is
+  reported through a Windows console with a narrow legacy encoding.
+- Write generated project and example files with deterministic LF endings on
+  Windows, matching the repository `.gitattributes` policy.
 - Validate complete UF2 block groups, including the RP2350 absolute-ignore
   record and merged OTA images with one global sequence across family IDs,
   before upload. Stream the Windows copy without metadata, detect short writes

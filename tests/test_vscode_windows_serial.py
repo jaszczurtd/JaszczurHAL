@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import replace
 import io
 import json
 import os
@@ -174,6 +175,49 @@ assert {"manufacturer", "product", "serialNumber"}.issubset(
     incomplete_match.missing_fields
 )
 
+pnp_info = port_info(
+    "COM4",
+    serial_number="PICO-USB-SERIAL",
+    manufacturer="Microsoft",
+    product=None,
+    interface=None,
+)
+pnp_adapter = WindowsPlatformAdapter(
+    lambda: [pnp_info],
+    lambda: [],
+    lambda _port_info: "Fiesta Adjustometer",
+)
+pnp_record = pnp_adapter.serial_port_record("COM4")
+assert pnp_record is not None
+assert pnp_record.manufacturer == ""
+assert pnp_record.product == "Fiesta Adjustometer"
+assert pnp_record.platform_identity == "Fiesta Adjustometer"
+pnp_expectation = SerialIdentityExpectation.from_config(
+    {
+        "usbManufacturer": "Jaszczur",
+        "usbProduct": "Fiesta Adjustometer",
+        "usbVid": "0x2e8a",
+        "usbPid": "0x000a",
+    }
+)
+pnp_match = match_serial_identity(pnp_record, pnp_expectation)
+assert pnp_match.verified
+assert pnp_match.missing_fields == ("manufacturer",)
+assert not match_serial_identity(
+    replace(pnp_record, product="Fiesta Adjustometer Clone"),
+    pnp_expectation,
+).verified
+weak_pnp_match = match_serial_identity(
+    pnp_record,
+    SerialIdentityExpectation.from_config(
+        {
+            "usbManufacturer": "Jaszczur",
+            "usbProduct": "Fiesta Adjustometer",
+        }
+    ),
+)
+assert weak_pnp_match.status == IDENTITY_MISSING_METADATA
+
 config = {
     "identity": {
         "enabled": True,
@@ -237,6 +281,7 @@ try:
     listed = json.loads(list_output.getvalue())
     assert listed["bootselSupported"] is True
     assert listed["bootsel"] == []
+    assert listed["bootselRecords"] == []
     assert [record["port"] for record in listed["serial"]] == [
         "COM3",
         "COM11",

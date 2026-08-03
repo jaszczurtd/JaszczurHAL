@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
@@ -22,6 +23,11 @@ VSCODE_EXTENSION_RECOMMENDATIONS = [
     "marus25.cortex-debug",
     "ms-vscode.vscode-serial-monitor",
 ]
+
+
+def write_text_lf(path: Path, content: str) -> None:
+    with path.open("w", encoding="utf-8", newline="\n") as output:
+        output.write(content)
 
 
 def extensions_recommendations() -> dict[str, Any]:

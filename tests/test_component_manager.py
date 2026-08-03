@@ -92,6 +92,41 @@ class GitManagerTests(unittest.TestCase):
 
 
 class ArchiveManagerTests(unittest.TestCase):
+    def test_windows_https_download_uses_system_schannel_and_hashes_payload(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-component-schannel-") as text:
+            temporary = Path(text)
+            system_root = temporary / "Windows"
+            curl = system_root / "System32/curl.exe"
+            curl.parent.mkdir(parents=True)
+            curl.write_bytes(b"fixture")
+            destination = temporary / "download.zip"
+            payload = b"authenticated archive"
+            observed: list[str] = []
+
+            def run(
+                command: tuple[str, ...], **_kwargs: object
+            ) -> subprocess.CompletedProcess[str]:
+                observed.extend(command)
+                output = Path(command[command.index("--output") + 1])
+                output.write_bytes(payload)
+                return subprocess.CompletedProcess(command, 0, "", "")
+
+            with (
+                mock.patch.object(manager.sys, "platform", "win32"),
+                mock.patch.dict(manager.os.environ, {"SystemRoot": str(system_root)}),
+                mock.patch.object(manager.subprocess, "run", side_effect=run),
+            ):
+                digest = manager._download(
+                    "https://example.invalid/tool.zip", destination
+                )
+
+            self.assertEqual(digest, hashlib.sha256(payload).hexdigest())
+            self.assertEqual(observed[0], str(curl))
+            self.assertIn("--fail", observed)
+            self.assertIn("--location", observed)
+            self.assertIn("--tlsv1.2", observed)
+            self.assertIn("=https", observed)
+
     def _exercise_archive(self, archive: Path, payload: str) -> None:
         destination = archive.parent / f"install-{archive.suffix.replace('.', '')}"
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()

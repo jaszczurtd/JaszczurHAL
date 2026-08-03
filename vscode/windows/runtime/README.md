@@ -11,6 +11,10 @@ BOOTSEL implementations live behind the platform adapter.
 The native adapter enumerates and normalizes COM ports through pyserial,
 including `COM10+`, and exposes VID, PID, serial number, manufacturer, product,
 interface, location, HWID, and description to the shared identity matcher.
+For the generic Windows `usbser` driver it also reads the parent PnP
+bus-reported product, because pyserial otherwise reports the driver vendor and
+omits the USB product. When Windows cannot expose the device manufacturer, an
+exact product plus configured VID and PID is the minimum verified fallback.
 Persistent monitors publish a versioned marker in the user's temporary
 directory and use a per-port release file as the cooperative control channel.
 PID reuse and process start time are checked before any fallback termination.

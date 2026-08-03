@@ -10,12 +10,17 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from typing import Any
+
+from vscode_task_config import write_text_lf
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 EXAMPLES_DIR = REPO_ROOT / "examples"
-JH_VSCODE = REPO_ROOT / "vscode" / "entry" / "jh-vscode"
+JH_VSCODE = REPO_ROOT / "vscode" / "entry" / (
+    "jh-vscode.cmd" if os.name == "nt" else "jh-vscode"
+)
 REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
 RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
@@ -466,7 +471,7 @@ def sync_reference_template(*, check: bool) -> int:
     for name, data in reference_template_files().items():
         path = REFERENCE_VSCODE_DIR / name
         expected = json_text(data)
-        path.write_text(expected, encoding="utf-8")
+        write_text_lf(path, expected)
         print(f"generated {path.relative_to(REPO_ROOT)}", flush=True)
     return 0
 
@@ -480,7 +485,7 @@ def generate() -> int:
         vscode_dir = example_dir / ".vscode"
         vscode_dir.mkdir(exist_ok=True)
         for name, data in example_vscode_files(entry).items():
-            (vscode_dir / name).write_text(json_text(data), encoding="utf-8")
+            write_text_lf(vscode_dir / name, json_text(data))
         print(f"generated {example_dir.relative_to(REPO_ROOT)}", flush=True)
     return 0
 
@@ -508,6 +513,12 @@ def tail(path: Path, lines: int = 80) -> str:
     return "\n".join(data[-lines:])
 
 
+def dispatcher_log_path(target: str, example_name: str) -> Path:
+    return Path(tempfile.gettempdir()) / (
+        f"jh_examples_dispatcher_{target}_{example_name}.log"
+    )
+
+
 def run_one_example(
     example_dir: Path,
     target: str,
@@ -515,7 +526,7 @@ def run_one_example(
     variants: list[str],
     verbose: bool,
 ) -> tuple[bool, str, Path]:
-    log_path = Path("/tmp") / f"jh_examples_dispatcher_{target}_{example_dir.name}.log"
+    log_path = dispatcher_log_path(target, example_dir.name)
     label = f"{example_dir.name}@{target}"
     base_command = [
         str(JH_VSCODE),

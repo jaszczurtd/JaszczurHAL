@@ -114,6 +114,17 @@ with TemporaryDirectory(prefix="jh windows bootsel ") as temporary:
         mount, candidates = runtime.find_single_bootsel_mount()
         assert mount == rp2040_mount
         assert candidates == [str(rp2040_mount)]
+        candidates, inventory = runtime.bootsel_inventory()
+        assert candidates == [str(rp2040_mount)]
+        assert inventory == [
+            {
+                "path": rp2040_guid,
+                "mount": str(rp2040_mount),
+                "volumeGuid": rp2040_guid,
+                "label": "RPI-RP2",
+                "filesystem": "FAT",
+            }
+        ]
 
         records.append(
             volume_record(

@@ -668,8 +668,8 @@ MFRC522::StatusCode MFRC522::PICC_Select(
                 // bit received.
   byte txLastBits; // Used in BitFramingReg. The number of valid bits in the
                    // last transmitted byte.
-  byte *responseBuffer;
-  byte responseLength;
+  byte *responseBuffer = buffer;
+  byte responseLength = 0;
 
   // Description of buffer structure:
   //		Byte 0: SEL 				Indicates the Cascade
