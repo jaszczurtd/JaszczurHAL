@@ -294,6 +294,7 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     target_compile_definitions("${BOOT_TARGET}" PRIVATE
         ${JH_RP_TARGET_DEFINE}=1
         ${JH_RP_BOARD_DEFINES}
+        NDEBUG
         JH_RP_OTA_BOOT_IMAGE=1
         HAL_ENABLE_CRYPTO=1
         HAL_ENABLE_CRC=1

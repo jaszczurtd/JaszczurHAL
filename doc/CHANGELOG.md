@@ -22,6 +22,11 @@ All notable changes to this project will be documented in this file.
 - Added verified OpenOCD, GNU Arm GDB, scripts-root, and target-configuration
   discovery through `jh-vscode debug-tools`; generated launch files now name
   their CMSIS-DAP and RP target scripts explicitly.
+- Validated the managed Windows OpenOCD/GDB path with a CMSIS-DAP v2
+  Picoprobe and a Pico 2 W target, including Debug ELF loading, hardware
+  breakpoints at `main` and `app_start`, resume, and application restart.
+- Kept the fixed-size native RP OTA boot applier within its flash partition in
+  application Debug builds by retaining its production assertion policy.
 - Added an MSVC/GNU portable BSD socket-header gate and documented the full
   POSIX adapter, Bash BearSSL integration, and FreeRTOS POSIX scheduler as
   Linux-only host tests. Windows static analysis remains undeclared until an
