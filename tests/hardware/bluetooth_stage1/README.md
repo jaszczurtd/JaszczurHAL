@@ -14,8 +14,7 @@ a bounded static read/write GATT characteristic.
 Successful compilation is only the software gate. Hardware results must record
 the `JHBT1` output, connection/write behaviour, ELF/map memory use, and the
 exact board/wiring under test. The STM32 run additionally verifies that the
-PIM730 `BT_ON` trace still follows `WL_ON`. No hardware result is implied by
-this fixture being present.
+PIM730 `BT_ON` trace still follows `WL_ON` in the assembled setup.
 
 The `bluetooth` variant is the probe; `wifi-only` is the otherwise equivalent
 memory baseline. Both variants must be measured from their ELF/map files with
@@ -25,12 +24,27 @@ The Stage 1 software builds measured on 2026-08-04 are:
 
 | Target and variant | FLASH load | SRAM static | Reserved heap/stack |
 |---|---:|---:|---:|
-| STM32G474 + PIM730, `bluetooth` | 314.2 KiB | 49.7 KiB | 3.0 KiB |
-| STM32G474 + PIM730, `wifi-only` | 276.4 KiB | 43.2 KiB | 3.0 KiB |
-| RP2040 Pico W, `bluetooth` | 376.2 KiB | 60.0 KiB | 6.0 KiB |
-| RP2040 Pico W, `wifi-only` | 325.6 KiB | 53.6 KiB | 6.0 KiB |
+| STM32G474 + PIM730, `bluetooth` | 332.3 KiB | 50.0 KiB | 3.0 KiB |
+| STM32G474 + PIM730, `wifi-only` | 276.9 KiB | 43.2 KiB | 3.0 KiB |
+| RP2040 Pico W, `bluetooth` | 403.2 KiB | 60.4 KiB | 6.0 KiB |
+| RP2040 Pico W, `wifi-only` | 326.0 KiB | 53.6 KiB | 6.0 KiB |
 
 These measurements do not require a reduced ATT MTU or smaller Stage 1 queues.
+
+Hardware substage 1.a completed on both profiles on 2026-08-04. The
+STM32G474 + PIM730 probe used the wiring below. The Pico W probe used its
+on-board CYW43439 and enumerated as `JaszczurHAL RP` over USB. On both boards
+the probe reached controller-ready and connectable advertising states, BlueZ
+resolved the static GATT service, characteristic read and write passed, and the
+peripheral accepted a disconnect followed by a fresh connection and GATT read.
+The matched `wifi-only` images also reported `HAL_OK`. Initial STM32 ATT
+discovery exposed a missing Security Manager initialization; the probe now
+initializes `sm_init()` before `att_server_init()`. Connection lifecycle is
+observed through one HCI event registration so each physical link is counted
+once. The final image restored to each board is the `bluetooth` variant.
+The Pico W connection run recorded no drain-budget hits. The STM32 probe
+recorded two bounded drain hits during controller initialization and then
+remained stable with `HAL_OK` transport status.
 
 ## Hardware substage 1.a
 

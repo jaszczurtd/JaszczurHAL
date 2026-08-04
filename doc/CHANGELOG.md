@@ -15,7 +15,21 @@ All notable changes to this project will be documented in this file.
   bring-up surface, not a public Bluetooth API.
 - Added bounded shared-bus and HCI transport integration, static GATT
   generation, dependency-boundary tests, and matched WiFi-only memory
-  baselines. Hardware validation remains a separate recorded gate.
+  baselines. The private transport diagnostics now distinguish HCI events,
+  commands, and ACL traffic while preserving controller flow-control status;
+  connection events use one HCI registration instead of the deprecated ATT
+  forwarding path, so observability counters track physical links once.
+- Fixed STM32G474 CYW43 board-runtime lifecycle transitions so the initialized
+  radio exposes its declared capabilities and failed or stopped instances no
+  longer retain an available state.
+- Scoped the CYW43 board-profile build rejection to STM32G474, preserving the
+  established plain-Pico static build whose public network calls reject absent
+  radio hardware at runtime without accessing CYW43 pins.
+- Initialized the BTstack Security Manager before the ATT server, restoring
+  GATT discovery and ACL responses after a connection. Hardware gates on both
+  STM32G474 + PIM730 and RP2040 Pico W now cover advertising, connection, GATT
+  read/write, disconnect/reconnect, symmetric ACL traffic, and the matched
+  WiFi-only regression.
 
 ### Windows OTA, debug, and extended host gates
 

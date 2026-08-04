@@ -11,6 +11,7 @@
 #include "cyw43.h"
 #include "cyw43_configport.h"
 #include "hci.h"
+#include "hci_cmd.h"
 #include "jh_btstack_chipset_cyw43.h"
 
 #define JH_CYW43_PACKET_HEADER_SIZE 4u
@@ -35,6 +36,8 @@ static btstack_data_source_t s_data_source;
 static bool s_ready;
 static jh_btstack_cyw43_transport_snapshot_t s_snapshot = {
     .last_status = HAL_NONE,
+    .host_buffer_size_status = 0xffu,
+    .controller_to_host_flow_control_status = 0xffu,
 };
 
 static uint8_t
@@ -60,6 +63,28 @@ static hal_status_t map_cybt_status(int status) {
     return HAL_EBUSY;
   default:
     return HAL_EIO;
+  }
+}
+
+static void record_received_packet(uint8_t packet_type, const uint8_t *packet,
+                                   uint16_t size) {
+  if (packet_type == HCI_ACL_DATA_PACKET) {
+    ++s_snapshot.rx_acl_packets;
+    return;
+  }
+  if (packet_type != HCI_EVENT_PACKET) {
+    return;
+  }
+
+  ++s_snapshot.rx_event_packets;
+  if (packet == NULL || size < 6u || packet[0] != HCI_EVENT_COMMAND_COMPLETE) {
+    return;
+  }
+  const uint16_t opcode = (uint16_t)packet[3] | ((uint16_t)packet[4] << 8u);
+  if (opcode == HCI_OPCODE_HCI_HOST_BUFFER_SIZE) {
+    s_snapshot.host_buffer_size_status = packet[5];
+  } else if (opcode == HCI_OPCODE_HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL) {
+    s_snapshot.controller_to_host_flow_control_status = packet[5];
   }
 }
 
@@ -89,9 +114,10 @@ static void process_hci(void) {
         return;
       }
       ++s_snapshot.rx_packets;
-      s_packet_handler(s_receive_buffer[3],
-                       &s_receive_buffer[JH_CYW43_PACKET_HEADER_SIZE],
-                       (uint16_t)payload_length);
+      const uint8_t packet_type = s_receive_buffer[3];
+      uint8_t *const packet = &s_receive_buffer[JH_CYW43_PACKET_HEADER_SIZE];
+      record_received_packet(packet_type, packet, (uint16_t)payload_length);
+      s_packet_handler(packet_type, packet, (uint16_t)payload_length);
     }
     ++loop_count;
   } while (had_work &&
@@ -173,6 +199,11 @@ static int transport_send_packet(uint8_t packet_type, uint8_t *packet,
   }
 
   ++s_snapshot.tx_packets;
+  if (packet_type == HCI_COMMAND_DATA_PACKET) {
+    ++s_snapshot.tx_command_packets;
+  } else if (packet_type == HCI_ACL_DATA_PACKET) {
+    ++s_snapshot.tx_acl_packets;
+  }
   static uint8_t packet_sent_event[] = {HCI_EVENT_TRANSPORT_PACKET_SENT, 0u};
   s_packet_handler(HCI_EVENT_PACKET, packet_sent_event,
                    (uint16_t)sizeof(packet_sent_event));
