@@ -34,6 +34,13 @@ my-device/
 `ms-vscode.vscode-serial-monitor` alongside the `jh-vscode` monitor actions.
 VS Code offers to install missing entries when the folder is opened.
 
+Generated launch files provide explicit OpenOCD interface and target scripts.
+On Windows, run `jh-vscode debug-tools
+--project <path> --json` and set the reported OpenOCD executable plus Arm
+toolchain directory in the Cortex-Debug user settings; the extension resolves
+GDB from that directory. These machine-local paths stay out of tracked project
+files.
+
 The tracked manifest selects `toolchain: "cmake"` and points
 `cmake.sourceDir` at `libraries/JaszczurHAL/cmake/jh_firmware_project`.
 `JH_PROJECT_DIR` identifies the application directory. The shared dispatcher

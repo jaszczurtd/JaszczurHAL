@@ -11,14 +11,16 @@ import os
 from pathlib import Path
 import re
 import sys
-import termios
 import time
-
-import serial
 
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
+from vscode.runtime.serial_io import (
+    open_serial_port,
+    serial_error_types,
+)
+
 RUNTIME_PATH = ROOT / "vscode" / "runtime" / "jh_vscode.py"
 ARTIFACT_SCRIPT_PATH = ROOT / "scripts" / "rp_ota_artifacts.py"
 HAL_OK = 1
@@ -27,9 +29,9 @@ BOOT_STABLE = 0
 BOOT_TRIAL = 2
 LOCAL_SECRETS = Path(__file__).with_name("ota_test_secrets.h")
 BOARD_PROFILES = {
-    ("rp2040", "picow"): "pico-w",
-    ("rp2040", "pico-rm2"): "pico-pim730",
-    ("rp2350-arm", "pico2w"): "pico-2-w",
+    ("rp2040", "picow"): "picow",
+    ("rp2040", "pico-rm2"): "pico-rm2",
+    ("rp2350-arm", "pico2w"): "pico2w",
 }
 
 STATUS_PATTERN = re.compile(rb"^JHOTA-HW1 (.+)\n$")
@@ -45,16 +47,17 @@ def load_module(name: str, path: Path):
     return module
 
 
-def open_port(path: str) -> serial.Serial:
-    port = serial.Serial(
-        path, baudrate=115200, timeout=0.1, write_timeout=5.0, exclusive=True
-    )
+SERIAL_ERRORS = serial_error_types()
+
+
+def open_port(path: str):
+    port = open_serial_port(path)
     port.dtr = True
     time.sleep(0.1)
     return port
 
 
-def read_line(port: serial.Serial, timeout_s: float) -> bytes:
+def read_line(port, timeout_s: float) -> bytes:
     deadline = time.monotonic() + timeout_s
     received = bytearray()
     while not received.endswith(b"\n"):
@@ -112,8 +115,7 @@ def wait_for_status(path: str, timeout_s: float, predicate) -> dict[str, int | s
             OSError,
             RuntimeError,
             TimeoutError,
-            serial.SerialException,
-            termios.error,
+            *SERIAL_ERRORS,
         ) as exc:
             last_error = exc
         time.sleep(0.25)
@@ -134,7 +136,7 @@ def reboot(path: str) -> None:
         with open_port(path) as port:
             port.write(b"R")
             port.flush()
-    except (OSError, serial.SerialException, termios.error):
+    except SERIAL_ERRORS:
         pass
 
 

@@ -47,11 +47,26 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
         "openocd": str(tools_root / "openocd.exe"),
     }
     arm_objdump = Path(tools["gnu-arm"]).with_name("arm-none-eabi-objdump.exe")
+    arm_gdb = Path(tools["gnu-arm"]).with_name("arm-none-eabi-gdb.exe")
     riscv_objdump = Path(tools["riscv"]).with_name("riscv32-unknown-elf-objdump.exe")
     arm_objdump.parent.mkdir(parents=True)
     riscv_objdump.parent.mkdir(parents=True)
     arm_objdump.touch()
+    arm_gdb.touch()
     riscv_objdump.touch()
+    openocd = Path(tools["openocd"])
+    openocd.touch()
+    openocd_scripts = openocd.parent / "scripts"
+    for relative in (
+        "interface/cmsis-dap.cfg",
+        "interface/stlink.cfg",
+        "target/rp2040.cfg",
+        "target/rp2350.cfg",
+        "target/stm32g4x.cfg",
+    ):
+        path = openocd_scripts / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
     state_path.write_text(
         json.dumps(
             {
@@ -109,6 +124,24 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
         require(
             runtime.objdump_program({"target": "rp2350-riscv"}) == str(riscv_objdump),
             "verified GNU RISC-V objdump was ignored",
+        )
+        debug_tools = runtime.debug_tool_paths(config)
+        require(debug_tools is not None, "verified debug tools were not resolved")
+        require(
+            debug_tools["openocd"] == tools["openocd"],
+            "verified OpenOCD was ignored",
+        )
+        require(
+            debug_tools["gdb"] == str(arm_gdb),
+            "GNU Arm GDB beside the compiler was ignored",
+        )
+        require(
+            debug_tools["scripts"] == str(openocd_scripts),
+            "OpenOCD scripts root was not resolved",
+        )
+        require(
+            debug_tools["targetConfig"] == "target/rp2040.cfg",
+            "RP2040 OpenOCD target config changed",
         )
 
         debug_config = runtime.cmake_build_config(config, debug=True)

@@ -9,6 +9,25 @@
             "executable": "${workspaceFolder}/../../.build/examples/43_dht_temperature_humidity/firmware.elf",
             "servertype": "openocd",
             "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug)"
+        },
+        {
+            "name": "Project: Debug Firmware (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/43_dht_temperature_humidity/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
             "runToEntryPoint": "main",
             "preLaunchTask": "Project: Build (Debug)"
         }

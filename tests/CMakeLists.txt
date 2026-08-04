@@ -61,6 +61,15 @@ target_include_directories(test_hal_config_headers_cpp PRIVATE
 jh_enable_host_warnings(test_hal_config_headers_cpp ERRORS)
 add_test(NAME test_hal_config_headers_cpp COMMAND test_hal_config_headers_cpp)
 
+# The public socket declaration surface is portable and compiled by both MSVC
+# and GNU-like host gates. The full adapter intentionally exports POSIX symbol
+# names and remains a firmware/Linux-host contract rather than a Winsock ABI.
+add_executable(test_bsd_socket_headers_c test_bsd_socket_headers_c.c)
+target_include_directories(test_bsd_socket_headers_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_bsd_socket_headers_c ERRORS)
+add_test(NAME test_bsd_socket_headers_c COMMAND test_bsd_socket_headers_c)
+
 function(add_stm32_host_test NAME)
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
@@ -394,6 +403,11 @@ add_test(NAME test_component_manager
 add_test(NAME test_ota_firewall_config
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_ota_firewall_config.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_serial_io
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_serial_io.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_board_generator

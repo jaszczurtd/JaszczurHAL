@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Windows OTA, debug, and extended host gates
+
+- Split shared OTA firewall validation from its host backends and added an
+  idempotent Windows Defender Firewall rule limited to an active `Private`
+  profile, interface alias, RFC1918 subnet, and callback TCP port, with
+  read-only check/dry-run modes, consent, and an explicit elevation boundary.
+- Moved the RP OTA hardware verifier from a direct `termios` dependency to the
+  shared pyserial adapter used on Windows and Unix hosts, and aligned its
+  identity checks with the generated board-profile runtime names.
+- Fixed relocated RP2350 application UF2 generation by passing the explicit
+  platform to picotool, whose address-map inference otherwise rejects valid
+  RP2350 scratch-RAM segments when the image does not start at the flash base.
+- Kept native RP OTA transfers responsive while writing staging flash by
+  erasing each 4 KiB sector immediately before its first page instead of
+  blocking the network stack while erasing the complete slot.
+- Added verified OpenOCD, GNU Arm GDB, scripts-root, and target-configuration
+  discovery through `jh-vscode debug-tools`; generated launch files now name
+  their CMSIS-DAP and RP target scripts explicitly.
+- Added an MSVC/GNU portable BSD socket-header gate and documented the full
+  POSIX adapter, Bash BearSSL integration, and FreeRTOS POSIX scheduler as
+  Linux-only host tests. Windows static analysis remains undeclared until an
+  authenticated version-pinned analyzer is part of the managed tool set.
+
 ### Cross-platform VS Code launchers
 
 - Added `jh-vscode.cmd` and a public Python entrypoint so Windows and Unix

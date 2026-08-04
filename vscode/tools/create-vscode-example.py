@@ -470,6 +470,25 @@ LAUNCH_TEMPLATE = """{
             "executable": "${workspaceFolder}/.build/firmware.elf",
             "servertype": "openocd",
             "device": "RP2040",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2040.cfg"
+            ],
+            "runToEntryPoint": "setup",
+            "preLaunchTask": "Project: Build (Debug)"
+        },
+        {
+            "name": "Project: Debug Firmware (RP2350 ARM)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/.build/firmware.elf",
+            "servertype": "openocd",
+            "device": "RP2350",
+            "configFiles": [
+                "interface/cmsis-dap.cfg",
+                "target/rp2350.cfg"
+            ],
             "runToEntryPoint": "setup",
             "preLaunchTask": "Project: Build (Debug)"
         }

@@ -51,6 +51,8 @@ jobs:
             'tests/test_vscode_serial_persistent.py',
             'tests/test_vscode_windows_serial.py',
             'tests/test_vscode_windows_bootsel.py',
+            'tests/test_ota_firewall_config.py',
+            'tests/test_serial_io.py',
             'tests/test_rp_ota_artifacts.py',
             'tests/test_vscode_windows_tooling.py',
             'tests/test_vscode_build_environment.py',
@@ -126,12 +128,13 @@ jobs:
 
           & $state.tools.cmake --build $build --parallel 2 `
             --target test_host_compiler_smoke `
-              test_hal_config_headers_c test_hal_config_headers_cpp
+              test_hal_config_headers_c test_hal_config_headers_cpp `
+              test_bsd_socket_headers_c
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed to compile.' }
 
           $ctest = Join-Path (Split-Path -Parent $state.tools.cmake) 'ctest.exe'
           & $ctest --test-dir $build --output-on-failure `
-            -R '^(test_host_compiler_smoke|test_hal_config_headers_c|test_hal_config_headers_cpp)$'
+            -R '^(test_host_compiler_smoke|test_hal_config_headers_c|test_hal_config_headers_cpp|test_bsd_socket_headers_c)$'
           if ($LASTEXITCODE -ne 0) { throw 'MSVC host API tests failed.' }
           $inventory = (& $ctest --test-dir $build --show-only=json-v1 |
             Out-String) | ConvertFrom-Json

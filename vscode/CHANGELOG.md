@@ -2,6 +2,12 @@
 
 ## 0.1.0 - Unreleased
 
+- Add `debug-tools` discovery for the managed OpenOCD executable, GNU Arm GDB,
+  scripts root, and per-target configuration files.
+- Generate explicit CMSIS-DAP and RP2040 OpenOCD configuration files in
+  Cortex-Debug launch configurations.
+- Share a portable pyserial adapter with the RP OTA hardware verifier so its
+  retry and reboot paths no longer import Linux `termios`.
 - Make `build-debug` use an isolated CMake cache with
   `CMAKE_BUILD_TYPE=Debug`, while preserving the stable firmware artifact
   paths used by upload and IntelliSense workflows.

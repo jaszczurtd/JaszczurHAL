@@ -8,11 +8,11 @@ from contextlib import redirect_stderr
 import importlib.util
 import io
 import ipaddress
+import json
 from pathlib import Path
 import subprocess
 import sys
 import unittest
-from unittest import mock
 
 
 ROOT = Path(sys.argv[1]).resolve()
@@ -23,6 +23,8 @@ if SPEC is None or SPEC.loader is None:
 FIREWALL = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = FIREWALL
 SPEC.loader.exec_module(FIREWALL)
+
+import ota_firewall_windows as WINDOWS_FIREWALL
 
 
 def result(
@@ -48,9 +50,13 @@ class FakeRunner:
         self.firewalld_permanent = False
         self.netfilter_service_enabled = False
         self.iptables_permissive = False
+        self.elevated = True
 
     def which(self, command: str) -> str | None:
         return f"/fake/{command}" if command in self.available else None
+
+    def is_elevated(self) -> bool:
+        return self.elevated
 
     def run(
         self,
@@ -191,6 +197,84 @@ class FakeRunner:
         return result(command, returncode=127, stderr="unexpected fake command")
 
 
+class FakeWindowsRunner:
+    def __init__(self, *, elevated: bool = False) -> None:
+        self.elevated = elevated
+        self.configured = False
+        self.listener = False
+        self.calls: list[tuple[str, ...]] = []
+
+    def which(self, command: str) -> str | None:
+        if command in {"powershell.exe", "netstat.exe", "netstat"}:
+            return f"C:/Windows/System32/{command}"
+        return None
+
+    def is_elevated(self) -> bool:
+        return self.elevated
+
+    def run(
+        self,
+        command: list[str],
+        *,
+        sudo: bool = False,
+        sudo_non_interactive: bool = False,
+        check: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
+        del sudo, sudo_non_interactive
+        argv = list(command)
+        self.calls.append(tuple(argv))
+        response = self.dispatch(argv)
+        if check and response.returncode != 0:
+            raise subprocess.CalledProcessError(
+                response.returncode,
+                argv,
+                output=response.stdout,
+                stderr=response.stderr,
+            )
+        return response
+
+    def dispatch(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        if command[:1] == ["powershell.exe"]:
+            script = command[-1]
+            if "JH:network-scope" in script:
+                return result(
+                    command,
+                    stdout=json.dumps(
+                        [
+                            {
+                                "InterfaceAlias": "Wi-Fi",
+                                "IPv4Address": "192.168.2.15",
+                                "PrefixLength": 24,
+                                "NetworkCategory": "Private",
+                                "AdapterStatus": "Up",
+                                "AddressState": "Preferred",
+                                "HasDefaultRoute": True,
+                            },
+                            {
+                                "InterfaceAlias": "VPN",
+                                "IPv4Address": "10.8.0.7",
+                                "PrefixLength": 24,
+                                "NetworkCategory": "Private",
+                                "AdapterStatus": "Up",
+                                "AddressState": "Preferred",
+                                "HasDefaultRoute": False,
+                            },
+                        ]
+                    ),
+                )
+            if "JH:inspect-rule" in script:
+                return result(command, stdout=str(self.configured).lower())
+            if "JH:apply-rule" in script:
+                self.configured = True
+                return result(command)
+        if command == ["netstat.exe", "-ano", "-p", "tcp"]:
+            output = ""
+            if self.listener:
+                output = "  TCP    0.0.0.0:8266    0.0.0.0:0    LISTENING    42\n"
+            return result(command, stdout=output)
+        return result(command, returncode=127, stderr="unexpected fake command")
+
+
 def arguments(**overrides: object) -> argparse.Namespace:
     values = {
         "port": 8266,
@@ -198,6 +282,7 @@ def arguments(**overrides: object) -> argparse.Namespace:
         "network": "",
         "yes": False,
         "check": False,
+        "dry_run": False,
     }
     values.update(overrides)
     return argparse.Namespace(**values)
@@ -221,29 +306,47 @@ class OtaFirewallTests(unittest.TestCase):
         with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit):
             FIREWALL.parse_args(["--yes"])
 
+    def test_linux_dry_run_does_not_mutate_firewall(self) -> None:
+        runner = FakeRunner()
+        status = FIREWALL.configure_firewall(
+            arguments(dry_run=True),
+            runner=runner,
+            input_function=lambda _: "y",
+            platform_name="linux",
+        )
+        self.assertEqual(status, 0)
+        self.assertFalse(runner.live_rule)
+        self.assertFalse(runner.saved_rule)
+
     def test_refuses_to_expose_an_existing_listener(self) -> None:
         runner = FakeRunner()
         runner.available.add("ss")
         with self.assertRaises(FIREWALL.SetupError):
             FIREWALL.configure_firewall(
-                arguments(yes=True), runner=runner, input_function=lambda _: "n"
+                arguments(yes=True),
+                runner=runner,
+                input_function=lambda _: "n",
+                platform_name="linux",
             )
         self.assertFalse(runner.saved_rule)
 
     def test_decline_does_not_mutate_firewall(self) -> None:
         runner = FakeRunner()
-        with mock.patch.object(FIREWALL.os, "geteuid", return_value=1000):
-            original_dispatch = runner.dispatch
+        runner.elevated = False
+        original_dispatch = runner.dispatch
 
-            def dispatch(command: list[str]) -> subprocess.CompletedProcess[str]:
-                if command == ["true"]:
-                    return result(command, returncode=1)
-                return original_dispatch(command)
+        def dispatch(command: list[str]) -> subprocess.CompletedProcess[str]:
+            if command == ["true"]:
+                return result(command, returncode=1)
+            return original_dispatch(command)
 
-            runner.dispatch = dispatch
-            status = FIREWALL.configure_firewall(
-                arguments(), runner=runner, input_function=lambda _: "n"
-            )
+        runner.dispatch = dispatch
+        status = FIREWALL.configure_firewall(
+            arguments(),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
+        )
         self.assertEqual(status, 0)
         self.assertFalse(runner.live_rule)
         self.assertFalse(runner.saved_rule)
@@ -251,7 +354,10 @@ class OtaFirewallTests(unittest.TestCase):
     def test_iptables_rule_is_scoped_and_persisted(self) -> None:
         runner = FakeRunner()
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.live_rule)
@@ -267,7 +373,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner.available = {"ip", "iptables", "iptables-save"}
         runner.iptables_permissive = True
         status = FIREWALL.configure_firewall(
-            arguments(), runner=runner, input_function=lambda _: "n"
+            arguments(),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertFalse(runner.saved_rule)
@@ -280,7 +389,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner = FakeRunner()
         runner.available = {"ip", "apt-get"}
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.saved_rule)
@@ -292,7 +404,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner = FakeRunner()
         runner.available.add("systemctl")
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.netfilter_service_enabled)
@@ -303,7 +418,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner.available = {"ip", "nft", "apt-get"}
         with self.assertRaises(FIREWALL.SetupError):
             FIREWALL.configure_firewall(
-                arguments(yes=True), runner=runner, input_function=lambda _: "n"
+                arguments(yes=True),
+                runner=runner,
+                input_function=lambda _: "n",
+                platform_name="linux",
             )
         self.assertFalse(runner.saved_rule)
 
@@ -311,7 +429,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner = FakeRunner()
         runner.available.add("ufw")
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.ufw_configured)
@@ -321,7 +442,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner = FakeRunner()
         runner.available = {"ip", "firewall-cmd"}
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.firewalld_runtime)
@@ -332,7 +456,10 @@ class OtaFirewallTests(unittest.TestCase):
         runner.available = {"ip", "firewall-cmd"}
         runner.firewalld_permanent = True
         status = FIREWALL.configure_firewall(
-            arguments(yes=True), runner=runner, input_function=lambda _: "n"
+            arguments(yes=True),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="linux",
         )
         self.assertEqual(status, 0)
         self.assertTrue(runner.firewalld_runtime)
@@ -342,6 +469,137 @@ class OtaFirewallTests(unittest.TestCase):
             if "--permanent" in call[0] and "--add-rich-rule" in call[0]
         ]
         self.assertEqual(permanent_adds, [])
+
+
+class WindowsOtaFirewallTests(unittest.TestCase):
+    def test_detects_private_default_route_and_ignores_vpn(self) -> None:
+        runner = FakeWindowsRunner()
+        status = FIREWALL.configure_firewall(
+            arguments(check=True),
+            runner=runner,
+            platform_name="win32",
+        )
+        self.assertEqual(status, 1)
+        network_query = next(
+            call[-1] for call in runner.calls if call[0] == "powershell.exe"
+        )
+        self.assertIn("JH:network-scope", network_query)
+
+    def test_check_is_read_only(self) -> None:
+        runner = FakeWindowsRunner()
+        status = FIREWALL.configure_firewall(
+            arguments(
+                check=True,
+                interface="Wi-Fi",
+                network="192.168.2.0/24",
+            ),
+            runner=runner,
+            platform_name="win32",
+        )
+        self.assertEqual(status, 1)
+        self.assertFalse(runner.configured)
+        self.assertFalse(any("JH:apply-rule" in call[-1] for call in runner.calls))
+
+    def test_dry_run_is_read_only(self) -> None:
+        runner = FakeWindowsRunner(elevated=True)
+        status = FIREWALL.configure_firewall(
+            arguments(
+                dry_run=True,
+                interface="Wi-Fi",
+                network="192.168.2.0/24",
+            ),
+            runner=runner,
+            input_function=lambda _: "y",
+            platform_name="win32",
+        )
+        self.assertEqual(status, 0)
+        self.assertFalse(runner.configured)
+        self.assertFalse(any("JH:inspect-rule" in call[-1] for call in runner.calls))
+        self.assertFalse(any("JH:apply-rule" in call[-1] for call in runner.calls))
+
+    def test_inspection_accepts_windows_network_representations(self) -> None:
+        scope = FIREWALL.NetworkScope(
+            "Wi-Fi",
+            ipaddress.IPv4Network("192.168.2.0/24"),
+        )
+        script = WINDOWS_FIREWALL.inspect_rule_script(scope, 8266)
+        self.assertIn("192.168.2.0/24", script)
+        self.assertIn("192.168.2.0/255.255.255.0", script)
+        self.assertIn("192.168.2.0-192.168.2.255", script)
+        self.assertIn("-ErrorAction Stop", script)
+
+    def test_decline_is_read_only(self) -> None:
+        runner = FakeWindowsRunner(elevated=True)
+        status = FIREWALL.configure_firewall(
+            arguments(interface="Wi-Fi", network="192.168.2.0/24"),
+            runner=runner,
+            input_function=lambda _: "n",
+            platform_name="win32",
+        )
+        self.assertEqual(status, 0)
+        self.assertFalse(runner.configured)
+
+    def test_requires_elevated_shell_after_consent(self) -> None:
+        runner = FakeWindowsRunner()
+        with self.assertRaisesRegex(FIREWALL.SetupError, "administrator"):
+            FIREWALL.configure_firewall(
+                arguments(
+                    yes=True,
+                    interface="Wi-Fi",
+                    network="192.168.2.0/24",
+                ),
+                runner=runner,
+                platform_name="win32",
+            )
+        self.assertFalse(runner.configured)
+
+    def test_applies_idempotent_private_lan_rule(self) -> None:
+        runner = FakeWindowsRunner(elevated=True)
+        args = arguments(
+            yes=True,
+            interface="Wi-Fi",
+            network="192.168.2.0/24",
+        )
+        self.assertEqual(
+            FIREWALL.configure_firewall(
+                args,
+                runner=runner,
+                platform_name="win32",
+            ),
+            0,
+        )
+        self.assertTrue(runner.configured)
+        apply_script = next(
+            call[-1] for call in runner.calls if "JH:apply-rule" in call[-1]
+        )
+        self.assertIn("Profile = 'Private'", apply_script)
+        self.assertIn("RemoteAddress = '192.168.2.0/24'", apply_script)
+        self.assertIn("InterfaceAlias = 'Wi-Fi'", apply_script)
+        call_count = len(runner.calls)
+        self.assertEqual(
+            FIREWALL.configure_firewall(
+                args,
+                runner=runner,
+                platform_name="win32",
+            ),
+            0,
+        )
+        self.assertEqual(len(runner.calls), call_count + 2)
+
+    def test_refuses_existing_listener(self) -> None:
+        runner = FakeWindowsRunner(elevated=True)
+        runner.listener = True
+        with self.assertRaisesRegex(FIREWALL.SetupError, "already used"):
+            FIREWALL.configure_firewall(
+                arguments(
+                    yes=True,
+                    interface="Wi-Fi",
+                    network="192.168.2.0/24",
+                ),
+                runner=runner,
+                platform_name="win32",
+            )
+        self.assertFalse(runner.configured)
 
 
 if __name__ == "__main__":

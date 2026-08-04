@@ -1033,7 +1033,13 @@ def _openocd_scripts_root(executable: Path) -> Optional[Path]:
         executable.parent.parent / "share/openocd/scripts",
         executable.parent.parent / "scripts",
     )
-    required = ("interface/stlink.cfg", "target/stm32g4x.cfg")
+    required = (
+        "interface/cmsis-dap.cfg",
+        "interface/stlink.cfg",
+        "target/rp2040.cfg",
+        "target/rp2350.cfg",
+        "target/stm32g4x.cfg",
+    )
     return next(
         (root for root in candidates if all((root / path).is_file() for path in required)),
         None,
@@ -1121,14 +1127,14 @@ def ensure_windows_tools(
                 (
                     "arm-none-eabi-g++.exe", "arm-none-eabi-ar.exe",
                     "arm-none-eabi-ranlib.exe", "arm-none-eabi-objcopy.exe",
-                    "arm-none-eabi-objdump.exe",
+                    "arm-none-eabi-objdump.exe", "arm-none-eabi-gdb.exe",
                 ),
             )
         elif spec.name == "openocd":
             if _openocd_scripts_root(executable) is None:
                 raise ComponentError(
-                    f"Resolved OpenOCD lacks interface/stlink.cfg or "
-                    f"target/stm32g4x.cfg: {executable}"
+                    "Resolved OpenOCD lacks the required CMSIS-DAP, ST-Link, "
+                    f"RP2040, RP2350, or STM32G4 scripts: {executable}"
                 )
         elif spec.name == "picotool":
             issues = _picotool_capability_issues(

@@ -302,6 +302,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_net_console` | Password-required TCP console start/auth flow, serial/debug mirroring to authenticated clients, multi-client broadcast, bidirectional command input, per-client replies and disconnect callbacks |
 | `test_hal_net_commands` | JSON/text command registration and dispatch, HTTP route integration, WebSocket message integration, structured errors and API validation |
 | `test_bsd_sockets` | BSD/POSIX adapter fd mapping, sockaddr translation, errno/EAI paths, TCP/UDP flow, nonblocking mode, `select()`, `getaddrinfo()` and `setsockopt()` |
+| `test_bsd_socket_headers_c` | portable C declaration/constant/structure contract for BSD socket headers; runs under GNU-like hosts and MSVC |
 | `test_hal_tls` / `test_bearssl_provider` | public TLS lifecycle, native HAL TCP transport, bounded BearSSL progression and optional TLS-over-BSD callbacks |
 | TLS/BSD compile probes | prove that TLS builds without BSD, BSD builds without TLS, and each flag propagates only its required network modules |
 | `test_bsd_sockets_c_compile` | C compile/link smoke test for socket headers, `netdb.h`, TCP/UDP client/server shapes, `fcntl()`, `select()`, `getaddrinfo()` and `setsockopt()` |

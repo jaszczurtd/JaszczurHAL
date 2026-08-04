@@ -479,10 +479,12 @@ permit device-to-host traffic; disable wireless client isolation for the OTA
 network.
 
 `runmefirst.sh` detects the RFC1918 network attached to the default IPv4
-interface and checks for a persistent TCP/8266 callback rule. When the rule is
+interface and checks for a persistent TCP/8266 callback rule. On Windows, run
+the same focused Python helper from the managed environment. When the rule is
 missing, it displays the exact interface, source subnet, port, persistence
-backend, and any package required before asking for confirmation. Declining
-leaves the firewall unchanged and does not prevent the remaining setup.
+backend, and any package or elevation boundary before asking for confirmation.
+Declining leaves the firewall unchanged and does not prevent the remaining
+setup.
 A host with an empty `INPUT` chain and an `ACCEPT` policy already permits the
 callback, so setup reports success without installing persistence tooling.
 
@@ -495,6 +497,9 @@ After confirmation, setup uses the active firewall manager:
   available;
 - `iptables-persistent` is installed through `apt` only when the iptables path
   needs persistence and no supported persistence tool is present.
+- Windows Defender Firewall receives a named inbound rule limited to the
+  `Private` profile, selected interface alias, RFC1918 source subnet, TCP, and
+  callback port. The helper does not change `Public` networks to `Private`.
 
 Setup never enables an inactive UFW or firewalld policy. The iptables
 persistence path writes the complete active IPv4 ruleset to
@@ -505,9 +510,27 @@ interface, or callback port:
 ```bash
 python3 scripts/configure_ota_firewall.py
 python3 scripts/configure_ota_firewall.py --check
+python3 scripts/configure_ota_firewall.py --dry-run
 python3 scripts/configure_ota_firewall.py \
   --interface enp7s0 --network 192.168.2.0/24
 ```
+
+Native Windows uses the managed interpreter and the interface alias shown by
+`Get-NetConnectionProfile`:
+
+```powershell
+.\.build\windows\venv\Scripts\python.exe `
+  .\scripts\configure_ota_firewall.py --dry-run `
+  --interface 'Wi-Fi' --network '192.168.2.0/24'
+.\.build\windows\venv\Scripts\python.exe `
+  .\scripts\configure_ota_firewall.py --check `
+  --interface 'Wi-Fi' --network '192.168.2.0/24'
+```
+
+If the inspected connection is `Public`, choose a trusted LAN and change its
+profile deliberately through Windows settings before provisioning the rule.
+Apply from an already elevated PowerShell only after reviewing `--dry-run`.
+The script reports the elevation boundary and does not invoke UAC itself.
 
 The helper accepts only RFC1918 IPv4 source networks. `--yes` permits
 non-interactive provisioning after the interface and network have been
