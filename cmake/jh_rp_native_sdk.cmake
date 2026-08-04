@@ -357,18 +357,6 @@ function(jh_add_rp_native_firmware TARGET_NAME)
             HAL_PROVIDE_APP_ENTRY=1)
     endif()
     if(_jh_native_storage_reservation GREATER 0 OR _jh_native_ota)
-        if(JH_RP_TARGET_NAME MATCHES "^rp2350")
-            set(_jh_picotool_platform "rp2350")
-        else()
-            set(_jh_picotool_platform "rp2040")
-        endif()
-        # A relocated application does not start at the platform's normal
-        # flash base, so picotool cannot infer the device from the ELF image.
-        # Give it the platform explicitly so that RP2350 scratch RAM segments
-        # are validated against the correct address map while producing UF2.
-        set_property(TARGET "${TARGET_NAME}" APPEND PROPERTY
-            PICOTOOL_EXTRA_UF2_ARGS
-            "--platform" "${_jh_picotool_platform}")
         set(_jh_default_linker_script
             "${PICO_LINKER_SCRIPT_PATH}/memmap_default.ld")
         if(NOT EXISTS "${_jh_default_linker_script}")

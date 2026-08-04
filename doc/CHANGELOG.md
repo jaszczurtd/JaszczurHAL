@@ -13,9 +13,9 @@ All notable changes to this project will be documented in this file.
 - Moved the RP OTA hardware verifier from a direct `termios` dependency to the
   shared pyserial adapter used on Windows and Unix hosts, and aligned its
   identity checks with the generated board-profile runtime names.
-- Fixed relocated RP2350 application UF2 generation by passing the explicit
-  platform to picotool, whose address-map inference otherwise rejects valid
-  RP2350 scratch-RAM segments when the image does not start at the flash base.
+- Let the Pico SDK select picotool's UF2 family for relocated applications,
+  avoiding an unsupported extra argument while retaining the SDK-provided
+  RP2040 and RP2350 address-map metadata.
 - Kept native RP OTA transfers responsive while writing staging flash by
   erasing each 4 KiB sector immediately before its first page instead of
   blocking the network stack while erasing the complete slot.

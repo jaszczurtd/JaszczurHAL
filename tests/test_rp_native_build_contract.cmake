@@ -198,8 +198,6 @@ foreach(_flash_build_contract IN ITEMS
         "HAL_RP_FLASH_EEPROM_SIZE"
         "HAL_RP_FLASH_LITTLEFS_SIZE"
         "NDEBUG"
-        "PICOTOOL_EXTRA_UF2_ARGS"
-        "--platform"
         "pico_set_linker_script"
         "_storage.ld")
     string(FIND "${_native_common_text}" "${_flash_build_contract}"
@@ -376,6 +374,18 @@ foreach(_ota_target_contract IN ITEMS
     if(_ota_target_at EQUAL -1)
         message(FATAL_ERROR
             "Native RP OTA target guard is missing: ${_ota_target_contract}")
+    endif()
+endforeach()
+
+foreach(_unsupported_picotool_contract IN ITEMS
+        "PICOTOOL_EXTRA_UF2_ARGS"
+        "--platform")
+    string(FIND "${_native_common_text}" "${_unsupported_picotool_contract}"
+        _unsupported_picotool_at)
+    if(NOT _unsupported_picotool_at EQUAL -1)
+        message(FATAL_ERROR
+            "Native RP UF2 conversion must let the Pico SDK select the family; "
+            "found unsupported contract: ${_unsupported_picotool_contract}")
     endif()
 endforeach()
 
