@@ -232,13 +232,20 @@ starts persistent serial monitors, and refreshes IntelliSense.
 - Native RP network updates, first flash, and firewall requirements:
   [OTAWorkflow.md](doc/OTAWorkflow.md)
 
-Linux remains the complete host-test environment. Native Windows has the
-launcher, generated task override, shared component manager, authenticated
-toolchain bootstrap, short-root Ninja builds for the four target families,
-COM identity and monitor handoff, BOOTSEL/UF2 and OTA upload paths, Cortex-Debug
-profiles, hardware validation, and CI coverage. See
-[Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
-explicit Linux-only boundaries.
+## Debugging with VS Code
+
+Generated Cortex-Debug profiles support RP2040 and RP2350 Arm over SWD with a
+Raspberry Pi Debug Probe or a Pico running Debug Probe/Picoprobe firmware.
+STM32G474 projects use the on-board ST-Link of the NUCLEO-G474RE. The VS Code
+Run and Debug workflow builds and loads the Debug ELF with managed OpenOCD and
+an Arm-capable GDB on Windows and Linux; see
+[Native Windows Setup](doc/windows_setup.md) for wiring and setup details.
+
+Both Linux and native Windows provides the complete VS Code firmware-development workflow,
+including builds, uploads, serial monitoring, OTA updates, and debugging. Linux
+provides the full repository quality gate, including Valgrind, static analysis,
+and POSIX-only host integrations. See [Native Windows Setup](doc/windows_setup.md)
+for setup, verification, and the explicit Linux-only boundaries.
 
 ## Managed dependencies
 

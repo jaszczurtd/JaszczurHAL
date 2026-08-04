@@ -315,7 +315,10 @@ with tempfile.TemporaryDirectory(prefix="jh Linux debug tools ") as temporary_te
             "gdb-multiarch": str(gdb_multiarch),
         }.get(program)
 
-    with mock.patch.object(runtime.shutil, "which", side_effect=linux_debug_which):
+    # Windows CI has a bootstrap-produced host record; hide it so this fixture
+    # exercises the Linux PATH fallback on every host.
+    with mock.patch.object(runtime, "resolved_windows_tools", return_value={}), \
+            mock.patch.object(runtime.shutil, "which", side_effect=linux_debug_which):
         debug_tools = runtime.debug_tool_paths({"target": "stm32g474"})
         require(debug_tools is not None, "Linux STM32 debug tools were not resolved")
         require(
