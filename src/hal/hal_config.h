@@ -154,8 +154,9 @@
 #error "HAL_CYW43_STACK_LWIP requires a JaszczurHAL CYW43 bus"
 #endif
 #if defined(HAL_NETWORK_BACKEND_CYW43)
-#if !HAL_BOARD_HAS_CYW43
-#error "HAL_NETWORK_BACKEND_CYW43 requires a board profile with CYW43"
+#if HAL_TARGET_IS_STM32G474 && !HAL_BOARD_HAS_CYW43
+#error                                                                         \
+    "HAL_NETWORK_BACKEND_CYW43 on STM32G474 requires a board profile with CYW43"
 #endif
 #if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
 #error                                                                         \

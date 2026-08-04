@@ -101,6 +101,18 @@ require(
     "JH_BTSTACK_CYW43_MAX_HCI_PROCESS_LOOP_COUNT 8u" in transport,
     "HCI receive drain is no longer bounded",
 )
+for diagnostic in (
+    "rx_event_packets",
+    "rx_acl_packets",
+    "tx_command_packets",
+    "tx_acl_packets",
+    "HCI_OPCODE_HCI_HOST_BUFFER_SIZE",
+    "HCI_OPCODE_HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL",
+):
+    require(
+        diagnostic in transport,
+        f"Stage 1 transport diagnostics are missing {diagnostic}",
+    )
 
 probe = (
     ROOT / "src/hal/impl/shared/bluetooth/jh_bluetooth_stage1_probe.c"
@@ -109,6 +121,32 @@ require(
     "hci_subevent_le_connection_complete_get_status(packet)" in probe,
     "Stage 1 reports failed LE connection events as successful connections",
 )
+require(
+    "hci_event_disconnection_complete_get_reason(packet)" in probe,
+    "Stage 1 does not preserve the HCI disconnect reason",
+)
+require(
+    probe.index("sm_init();") < probe.index("att_server_init("),
+    "Stage 1 must initialize the Security Manager before the ATT server",
+)
+require(
+    "att_server_register_packet_handler(packet_handler);" not in probe,
+    "Stage 1 must not receive connection events through the deprecated ATT forwarder",
+)
+
+stm32_backend = (
+    ROOT
+    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp"
+).read_text(encoding="utf-8")
+for transition in (
+    "jh_board_runtime_set_available(kCyw43Capabilities)",
+    "jh_board_runtime_set_failed(kCyw43Capabilities)",
+    "jh_board_runtime_set_inactive(kCyw43Capabilities)",
+):
+    require(
+        transition in stm32_backend,
+        f"STM32 CYW43 lifecycle is missing board transition {transition}",
+    )
 
 manifest = json.loads(
     (

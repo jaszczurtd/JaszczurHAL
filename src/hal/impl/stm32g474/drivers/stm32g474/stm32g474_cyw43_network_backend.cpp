@@ -11,6 +11,7 @@
 #include "../../../shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
 #include "../../../shared/hal_mutex_once.h"
+#include "../../../shared/jh_board_runtime.h"
 #include "../../../shared/network/jh_cyw43_scan.h"
 #include "../../../shared/network/jh_net_address_utils.h"
 #include "../../../shared/network/jh_network_backend.h"
@@ -42,6 +43,10 @@ extern "C" {
 namespace {
 
 constexpr uint32_t kDnsTimeoutMs = 10000u;
+constexpr hal_board_capabilities_t kCyw43Capabilities =
+    HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
+                               ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
+                               : 0u);
 
 hal_mutex_t s_state_mutex;
 hal_mutex_t s_stack_mutex;
@@ -199,6 +204,7 @@ hal_status_t service_initialize(void) {
     const hal_status_t create_status =
         jh_network_service_init(&s_network_service, &s_service_port);
     if (create_status != HAL_OK) {
+      (void)jh_board_runtime_set_failed(kCyw43Capabilities);
       hal_mutex_unlock(s_lifecycle_mutex);
       return create_status;
     }
@@ -214,6 +220,7 @@ hal_status_t service_initialize(void) {
   };
   hal_status_t status = jh_stm32g474_cyw43_gspi_init(&config);
   if (status != HAL_OK) {
+    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     hal_mutex_unlock(s_lifecycle_mutex);
     return status;
   }
@@ -222,12 +229,22 @@ hal_status_t service_initialize(void) {
   status = jh_cyw43_driver_start(jh_stm32g474_cyw43_gspi_transport(), &result);
   if (status != HAL_OK) {
     (void)jh_stm32g474_cyw43_gspi_deinit();
+    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     hal_mutex_unlock(s_lifecycle_mutex);
     return status;
   }
 
   status = jh_network_service_start(&s_network_service);
   if (status != HAL_OK) {
+    (void)jh_cyw43_driver_stop();
+    (void)jh_stm32g474_cyw43_gspi_deinit();
+    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
+    hal_mutex_unlock(s_lifecycle_mutex);
+    return status;
+  }
+  status = jh_board_runtime_set_available(kCyw43Capabilities);
+  if (status != HAL_OK) {
+    (void)jh_network_service_stop(&s_network_service);
     (void)jh_cyw43_driver_stop();
     (void)jh_stm32g474_cyw43_gspi_deinit();
     hal_mutex_unlock(s_lifecycle_mutex);
@@ -278,6 +295,12 @@ hal_status_t service_deinitialize(void) {
   s_scan_count = 0u;
   s_scan_overflow = false;
   status = driver_status != HAL_OK ? driver_status : transport_status;
+  const hal_status_t capability_status =
+      status == HAL_OK ? jh_board_runtime_set_inactive(kCyw43Capabilities)
+                       : jh_board_runtime_set_failed(kCyw43Capabilities);
+  if (status == HAL_OK) {
+    status = capability_status;
+  }
   hal_mutex_unlock(s_lifecycle_mutex);
   return status;
 }

@@ -14,13 +14,23 @@ static void report_status(void) {
   jh_bluetooth_stage1_snapshot_t snapshot = {0};
   jh_bluetooth_stage1_snapshot(&snapshot);
   deb("JHBT1 start=%s ready=%u advertising=%u connected=%u connections=%lu "
-      "writes=%lu rx=%lu tx=%lu drain_limited=%lu status=%s transport=%s",
+      "writes=%lu rx=%lu(event=%lu,acl=%lu) tx=%lu(cmd=%lu,acl=%lu) "
+      "drain_limited=%lu reason=0x%02x host_buf=0x%02x flow=0x%02x "
+      "status=%s transport=%s",
       hal_status_to_string(s_start_status), snapshot.controller_ready ? 1u : 0u,
       snapshot.advertising ? 1u : 0u, snapshot.connected ? 1u : 0u,
       (unsigned long)snapshot.connection_count,
       (unsigned long)snapshot.writes_received,
-      (unsigned long)snapshot.rx_packets, (unsigned long)snapshot.tx_packets,
+      (unsigned long)snapshot.rx_packets,
+      (unsigned long)snapshot.rx_event_packets,
+      (unsigned long)snapshot.rx_acl_packets,
+      (unsigned long)snapshot.tx_packets,
+      (unsigned long)snapshot.tx_command_packets,
+      (unsigned long)snapshot.tx_acl_packets,
       (unsigned long)snapshot.drain_budget_hits,
+      (unsigned)snapshot.last_disconnect_reason,
+      (unsigned)snapshot.host_buffer_size_status,
+      (unsigned)snapshot.controller_to_host_flow_control_status,
       hal_status_to_string(snapshot.last_status),
       hal_status_to_string(snapshot.transport_status));
 }

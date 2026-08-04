@@ -73,6 +73,8 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     }
     break;
   case HCI_EVENT_DISCONNECTION_COMPLETE:
+    s_snapshot.last_disconnect_reason =
+        hci_event_disconnection_complete_get_reason(packet);
     if (hci_event_disconnection_complete_get_status(packet) ==
         ERROR_CODE_SUCCESS) {
       s_snapshot.connected = false;
@@ -130,6 +132,7 @@ hal_status_t jh_bluetooth_stage1_start(void) {
   btstack_run_loop_init(btstack_run_loop_embedded_get_instance());
   hci_init(jh_btstack_cyw43_hci_transport_instance(), NULL);
   l2cap_init();
+  sm_init();
   att_server_init(profile_data, att_read_callback, att_write_callback);
 
   bd_addr_t null_address = {0u, 0u, 0u, 0u, 0u, 0u};
@@ -141,7 +144,6 @@ hal_status_t jh_bluetooth_stage1_start(void) {
 
   s_hci_events.callback = packet_handler;
   hci_add_event_handler(&s_hci_events);
-  att_server_register_packet_handler(packet_handler);
 
   const int power_status = hci_power_control(HCI_POWER_ON);
   if (power_status != 0) {
@@ -167,8 +169,15 @@ hal_status_t jh_bluetooth_stage1_service(void) {
   jh_btstack_cyw43_transport_snapshot_t transport;
   jh_btstack_cyw43_transport_snapshot(&transport);
   s_snapshot.rx_packets = transport.rx_packets;
+  s_snapshot.rx_event_packets = transport.rx_event_packets;
+  s_snapshot.rx_acl_packets = transport.rx_acl_packets;
   s_snapshot.tx_packets = transport.tx_packets;
+  s_snapshot.tx_command_packets = transport.tx_command_packets;
+  s_snapshot.tx_acl_packets = transport.tx_acl_packets;
   s_snapshot.drain_budget_hits = transport.drain_budget_hits;
+  s_snapshot.host_buffer_size_status = transport.host_buffer_size_status;
+  s_snapshot.controller_to_host_flow_control_status =
+      transport.controller_to_host_flow_control_status;
   s_snapshot.transport_status = transport.last_status;
   if (transport.last_status < HAL_NONE) {
     s_snapshot.last_status = transport.last_status;
