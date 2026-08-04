@@ -32,6 +32,10 @@ if(_cyw43_pin_read_begin LESS 0 OR _cyw43_pin_read_end LESS 0 OR
 endif()
 
 set(_pinned_files
+    "vendor/src/cybt_logging.h|ab0ac639e72b5a2797c54e704a33bd3d4a74be9250b4b12df6e5856b021103de"
+    "vendor/src/cybt_shared_bus.c.upstream|bab75c7d42b25d9b3b1e04e59ffc1c38ac807ae8b5682c405c69e7f9d9f5b75f"
+    "vendor/src/cybt_shared_bus_driver.c.upstream|4b62a35f7b5b5a4e991e636986e95ee5a9d1fddbed964cc6d9dd9a5307aaa481"
+    "vendor/src/cybt_shared_bus_driver.h|c65edbb4152de9f78ceebebf1e0e306638c769387e1d6c2ef7836d35bbcea37d"
     "vendor/src/cyw43.h|d315bcfe96ca96b0309d760fe93a60f11ed8b44b7da2472f5ba395ef19985ba0"
     "vendor/src/cyw43_btbus.h|4e7d8ac7e49e328d957f4166fcffe7cdae56b784fbdcafc59641969ab9f2de30"
     "vendor/src/cyw43_config.h|0a3b03ab983d6afce154323bb887943344ddb9658f8a4cd2b29b79b847dca03a"

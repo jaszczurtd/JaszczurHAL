@@ -1106,6 +1106,16 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
         cmake = config.get("cmake")
         cache = cmake.get("cache") if isinstance(cmake, dict) else {}
         cache_defines = str(cache.get("JH_EXTRA_DEFINES", "")) if isinstance(cache, dict) else ""
+        selected_board = str(config.get("board") or "")
+        board_components: set[str] = set()
+        if isinstance(desc, dict):
+            for board_desc in desc.get("boards") or []:
+                if isinstance(board_desc, dict) and board_desc.get("id") == selected_board:
+                    board_components = {
+                        str(component)
+                        for component in board_desc.get("components") or []
+                    }
+                    break
         configured_cyw43 = all(
             symbol in project_defines or symbol in cache_defines
             for symbol in (
@@ -1113,7 +1123,10 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
                 "HAL_CYW43_BUS_STM32_GSPI",
                 "HAL_CYW43_STACK_LWIP",
             )
-        )
+        ) or {
+            "cyw43-stm32-gspi",
+            "cyw43-lwip",
+        }.issubset(board_components)
         if network and not configured_cyw43:
             messages.append(
                 "axis-2: stm32g474 network modules require the explicit "

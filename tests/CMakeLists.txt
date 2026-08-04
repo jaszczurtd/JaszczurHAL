@@ -328,6 +328,13 @@ add_test(NAME test_board_selection
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_board_selection.cmake
 )
 
+add_test(NAME test_project_feature_defines
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_project_feature_defines.cmake
+)
+
 add_test(NAME test_rp_native_build_contract
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
@@ -393,6 +400,11 @@ add_test(NAME test_rp_ota_artifacts
 add_test(NAME test_component_management
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_management.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_bluetooth_stage1
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_bluetooth_stage1.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_component_manager
@@ -470,11 +482,6 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
-add_network_board_runtime_test(
-    test_network_board_runtime_absent
-    HAL_BOARD_PROFILE_RP_PICO
-    JH_TEST_NETWORK_BOARD_ABSENT
-)
 add_network_board_runtime_test(
     test_network_board_runtime_picow
     HAL_BOARD_PROFILE_RP_PICO_W

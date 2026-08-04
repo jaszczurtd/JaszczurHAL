@@ -48,6 +48,7 @@ for fixture in (
     "rp_storage",
     "rp_sdlogger",
     "rp_ota",
+    "bluetooth_stage1",
 ):
     manifest = load_json(
         ROOT

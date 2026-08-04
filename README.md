@@ -122,9 +122,10 @@ Backend files compile only for their selected target, so unused backends cost ze
 
 Official builds select a stable target and board ID through the generated board
 registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
-`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`, and
-`host-mock`. The build generator validates target compatibility, flash size,
-pins, components, and feature contracts before toolchain import. See
+`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`,
+`nucleo-g474re-pim730`, and `host-mock`. The build generator validates target
+compatibility, flash size, pins, components, and feature contracts before
+toolchain import. See
 [Target and board profiles](doc/boards_profiles_howto.md).
 
 Dispatcher-backed VS Code projects select the active family/board with the

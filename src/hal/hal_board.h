@@ -47,6 +47,7 @@ extern "C" {
     !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) &&                                 \
     !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) &&                              \
     !defined(HAL_BOARD_PROFILE_STM32G474_GENERIC) &&                           \
+    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730) &&                     \
     !defined(HAL_BOARD_PROFILE_HOST_MOCK)
 
 #if HAL_TARGET_IS_RP
@@ -115,6 +116,12 @@ extern "C" {
 #define HAL_BOARD_IS_STM32G474_GENERIC 0
 #endif
 
+#if defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
+#define HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 1
+#else
+#define HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 0
+#endif
+
 #if defined(HAL_BOARD_PROFILE_HOST_MOCK)
 #define HAL_BOARD_IS_HOST_MOCK 1
 #else
@@ -123,7 +130,8 @@ extern "C" {
 
 #if (HAL_BOARD_IS_RP_PICO + HAL_BOARD_IS_RP_PICO_W + HAL_BOARD_IS_RP_PICO_2 +  \
      HAL_BOARD_IS_RP_PICO_2_W + HAL_BOARD_IS_RP_PICO_PIM730 +                  \
-     HAL_BOARD_IS_STM32G474_GENERIC + HAL_BOARD_IS_HOST_MOCK) != 1
+     HAL_BOARD_IS_STM32G474_GENERIC + HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 +   \
+     HAL_BOARD_IS_HOST_MOCK) != 1
 #error "JaszczurHAL: exactly one HAL_BOARD_PROFILE_* must be selected."
 #endif
 
@@ -143,6 +151,11 @@ extern "C" {
 #if HAL_BOARD_IS_STM32G474_GENERIC && !HAL_TARGET_IS_STM32G474
 #error                                                                         \
     "JaszczurHAL: STM32G474 generic board profile requires HAL_TARGET_STM32G474."
+#endif
+
+#if HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 && !HAL_TARGET_IS_STM32G474
+#error                                                                         \
+    "JaszczurHAL: NUCLEO-G474RE PIM730 profile requires HAL_TARGET_STM32G474."
 #endif
 
 #if HAL_BOARD_IS_HOST_MOCK && !HAL_TARGET_IS_MOCK
@@ -172,7 +185,7 @@ extern "C" {
 
 /* 6. Compile-time physical board facts. */
 #if HAL_BOARD_IS_RP_PICO_W || HAL_BOARD_IS_RP_PICO_2_W ||                      \
-    HAL_BOARD_IS_RP_PICO_PIM730
+    HAL_BOARD_IS_RP_PICO_PIM730 || HAL_BOARD_IS_STM32G474_NUCLEO_PIM730
 #define HAL_BOARD_HAS_CYW43 1
 #else
 #define HAL_BOARD_HAS_CYW43 0
@@ -186,7 +199,7 @@ extern "C" {
 #define HAL_BOARD_HAS_USB_DEVICE 0
 #endif
 
-#if HAL_BOARD_IS_RP_PICO_PIM730
+#if HAL_BOARD_IS_RP_PICO_PIM730 || HAL_BOARD_IS_STM32G474_NUCLEO_PIM730
 #define HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND 1
 #else
 #define HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND 0
@@ -218,7 +231,8 @@ typedef enum {
   HAL_BOARD_RP_PICO_2_W = 4,
   HAL_BOARD_RP_PICO_PIM730 = 5,
   HAL_BOARD_STM32G474_GENERIC = 6,
-  HAL_BOARD_HOST_MOCK = 7
+  HAL_BOARD_HOST_MOCK = 7,
+  HAL_BOARD_STM32G474_NUCLEO_PIM730 = 11
 } hal_board_profile_t;
 
 #if HAL_BOARD_IS_RP_PICO
@@ -239,6 +253,9 @@ typedef enum {
 #elif HAL_BOARD_IS_STM32G474_GENERIC
 #define HAL_BOARD_PROFILE_ID HAL_BOARD_STM32G474_GENERIC
 #define HAL_BOARD_PROFILE_NAME "stm32g474-generic"
+#elif HAL_BOARD_IS_STM32G474_NUCLEO_PIM730
+#define HAL_BOARD_PROFILE_ID HAL_BOARD_STM32G474_NUCLEO_PIM730
+#define HAL_BOARD_PROFILE_NAME "nucleo-g474re-pim730"
 #else
 #define HAL_BOARD_PROFILE_ID HAL_BOARD_HOST_MOCK
 #define HAL_BOARD_PROFILE_NAME "host-mock"

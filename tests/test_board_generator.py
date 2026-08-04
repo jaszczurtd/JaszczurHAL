@@ -75,7 +75,7 @@ TEST_ROOT.mkdir(parents=True)
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 5 targets and 9 boards",
+    validated.stdout.strip() == "validated 5 targets and 10 boards",
     "unexpected validated registry size",
 )
 require(
@@ -88,6 +88,7 @@ require(
     == [
         "host-mock",
         "nucleo-g474re",
+        "nucleo-g474re-pim730",
         "pico",
         "pico-rm2",
         "pico2",
@@ -205,6 +206,37 @@ require(
     in (nucleo_output / "jh_board_config.h").read_text(encoding="utf-8"),
     "NUCLEO PA5 HAL encoding mismatch",
 )
+
+pim730_output = TEST_ROOT / "generated/nucleo-pim730"
+run(
+    "--target",
+    "stm32g474",
+    "--board",
+    "nucleo-g474re-pim730",
+    "--output-dir",
+    str(pim730_output),
+)
+pim730_resolved = load(pim730_output / "jh_board_resolved.json")
+require(
+    pim730_resolved["components"]
+    == ["cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
+    "NUCLEO PIM730 component set mismatch",
+)
+require(
+    pim730_resolved["capabilities"]["cyw43"]["present"] is True,
+    "NUCLEO PIM730 lost its CYW43 capability",
+)
+pim730_cmake = (pim730_output / "jh_board_config.cmake").read_text(
+    encoding="utf-8"
+)
+for expected_define in (
+    "HAL_CYW43_BUS_STM32_GSPI",
+    "HAL_CYW43_PIN_WL_ON=30u",
+    "HAL_CYW43_PIN_CHIP_SELECT=28u",
+    "HAL_CYW43_PIN_DATA=31u",
+    "HAL_CYW43_PIN_CLOCK=29u",
+):
+    require(expected_define in pim730_cmake, f"missing {expected_define}")
 
 compiler = shutil.which("cc")
 archiver = shutil.which("ar")
@@ -519,8 +551,11 @@ for component_id, entry in generator_registry.items():
     component_key = component_id.replace("-", "_")
     for provider in entry["providers"]:
         require(
-            f"set(JH_BOARD_COMPONENT_{component_key}_PROVIDERS \"{provider}\")"
-            in cmake_registry_text,
+            provider
+            in re.search(
+                rf"set\(JH_BOARD_COMPONENT_{component_key}_PROVIDERS\s+([^)]*)\)",
+                cmake_registry_text,
+            ).group(1),
             f"cmake registry lost provider {provider} for {component_id}",
         )
     require(

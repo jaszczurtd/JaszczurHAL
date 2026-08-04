@@ -51,14 +51,19 @@ typedef enum {
 void hal_gpio_set_irq_priority(hal_irq_priority_t priority);
 ```
 
-**Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, `Serial`, or any blocking call inside it.
+**Note:** The callback passed to `hal_gpio_attach_interrupt` runs in ISR context - avoid `printf`, `malloc`, or any blocking call inside it.
+
 **Validation:** Invalid arguments passed to legacy `void` operations trigger
 `HAL_ASSERT` in checked builds. The status-returning IRQ operations report
 `HAL_EINVAL` (or `HAL_EUNSUPPORTED` for an unsupported backend/pin) without
 configuring hardware.
+
 **Output initial state:** `HAL_GPIO_OUTPUT_LOW/HIGH` and `HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW/HIGH` make the intended initial latch state explicit. `HAL_GPIO_OUTPUT` remains compatible and means push-pull output with initial low.
+
 **Open drain:** On STM32G474 this maps to hardware open-drain. On RP2040 (native pico-sdk) it is emulated by driving LOW for `false` and releasing the pin as input (high-Z) for `true`.
+
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
+
 **IRQ core ownership:** Use `hal_gpio_attach_interrupt_ex` in multicore code. It
 returns `HAL_ESTATE` unless the caller is currently running on `owner_core`, and
 atomically records that core as the pin's interrupt owner. Reconfiguration and
@@ -80,8 +85,11 @@ the [`hal_uart` bus documentation](09_buses.md) and
 [`hal_gps` sensor documentation](11_sensors.md).
 RP2040 SoftwareSerial instead receives through PIO/DMA and does not install a
 CPU RX interrupt.
+
 **STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
+
 **IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
+
 **Interrupt detach:** `hal_gpio_detach_interrupt` removes the registered callback and masks the pin/EXTI source where the backend supports hardware interrupt masking.
 
 For example, RPM capture intended for RP2040 core 1 can fail fast during
@@ -123,11 +131,13 @@ resolutions to preserve the approximately 1 kHz default frequency when
 `clkdiv` would otherwise exceed the hardware limit. Two GPIOs on the same
 hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
 duty. Use `hal_pwm_freq` when exact frequency matters.
+
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
 default simple-PWM target frequency is 1 kHz best-effort from the current TIM
 clock. The STM32G474 PWM backend currently assumes APB prescaler == 1, so TIMx
 clock == `JH_G474_PCLK1_HZ` / `JH_G474_PCLK2_HZ`; if a future clock tree adds
 an APB divider, the STM32 timer x2 clock rule must be reflected in the backend.
+
 **Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins
 to TIM channels. Channels sharing a timer also share frequency/resolution, and
 pins sharing the same TIM channel are not independent. Call
@@ -159,8 +169,10 @@ now return `hal_status_t` in place; existing callers may continue to ignore the
 result.
 
 **impl/stm32g474:** real DAC1, 12-bit, channel 0 -> PA4 and channel 1 -> PA5.
+
 **impl/rp2040:** no true DAC peripheral; status APIs return
 `HAL_EUNSUPPORTED`.
+
 **impl/.mock:** two 12-bit channels with mock read-back helpers.
 
 ---
@@ -193,8 +205,11 @@ that has not been initialized. Historical `void hal_pcnt_reset()` now returns
 legacy init/read/read-and-reset wrappers retain their `bool`/`uint32_t` shapes.
 
 **impl/rp2040:** GPIO interrupt based software counters.
+
 **impl/stm32g474:** TIM2 external-clock mode for channel 0.
+
 **impl/.mock:** in-memory counters with pulse injection helpers.
+
 
 ---
 
@@ -225,6 +240,7 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 
 **impl/rp2040:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
+
 **impl/stm32g474:** register-level TIM PWM on mapped
 TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level
 resource, so multiple channels on the same TIM share the same frequency and
@@ -235,6 +251,7 @@ introduced.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
 function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
+
 **impl/.mock:** stores last written value; injectable via mock helpers.
 
 **Mock helpers:**

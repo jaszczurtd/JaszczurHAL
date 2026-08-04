@@ -23,6 +23,7 @@ include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
 include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
+include("${JH_ROOT}/cmake/jh_btstack.cmake")
 
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
 set(JH_EXTRA_LIBRARIES "" CACHE STRING "Extra flat library dirs to compile+include (';'-separated), e.g. Credentials")
@@ -49,7 +50,11 @@ foreach(_lib IN LISTS JH_EXTRA_LIBRARIES)
     endif()
 endforeach()
 
-set(_defines HAL_PROVIDE_APP_ENTRY=1 ${JH_EXTRA_DEFINES})
+set(_defines
+    HAL_PROVIDE_APP_ENTRY=1
+    ${JH_BOARD_COMPILE_DEFINITIONS}
+    ${JH_EXTRA_DEFINES})
+set(_feature_defines ${_defines} ${_jh_project_feature_defines})
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 function(_jh_extract_define_value OUT_VAR KEY)
@@ -64,7 +69,8 @@ endfunction()
 
 _jh_extract_define_value(_stm32_main_stack_size HAL_STM32_MAIN_STACK_SIZE ${_defines})
 _jh_extract_define_value(_stm32_littlefs_size HAL_STM32_FLASH_LITTLEFS_SIZE ${_defines})
-jh_cmake_defines_contain(_stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_defines})
+jh_cmake_defines_contain(
+    _stm32_has_littlefs HAL_ENABLE_LITTLEFS ${_feature_defines})
 if(_stm32_has_littlefs AND "${_stm32_littlefs_size}" STREQUAL "")
     list(APPEND _defines HAL_STM32_FLASH_LITTLEFS_SIZE=65536u)
     set(_stm32_littlefs_size "65536")
@@ -89,16 +95,25 @@ jh_add_stm32g474_firmware(firmware
     INCLUDES "${JH_PROJECT_DIR}" "${JH_BOARD_GENERATED_DIR}"
         ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
+    FEATURES ${_jh_project_feature_defines}
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
 
 jh_cmake_defines_contain(_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI ${_defines})
 if(_stm32_has_cyw43_gspi)
     jh_cmake_defines_contain(_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP ${_defines})
+    jh_cmake_defines_contain(_stm32_has_bluetooth_stage1
+        JH_BLUETOOTH_STAGE1_PROBE ${_defines})
+    set(_stm32_cyw43_options)
     if(_stm32_has_cyw43_lwip)
-        jh_target_enable_cyw43_driver(firmware LWIP)
-    else()
-        jh_target_enable_cyw43_driver(firmware)
+        list(APPEND _stm32_cyw43_options LWIP)
+    endif()
+    if(_stm32_has_bluetooth_stage1)
+        list(APPEND _stm32_cyw43_options BLUETOOTH)
+    endif()
+    jh_target_enable_cyw43_driver(firmware ${_stm32_cyw43_options})
+    if(_stm32_has_bluetooth_stage1)
+        jh_target_enable_btstack_stage1(firmware)
     endif()
 endif()
 
@@ -112,7 +127,8 @@ if(NOT "${_stm32_littlefs_size}" STREQUAL "")
         "-Wl,--defsym=HAL_STM32_FLASH_LITTLEFS_SIZE=${_stm32_littlefs_size}"
     )
 endif()
-jh_cmake_defines_contain(_stm32_has_freertos HAL_ENABLE_FREERTOS ${_defines})
+jh_cmake_defines_contain(
+    _stm32_has_freertos HAL_ENABLE_FREERTOS ${_feature_defines})
 if(_stm32_has_freertos)
     jh_stm32g474_enable_freertos(firmware)
 endif()

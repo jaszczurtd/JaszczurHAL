@@ -49,6 +49,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_btstack.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
 jh_bearssl_source_manifest(
     _jh_stm32_bearssl_sources
@@ -71,6 +72,7 @@ file(GLOB_RECURSE STM32_SHARED_SOURCES
     ${SRC}/hal/impl/shared/*.c
 )
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/PubSubClient/")
+list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/bluetooth/")
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 set(STM32_MQTT_INCLUDE_DIRS)
 if(DEFINED EXTRA_HAL_DEFINES)
@@ -209,10 +211,18 @@ jh_cmake_defines_contain(_jh_stm32_has_cyw43_gspi HAL_CYW43_BUS_STM32_GSPI
 if(_jh_stm32_has_cyw43_gspi)
     jh_cmake_defines_contain(_jh_stm32_has_cyw43_lwip HAL_CYW43_STACK_LWIP
         ${_jh_extra_hal_defines})
+    jh_cmake_defines_contain(_jh_stm32_has_bluetooth_stage1
+        JH_BLUETOOTH_STAGE1_PROBE ${_jh_extra_hal_defines})
+    set(_jh_stm32_cyw43_options)
     if(_jh_stm32_has_cyw43_lwip)
-        jh_target_enable_cyw43_driver(JaszczurHAL LWIP)
-    else()
-        jh_target_enable_cyw43_driver(JaszczurHAL)
+        list(APPEND _jh_stm32_cyw43_options LWIP)
+    endif()
+    if(_jh_stm32_has_bluetooth_stage1)
+        list(APPEND _jh_stm32_cyw43_options BLUETOOTH)
+    endif()
+    jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_stm32_cyw43_options})
+    if(_jh_stm32_has_bluetooth_stage1)
+        jh_target_enable_btstack_stage1(JaszczurHAL)
     endif()
 endif()
 

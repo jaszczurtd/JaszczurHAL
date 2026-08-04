@@ -92,6 +92,7 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
         "${SRC_DIR}/hal/impl/shared/*.c"
     )
     list(FILTER _rp_shared_sources EXCLUDE REGEX "/frameworks/PubSubClient/")
+    list(FILTER _rp_shared_sources EXCLUDE REGEX "/bluetooth/")
 
     file(GLOB_RECURSE _driver_sources CONFIGURE_DEPENDS
         "${SRC_DIR}/hal/impl/rp2040/drivers/*.cpp"
