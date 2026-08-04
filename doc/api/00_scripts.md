@@ -38,8 +38,8 @@ workflow entrypoints.
 One-time, idempotent setup for Debian/Ubuntu-like systems. It:
 
 - removes the repository `.build/` tree before setup;
-- installs compiler, CMake, Ninja, Python, Valgrind, clang-tidy, cppcheck, OpenOCD,
-  serial, libusb, and other host packages;
+- installs compiler, CMake, Ninja, Python, Valgrind, clang-tidy, cppcheck,
+  OpenOCD, `gdb-multiarch`, serial, libusb, and other host packages;
 - invokes `third_party/update_components.sh`;
 - installs `osv-scanner` and `cve-bin-tool`;
 - installs a udev rule for RP2040/RP2350 USB access;
@@ -130,9 +130,10 @@ preserves the CLI argument and exit-code contract. Firmware configuration uses
 Ninja by default, passes the active Python interpreter, exports compile
 commands, and resolves platform picotool/toolchain paths. Native Windows CMake
 trees use the bootstrap's short build root while final artifacts keep their
-manifest paths. `debug-tools` reports the verified OpenOCD, GNU Arm GDB,
-scripts root, and target configuration used to populate machine-local
-Cortex-Debug settings. Actions, options, device
+manifest paths. `debug-tools` reports the verified OpenOCD, Arm-capable GDB,
+scripts root, and target configuration used by Cortex-Debug. Generated Linux
+settings select `gdb-multiarch`; Windows uses the bootstrap-managed GNU Arm
+GDB. Actions, options, device
 safeguards, and monitor behavior are documented only in
 [JaszczurHAL VS Code Entry](../../vscode/README.md). Manifest, source-discovery,
 target, board, cache, and artifact semantics belong to

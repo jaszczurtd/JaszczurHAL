@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 
 ### Windows OTA, debug, and extended host gates
 
+- Extended the automatic board-picker synchronization to create or repair the
+  complete managed Cortex-Debug profile set in existing consumer projects,
+  including STM32G474/ST-Link, without removing custom debugger configurations;
+  `${jhRoot}` artifacts in repository examples remain workspace-relative.
+- Updated the public support boundary after the completed hardware gates:
+  native Windows COM/BOOTSEL is no longer marked as pending, while the Fiesta
+  desktop SerialConfigurator remains explicitly Linux-only.
 - Split shared OTA firewall validation from its host backends and added an
   idempotent Windows Defender Firewall rule limited to an active `Private`
   profile, interface alias, RFC1918 subnet, and callback TCP port, with
@@ -40,6 +47,10 @@ All notable changes to this project will be documented in this file.
 - Validated the STM32 profile natively on Windows with a physical
   NUCLEO-G474RE: managed OpenOCD detected the STM32G474, GNU Arm GDB programmed
   the Debug ELF, stopped at `main` and `app_start`, and restarted the target.
+- Validated the generated STM32 profile on Linux Mint 22.2 with the same
+  NUCLEO-G474RE and on-board ST-Link. Linux setup now includes
+  `gdb-multiarch`, OpenOCD script discovery validates the selected target, and
+  the STM32 launch profile connects under reset before loading the Debug ELF.
 - Kept the fixed-size native RP OTA boot applier within its flash partition in
   application Debug builds by retaining its production assertion policy.
 - Added an MSVC/GNU portable BSD socket-header gate and documented the full

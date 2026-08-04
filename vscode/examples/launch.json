@@ -49,7 +49,10 @@
                 "board/st_nucleo_g4.cfg"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Project: Build (Debug)"
+            "preLaunchTask": "Project: Build (Debug)",
+            "openOCDLaunchCommands": [
+                "reset_config srst_only srst_nogate connect_assert_srst"
+            ]
         }
     ]
 }

@@ -390,8 +390,10 @@ The project demonstrates the current firmware workflow:
 
 The selection is stored in `.vscode/jaszczurhal.local.json`, which is ignored by
 the generated `.gitignore`. `Project: Sync board picker` refreshes the tracked
-GUI options from the current JaszczurHAL registry when a trusted workspace
-opens. VS Code may request one-time approval for automatic tasks.
+GUI options and repairs the managed RP2040, RP2350 ARM, and STM32G474/ST-Link
+debugger profiles when a trusted workspace opens. Consumer-owned debugger
+profiles are preserved. VS Code may request one-time approval for automatic
+tasks.
 
 ## Flashing
 

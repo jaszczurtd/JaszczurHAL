@@ -32,6 +32,8 @@ from vscode_task_config import (
     VSCODE_EXTENSION_RECOMMENDATIONS,
     cortex_debug_launch_document,
     project_tasks_document,
+    sync_cortex_debug_launch_document,
+    vscode_launch_executable,
 )
 
 
@@ -68,6 +70,11 @@ def require_launch_contract(document: dict, executable: str, context: str) -> No
     )
     require(stm32["device"] == "STM32G474RE", f"{context} names the wrong STM32 device")
     require(stm32["runToEntryPoint"] == "main", f"{context} uses an invalid STM32 entry point")
+    require(
+        stm32.get("openOCDLaunchCommands")
+        == ["reset_config srst_only srst_nogate connect_assert_srst"],
+        f"{context} omits connect-under-reset for STM32G474",
+    )
 
 
 def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
@@ -84,6 +91,54 @@ def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
     return result
+
+
+launch_executable = vscode_launch_executable(
+    {
+        "buildDir": "${projectDir}/output/debug",
+        "artifacts": {"elf": "${buildDir}/custom-firmware.elf"},
+    }
+)
+require(
+    launch_executable == "${workspaceFolder}/output/debug/custom-firmware.elf",
+    "debug profile synchronization did not translate the manifest ELF path",
+)
+example_project = ROOT / "examples" / "01_blink"
+example_executable = vscode_launch_executable(
+    load_json(example_project / ".vscode" / "jaszczurhal.project.json"),
+    workspace_dir=example_project,
+    jh_root=ROOT,
+)
+require(
+    example_executable
+    == "${workspaceFolder}/../../.build/examples/01_blink/firmware.elf",
+    "debug profile synchronization emitted an unresolved JaszczurHAL root",
+)
+legacy_profile = cortex_debug_launch_document(launch_executable)["configurations"][0]
+legacy_profile["name"] = "Debug: RP2040 (Pico/Pico W/Zero/Plus)"
+custom_profile = {
+    "name": "Consumer: Custom debugger",
+    "type": "cppdbg",
+    "request": "launch",
+}
+launch_document = {
+    "version": "0.1.0",
+    "configurations": [legacy_profile, custom_profile],
+}
+require(
+    sync_cortex_debug_launch_document(launch_document, launch_executable),
+    "debug profile synchronization did not repair a legacy launch document",
+)
+require(
+    launch_document["configurations"]
+    == cortex_debug_launch_document(launch_executable)["configurations"]
+    + [custom_profile],
+    "debug profile synchronization removed a custom consumer configuration",
+)
+require(
+    not sync_cortex_debug_launch_document(launch_document, launch_executable),
+    "debug profile synchronization is not idempotent",
+)
 
 
 entry_python = ROOT / "vscode" / "entry" / "jh_vscode.py"
@@ -259,6 +314,10 @@ for entry in examples_dispatcher.EXAMPLES:
         f"checked-in example {entry['dir']} omits the Windows launcher setting",
     )
     require(
+        settings.get("cortex-debug.gdbPath.linux") == "gdb-multiarch",
+        f"checked-in example {entry['dir']} omits Linux Arm GDB selection",
+    )
+    require(
         "${config:cortex-debug." not in launch_text,
         f"checked-in example {entry['dir']} requires private Cortex-Debug settings",
     )
@@ -268,6 +327,10 @@ reference_settings = load_json(ROOT / "vscode" / "examples" / "settings.json")
 require(
     reference_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
     "checked-in VS Code settings omit the Windows launcher",
+)
+require(
+    reference_settings["cortex-debug.gdbPath.linux"] == "gdb-multiarch",
+    "checked-in VS Code settings omit Linux Arm GDB selection",
 )
 require_launch_contract(
     load_json(ROOT / "vscode" / "examples" / "launch.json"),
@@ -323,6 +386,10 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
     require(
         generated_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
         "standalone generator omitted Windows entry setting",
+    )
+    require(
+        generated_settings["cortex-debug.gdbPath.linux"] == "gdb-multiarch",
+        "standalone generator omitted Linux Arm GDB selection",
     )
     require_launch_contract(
         load_json(project_dir / ".vscode" / "launch.json"),

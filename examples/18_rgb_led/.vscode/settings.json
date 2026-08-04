@@ -4,6 +4,7 @@
     "jaszczurhal.root": "../..",
     "jaszczurhal.vscodeEntry": "../../vscode/entry/jh-vscode",
     "jaszczurhal.vscodeEntryWindows": "../../vscode/entry/jh-vscode.cmd",
+    "cortex-debug.gdbPath.linux": "gdb-multiarch",
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/18_rgb_led/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",

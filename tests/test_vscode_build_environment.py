@@ -290,6 +290,47 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
         "failed-build guard removed the IntelliSense database",
     )
 
+with tempfile.TemporaryDirectory(prefix="jh Linux debug tools ") as temporary_text:
+    temporary = Path(temporary_text)
+    bin_dir = temporary / "usr" / "bin"
+    scripts_dir = temporary / "usr" / "share" / "openocd" / "scripts"
+    openocd = bin_dir / "openocd"
+    gdb_multiarch = bin_dir / "gdb-multiarch"
+    openocd.parent.mkdir(parents=True)
+    openocd.touch()
+    gdb_multiarch.touch()
+    for relative in (
+        "board/st_nucleo_g4.cfg",
+        "interface/stlink.cfg",
+        "target/stm32g4x.cfg",
+    ):
+        path = scripts_dir / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+
+    def linux_debug_which(program: str) -> str | None:
+        return {
+            "openocd": str(openocd),
+            "arm-none-eabi-gdb": None,
+            "gdb-multiarch": str(gdb_multiarch),
+        }.get(program)
+
+    with mock.patch.object(runtime.shutil, "which", side_effect=linux_debug_which):
+        debug_tools = runtime.debug_tool_paths({"target": "stm32g474"})
+        require(debug_tools is not None, "Linux STM32 debug tools were not resolved")
+        require(
+            debug_tools["gdb"] == str(gdb_multiarch),
+            "gdb-multiarch was not selected as the Linux Arm debugger",
+        )
+        require(
+            debug_tools["scripts"] == str(scripts_dir),
+            "target-specific STM32 OpenOCD scripts were rejected",
+        )
+        require(
+            runtime.debug_tool_paths({"target": "rp2350-arm"}) is None,
+            "an incomplete RP2350 OpenOCD installation was accepted",
+        )
+
 if sys.platform != "win32":
     linux_args = runtime.platform_cmake_cache_args({"target": "rp2040"})
     require(
