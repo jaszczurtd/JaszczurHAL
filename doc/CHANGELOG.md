@@ -51,6 +51,9 @@ All notable changes to this project will be documented in this file.
   NUCLEO-G474RE and on-board ST-Link. Linux setup now includes
   `gdb-multiarch`, OpenOCD script discovery validates the selected target, and
   the STM32 launch profile connects under reset before loading the Debug ELF.
+- Isolated the Linux `gdb-multiarch` resolver fixture from managed Windows host
+  records so the cross-platform build-environment test exercises the intended
+  fallback consistently in Linux and Windows CI.
 - Kept the fixed-size native RP OTA boot applier within its flash partition in
   application Debug builds by retaining its production assertion policy.
 - Added an MSVC/GNU portable BSD socket-header gate and documented the full
