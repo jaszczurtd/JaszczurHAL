@@ -1,7 +1,7 @@
 #pragma once
 
 #include "../../../../hal_status.h"
-#include "../../../../impl/shared/network/jh_network_service.h"
+#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
 
 #include <stdint.h>
 
@@ -10,9 +10,9 @@ extern "C" {
 #endif
 
 hal_status_t jh_rp2040_cyw43_platform_init(uint32_t country_code);
-void jh_rp2040_cyw43_platform_deinit(void);
+hal_status_t jh_rp2040_cyw43_platform_deinit(void);
 hal_status_t jh_rp2040_cyw43_platform_status(int status);
-const jh_network_service_port_t *jh_rp2040_cyw43_platform_service_port(void);
+jh_cyw43_radio_runtime_t *jh_cyw43_radio_backend_runtime(void);
 
 #ifdef __cplusplus
 }

@@ -133,10 +133,18 @@ require(
     "att_server_register_packet_handler(packet_handler);" not in probe,
     "Stage 1 must not receive connection events through the deprecated ATT forwarder",
 )
+require(
+    "jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLE)" in probe,
+    "Stage 1 must acquire the BLE radio client directly",
+)
+require(
+    "hal_wifi_set_mode_ex" not in probe and "hal_net_service" not in probe,
+    "Stage 1 still owns CYW43 through the public WiFi lifecycle",
+)
 
-stm32_backend = (
+radio_facade = (
     ROOT
-    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp"
+    / "src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp"
 ).read_text(encoding="utf-8")
 for transition in (
     "jh_board_runtime_set_available(kCyw43Capabilities)",
@@ -144,8 +152,18 @@ for transition in (
     "jh_board_runtime_set_inactive(kCyw43Capabilities)",
 ):
     require(
-        transition in stm32_backend,
-        f"STM32 CYW43 lifecycle is missing board transition {transition}",
+        transition in radio_facade,
+        f"shared CYW43 lifecycle is missing board transition {transition}",
+    )
+
+for backend in (
+    ROOT / "src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp",
+    ROOT
+    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_platform.cpp",
+):
+    require(
+        "jh_cyw43_radio_backend_runtime" in backend.read_text(encoding="utf-8"),
+        f"{backend.name} does not expose the shared CYW43 owner",
     )
 
 manifest = json.loads(

@@ -22,11 +22,17 @@ string(FIND "${_cyw43_driver_wrapper}"
     "jh_cyw43_port_pin_read" _cyw43_pin_read_begin)
 string(FIND "${_cyw43_driver_wrapper}"
     "jh_cyw43_port_pin_low" _cyw43_pin_read_end)
-string(FIND "${_cyw43_driver_wrapper}"
-    "jh_cyw43_gspi_host_wake_refresh(s_transport)" _cyw43_refresh)
 if(_cyw43_pin_read_begin LESS 0 OR _cyw43_pin_read_end LESS 0 OR
-   _cyw43_refresh LESS _cyw43_pin_read_begin OR
-   _cyw43_refresh GREATER _cyw43_pin_read_end)
+   _cyw43_pin_read_end LESS _cyw43_pin_read_begin)
+    message(FATAL_ERROR
+        "CYW43 pin read must refresh polled HOST_WAKE before testing its latch")
+endif()
+math(EXPR _cyw43_pin_read_length
+    "${_cyw43_pin_read_end} - ${_cyw43_pin_read_begin}")
+string(SUBSTRING "${_cyw43_driver_wrapper}" ${_cyw43_pin_read_begin}
+    ${_cyw43_pin_read_length} _cyw43_pin_read_body)
+if(NOT _cyw43_pin_read_body MATCHES
+   "jh_cyw43_gspi_host_wake_refresh\\(s_transport\\)")
     message(FATAL_ERROR
         "CYW43 pin read must refresh polled HOST_WAKE before testing its latch")
 endif()
@@ -101,6 +107,7 @@ if(_implicit_sources)
 endif()
 
 set(_backend_sources
+    "${JH_ROOT}/src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_gspi.cpp"
@@ -109,6 +116,8 @@ set(_backend_sources
     "${JH_ROOT}/src/hal/impl/rp2040/hal_time.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/hal_udp.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/rp2040_lwip_extension_port.cpp"
+    "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_platform.cpp"
+    "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp"
     "${JH_ROOT}/src/hal/hal_net.cpp"
     "${JH_ROOT}/src/hal/hal_tcp.cpp"
     "${JH_ROOT}/src/hal/hal_udp.cpp"
@@ -141,7 +150,9 @@ endforeach()
 
 foreach(_source IN ITEMS
         "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
-        "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp")
+        "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
+        "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_platform.cpp"
+        "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp")
     file(READ "${_source}" _contents)
     if(NOT _contents MATCHES
        "drivers/cyw43-driver/jh_cyw43_driver\\.h")

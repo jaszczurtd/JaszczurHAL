@@ -7,6 +7,7 @@ typedef struct {
   jh_network_service_t *service;
   jh_network_context_owner_t owner;
   hal_status_t enter_status;
+  hal_status_t service_status;
   bool ipv4_ready;
   bool reenter_from_service;
   bool stop_during_enter;
@@ -51,7 +52,7 @@ static void fake_stack_leave(void *context) {
   ++static_cast<fake_port_state_t *>(context)->stack_leave_count;
 }
 
-static void fake_service(void *context) {
+static hal_status_t fake_service(void *context) {
   fake_port_state_t *state = static_cast<fake_port_state_t *>(context);
   ++state->service_count;
   if (state->stop_during_service) {
@@ -63,6 +64,7 @@ static void fake_service(void *context) {
     ++state->reentry_count;
     TEST_ASSERT_EQUAL_INT(HAL_OK, jh_network_service_leave(state->service));
   }
+  return state->service_status;
 }
 
 static bool fake_ipv4_ready(void *context) {
@@ -75,6 +77,7 @@ void setUp(void) {
   s_state.service = &s_service;
   s_state.owner = 1u;
   s_state.enter_status = HAL_OK;
+  s_state.service_status = HAL_OK;
   s_state.ipv4_ready = true;
   s_state.stop_status = HAL_ESTATE;
   s_port = {
@@ -114,6 +117,14 @@ void test_service_callback_can_reenter_without_second_platform_lock(void) {
 void test_ipv4_precondition_failure_unwinds_context(void) {
   s_state.ipv4_ready = false;
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, jh_network_service_enter(&s_service, true));
+  TEST_ASSERT_EQUAL_UINT(1u, s_state.stack_enter_count);
+  TEST_ASSERT_EQUAL_UINT(1u, s_state.stack_leave_count);
+  TEST_ASSERT_EQUAL_UINT(0u, s_service.depth);
+}
+
+void test_service_failure_is_propagated_and_unwinds_context(void) {
+  s_state.service_status = HAL_EIO;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, jh_network_service_enter(&s_service, false));
   TEST_ASSERT_EQUAL_UINT(1u, s_state.stack_enter_count);
   TEST_ASSERT_EQUAL_UINT(1u, s_state.stack_leave_count);
   TEST_ASSERT_EQUAL_UINT(0u, s_service.depth);
@@ -163,6 +174,17 @@ void test_stop_invalidates_pending_operation_and_late_completion(void) {
   TEST_ASSERT_TRUE(jh_network_service_is_quiescent(&s_service));
 }
 
+void test_try_stop_leaves_service_running_while_context_is_active(void) {
+  const uint32_t generation = s_service.generation;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_network_service_enter(&s_service, false));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, jh_network_service_try_stop(&s_service));
+  TEST_ASSERT_TRUE(s_service.running);
+  TEST_ASSERT_FALSE(s_service.stopping);
+  TEST_ASSERT_EQUAL_UINT32(generation, s_service.generation);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_network_service_leave(&s_service));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_network_service_try_stop(&s_service));
+}
+
 void test_cancel_releases_slot_and_owner_mismatch_is_rejected(void) {
   jh_network_operation_t operation = {};
   TEST_ASSERT_EQUAL_INT(HAL_OK,
@@ -182,9 +204,11 @@ int main(void) {
   RUN_TEST(test_nested_enter_is_balanced_and_enters_platform_once);
   RUN_TEST(test_service_callback_can_reenter_without_second_platform_lock);
   RUN_TEST(test_ipv4_precondition_failure_unwinds_context);
+  RUN_TEST(test_service_failure_is_propagated_and_unwinds_context);
   RUN_TEST(test_stop_racing_with_enter_unwinds_acquired_platform_context);
   RUN_TEST(test_stop_from_serviced_callback_unwinds_pending_context);
   RUN_TEST(test_stop_invalidates_pending_operation_and_late_completion);
+  RUN_TEST(test_try_stop_leaves_service_running_while_context_is_active);
   RUN_TEST(test_cancel_releases_slot_and_owner_mismatch_is_rejected);
   return UNITY_END();
 }

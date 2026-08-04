@@ -19,7 +19,7 @@ typedef struct {
   jh_network_context_owner_t (*current_owner)(void *context);
   hal_status_t (*stack_enter)(void *context);
   void (*stack_leave)(void *context);
-  void (*service)(void *context);
+  hal_status_t (*service)(void *context);
   bool (*ipv4_ready)(void *context);
 } jh_network_service_port_t;
 
@@ -43,6 +43,12 @@ hal_status_t jh_network_service_init(jh_network_service_t *service,
                                      const jh_network_service_port_t *port);
 hal_status_t jh_network_service_start(jh_network_service_t *service);
 hal_status_t jh_network_service_stop(jh_network_service_t *service);
+/**
+ * Stop only when no stack context is active. Pending operations are
+ * invalidated by the generation change. Unlike jh_network_service_stop(), a
+ * busy result leaves the service running.
+ */
+hal_status_t jh_network_service_try_stop(jh_network_service_t *service);
 bool jh_network_service_is_quiescent(jh_network_service_t *service);
 
 hal_status_t jh_network_service_enter(jh_network_service_t *service,

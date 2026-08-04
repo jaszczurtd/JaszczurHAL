@@ -11,10 +11,9 @@
 #include "../../../../hal_system.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
+#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio.h"
 #include "../../../../impl/shared/hal_mutex_once.h"
-#include "../../../../impl/shared/jh_board_runtime.h"
 #include "../../../../impl/shared/network/jh_cyw43_scan.h"
-#include "../../../../impl/shared/network/jh_network_service.h"
 #include "rp2040_cyw43_platform.h"
 #include "rp2040_cyw43_provider.h"
 
@@ -33,7 +32,6 @@ extern "C" {
 namespace {
 
 bool s_initialized;
-bool s_service_created;
 uint32_t s_timeout_ms = 15000u;
 hal_mutex_t s_operation_mutex;
 bool s_operation_active;
@@ -41,7 +39,6 @@ bool s_scan_overflow;
 size_t s_scan_count;
 char s_hostname[64]{};
 hal_wifi_scan_result_t s_scan_results[HAL_CYW43_SCAN_RESULT_CAPACITY]{};
-jh_network_service_t s_network_service{};
 
 constexpr hal_board_capabilities_t kCyw43Capabilities =
     HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
@@ -132,40 +129,11 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
   if (s_initialized) {
     return HAL_OK;
   }
-  const hal_status_t capability_status =
-      hal_board_require_capabilities(kCyw43Capabilities);
-  if (capability_status != HAL_EUNINIT) {
-    return capability_status;
-  }
-  hal_status_t status = jh_rp2040_cyw43_platform_init(HAL_CYW43_COUNTRY_CODE);
+  hal_status_t status = jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_WIFI);
   if (status != HAL_OK) {
-    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
-    return status;
-  }
-  if (!s_service_created) {
-    status = jh_network_service_init(&s_network_service,
-                                     jh_rp2040_cyw43_platform_service_port());
-    if (status != HAL_OK) {
-      jh_rp2040_cyw43_platform_deinit();
-      (void)jh_board_runtime_set_failed(kCyw43Capabilities);
-      return status;
-    }
-    s_service_created = true;
-  }
-  status = jh_network_service_start(&s_network_service);
-  if (status != HAL_OK) {
-    jh_rp2040_cyw43_platform_deinit();
-    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     return status;
   }
   s_initialized = true;
-  status = jh_board_runtime_set_available(kCyw43Capabilities);
-  if (status != HAL_OK) {
-    (void)jh_network_service_stop(&s_network_service);
-    jh_rp2040_cyw43_platform_deinit();
-    s_initialized = false;
-    return status;
-  }
   if (s_hostname[0] != '\0') {
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
   }
@@ -179,17 +147,21 @@ hal_status_t jh_rp2040_cyw43_provider_deinit_for_baseline(void) {
   if (!operation_begin()) {
     return HAL_EBUSY;
   }
-  hal_status_t status = jh_network_service_stop(&s_network_service);
-  if (status == HAL_OK &&
-      cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) != CYW43_LINK_DOWN) {
-    status = jh_cyw43_lwip_leave();
+  hal_status_t status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
+  if (status == HAL_OK) {
+    if (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) !=
+        CYW43_LINK_DOWN) {
+      status = jh_cyw43_lwip_leave();
+    }
+    (void)jh_cyw43_radio_leave();
   }
   if (status == HAL_OK) {
-    jh_rp2040_cyw43_platform_deinit();
+    status = jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_WIFI);
+  }
+  if (status == HAL_OK) {
     s_initialized = false;
     s_scan_count = 0u;
     s_scan_overflow = false;
-    status = jh_board_runtime_set_inactive(kCyw43Capabilities);
   }
   operation_end();
   return status;
@@ -198,7 +170,8 @@ hal_status_t jh_rp2040_cyw43_provider_deinit_for_baseline(void) {
 hal_status_t jh_cyw43_provider_service(void) {
   const hal_status_t status =
       hal_board_require_capabilities(kCyw43Capabilities);
-  return status == HAL_OK ? jh_cyw43_lwip_service() : status;
+  return status == HAL_OK ? jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_WIFI)
+                          : status;
 }
 
 hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
@@ -216,7 +189,7 @@ hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
   if (!operation_begin()) {
     return HAL_EBUSY;
   }
-  status = jh_network_service_enter(&s_network_service, false);
+  status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   if (status == HAL_OK) {
     if (cyw43_wifi_scan_active(&cyw43_state)) {
       status = HAL_EBUSY;
@@ -233,7 +206,7 @@ hal_status_t jh_rp2040_cyw43_provider_join(const char *ssid,
                      : jh_cyw43_lwip_join(ssid, password, auth, timeout_ms);
       }
     }
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   operation_end();
   return status;
@@ -246,11 +219,11 @@ hal_status_t jh_rp2040_cyw43_provider_leave(void) {
   if (!operation_begin()) {
     return HAL_EBUSY;
   }
-  hal_status_t status = jh_network_service_enter(&s_network_service, false);
+  hal_status_t status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   if (status == HAL_OK) {
     status = cyw43_wifi_scan_active(&cyw43_state) ? HAL_EBUSY
                                                   : jh_cyw43_lwip_leave();
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   operation_end();
   return status;
@@ -265,7 +238,7 @@ jh_rp2040_cyw43_provider_link_status(jh_cyw43_link_status_t *out_link_status) {
   if (status != HAL_OK) {
     return status;
   }
-  status = jh_network_service_enter(&s_network_service, false);
+  status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   if (status != HAL_OK) {
     return status;
   }
@@ -297,7 +270,7 @@ jh_rp2040_cyw43_provider_link_status(jh_cyw43_link_status_t *out_link_status) {
     *out_link_status = JH_CYW43_LINK_UNKNOWN;
     break;
   }
-  (void)jh_network_service_leave(&s_network_service);
+  (void)jh_cyw43_radio_leave();
   return HAL_OK;
 }
 
@@ -307,12 +280,12 @@ hal_status_t jh_rp2040_cyw43_provider_get_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]) {
   }
   hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status == HAL_OK) {
-    status = jh_network_service_enter(&s_network_service, false);
+    status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   }
   if (status == HAL_OK) {
     status = jh_rp2040_cyw43_platform_status(
         cyw43_wifi_get_mac(&cyw43_state, CYW43_ITF_STA, mac));
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   return status;
 }
@@ -323,12 +296,12 @@ hal_status_t jh_rp2040_cyw43_provider_get_rssi(int32_t *out_rssi) {
   }
   hal_status_t status = hal_board_require_capabilities(kCyw43Capabilities);
   if (status == HAL_OK) {
-    status = jh_network_service_enter(&s_network_service, true);
+    status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, true);
   }
   if (status == HAL_OK) {
     status = jh_rp2040_cyw43_platform_status(
         cyw43_wifi_get_rssi(&cyw43_state, out_rssi));
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   return status;
 }
@@ -346,10 +319,10 @@ hal_status_t jh_rp2040_cyw43_provider_set_hostname(const char *hostname) {
     return HAL_OK;
   }
   const hal_status_t status =
-      jh_network_service_enter(&s_network_service, false);
+      jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   if (status == HAL_OK) {
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   return status;
 }
@@ -358,13 +331,11 @@ hal_status_t jh_rp2040_cyw43_provider_lwip_begin(bool require_ipv4) {
   const hal_status_t status =
       hal_board_require_capabilities(kCyw43Capabilities);
   return status == HAL_OK
-             ? jh_network_service_enter(&s_network_service, require_ipv4)
+             ? jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, require_ipv4)
              : status;
 }
 
-void jh_rp2040_cyw43_provider_lwip_end(void) {
-  (void)jh_network_service_leave(&s_network_service);
-}
+void jh_rp2040_cyw43_provider_lwip_end(void) { (void)jh_cyw43_radio_leave(); }
 
 hal_status_t jh_rp2040_cyw43_provider_get_local_ipv4(uint8_t out_address[4]) {
   if (out_address == nullptr) {
@@ -457,7 +428,7 @@ hal_status_t jh_rp2040_cyw43_provider_scan(uint32_t timeout_ms,
     return HAL_EBUSY;
   }
   bool entered = false;
-  status = jh_network_service_enter(&s_network_service, false);
+  status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   entered = status == HAL_OK;
   if (status == HAL_OK && cyw43_wifi_scan_active(&cyw43_state)) {
     status = HAL_EBUSY;
@@ -485,7 +456,7 @@ hal_status_t jh_rp2040_cyw43_provider_scan(uint32_t timeout_ms,
     }
   }
   if (entered) {
-    (void)jh_network_service_leave(&s_network_service);
+    (void)jh_cyw43_radio_leave();
   }
   operation_end();
   return status;
