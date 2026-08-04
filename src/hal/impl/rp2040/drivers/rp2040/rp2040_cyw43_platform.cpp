@@ -11,6 +11,7 @@
 #include "../../../../hal_system.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
+#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
 #include "../../../../impl/shared/hal_mutex_once.h"
 #include "rp2040_cyw43_gspi.h"
 #include "rp2040_cyw43_platform.h"
@@ -27,6 +28,7 @@ namespace {
 
 hal_mutex_t s_state_mutex;
 hal_mutex_t s_stack_mutex;
+jh_cyw43_radio_runtime_t s_radio_runtime{};
 
 void ensure_state_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_state_mutex);
@@ -65,7 +67,7 @@ hal_status_t platform_stack_enter(void *) {
 
 void platform_stack_leave(void *) { hal_mutex_unlock(s_stack_mutex); }
 
-void platform_service(void *) { (void)jh_cyw43_lwip_service(); }
+hal_status_t platform_service(void *) { return jh_cyw43_lwip_service(); }
 
 bool platform_ipv4_ready(void *) {
   jh_cyw43_lwip_snapshot_t snapshot{};
@@ -77,6 +79,19 @@ const jh_network_service_port_t s_service_port = {
     nullptr,          platform_state_lock,  platform_state_unlock,
     platform_owner,   platform_stack_enter, platform_stack_leave,
     platform_service, platform_ipv4_ready,
+};
+
+hal_status_t radio_start(void *) {
+  return jh_rp2040_cyw43_platform_init(HAL_CYW43_COUNTRY_CODE);
+}
+
+hal_status_t radio_stop(void *) { return jh_rp2040_cyw43_platform_deinit(); }
+
+const jh_cyw43_radio_runtime_port_t s_radio_port = {
+    nullptr,
+    &s_service_port,
+    radio_start,
+    radio_stop,
 };
 
 } // namespace
@@ -161,17 +176,29 @@ hal_status_t jh_rp2040_cyw43_platform_init(uint32_t country_code) {
   return status;
 }
 
-void jh_rp2040_cyw43_platform_deinit(void) {
+hal_status_t jh_rp2040_cyw43_platform_deinit(void) {
+  hal_status_t status = HAL_OK;
   if (jh_cyw43_driver_is_ready()) {
-    (void)jh_cyw43_driver_stop();
+    status = jh_cyw43_driver_stop();
   }
   if (jh_rp2040_cyw43_gspi_transport() != nullptr) {
-    (void)jh_rp2040_cyw43_gspi_deinit();
+    const hal_status_t transport_status = jh_rp2040_cyw43_gspi_deinit();
+    if (status == HAL_OK) {
+      status = transport_status;
+    }
   }
+  return status;
 }
 
-const jh_network_service_port_t *jh_rp2040_cyw43_platform_service_port(void) {
-  return &s_service_port;
+extern "C" jh_cyw43_radio_runtime_t *jh_cyw43_radio_backend_runtime(void) {
+  ensure_state_mutex();
+  hal_mutex_lock(s_state_mutex);
+  hal_status_t status = HAL_OK;
+  if (!s_radio_runtime.initialized) {
+    status = jh_cyw43_radio_runtime_init(&s_radio_runtime, &s_radio_port);
+  }
+  hal_mutex_unlock(s_state_mutex);
+  return status == HAL_OK ? &s_radio_runtime : nullptr;
 }
 
 #endif

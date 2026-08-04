@@ -105,6 +105,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_driver.cpp
     ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_gspi_transport.cpp
     ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.cpp
+    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp
+    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.cpp
     ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
     ${SRC}/hal/impl/shared/drivers/flash/jh_flash_transaction_engine.cpp
     ${SRC}/hal/hal_kv.cpp

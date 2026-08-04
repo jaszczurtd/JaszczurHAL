@@ -46,19 +46,32 @@ hal_status_t jh_network_service_start(jh_network_service_t *service) {
   return HAL_OK;
 }
 
-hal_status_t jh_network_service_stop(jh_network_service_t *service) {
+static hal_status_t stop_service(jh_network_service_t *service,
+                                 bool preserve_when_busy) {
   if (service == nullptr || !port_is_valid(service->port)) {
     return HAL_EINVAL;
   }
   const jh_network_service_port_t *port = service->port;
   port->state_lock(port->context);
+  const bool context_active = service->depth != 0u;
+  if (context_active && preserve_when_busy) {
+    port->state_unlock(port->context);
+    return HAL_EBUSY;
+  }
   service->running = false;
   service->stopping = true;
   service->generation = next_generation(service->generation);
   service->pending_operations = 0u;
-  const bool context_active = service->depth != 0u;
   port->state_unlock(port->context);
   return context_active ? HAL_EBUSY : HAL_OK;
+}
+
+hal_status_t jh_network_service_stop(jh_network_service_t *service) {
+  return stop_service(service, false);
+}
+
+hal_status_t jh_network_service_try_stop(jh_network_service_t *service) {
+  return stop_service(service, true);
 }
 
 bool jh_network_service_is_quiescent(jh_network_service_t *service) {
@@ -120,7 +133,11 @@ hal_status_t jh_network_service_enter(jh_network_service_t *service,
   service->depth = 1u;
   port->state_unlock(port->context);
 
-  port->service(port->context);
+  const hal_status_t service_status = port->service(port->context);
+  if (service_status != HAL_OK) {
+    (void)jh_network_service_leave(service);
+    return service_status;
+  }
   port->state_lock(port->context);
   const bool still_running = service->running && !service->stopping &&
                              service->depth != 0u && service->owner == owner;

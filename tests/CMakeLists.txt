@@ -249,6 +249,23 @@ target_compile_definitions(test_network_service PRIVATE
 jh_enable_host_warnings(test_network_service ERRORS)
 add_test(NAME test_network_service COMMAND test_network_service)
 
+add_executable(test_cyw43_radio_runtime
+    test_cyw43_radio_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_service.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_cyw43_radio_runtime PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_cyw43_radio_runtime PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_cyw43_radio_runtime ERRORS)
+add_test(NAME test_cyw43_radio_runtime COMMAND test_cyw43_radio_runtime)
+
 add_executable(test_network_backend
     test_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp

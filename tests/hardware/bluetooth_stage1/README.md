@@ -7,9 +7,9 @@ used as an application API example.
 
 The build owns BTstack sources directly and does not link `pico_cyw43_arch`,
 `pico_btstack_cyw43`, or Pico SDK Bluetooth storage glue. It brings up the
-existing JH Wi-Fi/lwIP owner, downloads the Bluetooth firmware through the same
-CYW43 instance, starts connectable advertising as `JH BLE Stage 1`, and exposes
-a bounded static read/write GATT characteristic.
+shared JH CYW43 radio owner through its BLE reference, downloads the Bluetooth
+firmware through the same CYW43 instance, starts connectable advertising as
+`JH BLE Stage 1`, and exposes a bounded static read/write GATT characteristic.
 
 Successful compilation is only the software gate. Hardware results must record
 the `JHBT1` output, connection/write behaviour, ELF/map memory use, and the
@@ -31,6 +31,19 @@ The Stage 1 software builds measured on 2026-08-04 are:
 
 These measurements do not require a reduced ATT MTU or smaller Stage 1 queues.
 
+After the Stage 2 shared-owner migration, the matched images measured:
+
+| Target and variant | FLASH load | SRAM static | Reserved heap/stack |
+|---|---:|---:|---:|
+| STM32G474 + PIM730, `bluetooth` | 326.0 KiB | 48.4 KiB | 3.0 KiB |
+| STM32G474 + PIM730, `wifi-only` | 278.1 KiB | 43.2 KiB | 3.0 KiB |
+| RP2040 Pico W, `bluetooth` | 393.8 KiB | 57.3 KiB | 6.0 KiB |
+| RP2040 Pico W, `wifi-only` | 327.8 KiB | 53.6 KiB | 6.0 KiB |
+
+The WiFi-only images still exclude BTstack, Bluetooth firmware, and shared-bus
+Bluetooth pools. The owner migration adds no static SRAM to either WiFi-only
+baseline.
+
 Hardware substage 1.a completed on both profiles on 2026-08-04. The
 STM32G474 + PIM730 probe used the wiring below. The Pico W probe used its
 on-board CYW43439 and enumerated as `JaszczurHAL RP` over USB. On both boards
@@ -45,6 +58,11 @@ once. The final image restored to each board is the `bluetooth` variant.
 The Pico W connection run recorded no drain-budget hits. The STM32 probe
 recorded two bounded drain hits during controller initialization and then
 remained stable with `HAL_OK` transport status.
+
+The Stage 2 smoke gate repeated controller startup, advertising, BlueZ
+connection, and GATT service resolution with the shared owner on both boards.
+Pico W also recorded symmetric ACL traffic with no drain-budget hits. Both
+boards were left running the `bluetooth` variant.
 
 ## Hardware substage 1.a
 

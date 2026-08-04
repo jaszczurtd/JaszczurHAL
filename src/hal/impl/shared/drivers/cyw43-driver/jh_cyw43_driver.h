@@ -67,6 +67,9 @@ hal_status_t jh_cyw43_driver_restart(jh_cyw43_driver_result_t *result);
 bool jh_cyw43_driver_is_ready(void);
 const char *jh_cyw43_driver_stage_string(jh_cyw43_driver_stage_t stage);
 
+/** Service host-wake and the controller once without assuming an IP stack. */
+hal_status_t jh_cyw43_driver_service(bool *out_host_wake);
+
 #if defined(HAL_CYW43_BUS_PICO_PIO) || defined(HAL_CYW43_BUS_STM32_GSPI)
 /** Internal bridge for the following lwIP integration stage. */
 cyw43_ll_t *jh_cyw43_driver_low_level(void);

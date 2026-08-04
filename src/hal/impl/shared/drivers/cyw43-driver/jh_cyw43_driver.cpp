@@ -35,6 +35,7 @@ jh_cyw43_gspi_transport_t *s_transport;
 uint32_t s_generation;
 hal_status_t s_port_status = HAL_OK;
 bool s_ready;
+bool s_in_service;
 
 cyw43_ll_t *low_level(void) { return &cyw43_state.cyw43_ll; }
 
@@ -153,6 +154,34 @@ jh_cyw43_driver_restart(jh_cyw43_driver_result_t *result) {
 }
 
 extern "C" bool jh_cyw43_driver_is_ready(void) { return s_ready; }
+
+extern "C" hal_status_t jh_cyw43_driver_service(bool *out_host_wake) {
+  if (out_host_wake != nullptr) {
+    *out_host_wake = false;
+  }
+  if (!s_ready || s_transport == nullptr) {
+    return HAL_EUNINIT;
+  }
+  if (s_in_service) {
+    return HAL_EBUSY;
+  }
+  s_in_service = true;
+  hal_status_t status = jh_cyw43_gspi_host_wake_refresh(s_transport);
+  if (status == HAL_OK) {
+    const bool host_wake = jh_cyw43_gspi_host_wake_pending(s_transport);
+    if (cyw43_poll != nullptr) {
+      cyw43_poll();
+    }
+    if (host_wake) {
+      status = jh_cyw43_gspi_host_wake_clear(s_transport);
+    }
+    if (out_host_wake != nullptr) {
+      *out_host_wake = host_wake;
+    }
+  }
+  s_in_service = false;
+  return status;
+}
 
 extern "C" cyw43_ll_t *jh_cyw43_driver_low_level(void) {
   return s_ready ? low_level() : nullptr;
@@ -316,6 +345,9 @@ extern "C" hal_status_t jh_cyw43_driver_restart(jh_cyw43_driver_result_t *) {
   return HAL_EUNSUPPORTED;
 }
 extern "C" bool jh_cyw43_driver_is_ready(void) { return false; }
+extern "C" hal_status_t jh_cyw43_driver_service(bool *) {
+  return HAL_EUNSUPPORTED;
+}
 
 #endif
 

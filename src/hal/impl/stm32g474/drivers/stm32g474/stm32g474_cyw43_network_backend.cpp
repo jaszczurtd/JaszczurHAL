@@ -10,13 +10,11 @@
 #include "../../../../hal_system.h"
 #include "../../../shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../../../shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
+#include "../../../shared/drivers/cyw43-driver/jh_cyw43_radio.h"
 #include "../../../shared/hal_mutex_once.h"
-#include "../../../shared/jh_board_runtime.h"
 #include "../../../shared/network/jh_cyw43_scan.h"
 #include "../../../shared/network/jh_net_address_utils.h"
 #include "../../../shared/network/jh_network_backend.h"
-#include "../../../shared/network/jh_network_service.h"
-#include "stm32g474_cyw43_gspi.h"
 
 #if defined(HAL_ENABLE_TCP)
 #include "../../../shared/network/jh_lwip_tcp.h"
@@ -29,11 +27,6 @@ extern "C" {
 #include "lwip/netif.h"
 }
 
-#if defined(HAL_ENABLE_FREERTOS)
-#include <FreeRTOS.h>
-#include <task.h>
-#endif
-
 #include <string.h>
 
 #ifndef HAL_CYW43_SCAN_RESULT_CAPACITY
@@ -43,18 +36,8 @@ extern "C" {
 namespace {
 
 constexpr uint32_t kDnsTimeoutMs = 10000u;
-constexpr hal_board_capabilities_t kCyw43Capabilities =
-    HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
-                               ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
-                               : 0u);
-
-hal_mutex_t s_state_mutex;
-hal_mutex_t s_stack_mutex;
 hal_mutex_t s_pool_mutex;
 hal_mutex_t s_lifecycle_mutex;
-jh_network_service_t s_network_service{};
-bool s_service_created;
-bool s_service_running;
 bool s_initialized;
 char s_hostname[64]{};
 hal_wifi_scan_result_t s_scan_results[HAL_CYW43_SCAN_RESULT_CAPACITY]{};
@@ -86,49 +69,9 @@ udp_socket_slot_t s_udp_sockets[HAL_UDP_SOCKET_MAX_INSTANCES]{};
 #endif
 
 void ensure_mutexes(void) {
-  (void)jh_hal_mutex_create_once(&s_state_mutex);
-  (void)jh_hal_mutex_create_once(&s_stack_mutex);
   (void)jh_hal_mutex_create_once(&s_pool_mutex);
   (void)jh_hal_mutex_create_once(&s_lifecycle_mutex);
 }
-
-void state_lock(void *) { hal_mutex_lock(s_state_mutex); }
-void state_unlock(void *) { hal_mutex_unlock(s_state_mutex); }
-
-jh_network_context_owner_t current_owner(void *) {
-#if defined(HAL_ENABLE_FREERTOS)
-  const TaskHandle_t task = xTaskGetCurrentTaskHandle();
-  return task == nullptr ? 1u
-                         : reinterpret_cast<jh_network_context_owner_t>(task);
-#else
-  return 1u;
-#endif
-}
-
-hal_status_t platform_stack_enter(void *) {
-  hal_mutex_lock(s_stack_mutex);
-  if (!jh_cyw43_driver_is_ready()) {
-    hal_mutex_unlock(s_stack_mutex);
-    return HAL_EUNINIT;
-  }
-  return HAL_OK;
-}
-
-void platform_stack_leave(void *) { hal_mutex_unlock(s_stack_mutex); }
-
-void platform_service(void *) { (void)jh_cyw43_lwip_service(); }
-
-bool platform_ipv4_ready(void *) {
-  jh_cyw43_lwip_snapshot_t snapshot{};
-  return jh_cyw43_lwip_get_snapshot(&snapshot) == HAL_OK &&
-         snapshot.dhcp_bound && snapshot.ipv4 != 0u;
-}
-
-const jh_network_service_port_t s_service_port = {
-    nullptr,          state_lock,           state_unlock,
-    current_owner,    platform_stack_enter, platform_stack_leave,
-    platform_service, platform_ipv4_ready,
-};
 
 bool deadline_expired(uint32_t started, uint32_t timeout_ms) {
   return timeout_ms != HAL_NET_TIMEOUT_FOREVER &&
@@ -157,10 +100,10 @@ hal_status_t stack_enter(bool require_ipv4) {
       return status;
     }
   }
-  return jh_network_service_enter(&s_network_service, require_ipv4);
+  return jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, require_ipv4);
 }
 
-void stack_leave(void) { (void)jh_network_service_leave(&s_network_service); }
+void stack_leave(void) { (void)jh_cyw43_radio_leave(); }
 
 void endpoint_from_ipv4(uint32_t address, uint16_t port,
                         hal_net_endpoint_t *out) {
@@ -200,57 +143,11 @@ hal_status_t service_initialize(void) {
     hal_mutex_unlock(s_lifecycle_mutex);
     return HAL_OK;
   }
-  if (!s_service_created) {
-    const hal_status_t create_status =
-        jh_network_service_init(&s_network_service, &s_service_port);
-    if (create_status != HAL_OK) {
-      (void)jh_board_runtime_set_failed(kCyw43Capabilities);
-      hal_mutex_unlock(s_lifecycle_mutex);
-      return create_status;
-    }
-    s_service_created = true;
-  }
-
-  const jh_stm32g474_cyw43_gspi_config_t config = {
-      (uint8_t)HAL_CYW43_PIN_CHIP_SELECT,
-      (uint8_t)HAL_CYW43_PIN_CLOCK,
-      (uint8_t)HAL_CYW43_PIN_WL_ON,
-      (uint8_t)HAL_CYW43_PIN_DATA,
-      (size_t)HAL_CYW43_MAX_TRANSACTION_BYTES,
-  };
-  hal_status_t status = jh_stm32g474_cyw43_gspi_init(&config);
+  hal_status_t status = jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_WIFI);
   if (status != HAL_OK) {
-    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
     hal_mutex_unlock(s_lifecycle_mutex);
     return status;
   }
-
-  jh_cyw43_driver_result_t result{};
-  status = jh_cyw43_driver_start(jh_stm32g474_cyw43_gspi_transport(), &result);
-  if (status != HAL_OK) {
-    (void)jh_stm32g474_cyw43_gspi_deinit();
-    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
-    hal_mutex_unlock(s_lifecycle_mutex);
-    return status;
-  }
-
-  status = jh_network_service_start(&s_network_service);
-  if (status != HAL_OK) {
-    (void)jh_cyw43_driver_stop();
-    (void)jh_stm32g474_cyw43_gspi_deinit();
-    (void)jh_board_runtime_set_failed(kCyw43Capabilities);
-    hal_mutex_unlock(s_lifecycle_mutex);
-    return status;
-  }
-  status = jh_board_runtime_set_available(kCyw43Capabilities);
-  if (status != HAL_OK) {
-    (void)jh_network_service_stop(&s_network_service);
-    (void)jh_cyw43_driver_stop();
-    (void)jh_stm32g474_cyw43_gspi_deinit();
-    hal_mutex_unlock(s_lifecycle_mutex);
-    return status;
-  }
-  s_service_running = true;
   s_initialized = true;
   if (s_hostname[0] != '\0') {
     netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
@@ -283,39 +180,31 @@ hal_status_t service_deinitialize(void) {
   jh_network_facade_udp_reset_all();
   close_all_udp_tokens();
 #endif
-  hal_status_t status = jh_network_service_stop(&s_network_service);
-  if (status != HAL_OK) {
-    hal_mutex_unlock(s_lifecycle_mutex);
-    return status;
-  }
-  s_service_running = false;
-  const hal_status_t driver_status = jh_cyw43_driver_stop();
-  const hal_status_t transport_status = jh_stm32g474_cyw43_gspi_deinit();
-  s_initialized = false;
-  s_scan_count = 0u;
-  s_scan_overflow = false;
-  status = driver_status != HAL_OK ? driver_status : transport_status;
-  const hal_status_t capability_status =
-      status == HAL_OK ? jh_board_runtime_set_inactive(kCyw43Capabilities)
-                       : jh_board_runtime_set_failed(kCyw43Capabilities);
+  hal_status_t status = stack_enter(false);
   if (status == HAL_OK) {
-    status = capability_status;
+    if (cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA) !=
+        CYW43_LINK_DOWN) {
+      status = jh_cyw43_lwip_leave();
+    }
+    stack_leave();
+  }
+  if (status == HAL_OK) {
+    status = jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_WIFI);
+  }
+  if (status == HAL_OK) {
+    s_initialized = false;
+    s_scan_count = 0u;
+    s_scan_overflow = false;
   }
   hal_mutex_unlock(s_lifecycle_mutex);
   return status;
 }
 
 hal_status_t service_once(void) {
-  if (!s_initialized || !s_service_running) {
+  if (!s_initialized) {
     return HAL_EUNINIT;
   }
-  hal_status_t status = stack_enter(false);
-  if (status != HAL_OK) {
-    return status;
-  }
-  status = jh_cyw43_lwip_service();
-  stack_leave();
-  return status;
+  return jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_WIFI);
 }
 
 hal_status_t wifi_set_mode(hal_wifi_mode_t mode);

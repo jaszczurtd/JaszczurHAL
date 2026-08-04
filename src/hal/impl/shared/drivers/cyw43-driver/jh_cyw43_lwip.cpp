@@ -161,31 +161,23 @@ extern "C" HAL_NORETURN void jh_lwip_port_assert(const char *, const char *,
 }
 
 extern "C" hal_status_t jh_cyw43_lwip_service(void) {
-  if (!jh_cyw43_driver_is_ready()) {
-    return HAL_EUNINIT;
-  }
   if (s_in_service) {
     return HAL_EBUSY;
   }
   s_in_service = true;
-  jh_cyw43_gspi_transport_t *transport = jh_cyw43_driver_transport_internal();
-  hal_status_t status = jh_cyw43_gspi_host_wake_refresh(transport);
+  bool host_wake = false;
+  hal_status_t status = jh_cyw43_driver_service(&host_wake);
   if (status != HAL_OK) {
     s_in_service = false;
     return status;
   }
-  const bool host_wake = jh_cyw43_gspi_host_wake_pending(transport);
-  if (cyw43_poll != nullptr) {
-    cyw43_poll();
-  }
   sys_check_timeouts();
   if (host_wake) {
     ++s_host_wake_services;
-    status = jh_cyw43_gspi_host_wake_clear(transport);
   }
   ++s_service_calls;
   s_in_service = false;
-  return status;
+  return HAL_OK;
 }
 
 extern "C" hal_status_t jh_cyw43_lwip_join_start(const char *ssid,

@@ -535,6 +535,14 @@ jobs:
       - name: Build native parity hardware fixtures
         run: scripts/build_rp_native_parity_fixtures.sh --jobs 4
 
+      - name: Build RP2040 CYW43 Bluetooth ownership fixture
+        run: |
+          for variant in bluetooth wifi-only; do
+            vscode/entry/jh-vscode build \
+              --project tests/hardware/bluetooth_stage1 \
+              --target rp2040 --board picow --variant "${variant}"
+          done
+
       - name: Build native OTA hardware fixture matrix
         run: |
           for selection in \
@@ -787,6 +795,7 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_btstack.sh --force
 
       - name: Install STM32 toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
@@ -807,6 +816,15 @@ jobs:
             -D HAL_CYW43_PIN_CLOCK=29u \
             -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u \
             --jobs 4
+
+      - name: Build STM32G474 CYW43 Bluetooth ownership fixture
+        run: |
+          for variant in bluetooth wifi-only; do
+            vscode/entry/jh-vscode build \
+              --project tests/hardware/bluetooth_stage1 \
+              --target stm32g474 --board nucleo-g474re-pim730 \
+              --variant "${variant}"
+          done
 
       - name: Compile STM32G474 examples
         run: scripts/examples_dispatcher.py build --target stm32g474 --jobs 4

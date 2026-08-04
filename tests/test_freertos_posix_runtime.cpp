@@ -83,18 +83,20 @@ void network_stack_leave(void *) {
   hal_mutex_unlock(s_network_stack_mutex);
 }
 
-void network_service_callback(void *) {
+hal_status_t network_service_callback(void *) {
   __atomic_fetch_add(&s_network_service_calls, 1, __ATOMIC_RELAXED);
   if (__atomic_exchange_n(&s_network_reentry_requested, 0, __ATOMIC_RELAXED) !=
       0) {
     if (jh_network_service_enter(&s_network_service, false) != HAL_OK) {
       record_failure();
-      return;
+      return HAL_EINTERNAL;
     }
     if (jh_network_service_leave(&s_network_service) != HAL_OK) {
       record_failure();
+      return HAL_EINTERNAL;
     }
   }
+  return HAL_OK;
 }
 
 bool network_ipv4_ready(void *) { return true; }

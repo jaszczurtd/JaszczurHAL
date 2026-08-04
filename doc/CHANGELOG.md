@@ -30,6 +30,12 @@ All notable changes to this project will be documented in this file.
   STM32G474 + PIM730 and RP2040 Pico W now cover advertising, connection, GATT
   read/write, disconnect/reconnect, symmetric ACL traffic, and the matched
   WiFi-only regression.
+- Moved CYW43 transport and driver ownership above the WiFi providers on both
+  targets. The new shared radio runtime keeps independent WiFi and BLE
+  references, serializes service access, propagates service failures, and
+  invalidates both clients and pending operations across generation changes.
+  The private Bluetooth probe now acquires the BLE owner directly instead of
+  bootstrapping the public WiFi lifecycle.
 
 ### Windows OTA, debug, and extended host gates
 

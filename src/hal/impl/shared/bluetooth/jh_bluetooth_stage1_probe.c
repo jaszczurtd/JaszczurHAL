@@ -6,8 +6,7 @@
 #include "btstack.h"
 #include "btstack_run_loop_embedded.h"
 #include "hal/hal_config.h"
-#include "hal/hal_net.h"
-#include "hal/hal_wifi.h"
+#include "hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.h"
 #include "jh_btstack_hci_transport_cyw43.h"
 #include "jh_stage1_probe_gatt.h"
 
@@ -122,10 +121,11 @@ hal_status_t jh_bluetooth_stage1_start(void) {
     return HAL_ESTATE;
   }
 
-  const hal_status_t wifi_status = hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA);
-  if (wifi_status != HAL_OK) {
-    s_snapshot.last_status = wifi_status;
-    return wifi_status;
+  const hal_status_t radio_status =
+      jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLE);
+  if (radio_status != HAL_OK) {
+    s_snapshot.last_status = radio_status;
+    return radio_status;
   }
 
   btstack_memory_init();
@@ -147,6 +147,7 @@ hal_status_t jh_bluetooth_stage1_start(void) {
 
   const int power_status = hci_power_control(HCI_POWER_ON);
   if (power_status != 0) {
+    (void)jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_BLE);
     s_snapshot.last_status = HAL_EIO;
     return HAL_EIO;
   }
@@ -159,10 +160,11 @@ hal_status_t jh_bluetooth_stage1_service(void) {
   if (!s_snapshot.started) {
     return HAL_EUNINIT;
   }
-  const hal_status_t network_status = hal_net_service();
-  if (network_status != HAL_OK) {
-    s_snapshot.last_status = network_status;
-    return network_status;
+  const hal_status_t radio_status =
+      jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_BLE);
+  if (radio_status != HAL_OK) {
+    s_snapshot.last_status = radio_status;
+    return radio_status;
   }
   btstack_run_loop_embedded_execute_once();
 
