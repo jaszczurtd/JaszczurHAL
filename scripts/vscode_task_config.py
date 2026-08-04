@@ -34,6 +34,51 @@ def extensions_recommendations() -> dict[str, Any]:
     return {"recommendations": list(VSCODE_EXTENSION_RECOMMENDATIONS)}
 
 
+def cortex_debug_launch_document(
+    executable: str,
+    *,
+    run_to_entry_point: str = "main",
+) -> dict[str, Any]:
+    profiles = (
+        (
+            "Project: Debug Firmware",
+            "RP2040",
+            ["interface/cmsis-dap.cfg", "target/rp2040.cfg"],
+            ["adapter speed 5000"],
+        ),
+        (
+            "Project: Debug Firmware (RP2350 ARM)",
+            "RP2350",
+            ["interface/cmsis-dap.cfg", "target/rp2350.cfg"],
+            ["adapter speed 2000"],
+        ),
+        (
+            "Project: Debug Firmware (STM32G474 / ST-Link)",
+            "STM32G474RE",
+            ["board/st_nucleo_g4.cfg"],
+            [],
+        ),
+    )
+    configurations = []
+    for name, device, config_files, openocd_launch_commands in profiles:
+        configuration = {
+            "name": name,
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": executable,
+            "servertype": "openocd",
+            "device": device,
+            "configFiles": config_files,
+            "runToEntryPoint": run_to_entry_point,
+            "preLaunchTask": "Project: Build (Debug)",
+        }
+        if openocd_launch_commands:
+            configuration["openOCDLaunchCommands"] = openocd_launch_commands
+        configurations.append(configuration)
+    return {"version": "0.2.0", "configurations": configurations}
+
+
 def keybindings_reference() -> list[dict[str, str]]:
     bindings = [
         ("ctrl+shift+1", "Project: Build"),

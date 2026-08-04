@@ -30,6 +30,7 @@ from vscode_task_config import (
     VSCODE_ENTRY_CONFIG,
     VSCODE_ENTRY_WINDOWS_CONFIG,
     VSCODE_EXTENSION_RECOMMENDATIONS,
+    cortex_debug_launch_document,
     project_tasks_document,
 )
 
@@ -41,6 +42,32 @@ def require(condition: bool, message: str) -> None:
 
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def require_launch_contract(document: dict, executable: str, context: str) -> None:
+    expected = cortex_debug_launch_document(executable)
+    require(document == expected, f"{context} launch configuration drifted")
+    profiles = {profile["name"]: profile for profile in document["configurations"]}
+    rp2040 = profiles.get("Project: Debug Firmware")
+    require(rp2040 is not None, f"{context} omits the RP2040 debug profile")
+    require(
+        rp2040.get("openOCDLaunchCommands") == ["adapter speed 5000"],
+        f"{context} omits the validated RP2040 adapter speed",
+    )
+    rp2350 = profiles.get("Project: Debug Firmware (RP2350 ARM)")
+    require(rp2350 is not None, f"{context} omits the RP2350 debug profile")
+    require(
+        rp2350.get("openOCDLaunchCommands") == ["adapter speed 2000"],
+        f"{context} omits the validated RP2350 adapter speed",
+    )
+    stm32 = profiles.get("Project: Debug Firmware (STM32G474 / ST-Link)")
+    require(stm32 is not None, f"{context} omits the STM32G474 debug profile")
+    require(
+        stm32["configFiles"] == ["board/st_nucleo_g4.cfg"],
+        f"{context} bypasses the NUCLEO-G4 reset-aware OpenOCD profile",
+    )
+    require(stm32["device"] == "STM32G474RE", f"{context} names the wrong STM32 device")
+    require(stm32["runToEntryPoint"] == "main", f"{context} uses an invalid STM32 entry point")
 
 
 def run_checked(command: list[str], **kwargs) -> subprocess.CompletedProcess[str]:
@@ -215,7 +242,13 @@ for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")
     settings = load_json(vscode_dir / "settings.json")
-    launch_text = (vscode_dir / "launch.json").read_text(encoding="utf-8")
+    launch_path = vscode_dir / "launch.json"
+    launch_text = launch_path.read_text(encoding="utf-8")
+    require_launch_contract(
+        json.loads(launch_text),
+        f"${{workspaceFolder}}/../../.build/examples/{entry['dir']}/firmware.elf",
+        f"checked-in example {entry['dir']}",
+    )
     require(
         all(task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG
             for task in tasks["tasks"]),
@@ -235,6 +268,11 @@ reference_settings = load_json(ROOT / "vscode" / "examples" / "settings.json")
 require(
     reference_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
     "checked-in VS Code settings omit the Windows launcher",
+)
+require_launch_contract(
+    load_json(ROOT / "vscode" / "examples" / "launch.json"),
+    "${workspaceFolder}/.build/firmware.elf",
+    "checked-in VS Code template",
 )
 require(
     "${config:cortex-debug."
@@ -285,6 +323,11 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
     require(
         generated_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
         "standalone generator omitted Windows entry setting",
+    )
+    require_launch_contract(
+        load_json(project_dir / ".vscode" / "launch.json"),
+        "${workspaceFolder}/.build/firmware.elf",
+        "standalone generator",
     )
     require(
         "${config:cortex-debug."

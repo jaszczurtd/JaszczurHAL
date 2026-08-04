@@ -517,6 +517,7 @@ def openocd_scripts_root(executable: Path) -> Path | None:
         executable.parent.parent / "scripts",
     )
     required = (
+        "board/st_nucleo_g4.cfg",
         "interface/cmsis-dap.cfg",
         "interface/stlink.cfg",
         "target/rp2040.cfg",

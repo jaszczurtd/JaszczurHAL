@@ -159,6 +159,7 @@ def build_files(
     registry = load_target_registry(jh_root)
     target, board = resolve_target_board(registry, target, board)
     from vscode_task_config import (
+        cortex_debug_launch_document,
         project_tasks_document,
         vscode_entry_settings,
     )
@@ -242,7 +243,9 @@ def build_files(
             }
         ),
         ".vscode/tasks.json": json_text(tasks_document),
-        ".vscode/launch.json": render_template(LAUNCH_TEMPLATE, values),
+        ".vscode/launch.json": json_text(
+            cortex_debug_launch_document("${workspaceFolder}/.build/firmware.elf")
+        ),
         ".vscode/extensions.json": json_text(load_extension_recommendations(jh_root)),
         ".vscode/keybindings.reference.json": json.dumps(
             load_keybindings(jh_root),
@@ -456,44 +459,6 @@ HAL_PROJECT_CONFIG_TEMPLATE = """#pragma once
 #ifndef HAL_PROVIDE_APP_ENTRY
 #define HAL_PROVIDE_APP_ENTRY
 #endif
-"""
-
-
-LAUNCH_TEMPLATE = """{
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Project: Debug Firmware",
-            "type": "cortex-debug",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/.build/firmware.elf",
-            "servertype": "openocd",
-            "device": "RP2040",
-            "configFiles": [
-                "interface/cmsis-dap.cfg",
-                "target/rp2040.cfg"
-            ],
-            "runToEntryPoint": "setup",
-            "preLaunchTask": "Project: Build (Debug)"
-        },
-        {
-            "name": "Project: Debug Firmware (RP2350 ARM)",
-            "type": "cortex-debug",
-            "request": "launch",
-            "cwd": "${workspaceFolder}",
-            "executable": "${workspaceFolder}/.build/firmware.elf",
-            "servertype": "openocd",
-            "device": "RP2350",
-            "configFiles": [
-                "interface/cmsis-dap.cfg",
-                "target/rp2350.cfg"
-            ],
-            "runToEntryPoint": "setup",
-            "preLaunchTask": "Project: Build (Debug)"
-        }
-    ]
-}
 """
 
 
