@@ -130,6 +130,21 @@ interface, review the probe vendor's current Windows instructions, and obtain
 consent before changing it. Do not apply a USB driver to the Pico BOOTSEL mass
 storage interface.
 
+The native Windows hardware smoke used a Pico running Debug Probe/Picoprobe
+firmware as a CMSIS-DAP v2 probe and a Pico 2 W as the RP2350 Arm target. Wire
+probe `SWDIO` to target `SWDIO`, probe `SWCLK` to target `SWCLK`, and connect
+their grounds. Windows exposed the probe through the Microsoft WinUSB driver;
+no driver installation or rebinding was required. Managed OpenOCD detected
+both Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
+`main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
+returned the application USB CDC port.
+
+OpenOCD may report an old Debug Probe/Picoprobe firmware and enable a slower
+compatibility workaround. This warning does not prevent SWD debugging. Update
+the probe firmware separately using the probe vendor's instructions when the
+lower transfer rate matters; the JaszczurHAL bootstrap does not modify probe
+firmware.
+
 HTTPS downloads on Windows use the operating system's `curl.exe` and Schannel
 trust store with HTTPS-only redirects and TLS 1.2 or newer. This supports
 managed enterprise TLS inspection without disabling certificate validation.

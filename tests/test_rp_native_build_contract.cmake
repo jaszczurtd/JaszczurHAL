@@ -197,6 +197,7 @@ foreach(_flash_build_contract IN ITEMS
         "PICO_FLASH_ASSUME_CORE1_SAFE=1"
         "HAL_RP_FLASH_EEPROM_SIZE"
         "HAL_RP_FLASH_LITTLEFS_SIZE"
+        "NDEBUG"
         "PICOTOOL_EXTRA_UF2_ARGS"
         "--platform"
         "pico_set_linker_script"
