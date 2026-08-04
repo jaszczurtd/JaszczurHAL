@@ -61,6 +61,13 @@ runtime reads this state to select the verified CMake, Ninja, GNU Arm, GNU
 RISC-V, OpenOCD, picotool, Python, and managed build root paths. `-VerifyOnly`
 checks the state byte-for-byte against the current resolution.
 
+Editor mode also merges the resolved debugger paths into the standard VS Code
+user profile as `cortex-debug.openocdPath.windows` and
+`cortex-debug.armToolchainPath.windows`. Existing JSONC comments and unrelated
+settings are preserved. Before changing an existing file, setup saves
+`settings.json.jaszczurhal.bak`; `-VerifyOnly` checks the two values without
+writing. `-FirmwareOnly` leaves the VS Code profile unchanged.
+
 Useful modes are:
 
 ```powershell
@@ -76,7 +83,7 @@ Useful modes are:
 # Read-only component and host contract check.
 .\runmefirst.ps1 -VerifyOnly
 
-# Check a headless firmware builder without requiring VS Code extensions.
+# Check a headless firmware builder without requiring or configuring VS Code.
 .\runmefirst.ps1 -FirmwareOnly
 ```
 
@@ -98,8 +105,9 @@ unchanged.
 
 ## Cortex debug and probe drivers
 
-Resolve the exact debugger paths for one project before configuring
-Cortex-Debug:
+The Windows bootstrap configures Cortex-Debug from its verified host record.
+Use `debug-tools` when diagnosing or inspecting the resolved paths for a
+particular project:
 
 ```powershell
 .\vscode\entry\jh-vscode.cmd debug-tools `
@@ -108,13 +116,12 @@ Cortex-Debug:
 ```
 
 The result contains `openocd`, `gdb`, `armToolchainPath`, the OpenOCD scripts
-root, and the interface/target configuration pair. Put the resolved OpenOCD
-executable and Arm toolchain directory in the VS Code user settings
-`cortex-debug.openocdPath` and `cortex-debug.armToolchainPath`. Cortex-Debug
-then resolves `arm-none-eabi-gdb` from that toolchain directory; generated
-launch configurations provide explicit CMSIS-DAP plus target script names.
-The managed Raspberry Pi OpenOCD archive
-finds its adjacent scripts directory without a global `PATH` change.
+root, and the interface/target configuration pair. Cortex-Debug resolves
+`arm-none-eabi-gdb` from the configured toolchain directory. Generated launch
+configurations provide explicit CMSIS-DAP and target script names and do not
+depend on project-private `cortex-debug.gdbPath`, scripts-root, or SVD settings.
+The managed Raspberry Pi OpenOCD archive finds its adjacent scripts directory
+without a global `PATH` change.
 
 Pico and Pico 2 BOOTSEL USB devices are debug targets and do not provide an
 SWD probe over that connection. Cortex debugging requires a separate
@@ -130,14 +137,15 @@ interface, review the probe vendor's current Windows instructions, and obtain
 consent before changing it. Do not apply a USB driver to the Pico BOOTSEL mass
 storage interface.
 
-The native Windows hardware smoke used a Pico running Debug Probe/Picoprobe
-firmware as a CMSIS-DAP v2 probe and a Pico 2 W as the RP2350 Arm target. Wire
-probe `SWDIO` to target `SWDIO`, probe `SWCLK` to target `SWCLK`, and connect
-their grounds. Windows exposed the probe through the Microsoft WinUSB driver;
-no driver installation or rebinding was required. Managed OpenOCD detected
-both Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
+The native Windows hardware smoke used an official Raspberry Pi Debug Probe
+running firmware 2.3.1 and a Pico 2 W as the RP2350 Arm target. Wire probe
+`SWDIO` to target `SWDIO`, probe `SWCLK` to target `SWCLK`, and connect their
+grounds. Windows exposed the probe through the Microsoft WinUSB driver; no
+driver installation or rebinding was required. Managed OpenOCD detected both
+Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
 `main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
-returned the application USB CDC port.
+returned the application USB CDC port. A DoomConsole follow-up also loaded its
+Debug ELF and stopped at `app_start` through the same launch-profile contract.
 
 OpenOCD may report an old Debug Probe/Picoprobe firmware and enable a slower
 compatibility workaround. This warning does not prevent SWD debugging. Update

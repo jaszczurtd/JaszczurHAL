@@ -83,8 +83,8 @@ it as user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
 `debug-tools --project <path> --json` resolves the verified GNU Arm GDB,
 OpenOCD executable, scripts root, and board-family interface/target scripts.
 On native Windows these paths come from the bootstrap host-environment record;
-use `openocd` and `armToolchainPath` for the Cortex-Debug user settings
-`cortex-debug.openocdPath` and `cortex-debug.armToolchainPath`.
+`runmefirst.ps1` writes `openocd` and `armToolchainPath` to the Windows-specific
+Cortex-Debug user settings. The command output remains available for diagnosis.
 
 `list-ports --json` reports the compatibility `bootsel` path list and structured
 `bootselRecords`. Each structured record includes the mount, device path,

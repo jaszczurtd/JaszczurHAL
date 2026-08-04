@@ -22,9 +22,15 @@ All notable changes to this project will be documented in this file.
 - Added verified OpenOCD, GNU Arm GDB, scripts-root, and target-configuration
   discovery through `jh-vscode debug-tools`; generated launch files now name
   their CMSIS-DAP and RP target scripts explicitly.
-- Validated the managed Windows OpenOCD/GDB path with a CMSIS-DAP v2
-  Picoprobe and a Pico 2 W target, including Debug ELF loading, hardware
-  breakpoints at `main` and `app_start`, resume, and application restart.
+- Made the native Windows bootstrap preserve and configure the standard VS Code
+  JSONC user profile with OS-specific Cortex-Debug OpenOCD and GNU Arm paths;
+  verify-only checks drift and firmware-only leaves editor settings unchanged.
+- Removed the need for legacy project-private Cortex-Debug path, scripts-root,
+  and SVD variables from generated launch profiles.
+- Validated the managed Windows OpenOCD/GDB path with an official Raspberry Pi
+  Debug Probe running firmware 2.3.1 and a Pico 2 W target, including Debug ELF
+  loading, hardware breakpoints at `main` and `app_start`, resume, and
+  application restart.
 - Kept the fixed-size native RP OTA boot applier within its flash partition in
   application Debug builds by retaining its production assertion policy.
 - Added an MSVC/GNU portable BSD socket-header gate and documented the full

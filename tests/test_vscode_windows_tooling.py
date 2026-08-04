@@ -23,6 +23,7 @@ for import_dir in (str(SCRIPTS_DIR), str(TOOLS_DIR)):
         sys.path.insert(0, import_dir)
 
 import examples_dispatcher
+import configure_cortex_debug
 import manage_vscode_extensions
 from board_registry import tooling_target_registry
 from vscode_task_config import (
@@ -214,6 +215,7 @@ for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")
     settings = load_json(vscode_dir / "settings.json")
+    launch_text = (vscode_dir / "launch.json").read_text(encoding="utf-8")
     require(
         all(task.get("windows", {}).get("command") == VSCODE_ENTRY_WINDOWS_CONFIG
             for task in tasks["tasks"]),
@@ -223,12 +225,21 @@ for entry in examples_dispatcher.EXAMPLES:
         settings.get("jaszczurhal.vscodeEntryWindows", "").endswith("jh-vscode.cmd"),
         f"checked-in example {entry['dir']} omits the Windows launcher setting",
     )
+    require(
+        "${config:cortex-debug." not in launch_text,
+        f"checked-in example {entry['dir']} requires private Cortex-Debug settings",
+    )
 reference_tasks = load_json(ROOT / "vscode" / "examples" / "tasks.json")
 require(reference_tasks == expected_tasks, "checked-in VS Code task template drifted")
 reference_settings = load_json(ROOT / "vscode" / "examples" / "settings.json")
 require(
     reference_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
     "checked-in VS Code settings omit the Windows launcher",
+)
+require(
+    "${config:cortex-debug."
+    not in (ROOT / "vscode" / "examples" / "launch.json").read_text(encoding="utf-8"),
+    "checked-in VS Code launch template requires private Cortex-Debug settings",
 )
 
 with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
@@ -274,6 +285,11 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
     require(
         generated_settings["jaszczurhal.vscodeEntryWindows"].endswith("jh-vscode.cmd"),
         "standalone generator omitted Windows entry setting",
+    )
+    require(
+        "${config:cortex-debug."
+        not in (project_dir / ".vscode" / "launch.json").read_text(encoding="utf-8"),
+        "standalone generator requires private Cortex-Debug settings",
     )
 
     generator_path = TOOLS_DIR / "create-vscode-example.py"
@@ -362,4 +378,146 @@ with tempfile.TemporaryDirectory(prefix="jh code fixture ") as temp_dir:
     require(
         installed == {item.lower() for item in VSCODE_EXTENSION_RECOMMENDATIONS},
         "extension installer and recommendation list diverged",
+    )
+
+with tempfile.TemporaryDirectory(prefix="jh cortex debug settings ") as temp_dir:
+    fixture_root = Path(temp_dir)
+    tools_dir = fixture_root / "tools"
+    tools_dir.mkdir()
+    openocd = tools_dir / "openocd.exe"
+    compiler = tools_dir / "arm-none-eabi-gcc.exe"
+    gdb = tools_dir / "arm-none-eabi-gdb.exe"
+    for executable in (openocd, compiler, gdb):
+        executable.write_bytes(b"fixture")
+    host_environment = fixture_root / "host-environment.json"
+    host_environment.write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "tools": {
+                    "openocd": str(openocd),
+                    "gnu-arm": str(compiler),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    settings = fixture_root / "Code" / "User" / "settings.json"
+    settings.parent.mkdir(parents=True)
+    initial_settings = (
+        "{\n"
+        "    // Preserve existing user choices.\n"
+        '    "workbench.colorTheme": "Dark Modern",\n'
+        '    "files.exclude": {\n'
+        "        // Nested JSONC remains untouched.\n"
+        '        "**/.build": true,\n'
+        "    },\n"
+        '    "cortex-debug.openocdPath.windows": "C:/stale/openocd.exe", // stale\n'
+        "}\n"
+    )
+    settings.write_text(initial_settings, encoding="utf-8")
+
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        missing_result = configure_cortex_debug.main(
+            [
+                "--host-environment",
+                str(host_environment),
+                "--settings",
+                str(settings),
+                "--check",
+            ]
+        )
+    require(missing_result == 1, "Cortex-Debug check accepted stale settings")
+    require(
+        settings.read_text(encoding="utf-8") == initial_settings,
+        "Cortex-Debug check modified user settings",
+    )
+
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        configure_result = configure_cortex_debug.main(
+            [
+                "--host-environment",
+                str(host_environment),
+                "--settings",
+                str(settings),
+                "--yes",
+            ]
+        )
+    require(configure_result == 0, "Cortex-Debug configuration failed")
+    configured_text = settings.read_text(encoding="utf-8")
+    configured = configure_cortex_debug.setting_values(
+        configured_text,
+        {
+            configure_cortex_debug.SETTING_OPENOCD,
+            configure_cortex_debug.SETTING_ARM_TOOLCHAIN,
+            "workbench.colorTheme",
+        },
+    )
+    require(
+        configured[configure_cortex_debug.SETTING_OPENOCD]
+        == str(openocd.resolve()),
+        "Cortex-Debug OpenOCD setting did not use the verified host tool",
+    )
+    require(
+        configured[configure_cortex_debug.SETTING_ARM_TOOLCHAIN]
+        == str(compiler.parent.resolve()),
+        "Cortex-Debug GNU Arm setting did not use the verified host toolchain",
+    )
+    require(
+        configured["workbench.colorTheme"] == "Dark Modern"
+        and "Preserve existing user choices" in configured_text,
+        "Cortex-Debug configuration did not preserve JSONC user settings",
+    )
+    require(
+        "Nested JSONC remains untouched" in configured_text,
+        "Cortex-Debug configuration rewrote a nested JSONC setting",
+    )
+    require(
+        Path(f"{settings}.jaszczurhal.bak").read_text(encoding="utf-8")
+        == initial_settings,
+        "Cortex-Debug configuration did not create a recoverable backup",
+    )
+
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        verified_result = configure_cortex_debug.main(
+            [
+                "--host-environment",
+                str(host_environment),
+                "--settings",
+                str(settings),
+                "--check",
+            ]
+        )
+    require(verified_result == 0, "Cortex-Debug settings were not idempotent")
+
+    fresh_settings = fixture_root / "fresh" / "settings.json"
+    output = io.StringIO()
+    with redirect_stdout(output), redirect_stderr(output):
+        fresh_result = configure_cortex_debug.main(
+            [
+                "--host-environment",
+                str(host_environment),
+                "--settings",
+                str(fresh_settings),
+                "--yes",
+            ]
+        )
+    require(fresh_result == 0, "Cortex-Debug fresh-profile setup failed")
+    fresh_values = configure_cortex_debug.setting_values(
+        fresh_settings.read_text(encoding="utf-8"),
+        {
+            configure_cortex_debug.SETTING_OPENOCD,
+            configure_cortex_debug.SETTING_ARM_TOOLCHAIN,
+        },
+    )
+    require(
+        fresh_values == configure_cortex_debug.resolved_settings(host_environment),
+        "Cortex-Debug fresh profile does not contain the verified tool set",
+    )
+    require(
+        not Path(f"{fresh_settings}.jaszczurhal.bak").exists(),
+        "Cortex-Debug created a backup for a previously absent profile",
     )
