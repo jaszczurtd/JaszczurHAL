@@ -7,29 +7,22 @@ import argparse
 from dataclasses import dataclass
 import ipaddress
 import os
+from pathlib import Path
 import shutil
 import subprocess
 import sys
 from typing import Callable, Sequence
 
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from ota_firewall_common import NetworkScope, SetupError, is_rfc1918
+
+
 DEFAULT_PORT = 8266
 RULE_COMMENT = "JaszczurHAL OTA callback"
-RFC1918_NETWORKS = (
-    ipaddress.IPv4Network("10.0.0.0/8"),
-    ipaddress.IPv4Network("172.16.0.0/12"),
-    ipaddress.IPv4Network("192.168.0.0/16"),
-)
-
-
-class SetupError(RuntimeError):
-    """Raised when the firewall cannot be configured safely."""
-
-
-@dataclass(frozen=True)
-class NetworkScope:
-    interface: str
-    network: ipaddress.IPv4Network
 
 
 @dataclass(frozen=True)
@@ -47,6 +40,13 @@ class CommandRunner:
 
     def which(self, command: str) -> str | None:
         return shutil.which(command)
+
+    def is_elevated(self) -> bool:
+        if sys.platform == "win32":
+            import ctypes
+
+            return bool(ctypes.windll.shell32.IsUserAnAdmin())
+        return os.geteuid() == 0
 
     def run(
         self,
@@ -71,11 +71,6 @@ class CommandRunner:
             text=True,
             env=environment,
         )
-
-
-def is_rfc1918(network: ipaddress.IPv4Network) -> bool:
-    return any(network.subnet_of(private) for private in RFC1918_NETWORKS)
-
 
 def interface_from_route(line: str) -> str:
     fields = line.split()
@@ -180,7 +175,7 @@ def detect_network_scope(
 
 
 def sudo_is_ready(runner: CommandRunner) -> bool:
-    if os.geteuid() == 0:
+    if runner.is_elevated():
         return True
     result = runner.run(["true"], sudo=True, sudo_non_interactive=True)
     return result.returncode == 0
@@ -666,7 +661,7 @@ def ask_for_consent(
     return response.lower() in {"y", "yes"}
 
 
-def configure_firewall(
+def configure_linux_firewall(
     args: argparse.Namespace,
     *,
     runner: CommandRunner | None = None,
@@ -706,6 +701,18 @@ def configure_firewall(
         return 2
 
     ensure_callback_port_available(runner, args.port)
+    if args.dry_run:
+        print("Linux firewall OTA callback plan:")
+        print(f"  interface: {scope.interface}")
+        print(f"  source:    {scope.network}")
+        print(f"  port:      TCP/{args.port}")
+        print("  lifetime:  persistent across reboot")
+        if backend is not None:
+            print(f"  backend:   {backend.kind}")
+        else:
+            print("  backend:   selected after elevation")
+        print("Dry run: no firewall changes were made.")
+        return 0
     if not args.yes and not ask_for_consent(
         scope, args.port, backend, input_function=input_function
     ):
@@ -742,6 +749,30 @@ def configure_firewall(
     return 0
 
 
+def configure_firewall(
+    args: argparse.Namespace,
+    *,
+    runner: CommandRunner | None = None,
+    input_function: Callable[[str], str] = input,
+    platform_name: str | None = None,
+) -> int:
+    runner = runner or CommandRunner()
+    selected_platform = platform_name or sys.platform
+    if selected_platform == "win32":
+        from ota_firewall_windows import configure_firewall as configure_windows
+
+        return configure_windows(
+            args,
+            runner=runner,
+            input_function=input_function,
+        )
+    return configure_linux_firewall(
+        args,
+        runner=runner,
+        input_function=input_function,
+    )
+
+
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -762,11 +793,18 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
         action="store_true",
         help="Check for the persistent rule without changing the firewall.",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print the scoped rule plan without changing the firewall.",
+    )
     args = parser.parse_args(argv)
     if not 1 <= args.port <= 65535:
         parser.error("--port must be in range 1..65535")
     if args.yes and (not args.interface or not args.network):
         parser.error("--yes requires explicit --interface and --network")
+    if args.check and args.dry_run:
+        parser.error("--check and --dry-run are mutually exclusive")
     return args
 
 

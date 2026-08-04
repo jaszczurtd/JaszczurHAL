@@ -196,11 +196,6 @@ hal_status_t prepare_staging(void) {
   if (status != HAL_OK) {
     return status;
   }
-  status =
-      jh_rp_flash_storage_erase(&s_writer.staging, 0u, s_writer.staging.size);
-  if (status != HAL_OK) {
-    return status;
-  }
   status = hal_sha256_init_ex(&s_writer.sha256);
   if (status != HAL_OK) {
     return status;
@@ -217,8 +212,16 @@ hal_status_t flush_page(void) {
   const uint32_t offset =
       s_writer.payload_received - (uint32_t)s_writer.page_used;
   const uint32_t page_offset = offset - (offset % FLASH_PAGE_SIZE);
-  const hal_status_t status = jh_rp_flash_storage_program(
-      &s_writer.staging, page_offset, s_writer.page, sizeof(s_writer.page));
+  hal_status_t status = HAL_OK;
+  if ((page_offset % FLASH_SECTOR_SIZE) == 0u) {
+    status = jh_rp_flash_storage_erase(&s_writer.staging, page_offset,
+                                       FLASH_SECTOR_SIZE);
+  }
+  if (status == HAL_OK) {
+    status = jh_rp_flash_storage_program(&s_writer.staging, page_offset,
+                                         s_writer.page,
+                                         sizeof(s_writer.page));
+  }
   if (status == HAL_OK) {
     s_writer.page_used = 0u;
     memset(s_writer.page, 0xFF, sizeof(s_writer.page));

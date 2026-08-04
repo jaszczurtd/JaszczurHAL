@@ -109,6 +109,23 @@ the hardware test. Verify the rule without changing it with:
 python3 scripts/configure_ota_firewall.py --check
 ```
 
+On native Windows, first verify that the selected trusted LAN has a `Private`
+connection profile, then inspect the exact rule plan without changing the
+host:
+
+```powershell
+.\.build\windows\venv\Scripts\python.exe `
+  .\scripts\configure_ota_firewall.py --dry-run `
+  --interface 'Wi-Fi' --network '192.168.2.0/24'
+```
+
+Apply the same scope from an already elevated PowerShell after removing
+`--dry-run`. The helper requests confirmation, creates an idempotent Windows
+Defender Firewall rule limited to the `Private` profile, interface, source
+subnet, and TCP/8266, and never changes the network profile itself. Windows
+hardware verification uses the managed Python executable and accepts a COM
+port such as `--port COM3`.
+
 If the test network differs from the network selected during initial setup,
 re-run the helper with explicit `--interface` and `--network`. If
 limited-broadcast discovery is blocked but the device IP is known, use a

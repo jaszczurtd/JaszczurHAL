@@ -71,6 +71,7 @@ list-ports
 change-port
 clear-identity
 config-dump
+debug-tools
 ```
 
 Compatibility note: `debug` is accepted as an alias for `build-debug` only for
@@ -78,6 +79,12 @@ early migration work. New tasks should use `build-debug`.
 
 `change-port` selects a serial port interactively or through `--port` and saves
 it as user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
+
+`debug-tools --project <path> --json` resolves the verified GNU Arm GDB,
+OpenOCD executable, scripts root, and board-family interface/target scripts.
+On native Windows these paths come from the bootstrap host-environment record;
+use `openocd` and `armToolchainPath` for the Cortex-Debug user settings
+`cortex-debug.openocdPath` and `cortex-debug.armToolchainPath`.
 
 `list-ports --json` reports the compatibility `bootsel` path list and structured
 `bootselRecords`. Each structured record includes the mount, device path,
@@ -121,7 +128,7 @@ jh-vscode build --project /home/user/projects/Fiesta/src/Clocks
 jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
 ```
 
-`build`, `build-debug`, `upload`, `upload-uf2`, `upload-ota`, `ota-discover`,
+`build`, `build-debug`, `debug-tools`, `upload`, `upload-uf2`, `upload-ota`, `ota-discover`,
 `refresh-intellisense`, `clean`, `change-port`, and `clear-identity` require
 `--project`. Actions that touch a device must fail before accessing serial
 ports, BOOTSEL disks, or build artifacts when the target module is ambiguous.
@@ -203,6 +210,14 @@ projects:
 per-board CMake cache. It publishes the result through the same stable artifact
 paths as `build`, so upload tasks always use the most recently successful
 build.
+
+Generated Cortex-Debug launch configurations provide explicit OpenOCD
+configuration files and let the extension resolve GDB from its configured Arm
+toolchain path. RP examples use
+`interface/cmsis-dap.cfg` plus `target/rp2040.cfg`; select the corresponding
+RP2350 target configuration when debugging an RP2350 project. A Pico in
+BOOTSEL remains only the target. OpenOCD needs a separate CMSIS-DAP/Picoprobe
+connected to the board's SWD pins.
 
 The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration

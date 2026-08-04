@@ -425,6 +425,9 @@ class TrackedContractTests(unittest.TestCase):
                 (scripts / "target").mkdir()
                 (scripts / "interface/stlink.cfg").write_text("adapter\n")
                 (scripts / "target/stm32g4x.cfg").write_text("target\n")
+                (scripts / "interface/cmsis-dap.cfg").write_text("adapter\n")
+                (scripts / "target/rp2040.cfg").write_text("target\n")
+                (scripts / "target/rp2350.cfg").write_text("target\n")
                 self.assertEqual(manager._system_tool(spec), executable.resolve())
 
     def test_arm_cstdlib_probe_selects_rp2040_multilib(self) -> None:

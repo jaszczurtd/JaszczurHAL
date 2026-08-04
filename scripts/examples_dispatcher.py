@@ -370,6 +370,27 @@ def launch_for(name: str) -> dict[str, Any]:
                 ),
                 "servertype": "openocd",
                 "device": "RP2040",
+                "configFiles": [
+                    "interface/cmsis-dap.cfg",
+                    "target/rp2040.cfg",
+                ],
+                "runToEntryPoint": "main",
+                "preLaunchTask": "Project: Build (Debug)",
+            },
+            {
+                "name": "Project: Debug Firmware (RP2350 ARM)",
+                "type": "cortex-debug",
+                "request": "launch",
+                "cwd": "${workspaceFolder}",
+                "executable": (
+                    f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
+                ),
+                "servertype": "openocd",
+                "device": "RP2350",
+                "configFiles": [
+                    "interface/cmsis-dap.cfg",
+                    "target/rp2350.cfg",
+                ],
                 "runToEntryPoint": "main",
                 "preLaunchTask": "Project: Build (Debug)",
             }

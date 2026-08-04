@@ -64,6 +64,7 @@ MODULE_ACTIONS = {
     "clean",
     "clear-identity",
     "config-dump",
+    "debug-tools",
 }
 
 SUPPORTED_ACTIONS = {
@@ -85,6 +86,7 @@ SUPPORTED_ACTIONS = {
     "change-port",
     "clear-identity",
     "config-dump",
+    "debug-tools",
 }
 
 BOOTSEL_LABELS = {"RPI-RP2", "RP2350", "RPI-RP2350"}
@@ -508,6 +510,74 @@ def objdump_program(config: dict[str, Any]) -> str | None:
     return shutil.which("arm-none-eabi-objdump") or shutil.which("objdump")
 
 
+def openocd_scripts_root(executable: Path) -> Path | None:
+    candidates = (
+        executable.parent / "scripts",
+        executable.parent.parent / "share" / "openocd" / "scripts",
+        executable.parent.parent / "scripts",
+    )
+    required = (
+        "interface/cmsis-dap.cfg",
+        "interface/stlink.cfg",
+        "target/rp2040.cfg",
+        "target/rp2350.cfg",
+        "target/stm32g4x.cfg",
+    )
+    return next(
+        (
+            root
+            for root in candidates
+            if all((root / relative).is_file() for relative in required)
+        ),
+        None,
+    )
+
+
+def debug_tool_paths(config: dict[str, Any]) -> dict[str, str] | None:
+    """Resolve one verified OpenOCD/GDB/scripts set for Cortex-Debug."""
+    target = str(config.get("target", ""))
+    target_configs = {
+        "rp2040": "target/rp2040.cfg",
+        "rp2350-arm": "target/rp2350.cfg",
+        "stm32g474": "target/stm32g4x.cfg",
+    }
+    interface_configs = {
+        "rp2040": "interface/cmsis-dap.cfg",
+        "rp2350-arm": "interface/cmsis-dap.cfg",
+        "stm32g474": "interface/stlink.cfg",
+    }
+    if target not in target_configs:
+        return None
+
+    tools = resolved_windows_tools()
+    openocd_text = tools.get("openocd") or shutil.which("openocd")
+    gnu_arm = tools.get("gnu-arm")
+    gdb = (
+        Path(gnu_arm).with_name("arm-none-eabi-gdb.exe")
+        if gnu_arm
+        else None
+    )
+    if gdb is None or not gdb.is_file():
+        located_gdb = shutil.which("arm-none-eabi-gdb")
+        gdb = Path(located_gdb) if located_gdb else None
+    if not openocd_text or gdb is None or not gdb.is_file():
+        return None
+    openocd = Path(openocd_text)
+    if not openocd.is_file():
+        return None
+    scripts = openocd_scripts_root(openocd)
+    if scripts is None:
+        return None
+    return {
+        "openocd": str(openocd),
+        "gdb": str(gdb),
+        "armToolchainPath": str(gdb.parent),
+        "scripts": str(scripts),
+        "interfaceConfig": interface_configs[target],
+        "targetConfig": target_configs[target],
+    }
+
+
 def cmake_program(config: dict[str, Any]) -> str:
     cmake = config.get("cmake")
     if isinstance(cmake, dict) and cmake.get("executable"):
@@ -836,6 +906,29 @@ def command_config_dump(args: argparse.Namespace) -> int:
         print(json.dumps(config, ensure_ascii=False, indent=2, sort_keys=True))
     else:
         print_human_config(config)
+    return 0
+
+
+def command_debug_tools(args: argparse.Namespace) -> int:
+    project_dir, config, status = load_config_for_action(args)
+    if status != 0:
+        return status
+    paths = debug_tool_paths(config)
+    if paths is None:
+        print(
+            "error: a verified OpenOCD, GNU Arm GDB, and matching scripts "
+            f"were not found for target {config.get('target')}",
+            file=sys.stderr,
+        )
+        return EXIT_UNSUPPORTED
+    if args.json:
+        print(json.dumps(paths, ensure_ascii=False, indent=2, sort_keys=True))
+    else:
+        print(f"OpenOCD:           {paths['openocd']}")
+        print(f"GNU Arm GDB:       {paths['gdb']}")
+        print(f"OpenOCD scripts:   {paths['scripts']}")
+        print(f"Probe config:      {paths['interfaceConfig']}")
+        print(f"Target config:     {paths['targetConfig']}")
     return 0
 
 
@@ -3911,6 +4004,8 @@ def build_parser() -> argparse.ArgumentParser:
 def dispatch(args: argparse.Namespace) -> int:
     if args.action == "config-dump":
         return command_config_dump(args)
+    if args.action == "debug-tools":
+        return command_debug_tools(args)
     if args.action == "build":
         return command_build(args, debug=False)
     if args.action in {"build-debug", "debug"}:

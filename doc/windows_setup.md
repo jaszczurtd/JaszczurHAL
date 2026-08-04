@@ -8,6 +8,9 @@ The supported host floor is Windows 10 1809 (build 17763), AMD64. Git for
 Windows and VS Code must already be installed so the repository can be checked
 out and opened. The bootstrap manages Python, CMake, Ninja, GNU Arm Embedded,
 GNU RISC-V, OpenOCD, picotool, pyserial, and the pinned source dependencies.
+The GNU Arm completeness check includes GDB, and OpenOCD reuse requires the
+CMSIS-DAP, ST-Link, RP2040, RP2350, and STM32G4 scripts used by generated
+debug configurations.
 
 ## Host settings
 
@@ -93,6 +96,40 @@ path. OpenOCD reuse additionally requires a complete adjacent or conventional
 in favor of the managed archive. Running setup again leaves valid components
 unchanged.
 
+## Cortex debug and probe drivers
+
+Resolve the exact debugger paths for one project before configuring
+Cortex-Debug:
+
+```powershell
+.\vscode\entry\jh-vscode.cmd debug-tools `
+  --project .\examples\01_blink `
+  --target rp2350-arm --board pico2w --json
+```
+
+The result contains `openocd`, `gdb`, `armToolchainPath`, the OpenOCD scripts
+root, and the interface/target configuration pair. Put the resolved OpenOCD
+executable and Arm toolchain directory in the VS Code user settings
+`cortex-debug.openocdPath` and `cortex-debug.armToolchainPath`. Cortex-Debug
+then resolves `arm-none-eabi-gdb` from that toolchain directory; generated
+launch configurations provide explicit CMSIS-DAP plus target script names.
+The managed Raspberry Pi OpenOCD archive
+finds its adjacent scripts directory without a global `PATH` change.
+
+Pico and Pico 2 BOOTSEL USB devices are debug targets and do not provide an
+SWD probe over that connection. Cortex debugging requires a separate
+Raspberry Pi Debug Probe, a Pico running Debug Probe/Picoprobe firmware, or a
+compatible probe wired to SWD. The standard RP configuration uses
+`interface/cmsis-dap.cfg`; STM32G474 uses `interface/stlink.cfg`.
+
+The bootstrap inventories probe devices but does not install, replace, or
+rebind Windows USB drivers. If OpenOCD reports that no matching CMSIS-DAP
+device exists, check the physical SWD connection and Device Manager first. A
+driver change is a separate administrator action: identify the exact probe
+interface, review the probe vendor's current Windows instructions, and obtain
+consent before changing it. Do not apply a USB driver to the Pico BOOTSEL mass
+storage interface.
+
 HTTPS downloads on Windows use the operating system's `curl.exe` and Schannel
 trust store with HTTPS-only redirects and TLS 1.2 or newer. This supports
 managed enterprise TLS inspection without disabling certificate validation.
@@ -126,15 +163,27 @@ The gate checks Ninja configuration, the target static library where
 applicable, representative firmware, declared artifacts, the patched compile
 database, MSVC warning settings, and the visible disabled classification of
 Windows-incompatible POSIX/FreeRTOS/BearSSL host tests. The MSVC job builds and
-runs a focused HAL CRC smoke test with `/W4 /permissive- /WX`. The smoke target
-is independent from the GNU-oriented full mock backend, so firmware support
-does not imply that every historical host mock is portable to MSVC; generated
-project-file inspection is not the only warning-policy check.
+runs a focused HAL CRC smoke test and the portable BSD socket-header contract
+with `/W4 /permissive- /WX`. The full BSD adapter exports POSIX symbol names
+and remains a firmware/Linux-host test instead of pretending to implement the
+different Winsock ABI. The native BearSSL integration also remains Linux-only
+because its harness and transport use Bash and POSIX sockets.
+
+No Windows static-analysis profile is declared by this checkout. The current
+managed Windows tool set and this host provide neither `clang-tidy` nor
+`cppcheck`, and the MSVC Build Tools are not a pinned bootstrap component.
+The strict compiled MSVC warning profile remains the Windows host gate. Add a
+static-analysis profile only together with an authenticated, version-pinned
+analyzer binary so local and CI results cannot silently drift.
 
 ## Current support boundary
 
 The native launcher, shared build runtime, generated VS Code task override,
 line-ending policy, component manager, host bootstrap, four-family firmware
-matrix, and Windows CI are available. Native COM/BOOTSEL device adapters and
-hardware upload gates are tracked by the remaining Windows-support stages.
-Keep the Linux gate available while those device gates are being completed.
+matrix, COM/BOOTSEL upload paths, OTA firewall backend, debug-tool discovery,
+portable socket-header gate, and Windows CI are available. Full POSIX socket,
+FreeRTOS POSIX, and Bash-driven BearSSL integration tests remain explicitly
+Linux-only. The native Windows OTA callback, trial confirmation, and automatic
+rollback have been validated on Pico 2 W over a trusted `Private` LAN. OTA
+hardware requires local fixture credentials; hardware debug additionally
+requires a connected SWD probe.

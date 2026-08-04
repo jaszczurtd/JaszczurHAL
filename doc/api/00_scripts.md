@@ -126,7 +126,9 @@ preserves the CLI argument and exit-code contract. Firmware configuration uses
 Ninja by default, passes the active Python interpreter, exports compile
 commands, and resolves platform picotool/toolchain paths. Native Windows CMake
 trees use the bootstrap's short build root while final artifacts keep their
-manifest paths. Actions, options, device
+manifest paths. `debug-tools` reports the verified OpenOCD, GNU Arm GDB,
+scripts root, and target configuration used to populate machine-local
+Cortex-Debug settings. Actions, options, device
 safeguards, and monitor behavior are documented only in
 [JaszczurHAL VS Code Entry](../../vscode/README.md). Manifest, source-discovery,
 target, board, cache, and artifact semantics belong to
@@ -383,20 +385,30 @@ specific VS Code command.
 ### `scripts/configure_ota_firewall.py`
 
 Idempotently inspects and configures persistent inbound TCP access for the
-host-side OTA callback. It selects the RFC1918 network on the default IPv4
-interface, scopes the rule to that interface and subnet, and defaults to
-TCP/8266. Active UFW and firewalld installations use their native persistent
-configuration; the fallback uses `iptables-nft`/`iptables` with
+host-side OTA callback. The shared entrypoint selects a Linux or Windows
+backend, finds the RFC1918 network on the default IPv4 interface, scopes the
+rule to that interface and subnet, and defaults to TCP/8266. Active UFW and
+firewalld installations use their native persistent configuration; the Linux
+fallback uses `iptables-nft`/`iptables` with
 `iptables-save` plus the `netfilter-persistent` boot loader, enabled through
 systemd when available.
 An unfiltered `INPUT` policy already permits the callback and requires no
 additional package or rule.
 
+On Windows, the backend accepts only an active network whose connection
+profile is `Private`. It manages one named Windows Defender Firewall inbound
+rule restricted to that profile, interface alias, RFC1918 source subnet, TCP,
+and the selected local port. Inspection and planning run without elevation;
+applying the rule requires the caller to restart the command in an already
+elevated PowerShell. The helper never starts an elevated process or changes a
+network profile.
+
 Interactive mode prints the full rule scope and asks before making a change.
-`--check` is read-only, `--interface` and `--network` override automatic route
-detection, `--port` selects a different fixed callback port, and `--yes`
-supports deliberate non-interactive provisioning. Only RFC1918 IPv4 networks
-are accepted, and setup refuses to expose a port already used by a listener.
+`--check` is read-only, `--dry-run` prints the complete plan, `--interface`
+and `--network` override automatic route detection, `--port` selects a
+different fixed callback port, and `--yes` supports deliberate
+non-interactive provisioning. Only RFC1918 IPv4 networks are accepted, and
+setup refuses to expose a port already used by a listener.
 
 ### `scripts/rp_ota_artifacts.py`
 

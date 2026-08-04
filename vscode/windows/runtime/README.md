@@ -40,4 +40,7 @@ read-only media, drive removal, and write errors remain upload failures. Native
 Windows tests exercise real volume enumeration and durable file-handle flush
 behavior; the shared regression test also uploads a mixed-family merged OTA
 fixture through the adapter boundary. Real-device COM-to-BOOTSEL upload smoke
-on RP2040 and RP2350 remains pending.
+has passed on RP2040 and RP2350. The shared runtime also resolves managed GNU
+Arm GDB, OpenOCD, and its CMSIS-DAP/ST-Link target scripts through
+`debug-tools`; an actual Cortex session still requires a separately connected
+SWD probe.

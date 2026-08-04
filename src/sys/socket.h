@@ -16,6 +16,15 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#if defined(_WIN32) && !defined(HAL_BSD_SSIZE_T_DEFINED)
+#include <BaseTsd.h>
+#if !defined(_SSIZE_T_DEFINED)
+typedef SSIZE_T ssize_t;
+#define _SSIZE_T_DEFINED 1
+#endif
+#define HAL_BSD_SSIZE_T_DEFINED 1
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
