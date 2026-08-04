@@ -24,18 +24,6 @@ JH_VSCODE = REPO_ROOT / "vscode" / "entry" / (
 REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
 RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
-STM32_CYW43_PIM730_DEFINES = [
-    "HAL_NETWORK_BACKEND_CYW43",
-    "HAL_CYW43_BUS_STM32_GSPI",
-    "HAL_CYW43_STACK_LWIP",
-    "HAL_CYW43_PIN_WL_ON=30u",  # PB14
-    "HAL_CYW43_PIN_CHIP_SELECT=28u",  # PB12
-    "HAL_CYW43_PIN_DATA=31u",  # PB15
-    "HAL_CYW43_PIN_CLOCK=29u",  # PB13
-    "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
-]
-
-
 EXAMPLES: list[dict[str, Any]] = [
     {"dir": "01_blink", "targets": ["rp2040", "stm32g474"]},
     {"dir": "02_debug_helper", "targets": ["rp2040", "stm32g474"]},
@@ -50,14 +38,13 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "10_mqtt",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
-        "stm32ExtraDefines": ["HAL_ENABLE_MQTT"],
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "11_wireguard",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {"dir": "12_kv_store", "targets": ["rp2040", "stm32g474"]},
     {"dir": "13_i2c_slave", "targets": ["rp2040", "stm32g474"]},
@@ -66,7 +53,7 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "15_wifi",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {"dir": "16_littlefs", "targets": ["rp2040", "stm32g474"], "extraDefines": ["HAL_ENABLE_LITTLEFS"]},
     {"dir": "17_pid_controller", "targets": ["rp2040", "stm32g474"]},
@@ -103,7 +90,7 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "42_bsd_sockets_tcp_udp",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
         "module": "42_bsd_sockets_tcp_server",
         "sources": ["tcp_server.c", "bsd_socket_example_common.h"],
         "variants": [
@@ -147,31 +134,31 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "48_http_server",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "49_websocket",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "50_net_console",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "51_net_commands",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "52_http_files",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {"dir": "53_simple_io_chips", "targets": ["rp2040", "stm32g474"]},
     {"dir": "54_adp5360_pmic", "targets": ["rp2040", "stm32g474"]},
@@ -180,8 +167,7 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "56_http_https_client",
         "targets": ["rp2040", "stm32g474"],
         "board": "picow",
-        "stm32Cyw43Pim730": True,
-        "stm32ExtraDefines": ["HAL_ENABLE_TLS"],
+        "stm32Board": "nucleo-g474re-pim730",
     },
     {
         "dir": "57_ota",
@@ -248,7 +234,7 @@ def example_boards(entry: dict[str, Any]) -> dict[str, str]:
     if "rp2350-riscv" in targets:
         boards["rp2350-riscv"] = "pico2"
     if "stm32g474" in targets:
-        boards["stm32g474"] = "nucleo-g474re"
+        boards["stm32g474"] = str(entry.get("stm32Board") or "nucleo-g474re")
     return boards
 
 
@@ -301,25 +287,6 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
             "compileCommands": "${buildDir}/compile_commands_patched.json",
         },
     }
-    if entry.get("stm32Cyw43Pim730"):
-        stm32_defines = list(
-            dict.fromkeys(
-                [
-                    *(str(item) for item in entry.get("extraDefines", [])),
-                    *(str(item) for item in entry.get("stm32ExtraDefines", [])),
-                    *STM32_CYW43_PIM730_DEFINES,
-                ]
-            )
-        )
-        manifest["targetProfiles"] = {
-            "stm32g474": {
-                "cmake": {
-                    "cache": {
-                        "JH_EXTRA_DEFINES": ";".join(stm32_defines),
-                    }
-                }
-            }
-        }
     if entry.get("ota"):
         manifest["ota"] = dict(entry["ota"])
         manifest["artifacts"]["ota"] = "${buildDir}/firmware.ota"

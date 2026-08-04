@@ -59,7 +59,14 @@ COMPONENT_REGISTRY = {
         "providers": {"pico-sdk"},
         "slot": "network-radio-transport",
     },
-    "cyw43-lwip": {"providers": {"pico-sdk"}, "slot": "network-stack"},
+    "cyw43-stm32-gspi": {
+        "providers": {"jh-stm32-baremetal"},
+        "slot": "network-radio-transport",
+    },
+    "cyw43-lwip": {
+        "providers": {"pico-sdk", "jh-stm32-baremetal"},
+        "slot": "network-stack",
+    },
 }
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
@@ -194,10 +201,10 @@ def validate_endpoint(
             {"domain", "component", "id", "halPin"},
         )
         component_known = endpoint["component"] in components
-        if (
-            endpoint["component"] == "cyw43"
-            and "cyw43-pico-pio" in components
-        ):
+        if endpoint["component"] == "cyw43" and {
+            "cyw43-pico-pio",
+            "cyw43-stm32-gspi",
+        } & components:
             component_known = True
         if not component_known:
             fail(
@@ -519,11 +526,12 @@ def validate_board(
         )
         if not isinstance(value["present"], bool):
             fail(path, f"$.capabilities.{capability_id}.present", value["present"], "a boolean")
-    if board["capabilities"].get("cyw43", {}).get("present") and not {
-        "cyw43-pico-pio",
-        "cyw43-lwip",
-    } <= resolved_components:
-        fail(path, "$.capabilities.cyw43", True, "CYW43 components")
+    if board["capabilities"].get("cyw43", {}).get("present"):
+        has_transport = bool(
+            {"cyw43-pico-pio", "cyw43-stm32-gspi"} & resolved_components
+        )
+        if not has_transport or "cyw43-lwip" not in resolved_components:
+            fail(path, "$.capabilities.cyw43", True, "CYW43 components")
     if not isinstance(board["devices"], dict):
         fail(path, "$.devices", board["devices"], "an object")
     for device_id, device in board["devices"].items():
@@ -637,6 +645,7 @@ def load_registry(
         "host-mock": 7,
         "rp2040-zero": 8,
         "rp2040-plus-4mb": 9,
+        "nucleo-g474re-pim730": 11,
     }
     for board_id, profile_id in expected_profile_ids.items():
         if board_id not in boards or boards[board_id]["hal"]["profileId"] != profile_id:
@@ -725,6 +734,19 @@ def generate(
                 "HAL_NETWORK_BACKEND_CYW43",
                 "HAL_CYW43_BUS_PICO_PIO",
                 "HAL_CYW43_STACK_LWIP",
+                "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
+            ]
+        )
+    if "cyw43-stm32-gspi" in components:
+        board_compile_definitions.extend(
+            [
+                "HAL_NETWORK_BACKEND_CYW43",
+                "HAL_CYW43_BUS_STM32_GSPI",
+                "HAL_CYW43_STACK_LWIP",
+                "HAL_CYW43_PIN_WL_ON=30u",
+                "HAL_CYW43_PIN_CHIP_SELECT=28u",
+                "HAL_CYW43_PIN_DATA=31u",
+                "HAL_CYW43_PIN_CLOCK=29u",
                 "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
             ]
         )

@@ -147,8 +147,8 @@ require(
     "unsupported RP2350 RISC-V + CYW43 combination is selectable",
 )
 require(
-    wifi["example"]["boards"]["stm32g474"] == "nucleo-g474re",
-    "WiFi example does not map STM32G474 to NUCLEO-G474RE",
+    wifi["example"]["boards"]["stm32g474"] == "nucleo-g474re-pim730",
+    "WiFi example does not map STM32G474 to NUCLEO-G474RE with PIM730",
 )
 stm32_wifi = subprocess.run(
     [
@@ -159,29 +159,30 @@ stm32_wifi = subprocess.run(
         "--target",
         "stm32g474",
         "--board",
-        "nucleo-g474re",
+        "nucleo-g474re-pim730",
         "--json",
     ],
     check=True,
     capture_output=True,
     text=True,
 )
-stm32_wifi_defines = set(
-    json.loads(stm32_wifi.stdout)["cmake"]["cache"]["JH_EXTRA_DEFINES"].split(";")
+stm32_wifi_config = json.loads(stm32_wifi.stdout)
+require(
+    stm32_wifi_config["board"] == "nucleo-g474re-pim730",
+    "WiFi resolver changed the STM32G474 PIM730 board profile",
 )
 require(
-    {
-        "HAL_NETWORK_BACKEND_CYW43",
-        "HAL_CYW43_BUS_STM32_GSPI",
-        "HAL_CYW43_STACK_LWIP",
-        "HAL_CYW43_PIN_WL_ON=30u",
-        "HAL_CYW43_PIN_CHIP_SELECT=28u",
-        "HAL_CYW43_PIN_DATA=31u",
-        "HAL_CYW43_PIN_CLOCK=29u",
-        "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
-    }
-    <= stm32_wifi_defines,
-    "WiFi example lost the STM32G474 PIM730 target profile",
+    "JH_EXTRA_DEFINES" not in stm32_wifi_config["cmake"]["cache"],
+    "WiFi example still duplicates PIM730 wiring outside the board profile",
+)
+sys.path.insert(0, str(ROOT))
+from vscode.runtime import jh_vscode as workflow_runtime
+
+require(
+    not workflow_runtime.build_preflight_diagnostics(
+        stm32_wifi_config, ROOT / "examples" / "15_wifi"
+    ),
+    "WiFi preflight does not accept the registry-owned PIM730 backend",
 )
 
 for name in ("12_kv_store", "16_littlefs", "39_sdlogger"):

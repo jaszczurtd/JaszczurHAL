@@ -25,6 +25,7 @@ configs = (
     "jpeg_version.conf",
     "lwip_version.conf",
     "littlefs_version.conf",
+    "btstack_version.conf",
     "freertos_core_version.conf",
     "pico_sdk_version.conf",
     "picotool_version.conf",
@@ -135,6 +136,7 @@ wrapper_components = {
     "ensure_freertos_kernel.sh": "freertos",
     "ensure_jpeg.sh": "jpeg",
     "ensure_littlefs.sh": "littlefs",
+    "ensure_btstack.sh": "btstack",
     "ensure_lodepng.sh": "lodepng",
     "ensure_lwip.sh": "lwip",
     "ensure_pico_sdk.sh": "pico-sdk",
@@ -180,6 +182,7 @@ for component in (
     "Unity",
     "lwip",
     "littlefs",
+    "BTstack",
 ):
     ignored = subprocess.run(
         ["git", "check-ignore", "-q", f"third_party/{component}/sentinel"],

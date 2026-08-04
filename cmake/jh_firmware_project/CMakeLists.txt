@@ -26,11 +26,29 @@ set(JH_BOARD "" CACHE STRING
     "Physical board profile; defaults to the selected target's defaultBoard")
 set(JH_EXTRA_DEFINES "" CACHE STRING
     "Extra compile definitions for the selected firmware")
+set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
+
+if(NOT JH_PROJECT_DIR)
+    message(FATAL_ERROR "JH_PROJECT_DIR is required (the client project source dir)")
+endif()
+get_filename_component(JH_PROJECT_DIR "${JH_PROJECT_DIR}" ABSOLUTE)
+if(NOT IS_DIRECTORY "${JH_PROJECT_DIR}")
+    message(FATAL_ERROR "JH_PROJECT_DIR not found: ${JH_PROJECT_DIR}")
+endif()
 
 # Repo root: this file is <JH_ROOT>/cmake/jh_firmware_project/CMakeLists.txt
 get_filename_component(JH_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 if(NOT EXISTS "${JH_ROOT}/src/JaszczurHAL.h")
     message(FATAL_ERROR "JaszczurHAL root not found at '${JH_ROOT}'")
+endif()
+
+include("${JH_ROOT}/cmake/jh_project_features.cmake")
+jh_collect_project_feature_defines(
+    _jh_project_feature_defines "${JH_PROJECT_DIR}")
+set(_jh_project_config_file "${JH_PROJECT_DIR}/hal_project_config.h")
+if(EXISTS "${_jh_project_config_file}")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${_jh_project_config_file}")
 endif()
 
 set(_jh_requested_pico_platform "")
@@ -50,7 +68,7 @@ jh_generate_board_config(
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
     OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${JH_EXTRA_DEFINES})
+    DEFINES ${JH_EXTRA_DEFINES} ${_jh_project_feature_defines})
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
     "Resolved physical board profile" FORCE)
 
@@ -132,7 +150,6 @@ else()
     project(jh_firmware NONE)
 endif()
 
-set(JH_PROJECT_DIR "" CACHE PATH "Client project source directory")
 set(JH_MODULE_NAME "" CACHE STRING "Client firmware module/sketch name")
 set(JH_PROJECT_SOURCES "" CACHE STRING "Optional ';'-separated project sources; relative paths resolve from JH_PROJECT_DIR")
 set(JH_EXTRA_SOURCES "" CACHE STRING "Optional additional ';'-separated sources; relative paths resolve from JH_PROJECT_DIR")
@@ -140,13 +157,6 @@ set(JH_PROJECT_RECIPE "" CACHE FILEPATH "Optional project-specific recipe includ
 set(JH_ARTIFACT_DIR "" CACHE PATH
     "Directory for final firmware artifacts")
 
-if(NOT JH_PROJECT_DIR)
-    message(FATAL_ERROR "JH_PROJECT_DIR is required (the client project source dir)")
-endif()
-get_filename_component(JH_PROJECT_DIR "${JH_PROJECT_DIR}" ABSOLUTE)
-if(NOT IS_DIRECTORY "${JH_PROJECT_DIR}")
-    message(FATAL_ERROR "JH_PROJECT_DIR not found: ${JH_PROJECT_DIR}")
-endif()
 if(NOT JH_MODULE_NAME)
     get_filename_component(JH_MODULE_NAME "${JH_PROJECT_DIR}" NAME)
 endif()

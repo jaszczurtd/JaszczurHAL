@@ -4,7 +4,8 @@
 
 ## Multicore safety policy
 
-JaszczurHAL targets RP2040/RP2350 dual-core systems (core 0 + core 1).
+JaszczurHAL supports RP2040/RP2350 dual-core systems, using both core 0 and core 1 where available. STM32G474 is supported as well, and general mutex protection is available through the FreeRTOS-enabled path.
+
 The following design rules apply:
 
 ### Native Pico SDK application entry

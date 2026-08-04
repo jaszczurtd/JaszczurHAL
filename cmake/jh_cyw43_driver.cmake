@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
-    cmake_parse_arguments(JH_CYW43 "LWIP" "" "" ${ARGN})
+    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH" "" "" ${ARGN})
     set(_jh_cyw43_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/drivers/cyw43-driver")
     set(_jh_cyw43_vendor "${_jh_cyw43_root}/vendor")
@@ -16,11 +16,20 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
         list(APPEND _jh_cyw43_sources
             "${_jh_cyw43_vendor}/src/cyw43_lwip.c.upstream")
     endif()
+    if(JH_CYW43_BLUETOOTH)
+        list(APPEND _jh_cyw43_sources
+            "${_jh_cyw43_vendor}/src/cybt_shared_bus.c.upstream"
+            "${_jh_cyw43_vendor}/src/cybt_shared_bus_driver.c.upstream")
+    endif()
 
     set(_jh_cyw43_includes
         "${_jh_cyw43_root}"
         "${_jh_cyw43_vendor}"
         "${_jh_cyw43_vendor}/src")
+    if(JH_CYW43_BLUETOOTH)
+        list(APPEND _jh_cyw43_includes
+            "${_jh_cyw43_vendor}/firmware")
+    endif()
 
     if(JH_CYW43_LWIP)
         set(_jh_lwip_port
@@ -72,12 +81,16 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
 endfunction()
 
 function(jh_target_enable_cyw43_driver TARGET_NAME)
-    cmake_parse_arguments(JH_CYW43 "LWIP" "" "" ${ARGN})
+    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH" "" "" ${ARGN})
+    set(_jh_cyw43_options)
     if(JH_CYW43_LWIP)
-        jh_cyw43_source_manifest(_jh_cyw43_sources _jh_cyw43_includes LWIP)
-    else()
-        jh_cyw43_source_manifest(_jh_cyw43_sources _jh_cyw43_includes)
+        list(APPEND _jh_cyw43_options LWIP)
     endif()
+    if(JH_CYW43_BLUETOOTH)
+        list(APPEND _jh_cyw43_options BLUETOOTH)
+    endif()
+    jh_cyw43_source_manifest(_jh_cyw43_sources _jh_cyw43_includes
+        ${_jh_cyw43_options})
     set(_jh_generated_sources)
     foreach(_jh_source IN LISTS _jh_cyw43_sources)
         get_filename_component(_jh_name "${_jh_source}" NAME)

@@ -39,6 +39,7 @@ SOURCE_COMPONENT_ORDER = (
     "unity",
     "lwip",
     "littlefs",
+    "btstack",
     "freertos",
     "pico-sdk",
     "picotool",
@@ -660,6 +661,14 @@ GIT_COMPONENTS = {
             "littlefs", "littlefs", "littlefs_version.conf", "LITTLEFS",
             ("LICENSE.md", "lfs.c", "lfs.h", "lfs_util.c", "lfs_util.h"),
             version_validator=_version_littlefs,
+        ),
+        GitComponent(
+            "btstack", "BTstack", "btstack_version.conf", "BTSTACK",
+            (
+                "LICENSE", "src/bluetooth.h", "src/hci.c",
+                "src/ble/att_server.c", "platform/embedded/btstack_run_loop_embedded.c",
+                "tool/compile_gatt.py",
+            ),
         ),
         GitComponent(
             "freertos", "FreeRTOS-Kernel", "freertos_core_version.conf", "FREERTOS_KERNEL",

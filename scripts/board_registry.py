@@ -29,6 +29,7 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
                     "displayName": board["displayName"],
                     "status": board["status"],
                     "cache": {"JH_BOARD": board_id},
+                    "components": sorted((board.get("components") or {}).keys()),
                 }
             )
 

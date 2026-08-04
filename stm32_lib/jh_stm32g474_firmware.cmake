@@ -33,12 +33,14 @@ set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 #     SOURCES  <portable app sources (.c/.cpp)>
 #     INCLUDES <extra include dirs>
 #     DEFINES  <extra compile definitions, e.g. HAL_ENABLE_*>
+#     FEATURES <feature names already defined by a project configuration header>
 #     LIBRARIES <precompiled static archives or CMake library targets>
 #     [JH_ROOT <path>]   # JaszczurHAL repo root; defaults to this module's ../
 # )
 # Produces an executable <target> named "<target>.elf" plus <target>.bin/.hex.
 function(jh_add_stm32g474_firmware TARGET)
-    cmake_parse_arguments(ARG "" "JH_ROOT" "SOURCES;INCLUDES;DEFINES;OPTIONS;LIBRARIES" ${ARGN})
+    cmake_parse_arguments(ARG "" "JH_ROOT"
+        "SOURCES;INCLUDES;DEFINES;FEATURES;OPTIONS;LIBRARIES" ${ARGN})
 
     if(NOT ARG_JH_ROOT)
         get_filename_component(ARG_JH_ROOT "${_JH_STM32_MODULE_DIR}/.." ABSOLUTE)
@@ -73,6 +75,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal/impl/shared/*.c"
     )
     list(FILTER _shared EXCLUDE REGEX "/frameworks/PubSubClient/")
+    list(FILTER _shared EXCLUDE REGEX "/bluetooth/")
     # All top-level HAL module facades (hal/*.cpp). Each module wrapper is guarded
     # by its own HAL_ENABLE_* flag, so unused ones compile to empty TUs and are
     # stripped by --gc-sections. Globbing (rather than a hand-picked list) means a
@@ -94,7 +97,7 @@ function(jh_add_stm32g474_firmware TARGET)
     set(_jh_mqtt_sources)
     set(_jh_mqtt_includes)
     set(_jh_has_tls FALSE)
-    foreach(_definition IN LISTS ARG_DEFINES)
+    foreach(_definition IN LISTS ARG_DEFINES ARG_FEATURES)
         if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
             list(APPEND _jh_mqtt_sources
                 "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp")

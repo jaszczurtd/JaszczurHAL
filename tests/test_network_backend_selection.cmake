@@ -93,7 +93,9 @@ check_config(wireguard_offload FALSE "requires a host-stack L3 backend"
     -DHAL_ENABLE_WIREGUARD=1
     -DHAL_NETWORK_BACKEND_ESP_AT=1 -DHAL_ESP_AT_PROFILE_ESP8266=1)
 check_config(stm32_cyw43_gspi_lwip TRUE ""
-    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1 -DHAL_ENABLE_TCP=1
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1
+    -DHAL_ENABLE_WIFI=1 -DHAL_ENABLE_TCP=1
     -DHAL_ENABLE_UDP=1 -DHAL_ENABLE_BSD_SOCKETS=1
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
     -DHAL_CYW43_STACK_LWIP=1 -DHAL_CYW43_PIN_WL_ON=30u
@@ -101,11 +103,13 @@ check_config(stm32_cyw43_gspi_lwip TRUE ""
     -DHAL_CYW43_PIN_CLOCK=29u -DHAL_CYW43_MAX_TRANSACTION_BYTES=2052u)
 check_config(stm32_cyw43_missing_lwip FALSE
     "requires HAL_CYW43_STACK_LWIP"
-    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 -DHAL_ENABLE_WIFI=1
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1)
 check_config(stm32_cyw43_incomplete_gspi FALSE
     "requires a complete CYW43 gSPI profile"
-    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_WIFI=1
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 -DHAL_ENABLE_WIFI=1
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
     -DHAL_CYW43_STACK_LWIP=1)
 check_config(rp2040_network_without_board_profile FALSE
@@ -147,7 +151,8 @@ check_config(rp2040_cyw43_missing_lwip FALSE
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_PICO_PIO=1
     -DHAL_CYW43_PROFILE_PIM730=1
     -DHAL_CYW43_MAX_TRANSACTION_BYTES=2048u)
-check_config(rp2040_cyw43_on_board_without_radio TRUE ""
+check_config(rp2040_cyw43_on_board_without_radio FALSE
+    "requires a board profile with CYW43"
     -DHAL_TARGET_RP2040=1 -DHAL_ENABLE_WIFI=1
     -DHAL_BOARD_PROFILE_RP_PICO=1
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_PICO_PIO=1
@@ -164,7 +169,8 @@ check_architecture_identity(cyw43_host_stack
     -DHAL_CYW43_MAX_TRANSACTION_BYTES=2048u
     -DJH_EXPECT_NETWORK_CYW43=1)
 check_architecture_identity(stm32_cyw43_host_stack
-    -DHAL_TARGET_STM32G474=1 -DHAL_ENABLE_TCP=1
+    -DHAL_TARGET_STM32G474=1
+    -DHAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730=1 -DHAL_ENABLE_TCP=1
     -DHAL_NETWORK_BACKEND_CYW43=1 -DHAL_CYW43_BUS_STM32_GSPI=1
     -DHAL_CYW43_STACK_LWIP=1 -DHAL_CYW43_PIN_WL_ON=30u
     -DHAL_CYW43_PIN_CHIP_SELECT=28u -DHAL_CYW43_PIN_DATA=31u
@@ -175,7 +181,8 @@ file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
 foreach(_stm32_cyw43_contract IN ITEMS
         "jh_cyw43_driver.cmake"
         "HAL_CYW43_BUS_STM32_GSPI"
-        "jh_target_enable_cyw43_driver(JaszczurHAL LWIP)")
+        "list(APPEND _jh_stm32_cyw43_options LWIP)"
+        "jh_target_enable_cyw43_driver(JaszczurHAL \${_jh_stm32_cyw43_options})")
     string(FIND "${_stm32_library_cmake}" "${_stm32_cyw43_contract}"
         _stm32_cyw43_contract_at)
     if(_stm32_cyw43_contract_at EQUAL -1)

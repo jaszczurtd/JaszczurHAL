@@ -128,7 +128,16 @@ Build examples:
 
 ./scripts/build_stm32_lib.sh \
   --board nucleo-g474re
+
+./scripts/build_stm32_lib.sh \
+  --board nucleo-g474re-pim730
 ```
+
+`nucleo-g474re` describes the Nucleo board alone. Projects using the external
+PIM730/RM2 radio must select the experimental `nucleo-g474re-pim730` profile;
+it owns the fixed CYW43 gSPI pins and exports the radio capabilities and
+components required by network builds. The wiring and electrical constraints
+are documented in [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
 
 The archive defines:
 

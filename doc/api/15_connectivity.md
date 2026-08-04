@@ -256,9 +256,12 @@ advance the polling backend and expose connecting, no-network, authentication,
 DHCP and connected states. Passing `false` retains the bounded blocking join
 that waits for a DHCP lease.
 
-STM32G474 supports a configured external CYW43/PIM730 through its one-wire
-gSPI transport and the same pinned lwIP stack. Its station join is bounded and
-blocking; requesting the non-blocking form returns `HAL_EUNSUPPORTED`.
+STM32G474 supports an external CYW43/PIM730 through the experimental
+`nucleo-g474re-pim730` profile, its one-wire gSPI transport, and the same pinned
+lwIP stack. The plain `nucleo-g474re` profile deliberately has no radio
+capability and rejects a CYW43 network build. Station join on STM32G474 is
+bounded and blocking; requesting the non-blocking form returns
+`HAL_EUNSUPPORTED`.
 
 ```c
 #include <hal/hal_wifi.h>
@@ -368,7 +371,28 @@ high/low-speed sampling program without exceeding the target. Changing
 `clk_sys` while the provider is active is rejected; deinitialize the network,
 change the clock, and initialize it again.
 
-STM32G474 projects with an external PIM730 select:
+STM32G474 projects with an external PIM730 select board profile
+`nucleo-g474re-pim730`. The generated profile supplies the backend, bus, stack,
+and encoded pins; applications must not reproduce these definitions manually.
+The fixed wiring is:
+
+| PIM730 | STM32G474 | Nucleo connector |
+|---|---|---|
+| `CS` | `PB12` | CN10 pin 16 |
+| `DAT` | `PB15` | CN10 pin 26 |
+| `WL_ON` | `PB14` | CN10 pin 28 |
+| `CLK` | `PB13` | CN10 pin 30 |
+| `GND` | GND | CN10 pin 20 |
+| `3V3` | 3.3 V | CN7 pin 16 |
+
+PIM730 is a 3.0-3.3 V device; never connect it to 5 V. `DAT` is the combined
+data input/output and host-wake line. Use short, direct wiring. The supported
+profile assumes that the PIM730 cuttable `BT_ON`-to-`WL_ON` trace is intact, so
+`BT_ON`/`BL_ON` remains otherwise unconnected. Inspect that trace before using
+the profile; a cut trace is a different hardware topology and is not currently
+described by a board profile.
+
+The equivalent generated configuration is:
 
 ```c
 #define HAL_NETWORK_BACKEND_CYW43

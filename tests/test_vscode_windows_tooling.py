@@ -238,7 +238,7 @@ for path, expected in attributes.items():
 upstream_files = sorted(
     ROOT.glob("src/hal/impl/shared/drivers/cyw43-driver/vendor/src/*.upstream")
 )
-require(len(upstream_files) == 7, "CYW43 upstream fixture set changed unexpectedly")
+require(len(upstream_files) == 9, "CYW43 upstream fixture set changed unexpectedly")
 for path in upstream_files:
     result = run_checked(
         ["git", "check-attr", "eol", "--", path.relative_to(ROOT).as_posix()],

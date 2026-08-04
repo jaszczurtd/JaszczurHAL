@@ -214,8 +214,7 @@ the ISR path must not allocate, lock or touch the serial transport.
 
 ### ISR-deferred debug logging
 
-`hal_deb()`, `hal_derr()` and `hal_derr_limited()` may now be called from
-interrupt context. They detect ISR context via `hal_in_isr()` and on
+`hal_deb()`, `hal_derr()` and `hal_derr_limited()` may now be called from interrupt context, but still - **you should avoid that**. They detect ISR context via `hal_in_isr()` and on
 the hot path do **no** mutex acquisition, **no** lazy init, **no**
 timestamp hook, **no** rate-limiter table lookup, and **no** UART I/O.
 The formatted payload is enqueued into a per-backend single-producer /

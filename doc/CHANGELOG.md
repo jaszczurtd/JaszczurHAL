@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Experimental CYW43 Bluetooth bring-up
+
+- Added the experimental `nucleo-g474re-pim730` board profile with fixed gSPI
+  pin ownership and CYW43 capabilities; network builds now reject the plain
+  radio-less Nucleo profile at compile time.
+- Pinned the BTstack revision selected by Pico SDK 2.2.0 and added a private,
+  BLE-only Stage 1 probe for RP2040 Pico W and STM32G474 + PIM730 without
+  linking `pico_cyw43_arch` or `pico_btstack_cyw43`. This is an internal
+  bring-up surface, not a public Bluetooth API.
+- Added bounded shared-bus and HCI transport integration, static GATT
+  generation, dependency-boundary tests, and matched WiFi-only memory
+  baselines. Hardware validation remains a separate recorded gate.
+
 ### Windows OTA, debug, and extended host gates
 
 - Extended the automatic board-picker synchronization to create or repair the

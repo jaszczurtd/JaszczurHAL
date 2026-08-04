@@ -15,6 +15,7 @@ third_party/FatFs/
 third_party/Unity/
 third_party/lwip/
 third_party/littlefs/
+third_party/BTstack/
 third_party/pico-sdk/
 third_party/picotool/
 third_party/riscv-toolchain/

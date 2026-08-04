@@ -168,7 +168,6 @@ header "Gate 3/7: Memory safety (Valgrind memcheck)"
 
 MEMCHECK_REQUIRED_TESTS=(
     test_lwip_raw_engines
-    test_network_board_runtime_absent
     test_network_board_runtime_picow
     test_network_board_runtime_pim730
     test_pubsub_hal_client
@@ -344,7 +343,6 @@ pass "Native FreeRTOS SMP matrix built for RP2040 and both RP2350 ISAs."
 info "Building RP2040 flag matrix..."
 RP_FLAG_PROFILES=(
     empty-core
-    no-radio-network
     typical-set
     udp-wireguard
     pim730-owned
@@ -356,20 +354,6 @@ for profile in "${RP_FLAG_PROFILES[@]}"; do
     board=pico
     case "${profile}" in
         empty-core)
-            ;;
-        no-radio-network)
-            # Compile the complete public transport surface for a Pico profile
-            # without CYW43. Runtime preflight must reject hardware access.
-            flags=(
-                -D HAL_ENABLE_WIFI
-                -D HAL_ENABLE_TCP
-                -D HAL_ENABLE_UDP
-                -D HAL_NETWORK_BACKEND_CYW43
-                -D HAL_CYW43_BUS_PICO_PIO
-                -D HAL_CYW43_STACK_LWIP
-                -D HAL_BOARD_PROFILE_RP_PICO
-                -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-            )
             ;;
         typical-set)
             board=picow

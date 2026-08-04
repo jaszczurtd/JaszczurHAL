@@ -1,0 +1,48 @@
+#include <hal/hal_app.h>
+#include <hal/hal_status.h>
+#include <hal/hal_system.h>
+#include <hal/impl/shared/bluetooth/jh_bluetooth_stage1_probe.h>
+#include <tools_c.h>
+
+#include <stdbool.h>
+#include <stdint.h>
+
+static uint32_t s_last_report_ms;
+static hal_status_t s_start_status = HAL_NONE;
+
+static void report_status(void) {
+  jh_bluetooth_stage1_snapshot_t snapshot = {0};
+  jh_bluetooth_stage1_snapshot(&snapshot);
+  deb("JHBT1 start=%s ready=%u advertising=%u connected=%u connections=%lu "
+      "writes=%lu rx=%lu tx=%lu drain_limited=%lu status=%s transport=%s",
+      hal_status_to_string(s_start_status), snapshot.controller_ready ? 1u : 0u,
+      snapshot.advertising ? 1u : 0u, snapshot.connected ? 1u : 0u,
+      (unsigned long)snapshot.connection_count,
+      (unsigned long)snapshot.writes_received,
+      (unsigned long)snapshot.rx_packets, (unsigned long)snapshot.tx_packets,
+      (unsigned long)snapshot.drain_budget_hits,
+      hal_status_to_string(snapshot.last_status),
+      hal_status_to_string(snapshot.transport_status));
+}
+
+void app_start(void) {
+  debugInit();
+  s_start_status = jh_bluetooth_stage1_start();
+  report_status();
+}
+
+void app_task0(void) {
+  if (s_start_status == HAL_OK) {
+    const hal_status_t status = jh_bluetooth_stage1_service();
+    if (status != HAL_OK) {
+      s_start_status = status;
+    }
+  }
+
+  const uint32_t now = hal_millis();
+  if (now - s_last_report_ms >= 1000u) {
+    s_last_report_ms = now;
+    report_status();
+  }
+  hal_delay_ms(1u);
+}

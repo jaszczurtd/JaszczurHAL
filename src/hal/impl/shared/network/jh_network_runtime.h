@@ -5,7 +5,7 @@
 
 static inline hal_board_capabilities_t
 jh_network_required_board_capabilities(void) {
-#if defined(HAL_NETWORK_BACKEND_CYW43) && HAL_TARGET_IS_RP
+#if defined(HAL_NETWORK_BACKEND_CYW43)
   return HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
                                     ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
                                     : 0u);

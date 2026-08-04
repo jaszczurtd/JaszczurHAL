@@ -21,6 +21,7 @@ pico_sdk_init()
 
 set(SRC "${JH_ROOT}/src")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
+include("${JH_ROOT}/cmake/jh_btstack.cmake")
 include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
@@ -272,7 +273,16 @@ target_link_libraries(JaszczurHAL PUBLIC tinyusb_device)
 
 jh_hal_define_enabled(_jh_native_cyw43_backend HAL_NETWORK_BACKEND_CYW43)
 if(_jh_native_cyw43_backend)
-    jh_target_enable_cyw43_driver(JaszczurHAL LWIP)
+    jh_hal_define_enabled(_jh_native_bluetooth_stage1
+        JH_BLUETOOTH_STAGE1_PROBE)
+    set(_jh_native_cyw43_options LWIP)
+    if(_jh_native_bluetooth_stage1)
+        list(APPEND _jh_native_cyw43_options BLUETOOTH)
+    endif()
+    jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_native_cyw43_options})
+    if(_jh_native_bluetooth_stage1)
+        jh_target_enable_btstack_stage1(JaszczurHAL)
+    endif()
 elseif(_jh_pico_board_has_cyw43)
     target_compile_definitions(JaszczurHAL PUBLIC
         JH_RP_CYW43_LED_ONLY=1
