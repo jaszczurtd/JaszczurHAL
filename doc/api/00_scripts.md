@@ -13,7 +13,7 @@ document and the code disagree.
 | Goal | Command | Result |
 |---|---|---|
 | Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites; synchronizes managed components; configures Git hooks. |
-| Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, and the Windows host self-check. |
+| Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, built picotool, and the RISC-V toolchain stamp. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, target builds, and example builds. |
@@ -64,13 +64,17 @@ system tools are reused unless `-Force` is selected. A system OpenOCD is reused
 only when its required interface and target scripts can also be resolved;
 otherwise setup falls back to the authenticated managed archive.
 It records the verified executable set, managed Python, and short build root in
-`.build/windows/host-environment.json` for the shared firmware runtime.
+`.build/windows/host-environment.json` for the shared firmware runtime. Editor
+mode also preserves and updates the standard VS Code user `settings.json` with
+the Windows-specific Cortex-Debug OpenOCD and GNU Arm paths; it creates a
+recoverable `.jaszczurhal.bak` file before changing existing settings.
 
 `-VerifyOnly` is read-only. `-ConfigureHost` explicitly allows the documented
 long-path settings to be repaired, and `-InstallExtensions` explicitly allows
 VS Code profile changes. `-FirmwareOnly` keeps editor checks visible but
-optional for headless firmware builders and CI. The script never elevates
-itself. See
+optional for headless firmware builders and CI, and skips Cortex-Debug profile
+configuration. `-VerifyOnly` checks the configured debugger paths without
+writing. The script never elevates itself. See
 [Native Windows Setup](../windows_setup.md) for host requirements, commands,
 paths, and the current support boundary.
 
@@ -381,6 +385,18 @@ and requests confirmation before invoking `code --install-extension`.
 `--install --yes` records explicit non-interactive consent. The command verifies
 the complete list after installation. `--code` and `JH_VSCODE_CODE` select a
 specific VS Code command.
+
+### `vscode/tools/configure_cortex_debug.py`
+
+Reads the verified Windows `host-environment.json`, checks that OpenOCD, GNU
+Arm GCC, and adjacent GDB executables exist, and merges their absolute paths
+into the standard VS Code user profile as the Windows-specific Cortex-Debug
+settings. The updater preserves unrelated JSONC settings, comments, nesting,
+and trailing commas. It creates `settings.json.jaszczurhal.bak` before changing
+an existing profile and replaces the settings file atomically. `--check` is
+read-only, `--yes` confirms a non-interactive update, and `--settings` supports
+an explicitly selected VS Code profile or a test fixture. `runmefirst.ps1`
+invokes this helper automatically outside `-FirmwareOnly` mode.
 
 ### `scripts/configure_ota_firewall.py`
 

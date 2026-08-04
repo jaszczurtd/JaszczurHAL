@@ -5,7 +5,8 @@
 .DESCRIPTION
     Installs pinned tools under a short user-local root, creates the managed
     Python environment, synchronizes source components, and runs the final host
-    contract check. The script supports Windows PowerShell 5.1.
+    contract check. Editor mode also configures Cortex-Debug to use the verified
+    OpenOCD and GNU Arm tools. The script supports Windows PowerShell 5.1.
 
 .PARAMETER VerifyOnly
     Verify every component without downloading, installing, or repairing it.
@@ -22,7 +23,8 @@
 
 .PARAMETER FirmwareOnly
     Verify the firmware toolchain without requiring VS Code or its extensions.
-    Editor checks remain visible as optional inventory entries.
+    Editor checks remain visible as optional inventory entries, and VS Code user
+    settings are left unchanged.
 #>
 
 [CmdletBinding()]
@@ -42,6 +44,7 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = $PSScriptRoot
 $ComponentManager = Join-Path $RepoRoot 'scripts\component_manager.py'
 $Inventory = Join-Path $RepoRoot 'scripts\windows_host_inventory.ps1'
+$CortexDebugSettings = Join-Path $RepoRoot 'vscode\tools\configure_cortex_debug.py'
 $ToolConfig = Join-Path $RepoRoot 'third_party\windows_tools_version.conf'
 $Requirements = Join-Path $RepoRoot 'third_party\windows_requirements.txt'
 $VenvRoot = Join-Path $RepoRoot '.build\windows\venv'
@@ -292,6 +295,14 @@ Write-Host '              GNU Arm, GNU RISC-V, OpenOCD and picotool'
 Write-Host "  host changes allowed: $([bool]$ConfigureHost)"
 Write-Host "  extension installation allowed: $([bool]$InstallExtensions)"
 Write-Host "  firmware-only inventory: $([bool]$FirmwareOnly)"
+$cortexDebugMode = if ($FirmwareOnly) {
+    'unchanged'
+} elseif ($VerifyOnly) {
+    'verify'
+} else {
+    'configure'
+}
+Write-Host "  Cortex-Debug settings: $cortexDebugMode"
 Write-Host '  elevation: this script never elevates itself'
 Write-Host ''
 
@@ -316,6 +327,18 @@ Invoke-Checked $VenvPython $toolArguments 'Preparing native Windows tools'
 
 Add-ResolvedToolsToPath
 Sync-HostEnvironment
+if (-not $FirmwareOnly) {
+    $cortexDebugArguments = @(
+        $CortexDebugSettings, '--host-environment', $HostEnvironment
+    )
+    if ($VerifyOnly) {
+        $cortexDebugArguments += '--check'
+    } else {
+        $cortexDebugArguments += '--yes'
+    }
+    Invoke-Checked $VenvPython $cortexDebugArguments `
+        'Configuring VS Code Cortex-Debug tools'
+}
 if ($InstallExtensions) {
     Invoke-Checked $VenvPython @(
         (Join-Path $RepoRoot 'vscode\tools\manage_vscode_extensions.py'),
