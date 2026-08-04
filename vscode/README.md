@@ -211,13 +211,19 @@ per-board CMake cache. It publishes the result through the same stable artifact
 paths as `build`, so upload tasks always use the most recently successful
 build.
 
-Generated Cortex-Debug launch configurations provide explicit OpenOCD
-configuration files and let the extension resolve GDB from its configured Arm
-toolchain path. RP examples use
-`interface/cmsis-dap.cfg` plus `target/rp2040.cfg`; select the corresponding
-RP2350 target configuration when debugging an RP2350 project. A Pico in
-BOOTSEL remains only the target. OpenOCD needs a separate CMSIS-DAP/Picoprobe
-connected to the board's SWD pins.
+Generated Cortex-Debug launch configurations provide profiles for RP2040,
+RP2350 Arm, and STM32G474 with explicit OpenOCD configuration files, while the
+extension resolves GDB from its configured Arm toolchain path. Select the
+matching target and board with `Project: Select board` before starting a
+profile because the shared Debug pre-launch task builds the active selection.
+RP profiles use `interface/cmsis-dap.cfg` plus the matching RP target script. A
+Pico in BOOTSEL remains only the target, so OpenOCD needs a separate
+CMSIS-DAP/Picoprobe connected to its SWD pins. The STM32G474 profile uses the
+NUCLEO-G474RE's on-board ST-Link through `board/st_nucleo_g4.cfg`; no external
+probe wiring is required. Generated RP profiles also set a validated adapter
+speed explicitly: 5 MHz for RP2040 and 2 MHz for RP2350. Without that setting,
+OpenOCD falls back to 100 kHz and RP2350 flash discovery can exceed GDB's
+default remote timeout on Windows.
 
 The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration

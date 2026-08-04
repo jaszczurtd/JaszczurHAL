@@ -421,8 +421,10 @@ class TrackedContractTests(unittest.TestCase):
                 self.assertIsNone(manager._system_tool(spec))
 
                 scripts = root / "share/openocd/scripts"
+                (scripts / "board").mkdir(parents=True)
                 (scripts / "interface").mkdir(parents=True)
                 (scripts / "target").mkdir()
+                (scripts / "board/st_nucleo_g4.cfg").write_text("board\n")
                 (scripts / "interface/stlink.cfg").write_text("adapter\n")
                 (scripts / "target/stm32g4x.cfg").write_text("target\n")
                 (scripts / "interface/cmsis-dap.cfg").write_text("adapter\n")

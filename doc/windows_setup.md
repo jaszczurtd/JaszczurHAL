@@ -116,18 +116,26 @@ particular project:
 ```
 
 The result contains `openocd`, `gdb`, `armToolchainPath`, the OpenOCD scripts
-root, and the interface/target configuration pair. Cortex-Debug resolves
-`arm-none-eabi-gdb` from the configured toolchain directory. Generated launch
-configurations provide explicit CMSIS-DAP and target script names and do not
-depend on project-private `cortex-debug.gdbPath`, scripts-root, or SVD settings.
-The managed Raspberry Pi OpenOCD archive finds its adjacent scripts directory
-without a global `PATH` change.
+root, and the target's diagnostic interface/target configuration pair.
+Cortex-Debug resolves `arm-none-eabi-gdb` from the configured toolchain
+directory. Generated launch configurations select the complete OpenOCD setup
+for each profile and do not depend on project-private
+`cortex-debug.gdbPath`, scripts-root, or SVD settings. The managed Raspberry Pi
+OpenOCD archive finds its adjacent scripts directory without a global `PATH`
+change.
 
 Pico and Pico 2 BOOTSEL USB devices are debug targets and do not provide an
 SWD probe over that connection. Cortex debugging requires a separate
 Raspberry Pi Debug Probe, a Pico running Debug Probe/Picoprobe firmware, or a
 compatible probe wired to SWD. The standard RP configuration uses
-`interface/cmsis-dap.cfg`; STM32G474 uses `interface/stlink.cfg`.
+`interface/cmsis-dap.cfg`. The NUCLEO-G474RE profile uses its on-board ST-Link
+through `board/st_nucleo_g4.cfg`, which selects SWD and the board's hardware
+reset behavior; it does not require a separate probe or external SWD wiring.
+Generated RP launch profiles set `adapter speed 5000` for RP2040 and
+`adapter speed 2000` for RP2350. Do not remove these commands: the bare
+CMSIS-DAP/target scripts otherwise fall back to 100 kHz, and RP2350 flash
+discovery can exceed GDB's default remote timeout and desynchronize its initial
+packet exchange on Windows.
 
 The bootstrap inventories probe devices but does not install, replace, or
 rebind Windows USB drivers. If OpenOCD reports that no matching CMSIS-DAP
@@ -146,6 +154,16 @@ Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
 `main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
 returned the application USB CDC port. A DoomConsole follow-up also loaded its
 Debug ELF and stopped at `app_start` through the same launch-profile contract.
+
+The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
+V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD
+`0.12.0+dev (2026-07-01-10:44)` detected a Cortex-M4 r0p1, 512 KiB of dual-bank
+flash, six breakpoints, and four watchpoints. Managed GNU Arm GDB programmed a
+7,620-byte `01_blink` Debug image, stopped first at `main` and then at
+`app_start`, detached cleanly, and issued `reset run`. Use the generated
+`board/st_nucleo_g4.cfg` profile for this board: a bare
+`interface/stlink.cfg` plus `target/stm32g4x.cfg` session may fail target
+examination when the board needs the Nucleo hardware-reset configuration.
 
 OpenOCD may report an old Debug Probe/Picoprobe firmware and enable a slower
 compatibility workaround. This warning does not prevent SWD debugging. Update

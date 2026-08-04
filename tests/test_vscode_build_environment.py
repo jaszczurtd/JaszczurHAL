@@ -58,6 +58,7 @@ with tempfile.TemporaryDirectory(prefix="jh build env spacje ") as temporary_tex
     openocd.touch()
     openocd_scripts = openocd.parent / "scripts"
     for relative in (
+        "board/st_nucleo_g4.cfg",
         "interface/cmsis-dap.cfg",
         "interface/stlink.cfg",
         "target/rp2040.cfg",

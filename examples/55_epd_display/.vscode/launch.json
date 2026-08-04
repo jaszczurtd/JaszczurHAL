@@ -14,7 +14,10 @@
                 "target/rp2040.cfg"
             ],
             "runToEntryPoint": "main",
-            "preLaunchTask": "Project: Build (Debug)"
+            "preLaunchTask": "Project: Build (Debug)",
+            "openOCDLaunchCommands": [
+                "adapter speed 5000"
+            ]
         },
         {
             "name": "Project: Debug Firmware (RP2350 ARM)",
@@ -27,6 +30,23 @@
             "configFiles": [
                 "interface/cmsis-dap.cfg",
                 "target/rp2350.cfg"
+            ],
+            "runToEntryPoint": "main",
+            "preLaunchTask": "Project: Build (Debug)",
+            "openOCDLaunchCommands": [
+                "adapter speed 2000"
+            ]
+        },
+        {
+            "name": "Project: Debug Firmware (STM32G474 / ST-Link)",
+            "type": "cortex-debug",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "executable": "${workspaceFolder}/../../.build/examples/55_epd_display/firmware.elf",
+            "servertype": "openocd",
+            "device": "STM32G474RE",
+            "configFiles": [
+                "board/st_nucleo_g4.cfg"
             ],
             "runToEntryPoint": "main",
             "preLaunchTask": "Project: Build (Debug)"

@@ -27,10 +27,19 @@ All notable changes to this project will be documented in this file.
   verify-only checks drift and firmware-only leaves editor settings unchanged.
 - Removed the need for legacy project-private Cortex-Debug path, scripts-root,
   and SVD variables from generated launch profiles.
+- Added a generated STM32G474/NUCLEO-G474RE Cortex-Debug profile backed by the
+  on-board ST-Link and OpenOCD's board-level reset configuration, with shared
+  launch generation and drift coverage across all checked-in examples.
+- Added validated 5 MHz RP2040 and 2 MHz RP2350 CMSIS-DAP speeds to generated
+  profiles; this avoids OpenOCD's 100 kHz fallback and the resulting RP2350
+  GDB handshake timeout on Windows.
 - Validated the managed Windows OpenOCD/GDB path with an official Raspberry Pi
   Debug Probe running firmware 2.3.1 and a Pico 2 W target, including Debug ELF
   loading, hardware breakpoints at `main` and `app_start`, resume, and
   application restart.
+- Validated the STM32 profile natively on Windows with a physical
+  NUCLEO-G474RE: managed OpenOCD detected the STM32G474, GNU Arm GDB programmed
+  the Debug ELF, stopped at `main` and `app_start`, and restarted the target.
 - Kept the fixed-size native RP OTA boot applier within its flash partition in
   application Debug builds by retaining its production assertion policy.
 - Added an MSVC/GNU portable BSD socket-header gate and documented the full

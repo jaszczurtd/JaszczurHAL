@@ -2,6 +2,15 @@
 
 ## 0.1.0 - Unreleased
 
+- Generate an STM32G474 Cortex-Debug profile for the NUCLEO-G474RE on-board
+  ST-Link using OpenOCD's `board/st_nucleo_g4.cfg`, and include launch files in
+  the shared-template and checked-in-example drift gate.
+- Share one launch-document generator between the template, example
+  dispatcher, and standalone project generator; standalone RP profiles now
+  stop at the valid `main` entry point.
+- Set generated CMSIS-DAP adapter speeds explicitly to 5 MHz for RP2040 and
+  2 MHz for RP2350, preventing slow RP2350 flash discovery from exceeding
+  GDB's default remote timeout on Windows.
 - Add `debug-tools` discovery for the managed OpenOCD executable, GNU Arm GDB,
   scripts root, and per-target configuration files.
 - Generate explicit CMSIS-DAP and RP2040 OpenOCD configuration files in

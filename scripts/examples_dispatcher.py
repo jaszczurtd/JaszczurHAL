@@ -357,45 +357,10 @@ def base_tasks(default_target: str, default_board: str, variants: list[dict[str,
 
 
 def launch_for(name: str) -> dict[str, Any]:
-    return {
-        "version": "0.2.0",
-        "configurations": [
-            {
-                "name": "Project: Debug Firmware",
-                "type": "cortex-debug",
-                "request": "launch",
-                "cwd": "${workspaceFolder}",
-                "executable": (
-                    f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
-                ),
-                "servertype": "openocd",
-                "device": "RP2040",
-                "configFiles": [
-                    "interface/cmsis-dap.cfg",
-                    "target/rp2040.cfg",
-                ],
-                "runToEntryPoint": "main",
-                "preLaunchTask": "Project: Build (Debug)",
-            },
-            {
-                "name": "Project: Debug Firmware (RP2350 ARM)",
-                "type": "cortex-debug",
-                "request": "launch",
-                "cwd": "${workspaceFolder}",
-                "executable": (
-                    f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
-                ),
-                "servertype": "openocd",
-                "device": "RP2350",
-                "configFiles": [
-                    "interface/cmsis-dap.cfg",
-                    "target/rp2350.cfg",
-                ],
-                "runToEntryPoint": "main",
-                "preLaunchTask": "Project: Build (Debug)",
-            }
-        ],
-    }
+    from vscode_task_config import cortex_debug_launch_document
+
+    executable = f"${{workspaceFolder}}/../../.build/examples/{name}/firmware.elf"
+    return cortex_debug_launch_document(executable)
 
 
 def extensions_for() -> dict[str, Any]:
@@ -435,9 +400,14 @@ def reference_settings() -> dict[str, Any]:
 
 
 def reference_template_files() -> dict[str, Any]:
+    from vscode_task_config import cortex_debug_launch_document
+
     return {
         "settings.json": reference_settings(),
         "tasks.json": base_tasks("rp2040", "pico", []),
+        "launch.json": cortex_debug_launch_document(
+            "${workspaceFolder}/.build/firmware.elf"
+        ),
         "extensions.json": extensions_for(),
         "keybindings.reference.json": keybindings_for(),
     }
