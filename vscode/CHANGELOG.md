@@ -2,6 +2,11 @@
 
 ## 0.1.0 - Unreleased
 
+- Extend `sync-board-picker` to create, update, and repair the managed RP2040,
+  RP2350 ARM, and STM32G474 Cortex-Debug profiles while preserving custom
+  consumer configurations and migrating legacy JaszczurHAL profile names.
+  Repository examples retain portable workspace-relative ELF paths when their
+  manifests use `${jhRoot}`.
 - Generate an STM32G474 Cortex-Debug profile for the NUCLEO-G474RE on-board
   ST-Link using OpenOCD's `board/st_nucleo_g4.cfg`, and include launch files in
   the shared-template and checked-in-example drift gate.

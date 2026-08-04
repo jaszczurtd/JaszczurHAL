@@ -23,10 +23,10 @@ clean_build_artifacts
 cat <<'WHYSUDO'
 
 This setup needs sudo (you'll be prompted for your password) to:
-  - install system packages via apt: build tools, the arm-none-eabi toolchain,
+  - install (or update) system packages via apt: build tools, the arm-none-eabi toolchain,
     host test/QA tooling (valgrind, clang-tidy, cppcheck, ...), openocd, and
     libusb + pkg-config (picotool USB access),
-  - install osv-scanner into /usr/local/bin,
+  - install (or update) osv-scanner into /usr/local/bin,
   - write a udev rule under /etc/udev/rules.d so you can flash RP2040/RP2350
     boards over USB without sudo afterwards,
   - inspect the host firewall and, only after separate confirmation, allow the
@@ -43,11 +43,11 @@ sudo apt-get update
 sudo apt-get install -y build-essential cmake ninja-build git curl ca-certificates python3 iproute2
 
 # Client/runtime tooling used by generated jh-vscode projects:
-# - openocd flashes/debugs STM32G474 targets,
+# - openocd and gdb-multiarch debug Arm targets,
 # - python3-serial powers the persistent serial monitor,
 # - psmisc provides fuser for safe serial monitor handoff before upload,
 # - libusb-1.0-0-dev + pkg-config let picotool talk to RP2040/RP2350 over USB.
-sudo apt-get install -y openocd python3-serial psmisc libusb-1.0-0-dev pkg-config
+sudo apt-get install -y openocd gdb-multiarch python3-serial psmisc libusb-1.0-0-dev pkg-config
 
 # Synchronize all pinned source and toolchain components after their host build
 # prerequisites are installed.
@@ -157,7 +157,7 @@ for tool in cmake ninja g++ gcc make git python3 ip valgrind clang-tidy cppcheck
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
             arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
             arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \
-            openocd fuser; do
+            openocd gdb-multiarch fuser; do
   if tool_exists "$tool"; then
     printf '  ok       %s\n' "$tool"
   else

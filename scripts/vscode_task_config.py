@@ -3,12 +3,24 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
 
 BOARD_SELECTION_INPUT_ID = "boardSelection"
 SYNC_BOARD_PICKER_LABEL = "Project: Sync board picker"
+MANAGED_DEBUG_PROFILE_NAMES = {
+    "Project: Debug Firmware",
+    "Project: Debug Firmware (RP2350 ARM)",
+    "Project: Debug Firmware (STM32G474 / ST-Link)",
+    "Debug: RP2040 (Pico/Pico W/Zero/Plus)",
+    "Debug: RP2350 (Pico 2/Pico 2W)",
+    "Debug: Attach RP2040 (no upload)",
+    "Debug: Attach RP2350 (no upload)",
+    "Debug: Attach RP2040 (bez uploadu)",
+    "Debug: Attach RP2350 (bez uploadu)",
+}
 VSCODE_ENTRY_CONFIG = "${config:jaszczurhal.vscodeEntry}"
 VSCODE_ENTRY_WINDOWS_CONFIG = "${config:jaszczurhal.vscodeEntryWindows}"
 
@@ -56,7 +68,7 @@ def cortex_debug_launch_document(
             "Project: Debug Firmware (STM32G474 / ST-Link)",
             "STM32G474RE",
             ["board/st_nucleo_g4.cfg"],
-            [],
+            ["reset_config srst_only srst_nogate connect_assert_srst"],
         ),
     )
     configurations = []
@@ -77,6 +89,81 @@ def cortex_debug_launch_document(
             configuration["openOCDLaunchCommands"] = openocd_launch_commands
         configurations.append(configuration)
     return {"version": "0.2.0", "configurations": configurations}
+
+
+def vscode_workspace_path(path: Path, workspace_dir: Path) -> str:
+    try:
+        relative = os.path.relpath(path, workspace_dir)
+    except ValueError:
+        return path.as_posix()
+    relative_text = Path(relative).as_posix()
+    if relative_text == ".":
+        return "${workspaceFolder}"
+    return f"${{workspaceFolder}}/{relative_text}"
+
+
+def vscode_launch_executable(
+    manifest: dict[str, Any],
+    *,
+    workspace_dir: Path | None = None,
+    jh_root: Path | None = None,
+) -> str:
+    """Translate the tracked manifest artifact path into VS Code variables."""
+    build_dir = manifest.get("buildDir") or "${project}/.build"
+    if not isinstance(build_dir, str):
+        raise ValueError("project manifest field 'buildDir' must be a string")
+    artifacts = manifest.get("artifacts") or {}
+    if not isinstance(artifacts, dict):
+        raise ValueError("project manifest field 'artifacts' must be an object")
+    executable = artifacts.get("elf") or "${buildDir}/firmware.elf"
+    if not isinstance(executable, str):
+        raise ValueError("project manifest field 'artifacts.elf' must be a string")
+    executable = executable.replace("${buildDir}", build_dir)
+    if "${jhRoot}" in executable:
+        if workspace_dir is None or jh_root is None:
+            raise ValueError(
+                "manifest ELF path uses '${jhRoot}' without workspace context"
+            )
+        executable = executable.replace(
+            "${jhRoot}",
+            vscode_workspace_path(jh_root, workspace_dir),
+        )
+    return (
+        executable.replace("${projectDir}", "${workspaceFolder}")
+        .replace("${project}", "${workspaceFolder}")
+        .replace("\\", "/")
+    )
+
+
+def sync_cortex_debug_launch_document(
+    document: dict[str, Any],
+    executable: str,
+) -> bool:
+    """Replace JaszczurHAL-owned profiles while preserving consumer profiles."""
+    configurations = document.get("configurations")
+    if configurations is None:
+        configurations = []
+    elif not isinstance(configurations, list):
+        raise ValueError("launch.json field 'configurations' must be an array")
+
+    custom_configurations = [
+        configuration
+        for configuration in configurations
+        if not (
+            isinstance(configuration, dict)
+            and configuration.get("name") in MANAGED_DEBUG_PROFILE_NAMES
+        )
+    ]
+    desired = cortex_debug_launch_document(executable)
+    desired_configurations = desired["configurations"] + custom_configurations
+    changed = False
+    if document.get("version") != desired["version"]:
+        document["version"] = desired["version"]
+        changed = True
+    if configurations != desired_configurations:
+        document["configurations"] = desired_configurations
+        changed = True
+    return changed
 
 
 def keybindings_reference() -> list[dict[str, str]]:
@@ -108,6 +195,7 @@ def vscode_entry_settings(unix_entry: str) -> dict[str, str]:
     return {
         "jaszczurhal.vscodeEntry": unix_entry,
         "jaszczurhal.vscodeEntryWindows": f"{unix_entry}.cmd",
+        "cortex-debug.gdbPath.linux": "gdb-multiarch",
     }
 
 
@@ -180,7 +268,7 @@ def board_selection_input(
 def sync_board_picker_task() -> dict[str, Any]:
     return vscode_entry_task(
         label=SYNC_BOARD_PICKER_LABEL,
-        detail="Refresh target/board options from the JaszczurHAL registry",
+        detail="Refresh target/board options and managed debug profiles",
         args=[
             "sync-board-picker",
             "--project",

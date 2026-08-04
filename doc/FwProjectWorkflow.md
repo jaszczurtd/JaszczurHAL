@@ -41,6 +41,11 @@ toolchain directory in the Cortex-Debug user settings; the extension resolves
 GDB from that directory. These machine-local paths stay out of tracked project
 files.
 
+On Debian/Ubuntu-like Linux hosts, `runmefirst.sh` installs `gdb-multiarch` and
+generated settings select it through `cortex-debug.gdbPath.linux`. The
+STM32G474 profile uses `board/st_nucleo_g4.cfg` with connect-under-reset so the
+on-board ST-Link can recover a running target before GDB attaches.
+
 The tracked manifest selects `toolchain: "cmake"` and points
 `cmake.sourceDir` at `libraries/JaszczurHAL/cmake/jh_firmware_project`.
 `JH_PROJECT_DIR` identifies the application directory. The shared dispatcher
@@ -57,9 +62,12 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
 Generated `tasks.json` contains GUI and terminal board selection, OTA upload
 and discovery, and `Project: Sync board picker`. The synchronization task runs
 on `folderOpen`, reads the current JaszczurHAL board registry, and updates the
-tracked GUI options only when they changed. VS Code requires a trusted
-workspace and may request one-time approval for automatic tasks. The terminal
-`Project: Select board` task always reads the registry at invocation time.
+tracked GUI options only when they changed. The same task creates or repairs
+the generated RP2040, RP2350 ARM, and STM32G474/ST-Link debugger profiles in
+`launch.json`, using the manifest ELF artifact while preserving configurations
+owned by the consumer. VS Code requires a trusted workspace and may request
+one-time approval for automatic tasks. The terminal `Project: Select board`
+task always reads the registry at invocation time.
 Every generated task uses `jaszczurhal.vscodeEntry` on Unix and the
 `jaszczurhal.vscodeEntryWindows` platform override on Windows. The two settings
 select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which execute one

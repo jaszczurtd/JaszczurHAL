@@ -232,12 +232,13 @@ starts persistent serial monitors, and refreshes IntelliSense.
 - Native RP network updates, first flash, and firewall requirements:
   [OTAWorkflow.md](doc/OTAWorkflow.md)
 
-Linux remains the complete device-workflow environment. Native Windows now has
-the launcher, generated task override, shared component manager, authenticated
-toolchain bootstrap, short-root Ninja builds for the four target families, and
-CI coverage. COM/BOOTSEL adapters and hardware upload gates remain under
-development. See [Native Windows Setup](doc/windows_setup.md) for setup and
-verification.
+Linux remains the complete host-test environment. Native Windows has the
+launcher, generated task override, shared component manager, authenticated
+toolchain bootstrap, short-root Ninja builds for the four target families,
+COM identity and monitor handoff, BOOTSEL/UF2 and OTA upload paths, Cortex-Debug
+profiles, hardware validation, and CI coverage. See
+[Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
+explicit Linux-only boundaries.
 
 ## Managed dependencies
 

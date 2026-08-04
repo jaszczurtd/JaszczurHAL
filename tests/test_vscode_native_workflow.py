@@ -421,6 +421,7 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
         text=True,
     )
     generated_tasks_path = project_dir / ".vscode" / "tasks.json"
+    generated_launch_path = project_dir / ".vscode" / "launch.json"
     generated_tasks = load_json(generated_tasks_path)
     generated_by_label = {
         task.get("label"): task
@@ -478,6 +479,19 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
         json.dumps(generated_tasks, indent=2) + "\n",
         encoding="utf-8",
     )
+    generated_launch = load_json(generated_launch_path)
+    legacy_profile = dict(generated_launch["configurations"][0])
+    legacy_profile["name"] = "Debug: RP2040 (Pico/Pico W/Zero/Plus)"
+    custom_profile = {
+        "name": "Consumer: Custom debugger",
+        "type": "cppdbg",
+        "request": "launch",
+    }
+    generated_launch["configurations"] = [legacy_profile, custom_profile]
+    generated_launch_path.write_text(
+        json.dumps(generated_launch, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     subprocess.run(
         [
@@ -516,12 +530,47 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
         "Project: Sync board picker" in synchronized_labels,
         "sync-board-picker did not install its automatic task",
     )
+    synchronized_launch = load_json(generated_launch_path)
+    synchronized_profiles = {
+        profile.get("name"): profile
+        for profile in synchronized_launch["configurations"]
+    }
+    require(
+        "Debug: RP2040 (Pico/Pico W/Zero/Plus)" not in synchronized_profiles,
+        "sync-board-picker did not remove a legacy managed debug profile",
+    )
+    require(
+        {
+            "Project: Debug Firmware",
+            "Project: Debug Firmware (RP2350 ARM)",
+            "Project: Debug Firmware (STM32G474 / ST-Link)",
+            "Consumer: Custom debugger",
+        }
+        == set(synchronized_profiles),
+        "sync-board-picker did not install managed profiles or preserve a custom profile",
+    )
+    synchronized_stm32 = synchronized_profiles[
+        "Project: Debug Firmware (STM32G474 / ST-Link)"
+    ]
+    require(
+        synchronized_stm32["configFiles"] == ["board/st_nucleo_g4.cfg"],
+        "sync-board-picker installed an invalid STM32G474 OpenOCD profile",
+    )
+    require(
+        all(
+            profile.get("executable") == "${workspaceFolder}/.build/firmware.elf"
+            for name, profile in synchronized_profiles.items()
+            if name.startswith("Project: Debug Firmware")
+        ),
+        "sync-board-picker did not derive the debug artifact from the manifest",
+    )
 
     synchronized_tasks.pop("inputs")
     generated_tasks_path.write_text(
         json.dumps(synchronized_tasks, indent=2) + "\n",
         encoding="utf-8",
     )
+    generated_launch_path.unlink()
     subprocess.run(
         [
             str(ENTRY),
@@ -541,8 +590,21 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
         ),
         "sync-board-picker did not restore a missing inputs section",
     )
+    require(
+        {
+            profile.get("name")
+            for profile in load_json(generated_launch_path)["configurations"]
+        }
+        == {
+            "Project: Debug Firmware",
+            "Project: Debug Firmware (RP2350 ARM)",
+            "Project: Debug Firmware (STM32G474 / ST-Link)",
+        },
+        "sync-board-picker did not recreate a missing launch.json",
+    )
 
     synchronized_text = generated_tasks_path.read_text(encoding="utf-8")
+    synchronized_launch_text = generated_launch_path.read_text(encoding="utf-8")
     subprocess.run(
         [
             str(ENTRY),
@@ -557,4 +619,8 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
     require(
         generated_tasks_path.read_text(encoding="utf-8") == synchronized_text,
         "sync-board-picker rewrote an already current tasks.json",
+    )
+    require(
+        generated_launch_path.read_text(encoding="utf-8") == synchronized_launch_text,
+        "sync-board-picker rewrote an already current launch.json",
     )

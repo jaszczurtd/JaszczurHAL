@@ -227,4 +227,5 @@ FreeRTOS POSIX, and Bash-driven BearSSL integration tests remain explicitly
 Linux-only. The native Windows OTA callback, trial confirmation, and automatic
 rollback have been validated on Pico 2 W over a trusted `Private` LAN. OTA
 hardware requires local fixture credentials; hardware debug additionally
-requires a connected SWD probe.
+requires a connected SWD probe. The Fiesta desktop SerialConfigurator remains
+a Linux application and is outside the native Windows firmware-workflow scope.

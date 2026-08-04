@@ -510,19 +510,14 @@ def objdump_program(config: dict[str, Any]) -> str | None:
     return shutil.which("arm-none-eabi-objdump") or shutil.which("objdump")
 
 
-def openocd_scripts_root(executable: Path) -> Path | None:
+def openocd_scripts_root(
+    executable: Path,
+    required: tuple[str, ...],
+) -> Path | None:
     candidates = (
         executable.parent / "scripts",
         executable.parent.parent / "share" / "openocd" / "scripts",
         executable.parent.parent / "scripts",
-    )
-    required = (
-        "board/st_nucleo_g4.cfg",
-        "interface/cmsis-dap.cfg",
-        "interface/stlink.cfg",
-        "target/rp2040.cfg",
-        "target/rp2350.cfg",
-        "target/stm32g4x.cfg",
     )
     return next(
         (
@@ -547,6 +542,15 @@ def debug_tool_paths(config: dict[str, Any]) -> dict[str, str] | None:
         "rp2350-arm": "interface/cmsis-dap.cfg",
         "stm32g474": "interface/stlink.cfg",
     }
+    required_configs = {
+        "rp2040": ("interface/cmsis-dap.cfg", "target/rp2040.cfg"),
+        "rp2350-arm": ("interface/cmsis-dap.cfg", "target/rp2350.cfg"),
+        "stm32g474": (
+            "board/st_nucleo_g4.cfg",
+            "interface/stlink.cfg",
+            "target/stm32g4x.cfg",
+        ),
+    }
     if target not in target_configs:
         return None
 
@@ -559,14 +563,16 @@ def debug_tool_paths(config: dict[str, Any]) -> dict[str, str] | None:
         else None
     )
     if gdb is None or not gdb.is_file():
-        located_gdb = shutil.which("arm-none-eabi-gdb")
+        located_gdb = shutil.which("arm-none-eabi-gdb") or shutil.which(
+            "gdb-multiarch"
+        )
         gdb = Path(located_gdb) if located_gdb else None
     if not openocd_text or gdb is None or not gdb.is_file():
         return None
     openocd = Path(openocd_text)
     if not openocd.is_file():
         return None
-    scripts = openocd_scripts_root(openocd)
+    scripts = openocd_scripts_root(openocd, required_configs[target])
     if scripts is None:
         return None
     return {
@@ -917,7 +923,7 @@ def command_debug_tools(args: argparse.Namespace) -> int:
     paths = debug_tool_paths(config)
     if paths is None:
         print(
-            "error: a verified OpenOCD, GNU Arm GDB, and matching scripts "
+            "error: a verified OpenOCD, Arm-capable GDB, and matching scripts "
             f"were not found for target {config.get('target')}",
             file=sys.stderr,
         )
@@ -1390,7 +1396,7 @@ def temporary_directory() -> Path:
 
 
 def write_text_atomic(path: Path, content: str) -> None:
-    mode = path.stat().st_mode & 0o777
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     temp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
@@ -1422,6 +1428,7 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
         return EXIT_CONFIG
 
     tasks_path = project_dir / ".vscode" / "tasks.json"
+    launch_path = project_dir / ".vscode" / "launch.json"
     manifest_path = project_dir / ".vscode" / "jaszczurhal.project.json"
     if not tasks_path.is_file():
         print(f"error: VS Code tasks file does not exist: {tasks_path}", file=sys.stderr)
@@ -1430,6 +1437,9 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
     try:
         tasks_text = tasks_path.read_text(encoding="utf-8")
         tasks_document = load_json_file(tasks_path)
+        launch_exists = launch_path.is_file()
+        launch_text = launch_path.read_text(encoding="utf-8") if launch_exists else ""
+        launch_document = load_json_file(launch_path)
         manifest = load_json_file(manifest_path)
         registry = load_target_registry()
         selected_target, selected_board, _ = current_board_selection(
@@ -1442,36 +1452,68 @@ def command_sync_board_picker(args: argparse.Namespace) -> int:
                 f"target '{selected_target}' does not define a selectable board"
             )
 
-        from vscode_task_config import sync_board_picker_document
+        from vscode_task_config import (
+            sync_board_picker_document,
+            sync_cortex_debug_launch_document,
+            vscode_launch_executable,
+        )
 
-        changed = sync_board_picker_document(
+        tasks_changed = sync_board_picker_document(
             tasks_document,
             registry,
             selected_target,
             selected_board,
         )
+        launch_changed = sync_cortex_debug_launch_document(
+            launch_document,
+            vscode_launch_executable(
+                manifest,
+                workspace_dir=project_dir,
+                jh_root=jaszczurhal_root(),
+            ),
+        )
     except (OSError, ValueError) as exc:
-        print(f"error: cannot synchronize {tasks_path}: {exc}", file=sys.stderr)
+        print(f"error: cannot synchronize VS Code project files: {exc}", file=sys.stderr)
         return EXIT_CONFIG
 
-    if not changed:
-        print(f"Board picker is current: {tasks_path}")
+    if not tasks_changed and not launch_changed:
+        print(f"VS Code target picker and debug profiles are current: {project_dir}")
         return 0
 
-    content = (
-        json.dumps(
-            tasks_document,
-            indent=json_indent_width(tasks_text),
-            ensure_ascii=False,
-        )
-        + "\n"
-    )
     try:
-        write_text_atomic(tasks_path, content)
+        if tasks_changed:
+            tasks_content = (
+                json.dumps(
+                    tasks_document,
+                    indent=json_indent_width(tasks_text),
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            write_text_atomic(tasks_path, tasks_content)
+        if launch_changed:
+            launch_content = (
+                json.dumps(
+                    launch_document,
+                    indent=json_indent_width(launch_text) if launch_exists else 4,
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            write_text_atomic(launch_path, launch_content)
     except OSError as exc:
-        print(f"error: cannot update {tasks_path}: {exc}", file=sys.stderr)
+        print(f"error: cannot update VS Code project files: {exc}", file=sys.stderr)
         return EXIT_CONFIG
-    print(f"Updated board picker from the JaszczurHAL registry: {tasks_path}")
+
+    updated = []
+    if tasks_changed:
+        updated.append(str(tasks_path))
+    if launch_changed:
+        updated.append(str(launch_path))
+    print(
+        "Updated VS Code target picker and debug profiles from JaszczurHAL: "
+        + ", ".join(updated)
+    )
     return 0
 
 

@@ -80,8 +80,12 @@ early migration work. New tasks should use `build-debug`.
 `change-port` selects a serial port interactively or through `--port` and saves
 it as user-local `uploadPort` in `.vscode/jaszczurhal.local.json`.
 
-`debug-tools --project <path> --json` resolves the verified GNU Arm GDB,
+`debug-tools --project <path> --json` resolves a verified Arm-capable GDB,
 OpenOCD executable, scripts root, and board-family interface/target scripts.
+Generated Linux settings select `gdb-multiarch`, installed by
+`runmefirst.sh`. Script validation is target-specific, so a distro OpenOCD
+that contains the selected STM32 profile remains usable even when it predates
+another target family.
 On native Windows these paths come from the bootstrap host-environment record;
 `runmefirst.ps1` writes `openocd` and `armToolchainPath` to the Windows-specific
 Cortex-Debug user settings. The command output remains available for diagnosis.
@@ -91,10 +95,13 @@ Cortex-Debug user settings. The command output remains available for diagnosis.
 Windows volume GUID, label, and filesystem when the platform exposes them.
 
 `sync-board-picker` refreshes the `boardSelection` input and its automatic
-folder-open task from the current `boards/` registry. Generated projects run it
-when a trusted workspace opens. VS Code may require one-time approval through
-`Tasks: Manage Automatic Tasks`; `Project: Select board` remains the dynamic
-terminal fallback.
+folder-open task from the current `boards/` registry. It also creates or repairs
+the managed Cortex-Debug profiles in `launch.json` for RP2040, RP2350 ARM, and
+STM32G474/ST-Link. The ELF path comes from the tracked project manifest, legacy
+JaszczurHAL profiles are migrated, and configurations with consumer-owned names
+are preserved. Generated projects run the synchronization when a trusted
+workspace opens. VS Code may require one-time approval through `Tasks: Manage
+Automatic Tasks`; `Project: Select board` remains the dynamic terminal fallback.
 
 Common options:
 
@@ -219,11 +226,11 @@ profile because the shared Debug pre-launch task builds the active selection.
 RP profiles use `interface/cmsis-dap.cfg` plus the matching RP target script. A
 Pico in BOOTSEL remains only the target, so OpenOCD needs a separate
 CMSIS-DAP/Picoprobe connected to its SWD pins. The STM32G474 profile uses the
-NUCLEO-G474RE's on-board ST-Link through `board/st_nucleo_g4.cfg`; no external
-probe wiring is required. Generated RP profiles also set a validated adapter
-speed explicitly: 5 MHz for RP2040 and 2 MHz for RP2350. Without that setting,
-OpenOCD falls back to 100 kHz and RP2350 flash discovery can exceed GDB's
-default remote timeout on Windows.
+NUCLEO-G474RE's on-board ST-Link through `board/st_nucleo_g4.cfg`, connects
+under hardware reset, and requires no external probe wiring. Generated RP
+profiles also set a validated adapter speed explicitly: 5 MHz for RP2040 and
+2 MHz for RP2350. Without that setting, OpenOCD falls back to 100 kHz and
+RP2350 flash discovery can exceed GDB's default remote timeout on Windows.
 
 The full generated project should live outside `libraries/JaszczurHAL/vscode/`.
 The `vscode/examples/` directory remains a place for lightweight configuration
@@ -417,8 +424,9 @@ closes it before reporting success. Read-only media, a disappearing drive,
 short writes, and truncated or inconsistent UF2 artifacts fail with upload exit
 code 6. The validator accepts both ordinary per-family sequences and merged OTA
 images whose single global block sequence spans multiple family IDs. Native
-WinAPI, merged-OTA, and copy-path automation is covered in CI; real-device
-Windows BOOTSEL smoke on RP2040 and RP2350 remains pending.
+WinAPI, merged-OTA, and copy-path automation is covered in CI. Real-device
+Windows smoke passed on both RP2040/Pico and RP2350/Pico 2, including volume
+identity, UF2 validation and copy, reboot, and verified CDC reconnection.
 
 ## Native RP OTA
 
