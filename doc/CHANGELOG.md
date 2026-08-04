@@ -60,6 +60,9 @@ All notable changes to this project will be documented in this file.
   POSIX adapter, Bash BearSSL integration, and FreeRTOS POSIX scheduler as
   Linux-only host tests. Windows static analysis remains undeclared until an
   authenticated version-pinned analyzer is part of the managed tool set.
+- Completed the public Windows workflow reference with every generated VS Code
+  task, the native CI matrix, a full process-script index, and focused setup,
+  COM/BOOTSEL, debug-probe, and OTA troubleshooting.
 
 ### Cross-platform VS Code launchers
 

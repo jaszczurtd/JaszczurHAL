@@ -217,6 +217,48 @@ The strict compiled MSVC warning profile remains the Windows host gate. Add a
 static-analysis profile only together with an authenticated, version-pinned
 analyzer binary so local and CI results cannot silently drift.
 
+## Troubleshooting
+
+Start with the read-only host and component check:
+
+```powershell
+.\runmefirst.ps1 -VerifyOnly
+```
+
+Common failure paths are:
+
+- A checkout reached through `\\wsl.localhost\...` is rejected. Clone or move
+  the repository to a local Windows volume such as `C:` and run the native
+  bootstrap there.
+- GNU Arm reports missing C++ headers or Ninja cannot create dependency files.
+  Keep `ToolsRoot` and `BuildRoot` short, then verify both Windows and Git
+  long-path settings as described above.
+- `jh-vscode.cmd` reports an incomplete launcher environment. Re-run setup and
+  inspect `.build\windows\host-environment.json`; the launcher requires the
+  managed or explicitly selected Python interpreter to import pyserial.
+- A COM upload reports access denied or a busy port. Run `Project: List ports`
+  or `jh-vscode.cmd list-ports --project <path>` and inspect the reported
+  identity and monitor-owner PID. The upload handoff closes only a verified
+  JaszczurHAL monitor; close unrelated terminal programs manually.
+- More than one BOOTSEL device is visible. Disconnect the extra board or pass
+  the intended drive root/volume GUID with `--bootsel-volume`; the runtime
+  still verifies its label and FAT filesystem.
+- Cortex-Debug cannot start OpenOCD or GDB. Run `debug-tools --json` for the
+  selected project, confirm the reported files, then check the probe and target
+  in Device Manager. Driver changes remain a separate administrator action.
+- OTA callback discovery works but transfer cannot connect back to the host.
+  Keep the active Windows network profile `Private` and inspect the scoped rule
+  without changing it:
+
+  ```powershell
+  .\.build\windows\venv\Scripts\python.exe `
+    .\scripts\configure_ota_firewall.py --check
+  ```
+
+Device selection, monitor ownership, BOOTSEL safety, and task behavior are
+described in [JaszczurHAL VS Code Entry](../vscode/README.md). OTA recovery and
+trial/rollback diagnostics are in [Native RP OTA Workflow](OTAWorkflow.md).
+
 ## Current support boundary
 
 The native launcher, shared build runtime, generated VS Code task override,
