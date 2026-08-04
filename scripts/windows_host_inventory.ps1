@@ -24,10 +24,10 @@
     extensions. Editor checks remain visible as optional inventory entries.
 
 .EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File .\windows-host-inventory.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_host_inventory.ps1
 
 .EXAMPLE
-    powershell -NoProfile -ExecutionPolicy Bypass -File .\windows-host-inventory.ps1 -Json > host.json
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows_host_inventory.ps1 -Json > host.json
 #>
 
 [CmdletBinding()]

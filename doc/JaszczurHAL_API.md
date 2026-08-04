@@ -220,11 +220,8 @@ backend:
 
 ## Documentation scope
 
-This file is the API-oriented companion to [README.md](../README.md).
-
 Recommended split of responsibilities:
 
-- [README.md](../README.md): overview, architecture, quick start, build/test entry points, practical examples
 - [00_scripts.md](api/00_scripts.md): an essential part of the JaszczurHAL
   documentation that explains how setup, dependency management, builds,
   examples, validation, security tooling, and VS Code orchestration work

@@ -115,6 +115,27 @@ runs while normal target builds still compile every configured variant.
 
 This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
 
+### Native Windows CI gate
+
+`.github/workflows/ci.yml` runs two native `windows-2025` gates in addition to
+the complete Linux quality gate:
+
+- `windows-tooling` prepares the authenticated managed environment, repeats
+  `runmefirst.ps1 -VerifyOnly`, runs the shared runtime/platform/bootstrap and
+  generator tests, then compiles and runs the portable host contracts with
+  MSVC `/W4 /permissive- /WX`;
+- `Windows firmware (<target>)` builds a generated consumer from a path
+  containing spaces through Ninja for `rp2040`, `rp2350-arm`,
+  `rp2350-riscv`, and `stm32g474`, checks the target artifacts and patched
+  compile database, and uploads the representative build artifacts.
+
+The Windows CTest inventory keeps the POSIX BSD adapter, Bash/POSIX BearSSL
+integration, and FreeRTOS GCC/POSIX runtime visible as disabled tests. Their
+active coverage, together with Valgrind, cppcheck, and clang-tidy, remains in
+the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separate native
+Windows firmware workflows, which provide consumer-specific integration
+coverage in addition to JaszczurHAL's generated-consumer fixture.
+
 ### Native RP hardware fixtures
 
 The repeatable physical-device probes use the same VS Code dispatcher as

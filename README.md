@@ -43,7 +43,7 @@ Yes - by several of my more demanding projects.
 
 The most visible example of JaszczurHAL in practice is the Fiesta project: https://github.com/jaszczurtd/Fiesta
 
-It is my private retrofit/automotive-kind project built from several tightly integrated modules. The ECU module is probably the most demanding one: it uses JaszczurHAL for VP37 injection pump control, CAN communication with the rest of the system, OBD diagnostics, and other low-level functionality.
+It is my private retrofit/automotive-kind project built from several tightly integrated modules. The ECU module is probably the most demanding one: it uses JaszczurHAL in two cores mode, for VP37 injection pump control, CAN communication with the rest of the system, OBD diagnostics, and other low-level functionality.
 
 There are also smaller (but not trivial) projects, for example:
 
@@ -241,11 +241,12 @@ Run and Debug workflow builds and loads the Debug ELF with managed OpenOCD and
 an Arm-capable GDB on Windows and Linux; see
 [Native Windows Setup](doc/windows_setup.md) for wiring and setup details.
 
-Both Linux and native Windows provides the complete VS Code firmware-development workflow,
-including builds, uploads, serial monitoring, OTA updates, and debugging. Linux
-provides the full repository quality gate, including Valgrind, static analysis,
-and POSIX-only host integrations. See [Native Windows Setup](doc/windows_setup.md)
-for setup, verification, and the explicit Linux-only boundaries.
+Both Linux and native Windows provide the complete VS Code firmware-development
+workflow, including builds, uploads, serial monitoring, OTA updates, and
+debugging. Linux provides the full repository quality gate, including Valgrind,
+static analysis, and POSIX-only host integrations. See
+[Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
+explicit Linux-only boundaries.
 
 ## Managed dependencies
 

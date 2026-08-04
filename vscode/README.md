@@ -103,6 +103,43 @@ are preserved. Generated projects run the synchronization when a trusted
 workspace opens. VS Code may require one-time approval through `Tasks: Manage
 Automatic Tasks`; `Project: Select board` remains the dynamic terminal fallback.
 
+## Generated VS Code Tasks
+
+The generator writes the same task labels and arguments on both hosts. Unix
+uses `jaszczurhal.vscodeEntry`; the Windows override uses
+`jaszczurhal.vscodeEntryWindows`. The maintained tasks are:
+
+| Task | CLI action | Behavior |
+|---|---|---|
+| `Project: Build` | `build` | Builds the active target and board in Release mode and publishes its stable artifacts. This is the default VS Code build task. |
+| `Project: Build (Debug)` | `build-debug` | Uses a separate Debug CMake cache, publishes the Debug ELF, and serves as the pre-launch task for every managed Cortex-Debug profile. |
+| `Project: Upload` | `upload` | Builds and uploads through the active target backend: verified CDC-to-BOOTSEL UF2 for RP or OpenOCD for STM32G474. |
+| `Project: Upload (UF2 / BOOTSEL)` | `upload-uf2` | Builds an RP image, validates the UF2, and copies it to one verified BOOTSEL volume. It refuses ambiguous volumes. |
+| `Project: Upload (OTA)` | `upload-ota --interactive` | Builds and authenticates the OTA image, discovers matching native RP devices, and prompts when an explicit device choice is required. |
+| `Project: Discover OTA devices` | `ota-discover` | Lists compatible OTA responders and their address, target, generation, slot, and boot state. |
+| `Project: List ports` | `list-ports` | Shows serial records, project identity matches, and BOOTSEL candidates without opening a device. |
+| `Project: Change port` | `change-port` | Selects a serial port interactively and stores it in the gitignored local project configuration. |
+| `Project: Serial Monitor` | `monitor --lock-policy replace-own` | Starts the persistent project monitor and may replace only another verified JaszczurHAL monitor owning the same port. |
+| `Project: Debug Probe Monitor` | `monitor-probe --lock-policy replace-own` | Starts the persistent serial monitor for the configured debug-probe identity. |
+| `Project: Serial Monitor (Any)` | `monitor-any --lock-policy wait` | Waits for any eligible serial port and never displaces another owner. |
+| `Project: Refresh IntelliSense` | `refresh-intellisense` | Builds the compile-database target and writes the patched database at the stable path consumed by cpptools. |
+| `Project: Clean` | `clean` | Removes the project artifacts and its matching managed CMake trees after path-safety validation. |
+| `Project: Clear USB Identity` | `clear-identity` | Builds neutral RP firmware and flashes it only after the current USB identity or BOOTSEL selection passes the normal safety checks. |
+| `Project: Config Dump` | `config-dump` | Prints the fully resolved manifest, local overrides, target, board, paths, and upload configuration. |
+| `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal and persists the selection locally. |
+| `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair locally. |
+| `Project: Sync board picker` | `sync-board-picker` | Runs once on trusted folder open, refreshes picker values, and creates or repairs the managed RP2040, RP2350 Arm, and STM32G474 debug profiles while preserving consumer-owned profiles. |
+| `Project: Build variant: <id>` | `build --variant <id>` | Appears only for declared example variants and builds that manifest variant through the normal artifact pipeline. |
+
+The Run and Debug panel exposes three Cortex-Debug launch configurations:
+
+- `Project: Debug Firmware` for RP2040 through CMSIS-DAP/Picoprobe;
+- `Project: Debug Firmware (RP2350 ARM)` through CMSIS-DAP/Picoprobe;
+- `Project: Debug Firmware (STM32G474 / ST-Link)` through ST-Link.
+
+Each invokes `Project: Build (Debug)` first and then loads the resulting ELF
+with the profile-specific probe, OpenOCD configuration, and reset policy.
+
 Common options:
 
 ```text

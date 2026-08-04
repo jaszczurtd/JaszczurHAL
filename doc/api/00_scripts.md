@@ -78,6 +78,17 @@ writing. The script never elevates itself. See
 [Native Windows Setup](../windows_setup.md) for host requirements, commands,
 paths, and the current support boundary.
 
+### `scripts/windows_host_inventory.ps1`
+
+Read-only Windows PowerShell 5.1 probe used by `runmefirst.ps1` for its final
+host-contract check. It reports the Windows build and architecture, long-path
+settings, Git, Python, CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, picotool,
+VS Code extensions, and optional repository line-ending checks. Required
+failures produce a nonzero exit code. `-Json` emits structured records,
+`-RepoPath` enables checkout checks, and `-FirmwareOnly` keeps editor items
+visible but optional. The script never changes the host and is also useful as
+a standalone setup diagnostic.
+
 ### `third_party/update_components.sh`
 
 The normal dependency-management entrypoint. It is a compatibility launcher
@@ -368,6 +379,33 @@ RP2350 RISC-V + CYW43 is unsupported.
 See [JaszczurHAL Examples](../../examples/README.md) for the target matrix,
 application contract, and build commands.
 
+### `scripts/generate_board_config.py`
+
+Validates the JSON target, board, and capability descriptors under `boards/`
+and resolves one target/board pair into generated CMake configuration and
+machine-readable metadata. CMake and the board tests call it directly.
+`--validate-only` checks the complete registry, `--list targets|boards` and
+`--default-board` provide discovery, while `--feature` and `--define` add the
+validated build overlay used for generated output. `--output-dir` and
+`--output-root` must stay within the caller-owned build tree.
+
+### `scripts/board_registry.py`
+
+Import-only projection of the validated `boards/` descriptors into the target
+and board model consumed by `jh-vscode`, project generators, and the example
+dispatcher. It deliberately contains no independent registry or command-line
+interface; descriptor files remain the source of truth.
+
+### `scripts/vscode_task_config.py`
+
+Import-only source of truth for generated VS Code extensions, keybinding
+references, task definitions, board-picker input, and managed Cortex-Debug
+profiles. It also provides the migration and synchronization helpers used by
+`sync-board-picker`. Generated projects, the standalone project generator, and
+the drift tests import these functions instead of maintaining separate JSON
+templates. The user-facing behavior of every generated task is documented in
+[Generated VS Code Tasks](../../vscode/README.md#generated-vs-code-tasks).
+
 ### `vscode/tools/create-vscode-example.py`
 
 Generates a standalone dispatcher-backed firmware project with a manifest,
@@ -426,6 +464,23 @@ and `--network` override automatic route detection, `--port` selects a
 different fixed callback port, and `--yes` supports deliberate
 non-interactive provisioning. Only RFC1918 IPv4 networks are accepted, and
 setup refuses to expose a port already used by a listener.
+
+### `scripts/ota_firewall_common.py`
+
+Import-only contract shared by the Linux and Windows OTA firewall backends. It
+owns the validated interface/subnet value, RFC1918 checks, and the common
+`SetupError` failure type. Direct callers should use
+`scripts/configure_ota_firewall.py` so platform selection, consent, and exit
+codes remain consistent.
+
+### `scripts/ota_firewall_windows.py`
+
+Internal Windows Defender Firewall backend selected by
+`scripts/configure_ota_firewall.py`. It discovers active Private IPv4
+networks through NetTCPIP, parses existing NetSecurity rules, validates the
+interface/subnet/port scope, and creates or verifies the persistent inbound
+rule only after the entrypoint has obtained consent. Its command runner is a
+test seam, and the module remains internal to the public entrypoint.
 
 ### `scripts/rp_ota_artifacts.py`
 
