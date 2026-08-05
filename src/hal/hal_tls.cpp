@@ -12,6 +12,7 @@
 #include "impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
 #include "impl/shared/hal_mutex_once.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
+#include "impl/shared/network/jh_tls_timeout_policy.h"
 
 #include <algorithm>
 #include <string.h>
@@ -128,7 +129,11 @@ static hal_status_t advance_client(jh_tls_client_context_t *client,
        client->security.is_cancelled(client->security.callback_context))) {
     return fail_client(client, HAL_ECANCELED, 0);
   }
-  if (operation_timed_out(client)) {
+  /* operation_timeout_ms bounds handshakes and close_notify, not the lifetime
+   * of an established TLS session. Applying the original connect deadline to
+   * application reads/writes forced sustained MQTTS sessions to reconnect. */
+  if (jh_tls_operation_timeout_applies(client->state) &&
+      operation_timed_out(client)) {
     return fail_client(client, HAL_ETIMEOUT, 0);
   }
   if (client->security.service != NULL) {

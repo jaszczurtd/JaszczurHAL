@@ -1,6 +1,7 @@
 #include "hal/hal_net.h"
 #include "hal/hal_tls.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/impl/shared/network/jh_tls_timeout_policy.h"
 #include "utils/unity.h"
 
 #include <string.h>
@@ -26,6 +27,16 @@ void test_default_config_is_finite_and_poll_driven(void) {
                                config.transport_timeout_ms);
   TEST_ASSERT_GREATER_THAN_UINT32(0u, config.operation_timeout_ms);
   TEST_ASSERT_GREATER_THAN_UINT16(0u, config.poll_step_budget);
+}
+
+void test_operation_timeout_applies_only_to_transition_states(void) {
+  TEST_ASSERT_TRUE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CONNECTING));
+  TEST_ASSERT_TRUE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CLOSING));
+  TEST_ASSERT_FALSE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CONNECTED));
+  TEST_ASSERT_FALSE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CREATED));
+  TEST_ASSERT_FALSE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CONFIGURED));
+  TEST_ASSERT_FALSE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_CLOSED));
+  TEST_ASSERT_FALSE(jh_tls_operation_timeout_applies(HAL_TLS_STATE_FAILED));
 }
 
 void test_default_time_and_entropy_fail_closed_until_platform_is_ready(void) {
@@ -187,6 +198,7 @@ void test_pool_limit_and_release_are_deterministic(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_config_is_finite_and_poll_driven);
+  RUN_TEST(test_operation_timeout_applies_only_to_transition_states);
   RUN_TEST(test_default_time_and_entropy_fail_closed_until_platform_is_ready);
   RUN_TEST(test_create_rejects_unbounded_or_invalid_configuration);
   RUN_TEST(test_handle_lifecycle_is_generation_checked);

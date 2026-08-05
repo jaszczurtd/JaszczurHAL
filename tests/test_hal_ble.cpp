@@ -5,6 +5,7 @@
 #include "utils/unity.h"
 
 #include <string.h>
+#include <thread>
 
 namespace {
 
@@ -184,6 +185,31 @@ void test_advertising_is_bounded_copied_and_handle_checked(void) {
   config.data_length = 32u;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_ble_advertising_start(&config, &handle));
+}
+
+void test_concurrent_backend_operations_are_serialized(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  const hal_ble_advertising_config_t config = advertising();
+  hal_ble_advertising_handle_t first_handle = HAL_BLE_INVALID_HANDLE;
+  hal_status_t first_status = HAL_NONE;
+  hal_mock_ble_block_advertising_start(true);
+  std::thread first([&]() {
+    first_status = hal_ble_advertising_start(&config, &first_handle);
+  });
+  while (!hal_mock_ble_advertising_start_entered()) {
+    std::this_thread::yield();
+  }
+
+  hal_ble_advertising_handle_t second_handle = HAL_BLE_INVALID_HANDLE;
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY,
+                        hal_ble_advertising_start(&config, &second_handle));
+  TEST_ASSERT_EQUAL_UINT32(HAL_BLE_INVALID_HANDLE, second_handle);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_ble_deinitialize());
+
+  hal_mock_ble_block_advertising_start(false);
+  first.join();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, first_status);
+  TEST_ASSERT_NOT_EQUAL(HAL_BLE_INVALID_HANDLE, first_handle);
 }
 
 void test_connection_mtu_disconnect_and_reconnect_invalidate_handles(void) {
@@ -381,6 +407,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_lifecycle_ready_address_and_capability);
   RUN_TEST(test_advertising_is_bounded_copied_and_handle_checked);
+  RUN_TEST(test_concurrent_backend_operations_are_serialized);
   RUN_TEST(test_connection_mtu_disconnect_and_reconnect_invalidate_handles);
   RUN_TEST(test_callbacks_are_dispatched_by_poll_and_allow_state_queries);
   RUN_TEST(test_queue_overflow_and_fatal_failure_are_observable);

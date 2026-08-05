@@ -295,6 +295,7 @@
        are created as FreeRTOS tasks before vTaskStartScheduler().
    HAL-provided native FreeRTOS entry defaults:
      - HAL_FREERTOS_TASK0_STACK: 512 FreeRTOS stack words
+     - HAL_FREERTOS_HEAP_SIZE: target-specific FreeRTOS heap size in bytes
      - HAL_FREERTOS_TASK1_STACK: 512 FreeRTOS stack words
      - HAL_FREERTOS_TASK0_PRIORITY: tskIDLE_PRIORITY + 1
      - HAL_FREERTOS_TASK1_PRIORITY: tskIDLE_PRIORITY + 1

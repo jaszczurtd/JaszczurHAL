@@ -6,7 +6,9 @@
 #include "../shared/bluetooth/jh_ble_backend.h"
 #include "hal_mock.h"
 
+#include <atomic>
 #include <string.h>
+#include <thread>
 
 namespace {
 
@@ -29,6 +31,8 @@ struct mock_ble_t {
 };
 
 mock_ble_t s_mock{};
+std::atomic<bool> s_block_advertising_start{false};
+std::atomic<bool> s_advertising_start_entered{false};
 
 void emit(const jh_ble_backend_event_t &event) {
   if (s_mock.event_handler != nullptr) {
@@ -122,6 +126,10 @@ hal_status_t mock_service(void *) {
 
 hal_status_t
 mock_advertising_start(void *, const hal_ble_advertising_config_t *config) {
+  s_advertising_start_entered.store(true, std::memory_order_release);
+  while (s_block_advertising_start.load(std::memory_order_acquire)) {
+    std::this_thread::yield();
+  }
   if (!s_mock.started || config == nullptr) {
     return s_mock.started ? HAL_EINVAL : HAL_EUNINIT;
   }
@@ -195,6 +203,8 @@ void hal_mock_ble_reset(void) {
   s_mock.event_handler = event_handler;
   s_mock.event_context = event_context;
   s_mock.service_status = HAL_OK;
+  s_block_advertising_start.store(false, std::memory_order_release);
+  s_advertising_start_entered.store(false, std::memory_order_release);
 }
 
 hal_status_t hal_mock_ble_inject_ready(const hal_ble_address_t *address) {
@@ -298,6 +308,17 @@ hal_status_t hal_mock_ble_inject_advertising_report(
 
 void hal_mock_ble_set_service_status(hal_status_t status) {
   s_mock.service_status = status;
+}
+
+void hal_mock_ble_block_advertising_start(bool blocked) {
+  s_block_advertising_start.store(blocked, std::memory_order_release);
+  if (blocked) {
+    s_advertising_start_entered.store(false, std::memory_order_release);
+  }
+}
+
+bool hal_mock_ble_advertising_start_entered(void) {
+  return s_advertising_start_entered.load(std::memory_order_acquire);
 }
 
 hal_status_t
