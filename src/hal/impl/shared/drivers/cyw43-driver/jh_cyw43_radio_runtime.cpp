@@ -80,6 +80,8 @@ jh_cyw43_radio_runtime_init(jh_cyw43_radio_runtime_t *runtime,
     runtime->references[index] = 0u;
     runtime->invalidation[index] = nullptr;
     runtime->invalidation_context[index] = nullptr;
+    runtime->client_service[index] = nullptr;
+    runtime->client_service_context[index] = nullptr;
   }
   const hal_status_t status =
       jh_network_service_init(&runtime->service, port->service_port);
@@ -87,6 +89,53 @@ jh_cyw43_radio_runtime_init(jh_cyw43_radio_runtime_t *runtime,
     runtime->initialized = true;
   }
   return status;
+}
+
+extern "C" hal_status_t jh_cyw43_radio_runtime_set_service_handler(
+    jh_cyw43_radio_runtime_t *runtime, jh_cyw43_radio_client_t client,
+    jh_cyw43_radio_service_fn handler, void *context) {
+  if (runtime == nullptr || !runtime->initialized || !valid_client(client)) {
+    return HAL_EINVAL;
+  }
+  const jh_network_service_port_t *port = service_port(runtime);
+  port->state_lock(port->context);
+  if (runtime->references[client] != 0u) {
+    port->state_unlock(port->context);
+    return HAL_EBUSY;
+  }
+  runtime->client_service[client] = handler;
+  runtime->client_service_context[client] = context;
+  port->state_unlock(port->context);
+  return HAL_OK;
+}
+
+extern "C" hal_status_t
+jh_cyw43_radio_runtime_service_clients(jh_cyw43_radio_runtime_t *runtime) {
+  if (runtime == nullptr || !runtime->initialized) {
+    return HAL_EINVAL;
+  }
+  const jh_network_service_port_t *port = service_port(runtime);
+  jh_cyw43_radio_service_fn handlers[JH_CYW43_RADIO_CLIENT_COUNT]{};
+  void *contexts[JH_CYW43_RADIO_CLIENT_COUNT]{};
+  port->state_lock(port->context);
+  for (unsigned index = 0u; index < JH_CYW43_RADIO_CLIENT_COUNT; ++index) {
+    if (runtime->state == JH_CYW43_RADIO_STATE_READY &&
+        runtime->references[index] != 0u) {
+      handlers[index] = runtime->client_service[index];
+      contexts[index] = runtime->client_service_context[index];
+    }
+  }
+  port->state_unlock(port->context);
+
+  for (unsigned index = 0u; index < JH_CYW43_RADIO_CLIENT_COUNT; ++index) {
+    if (handlers[index] != nullptr) {
+      const hal_status_t status = handlers[index](contexts[index]);
+      if (status != HAL_OK) {
+        return status;
+      }
+    }
+  }
+  return HAL_OK;
 }
 
 extern "C" hal_status_t jh_cyw43_radio_runtime_set_invalidation_handler(

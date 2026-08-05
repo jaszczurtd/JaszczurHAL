@@ -16,9 +16,12 @@ struct fake_state_t {
   unsigned stops;
   unsigned synchronized_stops;
   unsigned services;
+  unsigned client_services;
   unsigned invalidations[JH_CYW43_RADIO_CLIENT_COUNT];
   uint32_t invalidated_generation[JH_CYW43_RADIO_CLIENT_COUNT];
   bool ipv4_ready;
+  bool run_client_services;
+  jh_cyw43_radio_runtime_t *runtime;
 };
 
 fake_state_t s_state;
@@ -56,7 +59,10 @@ void stack_leave(void *context) {
 hal_status_t service(void *context) {
   auto *state = static_cast<fake_state_t *>(context);
   ++state->services;
-  return state->service_status;
+  if (state->service_status != HAL_OK || !state->run_client_services) {
+    return state->service_status;
+  }
+  return jh_cyw43_radio_runtime_service_clients(state->runtime);
 }
 
 bool ipv4_ready(void *context) {
@@ -79,9 +85,18 @@ hal_status_t stop(void *context) {
 }
 
 void invalidated(void *context, uint32_t generation) {
+  TEST_ASSERT_EQUAL_UINT(0u, s_state.lock_depth);
   const auto client = *static_cast<const jh_cyw43_radio_client_t *>(context);
   ++s_state.invalidations[client];
   s_state.invalidated_generation[client] = generation;
+}
+
+hal_status_t client_service(void *context) {
+  auto *state = static_cast<fake_state_t *>(context);
+  TEST_ASSERT_EQUAL_UINT(0u, state->lock_depth);
+  TEST_ASSERT_EQUAL_UINT(1u, state->stack_depth);
+  ++state->client_services;
+  return HAL_OK;
 }
 
 jh_cyw43_radio_client_t s_wifi_client = JH_CYW43_RADIO_CLIENT_WIFI;
@@ -104,6 +119,8 @@ void setUp(void) {
   s_state.stop_status = HAL_OK;
   s_state.service_status = HAL_OK;
   s_state.ipv4_ready = true;
+  s_state.run_client_services = true;
+  s_state.runtime = &s_runtime;
   s_service_port = {
       &s_state,    state_lock,  state_unlock, current_owner,
       stack_enter, stack_leave, service,      ipv4_ready,
@@ -209,6 +226,28 @@ void test_service_failure_is_propagated_and_context_is_unwound(void) {
   TEST_ASSERT_EQUAL_UINT(0u, s_runtime.service.depth);
 }
 
+void test_wifi_service_runs_active_ble_hook_under_stack_lock(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_set_service_handler(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE,
+                                    client_service, &s_state));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_service(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
+  TEST_ASSERT_EQUAL_UINT(1u, s_state.client_services);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EBUSY, jh_cyw43_radio_runtime_set_service_handler(
+                     &s_runtime, JH_CYW43_RADIO_CLIENT_BLE, nullptr, nullptr));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_release(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_BLE));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_service(
+                                    &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
+  TEST_ASSERT_EQUAL_UINT(1u, s_state.client_services);
+}
+
 void test_restart_while_context_is_active_preserves_running_generation(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, jh_cyw43_radio_runtime_acquire(
                                     &s_runtime, JH_CYW43_RADIO_CLIENT_WIFI));
@@ -255,6 +294,7 @@ int main(void) {
   RUN_TEST(test_restart_invalidates_both_clients_and_pending_operations);
   RUN_TEST(test_duplicate_references_release_only_the_matching_client);
   RUN_TEST(test_service_failure_is_propagated_and_context_is_unwound);
+  RUN_TEST(test_wifi_service_runs_active_ble_hook_under_stack_lock);
   RUN_TEST(test_restart_while_context_is_active_preserves_running_generation);
   RUN_TEST(test_generation_rollover_never_exposes_zero);
   RUN_TEST(test_start_failure_is_sticky_and_does_not_create_references);

@@ -4,16 +4,17 @@
 #include <string.h>
 
 #include "btstack.h"
-#include "btstack_run_loop_embedded.h"
 #include "hal/hal_config.h"
-#include "hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.h"
+#include "jh_ble_controller.h"
 #include "jh_btstack_hci_transport_cyw43.h"
+#include "jh_btstack_run_loop.h"
 #include "jh_stage1_probe_gatt.h"
 
 static btstack_packet_callback_registration_t s_hci_events;
 static jh_bluetooth_stage1_snapshot_t s_snapshot;
 static uint8_t s_value[32] = {'J', 'H', ' ', 'S', 't', 'a', 'g', 'e', ' ', '1'};
 static uint16_t s_value_length = 10u;
+static const jh_ble_controller_t *s_controller;
 
 static const uint8_t s_advertising_data[] = {
     0x02u,
@@ -116,20 +117,38 @@ static int att_write_callback(hci_con_handle_t connection_handle,
   return 0;
 }
 
+static void controller_invalidated(void *context, uint32_t generation) {
+  jh_btstack_run_loop_invalidate(context, generation);
+  jh_btstack_cyw43_transport_invalidate();
+  s_snapshot.last_status = HAL_EHW;
+  s_snapshot.transport_status = HAL_EHW;
+}
+
 hal_status_t jh_bluetooth_stage1_start(void) {
   if (s_snapshot.started) {
     return HAL_ESTATE;
   }
 
-  const hal_status_t radio_status =
-      jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLE);
-  if (radio_status != HAL_OK) {
-    s_snapshot.last_status = radio_status;
-    return radio_status;
+  btstack_memory_init();
+  hal_status_t status = jh_btstack_run_loop_init();
+  if (status != HAL_OK) {
+    s_snapshot.last_status = status;
+    return status;
+  }
+  s_controller = jh_ble_controller_backend();
+  if (s_controller == NULL || s_controller->start == NULL ||
+      s_controller->stop == NULL || s_controller->service == NULL) {
+    s_snapshot.last_status = HAL_ECONFIG;
+    return HAL_ECONFIG;
+  }
+  status = s_controller->start(s_controller->context,
+                               jh_btstack_run_loop_service_once, NULL,
+                               controller_invalidated, NULL);
+  if (status != HAL_OK) {
+    s_snapshot.last_status = status;
+    return status;
   }
 
-  btstack_memory_init();
-  btstack_run_loop_init(btstack_run_loop_embedded_get_instance());
   hci_init(jh_btstack_cyw43_hci_transport_instance(), NULL);
   l2cap_init();
   sm_init();
@@ -147,7 +166,7 @@ hal_status_t jh_bluetooth_stage1_start(void) {
 
   const int power_status = hci_power_control(HCI_POWER_ON);
   if (power_status != 0) {
-    (void)jh_cyw43_radio_release(JH_CYW43_RADIO_CLIENT_BLE);
+    (void)s_controller->stop(s_controller->context);
     s_snapshot.last_status = HAL_EIO;
     return HAL_EIO;
   }
@@ -160,13 +179,12 @@ hal_status_t jh_bluetooth_stage1_service(void) {
   if (!s_snapshot.started) {
     return HAL_EUNINIT;
   }
-  const hal_status_t radio_status =
-      jh_cyw43_radio_service(JH_CYW43_RADIO_CLIENT_BLE);
-  if (radio_status != HAL_OK) {
-    s_snapshot.last_status = radio_status;
-    return radio_status;
+  const hal_status_t service_status =
+      s_controller->service(s_controller->context);
+  if (service_status != HAL_OK) {
+    s_snapshot.last_status = service_status;
+    return service_status;
   }
-  btstack_run_loop_embedded_execute_once();
 
   jh_btstack_cyw43_transport_snapshot_t transport;
   jh_btstack_cyw43_transport_snapshot(&transport);

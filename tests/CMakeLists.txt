@@ -266,6 +266,22 @@ target_compile_definitions(test_cyw43_radio_runtime PRIVATE
 jh_enable_host_warnings(test_cyw43_radio_runtime ERRORS)
 add_test(NAME test_cyw43_radio_runtime COMMAND test_cyw43_radio_runtime)
 
+add_executable(test_ble_hci_transport
+    test_ble_hci_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/bluetooth/jh_ble_hci_transport.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_ble_hci_transport PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_ble_hci_transport PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_ble_hci_transport ERRORS)
+add_test(NAME test_ble_hci_transport COMMAND test_ble_hci_transport)
+
 add_executable(test_network_backend
     test_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp

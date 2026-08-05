@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the private Bluetooth Stage 1 dependency and build boundary."""
+"""Validate the private Bluetooth controller and Stage 1 probe boundary."""
 
 from __future__ import annotations
 
@@ -49,8 +49,10 @@ for forbidden in ("pico_cyw43_arch", "pico_btstack_cyw43"):
     require(forbidden not in btstack_cmake, f"Stage 1 links forbidden {forbidden}")
 require(
     "jh_target_enable_btstack_stage1" in btstack_cmake
-    and "ENABLE_BLE=1" in btstack_cmake,
-    "Stage 1 does not own a BLE-only BTstack source manifest",
+    and "ENABLE_BLE=1" in btstack_cmake
+    and "jh_ble_hci_transport.c" in btstack_cmake
+    and "jh_btstack_run_loop.c" in btstack_cmake,
+    "Bluetooth integration does not own the JH transport and run loop",
 )
 require(
     "BLUETOOTH" in cyw43_cmake
@@ -89,16 +91,22 @@ shared_bus = "\n".join(
 for forbidden in ("assert(", "panic(", "cyw43_malloc", "cyw43_free"):
     require(forbidden not in shared_bus, f"shared bus retains fatal/dynamic path {forbidden}")
 
-transport = (
+transport_adapter = (
     ROOT
     / "src/hal/impl/shared/bluetooth/jh_btstack_hci_transport_cyw43.c"
 ).read_text(encoding="utf-8")
+transport = (
+    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_hci_transport.c"
+).read_text(encoding="utf-8")
+transport_header = (
+    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_hci_transport.h"
+).read_text(encoding="utf-8")
 require(
-    "length != 0u && length < JH_CYW43_PACKET_HEADER_SIZE" in transport,
+    "length != 0u && length < JH_BLE_HCI_FRAME_HEADER_SIZE" in transport,
     "HCI transport does not reject truncated CYW43 packet headers",
 )
 require(
-    "JH_BTSTACK_CYW43_MAX_HCI_PROCESS_LOOP_COUNT 8u" in transport,
+    "JH_BLE_HCI_SERVICE_BUDGET 8u" in transport_header,
     "HCI receive drain is no longer bounded",
 )
 for diagnostic in (
@@ -106,13 +114,56 @@ for diagnostic in (
     "rx_acl_packets",
     "tx_command_packets",
     "tx_acl_packets",
-    "HCI_OPCODE_HCI_HOST_BUFFER_SIZE",
-    "HCI_OPCODE_HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL",
+    "JH_HCI_OPCODE_HOST_BUFFER_SIZE",
+    "JH_HCI_OPCODE_SET_CONTROLLER_TO_HOST_FLOW_CONTROL",
 ):
     require(
         diagnostic in transport,
-        f"Stage 1 transport diagnostics are missing {diagnostic}",
+        f"shared HCI transport diagnostics are missing {diagnostic}",
     )
+require(
+    "cyw43_bluetooth_hci_" not in transport,
+    "host-testable HCI core directly depends on CYW43",
+)
+require(
+    "jh_ble_controller_backend()" in transport_adapter
+    and "jh_btstack_run_loop_notify()" in transport_adapter
+    and "btstack_run_loop_poll_data_sources_from_irq" not in transport_adapter,
+    "BTstack adapter bypasses the target controller or JH run loop",
+)
+
+controller = (
+    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_controller_cyw43.c"
+).read_text(encoding="utf-8")
+for operation in (
+    "cyw43_bluetooth_hci_init",
+    "cyw43_bluetooth_hci_read",
+    "cyw43_bluetooth_hci_write",
+    "jh_cyw43_port_get_mac",
+):
+    require(operation in controller, f"CYW43 controller omits {operation}")
+
+for backend in (
+    ROOT
+    / "src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_ble_controller.cpp",
+    ROOT
+    / "src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_ble_controller.cpp",
+):
+    backend_text = backend.read_text(encoding="utf-8")
+    require(
+        "jh_ble_controller_backend" in backend_text
+        and "jh_ble_controller_cyw43_instance" in backend_text,
+        f"{backend.name} does not bind the private BLE controller contract",
+    )
+
+run_loop = (
+    ROOT / "src/hal/impl/shared/bluetooth/jh_btstack_run_loop.c"
+).read_text(encoding="utf-8")
+require(
+    "jh_btstack_run_loop_service_once" in run_loop
+    and "btstack_run_loop_embedded_execute_once" in run_loop,
+    "JH run loop lacks an explicit service-once boundary",
+)
 
 probe = (
     ROOT / "src/hal/impl/shared/bluetooth/jh_bluetooth_stage1_probe.c"
@@ -134,12 +185,12 @@ require(
     "Stage 1 must not receive connection events through the deprecated ATT forwarder",
 )
 require(
-    "jh_cyw43_radio_acquire(JH_CYW43_RADIO_CLIENT_BLE)" in probe,
-    "Stage 1 must acquire the BLE radio client directly",
+    "s_controller->start(" in probe and "s_controller->service(" in probe,
+    "Stage 1 probe bypasses the target BLE controller contract",
 )
 require(
-    "hal_wifi_set_mode_ex" not in probe and "hal_net_service" not in probe,
-    "Stage 1 still owns CYW43 through the public WiFi lifecycle",
+    "btstack_run_loop_embedded_execute_once" not in probe,
+    "Stage 1 probe bypasses the JH-owned run loop",
 )
 
 radio_facade = (
@@ -165,6 +216,27 @@ for backend in (
         "jh_cyw43_radio_backend_runtime" in backend.read_text(encoding="utf-8"),
         f"{backend.name} does not expose the shared CYW43 owner",
     )
+
+lwip_service = (
+    ROOT
+    / "src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.cpp"
+).read_text(encoding="utf-8")
+require(
+    lwip_service.index("jh_cyw43_driver_service(&host_wake)")
+    < lwip_service.index("jh_cyw43_radio_service_clients()")
+    < lwip_service.index("sys_check_timeouts();"),
+    "shared CYW43 service order must be driver, client stacks, then lwIP timers",
+)
+
+host_test = (ROOT / "tests/test_ble_hci_transport.cpp").read_text(
+    encoding="utf-8"
+)
+for expected in (
+    "test_receive_drain_is_bounded_and_resumes_next_service",
+    "test_malformed_and_failed_reads_propagate_hal_status",
+    "test_packet_handler_cannot_reenter_transport_service",
+):
+    require(expected in host_test, f"fake HCI coverage is missing {expected}")
 
 manifest = json.loads(
     (
