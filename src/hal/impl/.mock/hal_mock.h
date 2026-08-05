@@ -20,6 +20,8 @@ hal_status_t hal_mock_ble_inject_failure(hal_status_t status);
 hal_status_t hal_mock_ble_inject_advertising_report(
     const hal_ble_advertising_report_t *report);
 void hal_mock_ble_set_service_status(hal_status_t status);
+void hal_mock_ble_block_advertising_start(bool blocked);
+bool hal_mock_ble_advertising_start_entered(void);
 hal_status_t
 hal_mock_ble_get_advertising(hal_ble_advertising_config_t *out_config,
                              bool *out_enabled);

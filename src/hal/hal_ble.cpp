@@ -39,6 +39,7 @@ struct ble_runtime_t {
   bool initialized;
   bool advertising_requested;
   bool scan_requested;
+  bool operation_active;
   bool poll_active;
   bool dispatch_active;
   bool overflow_pending;
@@ -368,8 +369,10 @@ hal_status_t hal_ble_initialize(void) {
 
   hal_mutex_lock(mutex);
   if (s_ble.initialized) {
-    const hal_status_t status =
-        s_ble.state == HAL_BLE_STATE_FAILED ? HAL_ESTATE : HAL_OK;
+    const hal_status_t status = s_ble.operation_active ? HAL_EBUSY
+                                : s_ble.state == HAL_BLE_STATE_FAILED
+                                    ? HAL_ESTATE
+                                    : HAL_OK;
     hal_mutex_unlock(mutex);
     return status;
   }
@@ -386,6 +389,7 @@ hal_status_t hal_ble_initialize(void) {
   s_ble.dropped_scan_reports = 0u;
   s_ble.advertising_requested = false;
   s_ble.scan_requested = false;
+  s_ble.operation_active = true;
   s_ble.poll_active = false;
   s_ble.dispatch_active = false;
   memset(&s_ble.local_address, 0, sizeof(s_ble.local_address));
@@ -396,10 +400,12 @@ hal_status_t hal_ble_initialize(void) {
 
   const hal_status_t status =
       backend->start(backend->context, backend_event, nullptr);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   if (status == HAL_OK) {
+    hal_mutex_unlock(mutex);
     return HAL_OK;
   }
-  hal_mutex_lock(mutex);
   s_ble.initialized = false;
   s_ble.backend = nullptr;
   s_ble.state = HAL_BLE_STATE_UNINITIALIZED;
@@ -421,15 +427,17 @@ hal_status_t hal_ble_deinitialize(void) {
     hal_mutex_unlock(mutex);
     return HAL_OK;
   }
-  if (s_ble.poll_active || s_ble.dispatch_active) {
+  if (s_ble.operation_active || s_ble.poll_active || s_ble.dispatch_active) {
     hal_mutex_unlock(mutex);
     return HAL_EBUSY;
   }
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status = backend->stop(backend->context);
   hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   s_ble.initialized = false;
   s_ble.backend = nullptr;
   s_ble.state = HAL_BLE_STATE_UNINITIALIZED;
@@ -462,7 +470,7 @@ hal_status_t hal_ble_poll(void) {
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
-  if (s_ble.poll_active || s_ble.dispatch_active) {
+  if (s_ble.operation_active || s_ble.poll_active || s_ble.dispatch_active) {
     hal_mutex_unlock(mutex);
     return HAL_EBUSY;
   }
@@ -586,6 +594,10 @@ hal_ble_advertising_start(const hal_ble_advertising_config_t *config,
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.operation_active) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   if (s_ble.state == HAL_BLE_STATE_FAILED) {
     hal_mutex_unlock(mutex);
     return HAL_EHW;
@@ -598,14 +610,17 @@ hal_ble_advertising_start(const hal_ble_advertising_config_t *config,
   s_ble.next_handle = next_nonzero(s_ble.next_handle);
   const hal_ble_advertising_handle_t handle = s_ble.next_handle;
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status =
       backend->advertising_start(backend->context, config);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   if (status != HAL_OK) {
+    hal_mutex_unlock(mutex);
     return status;
   }
-  hal_mutex_lock(mutex);
   s_ble.advertising = handle;
   s_ble.advertising_requested = true;
   hal_mutex_unlock(mutex);
@@ -627,19 +642,25 @@ hal_ble_advertising_stop(hal_ble_advertising_handle_t advertising) {
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.operation_active) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   if (!s_ble.advertising_requested || s_ble.advertising != advertising) {
     hal_mutex_unlock(mutex);
     return HAL_ENOENT;
   }
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status = backend->advertising_stop(backend->context);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   if (status == HAL_OK) {
-    hal_mutex_lock(mutex);
     s_ble.advertising_requested = false;
-    hal_mutex_unlock(mutex);
   }
+  hal_mutex_unlock(mutex);
   return status;
 }
 
@@ -656,14 +677,24 @@ hal_status_t hal_ble_disconnect(hal_ble_connection_handle_t connection) {
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.operation_active) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   if (s_ble.connection != connection) {
     hal_mutex_unlock(mutex);
     return HAL_ENOENT;
   }
   const uint16_t native_connection = s_ble.native_connection;
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
-  return backend->disconnect(backend->context, native_connection);
+  const hal_status_t status =
+      backend->disconnect(backend->context, native_connection);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
+  hal_mutex_unlock(mutex);
+  return status;
 }
 
 hal_status_t hal_ble_get_mtu(hal_ble_connection_handle_t connection,
@@ -702,6 +733,10 @@ hal_status_t hal_ble_scan_start(const hal_ble_scan_config_t *config) {
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.operation_active) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   if (s_ble.state == HAL_BLE_STATE_FAILED) {
     hal_mutex_unlock(mutex);
     return HAL_EHW;
@@ -712,15 +747,17 @@ hal_status_t hal_ble_scan_start(const hal_ble_scan_config_t *config) {
     return HAL_EBUSY;
   }
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status = backend->scan_start(backend->context, config);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   if (status == HAL_OK) {
-    hal_mutex_lock(mutex);
     s_ble.scan_requested = true;
     reset_scan_queue_locked();
-    hal_mutex_unlock(mutex);
   }
+  hal_mutex_unlock(mutex);
   return status;
 }
 
@@ -734,19 +771,25 @@ hal_status_t hal_ble_scan_stop(void) {
     hal_mutex_unlock(mutex);
     return HAL_EUNINIT;
   }
+  if (s_ble.operation_active) {
+    hal_mutex_unlock(mutex);
+    return HAL_EBUSY;
+  }
   if (!s_ble.scan_requested) {
     hal_mutex_unlock(mutex);
     return HAL_ENOENT;
   }
   const jh_ble_backend_t *backend = s_ble.backend;
+  s_ble.operation_active = true;
   hal_mutex_unlock(mutex);
 
   const hal_status_t status = backend->scan_stop(backend->context);
+  hal_mutex_lock(mutex);
+  s_ble.operation_active = false;
   if (status == HAL_OK) {
-    hal_mutex_lock(mutex);
     s_ble.scan_requested = false;
-    hal_mutex_unlock(mutex);
   }
+  hal_mutex_unlock(mutex);
   return status;
 }
 
