@@ -11,7 +11,7 @@
   "hal": { "profileId": 7, "selector": "HAL_BOARD_PROFILE_HOST_MOCK", "runtimeName": "host-mock", "legacySelectors": [] },
   "memory": { "flash": { "source": "none", "expectedBytes": 0 } },
   "gpio": { "exposedPins": { "ranges": [{ "first": 0, "last": 255 }] }, "reservations": {}, "aliases": {} },
-  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false } },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true } },
   "devices": {},
   "peripherals": { "defaults": {} },
   "components": {}

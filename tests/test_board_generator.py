@@ -219,12 +219,16 @@ run(
 pim730_resolved = load(pim730_output / "jh_board_resolved.json")
 require(
     pim730_resolved["components"]
-    == ["cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
+    == ["btstack-ble", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
     "NUCLEO PIM730 component set mismatch",
 )
 require(
     pim730_resolved["capabilities"]["cyw43"]["present"] is True,
     "NUCLEO PIM730 lost its CYW43 capability",
+)
+require(
+    pim730_resolved["capabilities"]["bluetooth-controller"]["present"] is True,
+    "NUCLEO PIM730 lost its Bluetooth controller capability",
 )
 pim730_cmake = (pim730_output / "jh_board_config.cmake").read_text(
     encoding="utf-8"

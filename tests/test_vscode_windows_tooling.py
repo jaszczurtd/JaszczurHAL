@@ -292,7 +292,7 @@ require(
     not examples_dispatcher.generated_file_mismatches(),
     "checked-in example VS Code files are outside the generator drift gate",
 )
-require(len(examples_dispatcher.EXAMPLES) == 57, "example registry size changed unexpectedly")
+require(len(examples_dispatcher.EXAMPLES) == 58, "example registry size changed unexpectedly")
 for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")

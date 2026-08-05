@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../hal_ble.h"
 #include "../../hal_gpio.h"
 #include "../../hal_net.h"
 #include "../../hal_system.h"
@@ -7,6 +8,24 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <time.h>
+
+#ifdef HAL_ENABLE_BLE
+// ── BLE ──────────────────────────────────────────────────────────────────────
+void hal_mock_ble_reset(void);
+hal_status_t hal_mock_ble_inject_ready(const hal_ble_address_t *address);
+hal_status_t hal_mock_ble_inject_connection(const hal_ble_address_t *peer);
+hal_status_t hal_mock_ble_inject_disconnect(uint8_t reason);
+hal_status_t hal_mock_ble_inject_mtu(uint16_t mtu);
+hal_status_t hal_mock_ble_inject_failure(hal_status_t status);
+hal_status_t hal_mock_ble_inject_advertising_report(
+    const hal_ble_advertising_report_t *report);
+void hal_mock_ble_set_service_status(hal_status_t status);
+hal_status_t
+hal_mock_ble_get_advertising(hal_ble_advertising_config_t *out_config,
+                             bool *out_enabled);
+hal_status_t hal_mock_ble_get_scan(hal_ble_scan_config_t *out_config,
+                                   bool *out_enabled);
+#endif
 
 // ── GPIO ─────────────────────────────────────────────────────────────────────
 typedef enum {

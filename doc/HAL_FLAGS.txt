@@ -185,6 +185,11 @@ Module enable flags
 -------------------
 
 Connectivity
+  HAL_ENABLE_BLE
+    Experimental BLE Peripheral with one connection, copied legacy
+    advertising, bounded events, ATT MTU reporting, and static GAP/GATT
+    services. Supported on RP2040 Pico W, STM32G474+PIM730, and mock. Pulls
+    the pinned, non-commercial-use BTstack dependency into firmware.
   HAL_ENABLE_WIFI
     WiFi. A profile without the selected network hardware compiles but public
     runtime access returns HAL_EUNSUPPORTED.

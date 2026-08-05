@@ -132,6 +132,68 @@
       ]
     },
     {
+      "type": "library",
+      "bom-ref": "pkg:btstack@v1.6.2-1-g501e6d2b8",
+      "name": "BTstack",
+      "version": "v1.6.2-1-g501e6d2b8",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "LicenseRef-BTstack-NonCommercial"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "BlueKitchen GmbH"
+      },
+      "purl": "pkg:github/bluekitchen/btstack@501e6d2b86e6c92bfb9c390bcf55709938e25ac1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/bluekitchen/btstack"
+        },
+        {
+          "type": "other",
+          "url": "third_party/BTstack",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/btstack_version.conf",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/LICENSE.BTstack",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/bluetooth",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "501e6d2b86e6c92bfb9c390bcf55709938e25ac1"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Exact Pico SDK-selected revision. Upstream permits personal, non-commercial use and requires notice reproduction; commercial firmware distribution requires a separate BlueKitchen license."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_BLE"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/impl/shared/bluetooth"
+        }
+      ]
+    },
+    {
       "type": "application",
       "bom-ref": "pkg:picotool@2.2.0",
       "name": "picotool",
@@ -863,5 +925,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:29105828-8d44-dc17-9e75-a29d4b86a673"
+  "serialNumber": "urn:uuid:1a7aa418-f55f-547b-b18a-107b150110d6"
 }

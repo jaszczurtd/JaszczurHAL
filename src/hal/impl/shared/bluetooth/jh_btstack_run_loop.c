@@ -19,6 +19,15 @@ hal_status_t jh_btstack_run_loop_init(void) {
   return HAL_OK;
 }
 
+void jh_btstack_run_loop_deinit(void) {
+  if (s_snapshot.initialized) {
+    btstack_run_loop_deinit();
+  }
+  s_snapshot = (jh_btstack_run_loop_snapshot_t){
+      .last_status = HAL_NONE,
+  };
+}
+
 hal_status_t jh_btstack_run_loop_service_once(void *context) {
   (void)context;
   if (!s_snapshot.initialized) {

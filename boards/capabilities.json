@@ -19,6 +19,12 @@
       "stateModel": "static",
       "runtimeOwner": null
     },
+    "bluetooth-controller": {
+      "bit": 4,
+      "macro": "HAL_BOARD_CAP_BLUETOOTH_CONTROLLER",
+      "stateModel": "lifecycle",
+      "runtimeOwner": "ble"
+    },
     "sx1262-radio": {
       "bit": 3,
       "macro": "HAL_BOARD_CAP_SX1262_RADIO",

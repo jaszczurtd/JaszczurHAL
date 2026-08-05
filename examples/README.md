@@ -152,7 +152,7 @@ The registry currently covers:
 - sensors, RTC, GPS, PMIC, simple I/O chips, RFID/NFC, and output devices;
 - TFT, OLED, EPD, PNG, JPEG, and graphics helpers;
 - WiFi, UDP/TCP, BSD sockets, HTTP/HTTPS, TLS, MQTT, WireGuard, WebSocket,
-  network console, command dispatch, and OTA.
+  network console, command dispatch, OTA, and experimental BLE Peripheral.
 
 Notable specialized examples:
 
@@ -164,6 +164,8 @@ Notable specialized examples:
 - `56_http_https_client` demonstrates verified BearSSL HTTPS;
 - `57_ota` demonstrates discovery, authenticated staging, trial confirmation,
   rollback, and BOOTSEL recovery.
+- `58_ble_peripheral` demonstrates experimental BLE advertising and connection
+  events on Pico W and STM32G474 with PIM730/RM2.
 
 Use the registry `list` command for the exact per-example target and variant
 matrix. This avoids duplicating build metadata in prose.

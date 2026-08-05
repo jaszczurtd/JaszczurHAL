@@ -32,8 +32,9 @@ void hal_critical_section_exit(void) {}
 
 void setUp(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        jh_board_runtime_set_inactive(HAL_BOARD_CAP_USB_DEVICE |
-                                                      HAL_BOARD_CAP_CYW43));
+                        jh_board_runtime_set_inactive(
+                            HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43 |
+                            HAL_BOARD_CAP_BLUETOOTH_CONTROLLER));
 }
 
 void tearDown(void) {}
@@ -43,7 +44,8 @@ void test_board_info_reports_profile_and_declared_capabilities(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_board_get_info(&info));
   TEST_ASSERT_EQUAL_INT(HAL_BOARD_RP_PICO_W, info.profile);
   TEST_ASSERT_EQUAL_STRING("pico-w", info.name);
-  TEST_ASSERT_EQUAL_UINT32(HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43,
+  TEST_ASSERT_EQUAL_UINT32(HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43 |
+                               HAL_BOARD_CAP_BLUETOOTH_CONTROLLER,
                            info.declared);
   TEST_ASSERT_EQUAL_UINT32(0u, info.available);
   TEST_ASSERT_EQUAL_UINT32(0u, info.failed);

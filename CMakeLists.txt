@@ -57,6 +57,7 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 set(UTIL_SOURCES
     ${SRC}/hal/hal_assert.cpp
     ${SRC}/hal/hal_board.cpp
+    ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
@@ -148,6 +149,7 @@ target_compile_definitions(hal_mock PUBLIC
     # enable every module here. Facade modules pull in a backend so
     # the consistency checks in hal_config.h are satisfied.
     HAL_ENABLE_WIFI
+    HAL_ENABLE_BLE
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP

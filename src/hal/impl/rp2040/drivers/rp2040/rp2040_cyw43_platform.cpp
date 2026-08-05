@@ -3,8 +3,8 @@
 #if HAL_TARGET_IS_RP
 #include "../../../../hal_config.h"
 
-#if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43) &&  \
-    HAL_BOARD_HAS_CYW43
+#if (defined(HAL_ENABLE_NETWORK_CORE) || defined(JH_BLUETOOTH_BTSTACK)) &&     \
+    defined(HAL_NETWORK_BACKEND_CYW43) && HAL_BOARD_HAS_CYW43
 
 #include "../../../../hal_serial.h"
 #include "../../../../hal_sync.h"

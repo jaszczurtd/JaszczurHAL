@@ -3,8 +3,9 @@
 #if HAL_TARGET_IS_STM32G474
 #include "../../../../hal_config.h"
 
-#if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43) &&  \
-    defined(HAL_CYW43_BUS_STM32_GSPI) && defined(HAL_CYW43_STACK_LWIP)
+#if (defined(HAL_ENABLE_NETWORK_CORE) || defined(JH_BLUETOOTH_BTSTACK)) &&     \
+    defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_CYW43_BUS_STM32_GSPI) && \
+    defined(HAL_CYW43_STACK_LWIP)
 
 #include "../../../../hal_sync.h"
 #include "../../../shared/drivers/cyw43-driver/jh_cyw43_driver.h"

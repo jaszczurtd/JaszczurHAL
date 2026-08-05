@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-function(jh_target_enable_btstack_stage1 TARGET_NAME)
+function(_jh_target_enable_btstack TARGET_NAME MODE)
     set(_jh_btstack_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/BTstack")
     set(_jh_bluetooth_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/bluetooth")
@@ -38,17 +38,33 @@ function(jh_target_enable_btstack_stage1 TARGET_NAME)
         "${_jh_btstack_root}/src/ble/le_device_db_memory.c"
         "${_jh_btstack_root}/src/ble/sm.c"
         "${_jh_btstack_root}/platform/embedded/btstack_run_loop_embedded.c")
-    set(_jh_stage1_sources
+    set(_jh_jh_sources
         "${_jh_bluetooth_root}/jh_ble_controller_cyw43.c"
         "${_jh_bluetooth_root}/jh_ble_hci_transport.c"
         "${_jh_bluetooth_root}/jh_btstack_port.c"
         "${_jh_bluetooth_root}/jh_btstack_chipset_cyw43.c"
         "${_jh_bluetooth_root}/jh_btstack_hci_transport_cyw43.c"
-        "${_jh_bluetooth_root}/jh_btstack_run_loop.c"
-        "${_jh_bluetooth_root}/jh_bluetooth_stage1_probe.c")
+        "${_jh_bluetooth_root}/jh_btstack_run_loop.c")
+    if(MODE STREQUAL "STAGE1")
+        list(APPEND _jh_jh_sources
+            "${_jh_bluetooth_root}/jh_bluetooth_stage1_probe.c")
+        set(_jh_gatt_source "${_jh_bluetooth_root}/jh_stage1_probe.gatt")
+        set(_jh_gatt_header "jh_stage1_probe_gatt.h")
+        set(_jh_mode_definitions JH_BLUETOOTH_STAGE1_PROBE=1)
+    elseif(MODE STREQUAL "PUBLIC")
+        list(APPEND _jh_jh_sources
+            "${_jh_bluetooth_root}/jh_ble_btstack_backend.c")
+        set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
+        set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
+        set(_jh_mode_definitions
+            JH_BLUETOOTH_PUBLIC_BLE=1
+            ENABLE_LE_CENTRAL=1)
+    else()
+        message(FATAL_ERROR "Unknown JaszczurHAL BTstack mode: ${MODE}")
+    endif()
     set(_jh_btstack_sources
         ${_jh_btstack_upstream_sources}
-        ${_jh_stage1_sources})
+        ${_jh_jh_sources})
 
     foreach(_jh_source IN LISTS _jh_btstack_sources)
         if(NOT EXISTS "${_jh_source}")
@@ -60,11 +76,11 @@ function(jh_target_enable_btstack_stage1 TARGET_NAME)
     set(_jh_generated_dir
         "${CMAKE_CURRENT_BINARY_DIR}/jh_btstack/${TARGET_NAME}")
     file(MAKE_DIRECTORY "${_jh_generated_dir}")
-    set(_jh_generated_gatt "${_jh_generated_dir}/jh_stage1_probe_gatt.h")
+    set(_jh_generated_gatt "${_jh_generated_dir}/${_jh_gatt_header}")
     execute_process(
         COMMAND "${Python3_EXECUTABLE}"
             "${_jh_btstack_root}/tool/compile_gatt.py"
-            "${_jh_bluetooth_root}/jh_stage1_probe.gatt"
+            "${_jh_gatt_source}"
             "${_jh_generated_gatt}"
         RESULT_VARIABLE _jh_gatt_result
         OUTPUT_VARIABLE _jh_gatt_stdout
@@ -87,10 +103,19 @@ function(jh_target_enable_btstack_stage1 TARGET_NAME)
     target_compile_definitions(${TARGET_NAME} PRIVATE
         ENABLE_BLE=1
         HAVE_BTSTACK_CONFIG_H=1
-        JH_BLUETOOTH_STAGE1_PROBE=1)
+        JH_BLUETOOTH_BTSTACK=1
+        ${_jh_mode_definitions})
     # Keep compatibility suppressions scoped to pinned upstream code.  The JH
     # port and probe remain subject to the target's complete warning policy.
     set_source_files_properties(${_jh_btstack_upstream_sources} PROPERTIES
         COMPILE_OPTIONS
             "-Wno-unused-parameter;-Wno-unused-function;-Wno-unused-variable;-Wno-sign-compare;-Wno-missing-field-initializers")
+endfunction()
+
+function(jh_target_enable_btstack_stage1 TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} STAGE1)
+endfunction()
+
+function(jh_target_enable_btstack_ble TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC)
 endfunction()

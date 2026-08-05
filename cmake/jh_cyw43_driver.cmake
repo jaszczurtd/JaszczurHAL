@@ -109,4 +109,8 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
     # The pinned JaszczurHAL headers must win over any CYW43/lwIP headers
     # exposed by the surrounding SDK.
     target_include_directories(${TARGET_NAME} BEFORE PRIVATE ${_jh_cyw43_includes})
+    if(JH_CYW43_BLUETOOTH)
+        target_compile_definitions(${TARGET_NAME} PRIVATE
+            JH_CYW43_BLUETOOTH=1)
+    endif()
 endfunction()

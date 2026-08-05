@@ -138,6 +138,10 @@ PIM730/RM2 radio must select the experimental `nucleo-g474re-pim730` profile;
 it owns the fixed CYW43 gSPI pins and exports the radio capabilities and
 components required by network builds. The wiring and electrical constraints
 are documented in [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
+Pico W and the PIM730 profile also declare the lifecycle-owned
+`bluetooth-controller` capability and feature-gated `btstack-ble` component.
+Enabling `HAL_ENABLE_BLE` compiles that component; the physical capability
+alone never enables Bluetooth. See the [Bluetooth API](api/20_bluetooth.md).
 
 The archive defines:
 

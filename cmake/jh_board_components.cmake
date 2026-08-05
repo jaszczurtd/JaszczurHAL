@@ -15,7 +15,8 @@ set(JH_BOARD_COMPONENT_IDS
     host-mock
     cyw43-pico-pio
     cyw43-stm32-gspi
-    cyw43-lwip)
+    cyw43-lwip
+    btstack-ble)
 
 set(JH_BOARD_COMPONENT_rp_native_PROVIDERS "pico-sdk")
 set(JH_BOARD_COMPONENT_rp_native_SLOT "target-runtime")
@@ -35,6 +36,10 @@ set(JH_BOARD_COMPONENT_cyw43_stm32_gspi_SLOT "network-radio-transport")
 set(JH_BOARD_COMPONENT_cyw43_lwip_PROVIDERS
     "pico-sdk;jh-stm32-baremetal")
 set(JH_BOARD_COMPONENT_cyw43_lwip_SLOT "network-stack")
+
+set(JH_BOARD_COMPONENT_btstack_ble_PROVIDERS
+    "pico-sdk;jh-stm32-baremetal")
+set(JH_BOARD_COMPONENT_btstack_ble_SLOT "bluetooth-host-stack")
 
 # Validate the generated JH_BOARD_COMPONENTS list against the registry and
 # expose one JH_BOARD_COMPONENT_<ID> flag per resolved component.
