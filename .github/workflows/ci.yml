@@ -804,6 +804,7 @@ jobs:
         run: |
           scripts/build_stm32_lib.sh \
             --output .build/ci/stm32-cyw43 \
+            --board nucleo-g474re-pim730 \
             -D HAL_ENABLE_WIFI \
             -D HAL_ENABLE_TCP \
             -D HAL_ENABLE_UDP \
