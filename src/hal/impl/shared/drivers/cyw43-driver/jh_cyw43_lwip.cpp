@@ -11,6 +11,7 @@
 
 #include "../../network/jh_icmp_echo.h"
 #include "jh_cyw43_driver.h"
+#include "jh_cyw43_radio.h"
 
 #include <hal/hal_system.h>
 
@@ -171,13 +172,14 @@ extern "C" hal_status_t jh_cyw43_lwip_service(void) {
     s_in_service = false;
     return status;
   }
+  status = jh_cyw43_radio_service_clients();
   sys_check_timeouts();
   if (host_wake) {
     ++s_host_wake_services;
   }
   ++s_service_calls;
   s_in_service = false;
-  return HAL_OK;
+  return status;
 }
 
 extern "C" hal_status_t jh_cyw43_lwip_join_start(const char *ssid,

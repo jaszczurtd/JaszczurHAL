@@ -109,6 +109,37 @@ jh_cyw43_radio_set_invalidation_handler(jh_cyw43_radio_client_t client,
 #endif
 }
 
+extern "C" hal_status_t
+jh_cyw43_radio_set_service_handler(jh_cyw43_radio_client_t client,
+                                   jh_cyw43_radio_service_fn handler,
+                                   void *context) {
+#if ((HAL_TARGET_IS_RP && defined(HAL_CYW43_BUS_PICO_PIO)) ||                  \
+     (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))) &&        \
+    HAL_BOARD_HAS_CYW43
+  jh_cyw43_radio_runtime_t *value = runtime();
+  return value == nullptr ? HAL_ECONFIG
+                          : jh_cyw43_radio_runtime_set_service_handler(
+                                value, client, handler, context);
+#else
+  (void)client;
+  (void)handler;
+  (void)context;
+  return HAL_EUNSUPPORTED;
+#endif
+}
+
+extern "C" hal_status_t jh_cyw43_radio_service_clients(void) {
+#if ((HAL_TARGET_IS_RP && defined(HAL_CYW43_BUS_PICO_PIO)) ||                  \
+     (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))) &&        \
+    HAL_BOARD_HAS_CYW43
+  jh_cyw43_radio_runtime_t *value = runtime();
+  return value == nullptr ? HAL_ECONFIG
+                          : jh_cyw43_radio_runtime_service_clients(value);
+#else
+  return HAL_EUNSUPPORTED;
+#endif
+}
+
 extern "C" hal_status_t jh_cyw43_radio_restart(void) {
 #if ((HAL_TARGET_IS_RP && defined(HAL_CYW43_BUS_PICO_PIO)) ||                  \
      (HAL_TARGET_IS_STM32G474 && defined(HAL_CYW43_BUS_STM32_GSPI))) &&        \

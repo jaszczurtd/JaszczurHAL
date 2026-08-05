@@ -44,6 +44,23 @@ The WiFi-only images still exclude BTstack, Bluetooth firmware, and shared-bus
 Bluetooth pools. The owner migration adds no static SRAM to either WiFi-only
 baseline.
 
+After the Stage 3 controller-contract, bounded-HCI, and JH-owned run-loop
+migration, the matched images measured:
+
+| Target and variant | FLASH load | SRAM static | Reserved heap/stack |
+|---|---:|---:|---:|
+| STM32G474 + PIM730, `bluetooth` | 327.1 KiB | 48.5 KiB | 3.0 KiB |
+| STM32G474 + PIM730, `wifi-only` | 278.1 KiB | 43.3 KiB | 3.0 KiB |
+| RP2040 Pico W, `bluetooth` | 390.1 KiB | 57.3 KiB | 6.0 KiB |
+| RP2040 Pico W, `wifi-only` | 322.5 KiB | 53.6 KiB | 6.0 KiB |
+
+The Stage 3 hardware gate repeated controller startup, advertising, BlueZ
+connection, and GATT service resolution on both boards. STM32G474 + PIM730
+recorded symmetric ACL traffic at `11/11` and two drain-budget hits confined
+to initialization. Pico W recorded symmetric ACL traffic at `11/11` with no
+drain-budget hits. Both transports remained `HAL_OK`, and both boards were
+left running the `bluetooth` variant.
+
 Hardware substage 1.a completed on both profiles on 2026-08-04. The
 STM32G474 + PIM730 probe used the wiring below. The Pico W probe used its
 on-board CYW43439 and enumerated as `JaszczurHAL RP` over USB. On both boards

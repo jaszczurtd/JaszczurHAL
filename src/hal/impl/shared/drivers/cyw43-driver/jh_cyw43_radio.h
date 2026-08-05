@@ -12,6 +12,12 @@ hal_status_t
 jh_cyw43_radio_set_invalidation_handler(jh_cyw43_radio_client_t client,
                                         jh_cyw43_radio_invalidation_fn handler,
                                         void *context);
+hal_status_t
+jh_cyw43_radio_set_service_handler(jh_cyw43_radio_client_t client,
+                                   jh_cyw43_radio_service_fn handler,
+                                   void *context);
+/** Run active internal client services while the caller owns the stack lock. */
+hal_status_t jh_cyw43_radio_service_clients(void);
 hal_status_t jh_cyw43_radio_restart(void);
 hal_status_t jh_cyw43_radio_enter(jh_cyw43_radio_client_t client,
                                   bool require_ipv4);

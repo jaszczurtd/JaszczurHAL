@@ -39,9 +39,12 @@ function(jh_target_enable_btstack_stage1 TARGET_NAME)
         "${_jh_btstack_root}/src/ble/sm.c"
         "${_jh_btstack_root}/platform/embedded/btstack_run_loop_embedded.c")
     set(_jh_stage1_sources
+        "${_jh_bluetooth_root}/jh_ble_controller_cyw43.c"
+        "${_jh_bluetooth_root}/jh_ble_hci_transport.c"
         "${_jh_bluetooth_root}/jh_btstack_port.c"
         "${_jh_bluetooth_root}/jh_btstack_chipset_cyw43.c"
         "${_jh_bluetooth_root}/jh_btstack_hci_transport_cyw43.c"
+        "${_jh_bluetooth_root}/jh_btstack_run_loop.c"
         "${_jh_bluetooth_root}/jh_bluetooth_stage1_probe.c")
     set(_jh_btstack_sources
         ${_jh_btstack_upstream_sources}
