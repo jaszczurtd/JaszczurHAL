@@ -1,8 +1,7 @@
 #ifndef JASZCZURHAL_BTSTACK_CONFIG_H
 #define JASZCZURHAL_BTSTACK_CONFIG_H
 
-/* Private Stage 1 sizing. Public Bluetooth configuration is intentionally
- * deferred until the controller spike has been measured on both boards. */
+/* Experimental BLE Peripheral sizing validated by the private bring-up. */
 #define ENABLE_LE_PERIPHERAL
 #define ENABLE_SOFTWARE_AES128
 

@@ -15,6 +15,9 @@
 #include "hal_bits.h"
 #include "hal_board.h"
 #include "hal_config.h"
+#ifdef HAL_ENABLE_BLE
+#include "hal_ble.h"
+#endif
 #include "hal_gpio.h"
 #include "hal_math.h"
 #include "hal_net.h"

@@ -56,6 +56,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | MFRC522 RFID | Shared RFID reader driver over HAL SPI/I2C. | [hal_mfrc522.h](../src/hal/hal_mfrc522.h), [mfrc522 driver](../src/hal/impl/shared/drivers/mfrc522/) |
 | PN532 NFC/RFID | Shared NFC/RFID reader driver over HAL SPI/I2C/UART. | [hal_pn532.h](../src/hal/hal_pn532.h), [pn532 driver](../src/hal/impl/shared/drivers/pn532/) |
 | WiFi | CYW43/lwIP connectivity on Pico W, Pico 2 W, Pico+PIM730, and configured STM32G474+PIM730 hardware. | [hal_wifi.h](../src/hal/hal_wifi.h) |
+| BLE Peripheral and Observer (experimental) | One Peripheral connection, copied legacy advertising, passive scanning with bounded copied reports and AD parsing, static GAP/GATT services, ATT MTU reporting, and a host mock on Pico W and STM32G474+PIM730. | [Bluetooth API](api/20_bluetooth.md) |
 | UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/hal_udp.h) |
 | TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP-family backends. | [hal_tcp.h](../src/hal/hal_tcp.h) |
 | HTTP server | Small poll-driven HTTP/1.1 server over HAL TCP with exact/prefix routes, request headers, buffered responses, automatic `Content-Length` and mock-testable request handling. | [hal_http_server.h](../src/hal/hal_http_server.h) |

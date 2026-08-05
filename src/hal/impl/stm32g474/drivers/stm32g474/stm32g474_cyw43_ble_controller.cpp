@@ -1,6 +1,6 @@
 #include "../../../../hal_target.h"
 
-#if HAL_TARGET_IS_STM32G474 && defined(JH_BLUETOOTH_STAGE1_PROBE)
+#if HAL_TARGET_IS_STM32G474 && defined(JH_BLUETOOTH_BTSTACK)
 
 #include "../../../shared/bluetooth/jh_ble_controller.h"
 

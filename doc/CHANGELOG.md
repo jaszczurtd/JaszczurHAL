@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Experimental CYW43 Bluetooth bring-up
 
+- Extended `hal_ble` with passive legacy Observer scanning, a bounded copied
+  advertising-report queue with explicit overflow acknowledgement, and an
+  allocation-free AD structure parser. Scanning remains mutually exclusive
+  with advertising and connections and exposes no GATT client or pairing.
+- Added deterministic Observer mock coverage and a two-target hardware probe
+  for Teltonika company data, iBeacon, and Eddystone signatures.
+- Added the experimental public `hal_ble` Peripheral API with copied legacy
+  advertising, one opaque connection, bounded events, ATT MTU reporting, a
+  static GAP/GATT database, and a deterministic host mock.
+- Added the `58_ble_peripheral` example and native build profiles for RP2040
+  Pico W and STM32G474 NUCLEO+PIM730, backed by the same CYW43/BTstack runtime.
+- Declared Bluetooth controller board capabilities and the optional BTstack
+  component, with public lifecycle, failure, and external-radio requirements.
 - Added the experimental `nucleo-g474re-pim730` board profile with fixed gSPI
   pin ownership and CYW43 capabilities; network builds now reject the plain
   radio-less Nucleo profile at compile time.

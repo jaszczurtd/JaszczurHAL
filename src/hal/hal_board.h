@@ -205,6 +205,14 @@ extern "C" {
 #define HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND 0
 #endif
 
+#if HAL_BOARD_IS_RP_PICO_W || HAL_BOARD_IS_RP_PICO_2_W ||                      \
+    HAL_BOARD_IS_RP_PICO_PIM730 || HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 ||     \
+    HAL_BOARD_IS_HOST_MOCK
+#define HAL_BOARD_HAS_BLUETOOTH_CONTROLLER 1
+#else
+#define HAL_BOARD_HAS_BLUETOOTH_CONTROLLER 0
+#endif
+
 /* 7. Board-owned built-in LED mapping. */
 #ifndef HAL_LED_BUILTIN
 #if HAL_BOARD_IS_RP_PICO_W || HAL_BOARD_IS_RP_PICO_2_W
@@ -264,16 +272,19 @@ typedef enum {
 #define HAL_BOARD_CAP_USB_DEVICE (UINT32_C(1) << 0)
 #define HAL_BOARD_CAP_CYW43 (UINT32_C(1) << 1)
 #define HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND (UINT32_C(1) << 2)
+#define HAL_BOARD_CAP_BLUETOOTH_CONTROLLER (UINT32_C(1) << 4)
 #define HAL_BOARD_CAP_ALL                                                      \
   (HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43 |                            \
-   HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND)
+   HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND | HAL_BOARD_CAP_BLUETOOTH_CONTROLLER)
 
 #define HAL_BOARD_DECLARED_CAPABILITIES                                        \
   ((HAL_BOARD_HAS_USB_DEVICE ? HAL_BOARD_CAP_USB_DEVICE : UINT32_C(0)) |       \
    (HAL_BOARD_HAS_CYW43 ? HAL_BOARD_CAP_CYW43 : UINT32_C(0)) |                 \
    (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND                                      \
         ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND                                \
-        : UINT32_C(0)))
+        : UINT32_C(0)) |                                                       \
+   (HAL_BOARD_HAS_BLUETOOTH_CONTROLLER ? HAL_BOARD_CAP_BLUETOOTH_CONTROLLER    \
+                                       : UINT32_C(0)))
 
 #endif
 

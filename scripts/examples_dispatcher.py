@@ -182,6 +182,13 @@ EXAMPLES: list[dict[str, Any]] = [
             "password": "change-this-ota-password",
         },
     },
+    {
+        "dir": "58_ble_peripheral",
+        "targets": ["rp2040", "stm32g474"],
+        "expandRpTargets": False,
+        "board": "picow",
+        "stm32Board": "nucleo-g474re-pim730",
+    },
 ]
 
 
@@ -211,7 +218,7 @@ def example_cache(entry: dict[str, Any], module: str) -> dict[str, Any]:
 
 def example_targets(entry: dict[str, Any], targets: list[str] | None = None) -> list[str]:
     declared = [str(item) for item in (targets if targets is not None else entry["targets"])]
-    if "rp2040" not in declared:
+    if "rp2040" not in declared or not entry.get("expandRpTargets", True):
         return declared
 
     expanded = [target for target in declared if target != "rp2040"]

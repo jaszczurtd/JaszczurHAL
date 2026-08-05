@@ -23,7 +23,7 @@
 #define CYW43_USE_STATS (0)
 #define CYW43_USE_OTP_MAC (1)
 #define CYW43_GPIO (1)
-#if defined(JH_BLUETOOTH_STAGE1_PROBE)
+#if defined(JH_CYW43_BLUETOOTH)
 #define CYW43_ENABLE_BLUETOOTH (1)
 #else
 #define CYW43_ENABLE_BLUETOOTH (0)

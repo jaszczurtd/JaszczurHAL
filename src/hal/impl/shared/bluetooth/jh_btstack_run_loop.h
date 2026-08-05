@@ -20,6 +20,7 @@ typedef struct {
 } jh_btstack_run_loop_snapshot_t;
 
 hal_status_t jh_btstack_run_loop_init(void);
+void jh_btstack_run_loop_deinit(void);
 hal_status_t jh_btstack_run_loop_service_once(void *context);
 void jh_btstack_run_loop_notify(void);
 void jh_btstack_run_loop_invalidate(void *context, uint32_t generation);

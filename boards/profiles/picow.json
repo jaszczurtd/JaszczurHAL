@@ -17,8 +17,8 @@
     },
     "aliases": { "status-led": { "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 } } }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "external-radio-frontend": { "present": false } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true } },
   "devices": { "statusLed": { "kind": "component-gpio", "endpoint": { "domain": "component-gpio", "component": "cyw43", "id": 0, "halPin": 64 }, "activeLevel": "high" } },
   "peripherals": { "defaultsSource": "pico-sdk" },
-  "components": { "cyw43-pico-pio": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" } }
+  "components": { "cyw43-pico-pio": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" }, "btstack-ble": { "mode": "feature-gated" } }
 }

@@ -372,6 +372,7 @@ The complete reference is split across the following focused documents:
 | 17 | [cJSON](api/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
+| 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
 
 ---
 
@@ -381,6 +382,7 @@ The complete reference is split across the following focused documents:
 |--------|---------|
 | `hal_adc` | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) |
 | `hal_bh1750` | [Sensors](api/11_sensors.md) |
+| `hal_ble` | [Bluetooth Low Energy](api/20_bluetooth.md) |
 | `hal_adp5360` | [Sensors](api/11_sensors.md) |
 | `hal_bits` | [Timers and system](api/06_timers_system.md) |
 | `hal_can` | [CAN and display](api/10_can_display.md) |

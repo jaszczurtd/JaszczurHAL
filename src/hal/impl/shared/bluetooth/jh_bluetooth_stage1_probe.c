@@ -16,11 +16,22 @@ static uint8_t s_value[32] = {'J', 'H', ' ', 'S', 't', 'a', 'g', 'e', ' ', '1'};
 static uint16_t s_value_length = 10u;
 static const jh_ble_controller_t *s_controller;
 
+enum {
+  JH_BLE_AD_TYPE_FIELD_SIZE = 1u,
+  JH_BLE_FLAGS_VALUE_SIZE = 1u,
+  JH_BLE_COMPLETE_NAME_LENGTH = 14u,
+  JH_BLE_UUID16_VALUE_SIZE = 2u,
+  JH_BLE_FLAG_GENERAL_DISCOVERABLE = 0x02u,
+  JH_BLE_FLAG_BR_EDR_NOT_SUPPORTED = 0x04u,
+  JH_BLE_STAGE1_SERVICE_UUID_LOW = 0xf0u,
+  JH_BLE_STAGE1_SERVICE_UUID_HIGH = 0xffu,
+};
+
 static const uint8_t s_advertising_data[] = {
-    0x02u,
+    JH_BLE_AD_TYPE_FIELD_SIZE + JH_BLE_FLAGS_VALUE_SIZE,
     BLUETOOTH_DATA_TYPE_FLAGS,
-    0x06u,
-    0x0fu,
+    JH_BLE_FLAG_GENERAL_DISCOVERABLE | JH_BLE_FLAG_BR_EDR_NOT_SUPPORTED,
+    JH_BLE_AD_TYPE_FIELD_SIZE + JH_BLE_COMPLETE_NAME_LENGTH,
     BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME,
     'J',
     'H',
@@ -36,10 +47,10 @@ static const uint8_t s_advertising_data[] = {
     'e',
     ' ',
     '1',
-    0x03u,
+    JH_BLE_AD_TYPE_FIELD_SIZE + JH_BLE_UUID16_VALUE_SIZE,
     BLUETOOTH_DATA_TYPE_INCOMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS,
-    0xf0u,
-    0xffu,
+    JH_BLE_STAGE1_SERVICE_UUID_LOW,
+    JH_BLE_STAGE1_SERVICE_UUID_HIGH,
 };
 
 static void packet_handler(uint8_t packet_type, uint16_t channel,

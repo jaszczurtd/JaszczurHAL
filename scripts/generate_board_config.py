@@ -67,6 +67,10 @@ COMPONENT_REGISTRY = {
         "providers": {"pico-sdk", "jh-stm32-baremetal"},
         "slot": "network-stack",
     },
+    "btstack-ble": {
+        "providers": {"pico-sdk", "jh-stm32-baremetal"},
+        "slot": "bluetooth-host-stack",
+    },
 }
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")

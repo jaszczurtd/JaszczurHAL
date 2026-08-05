@@ -38,6 +38,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
+| `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `impl/shared/bluetooth/*` | Experimental BLE Peripheral over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W, STM32G474+PIM730, and mock. BTstack carries a non-commercial-use restriction; see the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
 | `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates WIFI) |
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |

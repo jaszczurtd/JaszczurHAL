@@ -91,6 +91,7 @@ list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_assert.cpp
     ${SRC}/hal/hal_board.cpp
+    ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
@@ -213,16 +214,24 @@ if(_jh_stm32_has_cyw43_gspi)
         ${_jh_extra_hal_defines})
     jh_cmake_defines_contain(_jh_stm32_has_bluetooth_stage1
         JH_BLUETOOTH_STAGE1_PROBE ${_jh_extra_hal_defines})
+    jh_cmake_defines_contain(_jh_stm32_has_ble
+        HAL_ENABLE_BLE ${_jh_extra_hal_defines})
+    if(_jh_stm32_has_bluetooth_stage1 AND _jh_stm32_has_ble)
+        message(FATAL_ERROR
+            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
+    endif()
     set(_jh_stm32_cyw43_options)
     if(_jh_stm32_has_cyw43_lwip)
         list(APPEND _jh_stm32_cyw43_options LWIP)
     endif()
-    if(_jh_stm32_has_bluetooth_stage1)
+    if(_jh_stm32_has_bluetooth_stage1 OR _jh_stm32_has_ble)
         list(APPEND _jh_stm32_cyw43_options BLUETOOTH)
     endif()
     jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_stm32_cyw43_options})
     if(_jh_stm32_has_bluetooth_stage1)
         jh_target_enable_btstack_stage1(JaszczurHAL)
+    elseif(_jh_stm32_has_ble)
+        jh_target_enable_btstack_ble(JaszczurHAL)
     endif()
 endif()
 
