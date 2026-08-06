@@ -276,6 +276,12 @@ if(_jh_native_cyw43_backend)
     jh_hal_define_enabled(_jh_native_bluetooth_stage1
         JH_BLUETOOTH_STAGE1_PROBE)
     jh_hal_define_enabled(_jh_native_ble HAL_ENABLE_BLE)
+    jh_hal_define_enabled(_jh_native_ble_stream HAL_ENABLE_BLE_STREAM)
+    # hal_config.h propagates the stream flag to BLE; mirror it for source
+    # selection.
+    if(_jh_native_ble_stream)
+        set(_jh_native_ble TRUE)
+    endif()
     if(_jh_native_bluetooth_stage1 AND _jh_native_ble)
         message(FATAL_ERROR
             "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
@@ -287,6 +293,8 @@ if(_jh_native_cyw43_backend)
     jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_native_cyw43_options})
     if(_jh_native_bluetooth_stage1)
         jh_target_enable_btstack_stage1(JaszczurHAL)
+    elseif(_jh_native_ble_stream)
+        jh_target_enable_btstack_ble_stream(JaszczurHAL)
     elseif(_jh_native_ble)
         jh_target_enable_btstack_ble(JaszczurHAL)
     endif()

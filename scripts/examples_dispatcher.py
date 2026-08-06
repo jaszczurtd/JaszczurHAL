@@ -189,6 +189,13 @@ EXAMPLES: list[dict[str, Any]] = [
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
     },
+    {
+        "dir": "59_ble_stream",
+        "targets": ["rp2040", "stm32g474"],
+        "expandRpTargets": False,
+        "board": "picow",
+        "stm32Board": "nucleo-g474re-pim730",
+    },
 ]
 
 

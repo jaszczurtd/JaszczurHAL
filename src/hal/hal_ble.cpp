@@ -5,6 +5,9 @@
 #include "hal_sync.h"
 #include "impl/shared/bluetooth/jh_ble_backend.h"
 #include "impl/shared/bluetooth/jh_ble_runtime.h"
+#ifdef HAL_ENABLE_BLE_STREAM
+#include "impl/shared/bluetooth/jh_ble_stream_runtime.h"
+#endif
 #include "impl/shared/hal_mutex_once.h"
 #include "impl/shared/jh_board_runtime.h"
 
@@ -133,6 +136,11 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
   }
   bool publish_available = false;
   bool publish_failed = false;
+#ifdef HAL_ENABLE_BLE_STREAM
+  bool forward_stream = false;
+  bool stream_link_lost = false;
+  uint32_t stream_generation = 0u;
+#endif
   hal_mutex_lock(mutex);
   if (!s_ble.initialized) {
     hal_mutex_unlock(mutex);
@@ -261,10 +269,38 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
       s_ble.scan_requested = false;
       s_ble.generation = next_nonzero(s_ble.generation);
       publish_failed = true;
+#ifdef HAL_ENABLE_BLE_STREAM
+      stream_link_lost = true;
+      stream_generation = s_ble.generation;
+#endif
     }
     break;
+#ifdef HAL_ENABLE_BLE_STREAM
+  case JH_BLE_BACKEND_EVENT_STREAM_WRITE:
+  case JH_BLE_BACKEND_EVENT_STREAM_SUBSCRIPTION:
+  case JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND:
+    forward_stream =
+        s_ble.connection != HAL_BLE_INVALID_HANDLE &&
+        s_ble.native_connection == backend_event->native_connection;
+    break;
+#endif
   }
+#ifdef HAL_ENABLE_BLE_STREAM
+  if (backend_event->type == JH_BLE_BACKEND_EVENT_DISCONNECTED) {
+    stream_link_lost = true;
+    stream_generation = s_ble.generation;
+  }
+#endif
   hal_mutex_unlock(mutex);
+
+#ifdef HAL_ENABLE_BLE_STREAM
+  /* Stream handling runs outside the radio lock. */
+  if (stream_link_lost) {
+    jh_ble_stream_on_link_lost(stream_generation);
+  } else if (forward_stream) {
+    jh_ble_stream_on_backend_event(backend_event);
+  }
+#endif
 
   if (publish_available) {
     (void)jh_board_runtime_set_available(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
@@ -500,6 +536,10 @@ hal_status_t hal_ble_poll(void) {
   hal_mutex_unlock(mutex);
 
   const hal_status_t dispatch_status = dispatch_callbacks();
+#ifdef HAL_ENABLE_BLE_STREAM
+  /* Outside every lock, so the stream keeps its own serialization. */
+  jh_ble_stream_on_poll();
+#endif
   if (status == HAL_EHW || status == HAL_EIO) {
     (void)jh_board_runtime_set_failed(HAL_BOARD_CAP_BLUETOOTH_CONTROLLER);
   }

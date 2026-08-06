@@ -166,6 +166,8 @@ Notable specialized examples:
   rollback, and BOOTSEL recovery.
 - `58_ble_peripheral` demonstrates experimental BLE advertising and connection
   events on Pico W and STM32G474 with PIM730/RM2.
+- `59_ble_stream` demonstrates the experimental JH BLE Stream v1 profile with an
+  authenticated application session, bounded queues, and backpressure handling.
 
 Use the registry `list` command for the exact per-example target and variant
 matrix. This avoids duplicating build metadata in prose.

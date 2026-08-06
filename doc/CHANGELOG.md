@@ -6,6 +6,19 @@ All notable changes to this project will be documented in this file.
 
 ### Experimental CYW43 Bluetooth bring-up
 
+- Added the experimental `hal_ble_stream` JH BLE Stream v1 profile: one static
+  GATT service carrying a bounded byte stream, versioned framing with
+  capability negotiation, and a mutually authenticated application session
+  built on HMAC-SHA256 proofs and directional ChaCha20-Poly1305 keys. A client
+  reads the protocol version and capabilities without a session; payload
+  traffic requires proof of the per-device secret. Wrong proofs, forged tags,
+  replayed or decreasing counters, counter exhaustion, entropy failures,
+  disconnects, generation changes and the idle timeout drop the session and
+  zero its keys, and repeated failures enter a bounded backoff window.
+  `HAL_ENABLE_BLE_STREAM` enables `HAL_ENABLE_BLE` and `HAL_ENABLE_CRYPTO`.
+- Added `jh_secure_random_bytes()` as the shared platform entropy source for
+  RP, STM32G474 and the host mock, and routed `hal_tls_default_entropy()` and
+  the STM32 lwIP extension port through it instead of per-target copies.
 - Extended `hal_ble` with passive legacy Observer scanning, a bounded copied
   advertising-report queue with explicit overflow acknowledgement, and an
   allocation-free AD structure parser. Scanning remains mutually exclusive

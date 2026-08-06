@@ -318,10 +318,10 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 57,
+        "rp2040": 58,
         "rp2350-arm": 56,
         "rp2350-riscv": 45,
-        "stm32g474": 55,
+        "stm32g474": 56,
     },
     f"declared example target matrix changed without review: {example_counts}",
 )

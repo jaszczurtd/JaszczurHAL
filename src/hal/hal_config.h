@@ -142,6 +142,17 @@
 
 #include "hal_board.h" /* physical board profile and runtime capabilities */
 
+/* JH BLE Stream v1 carries an authenticated application session, so it pulls in
+   BLE and the crypto primitives used by its proofs and AEAD frames. */
+#ifdef HAL_ENABLE_BLE_STREAM
+#ifndef HAL_ENABLE_BLE
+#define HAL_ENABLE_BLE
+#endif
+#ifndef HAL_ENABLE_CRYPTO
+#define HAL_ENABLE_CRYPTO
+#endif
+#endif
+
 #if defined(HAL_ENABLE_BLE)
 #if !HAL_BOARD_HAS_BLUETOOTH_CONTROLLER
 #error "HAL_ENABLE_BLE requires a board profile with a Bluetooth controller"

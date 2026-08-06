@@ -10,10 +10,10 @@
 #include "../../hal_time.h"
 #include "../shared/drivers/cyw43-driver/jh_cyw43_driver.h"
 #include "../shared/frameworks/wireguard/crypto/crypto.h"
+#include "../shared/jh_secure_random.h"
 #include "../shared/network/jh_lwip_extension.h"
 #include "../shared/network/jh_lwip_status.h"
 #include "../shared/network/jh_network_backend.h"
-#include "stm32g474_secure_random.h"
 
 #include <lwip/ip_addr.h>
 #include <lwip/netif.h>
@@ -69,7 +69,7 @@ hal_status_t monotonic_ms(void *, uint32_t *out_millis) {
 }
 
 hal_status_t random_bytes(void *, void *buffer, size_t size) {
-  return jh_stm32g474_secure_random_bytes(buffer, size);
+  return jh_secure_random_bytes(buffer, size);
 }
 
 hal_status_t tai64n_now(void *,

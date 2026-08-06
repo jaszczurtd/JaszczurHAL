@@ -3,10 +3,12 @@
 #if HAL_TARGET_IS_STM32G474
 #include "../../hal_config.h"
 
-#if defined(HAL_ENABLE_TLS) || defined(HAL_ENABLE_WIREGUARD)
+#if defined(HAL_ENABLE_TLS) || defined(HAL_ENABLE_WIREGUARD) ||                \
+    defined(HAL_ENABLE_BLE_STREAM)
 
 #include "../../hal_status.h"
 #include "../../hal_sync.h"
+#include "../shared/jh_secure_random.h"
 #include "stm32g474_secure_random.h"
 #if defined(HAL_ENABLE_TLS)
 #include "../shared/frameworks/BearSSL/jh_bearssl_provider.h"
@@ -145,12 +147,9 @@ hal_status_t jh_stm32g474_secure_random_bytes(void *buffer, size_t length) {
 #endif
 }
 
-#if defined(HAL_ENABLE_TLS)
-extern "C" hal_status_t hal_tls_default_entropy(void *, void *buffer,
-                                                size_t length) {
+extern "C" hal_status_t jh_secure_random_bytes(void *buffer, size_t length) {
   return jh_stm32g474_secure_random_bytes(buffer, length);
 }
-#endif
 
 #endif
 #endif

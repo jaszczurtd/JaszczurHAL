@@ -3,7 +3,12 @@
 #include "hal/hal_ble.h"
 #include "hal/hal_status.h"
 
+#ifdef HAL_ENABLE_BLE_STREAM
+#include "hal/hal_ble_stream.h"
+#endif
+
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -21,6 +26,12 @@ typedef enum {
   JH_BLE_BACKEND_EVENT_SCAN_STOPPED,
   JH_BLE_BACKEND_EVENT_ADVERTISING_REPORT,
   JH_BLE_BACKEND_EVENT_ERROR
+#ifdef HAL_ENABLE_BLE_STREAM
+  ,
+  JH_BLE_BACKEND_EVENT_STREAM_WRITE,
+  JH_BLE_BACKEND_EVENT_STREAM_SUBSCRIPTION,
+  JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND
+#endif
 } jh_ble_backend_event_type_t;
 
 typedef struct {
@@ -32,6 +43,12 @@ typedef struct {
   uint16_t mtu;
   uint8_t disconnect_reason;
   bool fatal;
+#ifdef HAL_ENABLE_BLE_STREAM
+  /* Copied RX frame; valid for JH_BLE_BACKEND_EVENT_STREAM_WRITE. */
+  uint8_t stream_frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  uint8_t stream_frame_length;
+  bool stream_subscribed;
+#endif
 } jh_ble_backend_event_t;
 
 typedef void (*jh_ble_backend_event_fn)(void *context,
@@ -50,6 +67,16 @@ typedef struct {
   hal_status_t (*scan_start)(void *context,
                              const hal_ble_scan_config_t *config);
   hal_status_t (*scan_stop)(void *context);
+#ifdef HAL_ENABLE_BLE_STREAM
+  /* Publish one TX frame. HAL_EAGAIN asks the caller to retry after
+     JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND. */
+  hal_status_t (*stream_notify)(void *context, uint16_t native_connection,
+                                const uint8_t *frame, size_t length);
+  /* Values served from the read-only version and capabilities
+     characteristics. */
+  hal_status_t (*stream_publish)(void *context, uint8_t protocol_version,
+                                 uint16_t capabilities);
+#endif
 } jh_ble_backend_t;
 
 const jh_ble_backend_t *jh_ble_backend_instance(void);

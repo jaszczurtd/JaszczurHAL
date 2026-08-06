@@ -51,14 +51,21 @@ function(_jh_target_enable_btstack TARGET_NAME MODE)
         set(_jh_gatt_source "${_jh_bluetooth_root}/jh_stage1_probe.gatt")
         set(_jh_gatt_header "jh_stage1_probe_gatt.h")
         set(_jh_mode_definitions JH_BLUETOOTH_STAGE1_PROBE=1)
-    elseif(MODE STREQUAL "PUBLIC")
+    elseif(MODE STREQUAL "PUBLIC" OR MODE STREQUAL "PUBLIC_STREAM")
         list(APPEND _jh_jh_sources
             "${_jh_bluetooth_root}/jh_ble_btstack_backend.c")
-        set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
         set(_jh_gatt_header "jh_ble_peripheral_gatt.h")
         set(_jh_mode_definitions
             JH_BLUETOOTH_PUBLIC_BLE=1
             ENABLE_LE_CENTRAL=1)
+        if(MODE STREQUAL "PUBLIC_STREAM")
+            list(APPEND _jh_jh_sources
+                "${_jh_bluetooth_root}/jh_ble_stream_session.c")
+            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_stream.gatt")
+            list(APPEND _jh_mode_definitions JH_BLUETOOTH_BLE_STREAM=1)
+        else()
+            set(_jh_gatt_source "${_jh_bluetooth_root}/jh_ble_peripheral.gatt")
+        endif()
     else()
         message(FATAL_ERROR "Unknown JaszczurHAL BTstack mode: ${MODE}")
     endif()
@@ -118,4 +125,8 @@ endfunction()
 
 function(jh_target_enable_btstack_ble TARGET_NAME)
     _jh_target_enable_btstack(${TARGET_NAME} PUBLIC)
+endfunction()
+
+function(jh_target_enable_btstack_ble_stream TARGET_NAME)
+    _jh_target_enable_btstack(${TARGET_NAME} PUBLIC_STREAM)
 endfunction()
