@@ -1,0 +1,8 @@
+#pragma once
+
+#define HAL_ENABLE_EXTERNAL_ADC
+#define HAL_ENABLE_I2C
+
+#ifndef HAL_DEBUG_DEFAULT_BAUD
+#define HAL_DEBUG_DEFAULT_BAUD 115200u
+#endif

@@ -125,7 +125,7 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 | `Project: Refresh IntelliSense` | `refresh-intellisense` | Builds the compile-database target and writes the patched database at the stable path consumed by cpptools. |
 | `Project: Clean` | `clean` | Removes the project artifacts and its matching managed CMake trees after path-safety validation. |
 | `Project: Clear USB Identity` | `clear-identity` | Builds neutral RP firmware and flashes it only after the current USB identity or BOOTSEL selection passes the normal safety checks. |
-| `Project: Config Dump` | `config-dump` | Prints the fully resolved manifest, local overrides, target, board, paths, and upload configuration. |
+| `Project: Config Dump` | `config-dump` | Prints the fully resolved manifest, local overrides, target, board, paths, upload configuration, and HAL feature resolution. |
 | `Project: Select board` | `select-board --interactive` | Selects the target and board in the terminal and persists the selection locally. |
 | `Project: Select board (GUI)` | `select-board --selection ...` | Uses the generated VS Code picker and persists the selected target/board pair locally. |
 | `Project: Sync board picker` | `sync-board-picker` | Runs once on trusted folder open, refreshes picker values, and creates or repairs the managed RP2040, RP2350 Arm, and STM32G474 debug profiles while preserving consumer-owned profiles. |
@@ -239,6 +239,29 @@ libraries/JaszczurHAL/vscode/tools/create-vscode-example.py \
   --target stm32g474 \
   --board nucleo-g474re
 ```
+
+Feature flags in the project header, final target profile, and active example
+variant accept bare `HAL_ENABLE_X` or `HAL_ENABLE_X=1`. `jh-vscode` rejects
+`=0` and CMake generator expressions with `[JH-CFG-VALUE]` before CMake
+configure. In definition-list inputs, every `HAL_ENABLE_*` entry must be a
+standalone simple token separated with semicolons; whitespace does not separate
+multiple feature definitions.
+
+After applying the active target profile and variant, `jh-vscode` validates
+unknown and derived symbols, resolves transitive implications, and checks
+registry requirements and conflicts. `config-dump` exposes this result as
+`featureResolution`, with `registryDigest`, `requestedFeatures`,
+`resolvedFeatures`, `resolvedFeaturesDigest`, and per-request `provenance`.
+Requested features remain the CMake inputs; preflight and OTA eligibility use
+the resolved set.
+
+The project header is a macro-only input loaded before target auto-detection;
+do not include JaszczurHAL headers or use derived target/board selectors in it.
+Feature definitions used for source selection must be unconditional
+`#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; only a same-symbol
+`#ifndef HAL_ENABLE_X` guard is supported. Do not put feature definitions under
+any other conditional branch because the early collector reads the file
+textually.
 
 The generated project uses `jh-vscode` for the same actions as migrated
 projects:
@@ -501,7 +524,7 @@ back after the configured attempt limit. Manual BOOTSEL remains the recovery
 path.
 
 The reference application is
-[`examples/57_ota`](../examples/57_ota/README.md). Its built-in WiFi transport
+[`examples/25_ota`](../examples/25_ota/README.md). Its built-in WiFi transport
 supports Pico W/RP2040 and Pico 2 W/RP2350 ARM. The RP2350 RISC-V image and boot
 applier are buildable, but the repository does not yet provide a supported
 CYW43 network backend for that ISA.

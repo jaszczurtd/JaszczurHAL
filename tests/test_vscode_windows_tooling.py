@@ -12,6 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 from unittest import mock
 
 
@@ -103,7 +104,7 @@ require(
     launch_executable == "${workspaceFolder}/output/debug/custom-firmware.elf",
     "debug profile synchronization did not translate the manifest ELF path",
 )
-example_project = ROOT / "examples" / "01_blink"
+example_project = ROOT / "examples" / "01_core_runtime"
 example_executable = vscode_launch_executable(
     load_json(example_project / ".vscode" / "jaszczurhal.project.json"),
     workspace_dir=example_project,
@@ -111,7 +112,7 @@ example_executable = vscode_launch_executable(
 )
 require(
     example_executable
-    == "${workspaceFolder}/../../.build/examples/01_blink/firmware.elf",
+    == "${workspaceFolder}/../../.build/examples/01_core_runtime/firmware.elf",
     "debug profile synchronization emitted an unresolved JaszczurHAL root",
 )
 legacy_profile = cortex_debug_launch_document(launch_executable)["configurations"][0]
@@ -266,20 +267,284 @@ with tempfile.TemporaryDirectory(prefix="jh dispatcher logs ") as temp_dir:
     ):
         dispatcher_log = examples_dispatcher.dispatcher_log_path(
             "rp2350-arm",
-            "01_blink",
+            "01_core_runtime",
         )
     require(
         dispatcher_log.parent == Path(temp_dir),
         "example dispatcher bypasses the host temporary directory",
     )
     require(
-        dispatcher_log.name == "jh_examples_dispatcher_rp2350-arm_01_blink.log",
+        dispatcher_log.name
+        == "jh_examples_dispatcher_rp2350-arm_01_core_runtime.log",
         "example dispatcher log name changed unexpectedly",
     )
 require(
     examples_dispatcher.base_tasks("rp2040", "pico", []) == expected_tasks,
     "example dispatcher bypasses the shared task builder",
 )
+require(
+    examples_dispatcher.gate_targets(
+        ["rp2040", "rp2350-arm", "rp2350-riscv"]
+    )
+    == ["rp2040"],
+    "default example gate targets escape an RP-only target set",
+)
+require(
+    examples_dispatcher.gate_targets(["stm32g474"]) == ["stm32g474"],
+    "default example gate targets escape an STM32-only target set",
+)
+try:
+    examples_dispatcher.gate_targets(["rp2040"], ["stm32g474"])
+except ValueError as error:
+    require(
+        str(error) == "gateTargets escape supported targets: stm32g474",
+        "explicit gate target validation returned the wrong diagnostic",
+    )
+else:
+    raise RuntimeError("explicit gate targets may escape supported targets")
+
+examples_dispatcher.validate_example_registry()
+registry_names = [str(entry["dir"]) for entry in examples_dispatcher.EXAMPLES]
+expected_registry_names = [
+    "01_core_runtime",
+    "02_crypto",
+    "03_modem_A7670E",
+    "04_sensor_hub",
+    "05_serial_gps",
+    "06_thermocouple",
+    "07_display_media",
+    "08_mqtt",
+    "09_wireguard",
+    "10_storage",
+    "11_i2c_slave",
+    "12_i2c_scan",
+    "13_adc",
+    "14_can_mcp2515",
+    "15_display_oled_lcd",
+    "16_rtc_backends",
+    "17_audio_output",
+    "18_freertos_suite",
+    "19_touch",
+    "20_irsmall_decoder",
+    "21_stm32g474_fdcan_native",
+    "22_rfid_nfc",
+    "23_io_pmic",
+    "24_epd_display",
+    "25_ota",
+    "26_ble_stream",
+]
+active_example_names = sorted(
+    path.name
+    for path in (ROOT / "examples").glob("[0-9][0-9]_*")
+    if path.is_dir()
+)
+require(
+    registry_names == expected_registry_names
+    and len(set(registry_names)) == 26,
+    "example registry must contain the ordered 01..26 active catalog",
+)
+
+legacy_coverage: list[str] = []
+full_configuration_counts = {
+    target: 0
+    for target in ("rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474")
+}
+gate_configuration_counts = dict.fromkeys(full_configuration_counts, 0)
+for entry in examples_dispatcher.EXAMPLES:
+    supported_targets = examples_dispatcher.example_targets(entry)
+    selected_gate_targets = examples_dispatcher.gate_targets(
+        supported_targets, entry.get("gateTargets")
+    )
+    require(
+        set(selected_gate_targets).issubset(supported_targets),
+        f"{entry['dir']}: gateTargets escape supported targets",
+    )
+    legacy_coverage.extend(examples_dispatcher.example_covers(entry))
+    for target in supported_targets:
+        full_configuration_counts[target] += 1
+        if target in selected_gate_targets:
+            gate_configuration_counts[target] += 1
+
+    for variant in entry.get("variants", []):
+        variant_targets = examples_dispatcher.example_targets(
+            entry,
+            [
+                str(target)
+                for target in variant.get("targets", entry["targets"])
+            ],
+        )
+        variant_gate_targets = examples_dispatcher.gate_targets(
+            variant_targets, variant.get("gateTargets")
+        )
+        require(
+            set(variant_targets).issubset(supported_targets),
+            f"{entry['dir']}:{variant['id']}: targets escape the base example",
+        )
+        require(
+            set(variant_gate_targets).issubset(variant_targets),
+            f"{entry['dir']}:{variant['id']}: gateTargets escape variant targets",
+        )
+        for target in variant_targets:
+            full_configuration_counts[target] += 1
+            if target in variant_gate_targets:
+                gate_configuration_counts[target] += 1
+
+require(
+    len(legacy_coverage) == 59
+    and len(set(legacy_coverage)) == 59
+    and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
+    "the dispatcher must cover each of the 59 legacy examples exactly once",
+)
+require(
+    full_configuration_counts
+    == {
+        "rp2040": 27,
+        "rp2350-arm": 26,
+        "rp2350-riscv": 22,
+        "stm32g474": 25,
+    }
+    and sum(full_configuration_counts.values()) == 100,
+    f"full dispatcher matrix changed: {full_configuration_counts}",
+)
+require(
+    gate_configuration_counts
+    == {
+        "rp2040": 27,
+        "rp2350-arm": 0,
+        "rp2350-riscv": 0,
+        "stm32g474": 25,
+    }
+    and sum(gate_configuration_counts.values()) == 52,
+    f"dispatcher gate matrix changed: {gate_configuration_counts}",
+)
+
+serial_entry = next(
+    entry
+    for entry in examples_dispatcher.EXAMPLES
+    if entry["dir"] == "05_serial_gps"
+)
+swserial_variant = next(
+    variant
+    for variant in serial_entry["variants"]
+    if variant["id"] == "swserial"
+)
+require(
+    set(
+        examples_dispatcher.example_targets(
+            serial_entry, swserial_variant["targets"]
+        )
+    )
+    == {"rp2040", "rp2350-arm", "rp2350-riscv"},
+    "05_serial_gps:swserial must remain RP-only",
+)
+
+with tempfile.TemporaryDirectory(prefix="jh dispatcher runner ") as temp_dir:
+    log_path = Path(temp_dir) / "dispatcher.log"
+    with mock.patch.object(
+        examples_dispatcher,
+        "dispatcher_log_path",
+        return_value=log_path,
+    ), mock.patch.object(
+        examples_dispatcher.time,
+        "monotonic",
+        side_effect=[10.0, 12.5],
+    ), mock.patch.object(
+        examples_dispatcher.subprocess,
+        "run",
+        return_value=subprocess.CompletedProcess([], 0),
+    ) as dispatcher_run:
+        runner_result = examples_dispatcher.run_one_example(
+            ROOT / "examples" / "05_serial_gps",
+            "rp2040",
+            "pico",
+            True,
+            ["swserial"],
+            3,
+            False,
+        )
+    require(
+        runner_result
+        == (True, "05_serial_gps@rp2040", log_path, 2.5),
+        f"dispatcher worker returned an invalid result tuple: {runner_result}",
+    )
+    require(
+        len(dispatcher_run.call_args_list) == 2,
+        "dispatcher worker did not build the base and selected variant",
+    )
+    for call in dispatcher_run.call_args_list:
+        require(
+            call.kwargs["env"]["CMAKE_BUILD_PARALLEL_LEVEL"] == "3"
+            and call.kwargs["env"]["JH_VSCODE_MEMORY_OVERVIEW"] == "0",
+            "dispatcher worker did not propagate the bounded parallel environment",
+        )
+
+serial_manifest = examples_dispatcher.manifest_for(serial_entry)
+core_entry = next(
+    entry
+    for entry in examples_dispatcher.EXAMPLES
+    if entry["dir"] == "01_core_runtime"
+)
+build_manifests = {
+    "01_core_runtime": examples_dispatcher.manifest_for(core_entry),
+    "05_serial_gps": serial_manifest,
+}
+build_args = SimpleNamespace(
+    example=["01_core_runtime", "05_serial_gps"],
+    target="rp2040",
+    jobs=6,
+    gate=True,
+    verbose=False,
+)
+with mock.patch.object(
+    examples_dispatcher,
+    "read_manifest",
+    side_effect=lambda example_dir: build_manifests[example_dir.name],
+), mock.patch.object(
+    examples_dispatcher,
+    "run_one_example",
+    return_value=(
+        True,
+        "05_serial_gps@rp2040",
+        Path(tempfile.gettempdir()) / "dispatcher.log",
+        0.1,
+    ),
+) as scheduled_runner, redirect_stdout(io.StringIO()):
+    require(
+        examples_dispatcher.build(build_args) == 0,
+        "dispatcher scheduler rejected a valid worker result tuple",
+    )
+scheduled_runner.assert_has_calls(
+    [
+        mock.call(
+            ROOT / "examples" / "01_core_runtime",
+            "rp2040",
+            "pico",
+            True,
+            [],
+            3,
+            False,
+        ),
+        mock.call(
+            ROOT / "examples" / "05_serial_gps",
+            "rp2040",
+            "pico",
+            True,
+            ["swserial"],
+            3,
+            False,
+        ),
+    ],
+    any_order=True,
+)
+require(
+    scheduled_runner.call_count == 2,
+    "dispatcher scheduler did not use the two-project worker budget",
+)
+require(
+    active_example_names == sorted(registry_names),
+    "active example directories differ from the dispatcher registry",
+)
+
 for task in expected_tasks["tasks"]:
     require(task.get("command") == VSCODE_ENTRY_CONFIG, f"Unix command missing in {task['label']}")
     require(
@@ -292,7 +557,7 @@ require(
     not examples_dispatcher.generated_file_mismatches(),
     "checked-in example VS Code files are outside the generator drift gate",
 )
-require(len(examples_dispatcher.EXAMPLES) == 59, "example registry size changed unexpectedly")
+require(len(examples_dispatcher.EXAMPLES) == 26, "example registry size changed unexpectedly")
 for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")

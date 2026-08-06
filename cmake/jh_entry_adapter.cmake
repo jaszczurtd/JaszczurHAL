@@ -17,6 +17,20 @@
 #   - Otherwise (direct-entry project): both output vars are left empty/FALSE.
 # ─────────────────────────────────────────────────────────────────────────────
 
+function(jh_validate_entry_adapter_features has_core1)
+    if(NOT has_core1)
+        return()
+    endif()
+    set(_resolved_features ${ARGN})
+    list(FIND _resolved_features HAL_ENABLE_APP_TASK1 _app_task1_index)
+    if(_app_task1_index EQUAL -1)
+        message(FATAL_ERROR
+            "[JH-CFG-PARITY] FIESTA_ENABLE_CORE1=1 requires "
+            "HAL_ENABLE_APP_TASK1 in hal_project_config.h or the active "
+            "feature inputs")
+    endif()
+endfunction()
+
 function(jh_generate_entry_adapter project_dir out_dir out_adapter_var out_core1_var)
     set(${out_adapter_var} "" PARENT_SCOPE)
     set(${out_core1_var} FALSE PARENT_SCOPE)

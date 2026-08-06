@@ -75,6 +75,17 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+for definition in "${EXTRA_DEFS[@]}"; do
+    normalized="${definition#-D}"
+    if [[ "${normalized}" == *'$<'* ]]; then
+        die "[JH-CFG-VALUE] ${definition} is unsupported; generator expressions are not accepted"
+    fi
+    if [[ "${normalized}" == *HAL_ENABLE_* ]] &&
+       [[ ! "${normalized}" =~ ^HAL_ENABLE_[A-Z0-9_]+(=1)?$ ]]; then
+        die "[JH-CFG-VALUE] ${definition} is unsupported; use a standalone bare symbol or an explicit value of 1"
+    fi
+done
+
 if ! OUTPUT_DIR="$(jh_resolve_build_output \
     "${REPO_ROOT}" "${OUTPUT_DIR}" "static/stm32g474/${BOARD}")"; then
     die "Build output must be inside ${REPO_ROOT}/.build"

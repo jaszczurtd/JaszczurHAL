@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JaszczurHAL feature registry fragment",
+  "type": "object",
+  "required": ["$schema", "schemaVersion", "domain", "symbols"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "../features.schema.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "domain": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "symbols": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/symbol"
+      }
+    }
+  },
+  "$defs": {
+    "symbolNameArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$"
+      }
+    },
+    "symbol": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": ["feature", "derived"]
+        },
+        "implies": {
+          "$ref": "#/$defs/symbolNameArray"
+        },
+        "requires": {
+          "$ref": "#/$defs/symbolNameArray"
+        },
+        "conflicts": {
+          "$ref": "#/$defs/symbolNameArray"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

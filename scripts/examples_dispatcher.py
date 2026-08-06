@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 from typing import Any
 
 from vscode_task_config import write_text_lf
@@ -24,156 +25,278 @@ JH_VSCODE = REPO_ROOT / "vscode" / "entry" / (
 REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
 RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
+GATE_PRIMARY_TARGETS = ["rp2040", "stm32g474"]
+LEGACY_EXAMPLE_IDS = [
+    f"{index:02d}_{name}"
+    for index, name in enumerate(
+        [
+            "blink",
+            "debug_helper",
+            "soft_timer_table",
+            "crypto",
+            "modem_A7670E",
+            "ds18b20",
+            "gps",
+            "thermocouple",
+            "display_tft",
+            "mqtt",
+            "wireguard",
+            "kv_store",
+            "i2c_slave",
+            "uart",
+            "wifi",
+            "littlefs",
+            "pid_controller",
+            "rgb_led",
+            "timer_ext",
+            "i2c_scan",
+            "adc_read",
+            "gps_uart",
+            "external_adc_ads1115",
+            "can_mcp2515",
+            "display_oled",
+            "rtc_clock",
+            "rtc_ds3231",
+            "pga2311",
+            "freertos_smoke",
+            "bh1750_light",
+            "hd44780",
+            "tsc2007_touch",
+            "stmpe610_touch",
+            "irsmall_decoder",
+            "cJSON",
+            "lodePNG",
+            "lodePNG_ili9341_base64",
+            "stm32g474_fdcan_native",
+            "sdlogger",
+            "jpeg",
+            "jpeg_ili931_base64",
+            "bsd_sockets_tcp_udp",
+            "dht_temperature_humidity",
+            "dacless_audio",
+            "swserial_loopback",
+            "mfrc522_rfid",
+            "pn532_nfc",
+            "http_server",
+            "websocket",
+            "net_console",
+            "net_commands",
+            "http_files",
+            "simple_io_chips",
+            "adp5360_pmic",
+            "epd_display",
+            "http_https_client",
+            "ota",
+            "ble_peripheral",
+            "ble_stream",
+        ],
+        start=1,
+    )
+]
 EXAMPLES: list[dict[str, Any]] = [
-    {"dir": "01_blink", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "02_debug_helper", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "03_soft_timer_table", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "04_crypto", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "05_modem_A7670E", "targets": ["rp2040"]},
-    {"dir": "06_ds18b20", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "07_gps", "targets": ["rp2040"]},
-    {"dir": "08_thermocouple", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "09_display_tft", "targets": ["rp2040", "stm32g474"]},
     {
-        "dir": "10_mqtt",
+        "dir": "01_core_runtime",
         "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {
-        "dir": "11_wireguard",
-        "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {"dir": "12_kv_store", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "13_i2c_slave", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "14_uart", "targets": ["rp2040", "stm32g474"]},
-    {
-        "dir": "15_wifi",
-        "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {"dir": "16_littlefs", "targets": ["rp2040", "stm32g474"], "extraDefines": ["HAL_ENABLE_LITTLEFS"]},
-    {"dir": "17_pid_controller", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "18_rgb_led", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "19_timer_ext", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "20_i2c_scan", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "21_adc_read", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "22_gps_uart", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "23_external_adc_ads1115", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "24_can_mcp2515", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "25_display_oled", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "26_rtc_clock", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "27_rtc_ds3231", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "28_pga2311", "targets": ["rp2040", "stm32g474"]},
-    {
-        "dir": "29_freertos_smoke",
-        "targets": ["rp2040", "stm32g474"],
-        "extraDefines": ["HAL_ENABLE_FREERTOS", "HAL_ENABLE_APP_TASK1"],
-        "cache": {"JH_RP2040_FREERTOS": True},
-    },
-    {"dir": "30_bh1750_light", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "31_hd44780", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "32_tsc2007_touch", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "33_stmpe610_touch", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "34_irsmall_decoder", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "35_cJSON", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "36_lodePNG", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "37_lodePNG_ili9341_base64", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "38_stm32g474_fdcan_native", "targets": ["stm32g474"], "target": "stm32g474", "board": "nucleo-g474re"},
-    {"dir": "39_sdlogger", "targets": ["rp2040", "stm32g474"], "extraDefines": ["HAL_ENABLE_SDLOGGER"]},
-    {"dir": "40_jpeg", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "41_jpeg_ili931_base64", "targets": ["rp2040", "stm32g474"]},
-    {
-        "dir": "42_bsd_sockets_tcp_udp",
-        "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-        "module": "42_bsd_sockets_tcp_server",
-        "sources": ["tcp_server.c", "bsd_socket_example_common.h"],
-        "variants": [
-            {
-                "id": "tcp_client",
-                "module": "42_bsd_sockets_tcp_client",
-                "sources": ["tcp_client.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040", "stm32g474"],
-            },
-            {
-                "id": "udp_server",
-                "module": "42_bsd_sockets_udp_server",
-                "sources": ["udp_server.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040", "stm32g474"],
-            },
-            {
-                "id": "udp_client",
-                "module": "42_bsd_sockets_udp_client",
-                "sources": ["udp_client.c", "bsd_socket_example_common.h"],
-                "targets": ["rp2040", "stm32g474"],
-            },
+        "covers": [
+            "01_blink",
+            "02_debug_helper",
+            "03_soft_timer_table",
+            "17_pid_controller",
+            "19_timer_ext",
         ],
     },
-    {"dir": "43_dht_temperature_humidity", "targets": ["rp2040", "stm32g474"]},
     {
-        "dir": "44_dacless_audio",
+        "dir": "02_crypto",
         "targets": ["rp2040", "stm32g474"],
+        "covers": ["04_crypto"],
+    },
+    {
+        "dir": "03_modem_A7670E",
+        "targets": ["rp2040"],
+        "covers": ["05_modem_A7670E"],
+    },
+    {
+        "dir": "04_sensor_hub",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": [
+            "06_ds18b20",
+            "30_bh1750_light",
+            "43_dht_temperature_humidity",
+        ],
+    },
+    {
+        "dir": "05_serial_gps",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["07_gps", "14_uart", "22_gps_uart", "45_swserial_loopback"],
+        "sources": ["app.c"],
         "variants": [
             {
-                "id": "polling",
-                "module": "44_dacless_audio_polling",
-                "extraDefines": ["HAL_ENABLE_DACLESS", "DACLESS_EXAMPLE_USE_DMA=0"],
-                "targets": ["rp2040", "stm32g474"],
+                "id": "swserial",
+                "module": "05_serial_gps_swserial",
+                "sources": ["swserial_app.c"],
+                "targets": ["rp2040"],
+                "extraDefines": ["EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1"],
             }
         ],
     },
-    {"dir": "45_swserial_loopback", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "46_mfrc522_rfid", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "47_pn532_nfc", "targets": ["rp2040", "stm32g474"]},
     {
-        "dir": "48_http_server",
+        "dir": "06_thermocouple",
         "targets": ["rp2040", "stm32g474"],
+        "covers": ["08_thermocouple"],
+    },
+    {
+        "dir": "07_display_media",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": [
+            "09_display_tft",
+            "36_lodePNG",
+            "37_lodePNG_ili9341_base64",
+            "40_jpeg",
+            "41_jpeg_ili931_base64",
+        ],
+    },
+    {
+        "dir": "08_mqtt",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["10_mqtt"],
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
     },
     {
-        "dir": "49_websocket",
+        "dir": "09_wireguard",
         "targets": ["rp2040", "stm32g474"],
+        "covers": ["11_wireguard"],
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
     },
     {
-        "dir": "50_net_console",
+        "dir": "10_storage",
         "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
+        "covers": ["12_kv_store", "16_littlefs", "39_sdlogger"],
     },
     {
-        "dir": "51_net_commands",
+        "dir": "11_i2c_slave",
         "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
+        "covers": ["13_i2c_slave"],
     },
     {
-        "dir": "52_http_files",
+        "dir": "12_i2c_scan",
         "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {"dir": "53_simple_io_chips", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "54_adp5360_pmic", "targets": ["rp2040", "stm32g474"]},
-    {"dir": "55_epd_display", "targets": ["rp2040", "stm32g474"]},
-    {
-        "dir": "56_http_https_client",
-        "targets": ["rp2040", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
+        "covers": ["20_i2c_scan"],
     },
     {
-        "dir": "57_ota",
+        "dir": "13_adc",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["21_adc_read", "23_external_adc_ads1115"],
+    },
+    {
+        "dir": "14_can_mcp2515",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["24_can_mcp2515"],
+    },
+    {
+        "dir": "15_display_oled_lcd",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["25_display_oled", "31_hd44780"],
+    },
+    {
+        "dir": "16_rtc_backends",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["26_rtc_clock", "27_rtc_ds3231"],
+    },
+    {
+        "dir": "17_audio_output",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["28_pga2311", "44_dacless_audio"],
+    },
+    {
+        "dir": "18_freertos_suite",
+        "targets": ["rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474"],
+        "expandRpTargets": False,
+        "board": "picow",
+        "stm32Board": "nucleo-g474re-pim730",
+        "covers": [
+            "15_wifi",
+            "29_freertos_smoke",
+            "35_cJSON",
+            "42_bsd_sockets_tcp_udp",
+            "48_http_server",
+            "49_websocket",
+            "50_net_console",
+            "51_net_commands",
+            "52_http_files",
+            "56_http_https_client",
+        ],
+        "sources": ["app.c"],
+        "cache": {"JH_RP2040_FREERTOS": True},
+        "variants": [
+            {
+                "id": "network",
+                "module": "18_freertos_network",
+                "sources": ["network_app.cpp"],
+                "targets": ["rp2040", "rp2350-arm", "stm32g474"],
+                "extraDefines": [
+                    "HAL_ENABLE_BSD_SOCKETS",
+                    "HAL_ENABLE_CJSON",
+                    "HAL_ENABLE_HTTP_CLIENT",
+                    "HAL_ENABLE_HTTP_FILES",
+                    "HAL_ENABLE_HTTP_SERVER",
+                    "HAL_ENABLE_NET_COMMANDS",
+                    "HAL_ENABLE_NET_CONSOLE",
+                    "HAL_ENABLE_TIME",
+                    "HAL_ENABLE_TLS",
+                    "HAL_ENABLE_WEBSOCKET",
+                    "HAL_ENABLE_WIFI",
+                    "HAL_FREERTOS_TASK0_STACK=1536",
+                    "HAL_FREERTOS_TASK1_STACK=384",
+                    "HAL_HTTP_SERVER_MAX_CLIENTS=1",
+                    "HAL_NET_CONSOLE_MAX_CLIENTS=1",
+                    "HAL_TCP_LISTENER_MAX_INSTANCES=4",
+                    "HAL_TCP_LISTENER_BACKLOG_MAX=2",
+                    "HAL_TCP_SOCKET_MAX_INSTANCES=6",
+                    "HAL_TLS_MAX_CLIENTS=1",
+                    "HAL_WEBSOCKET_MAX_CLIENTS=1",
+                ],
+            }
+        ],
+    },
+    {
+        "dir": "19_touch",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["32_tsc2007_touch", "33_stmpe610_touch"],
+    },
+    {
+        "dir": "20_irsmall_decoder",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["34_irsmall_decoder"],
+    },
+    {
+        "dir": "21_stm32g474_fdcan_native",
+        "targets": ["stm32g474"],
+        "target": "stm32g474",
+        "board": "nucleo-g474re",
+        "covers": ["38_stm32g474_fdcan_native"],
+    },
+    {
+        "dir": "22_rfid_nfc",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["46_mfrc522_rfid", "47_pn532_nfc"],
+    },
+    {
+        "dir": "23_io_pmic",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["18_rgb_led", "53_simple_io_chips", "54_adp5360_pmic"],
+    },
+    {
+        "dir": "24_epd_display",
+        "targets": ["rp2040", "stm32g474"],
+        "covers": ["55_epd_display"],
+    },
+    {
+        "dir": "25_ota",
         "targets": ["rp2040"],
+        "covers": ["57_ota"],
         "board": "picow",
-        "extraDefines": ["HAL_ENABLE_OTA"],
         "cache": {"JH_OTA_GENERATION": 1, "JH_OTA_VERSION": "example"},
         "ota": {
             "hostname": "jaszczurhal-ota",
@@ -183,18 +306,12 @@ EXAMPLES: list[dict[str, Any]] = [
         },
     },
     {
-        "dir": "58_ble_peripheral",
+        "dir": "26_ble_stream",
         "targets": ["rp2040", "stm32g474"],
         "expandRpTargets": False,
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
-    },
-    {
-        "dir": "59_ble_stream",
-        "targets": ["rp2040", "stm32g474"],
-        "expandRpTargets": False,
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
+        "covers": ["58_ble_peripheral", "59_ble_stream"],
     },
 ]
 
@@ -252,6 +369,73 @@ def example_boards(entry: dict[str, Any]) -> dict[str, str]:
     return boards
 
 
+def gate_targets(
+    supported_targets: list[str], configured_targets: Any = None
+) -> list[str]:
+    if configured_targets is None:
+        return [
+            target for target in supported_targets if target in GATE_PRIMARY_TARGETS
+        ]
+    if not isinstance(configured_targets, list):
+        raise ValueError("gateTargets must be an array")
+
+    requested = [str(item) for item in configured_targets]
+    unknown = sorted(set(requested).difference(supported_targets))
+    if unknown:
+        raise ValueError(
+            "gateTargets escape supported targets: " + ", ".join(unknown)
+        )
+    return [target for target in supported_targets if target in requested]
+
+
+def example_covers(entry: dict[str, Any]) -> list[str]:
+    covers = entry.get("covers")
+    if covers is None:
+        return [str(entry["dir"])]
+    if not isinstance(covers, list) or not covers:
+        raise ValueError(f"{entry['dir']}: covers must be a non-empty array")
+    return [str(item) for item in covers]
+
+
+def validate_example_registry() -> None:
+    directories: set[str] = set()
+    coverage_owner: dict[str, str] = {}
+    for entry in EXAMPLES:
+        name = str(entry["dir"])
+        if name in directories:
+            raise ValueError(f"duplicate example directory: {name}")
+        directories.add(name)
+
+        supported = example_targets(entry)
+        gate_targets(supported, entry.get("gateTargets"))
+        for covered in example_covers(entry):
+            owner = coverage_owner.get(covered)
+            if owner is not None:
+                raise ValueError(
+                    f"legacy example {covered} is covered by both {owner} and {name}"
+                )
+            coverage_owner[covered] = name
+
+        for variant in entry.get("variants", []):
+            variant_supported = example_targets(
+                entry,
+                [str(target) for target in variant.get("targets", entry["targets"])],
+            )
+            gate_targets(variant_supported, variant.get("gateTargets"))
+
+    expected = set(LEGACY_EXAMPLE_IDS)
+    actual = set(coverage_owner)
+    missing = sorted(expected.difference(actual))
+    unknown = sorted(actual.difference(expected))
+    if missing or unknown:
+        details = []
+        if missing:
+            details.append("missing: " + ", ".join(missing))
+        if unknown:
+            details.append("unknown: " + ", ".join(unknown))
+        raise ValueError("legacy example coverage mismatch; " + "; ".join(details))
+
+
 def default_target_board(entry: dict[str, Any]) -> tuple[str, str]:
     targets = example_targets(entry)
     target = str(entry.get("target") or "rp2040")
@@ -270,6 +454,10 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
     example = {
         "targets": example_targets(entry),
         "boards": example_boards(entry),
+        "gateTargets": gate_targets(
+            example_targets(entry), entry.get("gateTargets")
+        ),
+        "covers": example_covers(entry),
     }
     if entry.get("variants"):
         variants = []
@@ -278,6 +466,9 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
             variant["targets"] = example_targets(
                 entry,
                 [str(target) for target in item.get("targets", entry["targets"])],
+            )
+            variant["gateTargets"] = gate_targets(
+                variant["targets"], item.get("gateTargets")
             )
             variants.append(variant)
         example["variants"] = variants
@@ -495,9 +686,12 @@ def run_one_example(
     example_dir: Path,
     target: str,
     board: str | None,
+    include_base: bool,
     variants: list[str],
+    parallel_level: int,
     verbose: bool,
-) -> tuple[bool, str, Path]:
+) -> tuple[bool, str, Path, float]:
+    started = time.monotonic()
     log_path = dispatcher_log_path(target, example_dir.name)
     label = f"{example_dir.name}@{target}"
     base_command = [
@@ -510,7 +704,7 @@ def run_one_example(
     ]
     if board:
         base_command.extend(["--board", board])
-    commands: list[list[str]] = [base_command]
+    commands: list[list[str]] = [base_command] if include_base else []
     for variant in variants:
         commands.append([*base_command, "--variant", variant])
 
@@ -524,18 +718,27 @@ def run_one_example(
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 text=True,
-                env={**os.environ, "JH_VSCODE_MEMORY_OVERVIEW": "0"},
+                env={
+                    **os.environ,
+                    "CMAKE_BUILD_PARALLEL_LEVEL": str(parallel_level),
+                    "JH_VSCODE_MEMORY_OVERVIEW": "0",
+                },
                 check=False,
             )
             if result.returncode != 0:
                 failed_variant = cmd[cmd.index("--variant") + 1] if "--variant" in cmd else None
-                return False, command_label(example_dir, target, failed_variant), log_path
-    return True, label, log_path
+                return (
+                    False,
+                    command_label(example_dir, target, failed_variant),
+                    log_path,
+                    time.monotonic() - started,
+                )
+    return True, label, log_path, time.monotonic() - started
 
 
 def build(args: argparse.Namespace) -> int:
     examples = selected_example_dirs(args.example or [])
-    groups: list[tuple[Path, str | None, list[str]]] = []
+    groups: list[tuple[Path, str | None, bool, list[str]]] = []
     skipped: list[str] = []
     for example_dir in examples:
         if not example_dir.is_dir():
@@ -547,25 +750,48 @@ def build(args: argparse.Namespace) -> int:
         if args.target not in targets:
             skipped.append(command_label(example_dir, args.target, None))
             continue
+        declared_gate_targets = [
+            str(item) for item in example_meta.get("gateTargets", targets)
+        ]
+        include_base = not args.gate or args.target in declared_gate_targets
         variants: list[str] = []
         for variant in example_meta.get("variants", []) if isinstance(example_meta.get("variants"), list) else []:
             if not isinstance(variant, dict) or not variant.get("id"):
                 continue
             variant_targets = [str(item) for item in variant.get("targets", targets)]
-            if args.target in variant_targets:
+            variant_gate_targets = [
+                str(item)
+                for item in variant.get("gateTargets", variant_targets)
+            ]
+            if args.target in variant_targets and (
+                not args.gate or args.target in variant_gate_targets
+            ):
                 variants.append(str(variant["id"]))
+        if not include_base and not variants:
+            skipped.append(command_label(example_dir, args.target, None))
+            continue
         boards = example_meta.get("boards")
         board = str(boards.get(args.target)) if isinstance(boards, dict) and boards.get(args.target) else None
-        groups.append((example_dir, board, variants))
+        groups.append((example_dir, board, include_base, variants))
 
     if skipped:
         for item in skipped:
-            print(f"skip {item} (unsupported target)", flush=True)
+            print(
+                f"skip {item} (unsupported target or outside gate)",
+                flush=True,
+            )
     if not groups:
         print(f"no examples to build for target {args.target}")
         return 0
 
-    workers = max(1, int(args.jobs or 1))
+    compiler_budget = max(1, int(args.jobs or 1))
+    workers = min(2, compiler_budget, len(groups))
+    parallel_level = max(1, compiler_budget // workers)
+    print(
+        f"scheduler: {workers} project worker(s), "
+        f"{parallel_level} compiler job(s) each",
+        flush=True,
+    )
     failures: list[tuple[str, Path]] = []
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = {
@@ -574,17 +800,22 @@ def build(args: argparse.Namespace) -> int:
                 example_dir,
                 args.target,
                 board,
+                include_base,
                 variants,
+                parallel_level,
                 args.verbose,
             ): example_dir
-            for example_dir, board, variants in groups
+            for example_dir, board, include_base, variants in groups
         }
         for future in as_completed(futures):
-            ok, label, log_path = future.result()
+            ok, label, log_path, elapsed = future.result()
             if ok:
-                print(f"pass {label}", flush=True)
+                print(f"pass {label} ({elapsed:.1f}s)", flush=True)
             else:
-                print(f"fail {label} (log: {log_path})", flush=True)
+                print(
+                    f"fail {label} ({elapsed:.1f}s, log: {log_path})",
+                    flush=True,
+                )
                 failures.append((label, log_path))
 
     if failures:
@@ -592,13 +823,26 @@ def build(args: argparse.Namespace) -> int:
         print(f"\nfirst failure: {label}", file=sys.stderr)
         print(tail(log_path), file=sys.stderr)
         return 1
-    print(f"built {len(groups)} example project(s) for {args.target}", flush=True)
+    configurations = sum(
+        (1 if include_base else 0) + len(variants)
+        for _, _, include_base, variants in groups
+    )
+    print(
+        f"built {configurations} configuration(s) from {len(groups)} "
+        f"example project(s) for {args.target}",
+        flush=True,
+    )
     return 0
 
 
 def list_examples() -> int:
     for entry in EXAMPLES:
-        print(f"{entry['dir']}: {', '.join(example_targets(entry))}")
+        supported = example_targets(entry)
+        selected_gate_targets = gate_targets(supported, entry.get("gateTargets"))
+        print(
+            f"{entry['dir']}: {', '.join(supported)} "
+            f"(gate: {', '.join(selected_gate_targets)})"
+        )
     return 0
 
 
@@ -628,8 +872,18 @@ def main(argv: list[str]) -> int:
     )
     build_parser.add_argument("--example", action="append", help="Build only this example directory name.")
     build_parser.add_argument("--jobs", type=int, default=1)
+    build_parser.add_argument(
+        "--gate",
+        action="store_true",
+        help="Build only the representative gateTargets matrix.",
+    )
     build_parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args(argv)
+
+    try:
+        validate_example_registry()
+    except ValueError as error:
+        parser.error(str(error))
 
     if args.command == "generate":
         return generate()

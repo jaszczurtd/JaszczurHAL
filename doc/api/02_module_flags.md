@@ -18,11 +18,28 @@ compiled. To use a module, define its `HAL_ENABLE_<MODULE>` flag (in
 Modules that are disabled cost zero code and RAM and do not pull their
 third-party dependencies into the target build.
 
+Feature flags use presence semantics. Supported project definitions are
+`#define HAL_ENABLE_X` and `#define HAL_ENABLE_X 1`. Do not use
+`#define HAL_ENABLE_X 0`: the production preprocessor still evaluates
+`#ifdef HAL_ENABLE_X`, so the symbol remains enabled. Supported board
+generation, CMake helpers, static-library scripts, and `jh-vscode` reject `=0`
+and other explicit values with `[JH-CFG-VALUE]`. Arbitrary direct compiler
+invocations retain preprocessor presence semantics. The feature-registry lint
+also reports unknown or derived symbols. In definition-list inputs, every
+`HAL_ENABLE_*` entry must be a standalone simple token separated with
+semicolons. Whitespace does not separate multiple feature definitions, and
+CMake generator expressions are rejected.
+
+The declarative registry under `config/features/` is the production source for
+the feature graph. `hal_config.h` includes its generated C header, while CMake,
+the board/link contract and `jh-vscode` consume the generated resolver and its
+`requestedFeatures` / `resolvedFeatures` result.
+
 ### Available flags
 
 This section is the maintained public catalog of `HAL_ENABLE_*` flags.
-`hal_config.h` keeps only the compile-time propagation and validation logic;
-`doc/HAL_FLAGS.txt` provides a concise text summary.
+`hal_config.h` remains the public configuration facade and retains contextual
+rules outside registry v1. `doc/HAL_FLAGS.txt` provides a concise text summary.
 
 Application entry flags are separate from optional HAL modules:
 
@@ -39,9 +56,10 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `impl/shared/bluetooth/*` | Experimental BLE Peripheral over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W, STM32G474+PIM730, and mock. BTstack carries a non-commercial-use restriction; see the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
+| `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `impl/shared/bluetooth/*` | Experimental bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
-| `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates WIFI) |
-| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates WIFI) |
+| `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates UDP + WIFI) |
+| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates TCP + WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
 | `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `impl/shared/network/services/http_server/hal_http_server.cpp` | Small poll-driven HTTP/1.1 server over HAL TCP (propagates TCP + WIFI) |
@@ -53,7 +71,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_TLS` | `hal_tls.h` | `hal_tls.cpp` + `impl/shared/frameworks/BearSSL/*` | BearSSL TLS client over native HAL TCP (propagates TCP + WIFI); does not force BSD sockets, while the optional BearSSL BSD transport keeps TLS-over-BSD available |
 | `HAL_ENABLE_HTTP_CLIENT` | `hal_http_client.h` | `impl/shared/network/http/hal_http_client.cpp` | Bounded one-shot HTTP/1.1 client over HAL TCP with an HTTPS transport when TLS is selected (propagates TCP + WIFI) |
 | `HAL_ENABLE_OTA`  | `hal_ota.h`  | `hal_ota.cpp` + RP boot/staging engine | Authenticated RP update service with staging, trial boot, confirmation and rollback over HAL UDP/TCP (propagates WIFI + UDP + TCP + CRYPTO + CRC) |
-| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates WIFI) |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal_wireguard.cpp` | bundled WireGuard (propagates UDP + WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
@@ -98,6 +116,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `impl/shared/drivers/dacless/dacless.h` | `impl/shared/drivers/dacless/dacless.cpp` | Shared DACless PWM-audio engine with block/sample callbacks and ADC sampling (propagates DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio DMA helper used by DACless |
 | `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
+| `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
+| `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, and mock targets |
 | `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `impl/shared/drivers/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `impl/shared/drivers/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `impl/shared/drivers/hd44780/hd44780.h` | `impl/shared/drivers/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `impl/shared/drivers/display/hal_display.cpp` | *(needs a TFT, OLED, LCD or EPD backend)* |
@@ -130,15 +150,27 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 |---|---|
 | `HAL_DISABLE_ASSERTS` | Compiles every `HAL_ASSERT()` to a no-op. Asserts are ON by default. Mirrors the standard `NDEBUG` convention. |
 
-### Dependency propagation (hal\_config.h)
+### Generated feature resolution
 
-Enabling a leaf module automatically enables every module it requires:
+The registry resolver keeps direct requests and their closure separate:
+
+* `requestedFeatures` contains normalized, direct requests collected from the
+  effective project and build inputs;
+* `resolvedFeatures` adds the transitive registry `implies` closure. Production
+  source/dependency selection and the board/link feature hash use this set.
+
+The compiler receives the requested feature definitions. The generated
+`src/hal/generated/jh_hal_features.h` header materializes the same registry
+closure for C and C++ preprocessing. The following summary shows the public
+feature implications; internal edges to the derived
+`HAL_ENABLE_NETWORK_CORE` symbol are omitted:
 
 ```
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT + HAL_ENABLE_EEPROM + HAL_ENABLE_SPI
-HAL_ENABLE_TIME        -> HAL_ENABLE_WIFI
-HAL_ENABLE_MQTT        -> HAL_ENABLE_WIFI
+HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE + HAL_ENABLE_CRYPTO
+HAL_ENABLE_TIME        -> HAL_ENABLE_UDP + HAL_ENABLE_WIFI
+HAL_ENABLE_MQTT        -> HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_TCP         -> HAL_ENABLE_WIFI
 HAL_ENABLE_HTTP_SERVER -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
@@ -148,8 +180,10 @@ HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
                            HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
+HAL_ENABLE_HTTP_CLIENT -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_OTA         -> HAL_ENABLE_WIFI + HAL_ENABLE_UDP + HAL_ENABLE_TCP + HAL_ENABLE_CRYPTO + HAL_ENABLE_CRC
-HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_WIFI
+HAL_ENABLE_WIREGUARD   -> HAL_ENABLE_UDP + HAL_ENABLE_WIFI
 HAL_ENABLE_EXTERNAL_ADC-> HAL_ENABLE_I2C
 HAL_ENABLE_BH1750      -> HAL_ENABLE_I2C
 HAL_ENABLE_ADP5360     -> HAL_ENABLE_I2C
@@ -160,6 +194,8 @@ HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
+HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
+HAL_ENABLE_MAX5395     -> HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
 HAL_ENABLE_PGA2311     -> HAL_ENABLE_SPI
 HAL_ENABLE_MCP23017    -> HAL_ENABLE_I2C
 HAL_ENABLE_PCA9654E    -> HAL_ENABLE_I2C
@@ -170,7 +206,6 @@ HAL_ENABLE_MFRC522     -> HAL_ENABLE_SPI
 HAL_ENABLE_PN532       -> HAL_ENABLE_SPI
 HAL_ENABLE_DS18B20     -> HAL_ENABLE_ONEWIRE
 HAL_ENABLE_ONEWIRE     -> HAL_ENABLE_CRC
-HAL_ENABLE_GPS         -> HAL_ENABLE_UART (only when UART and SWSERIAL are both absent)
 HAL_ENABLE_A7670       -> HAL_ENABLE_CELLULAR_MODEM + HAL_ENABLE_UART
 HAL_ENABLE_MCP2515     -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
 HAL_ENABLE_MCP251XFD   -> HAL_ENABLE_CAN + HAL_ENABLE_SPI
@@ -181,16 +216,40 @@ HAL_ENABLE_SSD1306     -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 HAL_ENABLE_{SSD1331,SSD135X} -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
 HAL_ENABLE_ST7567      -> HAL_ENABLE_DISPLAY + HAL_ENABLE_I2C
 HAL_ENABLE_{SSD16XX,UC81XX} -> HAL_ENABLE_DISPLAY + HAL_ENABLE_SPI
+HAL_ENABLE_DACLESS     -> HAL_ENABLE_DMA_PWM_AUDIO + HAL_ENABLE_PWM_FREQ
 HAL_ENABLE_PNG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_PNG
 HAL_ENABLE_JPEG_AS_BASE64 -> HAL_ENABLE_CRYPTO + HAL_ENABLE_JPEG
 ```
 
-Facade modules (`HAL_ENABLE_RTC`, `HAL_ENABLE_THERMOCOUPLE`,
-`HAL_ENABLE_DISPLAY`, `HAL_ENABLE_TFT`, `HAL_ENABLE_CELLULAR_MODEM`)
-emit a compile-time `#error` if enabled without any backend.
-
 You only need to enable the **leaf** module you actually use; everything
 upstream is pulled in for you.
+
+### Rules retained outside feature registry v1
+
+`hal_config.h` remains the public configuration facade for contextual rules
+that registry v1 cannot express:
+
+| Category | Retained behavior |
+|---|---|
+| Conditional feature propagation | `HAL_ENABLE_EEPROM` with `HAL_EEPROM_TYPE == EEPROM_TYPE_AT24C256` adds `HAL_ENABLE_I2C`. `HAL_ENABLE_GPS` adds `HAL_ENABLE_UART` only when neither UART nor SWSERIAL was selected. |
+| Provider and choice rules | Network configuration selects exactly one backend and checks its required capabilities. Facades validate providers for RTC, cellular modem, thermocouple, CAN, digital potentiometer, GPS transport, display and TFT. |
+| Target and board rules | BLE controller/target/board support, CYW43 bus/stack/profile/pin and target/board constraints, FreeRTOS target/toolchain/header constraints, and the STM32G474-only FDCAN rule remain contextual. |
+| Defaults, tunables, layout and ranges | Target-dependent EEPROM defaults, storage/OTA region layout, CYW43 pin/clock/country defaults, pool sizes, backlog and TLS limits, plus the remaining tunable defaults and range checks stay in the facade. |
+
+These retained sections contain all 46 production compile-time `#error`
+checks.
+
+Registry `resolvedFeatures` and its feature hash describe the registry v1
+closure. They do not append the two contextual propagation results above. A
+GPS-only request can therefore finish preprocessing with `HAL_ENABLE_UART`,
+and AT24 EEPROM can finish with `HAL_ENABLE_I2C`, even though those additions
+are absent from `resolvedFeatures` and the feature hash.
+
+With `HAL_CONFIG_VERBOSE`, the generated header checks the complete inventory
+of all 93 registered `HAL_ENABLE_*` and `HAL_DISABLE_*` symbols. The report is
+emitted after the retained conditional propagation, so its `#pragma message`
+output describes the final preprocessor state, including contextual I2C or
+UART additions.
 
 ### Passing flags - recommended: `hal_project_config.h`
 
@@ -214,7 +273,15 @@ modules you use:
 #define HAL_ENABLE_PWM_FREQ
 ```
 
-`hal_config.h` detects it via `__has_include("hal_project_config.h")`.
+The target-selection path detects it via
+`__has_include("hal_project_config.h")` before target auto-detection. Keep the
+header macro-only and avoid includes or conditions based on derived
+`HAL_TARGET_IS_*` and `HAL_BOARD_IS_*` macros, which are resolved afterward.
+Feature definitions used for source selection must be unconditional
+`#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; the only supported
+conditional form is a same-symbol `#ifndef HAL_ENABLE_X` guard. Do not put
+feature definitions under any other `#if`/`#ifdef`, including raw or derived
+target/board branches, because the early collector reads the file textually.
 
 ### FreeRTOS availability flag
 
@@ -230,8 +297,17 @@ FreeRTOS headers directly:
 
 Target rules:
 
+Direct dispatcher/CMake paths for both native RP and STM32G474 invoke
+`scripts/component_manager.py component freertos --enable` automatically when
+FreeRTOS is selected. Explicit static-library helper modes invoke
+`scripts/ensure_freertos_kernel.sh` first: `--freertos` for RP and STM32G474,
+and an explicit `-D HAL_ENABLE_FREERTOS` for STM32G474. The wrapper delegates
+to the same manager. If the feature comes only from `hal_project_config.h` (or
+from RP `-D`), the CMake fallback still prepares the kernel. An external
+`JH_FREERTOS_KERNEL_DIR` is verified and never replaced.
+
 - Native RP2040/RP2350: use `./scripts/build_rp_native_lib.sh --freertos` or
-  select `examples/29_freertos_smoke` through the normal VS Code target.
+  select `examples/18_freertos_suite` through the normal VS Code target.
   CMake selects the pinned SMP port for RP2040, RP2350 ARM_NTZ or RP2350
   RISC-V, links `heap_4`, creates `app_task0()` pinned to core 0 and optional
   `app_task1()` pinned to core 1, then starts the scheduler. Native USB is
@@ -240,8 +316,7 @@ Target rules:
   scheduler/heap state and CDC backpressure.
 - STM32G474: use the pinned `third_party/FreeRTOS-Kernel` dependency from
   `third_party/freertos_core_version.conf`, or pass
-  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds run
-  `scripts/ensure_freertos_kernel.sh` before adding FreeRTOS source paths,
+  `-DJH_FREERTOS_KERNEL_DIR=/path/to/FreeRTOS-Kernel`. STM32 CMake builds
   compile the explicit Cortex-M4F kernel source list, include the target
   `FreeRTOSConfig.h`, use `heap_4.c`, and let the FreeRTOS port own
   SVC/PendSV/SysTick. In FreeRTOS mode, STM32 `hal_mutex_*` uses FreeRTOS

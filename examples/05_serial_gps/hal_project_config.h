@@ -1,0 +1,15 @@
+#pragma once
+
+#define HAL_ENABLE_GPS
+#define HAL_ENABLE_SWSERIAL
+#define HAL_ENABLE_UART
+
+#if defined(EXAMPLE_SERIAL_GPS_USE_SWSERIAL)
+#define HAL_GPS_TRANSPORT_SWSERIAL
+#else
+#define HAL_GPS_TRANSPORT_UART
+#endif
+
+#ifndef HAL_DEBUG_DEFAULT_BAUD
+#define HAL_DEBUG_DEFAULT_BAUD 115200u
+#endif

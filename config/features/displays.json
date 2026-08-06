@@ -1,0 +1,45 @@
+{
+  "$schema": "../features.schema.json",
+  "schemaVersion": 1,
+  "domain": "displays",
+  "symbols": {
+    "HAL_ENABLE_DISPLAY": {},
+    "HAL_ENABLE_GC9A01": {
+      "implies": ["HAL_ENABLE_TFT"]
+    },
+    "HAL_ENABLE_HD44780": {},
+    "HAL_ENABLE_ILI9341": {
+      "implies": ["HAL_ENABLE_TFT"]
+    },
+    "HAL_ENABLE_SSD1306": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_SSD1331": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_SSD135X": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_SSD16XX": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_ST7567": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_ST7735": {
+      "implies": ["HAL_ENABLE_TFT"]
+    },
+    "HAL_ENABLE_ST7789": {
+      "implies": ["HAL_ENABLE_TFT"]
+    },
+    "HAL_ENABLE_ST7796S": {
+      "implies": ["HAL_ENABLE_TFT"]
+    },
+    "HAL_ENABLE_TFT": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_UC81XX": {
+      "implies": ["HAL_ENABLE_DISPLAY", "HAL_ENABLE_SPI"]
+    }
+  }
+}

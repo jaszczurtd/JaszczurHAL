@@ -10,6 +10,7 @@ from contextlib import contextmanager
 import errno
 import hashlib
 import hmac
+import importlib
 import json
 import os
 import re
@@ -21,7 +22,7 @@ import tempfile
 import time
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 from vscode.runtime.exit_codes import (
     EXIT_BUILD,
@@ -147,8 +148,15 @@ SECTION_HEADER_RE = re.compile(
     r"(?P<fileoff>[0-9a-fA-F]+)\s+"
     r"2\*\*(?P<align>\d+)"
 )
-HAL_ENABLE_RE = re.compile(r"^\s*#\s*define\s+(HAL_ENABLE_[A-Z0-9_]+)\b")
-HAL_DEFINE_TOKEN_RE = re.compile(r"(?:^|(?<=[;\s]))(?:-D)?(HAL_ENABLE_[A-Z0-9_]+)(?=[=;\s]|$)")
+HAL_FEATURE_RE = re.compile(
+    r"^\s*#\s*define\s+(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)\b(?P<tail>.*)$"
+)
+HAL_DEFINE_TOKEN_RE = re.compile(
+    r"(?:^|(?<=[;\s]))(?:-D)?"
+    r"(?P<symbol>HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)"
+    r"(?P<assignment>=(?P<value>[^;\s]*))?"
+    r"(?=[;\s]|$)"
+)
 REGION_OVERFLOW_RE = re.compile(r"region [`'](?P<region>[^`']+)[`'] overflowed by (?P<bytes>\d+) bytes")
 SECTION_WILL_NOT_FIT_RE = re.compile(
     r"section [`'](?P<section>[^`']+)[`'] will not fit in region [`'](?P<region>[^`']+)[`']"
@@ -749,6 +757,7 @@ def load_project_config(
     project_dir: Path,
     target_override: str | None = None,
     board_override: str | None = None,
+    use_local_state: bool = True,
 ) -> dict[str, Any]:
     vscode_dir = project_dir / ".vscode"
     manifest = load_json_file(vscode_dir / "jaszczurhal.project.json")
@@ -812,7 +821,11 @@ def load_project_config(
     expand_config_sections(config, project_dir)
     # User-local active board selection (gitignored). CLI overrides win over it;
     # it wins over the manifest default. Absent -> no effect (parity preserved).
-    local_state = load_json_file(vscode_dir / "jaszczurhal.local.json")
+    local_state = (
+        load_json_file(vscode_dir / "jaszczurhal.local.json")
+        if use_local_state
+        else {}
+    )
     local_target = local_state.get("target") if isinstance(local_state, dict) else None
     local_board = local_state.get("board") if isinstance(local_state, dict) else None
     local_port = local_state.get("uploadPort") if isinstance(local_state, dict) else None
@@ -909,6 +922,11 @@ def command_config_dump(args: argparse.Namespace) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
     apply_cli_overrides(config, args)
+    try:
+        attach_hal_feature_resolution(config, project_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
     if args.json:
         print(json.dumps(config, ensure_ascii=False, indent=2, sort_keys=True))
     else:
@@ -1031,29 +1049,273 @@ def ensure_local_state_gitignored(project_dir: Path) -> None:
         pass
 
 
-def collect_hal_enables(config: dict[str, Any], project_dir: Path) -> dict[str, str]:
-    enabled: dict[str, str] = {}
-    hal_project_config = project_dir / "hal_project_config.h"
-    if hal_project_config.is_file():
-        try:
-            text = hal_project_config.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        for line in text.splitlines():
-            match = HAL_ENABLE_RE.match(line)
-            if match:
-                enabled.setdefault(match.group(1), "hal_project_config.h")
+def preprocessor_logical_lines(text: str) -> Iterable[tuple[int, str]]:
+    """Yield comment-free preprocessing lines and their source line."""
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    spliced: list[str] = []
+    source_lines: list[int] = []
+    source_line = 1
+    source_offset = 0
+    while source_offset < len(text):
+        if text.startswith("\\\n", source_offset):
+            source_line += 1
+            source_offset += 2
+            continue
+        character = text[source_offset]
+        spliced.append(character)
+        source_lines.append(source_line)
+        if character == "\n":
+            source_line += 1
+        source_offset += 1
+    text = "".join(spliced)
 
+    buffer: list[str] = []
+    origin_line: int | None = None
+    offset = 0
+    quote: str | None = None
+
+    def append(character: str) -> None:
+        nonlocal origin_line
+        if origin_line is None and not character.isspace():
+            origin_line = source_lines[offset]
+        buffer.append(character)
+
+    while offset < len(text):
+        character = text[offset]
+        if quote is not None:
+            append(character)
+            if character == "\\" and offset + 1 < len(text):
+                offset += 1
+                append(text[offset])
+            elif character == quote:
+                quote = None
+            elif character == "\n":
+                yield origin_line or source_lines[offset], "".join(buffer)
+                buffer.clear()
+                origin_line = None
+                quote = None
+            offset += 1
+            continue
+
+        if text.startswith("//", offset):
+            append(" ")
+            newline = text.find("\n", offset + 2)
+            offset = len(text) if newline < 0 else newline
+            continue
+        if text.startswith("/*", offset):
+            append(" ")
+            block_end = text.find("*/", offset + 2)
+            if block_end < 0:
+                offset = len(text)
+                continue
+            offset = block_end + 2
+            continue
+        if character in {'"', "'"}:
+            quote = character
+            append(character)
+            offset += 1
+            continue
+        if character == "\n":
+            yield origin_line or source_lines[offset], "".join(buffer)
+            buffer.clear()
+            origin_line = None
+            offset += 1
+            continue
+        append(character)
+        offset += 1
+
+    if buffer:
+        final_line = source_lines[-1] if source_lines else 1
+        yield origin_line or final_line, "".join(buffer)
+
+
+def header_hal_feature_definitions(
+    project_dir: Path,
+) -> list[tuple[str, str | None, str]]:
+    definitions: list[tuple[str, str | None, str]] = []
+    hal_project_config = project_dir / "hal_project_config.h"
+    if not hal_project_config.is_file():
+        return definitions
+    try:
+        text = hal_project_config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return definitions
+    for line_number, line in preprocessor_logical_lines(text):
+        match = HAL_FEATURE_RE.match(line)
+        if not match:
+            continue
+        raw_value = match.group("tail").strip()
+        definitions.append(
+            (
+                match.group(1),
+                raw_value if raw_value else None,
+                f"hal_project_config.h:{line_number}",
+            )
+        )
+    return definitions
+
+
+def cache_hal_feature_definitions(
+    config: dict[str, Any],
+) -> list[tuple[str, str | None, str]]:
+    definitions: list[tuple[str, str | None, str]] = []
     cmake = config.get("cmake")
     cache = cmake.get("cache") if isinstance(cmake, dict) else None
-    if isinstance(cache, dict):
-        for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
-            value = cache.get(key)
-            if not value:
+    if not isinstance(cache, dict):
+        return definitions
+    for key, value in cache.items():
+        if re.fullmatch(
+            r"HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+", str(key)
+        ) is None:
+            continue
+        definitions.append(
+            (
+                str(key),
+                str(value) if value is not None else "",
+                f"cmake.cache.{key}",
+            )
+        )
+    for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
+        value = cache.get(key)
+        if value is None or value == "":
+            continue
+        raw_value = str(value)
+        for raw_token in raw_value.split(";"):
+            token = raw_token.strip()
+            if not token:
                 continue
-            for match in HAL_DEFINE_TOKEN_RE.finditer(str(value)):
-                enabled.setdefault(match.group(1), f"cmake.cache.{key}")
-    return enabled
+            if "$<" in token:
+                raise ValueError(
+                    f"cmake.cache.{key}: [JH-CFG-VALUE] compile definition "
+                    f"{token!r} uses an unsupported generator expression"
+                )
+            match = HAL_DEFINE_TOKEN_RE.fullmatch(token)
+            if (
+                "HAL_ENABLE_" in token or "HAL_DISABLE_" in token
+            ) and match is None:
+                raise ValueError(
+                    f"cmake.cache.{key}: [JH-CFG-VALUE] compile definition "
+                    f"{token!r} embeds a HAL feature in an unsupported "
+                    "expression"
+                )
+            if match is None:
+                continue
+            definitions.append(
+                (
+                    match.group("symbol"),
+                    match.group("value")
+                    if match.group("assignment") is not None
+                    else None,
+                    f"cmake.cache.{key}",
+                )
+            )
+    return definitions
+
+
+def validate_hal_enable_values(config: dict[str, Any], project_dir: Path) -> None:
+    definitions = [
+        *header_hal_feature_definitions(project_dir),
+        *cache_hal_feature_definitions(config),
+    ]
+    for symbol, value, source in definitions:
+        if value in {None, "1"}:
+            continue
+        if value == "0":
+            raise ValueError(
+                f"{source}: [JH-CFG-VALUE] {symbol}=0 is unsupported; "
+                "omit the symbol to disable it"
+            )
+        raise ValueError(
+            f"{source}: [JH-CFG-VALUE] {symbol} has unsupported value "
+            f"{value!r}; use the bare symbol or {symbol}=1"
+        )
+
+
+def collect_hal_features(
+    config: dict[str, Any], project_dir: Path
+) -> dict[str, str]:
+    features: dict[str, str] = {}
+    for symbol, value, source in header_hal_feature_definitions(project_dir):
+        if value in {None, "1"}:
+            features.setdefault(symbol, source.split(":", 1)[0])
+    for symbol, value, source in cache_hal_feature_definitions(config):
+        if value in {None, "1"}:
+            features.setdefault(symbol, source)
+    return features
+
+
+def collect_hal_enables(
+    config: dict[str, Any], project_dir: Path
+) -> dict[str, str]:
+    return {
+        symbol: source
+        for symbol, source in collect_hal_features(config, project_dir).items()
+        if symbol.startswith("HAL_ENABLE_")
+    }
+
+
+_HAL_FEATURE_SUPPORT: tuple[Any, Any] | None = None
+
+
+def hal_feature_support() -> tuple[Any, Any]:
+    global _HAL_FEATURE_SUPPORT
+    if _HAL_FEATURE_SUPPORT is None:
+        scripts_dir = jaszczurhal_root() / "scripts"
+        if str(scripts_dir) not in sys.path:
+            sys.path.insert(0, str(scripts_dir))
+        module = importlib.import_module("generate_hal_features")
+        model = module.load_registry(jaszczurhal_root() / "config")
+        _HAL_FEATURE_SUPPORT = module, model
+    return _HAL_FEATURE_SUPPORT
+
+
+def resolve_hal_features(
+    config: dict[str, Any], project_dir: Path
+) -> dict[str, Any]:
+    validate_hal_enable_values(config, project_dir)
+    module, model = hal_feature_support()
+    definitions = [
+        *header_hal_feature_definitions(project_dir),
+        *cache_hal_feature_definitions(config),
+    ]
+    requests = [
+        module.FeatureRequest(symbol, value, source)
+        for symbol, value, source in definitions
+    ]
+    resolution, findings = module.resolve_feature_requests(
+        requests, model, str(project_dir)
+    )
+    if findings:
+        raise ValueError("\n".join(sorted(set(findings))))
+    return {
+        "registryDigest": model.digest,
+        "requestedFeatures": list(resolution.requested),
+        "resolvedFeatures": list(resolution.resolved),
+        "resolvedFeaturesDigest": module.resolved_features_digest(
+            resolution.resolved
+        ),
+        "provenance": {
+            symbol: list(sources)
+            for symbol, sources in resolution.provenance.items()
+        },
+    }
+
+
+def attach_hal_feature_resolution(
+    config: dict[str, Any], project_dir: Path
+) -> None:
+    config["featureResolution"] = resolve_hal_features(config, project_dir)
+
+
+def resolved_hal_feature_names(
+    config: dict[str, Any], project_dir: Path
+) -> set[str]:
+    resolution = config.get("featureResolution")
+    if not isinstance(resolution, dict) or not isinstance(
+        resolution.get("resolvedFeatures"), list
+    ):
+        resolution = resolve_hal_features(config, project_dir)
+    return {str(symbol) for symbol in resolution["resolvedFeatures"]}
 
 
 def target_descriptor(config: dict[str, Any]) -> dict[str, Any] | None:
@@ -1095,7 +1357,7 @@ def build_preflight_diagnostics(config: dict[str, Any], project_dir: Path) -> li
         )
         return messages
 
-    enabled = collect_hal_enables(config, project_dir)
+    enabled = resolved_hal_feature_names(config, project_dir)
     if target == "stm32g474":
         network = sorted(module for module in enabled if module in STM32G474_NETWORK_MODULES)
         project_config = project_dir / "hal_project_config.h"
@@ -2391,6 +2653,11 @@ def load_config_for_action(args: argparse.Namespace) -> tuple[Path, dict[str, An
         print(f"error: {exc}", file=sys.stderr)
         return project_dir, {}, EXIT_CONFIG
     apply_cli_overrides(config, args)
+    try:
+        attach_hal_feature_resolution(config, project_dir)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return project_dir, {}, EXIT_CONFIG
     return project_dir, config, 0
 
 
@@ -2740,7 +3007,7 @@ def synchronize_cmake_firmware_artifacts(
     }
     if target in UF2_TARGETS:
         sources["firmware.uf2"] = ("firmware.uf2",)
-        if "HAL_ENABLE_OTA" in collect_hal_enables(config, project_dir):
+        if "HAL_ENABLE_OTA" in resolved_hal_feature_names(config, project_dir):
             sources["firmware.ota"] = ("firmware.ota",)
 
     resolved: dict[str, Path] = {}

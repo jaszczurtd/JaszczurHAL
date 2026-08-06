@@ -1,0 +1,45 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "17_audio_output",
+    "example": {
+        "targets": [
+            "stm32g474",
+            "rp2040",
+            "rp2350-arm",
+            "rp2350-riscv"
+        ],
+        "boards": {
+            "rp2040": "pico",
+            "rp2350-arm": "pico2",
+            "rp2350-riscv": "pico2",
+            "stm32g474": "nucleo-g474re"
+        },
+        "gateTargets": [
+            "stm32g474",
+            "rp2040"
+        ],
+        "covers": [
+            "28_pga2311",
+            "44_dacless_audio"
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${jhRoot}/.build/examples/17_audio_output",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "17_audio_output"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

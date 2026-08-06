@@ -73,15 +73,17 @@ flash of a blank board, and the full task reference are documented in
 
 ## Examples
 
-The `examples/` tree contains small, focused applications that demonstrate HAL
-modules. Each example is a portable `app.c`/`app.cpp` with a matching
+The `examples/` tree contains 26 consolidated applications that preserve the
+coverage of the former 59 examples while demonstrating related HAL modules
+together. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h`, built on the portable entry-point contract:
 `app_start()`, `app_task0()`, and optional `app_task1()`
 (`HAL_ENABLE_APP_TASK1`, mapped to dual-core execution on RP and cooperative
 calls on STM32G474).
 
-The build matrix, requirements, and per-example target coverage are maintained
-in [examples/README.md](examples/README.md).
+The build matrix, requirements, per-example target coverage, and the rule to
+extend an existing project or variant before creating another directory are
+maintained in [examples/README.md](examples/README.md).
 
 ## Module selection (quick)
 
@@ -103,6 +105,23 @@ see:
 - [doc/api/02_module_flags.md](doc/api/02_module_flags.md)
 - [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
 
+Feature flags use presence semantics: use `#define HAL_ENABLE_X` or
+`#define HAL_ENABLE_X 1`. A definition such as `HAL_ENABLE_X=0` is still
+present to the C/C++ preprocessor and therefore enables the module. Supported
+board generation, CMake, static-library scripts, and `jh-vscode` reject `=0`
+and other explicit values; arbitrary direct compiler flags retain preprocessor
+presence semantics. In definition-list inputs, every `HAL_ENABLE_*` entry must
+be a standalone simple token separated with semicolons. Whitespace does not
+separate multiple feature definitions, and CMake generator expressions are
+rejected. The versioned JSON registry under `config/features/` generates the C
+feature closure in `src/hal/generated/` and the CMake resolver in
+`cmake/generated/`. The resolved set drives C preprocessing, CMake source and
+dependency selection, the board feature hash and link contract, and
+`jh-vscode` preflight and OTA decisions. `hal_config.h` retains rules that
+depend on tunables, provider selection, board capabilities, or the active
+target. Defining `HAL_CONFIG_VERBOSE` emits a generated preprocessor report for
+every active registered feature.
+
 ## Target selection (multiplatform)
 
 Separate from the per-module flags, JaszczurHAL selects exactly one hardware
@@ -119,6 +138,16 @@ of the following in `hal_project_config.h` (or via `-D`):
 
 If you define none, the target is **auto-detected** from the toolchain.
 Backend files compile only for their selected target, so unused backends cost zero code.
+
+`hal_project_config.h` is loaded before target auto-detection and derived
+`HAL_TARGET_IS_*` values. Keep it as a macro-only input header: define raw
+target, board, feature, and tuning macros there without including JaszczurHAL
+headers or depending on derived target/board macros. Feature definitions used
+for source selection must be unconditional `#define HAL_ENABLE_X` or
+`#define HAL_ENABLE_X 1`; the only supported conditional form is a same-symbol
+`#ifndef HAL_ENABLE_X` guard. Do not put feature definitions under any other
+`#if`/`#ifdef`, including raw or derived target/board branches, because the
+early collector reads this macro-only file textually.
 
 Official builds select a stable target and board ID through the generated board
 registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
@@ -154,7 +183,11 @@ documented in [lib_compilation.md](doc/lib_compilation.md) and
 
 The complete guide for compiling JaszczurHAL to a linkable static library
 (`libJaszczurHAL.a`), including example-application builds and the core/entry
-policy: [lib_compilation.md](doc/lib_compilation.md)
+policy: [lib_compilation.md](doc/lib_compilation.md). Installed RP and
+STM32G474 packages include the generated feature and board headers, resolved
+board metadata, and link-contract reference source required by a direct
+compiler consumer. Compiling and linking the installed package does not invoke
+Python.
 
 ## Tests and quality gates
 
@@ -175,7 +208,8 @@ every push and pull request to `main`:
 
 It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
 `clang-tidy` and `cppcheck` static analysis, documentation link validation,
-and library/firmware compile gates for RP2040, RP2350 ARM, RP2350 RISC-V and
+strict raw/effective feature lint, generated feature-artifact drift checks, and
+library/firmware compile gates for RP2040, RP2350 ARM, RP2350 RISC-V and
 STM32G474 across `HAL_ENABLE_*` profiles, including every declared example and
 hardware-fixture compile matrix.
 

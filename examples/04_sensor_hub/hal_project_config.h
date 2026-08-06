@@ -1,0 +1,9 @@
+#pragma once
+
+#ifndef HAL_DEBUG_DEFAULT_BAUD
+#define HAL_DEBUG_DEFAULT_BAUD 115200u
+#endif
+
+#define HAL_ENABLE_BH1750
+#define HAL_ENABLE_DHT
+#define HAL_ENABLE_DS18B20

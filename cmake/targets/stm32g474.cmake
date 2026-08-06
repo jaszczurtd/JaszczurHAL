@@ -10,8 +10,10 @@
 #   - Projects that define app_start/app_task0[/app_task1] directly
 #     are built as-is; HAL_ENABLE_APP_TASK1 comes from their hal_project_config.h.
 #   - Projects using the Fiesta initialization/looper convention (they ship a
-#     firmware_entry.h) get a generated adapter (build dir only), with core1
-#     read straight from firmware_entry.h.
+#     firmware_entry.h) get a generated adapter (build dir only).
+#     FIESTA_ENABLE_CORE1=1 additionally requires HAL_ENABLE_APP_TASK1 in the
+#     normal project feature inputs so requested/resolved and the link contract
+#     describe the compiled entry path.
 #
 # Optional manifest cache inputs (target-unaware, declared by the project):
 #   JH_EXTRA_INCLUDES  extra include dirs (';'-separated)
@@ -54,7 +56,7 @@ set(_defines
     HAL_PROVIDE_APP_ENTRY=1
     ${JH_BOARD_COMPILE_DEFINITIONS}
     ${JH_EXTRA_DEFINES})
-set(_feature_defines ${_defines} ${_jh_project_feature_defines})
+set(_feature_defines ${JH_RESOLVED_FEATURES})
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c")
 list(APPEND _sources "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 function(_jh_extract_define_value OUT_VAR KEY)
@@ -83,9 +85,8 @@ endif()
 # shared generated adapter. Direct-entry projects define app_start directly.
 jh_generate_entry_adapter("${JH_PROJECT_DIR}" "${CMAKE_BINARY_DIR}/generated" _adapter _core1)
 if(_adapter)
-    if(_core1)
-        list(APPEND _defines HAL_ENABLE_APP_TASK1=1)
-    endif()
+    jh_validate_entry_adapter_features(
+        "${_core1}" ${JH_RESOLVED_FEATURES})
     list(APPEND _sources "${_adapter}")
 endif()
 
@@ -96,6 +97,7 @@ jh_add_stm32g474_firmware(firmware
         ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}
     FEATURES ${_jh_project_feature_defines}
+    RESOLVED_FEATURES ${JH_RESOLVED_FEATURES}
     LIBRARIES ${JH_LINK_LIBRARIES}
 )
 
@@ -108,11 +110,6 @@ if(_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ble_stream
         HAL_ENABLE_BLE_STREAM ${_feature_defines})
-    # hal_config.h propagates the stream flag to BLE; mirror it for source
-    # selection.
-    if(_stm32_has_ble_stream)
-        set(_stm32_has_ble TRUE)
-    endif()
     if(_stm32_has_bluetooth_stage1 AND _stm32_has_ble)
         message(FATAL_ERROR
             "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")

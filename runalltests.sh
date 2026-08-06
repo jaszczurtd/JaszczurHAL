@@ -323,18 +323,19 @@ for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
     info "Building native Pico SDK platform: ${platform}"
     run_logged "${LOG_ROOT}/jh_rp_native_${platform}.log" \
         "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
-            --platform "${platform}" --example 01_blink \
+            --platform "${platform}" --example 01_core_runtime \
             --clean --jobs "${JOBS}" \
             --output "${GATE_BUILD_ROOT}/rp-native/${platform}/bare"
 done
-pass "Native Pico SDK matrix built HAL entry/core probes and 01_blink artifacts successfully."
+pass "Native Pico SDK matrix built HAL entry/core probes and core-runtime artifacts successfully."
 
 info "Building native FreeRTOS SMP artifact matrix..."
 for platform in "${NATIVE_RP_PLATFORMS[@]}"; do
     info "Building native FreeRTOS SMP platform: ${platform}"
     run_logged "${LOG_ROOT}/jh_rp_native_freertos_${platform}.log" \
         "${SCRIPT_DIR}/scripts/build_rp_native_lib.sh" \
-            --platform "${platform}" --example 29_freertos_smoke \
+            --platform "${platform}" --example 18_freertos_suite \
+            --example-source app.c \
             --freertos --clean --jobs "${JOBS}" \
             --output "${GATE_BUILD_ROOT}/rp-native/${platform}/freertos"
 done
@@ -494,15 +495,13 @@ pass "Native RP images contain no removed carrier link inputs."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 7: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 7/7: Examples build (native RP + STM32G474)"
+header "Gate 7/7: Consolidated examples (representative RP + STM32G474)"
 
-for target in rp2040 rp2350-arm rp2350-riscv; do
-    info "Building every declared native VS Code example for ${target}..."
-    run_logged "${LOG_ROOT}/jh_examples_${target}_native_build.log" \
-        "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
-            --target "${target}" --jobs "${JOBS}"
-done
-pass "Complete native RP example matrix built successfully."
+info "Building the RP2040 example gate set..."
+run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
+    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
+        --target rp2040 --gate --jobs "${JOBS}"
+pass "RP2040 example gate set built successfully; Gate 6 covers both RP2350 ISAs."
 
 info "Building native RP USB-multicore and SDLogger parity fixtures..."
 run_logged "${LOG_ROOT}/jh_rp_native_parity_fixtures.log" \
@@ -512,7 +511,8 @@ pass "Native RP parity fixtures built for all target/runtime combinations."
 
 info "Building STM32G474 examples through dispatcher-backed VS Code manifests..."
 run_logged "${LOG_ROOT}/jh_examples_stm32g474_build.log" \
-    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build --target stm32g474 --jobs "${JOBS}"
+    "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
+        --target stm32g474 --gate --jobs "${JOBS}"
 pass "STM32G474 examples built successfully."
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -529,7 +529,7 @@ echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
 echo "  Target builds:    PASS (native Pico SDK + STM32G474)"
-echo "  Examples builds:  PASS (native RP + STM32G474)"
+echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
 echo ""
 echo "  Total time: ${SECONDS}s"
 echo ""

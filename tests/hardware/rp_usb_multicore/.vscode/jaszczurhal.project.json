@@ -23,7 +23,6 @@
                     "rp2350-riscv"
                 ],
                 "extraDefines": [
-                    "HAL_ENABLE_APP_TASK1",
                     "HAL_ENABLE_FREERTOS"
                 ]
             }
@@ -39,8 +38,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "rp_usb_multicore",
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_APP_TASK1"
+            "JH_MODULE_NAME": "rp_usb_multicore"
         }
     },
     "artifacts": {

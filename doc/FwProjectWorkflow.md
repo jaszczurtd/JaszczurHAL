@@ -139,6 +139,11 @@ Inspect the complete resolved view before diagnosing a build or upload:
   config-dump --project "$PWD"
 ```
 
+The dump includes a `featureResolution` object with `registryDigest`,
+`requestedFeatures`, `resolvedFeatures`, `resolvedFeaturesDigest`, and
+per-request `provenance`. This view reflects the active target profile and
+variant after all manifest overlays have been applied.
+
 ## Target matrix
 
 | Target | ISA | Default board | Firmware format | Upload |
@@ -273,6 +278,44 @@ Project-owned feature flags live in `hal_project_config.h`:
 }
 ```
 
+Feature requests accept `HAL_ENABLE_X` and `HAL_ENABLE_X=1`. The dispatcher
+and `jh-vscode` reject `HAL_ENABLE_X=0` and other explicit values with
+`[JH-CFG-VALUE]` after resolving the active target profile and example variant.
+Omit a feature symbol to disable it. Non-feature tunables such as
+`APP_DIAGNOSTICS=0` keep their normal value semantics. In definition-list
+inputs, every `HAL_ENABLE_*` entry must be a standalone simple token separated
+with semicolons. Whitespace does not separate multiple feature definitions,
+and CMake generator expressions are rejected.
+
+For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
+paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal
+feature input. This keeps the generated entry adapter, requested/resolved
+feature sets, and link contract identical.
+
+The feature registry computes one target-independent transitive closure for
+all production consumers. The generated C header defines implied feature
+macros, CMake uses the resolved set for source and dependency selection, and
+board generation uses it for `featureHash` and the link contract. `jh-vscode`
+uses the same closure for preflight and OTA eligibility while preserving the
+direct requests passed to CMake. Define `HAL_CONFIG_VERBOSE` to emit the
+generated report of every active registered feature during compilation.
+
+Rules whose results depend on tunables, provider choice, board capabilities,
+or the active target remain in `hal_config.h`. These include the EEPROM-type
+I2C implication, the GPS transport default, backend/provider validation, board
+capability checks, and target-specific constraints.
+
+The build loads `hal_project_config.h` before target auto-detection and before
+derived target/board selectors exist. Keep that file macro-only: it may define
+raw `HAL_TARGET_*`, `HAL_BOARD_PROFILE_*`, `HAL_ENABLE_*`, and tuning macros,
+but it must not include JaszczurHAL headers or branch on `HAL_TARGET_IS_*` /
+`HAL_BOARD_IS_*`. Feature definitions used for source selection must be
+unconditional `#define HAL_ENABLE_X` or `#define HAL_ENABLE_X 1`; the only
+supported conditional form is a same-symbol `#ifndef HAL_ENABLE_X` guard. Do
+not place feature definitions under any other `#if`/`#ifdef`, including raw or
+derived target/board branches, because the early collector reads the file
+textually.
+
 Physical board selection remains in `target` and `board`. Application wiring,
 USB identity, secrets, partition policy, and feature selection remain
 project-owned.
@@ -383,7 +426,7 @@ targets, and CMake cache entries.
 
 ```bash
 scripts/examples_dispatcher.py list
-scripts/examples_dispatcher.py build --target rp2040 --example 01_blink
+scripts/examples_dispatcher.py build --target rp2040 --example 01_core_runtime
 ```
 
 The generated example manifests are the build inputs used by the quality gate.

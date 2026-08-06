@@ -13,6 +13,8 @@ import sys
 import tempfile
 from typing import Any
 
+import generate_hal_features
+
 
 class DescriptorError(ValueError):
     """Descriptor validation failure with actionable context."""
@@ -75,7 +77,9 @@ COMPONENT_REGISTRY = {
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
 STM32_PIN_PATTERN = re.compile(r"^P([A-Z])([0-9]|1[0-5])$")
-FEATURE_PATTERN = re.compile(r"^HAL_ENABLE_[A-Z0-9_]+(?:=(?:0|1))?$")
+FEATURE_PATTERN = re.compile(
+    r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
+)
 
 
 def fail(path: Path, json_path: str, value: Any, expected: str) -> None:
@@ -669,15 +673,71 @@ def normalize_features(features: list[str]) -> list[str]:
     normalized: set[str] = set()
     for feature in features:
         value = feature.strip()
-        if not FEATURE_PATTERN.fullmatch(value):
+        match = FEATURE_PATTERN.fullmatch(value)
+        if match is None:
             raise DescriptorError(
-                f"feature {feature!r}: expected HAL_ENABLE_* or HAL_ENABLE_*=0/1"
+                f"feature {feature!r}: expected a HAL_ENABLE_* or "
+                "HAL_DISABLE_* symbol, optionally followed by =1"
             )
-        if "=" not in value:
-            value += "=1"
-        normalized.add(value)
+        explicit_value = match.group(2)
+        if explicit_value is not None and explicit_value != "1":
+            raise DescriptorError(
+                f"[JH-CFG-VALUE] feature {feature!r}: HAL feature symbols "
+                "accept only a bare macro or an explicit value of 1"
+            )
+        normalized.add(f"{match.group(1)}=1")
     ordered = sorted(normalized)
     return ordered
+
+
+def validate_definitions(definitions: list[str]) -> None:
+    for definition in definitions:
+        value = definition.strip()
+        if "$<" in value:
+            raise DescriptorError(
+                f"[JH-CFG-VALUE] compile definition {definition!r}: "
+                "generator expressions are not supported"
+            )
+        normalized = value.removeprefix("-D")
+        if not normalized.startswith(("HAL_ENABLE_", "HAL_DISABLE_")):
+            if "HAL_ENABLE_" in normalized or "HAL_DISABLE_" in normalized:
+                raise DescriptorError(
+                    f"[JH-CFG-VALUE] compile definition {definition!r}: "
+                    "HAL feature symbols must be standalone bare macros or "
+                    "have an explicit value of 1"
+                )
+            continue
+        match = FEATURE_PATTERN.fullmatch(value)
+        if match is None or (match.group(2) is not None and match.group(2) != "1"):
+            raise DescriptorError(
+                f"[JH-CFG-VALUE] compile definition {definition!r}: "
+                "HAL feature symbols accept only a bare macro or an explicit "
+                "value of 1"
+            )
+
+
+def resolve_features(features: list[str]) -> tuple[list[str], list[str]]:
+    normalized = normalize_features(features)
+    requests = [
+        generate_hal_features.FeatureRequest(
+            symbol=definition.removesuffix("=1"),
+            value="1",
+            source=f"command-line:--requested-feature[{index}]",
+        )
+        for index, definition in enumerate(normalized)
+    ]
+    try:
+        model = generate_hal_features.load_registry(
+            Path(__file__).resolve().parents[1] / "config"
+        )
+        resolution, findings = generate_hal_features.resolve_feature_requests(
+            requests, model, "board configuration"
+        )
+    except generate_hal_features.RegistryError as error:
+        raise DescriptorError(str(error)) from error
+    if findings:
+        raise DescriptorError("\n".join(findings))
+    return list(resolution.requested), list(resolution.resolved)
 
 
 def macro_suffix(identifier: str) -> str:
@@ -716,12 +776,17 @@ def generate(
     boards: dict[str, dict[str, Any]],
     capabilities: dict[str, Any],
     output_dir: Path,
-    features: list[str],
+    requested_feature_inputs: list[str],
 ) -> None:
-    normalized_features = normalize_features(features)
+    requested_features, resolved_features = resolve_features(
+        requested_feature_inputs
+    )
+    resolved_features_digest = generate_hal_features.resolved_features_digest(
+        resolved_features
+    )
     feature_contract = [
         f"hal.profileId={board['hal']['profileId']}",
-        *normalized_features,
+        *(f"{feature}=1" for feature in resolved_features),
     ]
     feature_hash = hashlib.sha256(
         "\n".join(feature_contract).encode()
@@ -767,7 +832,11 @@ def generate(
         "runtimeName": board["hal"]["runtimeName"],
         "flashBytes": board["memory"]["flash"]["expectedBytes"],
         "components": components,
-        "features": normalized_features,
+        "boardCompileDefinitions": board_compile_definitions,
+        "requestedFeatures": requested_features,
+        "resolvedFeatures": resolved_features,
+        "resolvedFeaturesDigest": resolved_features_digest,
+        "features": resolved_features,
         "featureHash": feature_hash,
         "contractSymbol": contract_symbol,
         "capabilities": board["capabilities"],
@@ -784,6 +853,10 @@ def generate(
         f'set(JH_BOARD_COMPONENTS "{";".join(components)}")',
         f'set(JH_BOARD_COMPILE_DEFINITIONS "{";".join(board_compile_definitions)}")',
         f'set(JH_BOARD_EXPECTED_FLASH_BYTES "{board["memory"]["flash"]["expectedBytes"]}")',
+        f'set(JH_BOARD_REQUESTED_FEATURES "{";".join(requested_features)}")',
+        f'set(JH_BOARD_RESOLVED_FEATURES "{";".join(resolved_features)}")',
+        f'set(JH_BOARD_RESOLVED_FEATURES_DIGEST "{resolved_features_digest}")',
+        f'set(JH_BOARD_FEATURES "{";".join(resolved_features)}")',
         f'set(JH_BOARD_FEATURE_HASH "{feature_hash}")',
         f'set(JH_BOARD_CONTRACT_SYMBOL "{contract_symbol}")',
     ]
@@ -833,6 +906,13 @@ def generate(
         f'#define HAL_BOARD_PROVIDER_BOARD "{board["build"].get("board", "")}"',
         f"#define HAL_BOARD_EXPECTED_FLASH_BYTES UINT32_C({board['memory']['flash']['expectedBytes']})",
     ]
+    if board_compile_definitions:
+        config_lines.append(
+            "/* Board/provider definitions required by direct compiler consumers. */"
+        )
+    for definition in board_compile_definitions:
+        name, separator, value = definition.partition("=")
+        config_lines.append(f"#define {name} {value if separator else '1'}")
     for entry in sorted(boards.values(), key=lambda item: item["hal"]["profileId"]):
         selector = entry["hal"]["selector"]
         is_macro = selector.replace("HAL_BOARD_PROFILE_", "HAL_BOARD_IS_", 1)
@@ -905,13 +985,16 @@ def generate(
             "/* Generated by generate_board_config.py; do not edit. */",
             '#include "jh_link_contract.h"',
             "#if defined(__GNUC__) || defined(__clang__)",
-            "#define JH_USED __attribute__((used))",
+            "#define JH_CONSTRUCTOR_USED __attribute__((constructor, used))",
+            "static void JH_CONSTRUCTOR_USED jh_require_board_contract(void)",
+            "{",
+            "    JH_BOARD_CONTRACT_SYMBOL();",
+            "}",
             "#else",
-            "#define JH_USED",
-            "#endif",
             "typedef void (*jh_board_contract_fn_t)(void);",
-            "JH_USED static jh_board_contract_fn_t const jh_board_contract_reference =",
+            "static jh_board_contract_fn_t const jh_board_contract_reference =",
             "    &JH_BOARD_CONTRACT_SYMBOL;",
+            "#endif",
             "",
         ]
     )
@@ -927,9 +1010,18 @@ def generate(
     )
     dependencies = [
         str(Path(__file__).resolve()),
+        str((Path(__file__).resolve().parent / "generate_hal_features.py")),
         *(
             str(path.resolve())
-            for path in sorted((Path(__file__).resolve().parents[1] / "boards").rglob("*.json"))
+            for path in sorted(
+                (Path(__file__).resolve().parents[1] / "boards").rglob("*.json")
+            )
+        ),
+        *(
+            str(path.resolve())
+            for path in sorted(
+                (Path(__file__).resolve().parents[1] / "config").rglob("*.json")
+            )
         ),
     ]
     atomic_write(output_dir / "generation.d", "\n".join(dependencies) + "\n")
@@ -942,7 +1034,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--boards-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--output-root", type=Path)
-    parser.add_argument("--feature", action="append", default=[])
+    parser.add_argument(
+        "--feature",
+        "--requested-feature",
+        dest="requested_feature",
+        action="append",
+        default=[],
+    )
     parser.add_argument("--define", action="append", default=[])
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--list", choices=("targets", "boards"))
@@ -955,6 +1053,8 @@ def main() -> int:
     boards_root = args.boards_root.resolve()
     try:
         targets, boards, capabilities = load_registry(boards_root)
+        normalize_features(args.requested_feature)
+        validate_definitions(args.define)
         if args.list:
             values = targets if args.list == "targets" else boards
             print("\n".join(sorted(values)))
@@ -1030,7 +1130,14 @@ def main() -> int:
             raise DescriptorError(
                 f"output directory must be below {managed_root}, got {output_dir}"
             )
-        generate(target, board, boards, capabilities, output_dir, args.feature)
+        generate(
+            target,
+            board,
+            boards,
+            capabilities,
+            output_dir,
+            args.requested_feature,
+        )
     except DescriptorError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

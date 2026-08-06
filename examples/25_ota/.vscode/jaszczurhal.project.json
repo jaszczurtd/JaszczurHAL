@@ -1,0 +1,48 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "25_ota",
+    "example": {
+        "targets": [
+            "rp2040",
+            "rp2350-arm"
+        ],
+        "boards": {
+            "rp2040": "picow",
+            "rp2350-arm": "pico2w"
+        },
+        "gateTargets": [
+            "rp2040"
+        ],
+        "covers": [
+            "57_ota"
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "picow",
+    "buildDir": "${jhRoot}/.build/examples/25_ota",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "25_ota",
+            "JH_OTA_GENERATION": 1,
+            "JH_OTA_VERSION": "example"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json",
+        "ota": "${buildDir}/firmware.ota"
+    },
+    "ota": {
+        "hostname": "jaszczurhal-ota",
+        "port": 8266,
+        "listenPort": 8266,
+        "password": "change-this-ota-password"
+    }
+}

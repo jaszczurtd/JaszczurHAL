@@ -28,19 +28,44 @@ include_guard(GLOBAL)
 
 # Directory of this module == <jh_root>/stm32_lib.
 set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_project_features.cmake")
 
 # jh_add_stm32g474_firmware(<target>
 #     SOURCES  <portable app sources (.c/.cpp)>
 #     INCLUDES <extra include dirs>
 #     DEFINES  <extra compile definitions, e.g. HAL_ENABLE_*>
-#     FEATURES <feature names already defined by a project configuration header>
+#     FEATURES <requested feature names defined by a project config header>
+#     RESOLVED_FEATURES <optional registry closure for source/link selection>
 #     LIBRARIES <precompiled static archives or CMake library targets>
 #     [JH_ROOT <path>]   # JaszczurHAL repo root; defaults to this module's ../
 # )
 # Produces an executable <target> named "<target>.elf" plus <target>.bin/.hex.
 function(jh_add_stm32g474_firmware TARGET)
     cmake_parse_arguments(ARG "" "JH_ROOT"
-        "SOURCES;INCLUDES;DEFINES;FEATURES;OPTIONS;LIBRARIES" ${ARGN})
+        "SOURCES;INCLUDES;DEFINES;FEATURES;RESOLVED_FEATURES;OPTIONS;LIBRARIES"
+        ${ARGN})
+
+    jh_normalize_feature_defines(ARG_DEFINES ${ARG_DEFINES})
+    jh_normalize_feature_defines(ARG_FEATURES ${ARG_FEATURES})
+    jh_resolve_feature_defines(
+        _jh_requested_features _jh_expected_selection_features
+        ${ARG_DEFINES} ${ARG_FEATURES})
+    if(ARG_RESOLVED_FEATURES)
+        jh_split_feature_defines(
+            _jh_selection_features _jh_resolved_non_features
+            ${ARG_RESOLVED_FEATURES})
+        if(_jh_resolved_non_features OR
+           NOT "${_jh_selection_features}" STREQUAL
+               "${_jh_expected_selection_features}")
+            message(FATAL_ERROR
+                "[JH-CFG-PARITY] jh_add_stm32g474_firmware(${TARGET}) "
+                "RESOLVED_FEATURES differs from DEFINES/FEATURES: expected "
+                "'${_jh_expected_selection_features}', got "
+                "'${_jh_selection_features}'")
+        endif()
+    else()
+        set(_jh_selection_features ${_jh_expected_selection_features})
+    endif()
 
     if(NOT ARG_JH_ROOT)
         get_filename_component(ARG_JH_ROOT "${_JH_STM32_MODULE_DIR}/.." ABSOLUTE)
@@ -93,11 +118,17 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/utils/draw7Segment.cpp"
         "${_jh_src}/utils/multicoreWatchdog.cpp"
     )
+    foreach(_definition IN LISTS _jh_selection_features)
+        if("${_definition}" MATCHES "^HAL_ENABLE_UNITY(=|$)")
+            list(APPEND _utils "${_jh_src}/utils/unity.c")
+            break()
+        endif()
+    endforeach()
 
     set(_jh_mqtt_sources)
     set(_jh_mqtt_includes)
     set(_jh_has_tls FALSE)
-    foreach(_definition IN LISTS ARG_DEFINES ARG_FEATURES)
+    foreach(_definition IN LISTS _jh_selection_features)
         if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
             list(APPEND _jh_mqtt_sources
                 "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp")

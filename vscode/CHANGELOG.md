@@ -64,7 +64,7 @@
   options after the JaszczurHAL registry changes.
 - Add Pico SDK dispatcher targets for RP2040, RP2350 ARM and RP2350 RISC-V,
   with shared build/upload/monitor/clean task labels and shortcuts.
-- Enable `29_freertos_smoke` on all native RP profiles through the same
+- Enable `18_freertos_suite` on all native RP profiles through the same
   dispatcher and VS Code tasks.
 - Route repository-owned examples, hardware fixtures, CMake probes, and the
   picotool build below the single root `.build/` directory. Managed clean and

@@ -20,7 +20,6 @@
                     "rp2350-arm"
                 ],
                 "extraDefines": [
-                    "HAL_ENABLE_OTA",
                     "HAL_ENABLE_FREERTOS"
                 ]
             }
@@ -37,7 +36,6 @@
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "rp_ota",
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_OTA",
             "JH_OTA_GENERATION": 1,
             "JH_OTA_VERSION": "hardware-fixture"
         }

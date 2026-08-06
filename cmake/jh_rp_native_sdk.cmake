@@ -33,11 +33,6 @@ jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
-jh_hal_define_enabled(_jh_native_kv HAL_ENABLE_KV)
-jh_hal_define_enabled(_jh_native_sdlogger HAL_ENABLE_SDLOGGER)
-if(_jh_native_kv OR _jh_native_sdlogger)
-    set(_jh_native_eeprom TRUE)
-endif()
 jh_hal_define_enabled(_jh_native_littlefs HAL_ENABLE_LITTLEFS)
 jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
 if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
@@ -277,11 +272,6 @@ if(_jh_native_cyw43_backend)
         JH_BLUETOOTH_STAGE1_PROBE)
     jh_hal_define_enabled(_jh_native_ble HAL_ENABLE_BLE)
     jh_hal_define_enabled(_jh_native_ble_stream HAL_ENABLE_BLE_STREAM)
-    # hal_config.h propagates the stream flag to BLE; mirror it for source
-    # selection.
-    if(_jh_native_ble_stream)
-        set(_jh_native_ble TRUE)
-    endif()
     if(_jh_native_bluetooth_stage1 AND _jh_native_ble)
         message(FATAL_ERROR
             "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")

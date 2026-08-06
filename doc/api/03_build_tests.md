@@ -96,11 +96,10 @@ Runs the complete quality-gate suite (7 gates, in order):
 5. Static analysis: clang-tidy (host + STM32 compile databases below
    `.build/gate/`)
 6. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
-   entry/core probes, RP feature profiles, `01_blink`, and FreeRTOS SMP
-   ELF/BIN/UF2 matrices)
-7. Examples build (every declared native RP example, the USB multicore and
-   SDLogger target/runtime fixture matrix, and STM32G474, through
-   dispatcher-backed manifests)
+   entry/core probes, RP feature profiles, and six representative
+   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds)
+7. Examples build (52 dispatcher-backed `gateTargets` configurations: 27 for
+   RP2040 and 25 for STM32G474, plus the dedicated target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
 

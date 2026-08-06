@@ -81,7 +81,7 @@ serial_upload_config = {
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", serial_upload_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", serial_upload_config, 0),
 ), patch.object(
     module, "build_preflight_diagnostics", return_value=[]
 ), patch.object(
@@ -126,7 +126,7 @@ boot_mount = Path("/media/test/RPI-RP2")
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", stale_port_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", stale_port_config, 0),
 ), patch.object(
     module, "build_preflight_diagnostics", return_value=[]
 ), patch.object(
@@ -164,7 +164,7 @@ with patch.object(
     module,
     "load_config_for_action",
     return_value=(
-        ROOT / "examples" / "01_blink",
+        ROOT / "examples" / "01_core_runtime",
         replacement_port_config,
         0,
     ),
@@ -205,7 +205,7 @@ replacement_verify.assert_called_once_with(
 )
 replacement_release.assert_called_once_with(
     replacement_port,
-    ROOT / "examples" / "01_blink",
+    ROOT / "examples" / "01_core_runtime",
 )
 replacement_touch.assert_called_once_with(replacement_port)
 replacement_uf2.assert_called_once_with(
@@ -222,7 +222,7 @@ explicit_port_args = SimpleNamespace(
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", stale_port_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", stale_port_config, 0),
 ), patch.object(
     module, "build_preflight_diagnostics", return_value=[]
 ), patch.object(
@@ -267,7 +267,7 @@ monitor_platform = SimpleNamespace(
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", monitor_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", monitor_config, 0),
 ), patch.object(
     module, "upload_port_path_exists", return_value=False
 ), patch.object(
@@ -300,7 +300,7 @@ explicit_monitor_args = SimpleNamespace(
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", monitor_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", monitor_config, 0),
 ), patch.object(
     module, "upload_port_path_exists"
 ) as explicit_monitor_exists, patch.object(
@@ -319,12 +319,12 @@ assert "--follow-identity" not in explicit_monitor_command
 assert explicit_monitor_command[-1] == explicit_monitor_args.port
 
 assert module.managed_build_dir_allowed(
-    ROOT / ".build" / "examples" / "01_blink",
-    ROOT / "examples" / "01_blink",
+    ROOT / ".build" / "examples" / "01_core_runtime",
+    ROOT / "examples" / "01_core_runtime",
 )
 assert not module.managed_build_dir_allowed(
     ROOT / "build_legacy",
-    ROOT / "examples" / "01_blink",
+    ROOT / "examples" / "01_core_runtime",
 )
 
 neutral_config = module.neutral_firmware_config(
@@ -348,7 +348,7 @@ neutral_config = module.neutral_firmware_config(
             },
         },
     },
-    ROOT / "examples" / "01_blink",
+    ROOT / "examples" / "01_core_runtime",
 )
 neutral_cache = neutral_config["cmake"]["cache"]
 assert neutral_config["identity"] == {"enabled": False}
@@ -447,7 +447,7 @@ upload_args = SimpleNamespace(port=None, allow_unverified_port=False)
 with patch.object(
     module,
     "load_config_for_action",
-    return_value=(ROOT / "examples" / "01_blink", serial_style_config, 0),
+    return_value=(ROOT / "examples" / "01_core_runtime", serial_style_config, 0),
 ), patch.object(
     module, "build_preflight_diagnostics", return_value=[]
 ), patch.object(

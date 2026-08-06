@@ -1,5 +1,6 @@
 get_filename_component(_jh_repo_root "${CMAKE_CURRENT_LIST_DIR}/.." ABSOLUTE)
 set(JH_REPO_ROOT "${_jh_repo_root}" CACHE INTERNAL "JaszczurHAL repository root")
+include("${JH_REPO_ROOT}/cmake/jh_project_features.cmake")
 
 function(jh_read_shell_conf OUT_VAR KEY DEFAULT_VALUE)
     set(_value "${DEFAULT_VALUE}")
@@ -31,8 +32,9 @@ set(JH_STM32G474_FREERTOS_CONFIG_DIR
     "${JH_REPO_ROOT}/src/hal/impl/stm32g474/freertos")
 
 function(jh_cmake_defines_contain OUT_VAR MACRO_NAME)
+    jh_normalize_feature_defines(_jh_defines ${ARGN})
     set(_found FALSE)
-    foreach(_def IN LISTS ARGN)
+    foreach(_def IN LISTS _jh_defines)
         if("${_def}" STREQUAL "${MACRO_NAME}" OR "${_def}" MATCHES "^${MACRO_NAME}=")
             set(_found TRUE)
         endif()

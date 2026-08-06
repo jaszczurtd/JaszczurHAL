@@ -478,8 +478,8 @@ small. Chunked transfer encoding returns `HAL_EUNSUPPORTED`.
 **Tests:** `test_hal_http_client` covers validation, fragmented response
 headers, response metadata, and bounded body copies.
 `test_hal_http_client_plaintext_compile` keeps the plaintext-only flag
-combination buildable. The verified HTTPS example is
-[`examples/56_http_https_client`](../../examples/56_http_https_client/README.md).
+combination buildable. The verified HTTP/HTTPS client path is part of
+[`examples/18_freertos_suite`](../../examples/18_freertos_suite/README.md).
 
 ---
 
@@ -1235,7 +1235,7 @@ uint32_t    hal_mock_ota_get_handle_count(void);
 The complete native project, firmware, VS Code, firewall, confirmation,
 rollback, and recovery contract is documented in
 [Native RP OTA Workflow](../OTAWorkflow.md). A complete application is
-available in [`examples/57_ota`](../../examples/57_ota/).
+available in [`examples/25_ota`](../../examples/25_ota/).
 
 ---
 

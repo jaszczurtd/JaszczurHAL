@@ -6,7 +6,41 @@ set(JH_TARGET "rp2040" CACHE STRING
 set(JH_BOARD "" CACHE STRING
     "Physical board profile; defaults to the target defaultBoard")
 set(EXTRA_HAL_DEFINES "" CACHE STRING "Extra HAL compile definitions")
+set(JH_RP_NATIVE_APP_DIR "" CACHE PATH
+    "Optional portable app directory containing app.c or app.cpp")
+set(JH_RP_NATIVE_APP_SOURCES "" CACHE STRING
+    "Optional source list relative to JH_RP_NATIVE_APP_DIR")
+if(JH_RP_NATIVE_APP_DIR)
+    get_filename_component(JH_RP_NATIVE_APP_DIR
+        "${JH_RP_NATIVE_APP_DIR}" ABSOLUTE BASE_DIR "${JH_ROOT}")
+    if(NOT IS_DIRECTORY "${JH_RP_NATIVE_APP_DIR}")
+        message(FATAL_ERROR
+            "JH_RP_NATIVE_APP_DIR is not a directory: "
+            "${JH_RP_NATIVE_APP_DIR}")
+    endif()
+    if(NOT DEFINED HAL_PROJECT_CONFIG_DIR OR
+       "${HAL_PROJECT_CONFIG_DIR}" STREQUAL "")
+        set(HAL_PROJECT_CONFIG_DIR "${JH_RP_NATIVE_APP_DIR}")
+    endif()
+endif()
 
+include("${JH_ROOT}/cmake/jh_project_features.cmake")
+jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
+list(APPEND EXTRA_HAL_DEFINES ${_jh_cmake_feature_defines})
+jh_normalize_feature_defines(EXTRA_HAL_DEFINES ${EXTRA_HAL_DEFINES})
+set(_jh_project_features "")
+if(DEFINED HAL_PROJECT_CONFIG_DIR)
+    foreach(_jh_project_config_dir IN LISTS HAL_PROJECT_CONFIG_DIR)
+        jh_collect_project_feature_defines(_jh_project_config_features
+            "${_jh_project_config_dir}")
+        list(APPEND _jh_project_features ${_jh_project_config_features})
+    endforeach()
+endif()
+jh_resolve_feature_defines(
+    JH_REQUESTED_FEATURES
+    JH_RESOLVED_FEATURES
+    ${EXTRA_HAL_DEFINES}
+    ${_jh_project_features})
 include("${JH_ROOT}/cmake/jh_board_profiles.cmake")
 jh_generate_board_config(
     ROOT "${JH_ROOT}"
@@ -14,7 +48,9 @@ jh_generate_board_config(
     BOARD "${JH_BOARD}"
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
-    DEFINES ${EXTRA_HAL_DEFINES})
+    DEFINES ${EXTRA_HAL_DEFINES} ${_jh_project_features}
+    REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
+    RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
     "Resolved physical board profile" FORCE)
 set(PICO_PLATFORM "${PICO_PLATFORM}" CACHE STRING
@@ -89,22 +125,6 @@ if(JH_PICOTOOL_EXECUTABLE AND NOT TARGET picotool)
         IMPORTED_LOCATION "${JH_PICOTOOL_EXECUTABLE}")
 endif()
 
-set(JH_RP_NATIVE_APP_DIR "" CACHE PATH
-    "Optional portable app directory containing app.c or app.cpp")
-if(JH_RP_NATIVE_APP_DIR)
-    get_filename_component(JH_RP_NATIVE_APP_DIR
-        "${JH_RP_NATIVE_APP_DIR}" ABSOLUTE BASE_DIR "${JH_ROOT}")
-    if(NOT IS_DIRECTORY "${JH_RP_NATIVE_APP_DIR}")
-        message(FATAL_ERROR
-            "JH_RP_NATIVE_APP_DIR is not a directory: "
-            "${JH_RP_NATIVE_APP_DIR}")
-    endif()
-    if(NOT DEFINED HAL_PROJECT_CONFIG_DIR OR
-       "${HAL_PROJECT_CONFIG_DIR}" STREQUAL "")
-        set(HAL_PROJECT_CONFIG_DIR "${JH_RP_NATIVE_APP_DIR}")
-    endif()
-endif()
-
 include("${JH_ROOT}/cmake/jh_rp_native_sdk.cmake")
 target_sources(JaszczurHAL PRIVATE
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
@@ -136,11 +156,25 @@ if(JH_RP_NATIVE_BUILD_CORE1_PROBE)
 endif()
 
 if(JH_RP_NATIVE_APP_DIR)
-    file(GLOB _jh_native_app_sources CONFIGURE_DEPENDS
-        "${JH_RP_NATIVE_APP_DIR}/*.c"
-        "${JH_RP_NATIVE_APP_DIR}/*.cc"
-        "${JH_RP_NATIVE_APP_DIR}/*.cpp"
-    )
+    set(_jh_native_app_sources "")
+    if(JH_RP_NATIVE_APP_SOURCES)
+        foreach(_jh_native_app_source IN LISTS JH_RP_NATIVE_APP_SOURCES)
+            get_filename_component(_jh_native_app_source_abs
+                "${JH_RP_NATIVE_APP_DIR}/${_jh_native_app_source}" ABSOLUTE)
+            if(NOT EXISTS "${_jh_native_app_source_abs}")
+                message(FATAL_ERROR
+                    "Native app source not found: ${_jh_native_app_source_abs}")
+            endif()
+            list(APPEND _jh_native_app_sources
+                "${_jh_native_app_source_abs}")
+        endforeach()
+    else()
+        file(GLOB _jh_native_app_sources CONFIGURE_DEPENDS
+            "${JH_RP_NATIVE_APP_DIR}/*.c"
+            "${JH_RP_NATIVE_APP_DIR}/*.cc"
+            "${JH_RP_NATIVE_APP_DIR}/*.cpp"
+        )
+    endif()
     if(NOT _jh_native_app_sources)
         message(FATAL_ERROR
             "No C/C++ application sources found in "
@@ -157,3 +191,12 @@ install(DIRECTORY "${SRC}/" DESTINATION include
         FILES_MATCHING
         PATTERN "*.h"
         PATTERN "impl/.mock" EXCLUDE)
+install(FILES
+        "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
+        "${JH_BOARD_GENERATED_DIR}/jh_board_registry.h"
+        "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
+        DESTINATION include/generated)
+install(FILES
+        "${JH_BOARD_GENERATED_DIR}/jh_link_contract_reference.c"
+        "${JH_BOARD_GENERATED_DIR}/jh_board_resolved.json"
+        DESTINATION share/JaszczurHAL/generated)

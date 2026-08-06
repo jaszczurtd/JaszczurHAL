@@ -312,7 +312,9 @@ Without an enable condition it is a no-op. It runs when:
 
 `--kernel-dir` and `JH_FREERTOS_KERNEL_DIR` select an external checkout that is
 verified but not replaced. Managed submodules and the kernel version are also
-checked.
+checked. The native RP and STM32G474 direct CMake integrations call
+`scripts/component_manager.py` directly; this shell wrapper is the compatibility
+entrypoint used by the static-library build helpers.
 
 ### `scripts/ensure_pico_sdk.sh`
 
@@ -364,17 +366,21 @@ Owns the checked-in example registry and exposes five subcommands:
 | `generate` | Regenerates each example's manifest, VS Code settings, tasks, launch configuration, and keybinding reference. |
 | `generate-template` | Regenerates the shared settings, tasks, extension, and keybinding snippets under `vscode/examples`. |
 | `check-template` | Fails when the shared snippets or any checked-in example `.vscode` file differs from the shared generators. |
-| `list` | Prints every registered example and its expanded target list. |
+| `list` | Prints every registered project with expanded `targets` and `gateTargets`. |
 | `build` | Builds supported examples and variants through `vscode/entry/jh-vscode`. |
 
 `build` requires `--target` with one of `rp2040`, `rp2350-arm`,
 `rp2350-riscv`, or `stm32g474`. Repeatable `--example` limits the run,
-`--jobs` controls parallel example projects, and `--verbose` records invoked
-commands in managed per-example logs below `.build/examples`.
+`--gate` restricts it to base/variant configurations whose generated
+`gateTargets` contain the requested target, `--jobs` controls parallel example
+projects, and `--verbose` records invoked commands in managed per-example logs
+below `.build/examples`.
 
 The Python registry is the source used by `generate`; the generated manifests
-are the source consumed by `build`. RISC-V WiFi examples remain excluded while
-RP2350 RISC-V + CYW43 is unsupported.
+are the source consumed by `build`. The full matrix is 100 configurations; the
+default `--gate` matrix is 52 configurations (27 RP2040 and 25 STM32G474).
+RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
+unsupported.
 
 See [JaszczurHAL Examples](../../examples/README.md) for the target matrix,
 application contract, and build commands.
@@ -387,7 +393,57 @@ machine-readable metadata. CMake and the board tests call it directly.
 `--validate-only` checks the complete registry, `--list targets|boards` and
 `--default-board` provide discovery, while `--feature` and `--define` add the
 validated build overlay used for generated output. `--output-dir` and
-`--output-root` must stay within the caller-owned build tree.
+`--output-root` must stay within the caller-owned build tree. Provider/backend
+definitions are projected consistently into
+`jh_board_resolved.json.boardCompileDefinitions`, generated
+`JH_BOARD_COMPILE_DEFINITIONS`, and `jh_board_config.h` macros for direct
+compiler use. The generated GCC/Clang contract reference uses a
+`constructor, used` root so target/board/feature mismatches remain link errors
+with section garbage collection enabled.
+
+### `scripts/generate_hal_features.py`
+
+Validates the closed `HAL_ENABLE_*` / `HAL_DISABLE_*` namespace and the
+target-independent dependency graph under `config/features/`. `--write`
+atomically refreshes the tracked production C header and CMake resolver, while
+`--check` compares them without writing. `--lint` accepts repeatable
+`--input-root` arguments and checks raw `hal_project_config.h` files and project
+manifests for unknown symbols, unsupported `=0` values, and direct requests for
+derived symbols. It also rejects conditional feature definitions outside a
+matching `#ifndef` guard and non-scalar CMake definition lists. Findings fail
+the command by default; `--report-only` is an explicit manual diagnostic mode.
+
+`--effective` reuses the `jh-vscode` resolver to enumerate declared targets,
+target profiles, and variants without reading gitignored local board state. It
+checks constraints and active duplicate requests after layer precedence has
+been applied. A standard `.vscode/jaszczurhal.project.json` creates the declared
+axes; an unpaired `hal_project_config.h` with at least one HAL feature request
+creates one axis-free direct context. Standalone headers without requests and
+reference manifests remain raw-lint-only inputs. `--resolution-output <path>`
+writes deterministic
+`requestedFeatures`, `resolvedFeatures`, closure digests, and direct-request
+provenance for each effective configuration. The registry test freezes the
+matrix digest in `config/effective-features-baseline.json`. Each record maps to
+a checked unique target/board/request tuple for the C preprocessors and a
+checked unique request set for the target-independent CMake resolver.
+
+The generated C header is included by `hal_config.h` and expands every
+target-independent transitive implication. Its generated `HAL_CONFIG_VERBOSE`
+section reports every active registered feature after the remaining
+configuration rules run. The generated CMake resolver supplies the same
+closure to RP and STM32G474 source and dependency selection. Board generation
+uses the resolved set for `featureHash` and the link contract, while retaining
+the direct set as `requestedFeatures`. `jh-vscode` resolves the registry after
+manifest profile and variant overlays, exposes the result through
+`featureResolution`, and uses the resolved set for preflight and OTA decisions
+while passing direct requests to CMake.
+
+Conditional defaults, provider choices, board capability checks, and target
+constraints remain in `hal_config.h`. CI runs `--check` and strict raw/effective
+lint, and uploads the deterministic resolution report. Installed RP and
+STM32G474 packages carry the generated feature/board headers, resolved board
+JSON, link-contract header, and reference source; a direct compiler consumer
+can compile and link those package artifacts without invoking Python.
 
 ### `scripts/board_registry.py`
 
