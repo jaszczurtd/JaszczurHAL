@@ -48,6 +48,14 @@ void store_u64(uint8_t *out, uint64_t value) {
   }
 }
 
+uint64_t load_u64(const uint8_t *in) {
+  uint64_t value = 0u;
+  for (size_t index = 0u; index < 8u; ++index) {
+    value |= (uint64_t)in[index] << (index * 8u);
+  }
+  return value;
+}
+
 size_t build_transcript(uint8_t domain, uint8_t *out) {
   size_t offset = 0u;
   out[offset++] = domain;
@@ -168,6 +176,8 @@ void connect_and_subscribe(void) {
   const hal_ble_address_t peer = address(0x11u);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_connection(&peer));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_poll());
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_ble_inject_mtu(HAL_BLE_STREAM_FULL_PAYLOAD_ATT_MTU));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_stream_subscription(true));
 }
 
@@ -356,24 +366,145 @@ static void test_replayed_counter_closes_the_session(void) {
   TEST_ASSERT_NOT_EQUAL(HAL_BLE_STREAM_STATE_AUTHENTICATED, state.state);
 }
 
-static void test_counter_gap_backwards_is_rejected(void) {
+static void test_counter_gap_is_rejected(void) {
   authenticate();
   const uint8_t payload[] = {0x88u};
   uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
-  size_t length = build_data(frame, payload, sizeof(payload), 5u, false);
-  TEST_ASSERT_EQUAL_INT(HAL_OK,
-                        hal_mock_ble_inject_stream_frame(frame, length));
-  uint8_t received[HAL_BLE_STREAM_MAX_PAYLOAD];
-  size_t received_length = 0u;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK,
-      hal_ble_stream_receive(received, sizeof(received), &received_length));
-
-  /* A forward jump is allowed, going back is not. */
-  length = build_data(frame, payload, sizeof(payload), 4u, false);
+  const size_t length = build_data(frame, payload, sizeof(payload), 2u, false);
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_mock_ble_inject_stream_frame(frame, length));
   TEST_ASSERT_EQUAL_UINT32(1u, info().replay_rejections);
+  TEST_ASSERT_NOT_EQUAL(HAL_BLE_STREAM_STATE_AUTHENTICATED, info().state);
+}
+
+static void test_tx_backpressure_does_not_skip_counter(void) {
+  authenticate();
+  const uint8_t payload[] = {0x31u};
+  hal_mock_ble_set_stream_notify_status(HAL_EAGAIN);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_stream_send(payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_UINT64(0u, info().tx_counter);
+  TEST_ASSERT_EQUAL_size_t(1u, info().pending_tx);
+
+  hal_mock_ble_set_stream_notify_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_stream_can_send());
+  uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_ble_get_stream_frame(frame, sizeof(frame), &length));
+  TEST_ASSERT_EQUAL_UINT64(1u, load_u64(&frame[4]));
+  TEST_ASSERT_EQUAL_UINT64(1u, info().tx_counter);
+  TEST_ASSERT_EQUAL_size_t(0u, info().pending_tx);
+}
+
+static void test_hello_response_survives_backpressure(void) {
+  hal_mock_ble_set_stream_notify_status(HAL_EAGAIN);
+  uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  const size_t length = build_hello(frame);
+  const size_t before = hal_mock_ble_stream_notify_count();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_ble_inject_stream_frame(frame, length));
+  TEST_ASSERT_EQUAL_size_t(before, hal_mock_ble_stream_notify_count());
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STREAM_STATE_HANDSHAKING, info().state);
+
+  hal_mock_ble_set_stream_notify_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_stream_can_send());
+  TEST_ASSERT_EQUAL_size_t(before + 1u, hal_mock_ble_stream_notify_count());
+  consume_hello_ack();
+}
+
+static void test_handshake_refuses_small_mtu(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_ble_inject_mtu(HAL_BLE_DEFAULT_ATT_MTU));
+  uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  const size_t length = build_hello(frame);
+  const size_t before = hal_mock_ble_stream_notify_count();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_ble_inject_stream_frame(frame, length));
+  TEST_ASSERT_EQUAL_size_t(before, hal_mock_ble_stream_notify_count());
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, info().last_status);
+  TEST_ASSERT_NOT_EQUAL(HAL_BLE_STREAM_STATE_HANDSHAKING, info().state);
+}
+
+static void test_send_rejects_payload_exceeding_negotiated_mtu(void) {
+  authenticate();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_ble_inject_mtu(HAL_BLE_STREAM_MIN_ATT_MTU));
+  uint8_t payload[51] = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_ble_stream_send(payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STREAM_STATE_AUTHENTICATED, info().state);
+  TEST_ASSERT_EQUAL_size_t(0u, info().pending_tx);
+  TEST_ASSERT_EQUAL_UINT64(0u, info().tx_counter);
+}
+
+static void test_tx_queue_saturation_recovers_without_counter_gaps(void) {
+  authenticate();
+  const uint8_t payload[] = {0x42u};
+  hal_mock_ble_set_stream_notify_status(HAL_EAGAIN);
+  for (size_t index = 0u; index < HAL_BLE_STREAM_TX_QUEUE_DEPTH; ++index) {
+    TEST_ASSERT_EQUAL_INT(HAL_OK,
+                          hal_ble_stream_send(payload, sizeof(payload)));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN,
+                        hal_ble_stream_send(payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_size_t(HAL_BLE_STREAM_TX_QUEUE_DEPTH, info().pending_tx);
+  TEST_ASSERT_EQUAL_UINT32(1u, info().dropped_tx_frames);
+  TEST_ASSERT_EQUAL_UINT64(0u, info().tx_counter);
+
+  hal_mock_ble_set_stream_notify_status(HAL_OK);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_ble_inject_stream_can_send());
+  TEST_ASSERT_EQUAL_size_t(0u, info().pending_tx);
+  TEST_ASSERT_EQUAL_UINT64(HAL_BLE_STREAM_TX_QUEUE_DEPTH, info().tx_counter);
+}
+
+static void test_tx_backend_failure_is_reported_and_closes_session(void) {
+  authenticate();
+  const uint8_t payload[] = {0x19u};
+  hal_mock_ble_set_stream_notify_status(HAL_EIO);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_ble_stream_send(payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, info().last_status);
+  TEST_ASSERT_NOT_EQUAL(HAL_BLE_STREAM_STATE_AUTHENTICATED, info().state);
+  TEST_ASSERT_EQUAL_size_t(0u, info().pending_tx);
+}
+
+static void test_counter_exhaustion_fails_closed(void) {
+  authenticate();
+  jh_ble_stream_session_t session{};
+  session.state = JH_BLE_STREAM_SESSION_AUTHENTICATED;
+  session.rx_counter = UINT64_MAX - 1u;
+  memcpy(session.key_client_to_device, s_client.key_client_to_device,
+         sizeof(session.key_client_to_device));
+
+  const uint8_t payload[] = {0x7eu};
+  uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  const size_t frame_length =
+      build_data(frame, payload, sizeof(payload), UINT64_MAX, false);
+  jh_ble_stream_session_result_t result{};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EPROTO, jh_ble_stream_session_handle_frame(&session, frame,
+                                                     frame_length, &result));
+  TEST_ASSERT_TRUE(result.close_session);
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STREAM_CLOSE_COUNTER_EXHAUSTED,
+                        result.close_reason);
+
+  session.state = JH_BLE_STREAM_SESSION_AUTHENTICATED;
+  session.tx_counter = UINT64_MAX - 1u;
+  size_t out_length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, jh_ble_stream_session_build_data(
+                                           &session, payload, sizeof(payload),
+                                           frame, sizeof(frame), &out_length));
+}
+
+static void test_initialize_rolls_back_when_ble_is_uninitialized(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_stream_deinitialize());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_deinitialize());
+  hal_ble_stream_config_t config{};
+  config.capabilities = kCapabilities;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_ble_stream_initialize(&config));
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STREAM_STATE_UNINITIALIZED, info().state);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_initialize());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_stream_initialize(&config));
 }
 
 static void test_repeated_failures_trigger_backoff(void) {
@@ -523,6 +654,27 @@ static void test_unsubscribe_closes_the_session(void) {
   TEST_ASSERT_NOT_EQUAL(HAL_BLE_STREAM_STATE_AUTHENTICATED, info().state);
 }
 
+static void test_deinitialize_unpublishes_and_discards_pending_frames(void) {
+  authenticate();
+  const uint8_t payload[] = {0x24u};
+  hal_mock_ble_set_stream_notify_status(HAL_EAGAIN);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_stream_send(payload, sizeof(payload)));
+  TEST_ASSERT_EQUAL_size_t(1u, info().pending_tx);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_ble_stream_deinitialize());
+  const hal_ble_stream_info_t state = info();
+  TEST_ASSERT_EQUAL_INT(HAL_BLE_STREAM_STATE_UNINITIALIZED, state.state);
+  TEST_ASSERT_EQUAL_size_t(0u, state.pending_tx);
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_mock_ble_inject_stream_subscription(true));
+  uint8_t version = 0xffu;
+  uint16_t capabilities = 0xffffu;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_mock_ble_get_stream_published(&version, &capabilities));
+  TEST_ASSERT_EQUAL_UINT8(0u, version);
+  TEST_ASSERT_EQUAL_UINT16(0u, capabilities);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_publishes_version_and_capabilities);
@@ -533,7 +685,15 @@ int main(void) {
   RUN_TEST(test_wrong_secret_fails_authentication);
   RUN_TEST(test_forged_tag_is_rejected);
   RUN_TEST(test_replayed_counter_closes_the_session);
-  RUN_TEST(test_counter_gap_backwards_is_rejected);
+  RUN_TEST(test_counter_gap_is_rejected);
+  RUN_TEST(test_tx_backpressure_does_not_skip_counter);
+  RUN_TEST(test_hello_response_survives_backpressure);
+  RUN_TEST(test_handshake_refuses_small_mtu);
+  RUN_TEST(test_send_rejects_payload_exceeding_negotiated_mtu);
+  RUN_TEST(test_tx_queue_saturation_recovers_without_counter_gaps);
+  RUN_TEST(test_tx_backend_failure_is_reported_and_closes_session);
+  RUN_TEST(test_counter_exhaustion_fails_closed);
+  RUN_TEST(test_initialize_rolls_back_when_ble_is_uninitialized);
   RUN_TEST(test_repeated_failures_trigger_backoff);
   RUN_TEST(test_entropy_failure_is_fail_closed);
   RUN_TEST(test_cleared_secret_refuses_handshake);
@@ -543,5 +703,6 @@ int main(void) {
   RUN_TEST(test_idle_session_expires);
   RUN_TEST(test_backoff_expires_after_its_window);
   RUN_TEST(test_unsubscribe_closes_the_session);
+  RUN_TEST(test_deinitialize_unpublishes_and_discards_pending_frames);
   return UNITY_END();
 }

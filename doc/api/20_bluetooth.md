@@ -10,9 +10,10 @@ The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure
 parsing, controller and connection events, ATT MTU reporting, and a static
 GATT database containing the mandatory GAP and GATT services. It does not yet
-provide active scanning or scan-response requests, application
-characteristics, notifications, a GATT client, pairing, bonding, or a BLE
-stream.
+provide active scanning or scan-response requests, arbitrary application
+characteristics, a GATT client, pairing, or bonding. The opt-in
+`HAL_ENABLE_BLE_STREAM` profile adds one fixed authenticated application
+service and its notification path.
 
 ## Supported profiles
 
@@ -181,7 +182,9 @@ version, both capability sets, a session identifier and two random nonces.
 Four separate HMAC-SHA256 domains produce the device proof, the client proof
 and two directional session keys. `DATA` frames are protected with
 ChaCha20-Poly1305; the direction and a strictly increasing counter enter both
-the nonce and the associated data.
+the nonce and the associated data. Counters are consecutive: the receiver
+accepts exactly the previous value plus one, so a replay, decrease, or forward
+gap closes the session.
 
 Sessions fail closed. A wrong proof, a forged tag, a replayed or decreasing
 counter, a counter about to wrap, an entropy failure, a disconnect, a
@@ -200,7 +203,15 @@ depend on the application session rather than on the BLE link alone.
 One frame travels in a single write or notification. The handshake needs at
 least `HAL_BLE_STREAM_MIN_ATT_MTU`, and a full-size payload needs
 `HAL_BLE_STREAM_FULL_PAYLOAD_ATT_MTU`. Watch `HAL_BLE_EVENT_MTU_UPDATED` and
-keep payloads within what the negotiated MTU carries.
+keep payloads within what the negotiated MTU carries. A send that cannot fit
+the current MTU returns `HAL_EOVERFLOW` without closing the authenticated
+session.
+
+Handshake responses and application payloads use bounded pending slots. An
+`HAL_EAGAIN` from the controller retains the frame and does not consume its
+directional counter; the next poll or can-send event retries it. The BTstack
+notification itself is issued only by the shared CYW43 radio service while it
+owns the radio lock.
 
 ### Usage
 
@@ -221,6 +232,8 @@ while (hal_ble_stream_receive(payload, sizeof(payload), &length) == HAL_OK) {
 const hal_status_t sent = hal_ble_stream_send(reply, reply_length);
 if (sent == HAL_EAGAIN) {
   /* Bounded TX queue is full; retry after the next poll. */
+} else if (sent == HAL_EOVERFLOW) {
+  /* The payload does not fit the negotiated ATT MTU. */
 } else if (sent == HAL_EAUTH) {
   /* No authenticated session; the client must complete the handshake. */
 }
@@ -251,4 +264,6 @@ artifacts, not to JaszczurHAL builds that do not compile BTstack.
 See the buildable [`58_ble_peripheral` example](../../examples/58_ble_peripheral/)
 for the complete startup and advertising flow, and
 [`59_ble_stream`](../../examples/59_ble_stream/) for an authenticated stream
-consumer.
+consumer. The dual-target
+[`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/)
+drives the complete protocol from an independent BlueZ client.

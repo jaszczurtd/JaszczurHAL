@@ -7,6 +7,7 @@
 #include "hal/impl/shared/hal_mutex_once.h"
 #include "jh_ble_controller.h"
 #include "jh_ble_peripheral_gatt.h"
+#include "jh_ble_stream_session.h"
 #include "jh_btstack_hci_transport_cyw43.h"
 #include "jh_btstack_run_loop.h"
 
@@ -41,7 +42,12 @@ typedef struct {
 #ifdef HAL_ENABLE_BLE_STREAM
   uint8_t stream_version;
   uint16_t stream_capabilities;
+  uint16_t stream_mtu;
+  bool stream_published;
   bool stream_subscribed;
+  bool stream_waiting_can_send;
+  uint8_t stream_pending_frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  size_t stream_pending_frame_length;
 #endif
 } jh_ble_btstack_state_t;
 
@@ -200,6 +206,13 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     s_ble.connection = connection;
     s_ble.connected = true;
     s_ble.advertising_active = false;
+#ifdef HAL_ENABLE_BLE_STREAM
+    s_ble.stream_mtu = ATT_DEFAULT_MTU;
+    s_ble.stream_subscribed = false;
+    s_ble.stream_waiting_can_send = false;
+    memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+    s_ble.stream_pending_frame_length = 0u;
+#endif
     hal_mutex_unlock(mutex);
     jh_ble_backend_event_t event = {
         .type = JH_BLE_BACKEND_EVENT_CONNECTED,
@@ -227,6 +240,13 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     if (connection == s_ble.connection) {
       s_ble.connection = HCI_CON_HANDLE_INVALID;
       s_ble.connected = false;
+#ifdef HAL_ENABLE_BLE_STREAM
+      s_ble.stream_mtu = 0u;
+      s_ble.stream_subscribed = false;
+      s_ble.stream_waiting_can_send = false;
+      memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+      s_ble.stream_pending_frame_length = 0u;
+#endif
       if (s_ble.advertising_requested) {
         s_ble.advertising_pending = true;
       }
@@ -251,23 +271,40 @@ static void att_packet_handler(uint8_t packet_type, uint16_t channel,
   }
   switch (hci_event_packet_get_type(packet)) {
   case ATT_EVENT_MTU_EXCHANGE_COMPLETE: {
+    const uint16_t connection =
+        att_event_mtu_exchange_complete_get_handle(packet);
+    const uint16_t mtu = att_event_mtu_exchange_complete_get_MTU(packet);
+#ifdef HAL_ENABLE_BLE_STREAM
+    hal_mutex_t mutex = backend_mutex();
+    if (mutex == NULL) {
+      emit_error(HAL_ENOMEM, true);
+      break;
+    }
+    hal_mutex_lock(mutex);
+    if (s_ble.connection == connection) {
+      s_ble.stream_mtu = mtu;
+    }
+    hal_mutex_unlock(mutex);
+#endif
     const jh_ble_backend_event_t event = {
         .type = JH_BLE_BACKEND_EVENT_MTU_UPDATED,
         .status = HAL_OK,
-        .native_connection = att_event_mtu_exchange_complete_get_handle(packet),
-        .mtu = att_event_mtu_exchange_complete_get_MTU(packet),
+        .native_connection = connection,
+        .mtu = mtu,
     };
     emit_event(&event);
     break;
   }
 #ifdef HAL_ENABLE_BLE_STREAM
   case ATT_EVENT_CAN_SEND_NOW: {
-    const jh_ble_backend_event_t event = {
-        .type = JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND,
-        .status = HAL_OK,
-        .native_connection = s_ble.connection,
-    };
-    emit_event(&event);
+    hal_mutex_t mutex = backend_mutex();
+    if (mutex == NULL) {
+      emit_error(HAL_ENOMEM, true);
+      break;
+    }
+    hal_mutex_lock(mutex);
+    s_ble.stream_waiting_can_send = false;
+    hal_mutex_unlock(mutex);
     break;
   }
 #endif
@@ -282,16 +319,27 @@ static uint16_t att_read_callback(hci_con_handle_t connection_handle,
                                   uint16_t att_handle, uint16_t offset,
                                   uint8_t *buffer, uint16_t buffer_size) {
   (void)connection_handle;
+  hal_mutex_t mutex = backend_mutex();
+  if (mutex == NULL) {
+    return 0u;
+  }
+  hal_mutex_lock(mutex);
+  const bool published = s_ble.stream_published;
+  const uint8_t version = s_ble.stream_version;
+  const uint16_t stream_capabilities = s_ble.stream_capabilities;
+  hal_mutex_unlock(mutex);
+  if (!published) {
+    return 0u;
+  }
   if (att_handle ==
       ATT_CHARACTERISTIC_B7CE0004_3C13_4FE2_801F_D71BDAB1369B_01_VALUE_HANDLE) {
-    const uint8_t version = s_ble.stream_version;
     return att_read_callback_handle_blob(&version, sizeof(version), offset,
                                          buffer, buffer_size);
   }
   if (att_handle ==
       ATT_CHARACTERISTIC_B7CE0005_3C13_4FE2_801F_D71BDAB1369B_01_VALUE_HANDLE) {
     uint8_t capabilities[2];
-    little_endian_store_16(capabilities, 0, s_ble.stream_capabilities);
+    little_endian_store_16(capabilities, 0, stream_capabilities);
     return att_read_callback_handle_blob(capabilities, sizeof(capabilities),
                                          offset, buffer, buffer_size);
   }
@@ -302,6 +350,16 @@ static int att_write_callback(hci_con_handle_t connection_handle,
                               uint16_t att_handle, uint16_t transaction_mode,
                               uint16_t offset, uint8_t *buffer,
                               uint16_t buffer_size) {
+  hal_mutex_t mutex = backend_mutex();
+  if (mutex == NULL) {
+    return ATT_ERROR_INSUFFICIENT_RESOURCES;
+  }
+  hal_mutex_lock(mutex);
+  const bool published = s_ble.stream_published;
+  hal_mutex_unlock(mutex);
+  if (!published) {
+    return ATT_ERROR_WRITE_REQUEST_REJECTED;
+  }
   if (transaction_mode != ATT_TRANSACTION_MODE_NONE) {
     return ATT_ERROR_WRITE_REQUEST_REJECTED;
   }
@@ -313,11 +371,20 @@ static int att_write_callback(hci_con_handle_t connection_handle,
     const bool subscribed =
         little_endian_read_16(buffer, 0) ==
         GATT_CLIENT_CHARACTERISTICS_CONFIGURATION_NOTIFICATION;
+    hal_mutex_lock(mutex);
     s_ble.stream_subscribed = subscribed;
+    if (!subscribed) {
+      s_ble.stream_waiting_can_send = false;
+      memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+      s_ble.stream_pending_frame_length = 0u;
+    }
+    const uint16_t mtu = s_ble.stream_mtu;
+    hal_mutex_unlock(mutex);
     jh_ble_backend_event_t event = {0};
     event.type = JH_BLE_BACKEND_EVENT_STREAM_SUBSCRIPTION;
     event.status = HAL_OK;
     event.native_connection = connection_handle;
+    event.mtu = mtu;
     event.stream_subscribed = subscribed;
     emit_event(&event);
     return 0;
@@ -331,10 +398,18 @@ static int att_write_callback(hci_con_handle_t connection_handle,
         buffer_size > HAL_BLE_STREAM_MAX_FRAME_LEN) {
       return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
     }
+    const uint16_t mtu = att_server_get_mtu(connection_handle);
+    if (buffer[0] == HAL_BLE_STREAM_PROTOCOL_VERSION &&
+        buffer_size >= HAL_BLE_STREAM_FRAME_HEADER_LEN &&
+        buffer[1] == JH_BLE_STREAM_FRAME_HELLO &&
+        mtu < HAL_BLE_STREAM_MIN_ATT_MTU) {
+      return ATT_ERROR_INVALID_ATTRIBUTE_VALUE_LENGTH;
+    }
     jh_ble_backend_event_t event = {0};
     event.type = JH_BLE_BACKEND_EVENT_STREAM_WRITE;
     event.status = HAL_OK;
     event.native_connection = connection_handle;
+    event.mtu = mtu;
     memcpy(event.stream_frame, buffer, buffer_size);
     event.stream_frame_length = (uint8_t)buffer_size;
     emit_event(&event);
@@ -374,8 +449,83 @@ static void teardown_btstack(void) {
   s_ble.connection = HCI_CON_HANDLE_INVALID;
 #ifdef HAL_ENABLE_BLE_STREAM
   s_ble.stream_subscribed = false;
+  s_ble.stream_mtu = 0u;
+  s_ble.stream_waiting_can_send = false;
+  memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+  s_ble.stream_pending_frame_length = 0u;
 #endif
 }
+
+#ifdef HAL_ENABLE_BLE_STREAM
+static hal_status_t stream_send_status(uint8_t status) {
+  if (status == ERROR_CODE_SUCCESS) {
+    return HAL_OK;
+  }
+  if (status == BTSTACK_ACL_BUFFERS_FULL) {
+    return HAL_EAGAIN;
+  }
+  if (status == ERROR_CODE_UNKNOWN_CONNECTION_IDENTIFIER) {
+    return HAL_ENOENT;
+  }
+  if (status == ERROR_CODE_COMMAND_DISALLOWED) {
+    return HAL_EBUSY;
+  }
+  return HAL_EIO;
+}
+
+/* BTstack and L2CAP are touched only from the shared radio service. */
+static void service_stream_notification_under_radio_lock(void) {
+  uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  size_t length = 0u;
+  uint16_t connection = HCI_CON_HANDLE_INVALID;
+  hal_mutex_t mutex = backend_mutex();
+  if (mutex == NULL) {
+    emit_error(HAL_ENOMEM, true);
+    return;
+  }
+
+  hal_mutex_lock(mutex);
+  const bool ready = s_ble.started && !s_ble.faulted && s_ble.connected &&
+                     s_ble.stream_subscribed &&
+                     !s_ble.stream_waiting_can_send &&
+                     s_ble.stream_pending_frame_length != 0u;
+  if (ready) {
+    connection = s_ble.connection;
+    length = s_ble.stream_pending_frame_length;
+    memcpy(frame, s_ble.stream_pending_frame, length);
+  }
+  hal_mutex_unlock(mutex);
+  if (!ready) {
+    return;
+  }
+
+  const uint8_t bt_status = att_server_notify(
+      connection,
+      ATT_CHARACTERISTIC_B7CE0003_3C13_4FE2_801F_D71BDAB1369B_01_VALUE_HANDLE,
+      frame, (uint16_t)length);
+  memset(frame, 0, sizeof(frame));
+  const hal_status_t status = stream_send_status(bt_status);
+  if (status == HAL_EAGAIN) {
+    hal_mutex_lock(mutex);
+    s_ble.stream_waiting_can_send = true;
+    hal_mutex_unlock(mutex);
+    att_server_request_can_send_now_event(connection);
+    return;
+  }
+
+  hal_mutex_lock(mutex);
+  memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+  s_ble.stream_pending_frame_length = 0u;
+  s_ble.stream_waiting_can_send = false;
+  hal_mutex_unlock(mutex);
+  const jh_ble_backend_event_t event = {
+      .type = JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND,
+      .status = status,
+      .native_connection = connection,
+  };
+  emit_event(&event);
+}
+#endif
 
 static hal_status_t service_under_radio_lock(void *context) {
   (void)context;
@@ -480,6 +630,9 @@ static hal_status_t service_under_radio_lock(void *context) {
     };
     emit_event(&event);
   }
+#ifdef HAL_ENABLE_BLE_STREAM
+  service_stream_notification_under_radio_lock();
+#endif
   return HAL_OK;
 }
 
@@ -737,27 +890,28 @@ static hal_status_t backend_stream_notify(void *context,
   const bool ready = s_ble.started && !s_ble.faulted && s_ble.connected &&
                      s_ble.connection == native_connection;
   const bool subscribed = s_ble.stream_subscribed;
-  hal_mutex_unlock(mutex);
   if (!ready) {
-    return s_ble.started ? HAL_ENOENT : HAL_EUNINIT;
+    const hal_status_t status = s_ble.started ? HAL_ENOENT : HAL_EUNINIT;
+    hal_mutex_unlock(mutex);
+    return status;
   }
   if (!subscribed) {
+    hal_mutex_unlock(mutex);
     return HAL_ESTATE;
   }
-
-  const uint8_t status = att_server_notify(
-      native_connection,
-      ATT_CHARACTERISTIC_B7CE0003_3C13_4FE2_801F_D71BDAB1369B_01_VALUE_HANDLE,
-      frame, (uint16_t)length);
-  if (status == ERROR_CODE_SUCCESS) {
-    return HAL_OK;
+  if (s_ble.stream_mtu < HAL_BLE_STREAM_ATT_OVERHEAD ||
+      length > (size_t)(s_ble.stream_mtu - HAL_BLE_STREAM_ATT_OVERHEAD)) {
+    hal_mutex_unlock(mutex);
+    return HAL_EOVERFLOW;
   }
-  if (status == BTSTACK_ACL_BUFFERS_FULL) {
-    /* Retry once the controller reports credit. */
-    att_server_request_can_send_now_event(native_connection);
+  if (s_ble.stream_pending_frame_length != 0u) {
+    hal_mutex_unlock(mutex);
     return HAL_EAGAIN;
   }
-  return HAL_EIO;
+  memcpy(s_ble.stream_pending_frame, frame, length);
+  s_ble.stream_pending_frame_length = length;
+  hal_mutex_unlock(mutex);
+  return HAL_OK;
 }
 
 static hal_status_t backend_stream_publish(void *context,
@@ -769,8 +923,31 @@ static hal_status_t backend_stream_publish(void *context,
     return HAL_ENOMEM;
   }
   hal_mutex_lock(mutex);
+  if (!s_ble.started) {
+    hal_mutex_unlock(mutex);
+    return HAL_EUNINIT;
+  }
   s_ble.stream_version = protocol_version;
   s_ble.stream_capabilities = capabilities;
+  s_ble.stream_published = true;
+  hal_mutex_unlock(mutex);
+  return HAL_OK;
+}
+
+static hal_status_t backend_stream_unpublish(void *context) {
+  (void)context;
+  hal_mutex_t mutex = backend_mutex();
+  if (mutex == NULL) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  s_ble.stream_published = false;
+  s_ble.stream_subscribed = false;
+  s_ble.stream_waiting_can_send = false;
+  s_ble.stream_version = 0u;
+  s_ble.stream_capabilities = 0u;
+  memset(s_ble.stream_pending_frame, 0, sizeof(s_ble.stream_pending_frame));
+  s_ble.stream_pending_frame_length = 0u;
   hal_mutex_unlock(mutex);
   return HAL_OK;
 }
@@ -789,6 +966,7 @@ static const jh_ble_backend_t s_backend = {
 #ifdef HAL_ENABLE_BLE_STREAM
     .stream_notify = backend_stream_notify,
     .stream_publish = backend_stream_publish,
+    .stream_unpublish = backend_stream_unpublish,
 #endif
 };
 

@@ -235,6 +235,9 @@ void backend_event(void *, const jh_ble_backend_event_t *backend_event) {
     event.connection = s_ble.connection;
     event.mtu = s_ble.mtu;
     queue_event_locked(event);
+#ifdef HAL_ENABLE_BLE_STREAM
+    forward_stream = true;
+#endif
     break;
   case JH_BLE_BACKEND_EVENT_SCAN_STARTED:
     if (s_ble.scan_requested) {

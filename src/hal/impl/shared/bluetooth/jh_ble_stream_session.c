@@ -291,12 +291,13 @@ static hal_status_t handle_data(jh_ble_stream_session_t *session, uint8_t flags,
   }
 
   const uint64_t counter = load_u64_le(body);
-  /* Counters are strictly increasing; gaps, replays and wrap close the
-     session. */
-  if (counter <= session->rx_counter || counter == UINT64_MAX) {
-    close_with(result, counter == UINT64_MAX
-                           ? HAL_BLE_STREAM_CLOSE_COUNTER_EXHAUSTED
-                           : HAL_BLE_STREAM_CLOSE_REPLAY_DETECTED);
+  /* Every authenticated frame consumes exactly one counter value. */
+  if (counter == UINT64_MAX || session->rx_counter == (UINT64_MAX - 1u)) {
+    close_with(result, HAL_BLE_STREAM_CLOSE_COUNTER_EXHAUSTED);
+    return HAL_EPROTO;
+  }
+  if (counter != (session->rx_counter + 1u)) {
+    close_with(result, HAL_BLE_STREAM_CLOSE_REPLAY_DETECTED);
     return HAL_EPROTO;
   }
 

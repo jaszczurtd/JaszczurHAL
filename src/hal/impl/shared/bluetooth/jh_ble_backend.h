@@ -76,6 +76,8 @@ typedef struct {
      characteristics. */
   hal_status_t (*stream_publish)(void *context, uint8_t protocol_version,
                                  uint16_t capabilities);
+  /* Deactivate stream GATT access and cancel an accepted notification. */
+  hal_status_t (*stream_unpublish)(void *context);
 #endif
 } jh_ble_backend_t;
 

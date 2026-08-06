@@ -49,3 +49,6 @@ handshake fits in one write; the example logs the MTU it observes.
 - draining received payloads with explicit overflow reporting;
 - handling `HAL_EAGAIN` backpressure on send;
 - restarting advertising after a disconnect.
+
+For an independent client implementation and dual-target negative test, see
+the [`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/).
