@@ -216,6 +216,13 @@ if(_jh_stm32_has_cyw43_gspi)
         JH_BLUETOOTH_STAGE1_PROBE ${_jh_extra_hal_defines})
     jh_cmake_defines_contain(_jh_stm32_has_ble
         HAL_ENABLE_BLE ${_jh_extra_hal_defines})
+    jh_cmake_defines_contain(_jh_stm32_has_ble_stream
+        HAL_ENABLE_BLE_STREAM ${_jh_extra_hal_defines})
+    # hal_config.h propagates the stream flag to BLE; mirror it for source
+    # selection.
+    if(_jh_stm32_has_ble_stream)
+        set(_jh_stm32_has_ble TRUE)
+    endif()
     if(_jh_stm32_has_bluetooth_stage1 AND _jh_stm32_has_ble)
         message(FATAL_ERROR
             "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
@@ -230,6 +237,8 @@ if(_jh_stm32_has_cyw43_gspi)
     jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_stm32_cyw43_options})
     if(_jh_stm32_has_bluetooth_stage1)
         jh_target_enable_btstack_stage1(JaszczurHAL)
+    elseif(_jh_stm32_has_ble_stream)
+        jh_target_enable_btstack_ble_stream(JaszczurHAL)
     elseif(_jh_stm32_has_ble)
         jh_target_enable_btstack_ble(JaszczurHAL)
     endif()

@@ -27,7 +27,25 @@ hal_mock_ble_get_advertising(hal_ble_advertising_config_t *out_config,
                              bool *out_enabled);
 hal_status_t hal_mock_ble_get_scan(hal_ble_scan_config_t *out_config,
                                    bool *out_enabled);
+#ifdef HAL_ENABLE_BLE_STREAM
+hal_status_t hal_mock_ble_inject_stream_subscription(bool subscribed);
+hal_status_t hal_mock_ble_inject_stream_frame(const uint8_t *frame,
+                                              size_t length);
+hal_status_t hal_mock_ble_inject_stream_can_send(void);
+void hal_mock_ble_set_stream_notify_status(hal_status_t status);
+hal_status_t hal_mock_ble_get_stream_frame(uint8_t *out_frame, size_t capacity,
+                                           size_t *out_length);
+size_t hal_mock_ble_stream_notify_count(void);
+hal_status_t hal_mock_ble_get_stream_published(uint8_t *out_version,
+                                               uint16_t *out_capabilities);
 #endif
+#endif
+
+// ── Secure random ────────────────────────────────────────────────────────────
+// The host reports HAL_EUNSUPPORTED until a test enables the generator.
+void hal_mock_secure_random_reset(void);
+void hal_mock_secure_random_set_status(hal_status_t status);
+void hal_mock_secure_random_set_seed(uint64_t seed);
 
 // ── GPIO ─────────────────────────────────────────────────────────────────────
 typedef enum {

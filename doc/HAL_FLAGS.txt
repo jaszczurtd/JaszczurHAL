@@ -190,6 +190,12 @@ Connectivity
     advertising, bounded events, ATT MTU reporting, and static GAP/GATT
     services. Supported on RP2040 Pico W, STM32G474+PIM730, and mock. Pulls
     the pinned, non-commercial-use BTstack dependency into firmware.
+  HAL_ENABLE_BLE_STREAM
+    Experimental JH BLE Stream v1: one static GATT service carrying a bounded
+    byte stream behind a mutually authenticated application session. Enables
+    HAL_ENABLE_BLE and HAL_ENABLE_CRYPTO. A client reads the protocol version
+    and capabilities without a session; payload exchange requires proof of the
+    per-device secret installed with hal_ble_stream_set_secret().
   HAL_ENABLE_WIFI
     WiFi. A profile without the selected network hardware compiles but public
     runtime access returns HAL_EUNSUPPORTED.

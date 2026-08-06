@@ -152,6 +152,84 @@ counters. A fatal controller or transport error moves the subsystem to
 `HAL_BLE_STATE_FAILED`, invalidates its handles, stops scanning, and advances
 the generation.
 
+## JH BLE Stream v1
+
+`HAL_ENABLE_BLE_STREAM` adds `hal_ble_stream.h`, a bounded byte stream carried
+by one static GATT service. The flag enables `HAL_ENABLE_BLE` and
+`HAL_ENABLE_CRYPTO`. Maturity is `experimental`.
+
+The header is the single source of truth for the service UUIDs, the frame
+layout and the capability bits. Changing any of them raises the profile
+version.
+
+| Element | UUID |
+|---|---|
+| Service | `B7CE0001-3C13-4FE2-801F-D71BDAB1369B` |
+| RX (write, write-without-response) | `B7CE0002-3C13-4FE2-801F-D71BDAB1369B` |
+| TX (notify) | `B7CE0003-3C13-4FE2-801F-D71BDAB1369B` |
+| Protocol version (read) | `B7CE0004-3C13-4FE2-801F-D71BDAB1369B` |
+| Capabilities (read) | `B7CE0005-3C13-4FE2-801F-D71BDAB1369B` |
+
+### Security model
+
+A client without a session reads the protocol version, the capability bitmask
+and nothing else. Every payload exchange requires a mutually authenticated
+session over a per-device secret of at least 256 bits, delivered out of band.
+
+The handshake binds a transcript built from the profile name, the protocol
+version, both capability sets, a session identifier and two random nonces.
+Four separate HMAC-SHA256 domains produce the device proof, the client proof
+and two directional session keys. `DATA` frames are protected with
+ChaCha20-Poly1305; the direction and a strictly increasing counter enter both
+the nonce and the associated data.
+
+Sessions fail closed. A wrong proof, a forged tag, a replayed or decreasing
+counter, a counter about to wrap, an entropy failure, a disconnect, a
+controller generation change, unsubscription and the idle timeout all drop the
+session and zero its directional keys. Repeated authentication failures move
+the profile into a bounded backoff window during which handshakes are refused.
+Rotating or clearing the secret invalidates any session built on the previous
+one.
+
+The device address and link-layer pairing are not authorization. `Just Works`
+encrypts the link without MITM protection, which is why product operations
+depend on the application session rather than on the BLE link alone.
+
+### ATT MTU
+
+One frame travels in a single write or notification. The handshake needs at
+least `HAL_BLE_STREAM_MIN_ATT_MTU`, and a full-size payload needs
+`HAL_BLE_STREAM_FULL_PAYLOAD_ATT_MTU`. Watch `HAL_BLE_EVENT_MTU_UPDATED` and
+keep payloads within what the negotiated MTU carries.
+
+### Usage
+
+```c
+hal_ble_stream_config_t config = {0};
+config.capabilities = HAL_BLE_STREAM_CAP_TELEMETRY;
+if (hal_ble_stream_initialize(&config) == HAL_OK) {
+  (void)hal_ble_stream_set_secret(device_secret, sizeof(device_secret));
+}
+
+/* In the application loop, after hal_ble_poll(). */
+uint8_t payload[HAL_BLE_STREAM_MAX_PAYLOAD];
+size_t length = 0u;
+while (hal_ble_stream_receive(payload, sizeof(payload), &length) == HAL_OK) {
+  handle_request(payload, length);
+}
+
+const hal_status_t sent = hal_ble_stream_send(reply, reply_length);
+if (sent == HAL_EAGAIN) {
+  /* Bounded TX queue is full; retry after the next poll. */
+} else if (sent == HAL_EAUTH) {
+  /* No authenticated session; the client must complete the handshake. */
+}
+```
+
+`hal_ble_stream_get_info()` reports the state, negotiated capabilities,
+directional counters, authentication failures, replay rejections and queue
+depth for diagnostics.
+
 ## WiFi coexistence and ownership
 
 BLE and WiFi share one CYW43 controller, transport, radio runtime, and service
@@ -171,4 +249,6 @@ separate license from BlueKitchen. This restriction applies to BLE-enabled
 artifacts, not to JaszczurHAL builds that do not compile BTstack.
 
 See the buildable [`58_ble_peripheral` example](../../examples/58_ble_peripheral/)
-for the complete startup and advertising flow.
+for the complete startup and advertising flow, and
+[`59_ble_stream`](../../examples/59_ble_stream/) for an authenticated stream
+consumer.

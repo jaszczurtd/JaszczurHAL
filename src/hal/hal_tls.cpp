@@ -11,6 +11,7 @@
 #include "impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.h"
 #include "impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
 #include "impl/shared/hal_mutex_once.h"
+#include "impl/shared/jh_secure_random.h"
 #include "impl/shared/network/jh_network_handle_pool.h"
 #include "impl/shared/network/jh_tls_timeout_policy.h"
 
@@ -59,13 +60,8 @@ hal_status_t hal_tls_default_time(void *, uint64_t *out_unix_seconds) {
 #endif
 }
 
-__attribute__((weak)) hal_status_t hal_tls_default_entropy(void *, void *buffer,
-                                                           size_t length) {
-  if (buffer == NULL || length == 0u) {
-    return HAL_EINVAL;
-  }
-  memset(buffer, 0, length);
-  return HAL_EUNSUPPORTED;
+hal_status_t hal_tls_default_entropy(void *, void *buffer, size_t length) {
+  return jh_secure_random_bytes(buffer, length);
 }
 
 static void tls_lock(void) {

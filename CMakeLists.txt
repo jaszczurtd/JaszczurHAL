@@ -58,9 +58,12 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_assert.cpp
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_ble.cpp
+    ${SRC}/hal/hal_ble_stream.cpp
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
+    ${SRC}/hal/impl/shared/bluetooth/jh_ble_stream_session.c
+    ${SRC}/hal/impl/shared/jh_secure_random.cpp
     ${SRC}/hal/impl/shared/network/http/hal_http_client.cpp
     ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
     ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
@@ -150,6 +153,7 @@ target_compile_definitions(hal_mock PUBLIC
     # the consistency checks in hal_config.h are satisfied.
     HAL_ENABLE_WIFI
     HAL_ENABLE_BLE
+    HAL_ENABLE_BLE_STREAM
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP
