@@ -115,6 +115,8 @@ run(
     "rp2040-zero",
     "--output-dir",
     str(first_output),
+    "--define",
+    "HAL_ENABLE_WIFI",
     *feature_arguments,
 )
 run(
@@ -124,6 +126,7 @@ run(
     "rp2040-zero",
     "--output-dir",
     str(second_output),
+    "--define=-DHAL_ENABLE_WIFI=1",
     "--feature",
     "HAL_ENABLE_FREERTOS",
     "--feature",
@@ -143,15 +146,134 @@ for name in (
         f"{name} is not deterministic for equivalent feature sets",
     )
 
+link_reference_text = (first_output / "jh_link_contract_reference.c").read_text(
+    encoding="utf-8"
+)
+require(
+    "__attribute__((constructor, used))" in link_reference_text,
+    "generated link reference is not retained through a constructor root",
+)
+require(
+    "retain" not in link_reference_text,
+    "generated link reference still uses the unsupported retain attribute",
+)
+
 resolved = load(first_output / "jh_board_resolved.json")
 expected_hash = hashlib.sha256(
-    b"hal.profileId=8\nHAL_ENABLE_FREERTOS=1\nHAL_ENABLE_WIFI=1"
+    b"hal.profileId=8\nHAL_ENABLE_FREERTOS=1\n"
+    b"HAL_ENABLE_NETWORK_CORE=1\nHAL_ENABLE_WIFI=1"
 ).hexdigest()[:12]
+require(
+    resolved["requestedFeatures"]
+    == ["HAL_ENABLE_FREERTOS", "HAL_ENABLE_WIFI"],
+    "requested feature set is not explicit and deterministic",
+)
+require(
+    resolved["resolvedFeatures"]
+    == [
+        "HAL_ENABLE_FREERTOS",
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_WIFI",
+    ],
+    "resolved feature closure is incorrect",
+)
+require(
+    resolved["features"] == resolved["resolvedFeatures"],
+    "features compatibility alias differs from resolvedFeatures",
+)
+expected_resolved_digest = hashlib.sha256(
+    b"HAL_ENABLE_FREERTOS\nHAL_ENABLE_NETWORK_CORE\nHAL_ENABLE_WIFI"
+).hexdigest()
+require(
+    resolved["resolvedFeaturesDigest"] == expected_resolved_digest,
+    "resolved feature digest golden mismatch",
+)
 require(resolved["featureHash"] == expected_hash, "featureHash golden mismatch")
 require(
     resolved["contractSymbol"]
     == f"jh_board_contract_rp2040_rp2040_zero_{expected_hash}",
     "contract symbol golden mismatch",
+)
+generated_cmake = (first_output / "jh_board_config.cmake").read_text(
+    encoding="utf-8"
+)
+require(
+    'set(JH_BOARD_REQUESTED_FEATURES "HAL_ENABLE_FREERTOS;HAL_ENABLE_WIFI")'
+    in generated_cmake,
+    "generated CMake lacks requested features",
+)
+require(
+    'set(JH_BOARD_RESOLVED_FEATURES "HAL_ENABLE_FREERTOS;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_WIFI")'
+    in generated_cmake,
+    "generated CMake lacks resolved features",
+)
+require(
+    f'set(JH_BOARD_RESOLVED_FEATURES_DIGEST "{expected_resolved_digest}")'
+    in generated_cmake,
+    "generated CMake lacks the resolved feature digest",
+)
+require(
+    'set(JH_BOARD_FEATURES "HAL_ENABLE_FREERTOS;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_WIFI")'
+    in generated_cmake,
+    "generated CMake compatibility alias differs from resolved features",
+)
+
+minimal_closure_output = TEST_ROOT / "generated/mqtt-minimal"
+redundant_closure_output = TEST_ROOT / "generated/mqtt-redundant"
+run(
+    "--target",
+    "rp2040",
+    "--board",
+    "rp2040-zero",
+    "--output-dir",
+    str(minimal_closure_output),
+    "--requested-feature",
+    "HAL_ENABLE_MQTT",
+)
+run(
+    "--target",
+    "rp2040",
+    "--board",
+    "rp2040-zero",
+    "--output-dir",
+    str(redundant_closure_output),
+    "--feature",
+    "HAL_ENABLE_MQTT",
+    "--requested-feature",
+    "HAL_ENABLE_TCP",
+    "--requested-feature",
+    "HAL_ENABLE_WIFI",
+)
+minimal_closure = load(minimal_closure_output / "jh_board_resolved.json")
+redundant_closure = load(redundant_closure_output / "jh_board_resolved.json")
+require(
+    minimal_closure["requestedFeatures"] == ["HAL_ENABLE_MQTT"],
+    "minimal MQTT request was not retained",
+)
+require(
+    redundant_closure["requestedFeatures"]
+    == ["HAL_ENABLE_MQTT", "HAL_ENABLE_TCP", "HAL_ENABLE_WIFI"],
+    "redundant MQTT request set was not retained",
+)
+require(
+    minimal_closure["resolvedFeatures"]
+    == redundant_closure["resolvedFeatures"],
+    "equivalent MQTT requests produced different closures",
+)
+require(
+    minimal_closure["features"] == minimal_closure["resolvedFeatures"]
+    and redundant_closure["features"]
+    == redundant_closure["resolvedFeatures"],
+    "features alias is not the resolved closure",
+)
+require(
+    minimal_closure["featureHash"] == redundant_closure["featureHash"],
+    "equivalent MQTT closures produced different feature hashes",
+)
+require(
+    minimal_closure["contractSymbol"]
+    == redundant_closure["contractSymbol"],
+    "equivalent MQTT closures produced different link contracts",
 )
 config = (first_output / "jh_board_config.h").read_text(encoding="utf-8")
 require("HAL_BOARD_STATUS_LED_KIND_ADDRESSABLE 1" in config, "missing WS2812 fact")
@@ -230,17 +352,36 @@ require(
     pim730_resolved["capabilities"]["bluetooth-controller"]["present"] is True,
     "NUCLEO PIM730 lost its Bluetooth controller capability",
 )
-pim730_cmake = (pim730_output / "jh_board_config.cmake").read_text(
-    encoding="utf-8"
-)
-for expected_define in (
+expected_pim730_definitions = [
+    "HAL_NETWORK_BACKEND_CYW43",
     "HAL_CYW43_BUS_STM32_GSPI",
+    "HAL_CYW43_STACK_LWIP",
     "HAL_CYW43_PIN_WL_ON=30u",
     "HAL_CYW43_PIN_CHIP_SELECT=28u",
     "HAL_CYW43_PIN_DATA=31u",
     "HAL_CYW43_PIN_CLOCK=29u",
-):
+    "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
+]
+require(
+    pim730_resolved["boardCompileDefinitions"]
+    == expected_pim730_definitions,
+    "NUCLEO PIM730 resolved JSON lost provider compile definitions",
+)
+pim730_cmake = (pim730_output / "jh_board_config.cmake").read_text(
+    encoding="utf-8"
+)
+for expected_define in expected_pim730_definitions:
     require(expected_define in pim730_cmake, f"missing {expected_define}")
+pim730_header = (pim730_output / "jh_board_config.h").read_text(
+    encoding="utf-8"
+)
+for expected_define in expected_pim730_definitions:
+    name, separator, value = expected_define.partition("=")
+    expected_header_define = f"#define {name} {value if separator else '1'}"
+    require(
+        expected_header_define in pim730_header,
+        f"installed board header would omit {expected_header_define}",
+    )
 
 compiler = shutil.which("cc")
 archiver = shutil.which("ar")
@@ -264,7 +405,21 @@ main_source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
 
 def compile_object(source: Path, output: Path, include: Path) -> None:
     subprocess.run(
-        [compiler, "-std=c17", "-Wall", "-Wextra", "-Werror", "-I", str(include), "-c", str(source), "-o", str(output)],
+        [
+            compiler,
+            "-std=c17",
+            "-Wall",
+            "-Wextra",
+            "-Werror",
+            "-ffunction-sections",
+            "-fdata-sections",
+            "-I",
+            str(include),
+            "-c",
+            str(source),
+            "-o",
+            str(output),
+        ],
         check=True,
     )
 
@@ -281,6 +436,7 @@ subprocess.run(
     [
         compiler,
         *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        "-Wl,--gc-sections",
         str(main_object),
         str(reference_object),
         str(matching_archive),
@@ -288,6 +444,29 @@ subprocess.run(
         str(link_root / "matching"),
     ],
     check=True,
+)
+
+missing_contract_link = subprocess.run(
+    [
+        compiler,
+        *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        "-Wl,--gc-sections",
+        str(main_object),
+        str(reference_object),
+        "-o",
+        str(link_root / "missing-contract"),
+    ],
+    check=False,
+    capture_output=True,
+    text=True,
+)
+require(
+    missing_contract_link.returncode != 0,
+    "missing board contract linked successfully with section GC enabled",
+)
+require(
+    resolved["contractSymbol"] in missing_contract_link.stderr,
+    "missing-contract link failure does not name the expected contract symbol",
 )
 
 wrong_definition = link_root / "wrong-definition.o"
@@ -302,6 +481,7 @@ wrong_link = subprocess.run(
     [
         compiler,
         *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        "-Wl,--gc-sections",
         str(main_object),
         str(reference_object),
         str(wrong_archive),
@@ -341,7 +521,16 @@ subprocess.run(
     check=True,
 )
 different_feature_link = subprocess.run(
-    [compiler, str(main_object), str(reference_object), str(different_feature_archive), "-o", str(link_root / "different-feature")],
+    [
+        compiler,
+        *(["-nostdlib", "-Wl,-e,main"] if cross_link else []),
+        "-Wl,--gc-sections",
+        str(main_object),
+        str(reference_object),
+        str(different_feature_archive),
+        "-o",
+        str(link_root / "different-feature"),
+    ],
     check=False,
     capture_output=True,
 )
@@ -455,6 +644,29 @@ run(
     "PROJECT_SECRET=value",
     expected_success=False,
 )
+
+for option, value in (
+    ("--feature", "HAL_ENABLE_WIFI=0"),
+    ("--feature", "HAL_ENABLE_WIFI=2"),
+    ("--define", "HAL_ENABLE_WIFI=0"),
+    ("--define", "HAL_ENABLE_WIFI=2"),
+    ("--define", "$<1:HAL_$<1:ENABLE>_WIFI=0>"),
+):
+    invalid_value = run(
+        "--target",
+        "rp2040",
+        "--board",
+        "pico",
+        "--output-dir",
+        str(TEST_ROOT / "negative/feature-value"),
+        option,
+        value,
+        expected_success=False,
+    )
+    require(
+        "[JH-CFG-VALUE]" in invalid_value.stderr,
+        f"{option} {value} lacks the stable value diagnostic",
+    )
 
 duplicate_id = mutate(
     "duplicate-id",

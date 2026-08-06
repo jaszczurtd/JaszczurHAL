@@ -213,7 +213,7 @@ Write generated text to a file:
 
 ## Example: Base64 PNG To ILI9341
 
-`examples/37_lodePNG_ili9341_base64` shows the complete display path:
+`examples/07_display_media` shows the complete display path:
 
 1. `pngBase64DecodedSize()` calculates the exact decoded PNG byte count.
 2. Base64 text is decoded to an exactly sized PNG work buffer.

@@ -261,9 +261,8 @@ source or binary distribution materials. Commercial products require a
 separate license from BlueKitchen. This restriction applies to BLE-enabled
 artifacts, not to JaszczurHAL builds that do not compile BTstack.
 
-See the buildable [`58_ble_peripheral` example](../../examples/58_ble_peripheral/)
-for the complete startup and advertising flow, and
-[`59_ble_stream`](../../examples/59_ble_stream/) for an authenticated stream
-consumer. The dual-target
+See the buildable [`26_ble_stream` example](../../examples/26_ble_stream/) for
+the complete Peripheral startup and advertising flow plus an authenticated
+stream consumer. The dual-target
 [`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/)
 drives the complete protocol from an independent BlueZ client.

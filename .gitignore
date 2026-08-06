@@ -29,7 +29,7 @@ third_party/riscv-toolchain/
 !examples/*/.vscode/**
 examples/*/.vscode/jaszczurhal.local.json
 examples/*/.vscode/c_cpp_properties.json
-examples/56_http_https_client/ca_certificate.h
+examples/18_freertos_suite/ca_certificate.h
 # Keep hardware project manifests tracked, but ignore per-user VS Code state.
 !tests/hardware/*/.vscode/
 tests/hardware/*/.vscode/*

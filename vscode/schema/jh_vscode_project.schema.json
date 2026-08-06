@@ -27,6 +27,16 @@
           "description": "Default board id used by the automated example dispatcher for each declared target.",
           "additionalProperties": { "type": "string" }
         },
+        "gateTargets": {
+          "type": "array",
+          "description": "Representative target subset compiled by the examples quality gate. Supported targets remain declared in targets.",
+          "items": { "type": "string" }
+        },
+        "covers": {
+          "type": "array",
+          "description": "Historical example ids whose functionality is represented by this consolidated project.",
+          "items": { "type": "string" }
+        },
         "variants": {
           "type": "array",
           "items": {
@@ -43,8 +53,14 @@
                 "type": "array",
                 "items": { "type": "string" }
               },
+              "gateTargets": {
+                "type": "array",
+                "description": "Representative target subset compiled for this variant by the examples quality gate.",
+                "items": { "type": "string" }
+              },
               "extraDefines": {
                 "type": "array",
+                "description": "Additional compile definitions applied by the active variant. HAL_ENABLE_* entries must be bare or use the explicit value 1.",
                 "items": { "type": "string" }
               },
               "cmake": { "type": "object", "additionalProperties": true }
@@ -95,6 +111,7 @@
         },
         "cache": {
           "type": "object",
+          "description": "Effective CMake cache entries. In JH_EXTRA_DEFINES and EXTRA_HAL_DEFINES, each HAL_ENABLE_* entry must be a standalone simple token separated with semicolons and must be bare or use the explicit value 1. Whitespace does not separate multiple feature definitions, and CMake generator expressions are unsupported.",
           "additionalProperties": {
             "type": ["string", "number", "integer", "boolean", "null"]
           }

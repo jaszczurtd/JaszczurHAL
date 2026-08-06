@@ -201,7 +201,8 @@ bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 ```
 
 **Behavior notes:**
-- `HAL_ENABLE_PGA2311` auto-propagates `HAL_ENABLE_SPI` in `hal_config.h`.
+- `HAL_ENABLE_PGA2311` gains `HAL_ENABLE_SPI` through the generated feature
+  registry included by `hal_config.h`.
 - The module does not call `hal_spi_init()`; the application owns SPI bus pin setup.
 - Status init distinguishes invalid configuration (`HAL_EINVAL`), static-pool
   or mutex exhaustion (`HAL_ENOMEM`) and propagated SPI setup/write failures.
@@ -253,7 +254,7 @@ maps driver-local outcomes to shared `hal_status_t` values.
 driver allocates a per-instance HAL mutex for future broader sequencing; create
 and destroy remain single-owner lifecycle operations.
 
-Example: `examples/46_mfrc522_rfid`.
+Example: `examples/22_rfid_nfc`.
 
 ---
 
@@ -291,7 +292,7 @@ HAL mutex created through `jh_hal_mutex_create_once()`. SPI and I2C transports
 also use HAL bus locks for physical transactions. Create and destroy remain
 single-owner lifecycle operations.
 
-Example: `examples/47_pn532_nfc`.
+Example: `examples/22_rfid_nfc`.
 
 ---
 
@@ -368,7 +369,7 @@ caller needs to distinguish zero data from an error.
 **Thread safety:** each device instance owns a HAL mutex, and bus transactions
 use the underlying HAL I2C/SPI locks. Lifecycle calls remain single-owner.
 
-Example: `examples/53_simple_io_chips`.
+Example: `examples/23_io_pmic`.
 
 ---
 

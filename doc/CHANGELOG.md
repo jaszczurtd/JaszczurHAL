@@ -4,6 +4,66 @@ All notable changes to this project will be documented in this file.
 
 ## [1.9.0] - 2026-xx-xx
 
+### Declarative feature configuration
+
+- Added the versioned JSON HAL feature registry, deterministic production C and
+  CMake resolvers, generated-artifact drift checks, and full-matrix closure
+  parity coverage.
+- Connected the resolved registry closure to C preprocessing, RP and STM32G474
+  source/dependency selection, board generation, the feature hash and link
+  contract, and `jh-vscode` preflight and OTA decisions. Direct feature
+  requests remain the compiler and CMake inputs.
+- Added parity failures when board or STM32 helper compile definitions disagree
+  with their requested/resolved feature sets, and require Fiesta core-1 entry
+  adapters to declare `HAL_ENABLE_APP_TASK1` through normal feature inputs.
+- Extended `jh-vscode config-dump` with `featureResolution`, including registry
+  and resolved-set digests, requested/resolved lists, and direct-request
+  provenance after target profile and variant overlays.
+- Made raw and effective feature lint blocking in CI, retained the deterministic
+  resolution report as a CI artifact, and froze the effective matrix digest.
+- Generated the complete `HAL_CONFIG_VERBOSE` report from the registry after
+  conditional configuration rules have run.
+- Installed generated feature/board headers, resolved board metadata, and the
+  link-contract reference source with RP and STM32G474 static packages, with a
+  direct ARM compiler compile/link gate for the PIM730/WiFi profile that runs
+  without Python in `PATH`. Board/provider definitions are materialized in the
+  installed header and resolved JSON, and the generated contract reference
+  remains live under `--gc-sections`.
+- Kept tunable-dependent defaults, provider choices, board capability checks,
+  and target constraints in `hal_config.h`, with coverage identifying these
+  remaining rules explicitly.
+- Fixed primitive network propagation order so HTTP server, WebSocket, and net
+  console selections complete their documented TCP-to-WiFi dependency chain.
+- Removed the unknown `HAL_ENABLE_SERIAL` no-op from the two RTC examples and
+  documented presence-only feature semantics together with the complete TIME,
+  MQTT, and WireGuard dependencies.
+- Loaded macro-only project configuration before target auto-detection across
+  direct, umbrella, and forced-include paths, with compile probes for every
+  exact target and conflicting selections.
+- Rejected `HAL_ENABLE_*=0` and other explicit feature values across board
+  generation, CMake, static-library scripts, component preparation, and the
+  fully resolved `jh-vscode` configuration while retaining the documented
+  direct-compiler presence behavior; definition lists now use simple,
+  semicolon-separated tokens and reject CMake generator expressions.
+
+### Consolidated examples and faster gate
+
+- Consolidated the former 59 single-purpose demonstrations into 26 registered
+  firmware projects while preserving their feature ownership through explicit
+  `covers` metadata and focused variants.
+- Reduced the complete supported example matrix to 100 configurations:
+  27 RP2040, 26 RP2350 ARM, 22 RP2350 RISC-V, and 25 STM32G474.
+- Added per-project and per-variant `gateTargets`. The default examples gate
+  now compiles 52 configurations (27 RP2040 and 25 STM32G474), while builds
+  without `--gate` retain access to the complete supported matrix.
+- Kept six direct native representative builds in Gate 6, one core-runtime and
+  one `18_freertos_suite` build for each RP toolchain/architecture. Together
+  with the examples gate, the example-related part of the default HAL gate
+  performs 58 firmware builds.
+- Documented the maintenance rule that new coverage should extend an existing
+  project or variant unless target, runtime, board, resource, or hardware
+  constraints require a separate firmware project.
+
 ### Experimental CYW43 Bluetooth bring-up
 
 - Added the experimental `hal_ble_stream` JH BLE Stream v1 profile: one static
@@ -36,7 +96,7 @@ All notable changes to this project will be documented in this file.
 - Added the experimental public `hal_ble` Peripheral API with copied legacy
   advertising, one opaque connection, bounded events, ATT MTU reporting, a
   static GAP/GATT database, and a deterministic host mock.
-- Added the `58_ble_peripheral` example and native build profiles for RP2040
+- Added the `26_ble_stream` example and native build profiles for RP2040
   Pico W and STM32G474 NUCLEO+PIM730, backed by the same CYW43/BTstack runtime.
 - Declared Bluetooth controller board capabilities and the optional BTstack
   component, with public lifecycle, failure, and external-radio requirements.
@@ -342,7 +402,7 @@ All notable changes to this project will be documented in this file.
 - Made native UF2 upload select only the BOOTSEL device created by the current
   1200-bps touch, so an explicitly selected board cannot be confused with a
   second board that was already waiting in BOOTSEL.
-- Enabled the shared FatFs `39_sdlogger` example for native RP2040, RP2350 ARM
+- Enabled the shared FatFs path in `10_storage` for native RP2040, RP2350 ARM
   and RP2350 RISC-V builds, made native RP2040 its default VS Code target and
   added the complete native matrix to CI.
 - Added native RP OTA for RP2040 and RP2350: versioned target-bound images,
@@ -352,7 +412,7 @@ All notable changes to this project will be documented in this file.
 - Added VS Code OTA discovery and authenticated upload, `ota` manifest
   configuration, build-time `.ota` packaging, merged boot/application UF2
   output, `Project: Upload (OTA)` / discovery tasks and documented keyboard
-  shortcuts. Example `57_ota` covers Pico W and Pico 2 W.
+  shortcuts. Example `25_ota` covers Pico W and Pico 2 W.
 - Preserved the top-level `ota` object while loading project manifests and
   added an optional fixed host TCP `listenPort` for callback firewall rules.
   OTA discovery now sends a direct query when `ota.host` is configured instead
@@ -403,7 +463,7 @@ All notable changes to this project will be documented in this file.
   ports for native RP2040, RP2350 ARM_NTZ and RP2350 RISC-V, with HAL-owned
   scheduler startup and core-affined application tasks.
 - Added a FreeRTOS-aware core-0 TinyUSB worker, native heap/runtime reporting,
-  `29_freertos_smoke` support in all RP VS Code profiles and a repeatable
+  `18_freertos_suite` support in all RP VS Code profiles and a repeatable
   scheduler/SMP/mutex/USB hardware probe.
 - Corrected RP2350 RISC-V tick rescheduling by preserving the
   `xTaskIncrementTick()` result across the community port's ISR critical
@@ -432,7 +492,7 @@ All notable changes to this project will be documented in this file.
 - Added the HAL-owned native `main()` and explicit core policy: `app_start()`
   and `app_task0()` run on core 0, while `HAL_ENABLE_APP_TASK1` alone launches
   core 1, registers it for multicore lockout and dispatches `app_task1()`.
-- Added HAL-only `01_blink` and core-1 entry builds for RP2040, RP2350 ARM
+- Added HAL-only `01_core_runtime` and core-1 entry builds for RP2040, RP2350 ARM
   and RP2350 Hazard3 RISC-V to the local gate and GitHub CI.
 - Mapped official Pico SDK board selectors to HAL profiles and added native
   `pico_w`/`pico2_w` built-in LED control through the pinned JaszczurHAL CYW43
@@ -532,7 +592,7 @@ All notable changes to this project will be documented in this file.
   `hal_display_flush_ex()` and `hal_display_epd_refresh_ex()` trigger panel
   updates, and capabilities now expose EPD, MSB-first packing and
   family-specific alignment requirements.
-- Added driver/facade host coverage and `examples/55_epd_display` for an
+- Added driver/facade host coverage and `examples/24_epd_display` for an
   SSD1681 200x200 raw frame on RP2040 and STM32G474.
 - Added GC9A01 round-TFT support to the shared ST77xx-style SPI/GPIO display
   backend. `HAL_ENABLE_GC9A01` now propagates `HAL_ENABLE_TFT`,
@@ -894,7 +954,7 @@ All notable changes to this project will be documented in this file.
   `hal_status_t`-based `_ex` APIs while keeping simple `bool` wrappers.
 - Added per-instance mutex protection for multicore/FreeRTOS-safe runtime use,
   host coverage in `test_simple_io_drivers`, and
-  `examples/53_simple_io_chips` for RP2040 and STM32G474.
+  `examples/23_io_pmic` for RP2040 and STM32G474.
 
 ### ADP5360 PMIC driver
 
@@ -906,7 +966,7 @@ All notable changes to this project will be documented in this file.
   I2C/GPIO/timing/sync primitives, with `hal_status_t` error mapping and
   per-device mutex protection via `jh_hal_mutex_create_once()`.
 - Added host coverage in `test_adp5360_driver`, API documentation and
-  `examples/54_adp5360_pmic` using `debugInit()`, `deb()` and `derr()`.
+  `examples/23_io_pmic` using `debugInit()`, `deb()` and `derr()`.
 
 ### Display raw buffer foundation
 
@@ -964,7 +1024,7 @@ All notable changes to this project will be documented in this file.
   modules can mount path subtrees such as static file roots.
 - HTTP route, start, handler and response helper APIs return `hal_status_t`
   result codes instead of collapsing failures to `bool`.
-- Added host coverage in `test_hal_http_server` and `examples/48_http_server`
+- Added host coverage in `test_hal_http_server` and `examples/18_freertos_suite`
   for a Pico W style HTML/JSON status endpoint.
 
 ### HTTP files
@@ -975,7 +1035,7 @@ All notable changes to this project will be documented in this file.
   content types, weak ETag generation, `If-None-Match`, raw PUT uploads,
   multipart/form-data POST uploads and path traversal rejection.
 - Added host coverage in `test_hal_http_files` and a RAM-backed Pico W example
-  in `examples/52_http_files`; real firmware can replace the RAM callbacks
+  in `examples/18_freertos_suite`; real firmware can replace the RAM callbacks
   with LittleFS, FatFs/SD or flash-asset callbacks.
 
 ### WebSocket server
@@ -990,7 +1050,7 @@ All notable changes to this project will be documented in this file.
 - WebSocket start, callback, send, broadcast and close APIs return
   `hal_status_t`; broadcast helpers report the sent-client count through an
   optional output pointer.
-- Added host coverage in `test_hal_websocket` and `examples/49_websocket` for
+- Added host coverage in `test_hal_websocket` and `examples/18_freertos_suite` for
   a Pico W style HTTP page with a live WebSocket telemetry/echo channel.
 
 ### Net console
@@ -1001,7 +1061,7 @@ All notable changes to this project will be documented in this file.
   path and is additionally mirrored to authenticated TCP clients.
 - Added bidirectional command input through a line callback and polling RX API,
   per-client/broadcast write helpers using `hal_status_t`, host coverage in
-  `test_hal_net_console` and `examples/50_net_console`.
+  `test_hal_net_console` and `examples/18_freertos_suite`.
 
 ### Network commands
 
@@ -1012,7 +1072,7 @@ All notable changes to this project will be documented in this file.
   response helpers returning `hal_status_t`.
 - Added HTTP route and WebSocket message helpers, structured default success
   and error responses, host coverage in `test_hal_net_commands` and
-  `examples/51_net_commands`.
+  `examples/18_freertos_suite`.
 
 ### HAL status codes
 
@@ -1039,7 +1099,7 @@ All notable changes to this project will be documented in this file.
 - Ported the MFRC522-spi-i2c-uart-async / Miguel Balboa protocol logic to
   JaszczurHAL SPI, I2C, GPIO, timing and mutex primitives, with
   `StatusCodeToHalStatus()` mapping driver outcomes to `hal_status_t`.
-- Added `examples/46_mfrc522_rfid`, module/API docs and host coverage in
+- Added `examples/22_rfid_nfc`, module/API docs and host coverage in
   `test_mfrc522_driver`; removed the old imported driver folder.
 
 ### PN532 - shared NFC/RFID reader driver
@@ -1050,7 +1110,7 @@ All notable changes to this project will be documented in this file.
 - Ported the Adafruit_PN532 command framing, ACK handling and core card
   commands to JaszczurHAL SPI/I2C/UART transports, GPIO, timing and mutex
   primitives, returning `hal_status_t` from the new API surface.
-- Added `examples/47_pn532_nfc`, API/docs entries and host coverage in
+- Added `examples/22_rfid_nfc`, API/docs entries and host coverage in
   `test_pn532_driver`; removed the old imported Adafruit_PN532 driver folder.
 
 ### RP2040 backend - native Pico SDK migration
@@ -1060,7 +1120,7 @@ All notable changes to this project will be documented in this file.
 - Moved `hal_swserial` to a shared HAL GPIO/timing/sync implementation used by
   RP2040, STM32G474 and mock builds. The driver preserves the Serial-over-PIO
   frame handling model, adds per-instance locking, critical-section-protected
-  bit timing, host coverage for GPIO framing, and `examples/45_swserial_loopback`.
+  bit timing, host coverage for GPIO framing, and `examples/05_serial_gps`.
 - Migrated `hal_system` to direct Pico SDK primitives: `hal_millis()`
   now uses `to_ms_since_boot(get_absolute_time())`, `hal_micros()`/
   `hal_micros64()` use `time_us_64()`, and `hal_delay_ms()` selects pico
@@ -1104,7 +1164,7 @@ All notable changes to this project will be documented in this file.
 - Added host coverage in `test_hal_dht` for successful frames, checksum
   failures, response failures, cached sample getters and critical-section
   restoration.
-- Added `examples/43_dht_temperature_humidity`, feature/API docs, module flag
+- Added `examples/04_sensor_hub`, feature/API docs, module flag
   docs and credits; removed the old RP2040-local Bonezegei DHT driver folders.
 
 ### hal_dacless - shared DACless PWM-audio driver
@@ -1126,7 +1186,7 @@ All notable changes to this project will be documented in this file.
   DMA-driven default operation plus `cfg.useDma=false` cooperative `service()`
   processing for normal task/core context, and `hal_pwm_freq_stop()` so
   `mute()` can stop polling PWM output without destroying the channel.
-- Added `examples/44_dacless_audio` plus a polling build variant, API/module
+- Added `examples/17_audio_output` plus a polling build variant, API/module
   docs, README credits and host regression coverage in
   `test_hal_dma_pwm_audio` and `test_dacless_driver`.
 - The shared driver no longer depends on the old RP2040-local
@@ -1256,7 +1316,7 @@ All notable changes to this project will be documented in this file.
   enabled through their define lists and no explicit size is provided.
 - Extracted common STM32G474 flash erase/program helpers so EEPROM/KV and
   LittleFS use the same register-level flash primitive layer.
-- Enabled `examples/16_littlefs` for both RP2040 and STM32G474 and documented
+- Enabled `examples/10_storage` for both RP2040 and STM32G474 and documented
   the STM32 partitioning requirements.
 
 ### build - RP2040 static-library paths
@@ -1283,7 +1343,7 @@ All notable changes to this project will be documented in this file.
   short critical sections for multicore/FreeRTOS-safe access.
 - Added `hal_gpio_detach_interrupt()` for GPIO interrupt users and covered it
   in the mock GPIO tests.
-- Added `examples/34_irsmall_decoder`, module/API docs, origin license context
+- Added `examples/20_irsmall_decoder`, module/API docs, origin license context
   in the shared driver folder and host regression coverage in
   `test_irsmall_decoder_driver`.
 - Removed the old `src/hal/impl/rp2040/drivers/IRsmallDecoder` import after
@@ -1300,7 +1360,7 @@ All notable changes to this project will be documented in this file.
   created through the shared create-once helper for multicore/FreeRTOS-safe
   first use; hardware SPI transactions also lock the HAL SPI bus.
 - Added I2C, hardware-SPI and soft-SPI transport coverage in
-  `test_stmpe610_driver`, plus `examples/33_stmpe610_touch`, module/API docs,
+  `test_stmpe610_driver`, plus `examples/19_touch`, module/API docs,
   and origin license context in the shared driver folder.
 - Removed the old `src/hal/impl/rp2040/drivers/Adafruit_STMPE610` import after
   moving the driver behavior into the shared HAL implementation.
@@ -1322,7 +1382,7 @@ All notable changes to this project will be documented in this file.
   row-offset defaults, display/cursor/blink/autoscroll commands, CGRAM writes,
   and command settle delays.
 - Added `src/hal/hal_hd44780.h`, module flag docs, API docs,
-  `examples/31_hd44780`, and host regression coverage in
+  `examples/15_display_oled_lcd`, and host regression coverage in
   `test_hd44780_driver`.
 - Public driver calls now serialize each display instance with a HAL mutex so
   multicore/FreeRTOS tasks cannot interleave command/data GPIO sequences.
@@ -1341,7 +1401,7 @@ All notable changes to this project will be documented in this file.
 - Public driver calls serialize each controller instance with a HAL mutex
   created through the shared create-once helper for multicore/FreeRTOS-safe
   first use.
-- Added `examples/32_tsc2007_touch`, module/API docs, origin license context in
+- Added `examples/19_touch`, module/API docs, origin license context in
   the shared driver folder and host regression coverage in
   `test_tsc2007_driver`.
 - Removed the old `src/hal/impl/rp2040/drivers/Adafruit_TSC2007` import after
@@ -1357,7 +1417,7 @@ All notable changes to this project will be documented in this file.
 - Added `hal_i2c_read_bytes()` / `_bus()` for direct sensor reads without a
   preceding register-pointer write, keeping request and sample copy inside the
   I2C bus mutex.
-- Added `examples/30_bh1750_light`, API/flag/example documentation, and host
+- Added `examples/04_sensor_hub`, API/flag/example documentation, and host
   regression coverage in `test_bh1750_driver` plus `test_hal_i2c`.
 - Removed the old `src/hal/impl/rp2040/drivers/ArtronShop_BH1750` import after
   moving the driver behavior into the shared HAL implementation.
@@ -1446,7 +1506,7 @@ All notable changes to this project will be documented in this file.
   8 bytes, and payload staging is safe for short or null buffers.
 - Fixed shared MCP9600 ambient-resolution handling to match the datasheet
   `DEVICE_CONFIG` bit 7 definition while preserving ADC-resolution bits.
-- Simplified `examples/01_blink` to use `LED_BUILTIN`, keeping the example on
+- Simplified `examples/01_core_runtime` to use `LED_BUILTIN`, keeping the example on
   the target abstraction instead of a local per-board pin override.
 - Normalized the final `runalltests.sh` summary label to the current
   `RP2040 + STM32G474` target naming.
@@ -1462,7 +1522,7 @@ All notable changes to this project will be documented in this file.
   `src/hal/impl/shared/drivers/pga2311/pga2311_driver.{h,cpp}` using HAL SPI/GPIO.
 - Added gain conversion helpers (dB and half-dB to raw code), raw-code writes,
   optional hardware-mute pin support, and software mute emulation fallback.
-- Added `examples/28_pga2311` demonstrating portable PGA2311 usage on RP2040
+- Added `examples/17_audio_output` demonstrating portable PGA2311 usage on RP2040
   and STM32G474 (SPI init, gain stepping, mute/unmute flow).
 - Wired module integration across umbrella/config/build paths:
   `hal/hal.h`, `hal_config.h`, root/test/target CMake files,
@@ -1501,7 +1561,7 @@ All notable changes to this project will be documented in this file.
 - Added a new STM32G474 `hal_rgb_led` backend using the same shared core with
   cycle-timed GPIO bitstream output, so `HAL_ENABLE_RGB_LED` now works on both
   RP2040 and STM32G474.
-- Enabled `examples/18_rgb_led` for STM32G474 in addition to RP2040.
+- Enabled `examples/23_io_pmic` for STM32G474 in addition to RP2040.
 - Removed the obsolete `drivers/Adafruit_NeoPixel` folder.
 - Moved NeoPixel attribution and license notice from README dependency list to
   the shared driver code/location (`impl/shared/drivers/neopixel/`).
@@ -1511,7 +1571,8 @@ All notable changes to this project will be documented in this file.
 - Ported the bundled DS3231 real-time clock driver to a shared HAL driver under `src/hal/impl/shared/drivers/ds3231/`.
 - The shared `ds3231.{h,cpp}` implementation preserves the original public class/API shape while using JaszczurHAL I2C primitives.
 - RP2040 and STM32G474 `hal_rtc` wrappers now use the shared DS3231 driver, so both targets can select `HAL_ENABLE_DS3231` through the same code path.
-- Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and a dedicated `examples/27_rtc_ds3231` sample.
+- Added a new `hal_rtc_get_temperature()` API for DS3231 temperature reads and
+  corresponding coverage in `examples/16_rtc_backends`.
 - Removed the vendored DS3231 driver from `src/hal/impl/rp2040/drivers/DS3231/`.
 
 ### hal_rtc - shared portable PCF8563 driver
@@ -1522,7 +1583,8 @@ All notable changes to this project will be documented in this file.
 - **STM32G474 now has full RTC support for the first time** through a new `impl/stm32g474/hal_rtc.cpp` backend using the same shared PCF8563 driver, enabling `HAL_ENABLE_RTC` and `HAL_ENABLE_PCF8563` on the STM32 platform.
 - All RTC functionality is preserved: date/time read/write, clock integrity check, alarms (minute/hour/day/weekday-independent matching), countdown timer (1/60Hz to 4096Hz), and CLKOUT output (disabled, 1Hz, 32Hz, 1024Hz, 32768Hz).
 - Removed the vendored PCF8563 driver from `src/hal/impl/rp2040/drivers/PCF8563/`.
-- Added `examples/26_rtc_clock` demonstrating portable RTC usage on both RP2040 and STM32G474.
+- Added `examples/16_rtc_backends` demonstrating portable RTC usage on both
+  RP2040 and STM32G474.
 - Documented that RTC support is complete for STM32G474.
 - Full test suite and both target static-library builds pass with no warnings.
 
@@ -1553,8 +1615,8 @@ All notable changes to this project will be documented in this file.
   shared `jh_gfx.cpp` and renamed `test_jh_gfx_geometry`; no platform stubs
   required. Added `test_ssd1306_driver` alongside the existing
   `test_ili9341_driver` and `test_st77xx_driver`.
-- Example `09_display_tft` now targets both RP2040 and STM32G474; added
-  `25_display_oled` (SSD1306) targeting both backends.
+- Example `07_display_media` now targets both RP2040 and STM32G474; added
+  `15_display_oled_lcd` (SSD1306) targeting both backends.
 - Removed the obsolete display-platform test stubs.
 
 ### hal_can - shared HAL-only MCP2515 driver
@@ -1569,7 +1631,7 @@ All notable changes to this project will be documented in this file.
 - Added `test_mcp2515_driver` smoke coverage on the mock backend to verify the
   shared driver performs MCP2515 reset/config traffic through HAL SPI and
   configures the chip-select pin through HAL GPIO.
-- Added `examples/24_can_mcp2515` for RP2040 and STM32G474.
+- Added `examples/14_can_mcp2515` for RP2040 and STM32G474.
 - Removed the obsolete `drivers/MCP2515` folder. Upstream attribution
   and LGPL notice now live in the shared driver folder instead of README.
 - Confirmed the migration with a clean full local quality-gate run: host tests,
@@ -1601,7 +1663,7 @@ All notable changes to this project will be documented in this file.
   deadline scheduling and cached fresh-sample semantics.
 - Added public `hal_onewire_crc16()` and `hal_onewire_check_crc16()` helpers,
   with host test coverage in `test_hal_onewire`.
-- Enabled `examples/06_ds18b20` for STM32G474 as well as RP2040.
+- Enabled `examples/04_sensor_hub` for STM32G474 as well as RP2040.
 - Removed obsolete `drivers/OneWire`, `drivers/DallasTemperature`,
   `impl/rp2040/hal_onewire.cpp` and `impl/rp2040/hal_ds18b20.cpp`. Upstream
   OneWire attribution and MIT notice now live in the shared driver source
@@ -1622,7 +1684,7 @@ All notable changes to this project will be documented in this file.
   reads.
 - Added `test_ads1x15_driver` coverage for register config writes, readback,
   ADS1015 shifting, comparator threshold endianness and I2C clock forwarding.
-- Added `examples/23_external_adc_ads1115` for RP2040 and STM32G474.
+- Added `examples/13_adc` for RP2040 and STM32G474.
 - Removed the obsolete `drivers/ADS1X15` folder. The MIT notice and
   upstream attribution now live in the shared driver source instead of
   README/docs dependency inventories.
@@ -1702,7 +1764,7 @@ All notable changes to this project will be documented in this file.
   `#if defined(__arm__) || defined(__thumb__)` (matched RP2040 too, causing
   multiple-definition linker errors) to
   `#if defined(HAL_TARGET_STM32G474) || defined(STM32G474xx) || defined(STM32G4)`.
-- Fixed `examples/09_display_tft`: renamed `app.c` -> `app.cpp` because it calls
+- Fixed `examples/07_display_media`: renamed `app.c` -> `app.cpp` because it calls
   the C++ function `draw7SegString` (C++ linkage mismatch caused undefined
   reference on RP2040).
 - Added `examples/README.md` documenting the build system, requirements,
@@ -1731,7 +1793,7 @@ All notable changes to this project will be documented in this file.
   opt-in `hal_sdlogger` module (`HAL_ENABLE_SDLOGGER`). The shared FatFs
   implementation now lives under `impl/shared/frameworks/filesystem/`, with a
   deterministic mock backend and `test_hal_sdlogger` coverage.
-- Added `examples/39_sdlogger` for RP2040 and STM32G474, demonstrating SPI SD
+- Added `examples/10_storage` for RP2040 and STM32G474, demonstrating SPI SD
   card setup, EEPROM-backed log/crash counters and FatFs 8.3 log filenames.
 - `tools` declarations no longer expose platform-specific public types such as
   `String`, `File`, or `SPISettings`; the remaining utilities use portable C
@@ -1755,7 +1817,7 @@ All notable changes to this project will be documented in this file.
   SoftwareSerial), and the 8N1<->7N1 auto-detect is preserved.
 - `HAL_ENABLE_GPS` no longer auto-enables SoftwareSerial. It now requires a
   transport - `HAL_ENABLE_SWSERIAL` **or** `HAL_ENABLE_UART` - enforced by a
-  compile-time `#error` (the `07_gps` example config gained `HAL_ENABLE_SWSERIAL`).
+  compile-time `#error` (the `05_serial_gps` project covers software serial).
 - Extended API (additive, existing getters unchanged): `hal_gps_altitude_m`,
   `hal_gps_course_deg`, `hal_gps_satellites_used`, `hal_gps_satellites_in_view`
   (summed across GP/GL/GA/GB), `hal_gps_hdop` / `hal_gps_vdop` / `hal_gps_pdop`,

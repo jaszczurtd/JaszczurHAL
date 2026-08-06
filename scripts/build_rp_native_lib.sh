@@ -35,6 +35,7 @@ Options:
   --picotool-build-dir PATH
                            picotool build directory below .build/
   --example NAME           Build examples/NAME through the native app entry
+  --example-source FILE    Select one source from the example (repeatable)
   --freertos               Enable the pinned native FreeRTOS SMP kernel
   -p, --project-config DIR Directory containing hal_project_config.h
   -D KEY=VALUE             Extra HAL compile definition (repeatable)
@@ -54,6 +55,7 @@ TOOLCHAIN_DIR=""
 PICOTOOL_DIR="${REPO_ROOT}/third_party/picotool"
 PICOTOOL_BUILD_DIR="${JH_PICOTOOL_BUILD_DIR:-${REPO_ROOT}/.build/tools/picotool}"
 EXAMPLE=""
+EXAMPLE_SOURCES=()
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 FREERTOS=0
@@ -71,6 +73,7 @@ while [[ $# -gt 0 ]]; do
         --picotool-dir) PICOTOOL_DIR="$2"; shift 2 ;;
         --picotool-build-dir) PICOTOOL_BUILD_DIR="$2"; shift 2 ;;
         --example) EXAMPLE="$2"; shift 2 ;;
+        --example-source) EXAMPLE_SOURCES+=("$2"); shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
@@ -80,6 +83,17 @@ while [[ $# -gt 0 ]]; do
         -h|--help) usage; exit 0 ;;
         *) die "Unknown option: $1" ;;
     esac
+done
+
+for definition in "${EXTRA_DEFS[@]}"; do
+    normalized="${definition#-D}"
+    if [[ "${normalized}" == *'$<'* ]]; then
+        die "[JH-CFG-VALUE] ${definition} is unsupported; generator expressions are not accepted"
+    fi
+    if [[ "${normalized}" == *HAL_ENABLE_* ]] &&
+       [[ ! "${normalized}" =~ ^HAL_ENABLE_[A-Z0-9_]+(=1)?$ ]]; then
+        die "[JH-CFG-VALUE] ${definition} is unsupported; use a standalone bare symbol or an explicit value of 1"
+    fi
 done
 
 if [[ -z "${TARGET}" ]]; then
@@ -145,6 +159,15 @@ if [[ -n "${EXAMPLE}" ]]; then
         die "--example uses its own hal_project_config.h; remove -p or select ${APP_DIR}"
     fi
 fi
+if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
+    [[ -n "${APP_DIR}" ]] || die "--example-source requires --example"
+    for source in "${EXAMPLE_SOURCES[@]}"; do
+        if [[ -z "${source}" || "${source}" == */* || "${source}" == "." ||
+              "${source}" == ".." || ! -f "${APP_DIR}/${source}" ]]; then
+            die "Example source must be a file directly under ${APP_DIR}: ${source}"
+        fi
+    done
+fi
 
 case "${OUTPUT_DIR}" in
     /|"${REPO_ROOT}"|"$(dirname "${REPO_ROOT}")")
@@ -193,6 +216,10 @@ if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
 fi
 if [[ -n "${APP_DIR}" ]]; then
     CMAKE_ARGS+=("-DJH_RP_NATIVE_APP_DIR=${APP_DIR}")
+fi
+if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
+    joined_sources="$(IFS=';'; echo "${EXAMPLE_SOURCES[*]}")"
+    CMAKE_ARGS+=("-DJH_RP_NATIVE_APP_SOURCES=${joined_sources}")
 fi
 if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
     joined="$(IFS=';'; echo "${EXTRA_DEFS[*]}")"

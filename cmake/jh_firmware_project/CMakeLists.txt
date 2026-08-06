@@ -43,13 +43,16 @@ if(NOT EXISTS "${JH_ROOT}/src/JaszczurHAL.h")
 endif()
 
 include("${JH_ROOT}/cmake/jh_project_features.cmake")
+jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
+list(APPEND JH_EXTRA_DEFINES ${_jh_cmake_feature_defines})
+jh_normalize_feature_defines(JH_EXTRA_DEFINES ${JH_EXTRA_DEFINES})
 jh_collect_project_feature_defines(
     _jh_project_feature_defines "${JH_PROJECT_DIR}")
-set(_jh_project_config_file "${JH_PROJECT_DIR}/hal_project_config.h")
-if(EXISTS "${_jh_project_config_file}")
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-        "${_jh_project_config_file}")
-endif()
+jh_resolve_feature_defines(
+    JH_REQUESTED_FEATURES
+    JH_RESOLVED_FEATURES
+    ${JH_EXTRA_DEFINES}
+    ${_jh_project_feature_defines})
 
 set(_jh_requested_pico_platform "")
 set(_jh_requested_pico_board "")
@@ -68,7 +71,9 @@ jh_generate_board_config(
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
     OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
-    DEFINES ${JH_EXTRA_DEFINES} ${_jh_project_feature_defines})
+    DEFINES ${JH_EXTRA_DEFINES} ${_jh_project_feature_defines}
+    REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
+    RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
     "Resolved physical board profile" FORCE)
 
@@ -169,6 +174,9 @@ file(MAKE_DIRECTORY "${JH_ARTIFACT_DIR}")
 message(STATUS
     "jh-firmware: target=${JH_TARGET} board=${JH_BOARD} module=${JH_MODULE_NAME} "
     "artifacts=${JH_ARTIFACT_DIR}")
+message(STATUS
+    "jh-firmware: requestedFeatures=${JH_REQUESTED_FEATURES} "
+    "resolvedFeatures=${JH_RESOLVED_FEATURES}")
 
 function(jh_resolve_project_sources OUT_VAR)
     set(_sources "")

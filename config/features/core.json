@@ -1,0 +1,30 @@
+{
+  "$schema": "../features.schema.json",
+  "schemaVersion": 1,
+  "domain": "core",
+  "symbols": {
+    "HAL_DISABLE_ASSERTS": {},
+    "HAL_ENABLE_APP_TASK1": {},
+    "HAL_ENABLE_CJSON": {},
+    "HAL_ENABLE_CRC": {},
+    "HAL_ENABLE_CRYPTO": {},
+    "HAL_ENABLE_DAC": {},
+    "HAL_ENABLE_DACLESS": {
+      "implies": ["HAL_ENABLE_DMA_PWM_AUDIO", "HAL_ENABLE_PWM_FREQ"]
+    },
+    "HAL_ENABLE_DMA_PWM_AUDIO": {},
+    "HAL_ENABLE_FREERTOS": {},
+    "HAL_ENABLE_JPEG": {},
+    "HAL_ENABLE_JPEG_AS_BASE64": {
+      "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_JPEG"]
+    },
+    "HAL_ENABLE_PCNT": {},
+    "HAL_ENABLE_PNG": {},
+    "HAL_ENABLE_PNG_AS_BASE64": {
+      "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_PNG"]
+    },
+    "HAL_ENABLE_PWM_FREQ": {},
+    "HAL_ENABLE_RGB_LED": {},
+    "HAL_ENABLE_UNITY": {}
+  }
+}

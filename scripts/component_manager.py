@@ -1192,14 +1192,50 @@ def ensure_windows_tools(
 def _component_enabled(name: str, arguments: argparse.Namespace) -> bool:
     if name not in ("freertos", "pico-sdk", "picotool", "riscv-toolchain"):
         return True
-    if arguments.force or arguments.verify_only or arguments.enable:
-        return True
     if name == "freertos":
-        definitions = re.split(r"[;,\s]+", os.environ.get("EXTRA_HAL_DEFINES", ""))
-        return bool(os.environ.get("HAL_ENABLE_FREERTOS")) or any(
-            item == "HAL_ENABLE_FREERTOS" or item.startswith("HAL_ENABLE_FREERTOS=")
+        raw_definitions = os.environ.get("EXTRA_HAL_DEFINES", "")
+        definitions = [
+            item.strip()
+            for item in raw_definitions.split(";")
+            if item.strip()
+        ]
+        for definition in definitions:
+            normalized = definition.removeprefix("-D")
+            if "$<" in normalized:
+                raise ComponentError(
+                    f"[JH-CFG-VALUE] {normalized} is unsupported; "
+                    "generator expressions are not accepted"
+                )
+            if "HAL_ENABLE_" not in normalized:
+                continue
+            if re.fullmatch(r"HAL_ENABLE_[A-Z0-9_]+(?:=1)?", normalized):
+                continue
+            if "HAL_ENABLE_" in normalized:
+                raise ComponentError(
+                    f"[JH-CFG-VALUE] {normalized} is unsupported; "
+                    "use a standalone bare symbol or an explicit value of 1"
+                )
+
+        environment_value = os.environ.get("HAL_ENABLE_FREERTOS")
+        if environment_value not in (None, "", "1"):
+            raise ComponentError(
+                "[JH-CFG-VALUE] HAL_ENABLE_FREERTOS="
+                f"{environment_value} is unsupported; omit the environment "
+                "variable to disable it"
+            )
+        requested = environment_value == "1" or any(
+            item.removeprefix("-D")
+            in {"HAL_ENABLE_FREERTOS", "HAL_ENABLE_FREERTOS=1"}
             for item in definitions
         )
+        return (
+            arguments.force
+            or arguments.verify_only
+            or arguments.enable
+            or requested
+        )
+    if arguments.force or arguments.verify_only or arguments.enable:
+        return True
     environment = {
         "pico-sdk": "JH_ENABLE_PICO_SDK",
         "picotool": "JH_ENABLE_PICOTOOL",

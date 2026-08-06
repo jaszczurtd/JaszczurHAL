@@ -8,7 +8,7 @@ confirmation, rollback, recovery, and security boundaries.
 The general dispatcher-backed project model remains in
 [Firmware Project Workflow](FwProjectWorkflow.md). The public API is documented
 under [`hal_ota`](api/15_connectivity.md), and the reference implementation is
-[`examples/57_ota`](../examples/57_ota/README.md).
+[`examples/25_ota`](../examples/25_ota/README.md).
 
 ## Support Matrix And Workflow
 

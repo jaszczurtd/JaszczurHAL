@@ -1,0 +1,99 @@
+{
+  "$schema": "../features.schema.json",
+  "schemaVersion": 1,
+  "domain": "connectivity",
+  "symbols": {
+    "HAL_ENABLE_A7670": {
+      "implies": ["HAL_ENABLE_CELLULAR_MODEM", "HAL_ENABLE_UART"]
+    },
+    "HAL_ENABLE_BLE": {},
+    "HAL_ENABLE_BLE_STREAM": {
+      "implies": ["HAL_ENABLE_BLE", "HAL_ENABLE_CRYPTO"]
+    },
+    "HAL_ENABLE_BSD_SOCKETS": {
+      "implies": [
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_UDP"
+      ]
+    },
+    "HAL_ENABLE_CELLULAR_MODEM": {},
+    "HAL_ENABLE_HTTP_CLIENT": {
+      "implies": ["HAL_ENABLE_TCP"]
+    },
+    "HAL_ENABLE_HTTP_FILES": {
+      "implies": [
+        "HAL_ENABLE_HTTP_SERVER",
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    "HAL_ENABLE_HTTP_SERVER": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
+    },
+    "HAL_ENABLE_MQTT": {
+      "implies": [
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    "HAL_ENABLE_NETWORK_CORE": {
+      "kind": "derived",
+      "note": "Shared network core selected by public connectivity features."
+    },
+    "HAL_ENABLE_NET_COMMANDS": {
+      "implies": [
+        "HAL_ENABLE_CJSON",
+        "HAL_ENABLE_HTTP_SERVER",
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_WEBSOCKET",
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    "HAL_ENABLE_NET_CONSOLE": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
+    },
+    "HAL_ENABLE_OTA": {
+      "implies": [
+        "HAL_ENABLE_CRC",
+        "HAL_ENABLE_CRYPTO",
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_UDP",
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    "HAL_ENABLE_TCP": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_WIFI"]
+    },
+    "HAL_ENABLE_TIME": {
+      "implies": [
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_UDP",
+        "HAL_ENABLE_WIFI"
+      ]
+    },
+    "HAL_ENABLE_TLS": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
+    },
+    "HAL_ENABLE_UDP": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_WIFI"]
+    },
+    "HAL_ENABLE_WEBSOCKET": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
+    },
+    "HAL_ENABLE_WIFI": {
+      "implies": ["HAL_ENABLE_NETWORK_CORE"]
+    },
+    "HAL_ENABLE_WIREGUARD": {
+      "implies": [
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_UDP",
+        "HAL_ENABLE_WIFI"
+      ]
+    }
+  }
+}

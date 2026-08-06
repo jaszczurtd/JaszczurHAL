@@ -1,4 +1,15 @@
+#if defined(JH_PROBE_UMBRELLA)
+#include "JaszczurHAL.h"
+#elif defined(JH_PROBE_HAL_CONFIG)
+#include "hal/hal_config.h"
+#elif defined(JH_PROBE_FORCED_TARGET)
+#include "hal/hal_board.h"
+#else
 #include "hal/hal_target.h"
+#if defined(JH_EXPECT_BOARD_ID)
+#include "hal/hal_board.h"
+#endif
+#endif
 
 #ifndef JH_EXPECT_RP2040
 #define JH_EXPECT_RP2040 0
@@ -32,6 +43,13 @@ static_assert(HAL_TARGET_IS_MOCK == JH_EXPECT_MOCK);
 static_assert(HAL_TARGET_IS_RP == JH_EXPECT_RP);
 static_assert(HAL_RP_ARCH_ARM == JH_EXPECT_ARM);
 static_assert(HAL_RP_ARCH_RISCV == JH_EXPECT_RISCV);
+#if defined(JH_EXPECT_BOARD_ID)
+static_assert(HAL_BOARD_PROFILE_ID == JH_EXPECT_BOARD_ID);
+#endif
+#if defined(JH_EXPECT_EEPROM_TYPE)
+static_assert(HAL_EEPROM_TYPE == JH_EXPECT_EEPROM_TYPE);
+static_assert(HAL_AT24C256_PAGE_SIZE == 128u);
+#endif
 constexpr bool target_name_is(const char *lhs, const char *rhs) {
   while (*lhs != '\0' && *rhs != '\0') {
     if (*lhs++ != *rhs++) {

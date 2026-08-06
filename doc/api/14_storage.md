@@ -550,7 +550,7 @@ HAL_SDLOGGER_SPI_BUS            0u
   returns `HAL_EOVERFLOW`; `hal_sdlogger_crash_report(NULL)` returns
   `HAL_EINVAL`.
 
-Buildable example: `examples/39_sdlogger`.
+Buildable example: `examples/10_storage`.
 
 **Example: SD card periodic logging**
 ```c

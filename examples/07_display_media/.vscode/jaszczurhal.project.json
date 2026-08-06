@@ -1,0 +1,48 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "07_display_media",
+    "example": {
+        "targets": [
+            "stm32g474",
+            "rp2040",
+            "rp2350-arm",
+            "rp2350-riscv"
+        ],
+        "boards": {
+            "rp2040": "pico",
+            "rp2350-arm": "pico2",
+            "rp2350-riscv": "pico2",
+            "stm32g474": "nucleo-g474re"
+        },
+        "gateTargets": [
+            "stm32g474",
+            "rp2040"
+        ],
+        "covers": [
+            "09_display_tft",
+            "36_lodePNG",
+            "37_lodePNG_ili9341_base64",
+            "40_jpeg",
+            "41_jpeg_ili931_base64"
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "pico",
+    "buildDir": "${jhRoot}/.build/examples/07_display_media",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "07_display_media"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

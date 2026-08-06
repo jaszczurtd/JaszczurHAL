@@ -56,6 +56,98 @@ The generated contract symbol has the form
 libraries, board headers, and feature sets fail during linking. Keep
 `libJaszczurHAL.a` together with the generated headers from the same build.
 
+Production feature resolution distinguishes:
+
+- `requestedFeatures`: direct requests collected from CMake definition inputs
+  and `hal_project_config.h`;
+- `resolvedFeatures`: the sorted transitive registry closure used for source,
+  dependency, and link-contract selection.
+
+The resolved board JSON stores both sets and their full closure digest. Its
+`features` field remains as an alias of `resolvedFeatures`. The 12-character
+`featureHash` is SHA-256 over `hal.profileId` followed by the sorted resolved
+closure, with feature names serialized as `=1`. Redundant direct requests that
+do not change the closure therefore do not change the archive contract. The
+same JSON records `boardCompileDefinitions`; generated CMake exposes them as
+`JH_BOARD_COMPILE_DEFINITIONS`, while `jh_board_config.h` materializes them for
+direct compiler consumers.
+
+Two conditional rules remain outside registry v1: AT24C256 EEPROM can add I2C,
+and GPS can add UART when no serial transport was requested. They remain in
+`hal_config.h` and are outside feature-hash equivalence. Target, board,
+provider, capability, and tunable checks also remain there.
+
+Validate feature inputs strictly before a release build:
+
+```bash
+python3 scripts/generate_hal_features.py --lint --input-root .
+python3 scripts/generate_hal_features.py \
+  --lint --effective --input-root . \
+  --resolution-output .build/effective-feature-resolution.json
+```
+
+Both commands fail when they find an invalid configuration. `--report-only`
+is available for a temporary migration audit, not for the normal quality gate.
+
+## Installed package and direct compiler use
+
+After configuring and building either embedded static-library entry, create a
+complete matching JaszczurHAL installation:
+
+```bash
+cmake --install .build/static/<target>/<board> \
+  --prefix .build/install/<target>/<board>
+```
+
+The relevant installed files are:
+
+```text
+include/
+  JaszczurHAL.h
+  hal/generated/jh_hal_features.h
+  generated/
+    jh_board_config.h
+    jh_board_registry.h
+    jh_link_contract.h
+lib/
+  libJaszczurHAL.a
+share/JaszczurHAL/generated/
+  jh_link_contract_reference.c
+  jh_board_resolved.json
+```
+
+All other public HAL headers are installed under `include/`. Treat this tree as
+one unit. For a direct compiler build, add `include/` and `include/generated/`
+to the include path, compile with the target selector and the direct requests
+recorded in `jh_board_resolved.json`, compile
+`share/JaszczurHAL/generated/jh_link_contract_reference.c`, and link that object
+with `lib/libJaszczurHAL.a`. For example, the command shape is:
+
+```bash
+"${CXX}" <target compile flags> \
+  -I<prefix>/include -I<prefix>/include/generated \
+  -DHAL_TARGET_<TARGET>=1 -D<REQUESTED_FEATURE>=1 \
+  -c app.cpp -o app.o
+"${CC}" <target compile flags> \
+  -I<prefix>/include -I<prefix>/include/generated \
+  -c <prefix>/share/JaszczurHAL/generated/jh_link_contract_reference.c \
+  -o jh_link_contract_reference.o
+"${CXX}" <target link flags> app.o jh_link_contract_reference.o \
+  <prefix>/lib/libJaszczurHAL.a <platform libraries> -o firmware.elf
+```
+
+`hal_config.h` includes the installed generated feature header, so the direct
+compiler receives the same resolved closure without running Python. The
+installed `jh_board_config.h` also provides every board/provider definition
+listed in `jh_board_resolved.json.boardCompileDefinitions`, including radio
+backend, bus, stack, and pin selections. Pass only the target selector and the
+recorded direct feature requests on the command line; do not repeat those
+board-owned definitions with `-D` options. The generated reference uses a
+GCC/Clang `constructor, used` root, so the board/feature contract remains live
+under `--gc-sections` when the supported linker script retains constructor
+arrays. The target SDK, startup objects, linker script, and platform libraries
+remain part of the normal target toolchain contract.
+
 ## Host mock
 
 The repository-root project builds the deterministic mock backend and its test
@@ -83,11 +175,11 @@ From the repository root:
 # RP2040 / Pico
 ./scripts/build_rp_native_lib.sh
 
-# RP2040 / Pico W with an example application
+# RP2040 / Pico with an example application
 ./scripts/build_rp_native_lib.sh \
   --target rp2040 \
-  --board picow \
-  --example 56_http_https_client
+  --board pico \
+  --example 01_core_runtime
 
 # RP2350 ARM
 ./scripts/build_rp_native_lib.sh --target rp2350-arm
@@ -106,6 +198,7 @@ The main options are:
 | `--target NAME` | `rp2040`, `rp2350-arm`, or `rp2350-riscv` |
 | `--board NAME` | Board profile compatible with the selected target |
 | `--example NAME` | Build `examples/NAME` as firmware |
+| `--example-source FILE` | Select one source from a multi-profile example (repeatable) |
 | `--freertos` | Enable the pinned FreeRTOS SMP kernel |
 | `-p`, `--project-config DIR` | Directory containing `hal_project_config.h` |
 | `-D KEY=VALUE` | Additional HAL definition; repeatable |
@@ -135,8 +228,10 @@ the HAL creates affinity-bound tasks and starts the scheduler.
 ### Direct CMake build
 
 The helper prepares pinned dependencies and supplies the cache variables.
-After those dependencies are present, the equivalent basic RP2040
-configuration is:
+When `HAL_ENABLE_FREERTOS` is selected, direct CMake invokes
+`scripts/component_manager.py` to prepare or verify FreeRTOS-Kernel. An
+external `JH_FREERTOS_KERNEL_DIR` is verified and never replaced. After the
+other dependencies are present, the equivalent basic RP2040 configuration is:
 
 ```bash
 cmake -S rp_native_lib -B .build/manual/rp2040-pico \
@@ -150,8 +245,8 @@ cmake --build .build/manual/rp2040-pico --parallel
 For an application directory, add:
 
 ```bash
--DJH_RP_NATIVE_APP_DIR="$PWD/examples/01_blink" \
--DHAL_PROJECT_CONFIG_DIR="$PWD/examples/01_blink"
+-DJH_RP_NATIVE_APP_DIR="$PWD/examples/01_core_runtime" \
+-DHAL_PROJECT_CONFIG_DIR="$PWD/examples/01_core_runtime"
 ```
 
 The application supplies `app_start()`, `app_task0()`, and optionally
@@ -233,11 +328,19 @@ the CMake build tree, so keep the build directory under a `.build` root.
 
 Pass project features through `EXTRA_HAL_DEFINES` or use
 `scripts/build_stm32_lib.sh -D ...`. `HAL_ENABLE_FREERTOS` selects the pinned
-kernel integration. Bare-metal firmware calls the generated HAL application
-entry in a cooperative loop; FreeRTOS firmware uses scheduler-managed tasks.
+kernel integration. Direct CMake invokes `scripts/component_manager.py` to
+prepare or verify the kernel. The shell helper invokes
+`scripts/ensure_freertos_kernel.sh` for `--freertos` or an explicit
+`-D HAL_ENABLE_FREERTOS`; a feature found only in `hal_project_config.h` is
+prepared by the CMake fallback. The wrapper delegates to the same manager. An
+external `JH_FREERTOS_KERNEL_DIR` is verified and never replaced. Bare-metal
+firmware calls the generated HAL application entry in a cooperative loop;
+FreeRTOS firmware uses scheduler-managed tasks.
 
-The firmware link must retain the generated contract object and use the
-matching linker configuration. See
+The firmware link must include the generated contract reference object and use
+the matching linker configuration. Its constructor root keeps the reference
+live when `--gc-sections` is enabled; a missing or mismatched archive therefore
+still fails with the expected undefined contract symbol. See
 [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) for flash, SRAM, persistent
 storage, and OTA reservations.
 

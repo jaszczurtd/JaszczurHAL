@@ -19,6 +19,8 @@
  * aliases.
  */
 
+#include "hal_project_config_hook.h"
+
 /* 1. Auto-detect the exact target when none was selected. */
 #if !defined(HAL_TARGET_RP2040) && !defined(HAL_TARGET_RP2350_ARM) &&          \
     !defined(HAL_TARGET_RP2350_RISCV) && !defined(HAL_TARGET_STM32G474) &&     \

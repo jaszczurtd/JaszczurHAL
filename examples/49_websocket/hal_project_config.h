@@ -1,9 +1,0 @@
-#pragma once
-
-#define HAL_ENABLE_WIFI
-#define HAL_ENABLE_HTTP_SERVER
-#define HAL_ENABLE_WEBSOCKET
-
-#ifndef HAL_DEBUG_BAUD
-#define HAL_DEBUG_BAUD 115200
-#endif

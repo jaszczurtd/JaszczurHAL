@@ -190,6 +190,8 @@ jh_generate_entry_adapter(
 if(NOT _entry_adapter_source OR NOT _entry_adapter_has_core1)
     message(FATAL_ERROR "Core-1 entry adapter fixture was not generated")
 endif()
+jh_validate_entry_adapter_features(
+    "${_entry_adapter_has_core1}" HAL_ENABLE_APP_TASK1)
 
 add_executable(test_jh_entry_adapter
     test_jh_entry_adapter.cpp
@@ -375,6 +377,18 @@ add_test(NAME test_rp_native_build_contract
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_feature_registry
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_registry.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        --cc ${CMAKE_C_COMPILER}
+        --cmake ${CMAKE_COMMAND}
+)
+add_test(NAME test_feature_registry_cmake
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_registry.cmake
+)
 add_test(NAME test_vscode_native_workflow
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_workflow.py

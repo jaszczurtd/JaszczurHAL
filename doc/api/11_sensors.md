@@ -960,7 +960,7 @@ the source driver's behavior.
 **Thread safety:** per-instance mutex serializes reads; I2C transactions use
 the HAL I2C bus lock. Lifecycle calls remain single-owner.
 
-Example: `examples/53_simple_io_chips`.
+Example: `examples/23_io_pmic`.
 
 ---
 

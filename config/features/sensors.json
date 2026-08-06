@@ -1,0 +1,55 @@
+{
+  "$schema": "../features.schema.json",
+  "schemaVersion": 1,
+  "domain": "sensors",
+  "symbols": {
+    "HAL_ENABLE_ADP5360": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_BH1750": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_DHT": {},
+    "HAL_ENABLE_DIGIPOT": {},
+    "HAL_ENABLE_DS18B20": {
+      "implies": ["HAL_ENABLE_ONEWIRE"]
+    },
+    "HAL_ENABLE_DS3231": {
+      "implies": ["HAL_ENABLE_I2C", "HAL_ENABLE_RTC"]
+    },
+    "HAL_ENABLE_EXTERNAL_ADC": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_GPS": {},
+    "HAL_ENABLE_IRSMALL_DECODER": {},
+    "HAL_ENABLE_MAX5395": {
+      "implies": ["HAL_ENABLE_DIGIPOT", "HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_MAX6675": {
+      "implies": ["HAL_ENABLE_THERMOCOUPLE"]
+    },
+    "HAL_ENABLE_MCP3221": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_MCP401X": {
+      "implies": ["HAL_ENABLE_DIGIPOT", "HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_MCP9600": {
+      "implies": ["HAL_ENABLE_I2C", "HAL_ENABLE_THERMOCOUPLE"]
+    },
+    "HAL_ENABLE_ONEWIRE": {
+      "implies": ["HAL_ENABLE_CRC"]
+    },
+    "HAL_ENABLE_PCF8563": {
+      "implies": ["HAL_ENABLE_I2C", "HAL_ENABLE_RTC"]
+    },
+    "HAL_ENABLE_RTC": {},
+    "HAL_ENABLE_STMPE610": {
+      "implies": ["HAL_ENABLE_I2C", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_THERMOCOUPLE": {},
+    "HAL_ENABLE_TSC2007": {
+      "implies": ["HAL_ENABLE_I2C"]
+    }
+  }
+}

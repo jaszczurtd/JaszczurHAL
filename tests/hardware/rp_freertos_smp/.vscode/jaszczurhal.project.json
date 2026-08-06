@@ -12,8 +12,7 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "rp_freertos_smp",
-            "JH_EXTRA_DEFINES": "HAL_ENABLE_FREERTOS;HAL_ENABLE_APP_TASK1"
+            "JH_MODULE_NAME": "rp_freertos_smp"
         }
     },
     "artifacts": {

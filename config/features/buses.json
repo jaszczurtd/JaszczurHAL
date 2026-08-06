@@ -1,0 +1,46 @@
+{
+  "$schema": "../features.schema.json",
+  "schemaVersion": 1,
+  "domain": "buses",
+  "symbols": {
+    "HAL_ENABLE_CAN": {},
+    "HAL_ENABLE_HC595": {
+      "implies": ["HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_I2C": {},
+    "HAL_ENABLE_I2C_SLAVE": {},
+    "HAL_ENABLE_MCP23017": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_MCP2515": {
+      "implies": ["HAL_ENABLE_CAN", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_MCP251XFD": {
+      "implies": ["HAL_ENABLE_CAN", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_MCP4725": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_MFRC522": {
+      "implies": ["HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_PCA9654E": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_PCF8574": {
+      "implies": ["HAL_ENABLE_I2C"]
+    },
+    "HAL_ENABLE_PGA2311": {
+      "implies": ["HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_PN532": {
+      "implies": ["HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_SPI": {},
+    "HAL_ENABLE_STM32G474_FDCAN": {
+      "implies": ["HAL_ENABLE_CAN"]
+    },
+    "HAL_ENABLE_SWSERIAL": {},
+    "HAL_ENABLE_UART": {}
+  }
+}

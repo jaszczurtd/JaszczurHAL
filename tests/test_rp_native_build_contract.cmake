@@ -13,7 +13,7 @@ set(_board_generator "${JH_ROOT}/scripts/generate_board_config.py")
 set(_board_cmake "${JH_ROOT}/cmake/jh_board_profiles.cmake")
 set(_sources "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 set(_app_entry "${JH_ROOT}/src/hal_app_entry.cpp")
-set(_blink "${JH_ROOT}/examples/01_blink/app.c")
+set(_core_runtime "${JH_ROOT}/examples/01_core_runtime/app.cpp")
 set(_usb_header "${JH_ROOT}/src/hal/hal_usb.h")
 set(_usb_impl "${JH_ROOT}/src/hal/impl/rp2040/hal_usb.cpp")
 set(_flash_engine_header
@@ -66,7 +66,7 @@ foreach(_file IN ITEMS
         "${_cmake}" "${_native_common}" "${_dispatcher}" "${_native_recipe}"
         "${_probe}" "${_core1_probe}" "${_script}" "${_board_generator}"
         "${_board_cmake}" "${_sources}"
-        "${_app_entry}" "${_blink}" "${_usb_header}"
+        "${_app_entry}" "${_core_runtime}" "${_usb_header}"
         "${_usb_impl}" "${_flash_engine_header}" "${_flash_engine}"
         "${_flash_header}" "${_flash_impl}" "${_flash_storage_header}"
         "${_flash_storage}" "${_flash_runtime}" "${_rp_eeprom}"
@@ -93,7 +93,7 @@ file(READ "${_board_generator}" _board_generator_text)
 file(READ "${_board_cmake}" _board_cmake_text)
 file(READ "${_sources}" _sources_text)
 file(READ "${_app_entry}" _app_entry_text)
-file(READ "${_blink}" _blink_text)
+file(READ "${_core_runtime}" _core_runtime_text)
 file(READ "${_usb_header}" _usb_header_text)
 file(READ "${_usb_impl}" _usb_impl_text)
 file(READ "${_flash_engine_header}" _flash_engine_header_text)
@@ -554,6 +554,7 @@ foreach(_cmake_contract IN ITEMS
         "CUSTOM_ENTRY"
         "HAL_PROVIDE_APP_ENTRY=1"
         "JH_RP_NATIVE_APP_DIR"
+        "JH_RP_NATIVE_APP_SOURCES"
         "jh_generate_board_config"
         "jh_apply_board_components"
         "JH_BOARD"
@@ -605,6 +606,7 @@ endforeach()
 
 foreach(_script_contract IN ITEMS
         "--example"
+        "--example-source"
         "examples/"
         "jh_rp_native_core1_probe"
         "jh_rp_native_firmware")
@@ -623,11 +625,13 @@ foreach(_core1_contract IN ITEMS app_start app_task0 app_task1)
     endif()
 endforeach()
 
-foreach(_blink_contract IN ITEMS app_start app_task0 HAL_LED_BUILTIN)
-    string(FIND "${_blink_text}" "${_blink_contract}" _blink_at)
-    if(_blink_at EQUAL -1)
+foreach(_core_runtime_contract IN ITEMS app_start app_task0 HAL_LED_BUILTIN)
+    string(FIND "${_core_runtime_text}" "${_core_runtime_contract}"
+        _core_runtime_at)
+    if(_core_runtime_at EQUAL -1)
         message(FATAL_ERROR
-            "Portable blink example is missing: ${_blink_contract}")
+            "Portable core runtime example is missing: "
+            "${_core_runtime_contract}")
     endif()
 endforeach()
 

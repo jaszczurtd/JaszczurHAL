@@ -6,11 +6,39 @@ set(JH_FREERTOS_KERNEL_DIR
     "${JH_ROOT}/third_party/FreeRTOS-Kernel" CACHE PATH
     "Path to the pinned FreeRTOS-Kernel checkout used by native RP builds")
 
+function(jh_ensure_rp_freertos_kernel)
+    get_property(_already_ensured GLOBAL PROPERTY JH_RP_FREERTOS_KERNEL_ENSURED)
+    if(_already_ensured)
+        return()
+    endif()
+
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(_helper "${JH_ROOT}/scripts/component_manager.py")
+    if(NOT EXISTS "${_helper}")
+        message(FATAL_ERROR "Missing FreeRTOS dependency helper: ${_helper}")
+    endif()
+
+    set(_ensure_args component freertos --enable --repo-root "${JH_ROOT}")
+    if(NOT "${JH_FREERTOS_KERNEL_DIR}" STREQUAL
+       "${JH_ROOT}/third_party/FreeRTOS-Kernel")
+        list(APPEND _ensure_args --kernel-dir "${JH_FREERTOS_KERNEL_DIR}")
+    endif()
+    execute_process(
+        COMMAND "${Python3_EXECUTABLE}" "${_helper}" ${_ensure_args}
+        RESULT_VARIABLE _ensure_result)
+    if(NOT _ensure_result EQUAL 0)
+        message(FATAL_ERROR "Failed to prepare FreeRTOS-Kernel for native RP")
+    endif()
+    set_property(GLOBAL PROPERTY JH_RP_FREERTOS_KERNEL_ENSURED TRUE)
+endfunction()
+
 function(jh_rp_enable_freertos TARGET_NAME)
     if(NOT TARGET "${TARGET_NAME}")
         message(FATAL_ERROR
             "jh_rp_enable_freertos: target '${TARGET_NAME}' does not exist")
     endif()
+
+    jh_ensure_rp_freertos_kernel()
 
     if(PICO_PLATFORM STREQUAL "rp2040")
         set(_port_dir

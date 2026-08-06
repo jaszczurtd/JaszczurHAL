@@ -3,17 +3,27 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr
+import io
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 
 ROOT = Path(sys.argv[1]).resolve()
 ENTRY = ROOT / "vscode" / "entry" / (
     "jh-vscode.cmd" if sys.platform == "win32" else "jh-vscode"
 )
+CORE_RUNTIME = ROOT / "examples" / "01_core_runtime"
+FREERTOS_SUITE = ROOT / "examples" / "18_freertos_suite"
+
+sys.path.insert(0, str(ROOT / "scripts"))
+import examples_dispatcher
+import generate_hal_features
 
 
 def require(condition: bool, message: str) -> None:
@@ -35,7 +45,7 @@ def resolved(target: str, board: str) -> dict:
             str(ENTRY),
             "config-dump",
             "--project",
-            str(ROOT / "examples" / "01_blink"),
+            str(CORE_RUNTIME),
             "--target",
             target,
             "--board",
@@ -78,7 +88,9 @@ for target, (board, toolchain) in expected.items():
     config = resolved(target, board)
     cache = config["cmake"]["cache"]
     require(
-        same_path(config["buildDir"], ROOT / ".build" / "examples" / "01_blink"),
+        same_path(
+            config["buildDir"], ROOT / ".build" / "examples" / "01_core_runtime"
+        ),
         f"{target}: buildDir escaped the central artifact tree",
     )
     require(
@@ -121,33 +133,43 @@ require(
     "stm32g474: cross toolchain must be selected before CMake project()",
 )
 
-blink = load_json(
-    ROOT / "examples" / "01_blink" / ".vscode" / "jaszczurhal.project.json"
+core_runtime = load_json(
+    CORE_RUNTIME / ".vscode" / "jaszczurhal.project.json"
 )
-blink_targets = set(blink["example"]["targets"])
+core_runtime_targets = set(core_runtime["example"]["targets"])
 require(
     {
         "rp2040",
         "rp2350-arm",
         "rp2350-riscv",
         "stm32g474",
-    }.issubset(blink_targets),
-    "01_blink does not expose the complete target matrix",
+    }.issubset(core_runtime_targets),
+    "01_core_runtime does not expose the complete target matrix",
 )
 
-wifi = load_json(
-    ROOT / "examples" / "15_wifi" / ".vscode" / "jaszczurhal.project.json"
+freertos_suite = load_json(
+    FREERTOS_SUITE / ".vscode" / "jaszczurhal.project.json"
+)
+freertos_metadata = freertos_suite["example"]
+network_variant = next(
+    variant
+    for variant in freertos_metadata["variants"]
+    if variant["id"] == "network"
 )
 require(
-    wifi["example"]["boards"]["rp2350-arm"] == "pico2w",
+    freertos_metadata["boards"]["rp2350-arm"] == "pico2w",
     "WiFi example does not map RP2350 ARM to Pico 2 W",
 )
 require(
-    "rp2350-riscv" not in wifi["example"]["targets"],
+    "rp2350-riscv" not in network_variant["targets"],
     "unsupported RP2350 RISC-V + CYW43 combination is selectable",
 )
 require(
-    wifi["example"]["boards"]["stm32g474"] == "nucleo-g474re-pim730",
+    "HAL_ENABLE_WIFI" in network_variant["extraDefines"],
+    "FreeRTOS network variant lost its WiFi feature",
+)
+require(
+    freertos_metadata["boards"]["stm32g474"] == "nucleo-g474re-pim730",
     "WiFi example does not map STM32G474 to NUCLEO-G474RE with PIM730",
 )
 stm32_wifi = subprocess.run(
@@ -155,11 +177,13 @@ stm32_wifi = subprocess.run(
         str(ENTRY),
         "config-dump",
         "--project",
-        str(ROOT / "examples" / "15_wifi"),
+        str(FREERTOS_SUITE),
         "--target",
         "stm32g474",
         "--board",
         "nucleo-g474re-pim730",
+        "--variant",
+        "network",
         "--json",
     ],
     check=True,
@@ -172,46 +196,52 @@ require(
     "WiFi resolver changed the STM32G474 PIM730 board profile",
 )
 require(
-    "JH_EXTRA_DEFINES" not in stm32_wifi_config["cmake"]["cache"],
-    "WiFi example still duplicates PIM730 wiring outside the board profile",
+    "HAL_ENABLE_WIFI"
+    in stm32_wifi_config["cmake"]["cache"]["JH_EXTRA_DEFINES"].split(";"),
+    "FreeRTOS network variant does not enable WiFi",
+)
+require(
+    not any(
+        define.startswith("HAL_CYW43_")
+        for define in stm32_wifi_config["cmake"]["cache"][
+            "JH_EXTRA_DEFINES"
+        ].split(";")
+    ),
+    "FreeRTOS network variant duplicates PIM730 wiring outside the board profile",
 )
 sys.path.insert(0, str(ROOT))
 from vscode.runtime import jh_vscode as workflow_runtime
 
 require(
     not workflow_runtime.build_preflight_diagnostics(
-        stm32_wifi_config, ROOT / "examples" / "15_wifi"
+        stm32_wifi_config, FREERTOS_SUITE
     ),
     "WiFi preflight does not accept the registry-owned PIM730 backend",
 )
 
-for name in ("12_kv_store", "16_littlefs", "39_sdlogger"):
-    manifest = load_json(
-        ROOT / "examples" / name / ".vscode" / "jaszczurhal.project.json"
-    )
-    require(
-        set(expected).issubset(manifest["example"]["targets"]),
-        f"{name}: native storage target matrix is incomplete",
-    )
-    require(
-        manifest["target"] == "rp2040",
-        f"{name}: native RP2040 is not the project default",
-    )
+storage = load_json(
+    ROOT / "examples" / "10_storage" / ".vscode" / "jaszczurhal.project.json"
+)
+require(
+    set(expected).issubset(storage["example"]["targets"]),
+    "10_storage: native storage target matrix is incomplete",
+)
+require(
+    storage["target"] == "rp2040",
+    "10_storage: native RP2040 is not the project default",
+)
 
-freertos = load_json(
-    ROOT / "examples" / "29_freertos_smoke" / ".vscode" / "jaszczurhal.project.json"
+require(
+    set(expected).issubset(freertos_metadata["targets"]),
+    "18_freertos_suite does not expose the native RP target matrix",
 )
 require(
-    set(expected).issubset(freertos["example"]["targets"]),
-    "29_freertos_smoke does not expose the native RP target matrix",
+    freertos_suite["target"] == "rp2040",
+    "18_freertos_suite does not default to the native RP2040 target",
 )
 require(
-    freertos["target"] == "rp2040",
-    "29_freertos_smoke does not default to the native RP2040 target",
-)
-require(
-    freertos["cmake"]["cache"]["JH_RP2040_FREERTOS"] is True,
-    "29_freertos_smoke does not enable native RP FreeRTOS",
+    freertos_suite["cmake"]["cache"]["JH_RP2040_FREERTOS"] is True,
+    "18_freertos_suite does not enable native RP FreeRTOS",
 )
 
 ota_fixture = load_json(
@@ -236,7 +266,7 @@ ota_variants = {
 }
 require(
     set(ota_variants["freertos"]["extraDefines"])
-    == {"HAL_ENABLE_OTA", "HAL_ENABLE_FREERTOS"},
+    == {"HAL_ENABLE_FREERTOS"},
     "OTA hardware fixture FreeRTOS variant lost required defines",
 )
 require(
@@ -244,7 +274,11 @@ require(
     "OTA hardware fixture must not store a tracked password",
 )
 
-example_dirs = sorted((ROOT / "examples").glob("[0-9][0-9]_*"))
+example_dirs = sorted(
+    path
+    for path in (ROOT / "examples").glob("[0-9][0-9]_*")
+    if path.is_dir()
+)
 listed_examples = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / "examples_dispatcher.py"), "list"],
     check=True,
@@ -254,16 +288,40 @@ listed_examples = subprocess.run(
 registered_names = {
     line.split(":", 1)[0] for line in listed_examples.stdout.splitlines()
 }
+examples_dispatcher.validate_example_registry()
+require(
+    len(examples_dispatcher.EXAMPLES) == 26 and len(registered_names) == 26,
+    "dispatcher registry must contain exactly 26 active examples",
+)
 require(
     registered_names == {example_dir.name for example_dir in example_dirs},
     "dispatcher registry and example directories differ",
 )
 
 example_counts = {target: 0 for target in known_targets}
+full_configuration_counts = {target: 0 for target in known_targets}
+gate_configuration_counts = {target: 0 for target in known_targets}
+legacy_coverage: list[str] = []
+requested_example_features: set[str] = set()
 for example_dir in example_dirs:
     manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
     require(manifest_path.is_file(), f"{example_dir.name}: missing manifest")
     manifest = load_json(manifest_path)
+    requested_example_features.update(
+        re.findall(
+            r"^\s*#\s*define\s+(HAL_ENABLE_[A-Z0-9_]+)",
+            (example_dir / "hal_project_config.h").read_text(encoding="utf-8"),
+            flags=re.MULTILINE,
+        )
+    )
+    base_defines = manifest.get("cmake", {}).get("cache", {}).get(
+        "JH_EXTRA_DEFINES", ""
+    )
+    requested_example_features.update(
+        token.split("=", 1)[0]
+        for token in str(base_defines).split(";")
+        if token.startswith("HAL_ENABLE_")
+    )
     metadata = manifest.get("example")
     require(
         isinstance(metadata, dict),
@@ -275,6 +333,19 @@ for example_dir in example_dirs:
         targets.issubset(known_targets),
         f"{example_dir.name}: unknown target classification {targets}",
     )
+    gate_targets = {
+        str(target) for target in metadata.get("gateTargets", targets)
+    }
+    require(
+        gate_targets.issubset(targets),
+        f"{example_dir.name}: gateTargets escape supported targets",
+    )
+    covers = metadata.get("covers")
+    require(
+        isinstance(covers, list) and covers,
+        f"{example_dir.name}: missing legacy coverage classification",
+    )
+    legacy_coverage.extend(str(item) for item in covers)
     boards = metadata.get("boards")
     require(
         isinstance(boards, dict),
@@ -286,6 +357,9 @@ for example_dir in example_dirs:
     )
     for target in targets:
         example_counts[target] += 1
+        full_configuration_counts[target] += 1
+        if target in gate_targets:
+            gate_configuration_counts[target] += 1
         require(
             boards[target] in target_boards[target],
             f"{example_dir.name}: invalid {target} board {boards[target]}",
@@ -302,6 +376,11 @@ for example_dir in example_dirs:
             f"{example_dir.name}: variant is missing an id",
         )
         variant_ids.append(str(variant["id"]))
+        requested_example_features.update(
+            str(token).split("=", 1)[0]
+            for token in variant.get("extraDefines", [])
+            if str(token).startswith("HAL_ENABLE_")
+        )
         variant_targets = {
             str(target) for target in variant.get("targets", targets)
         }
@@ -310,6 +389,19 @@ for example_dir in example_dirs:
             f"{example_dir.name}:{variant.get('id')}: variant target "
             "classification escapes its example",
         )
+        variant_gate_targets = {
+            str(target)
+            for target in variant.get("gateTargets", variant_targets)
+        }
+        require(
+            variant_gate_targets.issubset(variant_targets),
+            f"{example_dir.name}:{variant.get('id')}: gateTargets escape "
+            "variant targets",
+        )
+        for target in variant_targets:
+            full_configuration_counts[target] += 1
+            if target in variant_gate_targets:
+                gate_configuration_counts[target] += 1
     require(
         len(variant_ids) == len(set(variant_ids)),
         f"{example_dir.name}: duplicate variant id",
@@ -318,12 +410,141 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 58,
-        "rp2350-arm": 56,
-        "rp2350-riscv": 45,
-        "stm32g474": 56,
+        "rp2040": 25,
+        "rp2350-arm": 24,
+        "rp2350-riscv": 21,
+        "stm32g474": 24,
     },
     f"declared example target matrix changed without review: {example_counts}",
+)
+require(
+    full_configuration_counts
+    == {
+        "rp2040": 27,
+        "rp2350-arm": 26,
+        "rp2350-riscv": 22,
+        "stm32g474": 25,
+    }
+    and sum(full_configuration_counts.values()) == 100,
+    "full example build matrix must contain exactly 100 configurations: "
+    f"{full_configuration_counts}",
+)
+require(
+    gate_configuration_counts
+    == {
+        "rp2040": 27,
+        "rp2350-arm": 0,
+        "rp2350-riscv": 0,
+        "stm32g474": 25,
+    }
+    and sum(gate_configuration_counts.values()) == 52,
+    "example gate matrix must contain exactly 52 configurations: "
+    f"{gate_configuration_counts}",
+)
+require(
+    len(legacy_coverage) == 59
+    and len(set(legacy_coverage)) == 59
+    and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
+    "the 59 legacy examples must each be covered exactly once",
+)
+
+legacy_feature_surface = {
+    "HAL_ENABLE_A7670",
+    "HAL_ENABLE_ADP5360",
+    "HAL_ENABLE_APP_TASK1",
+    "HAL_ENABLE_BH1750",
+    "HAL_ENABLE_BLE",
+    "HAL_ENABLE_BLE_STREAM",
+    "HAL_ENABLE_BSD_SOCKETS",
+    "HAL_ENABLE_CJSON",
+    "HAL_ENABLE_CRYPTO",
+    "HAL_ENABLE_DACLESS",
+    "HAL_ENABLE_DHT",
+    "HAL_ENABLE_DISPLAY",
+    "HAL_ENABLE_DS18B20",
+    "HAL_ENABLE_DS3231",
+    "HAL_ENABLE_EXTERNAL_ADC",
+    "HAL_ENABLE_FREERTOS",
+    "HAL_ENABLE_GPS",
+    "HAL_ENABLE_HC595",
+    "HAL_ENABLE_HD44780",
+    "HAL_ENABLE_HTTP_CLIENT",
+    "HAL_ENABLE_HTTP_FILES",
+    "HAL_ENABLE_HTTP_SERVER",
+    "HAL_ENABLE_I2C",
+    "HAL_ENABLE_I2C_SLAVE",
+    "HAL_ENABLE_ILI9341",
+    "HAL_ENABLE_IRSMALL_DECODER",
+    "HAL_ENABLE_JPEG_AS_BASE64",
+    "HAL_ENABLE_KV",
+    "HAL_ENABLE_LITTLEFS",
+    "HAL_ENABLE_MAX6675",
+    "HAL_ENABLE_MCP23017",
+    "HAL_ENABLE_MCP2515",
+    "HAL_ENABLE_MCP3221",
+    "HAL_ENABLE_MCP4725",
+    "HAL_ENABLE_MCP9600",
+    "HAL_ENABLE_MFRC522",
+    "HAL_ENABLE_MQTT",
+    "HAL_ENABLE_NET_COMMANDS",
+    "HAL_ENABLE_NET_CONSOLE",
+    "HAL_ENABLE_OTA",
+    "HAL_ENABLE_PCA9654E",
+    "HAL_ENABLE_PCF8563",
+    "HAL_ENABLE_PCF8574",
+    "HAL_ENABLE_PGA2311",
+    "HAL_ENABLE_PN532",
+    "HAL_ENABLE_PNG_AS_BASE64",
+    "HAL_ENABLE_RGB_LED",
+    "HAL_ENABLE_RTC",
+    "HAL_ENABLE_SDLOGGER",
+    "HAL_ENABLE_SSD1306",
+    "HAL_ENABLE_SSD16XX",
+    "HAL_ENABLE_STM32G474_FDCAN",
+    "HAL_ENABLE_STMPE610",
+    "HAL_ENABLE_SWSERIAL",
+    "HAL_ENABLE_TIME",
+    "HAL_ENABLE_TLS",
+    "HAL_ENABLE_TSC2007",
+    "HAL_ENABLE_UART",
+    "HAL_ENABLE_WEBSOCKET",
+    "HAL_ENABLE_WIFI",
+    "HAL_ENABLE_WIREGUARD",
+}
+feature_model = generate_hal_features.load_registry(ROOT / "config")
+resolved_example_features = set(
+    feature_model.resolve_many(requested_example_features)
+)
+missing_legacy_features = sorted(
+    legacy_feature_surface.difference(resolved_example_features)
+)
+require(
+    not missing_legacy_features,
+    "consolidated examples lost legacy feature coverage: "
+    + ", ".join(missing_legacy_features),
+)
+
+serial_gps = load_json(
+    ROOT / "examples" / "05_serial_gps" / ".vscode" / "jaszczurhal.project.json"
+)
+serial_variants = {
+    variant["id"]: variant for variant in serial_gps["example"]["variants"]
+}
+require(
+    set(serial_variants["swserial"]["targets"])
+    == {"rp2040", "rp2350-arm", "rp2350-riscv"}
+    and set(serial_variants["swserial"]["gateTargets"]) == {"rp2040"},
+    "05_serial_gps:swserial must remain RP-only",
+)
+
+ble_stream = load_json(
+    ROOT / "examples" / "26_ble_stream" / ".vscode" / "jaszczurhal.project.json"
+)
+require(
+    set(ble_stream["example"]["covers"])
+    == {"58_ble_peripheral", "59_ble_stream"}
+    and set(ble_stream["example"]["targets"]) == {"rp2040", "stm32g474"},
+    "26_ble_stream no longer represents both supported BLE examples",
 )
 
 
@@ -361,13 +582,18 @@ def require_parity_fixture(name: str, base_define: str) -> None:
     )
     require(
         set(variants["freertos"]["extraDefines"])
-        == {base_define, "HAL_ENABLE_FREERTOS"},
+        == {"HAL_ENABLE_FREERTOS"},
         f"{name}: FreeRTOS feature classification changed",
+    )
+    header = (ROOT / "tests" / "hardware" / name / "hal_project_config.h")
+    require(
+        base_define in header.read_text(encoding="utf-8"),
+        f"{name}: base feature is missing from hal_project_config.h",
     )
     require(
         base_define
-        in manifest["cmake"]["cache"].get("JH_EXTRA_DEFINES", "").split(";"),
-        f"{name}: bare-metal feature classification changed",
+        not in manifest["cmake"]["cache"].get("JH_EXTRA_DEFINES", "").split(";"),
+        f"{name}: base feature is duplicated in the manifest",
     )
 
 
@@ -383,7 +609,7 @@ required_tasks = {
     "Project: Clean",
     "Project: Sync board picker",
 }
-tasks = load_json(ROOT / "examples" / "01_blink" / ".vscode" / "tasks.json")
+tasks = load_json(CORE_RUNTIME / ".vscode" / "tasks.json")
 labels = {task.get("label") for task in tasks["tasks"]}
 require(required_tasks.issubset(labels), "stable VS Code task verbs changed")
 reference_tasks = load_json(ROOT / "vscode" / "examples" / "tasks.json")
@@ -624,4 +850,322 @@ with tempfile.TemporaryDirectory(prefix="jh-vscode-project-") as temp_dir:
     require(
         generated_launch_path.read_text(encoding="utf-8") == synchronized_launch_text,
         "sync-board-picker rewrote an already current launch.json",
+    )
+
+
+def write_feature_value_fixture(
+    project_dir: Path,
+    *,
+    cache: dict[str, object] | None = None,
+    target_profiles: dict[str, object] | None = None,
+    variants: list[dict[str, object]] | None = None,
+    header: str = "#pragma once\n",
+) -> None:
+    manifest: dict[str, object] = {
+        "project": "jh-vscode feature value test",
+        "module": "feature_value_test",
+        "toolchain": "cmake",
+        "target": "rp2040",
+        "board": "pico",
+        "buildDir": "${project}/.build",
+        "cmakeBuildDir": "${project}/.build/cmake",
+        "cmake": {
+            "sourceDir": str(ROOT / "cmake" / "jh_firmware_project"),
+            "cache": {
+                "JH_PROJECT_DIR": "${project}",
+                "JH_MODULE_NAME": "feature_value_test",
+                **(cache or {}),
+            },
+        },
+    }
+    if target_profiles is not None:
+        manifest["targetProfiles"] = target_profiles
+    if variants is not None:
+        manifest["example"] = {"variants": variants}
+    vscode_dir = project_dir / ".vscode"
+    vscode_dir.mkdir(parents=True)
+    (vscode_dir / "jaszczurhal.project.json").write_text(
+        json.dumps(manifest, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (project_dir / "hal_project_config.h").write_text(header, encoding="utf-8")
+
+
+def run_feature_value_dump(
+    project_dir: Path, *extra_args: str
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            str(ENTRY),
+            "config-dump",
+            "--project",
+            str(project_dir),
+            *extra_args,
+            "--json",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+
+def require_value_rejection(
+    result: subprocess.CompletedProcess[str], symbol: str, source: str
+) -> None:
+    require(
+        result.returncode == workflow_runtime.EXIT_CONFIG,
+        f"invalid {symbol} returned {result.returncode}: {result.stderr}",
+    )
+    require("[JH-CFG-VALUE]" in result.stderr, f"{symbol}: missing diagnostic id")
+    require(symbol in result.stderr, f"{symbol}: missing symbol in diagnostic")
+    require(source in result.stderr, f"{symbol}: missing source in diagnostic")
+
+
+with tempfile.TemporaryDirectory(prefix="jh-vscode-feature-values-") as temp_dir:
+    fixture_root = Path(temp_dir)
+
+    base_invalid = fixture_root / "base-invalid"
+    write_feature_value_fixture(
+        base_invalid,
+        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=0"},
+    )
+    require_value_rejection(
+        run_feature_value_dump(base_invalid),
+        "HAL_ENABLE_WIFI",
+        "cmake.cache.JH_EXTRA_DEFINES",
+    )
+
+    genex_invalid = fixture_root / "genex-invalid"
+    write_feature_value_fixture(
+        genex_invalid,
+        cache={
+            "JH_EXTRA_DEFINES": "$<1:HAL_$<1:ENABLE>_MQTT=0>",
+        },
+    )
+    require_value_rejection(
+        run_feature_value_dump(genex_invalid),
+        "HAL_$<1:ENABLE>_MQTT",
+        "cmake.cache.JH_EXTRA_DEFINES",
+    )
+
+    whitespace_invalid = fixture_root / "whitespace-invalid"
+    write_feature_value_fixture(
+        whitespace_invalid,
+        cache={"EXTRA_HAL_DEFINES": "HAL_ENABLE_UDP=1 HAL_ENABLE_TCP"},
+    )
+    require_value_rejection(
+        run_feature_value_dump(whitespace_invalid),
+        "HAL_ENABLE_UDP",
+        "cmake.cache.EXTRA_HAL_DEFINES",
+    )
+
+    spaced_assignment_invalid = fixture_root / "spaced-assignment-invalid"
+    write_feature_value_fixture(
+        spaced_assignment_invalid,
+        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI = 1"},
+    )
+    require_value_rejection(
+        run_feature_value_dump(spaced_assignment_invalid),
+        "HAL_ENABLE_WIFI",
+        "cmake.cache.JH_EXTRA_DEFINES",
+    )
+
+    direct_cache_invalid = fixture_root / "direct-cache-invalid"
+    write_feature_value_fixture(
+        direct_cache_invalid,
+        cache={"HAL_ENABLE_WIFI": 0},
+    )
+    require_value_rejection(
+        run_feature_value_dump(direct_cache_invalid),
+        "HAL_ENABLE_WIFI",
+        "cmake.cache.HAL_ENABLE_WIFI",
+    )
+    for action in ("build", "upload"):
+        args = workflow_runtime.build_parser().parse_args(
+            [action, "--project", str(base_invalid)]
+        )
+        with mock.patch.object(
+            workflow_runtime, "configure_cmake_project"
+        ) as configure:
+            with redirect_stderr(io.StringIO()) as stderr:
+                status = workflow_runtime.dispatch(args)
+        require(
+            status == workflow_runtime.EXIT_CONFIG,
+            f"{action}: invalid feature value did not return EXIT_CONFIG: "
+            f"{stderr.getvalue()}",
+        )
+        configure.assert_not_called()
+
+    profile_invalid = fixture_root / "profile-invalid"
+    write_feature_value_fixture(
+        profile_invalid,
+        target_profiles={
+            "rp2350-arm": {
+                "cmake": {
+                    "cache": {
+                        "EXTRA_HAL_DEFINES": "-DHAL_ENABLE_TLS=2",
+                    }
+                }
+            }
+        },
+    )
+    require_value_rejection(
+        run_feature_value_dump(
+            profile_invalid,
+            "--target",
+            "rp2350-arm",
+            "--board",
+            "pico2",
+        ),
+        "HAL_ENABLE_TLS",
+        "cmake.cache.EXTRA_HAL_DEFINES",
+    )
+
+    variant_invalid = fixture_root / "variant-invalid"
+    write_feature_value_fixture(
+        variant_invalid,
+        variants=[
+            {
+                "id": "invalid",
+                "extraDefines": ["HAL_ENABLE_UDP", "HAL_ENABLE_TCP=false"],
+            }
+        ],
+    )
+    require_value_rejection(
+        run_feature_value_dump(variant_invalid, "--variant", "invalid"),
+        "HAL_ENABLE_TCP",
+        "cmake.cache.JH_EXTRA_DEFINES",
+    )
+
+    header_invalid = fixture_root / "header-invalid"
+    write_feature_value_fixture(
+        header_invalid,
+        header=(
+            "#pragma once\n"
+            "#define HAL_ENDPOINT \"https://example.invalid/*\"\n"
+            "// another marker /*\n"
+            "#define \\\n HAL_ENABLE_MQTT /* value follows\n"
+            "the multiline comment */ 0\n"
+        ),
+    )
+    require_value_rejection(
+        run_feature_value_dump(header_invalid),
+        "HAL_ENABLE_MQTT",
+        "hal_project_config.h:4",
+    )
+
+    valid = fixture_root / "valid"
+    write_feature_value_fixture(
+        valid,
+        cache={
+            "JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI;-DHAL_ENABLE_TLS=1",
+            "EXTRA_HAL_DEFINES": "HAL_ENABLE_UDP=1;HAL_ENABLE_TCP",
+        },
+        target_profiles={
+            "rp2350-arm": {
+                "cmake": {
+                    "cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_TIME=0"}
+                }
+            }
+        },
+        variants=[
+            {
+                "id": "inactive-invalid",
+                "extraDefines": ["HAL_ENABLE_HTTP_SERVER=0"],
+            }
+        ],
+        header=(
+            "#pragma once\n"
+            "#define HAL_ENABLE_MQTT\n"
+            "#define HAL_ENABLE_TIME 1 // explicit enabled value\n"
+            "// hidden by a continued line comment \\\n"
+            "#define HAL_ENABLE_WIFI 0\n"
+        ),
+    )
+    valid_result = run_feature_value_dump(valid)
+    require(
+        valid_result.returncode == 0,
+        f"valid bare/=1 definitions were rejected: {valid_result.stderr}",
+    )
+
+    resolved_network = fixture_root / "resolved-network"
+    write_feature_value_fixture(
+        resolved_network,
+        header=(
+            "#pragma once\n"
+            "#define HAL_ENABLE_HTTP_CLIENT 1\n"
+            "#define HAL_DISABLE_ASSERTS\n"
+        ),
+    )
+    resolved_network_result = run_feature_value_dump(
+        resolved_network,
+        "--target",
+        "stm32g474",
+        "--board",
+        "nucleo-g474re",
+    )
+    require(
+        resolved_network_result.returncode == 0,
+        "resolved feature configuration was rejected: "
+        f"{resolved_network_result.stderr}",
+    )
+    resolved_network_config = json.loads(resolved_network_result.stdout)
+    feature_resolution = resolved_network_config["featureResolution"]
+    require(
+        feature_resolution["requestedFeatures"]
+        == ["HAL_DISABLE_ASSERTS", "HAL_ENABLE_HTTP_CLIENT"],
+        "jh-vscode changed the direct feature request set",
+    )
+    require(
+        {
+            "HAL_DISABLE_ASSERTS",
+            "HAL_ENABLE_HTTP_CLIENT",
+            "HAL_ENABLE_NETWORK_CORE",
+            "HAL_ENABLE_TCP",
+            "HAL_ENABLE_WIFI",
+        }.issubset(feature_resolution["resolvedFeatures"]),
+        "jh-vscode did not resolve the HTTP client dependency chain",
+    )
+    require(
+        len(feature_resolution["resolvedFeaturesDigest"]) == 64,
+        "jh-vscode omitted the deterministic resolved feature digest",
+    )
+    require(
+        "HAL_DISABLE_ASSERTS" in feature_resolution["provenance"],
+        "jh-vscode omitted HAL_DISABLE_* provenance",
+    )
+    require(
+        "HAL_ENABLE_TCP"
+        not in json.dumps(resolved_network_config["cmake"]["cache"]),
+        "jh-vscode injected resolved features into requested CMake inputs",
+    )
+    network_diagnostics = workflow_runtime.build_preflight_diagnostics(
+        resolved_network_config, resolved_network
+    )
+    require(
+        any(
+            "CYW43 gSPI/lwIP backend profile" in diagnostic
+            and "HAL_ENABLE_TCP" in diagnostic
+            for diagnostic in network_diagnostics
+        ),
+        "STM32 preflight ignored an implied network feature",
+    )
+
+    overridden = fixture_root / "overridden"
+    write_feature_value_fixture(
+        overridden,
+        cache={"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=0"},
+        target_profiles={
+            "rp2040": {
+                "cmake": {
+                    "cache": {"JH_EXTRA_DEFINES": "HAL_ENABLE_WIFI=1"}
+                }
+            }
+        },
+    )
+    overridden_result = run_feature_value_dump(overridden)
+    require(
+        overridden_result.returncode == 0,
+        "feature values were validated before the active target profile merge: "
+        f"{overridden_result.stderr}",
     )

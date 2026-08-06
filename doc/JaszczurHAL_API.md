@@ -50,9 +50,11 @@ CMakeLists.txt              # host/mock tests build
 VERSION                     # project version
 .build/                     # ignored root for all managed build artifacts
 boards/                     # target, board and capability descriptors
+config/                     # declarative HAL feature registry and schema
 rp_native_lib/              # Pico SDK RP2040/RP2350 static-library build
   MEMORY_MAP.md             # native RP firmware/storage/OTA layout
 cmake/
+  generated/                # generated production CMake feature resolver
   jh_rp_native_sdk.cmake    # shared RP library/firmware CMake glue
   targets/                  # VS Code dispatcher target recipes
 stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
@@ -63,6 +65,7 @@ scripts/
   check_documentation_links.py # local Markdown link/anchor validation
   ensure_*.sh               # focused pinned-component fetch/verify helpers
   generate_sbom.py          # CycloneDX SBOM generator
+  generate_hal_features.py  # feature registry validation, generation and lint
   check_vulnerabilities.sh  # optional local vulnerability scanner wrapper
 runalltests.sh              # full local validation gate
 runmefirst.sh               # one-time local toolchain setup
@@ -99,6 +102,7 @@ src/
     hal_runtime_config.h    # runtime pool-limit configuration API
     hal_assert.h            # portable HAL assertion API
     hal_compat.h            # portable source-compatibility helpers
+    generated/              # generated production C feature closure/report
     impl/
       .mock/                # deterministic host/test backend
       rp2040/               # RP-family backend
@@ -133,6 +137,24 @@ third_party/                # tracked pins + ignored managed component installs
 reused by at least two hardware backends. It depends only on HAL-level
 contracts, behaves identically across supported targets, and keeps per-target
 `#if HAL_TARGET_IS_*` branches out of shared implementation files.
+
+### Compile-time feature resolution
+
+The versioned registry under `config/features/` generates the production C and
+CMake resolvers. `hal_config.h` includes the C closure, while RP and STM32G474
+CMake builds use the same resolved set for source and dependency selection.
+The board generator records both `requestedFeatures` and `resolvedFeatures`;
+its feature hash and link contract use the resolved set. `jh-vscode` resolves
+the active profile and variant into the same closure and publishes the registry
+digest, closure digest, and request provenance through `config-dump`.
+
+Conditional defaults, provider choices, board capability checks, and target
+constraints remain in `hal_config.h`. `HAL_CONFIG_VERBOSE` activates the
+generated report of every active registered flag. CI treats registry drift
+and raw/effective feature lint as errors. Installed RP and STM32G474 packages
+carry the generated feature/board headers, resolution JSON, link-contract
+header, and reference source, so direct compiler consumers can compile and
+link the fixed package without invoking Python.
 
 - `CMakeLists.txt` - repository-root host/mock tests build.
 - `rp_native_lib/` - official Pico SDK static library and firmware probes.

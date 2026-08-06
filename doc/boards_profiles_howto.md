@@ -92,8 +92,10 @@ python3 scripts/generate_board_config.py \
   --target rp2040 \
   --board rp2040-zero \
   --output-dir .build/generated/boards/rp2040/rp2040-zero \
-  --feature HAL_ENABLE_RGB_LED
+  --requested-feature HAL_ENABLE_RGB_LED
 ```
+
+`--feature` remains a compatibility spelling for `--requested-feature`.
 
 The deterministic output contains:
 
@@ -108,6 +110,15 @@ The deterministic output contains:
 Firmware never parses JSON. CMake runs the generator before importing Pico SDK
 and uses the generated provider platform and board. `hal_board.h` consumes the
 generated registry/config while preserving controlled compatibility aliases.
+`jh_board_resolved.json` records the direct `requestedFeatures`, the transitive
+registry `resolvedFeatures`, `resolvedFeaturesDigest`, and the board/provider
+`boardCompileDefinitions`. The retained `features` field is an alias of
+`resolvedFeatures`. Generated CMake exports the same feature values as
+`JH_BOARD_REQUESTED_FEATURES`, `JH_BOARD_RESOLVED_FEATURES`, and
+`JH_BOARD_RESOLVED_FEATURES_DIGEST`, and exports the provider definitions as
+`JH_BOARD_COMPILE_DEFINITIONS`. `jh_board_config.h` materializes those provider
+definitions as preprocessor macros so a direct compiler consumer receives the
+same backend, bus, and pin contract without running CMake or Python.
 
 ## Board-aware static libraries
 
@@ -136,8 +147,11 @@ Build examples:
 `nucleo-g474re` describes the Nucleo board alone. Projects using the external
 PIM730/RM2 radio must select the experimental `nucleo-g474re-pim730` profile;
 it owns the fixed CYW43 gSPI pins and exports the radio capabilities and
-components required by network builds. The wiring and electrical constraints
-are documented in [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
+components required by network builds. Its generated board header also owns the
+CYW43 backend, gSPI bus, stack, and pin definitions; direct compiler consumers
+must not duplicate those definitions with command-line `-D` options. The wiring
+and electrical constraints are documented in
+[Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
 Pico W and the PIM730 profile also declare the lifecycle-owned
 `bluetooth-controller` capability and feature-gated `btstack-ble` component.
 Enabling `HAL_ENABLE_BLE` compiles that component; the physical capability
@@ -150,15 +164,62 @@ jh_board_contract_<target>_<board>_<featureHash>
 ```
 
 `featureHash` is the first 12 hexadecimal characters of SHA-256 over
-`hal.profileId` and the sorted, normalized `HAL_ENABLE_*=0/1` feature set.
-Official firmware builds
-always compile the generated reference translation unit. Linking an archive
-for another target, board, or feature set therefore fails with an undefined
-contract symbol.
+`hal.profileId` followed by the sorted registry `resolvedFeatures`, serialized
+as `HAL_ENABLE_*=1` or `HAL_DISABLE_*=1`. Bare feature names and `=1` therefore
+produce the same hash; the generator rejects `=0`, unknown features, derived
+feature requests, and other explicit feature values. Two different requested
+sets that produce the same closure have the same feature hash and link contract,
+while `requestedFeatures` still preserves their diagnostic difference.
+
+Official firmware builds always compile the generated reference translation
+unit. Linking an archive for another target, board, or resolved feature set
+therefore fails with an undefined contract symbol. For GCC and Clang, the
+reference is rooted through a generated `constructor, used` function. The
+constructor array is retained by the supported linker scripts, so the contract
+remains effective when function/data sections and `--gc-sections` are enabled.
 
 The archive and its generated headers are one unit. Never copy or link
 `libJaszczurHAL.a` without the matching `include/generated/` directory and
-contract reference object.
+contract reference translation unit.
+
+Two conditional compatibility rules remain outside the v1 registry closure:
+AT24C256 EEPROM can add I2C, and GPS can select UART when no serial transport
+was requested. They run in `hal_config.h` and do not participate in feature-hash
+equivalence. The hash compares the registry-resolved set, not every macro added
+later by those residual rules.
+
+## Installed package
+
+Install a configured RP or STM32 static build with CMake:
+
+```bash
+cmake --install .build/static/<target>/<board> \
+  --prefix .build/install/<target>/<board>
+```
+
+The installed unit contains:
+
+```text
+include/
+  hal/generated/jh_hal_features.h
+  generated/
+    jh_board_config.h
+    jh_board_registry.h
+    jh_link_contract.h
+lib/
+  libJaszczurHAL.a
+share/JaszczurHAL/generated/
+  jh_link_contract_reference.c
+  jh_board_resolved.json
+```
+
+The rest of the public headers are installed below `include/` as usual. After
+installation, a matching compiler can compile project sources using the direct
+requests from `jh_board_resolved.json`; `hal_config.h` applies the tracked
+generated closure. Compile `jh_link_contract_reference.c` into the application
+and link it with the matching archive. This consumer compile/link path does not
+invoke Python. Target SDK libraries, startup files, linker scripts, and normal
+toolchain flags are still required by the selected platform.
 
 ## Adding RP2040-Zero
 

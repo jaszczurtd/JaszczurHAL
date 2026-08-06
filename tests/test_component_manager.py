@@ -283,6 +283,62 @@ class ArchiveManagerTests(unittest.TestCase):
 
 
 class TrackedContractTests(unittest.TestCase):
+    def test_freertos_component_rejects_disabled_feature_spelling(self) -> None:
+        parser = manager.build_parser()
+        arguments = parser.parse_args(
+            ["component", "freertos", "--repo-root", str(ROOT)]
+        )
+        with mock.patch.dict(
+            manager.os.environ,
+            {"EXTRA_HAL_DEFINES": "HAL_ENABLE_WIFI=0"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(manager.ComponentError, "JH-CFG-VALUE"):
+                manager._component_enabled("freertos", arguments)
+        with mock.patch.dict(
+            manager.os.environ,
+            {"EXTRA_HAL_DEFINES": "$<1:HAL_$<1:ENABLE>_FREERTOS=0>"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(manager.ComponentError, "JH-CFG-VALUE"):
+                manager._component_enabled("freertos", arguments)
+        with mock.patch.dict(
+            manager.os.environ,
+            {"EXTRA_HAL_DEFINES": "HAL_ENABLE_FREERTOS = 0"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(manager.ComponentError, "JH-CFG-VALUE"):
+                manager._component_enabled("freertos", arguments)
+        with mock.patch.dict(
+            manager.os.environ,
+            {"HAL_ENABLE_FREERTOS": "0"},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(manager.ComponentError, "JH-CFG-VALUE"):
+                manager._component_enabled("freertos", arguments)
+        with mock.patch.dict(
+            manager.os.environ,
+            {"EXTRA_HAL_DEFINES": "HAL_ENABLE_FREERTOS=1"},
+            clear=True,
+        ):
+            self.assertTrue(manager._component_enabled("freertos", arguments))
+
+    @unittest.skipIf(sys.platform == "win32", "fixture requires POSIX scripts")
+    def test_static_build_scripts_reject_disabled_feature_spelling(self) -> None:
+        for script in ("build_rp_native_lib.sh", "build_stm32_lib.sh"):
+            for definition in (
+                "HAL_ENABLE_WIFI=0",
+                "$<1:HAL_$<1:ENABLE>_WIFI=0>",
+            ):
+                result = subprocess.run(
+                    [str(ROOT / "scripts" / script), "-D", definition],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(result.returncode, 0, script)
+                self.assertIn("[JH-CFG-VALUE]", result.stderr, script)
+
     def test_windows_and_riscv_pins_are_complete(self) -> None:
         windows = manager.parse_config(ROOT / "third_party/windows_tools_version.conf")
         for prefix in ("PYTHON", "CMAKE", "NINJA", "GNU_ARM", "OPENOCD", "PICOTOOL"):

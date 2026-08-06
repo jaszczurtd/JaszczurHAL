@@ -111,7 +111,7 @@ particular project:
 
 ```powershell
 .\vscode\entry\jh-vscode.cmd debug-tools `
-  --project .\examples\01_blink `
+  --project .\examples\01_core_runtime `
   --target rp2350-arm --board pico2w --json
 ```
 
@@ -158,9 +158,9 @@ Debug ELF and stopped at `app_start` through the same launch-profile contract.
 The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
 V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD
 `0.12.0+dev (2026-07-01-10:44)` detected a Cortex-M4 r0p1, 512 KiB of dual-bank
-flash, six breakpoints, and four watchpoints. Managed GNU Arm GDB programmed a
-7,620-byte `01_blink` Debug image, stopped first at `main` and then at
-`app_start`, detached cleanly, and issued `reset run`. Use the generated
+flash, six breakpoints, and four watchpoints. Managed GNU Arm GDB programmed
+the representative `01_core_runtime` Debug image, stopped first at `main` and
+then at `app_start`, detached cleanly, and issued `reset run`. Use the generated
 `board/st_nucleo_g4.cfg` profile for this board: a bare
 `interface/stlink.cfg` plus `target/stm32g4x.cfg` session may fail target
 examination when the board needs the Nucleo hardware-reset configuration.

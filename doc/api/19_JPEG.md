@@ -185,7 +185,7 @@ Write generated text to a file:
 
 ## Example: Base64 JPEG To ILI9341
 
-`examples/41_jpeg_ili931_base64` shows the complete display path:
+`examples/07_display_media` shows the complete display path:
 
 1. `jpegBase64DecodedSize()` calculates the exact decoded JPEG byte count.
 2. Base64 text is decoded to an exactly sized JPEG work buffer.
@@ -194,4 +194,5 @@ Write generated text to a file:
    are rejected by the example before drawing.
 5. `hal_display_draw_rgb_bitmap()` draws the RGB565 image on ILI9341.
 
-`examples/40_jpeg` shows the smaller memory-only decode path without a display.
+The same project also exercises the direct memory-only decode path before
+rendering.
