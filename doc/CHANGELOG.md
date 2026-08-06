@@ -16,6 +16,14 @@ All notable changes to this project will be documented in this file.
   disconnects, generation changes and the idle timeout drop the session and
   zero its keys, and repeated failures enter a bounded backoff window.
   `HAL_ENABLE_BLE_STREAM` enables `HAL_ENABLE_BLE` and `HAL_ENABLE_CRYPTO`.
+- Hardened JH BLE Stream transport backpressure and lifecycle: handshake and
+  data frames survive controller saturation without skipping counters,
+  counters must be exactly consecutive, ATT MTU limits are enforced, and
+  deinitialization unpublishes the profile and discards pending frames. Native
+  BTstack notifications now run only under the shared CYW43 radio lock.
+- Added an independent BlueZ hardware gate for authenticated stream echo,
+  replay, forward-gap, forged-tag, wrong-proof and rate-limit behavior on
+  RP2040 Pico W and STM32G474 Nucleo with PIM730.
 - Added `jh_secure_random_bytes()` as the shared platform entropy source for
   RP, STM32G474 and the host mock, and routed `hal_tls_default_entropy()` and
   the STM32 lwIP extension port through it instead of per-target copies.

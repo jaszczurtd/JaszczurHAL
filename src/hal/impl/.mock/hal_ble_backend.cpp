@@ -19,6 +19,7 @@ struct mock_ble_t {
   hal_ble_scan_config_t scan;
   hal_status_t service_status;
   uint16_t connection;
+  uint16_t mtu;
   bool started;
   bool ready;
   bool advertising_requested;
@@ -32,6 +33,7 @@ struct mock_ble_t {
   hal_status_t notify_status;
   uint8_t protocol_version;
   uint16_t capabilities;
+  bool published;
   bool subscribed;
   uint8_t last_frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
   size_t last_frame_length;
@@ -206,8 +208,12 @@ hal_status_t mock_stream_notify(void *, uint16_t native_connection,
   if (native_connection == 0u || native_connection != s_mock.connection) {
     return HAL_ENOENT;
   }
-  if (!s_mock.subscribed) {
+  if (!s_mock.published || !s_mock.subscribed) {
     return HAL_ESTATE;
+  }
+  if (s_mock.mtu < HAL_BLE_STREAM_ATT_OVERHEAD ||
+      length > (size_t)(s_mock.mtu - HAL_BLE_STREAM_ATT_OVERHEAD)) {
+    return HAL_EOVERFLOW;
   }
   if (s_mock.notify_status != HAL_OK) {
     return s_mock.notify_status;
@@ -225,6 +231,17 @@ hal_status_t mock_stream_publish(void *, uint8_t protocol_version,
   }
   s_mock.protocol_version = protocol_version;
   s_mock.capabilities = capabilities;
+  s_mock.published = true;
+  return HAL_OK;
+}
+
+hal_status_t mock_stream_unpublish(void *) {
+  s_mock.published = false;
+  s_mock.subscribed = false;
+  s_mock.protocol_version = 0u;
+  s_mock.capabilities = 0u;
+  memset(s_mock.last_frame, 0, sizeof(s_mock.last_frame));
+  s_mock.last_frame_length = 0u;
   return HAL_OK;
 }
 #endif
@@ -242,6 +259,7 @@ const jh_ble_backend_t s_backend = {
 #ifdef HAL_ENABLE_BLE_STREAM
     .stream_notify = mock_stream_notify,
     .stream_publish = mock_stream_publish,
+    .stream_unpublish = mock_stream_unpublish,
 #endif
 };
 
@@ -290,6 +308,7 @@ hal_status_t hal_mock_ble_inject_connection(const hal_ble_address_t *peer) {
     ++s_mock.connection;
   }
   s_mock.advertising_enabled = false;
+  s_mock.mtu = HAL_BLE_DEFAULT_ATT_MTU;
   jh_ble_backend_event_t event{};
   event.type = JH_BLE_BACKEND_EVENT_CONNECTED;
   event.status = HAL_OK;
@@ -308,6 +327,7 @@ hal_status_t hal_mock_ble_inject_disconnect(uint8_t reason) {
   }
   const uint16_t connection = s_mock.connection;
   s_mock.connection = 0u;
+  s_mock.mtu = 0u;
   jh_ble_backend_event_t event{};
   event.type = JH_BLE_BACKEND_EVENT_DISCONNECTED;
   event.status = HAL_OK;
@@ -327,6 +347,7 @@ hal_status_t hal_mock_ble_inject_mtu(uint16_t mtu) {
   if (mtu < HAL_BLE_DEFAULT_ATT_MTU) {
     return HAL_EINVAL;
   }
+  s_mock.mtu = mtu;
   jh_ble_backend_event_t event{};
   event.type = JH_BLE_BACKEND_EVENT_MTU_UPDATED;
   event.status = HAL_OK;
@@ -395,11 +416,15 @@ hal_status_t hal_mock_ble_inject_stream_subscription(bool subscribed) {
   if (!s_mock.started || s_mock.connection == 0u) {
     return !s_mock.started ? HAL_EUNINIT : HAL_ENOENT;
   }
+  if (!s_mock.published) {
+    return HAL_ESTATE;
+  }
   s_mock.subscribed = subscribed;
   jh_ble_backend_event_t event{};
   event.type = JH_BLE_BACKEND_EVENT_STREAM_SUBSCRIPTION;
   event.status = HAL_OK;
   event.native_connection = s_mock.connection;
+  event.mtu = s_mock.mtu;
   event.stream_subscribed = subscribed;
   emit(event);
   return HAL_OK;
@@ -410,6 +435,9 @@ hal_status_t hal_mock_ble_inject_stream_frame(const uint8_t *frame,
   if (!s_mock.started || s_mock.connection == 0u) {
     return !s_mock.started ? HAL_EUNINIT : HAL_ENOENT;
   }
+  if (!s_mock.published) {
+    return HAL_ESTATE;
+  }
   if (frame == nullptr || length == 0u ||
       length > HAL_BLE_STREAM_MAX_FRAME_LEN) {
     return HAL_EINVAL;
@@ -418,6 +446,7 @@ hal_status_t hal_mock_ble_inject_stream_frame(const uint8_t *frame,
   event.type = JH_BLE_BACKEND_EVENT_STREAM_WRITE;
   event.status = HAL_OK;
   event.native_connection = s_mock.connection;
+  event.mtu = s_mock.mtu;
   memcpy(event.stream_frame, frame, length);
   event.stream_frame_length = (uint8_t)length;
   emit(event);

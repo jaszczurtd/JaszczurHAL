@@ -44,6 +44,9 @@ struct stream_runtime_t {
   stream_payload_t tx[HAL_BLE_STREAM_TX_QUEUE_DEPTH];
   size_t tx_head;
   size_t tx_count;
+  uint8_t control_frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
+  size_t control_frame_length;
+  uint16_t att_mtu;
   bool initialized;
   bool subscribed;
   bool rx_overflow_pending;
@@ -72,6 +75,8 @@ void close_session_locked(void) {
   s_stream.rx_count = 0u;
   s_stream.tx_head = 0u;
   s_stream.tx_count = 0u;
+  zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
+  s_stream.control_frame_length = 0u;
   s_stream.rx_overflow_pending = false;
   s_stream.tx_counter = 0u;
   s_stream.rx_counter = 0u;
@@ -109,7 +114,22 @@ bool backoff_active_locked(void) {
 }
 
 /* Push queued payloads until the controller reports backpressure. */
-void flush_tx_locked(void) {
+hal_status_t flush_tx_locked(void) {
+  if (s_stream.control_frame_length != 0u) {
+    const hal_status_t sent = s_stream.backend->stream_notify(
+        s_stream.backend->context, s_stream.native_connection,
+        s_stream.control_frame, s_stream.control_frame_length);
+    if (sent != HAL_OK) {
+      if (sent != HAL_EAGAIN) {
+        s_stream.last_status = sent;
+        close_session_locked();
+      }
+      return sent;
+    }
+    zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
+    s_stream.control_frame_length = 0u;
+  }
+
   while (s_stream.tx_count != 0u) {
     uint8_t frame[HAL_BLE_STREAM_MAX_FRAME_LEN];
     size_t frame_length = 0u;
@@ -122,25 +142,28 @@ void flush_tx_locked(void) {
       if (built == HAL_EOVERFLOW) {
         close_session_locked();
       }
-      return;
+      return built;
     }
+    const uint64_t previous_counter = s_stream.tx_counter;
     const hal_status_t sent = s_stream.backend->stream_notify(
         s_stream.backend->context, s_stream.native_connection, frame,
         frame_length);
     zeroize(frame, sizeof(frame));
     if (sent == HAL_EAGAIN) {
-      /* The counter already advanced, so the payload stays queued and the
-         next attempt rebuilds it under a fresh counter. */
-      return;
+      /* The backend did not accept the frame, so its nonce stays reusable. */
+      s_stream.session.tx_counter = previous_counter;
+      return HAL_EAGAIN;
     }
     if (sent != HAL_OK) {
       s_stream.last_status = sent;
-      return;
+      close_session_locked();
+      return sent;
     }
     s_stream.tx_head = (s_stream.tx_head + 1u) % HAL_BLE_STREAM_TX_QUEUE_DEPTH;
     --s_stream.tx_count;
     s_stream.tx_counter = s_stream.session.tx_counter;
   }
+  return HAL_OK;
 }
 
 } // namespace
@@ -155,7 +178,8 @@ hal_status_t hal_ble_stream_initialize(const hal_ble_stream_config_t *config) {
   }
   const jh_ble_backend_t *backend = jh_ble_backend_instance();
   if (backend == nullptr || backend->stream_notify == nullptr ||
-      backend->stream_publish == nullptr) {
+      backend->stream_publish == nullptr ||
+      backend->stream_unpublish == nullptr) {
     return HAL_EUNSUPPORTED;
   }
   hal_mutex_lock(mutex);
@@ -171,6 +195,7 @@ hal_status_t hal_ble_stream_initialize(const hal_ble_stream_config_t *config) {
   s_stream.state = HAL_BLE_STREAM_STATE_IDLE;
   s_stream.last_status = HAL_OK;
   s_stream.subscribed = false;
+  s_stream.att_mtu = 0u;
   s_stream.initialized = true;
   s_stream.auth_attempts = 0u;
   s_stream.backoff_until_ms = 0u;
@@ -183,8 +208,21 @@ hal_status_t hal_ble_stream_initialize(const hal_ble_stream_config_t *config) {
   close_session_locked();
   hal_mutex_unlock(mutex);
 
-  return backend->stream_publish(
+  const hal_status_t published = backend->stream_publish(
       backend->context, HAL_BLE_STREAM_PROTOCOL_VERSION, config->capabilities);
+  if (published == HAL_OK) {
+    return HAL_OK;
+  }
+
+  hal_mutex_lock(mutex);
+  close_session_locked();
+  jh_ble_stream_session_clear(&s_stream.session);
+  s_stream.initialized = false;
+  s_stream.state = HAL_BLE_STREAM_STATE_UNINITIALIZED;
+  s_stream.backend = nullptr;
+  s_stream.last_status = published;
+  hal_mutex_unlock(mutex);
+  return published;
 }
 
 hal_status_t hal_ble_stream_deinitialize(void) {
@@ -193,6 +231,7 @@ hal_status_t hal_ble_stream_deinitialize(void) {
     return HAL_ENOMEM;
   }
   hal_mutex_lock(mutex);
+  const jh_ble_backend_t *backend = s_stream.backend;
   s_stream.state = HAL_BLE_STREAM_STATE_IDLE;
   close_session_locked();
   jh_ble_stream_session_clear(&s_stream.session);
@@ -201,7 +240,8 @@ hal_status_t hal_ble_stream_deinitialize(void) {
   s_stream.state = HAL_BLE_STREAM_STATE_UNINITIALIZED;
   s_stream.backend = nullptr;
   hal_mutex_unlock(mutex);
-  return HAL_OK;
+  return backend != nullptr ? backend->stream_unpublish(backend->context)
+                            : HAL_OK;
 }
 
 hal_status_t hal_ble_stream_set_secret(const uint8_t *secret, size_t length) {
@@ -260,6 +300,14 @@ hal_status_t hal_ble_stream_send(const void *data, size_t length) {
     hal_mutex_unlock(mutex);
     return HAL_EAUTH;
   }
+  const size_t frame_length = HAL_BLE_STREAM_FRAME_HEADER_LEN +
+                              HAL_BLE_STREAM_AEAD_COUNTER_LEN + length +
+                              HAL_BLE_STREAM_AEAD_TAG_LEN;
+  if (s_stream.att_mtu < HAL_BLE_STREAM_ATT_OVERHEAD ||
+      frame_length > (size_t)(s_stream.att_mtu - HAL_BLE_STREAM_ATT_OVERHEAD)) {
+    hal_mutex_unlock(mutex);
+    return HAL_EOVERFLOW;
+  }
   if (s_stream.tx_count == HAL_BLE_STREAM_TX_QUEUE_DEPTH) {
     ++s_stream.dropped_tx_frames;
     hal_mutex_unlock(mutex);
@@ -270,9 +318,9 @@ hal_status_t hal_ble_stream_send(const void *data, size_t length) {
   memcpy(s_stream.tx[tail].data, data, length);
   s_stream.tx[tail].length = length;
   ++s_stream.tx_count;
-  flush_tx_locked();
+  const hal_status_t flushed = flush_tx_locked();
   hal_mutex_unlock(mutex);
-  return HAL_OK;
+  return flushed == HAL_EAGAIN ? HAL_OK : flushed;
 }
 
 hal_status_t hal_ble_stream_receive(void *out, size_t capacity,
@@ -380,6 +428,7 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
   case JH_BLE_BACKEND_EVENT_STREAM_SUBSCRIPTION:
     s_stream.subscribed = event->stream_subscribed;
     s_stream.native_connection = event->native_connection;
+    s_stream.att_mtu = event->mtu;
     if (!s_stream.subscribed) {
       close_session_locked();
     } else if (s_stream.state == HAL_BLE_STREAM_STATE_IDLE) {
@@ -390,6 +439,18 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
     if (backoff_active_locked()) {
       ++s_stream.dropped_rx_frames;
       s_stream.last_status = HAL_EAUTH;
+      break;
+    }
+    if (s_stream.control_frame_length != 0u) {
+      ++s_stream.dropped_rx_frames;
+      s_stream.last_status = HAL_EBUSY;
+      break;
+    }
+    if (event->stream_frame_length >= HAL_BLE_STREAM_FRAME_HEADER_LEN &&
+        event->stream_frame[0] == HAL_BLE_STREAM_PROTOCOL_VERSION &&
+        event->stream_frame[1] == JH_BLE_STREAM_FRAME_HELLO &&
+        event->mtu < HAL_BLE_STREAM_MIN_ATT_MTU) {
+      s_stream.last_status = HAL_EOVERFLOW;
       break;
     }
     jh_ble_stream_session_result_t result;
@@ -406,9 +467,9 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
     }
 
     if (result.response_length != 0u) {
-      (void)s_stream.backend->stream_notify(
-          s_stream.backend->context, s_stream.native_connection,
-          result.response, result.response_length);
+      memcpy(s_stream.control_frame, result.response, result.response_length);
+      s_stream.control_frame_length = result.response_length;
+      (void)flush_tx_locked();
     }
 
     if (result.payload_length != 0u) {
@@ -440,7 +501,17 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
     break;
   }
   case JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND:
-    flush_tx_locked();
+    if (event->status == HAL_OK) {
+      (void)flush_tx_locked();
+    } else {
+      s_stream.last_status = event->status;
+      close_session_locked();
+    }
+    break;
+  case JH_BLE_BACKEND_EVENT_MTU_UPDATED:
+    if (s_stream.native_connection == event->native_connection) {
+      s_stream.att_mtu = event->mtu;
+    }
     break;
   default:
     break;
@@ -462,6 +533,9 @@ extern "C" void jh_ble_stream_on_poll(void) {
       s_stream.last_status = HAL_ETIMEOUT;
       close_session_locked();
     }
+    if (s_stream.control_frame_length != 0u || s_stream.tx_count != 0u) {
+      (void)flush_tx_locked();
+    }
   }
   hal_mutex_unlock(mutex);
 }
@@ -476,6 +550,7 @@ extern "C" void jh_ble_stream_on_link_lost(uint32_t generation) {
     s_stream.generation = generation;
     s_stream.subscribed = false;
     s_stream.native_connection = 0u;
+    s_stream.att_mtu = 0u;
     close_session_locked();
   }
   hal_mutex_unlock(mutex);
