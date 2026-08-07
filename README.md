@@ -98,6 +98,8 @@ flags in a project-local
 #define HAL_ENABLE_GPS
 ```
 
+The project uses its own validation mechanisms to check whether a given flag is valid and supported, and whether its parameters are correct.
+
 For the complete flag matrix, dependency propagation rules, and `HAL_ENABLE_*` options,
 see:
 
@@ -105,24 +107,7 @@ see:
 - [doc/api/02_module_flags.md](doc/api/02_module_flags.md)
 - [doc/HAL_FLAGS.txt](doc/HAL_FLAGS.txt)
 
-Feature flags use presence semantics: use `#define HAL_ENABLE_X` or
-`#define HAL_ENABLE_X 1`. A definition such as `HAL_ENABLE_X=0` is still
-present to the C/C++ preprocessor and therefore enables the module. Supported
-board generation, CMake, static-library scripts, and `jh-vscode` reject `=0`
-and other explicit values; arbitrary direct compiler flags retain preprocessor
-presence semantics. In definition-list inputs, every `HAL_ENABLE_*` entry must
-be a standalone simple token separated with semicolons. Whitespace does not
-separate multiple feature definitions, and CMake generator expressions are
-rejected. The versioned JSON registry under `config/features/` generates the C
-feature closure in `src/hal/generated/` and the CMake resolver in
-`cmake/generated/`. The resolved set drives C preprocessing, CMake source and
-dependency selection, the board feature hash and link contract, and
-`jh-vscode` preflight and OTA decisions. `hal_config.h` retains rules that
-depend on tunables, provider selection, board capabilities, or the active
-target. Defining `HAL_CONFIG_VERBOSE` emits a generated preprocessor report for
-every active registered feature.
-
-## Target selection (multiplatform)
+## Target selection example (multiplatform)
 
 Separate from the per-module flags, JaszczurHAL selects exactly one hardware
 backend through `src/hal/hal_target.h`. Define one
@@ -139,16 +124,6 @@ of the following in `hal_project_config.h` (or via `-D`):
 If you define none, the target is **auto-detected** from the toolchain.
 Backend files compile only for their selected target, so unused backends cost zero code.
 
-`hal_project_config.h` is loaded before target auto-detection and derived
-`HAL_TARGET_IS_*` values. Keep it as a macro-only input header: define raw
-target, board, feature, and tuning macros there without including JaszczurHAL
-headers or depending on derived target/board macros. Feature definitions used
-for source selection must be unconditional `#define HAL_ENABLE_X` or
-`#define HAL_ENABLE_X 1`; the only supported conditional form is a same-symbol
-`#ifndef HAL_ENABLE_X` guard. Do not put feature definitions under any other
-`#if`/`#ifdef`, including raw or derived target/board branches, because the
-early collector reads this macro-only file textually.
-
 Official builds select a stable target and board ID through the generated board
 registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
 `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`,
@@ -156,12 +131,13 @@ registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
 compatibility, flash size, pins, components, and feature contracts before
 toolchain import. See
 [Target and board profiles](doc/boards_profiles_howto.md).
-
-Dispatcher-backed VS Code projects select the active family/board with the
-manifest, `.vscode/jaszczurhal.local.json`, or `--target`/`--board`; the
-dispatcher then pins `JH_TARGET` for CMake and lets `hal_target.h` select the
-HAL backend. See [FwProjectWorkflow.md](doc/FwProjectWorkflow.md) for the full
+Also see [FwProjectWorkflow.md](doc/FwProjectWorkflow.md) for the full
 target/board/configuration model.
+
+In practice, you do not need to know how the target-selection magic works internally.
+ Just press `Ctrl+Shift+Alt+1` in your projectm and select the target from the menu.
+
+This is the [full list](vscode/README.md#vs-code-keyboard-shortcuts) of available VS Code Keyboard Shortcuts.
 
 ## FreeRTOS opt-in
 
@@ -171,13 +147,24 @@ FreeRTOS support is selected with an explicit compile-time flag:
 #define HAL_ENABLE_FREERTOS
 ```
 
-Applications on RP2040, RP2350, and STM32G474 use the upstream FreeRTOS headers
-and APIs directly; JaszczurHAL starts the scheduler and pins the optional
-application entry tasks to their cores. RP builds use the pinned FreeRTOS-Kernel
-with SMP ports for all three RP variants, STM32G474 uses the same pinned kernel
-with its Cortex-M4F port. Kernel pinning, port notes, and build variants are
-documented in [lib_compilation.md](doc/lib_compilation.md) and
-[doc/api/04_multicore_drivers_migration.md](doc/api/04_multicore_drivers_migration.md).
+Applications use the standard upstream FreeRTOS headers and APIs directly on all supported targets.
+
+JaszczurHAL hides the target-specific startup details, such as scheduler startup and optional application task placement. RP targets use the pinned FreeRTOS-Kernel with SMP support, while STM32G474 uses the same kernel with the Cortex-M4F port.
+
+Detailed notes about kernel pinning, ports, and build variants are available in [lib_compilation.md](doc/lib_compilation.md) and [doc/api/04_multicore_drivers_migration.md](doc/api/04_multicore_drivers_migration.md).
+
+## Thread safety (overview)
+
+Thread/multicore safety is a core design principle across all targets. Initialization
+and teardown paths (`init` / `create` / `destroy` / `deinit`) are treated as
+single-core operations; singleton and per-bus locks are created atomically on
+first use through defensive lazy mutex creation. The mock backend targets
+deterministic single-threaded tests, and the optional
+`JH_ENABLE_FREERTOS_POSIX_TESTS` flag adds host-side FreeRTOS scheduler
+coverage on top of it.
+
+For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
+see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
 
 ## Building as a static library (.a)
 
@@ -218,19 +205,6 @@ Tool configuration lives alongside the sources: `.clang-tidy`,
 `scripts/clang_tidy_files.py`. Suite layout, dependencies, and instructions for
 adding tests are in [doc/api/03_build_tests.md](doc/api/03_build_tests.md).
 
-## Thread safety (overview)
-
-Thread safety is a core design principle across all targets. Initialization
-and teardown paths (`init` / `create` / `destroy` / `deinit`) are treated as
-single-core operations; singleton and per-bus locks are created atomically on
-first use through defensive lazy mutex creation. The mock backend targets
-deterministic single-threaded tests, and the optional
-`JH_ENABLE_FREERTOS_POSIX_TESTS` flag adds host-side FreeRTOS scheduler
-coverage on top of it.
-
-For detailed signatures, exact guarantees, module contracts, backend notes, and test coverage,
-see [JaszczurHAL_API.md](doc/JaszczurHAL_API.md).
-
 ## Security and SBOM
 
 JaszczurHAL keeps a lightweight software supply-chain record for bundled and
@@ -266,6 +240,7 @@ starts persistent serial monitors, and refreshes IntelliSense.
   [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
 - Native RP network updates, first flash, and firewall requirements:
   [OTAWorkflow.md](doc/OTAWorkflow.md)
+- [Full list of keyboard shortcuts](vscode/README.md#vs-code-keyboard-shortcuts)
 
 ## Debugging with VS Code
 
