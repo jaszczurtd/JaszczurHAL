@@ -37,6 +37,7 @@ static struct sockaddr_in any_endpoint(uint16_t port) {
 static void compile_tcp_client_shape(void) {
   char rx[8];
   const char tx[] = "GET";
+  ssize_t io_result;
   struct addrinfo hints;
   struct addrinfo *resolved = NULL;
   struct sockaddr_in remote = endpoint("192.0.2.10", 80u);
@@ -76,9 +77,11 @@ static void compile_tcp_client_shape(void) {
     (void)fcntl(fd, F_SETFL, O_NONBLOCK);
     (void)send(fd, tx, sizeof(tx) - 1u, 0);
     (void)send(fd, tx, sizeof(tx) - 1u, MSG_DONTWAIT);
-    (void)write(fd, tx, sizeof(tx) - 1u);
+    io_result = write(fd, tx, sizeof(tx) - 1u);
+    (void)io_result;
     (void)recv(fd, rx, sizeof(rx), MSG_DONTWAIT);
-    (void)read(fd, rx, sizeof(rx));
+    io_result = read(fd, rx, sizeof(rx));
+    (void)io_result;
     (void)shutdown(fd, SHUT_RDWR);
     (void)close(fd);
   }
@@ -104,6 +107,7 @@ static void compile_tcp_server_shape(void) {
 static void compile_udp_client_shape(void) {
   char rx[8];
   const char tx[] = "ping";
+  ssize_t io_result;
   struct sockaddr_in remote = endpoint("198.51.100.20", 9000u);
   struct sockaddr_in local_name;
   struct sockaddr_in peer_name;
@@ -115,9 +119,11 @@ static void compile_udp_client_shape(void) {
     (void)connect(fd, (const struct sockaddr *)&remote,
                   (socklen_t)sizeof(remote));
     (void)send(fd, tx, sizeof(tx) - 1u, 0);
-    (void)write(fd, tx, sizeof(tx) - 1u);
+    io_result = write(fd, tx, sizeof(tx) - 1u);
+    (void)io_result;
     (void)recv(fd, rx, sizeof(rx), MSG_DONTWAIT);
-    (void)read(fd, rx, sizeof(rx));
+    io_result = read(fd, rx, sizeof(rx));
+    (void)io_result;
     (void)getsockname(fd, (struct sockaddr *)&local_name, &name_len);
     name_len = (socklen_t)sizeof(peer_name);
     (void)getpeername(fd, (struct sockaddr *)&peer_name, &name_len);

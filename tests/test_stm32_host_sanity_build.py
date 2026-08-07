@@ -55,11 +55,51 @@ for relative in ("runalltests.sh", ".github/workflows/ci.yml"):
 
 ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 host_test_job = ci_workflow.split("\n  test:\n", 1)[1].split("\n  memcheck:\n", 1)[0]
-require(
-    "gcc-arm-none-eabi" in host_test_job,
-    "the Linux host-test job does not provision the cross compiler required "
-    "by the installed radio-package probe",
-)
+for package in (
+    "gcc-arm-none-eabi",
+    "libnewlib-arm-none-eabi",
+    "libstdc++-arm-none-eabi-dev",
+):
+    require(
+        package in host_test_job,
+        f"the Linux host-test job does not provision {package}",
+    )
+for dependency in ("ensure_btstack.sh --force", "ensure_freertos_kernel.sh --force"):
+    require(
+        dependency in host_test_job,
+        f"the Linux host-test job does not prepare {dependency.split()[0]}",
+    )
+
+memcheck_job = ci_workflow.split("\n  memcheck:\n", 1)[1].split(
+    "\n  static-analysis:\n", 1
+)[0]
+for package in (
+    "gcc-arm-none-eabi",
+    "libnewlib-arm-none-eabi",
+    "libstdc++-arm-none-eabi-dev",
+):
+    require(
+        package in memcheck_job,
+        f"the memcheck job does not provision {package}",
+    )
+for dependency in ("ensure_btstack.sh --force", "ensure_freertos_kernel.sh --force"):
+    require(
+        dependency in memcheck_job,
+        f"the memcheck job does not prepare {dependency.split()[0]}",
+    )
+
+windows_tooling_job = ci_workflow.split("\n  windows-tooling:\n", 1)[1].split(
+    "\n  windows-firmware:\n", 1
+)[0]
+for fragment in (
+    "$previousErrorActionPreference = $ErrorActionPreference",
+    "$ErrorActionPreference = 'Continue'",
+    "$ErrorActionPreference = $previousErrorActionPreference",
+):
+    require(
+        fragment in windows_tooling_job,
+        "the Windows FreeRTOS configure probe does not safely capture CMake stderr",
+    )
 
 if sys.platform == "win32":
     print("host-compiler STM32 configure probe: skipped on native Windows")

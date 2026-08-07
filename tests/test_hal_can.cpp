@@ -259,7 +259,7 @@ void test_send_receive_can_fd_frame_via_mock_frame_api(void) {
   frame.flags = HAL_CAN_FRAME_FD | HAL_CAN_FRAME_BRS;
   frame.len = 64;
   frame.dlc = hal_can_bytes_to_dlc(frame.len);
-  for (uint8_t i = 0; i < frame.len; i++) {
+  for (uint8_t i = 0; i < HAL_CAN_FD_MAX_DATA_LEN; i++) {
     frame.data[i] = i;
   }
 

@@ -45,6 +45,10 @@ All notable changes to this project will be documented in this file.
   fully resolved `jh-vscode` configuration while retaining the documented
   direct-compiler presence behavior; definition lists now use simple,
   semicolon-separated tokens and reject CMake generator expressions.
+- Prepared BTstack and FreeRTOS-Kernel before Linux CTest and memcheck probes,
+  provisioned the ARM compiler with newlib and C++ headers, and made the
+  Windows FreeRTOS CMake probe tolerate informational Pico SDK output written
+  to stderr.
 
 ### Consolidated examples and faster gate
 
