@@ -353,7 +353,7 @@ jobs:
           }
 
       - name: Upload representative firmware artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: windows-${{ matrix.target }}-firmware
           path: stage5 consumer with spaces/.build/*
@@ -376,8 +376,8 @@ jobs:
             --resolution-output .build/ci/effective-feature-resolution.json
 
       - name: Upload effective feature resolution
-        if: always()
-        uses: actions/upload-artifact@v4
+        if: ${{ always() && hashFiles('.build/ci/effective-feature-resolution.json') != '' }}
+        uses: actions/upload-artifact@v6
         with:
           name: effective-feature-resolution
           path: .build/ci/effective-feature-resolution.json
