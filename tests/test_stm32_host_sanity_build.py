@@ -477,6 +477,19 @@ add_custom_target(config_dependency_probe ALL
     incremental_header.write_text(
         "#define HAL_ENABLE_TLS 1\n", encoding="utf-8"
     )
+    # CMAKE_CONFIGURE_DEPENDS re-checks by timestamp. The edit lands in the same
+    # second as the generated build system, so push the header clearly ahead of
+    # it instead of relying on filesystem timestamp resolution.
+    build_system_mtime = max(
+        (
+            entry.stat().st_mtime
+            for entry in incremental_build.rglob("*")
+            if entry.is_file()
+        ),
+        default=incremental_header.stat().st_mtime,
+    )
+    forced_mtime = max(build_system_mtime, incremental_header.stat().st_mtime) + 2.0
+    os.utime(incremental_header, (forced_mtime, forced_mtime))
     incremental_rebuild = subprocess.run(
         [cmake, "--build", str(incremental_build)],
         check=False,

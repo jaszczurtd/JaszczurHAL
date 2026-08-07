@@ -67,6 +67,61 @@ the pin has a board-owned function that an application can intentionally
 drive. Application wiring, partition layout, USB identity, clock selection,
 secrets, and WS2812 pixel order do not belong in a board descriptor.
 
+## Board-owned devices
+
+Every entry under `devices` uses a camelCase ID and declares a `kind`. Devices
+that own one line - `gpio`, `component-gpio`, and `addressable` - carry a single
+`endpoint`.
+
+A device wired across several pins on a bus uses `kind: "bus-device"` and names
+a `role` from the generator's device-role registry. The role declares which
+signals and which typed attributes the descriptor must supply, so a profile
+cannot ship a partially described device:
+
+```json
+"loraRadio": {
+  "kind": "bus-device",
+  "role": "sx1262-radio",
+  "bus": { "kind": "spi", "index": 1 },
+  "signals": {
+    "sck": { "domain": "soc-gpio", "id": 14 },
+    "cs": { "domain": "soc-gpio", "id": 13 },
+    "busy": { "domain": "soc-gpio", "id": 18 },
+    "dio1": { "domain": "soc-gpio", "id": 16 }
+  },
+  "attributes": {
+    "maxSpiClockHz": 16000000,
+    "regulator": "dcdc",
+    "rfSwitchMode": "dio2"
+  }
+}
+```
+
+The generator enforces that each role appears at most once per board, that no
+two signals of one device share a pin, that every `soc-gpio` signal is covered
+by a `hard` reservation, and that numeric attributes stay inside their declared
+type and ordering. Signals and attributes may be gated on an enum attribute:
+they become required when the gate selects them and are rejected otherwise, so
+`rfSwitchMode: "dio2"` forbids the GPIO switch lines and levels.
+
+Each role materializes a fixed macro surface in `jh_board_config.h` under its
+own prefix, plus `HAL_BOARD_DEVICE_PIN_NONE` for absent optional signals:
+
+```c
+#define HAL_BOARD_LORA_RADIO_PRESENT 1
+#define HAL_BOARD_LORA_RADIO_SPI_BUS 1u
+#define HAL_BOARD_LORA_RADIO_PIN_CS 13u
+#define HAL_BOARD_LORA_RADIO_PIN_RF_SWITCH_A HAL_BOARD_DEVICE_PIN_NONE
+#define HAL_BOARD_LORA_RADIO_MAX_SPI_CLOCK_HZ UINT32_C(16000000)
+#define HAL_BOARD_LORA_RADIO_REGULATOR_IS_DCDC 1
+```
+
+Boards without the device still define `<PREFIX>_PRESENT 0`, so a HAL module
+can resolve board-supplied configuration at compile time. Enum attributes emit
+one `_IS_<VALUE>` flag per allowed value and a `_NAME` string; STM32 symbolic
+pins are encoded into the same integer pin IDs the HAL consumes. The full
+descriptor also reaches `jh_board_resolved.json` unchanged for tooling.
+
 Component IDs come from a finite registry shared by the generator and
 `cmake/jh_board_components.cmake`. Every official build validates the
 resolved component list against that registry: an unknown component, a

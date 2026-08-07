@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -724,6 +725,261 @@ flash_mismatch = mutate(
 )
 result = run("--validate-only", boards_root=flash_mismatch)
 require(result.returncode == 0, "descriptor-only validation should not guess SDK facts")
+
+# Typed multi-pin bus devices. rp2040-zero gains a synthetic SX1262 so the role
+# model is covered before any board profile ships one.
+RADIO_PINS = {
+    "sck": 14,
+    "mosi": 15,
+    "miso": 24,
+    "cs": 13,
+    "reset": 23,
+    "busy": 18,
+    "dio1": 19,
+    "rfSwitchA": 17,
+}
+RADIO_DEVICE = {
+    "kind": "bus-device",
+    "role": "sx1262-radio",
+    "bus": {"kind": "spi", "index": 1},
+    "signals": {
+        name: {"domain": "soc-gpio", "id": pin} for name, pin in RADIO_PINS.items()
+    },
+    "attributes": {
+        "minFrequencyHz": 410000000,
+        "maxFrequencyHz": 525000000,
+        "maxSpiClockHz": 16000000,
+        "defaultSpiClockHz": 8000000,
+        "minTxPowerDbm": -9,
+        "maxTxPowerDbm": 22,
+        "regulator": "dcdc",
+        "rfSwitchMode": "single-gpio",
+        "rfSwitchIdleLevelA": True,
+        "rfSwitchRxLevelA": True,
+        "rfSwitchTxLevelA": False,
+        "tcxoControl": "dio3",
+        "tcxoVoltage": "1v8",
+        "tcxoStartupUs": 5000,
+    },
+}
+
+
+def radio_fixture(case: str, adjust=None, reserve: bool = True) -> Path:
+    device = copy.deepcopy(RADIO_DEVICE)
+    pins = sorted(set(RADIO_PINS.values()) | {20})
+    if adjust is not None:
+        adjust(device)
+
+    def apply(value: dict) -> None:
+        if reserve:
+            value["gpio"]["reservations"]["lora-radio"] = {
+                "pins": [{"domain": "soc-gpio", "id": pin} for pin in pins],
+                "owner": "board.lora-radio",
+                "strength": "hard",
+                "reason": "Synthetic SX1262 radio wiring under test.",
+            }
+        value["devices"]["loraRadio"] = device
+
+    return mutate(case, "profiles/rp2040-zero.json", apply)
+
+
+radio_root = radio_fixture("radio-valid")
+run("--validate-only", boards_root=radio_root)
+radio_output = TEST_ROOT / "fixtures/.build/radio"
+run(
+    "--target",
+    "rp2040",
+    "--board",
+    "rp2040-zero",
+    "--output-dir",
+    str(radio_output),
+    boards_root=radio_root,
+)
+radio_header = (radio_output / "jh_board_config.h").read_text(encoding="utf-8")
+for expected in (
+    "#define HAL_BOARD_DEVICE_PIN_NONE 0xFFu",
+    "#define HAL_BOARD_LORA_RADIO_PRESENT 1",
+    "#define HAL_BOARD_LORA_RADIO_SPI_BUS 1u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_CS 13u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_DIO1 19u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_RF_SWITCH_A 17u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_RF_SWITCH_B HAL_BOARD_DEVICE_PIN_NONE",
+    "#define HAL_BOARD_LORA_RADIO_MIN_FREQUENCY_HZ UINT32_C(410000000)",
+    "#define HAL_BOARD_LORA_RADIO_MIN_TX_POWER_DBM (-9)",
+    "#define HAL_BOARD_LORA_RADIO_DEFAULT_SPI_CLOCK_HZ UINT32_C(8000000)",
+    "#define HAL_BOARD_LORA_RADIO_REGULATOR_IS_DCDC 1",
+    "#define HAL_BOARD_LORA_RADIO_REGULATOR_IS_LDO 0",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_MODE_IS_SINGLE_GPIO 1",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_MODE_IS_DUAL_GPIO 0",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_TX_LEVEL_A 0",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_DIO3 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_VOLTAGE_IS_1V8 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_STARTUP_US UINT32_C(5000)",
+):
+    require(expected in radio_header, f"generated board config lacks {expected!r}")
+require(
+    load(radio_output / "jh_board_resolved.json")["devices"]["loraRadio"]
+    == RADIO_DEVICE,
+    "resolved JSON lost the bus-device descriptor",
+)
+
+
+def radio_negative(case: str, adjust, diagnostic: str, reserve: bool = True) -> None:
+    stderr = run(
+        "--validate-only",
+        boards_root=radio_fixture(case, adjust, reserve),
+        expected_success=False,
+    ).stderr
+    require(
+        diagnostic in stderr,
+        f"{case} diagnostic lacks {diagnostic!r}; got {stderr.strip()!r}",
+    )
+
+
+def drop_switch_levels(device: dict) -> None:
+    for suffix in ("IdleLevelA", "RxLevelA", "TxLevelA"):
+        device["attributes"].pop(f"rfSwitch{suffix}")
+
+
+radio_negative(
+    "radio-missing-signal",
+    lambda device: device["signals"].pop("busy"),
+    "$.devices.loraRadio.signals",
+)
+radio_negative(
+    "radio-unknown-signal",
+    lambda device: device["signals"].update(
+        dio9={"domain": "soc-gpio", "id": 20}
+    ),
+    "$.devices.loraRadio.signals",
+)
+radio_negative(
+    "radio-duplicate-pin",
+    lambda device: device["signals"].update(
+        dio1={"domain": "soc-gpio", "id": 13}
+    ),
+    "a pin not already used by cs",
+)
+radio_negative(
+    "radio-unreserved-pin",
+    None,
+    "a pin covered by a hard gpio reservation",
+    reserve=False,
+)
+radio_negative(
+    "radio-unordered-frequency",
+    lambda device: device["attributes"].update(maxFrequencyHz=400000000),
+    "$.devices.loraRadio.attributes.minFrequencyHz",
+)
+radio_negative(
+    "radio-clock-above-max",
+    lambda device: device["attributes"].update(defaultSpiClockHz=20000000),
+    "$.devices.loraRadio.attributes.defaultSpiClockHz",
+)
+radio_negative(
+    "radio-missing-attribute",
+    lambda device: device["attributes"].pop("regulator"),
+    "required sx1262-radio attributes",
+)
+radio_negative(
+    "radio-unknown-attribute",
+    lambda device: device["attributes"].update(bogus=1),
+    "only attributes required by the active sx1262-radio configuration",
+)
+radio_negative(
+    "radio-bad-enum",
+    lambda device: device["attributes"].update(regulator="buck"),
+    "$.devices.loraRadio.attributes.regulator",
+)
+radio_negative(
+    "radio-int8-range",
+    lambda device: device["attributes"].update(maxTxPowerDbm=500),
+    "an int8 integer in [-128, 127]",
+)
+radio_negative(
+    "radio-bool-type",
+    lambda device: device["attributes"].update(rfSwitchTxLevelA=1),
+    "a boolean",
+)
+radio_negative(
+    "radio-unknown-role",
+    lambda device: device.update(role="sx1276-radio"),
+    "a known device role",
+)
+radio_negative(
+    "radio-bad-bus-kind",
+    lambda device: device["bus"].update(kind="i2c"),
+    "$.devices.loraRadio.bus.kind",
+)
+radio_negative(
+    "radio-unknown-kind",
+    lambda device: device.update(kind="spi-thing"),
+    "$.devices.loraRadio.kind",
+)
+non_camel_device = mutate(
+    "radio-non-camel-id",
+    "profiles/rp2040-zero.json",
+    lambda value: value["devices"].update(
+        lora_radio={"kind": "gpio", "endpoint": {"domain": "soc-gpio", "id": 20}}
+    ),
+)
+require(
+    "a camelCase device ID"
+    in run(
+        "--validate-only", boards_root=non_camel_device, expected_success=False
+    ).stderr,
+    "non-camelCase device ID was not diagnosed",
+)
+radio_negative(
+    "radio-switch-signal-without-mode",
+    lambda device: (
+        device["attributes"].update(rfSwitchMode="dio2"),
+        drop_switch_levels(device),
+    ),
+    "only signals required by the active sx1262-radio configuration",
+)
+radio_negative(
+    "radio-tcxo-none-keeps-voltage",
+    lambda device: device["attributes"].update(tcxoControl="none"),
+    "only attributes required by the active sx1262-radio configuration",
+)
+radio_negative(
+    "radio-tcxo-dio3-without-voltage",
+    lambda device: device["attributes"].pop("tcxoVoltage"),
+    "required sx1262-radio attributes",
+)
+
+for case, adjust in (
+    (
+        "radio-dio2-switch",
+        lambda device: (
+            device["attributes"].update(rfSwitchMode="dio2"),
+            drop_switch_levels(device),
+            device["signals"].pop("rfSwitchA"),
+        ),
+    ),
+    (
+        "radio-dual-gpio-switch",
+        lambda device: (
+            device["attributes"].update(
+                rfSwitchMode="dual-gpio",
+                rfSwitchIdleLevelB=False,
+                rfSwitchRxLevelB=True,
+                rfSwitchTxLevelB=False,
+            ),
+            device["signals"].update(rfSwitchB={"domain": "soc-gpio", "id": 20}),
+        ),
+    ),
+    (
+        "radio-tcxo-none",
+        lambda device: (
+            device["attributes"].update(tcxoControl="none"),
+            device["attributes"].pop("tcxoVoltage"),
+            device["attributes"].pop("tcxoStartupUs"),
+        ),
+    ),
+):
+    run("--validate-only", boards_root=radio_fixture(case, adjust))
 
 pico_output = TEST_ROOT / "generated/drift-pico"
 rm2_output = TEST_ROOT / "generated/drift-pico-rm2"

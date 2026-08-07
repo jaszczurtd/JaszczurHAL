@@ -74,8 +74,98 @@ COMPONENT_REGISTRY = {
         "slot": "bluetooth-host-stack",
     },
 }
+SINGLE_ENDPOINT_DEVICE_KINDS = {
+    "gpio": {"activeLevel"},
+    "component-gpio": {"activeLevel"},
+    "addressable": {"protocol", "pixelOrder"},
+}
+BUS_DEVICE_KIND = "bus-device"
+# Declarative schema for multi-pin bus devices. Machinery below is role
+# agnostic; every entry here is data describing one device role.
+DEVICE_ROLE_REGISTRY = {
+    "sx1262-radio": {
+        "busKinds": {"spi"},
+        "macroPrefix": "HAL_BOARD_LORA_RADIO",
+        "signals": {
+            "sck": "required",
+            "mosi": "required",
+            "miso": "required",
+            "cs": "required",
+            "reset": "required",
+            "busy": "required",
+            "dio1": "required",
+            "rfSwitchA": "conditional",
+            "rfSwitchB": "conditional",
+        },
+        "attributes": {
+            "minFrequencyHz": {"type": "uint32", "min": 1},
+            "maxFrequencyHz": {"type": "uint32", "min": 1},
+            "maxSpiClockHz": {"type": "uint32", "min": 1},
+            "defaultSpiClockHz": {"type": "uint32", "min": 1},
+            "minTxPowerDbm": {"type": "int8"},
+            "maxTxPowerDbm": {"type": "int8"},
+            "regulator": {"type": "enum", "values": ["ldo", "dcdc"]},
+            "rfSwitchMode": {
+                "type": "enum",
+                "values": ["none", "dio2", "single-gpio", "dual-gpio"],
+            },
+            "tcxoControl": {"type": "enum", "values": ["none", "dio3"]},
+            "tcxoVoltage": {
+                "type": "enum",
+                "values": [
+                    "1v6",
+                    "1v7",
+                    "1v8",
+                    "2v2",
+                    "2v4",
+                    "2v7",
+                    "3v0",
+                    "3v3",
+                ],
+                "conditional": True,
+            },
+            "tcxoStartupUs": {"type": "uint32", "min": 1, "conditional": True},
+            "rfSwitchIdleLevelA": {"type": "bool", "conditional": True},
+            "rfSwitchRxLevelA": {"type": "bool", "conditional": True},
+            "rfSwitchTxLevelA": {"type": "bool", "conditional": True},
+            "rfSwitchIdleLevelB": {"type": "bool", "conditional": True},
+            "rfSwitchRxLevelB": {"type": "bool", "conditional": True},
+            "rfSwitchTxLevelB": {"type": "bool", "conditional": True},
+        },
+        "ordered": [
+            ("minFrequencyHz", "maxFrequencyHz"),
+            ("minTxPowerDbm", "maxTxPowerDbm"),
+            ("defaultSpiClockHz", "maxSpiClockHz"),
+        ],
+        "requires": [
+            {
+                "when": ("rfSwitchMode", {"single-gpio", "dual-gpio"}),
+                "signals": ["rfSwitchA"],
+                "attributes": [
+                    "rfSwitchIdleLevelA",
+                    "rfSwitchRxLevelA",
+                    "rfSwitchTxLevelA",
+                ],
+            },
+            {
+                "when": ("rfSwitchMode", {"dual-gpio"}),
+                "signals": ["rfSwitchB"],
+                "attributes": [
+                    "rfSwitchIdleLevelB",
+                    "rfSwitchRxLevelB",
+                    "rfSwitchTxLevelB",
+                ],
+            },
+            {
+                "when": ("tcxoControl", {"dio3"}),
+                "attributes": ["tcxoVoltage", "tcxoStartupUs"],
+            },
+        ],
+    }
+}
 ID_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 MACRO_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+CAMEL_PATTERN = re.compile(r"^[a-z][a-zA-Z0-9]*$")
 STM32_PIN_PATTERN = re.compile(r"^P([A-Z])([0-9]|1[0-5])$")
 FEATURE_PATTERN = re.compile(
     r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
@@ -227,6 +317,268 @@ def validate_endpoint(
             fail(path, json_path, endpoint, "integer component id and halPin")
     else:
         fail(path, f"{json_path}.domain", domain, "soc-gpio or component-gpio")
+
+
+def validate_role_registry() -> None:
+    """Guard the declarative role specs against unreachable conditionals."""
+    for role, spec in DEVICE_ROLE_REGISTRY.items():
+        if not ID_PATTERN.fullmatch(role):
+            raise DescriptorError(f"device role {role!r}: expected a kebab-case ID")
+        if not MACRO_PATTERN.fullmatch(spec["macroPrefix"]):
+            raise DescriptorError(f"device role {role!r}: expected a C macro prefix")
+        gated_signals: set[str] = set()
+        gated_attributes: set[str] = set()
+        for rule in spec["requires"]:
+            gate, allowed = rule["when"]
+            gate_spec = spec["attributes"].get(gate)
+            if gate_spec is None or gate_spec["type"] != "enum":
+                raise DescriptorError(
+                    f"device role {role!r}: gate {gate!r} is not an enum attribute"
+                )
+            unknown = allowed - set(gate_spec["values"])
+            if unknown:
+                raise DescriptorError(
+                    f"device role {role!r}: gate {gate!r} values {sorted(unknown)} "
+                    "are not declared by the attribute"
+                )
+            if gate_spec.get("conditional"):
+                raise DescriptorError(
+                    f"device role {role!r}: gate {gate!r} must be required"
+                )
+            gated_signals.update(rule.get("signals", ()))
+            gated_attributes.update(rule.get("attributes", ()))
+        for name, mode in spec["signals"].items():
+            if not CAMEL_PATTERN.fullmatch(name):
+                raise DescriptorError(
+                    f"device role {role!r}: signal {name!r} is not camelCase"
+                )
+            if mode not in {"required", "conditional"}:
+                raise DescriptorError(
+                    f"device role {role!r}: signal {name!r} has mode {mode!r}"
+                )
+            if (mode == "conditional") != (name in gated_signals):
+                raise DescriptorError(
+                    f"device role {role!r}: signal {name!r} must be conditional "
+                    "exactly when a requires rule gates it"
+                )
+        for name, attribute in spec["attributes"].items():
+            if not CAMEL_PATTERN.fullmatch(name):
+                raise DescriptorError(
+                    f"device role {role!r}: attribute {name!r} is not camelCase"
+                )
+            if attribute["type"] not in {"uint32", "int8", "bool", "enum"}:
+                raise DescriptorError(
+                    f"device role {role!r}: attribute {name!r} has an unknown type"
+                )
+            if attribute["type"] == "enum" and not attribute.get("values"):
+                raise DescriptorError(
+                    f"device role {role!r}: attribute {name!r} declares no values"
+                )
+            if bool(attribute.get("conditional")) != (name in gated_attributes):
+                raise DescriptorError(
+                    f"device role {role!r}: attribute {name!r} must be conditional "
+                    "exactly when a requires rule gates it"
+                )
+        for lower, upper in spec["ordered"]:
+            for name in (lower, upper):
+                if spec["attributes"].get(name, {}).get("type") not in {
+                    "uint32",
+                    "int8",
+                }:
+                    raise DescriptorError(
+                        f"device role {role!r}: ordered pair uses non-numeric "
+                        f"attribute {name!r}"
+                    )
+
+
+def validate_device_attributes(
+    path: Path,
+    json_path: str,
+    role: str,
+    spec: dict[str, Any],
+    attributes: Any,
+    active: set[str],
+) -> None:
+    if not isinstance(attributes, dict):
+        fail(path, json_path, attributes, "an object")
+    expected = {
+        name
+        for name, attribute in spec["attributes"].items()
+        if not attribute.get("conditional") or name in active
+    }
+    missing = sorted(expected - attributes.keys())
+    unknown = sorted(attributes.keys() - expected)
+    if missing:
+        fail(path, json_path, missing, f"required {role} attributes {missing}")
+    if unknown:
+        fail(
+            path,
+            json_path,
+            unknown,
+            f"only attributes required by the active {role} configuration",
+        )
+    for name, value in attributes.items():
+        attribute = spec["attributes"][name]
+        item_path = f"{json_path}.{name}"
+        kind = attribute["type"]
+        if kind == "bool":
+            if not isinstance(value, bool):
+                fail(path, item_path, value, "a boolean")
+        elif kind == "enum":
+            if value not in attribute["values"]:
+                fail(path, item_path, value, f"one of {attribute['values']}")
+        else:
+            low, high = (0, 0xFFFFFFFF) if kind == "uint32" else (-128, 127)
+            low = max(low, attribute.get("min", low))
+            if not isinstance(value, int) or isinstance(value, bool):
+                fail(path, item_path, value, f"an {kind} integer")
+            if value < low or value > high:
+                fail(path, item_path, value, f"an {kind} integer in [{low}, {high}]")
+    for lower, upper in spec["ordered"]:
+        if lower in attributes and upper in attributes:
+            if attributes[lower] > attributes[upper]:
+                fail(
+                    path,
+                    f"{json_path}.{lower}",
+                    attributes[lower],
+                    f"a value not greater than {upper} ({attributes[upper]})",
+                )
+
+
+def validate_bus_device(
+    path: Path,
+    json_path: str,
+    device: dict[str, Any],
+    valid_pins: set[Any],
+    components: set[str],
+    hard_reserved: set[Any],
+) -> None:
+    exact_fields(
+        path,
+        json_path,
+        device,
+        {"kind", "role", "bus", "signals", "attributes"},
+        {"kind", "role", "bus", "signals", "attributes"},
+    )
+    role = device["role"]
+    if role not in DEVICE_ROLE_REGISTRY:
+        fail(path, f"{json_path}.role", role, "a known device role")
+    spec = DEVICE_ROLE_REGISTRY[role]
+    bus = exact_fields(
+        path, f"{json_path}.bus", device["bus"], {"kind", "index"}, {"kind", "index"}
+    )
+    if bus["kind"] not in spec["busKinds"]:
+        fail(
+            path,
+            f"{json_path}.bus.kind",
+            bus["kind"],
+            f"one of {sorted(spec['busKinds'])}",
+        )
+    if not isinstance(bus["index"], int) or isinstance(bus["index"], bool):
+        fail(path, f"{json_path}.bus.index", bus["index"], "an integer bus index")
+    if bus["index"] < 0 or bus["index"] > 0xFE:
+        fail(path, f"{json_path}.bus.index", bus["index"], "a bus index in [0, 254]")
+    signals = device["signals"]
+    if not isinstance(signals, dict):
+        fail(path, f"{json_path}.signals", signals, "an object")
+    unknown_signals = sorted(signals.keys() - spec["signals"].keys())
+    if unknown_signals:
+        fail(
+            path,
+            f"{json_path}.signals",
+            unknown_signals,
+            f"only signals declared by role {role}",
+        )
+    attributes = device["attributes"]
+    declared = attributes if isinstance(attributes, dict) else {}
+    active_signals: set[str] = set()
+    active_attributes: set[str] = set()
+    for rule in spec["requires"]:
+        gate, allowed = rule["when"]
+        if declared.get(gate) in allowed:
+            active_signals.update(rule.get("signals", ()))
+            active_attributes.update(rule.get("attributes", ()))
+    validate_device_attributes(
+        path,
+        f"{json_path}.attributes",
+        role,
+        spec,
+        attributes,
+        active_attributes,
+    )
+    expected_signals = {
+        name
+        for name, mode in spec["signals"].items()
+        if mode == "required" or name in active_signals
+    }
+    missing_signals = sorted(expected_signals - signals.keys())
+    extra_signals = sorted(signals.keys() - expected_signals)
+    if missing_signals:
+        fail(
+            path,
+            f"{json_path}.signals",
+            missing_signals,
+            f"required {role} signals {missing_signals}",
+        )
+    if extra_signals:
+        fail(
+            path,
+            f"{json_path}.signals",
+            extra_signals,
+            f"only signals required by the active {role} configuration",
+        )
+    seen: dict[tuple[Any, ...], str] = {}
+    for name in sorted(signals):
+        signal_path = f"{json_path}.signals.{name}"
+        endpoint = signals[name]
+        validate_endpoint(path, signal_path, endpoint, valid_pins, components)
+        # Component GPIO IDs are only unique per component, so keep it in the key.
+        key = (*endpoint_key(endpoint), endpoint.get("component"))
+        if key in seen:
+            fail(path, signal_path, endpoint, f"a pin not already used by {seen[key]}")
+        seen[key] = name
+        if endpoint["domain"] == "soc-gpio" and endpoint["id"] not in hard_reserved:
+            fail(
+                path,
+                signal_path,
+                endpoint["id"],
+                "a pin covered by a hard gpio reservation",
+            )
+
+
+def validate_device(
+    path: Path,
+    json_path: str,
+    device: Any,
+    valid_pins: set[Any],
+    components: set[str],
+    hard_reserved: set[Any],
+) -> None:
+    if not isinstance(device, dict) or not isinstance(device.get("kind"), str):
+        fail(path, json_path, device, "a device object with a kind")
+    kind = device["kind"]
+    if kind == BUS_DEVICE_KIND:
+        validate_bus_device(
+            path, json_path, device, valid_pins, components, hard_reserved
+        )
+        return
+    if kind not in SINGLE_ENDPOINT_DEVICE_KINDS:
+        fail(
+            path,
+            f"{json_path}.kind",
+            kind,
+            f"one of {sorted({BUS_DEVICE_KIND, *SINGLE_ENDPOINT_DEVICE_KINDS})}",
+        )
+    exact_fields(
+        path,
+        json_path,
+        device,
+        {"kind", "endpoint"},
+        {"kind", "endpoint", *SINGLE_ENDPOINT_DEVICE_KINDS[kind]},
+    )
+    validate_endpoint(
+        path, f"{json_path}.endpoint", device["endpoint"], valid_pins, components
+    )
 
 
 def validate_components(
@@ -470,6 +822,7 @@ def validate_board(
             )
     if not isinstance(gpio["reservations"], dict):
         fail(path, "$.gpio.reservations", gpio["reservations"], "an object")
+    hard_reserved: set[Any] = set()
     for reservation_id, reservation in gpio["reservations"].items():
         exact_fields(
             path,
@@ -495,6 +848,8 @@ def validate_board(
                 valid_union,
                 resolved_components,
             )
+            if reservation["strength"] == "hard" and endpoint["domain"] == "soc-gpio":
+                hard_reserved.add(endpoint["id"])
     if not isinstance(gpio["aliases"], dict):
         fail(path, "$.gpio.aliases", gpio["aliases"], "an object")
     for alias_id, alias in gpio["aliases"].items():
@@ -542,16 +897,28 @@ def validate_board(
             fail(path, "$.capabilities.cyw43", True, "CYW43 components")
     if not isinstance(board["devices"], dict):
         fail(path, "$.devices", board["devices"], "an object")
+    roles_seen: dict[str, str] = {}
     for device_id, device in board["devices"].items():
-        if not isinstance(device, dict) or "endpoint" not in device or "kind" not in device:
-            fail(path, f"$.devices.{device_id}", device, "a device with kind and endpoint")
-        validate_endpoint(
+        if not CAMEL_PATTERN.fullmatch(device_id):
+            fail(path, f"$.devices.{device_id}", device_id, "a camelCase device ID")
+        validate_device(
             path,
-            f"$.devices.{device_id}.endpoint",
-            device["endpoint"],
+            f"$.devices.{device_id}",
+            device,
             valid_union,
             resolved_components,
+            hard_reserved,
         )
+        role = device.get("role")
+        if role is not None:
+            if role in roles_seen:
+                fail(
+                    path,
+                    f"$.devices.{device_id}.role",
+                    role,
+                    f"a role not already declared by {roles_seen[role]}",
+                )
+            roles_seen[role] = device_id
     if not isinstance(board["peripherals"], dict):
         fail(path, "$.peripherals", board["peripherals"], "an object")
 
@@ -563,6 +930,7 @@ def load_registry(
     dict[str, dict[str, Any]],
     dict[str, Any],
 ]:
+    validate_role_registry()
     capability_document = load_json(boards_root / "capabilities.json")
     exact_fields(
         boards_root / "capabilities.json",
@@ -742,6 +1110,72 @@ def resolve_features(features: list[str]) -> tuple[list[str], list[str]]:
 
 def macro_suffix(identifier: str) -> str:
     return identifier.upper().replace("-", "_")
+
+
+def camel_macro_suffix(name: str) -> str:
+    return re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", name).upper()
+
+
+def encode_hal_pin(endpoint: dict[str, Any]) -> int | None:
+    """Encode one endpoint into the integer pin ID consumed by HAL modules."""
+    if endpoint["domain"] == "soc-gpio":
+        pin = endpoint["id"]
+        if isinstance(pin, str):
+            match = STM32_PIN_PATTERN.fullmatch(pin)
+            assert match is not None
+            return (ord(match.group(1)) - ord("A")) * 16 + int(match.group(2))
+        return pin
+    return endpoint.get("halPin")
+
+
+def device_config_lines(board: dict[str, Any]) -> list[str]:
+    """Materialize bus-device facts for every known role."""
+    devices = {
+        device["role"]: device
+        for device in board["devices"].values()
+        if device["kind"] == BUS_DEVICE_KIND
+    }
+    lines = ["#define HAL_BOARD_DEVICE_PIN_NONE 0xFFu"]
+    for role, spec in sorted(DEVICE_ROLE_REGISTRY.items()):
+        prefix = spec["macroPrefix"]
+        device = devices.get(role)
+        lines.append(f"#define {prefix}_PRESENT {1 if device else 0}")
+        if device is None:
+            continue
+        lines.append(
+            f"#define {prefix}_{macro_suffix(device['bus']['kind'])}_BUS "
+            f"{device['bus']['index']}u"
+        )
+        for name in sorted(spec["signals"]):
+            pin = device["signals"].get(name)
+            value = "HAL_BOARD_DEVICE_PIN_NONE"
+            if pin is not None:
+                encoded = encode_hal_pin(pin)
+                value = f"{encoded}u"
+            lines.append(f"#define {prefix}_PIN_{camel_macro_suffix(name)} {value}")
+        for name in sorted(spec["attributes"]):
+            attribute = spec["attributes"][name]
+            suffix = f"{prefix}_{camel_macro_suffix(name)}"
+            if attribute["type"] == "enum":
+                value = device["attributes"].get(name)
+                for allowed in attribute["values"]:
+                    lines.append(
+                        f"#define {suffix}_IS_{macro_suffix(allowed)} "
+                        f"{1 if value == allowed else 0}"
+                    )
+                if value is not None:
+                    lines.append(f'#define {suffix}_NAME "{value}"')
+                continue
+            if name not in device["attributes"]:
+                continue
+            value = device["attributes"][name]
+            if attribute["type"] == "bool":
+                lines.append(f"#define {suffix} {1 if value else 0}")
+            elif attribute["type"] == "uint32":
+                lines.append(f"#define {suffix} UINT32_C({value})")
+            else:
+                lines.append(f"#define {suffix} ({value})")
+    return lines
 
 
 def board_enum_name(board: dict[str, Any]) -> str:
@@ -936,18 +1370,9 @@ def generate(
         config_lines.append(
             f"#define HAL_BOARD_STATUS_LED_KIND_{macro_suffix(status_led['kind'])} 1"
         )
-        endpoint = status_led["endpoint"]
-        if endpoint["domain"] == "soc-gpio":
-            pin = endpoint["id"]
-            if isinstance(pin, str):
-                match = STM32_PIN_PATTERN.fullmatch(pin)
-                assert match is not None
-                pin = (ord(match.group(1)) - ord("A")) * 16 + int(match.group(2))
+        pin = encode_hal_pin(status_led["endpoint"])
+        if pin is not None:
             config_lines.append(f"#define HAL_BOARD_STATUS_LED_PIN {pin}u")
-        elif "halPin" in endpoint:
-            config_lines.append(
-                f"#define HAL_BOARD_STATUS_LED_PIN {endpoint['halPin']}u"
-            )
         if status_led["kind"] in ("gpio", "component-gpio"):
             config_lines.append("#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN")
         if status_led["kind"] == "addressable":
@@ -957,6 +1382,7 @@ def generate(
                     "#define HAL_BOARD_STATUS_LED_PIXEL_ORDER_PROJECT_DEFINED 1",
                 ]
             )
+    config_lines.extend(device_config_lines(board))
     link_header = "\n".join(
         [
             "#pragma once",

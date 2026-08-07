@@ -50,6 +50,24 @@ All notable changes to this project will be documented in this file.
   Windows FreeRTOS CMake probe tolerate informational Pico SDK output written
   to stderr.
 
+### Typed multi-pin board devices
+
+- Added the `bus-device` descriptor kind and a device-role registry, so a board
+  profile can declare a device spread across a bus and several control lines
+  through validated signals and typed attributes instead of loose JSON.
+- Materialized every known role as a fixed macro surface in `jh_board_config.h`,
+  including `<PREFIX>_PRESENT` on boards without the device, so HAL modules can
+  resolve board-supplied device configuration at compile time.
+- Enforced role uniqueness per board, per-device pin uniqueness, hard-reservation
+  coverage for every on-SoC device signal, attribute type and ordering limits,
+  and gated signals/attributes that are required and rejected by their gate.
+- Tightened validation of single-endpoint devices to their declared fields and
+  camelCase device IDs, and shared one pin encoder between status LED and device
+  materialization.
+- Removed a timestamp race in the STM32 host sanity fixture that let a
+  `CMAKE_CONFIGURE_DEPENDS` edit land in the same second as the generated build
+  system and skip the expected reconfigure.
+
 ### Consolidated examples and faster gate
 
 - Consolidated the former 59 single-purpose demonstrations into 26 registered
