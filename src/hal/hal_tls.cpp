@@ -38,12 +38,20 @@ typedef struct {
   uint8_t server_key_pin[32];
   bool cancelled;
   bool allocated;
+  bool callback_active;
 } jh_tls_client_context_t;
+
+typedef struct {
+  jh_tls_client_context_t *client;
+  jh_network_handle_lease_t lease;
+  hal_mutex_t mutex;
+} jh_tls_operation_t;
 
 static jh_tls_client_context_t s_clients[HAL_TLS_MAX_CLIENTS];
 static jh_network_handle_slot_t s_handle_slots[HAL_TLS_MAX_CLIENTS];
 static jh_network_handle_pool_t s_handle_pool;
-static hal_mutex_t s_tls_mutex = NULL;
+static hal_mutex_t s_pool_mutex = NULL;
+static hal_mutex_t s_client_mutexes[HAL_TLS_MAX_CLIENTS];
 static bool s_pool_initialized = false;
 
 hal_status_t hal_tls_default_time(void *, uint64_t *out_unix_seconds) {
@@ -64,30 +72,20 @@ hal_status_t hal_tls_default_entropy(void *, void *buffer, size_t length) {
   return jh_secure_random_bytes(buffer, length);
 }
 
-static void tls_lock(void) {
-  (void)jh_hal_mutex_create_once(&s_tls_mutex);
-  hal_mutex_lock(s_tls_mutex);
+static void pool_lock(void) {
+  (void)jh_hal_mutex_create_once(&s_pool_mutex);
+  hal_mutex_lock(s_pool_mutex);
   if (!s_pool_initialized) {
     (void)jh_network_handle_pool_init(&s_handle_pool, s_handle_slots,
                                       HAL_TLS_MAX_CLIENTS, JH_TLS_HANDLE_KIND);
+    for (size_t index = 0u; index < HAL_TLS_MAX_CLIENTS; ++index) {
+      (void)jh_hal_mutex_create_once(&s_client_mutexes[index]);
+    }
     s_pool_initialized = true;
   }
 }
 
-static void tls_unlock(void) { hal_mutex_unlock(s_tls_mutex); }
-
-static hal_status_t resolve_client(hal_tls_client_t handle,
-                                   jh_tls_client_context_t **out_client) {
-  void *token = NULL;
-  hal_status_t status =
-      jh_network_handle_resolve(&s_handle_pool, handle, &token, NULL);
-  if (status != HAL_OK || token == NULL) {
-    *out_client = NULL;
-    return HAL_EINVAL;
-  }
-  *out_client = static_cast<jh_tls_client_context_t *>(token);
-  return HAL_OK;
-}
+static void pool_unlock(void) { hal_mutex_unlock(s_pool_mutex); }
 
 static hal_status_t record_error(jh_tls_client_context_t *client,
                                  hal_status_t status, int32_t provider_error) {
@@ -106,6 +104,116 @@ static void release_transport(jh_tls_client_context_t *client) {
   client->provider = NULL;
 }
 
+static void finalize_client(void *token) {
+  if (token == NULL) {
+    return;
+  }
+  jh_tls_client_context_t *client =
+      static_cast<jh_tls_client_context_t *>(token);
+  const size_t index = (size_t)(client - &s_clients[0]);
+  if (index >= HAL_TLS_MAX_CLIENTS) {
+    return;
+  }
+  hal_mutex_lock(s_client_mutexes[index]);
+  release_transport(client);
+  pool_lock();
+  memset(client, 0, sizeof(*client));
+  pool_unlock();
+  hal_mutex_unlock(s_client_mutexes[index]);
+}
+
+static hal_status_t begin_operation(hal_tls_client_t handle,
+                                    jh_tls_operation_t *operation) {
+  if (operation == NULL) {
+    return HAL_EINVAL;
+  }
+  memset(operation, 0, sizeof(*operation));
+
+  pool_lock();
+  hal_status_t status =
+      jh_network_handle_acquire(&s_handle_pool, handle, &operation->lease);
+  if (status != HAL_OK) {
+    pool_unlock();
+    return HAL_EINVAL;
+  }
+  operation->client =
+      static_cast<jh_tls_client_context_t *>(operation->lease.backend_token);
+  const size_t index = (size_t)(operation->client - &s_clients[0]);
+  if (index >= HAL_TLS_MAX_CLIENTS || operation->client->callback_active) {
+    void *deferred = NULL;
+    (void)jh_network_handle_end_operation(&s_handle_pool, &operation->lease,
+                                          &deferred);
+    status = index >= HAL_TLS_MAX_CLIENTS ? HAL_EINVAL : HAL_EBUSY;
+    pool_unlock();
+    finalize_client(deferred);
+    return status;
+  }
+  operation->mutex = s_client_mutexes[index];
+  pool_unlock();
+
+  hal_mutex_lock(operation->mutex);
+  pool_lock();
+  const bool open =
+      jh_network_handle_lease_is_open(&s_handle_pool, &operation->lease);
+  const bool callback_active = operation->client->callback_active;
+  if (!open || callback_active) {
+    void *deferred = NULL;
+    (void)jh_network_handle_end_operation(&s_handle_pool, &operation->lease,
+                                          &deferred);
+    pool_unlock();
+    hal_mutex_unlock(operation->mutex);
+    finalize_client(deferred);
+    return callback_active ? HAL_EBUSY : HAL_EINVAL;
+  }
+  pool_unlock();
+  return HAL_OK;
+}
+
+static void end_operation(jh_tls_operation_t *operation) {
+  hal_mutex_unlock(operation->mutex);
+  void *deferred = NULL;
+  pool_lock();
+  (void)jh_network_handle_end_operation(&s_handle_pool, &operation->lease,
+                                        &deferred);
+  pool_unlock();
+  finalize_client(deferred);
+}
+
+static void begin_callback(jh_tls_operation_t *operation) {
+  pool_lock();
+  operation->client->callback_active = true;
+  pool_unlock();
+  hal_mutex_unlock(operation->mutex);
+}
+
+static bool end_callback(jh_tls_operation_t *operation) {
+  hal_mutex_lock(operation->mutex);
+  pool_lock();
+  const bool open =
+      jh_network_handle_lease_is_open(&s_handle_pool, &operation->lease);
+  operation->client->callback_active = false;
+  pool_unlock();
+  return open;
+}
+
+static hal_status_t call_time(jh_tls_operation_t *operation,
+                              uint64_t *out_unix_seconds) {
+  hal_tls_time_fn callback = operation->client->security.get_time;
+  void *context = operation->client->security.callback_context;
+  begin_callback(operation);
+  const hal_status_t status = callback(context, out_unix_seconds);
+  return end_callback(operation) ? status : HAL_ECANCELED;
+}
+
+static hal_status_t call_entropy(jh_tls_operation_t *operation, void *buffer,
+                                 size_t length) {
+  hal_tls_entropy_fn callback = operation->client->security.get_entropy;
+  void *context = operation->client->security.callback_context;
+  begin_callback(operation);
+  const hal_status_t status = callback(context, buffer, length);
+  return end_callback(operation) ? status : HAL_ECANCELED;
+}
+
 static bool operation_timed_out(const jh_tls_client_context_t *client) {
   return (uint32_t)(hal_millis() - client->operation_started_ms) >=
          client->config.operation_timeout_ms;
@@ -118,24 +226,8 @@ static hal_status_t fail_client(jh_tls_client_context_t *client,
   return record_error(client, status, provider_error);
 }
 
-static hal_status_t advance_client(jh_tls_client_context_t *client,
+static hal_status_t advance_engine(jh_tls_client_context_t *client,
                                    bool pending_read = false) {
-  if (client->cancelled ||
-      (client->security.is_cancelled != NULL &&
-       client->security.is_cancelled(client->security.callback_context))) {
-    return fail_client(client, HAL_ECANCELED, 0);
-  }
-  /* operation_timeout_ms bounds handshakes and close_notify, not the lifetime
-   * of an established TLS session. Applying the original connect deadline to
-   * application reads/writes forced sustained MQTTS sessions to reconnect. */
-  if (jh_tls_operation_timeout_applies(client->state) &&
-      operation_timed_out(client)) {
-    return fail_client(client, HAL_ETIMEOUT, 0);
-  }
-  if (client->security.service != NULL) {
-    client->security.service(client->security.callback_context);
-  }
-
   jh_bearssl_poll_result_t result = {};
   hal_status_t status =
       pending_read
@@ -176,6 +268,43 @@ static hal_status_t advance_client(jh_tls_client_context_t *client,
     return HAL_OK;
   }
   return HAL_EAGAIN;
+}
+
+static hal_status_t advance_operation(jh_tls_operation_t *operation,
+                                      bool pending_read = false) {
+  jh_tls_client_context_t *client = operation->client;
+  if (client->cancelled) {
+    return fail_client(client, HAL_ECANCELED, 0);
+  }
+  if (client->security.is_cancelled != NULL) {
+    hal_tls_cancel_fn callback = client->security.is_cancelled;
+    void *context = client->security.callback_context;
+    begin_callback(operation);
+    const bool cancelled = callback(context);
+    if (!end_callback(operation)) {
+      return HAL_ECANCELED;
+    }
+    if (cancelled) {
+      return fail_client(client, HAL_ECANCELED, 0);
+    }
+  }
+  /* operation_timeout_ms bounds handshakes and close_notify, not the lifetime
+   * of an established TLS session. Applying the original connect deadline to
+   * application reads/writes forced sustained MQTTS sessions to reconnect. */
+  if (jh_tls_operation_timeout_applies(client->state) &&
+      operation_timed_out(client)) {
+    return fail_client(client, HAL_ETIMEOUT, 0);
+  }
+  if (client->security.service != NULL) {
+    hal_tls_service_fn callback = client->security.service;
+    void *context = client->security.callback_context;
+    begin_callback(operation);
+    callback(context);
+    if (!end_callback(operation)) {
+      return HAL_ECANCELED;
+    }
+  }
+  return advance_engine(client, pending_read);
 }
 
 static bool config_is_valid(const hal_tls_client_config_t *config) {
@@ -318,7 +447,7 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
     return HAL_EINVAL;
   }
 
-  tls_lock();
+  pool_lock();
   jh_tls_client_context_t *client = NULL;
   for (size_t index = 0u; index < HAL_TLS_MAX_CLIENTS; ++index) {
     if (!s_clients[index].allocated) {
@@ -332,7 +461,7 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
     }
   }
   if (client == NULL) {
-    tls_unlock();
+    pool_unlock();
     return HAL_ENOMEM;
   }
 
@@ -341,11 +470,11 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
       jh_network_handle_allocate(&s_handle_pool, client, &handle);
   if (status != HAL_OK) {
     memset(client, 0, sizeof(*client));
-    tls_unlock();
+    pool_unlock();
     return status;
   }
   *out_client = static_cast<hal_tls_client_t>(handle);
-  tls_unlock();
+  pool_unlock();
   return HAL_OK;
 }
 
@@ -357,9 +486,9 @@ hal_status_t hal_tls_client_configure_security_ex(
       security->get_time == NULL || security->get_entropy == NULL) {
     return HAL_ECONFIG;
   }
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK && client->state != HAL_TLS_STATE_CREATED &&
       client->state != HAL_TLS_STATE_CONFIGURED) {
     status = HAL_ESTATE;
@@ -377,7 +506,9 @@ hal_status_t hal_tls_client_configure_security_ex(
     client->last_status = HAL_OK;
     client->provider_error = 0;
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
@@ -392,9 +523,9 @@ hal_status_t hal_tls_client_configure_server_ex(hal_tls_client_t handle,
     return HAL_EOVERFLOW;
   }
 
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK && client->state != HAL_TLS_STATE_CREATED &&
       client->state != HAL_TLS_STATE_CONFIGURED) {
     status = HAL_ESTATE;
@@ -406,14 +537,16 @@ hal_status_t hal_tls_client_configure_server_ex(hal_tls_client_t handle,
     client->last_status = HAL_OK;
     client->provider_error = 0;
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK && client->state != HAL_TLS_STATE_CONFIGURED) {
     status = HAL_ESTATE;
   }
@@ -423,14 +556,12 @@ hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
     } else {
       uint64_t unix_seconds = 0u;
       unsigned char entropy[JH_BEARSSL_ENTROPY_SIZE] = {};
-      status = client->security.get_time(client->security.callback_context,
-                                         &unix_seconds);
+      status = call_time(&operation, &unix_seconds);
       if (status == HAL_OK && unix_seconds < HAL_TLS_MIN_VALID_UNIX_TIME) {
         status = HAL_ECONFIG;
       }
       if (status == HAL_OK) {
-        status = client->security.get_entropy(client->security.callback_context,
-                                              entropy, sizeof(entropy));
+        status = call_entropy(&operation, entropy, sizeof(entropy));
       }
       if (status == HAL_OK) {
         status = open_transport(client);
@@ -452,27 +583,31 @@ hal_status_t hal_tls_client_connect_ex(hal_tls_client_t handle) {
         client->cancelled = false;
         client->state = HAL_TLS_STATE_CONNECTING;
         client->operation_started_ms = hal_millis();
-        status = advance_client(client);
+        status = advance_operation(&operation);
       } else {
         status = fail_client(client, status, 0);
       }
     }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_poll_ex(hal_tls_client_t handle) {
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     status = client->state == HAL_TLS_STATE_CONNECTING ||
                      client->state == HAL_TLS_STATE_CLOSING
-                 ? advance_client(client)
+                 ? advance_operation(&operation)
                  : HAL_ESTATE;
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
@@ -482,18 +617,20 @@ hal_status_t hal_tls_client_read_ex(hal_tls_client_t handle, void *buffer,
     return HAL_EINVAL;
   }
   *out_received = 0u;
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     if (client->state != HAL_TLS_STATE_CONNECTED) {
       status = HAL_ESTATE;
+    } else if (capacity == 0u) {
+      status = HAL_OK;
     } else {
       size_t available = 0u;
       unsigned char *source =
           br_ssl_engine_recvapp_buf(&client->provider->client.eng, &available);
       if (source == NULL || available == 0u) {
-        status = advance_client(client, true);
+        status = advance_operation(&operation, true);
         if (status == HAL_OK) {
           status = HAL_EAGAIN;
         }
@@ -505,7 +642,9 @@ hal_status_t hal_tls_client_read_ex(hal_tls_client_t handle, void *buffer,
       }
     }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
@@ -515,18 +654,20 @@ hal_status_t hal_tls_client_write_ex(hal_tls_client_t handle, const void *data,
     return HAL_EINVAL;
   }
   *out_written = 0u;
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     if (client->state != HAL_TLS_STATE_CONNECTED) {
       status = HAL_ESTATE;
+    } else if (length == 0u) {
+      status = HAL_OK;
     } else {
       size_t available = 0u;
       unsigned char *destination =
           br_ssl_engine_sendapp_buf(&client->provider->client.eng, &available);
       if (destination == NULL || available == 0u) {
-        status = advance_client(client);
+        status = advance_operation(&operation);
         if (status == HAL_OK) {
           status = HAL_EAGAIN;
         }
@@ -539,14 +680,16 @@ hal_status_t hal_tls_client_write_ex(hal_tls_client_t handle, const void *data,
       }
     }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_shutdown_ex(hal_tls_client_t handle) {
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     if (client->state == HAL_TLS_STATE_CREATED ||
         client->state == HAL_TLS_STATE_CONFIGURED ||
@@ -564,14 +707,16 @@ hal_status_t hal_tls_client_shutdown_ex(hal_tls_client_t handle) {
       status = HAL_ESTATE;
     }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_cancel_ex(hal_tls_client_t handle) {
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     client->cancelled = true;
     if (client->state == HAL_TLS_STATE_CONNECTING ||
@@ -580,7 +725,9 @@ hal_status_t hal_tls_client_cancel_ex(hal_tls_client_t handle) {
       status = fail_client(client, HAL_ECANCELED, 0);
     }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
@@ -589,47 +736,61 @@ hal_status_t hal_tls_client_get_state_ex(hal_tls_client_t handle,
   if (out_state == NULL) {
     return HAL_EINVAL;
   }
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  const hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  const hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     *out_state = client->state;
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_get_last_error_ex(hal_tls_client_t handle,
                                               hal_status_t *out_status,
                                               int32_t *out_provider_error) {
-  if (out_status == NULL || out_provider_error == NULL) {
+  if (out_status == NULL) {
     return HAL_EINVAL;
   }
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  const hal_status_t status = resolve_client(handle, &client);
+  jh_tls_operation_t operation = {};
+  const hal_status_t status = begin_operation(handle, &operation);
+  jh_tls_client_context_t *client = operation.client;
   if (status == HAL_OK) {
     *out_status = client->last_status;
-    *out_provider_error = client->provider_error;
+    if (out_provider_error != NULL) {
+      *out_provider_error = client->provider_error;
+    }
   }
-  tls_unlock();
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
   return status;
 }
 
 hal_status_t hal_tls_client_close_ex(hal_tls_client_t handle) {
-  tls_lock();
-  jh_tls_client_context_t *client = NULL;
-  hal_status_t status = resolve_client(handle, &client);
-  if (status == HAL_OK) {
-    release_transport(client);
-    void *released = NULL;
-    status = jh_network_handle_release(&s_handle_pool, handle, &released);
-    if (status == HAL_OK) {
-      memset(client, 0, sizeof(*client));
-    }
-  }
-  tls_unlock();
+  pool_lock();
+  void *released = NULL;
+  const hal_status_t status =
+      jh_network_handle_begin_close(&s_handle_pool, handle, &released);
+  pool_unlock();
+  finalize_client(released);
   return status;
 }
+
+#if HAL_TARGET_IS_MOCK
+hal_status_t hal_mock_tls_mark_connected_for_zero_io(hal_tls_client_t handle) {
+  jh_tls_operation_t operation = {};
+  hal_status_t status = begin_operation(handle, &operation);
+  if (status == HAL_OK) {
+    operation.client->state = HAL_TLS_STATE_CONNECTED;
+  }
+  if (operation.lease.active) {
+    end_operation(&operation);
+  }
+  return status;
+}
+#endif
 
 #endif

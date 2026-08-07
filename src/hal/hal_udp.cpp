@@ -34,13 +34,26 @@ static const jh_network_udp_ops_t *udp_ops(void) {
              : nullptr;
 }
 
-static hal_status_t resolve_socket(hal_udp_socket_t socket, void **out_token) {
+static hal_status_t acquire_socket(hal_udp_socket_t socket,
+                                   jh_network_handle_lease_t *out_lease) {
   ensure_pool();
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_resolve(
-      &s_pool, reinterpret_cast<const void *>(socket), out_token, nullptr);
+  const hal_status_t status = jh_network_handle_acquire(
+      &s_pool, reinterpret_cast<const void *>(socket), out_lease);
   hal_mutex_unlock(s_mutex);
   return status;
+}
+
+static void finish_socket_operation(jh_network_handle_lease_t *lease) {
+  void *deferred_token = nullptr;
+  hal_mutex_lock(s_mutex);
+  (void)jh_network_handle_end_operation(&s_pool, lease, &deferred_token);
+  hal_mutex_unlock(s_mutex);
+  const jh_network_udp_ops_t *ops = udp_ops();
+  if (deferred_token != nullptr && ops != nullptr &&
+      ops->socket_close != nullptr) {
+    ops->socket_close(deferred_token);
+  }
 }
 
 static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
@@ -109,14 +122,16 @@ hal_status_t hal_udp_socket_bind_ex(hal_udp_socket_t socket,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_udp_ops_t *ops = udp_ops();
-  return ops != nullptr && ops->socket_bind != nullptr
-             ? ops->socket_bind(token, local)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status = ops != nullptr && ops->socket_bind != nullptr
+                                  ? ops->socket_bind(lease.backend_token, local)
+                                  : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 bool hal_udp_socket_bind(hal_udp_socket_t socket,
@@ -142,14 +157,17 @@ hal_status_t hal_udp_socket_sendto_ex(hal_udp_socket_t socket, const void *data,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_udp_ops_t *ops = udp_ops();
-  return ops != nullptr && ops->socket_sendto != nullptr
-             ? ops->socket_sendto(token, data, len, remote, out_sent)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->socket_sendto != nullptr
+          ? ops->socket_sendto(lease.backend_token, data, len, remote, out_sent)
+          : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 int hal_udp_socket_sendto(hal_udp_socket_t socket, const void *data, size_t len,
@@ -175,15 +193,18 @@ hal_status_t hal_udp_socket_recvfrom_ex(hal_udp_socket_t socket, void *buffer,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_udp_ops_t *ops = udp_ops();
-  return ops != nullptr && ops->socket_recvfrom != nullptr
-             ? ops->socket_recvfrom(token, buffer, max_len, remote, timeout_ms,
-                                    out_received)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->socket_recvfrom != nullptr
+          ? ops->socket_recvfrom(lease.backend_token, buffer, max_len, remote,
+                                 timeout_ms, out_received)
+          : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 int hal_udp_socket_recvfrom(hal_udp_socket_t socket, void *buffer,
@@ -201,31 +222,42 @@ bool hal_udp_socket_can_recv(hal_udp_socket_t socket) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_udp_ops_t *ops = udp_ops();
-  return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-         ops->socket_can_recv != nullptr && ops->socket_can_recv(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->socket_can_recv != nullptr &&
+                      ops->socket_can_recv(lease.backend_token);
+  finish_socket_operation(&lease);
+  return result;
 }
 
 bool hal_udp_socket_can_send(hal_udp_socket_t socket) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_udp_ops_t *ops = udp_ops();
-  return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-         ops->socket_can_send != nullptr && ops->socket_can_send(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->socket_can_send != nullptr &&
+                      ops->socket_can_send(lease.backend_token);
+  finish_socket_operation(&lease);
+  return result;
 }
 
 void hal_udp_socket_close(hal_udp_socket_t socket) {
   ensure_pool();
   void *token = nullptr;
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_release(
+  const hal_status_t status = jh_network_handle_begin_close(
       &s_pool, reinterpret_cast<const void *>(socket), &token);
   hal_mutex_unlock(s_mutex);
   const jh_network_udp_ops_t *ops = udp_ops();
-  if (status == HAL_OK && ops != nullptr && ops->socket_close != nullptr) {
+  if (status == HAL_OK && token != nullptr && ops != nullptr &&
+      ops->socket_close != nullptr) {
     ops->socket_close(token);
   }
 }
@@ -235,12 +267,8 @@ extern "C" void jh_network_facade_udp_reset_all(void) {
   void *tokens[HAL_UDP_SOCKET_MAX_INSTANCES] = {};
   size_t count = 0u;
   hal_mutex_lock(s_mutex);
-  for (size_t index = 0u; index < s_pool.capacity; ++index) {
-    if (s_pool.slots[index].in_use) {
-      tokens[count++] = s_pool.slots[index].backend_token;
-    }
-  }
-  jh_network_handle_invalidate_all(&s_pool);
+  count = jh_network_handle_begin_close_all(&s_pool, tokens,
+                                            HAL_UDP_SOCKET_MAX_INSTANCES);
   hal_mutex_unlock(s_mutex);
   const jh_network_udp_ops_t *ops = udp_ops();
   if (ops != nullptr && ops->socket_close != nullptr) {

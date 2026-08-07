@@ -77,7 +77,8 @@ static hal_status_t wait_tls_connected(hal_tls_client_t client,
     }
     if (state == HAL_TLS_STATE_FAILED || state == HAL_TLS_STATE_CLOSED) {
       hal_status_t last = HAL_EPROTO;
-      (void)hal_tls_client_get_last_error_ex(client, &last, NULL);
+      int32_t provider_error = 0;
+      (void)hal_tls_client_get_last_error_ex(client, &last, &provider_error);
       return last;
     }
     status = hal_tls_client_poll_ex(client);

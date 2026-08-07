@@ -15,6 +15,14 @@ bool is_line_end(uint8_t value) {
          value == static_cast<uint8_t>('\n');
 }
 
+size_t bounded_string_length(const char *value, size_t capacity) {
+  size_t length = 0u;
+  while (length < capacity && value[length] != '\0') {
+    ++length;
+  }
+  return length;
+}
+
 void skip_space(const uint8_t *data, size_t size, size_t *cursor) {
   while (*cursor < size && is_space(data[*cursor])) {
     ++(*cursor);
@@ -140,11 +148,16 @@ extern "C" bool jh_ota_hex_equal(const char *left, const char *right) {
   if (left == nullptr || right == nullptr) {
     return false;
   }
+  if (bounded_string_length(left, JH_OTA_MD5_HEX_BUFFER_SIZE) !=
+          JH_OTA_MD5_HEX_CHARS ||
+      bounded_string_length(right, JH_OTA_MD5_HEX_BUFFER_SIZE) !=
+          JH_OTA_MD5_HEX_CHARS) {
+    return false;
+  }
   uint8_t difference = 0u;
   for (size_t index = 0u; index < JH_OTA_MD5_HEX_CHARS; ++index) {
     difference |=
         static_cast<uint8_t>(left[index]) ^ static_cast<uint8_t>(right[index]);
   }
-  return difference == 0u && left[JH_OTA_MD5_HEX_CHARS] == '\0' &&
-         right[JH_OTA_MD5_HEX_CHARS] == '\0';
+  return difference == 0u;
 }

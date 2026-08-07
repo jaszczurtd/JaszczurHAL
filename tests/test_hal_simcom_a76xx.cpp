@@ -136,11 +136,10 @@ void test_power_toggle_invalid_handle(void) {
 /* ── Boot ─────────────────────────────────────────────────────────────── */
 
 void test_wait_boot_completes_on_pb_done(void) {
-  hal_mock_uart_push(
-      s_uart,
-      (const uint8_t
-           *)"\r\n*ATREADY\r\n+CPIN: READY\r\nSMS DONE\r\nPB DONE\r\n",
-      47);
+  const char boot_urcs[] =
+      "\r\n*ATREADY\r\n+CPIN: READY\r\nSMS DONE\r\nPB DONE\r\n";
+  hal_mock_uart_push(s_uart, (const uint8_t *)boot_urcs,
+                     (int)(sizeof(boot_urcs) - 1u));
   TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
                     hal_simcom_a76xx_wait_boot(s_modem, 1000));
 }

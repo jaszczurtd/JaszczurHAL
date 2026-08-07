@@ -113,12 +113,62 @@ def deterministic_serial(payload: dict[str, object]) -> str:
     return f"urn:uuid:{uuid.UUID(digest[:32])}"
 
 
+def validate_inventory(inventory: dict[str, object]) -> None:
+    project = inventory["project"]
+    if not isinstance(project, dict):
+        raise ValueError("project inventory entry must be an object")
+    project_license = str(project.get("license", ""))
+    if not project_license or "unknown" in project_license.lower():
+        raise ValueError("project license must be explicitly identified")
+    license_file = project.get("license_file")
+    if project_license.startswith("LicenseRef-"):
+        if not isinstance(license_file, str) or not license_file:
+            raise ValueError("custom project license requires license_file")
+        if not (REPO_ROOT / license_file).is_file():
+            raise ValueError(f"project license file is missing: {license_file}")
+
+    components = inventory["components"]
+    if not isinstance(components, list):
+        raise ValueError("components inventory entry must be an array")
+    for component in components:
+        if not isinstance(component, dict):
+            raise ValueError("component inventory entry must be an object")
+        name = str(component.get("name", "unnamed component"))
+        scope = str(component.get("scope", "optional"))
+        version = str(component.get("version", ""))
+        licenses = [str(item) for item in component.get("licenses", [])]
+        if scope in ("required", "optional"):
+            if not version or "unknown" in version.lower():
+                raise ValueError(f"{name} has no verified version")
+            if not licenses or any("unknown" in item.lower() for item in licenses):
+                raise ValueError(f"{name} has no verified license")
+        commit = component.get("commit")
+        purl = str(component.get("purl", ""))
+        if purl.startswith("pkg:github/"):
+            if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+                raise ValueError(f"{name} GitHub component has no exact commit")
+            if not purl.endswith(f"@{commit}"):
+                raise ValueError(f"{name} purl does not use its exact commit")
+
+
 def generate(inventory_path: pathlib.Path, output_path: pathlib.Path) -> None:
     inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
+    validate_inventory(inventory)
     project = inventory["project"]
     project_version = read_project_version(REPO_ROOT, str(project["version_file"]))
 
     components = [make_component(component) for component in inventory["components"]]
+    project_references = [
+        {"type": "vcs", "url": str(project["repository"])}
+    ]
+    license_file = project.get("license_file")
+    if isinstance(license_file, str) and license_file:
+        project_references.append({
+            "type": "license",
+            "url": license_file,
+            "comment": "repository license text",
+        })
+
     bom: dict[str, object] = {
         "bomFormat": "CycloneDX",
         "specVersion": "1.5",
@@ -137,9 +187,7 @@ def generate(inventory_path: pathlib.Path, output_path: pathlib.Path) -> None:
                 "name": project["name"],
                 "version": project_version,
                 "licenses": license_entries([str(project["license"])]),
-                "externalReferences": [
-                    {"type": "vcs", "url": str(project["repository"])}
-                ],
+                "externalReferences": project_references,
             },
         },
         "components": components,

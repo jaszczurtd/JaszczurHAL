@@ -5,6 +5,14 @@ function(add_hal_test NAME)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
+function(add_hal_fuzzer NAME)
+    add_executable(${NAME} fuzz/${NAME}.cpp)
+    target_link_libraries(${NAME} PRIVATE hal_mock)
+    target_compile_options(${NAME} PRIVATE -fsanitize=fuzzer)
+    target_link_options(${NAME} PRIVATE -fsanitize=fuzzer)
+    jh_enable_host_warnings(${NAME} ERRORS)
+endfunction()
+
 function(add_hal_freertos_posix_test NAME)
     add_executable(${NAME} ${NAME}.cpp)
     target_link_libraries(${NAME} PRIVATE hal_freertos_posix)
@@ -92,7 +100,7 @@ function(add_stm32_host_test NAME)
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
-    jh_enable_host_warnings(${NAME})
+    jh_enable_host_warnings(${NAME} ERRORS)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -115,7 +123,7 @@ function(add_stm32_i2c_slave_host_test NAME)
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
-    jh_enable_host_warnings(${NAME})
+    jh_enable_host_warnings(${NAME} ERRORS)
     add_test(NAME ${NAME} COMMAND ${NAME})
 endfunction()
 
@@ -477,6 +485,16 @@ add_test(NAME test_board_generator
 add_test(NAME test_documentation_links
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/check_documentation_links.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_release_metadata
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_release_metadata.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_sbom_inventory
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_sbom_inventory.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 
@@ -1204,3 +1222,9 @@ add_executable(test_tools
 )
 target_link_libraries(test_tools PRIVATE hal_mock)
 add_test(NAME test_tools COMMAND test_tools)
+
+if(JH_ENABLE_FUZZING)
+    add_hal_fuzzer(fuzz_http_server)
+    add_hal_fuzzer(fuzz_websocket)
+    add_hal_fuzzer(fuzz_http_multipart)
+endif()

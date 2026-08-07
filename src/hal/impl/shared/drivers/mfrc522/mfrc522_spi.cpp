@@ -46,24 +46,21 @@ void MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
   }
 
   const byte address = (byte)(0x80 | (reg << 1));
-  byte index = 0;
 
   hal_spi_lock(_bus);
   hal_spi_begin_transaction(_bus, &_spiSettings);
   hal_gpio_write(_chipSelectPin, false);
-  count--;
   (void)hal_spi_transfer(_bus, address);
-  if (rxAlign) {
-    byte mask = (byte)((0xFFu << rxAlign) & 0xFFu);
-    byte value = hal_spi_transfer(_bus, address);
-    values[0] = (byte)((values[0] & ~mask) | (value & mask));
-    index++;
+  for (byte index = 0; index < count; index++) {
+    const byte tx = (index + 1u < count) ? address : 0u;
+    const byte value = hal_spi_transfer(_bus, tx);
+    if (index == 0 && rxAlign) {
+      const byte mask = (byte)((0xFFu << rxAlign) & 0xFFu);
+      values[0] = (byte)((values[0] & ~mask) | (value & mask));
+    } else {
+      values[index] = value;
+    }
   }
-  while (index < count) {
-    values[index] = hal_spi_transfer(_bus, address);
-    index++;
-  }
-  values[index] = hal_spi_transfer(_bus, 0);
   hal_gpio_write(_chipSelectPin, true);
   hal_spi_end_transaction(_bus);
   hal_spi_unlock(_bus);

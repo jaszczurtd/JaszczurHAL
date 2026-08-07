@@ -3,6 +3,7 @@
 
 #ifdef HAL_ENABLE_HTTP_SERVER
 
+#include "hal/hal_system.h"
 #include "hal/hal_tcp.h"
 
 #include <string.h>
@@ -26,7 +27,7 @@ struct hal_http_response_t {
 
 typedef struct {
   hal_http_method_t method;
-  const char *path;
+  char path[HAL_HTTP_SERVER_ROUTE_PATH_MAX];
   bool prefix;
   hal_http_handler_t handler;
   void *user;
@@ -37,7 +38,16 @@ typedef struct {
   hal_net_endpoint_t remote;
   char request[HAL_HTTP_SERVER_REQUEST_BUFFER_SIZE];
   size_t request_len;
+  uint32_t accepted_ms;
+  uint32_t last_activity_ms;
 } hal_http_client_t;
+
+typedef enum {
+  HTTP_REQUEST_PENDING = 0,
+  HTTP_REQUEST_COMPLETE,
+  HTTP_REQUEST_BAD,
+  HTTP_REQUEST_TOO_LARGE
+} http_request_state_t;
 
 static hal_tcp_listener_t s_listener;
 static hal_http_route_t s_routes[HAL_HTTP_SERVER_MAX_ROUTES];
@@ -276,31 +286,82 @@ static const hal_http_route_t *find_route(hal_http_method_t method,
   return prefix_route;
 }
 
-static size_t parse_content_length(char *headers_start, char *body_start) {
-  char *line = headers_start;
-  while (line && line < body_start) {
-    char *next = find_crlf(line);
-    if (!next) {
-      break;
-    }
-    *next = '\0';
-    if (str_nieq(line, "Content-Length:", 15u)) {
-      char *p = line + 15;
-      while (*p == ' ' || *p == '\t') {
-        ++p;
-      }
-      size_t value = 0u;
-      while (*p >= '0' && *p <= '9') {
-        value = value * 10u + (size_t)(*p - '0');
-        ++p;
-      }
-      *next = '\r';
-      return value;
-    }
-    *next = '\r';
-    line = next + 2;
+static bool header_name_equals(const char *line, size_t name_len,
+                               const char *expected) {
+  return strlen(expected) == name_len && str_nieq(line, expected, name_len);
+}
+
+static http_request_state_t parse_message_length(const char *request,
+                                                 const char *headers_end,
+                                                 size_t body_capacity,
+                                                 size_t *content_len_out) {
+  const char *line = strstr(request, "\r\n");
+  bool content_length_seen = false;
+  size_t content_len = 0u;
+  if (!line || line > headers_end) {
+    return HTTP_REQUEST_BAD;
   }
-  return 0u;
+  if (line == headers_end) {
+    *content_len_out = 0u;
+    return HTTP_REQUEST_COMPLETE;
+  }
+  line += 2;
+
+  while (line < headers_end) {
+    const char *line_end = strstr(line, "\r\n");
+    if (!line_end || line_end > headers_end) {
+      return HTTP_REQUEST_BAD;
+    }
+    const char *colon =
+        (const char *)memchr(line, ':', (size_t)(line_end - line));
+    if (!colon) {
+      return HTTP_REQUEST_BAD;
+    }
+
+    size_t name_len = (size_t)(colon - line);
+    while (name_len > 0u &&
+           (line[name_len - 1u] == ' ' || line[name_len - 1u] == '\t')) {
+      --name_len;
+    }
+    const char *value = colon + 1;
+    while (value < line_end && (*value == ' ' || *value == '\t')) {
+      ++value;
+    }
+    const char *value_end = line_end;
+    while (value_end > value &&
+           (value_end[-1] == ' ' || value_end[-1] == '\t')) {
+      --value_end;
+    }
+
+    if (header_name_equals(line, name_len, "Transfer-Encoding")) {
+      return HTTP_REQUEST_BAD;
+    }
+    if (header_name_equals(line, name_len, "Content-Length")) {
+      if (content_length_seen || value == value_end) {
+        return HTTP_REQUEST_BAD;
+      }
+      content_length_seen = true;
+      size_t parsed = 0u;
+      for (const char *p = value; p < value_end; ++p) {
+        if (*p < '0' || *p > '9') {
+          return HTTP_REQUEST_BAD;
+        }
+        const size_t digit = (size_t)(*p - '0');
+        if (parsed > (SIZE_MAX - digit) / 10u) {
+          return HTTP_REQUEST_TOO_LARGE;
+        }
+        parsed = parsed * 10u + digit;
+      }
+      content_len = parsed;
+    }
+    line = line_end + 2;
+  }
+
+  if (content_len > body_capacity) {
+    return HTTP_REQUEST_TOO_LARGE;
+  }
+  *content_len_out = content_len;
+  return HTTP_REQUEST_COMPLETE;
 }
 
 static char *trim_left(char *text) {
@@ -350,25 +411,29 @@ static size_t parse_request_headers(char *headers_start, char *body_start,
   return count;
 }
 
-static bool request_complete(const hal_http_client_t *client) {
+static http_request_state_t request_state(const hal_http_client_t *client,
+                                          size_t *content_len_out) {
   const char *end = strstr(client->request, "\r\n\r\n");
   if (!end) {
-    return false;
+    return HTTP_REQUEST_PENDING;
   }
-
-  char tmp[HAL_HTTP_SERVER_REQUEST_BUFFER_SIZE];
-  memcpy(tmp, client->request, client->request_len + 1u);
-  char *body = strstr(tmp, "\r\n\r\n");
-  if (!body) {
-    return false;
+  const size_t header_len = (size_t)(end - client->request) + 4u;
+  if (header_len >= sizeof(client->request)) {
+    return HTTP_REQUEST_TOO_LARGE;
   }
-  body += 4;
-  size_t content_len = parse_content_length(tmp, body);
-  size_t header_len = (size_t)(end - client->request) + 4u;
-  return client->request_len >= header_len + content_len;
+  size_t content_len = 0u;
+  http_request_state_t state = parse_message_length(
+      client->request, end, sizeof(client->request) - header_len - 1u,
+      &content_len);
+  if (state != HTTP_REQUEST_COMPLETE) {
+    return state;
+  }
+  *content_len_out = content_len;
+  return client->request_len >= header_len + content_len ? HTTP_REQUEST_COMPLETE
+                                                         : HTTP_REQUEST_PENDING;
 }
 
-static void process_request(hal_http_client_t *client) {
+static void process_request(hal_http_client_t *client, size_t body_len) {
   hal_http_response_t response;
   reset_response(&response);
 
@@ -400,13 +465,11 @@ static void process_request(hal_http_client_t *client) {
   }
 
   char *body = strstr(request_line_end + 2, "\r\n\r\n");
-  size_t body_len = 0u;
   hal_http_header_t headers[HAL_HTTP_SERVER_MAX_REQUEST_HEADERS];
   size_t header_count = 0u;
   if (body) {
     char *headers_start = request_line_end + 2;
     body += 4;
-    body_len = parse_content_length(headers_start, body);
     header_count = parse_request_headers(headers_start, body, headers,
                                          HAL_HTTP_SERVER_MAX_REQUEST_HEADERS);
     body[body_len] = '\0';
@@ -449,6 +512,10 @@ static hal_status_t route_common(hal_http_method_t method, const char *path,
       !handler) {
     return HAL_EINVAL;
   }
+  const size_t path_len = strlen(path);
+  if (path_len >= HAL_HTTP_SERVER_ROUTE_PATH_MAX) {
+    return HAL_EOVERFLOW;
+  }
 
   for (size_t i = 0u; i < HAL_HTTP_SERVER_MAX_ROUTES; ++i) {
     if (s_routes[i].handler && s_routes[i].method == method &&
@@ -462,7 +529,7 @@ static hal_status_t route_common(hal_http_method_t method, const char *path,
   for (size_t i = 0u; i < HAL_HTTP_SERVER_MAX_ROUTES; ++i) {
     if (!s_routes[i].handler) {
       s_routes[i].method = method;
-      s_routes[i].path = path;
+      memcpy(s_routes[i].path, path, path_len + 1u);
       s_routes[i].prefix = prefix;
       s_routes[i].handler = handler;
       s_routes[i].user = user;
@@ -560,6 +627,8 @@ void hal_http_server_poll(void) {
     memset(slot, 0, sizeof(*slot));
     slot->socket = socket;
     slot->remote = remote;
+    slot->accepted_ms = hal_millis();
+    slot->last_activity_ms = slot->accepted_ms;
   }
 
   for (size_t i = 0u; i < HAL_HTTP_SERVER_MAX_CLIENTS; ++i) {
@@ -584,6 +653,9 @@ void hal_http_server_poll(void) {
       }
       client->request_len += (size_t)rc;
       client->request[client->request_len] = '\0';
+      if (rc > 0) {
+        client->last_activity_ms = hal_millis();
+      }
     }
 
     if (client->request_len + 1u >= sizeof(client->request)) {
@@ -592,8 +664,38 @@ void hal_http_server_poll(void) {
       continue;
     }
 
-    if (request_complete(client)) {
-      process_request(client);
+    size_t content_len = 0u;
+    http_request_state_t state = request_state(client, &content_len);
+    if (state == HTTP_REQUEST_BAD) {
+      send_text_error_and_close(client, 400u, "Bad Request", "Bad Request\n");
+      continue;
+    }
+    if (state == HTTP_REQUEST_TOO_LARGE) {
+      send_text_error_and_close(client, 413u, "Payload Too Large",
+                                "Payload Too Large\n");
+      continue;
+    }
+    if (state == HTTP_REQUEST_COMPLETE) {
+      process_request(client, content_len);
+      continue;
+    }
+
+    const uint32_t now_ms = hal_millis();
+    const bool first_byte_timeout =
+        client->request_len == 0u &&
+        HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS > 0u &&
+        (uint32_t)(now_ms - client->accepted_ms) >=
+            HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS;
+    const bool request_timeout = HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS > 0u &&
+                                 (uint32_t)(now_ms - client->accepted_ms) >=
+                                     HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS;
+    const bool idle_timeout = client->request_len > 0u &&
+                              HAL_HTTP_SERVER_IDLE_TIMEOUT_MS > 0u &&
+                              (uint32_t)(now_ms - client->last_activity_ms) >=
+                                  HAL_HTTP_SERVER_IDLE_TIMEOUT_MS;
+    if (first_byte_timeout || request_timeout || idle_timeout) {
+      send_text_error_and_close(client, 408u, "Request Timeout",
+                                "Request Timeout\n");
     }
   }
 }

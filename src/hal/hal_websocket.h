@@ -32,12 +32,44 @@ extern "C" {
 #define HAL_WEBSOCKET_REQUEST_BUFFER_SIZE 512u
 #endif
 
+#ifndef HAL_WEBSOCKET_MAX_PAYLOAD_SIZE
+#define HAL_WEBSOCKET_MAX_PAYLOAD_SIZE 256u
+#endif
+
 #ifndef HAL_WEBSOCKET_FRAME_BUFFER_SIZE
-#define HAL_WEBSOCKET_FRAME_BUFFER_SIZE 256u
+#define HAL_WEBSOCKET_FRAME_BUFFER_SIZE (HAL_WEBSOCKET_MAX_PAYLOAD_SIZE + 8u)
 #endif
 
 #ifndef HAL_WEBSOCKET_DEFAULT_BACKLOG
 #define HAL_WEBSOCKET_DEFAULT_BACKLOG 2u
+#endif
+
+#ifndef HAL_WEBSOCKET_PATH_MAX
+#define HAL_WEBSOCKET_PATH_MAX 128u
+#endif
+
+#ifndef HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS
+#define HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS 5000u
+#endif
+
+#ifndef HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS
+#define HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS 15000u
+#endif
+
+#ifndef HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS
+#define HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS 5000u
+#endif
+
+#if HAL_WEBSOCKET_MAX_PAYLOAD_SIZE < 1
+#error "HAL_WEBSOCKET_MAX_PAYLOAD_SIZE must be at least 1"
+#endif
+
+#if HAL_WEBSOCKET_FRAME_BUFFER_SIZE < (HAL_WEBSOCKET_MAX_PAYLOAD_SIZE + 8u)
+#error "HAL_WEBSOCKET_FRAME_BUFFER_SIZE must hold payload and frame overhead"
+#endif
+
+#if HAL_WEBSOCKET_PATH_MAX < 2
+#error "HAL_WEBSOCKET_PATH_MAX must be at least 2"
 #endif
 
 #define HAL_WEBSOCKET_INVALID_CLIENT 0xffu
@@ -62,6 +94,11 @@ hal_status_t
 hal_websocket_server_set_callbacks(const hal_websocket_callbacks_t *callbacks,
                                    void *user);
 
+/**
+ * @brief Start the server and copy the accepted request path.
+ *
+ * The caller may release or modify @p path after this function returns.
+ */
 hal_status_t hal_websocket_server_start(uint16_t port, const char *path);
 void hal_websocket_server_stop(void);
 bool hal_websocket_server_is_running(void);

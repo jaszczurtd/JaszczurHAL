@@ -19,7 +19,8 @@
         "name": {"type": "string"},
         "version_file": {"type": "string"},
         "repository": {"type": "string"},
-        "license": {"type": "string"}
+        "license": {"type": "string"},
+        "license_file": {"type": "string"}
       },
       "additionalProperties": true
     },

@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.9.1] - 2026-08-07
+
+### Security and reliability corrections
+
+- Fixed HTTP request-length overflow and ambiguous framing handling, WebSocket
+  callback-driven close corruption, borrowed route/path lifetimes, and
+  incomplete-client slot exhaustion across HTTP, WebSocket, and net console.
+- Added fail-closed HTTP upload authorization before multipart parsing or
+  filesystem writes.
+- Deferred TCP/UDP backend destruction until active operations return and
+  replaced the global TLS I/O lock with per-client serialization. TLS callbacks
+  are now reentrant without deadlock, same-client callback reentry reports
+  `HAL_EBUSY`, callback-driven close is safe, provider errors propagate through
+  the HTTP client, and zero-length I/O does not touch null buffers.
+- Corrected component-manager missing-checkout diagnostics and completed the
+  project, PubSubClient, WireGuard crypto, and SmartTimers license/provenance
+  inventory used to generate the CycloneDX SBOM.
+- Added focused regression tests, parser fuzz targets, sanitizer coverage, and a
+  release metadata/tag ancestry gate.
+- Made PubSubClient timeout arithmetic explicitly 32-bit and rollover-safe for
+  Clang warning-as-error builds, and removed the unused STM32 host ISR helper.
+
+Version 1.9.0 contains the corrected HTTP/WebSocket memory-safety and network
+lifecycle defects and should not be used for new deployments. Upgrade directly
+to 1.9.1 or a later release.
+
 ## [1.9.0] - 2026-08-07
 
 ### Declarative feature configuration

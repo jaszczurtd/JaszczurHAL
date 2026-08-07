@@ -15,6 +15,40 @@ static hal_status_t fake_time(void *context, uint64_t *out_unix_seconds) {
 
 static hal_status_t failing_entropy(void *, void *, size_t) { return HAL_EHW; }
 
+typedef struct {
+  hal_tls_client_t client;
+  hal_status_t reentrant_status;
+  hal_status_t close_status;
+  bool close_client;
+} callback_context_t;
+
+static hal_status_t reentrant_time(void *context, uint64_t *out_unix_seconds) {
+  callback_context_t *callback = static_cast<callback_context_t *>(context);
+  hal_tls_state_t state = HAL_TLS_STATE_FAILED;
+  callback->reentrant_status =
+      hal_tls_client_get_state_ex(callback->client, &state);
+  if (callback->close_client) {
+    callback->close_status = hal_tls_client_close_ex(callback->client);
+  }
+  *out_unix_seconds = HAL_TLS_MIN_VALID_UNIX_TIME;
+  return HAL_OK;
+}
+
+static hal_tls_trust_anchor_t fake_anchor(void) {
+  static const uint8_t dn[] = {0x30u, 0x00u};
+  static const uint8_t modulus[] = {1u};
+  static const uint8_t exponent[] = {3u};
+  hal_tls_trust_anchor_t anchor = {};
+  anchor.subject_dn = dn;
+  anchor.subject_dn_length = sizeof(dn);
+  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
+  anchor.key.rsa.modulus = modulus;
+  anchor.key.rsa.modulus_length = sizeof(modulus);
+  anchor.key.rsa.exponent = exponent;
+  anchor.key.rsa.exponent_length = sizeof(exponent);
+  return anchor;
+}
+
 void setUp(void) { hal_mock_time_reset(); }
 void tearDown(void) {}
 
@@ -124,6 +158,8 @@ void test_connect_fails_closed_until_security_configuration_exists(void) {
                                     client, &last_status, &provider_error));
   TEST_ASSERT_EQUAL_INT(HAL_ECONFIG, last_status);
   TEST_ASSERT_EQUAL_INT32(0, provider_error);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_get_last_error_ex(client, &last_status, NULL));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_shutdown_ex(client));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_close_ex(client));
 }
@@ -195,6 +231,80 @@ void test_pool_limit_and_release_are_deterministic(void) {
   }
 }
 
+void test_security_callback_reentry_returns_busy_without_deadlock(void) {
+  hal_tls_client_config_t config = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_config_init(&config));
+  hal_tls_client_t client = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_create_ex(&config, &client));
+  callback_context_t context = {client, HAL_NONE, HAL_NONE, false};
+  hal_tls_trust_anchor_t anchor = fake_anchor();
+  hal_tls_security_config_t security = {};
+  security.trust_anchors = &anchor;
+  security.trust_anchor_count = 1u;
+  security.get_time = reentrant_time;
+  security.get_entropy = failing_entropy;
+  security.callback_context = &context;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_configure_security_ex(client, &security));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_configure_server_ex(client, "example.com", 443u));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EHW, hal_tls_client_connect_ex(client));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, context.reentrant_status);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_close_ex(client));
+}
+
+void test_security_callback_may_close_client_with_deferred_cleanup(void) {
+  hal_tls_client_config_t config = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_config_init(&config));
+  hal_tls_client_t client = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_create_ex(&config, &client));
+  callback_context_t context = {client, HAL_NONE, HAL_NONE, true};
+  hal_tls_trust_anchor_t anchor = fake_anchor();
+  hal_tls_security_config_t security = {};
+  security.trust_anchors = &anchor;
+  security.trust_anchor_count = 1u;
+  security.get_time = reentrant_time;
+  security.get_entropy = failing_entropy;
+  security.callback_context = &context;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_configure_security_ex(client, &security));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_configure_server_ex(client, "example.com", 443u));
+
+  TEST_ASSERT_EQUAL_INT(HAL_ECANCELED, hal_tls_client_connect_ex(client));
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, context.reentrant_status);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, context.close_status);
+  hal_tls_state_t state = HAL_TLS_STATE_FAILED;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tls_client_get_state_ex(client, &state));
+
+  hal_tls_client_t replacement = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tls_client_create_ex(&config, &replacement));
+  TEST_ASSERT_NOT_EQUAL(client, replacement);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_close_ex(replacement));
+}
+
+void test_zero_length_io_accepts_null_buffers_without_provider_access(void) {
+  hal_tls_client_config_t config = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_config_init(&config));
+  hal_tls_client_t client = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_create_ex(&config, &client));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_tls_mark_connected_for_zero_io(client));
+
+  size_t transferred = 99u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tls_client_read_ex(client, NULL, 0u, &transferred));
+  TEST_ASSERT_EQUAL_size_t(0u, transferred);
+  transferred = 99u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_tls_client_write_ex(client, NULL, 0u, &transferred));
+  TEST_ASSERT_EQUAL_size_t(0u, transferred);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_close_ex(client));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_config_is_finite_and_poll_driven);
@@ -207,5 +317,8 @@ int main(void) {
   RUN_TEST(test_security_configuration_requires_ca_time_and_entropy);
   RUN_TEST(test_der_ca_is_decoded_into_provider_neutral_anchor);
   RUN_TEST(test_pool_limit_and_release_are_deterministic);
+  RUN_TEST(test_security_callback_reentry_returns_busy_without_deadlock);
+  RUN_TEST(test_security_callback_may_close_client_with_deferred_cleanup);
+  RUN_TEST(test_zero_length_io_accepts_null_buffers_without_provider_access);
   return UNITY_END();
 }

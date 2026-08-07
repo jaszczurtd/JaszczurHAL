@@ -65,6 +65,26 @@ extern "C" {
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
 #endif
 
+#ifndef HAL_HTTP_SERVER_ROUTE_PATH_MAX
+#define HAL_HTTP_SERVER_ROUTE_PATH_MAX 128u
+#endif
+
+#ifndef HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS
+#define HAL_HTTP_SERVER_FIRST_BYTE_TIMEOUT_MS 5000u
+#endif
+
+#ifndef HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS
+#define HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS 15000u
+#endif
+
+#ifndef HAL_HTTP_SERVER_IDLE_TIMEOUT_MS
+#define HAL_HTTP_SERVER_IDLE_TIMEOUT_MS 5000u
+#endif
+
+#if HAL_HTTP_SERVER_ROUTE_PATH_MAX < 2
+#error "HAL_HTTP_SERVER_ROUTE_PATH_MAX must be at least 2"
+#endif
+
 typedef enum {
   HAL_HTTP_METHOD_UNKNOWN = 0,
   HAL_HTTP_METHOD_GET,
@@ -97,11 +117,19 @@ typedef hal_status_t (*hal_http_handler_t)(const hal_http_request_t *request,
                                            hal_http_response_t *response,
                                            void *user);
 
-/** @brief Register an exact method/path route. */
+/**
+ * @brief Register an exact method/path route.
+ *
+ * The path is copied by the server and may be released after this call.
+ */
 hal_status_t hal_http_server_route(hal_http_method_t method, const char *path,
                                    hal_http_handler_t handler, void *user);
 
-/** @brief Register a prefix route. Exact routes are matched before prefixes. */
+/**
+ * @brief Register a prefix route. Exact routes are matched before prefixes.
+ *
+ * The path is copied by the server and may be released after this call.
+ */
 hal_status_t hal_http_server_route_prefix(hal_http_method_t method,
                                           const char *path_prefix,
                                           hal_http_handler_t handler,

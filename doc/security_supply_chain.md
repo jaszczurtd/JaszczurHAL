@@ -47,6 +47,7 @@ and recovery are documented in
 | `security/vulnerability_log.md` | Human-maintained vulnerability assessment and patch log. |
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
 | `scripts/generate_sbom.py` | Offline SBOM generator using only Python standard library. |
+| `scripts/check_release_metadata.py` | Release gate for VERSION, changelog, SBOM, tag name and mainline ancestry. |
 | `scripts/check_vulnerabilities.sh` | Optional scanner wrapper for local vulnerability checks. |
 
 ## Generate the SBOM
@@ -114,6 +115,22 @@ Policy for findings:
   be recorded.
 - Opt-in module findings should state the affected `HAL_ENABLE_*` flags and
   supported targets.
+
+## Release gate
+
+Before creating a release tag, verify that `VERSION`, the first dated changelog
+entry, and the SBOM project version agree:
+
+```bash
+python3 scripts/check_release_metadata.py
+```
+
+Create the matching tag only after the release commit is on `main`. Tag-triggered
+CI additionally checks the tag name and proves that the tagged commit is an
+ancestor of `origin/main`; a tag from a divergent release branch is rejected.
+The host CI also runs the complete test suite under ASan/UBSan and smoke-fuzzes
+the HTTP, WebSocket, and multipart upload parsers. ThreadSanitizer remains an
+optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 
 ## Updating a component
 

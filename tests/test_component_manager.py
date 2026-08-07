@@ -33,6 +33,27 @@ def git(directory: Path, *arguments: str) -> str:
 
 
 class GitManagerTests(unittest.TestCase):
+    def test_verify_distinguishes_missing_and_non_git_checkouts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-component-state-") as text:
+            temporary = Path(text)
+            missing = temporary / "missing"
+            repository = (temporary / "upstream").resolve().as_uri()
+            with self.assertRaisesRegex(
+                manager.ComponentError, r"found missing checkout\."
+            ):
+                manager.sync_git_checkout(
+                    repository, "a" * 40, missing, verify_only=True
+                )
+
+            non_git = temporary / "non-git"
+            non_git.mkdir()
+            with self.assertRaisesRegex(
+                manager.ComponentError, r"found non-git directory\."
+            ):
+                manager.sync_git_checkout(
+                    repository, "a" * 40, non_git, verify_only=True
+                )
+
     def test_exact_ref_origin_cleanliness_and_idempotency(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-component-git-") as text:
             temporary = Path(text)

@@ -101,6 +101,10 @@
 #define NETWORK_SUITE_CONSOLE_PASSWORD "change-me"
 #endif
 
+#ifndef NETWORK_SUITE_UPLOAD_TOKEN
+#define NETWORK_SUITE_UPLOAD_TOKEN "change-me-upload"
+#endif
+
 #ifndef NETWORK_SUITE_REMOTE_HOST
 #define NETWORK_SUITE_REMOTE_HOST "192.168.1.50"
 #endif
@@ -370,6 +374,17 @@ static hal_status_t ram_file_write(const char *path, size_t offset,
   return HAL_OK;
 }
 
+static hal_status_t authorize_file_upload(const hal_http_request_t *request,
+                                          hal_http_file_upload_t upload,
+                                          void *user) {
+  (void)upload;
+  (void)user;
+  const char *token = hal_http_request_get_header(request, "X-Upload-Token");
+  return token != nullptr && strcmp(token, NETWORK_SUITE_UPLOAD_TOKEN) == 0
+             ? HAL_OK
+             : HAL_EAUTH;
+}
+
 static void seed_ram_files(void) {
   static const char kIndex[] =
       "<!doctype html><html><body><h1>JaszczurHAL RAM files</h1>"
@@ -605,6 +620,7 @@ static bool configure_services(void) {
   files.stat = ram_file_stat;
   files.read = ram_file_read;
   files.write = ram_file_write;
+  files.authorize_upload = authorize_file_upload;
   if (!require_status(hal_http_files_mount(&files), "mount RAM files")) {
     return false;
   }

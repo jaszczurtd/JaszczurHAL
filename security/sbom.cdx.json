@@ -14,11 +14,11 @@
       "type": "library",
       "bom-ref": "pkg:jaszczurhal",
       "name": "JaszczurHAL",
-      "version": "1.9.0",
+      "version": "1.9.1",
       "licenses": [
         {
           "license": {
-            "id": "MIT"
+            "id": "LicenseRef-JaszczurHAL-Attribution"
           }
         }
       ],
@@ -26,6 +26,11 @@
         {
           "type": "vcs",
           "url": "https://github.com/jaszczurtd/JaszczurHAL"
+        },
+        {
+          "type": "license",
+          "url": "LICENSE",
+          "comment": "repository license text"
         }
       ]
     }
@@ -624,9 +629,9 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:pubsubclient@unknown-vendored",
+      "bom-ref": "pkg:pubsubclient@2.8-derived",
       "name": "PubSubClient",
-      "version": "unknown-vendored",
+      "version": "2.8-derived",
       "scope": "optional",
       "licenses": [
         {
@@ -638,7 +643,7 @@
       "supplier": {
         "name": "Nicholas O'Leary"
       },
-      "purl": "pkg:github/knolleary/pubsubclient",
+      "purl": "pkg:github/knolleary/pubsubclient@2d228f2f862a95846c65a8518c79f48dfc8f188c",
       "externalReferences": [
         {
           "type": "website",
@@ -648,12 +653,21 @@
           "type": "other",
           "url": "src/hal/impl/shared/frameworks/PubSubClient",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/PubSubClient/LICENSE.txt",
+          "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "2d228f2f862a95846c65a8518c79f48dfc8f188c"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Vendored MQTT protocol engine adapted to the native shared JaszczurHAL transport. Record the exact upstream tag/commit at the next refresh."
+          "value": "Vendored MQTT protocol engine derived from upstream v2.8 at the recorded commit and adapted to the native shared JaszczurHAL transport."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -661,15 +675,15 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/PubSubClient"
+          "value": "src/hal/impl/shared/frameworks/PubSubClient,src/hal/impl/shared/frameworks/PubSubClient/LICENSE.txt"
         }
       ]
     },
     {
       "type": "library",
-      "bom-ref": "pkg:shared-wireguard-lwip-engine@0.1.8",
+      "bom-ref": "pkg:shared-wireguard-lwip-engine@0.1.8-derived",
       "name": "Shared WireGuard/lwIP engine",
-      "version": "0.1.8",
+      "version": "0.1.8-derived",
       "scope": "optional",
       "licenses": [
         {
@@ -681,7 +695,7 @@
       "supplier": {
         "name": "Kenta Ida, Daniel Hope, Marcin Kielesinski"
       },
-      "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@0.1.8",
+      "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@ba409a040c78bcf86f6c8026ba86c014035b8c63",
       "externalReferences": [
         {
           "type": "website",
@@ -691,12 +705,21 @@
           "type": "other",
           "url": "src/hal/impl/shared/frameworks/wireguard",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/wireguard/LICENSE",
+          "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "ba409a040c78bcf86f6c8026ba86c014035b8c63"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "WireGuard-ESP32-derived protocol engine with target-neutral JaszczurHAL lwIP extension glue; shared by supported host-lwIP targets."
+          "value": "WireGuard-ESP32-derived protocol engine imported from the 0.1.8 JaszczurHAL fork commit and adapted with target-neutral lwIP extension glue."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -704,17 +727,22 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/wireguard"
+          "value": "src/hal/impl/shared/frameworks/wireguard,src/hal/impl/shared/frameworks/wireguard/LICENSE"
         }
       ]
     },
     {
       "type": "library",
-      "bom-ref": "pkg:wireguard-crypto-core@unknown-vendored",
+      "bom-ref": "pkg:wireguard-crypto-core@0.1.8-derived",
       "name": "WireGuard crypto core",
-      "version": "unknown-vendored",
+      "version": "0.1.8-derived",
       "scope": "optional",
       "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        },
         {
           "license": {
             "id": "MIT"
@@ -722,24 +750,38 @@
         }
       ],
       "supplier": {
-        "name": "WireGuard and upstream crypto contributors"
+        "name": "Daniel Hope, Cryptography Research, Inc., floodyberry and upstream crypto contributors"
       },
-      "purl": "pkg:generic/wireguard-crypto-core",
+      "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@ba409a040c78bcf86f6c8026ba86c014035b8c63",
       "externalReferences": [
         {
           "type": "website",
-          "url": "https://www.wireguard.com"
+          "url": "https://github.com/jaszczurtd/arduino-wireguard-pico-w"
         },
         {
           "type": "other",
           "url": "src/hal/impl/shared/frameworks/wireguard/crypto",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/wireguard/LICENSE",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/wireguard/crypto/x25519-license.txt",
+          "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "ba409a040c78bcf86f6c8026ba86c014035b8c63"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Shared ChaCha20, Poly1305, BLAKE2s and X25519 primitives used by HAL crypto/WireGuard paths; local license detail includes x25519 MIT attribution."
+          "value": "ChaCha20/Poly1305/BLAKE2s/X25519 sources imported through the recorded 0.1.8 fork commit. The BSD port license and Cryptography Research X25519 MIT notice are retained locally; Poly1305-DONNA identifies its upstream as public domain or MIT."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -747,7 +789,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/wireguard/crypto"
+          "value": "src/hal/impl/shared/frameworks/wireguard/crypto,src/hal/impl/shared/frameworks/wireguard/LICENSE,src/hal/impl/shared/frameworks/wireguard/crypto/x25519-license.txt"
         }
       ]
     },
@@ -887,21 +929,21 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:smarttimers@unknown-vendored",
+      "bom-ref": "pkg:smarttimers@16.4.1-1-g651b205-derived",
       "name": "SmartTimers",
-      "version": "unknown-vendored",
+      "version": "16.4.1-1-g651b205-derived",
       "scope": "required",
       "licenses": [
         {
           "license": {
-            "name": "unknown"
+            "id": "MIT"
           }
         }
       ],
       "supplier": {
         "name": "Nettigo, garthoff/Timers contributors"
       },
-      "purl": "pkg:generic/smarttimers",
+      "purl": "pkg:github/nettigo/Timers@651b205ab6b6ac64ab08983f2ecf158459c19d16",
       "externalReferences": [
         {
           "type": "website",
@@ -911,19 +953,28 @@
           "type": "other",
           "url": "src/hal/impl/shared/frameworks/smart_timers",
           "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "src/hal/impl/shared/frameworks/smart_timers/LICENSE.Nettigo-Timers",
+          "comment": "repository path"
         }
       ],
       "properties": [
         {
+          "name": "jaszczurhal:commit",
+          "value": "651b205ab6b6ac64ab08983f2ecf158459c19d16"
+        },
+        {
           "name": "jaszczurhal:notes",
-          "value": "Based on Nettigo Timers, itself a fork of garthoff/Timers. License should be confirmed during the next upstream refresh."
+          "value": "Derived from Nettigo Timers v16.4.1-1-g651b205, itself a fork of garthoff/Timers. The upstream MIT notice is retained beside the adapted source."
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/smart_timers"
+          "value": "src/hal/impl/shared/frameworks/smart_timers,src/hal/impl/shared/frameworks/smart_timers/LICENSE.Nettigo-Timers"
         }
       ]
     }
   ],
-  "serialNumber": "urn:uuid:579aa6e0-16d7-b3a7-745c-c5f374edb516"
+  "serialNumber": "urn:uuid:452aae5b-2951-69c8-c875-0b2b9969aa98"
 }

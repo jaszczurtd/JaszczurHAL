@@ -207,6 +207,12 @@ def _git_head(directory: Path) -> str:
     return _git_output(directory, "rev-parse", "HEAD", check=False)
 
 
+def _checkout_state(directory: Path, actual_ref: str) -> str:
+    if actual_ref:
+        return actual_ref
+    return "missing checkout" if not directory.exists() else "non-git directory"
+
+
 def _clone_pinned(repository: str, reference: str, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = destination.parent / f".{destination.name}.clone.{uuid.uuid4().hex}"
@@ -272,7 +278,7 @@ def sync_git_checkout(
     changed = False
     if actual != reference:
         if verify_only:
-            found = actual or "non-git directory"
+            found = _checkout_state(destination, actual)
             raise ComponentError(
                 f"Pinned checkout mismatch at {destination}: expected {reference}, found {found}."
             )
@@ -736,7 +742,8 @@ def ensure_git_component(
         if actual != config[f"{spec.prefix}_REF"]:
             raise ComponentError(
                 f"External {spec.label} checkout mismatch at {destination}: expected "
-                f"{config[f'{spec.prefix}_REF']}, found {actual or 'non-git directory'}."
+                f"{config[f'{spec.prefix}_REF']}, "
+                f"found {_checkout_state(destination, actual)}."
             )
         _sync_submodules(destination, submodules, verify_only)
         _verify_required_paths(destination, spec.required_paths)

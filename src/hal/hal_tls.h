@@ -131,11 +131,26 @@ hal_status_t hal_tls_client_shutdown_ex(hal_tls_client_t client);
 hal_status_t hal_tls_client_cancel_ex(hal_tls_client_t client);
 hal_status_t hal_tls_client_get_state_ex(hal_tls_client_t client,
                                          hal_tls_state_t *out_state);
+/**
+ * @brief Return the last HAL and optional provider-specific error.
+ *
+ * Operations on one client are serialized. Security callbacks execute without
+ * the client mutex; a callback that re-enters the same client receives
+ * HAL_EBUSY. Closing that client from a callback is supported and invalidates
+ * the handle immediately while resource destruction is safely deferred.
+ * @p out_provider_error may be NULL when only the portable HAL status is
+ * required.
+ */
 hal_status_t hal_tls_client_get_last_error_ex(hal_tls_client_t client,
                                               hal_status_t *out_status,
                                               int32_t *out_provider_error);
 
-/** Release the client slot. Stale copies of the handle remain invalid. */
+/**
+ * @brief Release the client slot. Stale copies of the handle remain invalid.
+ *
+ * When another operation is active, the handle is invalidated immediately and
+ * provider/transport destruction occurs after that operation returns.
+ */
 hal_status_t hal_tls_client_close_ex(hal_tls_client_t client);
 
 #ifdef __cplusplus

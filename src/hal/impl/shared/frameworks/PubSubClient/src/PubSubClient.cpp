@@ -14,8 +14,10 @@
 
 #include <stdlib.h>
 
-static inline unsigned long pubsub_millis(void) {
-  return (unsigned long)hal_millis();
+static inline uint32_t pubsub_millis(void) { return hal_millis(); }
+
+static inline uint32_t pubsub_duration_ms(uint16_t seconds) {
+  return static_cast<uint32_t>(seconds) * 1000u;
 }
 
 static inline void pubsub_idle(void) {
@@ -144,8 +146,8 @@ boolean PubSubClient::connect(const char *id, const char *user,
 
       while (!_client->available()) {
         pubsub_idle();
-        unsigned long t = pubsub_millis();
-        if (t - lastInActivity >= ((int32_t)this->socketTimeout * 1000UL)) {
+        const uint32_t t = pubsub_millis();
+        if (t - lastInActivity >= pubsub_duration_ms(this->socketTimeout)) {
           _state = MQTT_CONNECTION_TIMEOUT;
           _client->stop();
           return false;
@@ -178,9 +180,9 @@ boolean PubSubClient::readByte(uint8_t *result) {
   uint32_t previousMillis = pubsub_millis();
   while (!_client->available()) {
     pubsub_idle();
-    uint32_t currentMillis = pubsub_millis();
+    const uint32_t currentMillis = pubsub_millis();
     if (currentMillis - previousMillis >=
-        ((int32_t)this->socketTimeout * 1000)) {
+        pubsub_duration_ms(this->socketTimeout)) {
       return false;
     }
   }
@@ -252,9 +254,10 @@ uint32_t PubSubClient::readPacket(uint8_t *lengthLength) {
 
 boolean PubSubClient::loop() {
   if (connected()) {
-    unsigned long t = pubsub_millis();
-    if ((t - lastInActivity > this->keepAlive * 1000UL) ||
-        (t - lastOutActivity > this->keepAlive * 1000UL)) {
+    const uint32_t t = pubsub_millis();
+    const uint32_t keep_alive_ms = pubsub_duration_ms(this->keepAlive);
+    if ((t - lastInActivity > keep_alive_ms) ||
+        (t - lastOutActivity > keep_alive_ms)) {
       if (pingOutstanding) {
         this->_state = MQTT_CONNECTION_TIMEOUT;
         _client->stop();

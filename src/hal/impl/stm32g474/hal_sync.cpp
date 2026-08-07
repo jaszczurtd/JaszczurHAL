@@ -48,13 +48,17 @@ static inline void stm32_enable_irq(void) {
   __asm__ volatile("cpsie i" ::: "memory");
 }
 
+#if JH_STM32_HAL_SYNC_FREERTOS
 static inline bool stm32_in_isr(void) {
   uint32_t ipsr;
   __asm__ volatile("MRS %0, ipsr" : "=r"(ipsr));
   return (ipsr & 0x1FFu) != 0u;
 }
+#endif
 #else
+#if JH_STM32_HAL_SYNC_FREERTOS
 static inline bool stm32_in_isr(void) { return false; }
+#endif
 #endif
 } // namespace
 
