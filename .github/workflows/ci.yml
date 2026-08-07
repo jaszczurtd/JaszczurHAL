@@ -113,8 +113,15 @@ jobs:
             )
             $configureArguments += $ExtraArguments
 
-            $configureOutput = & $cmake @configureArguments 2>&1
-            $configureExitCode = $LASTEXITCODE
+            $previousErrorActionPreference = $ErrorActionPreference
+            try {
+              # CMake writes informational Pico SDK messages to stderr.
+              $ErrorActionPreference = 'Continue'
+              $configureOutput = & $cmake @configureArguments 2>&1
+              $configureExitCode = $LASTEXITCODE
+            } finally {
+              $ErrorActionPreference = $previousErrorActionPreference
+            }
             $configureText = $configureOutput | Out-String
             Write-Host $configureText
             if ($configureExitCode -ne 0) {
@@ -386,7 +393,10 @@ jobs:
       - name: Install GNU Arm Embedded toolchain
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc-arm-none-eabi
+          sudo apt-get install -y --no-install-recommends \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-dev
 
       - name: Prepare host source dependencies
         run: |
@@ -398,6 +408,8 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Configure
         run: cmake -B .build/ci/host
@@ -432,9 +444,17 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Install Valgrind
-        run: sudo apt-get update && sudo apt-get install -y valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            valgrind \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-dev
 
       - name: Configure
         run: cmake -B .build/ci/memcheck

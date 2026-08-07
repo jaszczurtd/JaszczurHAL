@@ -121,8 +121,9 @@ the complete Linux quality gate:
 
 - `windows-tooling` prepares the authenticated managed environment, repeats
   `runmefirst.ps1 -VerifyOnly`, runs the shared runtime/platform/bootstrap and
-  generator tests, then compiles and runs the portable host contracts with
-  MSVC `/W4 /permissive- /WX`;
+  generator tests, verifies the RP and STM32 FreeRTOS CMake dependency source
+  selection, then compiles and runs the portable host contracts with MSVC
+  `/W4 /permissive- /WX`;
 - `Windows firmware (<target>)` builds a generated consumer from a path
   containing spaces through Ninja for `rp2040`, `rp2350-arm`,
   `rp2350-riscv`, and `stm32g474`, checks the target artifacts and patched
