@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.9.0] - 2026-xx-xx
+## [1.9.0] - 2026-08-07
 
 ### Declarative feature configuration
 
