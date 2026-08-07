@@ -644,6 +644,16 @@ uint16_t hal_mock_mqtt_get_keepalive(void);
 uint16_t hal_mock_mqtt_get_socket_timeout(void);
 #endif
 
+// ── TLS ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_TLS
+#include "../../hal_tls.h"
+/** @brief Put a mock TLS client in a provider-free connected state.
+ *
+ * This state is intended only for exercising zero-length read/write contracts.
+ */
+hal_status_t hal_mock_tls_mark_connected_for_zero_io(hal_tls_client_t client);
+#endif
+
 // ── OTA ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_OTA
 #include "../../hal_ota.h"

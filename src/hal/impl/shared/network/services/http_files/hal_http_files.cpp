@@ -18,6 +18,7 @@ typedef struct {
   hal_http_file_stat_cb_t stat;
   hal_http_file_read_cb_t read;
   hal_http_file_write_cb_t write;
+  hal_http_file_authorize_cb_t authorize_upload;
   void *user;
 } http_files_mount_t;
 
@@ -742,11 +743,19 @@ static hal_status_t file_route_handler(const hal_http_request_t *request,
 
   if (request->method == HAL_HTTP_METHOD_PUT && mount->enable_upload &&
       mount->write) {
+    if (mount->authorize_upload(request, HAL_HTTP_FILE_UPLOAD_RAW,
+                                mount->user) != HAL_OK) {
+      return write_status_text(response, 403u, "Forbidden", "Forbidden\n");
+    }
     return handle_raw_upload(mount, request, response);
   }
 
   if (request->method == HAL_HTTP_METHOD_POST && mount->enable_upload &&
       mount->write) {
+    if (mount->authorize_upload(request, HAL_HTTP_FILE_UPLOAD_MULTIPART,
+                                mount->user) != HAL_OK) {
+      return write_status_text(response, 403u, "Forbidden", "Forbidden\n");
+    }
     return handle_multipart_upload(mount, request, response);
   }
 
@@ -759,7 +768,7 @@ hal_status_t hal_http_files_mount(const hal_http_files_config_t *config) {
       !config->stat || !config->read) {
     return HAL_EINVAL;
   }
-  if (config->enable_upload && !config->write) {
+  if (config->enable_upload && (!config->write || !config->authorize_upload)) {
     return HAL_EINVAL;
   }
 
@@ -798,6 +807,7 @@ hal_status_t hal_http_files_mount(const hal_http_files_config_t *config) {
   slot->stat = config->stat;
   slot->read = config->read;
   slot->write = config->write;
+  slot->authorize_upload = config->authorize_upload;
   slot->user = config->user;
   slot->used = true;
 

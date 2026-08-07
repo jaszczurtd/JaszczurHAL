@@ -15,6 +15,7 @@ static size_t s_seen_body_len;
 void setUp(void) {
   hal_mock_serial_reset();
   hal_mock_tcp_reset();
+  hal_mock_set_millis(0u);
   hal_http_server_stop();
   hal_http_server_clear_routes();
   s_seen_handler = false;
@@ -244,6 +245,97 @@ void test_prefix_route_matches_nested_path(void) {
   assert_response_contains(socket, "\r\n\r\nprefix");
 }
 
+void test_content_length_overflow_is_rejected_before_body_indexing(void) {
+  hal_tcp_socket_t socket =
+      send_request(8086u, "POST /api HTTP/1.1\r\nHost: unit\r\nContent-Length: "
+                          "184467440737095516160\r\n\r\n");
+
+  TEST_ASSERT_FALSE(s_seen_handler);
+  assert_response_contains(socket, "HTTP/1.1 413 Payload Too Large\r\n");
+}
+
+void test_ambiguous_request_framing_is_rejected(void) {
+  hal_tcp_socket_t invalid =
+      send_request(8087u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+                          "Content-Length: 1x\r\n\r\nx");
+  assert_response_contains(invalid, "HTTP/1.1 400 Bad Request\r\n");
+  hal_http_server_stop();
+
+  hal_tcp_socket_t duplicate =
+      send_request(8088u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+                          "Content-Length: 1\r\nContent-Length: 1\r\n\r\nx");
+  assert_response_contains(duplicate, "HTTP/1.1 400 Bad Request\r\n");
+  hal_http_server_stop();
+
+  hal_tcp_socket_t transfer =
+      send_request(8089u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+                          "Transfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
+  assert_response_contains(transfer, "HTTP/1.1 400 Bad Request\r\n");
+}
+
+void test_route_owns_path_and_rejects_overlong_path(void) {
+  char path[] = "/owned";
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_route(HAL_HTTP_METHOD_GET, path,
+                                                      hello_handler, NULL));
+  path[1] = 'x';
+
+  hal_tcp_socket_t socket =
+      send_request(8090u, "GET /owned HTTP/1.1\r\nHost: unit\r\n\r\n");
+  TEST_ASSERT_TRUE(s_seen_handler);
+  assert_response_contains(socket, "HTTP/1.1 200 OK\r\n");
+
+  char overlong[HAL_HTTP_SERVER_ROUTE_PATH_MAX + 1u];
+  memset(overlong, 'a', sizeof(overlong));
+  overlong[0] = '/';
+  overlong[sizeof(overlong) - 1u] = '\0';
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW,
+                        hal_http_server_route(HAL_HTTP_METHOD_GET, overlong,
+                                              hello_handler, NULL));
+}
+
+void test_incomplete_clients_time_out_and_release_slots(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_http_server_route(HAL_HTTP_METHOD_GET, "/hello",
+                                              hello_handler, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_start(8091u));
+  hal_tcp_listener_t listener = hal_mock_tcp_listener_find_by_port(8091u);
+  TEST_ASSERT_NOT_NULL(listener);
+  hal_net_endpoint_t remote = make_endpoint(192u, 168u, 1u, 70u, 53000u);
+  for (size_t i = 0u; i < HAL_HTTP_SERVER_MAX_CLIENTS; ++i) {
+    TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+    hal_http_server_poll();
+    hal_tcp_socket_t socket = hal_mock_tcp_get_last_accepted_socket();
+    const uint8_t partial_request = 'G';
+    hal_mock_tcp_inject_rx(socket, &partial_request, 1u);
+    hal_http_server_poll();
+  }
+
+  hal_mock_advance_millis(HAL_HTTP_SERVER_IDLE_TIMEOUT_MS);
+  hal_http_server_poll();
+
+  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+  hal_http_server_poll();
+  hal_tcp_socket_t slow_socket = hal_mock_tcp_get_last_accepted_socket();
+  for (size_t i = 0u; i < 3u; ++i) {
+    hal_mock_advance_millis(HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u);
+    const uint8_t next_byte = (uint8_t)('G' + i);
+    hal_mock_tcp_inject_rx(slow_socket, &next_byte, 1u);
+    hal_http_server_poll();
+  }
+  hal_mock_advance_millis(HAL_HTTP_SERVER_REQUEST_TIMEOUT_MS -
+                          (3u * (HAL_HTTP_SERVER_IDLE_TIMEOUT_MS - 1u)));
+  hal_http_server_poll();
+
+  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+  hal_http_server_poll();
+  hal_tcp_socket_t socket = hal_mock_tcp_get_last_accepted_socket();
+  const char request[] = "GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n";
+  hal_mock_tcp_inject_rx(socket, (const uint8_t *)request,
+                         (uint16_t)strlen(request));
+  hal_http_server_poll();
+  TEST_ASSERT_TRUE(s_seen_handler);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_get_route_sends_ok_response);
@@ -253,5 +345,9 @@ int main(void) {
   RUN_TEST(test_handler_failure_returns_500);
   RUN_TEST(test_api_rejects_invalid_configuration);
   RUN_TEST(test_prefix_route_matches_nested_path);
+  RUN_TEST(test_content_length_overflow_is_rejected_before_body_indexing);
+  RUN_TEST(test_ambiguous_request_framing_is_rejected);
+  RUN_TEST(test_route_owns_path_and_rejects_overlong_path);
+  RUN_TEST(test_incomplete_clients_time_out_and_release_slots);
   return UNITY_END();
 }

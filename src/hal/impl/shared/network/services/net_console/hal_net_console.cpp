@@ -3,6 +3,7 @@
 
 #ifdef HAL_ENABLE_NET_CONSOLE
 
+#include "hal/hal_system.h"
 #include "hal/hal_tcp.h"
 
 #include <string.h>
@@ -33,6 +34,8 @@ struct net_console_client_t {
   size_t line_len;
   uint8_t tx_storage[HAL_NET_CONSOLE_TX_BUFFER_SIZE];
   byte_ring_t tx;
+  uint32_t accepted_ms;
+  uint32_t last_activity_ms;
 };
 
 hal_tcp_listener_t s_listener = NULL;
@@ -147,11 +150,14 @@ void emit_event(net_console_client_t *client, hal_net_console_event_t event) {
 }
 
 void close_client(net_console_client_t *client, bool emit_disconnect) {
-  bool was_active = client->state != CLIENT_UNUSED;
-  if (emit_disconnect && was_active) {
-    emit_event(client, HAL_NET_CONSOLE_EVENT_DISCONNECT);
-  }
+  const bool notify = emit_disconnect && client->state != CLIENT_UNUSED;
+  const hal_net_console_client_t id = client_index(client);
+  hal_net_console_event_cb_t event_cb = s_event_cb;
+  void *cb_user = s_cb_user;
   clear_client(client);
+  if (notify && event_cb) {
+    event_cb(id, HAL_NET_CONSOLE_EVENT_DISCONNECT, cb_user);
+  }
 }
 
 hal_status_t enqueue_to_client(net_console_client_t *client, const void *data,
@@ -196,6 +202,8 @@ void accept_pending_clients(void) {
     slot->socket = socket;
     slot->remote = remote;
     slot->state = CLIENT_AUTH;
+    slot->accepted_ms = hal_millis();
+    slot->last_activity_ms = slot->accepted_ms;
     enqueue_text_to_client(slot, kGreeting);
     emit_event(slot, HAL_NET_CONSOLE_EVENT_CONNECT);
   }
@@ -301,6 +309,7 @@ void process_client_rx(net_console_client_t *client) {
     if (read == 0) {
       return;
     }
+    client->last_activity_ms = hal_millis();
     for (int i = 0; i < read; ++i) {
       if (client->state == CLIENT_AUTH) {
         authenticate_byte(client, buffer[i]);
@@ -425,6 +434,25 @@ extern "C" void hal_net_console_poll(void) {
     process_client_rx(client);
     if (client->state == CLIENT_UNUSED) {
       continue;
+    }
+    if (client->state == CLIENT_AUTH) {
+      const uint32_t now_ms = hal_millis();
+      const bool first_byte_timeout =
+          client->auth_len == 0u &&
+          HAL_NET_CONSOLE_AUTH_FIRST_BYTE_TIMEOUT_MS > 0u &&
+          (uint32_t)(now_ms - client->accepted_ms) >=
+              HAL_NET_CONSOLE_AUTH_FIRST_BYTE_TIMEOUT_MS;
+      const bool auth_timeout = HAL_NET_CONSOLE_AUTH_TIMEOUT_MS > 0u &&
+                                (uint32_t)(now_ms - client->accepted_ms) >=
+                                    HAL_NET_CONSOLE_AUTH_TIMEOUT_MS;
+      const bool idle_timeout = client->auth_len > 0u &&
+                                HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS > 0u &&
+                                (uint32_t)(now_ms - client->last_activity_ms) >=
+                                    HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS;
+      if (first_byte_timeout || auth_timeout || idle_timeout) {
+        close_client(client, true);
+        continue;
+      }
     }
     flush_client_tx(client);
     if (client->state == CLIENT_CLOSING && ring_empty(&client->tx)) {

@@ -72,7 +72,8 @@ hal_status_t jh_network_handle_allocate(jh_network_handle_pool_t *pool,
   *out_handle = nullptr;
   for (size_t index = 0u; index < pool->capacity; ++index) {
     jh_network_handle_slot_t *slot = &pool->slots[index];
-    if (!slot->in_use) {
+    if (!slot->in_use && !slot->closing && slot->active_operations == 0u &&
+        slot->backend_token == nullptr) {
       slot->generation = next_generation(slot->generation);
       slot->backend_token = backend_token;
       slot->in_use = true;
@@ -111,18 +112,132 @@ hal_status_t jh_network_handle_resolve(const jh_network_handle_pool_t *pool,
   return HAL_OK;
 }
 
-hal_status_t jh_network_handle_release(jh_network_handle_pool_t *pool,
+hal_status_t jh_network_handle_acquire(jh_network_handle_pool_t *pool,
                                        const void *handle,
-                                       void **out_backend_token) {
+                                       jh_network_handle_lease_t *out_lease) {
+  if (out_lease != nullptr) {
+    memset(out_lease, 0, sizeof(*out_lease));
+  }
+  if (pool == nullptr || out_lease == nullptr) {
+    return HAL_EINVAL;
+  }
+  void *backend_token = nullptr;
   size_t index = 0u;
-  hal_status_t status =
-      jh_network_handle_resolve(pool, handle, out_backend_token, &index);
+  const hal_status_t status =
+      jh_network_handle_resolve(pool, handle, &backend_token, &index);
   if (status != HAL_OK) {
     return status;
   }
-  pool->slots[index].backend_token = nullptr;
-  pool->slots[index].in_use = false;
+  jh_network_handle_slot_t *slot = &pool->slots[index];
+  if (slot->active_operations == UINT32_MAX) {
+    return HAL_EOVERFLOW;
+  }
+  ++slot->active_operations;
+  out_lease->backend_token = backend_token;
+  out_lease->index = index;
+  out_lease->generation = slot->generation;
+  out_lease->active = true;
   return HAL_OK;
+}
+
+bool jh_network_handle_lease_is_open(const jh_network_handle_pool_t *pool,
+                                     const jh_network_handle_lease_t *lease) {
+  if (pool == nullptr || pool->slots == nullptr || lease == nullptr ||
+      !lease->active || lease->index >= pool->capacity) {
+    return false;
+  }
+  const jh_network_handle_slot_t *slot = &pool->slots[lease->index];
+  return slot->in_use && !slot->closing &&
+         slot->generation == lease->generation &&
+         slot->backend_token == lease->backend_token;
+}
+
+hal_status_t
+jh_network_handle_end_operation(jh_network_handle_pool_t *pool,
+                                jh_network_handle_lease_t *lease,
+                                void **out_deferred_backend_token) {
+  if (out_deferred_backend_token != nullptr) {
+    *out_deferred_backend_token = nullptr;
+  }
+  if (pool == nullptr || pool->slots == nullptr || lease == nullptr ||
+      !lease->active || lease->index >= pool->capacity ||
+      out_deferred_backend_token == nullptr) {
+    return HAL_EINVAL;
+  }
+  jh_network_handle_slot_t *slot = &pool->slots[lease->index];
+  if (slot->generation != lease->generation ||
+      slot->backend_token != lease->backend_token ||
+      slot->active_operations == 0u) {
+    return HAL_EINVAL;
+  }
+  --slot->active_operations;
+  lease->active = false;
+  if (slot->closing && slot->active_operations == 0u) {
+    *out_deferred_backend_token = slot->backend_token;
+    slot->backend_token = nullptr;
+    slot->closing = false;
+  }
+  return HAL_OK;
+}
+
+hal_status_t jh_network_handle_begin_close(jh_network_handle_pool_t *pool,
+                                           const void *handle,
+                                           void **out_backend_token) {
+  if (out_backend_token != nullptr) {
+    *out_backend_token = nullptr;
+  }
+  if (pool == nullptr || pool->slots == nullptr ||
+      out_backend_token == nullptr) {
+    return HAL_EINVAL;
+  }
+  size_t index = 0u;
+  uint32_t generation = 0u;
+  if (!decode_handle(pool, handle, &index, &generation)) {
+    return HAL_EINVAL;
+  }
+  jh_network_handle_slot_t *slot = &pool->slots[index];
+  if (!slot->in_use || slot->generation != generation ||
+      slot->backend_token == nullptr) {
+    return HAL_EINVAL;
+  }
+  slot->in_use = false;
+  slot->closing = true;
+  if (slot->active_operations == 0u) {
+    *out_backend_token = slot->backend_token;
+    slot->backend_token = nullptr;
+    slot->closing = false;
+  }
+  return HAL_OK;
+}
+
+size_t jh_network_handle_begin_close_all(jh_network_handle_pool_t *pool,
+                                         void **out_backend_tokens,
+                                         size_t token_capacity) {
+  if (pool == nullptr || pool->slots == nullptr ||
+      token_capacity < pool->capacity || out_backend_tokens == nullptr) {
+    return 0u;
+  }
+  size_t token_count = 0u;
+  for (size_t index = 0u; index < pool->capacity; ++index) {
+    jh_network_handle_slot_t *slot = &pool->slots[index];
+    if (!slot->in_use) {
+      continue;
+    }
+    slot->in_use = false;
+    slot->closing = true;
+    if (slot->active_operations == 0u && token_count < token_capacity) {
+      out_backend_tokens[token_count++] = slot->backend_token;
+      slot->backend_token = nullptr;
+      slot->closing = false;
+    }
+  }
+  return token_count;
+}
+
+hal_status_t jh_network_handle_release(jh_network_handle_pool_t *pool,
+                                       const void *handle,
+                                       void **out_backend_token) {
+  return jh_network_handle_begin_close(pool, handle, out_backend_token);
 }
 
 void jh_network_handle_invalidate_all(jh_network_handle_pool_t *pool) {
@@ -132,6 +247,8 @@ void jh_network_handle_invalidate_all(jh_network_handle_pool_t *pool) {
   for (size_t index = 0u; index < pool->capacity; ++index) {
     pool->slots[index].backend_token = nullptr;
     pool->slots[index].in_use = false;
+    pool->slots[index].active_operations = 0u;
+    pool->slots[index].closing = false;
     pool->slots[index].generation =
         next_generation(pool->slots[index].generation);
   }

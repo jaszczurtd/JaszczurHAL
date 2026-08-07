@@ -14,6 +14,9 @@ typedef struct {
 } mem_file_t;
 
 static mem_file_t s_files[4];
+static bool s_upload_allowed;
+static unsigned s_authorize_calls;
+static hal_http_file_upload_t s_last_upload;
 
 void setUp(void) {
   hal_mock_serial_reset();
@@ -22,6 +25,9 @@ void setUp(void) {
   hal_http_server_clear_routes();
   hal_http_files_clear();
   memset(s_files, 0, sizeof(s_files));
+  s_upload_allowed = true;
+  s_authorize_calls = 0u;
+  s_last_upload = HAL_HTTP_FILE_UPLOAD_RAW;
 
   snprintf(s_files[0].path, sizeof(s_files[0].path), "/www/index.html");
   const char html[] = "<h1>hello</h1>";
@@ -110,6 +116,16 @@ static hal_status_t mem_write(const char *path, size_t offset, const void *data,
   return HAL_OK;
 }
 
+static hal_status_t authorize_upload(const hal_http_request_t *request,
+                                     hal_http_file_upload_t upload,
+                                     void *user) {
+  (void)user;
+  TEST_ASSERT_NOT_NULL(request);
+  ++s_authorize_calls;
+  s_last_upload = upload;
+  return s_upload_allowed ? HAL_OK : HAL_EAUTH;
+}
+
 static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
                                         uint8_t d, uint16_t port) {
   hal_net_endpoint_t endpoint = {};
@@ -132,6 +148,7 @@ static void mount_files(void) {
   cfg.stat = mem_stat;
   cfg.read = mem_read;
   cfg.write = mem_write;
+  cfg.authorize_upload = authorize_upload;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_files_mount(&cfg));
 }
 
@@ -217,6 +234,8 @@ void test_raw_put_writes_file_under_mounted_root(void) {
   TEST_ASSERT_NOT_NULL(file);
   TEST_ASSERT_EQUAL_UINT(8u, file->len);
   TEST_ASSERT_EQUAL_MEMORY("raw body", file->data, 8u);
+  TEST_ASSERT_EQUAL_UINT(1u, s_authorize_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_HTTP_FILE_UPLOAD_RAW, s_last_upload);
 }
 
 void test_multipart_upload_writes_file_part(void) {
@@ -248,6 +267,8 @@ void test_multipart_upload_writes_file_part(void) {
   TEST_ASSERT_NOT_NULL(file);
   TEST_ASSERT_EQUAL_UINT(strlen("hello upload"), file->len);
   TEST_ASSERT_EQUAL_MEMORY("hello upload", file->data, strlen("hello upload"));
+  TEST_ASSERT_EQUAL_UINT(1u, s_authorize_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_HTTP_FILE_UPLOAD_MULTIPART, s_last_upload);
 }
 
 void test_path_traversal_is_rejected(void) {
@@ -268,10 +289,41 @@ void test_api_rejects_invalid_configuration(void) {
   cfg.read = mem_read;
   cfg.enable_upload = true;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_files_mount(&cfg));
+  cfg.write = mem_write;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_http_files_mount(&cfg));
   TEST_ASSERT_EQUAL_STRING("application/json",
                            hal_http_files_content_type_for_path("x.json"));
   TEST_ASSERT_EQUAL_STRING("application/octet-stream",
                            hal_http_files_content_type_for_path("x.unknown"));
+}
+
+void test_denied_upload_returns_forbidden_without_writing(void) {
+  mount_files();
+  s_upload_allowed = false;
+  const char request[] =
+      "PUT /fs/denied.txt HTTP/1.1\r\nHost: unit\r\nContent-Length: 6\r\n\r\n"
+      "denied";
+
+  hal_tcp_socket_t socket = send_request(8115u, request);
+
+  assert_response_contains(socket, "HTTP/1.1 403 Forbidden\r\n");
+  TEST_ASSERT_NULL(find_file("/www/denied.txt"));
+  TEST_ASSERT_EQUAL_UINT(1u, s_authorize_calls);
+}
+
+void test_denied_multipart_is_rejected_before_body_parsing(void) {
+  mount_files();
+  s_upload_allowed = false;
+  const char request[] =
+      "POST /upload HTTP/1.1\r\nHost: unit\r\n"
+      "Content-Type: multipart/form-data; boundary=AaB03x\r\n"
+      "Content-Length: 9\r\n\r\nmalformed";
+
+  hal_tcp_socket_t socket = send_request(8116u, request);
+
+  assert_response_contains(socket, "HTTP/1.1 403 Forbidden\r\n");
+  TEST_ASSERT_EQUAL_UINT(1u, s_authorize_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_HTTP_FILE_UPLOAD_MULTIPART, s_last_upload);
 }
 
 int main(void) {
@@ -282,5 +334,7 @@ int main(void) {
   RUN_TEST(test_multipart_upload_writes_file_part);
   RUN_TEST(test_path_traversal_is_rejected);
   RUN_TEST(test_api_rejects_invalid_configuration);
+  RUN_TEST(test_denied_upload_returns_forbidden_without_writing);
+  RUN_TEST(test_denied_multipart_is_rejected_before_body_parsing);
   return UNITY_END();
 }

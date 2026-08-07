@@ -86,11 +86,45 @@ static void test_handle_kind_rejects_cross_pool_ticket(void) {
       jh_network_handle_resolve(&listener_pool, handle, &resolved, nullptr));
 }
 
+static void test_close_defers_backend_release_until_active_lease_ends(void) {
+  jh_network_handle_slot_t slots[1] = {};
+  jh_network_handle_pool_t pool = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_network_handle_pool_init(&pool, slots, 1u, 1u));
+  int backend = 7;
+  void *handle = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_network_handle_allocate(&pool, &backend, &handle));
+
+  jh_network_handle_lease_t lease = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_network_handle_acquire(&pool, handle, &lease));
+  TEST_ASSERT_EQUAL_PTR(&backend, lease.backend_token);
+  void *released = nullptr;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_network_handle_begin_close(&pool, handle, &released));
+  TEST_ASSERT_NULL(released);
+  TEST_ASSERT_FALSE(jh_network_handle_lease_is_open(&pool, &lease));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, jh_network_handle_resolve(&pool, handle, &released, nullptr));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, jh_network_handle_end_operation(&pool, &lease, &released));
+  TEST_ASSERT_EQUAL_PTR(&backend, released);
+
+  int replacement = 8;
+  void *replacement_handle = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_network_handle_allocate(
+                                    &pool, &replacement, &replacement_handle));
+  TEST_ASSERT_NOT_EQUAL(handle, replacement_handle);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_descriptor_rejects_invalid_abi);
   RUN_TEST(test_descriptor_checks_capability_and_operation_table);
   RUN_TEST(test_handle_generation_rejects_stale_ticket);
   RUN_TEST(test_handle_kind_rejects_cross_pool_ticket);
+  RUN_TEST(test_close_defers_backend_release_until_active_lease_ends);
   return UNITY_END();
 }

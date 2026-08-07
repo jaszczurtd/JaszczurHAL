@@ -10,6 +10,9 @@ Security fixes are normally made on `main` first and then released in the next
 tagged version. Downstream products should track the latest released version or
 vendor a specific commit together with the generated SBOM.
 
+Release 1.9.0 is affected by the HTTP/WebSocket memory-safety and network
+lifecycle issues corrected in 1.9.1. Deployments should use 1.9.1 or later.
+
 ## Reporting a vulnerability
 
 Please report suspected vulnerabilities privately before opening a public issue.

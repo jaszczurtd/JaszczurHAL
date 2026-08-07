@@ -124,8 +124,8 @@ private:
   uint16_t keepAlive;
   uint16_t socketTimeout;
   uint16_t nextMsgId;
-  unsigned long lastOutActivity;
-  unsigned long lastInActivity;
+  uint32_t lastOutActivity;
+  uint32_t lastInActivity;
   bool pingOutstanding;
   MQTT_CALLBACK_SIGNATURE;
   uint32_t readPacket(uint8_t *);

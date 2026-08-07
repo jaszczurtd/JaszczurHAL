@@ -14,10 +14,12 @@ static unsigned s_auth_events;
 static unsigned s_disconnect_events;
 static hal_net_console_client_t s_last_line_client;
 static char s_last_line[64];
+static bool s_close_from_disconnect;
 
 void setUp(void) {
   hal_mock_serial_reset();
   hal_mock_tcp_reset();
+  hal_mock_set_millis(0u);
   hal_net_console_stop();
   hal_net_console_set_callbacks(NULL, NULL, NULL);
   s_last_event_client = HAL_NET_CONSOLE_INVALID_CLIENT;
@@ -27,6 +29,7 @@ void setUp(void) {
   s_disconnect_events = 0u;
   s_last_line_client = HAL_NET_CONSOLE_INVALID_CLIENT;
   s_last_line[0] = '\0';
+  s_close_from_disconnect = false;
 }
 
 void tearDown(void) {
@@ -57,6 +60,9 @@ static void on_event(hal_net_console_client_t client,
     ++s_auth_events;
   } else if (event == HAL_NET_CONSOLE_EVENT_DISCONNECT) {
     ++s_disconnect_events;
+    if (s_close_from_disconnect) {
+      hal_net_console_close(client);
+    }
   }
 }
 
@@ -220,6 +226,58 @@ void test_event_callbacks_report_connect_and_auth(void) {
   TEST_ASSERT_EQUAL_INT(HAL_NET_CONSOLE_EVENT_AUTHENTICATED, s_last_event);
 }
 
+void test_disconnect_callback_may_close_same_client_once(void) {
+  install_callbacks();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_console_start(2330u, "pw"));
+  (void)connect_client(2330u, 91u, 53091u, "pw");
+  s_close_from_disconnect = true;
+
+  hal_net_console_close(0u);
+
+  TEST_ASSERT_EQUAL_UINT(1u, s_disconnect_events);
+  TEST_ASSERT_EQUAL_UINT(0u, hal_net_console_client_count());
+}
+
+void test_unauthenticated_clients_time_out_and_release_slots(void) {
+  install_callbacks();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_net_console_start(2331u, "pw"));
+  hal_tcp_listener_t listener = hal_mock_tcp_listener_find_by_port(2331u);
+  TEST_ASSERT_NOT_NULL(listener);
+  hal_net_endpoint_t remote = make_endpoint(92u, 53092u);
+  for (size_t i = 0u; i < HAL_NET_CONSOLE_MAX_CLIENTS; ++i) {
+    TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+    hal_net_console_poll();
+    hal_tcp_socket_t socket = hal_mock_tcp_get_last_accepted_socket();
+    const uint8_t partial_password = 'p';
+    hal_mock_tcp_inject_rx(socket, &partial_password, 1u);
+    hal_net_console_poll();
+  }
+  TEST_ASSERT_EQUAL_UINT(HAL_NET_CONSOLE_MAX_CLIENTS,
+                         hal_net_console_client_count());
+
+  hal_mock_advance_millis(HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS);
+  hal_net_console_poll();
+  TEST_ASSERT_EQUAL_UINT(0u, hal_net_console_client_count());
+  TEST_ASSERT_EQUAL_UINT(HAL_NET_CONSOLE_MAX_CLIENTS, s_disconnect_events);
+
+  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
+  hal_net_console_poll();
+  hal_tcp_socket_t slow_socket = hal_mock_tcp_get_last_accepted_socket();
+  for (size_t i = 0u; i < 3u; ++i) {
+    hal_mock_advance_millis(HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS - 1u);
+    const uint8_t next_byte = (uint8_t)('a' + i);
+    hal_mock_tcp_inject_rx(slow_socket, &next_byte, 1u);
+    hal_net_console_poll();
+  }
+  hal_mock_advance_millis(HAL_NET_CONSOLE_AUTH_TIMEOUT_MS -
+                          (3u * (HAL_NET_CONSOLE_AUTH_IDLE_TIMEOUT_MS - 1u)));
+  hal_net_console_poll();
+  TEST_ASSERT_EQUAL_UINT(0u, hal_net_console_client_count());
+
+  (void)connect_client(2331u, 93u, 53093u, "pw");
+  TEST_ASSERT_EQUAL_UINT(1u, hal_net_console_authenticated_count());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_start_requires_nonempty_password);
@@ -229,5 +287,7 @@ int main(void) {
   RUN_TEST(test_wrong_password_closes_session);
   RUN_TEST(test_explicit_write_requires_authenticated_client);
   RUN_TEST(test_event_callbacks_report_connect_and_auth);
+  RUN_TEST(test_disconnect_callback_may_close_same_client_once);
+  RUN_TEST(test_unauthenticated_clients_time_out_and_release_slots);
   return UNITY_END();
 }

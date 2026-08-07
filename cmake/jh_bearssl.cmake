@@ -36,4 +36,11 @@ function(jh_add_bearssl_source_library TARGET_NAME)
     target_compile_options(${TARGET_NAME} PRIVATE
         -ffunction-sections
         -fdata-sections)
+    if(JH_ENABLE_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "Clang")
+        # BearSSL implements C polymorphism through prefix-compatible vtables
+        # and uses native unaligned loads on architectures that support them.
+        # Clang diagnoses both deliberate upstream optimizations as UB.
+        target_compile_options(${TARGET_NAME} PRIVATE
+            -fno-sanitize=function,alignment)
+    endif()
 endfunction()

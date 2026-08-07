@@ -41,25 +41,49 @@ static const jh_network_tcp_ops_t *tcp_ops(void) {
              : nullptr;
 }
 
-static hal_status_t resolve_socket(hal_tcp_socket_t socket, void **out_token) {
+static hal_status_t acquire_socket(hal_tcp_socket_t socket,
+                                   jh_network_handle_lease_t *out_lease) {
   ensure_pools();
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_resolve(
-      &s_socket_pool, reinterpret_cast<const void *>(socket), out_token,
-      nullptr);
+  const hal_status_t status = jh_network_handle_acquire(
+      &s_socket_pool, reinterpret_cast<const void *>(socket), out_lease);
   hal_mutex_unlock(s_mutex);
   return status;
 }
 
-static hal_status_t resolve_listener(hal_tcp_listener_t listener,
-                                     void **out_token) {
+static hal_status_t acquire_listener(hal_tcp_listener_t listener,
+                                     jh_network_handle_lease_t *out_lease) {
   ensure_pools();
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_resolve(
-      &s_listener_pool, reinterpret_cast<const void *>(listener), out_token,
-      nullptr);
+  const hal_status_t status = jh_network_handle_acquire(
+      &s_listener_pool, reinterpret_cast<const void *>(listener), out_lease);
   hal_mutex_unlock(s_mutex);
   return status;
+}
+
+static void finish_socket_operation(jh_network_handle_lease_t *lease) {
+  void *deferred_token = nullptr;
+  hal_mutex_lock(s_mutex);
+  (void)jh_network_handle_end_operation(&s_socket_pool, lease, &deferred_token);
+  hal_mutex_unlock(s_mutex);
+  const jh_network_tcp_ops_t *ops = tcp_ops();
+  if (deferred_token != nullptr && ops != nullptr &&
+      ops->socket_close != nullptr) {
+    ops->socket_close(deferred_token);
+  }
+}
+
+static void finish_listener_operation(jh_network_handle_lease_t *lease) {
+  void *deferred_token = nullptr;
+  hal_mutex_lock(s_mutex);
+  (void)jh_network_handle_end_operation(&s_listener_pool, lease,
+                                        &deferred_token);
+  hal_mutex_unlock(s_mutex);
+  const jh_network_tcp_ops_t *ops = tcp_ops();
+  if (deferred_token != nullptr && ops != nullptr &&
+      ops->listener_close != nullptr) {
+    ops->listener_close(deferred_token);
+  }
 }
 
 static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
@@ -129,14 +153,17 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return ops != nullptr && ops->socket_connect != nullptr
-             ? ops->socket_connect(token, remote, timeout_ms)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->socket_connect != nullptr
+          ? ops->socket_connect(lease.backend_token, remote, timeout_ms)
+          : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 bool hal_tcp_socket_connect(hal_tcp_socket_t socket,
@@ -158,14 +185,17 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return ops != nullptr && ops->socket_send != nullptr
-             ? ops->socket_send(token, data, len, out_sent)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->socket_send != nullptr
+          ? ops->socket_send(lease.backend_token, data, len, out_sent)
+          : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
@@ -187,15 +217,18 @@ hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_socket(socket, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_socket(socket, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return ops != nullptr && ops->socket_recv != nullptr
-             ? ops->socket_recv(token, buffer, max_len, timeout_ms,
-                                out_received)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->socket_recv != nullptr
+          ? ops->socket_recv(lease.backend_token, buffer, max_len, timeout_ms,
+                             out_received)
+          : HAL_EUNSUPPORTED;
+  finish_socket_operation(&lease);
+  return status;
 }
 
 int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
@@ -212,50 +245,69 @@ bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-         ops->socket_can_recv != nullptr && ops->socket_can_recv(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->socket_can_recv != nullptr &&
+                      ops->socket_can_recv(lease.backend_token);
+  finish_socket_operation(&lease);
+  return result;
 }
 
 bool hal_tcp_socket_can_send(hal_tcp_socket_t socket) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-         ops->socket_can_send != nullptr && ops->socket_can_send(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->socket_can_send != nullptr &&
+                      ops->socket_can_send(lease.backend_token);
+  finish_socket_operation(&lease);
+  return result;
 }
 
 bool hal_tcp_socket_is_connected(hal_tcp_socket_t socket) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-         ops->socket_is_connected != nullptr && ops->socket_is_connected(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->socket_is_connected != nullptr &&
+                      ops->socket_is_connected(lease.backend_token);
+  finish_socket_operation(&lease);
+  return result;
 }
 
 void hal_tcp_socket_shutdown(hal_tcp_socket_t socket) {
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  if (resolve_socket(socket, &token) == HAL_OK && ops != nullptr &&
-      ops->socket_shutdown != nullptr) {
-    ops->socket_shutdown(token);
+  if (acquire_socket(socket, &lease) != HAL_OK) {
+    return;
   }
+  if (ops != nullptr && ops->socket_shutdown != nullptr) {
+    ops->socket_shutdown(lease.backend_token);
+  }
+  finish_socket_operation(&lease);
 }
 
 void hal_tcp_socket_close(hal_tcp_socket_t socket) {
   ensure_pools();
   void *token = nullptr;
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_release(
+  const hal_status_t status = jh_network_handle_begin_close(
       &s_socket_pool, reinterpret_cast<const void *>(socket), &token);
   hal_mutex_unlock(s_mutex);
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  if (status == HAL_OK && ops != nullptr && ops->socket_close != nullptr) {
+  if (status == HAL_OK && token != nullptr && ops != nullptr &&
+      ops->socket_close != nullptr) {
     ops->socket_close(token);
   }
 }
@@ -308,14 +360,17 @@ hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_listener(listener, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_listener(listener, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return ops != nullptr && ops->listener_bind != nullptr
-             ? ops->listener_bind(token, local)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->listener_bind != nullptr
+          ? ops->listener_bind(lease.backend_token, local)
+          : HAL_EUNSUPPORTED;
+  finish_listener_operation(&lease);
+  return status;
 }
 
 bool hal_tcp_listener_bind(hal_tcp_listener_t listener,
@@ -332,14 +387,17 @@ hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *token = nullptr;
-  if (resolve_listener(listener, &token) != HAL_OK) {
+  jh_network_handle_lease_t lease = {};
+  if (acquire_listener(listener, &lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return ops != nullptr && ops->listener_listen != nullptr
-             ? ops->listener_listen(token, backlog)
-             : HAL_EUNSUPPORTED;
+  const hal_status_t status =
+      ops != nullptr && ops->listener_listen != nullptr
+          ? ops->listener_listen(lease.backend_token, backlog)
+          : HAL_EUNSUPPORTED;
+  finish_listener_operation(&lease);
+  return status;
 }
 
 bool hal_tcp_listener_listen(hal_tcp_listener_t listener, uint8_t backlog) {
@@ -358,18 +416,20 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  void *listener_token = nullptr;
-  if (resolve_listener(listener, &listener_token) != HAL_OK) {
+  jh_network_handle_lease_t listener_lease = {};
+  if (acquire_listener(listener, &listener_lease) != HAL_OK) {
     return HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   if (ops == nullptr || ops->listener_accept == nullptr ||
       ops->socket_close == nullptr) {
+    finish_listener_operation(&listener_lease);
     return HAL_EUNSUPPORTED;
   }
   void *socket_token = nullptr;
-  hal_status_t status =
-      ops->listener_accept(listener_token, remote, timeout_ms, &socket_token);
+  hal_status_t status = ops->listener_accept(listener_lease.backend_token,
+                                             remote, timeout_ms, &socket_token);
+  finish_listener_operation(&listener_lease);
   if (status != HAL_OK) {
     return status;
   }
@@ -398,21 +458,27 @@ bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener) {
   if (jh_network_require_ready() != HAL_OK) {
     return false;
   }
-  void *token = nullptr;
+  jh_network_handle_lease_t lease = {};
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  return resolve_listener(listener, &token) == HAL_OK && ops != nullptr &&
-         ops->listener_can_accept != nullptr && ops->listener_can_accept(token);
+  if (acquire_listener(listener, &lease) != HAL_OK) {
+    return false;
+  }
+  const bool result = ops != nullptr && ops->listener_can_accept != nullptr &&
+                      ops->listener_can_accept(lease.backend_token);
+  finish_listener_operation(&lease);
+  return result;
 }
 
 void hal_tcp_listener_close(hal_tcp_listener_t listener) {
   ensure_pools();
   void *token = nullptr;
   hal_mutex_lock(s_mutex);
-  const hal_status_t status = jh_network_handle_release(
+  const hal_status_t status = jh_network_handle_begin_close(
       &s_listener_pool, reinterpret_cast<const void *>(listener), &token);
   hal_mutex_unlock(s_mutex);
   const jh_network_tcp_ops_t *ops = tcp_ops();
-  if (status == HAL_OK && ops != nullptr && ops->listener_close != nullptr) {
+  if (status == HAL_OK && token != nullptr && ops != nullptr &&
+      ops->listener_close != nullptr) {
     ops->listener_close(token);
   }
 }
@@ -424,19 +490,10 @@ extern "C" void jh_network_facade_tcp_reset_all(void) {
   size_t socket_count = 0u;
   size_t listener_count = 0u;
   hal_mutex_lock(s_mutex);
-  for (size_t index = 0u; index < s_socket_pool.capacity; ++index) {
-    if (s_socket_pool.slots[index].in_use) {
-      socket_tokens[socket_count++] = s_socket_pool.slots[index].backend_token;
-    }
-  }
-  for (size_t index = 0u; index < s_listener_pool.capacity; ++index) {
-    if (s_listener_pool.slots[index].in_use) {
-      listener_tokens[listener_count++] =
-          s_listener_pool.slots[index].backend_token;
-    }
-  }
-  jh_network_handle_invalidate_all(&s_socket_pool);
-  jh_network_handle_invalidate_all(&s_listener_pool);
+  socket_count = jh_network_handle_begin_close_all(
+      &s_socket_pool, socket_tokens, HAL_TCP_SOCKET_MAX_INSTANCES);
+  listener_count = jh_network_handle_begin_close_all(
+      &s_listener_pool, listener_tokens, HAL_TCP_LISTENER_MAX_INSTANCES);
   hal_mutex_unlock(s_mutex);
   const jh_network_tcp_ops_t *ops = tcp_ops();
   if (ops != nullptr) {

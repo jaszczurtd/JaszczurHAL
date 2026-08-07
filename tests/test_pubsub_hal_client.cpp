@@ -590,9 +590,13 @@ void test_pubsub_connack_timeout_closes_and_reconnects(void) {
   PubSubClient mqtt(network);
   mqtt.setServer("mqtt.test", 1883u);
   mqtt.setSocketTimeout(1u);
+  s_now_ms = std::numeric_limits<uint32_t>::max() - 500u;
+  const uint32_t start_ms = hal_millis();
 
   TEST_ASSERT_FALSE(mqtt.connect("node-timeout"));
   TEST_ASSERT_EQUAL_INT(MQTT_CONNECTION_TIMEOUT, mqtt.state());
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(
+      1000u, static_cast<uint32_t>(hal_millis() - start_ms));
   TEST_ASSERT_EQUAL_UINT(1u, s_close_count);
   TEST_ASSERT_EQUAL_INT(0, network.connected());
 
@@ -601,6 +605,26 @@ void test_pubsub_connack_timeout_closes_and_reconnects(void) {
   TEST_ASSERT_TRUE(mqtt.connect("node-retry"));
   TEST_ASSERT_EQUAL_INT(MQTT_CONNECTED, mqtt.state());
   TEST_ASSERT_EQUAL_UINT(2u, s_open_count);
+}
+
+void test_pubsub_packet_timeout_survives_millis_rollover(void) {
+  JHPubSubHalClient network;
+  PubSubClient mqtt(network);
+  mqtt.setServer("mqtt.test", 1883u);
+  mqtt.setSocketTimeout(1u);
+  s_now_ms = std::numeric_limits<uint32_t>::max() - 500u;
+
+  const uint8_t connack[] = {0x20u, 0x02u, 0x00u, 0x00u};
+  inject_receive(connack, sizeof(connack));
+  TEST_ASSERT_TRUE(mqtt.connect("node-rollover"));
+
+  const uint8_t truncated_publish[] = {0x30u};
+  inject_receive(truncated_publish, sizeof(truncated_publish));
+  const uint32_t start_ms = hal_millis();
+  TEST_ASSERT_TRUE(mqtt.loop());
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(
+      1000u, static_cast<uint32_t>(hal_millis() - start_ms));
+  TEST_ASSERT_EQUAL_INT(MQTT_CONNECTED, mqtt.state());
 }
 
 int main(void) {
@@ -614,5 +638,6 @@ int main(void) {
       test_pubsub_uses_hal_transport_for_partial_writes_and_fragmented_publish);
   RUN_TEST(test_pubsub_buffers_complete_packet_in_one_transport_read);
   RUN_TEST(test_pubsub_connack_timeout_closes_and_reconnects);
+  RUN_TEST(test_pubsub_packet_timeout_survives_millis_rollover);
   return UNITY_END();
 }

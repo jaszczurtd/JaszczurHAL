@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: ["*"]
   pull_request:
     branches: [main]
   schedule:
@@ -372,6 +373,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Verify release metadata and tag ancestry
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            python3 scripts/check_release_metadata.py \
+              --tag "${GITHUB_REF_NAME}" --release-ref origin/main
+          else
+            python3 scripts/check_release_metadata.py
+          fi
 
       - name: Verify generated feature registry
         run: python3 scripts/generate_hal_features.py --check
@@ -419,6 +431,64 @@ jobs:
 
       - name: Test
         run: ctest --test-dir .build/ci/host --output-on-failure
+
+  # ── Sanitizer and parser fuzz gate ─────────────────────────────────────────
+  sanitizer-fuzz:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Clang and GNU Arm Embedded toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang \
+            gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi \
+            libstdc++-arm-none-eabi-dev
+
+      - name: Prepare host source dependencies
+        run: |
+          ./scripts/ensure_bearssl.sh --force
+          ./scripts/ensure_cjson.sh --force
+          ./scripts/ensure_lodepng.sh --force
+          ./scripts/ensure_jpeg.sh --force
+          ./scripts/ensure_fatfs.sh --force
+          ./scripts/ensure_unity.sh --force
+          ./scripts/ensure_lwip.sh --force
+          ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_freertos_kernel.sh --force
+
+      - name: Configure ASan, UBSan and libFuzzer
+        env:
+          CC: clang
+          CXX: clang++
+        run: >-
+          cmake -B .build/ci/sanitizer-fuzz
+          -DJH_ENABLE_SANITIZERS=ON
+          -DJH_ENABLE_FUZZING=ON
+
+      - name: Build instrumented tests and fuzzers
+        run: cmake --build .build/ci/sanitizer-fuzz --parallel
+
+      - name: Run instrumented tests
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: ctest --test-dir .build/ci/sanitizer-fuzz --output-on-failure
+
+      - name: Smoke fuzz network parsers
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+        run: |
+          for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
+            ".build/ci/sanitizer-fuzz/tests/${target}" \
+              -runs=2000 -max_len=1024
+          done
 
   # ── Valgrind memcheck gate ─────────────────────────────────────────────────
   # Runs the host unit-test suite under Valgrind to catch memory defects

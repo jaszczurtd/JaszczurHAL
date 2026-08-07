@@ -29,6 +29,14 @@ unsigned s_resolve_calls;
 hal_status_t s_join_status = HAL_OK;
 int s_tcp_token;
 int s_udp_token;
+hal_tcp_socket_t s_tcp_handle;
+hal_udp_socket_t s_udp_handle;
+bool s_close_during_tcp_send;
+bool s_close_during_udp_send;
+bool s_tcp_send_active;
+bool s_udp_send_active;
+unsigned s_tcp_close_calls;
+unsigned s_udp_close_calls;
 
 hal_status_t service_ok(void) { return HAL_OK; }
 hal_status_t stack_enter(bool) { return HAL_OK; }
@@ -133,6 +141,12 @@ hal_status_t tcp_ok(void *, const hal_net_endpoint_t *, uint32_t) {
 }
 
 hal_status_t tcp_send(void *, const void *, size_t len, size_t *out_sent) {
+  s_tcp_send_active = true;
+  if (s_close_during_tcp_send) {
+    hal_tcp_socket_close(s_tcp_handle);
+    TEST_ASSERT_EQUAL_UINT32(0u, s_tcp_close_calls);
+  }
+  s_tcp_send_active = false;
   *out_sent = len;
   return HAL_OK;
 }
@@ -144,6 +158,16 @@ hal_status_t tcp_recv(void *, void *, size_t, uint32_t, size_t *out_received) {
 
 bool socket_true(void *) { return true; }
 void socket_noop(void *) {}
+
+void tcp_close(void *) {
+  TEST_ASSERT_FALSE(s_tcp_send_active);
+  ++s_tcp_close_calls;
+}
+
+void udp_close(void *) {
+  TEST_ASSERT_FALSE(s_udp_send_active);
+  ++s_udp_close_calls;
+}
 
 hal_status_t listener_open(void **out_listener) {
   *out_listener = &s_tcp_token;
@@ -175,6 +199,12 @@ hal_status_t udp_bind(void *, const hal_net_endpoint_t *) {
 
 hal_status_t udp_send(void *, const void *, size_t len,
                       const hal_net_endpoint_t *, size_t *out_sent) {
+  s_udp_send_active = true;
+  if (s_close_during_udp_send) {
+    hal_udp_socket_close(s_udp_handle);
+    TEST_ASSERT_EQUAL_UINT32(0u, s_udp_close_calls);
+  }
+  s_udp_send_active = false;
   *out_sent = len;
   return HAL_OK;
 }
@@ -199,13 +229,12 @@ const jh_network_resolver_ops_t kResolverOps = {resolve};
 
 const jh_network_tcp_ops_t kTcpOps = {
     tcp_open,      tcp_ok,          tcp_send,        tcp_recv,    socket_true,
-    socket_true,   socket_true,     socket_noop,     socket_noop, listener_open,
+    socket_true,   socket_true,     socket_noop,     tcp_close,   listener_open,
     listener_bind, listener_listen, listener_accept, socket_true, socket_noop,
 };
 
 const jh_network_udp_ops_t kUdpOps = {
-    udp_open,    udp_bind,    udp_send,    udp_recv,
-    socket_true, socket_true, socket_noop,
+    udp_open, udp_bind, udp_send, udp_recv, socket_true, socket_true, udp_close,
 };
 
 } // namespace
@@ -261,6 +290,14 @@ void setUp(void) {
   s_udp_bind_calls = 0u;
   s_resolve_calls = 0u;
   s_join_status = HAL_OK;
+  s_tcp_handle = nullptr;
+  s_udp_handle = nullptr;
+  s_close_during_tcp_send = false;
+  s_close_during_udp_send = false;
+  s_tcp_send_active = false;
+  s_udp_send_active = false;
+  s_tcp_close_calls = 0u;
+  s_udp_close_calls = 0u;
   const hal_board_capabilities_t declared =
       HAL_BOARD_DECLARED_CAPABILITIES &
       (HAL_BOARD_CAP_CYW43 | HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND);
@@ -392,6 +429,44 @@ void test_numeric_ipv4_parsing_does_not_require_radio_access(void) {
   TEST_ASSERT_EQUAL_UINT32(0u, s_resolve_calls);
 }
 
+void test_close_during_tcp_operation_is_deferred_until_backend_returns(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_wifi_begin_station_ex("ssid", "password", false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tcp_socket_open_ex(&s_tcp_handle));
+  s_close_during_tcp_send = true;
+  size_t sent = 0u;
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_tcp_socket_send_ex(s_tcp_handle, "x", 1u, &sent));
+  TEST_ASSERT_EQUAL_size_t(1u, sent);
+  TEST_ASSERT_EQUAL_UINT32(1u, s_tcp_close_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_tcp_socket_send_ex(s_tcp_handle, "x", 1u, &sent));
+}
+
+void test_close_during_udp_operation_is_deferred_until_backend_returns(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_wifi_begin_station_ex("ssid", "password", false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_open_ex(&s_udp_handle));
+  s_close_during_udp_send = true;
+  hal_net_endpoint_t remote{};
+  remote.family = HAL_NET_AF_INET;
+  remote.addr_len = HAL_NET_IPV4_ADDR_LEN;
+  remote.addr[0] = 192u;
+  remote.addr[1] = 0u;
+  remote.addr[2] = 2u;
+  remote.addr[3] = 1u;
+  remote.port = 1234u;
+  size_t sent = 0u;
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_udp_socket_sendto_ex(s_udp_handle, "x", 1u, &remote, &sent));
+  TEST_ASSERT_EQUAL_size_t(1u, sent);
+  TEST_ASSERT_EQUAL_UINT32(1u, s_udp_close_calls);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_udp_socket_sendto_ex(
+                                        s_udp_handle, "x", 1u, &remote, &sent));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_profile_and_runtime_state_gate_public_network_api);
@@ -399,5 +474,7 @@ int main(void) {
   RUN_TEST(test_pim730_requires_the_external_radio_frontend);
   RUN_TEST(test_failed_hardware_status_precedes_endpoint_capability_checks);
   RUN_TEST(test_numeric_ipv4_parsing_does_not_require_radio_access);
+  RUN_TEST(test_close_during_tcp_operation_is_deferred_until_backend_returns);
+  RUN_TEST(test_close_during_udp_operation_is_deferred_until_backend_returns);
   return UNITY_END();
 }

@@ -3,6 +3,7 @@
 
 #ifdef HAL_ENABLE_WEBSOCKET
 
+#include "hal/hal_system.h"
 #include "hal/hal_tcp.h"
 
 #include <string.h>
@@ -33,6 +34,8 @@ typedef struct {
   size_t request_len;
   uint8_t frame[HAL_WEBSOCKET_FRAME_BUFFER_SIZE];
   size_t frame_len;
+  uint32_t accepted_ms;
+  uint32_t last_activity_ms;
 } ws_client_t;
 
 typedef struct {
@@ -43,7 +46,7 @@ typedef struct {
 } ws_sha1_t;
 
 static hal_tcp_listener_t s_listener;
-static const char *s_path = "/ws";
+static char s_path[HAL_WEBSOCKET_PATH_MAX] = "/ws";
 static ws_client_t s_clients[HAL_WEBSOCKET_MAX_CLIENTS];
 static hal_websocket_callbacks_t s_callbacks;
 static void *s_callbacks_user;
@@ -433,11 +436,11 @@ static bool process_handshake(ws_client_t *client) {
 
 static hal_status_t send_frame(hal_tcp_socket_t socket, uint8_t opcode,
                                const void *data, size_t len) {
-  if (len > HAL_WEBSOCKET_FRAME_BUFFER_SIZE) {
+  if (len > HAL_WEBSOCKET_MAX_PAYLOAD_SIZE) {
     return HAL_EOVERFLOW;
   }
 
-  uint8_t packet[10u + HAL_WEBSOCKET_FRAME_BUFFER_SIZE];
+  uint8_t packet[10u + HAL_WEBSOCKET_MAX_PAYLOAD_SIZE];
   size_t pos = 0u;
   packet[pos++] = (uint8_t)(0x80u | (opcode & 0x0fu));
   if (len <= 125u) {
@@ -474,12 +477,13 @@ static bool parse_frame(ws_client_t *client) {
   const uint8_t b0 = client->frame[0];
   const uint8_t b1 = client->frame[1];
   const bool fin = (b0 & 0x80u) != 0u;
+  const bool reserved = (b0 & 0x70u) != 0u;
   const uint8_t opcode = b0 & 0x0fu;
   const bool masked = (b1 & 0x80u) != 0u;
   uint64_t payload_len = (uint64_t)(b1 & 0x7fu);
   size_t pos = 2u;
 
-  if (!fin || !masked || opcode == WS_OPCODE_CONTINUATION) {
+  if (!fin || reserved || !masked || opcode == WS_OPCODE_CONTINUATION) {
     send_close_frame(client, WS_CLOSE_PROTOCOL_ERROR);
     clear_client(client, WS_CLOSE_PROTOCOL_ERROR, true);
     return false;
@@ -495,7 +499,9 @@ static bool parse_frame(ws_client_t *client) {
     clear_client(client, WS_CLOSE_TOO_BIG, true);
     return false;
   }
-  if (payload_len > HAL_WEBSOCKET_FRAME_BUFFER_SIZE) {
+  const bool control_frame = opcode >= WS_OPCODE_CLOSE;
+  if (payload_len > HAL_WEBSOCKET_MAX_PAYLOAD_SIZE ||
+      (control_frame && payload_len > 125u)) {
     send_close_frame(client, WS_CLOSE_TOO_BIG);
     clear_client(client, WS_CLOSE_TOO_BIG, true);
     return false;
@@ -507,10 +513,17 @@ static bool parse_frame(ws_client_t *client) {
   uint8_t mask[4];
   memcpy(mask, client->frame + pos, sizeof(mask));
   pos += sizeof(mask);
-  uint8_t *payload = client->frame + pos;
+  uint8_t payload[HAL_WEBSOCKET_MAX_PAYLOAD_SIZE];
   for (size_t i = 0u; i < (size_t)payload_len; ++i) {
-    payload[i] ^= mask[i & 3u];
+    payload[i] = (uint8_t)(client->frame[pos + i] ^ mask[i & 3u]);
   }
+
+  const size_t total = pos + (size_t)payload_len;
+  const size_t remaining = client->frame_len - total;
+  if (remaining > 0u) {
+    memmove(client->frame, client->frame + total, remaining);
+  }
+  client->frame_len = remaining;
 
   if (opcode == WS_OPCODE_TEXT || opcode == WS_OPCODE_BINARY) {
     if (s_callbacks.on_message) {
@@ -521,10 +534,18 @@ static bool parse_frame(ws_client_t *client) {
                                  ? HAL_WEBSOCKET_MESSAGE_TEXT
                                  : HAL_WEBSOCKET_MESSAGE_BINARY,
                              payload, (size_t)payload_len, s_callbacks_user);
+      if (client->state != WS_CLIENT_OPEN || !s_listener) {
+        return false;
+      }
     }
   } else if (opcode == WS_OPCODE_PING) {
     send_frame(client->socket, WS_OPCODE_PONG, payload, (size_t)payload_len);
   } else if (opcode == WS_OPCODE_CLOSE) {
+    if (payload_len == 1u) {
+      send_close_frame(client, WS_CLOSE_PROTOCOL_ERROR);
+      clear_client(client, WS_CLOSE_PROTOCOL_ERROR, true);
+      return false;
+    }
     uint16_t code = WS_CLOSE_NORMAL;
     if (payload_len >= 2u) {
       code = ((uint16_t)payload[0] << 8u) | payload[1];
@@ -538,12 +559,6 @@ static bool parse_frame(ws_client_t *client) {
     return false;
   }
 
-  size_t total = pos + (size_t)payload_len;
-  size_t remaining = client->frame_len - total;
-  if (remaining > 0u) {
-    memmove(client->frame, client->frame + total, remaining);
-  }
-  client->frame_len = remaining;
   return true;
 }
 
@@ -565,13 +580,12 @@ static void poll_open_client(ws_client_t *client) {
     client->frame_len += (size_t)rc;
   }
 
-  if (client->frame_len >= sizeof(client->frame)) {
+  while (client->state == WS_CLIENT_OPEN && parse_frame(client)) {
+  }
+  if (client->state == WS_CLIENT_OPEN &&
+      client->frame_len >= sizeof(client->frame)) {
     send_close_frame(client, WS_CLOSE_TOO_BIG);
     clear_client(client, WS_CLOSE_TOO_BIG, true);
-    return;
-  }
-
-  while (client->state == WS_CLIENT_OPEN && parse_frame(client)) {
   }
 }
 
@@ -592,6 +606,9 @@ static void poll_handshake_client(ws_client_t *client) {
     }
     client->request_len += (size_t)rc;
     client->request[client->request_len] = '\0';
+    if (rc > 0) {
+      client->last_activity_ms = hal_millis();
+    }
   }
 
   if (client->request_len + 1u >= sizeof(client->request)) {
@@ -602,6 +619,26 @@ static void poll_handshake_client(ws_client_t *client) {
 
   if (request_complete(client) && !process_handshake(client)) {
     clear_client(client, WS_CLOSE_PROTOCOL_ERROR, false);
+    return;
+  }
+
+  if (client->state == WS_CLIENT_HANDSHAKE) {
+    const uint32_t now_ms = hal_millis();
+    const bool first_byte_timeout = client->request_len == 0u &&
+                                    HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS > 0u &&
+                                    (uint32_t)(now_ms - client->accepted_ms) >=
+                                        HAL_WEBSOCKET_FIRST_BYTE_TIMEOUT_MS;
+    const bool handshake_timeout = HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS > 0u &&
+                                   (uint32_t)(now_ms - client->accepted_ms) >=
+                                       HAL_WEBSOCKET_HANDSHAKE_TIMEOUT_MS;
+    const bool idle_timeout = client->request_len > 0u &&
+                              HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS > 0u &&
+                              (uint32_t)(now_ms - client->last_activity_ms) >=
+                                  HAL_WEBSOCKET_HANDSHAKE_IDLE_TIMEOUT_MS;
+    if (first_byte_timeout || handshake_timeout || idle_timeout) {
+      send_http_error(client->socket, "408 Request Timeout");
+      clear_client(client, WS_CLOSE_PROTOCOL_ERROR, false);
+    }
   }
 }
 
@@ -625,6 +662,10 @@ hal_status_t hal_websocket_server_start(uint16_t port, const char *path) {
   if (port == 0u || !path || path[0] != '/') {
     return HAL_EINVAL;
   }
+  const size_t path_len = strlen(path);
+  if (path_len >= HAL_WEBSOCKET_PATH_MAX) {
+    return HAL_EOVERFLOW;
+  }
 
   s_listener = hal_tcp_listener_open();
   if (!s_listener) {
@@ -643,7 +684,7 @@ hal_status_t hal_websocket_server_start(uint16_t port, const char *path) {
     return HAL_EIO;
   }
 
-  s_path = path;
+  memcpy(s_path, path, path_len + 1u);
   return HAL_OK;
 }
 
@@ -688,6 +729,8 @@ void hal_websocket_server_poll(void) {
     slot->state = WS_CLIENT_HANDSHAKE;
     slot->socket = socket;
     slot->remote = remote;
+    slot->accepted_ms = hal_millis();
+    slot->last_activity_ms = slot->accepted_ms;
   }
 
   for (size_t i = 0u; i < HAL_WEBSOCKET_MAX_CLIENTS; ++i) {
@@ -757,7 +800,7 @@ hal_status_t hal_websocket_broadcast(hal_websocket_message_type_t type,
   if (len > 0u && !data) {
     return HAL_EINVAL;
   }
-  if (len > HAL_WEBSOCKET_FRAME_BUFFER_SIZE) {
+  if (len > HAL_WEBSOCKET_MAX_PAYLOAD_SIZE) {
     return HAL_EOVERFLOW;
   }
 

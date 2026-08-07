@@ -668,6 +668,16 @@ typedef hal_status_t (*hal_http_file_write_cb_t)(
     bool final,
     void *user);
 
+typedef enum {
+  HAL_HTTP_FILE_UPLOAD_RAW = 0,
+  HAL_HTTP_FILE_UPLOAD_MULTIPART
+} hal_http_file_upload_t;
+
+typedef hal_status_t (*hal_http_file_authorize_cb_t)(
+    const hal_http_request_t *request,
+    hal_http_file_upload_t upload,
+    void *user);
+
 typedef struct {
   const char *url_prefix;
   const char *fs_root;
@@ -677,6 +687,7 @@ typedef struct {
   hal_http_file_stat_cb_t stat;
   hal_http_file_read_cb_t read;
   hal_http_file_write_cb_t write;
+  hal_http_file_authorize_cb_t authorize_upload;
   void *user;
 } hal_http_files_config_t;
 
@@ -700,6 +711,7 @@ cfg.enable_upload = true;
 cfg.stat = my_stat;
 cfg.read = my_read;
 cfg.write = my_write;
+cfg.authorize_upload = my_authorize_upload;
 
 hal_http_files_mount(&cfg);
 hal_http_server_start(80);
@@ -708,6 +720,11 @@ for (;;) {
   hal_http_server_poll();
 }
 ```
+
+Uploads are fail-closed: `enable_upload = true` requires both `write` and
+`authorize_upload`. The authorization callback runs before multipart parsing or
+filesystem writes and must return `HAL_OK`; every other status produces HTTP
+403. Use TLS when credentials cross an untrusted network.
 
 Multipart upload example:
 
