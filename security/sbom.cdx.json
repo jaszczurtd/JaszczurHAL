@@ -14,7 +14,7 @@
       "type": "library",
       "bom-ref": "pkg:jaszczurhal",
       "name": "JaszczurHAL",
-      "version": "1.8.0",
+      "version": "1.9.0",
       "licenses": [
         {
           "license": {
@@ -925,5 +925,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:1a7aa418-f55f-547b-b18a-107b150110d6"
+  "serialNumber": "urn:uuid:579aa6e0-16d7-b3a7-745c-c5f374edb516"
 }
