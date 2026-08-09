@@ -213,6 +213,9 @@ extern "C" {
 #define HAL_BOARD_HAS_BLUETOOTH_CONTROLLER 0
 #endif
 
+/* Integrated SX1262 boards require generated board configuration. */
+#define HAL_BOARD_HAS_SX1262_RADIO 0
+
 /* 7. Board-owned built-in LED mapping. */
 #ifndef HAL_LED_BUILTIN
 #if HAL_BOARD_IS_RP_PICO_W || HAL_BOARD_IS_RP_PICO_2_W
@@ -272,10 +275,12 @@ typedef enum {
 #define HAL_BOARD_CAP_USB_DEVICE (UINT32_C(1) << 0)
 #define HAL_BOARD_CAP_CYW43 (UINT32_C(1) << 1)
 #define HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND (UINT32_C(1) << 2)
+#define HAL_BOARD_CAP_SX1262_RADIO (UINT32_C(1) << 3)
 #define HAL_BOARD_CAP_BLUETOOTH_CONTROLLER (UINT32_C(1) << 4)
 #define HAL_BOARD_CAP_ALL                                                      \
   (HAL_BOARD_CAP_USB_DEVICE | HAL_BOARD_CAP_CYW43 |                            \
-   HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND | HAL_BOARD_CAP_BLUETOOTH_CONTROLLER)
+   HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND | HAL_BOARD_CAP_SX1262_RADIO |        \
+   HAL_BOARD_CAP_BLUETOOTH_CONTROLLER)
 
 #define HAL_BOARD_DECLARED_CAPABILITIES                                        \
   ((HAL_BOARD_HAS_USB_DEVICE ? HAL_BOARD_CAP_USB_DEVICE : UINT32_C(0)) |       \
@@ -283,6 +288,7 @@ typedef enum {
    (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND                                      \
         ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND                                \
         : UINT32_C(0)) |                                                       \
+   (HAL_BOARD_HAS_SX1262_RADIO ? HAL_BOARD_CAP_SX1262_RADIO : UINT32_C(0)) |   \
    (HAL_BOARD_HAS_BLUETOOTH_CONTROLLER ? HAL_BOARD_CAP_BLUETOOTH_CONTROLLER    \
                                        : UINT32_C(0)))
 

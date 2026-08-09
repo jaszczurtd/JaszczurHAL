@@ -76,7 +76,7 @@ TEST_ROOT.mkdir(parents=True)
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 5 targets and 10 boards",
+    validated.stdout.strip() == "validated 5 targets and 11 boards",
     "unexpected validated registry size",
 )
 require(
@@ -95,6 +95,7 @@ require(
         "pico2",
         "pico2w",
         "picow",
+        "rp2040-lora-lf",
         "rp2040-plus-4mb",
         "rp2040-zero",
     ],
@@ -298,6 +299,60 @@ require(
     "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN"
     in (plus_output / "jh_board_config.h").read_text(encoding="utf-8"),
     "GPIO status LED must provide HAL_LED_BUILTIN",
+)
+
+lora_output = TEST_ROOT / "generated/rp2040-lora-lf"
+run(
+    "--target",
+    "rp2040",
+    "--board",
+    "rp2040-lora-lf",
+    "--output-dir",
+    str(lora_output),
+)
+lora_resolved = load(lora_output / "jh_board_resolved.json")
+lora_config = (lora_output / "jh_board_config.h").read_text(encoding="utf-8")
+require(lora_resolved["profileId"] == 10, "LoRa board profile ID changed")
+require(
+    lora_resolved["components"] == ["rp-native", "sx126x-radio"],
+    "LoRa board component contract changed",
+)
+require(
+    lora_resolved["capabilities"]["sx1262-radio"]["present"] is True,
+    "LoRa board lost its SX1262 capability",
+)
+require(
+    lora_resolved["gpio"]["reservations"]["lora-radio"]["strength"]
+    == "hard",
+    "LoRa board wiring is not hard-reserved",
+)
+for expected in (
+    "#define HAL_BOARD_PROFILE_RP2040_LORA_LF 1",
+    "#define HAL_BOARD_IS_RP2040_LORA_LF 1",
+    "#define HAL_BOARD_DECLARED_CAPABILITIES UINT32_C(0x00000009)",
+    "#define HAL_BOARD_LORA_RADIO_PRESENT 1",
+    "#define HAL_BOARD_LORA_RADIO_SPI_BUS 1u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_CS 13u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_DIO1 16u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_RF_SWITCH_A 17u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_BUSY 18u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_RESET 23u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_MISO 24u",
+    "#define HAL_BOARD_LORA_RADIO_MAX_FREQUENCY_HZ UINT32_C(450000000)",
+    "#define HAL_BOARD_LORA_RADIO_MAX_SPI_CLOCK_HZ UINT32_C(17999999)",
+    "#define HAL_BOARD_LORA_RADIO_DEFAULT_SPI_CLOCK_HZ UINT32_C(8000000)",
+    "#define HAL_BOARD_LORA_RADIO_REGULATOR_IS_DCDC 1",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_MODE_IS_DIO2_SINGLE_GPIO 1",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_TX_LEVEL_A 0",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_DIO3 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_VOLTAGE_IS_1V7 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_STARTUP_US UINT32_C(5000)",
+):
+    require(expected in lora_config, f"LoRa board config lacks {expected!r}")
+require(
+    'set(PICO_BOARD "pico")'
+    in (lora_output / "jh_board_config.cmake").read_text(encoding="utf-8"),
+    "LoRa board must use the compatible Pico SDK board definition",
 )
 
 picow_output = TEST_ROOT / "generated/picow"
@@ -956,6 +1011,12 @@ for case, adjust in (
             device["attributes"].update(rfSwitchMode="dio2"),
             drop_switch_levels(device),
             device["signals"].pop("rfSwitchA"),
+        ),
+    ),
+    (
+        "radio-dio2-single-gpio-switch",
+        lambda device: device["attributes"].update(
+            rfSwitchMode="dio2-single-gpio"
         ),
     ),
     (

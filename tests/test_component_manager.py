@@ -304,6 +304,35 @@ class ArchiveManagerTests(unittest.TestCase):
 
 
 class TrackedContractTests(unittest.TestCase):
+    def test_sx126x_pin_and_license_are_exact(self) -> None:
+        config = manager.parse_config(
+            ROOT / "third_party/sx126x_driver_version.conf"
+        )
+        self.assertEqual(
+            config,
+            {
+                "SX126X_DRIVER_REPO":
+                    "https://github.com/Lora-net/sx126x_driver.git",
+                "SX126X_DRIVER_REF":
+                    "a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+                "SX126X_DRIVER_VERSION": "v2.5.0",
+                "SX126X_DRIVER_DIR": "third_party/sx126x_driver",
+            },
+        )
+        spec = manager.GIT_COMPONENTS["sx126x"]
+        self.assertTrue(spec.clean)
+        self.assertEqual(spec.prefix, "SX126X_DRIVER")
+        self.assertIn("LICENSE.txt", spec.required_paths)
+        self.assertIn("src/sx126x_hal.h", spec.required_paths)
+        self.assertIn("src/sx126x_driver_version.c", spec.required_paths)
+        self.assertIn("src/sx126x_status.h", spec.required_paths)
+        self.assertIn("sx126x", manager.SOURCE_COMPONENT_ORDER)
+        license_text = (ROOT / "third_party/LICENSE.SX126X").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("The Clear BSD License", license_text)
+        self.assertIn("NO EXPRESS OR IMPLIED LICENSES", license_text)
+
     def test_freertos_component_rejects_disabled_feature_spelling(self) -> None:
         parser = manager.build_parser()
         arguments = parser.parse_args(

@@ -777,6 +777,8 @@ jobs:
   #   empty-core   - no HAL_ENABLE_* flags at all. Validates that the
   #                  bare-core library still compiles when every optional
   #                  module is off (catches missing #ifdef guards).
+  #   lora-board-stage0 - integrated SX1262 board metadata and component
+  #                  contract before the Stage 1 LoRa sources are enabled.
   #   no-radio-network - public WiFi/TCP/UDP surface on a plain Pico profile.
   #                  Validates runtime rejection without touching CYW43 pins.
   #   typical-set  - a realistic subset chosen so that *every*
@@ -804,6 +806,10 @@ jobs:
             board: pico
             platform: rp2040
             flags: -D HAL_BOARD_PROFILE_RP_PICO
+          - profile: lora-board-stage0
+            board: rp2040-lora-lf
+            platform: rp2040
+            flags: -D HAL_BOARD_PROFILE_RP2040_LORA_LF
           - profile: rp2350-arm-empty
             board: pico2
             platform: rp2350-arm-s

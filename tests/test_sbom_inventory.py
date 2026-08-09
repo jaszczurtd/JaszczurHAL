@@ -29,6 +29,8 @@ class SbomInventoryTests(unittest.TestCase):
 
         components = {item["name"]: item for item in inventory["components"]}
         expected = {
+            "Semtech SX126x driver":
+                "a10c5dfdf89788c6ac805e9fe98889de44175aa2",
             "PubSubClient": "2d228f2f862a95846c65a8518c79f48dfc8f188c",
             "Shared WireGuard/lwIP engine":
                 "ba409a040c78bcf86f6c8026ba86c014035b8c63",
@@ -40,6 +42,14 @@ class SbomInventoryTests(unittest.TestCase):
             self.assertEqual(commit, components[name]["commit"])
             self.assertNotIn("unknown", components[name]["version"].lower())
             self.assertTrue(components[name]["licenses"])
+        self.assertEqual(
+            ["BSD-3-Clause-Clear"],
+            components["Semtech SX126x driver"]["licenses"],
+        )
+        self.assertIn(
+            "third_party/LICENSE.SX126X",
+            components["Semtech SX126x driver"]["paths"],
+        )
 
     def test_generated_sbom_retains_license_file_and_exact_commits(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-sbom-") as text:

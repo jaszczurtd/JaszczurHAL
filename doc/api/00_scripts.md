@@ -92,7 +92,7 @@ a standalone setup diagnostic.
 ### `third_party/update_components.sh`
 
 The normal dependency-management entrypoint. It is a compatibility launcher
-for `scripts/component_manager.py all`, which processes all twelve components
+for `scripts/component_manager.py all`, which processes all fourteen components
 in dependency order:
 
 1. BearSSL
@@ -103,10 +103,12 @@ in dependency order:
 6. Unity
 7. lwIP
 8. littlefs
-9. FreeRTOS-Kernel
-10. Pico SDK
-11. picotool
-12. RISC-V toolchain
+9. BTstack
+10. Semtech SX126x driver
+11. FreeRTOS-Kernel
+12. Pico SDK
+13. picotool
+14. RISC-V toolchain
 
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
@@ -300,6 +302,14 @@ Synchronizes `third_party/littlefs` from
 core sources and license, and the configured littlefs major/minor API version.
 The native RP and STM32G474 builds compile this managed checkout directly.
 Options mirror the BearSSL helper.
+
+### Semtech SX126x managed component
+
+`python3 scripts/component_manager.py component sx126x` synchronizes
+`third_party/sx126x_driver` from `sx126x_driver_version.conf`. It verifies the
+clean exact commit, Clear BSD license, base driver and version source set, and
+the HAL/status/register headers. The normal component updater includes it on
+Linux and Windows; no shell-only focused wrapper is required.
 
 ### `scripts/ensure_freertos_kernel.sh`
 

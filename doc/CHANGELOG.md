@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased] - 2026-08-09 (LoRa Stage 0)
+
+- Pinned the official Semtech SX126x driver at `v2.5.0` and exact commit
+  `a10c5dfdf89788c6ac805e9fe98889de44175aa2`, retained its Clear BSD license,
+  and added it to managed components, provenance inventory, and the generated
+  SBOM.
+- Activated the lifecycle-owned `sx1262-radio` board capability and added the
+  experimental `rp2040-lora-lf` profile for Waveshare SKU 26592 with fixed SPI,
+  DIO1, BUSY, RESET, DIO2 plus GPIO antenna control, DCDC, and DIO3 TCXO facts.
+- Kept the externally wired Core1262-HF as project configuration rather than
+  inventing host board profiles; its reusable electrical helper remains part
+  of the Stage 1 LoRa adapter work.
+
 ## [1.9.1] - 2026-08-07
 
 ### Security and reliability corrections

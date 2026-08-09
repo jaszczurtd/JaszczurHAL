@@ -102,6 +102,12 @@ void test_missing_board_hardware_is_reported_as_unsupported(void) {
   TEST_ASSERT_EQUAL_INT(
       HAL_EUNSUPPORTED,
       jh_board_runtime_set_available(HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_board_get_capability_state(
+                                    HAL_BOARD_CAP_SX1262_RADIO, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_BOARD_CAP_NOT_PRESENT, state);
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_board_require_capabilities(
+                                              HAL_BOARD_CAP_SX1262_RADIO));
 }
 
 void test_invalid_capability_queries_are_rejected(void) {

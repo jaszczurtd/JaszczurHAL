@@ -1,0 +1,61 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "rp2040-lora-lf",
+  "displayName": "Waveshare RP2040-LoRa-LF",
+  "description": "Waveshare SKU 26592 with RP2040, 2 MB flash, and an integrated LF SX1262 radio.",
+  "status": "experimental",
+  "compatibleTargets": ["rp2040"],
+  "build": { "provider": "pico-sdk", "board": "pico" },
+  "hal": { "profileId": 10, "selector": "HAL_BOARD_PROFILE_RP2040_LORA_LF", "runtimeName": "rp2040-lora-lf", "legacySelectors": [] },
+  "memory": { "flash": { "source": "sdk", "expectedBytes": 2097152 } },
+  "gpio": {
+    "exposedPins": { "values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 19, 20, 21, 22, 26, 27, 28, 29] },
+    "connectors": {
+      "headers": { "pins": [{ "domain": "soc-gpio", "id": 0 }, { "domain": "soc-gpio", "id": 1 }, { "domain": "soc-gpio", "id": 2 }, { "domain": "soc-gpio", "id": 3 }, { "domain": "soc-gpio", "id": 4 }, { "domain": "soc-gpio", "id": 5 }, { "domain": "soc-gpio", "id": 6 }, { "domain": "soc-gpio", "id": 7 }, { "domain": "soc-gpio", "id": 8 }, { "domain": "soc-gpio", "id": 9 }, { "domain": "soc-gpio", "id": 10 }, { "domain": "soc-gpio", "id": 11 }, { "domain": "soc-gpio", "id": 12 }, { "domain": "soc-gpio", "id": 19 }, { "domain": "soc-gpio", "id": 20 }, { "domain": "soc-gpio", "id": 21 }, { "domain": "soc-gpio", "id": 22 }, { "domain": "soc-gpio", "id": 26 }, { "domain": "soc-gpio", "id": 27 }, { "domain": "soc-gpio", "id": 28 }, { "domain": "soc-gpio", "id": 29 }] }
+    },
+    "reservations": {
+      "lora-radio": { "pins": [{ "domain": "soc-gpio", "id": 13 }, { "domain": "soc-gpio", "id": 14 }, { "domain": "soc-gpio", "id": 15 }, { "domain": "soc-gpio", "id": 16 }, { "domain": "soc-gpio", "id": 17 }, { "domain": "soc-gpio", "id": 18 }, { "domain": "soc-gpio", "id": 23 }, { "domain": "soc-gpio", "id": 24 }], "owner": "board.lora-radio", "strength": "hard", "reason": "Fixed SPI, control, IRQ, and antenna-switch wiring of the integrated SX1262 radio." },
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": 25 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board red GPIO status LED." }
+    },
+    "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": true } },
+  "devices": {
+    "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" },
+    "loraRadio": {
+      "kind": "bus-device",
+      "role": "sx1262-radio",
+      "bus": { "kind": "spi", "index": 1 },
+      "signals": {
+        "sck": { "domain": "soc-gpio", "id": 14 },
+        "mosi": { "domain": "soc-gpio", "id": 15 },
+        "miso": { "domain": "soc-gpio", "id": 24 },
+        "cs": { "domain": "soc-gpio", "id": 13 },
+        "reset": { "domain": "soc-gpio", "id": 23 },
+        "busy": { "domain": "soc-gpio", "id": 18 },
+        "dio1": { "domain": "soc-gpio", "id": 16 },
+        "rfSwitchA": { "domain": "soc-gpio", "id": 17 }
+      },
+      "attributes": {
+        "minFrequencyHz": 410000000,
+        "maxFrequencyHz": 450000000,
+        "maxSpiClockHz": 17999999,
+        "defaultSpiClockHz": 8000000,
+        "minTxPowerDbm": -9,
+        "maxTxPowerDbm": 22,
+        "regulator": "dcdc",
+        "rfSwitchMode": "dio2-single-gpio",
+        "rfSwitchIdleLevelA": true,
+        "rfSwitchRxLevelA": true,
+        "rfSwitchTxLevelA": false,
+        "tcxoControl": "dio3",
+        "tcxoVoltage": "1v7",
+        "tcxoStartupUs": 5000
+      }
+    }
+  },
+  "peripherals": { "defaultsSource": "pico-sdk" },
+  "components": { "sx126x-radio": { "mode": "feature-gated" } }
+}

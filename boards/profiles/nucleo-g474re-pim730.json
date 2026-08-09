@@ -26,7 +26,7 @@
       "user-button": { "endpoint": { "domain": "soc-gpio", "id": "PC13" } }
     }
   },
-  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": true }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": true } },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": true }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": true }, "sx1262-radio": { "present": false } },
   "devices": {
     "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PA5" }, "activeLevel": "high" },
     "userButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PC13" }, "activeLevel": "low" }

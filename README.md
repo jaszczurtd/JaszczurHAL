@@ -126,7 +126,7 @@ Backend files compile only for their selected target, so unused backends cost ze
 
 Official builds select a stable target and board ID through the generated board
 registry. Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
-`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `nucleo-g474re`,
+`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`, `nucleo-g474re`,
 `nucleo-g474re-pim730`, and `host-mock`. The build generator validates target
 compatibility, flash size, pins, components, and feature contracts before
 toolchain import. See
@@ -261,7 +261,8 @@ explicit Linux-only boundaries.
 ## Managed dependencies
 
 Tracked pins for Pico SDK, picotool, the RP2350 RISC-V toolchain, FreeRTOS,
-BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, and littlefs live in
+BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, and the
+Semtech SX126x driver live in
 `third_party/*_version.conf`:
 
 ```bash
@@ -311,6 +312,7 @@ Primary docs:
   [BearSSL pin](third_party/bearssl_version.conf),
   [lwIP pin](third_party/lwip_version.conf),
   [littlefs pin](third_party/littlefs_version.conf),
+  [Semtech SX126x driver pin](third_party/sx126x_driver_version.conf),
   [PubSubClient](src/hal/impl/shared/frameworks/PubSubClient/),
   [shared WireGuard/lwIP engine](src/hal/impl/shared/frameworks/wireguard/),
   [LiquidCrystal / HD44780](src/hal/impl/shared/drivers/hd44780/),

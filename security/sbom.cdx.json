@@ -199,6 +199,63 @@
       ]
     },
     {
+      "type": "library",
+      "bom-ref": "pkg:semtech-sx126x-driver@v2.5.0",
+      "name": "Semtech SX126x driver",
+      "version": "v2.5.0",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause-Clear"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Semtech Corporation"
+      },
+      "purl": "pkg:github/Lora-net/sx126x_driver@a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/Lora-net/sx126x_driver"
+        },
+        {
+          "type": "other",
+          "url": "third_party/sx126x_driver",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/sx126x_driver_version.conf",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/LICENSE.SX126X",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "a10c5dfdf89788c6ac805e9fe98889de44175aa2"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Clean exact-commit checkout of Semtech's portable SX126x radio driver. Stage 1 will compile the base LoRa source set behind HAL_ENABLE_SX126X through a tracked JaszczurHAL HAL adapter; optional LR-FHSS and BPSK sources remain excluded unless separately reviewed."
+        },
+        {
+          "name": "jaszczurhal:feature_flags",
+          "value": "HAL_ENABLE_SX126X"
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/sx126x_driver,third_party/sx126x_driver_version.conf,third_party/LICENSE.SX126X"
+        }
+      ]
+    },
+    {
       "type": "application",
       "bom-ref": "pkg:picotool@2.2.0",
       "name": "picotool",
@@ -976,5 +1033,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:452aae5b-2951-69c8-c875-0b2b9969aa98"
+  "serialNumber": "urn:uuid:d388f539-234e-55d6-286f-e3363b24647e"
 }
