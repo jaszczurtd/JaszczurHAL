@@ -46,9 +46,11 @@ format_cpp_file() {
     [ -f "$file" ] || return 0
 
     case "$file" in
-        src/hal/generated/jh_hal_features.h)
+        src/hal/generated/jh_hal_features.h|\
+        src/hal/generated/jh_board_registry.h|\
+        src/hal/generated/jh_board_fallback_config.h)
             # Generated artifacts must remain byte-for-byte identical to the
-            # generator output verified by generate_hal_features.py --check.
+            # generator output verified by the corresponding --check command.
             return 0
             ;;
         *.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx)
