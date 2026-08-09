@@ -18,8 +18,7 @@
 #elif HAL_TARGET_IS_RP2350_ARM
 #define HAL_BOARD_PROFILE_RP_PICO_2_W 1
 #else
-#error                                                                         \
-    "JaszczurHAL: HAL_CYW43_PROFILE_PICOW has no board for the selected target."
+#error "JaszczurHAL: HAL_CYW43_PROFILE_PICOW has no board for the selected target."
 #endif
 #endif
 
@@ -30,32 +29,10 @@
 #endif
 
 /* Prefer an unambiguous provider board selector. */
-#if !defined(HAL_BOARD_PROFILE_RP_PICO) &&                                     \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_W) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) &&                     \
-    !defined(HAL_BOARD_PROFILE_HOST_MOCK) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP2040_ZERO) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) &&                             \
-    !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730) &&                     \
-    (defined(RASPBERRYPI_PICO) + defined(RASPBERRYPI_PICO_W) +                 \
-     defined(RASPBERRYPI_PICO2) + defined(RASPBERRYPI_PICO2_W)) > 1
+#if !defined(HAL_BOARD_PROFILE_RP_PICO) && !defined(HAL_BOARD_PROFILE_RP_PICO_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_2) && !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) && !defined(HAL_BOARD_PROFILE_HOST_MOCK) && !defined(HAL_BOARD_PROFILE_RP2040_ZERO) && !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) && !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730) && (defined(RASPBERRYPI_PICO) + defined(RASPBERRYPI_PICO_W) + defined(RASPBERRYPI_PICO2) + defined(RASPBERRYPI_PICO2_W)) > 1
 #error "JaszczurHAL: multiple provider board selectors are active."
 #endif
-#if !defined(HAL_BOARD_PROFILE_RP_PICO) &&                                     \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_W) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) &&                     \
-    !defined(HAL_BOARD_PROFILE_HOST_MOCK) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP2040_ZERO) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) &&                             \
-    !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
+#if !defined(HAL_BOARD_PROFILE_RP_PICO) && !defined(HAL_BOARD_PROFILE_RP_PICO_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_2) && !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) && !defined(HAL_BOARD_PROFILE_HOST_MOCK) && !defined(HAL_BOARD_PROFILE_RP2040_ZERO) && !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) && !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
 #if defined(RASPBERRYPI_PICO)
 #define HAL_BOARD_PROFILE_RP_PICO 1
 #elif defined(RASPBERRYPI_PICO_W)
@@ -68,24 +45,13 @@
 #endif
 
 /* Apply only explicitly declared source-level fallbacks. */
-#if !defined(HAL_BOARD_PROFILE_RP_PICO) &&                                     \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_W) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) &&                     \
-    !defined(HAL_BOARD_PROFILE_HOST_MOCK) &&                                   \
-    !defined(HAL_BOARD_PROFILE_RP2040_ZERO) &&                                 \
-    !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) &&                             \
-    !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) &&                              \
-    !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
+#if !defined(HAL_BOARD_PROFILE_RP_PICO) && !defined(HAL_BOARD_PROFILE_RP_PICO_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_2) && !defined(HAL_BOARD_PROFILE_RP_PICO_2_W) && !defined(HAL_BOARD_PROFILE_RP_PICO_PIM730) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE) && !defined(HAL_BOARD_PROFILE_HOST_MOCK) && !defined(HAL_BOARD_PROFILE_RP2040_ZERO) && !defined(HAL_BOARD_PROFILE_RP2040_PLUS_4MB) && !defined(HAL_BOARD_PROFILE_RP2040_LORA_LF) && !defined(HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730)
 #if HAL_TARGET_IS_MOCK
 #define HAL_BOARD_PROFILE_HOST_MOCK 1
 #elif HAL_TARGET_IS_STM32G474
 #define HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE 1
 #else
-#error                                                                         \
-    "JaszczurHAL: unknown board. Configure through the board generator (JH_BOARD), define an explicit HAL_BOARD_PROFILE_*, or provide an unambiguous provider board selector."
+#error "JaszczurHAL: unknown board. Configure through the board generator (JH_BOARD), define an explicit HAL_BOARD_PROFILE_*, or provide an unambiguous provider board selector."
 #endif
 #endif
 
@@ -156,11 +122,7 @@
 #define HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 0
 #endif
 
-#if (HAL_BOARD_IS_RP_PICO + HAL_BOARD_IS_RP_PICO_W + HAL_BOARD_IS_RP_PICO_2 +  \
-     HAL_BOARD_IS_RP_PICO_2_W + HAL_BOARD_IS_RP_PICO_PIM730 +                  \
-     HAL_BOARD_IS_STM32G474_NUCLEO_G474RE + HAL_BOARD_IS_HOST_MOCK +           \
-     HAL_BOARD_IS_RP2040_ZERO + HAL_BOARD_IS_RP2040_PLUS_4MB +                 \
-     HAL_BOARD_IS_RP2040_LORA_LF + HAL_BOARD_IS_STM32G474_NUCLEO_PIM730) != 1
+#if (HAL_BOARD_IS_RP_PICO + HAL_BOARD_IS_RP_PICO_W + HAL_BOARD_IS_RP_PICO_2 + HAL_BOARD_IS_RP_PICO_2_W + HAL_BOARD_IS_RP_PICO_PIM730 + HAL_BOARD_IS_STM32G474_NUCLEO_G474RE + HAL_BOARD_IS_HOST_MOCK + HAL_BOARD_IS_RP2040_ZERO + HAL_BOARD_IS_RP2040_PLUS_4MB + HAL_BOARD_IS_RP2040_LORA_LF + HAL_BOARD_IS_STM32G474_NUCLEO_PIM730) != 1
 #error "JaszczurHAL: exactly one HAL_BOARD_PROFILE_* must be selected."
 #endif
 
@@ -171,8 +133,7 @@
 #if HAL_BOARD_IS_RP_PICO_W && !(HAL_TARGET_IS_RP2040)
 #error "JaszczurHAL: board picow is incompatible with the selected target."
 #endif
-#if HAL_BOARD_IS_RP_PICO_2 &&                                                  \
-    !(HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_RP2350_RISCV)
+#if HAL_BOARD_IS_RP_PICO_2 && !(HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_RP2350_RISCV)
 #error "JaszczurHAL: board pico2 is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_RP_PICO_2_W && !(HAL_TARGET_IS_RP2350_ARM)
@@ -182,27 +143,22 @@
 #error "JaszczurHAL: board pico-rm2 is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_STM32G474_NUCLEO_G474RE && !(HAL_TARGET_IS_STM32G474)
-#error                                                                         \
-    "JaszczurHAL: board nucleo-g474re is incompatible with the selected target."
+#error "JaszczurHAL: board nucleo-g474re is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_HOST_MOCK && !(HAL_TARGET_IS_MOCK)
 #error "JaszczurHAL: board host-mock is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_RP2040_ZERO && !(HAL_TARGET_IS_RP2040)
-#error                                                                         \
-    "JaszczurHAL: board rp2040-zero is incompatible with the selected target."
+#error "JaszczurHAL: board rp2040-zero is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_RP2040_PLUS_4MB && !(HAL_TARGET_IS_RP2040)
-#error                                                                         \
-    "JaszczurHAL: board rp2040-plus-4mb is incompatible with the selected target."
+#error "JaszczurHAL: board rp2040-plus-4mb is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_RP2040_LORA_LF && !(HAL_TARGET_IS_RP2040)
-#error                                                                         \
-    "JaszczurHAL: board rp2040-lora-lf is incompatible with the selected target."
+#error "JaszczurHAL: board rp2040-lora-lf is incompatible with the selected target."
 #endif
 #if HAL_BOARD_IS_STM32G474_NUCLEO_PIM730 && !(HAL_TARGET_IS_STM32G474)
-#error                                                                         \
-    "JaszczurHAL: board nucleo-g474re-pim730 is incompatible with the selected target."
+#error "JaszczurHAL: board nucleo-g474re-pim730 is incompatible with the selected target."
 #endif
 
 /* Materialize the selected board facts. */
