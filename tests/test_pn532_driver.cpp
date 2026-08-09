@@ -149,6 +149,19 @@ void test_pn532_spi_status_read_uses_hal_transaction(void) {
   TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(1));
 }
 
+void test_pn532_spi_write_failure_releases_device(void) {
+  hal_spi_init(1, 8, 11, 10);
+  PN532_SPI bus(/*chipSelectPin=*/22, /*resetPin=*/PN532_UNUSED_PIN,
+                /*bus=*/1);
+  const uint8_t command[] = {PN532_COMMAND_SAMCONFIGURATION};
+
+  hal_mock_spi_fail_next_write(1, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, bus.writeCommand(command, sizeof(command)));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(22));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(1));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(1));
+}
+
 void test_pn532_check_response_frame_detects_checksum_error(void) {
   uint8_t frame[20] = {};
   size_t frame_len = 0;
@@ -168,6 +181,7 @@ int main(void) {
   RUN_TEST(test_pn532_get_firmware_version_parses_response);
   RUN_TEST(test_pn532_rejects_bad_ack);
   RUN_TEST(test_pn532_spi_status_read_uses_hal_transaction);
+  RUN_TEST(test_pn532_spi_write_failure_releases_device);
   RUN_TEST(test_pn532_check_response_frame_detects_checksum_error);
   return UNITY_END();
 }

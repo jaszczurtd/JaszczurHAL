@@ -2,7 +2,7 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-Covers: `hal_spi`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `hal_swserial`, `hal_onewire`.
+Covers: `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `hal_swserial`, `hal_onewire`.
 
 ## `hal_spi` - SPI bus and transfer API
 
@@ -78,6 +78,36 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. The async DMA API currently falls back to the synchronous polling write path.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
 **Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses. Treat async DMA lifetime as part of the same transaction/critical section: keep chip-select and bus ownership valid until `_async_wait()` completes.
+
+---
+
+## `hal_spi_device` - target-neutral SPI device descriptor
+
+```c
+#include <hal/hal_spi_device.h>
+
+hal_spi_device_t device;
+hal_spi_settings_t settings = {
+    8000000u, HAL_SPI_MSBFIRST, HAL_SPI_MODE0};
+hal_status_t status = hal_spi_device_init(&device, 0u, 5u, &settings);
+
+hal_spi_device_operation_t operations[] = {
+    {HAL_SPI_DEVICE_OP_WRITE, command, NULL, command_len},
+    {HAL_SPI_DEVICE_OP_READ, NULL, response, response_len},
+};
+status = hal_spi_device_transaction(&device, operations, 2u);
+```
+
+The descriptor binds one bus, active-low chip-select pin and effective SPI
+settings. `HAL_SPI_DEVICE_CS_NONE` selects a device without HAL-managed CS.
+Initialisation configures a connected CS pin as an inactive high output.
+Descriptors are target-neutral and use the existing backend SPI/GPIO APIs.
+`hal_spi_device_acquire()` and `hal_spi_device_release()` expose a status-first
+manual lifetime for stateful transfers. `hal_spi_device_transaction()` executes
+READ, WRITE, TRANSFER and TRANSFER_IN_PLACE buffers under one acquisition.
+`hal_spi_device_finish()` guarantees release after manual I/O and preserves an
+operation error over a later completion error. Once acquisition succeeds, all
+transaction paths call backend end, deassert CS and unlock the bus.
 
 ---
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/hal_spi_device.h"
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -73,6 +75,7 @@ typedef struct {
 
 typedef struct {
   jh_ssd1306_config_t config;
+  hal_spi_device_t spi_device;
   uint16_t width;
   uint16_t height;
   uint8_t i2c_addr;

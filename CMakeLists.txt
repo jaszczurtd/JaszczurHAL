@@ -99,6 +99,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_ble_stream.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
     ${SRC}/hal/impl/shared/bluetooth/jh_ble_stream_session.c

@@ -12,7 +12,7 @@
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_i2c.h"
-#include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_status.h"
 #include "hal/hal_sync.h"
 
@@ -131,10 +131,8 @@ private:
   hal_status_t transferFrame(uint8_t command, const uint8_t *tx, size_t tx_len,
                              uint8_t *rx, size_t rx_len);
 
-  uint8_t _chipSelectPin;
+  hal_spi_device_t _device;
   uint8_t _resetPin;
-  uint8_t _bus;
-  hal_spi_settings_t _settings;
 };
 
 #ifdef HAL_ENABLE_I2C

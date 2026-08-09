@@ -7,6 +7,7 @@
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_system.h"
 
 #include <string.h>
@@ -160,12 +161,6 @@ static uint32_t normalized_clock(const jh_ili9341_config_t *config) {
                                                     : JH_ILI9341_SPI_DEFAULT_HZ;
 }
 
-static hal_spi_settings_t spi_settings_for(const jh_ili9341_t *dev) {
-  hal_spi_settings_t settings = {normalized_clock(&dev->config),
-                                 HAL_SPI_MSBFIRST, HAL_SPI_MODE0};
-  return settings;
-}
-
 bool jh_ili9341_run_init_sequence(const jh_ili9341_command_io_t *io,
                                   uint32_t delay_ms) {
   if (io == NULL || io->write_command == NULL) {
@@ -201,30 +196,20 @@ static bool hal_write_command(void *ctx, uint8_t command, const uint8_t *data,
     return false;
   }
 
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
-
-  hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
-
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
+  hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
+  if (hal_status_is_error(status)) {
+    return false;
   }
 
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), false);
-  hal_spi_write(bus, &command, 1u);
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
-  if (data != NULL && data_len > 0u) {
-    hal_spi_write(bus, data, data_len);
+  status = hal_spi_write(dev->spi_device.bus, &command, 1u);
+  if (hal_status_is_ok(status)) {
+    hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
+    if (data != NULL && data_len > 0u) {
+      status = hal_spi_write(dev->spi_device.bus, data, data_len);
+    }
   }
-
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-
-  hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return true;
+  return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 }
 
 static bool write_command(jh_ili9341_t *dev, uint8_t command,
@@ -241,9 +226,14 @@ bool jh_ili9341_init(jh_ili9341_t *dev, const jh_ili9341_config_t *config) {
   dev->config = *config;
   dev->config.clock_hz = normalized_clock(config);
 
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_set_mode(pin_to_u8(dev->config.cs_pin), HAL_GPIO_OUTPUT);
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
+  const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
+                                       HAL_SPI_MODE0};
+  const uint8_t cs_pin = pin_is_connected(dev->config.cs_pin)
+                             ? pin_to_u8(dev->config.cs_pin)
+                             : HAL_SPI_DEVICE_CS_NONE;
+  if (hal_status_is_error(hal_spi_device_init(&dev->spi_device, dev->config.bus,
+                                              cs_pin, &settings))) {
+    return false;
   }
   hal_gpio_set_mode(pin_to_u8(dev->config.dc_pin), HAL_GPIO_OUTPUT);
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
@@ -337,8 +327,15 @@ static bool spi_write_dma_or_fallback(uint8_t bus, const uint8_t *data,
   if (hal_spi_write_dma(bus, data, len)) {
     return true;
   }
-  hal_spi_write(bus, data, len);
-  return true;
+  return hal_status_is_ok(hal_spi_write(bus, data, len));
+}
+
+static bool abort_write(jh_ili9341_t *dev, hal_status_t status) {
+  if (dev != NULL && dev->write_active) {
+    dev->write_active = false;
+    (void)hal_spi_device_finish(&dev->spi_device, status);
+  }
+  return false;
 }
 
 bool jh_ili9341_set_addr_window(jh_ili9341_t *dev, uint16_t x, uint16_t y,
@@ -375,34 +372,26 @@ bool jh_ili9341_write_pixels(jh_ili9341_t *dev, const uint16_t *pixels,
     return true;
   }
 
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
   uint8_t chunk[64];
-
-  hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
+  hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
+  if (hal_status_is_error(status)) {
+    return false;
   }
+
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
 
-  while (count > 0u) {
+  while (count > 0u && hal_status_is_ok(status)) {
     const size_t pixel_count =
         (count < (sizeof(chunk) / 2u)) ? count : (sizeof(chunk) / 2u);
     for (size_t i = 0u; i < pixel_count; ++i) {
       put_u16_be(&chunk[i * 2u], pixels[i]);
     }
-    hal_spi_write(bus, chunk, pixel_count * 2u);
+    status = hal_spi_write(dev->spi_device.bus, chunk, pixel_count * 2u);
     pixels += pixel_count;
     count -= pixel_count;
   }
 
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return true;
+  return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 }
 
 bool jh_ili9341_begin_write(jh_ili9341_t *dev, uint16_t x, uint16_t y,
@@ -415,13 +404,8 @@ bool jh_ili9341_begin_write(jh_ili9341_t *dev, uint16_t x, uint16_t y,
     return false;
   }
 
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
-
-  hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
+  if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
+    return false;
   }
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
   dev->write_active = true;
@@ -432,23 +416,27 @@ bool jh_ili9341_write_pixels_be(jh_ili9341_t *dev, const uint8_t *pixels_be,
                                 size_t byte_count) {
   if (dev == NULL || !dev->initialized || !dev->write_active ||
       (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
   if (byte_count == 0u) {
     return true;
   }
 
-  hal_spi_write(dev->config.bus, pixels_be, byte_count);
-  return true;
+  const hal_status_t status =
+      hal_spi_write(dev->spi_device.bus, pixels_be, byte_count);
+  return hal_status_is_error(status) ? abort_write(dev, status) : true;
 }
 
 bool jh_ili9341_write_pixels_dma(jh_ili9341_t *dev, const uint8_t *pixels_be,
                                  size_t byte_count) {
   if (dev == NULL || !dev->initialized || !dev->write_active ||
       (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
-  return spi_write_dma_or_fallback(dev->config.bus, pixels_be, byte_count);
+  if (!spi_write_dma_or_fallback(dev->spi_device.bus, pixels_be, byte_count)) {
+    return abort_write(dev, HAL_EIO);
+  }
+  return true;
 }
 
 bool jh_ili9341_write_pixels_dma_async_start(jh_ili9341_t *dev,
@@ -456,34 +444,41 @@ bool jh_ili9341_write_pixels_dma_async_start(jh_ili9341_t *dev,
                                              size_t byte_count) {
   if (dev == NULL || !dev->initialized || !dev->write_active ||
       (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
   if (byte_count == 0u) {
     return true;
   }
 
-  return hal_spi_write_dma_async_start(dev->config.bus, pixels_be, byte_count);
+  if (!hal_spi_write_dma_async_start(dev->spi_device.bus, pixels_be,
+                                     byte_count)) {
+    return abort_write(dev, HAL_EIO);
+  }
+  return true;
 }
 
 bool jh_ili9341_write_pixels_dma_async_busy(jh_ili9341_t *dev) {
   if (dev == NULL || !dev->initialized) {
     return false;
   }
-  return hal_spi_write_dma_async_busy(dev->config.bus);
+  return hal_spi_write_dma_async_busy(dev->spi_device.bus);
 }
 
 bool jh_ili9341_write_pixels_dma_async_wait(jh_ili9341_t *dev) {
   if (dev == NULL || !dev->initialized) {
     return false;
   }
-  return hal_spi_write_dma_async_wait(dev->config.bus);
+  if (!hal_spi_write_dma_async_wait(dev->spi_device.bus)) {
+    return abort_write(dev, HAL_EIO);
+  }
+  return true;
 }
 
 bool jh_ili9341_write_pixels_fast(jh_ili9341_t *dev, const uint16_t *pixels,
                                   size_t count) {
   if (dev == NULL || !dev->initialized || !dev->write_active ||
       (pixels == NULL && count > 0u)) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
   if (count == 0u) {
     return true;
@@ -510,14 +505,8 @@ bool jh_ili9341_end_write(jh_ili9341_t *dev) {
     return false;
   }
 
-  const uint8_t bus = dev->config.bus;
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
   dev->write_active = false;
-  return true;
+  return hal_status_is_ok(hal_spi_device_release(&dev->spi_device));
 }
 
 bool jh_ili9341_fill_rect(jh_ili9341_t *dev, uint16_t x, uint16_t y, uint16_t w,
@@ -525,45 +514,28 @@ bool jh_ili9341_fill_rect(jh_ili9341_t *dev, uint16_t x, uint16_t y, uint16_t w,
   if (dev == NULL || !dev->initialized || w == 0u || h == 0u) {
     return false;
   }
-  if (!jh_ili9341_set_addr_window(dev, x, y, w, h)) {
+  if (!jh_ili9341_begin_write(dev, x, y, w, h)) {
     return false;
   }
 
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
   uint8_t chunk[ILI9341_PIXEL_CHUNK_BYTES];
   for (size_t i = 0u; i < sizeof(chunk); i += 2u) {
     put_u16_be(&chunk[i], color);
   }
 
   size_t remaining = (size_t)w * (size_t)h;
-  hal_spi_lock(bus);
-  hal_spi_begin_transaction(bus, &settings);
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
-  }
-  hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
-
+  bool ok = true;
   while (remaining > 0u) {
     const size_t pixels =
         remaining < (sizeof(chunk) / 2u) ? remaining : (sizeof(chunk) / 2u);
-    if (!spi_write_dma_or_fallback(bus, chunk, pixels * 2u)) {
-      if (pin_is_connected(dev->config.cs_pin)) {
-        hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-      }
-      hal_spi_end_transaction(bus);
-      hal_spi_unlock(bus);
-      return false;
+    if (!spi_write_dma_or_fallback(dev->spi_device.bus, chunk, pixels * 2u)) {
+      ok = false;
+      break;
     }
     remaining -= pixels;
   }
 
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return true;
+  return jh_ili9341_end_write(dev) && ok;
 }
 
 bool jh_ili9341_draw_rgb_bitmap(jh_ili9341_t *dev, uint16_t x, uint16_t y,

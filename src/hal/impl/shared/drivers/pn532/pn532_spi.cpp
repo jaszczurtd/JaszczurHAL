@@ -2,18 +2,28 @@
 
 #include "hal/hal_system.h"
 
+#include <string.h>
+
 static constexpr uint8_t PN532_SPI_DATAWRITE = 0x01;
 static constexpr uint8_t PN532_SPI_STATREAD = 0x02;
 static constexpr uint8_t PN532_SPI_DATAREAD = 0x03;
 static constexpr uint8_t PN532_SPI_READY = 0x01;
 
 PN532_SPI::PN532_SPI(uint8_t chipSelectPin, uint8_t resetPin, uint8_t bus)
-    : _chipSelectPin(chipSelectPin), _resetPin(resetPin), _bus(bus),
-      _settings{PN532_SPI_DEFAULT_CLOCK_HZ, HAL_SPI_LSBFIRST, HAL_SPI_MODE0} {}
+    : _device{{PN532_SPI_DEFAULT_CLOCK_HZ, HAL_SPI_LSBFIRST, HAL_SPI_MODE0},
+              bus,
+              chipSelectPin,
+              true,
+              false},
+      _resetPin(resetPin) {}
 
 hal_status_t PN532_SPI::begin() {
-  hal_gpio_set_mode(_chipSelectPin, HAL_GPIO_OUTPUT_HIGH);
-  hal_gpio_write(_chipSelectPin, true);
+  const hal_spi_settings_t settings = _device.settings;
+  hal_status_t status =
+      hal_spi_device_init(&_device, _device.bus, _device.cs_pin, &settings);
+  if (hal_status_is_error(status)) {
+    return status;
+  }
 
   if (_resetPin != PN532_UNUSED_PIN) {
     hal_gpio_set_mode(_resetPin, HAL_GPIO_OUTPUT_HIGH);
@@ -61,20 +71,14 @@ hal_status_t PN532_SPI::readData(uint8_t *data, size_t len) {
 hal_status_t PN532_SPI::transferFrame(uint8_t command, const uint8_t *tx,
                                       size_t tx_len, uint8_t *rx,
                                       size_t rx_len) {
-  hal_spi_lock(_bus);
-  hal_spi_begin_transaction(_bus, &_settings);
-  hal_gpio_write(_chipSelectPin, false);
-
-  (void)hal_spi_transfer(_bus, command);
-  for (size_t i = 0; i < tx_len; ++i) {
-    (void)hal_spi_transfer(_bus, tx[i]);
+  if (rx_len > 0u) {
+    memset(rx, 0, rx_len);
   }
-  for (size_t i = 0; i < rx_len; ++i) {
-    rx[i] = hal_spi_transfer(_bus, 0);
-  }
-
-  hal_gpio_write(_chipSelectPin, true);
-  hal_spi_end_transaction(_bus);
-  hal_spi_unlock(_bus);
-  return HAL_OK;
+  const hal_spi_device_operation_t operations[] = {
+      {HAL_SPI_DEVICE_OP_WRITE, &command, NULL, 1u},
+      {HAL_SPI_DEVICE_OP_WRITE, tx, NULL, tx_len},
+      {HAL_SPI_DEVICE_OP_TRANSFER_IN_PLACE, NULL, rx, rx_len},
+  };
+  return hal_spi_device_transaction(&_device, operations,
+                                    sizeof(operations) / sizeof(operations[0]));
 }

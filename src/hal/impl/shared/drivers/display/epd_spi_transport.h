@@ -10,6 +10,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+#include "hal/hal_spi_device.h"
 #include "hal/hal_status.h"
 
 #include <stdbool.h>
@@ -42,6 +43,8 @@ typedef struct {
 
 typedef struct {
   jh_epd_spi_config_t config;
+  /* Effective SPI bus, CS and settings state. */
+  hal_spi_device_t spi_device;
   bool initialized;
 } jh_epd_spi_t;
 

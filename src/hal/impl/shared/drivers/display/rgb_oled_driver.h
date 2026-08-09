@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/hal_spi_device.h"
+
 /*
  * SSD1331 / SSD135x RGB OLED panel driver over HAL SPI/GPIO.
  *
@@ -61,6 +63,7 @@ typedef struct {
 
 typedef struct {
   jh_rgb_oled_config_t config;
+  hal_spi_device_t spi_device;
   uint16_t width;
   uint16_t height;
   uint8_t rotation;

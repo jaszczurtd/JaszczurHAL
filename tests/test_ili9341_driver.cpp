@@ -102,11 +102,28 @@ void test_fill_rect_falls_back_to_spi_write_when_dma_fails(void) {
   TEST_ASSERT_EQUAL_UINT32(1u, hal_mock_spi_get_dma_write_count(config.bus));
 }
 
+void test_stream_dma_failure_aborts_and_releases_device(void) {
+  jh_ili9341_t dev = {};
+  const jh_ili9341_config_t config = make_config();
+  const uint8_t pixels[] = {0x12u, 0x34u};
+
+  TEST_ASSERT_TRUE(jh_ili9341_init(&dev, &config));
+  TEST_ASSERT_TRUE(jh_ili9341_begin_write(&dev, 0u, 0u, 1u, 1u));
+  hal_mock_spi_fail_next_dma_write(config.bus, true);
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_ili9341_write_pixels_dma(&dev, pixels, sizeof(pixels)));
+  TEST_ASSERT_FALSE(dev.write_active);
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_init_sends_ili9341_sequence_over_hal_spi);
   RUN_TEST(test_set_rotation_writes_madctl_and_updates_dimensions);
   RUN_TEST(test_addr_window_and_bitmap_write_big_endian_pixels);
   RUN_TEST(test_fill_rect_falls_back_to_spi_write_when_dma_fails);
+  RUN_TEST(test_stream_dma_failure_aborts_and_releases_device);
   return UNITY_END();
 }

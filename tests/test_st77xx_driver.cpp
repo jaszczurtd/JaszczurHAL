@@ -240,7 +240,10 @@ void test_st77xx_stream_write_reports_spi_write_failure(void) {
   TEST_ASSERT_TRUE(jh_st77xx_begin_write(&dev, 0u, 0u, 1u, 1u));
   hal_mock_spi_fail_next_write(config.bus, true);
   TEST_ASSERT_FALSE(jh_st77xx_write_pixels_be(&dev, pixels, sizeof(pixels)));
-  TEST_ASSERT_TRUE(jh_st77xx_end_write(&dev));
+  TEST_ASSERT_FALSE(dev.write_active);
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
 }
 
 void test_st77xx_direct_pixel_write_reports_spi_write_failure(void) {

@@ -7,6 +7,7 @@
 #include "hal/hal_gpio.h"
 #include "hal/hal_i2c.h"
 #include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_status.h"
 #include "hal/hal_system.h"
 
@@ -68,49 +69,29 @@ static bool i2c_write_control(const jh_st7567_t *dev, uint8_t control,
   return hal_i2c_end_transmission_bus(dev->config.bus) == 0u;
 }
 
-static hal_spi_settings_t spi_settings_for(const jh_st7567_t *dev) {
-  hal_spi_settings_t settings = {normalized_clock(&dev->config),
-                                 HAL_SPI_MSBFIRST,
-                                 normalized_spi_mode(&dev->config)};
-  return settings;
-}
-
-static bool spi_write_control(const jh_st7567_t *dev, bool command,
+static bool spi_write_control(jh_st7567_t *dev, bool command,
                               const uint8_t *data, size_t len) {
   if (dev == NULL || data == NULL || len == 0u ||
       !pin_is_connected(dev->config.spi_dc_pin)) {
     return false;
   }
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
-  hal_spi_lock(bus);
-  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
-    hal_spi_unlock(bus);
+  hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
+  if (hal_status_is_error(status)) {
     return false;
   }
-  if (pin_is_connected(dev->config.spi_cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), false);
-  }
   hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), !command);
-  const bool ok = hal_status_is_ok(hal_spi_write(bus, data, len));
-  if (pin_is_connected(dev->config.spi_cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), true);
-  }
-  (void)hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return ok;
+  status = hal_spi_write(dev->spi_device.bus, data, len);
+  return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 }
 
-static bool write_command(const jh_st7567_t *dev, const uint8_t *data,
-                          size_t len) {
+static bool write_command(jh_st7567_t *dev, const uint8_t *data, size_t len) {
   if (dev->config.bus_type == JH_ST7567_BUS_SPI) {
     return spi_write_control(dev, true, data, len);
   }
   return i2c_write_control(dev, ST7567_CONTROL_ALL_BYTES_CMD, data, len);
 }
 
-static bool write_data(const jh_st7567_t *dev, const uint8_t *data,
-                       size_t len) {
+static bool write_data(jh_st7567_t *dev, const uint8_t *data, size_t len) {
   if (dev->config.bus_type == JH_ST7567_BUS_SPI) {
     return spi_write_control(dev, false, data, len);
   }
@@ -122,9 +103,14 @@ static bool setup_bus_and_pins(jh_st7567_t *dev) {
     if (!pin_is_connected(dev->config.spi_dc_pin)) {
       return false;
     }
-    if (pin_is_connected(dev->config.spi_cs_pin)) {
-      hal_gpio_set_mode(pin_to_u8(dev->config.spi_cs_pin), HAL_GPIO_OUTPUT);
-      hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), true);
+    const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
+                                         dev->config.spi_mode};
+    const uint8_t cs_pin = pin_is_connected(dev->config.spi_cs_pin)
+                               ? pin_to_u8(dev->config.spi_cs_pin)
+                               : HAL_SPI_DEVICE_CS_NONE;
+    if (hal_status_is_error(hal_spi_device_init(
+            &dev->spi_device, dev->config.bus, cs_pin, &settings))) {
+      return false;
     }
     hal_gpio_set_mode(pin_to_u8(dev->config.spi_dc_pin), HAL_GPIO_OUTPUT);
     hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), true);

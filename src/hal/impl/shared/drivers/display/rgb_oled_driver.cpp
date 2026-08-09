@@ -6,6 +6,7 @@
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_system.h"
 
 #include <string.h>
@@ -78,70 +79,40 @@ static uint8_t normalized_spi_mode(const jh_rgb_oled_config_t *config) {
              : HAL_SPI_MODE0;
 }
 
-static hal_spi_settings_t spi_settings_for(const jh_rgb_oled_t *dev) {
-  hal_spi_settings_t settings = {normalized_clock(&dev->config),
-                                 HAL_SPI_MSBFIRST,
-                                 normalized_spi_mode(&dev->config)};
-  return settings;
-}
-
 static bool command_write(jh_rgb_oled_t *dev, uint8_t command,
                           const uint8_t *data, uint8_t len) {
   if (dev == NULL || !pin_is_connected(dev->config.dc_pin)) {
     return false;
   }
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
-  hal_status_t end_status = HAL_OK;
-
-  hal_spi_lock(bus);
-  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
-    hal_spi_unlock(bus);
+  hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
+  if (hal_status_is_error(status)) {
     return false;
-  }
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
   }
 
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), false);
-  if (hal_status_is_error(hal_spi_write(bus, &command, 1u))) {
-    goto fail;
-  }
-  if (data != NULL && len > 0u) {
+  status = hal_spi_write(dev->spi_device.bus, &command, 1u);
+  if (hal_status_is_ok(status) && data != NULL && len > 0u) {
     if (dev->config.controller == JH_RGB_OLED_SSD1331) {
-      for (uint8_t i = 0u; i < len; ++i) {
-        if (hal_status_is_error(hal_spi_write(bus, &data[i], 1u))) {
-          goto fail;
-        }
+      for (uint8_t i = 0u; i < len && hal_status_is_ok(status); ++i) {
+        status = hal_spi_write(dev->spi_device.bus, &data[i], 1u);
       }
     } else {
       hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
-      if (hal_status_is_error(hal_spi_write(bus, data, len))) {
-        goto fail;
-      }
+      status = hal_spi_write(dev->spi_device.bus, data, len);
     }
   }
-
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  end_status = hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return hal_status_is_ok(end_status);
-
-fail:
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  (void)hal_spi_end_transaction(bus);
-  hal_spi_unlock(bus);
-  return false;
+  return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 }
 
 static bool setup_pins_and_reset(jh_rgb_oled_t *dev) {
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_set_mode(pin_to_u8(dev->config.cs_pin), HAL_GPIO_OUTPUT);
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
+  const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
+                                       dev->config.spi_mode};
+  const uint8_t cs_pin = pin_is_connected(dev->config.cs_pin)
+                             ? pin_to_u8(dev->config.cs_pin)
+                             : HAL_SPI_DEVICE_CS_NONE;
+  if (hal_status_is_error(hal_spi_device_init(&dev->spi_device, dev->config.bus,
+                                              cs_pin, &settings))) {
+    return false;
   }
   hal_gpio_set_mode(pin_to_u8(dev->config.dc_pin), HAL_GPIO_OUTPUT);
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
@@ -420,29 +391,31 @@ bool jh_rgb_oled_begin_write(jh_rgb_oled_t *dev, uint16_t x, uint16_t y,
       !jh_rgb_oled_set_addr_window(dev, x, y, w, h)) {
     return false;
   }
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = spi_settings_for(dev);
-  hal_spi_lock(bus);
-  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
-    hal_spi_unlock(bus);
+  if (hal_status_is_error(hal_spi_device_acquire(&dev->spi_device))) {
     return false;
-  }
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), false);
   }
   hal_gpio_write(pin_to_u8(dev->config.dc_pin), true);
   dev->write_active = true;
   return true;
 }
 
+static bool abort_write(jh_rgb_oled_t *dev, hal_status_t status) {
+  if (dev != NULL && dev->write_active) {
+    dev->write_active = false;
+    (void)hal_spi_device_finish(&dev->spi_device, status);
+  }
+  return false;
+}
+
 bool jh_rgb_oled_write_pixels_be(jh_rgb_oled_t *dev, const uint8_t *pixels_be,
                                  size_t byte_count) {
   if (dev == NULL || !dev->write_active ||
       (pixels_be == NULL && byte_count > 0u) || (byte_count & 1u) != 0u) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
-  return hal_status_is_ok(
-      hal_spi_write(dev->config.bus, pixels_be, byte_count));
+  const hal_status_t status =
+      hal_spi_write(dev->spi_device.bus, pixels_be, byte_count);
+  return hal_status_is_error(status) ? abort_write(dev, status) : true;
 }
 
 static void put_u16_be(uint8_t *out, uint16_t value) {
@@ -453,7 +426,7 @@ static void put_u16_be(uint8_t *out, uint16_t value) {
 bool jh_rgb_oled_write_pixels_fast(jh_rgb_oled_t *dev, const uint16_t *pixels,
                                    size_t count) {
   if (dev == NULL || !dev->write_active || (pixels == NULL && count > 0u)) {
-    return false;
+    return abort_write(dev, HAL_EINVAL);
   }
   uint8_t chunk[RGB_OLED_PIXEL_CHUNK_BYTES];
   while (count > 0u) {
@@ -475,13 +448,8 @@ bool jh_rgb_oled_end_write(jh_rgb_oled_t *dev) {
   if (dev == NULL || !dev->write_active) {
     return false;
   }
-  if (pin_is_connected(dev->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(dev->config.cs_pin), true);
-  }
-  const hal_status_t status = hal_spi_end_transaction(dev->config.bus);
-  hal_spi_unlock(dev->config.bus);
   dev->write_active = false;
-  return hal_status_is_ok(status);
+  return hal_status_is_ok(hal_spi_device_release(&dev->spi_device));
 }
 
 bool jh_rgb_oled_fill_rect(jh_rgb_oled_t *dev, uint16_t x, uint16_t y,

@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-09 (LoRa Stage 0)
 
+- Added the target-neutral `hal_spi_device_t` descriptor with status-first
+  initialisation, effective per-device settings and optional active-low CS
+  ownership over the existing portable SPI/GPIO backends.
+- Added status-returning SPI device acquire/release and allocation-free
+  multi-operation transactions for read, write, separate-buffer transfer and
+  in-place transfer.
+- Centralized SPI device cleanup and error precedence so begin, operation and
+  completion failures leave CS inactive, release the bus and permit retry.
+- Migrated PN532, MFRC522, EPD, SSD1306, ST7567, ILI9341, ST77xx and RGB OLED
+  transports, including streaming and DMA paths, to the shared SPI device
+  lifecycle with immediate cleanup after active-stream failures.
 - Pinned the official Semtech SX126x driver at `v2.5.0` and exact commit
   `a10c5dfdf89788c6ac805e9fe98889de44175aa2`, retained its Clear BSD license,
   and added it to managed components, provenance inventory, and the generated

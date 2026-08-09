@@ -8,6 +8,7 @@
 #include "hal/hal_i2c.h"
 #ifdef HAL_ENABLE_SPI
 #include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #endif
 #include "hal/hal_system.h"
 
@@ -140,7 +141,7 @@ static bool i2c_write_control(const jh_ssd1306_t *dev, uint8_t control,
   return hal_i2c_end_transmission_bus(dev->config.bus) == 0u;
 }
 
-static bool spi_write_control(const jh_ssd1306_t *dev, bool command,
+static bool spi_write_control(jh_ssd1306_t *dev, bool command,
                               const uint8_t *bytes, size_t len) {
 #ifndef HAL_ENABLE_SPI
   (void)dev;
@@ -154,39 +155,19 @@ static bool spi_write_control(const jh_ssd1306_t *dev, bool command,
     return false;
   }
 
-  const uint8_t bus = dev->config.bus;
-  const hal_spi_settings_t settings = {normalized_clock(&dev->config),
-                                       HAL_SPI_MSBFIRST,
-                                       normalized_spi_mode(&dev->config)};
-  bool ok = true;
-
-  hal_spi_lock(bus);
-  if (hal_status_is_error(hal_spi_begin_transaction(bus, &settings))) {
-    ok = false;
-  } else {
-    if (pin_is_connected(dev->config.spi_cs_pin)) {
-      hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), false);
-    }
-
-    hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), !command);
-    if (len > 0u && hal_status_is_error(hal_spi_write(bus, bytes, len))) {
-      ok = false;
-    }
-
-    if (pin_is_connected(dev->config.spi_cs_pin)) {
-      hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), true);
-    }
-
-    if (hal_status_is_error(hal_spi_end_transaction(bus))) {
-      ok = false;
-    }
+  hal_status_t status = hal_spi_device_acquire(&dev->spi_device);
+  if (hal_status_is_error(status)) {
+    return false;
   }
-  hal_spi_unlock(bus);
-  return ok;
+  hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), !command);
+  if (len > 0u) {
+    status = hal_spi_write(dev->spi_device.bus, bytes, len);
+  }
+  return hal_status_is_ok(hal_spi_device_finish(&dev->spi_device, status));
 #endif
 }
 
-static bool bus_write_control(const jh_ssd1306_t *dev, bool command,
+static bool bus_write_control(jh_ssd1306_t *dev, bool command,
                               const uint8_t *bytes, size_t len) {
   if (dev == NULL) {
     return false;
@@ -198,12 +179,11 @@ static bool bus_write_control(const jh_ssd1306_t *dev, bool command,
       dev, command ? SSD1306_CTRL_COMMAND : SSD1306_CTRL_DATA, bytes, len);
 }
 
-static bool ssd1306_command(const jh_ssd1306_t *dev, uint8_t command) {
+static bool ssd1306_command(jh_ssd1306_t *dev, uint8_t command) {
   return bus_write_control(dev, true, &command, 1u);
 }
 
-static bool ssd1306_data(const jh_ssd1306_t *dev, const uint8_t *data,
-                         size_t len) {
+static bool ssd1306_data(jh_ssd1306_t *dev, const uint8_t *data, size_t len) {
   return bus_write_control(dev, false, data, len);
 }
 
@@ -215,9 +195,14 @@ static bool setup_bus_and_pins(jh_ssd1306_t *dev) {
     if (!pin_is_connected(dev->config.spi_dc_pin)) {
       return false;
     }
-    if (pin_is_connected(dev->config.spi_cs_pin)) {
-      hal_gpio_set_mode(pin_to_u8(dev->config.spi_cs_pin), HAL_GPIO_OUTPUT);
-      hal_gpio_write(pin_to_u8(dev->config.spi_cs_pin), true);
+    const hal_spi_settings_t settings = {dev->config.clock_hz, HAL_SPI_MSBFIRST,
+                                         dev->config.spi_mode};
+    const uint8_t cs_pin = pin_is_connected(dev->config.spi_cs_pin)
+                               ? pin_to_u8(dev->config.spi_cs_pin)
+                               : HAL_SPI_DEVICE_CS_NONE;
+    if (hal_status_is_error(hal_spi_device_init(
+            &dev->spi_device, dev->config.bus, cs_pin, &settings))) {
+      return false;
     }
     hal_gpio_set_mode(pin_to_u8(dev->config.spi_dc_pin), HAL_GPIO_OUTPUT);
     hal_gpio_write(pin_to_u8(dev->config.spi_dc_pin), true);
