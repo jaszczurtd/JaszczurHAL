@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/hal_spi_device.h"
+
 /*
  * Sitronix ST7567 monochrome LCD driver over HAL I2C or SPI/GPIO.
  *
@@ -58,6 +60,7 @@ typedef struct {
 
 typedef struct {
   jh_st7567_config_t config;
+  hal_spi_device_t spi_device;
   uint16_t width;
   uint16_t height;
   bool initialized;

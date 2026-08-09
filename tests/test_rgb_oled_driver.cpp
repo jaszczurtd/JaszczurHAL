@@ -85,10 +85,26 @@ void test_rgb_oled_rejects_non_native_rotation(void) {
   TEST_ASSERT_FALSE(jh_rgb_oled_set_rotation(&dev, 1u));
 }
 
+void test_rgb_oled_stream_failure_aborts_and_releases_device(void) {
+  jh_rgb_oled_t dev = {};
+  const jh_rgb_oled_config_t config = make_config(JH_RGB_OLED_SSD1351);
+  const uint8_t pixels[] = {0x12u, 0x34u};
+
+  TEST_ASSERT_TRUE(jh_rgb_oled_init(&dev, &config));
+  TEST_ASSERT_TRUE(jh_rgb_oled_begin_write(&dev, 0u, 0u, 1u, 1u));
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_rgb_oled_write_pixels_be(&dev, pixels, sizeof(pixels)));
+  TEST_ASSERT_FALSE(dev.write_active);
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ssd1331_init_and_write_rgb565);
   RUN_TEST(test_ssd135x_init_write_command_and_column_offset);
   RUN_TEST(test_rgb_oled_rejects_non_native_rotation);
+  RUN_TEST(test_rgb_oled_stream_failure_aborts_and_releases_device);
   return UNITY_END();
 }

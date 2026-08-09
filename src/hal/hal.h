@@ -60,6 +60,7 @@
 #include "hal_swserial.h"
 #endif
 #include "hal_spi.h"
+#include "hal_spi_device.h"
 #ifdef HAL_ENABLE_ONEWIRE
 #include "hal_onewire.h"
 #endif

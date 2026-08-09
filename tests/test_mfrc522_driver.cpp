@@ -72,6 +72,20 @@ void test_mfrc522_spi_register_read_preserves_rx_align_bits(void) {
   TEST_ASSERT_EQUAL_UINT8(0xA5, value);
 }
 
+void test_mfrc522_spi_write_failure_still_releases_device(void) {
+  hal_spi_init(1, 8, 11, 10);
+  MFRC522_SPI bus(/*chipSelectPin=*/22, /*resetPowerDownPin=*/UNUSED_PIN,
+                  /*bus=*/1);
+  MFRC522 dev(&bus);
+
+  hal_mock_spi_fail_next_write(1, true);
+  dev.PCD_WriteRegister(MFRC522::CommandReg, 0x0F);
+
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(22));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(1));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(1));
+}
+
 void test_mfrc522_i2c_register_read_uses_write_read_transaction(void) {
   const uint8_t rx[] = {0x92};
   hal_mock_i2c_inject_rx_bus(1, rx, sizeof(rx));
@@ -127,6 +141,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_mfrc522_spi_register_write_uses_hal_transaction);
   RUN_TEST(test_mfrc522_spi_register_read_preserves_rx_align_bits);
+  RUN_TEST(test_mfrc522_spi_write_failure_still_releases_device);
   RUN_TEST(test_mfrc522_i2c_register_read_uses_write_read_transaction);
   RUN_TEST(test_mfrc522_status_maps_to_hal_status);
   RUN_TEST(test_mfrc522_init_soft_resets_when_transport_did_not_reset);

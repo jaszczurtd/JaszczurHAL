@@ -53,6 +53,19 @@ void test_epd_transport_times_out_when_busy_does_not_clear(void) {
   TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(0u));
 }
 
+void test_epd_transport_write_failure_releases_device(void) {
+  jh_epd_spi_t transport = {};
+  const jh_epd_spi_config_t config = transport_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_epd_spi_init(&transport, &config));
+
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        jh_epd_spi_command(&transport, 0x12u, NULL, 0u));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 void test_ssd16xx_initializes_writes_window_and_refreshes(void) {
   jh_ssd16xx_t dev = {};
   jh_ssd16xx_config_t config = {};
@@ -208,6 +221,7 @@ void test_uc81xx_partial_profile_refreshes_after_full_batch_is_committed(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_epd_transport_times_out_when_busy_does_not_clear);
+  RUN_TEST(test_epd_transport_write_failure_releases_device);
   RUN_TEST(test_ssd16xx_initializes_writes_window_and_refreshes);
   RUN_TEST(test_ssd16xx_rejects_non_page_aligned_normal_write);
   RUN_TEST(

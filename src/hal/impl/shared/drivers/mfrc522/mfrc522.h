@@ -89,7 +89,7 @@
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_i2c.h"
-#include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_status.h"
 #include "hal/hal_sync.h"
 
@@ -163,7 +163,7 @@ public:
   enum PCD_Register : byte {
     // Page 0: Command and status
     //						  0x00			//
-    //reserved for future use
+    // reserved for future use
     CommandReg = 0x01, // starts and stops command execution
     ComIEnReg = 0x02,  // enable and disable interrupt request control bits
     DivIEnReg = 0x03,  // enable and disable interrupt request control bits
@@ -181,7 +181,7 @@ public:
     CollReg = 0x0E, // bit position of the first bit-collision detected on the
                     // RF interface
     //						  0x0F			//
-    //reserved for future use
+    // reserved for future use
 
     // Page 1: Command
     // 						  0x10			//
@@ -543,19 +543,13 @@ public:
               hal_spi_settings_t spiSettings = {HAL_SPI_CLOCK_DEFAULT_HZ,
                                                 HAL_SPI_MSBFIRST,
                                                 HAL_SPI_MODE0})
-      : _chipSelectPin(chipSelectPin), _resetPowerDownPin(resetPowerDownPin),
-        _bus(bus), _spiSettings(spiSettings){};
+      : _device{spiSettings, bus, chipSelectPin, true, false},
+        _resetPowerDownPin(resetPowerDownPin){};
 
 protected:
-  // Pins
-  byte _chipSelectPin;
+  hal_spi_device_t _device;
   byte _resetPowerDownPin; // optional; software set is used when set to
                            // UNUSED_PIN.
-
-  // SPI communication
-  byte _bus;
-  hal_spi_settings_t
-      _spiSettings; // SPI settings; defaults to a speed known to work.
   bool PCD_Init();
   void PCD_WriteRegister(MFRC522::PCD_Register reg, byte value);
   void PCD_WriteRegister(MFRC522::PCD_Register reg, byte count, byte *values);

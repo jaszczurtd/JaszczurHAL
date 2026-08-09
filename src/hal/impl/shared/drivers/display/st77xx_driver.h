@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/hal_spi_device.h"
+
 /*
  * ST7735 / ST7789 / ST7796S / GC9A01 TFT panel driver.
  *
@@ -72,6 +74,7 @@ typedef struct {
 
 typedef struct {
   jh_st77xx_config_t config;
+  hal_spi_device_t spi_device;
   uint16_t width;
   uint16_t height;
   uint16_t window_width;

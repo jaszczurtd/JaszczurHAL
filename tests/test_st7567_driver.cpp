@@ -91,11 +91,24 @@ void test_st7567_rejects_out_of_bounds_write(void) {
   TEST_ASSERT_FALSE(jh_st7567_write(&dev, 0u, 64u, 1u, 8u, page, sizeof(page)));
 }
 
+void test_st7567_spi_failure_releases_device(void) {
+  jh_st7567_t dev = {};
+  const jh_st7567_config_t config = make_config();
+
+  TEST_ASSERT_TRUE(jh_st7567_init(&dev, &config));
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_st7567_set_contrast(&dev, 0x40u));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.spi_cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_st7567_init_sends_power_sequence_and_reports_buffer_size);
   RUN_TEST(test_st7567_write_sets_column_page_and_streams_page_data);
   RUN_TEST(test_st7567_rejects_non_page_aligned_write);
   RUN_TEST(test_st7567_rejects_out_of_bounds_write);
+  RUN_TEST(test_st7567_spi_failure_releases_device);
   return UNITY_END();
 }

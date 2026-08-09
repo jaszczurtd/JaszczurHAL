@@ -23,6 +23,8 @@ typedef struct {
   size_t tx_len;
   uint32_t transfer_count;
   uint32_t dma_write_count;
+  bool fail_next_begin;
+  bool fail_next_end;
   bool fail_next_write;
   bool fail_next_dma_write;
 } mock_spi_bus_t;
@@ -113,6 +115,10 @@ hal_status_t hal_spi_begin_transaction(uint8_t bus,
     return HAL_EINVAL;
   }
   const uint8_t idx = spi_bus_index(bus);
+  if (s_spi[idx].fail_next_begin) {
+    s_spi[idx].fail_next_begin = false;
+    return HAL_EIO;
+  }
   if (!s_spi[idx].initialized) {
     const hal_status_t status = hal_spi_init(idx, 0u, 0u, 0u);
     if (hal_status_is_error(status)) {
@@ -129,7 +135,12 @@ hal_status_t hal_spi_end_transaction(uint8_t bus) {
   if (bus > 1u) {
     return HAL_EINVAL;
   }
-  s_spi[spi_bus_index(bus)].transaction_active = false;
+  mock_spi_bus_t *st = &s_spi[spi_bus_index(bus)];
+  st->transaction_active = false;
+  if (st->fail_next_end) {
+    st->fail_next_end = false;
+    return HAL_EIO;
+  }
   return HAL_OK;
 }
 
@@ -326,6 +337,14 @@ uint32_t hal_mock_spi_get_dma_write_count(uint8_t bus) {
 
 void hal_mock_spi_fail_next_write(uint8_t bus, bool fail) {
   s_spi[spi_bus_index(bus)].fail_next_write = fail;
+}
+
+void hal_mock_spi_fail_next_begin(uint8_t bus, bool fail) {
+  s_spi[spi_bus_index(bus)].fail_next_begin = fail;
+}
+
+void hal_mock_spi_fail_next_end(uint8_t bus, bool fail) {
+  s_spi[spi_bus_index(bus)].fail_next_end = fail;
 }
 
 void hal_mock_spi_fail_next_dma_write(uint8_t bus, bool fail) {

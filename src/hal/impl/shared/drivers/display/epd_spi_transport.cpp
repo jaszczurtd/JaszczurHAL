@@ -8,6 +8,7 @@
 
 #include "hal/hal_gpio.h"
 #include "hal/hal_spi.h"
+#include "hal/hal_spi_device.h"
 #include "hal/hal_system.h"
 
 #include <string.h>
@@ -28,50 +29,18 @@ static uint8_t normalized_spi_mode(const jh_epd_spi_config_t *config) {
   return config->spi_mode <= HAL_SPI_MODE3 ? config->spi_mode : HAL_SPI_MODE0;
 }
 
-static hal_spi_settings_t settings_for(const jh_epd_spi_t *transport) {
-  const hal_spi_settings_t settings = {
-      transport->config.clock_hz, HAL_SPI_MSBFIRST, transport->config.spi_mode};
-  return settings;
-}
-
-static hal_status_t release_transaction(jh_epd_spi_t *transport) {
-  if (pin_is_connected(transport->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(transport->config.cs_pin), true);
-  }
-  const hal_status_t status = hal_spi_end_transaction(transport->config.bus);
-  hal_spi_unlock(transport->config.bus);
-  return status;
-}
-
-static hal_status_t finish_transaction(jh_epd_spi_t *transport,
-                                       hal_status_t operation_status) {
-  const hal_status_t end_status = release_transaction(transport);
-  return hal_status_is_error(operation_status) ? operation_status : end_status;
-}
-
 static hal_status_t begin_transaction(jh_epd_spi_t *transport) {
   hal_status_t status = jh_epd_spi_wait_idle(transport);
   if (hal_status_is_error(status)) {
     return status;
   }
-  const uint8_t bus = transport->config.bus;
-  const hal_spi_settings_t settings = settings_for(transport);
-  hal_spi_lock(bus);
-  status = hal_spi_begin_transaction(bus, &settings);
-  if (hal_status_is_error(status)) {
-    hal_spi_unlock(bus);
-    return status;
-  }
-  if (pin_is_connected(transport->config.cs_pin)) {
-    hal_gpio_write(pin_to_u8(transport->config.cs_pin), false);
-  }
-  return HAL_OK;
+  return hal_spi_device_acquire(&transport->spi_device);
 }
 
 static hal_status_t write_command_prefix(jh_epd_spi_t *transport,
                                          uint8_t command) {
   hal_gpio_write(pin_to_u8(transport->config.dc_pin), false);
-  return hal_spi_write(transport->config.bus, &command, 1u);
+  return hal_spi_write(transport->spi_device.bus, &command, 1u);
 }
 
 hal_status_t jh_epd_spi_init(jh_epd_spi_t *transport,
@@ -86,9 +55,15 @@ hal_status_t jh_epd_spi_init(jh_epd_spi_t *transport,
   transport->config.busy_timeout_ms = normalized_timeout(config);
   transport->config.spi_mode = normalized_spi_mode(config);
 
-  if (pin_is_connected(config->cs_pin)) {
-    hal_gpio_set_mode(pin_to_u8(config->cs_pin), HAL_GPIO_OUTPUT);
-    hal_gpio_write(pin_to_u8(config->cs_pin), true);
+  const hal_spi_settings_t settings = {
+      transport->config.clock_hz, HAL_SPI_MSBFIRST, transport->config.spi_mode};
+  const uint8_t cs_pin = pin_is_connected(config->cs_pin)
+                             ? pin_to_u8(config->cs_pin)
+                             : HAL_SPI_DEVICE_CS_NONE;
+  hal_status_t status = hal_spi_device_init(
+      &transport->spi_device, transport->config.bus, cs_pin, &settings);
+  if (hal_status_is_error(status)) {
+    return status;
   }
   hal_gpio_set_mode(pin_to_u8(config->dc_pin), HAL_GPIO_OUTPUT);
   hal_gpio_write(pin_to_u8(config->dc_pin), true);
@@ -155,9 +130,9 @@ hal_status_t jh_epd_spi_command(jh_epd_spi_t *transport, uint8_t command,
   status = write_command_prefix(transport, command);
   if (hal_status_is_ok(status) && len > 0u) {
     hal_gpio_write(pin_to_u8(transport->config.dc_pin), true);
-    status = hal_spi_write(transport->config.bus, data, len);
+    status = hal_spi_write(transport->spi_device.bus, data, len);
   }
-  return finish_transaction(transport, status);
+  return hal_spi_device_finish(&transport->spi_device, status);
 }
 
 hal_status_t jh_epd_spi_command_pattern(jh_epd_spi_t *transport,
@@ -177,11 +152,11 @@ hal_status_t jh_epd_spi_command_pattern(jh_epd_spi_t *transport,
     hal_gpio_write(pin_to_u8(transport->config.dc_pin), true);
     while (len > 0u && hal_status_is_ok(status)) {
       const size_t write_len = len < sizeof(chunk) ? len : sizeof(chunk);
-      status = hal_spi_write(transport->config.bus, chunk, write_len);
+      status = hal_spi_write(transport->spi_device.bus, chunk, write_len);
       len -= write_len;
     }
   }
-  return finish_transaction(transport, status);
+  return hal_spi_device_finish(&transport->spi_device, status);
 }
 
 #endif

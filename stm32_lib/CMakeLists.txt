@@ -146,6 +146,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
     ${SRC}/hal/hal_can_util.cpp

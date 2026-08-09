@@ -301,6 +301,22 @@ void test_spi_transport_splits_command_setup_and_pixel_data(void) {
   free(buffer);
 }
 
+void test_spi_transport_failure_releases_device(void) {
+  jh_ssd1306_t dev = {};
+  jh_ssd1306_config_t config = make_config(128u, 64u, 0u);
+  config.controller = JH_SSD1306_CONTROLLER_SSD1315;
+  config.bus_type = JH_SSD1306_BUS_SPI;
+  config.spi_dc_pin = 5;
+  config.spi_cs_pin = 6;
+
+  TEST_ASSERT_TRUE(jh_ssd1306_init(&dev, &config));
+  hal_mock_spi_fail_next_write(config.bus, true);
+  TEST_ASSERT_FALSE(jh_ssd1306_set_contrast(&dev, 0x40u));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state((uint8_t)config.spi_cs_pin));
+  TEST_ASSERT_FALSE(hal_mock_spi_transaction_active(config.bus));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_spi_get_lock_depth(config.bus));
+}
+
 void test_rejects_invalid_arguments(void) {
   jh_ssd1306_t dev = {};
   const jh_ssd1306_config_t config = make_config(0u, 64u, 0x3Cu);
@@ -324,6 +340,7 @@ int main(void) {
   RUN_TEST(test_invert_sends_invert_and_normal_commands);
   RUN_TEST(test_orientation_contrast_suspend_and_resume);
   RUN_TEST(test_spi_transport_splits_command_setup_and_pixel_data);
+  RUN_TEST(test_spi_transport_failure_releases_device);
   RUN_TEST(test_rejects_invalid_arguments);
   return UNITY_END();
 }

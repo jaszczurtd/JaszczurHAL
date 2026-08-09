@@ -3,39 +3,32 @@
 #include "hal/hal_system.h"
 
 void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte value) {
-  hal_spi_lock(_bus);
-  hal_spi_begin_transaction(_bus, &_spiSettings);
-  hal_gpio_write(_chipSelectPin, false);
-  (void)hal_spi_transfer(_bus, (byte)(reg << 1));
-  (void)hal_spi_transfer(_bus, value);
-  hal_gpio_write(_chipSelectPin, true);
-  hal_spi_end_transaction(_bus);
-  hal_spi_unlock(_bus);
+  const byte frame[] = {(byte)(reg << 1), value};
+  const hal_spi_device_operation_t operation = {HAL_SPI_DEVICE_OP_WRITE, frame,
+                                                NULL, sizeof(frame)};
+  (void)hal_spi_device_transaction(&_device, &operation, 1u);
 }
 
 void MFRC522_SPI::PCD_WriteRegister(MFRC522::PCD_Register reg, byte count,
                                     byte *values) {
-  hal_spi_lock(_bus);
-  hal_spi_begin_transaction(_bus, &_spiSettings);
-  hal_gpio_write(_chipSelectPin, false);
-  (void)hal_spi_transfer(_bus, (byte)(reg << 1));
-  for (byte index = 0; index < count; index++) {
-    (void)hal_spi_transfer(_bus, values[index]);
-  }
-  hal_gpio_write(_chipSelectPin, true);
-  hal_spi_end_transaction(_bus);
-  hal_spi_unlock(_bus);
+  const byte address = (byte)(reg << 1);
+  const hal_spi_device_operation_t operations[] = {
+      {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
+      {HAL_SPI_DEVICE_OP_WRITE, values, NULL, count},
+  };
+  (void)hal_spi_device_transaction(&_device, operations,
+                                   sizeof(operations) / sizeof(operations[0]));
 }
 
 byte MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg) {
-  hal_spi_lock(_bus);
-  hal_spi_begin_transaction(_bus, &_spiSettings);
-  hal_gpio_write(_chipSelectPin, false);
-  (void)hal_spi_transfer(_bus, (byte)(0x80 | (reg << 1)));
-  byte value = hal_spi_transfer(_bus, 0);
-  hal_gpio_write(_chipSelectPin, true);
-  hal_spi_end_transaction(_bus);
-  hal_spi_unlock(_bus);
+  const byte address = (byte)(0x80 | (reg << 1));
+  byte value = 0u;
+  const hal_spi_device_operation_t operations[] = {
+      {HAL_SPI_DEVICE_OP_WRITE, &address, NULL, 1u},
+      {HAL_SPI_DEVICE_OP_TRANSFER_IN_PLACE, NULL, &value, 1u},
+  };
+  (void)hal_spi_device_transaction(&_device, operations,
+                                   sizeof(operations) / sizeof(operations[0]));
   return value;
 }
 
@@ -47,13 +40,18 @@ void MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
 
   const byte address = (byte)(0x80 | (reg << 1));
 
-  hal_spi_lock(_bus);
-  hal_spi_begin_transaction(_bus, &_spiSettings);
-  hal_gpio_write(_chipSelectPin, false);
-  (void)hal_spi_transfer(_bus, address);
+  hal_status_t status = hal_spi_device_acquire(&_device);
+  if (hal_status_is_error(status)) {
+    return;
+  }
+  status = hal_spi_write(_device.bus, &address, 1u);
   for (byte index = 0; index < count; index++) {
     const byte tx = (index + 1u < count) ? address : 0u;
-    const byte value = hal_spi_transfer(_bus, tx);
+    byte value = 0u;
+    if (hal_status_is_error(status)) {
+      break;
+    }
+    status = hal_spi_transfer_ex(_device.bus, tx, &value);
     if (index == 0 && rxAlign) {
       const byte mask = (byte)((0xFFu << rxAlign) & 0xFFu);
       values[0] = (byte)((values[0] & ~mask) | (value & mask));
@@ -61,14 +59,15 @@ void MFRC522_SPI::PCD_ReadRegister(MFRC522::PCD_Register reg, byte count,
       values[index] = value;
     }
   }
-  hal_gpio_write(_chipSelectPin, true);
-  hal_spi_end_transaction(_bus);
-  hal_spi_unlock(_bus);
+  (void)hal_spi_device_finish(&_device, status);
 }
 
 bool MFRC522_SPI::PCD_Init() {
-  hal_gpio_set_mode(_chipSelectPin, HAL_GPIO_OUTPUT_HIGH);
-  hal_gpio_write(_chipSelectPin, true);
+  const hal_spi_settings_t settings = _device.settings;
+  if (hal_status_is_error(hal_spi_device_init(&_device, _device.bus,
+                                              _device.cs_pin, &settings))) {
+    return false;
+  }
 
   if (_resetPowerDownPin != UNUSED_PIN) {
     hal_gpio_set_mode(_resetPowerDownPin, HAL_GPIO_OUTPUT_HIGH);
