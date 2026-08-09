@@ -334,9 +334,10 @@ expected_registry_names = [
     "26_ble_stream",
 ]
 active_example_names = sorted(
-    path.name
-    for path in (ROOT / "examples").glob("[0-9][0-9]_*")
-    if path.is_dir()
+    path.parent.parent.name
+    for path in (ROOT / "examples").glob(
+        "[0-9][0-9]_*/.vscode/jaszczurhal.project.json"
+    )
 )
 require(
     registry_names == expected_registry_names
@@ -542,7 +543,7 @@ require(
 )
 require(
     active_example_names == sorted(registry_names),
-    "active example directories differ from the dispatcher registry",
+    "generated example manifests differ from the dispatcher registry",
 )
 
 for task in expected_tasks["tasks"]:

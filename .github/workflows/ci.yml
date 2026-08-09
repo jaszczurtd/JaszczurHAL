@@ -388,6 +388,11 @@ jobs:
       - name: Verify generated feature registry
         run: python3 scripts/generate_hal_features.py --check
 
+      - name: Verify generated board registry and fallback
+        run: >-
+          python3 scripts/generate_board_config.py
+          --boards-root boards --check-static
+
       - name: Validate effective feature configuration
         run: |
           python3 scripts/generate_hal_features.py \

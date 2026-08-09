@@ -8,7 +8,7 @@
   "status": "experimental",
   "compatibleTargets": ["rp2040"],
   "build": { "provider": "pico-sdk", "board": "pico" },
-  "hal": { "profileId": 10, "selector": "HAL_BOARD_PROFILE_RP2040_LORA_LF", "runtimeName": "rp2040-lora-lf", "legacySelectors": [] },
+  "hal": { "profileId": 10, "selector": "HAL_BOARD_PROFILE_RP2040_LORA_LF", "legacySelectors": [], "autoDetectSelectors": [] },
   "memory": { "flash": { "source": "sdk", "expectedBytes": 2097152 } },
   "gpio": {
     "exposedPins": { "values": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 19, 20, 21, 22, 26, 27, 28, 29] },

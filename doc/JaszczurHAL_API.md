@@ -314,7 +314,8 @@ Runtime users should query `hal_board_get_info()` or
 `hal_board_get_capability_state()`, then use
 `hal_board_require_capabilities()` before operations that require one or more
 of `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`,
-`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, and `HAL_BOARD_CAP_SX1262_RADIO`.
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, `HAL_BOARD_CAP_SX1262_RADIO`, and
+`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER`.
 A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
@@ -342,7 +343,7 @@ typedef enum {                               /* runtime state of one capability 
 
 typedef struct {                             /* consistent snapshot */
   hal_board_profile_t profile;
-  const char *name;                          /* e.g. "pico-2-w" */
+  const char *name;                          /* e.g. "pico2w" */
   hal_board_capabilities_t declared;
   hal_board_capabilities_t available;
   hal_board_capabilities_t failed;

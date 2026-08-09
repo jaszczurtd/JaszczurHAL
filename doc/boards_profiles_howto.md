@@ -15,6 +15,13 @@ devices, capabilities, and controlled build components. Application features
 remain opt-in through `HAL_ENABLE_*`; a hardware capability never enables a
 feature by itself.
 
+Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
+`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`, `nucleo-g474re`,
+`nucleo-g474re-pim730`, and `host-mock`. The build generator validates target
+compatibility, flash size, pins, components, and feature contracts before
+toolchain import. The same descriptors generate the source fallback, so board
+names and compile-time facts stay identical without a build-generated config.
+
 ## Source files
 
 The versioned source of truth is `boards/`:
@@ -42,13 +49,16 @@ Target descriptors additionally define:
 - `gpio`: pin ID format, exact valid pins, and HAL encoding;
 - `memory.regions`;
 - `defaultBoard`;
+- optional `sourceFallbackBoard`, used only when source-level selection may
+  safely choose a board without the build generator;
 - target-owned component IDs.
 
 Board descriptors additionally define:
 
 - `compatibleTargets` and `build.provider`;
 - provider board ID where required;
-- stable `hal.profileId`, selector, runtime name, and compatibility aliases;
+- stable `hal.profileId`, selector, compatibility aliases, and optional
+  provider autodetection selectors; the runtime name is always the board `id`;
 - physical flash source and expected size;
 - exposed pins, connector groups, reservations, and aliases;
 - capabilities, board-owned devices, peripheral defaults, and components.
@@ -156,19 +166,31 @@ python3 scripts/generate_board_config.py \
 
 `--feature` remains a compatibility spelling for `--requested-feature`.
 
+Refresh or verify the tracked source-level board artifacts independently of a
+selected build:
+
+```bash
+python3 scripts/generate_board_config.py --boards-root boards --write-static
+python3 scripts/generate_board_config.py --boards-root boards --check-static
+```
+
+These commands materialize the public enum/capability registry and the complete
+fallback configuration directly from the descriptors. This tracked registry is
+the only physical `jh_board_registry.h`; per-build output never duplicates it.
+
 The deterministic output contains:
 
 - `jh_board_config.cmake`;
 - `jh_board_config.h`;
-- `jh_board_registry.h`;
 - `jh_board_resolved.json`;
 - `jh_link_contract.h`;
 - contract definition and reference translation units;
 - `generation.d`.
 
 Firmware never parses JSON. CMake runs the generator before importing Pico SDK
-and uses the generated provider platform and board. `hal_board.h` consumes the
-generated registry/config while preserving controlled compatibility aliases.
+and uses the generated provider platform and board. `hal_board.h` always uses
+the tracked registry, then consumes the build-generated board config when it is
+available or the tracked generated fallback otherwise.
 `jh_board_resolved.json` records the direct `requestedFeatures`, the transitive
 registry `resolvedFeatures`, `resolvedFeaturesDigest`, and the board/provider
 `boardCompileDefinitions`. The retained `features` field is an alias of
@@ -276,10 +298,12 @@ The installed unit contains:
 
 ```text
 include/
-  hal/generated/jh_hal_features.h
+  hal/generated/
+    jh_hal_features.h
+    jh_board_registry.h
+    jh_board_fallback_config.h
   generated/
     jh_board_config.h
-    jh_board_registry.h
     jh_link_contract.h
 lib/
   libJaszczurHAL.a

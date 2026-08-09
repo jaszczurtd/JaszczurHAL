@@ -74,6 +74,12 @@ if TEST_ROOT.exists():
     shutil.rmtree(TEST_ROOT)
 TEST_ROOT.mkdir(parents=True)
 
+checked_static = run("--check-static")
+require(
+    checked_static.stdout.strip() == "verified 2 generated board artifacts",
+    "tracked board artifacts are not verified deterministically",
+)
+
 validated = run("--validate-only")
 require(
     validated.stdout.strip() == "validated 5 targets and 11 boards",
@@ -104,6 +110,10 @@ require(
 
 first_output = TEST_ROOT / "generated/first"
 second_output = TEST_ROOT / "generated/second"
+first_output.mkdir(parents=True)
+(first_output / "jh_board_registry.h").write_text(
+    "stale per-build registry\n", encoding="utf-8"
+)
 feature_arguments = [
     "--feature",
     "HAL_ENABLE_WIFI",
@@ -136,7 +146,6 @@ run(
 )
 for name in (
     "jh_board_config.cmake",
-    "jh_board_registry.h",
     "jh_board_config.h",
     "jh_board_resolved.json",
     "jh_link_contract.h",
@@ -147,6 +156,11 @@ for name in (
         (first_output / name).read_bytes() == (second_output / name).read_bytes(),
         f"{name} is not deterministic for equivalent feature sets",
     )
+require(
+    not (first_output / "jh_board_registry.h").exists()
+    and not (second_output / "jh_board_registry.h").exists(),
+    "per-build generation emitted a second board registry",
+)
 
 link_reference_text = (first_output / "jh_link_contract_reference.c").read_text(
     encoding="utf-8"
@@ -453,6 +467,87 @@ if (compiler is None or archiver is None) and sys.platform == "win32":
             archiver = str(arm_ar)
             cross_link = True
 require(compiler is not None and archiver is not None, "host C toolchain missing")
+
+
+def macro_dump(include_dirs: list[Path], definitions: list[str]) -> dict[str, str]:
+    result = subprocess.run(
+        [
+            compiler,
+            "-std=c17",
+            "-dM",
+            "-E",
+            "-x",
+            "c",
+            *(argument for path in include_dirs for argument in ("-I", str(path))),
+            *(f"-D{definition}" for definition in definitions),
+            "-",
+        ],
+        input='#include "hal/hal_board.h"\n',
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(result.returncode == 0, result.stderr)
+    macros: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        match = re.fullmatch(r"#define ([A-Za-z0-9_]+)(?: (.*))?", line)
+        if match:
+            macros[match.group(1)] = match.group(2) or ""
+    return macros
+
+
+def board_contract_macros(macros: dict[str, str]) -> dict[str, str]:
+    prefixes = (
+        "HAL_BOARD_",
+        "HAL_CYW43_PROFILE_",
+        "HAL_NETWORK_BACKEND_",
+        "HAL_CYW43_BUS_",
+        "HAL_CYW43_STACK_",
+        "HAL_CYW43_PIN_",
+        "HAL_CYW43_MAX_",
+    )
+    selected = {
+        name: value
+        for name, value in macros.items()
+        if name.startswith(prefixes) or name in {"HAL_LED_BUILTIN", "LED_BUILTIN"}
+    }
+    selected.pop("HAL_BOARD_PROFILE_TARGET", None)
+    return selected
+
+
+target_descriptors = {
+    path.stem: load(path) for path in sorted((BOARDS / "targets").glob("*.json"))
+}
+board_descriptors = {
+    path.stem: load(path) for path in sorted((BOARDS / "profiles").glob("*.json"))
+}
+for board_id, descriptor in board_descriptors.items():
+    for target_id in descriptor["compatibleTargets"]:
+        parity_output = TEST_ROOT / "generated/parity" / target_id / board_id
+        run(
+            "--target",
+            target_id,
+            "--board",
+            board_id,
+            "--output-dir",
+            str(parity_output),
+        )
+        target_selector = target_descriptors[target_id]["hal"]["targetSelector"]
+        board_selector = descriptor["hal"]["selector"]
+        generated_macros = board_contract_macros(
+            macro_dump([parity_output, ROOT / "src"], [f"{target_selector}=1"])
+        )
+        fallback_macros = board_contract_macros(
+            macro_dump(
+                [ROOT / "src"],
+                [f"{target_selector}=1", f"{board_selector}=1"],
+            )
+        )
+        require(
+            fallback_macros == generated_macros,
+            f"fallback differs from generated config for {target_id}/{board_id}",
+        )
+
 link_root = TEST_ROOT / "link-contract"
 link_root.mkdir(parents=True)
 main_source = link_root / "main.c"
@@ -732,6 +827,66 @@ duplicate_id = mutate(
 require(
     "$.hal.profileId" in run("--validate-only", boards_root=duplicate_id, expected_success=False).stderr,
     "duplicate profile ID diagnostic lacks JSON path",
+)
+duplicate_auto_detect = mutate(
+    "duplicate-auto-detect",
+    "profiles/picow.json",
+    lambda value: value["hal"].update(
+        autoDetectSelectors=["RASPBERRYPI_PICO"]
+    ),
+)
+require(
+    "globally unique auto-detection selector"
+    in run(
+        "--validate-only",
+        boards_root=duplicate_auto_detect,
+        expected_success=False,
+    ).stderr,
+    "duplicate auto-detection selector was not rejected",
+)
+ambiguous_legacy_selector = mutate(
+    "ambiguous-legacy-selector",
+    "profiles/pico-rm2.json",
+    lambda value: value["hal"].update(
+        legacySelectors=["HAL_CYW43_PROFILE_PICOW"]
+    ),
+)
+require(
+    "an unambiguous selector for target 'rp2040'"
+    in run(
+        "--validate-only",
+        boards_root=ambiguous_legacy_selector,
+        expected_success=False,
+    ).stderr,
+    "target-ambiguous legacy selector was not rejected",
+)
+invalid_source_fallback = mutate(
+    "invalid-source-fallback",
+    "targets/rp2040.json",
+    lambda value: value.update(sourceFallbackBoard="pico2"),
+)
+require(
+    "$.sourceFallbackBoard"
+    in run(
+        "--validate-only",
+        boards_root=invalid_source_fallback,
+        expected_success=False,
+    ).stderr,
+    "incompatible source fallback board was not rejected",
+)
+missing_cyw43_component = mutate(
+    "missing-cyw43-component",
+    "profiles/nucleo-g474re-pim730.json",
+    lambda value: value["components"].pop("cyw43-lwip"),
+)
+require(
+    "CYW43 components"
+    in run(
+        "--validate-only",
+        boards_root=missing_cyw43_component,
+        expected_success=False,
+    ).stderr,
+    "CYW43 capability without its complete provider was not rejected",
 )
 unknown_field = mutate(
     "unknown-field",

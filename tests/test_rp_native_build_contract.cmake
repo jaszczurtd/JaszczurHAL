@@ -581,7 +581,6 @@ foreach(_board_contract IN ITEMS
         "--target"
         "--board"
         "jh_board_config.cmake"
-        "jh_board_registry.h"
         "jh_link_contract.h"
         "contractSymbol")
     string(FIND

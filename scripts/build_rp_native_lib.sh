@@ -237,7 +237,7 @@ GENERATED_SOURCE="${OUTPUT_DIR}/generated/boards/${TARGET}/${BOARD}"
 GENERATED_INCLUDE="${OUTPUT_DIR}/include/generated"
 mkdir -p "${GENERATED_INCLUDE}"
 for generated_header in \
-    jh_board_config.h jh_board_registry.h jh_link_contract.h; do
+    jh_board_config.h jh_link_contract.h; do
     [[ -f "${GENERATED_SOURCE}/${generated_header}" ]] ||
         die "Generated board header not found: ${GENERATED_SOURCE}/${generated_header}"
     cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"

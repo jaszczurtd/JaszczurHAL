@@ -42,12 +42,12 @@ detection:
 ```
 
 `JH_TARGET` identifies the processor and execution platform. `JH_BOARD`
-identifies the physical board profile. The build generates:
+identifies the physical board profile. The source tree tracks the generated
+global registry and fallback under `src/hal/generated/`. Each build generates:
 
 ```text
 include/generated/
   jh_board_config.h
-  jh_board_registry.h
   jh_link_contract.h
 ```
 
@@ -104,10 +104,12 @@ The relevant installed files are:
 ```text
 include/
   JaszczurHAL.h
-  hal/generated/jh_hal_features.h
+  hal/generated/
+    jh_hal_features.h
+    jh_board_registry.h
+    jh_board_fallback_config.h
   generated/
     jh_board_config.h
-    jh_board_registry.h
     jh_link_contract.h
 lib/
   libJaszczurHAL.a

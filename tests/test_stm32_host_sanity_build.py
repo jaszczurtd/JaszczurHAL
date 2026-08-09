@@ -313,6 +313,13 @@ try:
         "STM32 package build failed:\n"
         f"{package_build.stdout}\n{package_build.stderr}",
     )
+    stale_installed_registry = (
+        install_prefix / "include/generated/jh_board_registry.h"
+    )
+    stale_installed_registry.parent.mkdir(parents=True)
+    stale_installed_registry.write_text(
+        "stale installed registry\n", encoding="utf-8"
+    )
     package_install = subprocess.run(
         [cmake, "--install", str(radio_package), "--prefix", str(install_prefix)],
         check=False,
@@ -326,8 +333,9 @@ try:
     )
     installed_paths = (
         install_prefix / "include/hal/generated/jh_hal_features.h",
+        install_prefix / "include/hal/generated/jh_board_registry.h",
+        install_prefix / "include/hal/generated/jh_board_fallback_config.h",
         install_prefix / "include/generated/jh_board_config.h",
-        install_prefix / "include/generated/jh_board_registry.h",
         install_prefix / "include/generated/jh_link_contract.h",
         install_prefix
         / "share/JaszczurHAL/generated/jh_link_contract_reference.c",
@@ -339,6 +347,10 @@ try:
             installed_path.is_file(),
             f"STM32 package is missing {installed_path.relative_to(install_prefix)}",
         )
+    require(
+        not stale_installed_registry.exists(),
+        "STM32 package installed a second board registry",
+    )
 
     installed_resolution = json.loads(installed_paths[-2].read_text(encoding="utf-8"))
     require(
@@ -369,6 +381,7 @@ try:
     consumer_source = direct_consumer / "consumer.c"
     consumer_source.write_text(
         "#include <hal/hal_config.h>\n"
+        "#include <hal/generated/jh_board_registry.h>\n"
         "#ifndef HAL_ENABLE_DS18B20\n"
         '#error "missing requested DS18B20"\n'
         "#endif\n"

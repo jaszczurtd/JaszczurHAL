@@ -33,7 +33,7 @@ python3 tests/hardware/rp_sdlogger/verify_sdlogger.py \
 ```
 
 For Pico 2, select `rp2350-arm` or `rp2350-riscv`, use the `pico2` build board,
-and pass `--board pico-2` to the verifier. Add `--variant freertos` to build
+and pass `--board pico2` to the verifier. Add `--variant freertos` to build
 and upload commands and use `--runtime freertos` for the FreeRTOS run.
 
 The verifier is repeatable without formatting the card. If an old log file

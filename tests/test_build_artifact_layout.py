@@ -11,6 +11,8 @@ import sys
 
 ROOT = Path(sys.argv[1]).resolve()
 BUILD_ROOT = ROOT / ".build"
+sys.path.insert(0, str(ROOT / "scripts"))
+import examples_dispatcher
 
 
 def require(condition: bool, message: str) -> None:
@@ -22,7 +24,7 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-for example_dir in sorted((ROOT / "examples").glob("[0-9][0-9]_*")):
+for example_dir in examples_dispatcher.selected_example_dirs([]):
     manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
     manifest = load_json(manifest_path)
     expected = f"${{jhRoot}}/.build/examples/{example_dir.name}"
@@ -68,7 +70,6 @@ for fixture in (
         f"{fixture}: final artifacts do not follow buildDir",
     )
 
-sys.path.insert(0, str(ROOT / "scripts"))
 from board_registry import tooling_target_registry
 
 tooling_registry = tooling_target_registry(ROOT)
