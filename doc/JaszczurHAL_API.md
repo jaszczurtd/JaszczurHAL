@@ -163,8 +163,9 @@ link the fixed package without invoking Python.
   including the optional pinned FreeRTOS SMP matrix.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
 - `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
-  TJpgDec, FatFs, Unity, lwIP, littlefs, FreeRTOS, Pico SDK, picotool and the RP2350
-  RISC-V toolchain to their tracked `third_party/*_version.conf` pins.
+  TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, the Semtech SX126x driver,
+  FreeRTOS, Pico SDK, picotool and the RP2350 RISC-V toolchain to their tracked
+  `third_party/*_version.conf` pins.
 - `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
   security inventory.
 - `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
@@ -306,14 +307,15 @@ boundary conceptually.
 profile from `boards/profiles/`; the generator emits the matching
 `HAL_BOARD_PROFILE_*` selector and target configuration. Supported profiles
 include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
-`rp2040-plus-4mb`, `rp2040-zero`, and `nucleo-g474re`.
+`rp2040-plus-4mb`, `rp2040-zero`, `rp2040-lora-lf`, and `nucleo-g474re`.
 
 `HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
 Runtime users should query `hal_board_get_info()` or
 `hal_board_get_capability_state()`, then use
 `hal_board_require_capabilities()` before operations that require one or more
-of `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`, and
-`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`. A declared capability is initially
+of `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`,
+`HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, and `HAL_BOARD_CAP_SX1262_RADIO`.
+A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
 
@@ -325,7 +327,10 @@ typedef uint32_t hal_board_capabilities_t;   /* HAL_BOARD_CAP_* bitmask */
 typedef enum {                               /* stable board identity */
   HAL_BOARD_RP_PICO = 1, HAL_BOARD_RP_PICO_W, HAL_BOARD_RP_PICO_2,
   HAL_BOARD_RP_PICO_2_W, HAL_BOARD_RP_PICO_PIM730,
-  HAL_BOARD_STM32G474_GENERIC, HAL_BOARD_HOST_MOCK
+  HAL_BOARD_STM32G474_NUCLEO_G474RE, HAL_BOARD_HOST_MOCK,
+  HAL_BOARD_RP2040_ZERO, HAL_BOARD_RP2040_PLUS_4MB,
+  HAL_BOARD_RP2040_LORA_LF,
+  HAL_BOARD_STM32G474_NUCLEO_PIM730
 } hal_board_profile_t;
 
 typedef enum {                               /* runtime state of one capability */

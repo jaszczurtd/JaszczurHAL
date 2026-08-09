@@ -40,6 +40,7 @@ SOURCE_COMPONENT_ORDER = (
     "lwip",
     "littlefs",
     "btstack",
+    "sx126x",
     "freertos",
     "pico-sdk",
     "picotool",
@@ -675,6 +676,17 @@ GIT_COMPONENTS = {
                 "src/ble/att_server.c", "platform/embedded/btstack_run_loop_embedded.c",
                 "tool/compile_gatt.py",
             ),
+        ),
+        GitComponent(
+            "sx126x", "Semtech SX126x driver",
+            "sx126x_driver_version.conf", "SX126X_DRIVER",
+            (
+                "LICENSE.txt", "src/sx126x.c", "src/sx126x.h",
+                "src/sx126x_hal.h", "src/sx126x_regs.h",
+                "src/sx126x_status.h", "src/sx126x_driver_version.c",
+                "src/sx126x_driver_version.h",
+            ),
+            clean=True,
         ),
         GitComponent(
             "freertos", "FreeRTOS-Kernel", "freertos_core_version.conf", "FREERTOS_KERNEL",

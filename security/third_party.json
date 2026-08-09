@@ -62,6 +62,24 @@
       "notes": "Exact Pico SDK-selected revision. Upstream permits personal, non-commercial use and requires notice reproduction; commercial firmware distribution requires a separate BlueKitchen license."
     },
     {
+      "name": "Semtech SX126x driver",
+      "version": "v2.5.0",
+      "commit": "a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+      "type": "library",
+      "scope": "optional",
+      "supplier": "Semtech Corporation",
+      "licenses": ["BSD-3-Clause-Clear"],
+      "purl": "pkg:github/Lora-net/sx126x_driver@a10c5dfdf89788c6ac805e9fe98889de44175aa2",
+      "paths": [
+        "third_party/sx126x_driver",
+        "third_party/sx126x_driver_version.conf",
+        "third_party/LICENSE.SX126X"
+      ],
+      "upstream": "https://github.com/Lora-net/sx126x_driver",
+      "feature_flags": ["HAL_ENABLE_SX126X"],
+      "notes": "Clean exact-commit checkout of Semtech's portable SX126x radio driver. Stage 1 will compile the base LoRa source set behind HAL_ENABLE_SX126X through a tracked JaszczurHAL HAL adapter; optional LR-FHSS and BPSK sources remain excluded unless separately reviewed."
+    },
+    {
       "name": "picotool",
       "version": "2.2.0",
       "commit": "a7eb3988f0645239185fadb4e25d8279478c2dbb",

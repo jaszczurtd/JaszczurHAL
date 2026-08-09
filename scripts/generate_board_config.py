@@ -73,6 +73,10 @@ COMPONENT_REGISTRY = {
         "providers": {"pico-sdk", "jh-stm32-baremetal"},
         "slot": "bluetooth-host-stack",
     },
+    "sx126x-radio": {
+        "providers": {"pico-sdk", "jh-stm32-baremetal"},
+        "slot": "lora-radio-provider",
+    },
 }
 SINGLE_ENDPOINT_DEVICE_KINDS = {
     "gpio": {"activeLevel"},
@@ -107,7 +111,13 @@ DEVICE_ROLE_REGISTRY = {
             "regulator": {"type": "enum", "values": ["ldo", "dcdc"]},
             "rfSwitchMode": {
                 "type": "enum",
-                "values": ["none", "dio2", "single-gpio", "dual-gpio"],
+                "values": [
+                    "none",
+                    "dio2",
+                    "single-gpio",
+                    "dio2-single-gpio",
+                    "dual-gpio",
+                ],
             },
             "tcxoControl": {"type": "enum", "values": ["none", "dio3"]},
             "tcxoVoltage": {
@@ -139,7 +149,10 @@ DEVICE_ROLE_REGISTRY = {
         ],
         "requires": [
             {
-                "when": ("rfSwitchMode", {"single-gpio", "dual-gpio"}),
+                "when": (
+                    "rfSwitchMode",
+                    {"single-gpio", "dio2-single-gpio", "dual-gpio"},
+                ),
                 "signals": ["rfSwitchA"],
                 "attributes": [
                     "rfSwitchIdleLevelA",
@@ -1021,13 +1034,12 @@ def load_registry(
         "host-mock": 7,
         "rp2040-zero": 8,
         "rp2040-plus-4mb": 9,
+        "rp2040-lora-lf": 10,
         "nucleo-g474re-pim730": 11,
     }
     for board_id, profile_id in expected_profile_ids.items():
         if board_id not in boards or boards[board_id]["hal"]["profileId"] != profile_id:
             fail(boards_root, f"$.profiles.{board_id}.profileId", boards.get(board_id), str(profile_id))
-    if 10 in profile_ids:
-        fail(profile_ids[10], "$.hal.profileId", 10, "reserved for rp2040-lora-lf")
     pico_reservations = set(boards["pico"]["gpio"]["reservations"])
     rm2_reservations = set(boards["pico-rm2"]["gpio"]["reservations"])
     if not pico_reservations <= rm2_reservations:

@@ -29,8 +29,7 @@
       "bit": 3,
       "macro": "HAL_BOARD_CAP_SX1262_RADIO",
       "stateModel": "lifecycle",
-      "runtimeOwner": "lora",
-      "status": "reserved"
+      "runtimeOwner": "lora"
     }
   }
 }

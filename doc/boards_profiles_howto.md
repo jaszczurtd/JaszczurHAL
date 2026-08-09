@@ -76,7 +76,9 @@ that own one line - `gpio`, `component-gpio`, and `addressable` - carry a single
 A device wired across several pins on a bus uses `kind: "bus-device"` and names
 a `role` from the generator's device-role registry. The role declares which
 signals and which typed attributes the descriptor must supply, so a profile
-cannot ship a partially described device:
+cannot ship a partially described device. This abridged shape illustrates the
+naming; use the complete tracked `rp2040-lora-lf` profile as the authoritative
+SX1262 example:
 
 ```json
 "loraRadio": {
@@ -103,6 +105,8 @@ by a `hard` reservation, and that numeric attributes stay inside their declared
 type and ordering. Signals and attributes may be gated on an enum attribute:
 they become required when the gate selects them and are rejected otherwise, so
 `rfSwitchMode: "dio2"` forbids the GPIO switch lines and levels.
+`rfSwitchMode: "dio2-single-gpio"` models boards that enable the SX1262 DIO2
+RF-switch control and also require one external front-end control line.
 
 Each role materializes a fixed macro surface in `jh_board_config.h` under its
 own prefix, plus `HAL_BOARD_DEVICE_PIN_NONE` for absent optional signals:
@@ -211,6 +215,22 @@ Pico W and the PIM730 profile also declare the lifecycle-owned
 `bluetooth-controller` capability and feature-gated `btstack-ble` component.
 Enabling `HAL_ENABLE_BLE` compiles that component; the physical capability
 alone never enables Bluetooth. See the [Bluetooth API](api/20_bluetooth.md).
+
+The experimental `rp2040-lora-lf` profile describes Waveshare SKU 26592. It
+uses the existing `rp2040` target and Pico SDK `pico` board definition, reserves
+the integrated SX1262 wiring, exports `sx126x-radio` as a feature-gated
+component, and declares `HAL_BOARD_CAP_SX1262_RADIO`. Its checked-in electrical
+facts include SPI1 at a safe default 8 MHz, a strict sub-18-MHz ceiling, the
+conservative 410-450 MHz LF range from the manufacturer wiki, DCDC regulation,
+DIO3-controlled 1.7 V TCXO with 5 ms startup, and combined DIO2 plus GPIO17
+antenna-path control. Until the Stage 1 runtime owner exists, this lifecycle
+capability remains inactive at runtime even though the hardware is declared.
+
+Core1262-HF modules wired by jumper leads do not create new Pico or Nucleo board
+profiles: their host pins and SPI instance are project configuration. Stage 1
+will add a reusable module helper for electrical defaults while leaving the
+physical host profiles unchanged. A fixed carrier or shield may receive its own
+board profile later.
 
 The archive defines:
 

@@ -38,6 +38,8 @@ entry point.
 | Unity | `unity_version.conf` | `Unity/` | Test framework used by host and target-side test builds |
 | lwIP | `lwip_version.conf` | `lwip/` | TCP/IP stack used by the JaszczurHAL CYW43 integration |
 | littlefs | `littlefs_version.conf` | `littlefs/` | Filesystem core used by native RP and STM32G474 storage |
+| BTstack | `btstack_version.conf` | `BTstack/` | BLE host stack used by the CYW43 Bluetooth integration |
+| Semtech SX126x driver | `sx126x_driver_version.conf` | `sx126x_driver/` | Portable SX1261/SX1262 command driver for the LoRa provider |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
@@ -53,6 +55,11 @@ is a direct mirror of ChaN's unchanged R0.16 archive and replaces the unreliable
 runtime download from `elm-chan.org`. The littlefs checkout is consumed directly
 by the native RP and STM32G474 CMake recipes; target-specific flash adapters
 remain tracked in their respective backend directories.
+
+The Semtech checkout is kept clean at the exact `v2.5.0` commit. Its tracked
+Clear BSD license copy is `LICENSE.SX126X`. Stage 1 LoRa integration will use
+only `sx126x.c` and `sx126x_driver_version.c`; optional LR-FHSS and BPSK source
+sets remain excluded until separately reviewed.
 
 The Pico SDK submodules required by native builds are listed in
 `PICO_SDK_SUBMODULES` in `pico_sdk_version.conf`. JaszczurHAL deliberately uses

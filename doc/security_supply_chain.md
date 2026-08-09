@@ -9,8 +9,8 @@ The tracked supply-chain surface includes:
 
 - bundled third-party source copied into `src/`,
 - pinned external checkouts used by the component updater, including BearSSL,
-  cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs, FreeRTOS-Kernel and the
-  Pico SDK,
+  cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs, BTstack, the
+  Semtech SX126x driver, FreeRTOS-Kernel and the Pico SDK,
 - adapted upstream code where local changes may affect security behavior.
 
 The inventory does not replace per-product firmware analysis. Downstream
