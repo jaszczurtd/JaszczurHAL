@@ -24,5 +24,6 @@
     }
   },
   "defaultBoard": "nucleo-g474re",
+  "sourceFallbackBoard": "nucleo-g474re",
   "components": { "stm32g474-native": { "mode": "required" } }
 }

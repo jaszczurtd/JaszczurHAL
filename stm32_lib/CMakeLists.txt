@@ -193,12 +193,12 @@ target_include_directories(JaszczurHAL PUBLIC
     ${_jh_stm32_bearssl_include_dirs}
     ${_jh_stm32_framework_include_dirs}
 )
+file(REMOVE "${CMAKE_BINARY_DIR}/include/generated/jh_board_registry.h")
 add_custom_command(TARGET JaszczurHAL POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory
         "${CMAKE_BINARY_DIR}/include/generated"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
         "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
-        "${JH_BOARD_GENERATED_DIR}/jh_board_registry.h"
         "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
         "${CMAKE_BINARY_DIR}/include/generated"
     VERBATIM)
@@ -322,9 +322,12 @@ install(DIRECTORY ${SRC}/ DESTINATION include
         FILES_MATCHING
         PATTERN "*.h"
         PATTERN "impl/.mock" EXCLUDE)
+install(CODE [[
+    file(REMOVE
+        "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/include/generated/jh_board_registry.h")
+]])
 install(FILES
         "${JH_BOARD_GENERATED_DIR}/jh_board_config.h"
-        "${JH_BOARD_GENERATED_DIR}/jh_board_registry.h"
         "${JH_BOARD_GENERATED_DIR}/jh_link_contract.h"
         DESTINATION include/generated)
 install(FILES

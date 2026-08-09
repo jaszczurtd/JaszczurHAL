@@ -12,8 +12,17 @@
 #ifndef JH_EXPECT_EXTERNAL_RADIO
 #define JH_EXPECT_EXTERNAL_RADIO 0
 #endif
+#ifndef JH_EXPECT_BLUETOOTH
+#define JH_EXPECT_BLUETOOTH 0
+#endif
+#ifndef JH_EXPECT_SX1262
+#define JH_EXPECT_SX1262 0
+#endif
 #ifndef JH_EXPECT_LED
 #define JH_EXPECT_LED 0
+#endif
+#ifndef JH_EXPECT_NAME
+#error "JH_EXPECT_NAME is required."
 #endif
 
 static_assert(HAL_BOARD_PROFILE_ID == JH_EXPECT_PROFILE);
@@ -21,6 +30,8 @@ static_assert(HAL_BOARD_HAS_USB_DEVICE == JH_EXPECT_USB);
 static_assert(HAL_BOARD_HAS_CYW43 == JH_EXPECT_CYW43);
 static_assert(HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND ==
               JH_EXPECT_EXTERNAL_RADIO);
+static_assert(HAL_BOARD_HAS_BLUETOOTH_CONTROLLER == JH_EXPECT_BLUETOOTH);
+static_assert(HAL_BOARD_HAS_SX1262_RADIO == JH_EXPECT_SX1262);
 
 #if JH_EXPECT_LED
 static_assert(HAL_LED_BUILTIN == JH_EXPECT_LED);
@@ -35,22 +46,10 @@ constexpr bool board_name_is(const char *lhs, const char *rhs) {
   return *lhs == *rhs;
 }
 
-#if defined(JH_EXPECT_NAME_PICO)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "pico"));
-#elif defined(JH_EXPECT_NAME_PICO_W)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "pico-w"));
-#elif defined(JH_EXPECT_NAME_PICO_2)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "pico-2"));
-#elif defined(JH_EXPECT_NAME_PICO_2_W)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "pico-2-w"));
-#elif defined(JH_EXPECT_NAME_PICO_PIM730)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "pico-pim730"));
-#elif defined(JH_EXPECT_NAME_STM32)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "stm32g474-generic"));
-#elif defined(JH_EXPECT_NAME_MOCK)
-static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, "host-mock"));
-#else
-#error "An expected board name is required."
+static_assert(board_name_is(HAL_BOARD_PROFILE_NAME, JH_EXPECT_NAME));
+
+#if defined(JH_EXPECT_NO_LED_BUILTIN) && defined(HAL_LED_BUILTIN)
+#error "HAL_LED_BUILTIN must not be defined for this profile."
 #endif
 
 #if defined(JH_EXPECT_LEGACY_PICOW)

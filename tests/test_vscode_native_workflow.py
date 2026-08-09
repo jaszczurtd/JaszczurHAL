@@ -274,11 +274,13 @@ require(
     "OTA hardware fixture must not store a tracked password",
 )
 
-example_dirs = sorted(
-    path
-    for path in (ROOT / "examples").glob("[0-9][0-9]_*")
-    if path.is_dir()
-)
+example_dirs = examples_dispatcher.selected_example_dirs([])
+manifest_example_names = {
+    path.parent.parent.name
+    for path in (ROOT / "examples").glob(
+        "[0-9][0-9]_*/.vscode/jaszczurhal.project.json"
+    )
+}
 listed_examples = subprocess.run(
     [sys.executable, str(ROOT / "scripts" / "examples_dispatcher.py"), "list"],
     check=True,
@@ -294,8 +296,8 @@ require(
     "dispatcher registry must contain exactly 26 active examples",
 )
 require(
-    registered_names == {example_dir.name for example_dir in example_dirs},
-    "dispatcher registry and example directories differ",
+    registered_names == manifest_example_names,
+    "dispatcher registry and generated example manifests differ",
 )
 
 example_counts = {target: 0 for target in known_targets}

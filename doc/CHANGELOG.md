@@ -14,6 +14,16 @@ All notable changes to this project will be documented in this file.
 - Kept the externally wired Core1262-HF as project configuration rather than
   inventing host board profiles; its reusable electrical helper remains part
   of the Stage 1 LoRa adapter work.
+- Made `boards/` the single maintained source for public board IDs, runtime
+  names, capability bits, target compatibility, provider autodetection, and
+  device facts. The generator now maintains a tracked public registry and a
+  complete fallback config, with per-profile parity tests and CI drift checks.
+- Kept exactly one physical board registry in source and installed packages;
+  per-build generation now emits only the selected-board configuration and
+  removes obsolete registry copies from incremental builds and installations.
+- Unified runtime profile names with board IDs such as `picow`, `pico2w`,
+  `pico-rm2`, and `nucleo-g474re`; the fallback now covers all declared boards
+  and rejects target combinations excluded by their descriptors.
 
 ## [1.9.1] - 2026-08-07
 

@@ -16,5 +16,6 @@
   },
   "memory": { "regions": {} },
   "defaultBoard": "host-mock",
+  "sourceFallbackBoard": "host-mock",
   "components": { "host-mock": { "mode": "required" } }
 }

@@ -8,7 +8,7 @@
   "status": "supported",
   "compatibleTargets": ["rp2350-arm"],
   "build": { "provider": "pico-sdk", "board": "pico2_w" },
-  "hal": { "profileId": 4, "selector": "HAL_BOARD_PROFILE_RP_PICO_2_W", "runtimeName": "pico2w", "legacySelectors": ["HAL_CYW43_PROFILE_PICOW"] },
+  "hal": { "profileId": 4, "selector": "HAL_BOARD_PROFILE_RP_PICO_2_W", "legacySelectors": ["HAL_CYW43_PROFILE_PICOW"], "autoDetectSelectors": ["RASPBERRYPI_PICO2_W"] },
   "memory": { "flash": { "source": "sdk", "expectedBytes": 4194304 } },
   "gpio": {
     "exposedPins": { "ranges": [{ "first": 0, "last": 22 }, { "first": 26, "last": 28 }] },

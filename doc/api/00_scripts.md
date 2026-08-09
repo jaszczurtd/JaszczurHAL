@@ -411,6 +411,11 @@ compiler use. The generated GCC/Clang contract reference uses a
 `constructor, used` root so target/board/feature mismatches remain link errors
 with section garbage collection enabled.
 
+`--write-static` refreshes the tracked `jh_board_registry.h` and
+`jh_board_fallback_config.h` directly from `boards/`; `--check-static` rejects
+missing or stale copies. CI runs the check independently of per-build board
+generation.
+
 ### `scripts/generate_hal_features.py`
 
 Validates the closed `HAL_ENABLE_*` / `HAL_DISABLE_*` namespace and the

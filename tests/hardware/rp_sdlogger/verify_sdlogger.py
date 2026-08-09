@@ -191,14 +191,14 @@ def main() -> int:
         required=True,
         choices=("rp2040", "rp2350-arm", "rp2350-riscv"),
     )
-    parser.add_argument("--board", required=True, choices=("pico", "pico-2"))
+    parser.add_argument("--board", required=True, choices=("pico", "pico2"))
     parser.add_argument(
         "--runtime", required=True, choices=("baremetal", "freertos")
     )
     parser.add_argument("--timeout", type=float, default=30.0)
     args = parser.parse_args()
 
-    expected_board = "pico" if args.target == "rp2040" else "pico-2"
+    expected_board = "pico" if args.target == "rp2040" else "pico2"
     if args.board != expected_board:
         parser.error(f"{args.target} requires --board {expected_board}")
 

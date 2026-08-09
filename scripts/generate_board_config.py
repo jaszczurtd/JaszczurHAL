@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import os
@@ -36,6 +37,7 @@ TARGET_FIELDS = COMMON_FIELDS | {
     "gpio",
     "memory",
     "defaultBoard",
+    "sourceFallbackBoard",
     "components",
 }
 BOARD_FIELDS = COMMON_FIELDS | {
@@ -726,6 +728,15 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
             )
     if not isinstance(target["defaultBoard"], str):
         fail(path, "$.defaultBoard", target["defaultBoard"], "a board ID")
+    if "sourceFallbackBoard" in target and not isinstance(
+        target["sourceFallbackBoard"], str
+    ):
+        fail(
+            path,
+            "$.sourceFallbackBoard",
+            target["sourceFallbackBoard"],
+            "a board ID",
+        )
     validate_components(path, "$.components", target["components"], build["provider"])
     return valid_pins
 
@@ -762,8 +773,18 @@ def validate_board(
         path,
         "$.hal",
         board["hal"],
-        {"profileId", "selector", "runtimeName", "legacySelectors"},
-        {"profileId", "selector", "runtimeName", "legacySelectors"},
+        {
+            "profileId",
+            "selector",
+            "legacySelectors",
+            "autoDetectSelectors",
+        },
+        {
+            "profileId",
+            "selector",
+            "legacySelectors",
+            "autoDetectSelectors",
+        },
     )
     if not isinstance(hal["profileId"], int) or hal["profileId"] < 1:
         fail(path, "$.hal.profileId", hal["profileId"], "a positive integer")
@@ -771,13 +792,35 @@ def validate_board(
         hal["selector"]
     ):
         fail(path, "$.hal.selector", hal["selector"], "a C macro")
-    if not isinstance(hal["runtimeName"], str) or not hal["runtimeName"]:
-        fail(path, "$.hal.runtimeName", hal["runtimeName"], "a non-empty string")
     if not isinstance(hal["legacySelectors"], list) or any(
         not isinstance(item, str) or not MACRO_PATTERN.fullmatch(item)
         for item in hal["legacySelectors"]
     ):
         fail(path, "$.hal.legacySelectors", hal["legacySelectors"], "C macro array")
+    if len(set(hal["legacySelectors"])) != len(hal["legacySelectors"]):
+        fail(
+            path,
+            "$.hal.legacySelectors",
+            hal["legacySelectors"],
+            "unique C macros",
+        )
+    if not isinstance(hal["autoDetectSelectors"], list) or any(
+        not isinstance(item, str) or not MACRO_PATTERN.fullmatch(item)
+        for item in hal["autoDetectSelectors"]
+    ):
+        fail(
+            path,
+            "$.hal.autoDetectSelectors",
+            hal["autoDetectSelectors"],
+            "C macro array",
+        )
+    if len(set(hal["autoDetectSelectors"])) != len(hal["autoDetectSelectors"]):
+        fail(
+            path,
+            "$.hal.autoDetectSelectors",
+            hal["autoDetectSelectors"],
+            "unique C macros",
+        )
     memory = exact_fields(
         path, "$.memory", board["memory"], {"flash"}, {"flash"}
     )
@@ -998,7 +1041,7 @@ def load_registry(
     boards: dict[str, dict[str, Any]] = {}
     profile_ids: dict[int, Path] = {}
     selectors: dict[str, Path] = {}
-    runtime_names: dict[str, Path] = {}
+    auto_detect_selectors: dict[str, Path] = {}
     for path in sorted((boards_root / "profiles").glob("*.json")):
         descriptor = load_json(path)
         validate_board(path, descriptor, targets, target_pins, capabilities)
@@ -1009,12 +1052,60 @@ def load_registry(
         for value, seen, json_path in (
             (hal["profileId"], profile_ids, "$.hal.profileId"),
             (hal["selector"], selectors, "$.hal.selector"),
-            (hal["runtimeName"], runtime_names, "$.hal.runtimeName"),
         ):
             if value in seen:
                 fail(path, json_path, value, f"a unique value; first used by {seen[value]}")
             seen[value] = path
+        for selector in hal["autoDetectSelectors"]:
+            if selector in auto_detect_selectors:
+                fail(
+                    path,
+                    "$.hal.autoDetectSelectors",
+                    selector,
+                    "a globally unique auto-detection selector",
+                )
+            auto_detect_selectors[selector] = path
         boards[board_id] = descriptor
+    for board_id, board in boards.items():
+        path = boards_root / "profiles" / f"{board_id}.json"
+        for legacy_selector in board["hal"]["legacySelectors"]:
+            if legacy_selector in selectors:
+                fail(
+                    path,
+                    "$.hal.legacySelectors",
+                    legacy_selector,
+                    "a selector distinct from every primary board selector",
+                )
+            if legacy_selector in auto_detect_selectors:
+                fail(
+                    path,
+                    "$.hal.legacySelectors",
+                    legacy_selector,
+                    "a selector distinct from every provider auto-detection selector",
+                )
+    for selector, path in auto_detect_selectors.items():
+        if selector in selectors:
+            fail(
+                path,
+                "$.hal.autoDetectSelectors",
+                selector,
+                "a selector distinct from every primary board selector",
+            )
+    legacy_targets: dict[tuple[str, str], Path] = {}
+    for board_id, board in boards.items():
+        path = boards_root / "profiles" / f"{board_id}.json"
+        for legacy_selector in board["hal"]["legacySelectors"]:
+            for target_id in board["compatibleTargets"]:
+                key = (legacy_selector, target_id)
+                if key in legacy_targets:
+                    fail(
+                        path,
+                        "$.hal.legacySelectors",
+                        legacy_selector,
+                        f"an unambiguous selector for target {target_id!r}; "
+                        f"first used by {legacy_targets[key]}",
+                    )
+                legacy_targets[key] = path
     for target_id, target in targets.items():
         default_board = target["defaultBoard"]
         if default_board not in boards or target_id not in boards[default_board]["compatibleTargets"]:
@@ -1024,22 +1115,18 @@ def load_registry(
                 default_board,
                 "a compatible board ID",
             )
-    expected_profile_ids = {
-        "pico": 1,
-        "picow": 2,
-        "pico2": 3,
-        "pico2w": 4,
-        "pico-rm2": 5,
-        "nucleo-g474re": 6,
-        "host-mock": 7,
-        "rp2040-zero": 8,
-        "rp2040-plus-4mb": 9,
-        "rp2040-lora-lf": 10,
-        "nucleo-g474re-pim730": 11,
-    }
-    for board_id, profile_id in expected_profile_ids.items():
-        if board_id not in boards or boards[board_id]["hal"]["profileId"] != profile_id:
-            fail(boards_root, f"$.profiles.{board_id}.profileId", boards.get(board_id), str(profile_id))
+        source_fallback_board = target.get("sourceFallbackBoard")
+        if source_fallback_board is not None and (
+            source_fallback_board not in boards
+            or target_id
+            not in boards[source_fallback_board]["compatibleTargets"]
+        ):
+            fail(
+                boards_root / "targets" / f"{target_id}.json",
+                "$.sourceFallbackBoard",
+                source_fallback_board,
+                "a compatible board ID",
+            )
     pico_reservations = set(boards["pico"]["gpio"]["reservations"])
     rm2_reservations = set(boards["pico-rm2"]["gpio"]["reservations"])
     if not pico_reservations <= rm2_reservations:
@@ -1194,6 +1281,364 @@ def board_enum_name(board: dict[str, Any]) -> str:
     return board["hal"]["selector"].replace("HAL_BOARD_PROFILE_", "HAL_BOARD_", 1)
 
 
+def board_is_macro(board: dict[str, Any]) -> str:
+    return board["hal"]["selector"].replace(
+        "HAL_BOARD_PROFILE_", "HAL_BOARD_IS_", 1
+    )
+
+
+def target_is_macro(target: dict[str, Any]) -> str:
+    return target["hal"]["targetSelector"].replace(
+        "HAL_TARGET_", "HAL_TARGET_IS_", 1
+    )
+
+
+def board_compile_definitions(
+    target: dict[str, Any], board: dict[str, Any]
+) -> list[str]:
+    components = set(target["components"]) | set(board["components"])
+    definitions: list[str] = []
+    if "cyw43-pico-pio" in components:
+        definitions.extend(
+            [
+                "HAL_NETWORK_BACKEND_CYW43",
+                "HAL_CYW43_BUS_PICO_PIO",
+                "HAL_CYW43_STACK_LWIP",
+                "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
+            ]
+        )
+    if "cyw43-stm32-gspi" in components:
+        definitions.extend(
+            [
+                "HAL_NETWORK_BACKEND_CYW43",
+                "HAL_CYW43_BUS_STM32_GSPI",
+                "HAL_CYW43_STACK_LWIP",
+                "HAL_CYW43_PIN_WL_ON=30u",
+                "HAL_CYW43_PIN_CHIP_SELECT=28u",
+                "HAL_CYW43_PIN_DATA=31u",
+                "HAL_CYW43_PIN_CLOCK=29u",
+                "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
+            ]
+        )
+    return definitions
+
+
+def render_board_registry(
+    boards: dict[str, dict[str, Any]], capabilities: dict[str, Any]
+) -> str:
+    lines = [
+        "#pragma once",
+        "/* Generated by generate_board_config.py; do not edit. */",
+        "#include <stdint.h>",
+        "",
+        "typedef enum {",
+    ]
+    ordered_boards = sorted(
+        boards.values(), key=lambda item: item["hal"]["profileId"]
+    )
+    for board in ordered_boards:
+        lines.append(f"  {board_enum_name(board)} = {board['hal']['profileId']},")
+    enum_aliases: dict[str, str] = {}
+    for board in ordered_boards:
+        for selector in board["hal"]["legacySelectors"]:
+            if not selector.startswith("HAL_BOARD_PROFILE_"):
+                continue
+            alias = selector.replace("HAL_BOARD_PROFILE_", "HAL_BOARD_", 1)
+            enum_aliases[alias] = board_enum_name(board)
+    for alias, destination in sorted(enum_aliases.items()):
+        lines.append(f"  {alias} = {destination},")
+    lines.extend(["} hal_board_profile_t;", ""])
+    ordered_capabilities = sorted(
+        capabilities.values(), key=lambda config: config["bit"]
+    )
+    for config in ordered_capabilities:
+        lines.append(
+            f"#define {config['macro']} (UINT32_C(1) << {config['bit']})"
+        )
+    all_active = [
+        config["macro"]
+        for config in ordered_capabilities
+        if config.get("status") != "reserved"
+    ]
+    lines.append(f"#define HAL_BOARD_CAP_ALL ({' | '.join(all_active)})")
+    return "\n".join(lines) + "\n"
+
+
+def selected_board_fact_lines(
+    board: dict[str, Any],
+    boards: dict[str, dict[str, Any]],
+    capabilities: dict[str, Any],
+    compile_definitions: list[str],
+    target_value: str,
+    *,
+    define_selector: bool,
+    define_is_macros: bool,
+) -> list[str]:
+    lines: list[str] = []
+    if define_selector:
+        lines.append(f"#define {board['hal']['selector']} 1")
+    lines.extend(
+        [
+            f"#define HAL_BOARD_PROFILE_ID {board_enum_name(board)}",
+            f'#define HAL_BOARD_PROFILE_NAME "{board["id"]}"',
+            f"#define HAL_BOARD_PROFILE_TARGET {target_value}",
+            f'#define HAL_BOARD_PROVIDER_BOARD "{board["build"].get("board", "")}"',
+            f"#define HAL_BOARD_EXPECTED_FLASH_BYTES "
+            f"UINT32_C({board['memory']['flash']['expectedBytes']})",
+        ]
+    )
+    if compile_definitions:
+        lines.append(
+            "/* Board/provider definitions required by direct compiler consumers. */"
+        )
+    for definition in compile_definitions:
+        name, separator, value = definition.partition("=")
+        lines.append(f"#define {name} {value if separator else '1'}")
+    if define_is_macros:
+        for entry in sorted(
+            boards.values(), key=lambda item: item["hal"]["profileId"]
+        ):
+            lines.append(
+                f"#define {board_is_macro(entry)} "
+                f"{1 if entry['id'] == board['id'] else 0}"
+            )
+    for legacy_selector in board["hal"]["legacySelectors"]:
+        lines.extend(
+            [
+                f"#ifndef {legacy_selector}",
+                f"#define {legacy_selector} 1",
+                "#endif",
+            ]
+        )
+    capability_mask = 0
+    for capability_id, config in sorted(capabilities.items()):
+        present = board["capabilities"].get(capability_id, {}).get("present", False)
+        lines.append(
+            f"#define HAL_BOARD_HAS_{macro_suffix(capability_id)} "
+            f"{1 if present else 0}"
+        )
+        if present and config.get("status") != "reserved":
+            capability_mask |= 1 << config["bit"]
+    lines.append(
+        f"#define HAL_BOARD_DECLARED_CAPABILITIES "
+        f"UINT32_C(0x{capability_mask:08x})"
+    )
+    status_led = board["devices"].get("statusLed")
+    if status_led:
+        lines.append(
+            f"#define HAL_BOARD_STATUS_LED_KIND_"
+            f"{macro_suffix(status_led['kind'])} 1"
+        )
+        pin = encode_hal_pin(status_led["endpoint"])
+        if pin is not None:
+            lines.append(f"#define HAL_BOARD_STATUS_LED_PIN {pin}u")
+        if status_led["kind"] in ("gpio", "component-gpio"):
+            lines.append("#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN")
+        if status_led["kind"] == "addressable":
+            lines.extend(
+                [
+                    "#define HAL_BOARD_STATUS_LED_PROTOCOL_WS2812 1",
+                    "#define HAL_BOARD_STATUS_LED_PIXEL_ORDER_PROJECT_DEFINED 1",
+                ]
+            )
+    lines.extend(device_config_lines(board))
+    return lines
+
+
+def fallback_compile_definitions(
+    board: dict[str, Any], targets: dict[str, dict[str, Any]]
+) -> list[str]:
+    variants = {
+        tuple(board_compile_definitions(targets[target_id], board))
+        for target_id in board["compatibleTargets"]
+    }
+    if len(variants) != 1:
+        raise DescriptorError(
+            f"board {board['id']!r} requires target-specific fallback definitions"
+        )
+    return list(next(iter(variants)))
+
+
+def all_selectors_absent(selectors: list[str]) -> str:
+    return " && ".join(f"!defined({selector})" for selector in selectors)
+
+
+def render_board_fallback_config(
+    targets: dict[str, dict[str, Any]],
+    boards: dict[str, dict[str, Any]],
+    capabilities: dict[str, Any],
+) -> str:
+    ordered_boards = sorted(
+        boards.values(), key=lambda item: item["hal"]["profileId"]
+    )
+    primary_selectors = [board["hal"]["selector"] for board in ordered_boards]
+    no_primary = all_selectors_absent(primary_selectors)
+    lines = [
+        "#pragma once",
+        "/* Generated by generate_board_config.py; do not edit. */",
+        "",
+        "#if defined(HAL_CYW43_PROFILE_PICO_W)",
+        '#error "HAL_CYW43_PROFILE_PICO_W is invalid; use HAL_CYW43_PROFILE_PICOW."',
+        "#endif",
+        "",
+        "/* Resolve legacy selectors through descriptor target compatibility. */",
+    ]
+    legacy_boards: dict[str, list[dict[str, Any]]] = {}
+    for board in ordered_boards:
+        for selector in board["hal"]["legacySelectors"]:
+            legacy_boards.setdefault(selector, []).append(board)
+    for legacy_selector, matches in sorted(legacy_boards.items()):
+        lines.append(f"#if defined({legacy_selector})")
+        if len(matches) == 1:
+            destination = matches[0]["hal"]["selector"]
+            lines.extend(
+                [
+                    f"#ifndef {destination}",
+                    f"#define {destination} 1",
+                    "#endif",
+                ]
+            )
+        else:
+            branches: list[tuple[str, str]] = []
+            for board in matches:
+                for target_id in board["compatibleTargets"]:
+                    branches.append(
+                        (target_is_macro(targets[target_id]), board["hal"]["selector"])
+                    )
+            for index, (target_macro, destination) in enumerate(branches):
+                lines.append(f"#{'if' if index == 0 else 'elif'} {target_macro}")
+                lines.append(f"#define {destination} 1")
+            lines.extend(
+                [
+                    "#else",
+                    f'#error "JaszczurHAL: {legacy_selector} has no board for the selected target."',
+                    "#endif",
+                ]
+            )
+        lines.extend(["#endif", ""])
+
+    auto_detect: list[tuple[str, dict[str, Any]]] = []
+    for board in ordered_boards:
+        auto_detect.extend(
+            (selector, board) for selector in board["hal"]["autoDetectSelectors"]
+        )
+    if auto_detect:
+        detection_count = " + ".join(
+            f"defined({selector})" for selector, _board in auto_detect
+        )
+        lines.extend(
+            [
+                "/* Prefer an unambiguous provider board selector. */",
+                f"#if {no_primary} && ({detection_count}) > 1",
+                '#error "JaszczurHAL: multiple provider board selectors are active."',
+                "#endif",
+                f"#if {no_primary}",
+            ]
+        )
+        for index, (selector, board) in enumerate(auto_detect):
+            lines.append(
+                f"#{'if' if index == 0 else 'elif'} defined({selector})"
+            )
+            lines.append(f"#define {board['hal']['selector']} 1")
+        lines.extend(["#endif", "#endif", ""])
+
+    source_fallback_targets = [
+        target
+        for target in sorted(targets.values(), key=lambda item: item["id"])
+        if "sourceFallbackBoard" in target
+    ]
+    lines.extend(
+        [
+            "/* Apply only explicitly declared source-level fallbacks. */",
+            f"#if {no_primary}",
+        ]
+    )
+    for index, target in enumerate(source_fallback_targets):
+        fallback_board = boards[target["sourceFallbackBoard"]]
+        lines.append(
+            f"#{'if' if index == 0 else 'elif'} {target_is_macro(target)}"
+        )
+        lines.append(f"#define {fallback_board['hal']['selector']} 1")
+    if source_fallback_targets:
+        lines.append("#else")
+    lines.append(
+        '#error "JaszczurHAL: unknown board. Configure through the board generator (JH_BOARD), define an explicit HAL_BOARD_PROFILE_*, or provide an unambiguous provider board selector."'
+    )
+    if source_fallback_targets:
+        lines.append("#endif")
+    lines.extend(["#endif", ""])
+
+    lines.append("/* Normalize every descriptor selector to a fixed 0/1 macro. */")
+    for board in ordered_boards:
+        selector = board["hal"]["selector"]
+        is_macro = board_is_macro(board)
+        lines.extend(
+            [
+                f"#if defined({selector})",
+                f"#define {is_macro} 1",
+                "#else",
+                f"#define {is_macro} 0",
+                "#endif",
+                "",
+            ]
+        )
+    selection_count = " + ".join(board_is_macro(board) for board in ordered_boards)
+    lines.extend(
+        [
+            f"#if ({selection_count}) != 1",
+            '#error "JaszczurHAL: exactly one HAL_BOARD_PROFILE_* must be selected."',
+            "#endif",
+            "",
+            "/* Validate descriptor target compatibility. */",
+        ]
+    )
+    for board in ordered_boards:
+        compatible = " || ".join(
+            target_is_macro(targets[target_id])
+            for target_id in board["compatibleTargets"]
+        )
+        lines.extend(
+            [
+                f"#if {board_is_macro(board)} && !({compatible})",
+                f'#error "JaszczurHAL: board {board["id"]} is incompatible with the selected target."',
+                "#endif",
+            ]
+        )
+    lines.extend(["", "/* Materialize the selected board facts. */"])
+    for index, board in enumerate(ordered_boards):
+        lines.append(
+            f"#{'if' if index == 0 else 'elif'} {board_is_macro(board)}"
+        )
+        lines.extend(
+            selected_board_fact_lines(
+                board,
+                boards,
+                capabilities,
+                fallback_compile_definitions(board, targets),
+                "HAL_TARGET_NAME",
+                define_selector=False,
+                define_is_macros=False,
+            )
+        )
+    lines.extend(["#endif", ""])
+    return "\n".join(lines)
+
+
+def static_generated_outputs(
+    targets: dict[str, dict[str, Any]],
+    boards: dict[str, dict[str, Any]],
+    capabilities: dict[str, Any],
+) -> dict[Path, str]:
+    return {
+        Path("src/hal/generated/jh_board_registry.h"): render_board_registry(
+            boards, capabilities
+        ),
+        Path(
+            "src/hal/generated/jh_board_fallback_config.h"
+        ): render_board_fallback_config(targets, boards, capabilities),
+    }
+
+
 def c_symbol_part(identifier: str) -> str:
     return identifier.replace("-", "_")
 
@@ -1214,6 +1659,51 @@ def atomic_write(path: Path, content: str) -> None:
             os.unlink(temporary_name)
         except FileNotFoundError:
             pass
+
+
+def write_static_outputs(repository_root: Path, outputs: dict[Path, str]) -> None:
+    changed = 0
+    for relative_path, content in outputs.items():
+        path = repository_root / relative_path
+        previous = path.read_text(encoding="utf-8") if path.exists() else None
+        atomic_write(path, content)
+        changed += int(previous != content)
+    print(f"generated {len(outputs)} board artifacts ({changed} changed)")
+
+
+def check_static_outputs(repository_root: Path, outputs: dict[Path, str]) -> bool:
+    valid = True
+    for relative_path, expected in outputs.items():
+        path = repository_root / relative_path
+        try:
+            actual = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            print(f"error: missing generated artifact {path}", file=sys.stderr)
+            valid = False
+            continue
+        except OSError as error:
+            raise DescriptorError(
+                f"{path}: cannot read generated output: {error}"
+            ) from error
+        if actual == expected:
+            continue
+        valid = False
+        print(f"error: stale generated artifact {path}", file=sys.stderr)
+        diff = difflib.unified_diff(
+            actual.splitlines(),
+            expected.splitlines(),
+            fromfile=str(path),
+            tofile=f"generated:{relative_path}",
+            lineterm="",
+        )
+        for index, line in enumerate(diff):
+            if index == 120:
+                print("... diff truncated ...", file=sys.stderr)
+                break
+            print(line, file=sys.stderr)
+    if valid:
+        print(f"verified {len(outputs)} generated board artifacts")
+    return valid
 
 
 def generate(
@@ -1242,29 +1732,7 @@ def generate(
         f"{c_symbol_part(board['id'])}_{feature_hash}"
     )
     components = sorted(set(target["components"]) | set(board["components"]))
-    board_compile_definitions: list[str] = []
-    if "cyw43-pico-pio" in components:
-        board_compile_definitions.extend(
-            [
-                "HAL_NETWORK_BACKEND_CYW43",
-                "HAL_CYW43_BUS_PICO_PIO",
-                "HAL_CYW43_STACK_LWIP",
-                "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
-            ]
-        )
-    if "cyw43-stm32-gspi" in components:
-        board_compile_definitions.extend(
-            [
-                "HAL_NETWORK_BACKEND_CYW43",
-                "HAL_CYW43_BUS_STM32_GSPI",
-                "HAL_CYW43_STACK_LWIP",
-                "HAL_CYW43_PIN_WL_ON=30u",
-                "HAL_CYW43_PIN_CHIP_SELECT=28u",
-                "HAL_CYW43_PIN_DATA=31u",
-                "HAL_CYW43_PIN_CLOCK=29u",
-                "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u",
-            ]
-        )
+    compile_definitions = board_compile_definitions(target, board)
     resolved = {
         "schemaVersion": 1,
         "target": target["id"],
@@ -1275,10 +1743,10 @@ def generate(
         "recipe": target["build"]["recipe"],
         "profileId": board["hal"]["profileId"],
         "selector": board["hal"]["selector"],
-        "runtimeName": board["hal"]["runtimeName"],
+        "runtimeName": board["id"],
         "flashBytes": board["memory"]["flash"]["expectedBytes"],
         "components": components,
-        "boardCompileDefinitions": board_compile_definitions,
+        "boardCompileDefinitions": compile_definitions,
         "requestedFeatures": requested_features,
         "resolvedFeatures": resolved_features,
         "resolvedFeaturesDigest": resolved_features_digest,
@@ -1297,7 +1765,7 @@ def generate(
         f'set(JH_BOARD_PROVIDER "{board["build"]["provider"]}")',
         f'set(JH_BOARD_RECIPE "{target["build"]["recipe"]}")',
         f'set(JH_BOARD_COMPONENTS "{";".join(components)}")',
-        f'set(JH_BOARD_COMPILE_DEFINITIONS "{";".join(board_compile_definitions)}")',
+        f'set(JH_BOARD_COMPILE_DEFINITIONS "{";".join(compile_definitions)}")',
         f'set(JH_BOARD_EXPECTED_FLASH_BYTES "{board["memory"]["flash"]["expectedBytes"]}")',
         f'set(JH_BOARD_REQUESTED_FEATURES "{";".join(requested_features)}")',
         f'set(JH_BOARD_RESOLVED_FEATURES "{";".join(resolved_features)}")',
@@ -1310,91 +1778,21 @@ def generate(
         cmake_lines.append(f'set(PICO_PLATFORM "{target["build"]["platform"]}")')
     if "board" in board["build"]:
         cmake_lines.append(f'set(PICO_BOARD "{board["build"]["board"]}")')
-    registry_lines = [
-        "#pragma once",
-        "/* Generated by generate_board_config.py; do not edit. */",
-        "#include <stdint.h>",
-        "",
-        "typedef enum {",
-    ]
-    for entry in sorted(boards.values(), key=lambda item: item["hal"]["profileId"]):
-        registry_lines.append(
-            f"  {board_enum_name(entry)} = {entry['hal']['profileId']},"
-        )
-    registry_lines.extend(
-        [
-            "  HAL_BOARD_STM32G474_GENERIC = "
-            "HAL_BOARD_STM32G474_NUCLEO_G474RE",
-            "} hal_board_profile_t;",
-            "",
-        ]
-    )
-    for capability_id, config in sorted(
-        capabilities.items(), key=lambda item: item[1]["bit"]
-    ):
-        registry_lines.append(
-            f"#define {config['macro']} (UINT32_C(1) << {config['bit']})"
-        )
-    all_active = [
-        config["macro"]
-        for config in capabilities.values()
-        if config.get("status") != "reserved"
-    ]
-    registry_lines.append(f"#define HAL_BOARD_CAP_ALL ({' | '.join(all_active)})")
-    capability_mask = 0
     config_lines = [
         "#pragma once",
         "/* Generated by generate_board_config.py; do not edit. */",
-        f"#define {board['hal']['selector']} 1",
-        f"#define HAL_BOARD_PROFILE_ID {board_enum_name(board)}",
-        f'#define HAL_BOARD_PROFILE_NAME "{board["hal"]["runtimeName"]}"',
-        f'#define HAL_BOARD_PROFILE_TARGET "{target["id"]}"',
-        f'#define HAL_BOARD_PROVIDER_BOARD "{board["build"].get("board", "")}"',
-        f"#define HAL_BOARD_EXPECTED_FLASH_BYTES UINT32_C({board['memory']['flash']['expectedBytes']})",
     ]
-    if board_compile_definitions:
-        config_lines.append(
-            "/* Board/provider definitions required by direct compiler consumers. */"
+    config_lines.extend(
+        selected_board_fact_lines(
+            board,
+            boards,
+            capabilities,
+            compile_definitions,
+            f'"{target["id"]}"',
+            define_selector=True,
+            define_is_macros=True,
         )
-    for definition in board_compile_definitions:
-        name, separator, value = definition.partition("=")
-        config_lines.append(f"#define {name} {value if separator else '1'}")
-    for entry in sorted(boards.values(), key=lambda item: item["hal"]["profileId"]):
-        selector = entry["hal"]["selector"]
-        is_macro = selector.replace("HAL_BOARD_PROFILE_", "HAL_BOARD_IS_", 1)
-        config_lines.append(
-            f"#define {is_macro} {1 if entry['id'] == board['id'] else 0}"
-        )
-    for legacy_selector in board["hal"]["legacySelectors"]:
-        config_lines.append(f"#define {legacy_selector} 1")
-    for capability_id, config in sorted(capabilities.items()):
-        present = board["capabilities"].get(capability_id, {}).get("present", False)
-        config_lines.append(
-            f"#define HAL_BOARD_HAS_{macro_suffix(capability_id)} {1 if present else 0}"
-        )
-        if present and config.get("status") != "reserved":
-            capability_mask |= 1 << config["bit"]
-    config_lines.append(
-        f"#define HAL_BOARD_DECLARED_CAPABILITIES UINT32_C(0x{capability_mask:08x})"
     )
-    status_led = board["devices"].get("statusLed")
-    if status_led:
-        config_lines.append(
-            f"#define HAL_BOARD_STATUS_LED_KIND_{macro_suffix(status_led['kind'])} 1"
-        )
-        pin = encode_hal_pin(status_led["endpoint"])
-        if pin is not None:
-            config_lines.append(f"#define HAL_BOARD_STATUS_LED_PIN {pin}u")
-        if status_led["kind"] in ("gpio", "component-gpio"):
-            config_lines.append("#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN")
-        if status_led["kind"] == "addressable":
-            config_lines.extend(
-                [
-                    "#define HAL_BOARD_STATUS_LED_PROTOCOL_WS2812 1",
-                    "#define HAL_BOARD_STATUS_LED_PIXEL_ORDER_PROJECT_DEFINED 1",
-                ]
-            )
-    config_lines.extend(device_config_lines(board))
     link_header = "\n".join(
         [
             "#pragma once",
@@ -1436,8 +1834,11 @@ def generate(
             "",
         ]
     )
+    try:
+        (output_dir / "jh_board_registry.h").unlink()
+    except FileNotFoundError:
+        pass
     atomic_write(output_dir / "jh_board_config.cmake", "\n".join(cmake_lines) + "\n")
-    atomic_write(output_dir / "jh_board_registry.h", "\n".join(registry_lines) + "\n")
     atomic_write(output_dir / "jh_board_config.h", "\n".join(config_lines) + "\n")
     atomic_write(output_dir / "jh_link_contract.h", link_header)
     atomic_write(output_dir / "jh_link_contract_definition.c", link_definition)
@@ -1483,6 +1884,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--list", choices=("targets", "boards"))
     parser.add_argument("--default-board", action="store_true")
+    static_group = parser.add_mutually_exclusive_group()
+    static_group.add_argument("--write-static", action="store_true")
+    static_group.add_argument("--check-static", action="store_true")
     return parser.parse_args()
 
 
@@ -1493,6 +1897,29 @@ def main() -> int:
         targets, boards, capabilities = load_registry(boards_root)
         normalize_features(args.requested_feature)
         validate_definitions(args.define)
+        if args.write_static or args.check_static:
+            if any(
+                (
+                    args.target,
+                    args.board,
+                    args.output_dir,
+                    args.output_root,
+                    args.requested_feature,
+                    args.define,
+                    args.validate_only,
+                    args.list,
+                    args.default_board,
+                )
+            ):
+                raise DescriptorError(
+                    "static generation does not accept build selection arguments"
+                )
+            repository_root = boards_root.parent
+            outputs = static_generated_outputs(targets, boards, capabilities)
+            if args.write_static:
+                write_static_outputs(repository_root, outputs)
+                return 0
+            return 0 if check_static_outputs(repository_root, outputs) else 1
         if args.list:
             values = targets if args.list == "targets" else boards
             print("\n".join(sorted(values)))

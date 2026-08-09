@@ -73,12 +73,17 @@ profile with `JH_BOARD`; the board generator emits one selector:
     HAL_BOARD_PROFILE_RP_PICO_PIM730
     HAL_BOARD_PROFILE_RP2040_PLUS_4MB
     HAL_BOARD_PROFILE_RP2040_ZERO
+    HAL_BOARD_PROFILE_RP2040_LORA_LF
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE
+    HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730
+    HAL_BOARD_PROFILE_HOST_MOCK
 
 Pico/Pico W/PIM730 require HAL_TARGET_RP2040. Pico 2/Pico 2 W require an
 RP2350 target; Pico 2 W currently requires RP2350 ARM. HAL_BOARD_HAS_USB_DEVICE,
-HAL_BOARD_HAS_CYW43 and
-HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND expose compile-time physical facts.
+HAL_BOARD_HAS_CYW43, HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND,
+HAL_BOARD_HAS_SX1262_RADIO, and HAL_BOARD_HAS_BLUETOOTH_CONTROLLER expose
+compile-time physical facts. Profile names reported at runtime equal the board
+IDs from boards/profiles, for example picow, pico2w, and pico-rm2.
 The CMake registry resolves the matching Pico SDK board and validates expected
 flash size. Wireless builds can control HAL_LED_BUILTIN through the pinned
 JaszczurHAL CYW43 driver without enabling lwIP or the full network backend.
@@ -99,6 +104,8 @@ The public hal_board API reports runtime states for:
     HAL_BOARD_CAP_USB_DEVICE
     HAL_BOARD_CAP_CYW43
     HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
+    HAL_BOARD_CAP_SX1262_RADIO
+    HAL_BOARD_CAP_BLUETOOTH_CONTROLLER
 
 Use hal_board_get_info(), hal_board_get_capability_state() and
 hal_board_require_capabilities(). A declared device starts inactive and moves
