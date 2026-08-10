@@ -673,6 +673,18 @@ add_test(NAME test_calendar_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_calendar_architecture.cmake
 )
 
+add_test(NAME test_rtc_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rtc_architecture.cmake
+)
+
+add_test(NAME test_gps_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_gps_architecture.cmake
+)
+
 get_filename_component(_jh_workspace_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
     ABSOLUTE)
 set(JH_CW43_FIXTURE_SETUP_SCRIPT
@@ -711,6 +723,14 @@ add_executable(test_ds3231_driver
 )
 target_link_libraries(test_ds3231_driver PRIVATE hal_mock)
 add_test(NAME test_ds3231_driver COMMAND test_ds3231_driver)
+add_executable(test_jh_rtc_i2c_provider
+    test_jh_rtc_i2c_provider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/rtc/jh_rtc_i2c_provider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ds3231/ds3231.cpp
+)
+target_link_libraries(test_jh_rtc_i2c_provider PRIVATE hal_mock)
+add_test(NAME test_jh_rtc_i2c_provider COMMAND test_jh_rtc_i2c_provider)
 add_executable(test_max6675_driver
     test_max6675_driver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/max6675/max6675_driver.cpp
@@ -1205,13 +1225,11 @@ add_hal_test(test_hal_bits)
 add_hal_test(test_hal_crypto)
 add_executable(test_jpeg
     test_jpeg.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_jpeg PRIVATE hal_mock)
 add_test(NAME test_jpeg COMMAND test_jpeg)
 add_executable(test_lodepng
     test_lodepng.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_lodepng PRIVATE hal_mock)
 add_test(NAME test_lodepng COMMAND test_lodepng)
@@ -1236,22 +1254,18 @@ add_executable(test_multicoreWatchdog
 target_link_libraries(test_multicoreWatchdog PRIVATE hal_mock)
 add_test(NAME test_multicoreWatchdog COMMAND test_multicoreWatchdog)
 
-# test_gps_nmea_parser: the portable NMEA parser is backend-agnostic (not part
-# of the mock lib), so compile it (with shared tools helpers) straight into the
-# test and feed real sentences through it.
+# Exercise the parser API directly while linking its shared implementation
+# through hal_mock.
 add_executable(test_gps_nmea_parser
     test_gps_nmea_parser.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_gps_nmea_parser PRIVATE hal_mock)
 add_test(NAME test_gps_nmea_parser COMMAND test_gps_nmea_parser)
 
-# test_tools: compiles tools.cpp directly so the utility functions can be
-# tested on the host without hardware.
+# tools.cpp is linked once through hal_mock for direct utility tests and shared
+# consumers such as the GPS parser.
 add_executable(test_tools
     test_tools.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/tools.cpp
 )
 target_link_libraries(test_tools PRIVATE hal_mock)
 add_test(NAME test_tools COMMAND test_tools)

@@ -206,7 +206,7 @@ link the fixed package without invoking Python.
 - `src/hal/hal_compat.h` - `PROGMEM`, `F()`, `hal_min()` and `hal_max()`
   source-compatibility helpers.
 - `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, simple external I/O chips, WiFi, UDP, WireGuard, MQTT, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_crc.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper implementations.
+- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_crc.cpp`, `src/hal/hal_gps.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_rtc.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper and facade implementations.
 - `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
 - `src/hal/hal_status.h` - shared `hal_status_t` result codes for new public
   APIs.
@@ -215,7 +215,7 @@ link the fixed package without invoking Python.
 - `src/hal/impl/rp2040/` - RP-family backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.); Gregorian validation and Unix conversion live under `time/`. Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/`).
+- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.); RTC provider dispatch lives under `rtc/`; Gregorian validation and Unix conversion live under `time/`. Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/`).
 - `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).

@@ -19,9 +19,7 @@ endforeach()
 
 set(_consumers
     "${_public_time}"
-    "${JH_ROOT}/src/hal/impl/.mock/hal_rtc.cpp"
-    "${JH_ROOT}/src/hal/impl/rp2040/hal_rtc.cpp"
-    "${JH_ROOT}/src/hal/impl/stm32g474/hal_rtc.cpp"
+    "${JH_ROOT}/src/hal/hal_rtc.cpp"
     "${JH_ROOT}/src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp"
     "${JH_ROOT}/src/hal/impl/shared/drivers/ds3231/ds3231.cpp")
 

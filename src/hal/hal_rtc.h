@@ -20,6 +20,10 @@
  * made per-handle via @ref hal_rtc_config_t::chip. Enabling
  * HAL_ENABLE_RTC alone (without a backend) triggers a compile-time
  * #error from hal_config.h.
+ *
+ * The target-independent facade owns handle allocation, validation, locking,
+ * epoch conversion, and legacy wrappers. Internal providers implement only
+ * chip I/O or deterministic mock storage.
  */
 
 #include "hal_status.h"
@@ -285,7 +289,7 @@ bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
- * Status-returning RTC APIs own validation and I/O in each backend. Legacy
+ * Status-returning RTC APIs are implemented by the shared facade. Legacy
  * handle/bool entry points remain compatibility wrappers. Infallible deinit
  * stays void and has no artificial status companion.
  */

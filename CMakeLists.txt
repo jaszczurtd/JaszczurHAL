@@ -101,6 +101,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_ble_stream.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_gps.cpp
+    ${SRC}/hal/hal_rtc.cpp
     ${SRC}/hal/hal_time.cpp
     ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
@@ -120,6 +122,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
     ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp
+    ${SRC}/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp
+    ${SRC}/hal/impl/shared/frameworks/gps/hal_gps_core.cpp
     ${SRC}/hal/impl/shared/network/services/http_server/hal_http_server.cpp
     ${SRC}/hal/impl/shared/network/services/http_files/hal_http_files.cpp
     ${SRC}/hal/impl/shared/network/services/websocket/hal_websocket.cpp
@@ -166,6 +170,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_timer_ext.cpp
     ${SRC}/hal/hal_soft_timer.cpp
     ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
+    ${SRC}/utils/tools.cpp
     ${SRC}/utils/pidController.cpp
     ${SRC}/hal/impl/shared/frameworks/cjson/cJSON.c
     ${SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c

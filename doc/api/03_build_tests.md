@@ -25,7 +25,7 @@
 | `hal_lora_radio` | Pinned official Semtech SX126x driver plus the shared HAL SPI/GPIO adapter; SX1262 on RP2040 and STM32G474, deterministic provider on mock |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
-| `hal_gps` | portable in-tree NMEA engine + `hal_uart` / `hal_swserial` transport |
+| `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
 | `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
 | `hal_thermocouple` (MAX6675) | shared driver (`impl/shared/drivers/max6675/max6675_driver.*`) |
@@ -284,6 +284,8 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
 | `test_hal_rtc` | RTC init/get/set datetime, full Gregorian validation, 1970/2000/2099 epoch boundaries and overflow, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
+| `test_jh_rtc_i2c_provider` | Shared PCF8563/DS3231 provider selection, metadata, datetime/event translation, and backend capability status mapping over mock HAL I2C |
+| `test_rtc_architecture` | Single RTC facade ownership, deleted target-local copies, provider boundaries, shared validation/locking, HAL-only chip drivers, and source-manifest wiring |
 | `test_jh_calendar` | Gregorian leap-year/month-length/day-of-week validation, impossible dates, Unix epoch zero, leap-day round-trip, RTC upper boundary and 64-bit overflow statuses |
 | `test_calendar_architecture` | Shared calendar source ownership, HAL-only legacy time wrappers, and rejection of target/driver-local calendar algorithms or `hal_time_from_components()` copies |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
@@ -315,7 +317,8 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_stmpe610_driver` | Shared STMPE610 setup sequence, chip-ID probing, I2C/SPI/register transactions, FIFO decode, soft-SPI bit-bang path and instance-mutex coverage |
 | `test_ads1x15_driver` | Shared ADS1X15 register config, ADS1115/ADS1015 conversion reads, gain/mode/data-rate mapping, comparator threshold writes and I2C clock forwarding |
 | `test_hal_external_adc` | ADS1115 range setup, per-channel raw/scaled reads, out-of-range safety |
-| `test_hal_gps` | location/speed/date/time inject, valid/updated/age flags, init reset, diagnostics getters |
+| `test_hal_gps` | shared public NMEA encode/getter path, location/speed/date/time and extended-fix injection, valid/updated/age flags, reset and diagnostics |
+| `test_gps_architecture` | Single GPS transport facade ownership, deleted target copies, shared getter/engine ownership, mock-injection boundary and source-manifest wiring |
 | `test_hal_system` | delay/millis/micros behavior, wrap-safe non-blocking `hal_millis_interval_*` helpers (elapsed + callback variants), watchdog flags, heap/chip-temp helpers, type-independent `hal_constrain`/`hal_map` (incl. equal-range guard), `COUNTOF`, `hal_u32_to_bytes_be`, `NONULL` |
 | `test_hal_bits` | bit helper macros (`is_set`, `set_bit`, `clr_bit`, `bitSet`, `bitClear`, `bitRead`, `set_bit_v`, `clr_bit_v`) |
 | `test_hal_wifi` | mode/hostname/RSSI/ping, IP/DNS/MAC inject, input validation |

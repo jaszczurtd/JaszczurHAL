@@ -441,6 +441,29 @@ void test_ex_init_and_handle_status(void) {
   bad.bus.i2c.i2c_addr = HAL_RTC_PCF8563_DEFAULT_I2C_ADDR;
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_init_ex(&bad, &bad_handle));
   TEST_ASSERT_NULL(bad_handle);
+
+  bad = default_cfg();
+  bad.bus.i2c.i2c_bus = 2;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_init_ex(&bad, &bad_handle));
+  TEST_ASSERT_NULL(bad_handle);
+}
+
+void test_ex_deinit_invalidates_handle_and_releases_slot(void) {
+  hal_rtc_config_t cfg = default_cfg();
+  hal_rtc_t handle = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &handle));
+  TEST_ASSERT_NOT_NULL(handle);
+
+  hal_rtc_deinit(handle);
+
+  hal_rtc_datetime_t datetime = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_get_datetime_ex(handle, &datetime));
+  hal_rtc_deinit(handle);
+
+  hal_rtc_t replacement = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &replacement));
+  TEST_ASSERT_NOT_NULL(replacement);
+  hal_rtc_deinit(replacement);
 }
 
 void test_ex_init_reports_pool_exhaustion(void) {
@@ -596,6 +619,7 @@ int main(void) {
   RUN_TEST(test_alarm_roundtrip_and_validation);
   RUN_TEST(test_invalid_arguments_return_false);
   RUN_TEST(test_ex_init_and_handle_status);
+  RUN_TEST(test_ex_deinit_invalidates_handle_and_releases_slot);
   RUN_TEST(test_ex_init_reports_pool_exhaustion);
   RUN_TEST(test_ex_datetime_roundtrip_and_validation);
   RUN_TEST(test_ex_epoch_and_control_status);

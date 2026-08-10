@@ -90,10 +90,10 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 | Area | What it offers | Source |
 |---|---|---|
-| RTC facade | Common real-time-clock surface with multiple chip backends, status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs, and shared Gregorian date validation. | [hal_rtc.h](../src/hal/hal_rtc.h), [calendar core](../src/hal/impl/shared/time/) |
+| RTC facade | One target-independent real-time-clock facade with provider-dispatched chip/mock backends, status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs, shared lifecycle/locking, and Gregorian validation. | [hal_rtc.h](../src/hal/hal_rtc.h), [hal_rtc.cpp](../src/hal/hal_rtc.cpp), [providers](../src/hal/impl/shared/rtc/), [calendar core](../src/hal/impl/shared/time/) |
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/impl/shared/drivers/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/impl/shared/drivers/ds3231/) |
-| GPS / NMEA | Portable NMEA parser and GPS abstraction for UART/software-serial receivers, with transport-specific RP2040 IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/hal_gps.h), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |
+| GPS / NMEA | One target-independent GPS facade with compile-time HAL UART/SoftwareSerial selection, a shared mutex-protected NMEA engine and deterministic mock injection. RP UART retains IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/hal_gps.h), [hal_gps.cpp](../src/hal/hal_gps.cpp), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |
 | Thermocouple facade | Common temperature surface for thermocouple backends. | [hal_thermocouple.h](../src/hal/hal_thermocouple.h) |
 | MCP9600/MCP9601 | Shared I2C thermocouple amplifier driver. | [mcp9600 driver](../src/hal/impl/shared/drivers/mcp9600/) |
 | MAX6675 | Shared GPIO bit-banged thermocouple converter driver. | [max6675 driver](../src/hal/impl/shared/drivers/max6675/) |

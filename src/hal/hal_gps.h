@@ -11,10 +11,9 @@ extern "C" {
  * @file hal_gps.h
  * @brief Hardware abstraction for GPS NMEA receivers.
  *
- * Wraps an NMEA parser behind a platform-independent API. RP2040 supports a
- * PIO/DMA SoftwareSerial transport and an interrupt-driven hardware UART
- * transport; the mock lets tests inject location, speed, date and time
- * directly.
+ * A target-independent facade selects hal_uart or hal_swserial at compile time
+ * and feeds one shared NMEA engine. The mock routes deterministic injection
+ * through that same engine and set of public getters.
  *
  * Only one GPS instance is supported (singleton).
  */
@@ -26,7 +25,8 @@ extern "C" {
 /**
  * @brief Initialise the GPS subsystem.
  *
- * Only the first call has effect (singleton guard).  The implementation
+ * On hardware only the first successful call has effect (singleton guard).
+ * The mock resets its deterministic engine on every call. SoftwareSerial
  * automatically tries the alternate framing (8N1↔️7N1) if, after the first
  * ~500 received characters, every NMEA sentence fails its checksum.
  *
@@ -61,8 +61,8 @@ void hal_gps_update(void);
  *
  * Hardware transports feed bytes to this function while their buffered input
  * is drained by hal_gps_update(); the NMEA parser itself does not run directly
- * in the RP2040 UART ISR. In mock builds this is a no-op (use inject functions
- * instead).
+ * in the RP2040 UART ISR. Mock tests may feed complete NMEA streams through
+ * this function or use the deterministic injection helpers.
  *
  * @param c Byte received from the GPS module.
  */

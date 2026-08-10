@@ -65,6 +65,18 @@ All notable changes to this project will be documented in this file.
 - Moved CET/CEST date adjustment, half-open time-range checks, and minute
   extraction from `tools.cpp` into the always-available `hal_time` API; legacy
   utility names now remain as HAL-only compatibility wrappers.
+- Replaced the duplicated RP2040, STM32G474, and mock RTC facades with one
+  target-independent `hal_rtc.cpp` owning validation, handle lifecycle,
+  locking, epoch conversion, status mapping, and compatibility wrappers.
+- Added internal RTC provider operations with a shared HAL-I2C provider for
+  PCF8563/DS3231 and a deterministic storage provider for host tests, plus
+  provider-level and architecture regression coverage.
+- Replaced the duplicate RP2040 and STM32G474 GPS transport files with one
+  target-independent `hal_gps.cpp` facade selecting HAL UART or SoftwareSerial
+  at compile time.
+- Routed mock GPS injection and raw NMEA encoding through the shared GPS engine
+  and its mutex-protected public getters; added architecture and public-engine
+  regression coverage.
 
 ## [1.9.1] - 2026-08-07
 
