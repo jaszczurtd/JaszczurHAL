@@ -30,6 +30,7 @@ configs = (
     "freertos_core_version.conf",
     "pico_sdk_version.conf",
     "picotool_version.conf",
+    "pmd_version.conf",
     "riscv_toolchain_version.conf",
     "unity_version.conf",
     "windows_tools_version.conf",
@@ -37,6 +38,14 @@ configs = (
 for name in configs:
     require((THIRD_PARTY / name).is_file(), f"missing tracked component pin: {name}")
     require(not (ROOT / name).exists(), f"component pin remains in repository root: {name}")
+
+pmd_pin = (THIRD_PARTY / "pmd_version.conf").read_text(encoding="utf-8")
+require("PMD_VERSION=7.26.0" in pmd_pin, "PMD CPD version is not pinned to 7.26.0")
+require(
+    "PMD_SHA256=9f55cb7ff0e9f9a66dd2f005eaa370e84c8a4cd971b134aa14a930c4a283ebc9"
+    in pmd_pin,
+    "PMD CPD archive digest is not pinned",
+)
 
 updater = (THIRD_PARTY / "update_components.sh").read_text(encoding="utf-8")
 require(
@@ -143,6 +152,7 @@ wrapper_components = {
     "ensure_lwip.sh": "lwip",
     "ensure_pico_sdk.sh": "pico-sdk",
     "ensure_picotool.sh": "picotool",
+    "ensure_pmd.sh": "pmd",
     "ensure_riscv_toolchain.sh": "riscv-toolchain",
     "ensure_unity.sh": "unity",
 }
@@ -186,6 +196,7 @@ for component in (
     "littlefs",
     "BTstack",
     "sx126x_driver",
+    "pmd",
 ):
     ignored = subprocess.run(
         ["git", "check-ignore", "-q", f"third_party/{component}/sentinel"],

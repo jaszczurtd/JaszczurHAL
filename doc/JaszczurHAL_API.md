@@ -164,8 +164,8 @@ link the fixed package without invoking Python.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
 - `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
   TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, the Semtech SX126x driver,
-  FreeRTOS, Pico SDK, picotool and the RP2350 RISC-V toolchain to their tracked
-  `third_party/*_version.conf` pins.
+  FreeRTOS, Pico SDK, picotool, PMD CPD and the RP2350 RISC-V toolchain to their
+  tracked `third_party/*_version.conf` pins.
 - `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
   security inventory.
 - `scripts/check_sbom.sh` - verifies that the committed SBOM matches the

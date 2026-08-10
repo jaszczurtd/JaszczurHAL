@@ -546,7 +546,7 @@ jobs:
         run: ctest --test-dir .build/ci/memcheck -T memcheck --output-on-failure
 
   # ── Static analysis gate ───────────────────────────────────────────────────
-  # Two complementary analyzers on the project's OWN code (vendored libraries
+  # Three complementary analyzers on the project's OWN code (vendored libraries
   # excluded). They reach layers the host valgrind gate cannot run:
   #
   #   cppcheck    - parses standalone, so it scans ALL own code: portable logic,
@@ -555,11 +555,13 @@ jobs:
   #                 production code: portable HAL (src/hal/hal_*.cpp), shared/,
   #                 and the stm32g474 backend. The mock backend (test scaffolding)
   #                 is intentionally out of scope.
+  #   PMD CPD     - compares C/C++ implementation tokens across the mock, RP,
+  #                 STM32G474 and shared backends without requiring compilation.
   #
-  # Tool configs live in .clang-tidy and tests/cppcheck-suppressions.txt. Pinned
-  # to the analyzers shipped on ubuntu-latest (clang-tidy 18, cppcheck 2.13) so
-  # CI and local runs agree. Vendored code excluded: bundled drivers/frameworks,
-  # cJSON, TJpgDec, LodePNG, lwIP, Unity.
+  # Tool configs live in .clang-tidy, tests/cppcheck-suppressions.txt and
+  # scripts/run_cpd.py. PMD is an authenticated 7.26.0 archive managed under
+  # third_party; the other analyzers come from ubuntu-latest. Vendored code is
+  # excluded from duplicate analysis and static-analysis ownership.
   static-analysis:
     runs-on: ubuntu-latest
     needs: test
@@ -580,7 +582,12 @@ jobs:
           ./scripts/ensure_sx126x.sh --force
 
       - name: Install analyzers
-        run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck clang-tools
+        run: >-
+          sudo apt-get update && sudo apt-get install -y
+          clang-tidy cppcheck clang-tools default-jre-headless
+
+      - name: Prepare pinned PMD CPD
+        run: ./scripts/ensure_pmd.sh --force
 
       - name: Generate compile databases
         run: |
@@ -627,6 +634,11 @@ jobs:
             echo "::error::clang-tidy reported findings (see logs above)"
             exit 1
           fi
+
+      - name: "PMD CPD strict duplicate gate (owned C/C++ implementations)"
+        run: >-
+          scripts/run_cpd.py
+          --output-dir .build/ci/static-analysis/cpd
 
   # ── Security supply-chain gate ─────────────────────────────────────────────
   # Regenerates the repository CycloneDX SBOM from security/third_party.json and
@@ -715,7 +727,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             gcc-arm-none-eabi binutils-arm-none-eabi \
-            libusb-1.0-0-dev pkg-config
+            libusb-1.0-0-dev pkg-config default-jre-headless
 
       - name: Prepare pinned Pico SDK tools
         run: ./third_party/update_components.sh
@@ -977,7 +989,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             gcc-arm-none-eabi binutils-arm-none-eabi \
-            libusb-1.0-0-dev pkg-config
+            libusb-1.0-0-dev pkg-config default-jre-headless
           ./third_party/update_components.sh
 
       - name: "Quality Gate: Build native RP static library (${{ matrix.profile }})"

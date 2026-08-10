@@ -43,6 +43,7 @@ SOURCE_COMPONENT_ORDER = (
     "sx126x",
     "freertos",
     "pico-sdk",
+    "pmd",
     "picotool",
     "riscv-toolchain",
 )
@@ -848,6 +849,56 @@ def ensure_riscv_toolchain(
     return gcc
 
 
+def _pmd_command(executable: Path, *arguments: str) -> tuple[str, ...]:
+    if sys.platform == "win32":
+        return ("cmd.exe", "/d", "/c", str(executable), *arguments)
+    return (str(executable), *arguments)
+
+
+def ensure_pmd(
+    repo_root: Path,
+    *,
+    verify_only: bool,
+    directory_override: str = "",
+) -> Path:
+    config_path = repo_root / "third_party/pmd_version.conf"
+    config = parse_config(config_path)
+    required = ("PMD_VERSION", "PMD_URL", "PMD_SHA256", "PMD_DIR")
+    require_values(config, required, config_path)
+    destination = _resolve_component_dir(
+        repo_root, config["PMD_DIR"], directory_override
+    )
+    stamp = f"pmd|{config['PMD_VERSION']}|{config['PMD_SHA256']}"
+    changed = sync_archive(
+        config["PMD_URL"],
+        config["PMD_SHA256"],
+        destination,
+        verify_only=verify_only,
+        version_stamp=stamp,
+    )
+    executable_name = "pmd.bat" if sys.platform == "win32" else "pmd"
+    executable = _find_executable(destination, executable_name)
+    if sys.platform != "win32" and not verify_only:
+        executable.chmod(
+            executable.stat().st_mode
+            | stat.S_IXUSR
+            | stat.S_IXGRP
+            | stat.S_IXOTH
+        )
+    result = _run(_pmd_command(executable, "--version"), check=False)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0 or not re.search(
+        rf"\bPMD\s+{re.escape(config['PMD_VERSION'])}\b", output
+    ):
+        raise ComponentError(
+            f"PMD version mismatch: expected {config['PMD_VERSION']}, "
+            f"got {output or 'no version output'}. Ensure a Java runtime is installed."
+        )
+    status = "installed" if changed else "already installed"
+    ok(f"PMD {config['PMD_VERSION']} {status}: {executable}")
+    return executable
+
+
 def _picotool_binary_matches(binary: Path, version: str) -> bool:
     result = _run((str(binary), "version"), check=False)
     return result.returncode == 0 and version in (result.stdout + result.stderr)
@@ -1293,6 +1344,12 @@ def ensure_component(arguments: argparse.Namespace) -> None:
             repo_root, verify_only=arguments.verify_only,
             directory_override=directory,
         )
+    elif name == "pmd":
+        ensure_pmd(
+            repo_root,
+            verify_only=arguments.verify_only,
+            directory_override=directory,
+        )
     elif name == "picotool":
         if sys.platform == "win32":
             raise ComponentError(
@@ -1329,7 +1386,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     component = subparsers.add_parser("component", help="ensure one pinned component")
-    component.add_argument("name", choices=(*GIT_COMPONENTS, "picotool", "riscv-toolchain"))
+    component.add_argument(
+        "name", choices=(*GIT_COMPONENTS, "pmd", "picotool", "riscv-toolchain")
+    )
     _common_component_arguments(component)
 
     sources = subparsers.add_parser(

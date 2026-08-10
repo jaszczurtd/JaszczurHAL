@@ -190,16 +190,21 @@ every push and pull request to `main`:
 ```
 
 It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
-`clang-tidy` and `cppcheck` static analysis, documentation link validation,
-strict raw/effective feature lint, generated feature-artifact drift checks, and
-library/firmware compile gates for RP2040, RP2350 ARM, RP2350 RISC-V and
-STM32G474 across `HAL_ENABLE_*` profiles, including every declared example and
-hardware-fixture compile matrix.
+`clang-tidy` and `cppcheck` static analysis, PMD CPD duplicate detection,
+documentation link validation, strict raw/effective feature lint, generated
+feature-artifact drift checks, and library/firmware compile gates for RP2040,
+RP2350 ARM, RP2350 RISC-V and STM32G474 across `HAL_ENABLE_*` profiles,
+including every declared example and hardware-fixture compile matrix.
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
 `tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
-`scripts/clang_tidy_files.py`. Suite layout, dependencies, and instructions for
-adding tests are in [doc/api/03_build_tests.md](doc/api/03_build_tests.md).
+`scripts/clang_tidy_files.py`. The shared `scripts/run_cpd.py` policy scans
+production, test, and example implementations from 100 tokens and blocks every
+reported duplicate group without exceptions. It also reports the union of
+duplicated token ranges as global and per-component coverage. A passing CPD
+gate therefore means that no duplicate group reached the detection threshold.
+Suite layout, dependencies, and instructions for adding tests are in
+[doc/api/03_build_tests.md](doc/api/03_build_tests.md).
 
 ## Security and SBOM
 
@@ -256,9 +261,9 @@ explicit Linux-only boundaries.
 
 ## Managed dependencies
 
-Tracked pins for Pico SDK, picotool, the RP2350 RISC-V toolchain, FreeRTOS,
-BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, and the
-Semtech SX126x driver live in
+Tracked pins for Pico SDK, picotool, PMD CPD, the RP2350 RISC-V toolchain,
+FreeRTOS, BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs,
+BTstack, and the Semtech SX126x driver live in
 `third_party/*_version.conf`:
 
 ```bash

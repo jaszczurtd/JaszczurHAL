@@ -89,17 +89,18 @@ Configures your local environment for the first time:
 ```bash
 ./runalltests.sh
 ```
-Runs the complete quality-gate suite (7 gates, in order):
+Runs the complete quality-gate suite (8 gates, in order):
 1. Tool-presence check
 2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
 3. Memory safety (Valgrind memcheck on `MEMCHECK_REQUIRED_TESTS`)
 4. Static analysis: cppcheck
 5. Static analysis: clang-tidy (host + STM32 compile databases below
    `.build/gate/`)
-6. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
+6. PMD CPD duplicate detection across owned C/C++ implementation sources
+7. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
    entry/core probes, RP feature profiles, and six representative
    `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds)
-7. Examples build (52 dispatcher-backed `gateTargets` configurations: 27 for
+8. Examples build (52 dispatcher-backed `gateTargets` configurations: 27 for
    RP2040 and 25 for STM32G474, plus the dedicated target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
@@ -112,6 +113,15 @@ The clang-tidy gate creates profile-specific analysis databases with one
 compile command per source file. This keeps facade tests that compile the same
 shared driver under several feature sets from triggering duplicate analyzer
 runs while normal target builds still compile every configured variant.
+
+The CPD gate uses the authenticated PMD 7.26.0 distribution managed under
+`third_party/pmd`. It scans implementation files rather than headers and
+excludes generated and vendored sources. Every duplicate group from 100 tokens
+blocks in production, tests, and examples; no baseline or allowlist can hide an
+existing group. The report computes the union of duplicated token ranges and
+prints coverage globally and for mock, RP2040, STM32G474, shared, and remaining
+portable code. XML reports and deterministic file lists are written below
+`.build/gate/cpd/`. CPD `PASS` means zero groups at the configured threshold.
 
 This is the **recommended pre-commit validation** and **CI/CD test gate**. Run before pushing changes to catch cross-platform issues early.
 
@@ -132,8 +142,8 @@ the complete Linux quality gate:
 
 The Windows CTest inventory keeps the POSIX BSD adapter, Bash/POSIX BearSSL
 integration, and FreeRTOS GCC/POSIX runtime visible as disabled tests. Their
-active coverage, together with Valgrind, cppcheck, and clang-tidy, remains in
-the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separate native
+active coverage, together with Valgrind, cppcheck, clang-tidy, and PMD CPD,
+remains in the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separate native
 Windows firmware workflows, which provide consumer-specific integration
 coverage in addition to JaszczurHAL's generated-consumer fixture.
 

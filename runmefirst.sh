@@ -39,8 +39,9 @@ sudo apt-get update
 # Core build + host-test toolchain (required: without `cmake -B .build/host`
 # and `ctest` the gate cannot run). build-essential provides gcc/g++/make; the host mock
 # backend links pthreads, which comes with glibc. curl fetches the security
-# scanner below. Python runs repository helper scripts.
-sudo apt-get install -y build-essential cmake ninja-build git curl ca-certificates python3 iproute2
+# scanner below. Python runs repository helper scripts. The headless Java runtime
+# executes the pinned PMD 7 CPD distribution managed under third_party/.
+sudo apt-get install -y build-essential cmake ninja-build git curl ca-certificates python3 iproute2 default-jre-headless
 
 # Client/runtime tooling used by generated jh-vscode projects:
 # - openocd and gdb-multiarch debug Arm targets,
@@ -54,7 +55,8 @@ sudo apt-get install -y openocd gdb-multiarch python3-serial psmisc libusb-1.0-0
 "${SCRIPT_DIR}/third_party/update_components.sh"
 
 # Quality-gate tooling - memory safety (valgrind / `ctest -T memcheck`) and
-# static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy).
+# static analysis (clang-tidy + cppcheck; clang-tools provides run-clang-tidy;
+# PMD CPD itself is installed by the managed component updater above).
 # See README "Continuous integration and quality gates".
 sudo apt-get install -y valgrind clang-tidy cppcheck clang-tools clang-format
 
@@ -153,7 +155,7 @@ tool_exists() {
   command -v "$1" >/dev/null 2>&1 || [ -x "${HOME}/.local/bin/$1" ]
 }
 
-for tool in cmake ninja g++ gcc make git python3 ip valgrind clang-tidy cppcheck \
+for tool in cmake ninja g++ gcc make git python3 ip java valgrind clang-tidy cppcheck \
             run-clang-tidy clang-format osv-scanner cve-bin-tool \
             arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar \
             arm-none-eabi-ranlib arm-none-eabi-objcopy arm-none-eabi-objdump \

@@ -15,8 +15,8 @@ document and the code disagree.
 | Prepare a Debian/Ubuntu workstation | `./runmefirst.sh` | Installs host, ARM, analysis, security, USB, and VS Code workflow prerequisites; synchronizes managed components; configures Git hooks. |
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
-| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, built picotool, and the RISC-V toolchain stamp. |
-| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, target builds, and example builds. |
+| Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
+| Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, CPD, target builds, and example builds. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
@@ -38,7 +38,7 @@ workflow entrypoints.
 One-time, idempotent setup for Debian/Ubuntu-like systems. It:
 
 - removes the repository `.build/` tree before setup;
-- installs compiler, CMake, Ninja, Python, Valgrind, clang-tidy, cppcheck,
+- installs compiler, CMake, Ninja, Python, Java, Valgrind, clang-tidy, cppcheck,
   OpenOCD, `gdb-multiarch`, serial, libusb, and other host packages;
 - invokes `third_party/update_components.sh`;
 - installs `osv-scanner` and `cve-bin-tool`;
@@ -92,7 +92,7 @@ a standalone setup diagnostic.
 ### `third_party/update_components.sh`
 
 The normal dependency-management entrypoint. It is a compatibility launcher
-for `scripts/component_manager.py all`, which processes all fourteen components
+for `scripts/component_manager.py all`, which processes all fifteen components
 in dependency order:
 
 1. BearSSL
@@ -107,8 +107,9 @@ in dependency order:
 10. Semtech SX126x driver
 11. FreeRTOS-Kernel
 12. Pico SDK
-13. picotool
-14. RISC-V toolchain
+13. PMD CPD
+14. picotool
+15. RISC-V toolchain
 
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
@@ -352,6 +353,14 @@ The helper is enabled through `--enable`, `--build`, `--force`,
 `--verify-only`, `--rebuild`, or `JH_ENABLE_PICOTOOL`. Its build directory is
 required to stay below `.build/`.
 
+### `scripts/ensure_pmd.sh`
+
+Installs or verifies the PMD 7.26.0 binary distribution pinned in
+`third_party/pmd_version.conf`. The manager authenticates the ZIP SHA-256,
+tracks the complete extracted-file manifest, resolves the platform launcher,
+and checks the reported PMD version. A Java runtime is required; Linux
+`runmefirst.sh` installs the headless default runtime.
+
 ### `scripts/ensure_riscv_toolchain.sh`
 
 Installs the pinned Raspberry Pi prebuilt
@@ -588,6 +597,17 @@ the built picotool executable; ignored component sources under `third_party/`
 are retained.
 
 ## Static Analysis And Security Scripts
+
+### `scripts/run_cpd.py`
+
+Runs the managed PMD Copy/Paste Detector over owned C/C++ implementation
+sources. Every production, test, or example duplicate group from 100 tokens
+blocks the gate; there is no baseline or accepted-debt list. Generated and
+vendored implementations are excluded. The report also gives duplicate-token
+coverage globally and for the mock, RP2040, STM32G474, shared, and remaining
+portable scopes. Overlapping token ranges count only once. Deterministic source
+lists and XML reports are written to the requested output directory below
+`.build/`.
 
 ### `scripts/clang_tidy_files.py`
 

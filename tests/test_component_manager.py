@@ -148,6 +148,73 @@ class ArchiveManagerTests(unittest.TestCase):
             self.assertIn("--tlsv1.2", observed)
             self.assertIn("=https", observed)
 
+    def test_pmd_archive_is_version_checked_and_resolved(self) -> None:
+        self.assertIn("pmd", manager.SOURCE_COMPONENT_ORDER)
+        with tempfile.TemporaryDirectory(prefix="jh-pmd-component-") as text:
+            root = Path(text)
+            third_party = root / "third_party"
+            third_party.mkdir()
+            (third_party / "pmd_version.conf").write_text(
+                "PMD_VERSION=7.26.0\n"
+                "PMD_URL=https://example.invalid/pmd.zip\n"
+                f"PMD_SHA256={'a' * 64}\n"
+                "PMD_DIR=third_party/pmd\n",
+                encoding="utf-8",
+            )
+            executable_name = "pmd.bat" if sys.platform == "win32" else "pmd"
+
+            def sync_archive(
+                _url: str,
+                _digest: str,
+                destination: Path,
+                **_kwargs: object,
+            ) -> bool:
+                binary = destination / "pmd-bin-7.26.0/bin" / executable_name
+                binary.parent.mkdir(parents=True)
+                binary.write_text("launcher\n", encoding="utf-8")
+                return True
+
+            version = subprocess.CompletedProcess(
+                [executable_name, "--version"], 0, "PMD 7.26.0\n", ""
+            )
+            with (
+                mock.patch.object(manager, "sync_archive", side_effect=sync_archive),
+                mock.patch.object(manager, "_run", return_value=version),
+            ):
+                executable = manager.ensure_pmd(root, verify_only=False)
+
+            self.assertEqual(executable_name, executable.name)
+            if sys.platform != "win32":
+                self.assertTrue(executable.stat().st_mode & 0o111)
+
+    @unittest.skipIf(sys.platform == "win32", "POSIX launcher mode test")
+    def test_pmd_verify_only_does_not_change_launcher_mode(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-pmd-verify-") as text:
+            root = Path(text)
+            third_party = root / "third_party"
+            third_party.mkdir()
+            (third_party / "pmd_version.conf").write_text(
+                "PMD_VERSION=7.26.0\n"
+                "PMD_URL=https://example.invalid/pmd.zip\n"
+                f"PMD_SHA256={'a' * 64}\n"
+                "PMD_DIR=third_party/pmd\n",
+                encoding="utf-8",
+            )
+            executable = third_party / "pmd/pmd-bin-7.26.0/bin/pmd"
+            executable.parent.mkdir(parents=True)
+            executable.write_text("launcher\n", encoding="utf-8")
+            executable.chmod(0o644)
+            version = subprocess.CompletedProcess(
+                [str(executable), "--version"], 0, "PMD 7.26.0\n", ""
+            )
+            with (
+                mock.patch.object(manager, "sync_archive", return_value=False),
+                mock.patch.object(manager, "_run", return_value=version),
+            ):
+                manager.ensure_pmd(root, verify_only=True)
+
+            self.assertEqual(0, executable.stat().st_mode & 0o111)
+
     def _exercise_archive(self, archive: Path, payload: str) -> None:
         destination = archive.parent / f"install-{archive.suffix.replace('.', '')}"
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
