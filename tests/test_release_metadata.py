@@ -31,7 +31,9 @@ def write_metadata(root: Path, version: str) -> None:
     (root / "security").mkdir(parents=True, exist_ok=True)
     (root / "VERSION").write_text(f"version={version}\n", encoding="utf-8")
     (root / "doc/CHANGELOG.md").write_text(
-        f"# Changelog\n\n## [{version}] - 2026-08-07\n", encoding="utf-8"
+        f"# Changelog\n\n## [Unreleased] - 2026-08-10\n\n"
+        f"## [{version}] - 2026-08-07\n",
+        encoding="utf-8",
     )
     (root / "security/sbom.cdx.json").write_text(
         json.dumps({"metadata": {"component": {"version": version}}}),

@@ -26,7 +26,12 @@ def project_version(root: Path) -> str:
 
 def changelog_version(root: Path) -> str:
     text = (root / "doc/CHANGELOG.md").read_text(encoding="utf-8")
-    match = re.search(r"^## \[([^]]+)] - \d{4}-\d{2}-\d{2}$", text, re.MULTILINE)
+    match = re.search(
+        r"^## \[((?:\d+\.){2}\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)\]"
+        r" - \d{4}-\d{2}-\d{2}$",
+        text,
+        re.MULTILINE,
+    )
     if not match:
         raise ReleaseError("doc/CHANGELOG.md has no dated release heading")
     return match.group(1)
