@@ -722,7 +722,12 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
 bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
 ```
 
-**impl/rp2040 + impl/stm32g474:**
+**Architecture:** `src/hal/hal_rtc.cpp` is the only public facade. It owns the
+static handle pool, configuration/date/alarm validation, per-handle locking,
+epoch conversion, status propagation, and legacy `bool`/handle wrappers.
+Internal provider operations separate that lifecycle from backend behavior:
+
+- **Shared I2C provider:**
 - PCF8563 backend: direct register access over `hal_i2c` (date-time,
   clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
   interrupt enable mask and read-clear event flags).
@@ -730,15 +735,17 @@ bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
   clock integrity via OSF/`oscillatorCheck()`, alarm/IRQ mapping using Alarm2,
   and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
   Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
-**impl/.mock:** in-memory state model with deterministic behavior for unit tests.
-All three facades and both chip drivers use the shared Gregorian calendar core,
-which rejects impossible dates such as April 31 and a non-leap February 29.
+- **Mock provider:** in-memory state with deterministic injection for unit
+  tests; it contains no facade, validation, calendar, pool, or mutex copy.
+
+The facade and both chip drivers use the shared Gregorian calendar core, which
+rejects impossible dates such as April 31 and a non-leap February 29.
 Unix conversion accepts 1970-01-01 through 2099-12-31 and reports
 `HAL_EOVERFLOW` outside that range.
-**Thread safety:** Hardware backends: per-handle mutex serializes runtime API calls;
-I2C traffic is additionally protected by the `hal_i2c` bus mutex. Create/destroy
-should follow the project-wide single-core init/deinit policy. Mock backend is
-for deterministic single-threaded tests.
+**Thread safety:** the shared facade serializes every runtime provider call with
+a per-handle mutex; I2C traffic is additionally protected by the `hal_i2c` bus
+mutex. Create/destroy follows the project-wide single-core init/deinit policy.
+The mock provider remains intended for deterministic single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -753,11 +760,11 @@ has an additive `_ex` counterpart returning `hal_status_t` (see
 an output parameter. `hal_rtc_deinit()` is infallible cleanup, remains `void`
 and intentionally has no `_ex` companion.
 
-RTC backends own their status results directly. They distinguish invalid
-arguments or configuration (`HAL_EINVAL`), pool/mutex exhaustion (`HAL_ENOMEM`),
-unsupported chips or chip features (`HAL_EUNSUPPORTED`), Unix epoch conversion
-outside 1970..2099 (`HAL_EOVERFLOW`) and backend/bus failures (`HAL_EIO`). I2C
-bus init status is propagated.
+The shared facade reports invalid arguments or configuration (`HAL_EINVAL`),
+pool/mutex exhaustion (`HAL_ENOMEM`), and Unix epoch conversion outside
+1970..2099 (`HAL_EOVERFLOW`). Providers report unsupported chips or chip
+features (`HAL_EUNSUPPORTED`) and backend failures (`HAL_EIO`). I2C bus init
+status is propagated unchanged.
 
 ```c
 hal_rtc_t rtc = NULL;
@@ -811,22 +818,23 @@ float hal_mock_ext_adc_get_range(void);                               // return 
 
 ## `hal_gps` - GPS NMEA receiver  *(optional - `HAL_ENABLE_GPS`)*
 
-Singleton GPS subsystem. A portable in-tree NMEA parser behind a
-platform-independent API. RP2040 can feed it from the native PIO/DMA
-SoftwareSerial backend or a hardware UART; the mock lets tests inject position,
-speed, date and time directly.
+Singleton GPS subsystem. One target-independent facade feeds the portable
+in-tree NMEA engine from HAL UART or SoftwareSerial, selected at compile time.
+The mock supports exact field injection and raw NMEA input through the same
+engine and public getters.
 
-**Auto-detect framing:** After ~500 received characters, if every NMEA sentence
-failed its checksum, the implementation automatically toggles between 8N1 and
-7N1 and re-initialises the serial port.  This handles both genuine u-blox modules
-(8N1) and clone NEO-6M boards that ship as 7N1 - no user intervention required.
+**SoftwareSerial auto-detect framing:** After ~500 received characters, if every
+NMEA sentence failed its checksum, the SoftwareSerial path toggles between 8N1
+and 7N1 and re-initialises the port once. This handles genuine u-blox modules
+(8N1) and clone NEO-6M boards that ship as 7N1.
 
 ```c
 #include <hal/hal_gps.h>
 
-// Initialise the GPS subsystem (only first call has effect - singleton guard).
+// Initialise the GPS subsystem (first successful hardware call takes effect).
 // config: UART frame format - HAL_UART_CFG_8N1 (recommended default) or
-//         HAL_UART_CFG_7N1.  Auto-detect will try the other if checksums fail.
+//         HAL_UART_CFG_7N1. The SoftwareSerial transport can try the alternate
+//         framing after repeated checksum failures.
 void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config);
 
 // Drain available serial bytes into the parser.
@@ -836,7 +844,7 @@ void hal_gps_init(uint8_t rx_pin, uint8_t tx_pin, uint32_t baud, uint16_t config
 void hal_gps_update(void);
 
 // Feed one raw NMEA byte into the parser manually (alternative to hal_gps_update).
-// In mock builds this is a no-op.
+// Mock tests can use this path to exercise the complete shared engine.
 void hal_gps_encode(char c);
 
 // Fix state
@@ -881,16 +889,21 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
-**Engine:** the portable NMEA parser (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`) wrapped
-by a shared facade (`impl/shared/frameworks/gps/hal_gps_core.cpp`) - used by both hardware
-backends; parsing logic ported from TinyGPS++ (LGPL), GSA/GSV/GST from the minmea parser.
-**impl/rp2040 (RP2040):** transport only - native Pico SDK PIO/DMA SoftwareSerial (default) or hardware UART, selected at compile time. `hal_gps_update()` should be
-polled every loop iteration.
-**impl/stm32g474:** transport only - hardware UART (USART1 by default).
-**impl/.mock:** internal state struct; inject helpers set values directly.
-**Thread safety:** the shared engine is thread-safe and multicore-safe - an
-internal `hal_mutex_t` protects the parser state, the byte feed and all accessor
-calls. Mock backend is unsynchronized and intended for single-threaded tests.
+**Architecture:** `src/hal/hal_gps.cpp` is the only transport facade. It owns
+initialization, polling, SoftwareSerial framing fallback, serial availability
+and compile-time selection between `hal_uart` and `hal_swserial`. RP2040 and
+STM32G474 use the same file and only the selected HAL transport supplies
+target-specific behavior.
+
+The shared `impl/shared/frameworks/gps/hal_gps_core.cpp` owns the mutex, byte
+feed, fix age, diagnostics and every public data getter around
+`gps_nmea_parser.cpp`. The parser logic is ported from TinyGPS++ (LGPL), with
+GSA/GSV/GST support based on the minmea field layouts. Mock injectors update a
+deterministic engine state without reimplementing public getters.
+
+**Thread safety:** one internal `hal_mutex_t` protects parser state, mock
+injection, byte feeds and all accessors. Initialization remains a singleton
+init operation on hardware; mock initialization resets state for each test.
 
 **RP2040 transport and core affinity:**
 
@@ -916,8 +929,8 @@ installed RP2040 UART IRQ between cores.
 **UART config default:**
 
 `HAL_GPS_DEFAULT_UART_CONFIG` (defined in `hal/hal_config.h`) defaults to
-`HAL_UART_CFG_8N1` (the NMEA 0183 standard).  The auto-detect mechanism makes
-this safe for clone modules too - it will switch to 7N1 automatically if needed.
+`HAL_UART_CFG_8N1` (the NMEA 0183 standard). The SoftwareSerial path can switch
+to 7N1 automatically after repeated checksum failures.
 
 ```c
 // hal/hal_config.h default (can be overridden in build flags):
@@ -936,6 +949,12 @@ void hal_mock_gps_set_age(uint32_t age_ms);                    // control hal_gp
 void hal_mock_gps_set_speed(double kmph);                      // control hal_gps_speed_kmph()
 void hal_mock_gps_set_date(int year, int month, int day);      // control date accessors
 void hal_mock_gps_set_time(int hour, int minute, int second);  // control time accessors
+void hal_mock_gps_set_altitude_m(double altitude_m);
+void hal_mock_gps_set_course_deg(double course_deg);
+void hal_mock_gps_set_dop(double hdop, double vdop, double pdop);
+void hal_mock_gps_set_satellites(uint32_t used, uint8_t in_view);
+void hal_mock_gps_set_fix(uint8_t quality, uint8_t mode);
+void hal_mock_gps_set_horizontal_accuracy_m(double accuracy_m);
 void hal_mock_gps_reset(void);                                 // zero all state
 ```
 
