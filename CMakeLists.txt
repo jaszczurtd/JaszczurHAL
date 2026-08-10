@@ -68,8 +68,10 @@ include(CTest)
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_host_warnings.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/jh_sx126x.cmake)
 jh_managed_framework_include_dirs(JH_MANAGED_FRAMEWORK_INCLUDE_DIRS)
 jh_managed_framework_configure_sources()
+jh_sx126x_source_manifest(JH_SX126X_SOURCES JH_SX126X_INCLUDE_DIRS)
 
 option(JH_ENABLE_FREERTOS_POSIX_TESTS
     "Build host FreeRTOS POSIX scheduler regression tests"
@@ -99,10 +101,13 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_ble_stream.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
     ${SRC}/hal/impl/shared/bluetooth/jh_ble_stream_session.c
+    ${SRC}/hal/impl/shared/jh_handle_pool.cpp
+    ${SRC}/hal/impl/shared/drivers/sx126x/jh_sx126x_adapter.cpp
     ${SRC}/hal/impl/shared/jh_secure_random.cpp
     ${SRC}/hal/impl/shared/network/http/hal_http_client.cpp
     ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
@@ -164,6 +169,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c
     ${SRC}/hal/impl/shared/frameworks/lodepng/lodepng.cpp
     ${SRC}/hal/impl/shared/frameworks/jpeg/tjpgd.c
+    ${JH_SX126X_SOURCES}
 )
 
 # ── hal_mock static library ───────────────────────────────────────────────────
@@ -182,7 +188,16 @@ endif()
 target_include_directories(hal_mock PUBLIC
     ${SRC}
     ${JH_MANAGED_FRAMEWORK_INCLUDE_DIRS}
+    ${JH_SX126X_INCLUDE_DIRS}
 )
+
+if(MSVC)
+    set_source_files_properties(${JH_SX126X_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "/w")
+else()
+    set_source_files_properties(${JH_SX126X_SOURCES}
+        PROPERTIES COMPILE_OPTIONS "-w")
+endif()
 
 target_compile_definitions(hal_mock PUBLIC
     HAL_TARGET_MOCK         # base backend selection (see src/hal/hal_target.h)
@@ -194,6 +209,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_WIFI
     HAL_ENABLE_BLE
     HAL_ENABLE_BLE_STREAM
+    HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP

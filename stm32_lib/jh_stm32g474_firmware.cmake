@@ -83,6 +83,7 @@ function(jh_add_stm32g474_firmware TARGET)
     include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_managed_frameworks.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_littlefs.cmake")
+    include("${ARG_JH_ROOT}/cmake/jh_sx126x.cmake")
     jh_bearssl_source_manifest(
         _jh_bearssl_sources
         _jh_bearssl_include_dirs)
@@ -91,6 +92,15 @@ function(jh_add_stm32g474_firmware TARGET)
     jh_littlefs_source_manifest(
         _littlefs
         _jh_littlefs_include_dirs)
+    jh_cmake_defines_contain(_jh_has_sx126x HAL_ENABLE_SX126X
+        ${_jh_selection_features})
+    set(_jh_sx126x_sources)
+    set(_jh_sx126x_include_dirs)
+    if(_jh_has_sx126x)
+        jh_sx126x_source_manifest(
+            _jh_sx126x_sources
+            _jh_sx126x_include_dirs)
+    endif()
 
     # Backend + shared driver/engine sources (mirrors the proven examples recipe).
     file(GLOB _impl CONFIGURE_DEPENDS "${_g474}/*.cpp")
@@ -151,6 +161,7 @@ function(jh_add_stm32g474_firmware TARGET)
         ${_impl}
         ${_drivers}
         ${_littlefs}
+        ${_jh_sx126x_sources}
         ${_shared}
         ${_hal_common}
         ${_utils}
@@ -168,6 +179,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/hal"
         "${_g474}"
         ${_jh_littlefs_include_dirs}
+        ${_jh_sx126x_include_dirs}
         ${_jh_bearssl_include_dirs}
         ${_jh_framework_include_dirs}
         ${_jh_mqtt_includes}
@@ -193,6 +205,10 @@ function(jh_add_stm32g474_firmware TARGET)
         ${ARG_OPTIONS}
     )
     set_source_files_properties(${_littlefs} PROPERTIES COMPILE_OPTIONS "-w")
+    if(_jh_sx126x_sources)
+        set_source_files_properties(${_jh_sx126x_sources}
+            PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
 
     target_link_options(${TARGET} PRIVATE
         ${_arch}

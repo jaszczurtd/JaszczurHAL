@@ -426,6 +426,34 @@ def preprocess_hal_config_verbose(
     return result.stdout + result.stderr
 
 
+def require_hal_config_failure(
+    compiler: str, definitions: tuple[str, ...], expected: str
+) -> None:
+    source = [
+        *(f"#define {definition.replace('=', ' ', 1)}" for definition in definitions),
+        '#include "hal/hal_config.h"',
+        "",
+    ]
+    result = subprocess.run(
+        [
+            compiler,
+            "-std=c11",
+            "-E",
+            "-x",
+            "c",
+            "-I",
+            str(ROOT / "src"),
+            "-",
+        ],
+        input="\n".join(source),
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    require(result.returncode != 0, "negative hal_config.h probe unexpectedly passed")
+    require(expected in result.stderr, f"hal_config.h did not report {expected!r}")
+
+
 def check_production_feature_facade(compiler: str) -> None:
     stream = preprocess_hal_config_features(
         compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_BLE_STREAM=1")
@@ -434,6 +462,55 @@ def check_production_feature_facade(compiler: str) -> None:
         {"HAL_ENABLE_BLE_STREAM", "HAL_ENABLE_BLE", "HAL_ENABLE_CRYPTO"}
         <= stream,
         "hal_config.h did not expose generated BLE Stream closure",
+    )
+
+    sx126x = preprocess_hal_config_features(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_SX126X=1")
+    )
+    require(
+        {"HAL_ENABLE_SX126X", "HAL_ENABLE_LORA", "HAL_ENABLE_SPI"} <= sx126x,
+        "hal_config.h did not expose the SX126x provider closure",
+    )
+    require_hal_config_failure(
+        compiler,
+        ("HAL_TARGET_MOCK=1", "HAL_ENABLE_LORA=1"),
+        "HAL_ENABLE_LORA requires exactly one provider",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_LORA_RADIO_MAX_INSTANCES=0",
+        ),
+        "HAL_LORA_RADIO_MAX_INSTANCES must be in range 1..255",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_LORA_SX126X_BUSY_TIMEOUT_MS=0",
+        ),
+        "HAL_LORA_SX126X_BUSY_TIMEOUT_MS must be in range 1..60000",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_LORA_SX126X_BUSY_TIMEOUT_MS=60001",
+        ),
+        "HAL_LORA_SX126X_BUSY_TIMEOUT_MS must be in range 1..60000",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_LORA_RADIO_MAX_INSTANCES=256",
+        ),
+        "HAL_LORA_RADIO_MAX_INSTANCES must be in range 1..255",
     )
 
     at24 = preprocess_hal_config_features(
@@ -534,14 +611,23 @@ if TEST_ROOT.exists():
 TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 93, "feature registry symbol count drifted")
+require(len(model.features) == 95, "feature registry symbol count drifted")
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 59,
+    sum(bool(feature.implies) for feature in model.features.values()) == 60,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 108,
+    sum(len(feature.implies) for feature in model.features.values()) == 110,
     "feature registry direct-edge count drifted",
+)
+require(
+    model.features["HAL_ENABLE_LORA"].implies == (),
+    "LoRa facade must remain provider-neutral",
+)
+require(
+    model.features["HAL_ENABLE_SX126X"].implies
+    == ("HAL_ENABLE_LORA", "HAL_ENABLE_SPI"),
+    "SX126x provider dependencies drifted",
 )
 source_symbols: set[str] = set()
 for source_path in (ROOT / "src/hal").rglob("*"):
@@ -596,6 +682,7 @@ require(
 facade_provider_checks = (
     "HAL_ENABLE_RTC",
     "HAL_ENABLE_CELLULAR_MODEM",
+    "HAL_ENABLE_LORA",
     "HAL_ENABLE_THERMOCOUPLE",
     "HAL_ENABLE_CAN",
     "HAL_ENABLE_DIGIPOT",
@@ -610,8 +697,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 46,
-    "hal_config.h retained validation inventory drifted from 46 #error checks",
+    == 49,
+    "hal_config.h retained validation inventory drifted from 49 #error checks",
 )
 
 checked = run_generator("--check")

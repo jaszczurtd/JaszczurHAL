@@ -32,6 +32,7 @@
     "HAL_ENABLE_HTTP_SERVER": {
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
+    "HAL_ENABLE_LORA": {},
     "HAL_ENABLE_MQTT": {
       "implies": [
         "HAL_ENABLE_NETWORK_CORE",
@@ -65,6 +66,9 @@
         "HAL_ENABLE_UDP",
         "HAL_ENABLE_WIFI"
       ]
+    },
+    "HAL_ENABLE_SX126X": {
+      "implies": ["HAL_ENABLE_LORA", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_TCP": {
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_WIFI"]

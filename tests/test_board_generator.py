@@ -358,11 +358,19 @@ for expected in (
     "#define HAL_BOARD_LORA_RADIO_REGULATOR_IS_DCDC 1",
     "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_MODE_IS_DIO2_SINGLE_GPIO 1",
     "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_TX_LEVEL_A 0",
-    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_DIO3 1",
-    "#define HAL_BOARD_LORA_RADIO_TCXO_VOLTAGE_IS_1V7 1",
-    "#define HAL_BOARD_LORA_RADIO_TCXO_STARTUP_US UINT32_C(5000)",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_NONE 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_DIO3 0",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_VOLTAGE_IS_1V7 0",
 ):
     require(expected in lora_config, f"LoRa board config lacks {expected!r}")
+for unexpected in (
+    "HAL_BOARD_LORA_RADIO_TCXO_VOLTAGE_NAME",
+    "HAL_BOARD_LORA_RADIO_TCXO_STARTUP_US",
+):
+    require(
+        unexpected not in lora_config,
+        f"XTAL LoRa board config unexpectedly contains {unexpected!r}",
+    )
 require(
     'set(PICO_BOARD "pico")'
     in (lora_output / "jh_board_config.cmake").read_text(encoding="utf-8"),

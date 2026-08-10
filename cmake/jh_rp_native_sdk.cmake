@@ -26,6 +26,7 @@ include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
 include("${JH_ROOT}/cmake/jh_littlefs.cmake")
+include("${JH_ROOT}/cmake/jh_sx126x.cmake")
 jh_bearssl_source_manifest(
     _jh_native_bearssl_sources
     _jh_native_bearssl_include_dirs)
@@ -35,6 +36,7 @@ jh_managed_framework_configure_sources()
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
 jh_hal_define_enabled(_jh_native_littlefs HAL_ENABLE_LITTLEFS)
 jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
+jh_hal_define_enabled(_jh_native_sx126x HAL_ENABLE_SX126X)
 if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
     message(FATAL_ERROR
         "HAL_ENABLE_OTA is not supported for rp2350-riscv; "
@@ -140,6 +142,16 @@ endif()
 
 jh_collect_rp_hal_sources(JH_RP_HAL_SOURCES "${SRC}" EXCLUDE_APP_ENTRY)
 add_library(JaszczurHAL STATIC ${JH_RP_HAL_SOURCES})
+if(_jh_native_sx126x)
+    jh_sx126x_source_manifest(
+        _jh_native_sx126x_sources
+        _jh_native_sx126x_include_dirs)
+    target_sources(JaszczurHAL PRIVATE ${_jh_native_sx126x_sources})
+    target_include_directories(JaszczurHAL PRIVATE
+        ${_jh_native_sx126x_include_dirs})
+    set_source_files_properties(${_jh_native_sx126x_sources}
+        PROPERTIES COMPILE_OPTIONS "-w")
+endif()
 if(_jh_native_littlefs)
     jh_littlefs_source_manifest(
         _jh_native_littlefs_sources

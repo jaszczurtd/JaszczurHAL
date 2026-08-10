@@ -387,8 +387,8 @@ projects, and `--verbose` records invoked commands in managed per-example logs
 below `.build/examples`.
 
 The Python registry is the source used by `generate`; the generated manifests
-are the source consumed by `build`. The full matrix is 100 configurations; the
-default `--gate` matrix is 52 configurations (27 RP2040 and 25 STM32G474).
+are the source consumed by `build`. The full matrix is 104 configurations; the
+default `--gate` matrix is 56 configurations (29 RP2040 and 27 STM32G474).
 RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 

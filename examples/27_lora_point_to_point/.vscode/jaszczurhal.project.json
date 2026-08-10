@@ -1,0 +1,57 @@
+{
+    "$schema": "../../../vscode/schema/jh_vscode_project.schema.json",
+    "project": "JaszczurHAL examples",
+    "module": "27_lora_point_to_point",
+    "example": {
+        "targets": [
+            "rp2040",
+            "stm32g474"
+        ],
+        "boards": {
+            "rp2040": "rp2040-lora-lf",
+            "stm32g474": "nucleo-g474re"
+        },
+        "gateTargets": [
+            "rp2040",
+            "stm32g474"
+        ],
+        "covers": [
+            "60_lora_point_to_point"
+        ],
+        "variants": [
+            {
+                "id": "responder",
+                "module": "27_lora_point_to_point_responder",
+                "targets": [
+                    "rp2040",
+                    "stm32g474"
+                ],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_RESPONDER=1"
+                ],
+                "gateTargets": [
+                    "rp2040",
+                    "stm32g474"
+                ]
+            }
+        ]
+    },
+    "toolchain": "cmake",
+    "target": "rp2040",
+    "board": "rp2040-lora-lf",
+    "buildDir": "${jhRoot}/.build/examples/27_lora_point_to_point",
+    "cmakeBuildDir": "${buildDir}/cmake",
+    "cmake": {
+        "sourceDir": "${project}/../../cmake/jh_firmware_project",
+        "cache": {
+            "JH_ARTIFACT_DIR": "${buildDir}",
+            "JH_PROJECT_DIR": "${project}",
+            "JH_MODULE_NAME": "27_lora_point_to_point"
+        }
+    },
+    "artifacts": {
+        "elf": "${buildDir}/firmware.elf",
+        "uf2": "${buildDir}/firmware.uf2",
+        "compileCommands": "${buildDir}/compile_commands_patched.json"
+    }
+}

@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-09 (LoRa Stage 0)
+## [Unreleased] - 2026-08-09 (LoRa Stage 1)
 
 - Added the target-neutral `hal_spi_device_t` descriptor with status-first
   initialisation, effective per-device settings and optional active-low CS
@@ -15,6 +15,28 @@ All notable changes to this project will be documented in this file.
 - Migrated PN532, MFRC522, EPD, SSD1306, ST7567, ILI9341, ST77xx and RGB OLED
   transports, including streaming and DMA paths, to the shared SPI device
   lifecycle with immediate cleanup after active-stream failures.
+- Registered the provider-neutral `HAL_ENABLE_LORA` feature and the
+  `HAL_ENABLE_SX126X` provider closure over LoRa and SPI, with a compile-time
+  rejection for facade-only configurations that select no provider.
+- Added the provider-neutral C/C++ `hal_lora_radio.h` MVP contract for SX1262
+  hardware/module profiles, raw modem configuration, blocking TX, polling RX,
+  power state and time-on-air, with standalone public-header compile gates.
+- Added the bounded `HAL_LORA_RADIO_MAX_INSTANCES` lifecycle pool with
+  generation-tagged opaque handles, per-instance mutexes, stale-handle
+  rejection and provider-failure cleanup; promoted the proven ticket pool to a
+  shared internal utility while preserving the network compatibility surface.
+- Added the shared HAL-only SX1262 adapter around the official Semtech command
+  driver, including bounded BUSY waits, complete SPI cleanup, DCDC/LDO and
+  DIO3 TCXO setup, RF-switch control, SX1262 workarounds and band-aware image
+  calibration.
+- Implemented validated raw LoRa configuration, balanced/long-range/fast
+  EU868 technical presets, blocking TX, bounded and continuous polling RX,
+  packet RSSI/SNR metadata, standby/sleep, basic diagnostics and time-on-air.
+- Added a deterministic mock provider with packet injection/capture and a
+  two-radio link, plus lifecycle, facade and low-level adapter tests.
+- Added `27_lora_point_to_point` for integrated LF RP2040 boards and explicitly
+  wired Core1262-HF modules on RP2040/STM32G474, including initiator/responder
+  variants and a serial-log hardware verifier.
 - Pinned the official Semtech SX126x driver at `v2.5.0` and exact commit
   `a10c5dfdf89788c6ac805e9fe98889de44175aa2`, retained its Clear BSD license,
   and added it to managed components, provenance inventory, and the generated
@@ -22,9 +44,8 @@ All notable changes to this project will be documented in this file.
 - Activated the lifecycle-owned `sx1262-radio` board capability and added the
   experimental `rp2040-lora-lf` profile for Waveshare SKU 26592 with fixed SPI,
   DIO1, BUSY, RESET, DIO2 plus GPIO antenna control, DCDC, and DIO3 TCXO facts.
-- Kept the externally wired Core1262-HF as project configuration rather than
-  inventing host board profiles; its reusable electrical helper remains part
-  of the Stage 1 LoRa adapter work.
+- Kept the externally wired Core1262-HF as project configuration and added a
+  reusable helper for its electrical limits, TCXO and RF-switch truth table.
 - Made `boards/` the single maintained source for public board IDs, runtime
   names, capability bits, target compatibility, provider autodetection, and
   device facts. The generator now maintains a tracked public registry and a

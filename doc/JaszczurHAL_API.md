@@ -278,6 +278,7 @@ logic from board-specific SDK calls:
 - `hal_crypto`, `hal_crc`
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
+- `hal_lora_radio` for provider-neutral raw LoRa/SX1262 operation
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`, `hal_pn532`
 - `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
@@ -401,6 +402,7 @@ The complete reference is split across the following focused documents:
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
+| 21 | [Raw LoRa radio](api/21_lora.md) | SX1262 hardware profiles, lifecycle, raw modem presets/configuration, blocking TX, polling RX, packet metadata, diagnostics, power states and time-on-air |
 
 ---
 
@@ -431,6 +433,7 @@ The complete reference is split across the following focused documents:
 | `hal_i2c` / `hal_i2c_slave` | [Communication buses](api/09_buses.md) |
 | `hal_kv` | [Storage](api/14_storage.md) |
 | `hal_littlefs` | [Storage](api/14_storage.md) |
+| `hal_lora_radio` | [Raw LoRa radio](api/21_lora.md) |
 | `hal_math` | [Timers and system](api/06_timers_system.md) / [Output devices](api/13_output_devices.md) |
 | `hal_mcp23017` | [Output devices](api/13_output_devices.md) |
 | `hal_mcp3221` | [Sensors](api/11_sensors.md) |

@@ -89,6 +89,7 @@ LEGACY_EXAMPLE_IDS = [
             "ota",
             "ble_peripheral",
             "ble_stream",
+            "lora_point_to_point",
         ],
         start=1,
     )
@@ -312,6 +313,22 @@ EXAMPLES: list[dict[str, Any]] = [
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
         "covers": ["58_ble_peripheral", "59_ble_stream"],
+    },
+    {
+        "dir": "27_lora_point_to_point",
+        "targets": ["rp2040", "stm32g474"],
+        "expandRpTargets": False,
+        "board": "rp2040-lora-lf",
+        "stm32Board": "nucleo-g474re",
+        "covers": ["60_lora_point_to_point"],
+        "variants": [
+            {
+                "id": "responder",
+                "module": "27_lora_point_to_point_responder",
+                "targets": ["rp2040", "stm32g474"],
+                "extraDefines": ["HAL_LORA_EXAMPLE_RESPONDER=1"],
+            }
+        ],
     },
 ]
 

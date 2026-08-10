@@ -426,6 +426,7 @@ jobs:
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
           ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_sx126x.sh --force
           ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Configure
@@ -465,6 +466,7 @@ jobs:
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
           ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_sx126x.sh --force
           ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Configure ASan, UBSan and libFuzzer
@@ -520,6 +522,7 @@ jobs:
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
           ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_sx126x.sh --force
           ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Install Valgrind
@@ -572,6 +575,7 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_sx126x.sh --force
 
       - name: Install analyzers
         run: sudo apt-get update && sudo apt-get install -y clang-tidy cppcheck clang-tools
@@ -684,6 +688,7 @@ jobs:
           ./scripts/ensure_unity.sh --force
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
+          ./scripts/ensure_sx126x.sh --force
 
       - name: Configure STM32 host build
         run: cmake -S stm32_lib -B .build/ci/stm32-host -DJH_STM32_HOST_SANITY=ON
@@ -782,8 +787,8 @@ jobs:
   #   empty-core   - no HAL_ENABLE_* flags at all. Validates that the
   #                  bare-core library still compiles when every optional
   #                  module is off (catches missing #ifdef guards).
-  #   lora-board-stage0 - integrated SX1262 board metadata and component
-  #                  contract before the Stage 1 LoRa sources are enabled.
+  #   lora-board-stage1 - integrated SX1262 board metadata, official provider,
+  #                  shared HAL adapter and complete raw-radio source path.
   #   no-radio-network - public WiFi/TCP/UDP surface on a plain Pico profile.
   #                  Validates runtime rejection without touching CYW43 pins.
   #   typical-set  - a realistic subset chosen so that *every*
@@ -811,10 +816,12 @@ jobs:
             board: pico
             platform: rp2040
             flags: -D HAL_BOARD_PROFILE_RP_PICO
-          - profile: lora-board-stage0
+          - profile: lora-board-stage1
             board: rp2040-lora-lf
             platform: rp2040
-            flags: -D HAL_BOARD_PROFILE_RP2040_LORA_LF
+            flags: >-
+              -D HAL_ENABLE_SX126X
+              -D HAL_BOARD_PROFILE_RP2040_LORA_LF
           - profile: rp2350-arm-empty
             board: pico2
             platform: rp2350-arm-s
@@ -934,6 +941,7 @@ jobs:
               -D HAL_ENABLE_SWSERIAL
               -D HAL_ENABLE_I2C
               -D HAL_ENABLE_I2C_SLAVE
+              -D HAL_ENABLE_SX126X
               -D HAL_ENABLE_MCP2515
               -D HAL_ENABLE_PCF8563
               -D HAL_ENABLE_DS3231
@@ -1014,6 +1022,7 @@ jobs:
           ./scripts/ensure_lwip.sh --force
           ./scripts/ensure_littlefs.sh --force
           ./scripts/ensure_btstack.sh --force
+          ./scripts/ensure_sx126x.sh --force
 
       - name: Install STM32 toolchain
         run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi

@@ -486,6 +486,10 @@
     "HAL_ENABLE_CELLULAR_MODEM requires at least one backend: HAL_ENABLE_A7670"
 #endif
 
+#if defined(HAL_ENABLE_LORA) && !defined(HAL_ENABLE_SX126X)
+#error "HAL_ENABLE_LORA requires exactly one provider; select HAL_ENABLE_SX126X"
+#endif
+
 #if defined(HAL_ENABLE_THERMOCOUPLE) && !defined(HAL_ENABLE_MCP9600) &&        \
     !defined(HAL_ENABLE_MAX6675)
 #error                                                                         \
@@ -573,6 +577,31 @@
  */
 #ifndef HAL_DMA_PWM_AUDIO_MAX_CHANNELS
 #define HAL_DMA_PWM_AUDIO_MAX_CHANNELS 4
+#endif
+
+/**
+ * @def HAL_LORA_SX126X_BUSY_TIMEOUT_MS
+ * Maximum time for the SX126x BUSY line to remain asserted during one driver
+ * operation. Override in hal_project_config.h before including HAL headers.
+ */
+#ifndef HAL_LORA_SX126X_BUSY_TIMEOUT_MS
+#define HAL_LORA_SX126X_BUSY_TIMEOUT_MS 1000u
+#endif
+#if HAL_LORA_SX126X_BUSY_TIMEOUT_MS < 1u ||                                    \
+    HAL_LORA_SX126X_BUSY_TIMEOUT_MS > 60000u
+#error "HAL_LORA_SX126X_BUSY_TIMEOUT_MS must be in range 1..60000"
+#endif
+
+/**
+ * @def HAL_LORA_RADIO_MAX_INSTANCES
+ * Maximum number of simultaneous raw LoRa radio handles. Override in
+ * hal_project_config.h before including the HAL headers.
+ */
+#ifndef HAL_LORA_RADIO_MAX_INSTANCES
+#define HAL_LORA_RADIO_MAX_INSTANCES 2u
+#endif
+#if HAL_LORA_RADIO_MAX_INSTANCES < 1u || HAL_LORA_RADIO_MAX_INSTANCES > 255u
+#error "HAL_LORA_RADIO_MAX_INSTANCES must be in range 1..255"
 #endif
 
 /**

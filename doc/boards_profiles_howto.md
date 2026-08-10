@@ -244,7 +244,7 @@ the integrated SX1262 wiring, exports `sx126x-radio` as a feature-gated
 component, and declares `HAL_BOARD_CAP_SX1262_RADIO`. Its checked-in electrical
 facts include SPI1 at a safe default 8 MHz, a strict sub-18-MHz ceiling, the
 conservative 410-450 MHz LF range from the manufacturer wiki, DCDC regulation,
-DIO3-controlled 1.7 V TCXO with 5 ms startup, and combined DIO2 plus GPIO17
+XTAL oscillator mode and combined DIO2 plus GPIO17
 antenna-path control. Until the Stage 1 runtime owner exists, this lifecycle
 capability remains inactive at runtime even though the hardware is declared.
 
