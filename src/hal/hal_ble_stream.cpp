@@ -8,6 +8,7 @@
 #include "impl/shared/bluetooth/jh_ble_stream_runtime.h"
 #include "impl/shared/bluetooth/jh_ble_stream_session.h"
 #include "impl/shared/hal_mutex_once.h"
+#include "impl/shared/jh_secure_random.h"
 
 #include <string.h>
 
@@ -58,24 +59,17 @@ hal_mutex_t runtime_mutex(void) {
   return jh_hal_mutex_create_once(&s_stream.mutex);
 }
 
-void zeroize(void *buffer, size_t length) {
-  volatile uint8_t *bytes = static_cast<volatile uint8_t *>(buffer);
-  for (size_t index = 0u; index < length; ++index) {
-    bytes[index] = 0u;
-  }
-}
-
 /* Drop session state and key material without touching the provisioned
    secret. */
 void close_session_locked(void) {
   jh_ble_stream_session_reset(&s_stream.session);
-  zeroize(s_stream.rx, sizeof(s_stream.rx));
-  zeroize(s_stream.tx, sizeof(s_stream.tx));
+  jh_secure_zeroize(s_stream.rx, sizeof(s_stream.rx));
+  jh_secure_zeroize(s_stream.tx, sizeof(s_stream.tx));
   s_stream.rx_head = 0u;
   s_stream.rx_count = 0u;
   s_stream.tx_head = 0u;
   s_stream.tx_count = 0u;
-  zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
+  jh_secure_zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
   s_stream.control_frame_length = 0u;
   s_stream.rx_overflow_pending = false;
   s_stream.tx_counter = 0u;
@@ -126,7 +120,7 @@ hal_status_t flush_tx_locked(void) {
       }
       return sent;
     }
-    zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
+    jh_secure_zeroize(s_stream.control_frame, sizeof(s_stream.control_frame));
     s_stream.control_frame_length = 0u;
   }
 
@@ -138,6 +132,7 @@ hal_status_t flush_tx_locked(void) {
         &s_stream.session, payload.data, payload.length, frame, sizeof(frame),
         &frame_length);
     if (built != HAL_OK) {
+      jh_secure_zeroize(frame, sizeof(frame));
       s_stream.last_status = built;
       if (built == HAL_EOVERFLOW) {
         close_session_locked();
@@ -148,7 +143,7 @@ hal_status_t flush_tx_locked(void) {
     const hal_status_t sent = s_stream.backend->stream_notify(
         s_stream.backend->context, s_stream.native_connection, frame,
         frame_length);
-    zeroize(frame, sizeof(frame));
+    jh_secure_zeroize(frame, sizeof(frame));
     if (sent == HAL_EAGAIN) {
       /* The backend did not accept the frame, so its nonce stays reusable. */
       s_stream.session.tx_counter = previous_counter;
@@ -159,6 +154,7 @@ hal_status_t flush_tx_locked(void) {
       close_session_locked();
       return sent;
     }
+    jh_secure_zeroize(&s_stream.tx[s_stream.tx_head], sizeof(stream_payload_t));
     s_stream.tx_head = (s_stream.tx_head + 1u) % HAL_BLE_STREAM_TX_QUEUE_DEPTH;
     --s_stream.tx_count;
     s_stream.tx_counter = s_stream.session.tx_counter;
@@ -353,6 +349,7 @@ hal_status_t hal_ble_stream_receive(void *out, size_t capacity,
   }
   memcpy(out, payload.data, payload.length);
   *out_length = payload.length;
+  jh_secure_zeroize(&s_stream.rx[s_stream.rx_head], sizeof(stream_payload_t));
   s_stream.rx_head = (s_stream.rx_head + 1u) % HAL_BLE_STREAM_RX_QUEUE_DEPTH;
   --s_stream.rx_count;
   hal_mutex_unlock(mutex);
@@ -453,7 +450,7 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
       s_stream.last_status = HAL_EOVERFLOW;
       break;
     }
-    jh_ble_stream_session_result_t result;
+    jh_ble_stream_session_result_t result{};
     const hal_status_t status = jh_ble_stream_session_handle_frame(
         &s_stream.session, event->stream_frame, event->stream_frame_length,
         &result);
@@ -497,7 +494,7 @@ jh_ble_stream_on_backend_event(const jh_ble_backend_event_t *event) {
     } else if (s_stream.session.state == JH_BLE_STREAM_SESSION_HANDSHAKING) {
       s_stream.state = HAL_BLE_STREAM_STATE_HANDSHAKING;
     }
-    zeroize(&result, sizeof(result));
+    jh_secure_zeroize(&result, sizeof(result));
     break;
   }
   case JH_BLE_BACKEND_EVENT_STREAM_CAN_SEND:

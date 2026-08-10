@@ -93,10 +93,6 @@ hal_status_t jh_ble_stream_session_build_data(jh_ble_stream_session_t *session,
                                               size_t capacity,
                                               size_t *out_length);
 
-/** Constant-time comparison used for proofs and tags. */
-bool jh_ble_stream_equal_ct(const uint8_t *left, const uint8_t *right,
-                            size_t length);
-
 #ifdef __cplusplus
 }
 #endif

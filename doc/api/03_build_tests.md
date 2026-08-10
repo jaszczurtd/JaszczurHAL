@@ -8,7 +8,7 @@
 |---|---|
 | `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
 | `hal_usb` | HAL-owned TinyUSB device on RP: CDC descriptors, IRQ/timer pump in bare builds, core-0 worker task in FreeRTOS builds, and BOOTSEL reset. STM32G474 is currently unsupported. Mock provides deterministic CDC buffers and a reset observer. |
-| `hal_serial` | RP console client of `hal_usb` CDC. STM32G474 debug UART / stdio backend. Mock stdio capture helpers. |
+| `hal_serial` | One target-independent serial/debug core plus link-time ports: RP `hal_usb` CDC, STM32G474 debug USART2/host stdout, and mock stdout capture/injectable RX. |
 | `hal_sync` | RP: Pico SDK `pico/mutex.h` in bare builds and FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds. STM32G474: atomic spinlock in bare builds and FreeRTOS mutex/task APIs in `HAL_ENABLE_FREERTOS` builds |
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
@@ -290,7 +290,11 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_calendar_architecture` | Shared calendar source ownership, HAL-only legacy time wrappers, and rejection of target/driver-local calendar algorithms or `hal_time_from_components()` copies |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
 | `test_hal_serial` | Serial wire/message boundaries, binary RX inject + `available`/`read`, task/ISR debug prefixes, accepted/rejected timestamps, rate-limit configuration/lifecycle/source isolation, streamed formatting beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred ring/drop summaries, mute and flush semantics |
-| `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
+| `test_hal_serial_session` | Framed HELLO/AUTH lifecycle, deterministic and consecutive random challenges, entropy fail-closed behavior, challenge cleanup, command compatibility, unknown-handler dispatch, seq echo, malformed-frame drops and null-arg safety |
+| `test_hal_sc_auth` | Stable per-device key/response vectors, invalid-input output clearing and shared constant-time MAC comparison |
+| `test_jh_security_primitives` | Secure zeroization, constant-time equality/mismatch behavior, deterministic mock entropy vector and failure output clearing |
+| `test_security_architecture` | Compiled Serial Session/auth ownership, one shared entropy/zeroize/constant-time implementation, BLE adoption and source-manifest wiring |
+| `test_serial_architecture` | One shared serial/debug core, three complete link-time transport ports, target-core duplication rejection and source-manifest wiring |
 | `test_hal_swserial` | software UART status success/failure paths, pool exhaustion, RX inject, TX capture, frame format and pin reassignment |
 | `test_rp2040_swserial_backend` | RP2040 source-selection guard: Pico SDK PIO programs required; wrapper serial implementations, GPIO RX callbacks, microsecond bit delays and HAL critical sections forbidden |
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
@@ -384,7 +388,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_gps_nmea_parser` | NMEA framing/checksum, fix/date/time/speed parsing and invalid-input recovery |
 | `test_stm32_hal_system` | STM32G474 system clock, reset/fault state and backend system-service simulation |
 | `test_stm32_hal_i2c_slave` | STM32G474 I2C-slave register backend, events, callbacks and error handling |
-| `test_freertos_posix_runtime` | Host FreeRTOS POSIX scheduler, task dispatch, mutex/delay and lazy create-once behavior |
+| `test_freertos_posix_runtime` | Host FreeRTOS POSIX scheduler, task dispatch, mutex/delay and lazy create-once behavior, including concurrent serial/debug message boundaries |
 
 ### Adding a new test suite
 

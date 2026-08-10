@@ -110,6 +110,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Per-driver mutexes | Selected drivers/wrappers now own mutexes for multi-step operations (`MCP2515`, `MAX6675`, `MCP9600`, HAL wrappers). | Reduces race conditions in read/modify/write and multi-call command sequences. |
 | Shared RTC facade | `hal_rtc.cpp` owns the handle pool, validation, mutexes, epoch conversion, status mapping, and compatibility wrappers; link-time providers supply shared PCF8563/DS3231 I2C behavior or mock storage. | Removes target-local facade copies while keeping chip protocol and test injection behind internal provider operations. |
 | Shared GPS facade | `hal_gps.cpp` selects HAL UART or SoftwareSerial at compile time and owns transport initialization, polling, framing fallback and availability. The shared GPS engine owns parsing, locking, diagnostics and every fix getter, including the mock injection path. | Removes identical RP2040/STM32G474 transport facades and the mock getter copy while preserving transport selection and deterministic injection. |
+| Shared serial/debug core | `hal_serial.cpp` owns formatting, prefixes, timestamps, mute/rate-limit state, the ISR SPSC ring, net-console mirroring, lazy create-once mutexes and public serial/debug entry points. Three link-time ports own only RP USB CDC, STM32 USART2/stdout, or mock capture/RX transport. | Removes three debug-core copies while preserving target line endings, RP flush/assertion output and atomic cross-task/cross-core message boundaries. |
 | Second I2C controller support | HAL I2C APIs and driver adapters use bus index 0/1 for the target's first and second hardware controllers. | Allows second controller usage without bypassing HAL thread-safety. |
 | Shared display stack | The vendored Adafruit GFX/ILI9341/ST77xx/SSD1306/BusIO libraries were replaced by a portable in-tree display stack (`impl/shared/drivers/display/`) built only on HAL SPI/I2C/GPIO. The public facade covers ILI9341, ST77xx/GC9A01, SSD1306-family, SSD1331/SSD135x and ST7567 displays through GFX and capability-advertised raw writes. | One shared implementation drives RP2040 and STM32G474 identically and compiles out when the display module is disabled. |
 | Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`impl/shared/frameworks/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | The same parser/getter engine runs on RP2040, STM32G474 and mock, and compiles out with the GPS module disabled. |
@@ -216,7 +217,11 @@ Covered test targets include:
 - `test_stm32_hal_timer` validates the real STM32G474 timer backend in a
   host-driven build, including callback rescheduling and managed timers.
 - `test_hal_i2c`, `test_hal_i2c_slave`, `test_hal_rgb_led`, `test_hal_external_adc`, `test_ads1x15_driver`, `test_bh1750_driver`, `test_hal_gps`, `test_hal_system`, `test_hal_bits`
-- `test_hal_serial`, `test_hal_serial_session`, `test_hal_serial_session_vocabulary`, `test_hal_uart`, `test_hal_swserial`
+- `test_hal_serial`, `test_hal_sc_auth`, `test_hal_serial_session`,
+  `test_hal_serial_session_vocabulary`, `test_jh_security_primitives`,
+  `test_security_architecture`, `test_serial_architecture`, `test_hal_uart`,
+  `test_hal_swserial`; `test_freertos_posix_runtime` also mixes concurrent
+  serial/debug emitters and validates complete message boundaries.
 - `test_hal_can`, `test_hal_thermocouple`, `test_hal_display`
 - `test_hal_eeprom`, `test_hal_kv`, `test_hal_wifi`, `test_hal_littlefs`, `test_hal_sdlogger`, `test_hal_udp`, `test_hal_wireguard`, `test_hal_mqtt`, `test_hal_ota`, `test_hal_time`, `test_hal_crypto`
 - `test_SmartTimers`, `test_pidController`, `test_multicoreWatchdog`, `test_tools`

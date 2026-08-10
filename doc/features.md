@@ -43,7 +43,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 |---|---|---|
 | UART | Hardware serial communication abstraction; RP2040 RX IRQ affinity follows the core that starts the UART. | [hal_uart.h](../src/hal/hal_uart.h) |
 | USB device / CDC | Status-first USB lifecycle and CDC API with native RP TinyUSB ownership, descriptors, background pumping, bounded backpressure, 1200-bps BOOTSEL reset and a host mock. | [hal_usb.h](../src/hal/hal_usb.h) |
-| Serial/debug console | TX-serialized console output over `hal_usb` CDC on RP, streamed task-context debug formatting, ISR-deferred logs and per-source error rate limiting. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
+| Serial/debug console | One TX-serialized shared core with streamed task-context formatting, ISR-deferred logs, per-source error rate limiting, net-console mirroring and link-time RP USB CDC, STM32 USART2/stdout or mock capture/RX ports. | [hal_serial.h](../src/hal/hal_serial.h), [serial API](api/08_sync_serial.md) |
 | Software serial | Target-optimized software UART: native Pico SDK PIO/DMA on RP2040 and a shared HAL GPIO backend on other targets. | [hal_swserial.h](../src/hal/hal_swserial.h) |
 | I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
