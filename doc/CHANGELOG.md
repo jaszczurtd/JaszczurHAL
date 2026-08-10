@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-10
 
+- Added pinned PMD 7.26.0 Copy/Paste Detector management and a blocking
+  `runalltests.sh`/CI gate over owned C/C++ implementation sources. Every
+  duplicate group from 100 tokens blocks without a baseline or exceptions;
+  reports include global and per-component duplicate-token coverage.
 - Added the target-neutral `hal_spi_device_t` descriptor with status-first
   initialisation, effective per-device settings and optional active-low CS
   ownership over the existing portable SPI/GPIO backends.

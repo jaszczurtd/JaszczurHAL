@@ -11,8 +11,9 @@
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. Target builds (STM32 + native Pico SDK matrix)
-#   7. Examples build (native RP + STM32G474)
+#   6. Duplicate detection: PMD CPD (owned C/C++ implementation sources)
+#   7. Target builds (STM32 + native Pico SDK matrix)
+#   8. Examples build (native RP + STM32G474)
 #
 # Usage:
 #   ./runalltests.sh          # run everything
@@ -112,11 +113,11 @@ clean_build_artifacts
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 1/7: Checking required tools"
+header "Gate 1/8: Checking required tools"
 
 REQUIRED_TOOLS=(
     cmake ninja g++ gcc make
-    valgrind clang-tidy cppcheck run-clang-tidy
+    valgrind clang-tidy cppcheck run-clang-tidy java
     arm-none-eabi-gcc arm-none-eabi-g++ arm-none-eabi-ar arm-none-eabi-ranlib arm-none-eabi-objcopy
 )
 missing=0
@@ -143,7 +144,7 @@ pass "Pinned third-party components are ready."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 2: Host unit tests
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 2/7: Host unit tests (build + ctest + FreeRTOS POSIX)"
+header "Gate 2/8: Host unit tests (build + ctest + FreeRTOS POSIX)"
 
 BUILD_DIR="${GATE_BUILD_ROOT}/host"
 rm -rf "${BUILD_DIR}"
@@ -164,7 +165,7 @@ pass "All unit tests passed."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 3: Valgrind memcheck
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 3/7: Memory safety (Valgrind memcheck)"
+header "Gate 3/8: Memory safety (Valgrind memcheck)"
 
 MEMCHECK_REQUIRED_TESTS=(
     test_lwip_raw_engines
@@ -216,7 +217,7 @@ pass "No memory defects found."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 4: cppcheck (all own code)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 4/7: Static analysis - cppcheck"
+header "Gate 4/8: Static analysis - cppcheck"
 
 info "Scanning src/ (vendored code excluded)..."
 cppcheck --enable=warning,performance,portability \
@@ -236,7 +237,7 @@ pass "cppcheck: no issues found."
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 5: clang-tidy (host + stm32)
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 5/7: Static analysis - clang-tidy"
+header "Gate 5/8: Static analysis - clang-tidy"
 
 # Generate STM32 compile database
 BUILD_STM32="${GATE_BUILD_ROOT}/stm32-host"
@@ -299,9 +300,19 @@ fi
 pass "clang-tidy: no issues found."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 6: Target static-library builds
+# GATE 6: PMD CPD duplicate detection
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 6/7: Target static-library builds"
+header "Gate 6/8: Duplicate detection - PMD CPD"
+
+info "Scanning owned C/C++ implementation sources for exact duplication..."
+run_logged "${LOG_ROOT}/jh_cpd.log" \
+    scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"
+pass "PMD CPD found zero duplicate groups at the 100-token threshold."
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GATE 7: Target static-library builds
+# ═══════════════════════════════════════════════════════════════════════════════
+header "Gate 7/8: Target static-library builds"
 
 info "Verifying libJaszczurHAL.a (STM32G474 backend, host compiler)..."
 # Already built above in gate 5 - just verify artifact exists
@@ -493,15 +504,15 @@ fi
 pass "Native RP images contain no removed carrier link inputs."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 7: Examples build
+# GATE 8: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 7/7: Consolidated examples (representative RP + STM32G474)"
+header "Gate 8/8: Consolidated examples (representative RP + STM32G474)"
 
 info "Building the RP2040 example gate set..."
 run_logged "${LOG_ROOT}/jh_examples_rp2040_native_build.log" \
     "${SCRIPT_DIR}/scripts/examples_dispatcher.py" build \
         --target rp2040 --gate --jobs "${JOBS}"
-pass "RP2040 example gate set built successfully; Gate 6 covers both RP2350 ISAs."
+pass "RP2040 example gate set built successfully; Gate 7 covers both RP2350 ISAs."
 
 info "Building native RP USB-multicore and SDLogger parity fixtures..."
 run_logged "${LOG_ROOT}/jh_rp_native_parity_fixtures.log" \
@@ -528,6 +539,7 @@ echo "  FreeRTOS POSIX:   PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
+echo "  PMD CPD:          PASS (zero duplicate groups >= 100 tokens)"
 echo "  Target builds:    PASS (native Pico SDK + STM32G474)"
 echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
 echo ""

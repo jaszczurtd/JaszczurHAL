@@ -71,6 +71,13 @@ options. Such user-managed paths are verified but are never replaced.
 
 ## Built tools and toolchains
 
+PMD 7.26.0 is installed from its authenticated binary ZIP below
+`third_party/pmd/`. The component manager verifies the archive digest, complete
+extracted-file manifest, and reported PMD version. A system Java runtime is the
+only host requirement; `runmefirst.sh` installs `default-jre-headless`.
+`scripts/run_cpd.py` owns the source scope and thresholds used identically by
+`runalltests.sh` and CI.
+
 picotool sources live in `third_party/picotool`, while all generated build
 artifacts and the executable live under:
 

@@ -104,6 +104,10 @@ require(
     "runalltests.sh gate 1 does not verify the default Ninja generator",
 )
 require(
+    'scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"' in quality_gate,
+    "runalltests.sh does not keep CPD reports below .build/gate",
+)
+require(
     "/tmp/jh_" not in quality_gate,
     "runalltests.sh still writes logs outside .build",
 )

@@ -94,6 +94,19 @@
       "notes": "Pinned host tool used by the official Pico SDK build for binary metadata, RP2350 post-processing and UF2 generation."
     },
     {
+      "name": "PMD Copy/Paste Detector",
+      "version": "7.26.0",
+      "type": "application",
+      "scope": "development",
+      "supplier": "PMD contributors",
+      "licenses": ["BSD-Style-PMD"],
+      "purl": "pkg:generic/pmd@7.26.0",
+      "paths": ["third_party/pmd", "third_party/pmd_version.conf"],
+      "upstream": "https://github.com/pmd/pmd",
+      "feature_flags": [],
+      "notes": "Authenticated upstream binary distribution used only for the C/C++ CPD quality gate; the archive and version are pinned and verified by the component manager."
+    },
+    {
       "name": "Raspberry Pi RISC-V toolchain",
       "version": "v2.2.0-4-gcc15",
       "type": "application",

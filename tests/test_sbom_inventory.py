@@ -50,6 +50,16 @@ class SbomInventoryTests(unittest.TestCase):
             "third_party/LICENSE.SX126X",
             components["Semtech SX126x driver"]["paths"],
         )
+        self.assertEqual(
+            "7.26.0", components["PMD Copy/Paste Detector"]["version"]
+        )
+        self.assertEqual(
+            "development", components["PMD Copy/Paste Detector"]["scope"]
+        )
+        self.assertIn(
+            "third_party/pmd_version.conf",
+            components["PMD Copy/Paste Detector"]["paths"],
+        )
 
     def test_generated_sbom_retains_license_file_and_exact_commits(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-sbom-") as text:

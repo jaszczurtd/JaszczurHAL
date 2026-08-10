@@ -488,6 +488,11 @@ add_test(NAME test_component_manager
         ${CMAKE_CURRENT_SOURCE_DIR}/test_component_manager.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_cpd_gate
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_cpd_gate.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_ota_firewall_config
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_ota_firewall_config.py

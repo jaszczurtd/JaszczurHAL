@@ -305,6 +305,50 @@
     },
     {
       "type": "application",
+      "bom-ref": "pkg:pmd-copy-paste-detector@7.26.0",
+      "name": "PMD Copy/Paste Detector",
+      "version": "7.26.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-Style-PMD"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "PMD contributors"
+      },
+      "purl": "pkg:generic/pmd@7.26.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/pmd/pmd"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pmd",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/pmd_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Authenticated upstream binary distribution used only for the C/C++ CPD quality gate; the archive and version are pinned and verified by the component manager."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/pmd,third_party/pmd_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
       "bom-ref": "pkg:raspberry-pi-risc-v-toolchain@v2.2.0-4-gcc15",
       "name": "Raspberry Pi RISC-V toolchain",
       "version": "v2.2.0-4-gcc15",
@@ -1033,5 +1077,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:d388f539-234e-55d6-286f-e3363b24647e"
+  "serialNumber": "urn:uuid:56887a94-6d21-9736-334e-9b2a03e73821"
 }
