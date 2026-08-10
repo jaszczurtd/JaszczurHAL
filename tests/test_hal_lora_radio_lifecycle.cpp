@@ -27,7 +27,7 @@ static hal_status_t fake_deinitialize(jh_lora_radio_context_t *) {
 
 static hal_status_t fake_configure(jh_lora_radio_context_t *) { return HAL_OK; }
 
-static hal_status_t fake_transmit(jh_lora_radio_context_t *, uint32_t) {
+static hal_status_t fake_transmit_start(jh_lora_radio_context_t *, uint32_t) {
   return HAL_OK;
 }
 
@@ -36,17 +36,21 @@ static hal_status_t fake_receive_start(jh_lora_radio_context_t *, uint32_t,
   return HAL_OK;
 }
 
-static hal_status_t fake_receive_poll(jh_lora_radio_context_t *) {
+static hal_status_t fake_process(jh_lora_radio_context_t *,
+                                 jh_lora_provider_events_t *) {
   return HAL_EAGAIN;
 }
+
+static hal_status_t fake_cancel(jh_lora_radio_context_t *) { return HAL_OK; }
 
 static hal_status_t fake_sleep(jh_lora_radio_context_t *) { return HAL_OK; }
 
 static hal_status_t fake_standby(jh_lora_radio_context_t *) { return HAL_OK; }
 
 static const jh_lora_radio_provider_ops_t s_fake_provider = {
-    fake_initialize,    fake_deinitialize, fake_configure, fake_transmit,
-    fake_receive_start, fake_receive_poll, fake_sleep,     fake_standby,
+    fake_initialize,     fake_deinitialize,  fake_configure,
+    fake_transmit_start, fake_receive_start, fake_process,
+    fake_cancel,         fake_sleep,         fake_standby,
 };
 
 static hal_lora_radio_config_t valid_config(void) {

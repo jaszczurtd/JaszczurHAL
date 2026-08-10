@@ -16,6 +16,10 @@
 #define JH_SX126X_RESET_LOW_US UINT32_C(200)
 #define JH_SX126X_RESET_SETTLE_US UINT32_C(10000)
 
+static volatile bool s_dio1_pending = false;
+
+static void sx126x_dio1_interrupt(void) { s_dio1_pending = true; }
+
 typedef enum {
   JH_SX126X_RF_IDLE,
   JH_SX126X_RF_RX,
@@ -515,11 +519,19 @@ static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
   }
   if (status != HAL_OK) {
     jh_sx126x_set_rf_idle(context);
+  } else {
+    hal_gpio_attach_interrupt(hardware->dio1_pin, sx126x_dio1_interrupt,
+                              HAL_GPIO_IRQ_RISING);
+    context->provider_irq_attached = true;
   }
   return status;
 }
 
 static hal_status_t sx126x_deinitialize(jh_lora_radio_context_t *context) {
+  if (context->provider_irq_attached) {
+    hal_gpio_detach_interrupt(context->config.hardware.sx126x.dio1_pin);
+    context->provider_irq_attached = false;
+  }
   jh_sx126x_set_rf_idle(context);
   if (context->provider_sleeping) {
     const hal_status_t wake = map_status(context, sx126x_wakeup(context));
@@ -593,8 +605,8 @@ static hal_status_t sx126x_configure(jh_lora_radio_context_t *context) {
   return status;
 }
 
-static hal_status_t sx126x_transmit(jh_lora_radio_context_t *context,
-                                    uint32_t timeout_ms) {
+static hal_status_t sx126x_transmit_start(jh_lora_radio_context_t *context,
+                                          uint32_t timeout_ms) {
   hal_status_t status = configure_packet(context, context->tx_length);
   if (status == HAL_OK) {
     status = map_status(
@@ -615,29 +627,10 @@ static hal_status_t sx126x_transmit(jh_lora_radio_context_t *context,
     jh_sx126x_set_rf_tx(context);
     status = map_status(context, sx126x_set_tx(context, timeout_ms));
   }
-  const uint32_t started_ms = hal_millis();
-  while (status == HAL_OK) {
-    sx126x_irq_mask_t irq = SX126X_IRQ_NONE;
-    status = map_status(context, sx126x_get_irq_status(context, &irq));
-    if (status != HAL_OK) {
-      break;
-    }
-    if ((irq & SX126X_IRQ_TX_DONE) != 0u) {
-      status = map_status(context, sx126x_clear_irq_status(context, irq));
-      break;
-    }
-    if ((irq & SX126X_IRQ_TIMEOUT) != 0u ||
-        (uint32_t)(hal_millis() - started_ms) >= timeout_ms) {
-      (void)sx126x_clear_irq_status(context, irq);
-      status = HAL_ETIMEOUT;
-      break;
-    }
-    hal_delay_ms(1u);
+  if (status != HAL_OK) {
+    jh_sx126x_set_rf_idle(context);
   }
-  jh_sx126x_set_rf_idle(context);
-  const hal_status_t standby =
-      map_status(context, sx126x_set_standby(context, SX126X_STANDBY_CFG_RC));
-  return status != HAL_OK ? status : standby;
+  return status;
 }
 
 static hal_status_t sx126x_receive_start(jh_lora_radio_context_t *context,
@@ -671,35 +664,81 @@ static hal_status_t sx126x_receive_start(jh_lora_radio_context_t *context,
   return status;
 }
 
-static hal_status_t sx126x_receive_poll(jh_lora_radio_context_t *context) {
+static hal_status_t sx126x_cancel(jh_lora_radio_context_t *context) {
+  jh_sx126x_set_rf_idle(context);
+  hal_status_t status =
+      map_status(context, sx126x_set_standby(context, SX126X_STANDBY_CFG_RC));
+  if (status == HAL_OK) {
+    status = map_status(context, sx126x_stop_rtc(context));
+  }
+  if (status == HAL_OK) {
+    status =
+        map_status(context, sx126x_clear_irq_status(context, SX126X_IRQ_ALL));
+  }
+  if (status == HAL_OK) {
+    status = map_status(context, sx126x_set_dio_irq_params(
+                                     context, SX126X_IRQ_NONE, SX126X_IRQ_NONE,
+                                     SX126X_IRQ_NONE, SX126X_IRQ_NONE));
+  }
+  return status;
+}
+
+static hal_status_t sx126x_process(jh_lora_radio_context_t *context,
+                                   jh_lora_provider_events_t *out_events) {
+  if (out_events == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_events = JH_LORA_PROVIDER_EVENT_NONE;
+  const uint32_t now = hal_millis();
+  const bool tx_timeout = context->state == HAL_LORA_RADIO_STATE_TX &&
+                          (uint32_t)(now - context->transmit_started_ms) >=
+                              context->transmit_timeout_ms;
+  const bool rx_timeout = context->state == HAL_LORA_RADIO_STATE_RX &&
+                          !context->receive_continuous &&
+                          (uint32_t)(now - context->receive_started_ms) >=
+                              context->receive_timeout_ms;
+  if (!s_dio1_pending &&
+      !hal_gpio_read(context->config.hardware.sx126x.dio1_pin) && !tx_timeout &&
+      !rx_timeout) {
+    return HAL_EAGAIN;
+  }
+  s_dio1_pending = false;
+
   sx126x_irq_mask_t irq = SX126X_IRQ_NONE;
   hal_status_t status =
       map_status(context, sx126x_get_irq_status(context, &irq));
   if (status != HAL_OK) {
     return status;
   }
-  if ((irq & (SX126X_IRQ_CRC_ERROR | SX126X_IRQ_HEADER_ERROR)) != 0u) {
-    (void)sx126x_clear_irq_status(context, irq);
+  if (irq != SX126X_IRQ_NONE) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_IRQ;
+  }
+  if ((irq & SX126X_IRQ_CRC_ERROR) != 0u) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_CRC_ERROR;
+  }
+  if ((irq & SX126X_IRQ_HEADER_ERROR) != 0u) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_HEADER_ERROR;
+  }
+  if ((*out_events & (JH_LORA_PROVIDER_EVENT_CRC_ERROR |
+                      JH_LORA_PROVIDER_EVENT_HEADER_ERROR)) != 0u) {
+    status = map_status(context, sx126x_clear_irq_status(context, irq));
     if (!context->receive_continuous) {
       jh_sx126x_set_rf_idle(context);
     }
-    return HAL_EPROTO;
+    return status;
   }
-  if ((irq & SX126X_IRQ_TIMEOUT) != 0u) {
-    (void)sx126x_clear_irq_status(context, irq);
-    (void)sx126x_stop_rtc(context);
+  if ((irq & SX126X_IRQ_TIMEOUT) != 0u || tx_timeout || rx_timeout) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_TIMEOUT;
+    status = sx126x_cancel(context);
+    return status;
+  }
+  if ((irq & SX126X_IRQ_TX_DONE) != 0u) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_TX_DONE;
+    status = map_status(context, sx126x_clear_irq_status(context, irq));
     jh_sx126x_set_rf_idle(context);
-    return HAL_ETIMEOUT;
+    return status;
   }
   if ((irq & SX126X_IRQ_RX_DONE) == 0u) {
-    if (!context->receive_continuous &&
-        (uint32_t)(hal_millis() - context->receive_started_ms) >=
-            context->receive_timeout_ms) {
-      (void)sx126x_set_standby(context, SX126X_STANDBY_CFG_RC);
-      (void)sx126x_stop_rtc(context);
-      jh_sx126x_set_rf_idle(context);
-      return HAL_ETIMEOUT;
-    }
     return HAL_EAGAIN;
   }
 
@@ -736,6 +775,7 @@ static hal_status_t sx126x_receive_poll(jh_lora_radio_context_t *context) {
   context->rx_info.timestamp_ms = hal_millis();
   context->rx_info.crc_valid = true;
   context->rx_ready = true;
+  *out_events |= JH_LORA_PROVIDER_EVENT_RX_DONE;
   if (!context->receive_continuous) {
     jh_sx126x_set_rf_idle(context);
   }
@@ -755,9 +795,9 @@ static hal_status_t sx126x_standby(jh_lora_radio_context_t *context) {
 }
 
 [[maybe_unused]] static const jh_lora_radio_provider_ops_t s_sx126x_provider = {
-    sx126x_initialize, sx126x_deinitialize,  sx126x_configure,
-    sx126x_transmit,   sx126x_receive_start, sx126x_receive_poll,
-    sx126x_sleep,      sx126x_standby,
+    sx126x_initialize,     sx126x_deinitialize,  sx126x_configure,
+    sx126x_transmit_start, sx126x_receive_start, sx126x_process,
+    sx126x_cancel,         sx126x_sleep,         sx126x_standby,
 };
 
 const jh_lora_radio_provider_ops_t *jh_sx126x_provider_ops(void) {

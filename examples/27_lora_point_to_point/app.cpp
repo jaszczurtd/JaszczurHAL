@@ -4,6 +4,8 @@
  */
 
 #include <hal/hal_app.h>
+#include <hal/hal_board.h>
+#include <hal/hal_gpio.h>
 #include <hal/hal_lora_radio.h>
 #include <hal/hal_spi.h>
 #include <hal/hal_status.h>
@@ -26,13 +28,62 @@ hal_lora_radio_t s_radio = nullptr;
 hal_lora_radio_config_t s_hardware{};
 hal_lora_modem_config_t s_modem{};
 bool s_ready = false;
+bool s_event_ready = false;
+hal_lora_radio_event_t s_event{};
+#ifdef HAL_LED_BUILTIN
+constexpr uint32_t kReceiveLedPulseMs = UINT32_C(120);
+uint32_t s_led_off_ms = 0u;
+
+void status_led_initialize(void) {
+  hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT_LOW);
+}
+
+void status_led_transmit_started(void) {
+  s_led_off_ms = 0u;
+  hal_gpio_write(HAL_LED_BUILTIN, true);
+}
+
+void status_led_transmit_finished(void) {
+  s_led_off_ms = 0u;
+  hal_gpio_write(HAL_LED_BUILTIN, false);
+}
+
+void status_led_receive_pulse(void) {
+  hal_gpio_write(HAL_LED_BUILTIN, true);
+  s_led_off_ms = hal_millis() + kReceiveLedPulseMs;
+}
+
+void status_led_process(void) {
+  if (s_led_off_ms != 0u && (int32_t)(hal_millis() - s_led_off_ms) >= 0) {
+    s_led_off_ms = 0u;
+    hal_gpio_write(HAL_LED_BUILTIN, false);
+  }
+}
+#else
+void status_led_initialize(void) {}
+void status_led_transmit_started(void) {}
+void status_led_transmit_finished(void) {}
+void status_led_receive_pulse(void) {}
+void status_led_process(void) {}
+#endif
 #ifndef HAL_LORA_EXAMPLE_RESPONDER
-bool s_waiting_for_reply = false;
+enum class InitiatorState { Idle, Transmitting, Receiving };
+InitiatorState s_initiator_state = InitiatorState::Idle;
 uint32_t s_next_transmit_ms = 0u;
 uint32_t s_sequence = 0u;
+uint32_t s_active_sequence = 0u;
 #else
+enum class ResponderState { Receiving, Transmitting };
+ResponderState s_responder_state = ResponderState::Receiving;
 uint32_t s_last_received_sequence = 0u;
+uint32_t s_reply_sequence = 0u;
 #endif
+
+void radio_event_callback(hal_lora_radio_t, const hal_lora_radio_event_t *event,
+                          void *) {
+  s_event = *event;
+  s_event_ready = true;
+}
 
 hal_status_t external_core1262_hf_config(hal_lora_radio_config_t *out_config) {
   if (out_config == nullptr) {
@@ -119,24 +170,65 @@ void start_responder_receive(void) {
   const hal_status_t status = hal_lora_radio_receive_start_continuous(s_radio);
   if (status != HAL_OK) {
     derr("RX start failed: %s", hal_status_to_string(status));
+    s_ready = false;
+    return;
+  }
+  s_responder_state = ResponderState::Receiving;
+}
+
+void maintain_responder_radio(uint32_t sequence) {
+  if ((sequence % 10u) == 0u) {
+    hal_lora_radio_diagnostics_t diagnostics{};
+    const hal_status_t status =
+        hal_lora_radio_get_diagnostics(s_radio, &diagnostics);
+    if (status == HAL_OK) {
+      deb("Async diagnostics sequence=%lu irq=%lu callbacks=%lu cancelled=%lu",
+          (unsigned long)sequence, (unsigned long)diagnostics.irq_events,
+          (unsigned long)diagnostics.callback_events,
+          (unsigned long)diagnostics.cancelled_operations);
+    }
+  }
+  if ((sequence % 10u) == 0u) {
+    const hal_status_t sleep = hal_lora_radio_sleep(s_radio);
+    hal_delay_ms(100u);
+    const hal_status_t wake = hal_lora_radio_standby(s_radio);
+    deb("Sleep/wake sequence=%lu sleep=%s wake=%s", sequence,
+        hal_status_to_string(sleep), hal_status_to_string(wake));
+  }
+  if ((sequence % 20u) == 0u) {
+    hal_status_t reinitialize = hal_lora_radio_destroy(s_radio);
+    s_radio = nullptr;
+    if (reinitialize == HAL_OK) {
+      reinitialize = hal_lora_radio_create(&s_hardware, &s_radio);
+    }
+    if (reinitialize == HAL_OK) {
+      reinitialize = hal_lora_radio_configure(s_radio, &s_modem);
+    }
+    if (reinitialize == HAL_OK) {
+      reinitialize = hal_lora_radio_set_event_callback(
+          s_radio, radio_event_callback, nullptr);
+    }
+    deb("Reinitialize sequence=%lu status=%s", sequence,
+        hal_status_to_string(reinitialize));
+    if (reinitialize != HAL_OK) {
+      s_ready = false;
+    }
   }
 }
 
-void responder_poll(void) {
+void responder_receive_ready(void) {
   uint8_t packet[HAL_LORA_RADIO_MAX_PAYLOAD]{};
   size_t length = 0u;
   hal_lora_packet_info_t info{};
   const hal_status_t status =
       hal_lora_radio_receive(s_radio, packet, sizeof(packet), &length, &info);
-  if (status == HAL_EAGAIN) {
-    return;
-  }
   if (status != HAL_OK) {
     derr("RX failed: %s", hal_status_to_string(status));
-    (void)hal_lora_radio_standby(s_radio);
+    (void)hal_lora_radio_cancel(s_radio);
     start_responder_receive();
     return;
   }
+  status_led_receive_pulse();
   log_packet("RX", packet, length, info);
 
   char received[HAL_LORA_RADIO_MAX_PAYLOAD + 1u]{};
@@ -152,45 +244,68 @@ void responder_poll(void) {
   char reply[64];
   const int written = snprintf(reply, sizeof(reply), "JHLORA1 PONG %lu %lu",
                                sequence, (unsigned long)hal_millis());
-  (void)hal_lora_radio_standby(s_radio);
-  if ((sequence % 10u) == 0u) {
-    const hal_status_t sleep = hal_lora_radio_sleep(s_radio);
-    hal_delay_ms(100u);
-    const hal_status_t wake = hal_lora_radio_standby(s_radio);
-    deb("Sleep/wake sequence=%lu sleep=%s wake=%s", sequence,
-        hal_status_to_string(sleep), hal_status_to_string(wake));
-  }
+  (void)hal_lora_radio_cancel(s_radio);
   if (written > 0 && (size_t)written < sizeof(reply)) {
-    const hal_status_t tx = hal_lora_radio_transmit(
-        s_radio, reinterpret_cast<const uint8_t *>(reply), (size_t)written, 0u);
-    if (tx == HAL_OK) {
-      deb("TX reply sequence=%lu", sequence);
-    } else {
+    const hal_status_t tx = hal_lora_radio_transmit_start(
+        s_radio, reinterpret_cast<const uint8_t *>(reply), (size_t)written);
+    if (tx != HAL_OK) {
       derr("TX reply failed: %s", hal_status_to_string(tx));
-    }
-  }
-  if ((sequence % 20u) == 0u) {
-    hal_status_t reinitialize = hal_lora_radio_destroy(s_radio);
-    s_radio = nullptr;
-    if (reinitialize == HAL_OK) {
-      reinitialize = hal_lora_radio_create(&s_hardware, &s_radio);
-    }
-    if (reinitialize == HAL_OK) {
-      reinitialize = hal_lora_radio_configure(s_radio, &s_modem);
-    }
-    deb("Reinitialize sequence=%lu status=%s", sequence,
-        hal_status_to_string(reinitialize));
-    if (reinitialize != HAL_OK) {
-      s_ready = false;
+      start_responder_receive();
       return;
     }
+    s_reply_sequence = (uint32_t)sequence;
+    s_responder_state = ResponderState::Transmitting;
+    status_led_transmit_started();
+  } else {
+    start_responder_receive();
   }
+}
+
+void responder_handle_event(const hal_lora_radio_event_t &event) {
+  if (event.type == HAL_LORA_RADIO_EVENT_CANCELLED &&
+      event.operation == HAL_LORA_OPERATION_KIND_RECEIVE &&
+      s_responder_state == ResponderState::Transmitting) {
+    /* Continuous RX is deliberately cancelled before sending the reply. */
+    return;
+  }
+  if (event.type == HAL_LORA_RADIO_EVENT_RX_READY &&
+      s_responder_state == ResponderState::Receiving) {
+    responder_receive_ready();
+    return;
+  }
+  if (event.type == HAL_LORA_RADIO_EVENT_TX_COMPLETE &&
+      s_responder_state == ResponderState::Transmitting) {
+    status_led_transmit_finished();
+    deb("TX reply sequence=%lu", (unsigned long)s_reply_sequence);
+    maintain_responder_radio(s_reply_sequence);
+    if (s_ready) {
+      start_responder_receive();
+    }
+    return;
+  }
+  if (event.operation == HAL_LORA_OPERATION_KIND_TRANSMIT) {
+    status_led_transmit_finished();
+  }
+  derr("Radio event failed: %s", hal_status_to_string(event.result));
+  if (s_responder_state == ResponderState::Receiving) {
+    uint8_t ignored = 0u;
+    size_t ignored_length = 0u;
+    (void)hal_lora_radio_receive(s_radio, &ignored, sizeof(ignored),
+                                 &ignored_length, nullptr);
+  }
+  (void)hal_lora_radio_cancel(s_radio);
+  (void)hal_lora_radio_standby(s_radio);
   start_responder_receive();
 }
 
 #else
-void initiator_poll(void) {
-  if (!s_waiting_for_reply &&
+void schedule_next_transmit(void) {
+  s_initiator_state = InitiatorState::Idle;
+  s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+}
+
+void initiator_start_transmit(void) {
+  if (s_initiator_state == InitiatorState::Idle &&
       (int32_t)(hal_millis() - s_next_transmit_ms) >= 0) {
     char packet[64];
     const uint32_t sequence = ++s_sequence;
@@ -200,25 +315,54 @@ void initiator_poll(void) {
     if (written <= 0 || (size_t)written >= sizeof(packet)) {
       return;
     }
-    const hal_status_t tx = hal_lora_radio_transmit(
-        s_radio, reinterpret_cast<const uint8_t *>(packet), (size_t)written,
-        0u);
+    const hal_status_t tx = hal_lora_radio_transmit_start(
+        s_radio, reinterpret_cast<const uint8_t *>(packet), (size_t)written);
     if (tx != HAL_OK) {
       derr("TX failed: %s", hal_status_to_string(tx));
-      s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+      schedule_next_transmit();
       return;
     }
-    deb("TX ping sequence=%lu", (unsigned long)sequence);
+    s_active_sequence = sequence;
+    s_initiator_state = InitiatorState::Transmitting;
+    status_led_transmit_started();
+  }
+}
+
+void initiator_handle_event(const hal_lora_radio_event_t &event) {
+  if (event.type == HAL_LORA_RADIO_EVENT_TX_COMPLETE &&
+      s_initiator_state == InitiatorState::Transmitting) {
+    status_led_transmit_finished();
+    hal_lora_operation_status_t tx_status{};
+    if (hal_lora_radio_get_tx_status(s_radio, &tx_status) != HAL_OK ||
+        tx_status.state != HAL_LORA_OPERATION_SUCCEEDED) {
+      derr("TX completion status mismatch");
+      schedule_next_transmit();
+      return;
+    }
+    deb("TX ping sequence=%lu", (unsigned long)s_active_sequence);
     const hal_status_t rx =
         hal_lora_radio_receive_start(s_radio, kReplyTimeoutMs);
     if (rx != HAL_OK) {
       derr("Reply RX start failed: %s", hal_status_to_string(rx));
-      s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+      schedule_next_transmit();
       return;
     }
-    s_waiting_for_reply = true;
+    s_initiator_state = InitiatorState::Receiving;
+    return;
   }
-  if (!s_waiting_for_reply) {
+  if (event.type != HAL_LORA_RADIO_EVENT_RX_READY ||
+      s_initiator_state != InitiatorState::Receiving) {
+    if (event.operation == HAL_LORA_OPERATION_KIND_TRANSMIT) {
+      status_led_transmit_finished();
+    }
+    derr("Reply failed: %s", hal_status_to_string(event.result));
+    if (s_initiator_state == InitiatorState::Receiving) {
+      uint8_t ignored = 0u;
+      size_t ignored_length = 0u;
+      (void)hal_lora_radio_receive(s_radio, &ignored, sizeof(ignored),
+                                   &ignored_length, nullptr);
+    }
+    schedule_next_transmit();
     return;
   }
 
@@ -231,12 +375,12 @@ void initiator_poll(void) {
     return;
   }
   if (rx == HAL_OK) {
+    status_led_receive_pulse();
     log_packet("RX", reply, length, info);
   } else {
     derr("Reply failed: %s", hal_status_to_string(rx));
   }
-  s_waiting_for_reply = false;
-  s_next_transmit_ms = hal_millis() + kTransmitPeriodMs;
+  schedule_next_transmit();
 }
 #endif
 
@@ -244,6 +388,7 @@ void initiator_poll(void) {
 
 extern "C" void app_start(void) {
   debugInit();
+  status_led_initialize();
 #ifdef HAL_LORA_EXAMPLE_RESPONDER
   deb("=== JaszczurHAL raw LoRa responder ===");
 #else
@@ -274,6 +419,10 @@ extern "C" void app_start(void) {
   if (status == HAL_OK) {
     status = hal_lora_radio_configure(s_radio, &s_modem);
   }
+  if (status == HAL_OK) {
+    status = hal_lora_radio_set_event_callback(s_radio, radio_event_callback,
+                                               nullptr);
+  }
   if (status != HAL_OK) {
     derr("Radio setup failed: %s", hal_status_to_string(status));
     return;
@@ -281,6 +430,10 @@ extern "C" void app_start(void) {
   deb("Radio ready: %lu Hz, SF%u, %ld Hz BW, %d dBm",
       (unsigned long)s_modem.frequency_hz, (unsigned)s_modem.spreading_factor,
       (long)s_modem.bandwidth_hz, (int)s_modem.tx_power_dbm);
+  deb("Async DIO1 event loop enabled");
+#ifdef HAL_LED_BUILTIN
+  deb("Status LED: solid during TX, 120 ms pulse after RX");
+#endif
   s_ready = true;
 #ifdef HAL_LORA_EXAMPLE_RESPONDER
   start_responder_receive();
@@ -290,13 +443,25 @@ extern "C" void app_start(void) {
 }
 
 extern "C" void app_task0(void) {
+  status_led_process();
   if (!s_ready) {
     hal_delay_ms(100u);
     return;
   }
+  const hal_status_t process = hal_lora_radio_process(s_radio);
+  if (process != HAL_OK && process != HAL_EAGAIN && !s_event_ready) {
+    derr("Radio process failed: %s", hal_status_to_string(process));
+  }
+  if (s_event_ready) {
+    const hal_lora_radio_event_t event = s_event;
+    s_event_ready = false;
 #ifdef HAL_LORA_EXAMPLE_RESPONDER
-  responder_poll();
+    responder_handle_event(event);
 #else
-  initiator_poll();
+    initiator_handle_event(event);
+#endif
+  }
+#ifndef HAL_LORA_EXAMPLE_RESPONDER
+  initiator_start_transmit();
 #endif
 }

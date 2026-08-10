@@ -365,16 +365,24 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         ${SRC}/hal/hal_config.cpp
         ${SRC}/hal/impl/shared/network/jh_network_service.cpp
         ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
+        ${SRC}/hal/hal_lora_radio.cpp
+        ${SRC}/hal/impl/shared/drivers/sx126x/jh_sx126x_adapter.cpp
+        ${SRC}/hal/impl/shared/jh_handle_pool.cpp
+        ${JH_SX126X_SOURCES}
         ${SRC}/utils/unity.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/freertos_posix_lora_port.cpp
     )
     target_include_directories(hal_freertos_posix PUBLIC
         ${SRC}
+        ${JH_SX126X_INCLUDE_DIRS}
     )
     target_compile_definitions(hal_freertos_posix PUBLIC
         HAL_TARGET_STM32G474=1
         JH_TARGET_STM32G474=1
         HAL_ENABLE_FREERTOS=1
+        HAL_ENABLE_SX126X=1
         HAL_ENABLE_UNITY
+        JH_LORA_PROVIDER_TESTING=1
         UNITY_INCLUDE_CONFIG_H
     )
     jh_enable_host_warnings(hal_freertos_posix)

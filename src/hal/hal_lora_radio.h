@@ -142,18 +142,27 @@ typedef struct {
   bool crc_valid;
 } hal_lora_packet_info_t;
 
-/** @brief Basic per-handle counters and the most recent radio error. */
+/** @brief Per-handle counters and the most recent radio observations. */
 typedef struct {
   uint32_t transmitted_packets;
   uint32_t received_packets;
   uint32_t crc_errors;
+  uint32_t header_errors;
   uint32_t tx_timeouts;
   uint32_t rx_timeouts;
   uint32_t dropped_packets;
   uint32_t bus_errors;
   uint32_t resets;
+  uint32_t cancelled_operations;
+  uint32_t operation_errors;
+  uint32_t irq_events;
+  uint32_t callback_events;
+  uint32_t dropped_events;
   int16_t last_rssi_dbm;
+  int16_t last_signal_rssi_dbm;
   int8_t last_snr_db;
+  uint32_t last_event_timestamp_ms;
+  uint32_t last_state_change_ms;
   hal_status_t last_error;
 } hal_lora_radio_diagnostics_t;
 
@@ -166,6 +175,51 @@ typedef enum {
   HAL_LORA_RADIO_STATE_SLEEP,
   HAL_LORA_RADIO_STATE_ERROR,
 } hal_lora_radio_state_t;
+
+/** @brief Lifecycle state of the most recent asynchronous TX operation. */
+typedef enum {
+  HAL_LORA_OPERATION_IDLE = 0,
+  HAL_LORA_OPERATION_IN_PROGRESS,
+  HAL_LORA_OPERATION_SUCCEEDED,
+  HAL_LORA_OPERATION_TIMED_OUT,
+  HAL_LORA_OPERATION_CANCELLED,
+  HAL_LORA_OPERATION_FAILED,
+} hal_lora_operation_state_t;
+
+/** @brief Snapshot of an asynchronous operation result. */
+typedef struct {
+  hal_lora_operation_state_t state;
+  hal_status_t result;
+} hal_lora_operation_status_t;
+
+/** @brief Radio operation associated with an event. */
+typedef enum {
+  HAL_LORA_OPERATION_KIND_NONE = 0,
+  HAL_LORA_OPERATION_KIND_TRANSMIT,
+  HAL_LORA_OPERATION_KIND_RECEIVE,
+} hal_lora_operation_kind_t;
+
+/** @brief Events delivered from task context by hal_lora_radio_process(). */
+typedef enum {
+  HAL_LORA_RADIO_EVENT_TX_COMPLETE = 0,
+  HAL_LORA_RADIO_EVENT_RX_READY,
+  HAL_LORA_RADIO_EVENT_TIMEOUT,
+  HAL_LORA_RADIO_EVENT_CANCELLED,
+  HAL_LORA_RADIO_EVENT_ERROR,
+} hal_lora_radio_event_type_t;
+
+/** @brief One radio event copied before a user callback is invoked. */
+typedef struct {
+  hal_lora_radio_event_type_t type;
+  hal_lora_operation_kind_t operation;
+  hal_status_t result;
+  uint32_t timestamp_ms;
+} hal_lora_radio_event_t;
+
+/** @brief Callback invoked from task context, never from the DIO1 ISR. */
+typedef void (*hal_lora_radio_event_callback_t)(
+    hal_lora_radio_t radio, const hal_lora_radio_event_t *event,
+    void *user_data);
 
 /**
  * @brief Build a radio descriptor from the active board profile.
@@ -220,6 +274,21 @@ hal_status_t hal_lora_radio_transmit(hal_lora_radio_t radio,
                                      const uint8_t *data, size_t length,
                                      uint32_t timeout_ms);
 
+/**
+ * @brief Start one copied TX packet and return before radio completion.
+ *
+ * The timeout is derived from time-on-air plus a bounded driver margin. Call
+ * hal_lora_radio_process() from the application loop and inspect completion
+ * with hal_lora_radio_get_tx_status().
+ */
+hal_status_t hal_lora_radio_transmit_start(hal_lora_radio_t radio,
+                                           const uint8_t *data, size_t length);
+
+/** @brief Copy the current or most recent asynchronous TX status. */
+hal_status_t
+hal_lora_radio_get_tx_status(hal_lora_radio_t radio,
+                             hal_lora_operation_status_t *out_status);
+
 /** @brief Start bounded receive mode; poll with hal_lora_radio_receive(). */
 hal_status_t hal_lora_radio_receive_start(hal_lora_radio_t radio,
                                           uint32_t timeout_ms);
@@ -237,6 +306,27 @@ hal_status_t hal_lora_radio_receive_start_continuous(hal_lora_radio_t radio);
 hal_status_t hal_lora_radio_receive(hal_lora_radio_t radio, uint8_t *buffer,
                                     size_t buffer_size, size_t *out_length,
                                     hal_lora_packet_info_t *out_info);
+
+/**
+ * @brief Service DIO1 events and software timeouts from task context.
+ *
+ * HAL_EAGAIN means an active operation has no event yet. Registered callbacks
+ * are invoked synchronously before this function returns and outside internal
+ * locks. The callback may call other radio APIs.
+ */
+hal_status_t hal_lora_radio_process(hal_lora_radio_t radio);
+
+/**
+ * @brief Register or clear a task-context event callback.
+ * @param callback NULL clears the callback and any queued notification.
+ */
+hal_status_t
+hal_lora_radio_set_event_callback(hal_lora_radio_t radio,
+                                  hal_lora_radio_event_callback_t callback,
+                                  void *user_data);
+
+/** @brief Cancel the active TX or RX operation and enter standby. */
+hal_status_t hal_lora_radio_cancel(hal_lora_radio_t radio);
 
 /** @brief Read the current stable public radio state. */
 hal_status_t hal_lora_radio_get_state(hal_lora_radio_t radio,

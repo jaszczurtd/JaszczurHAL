@@ -25,9 +25,9 @@ static const jh_lora_radio_provider_ops_t *s_provider = NULL;
 static bool provider_valid(const jh_lora_radio_provider_ops_t *provider) {
   return provider != NULL && provider->initialize != NULL &&
          provider->deinitialize != NULL && provider->configure != NULL &&
-         provider->transmit != NULL && provider->receive_start != NULL &&
-         provider->receive_poll != NULL && provider->sleep != NULL &&
-         provider->standby != NULL;
+         provider->transmit_start != NULL && provider->receive_start != NULL &&
+         provider->process != NULL && provider->cancel != NULL &&
+         provider->sleep != NULL && provider->standby != NULL;
 }
 
 static hal_status_t pool_lock(void) {
@@ -151,6 +151,9 @@ static void clear_context(jh_lora_radio_context_t *context) {
   memset(context, 0, sizeof(*context));
   context->mutex = mutex;
   context->state = HAL_LORA_RADIO_STATE_ERROR;
+  context->tx_status.state = HAL_LORA_OPERATION_IDLE;
+  context->tx_status.result = HAL_NONE;
+  context->rx_result = HAL_NONE;
   context->diagnostics.last_error = HAL_NONE;
 }
 
@@ -229,6 +232,7 @@ static hal_status_t allocate_context(const hal_lora_radio_config_t *config,
 
   hal_mutex_lock(context->mutex);
   *out_radio = reinterpret_cast<hal_lora_radio_t>(handle);
+  context->handle = *out_radio;
   *out_context = context;
   return HAL_OK;
 }
@@ -295,18 +299,61 @@ static void record_error(jh_lora_radio_context_t *context,
   if (status == HAL_EBUS || status == HAL_EIO || status == HAL_EHW) {
     ++context->diagnostics.bus_errors;
   }
+  if (status != HAL_ETIMEOUT && status != HAL_ECANCELED &&
+      status != HAL_EPROTO) {
+    ++context->diagnostics.operation_errors;
+  }
 }
 
-static hal_status_t finish_operation(jh_lora_radio_context_t *context,
-                                     hal_status_t status,
-                                     hal_lora_radio_state_t success_state) {
-  hal_mutex_lock(context->mutex);
-  context->operation_busy = false;
-  context->state =
-      status == HAL_OK ? success_state : HAL_LORA_RADIO_STATE_ERROR;
-  record_error(context, status);
-  hal_mutex_unlock(context->mutex);
-  return status;
+static bool state_transition_valid(hal_lora_radio_state_t from,
+                                   hal_lora_radio_state_t to) {
+  if (from == to || to == HAL_LORA_RADIO_STATE_ERROR) {
+    return true;
+  }
+  switch (from) {
+  case HAL_LORA_RADIO_STATE_STANDBY:
+    return to == HAL_LORA_RADIO_STATE_RX || to == HAL_LORA_RADIO_STATE_TX ||
+           to == HAL_LORA_RADIO_STATE_CAD || to == HAL_LORA_RADIO_STATE_SLEEP;
+  case HAL_LORA_RADIO_STATE_RX:
+  case HAL_LORA_RADIO_STATE_TX:
+  case HAL_LORA_RADIO_STATE_CAD:
+  case HAL_LORA_RADIO_STATE_SLEEP:
+  case HAL_LORA_RADIO_STATE_ERROR:
+    return to == HAL_LORA_RADIO_STATE_STANDBY;
+  default:
+    return false;
+  }
+}
+
+static void set_state(jh_lora_radio_context_t *context,
+                      hal_lora_radio_state_t state) {
+  if (!state_transition_valid(context->state, state)) {
+    context->state = HAL_LORA_RADIO_STATE_ERROR;
+    context->diagnostics.last_error = HAL_EINTERNAL;
+    ++context->diagnostics.operation_errors;
+  } else {
+    context->state = state;
+  }
+  context->diagnostics.last_state_change_ms = hal_millis();
+}
+
+static void queue_event(jh_lora_radio_context_t *context,
+                        hal_lora_radio_event_type_t type,
+                        hal_lora_operation_kind_t operation,
+                        hal_status_t result) {
+  const uint32_t now = hal_millis();
+  context->diagnostics.last_event_timestamp_ms = now;
+  if (context->event_callback == NULL) {
+    return;
+  }
+  if (context->event_pending) {
+    ++context->diagnostics.dropped_events;
+  }
+  context->pending_event.type = type;
+  context->pending_event.operation = operation;
+  context->pending_event.result = result;
+  context->pending_event.timestamp_ms = now;
+  context->event_pending = true;
 }
 
 hal_status_t
@@ -443,7 +490,7 @@ hal_status_t hal_lora_radio_create(const hal_lora_radio_config_t *config,
     abandon_context(failed_handle, context);
     return status;
   }
-  context->state = HAL_LORA_RADIO_STATE_STANDBY;
+  set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
   context->diagnostics.resets = 1u;
   set_board_radio_state(context->board_device, HAL_OK);
   hal_mutex_unlock(context->mutex);
@@ -456,7 +503,9 @@ hal_status_t hal_lora_radio_destroy(hal_lora_radio_t radio) {
   if (status != HAL_OK) {
     return status;
   }
-  if (context->operation_busy) {
+  if (context->operation_busy || context->state == HAL_LORA_RADIO_STATE_TX ||
+      context->state == HAL_LORA_RADIO_STATE_RX ||
+      context->state == HAL_LORA_RADIO_STATE_CAD) {
     jh_lora_radio_context_unlock(context);
     return HAL_EBUSY;
   }
@@ -496,7 +545,8 @@ hal_status_t hal_lora_radio_configure(hal_lora_radio_t radio,
     return HAL_EINVAL;
   }
   if (context->operation_busy || context->state == HAL_LORA_RADIO_STATE_RX ||
-      context->state == HAL_LORA_RADIO_STATE_TX) {
+      context->state == HAL_LORA_RADIO_STATE_TX ||
+      context->state == HAL_LORA_RADIO_STATE_CAD) {
     jh_lora_radio_context_unlock(context);
     return HAL_EBUSY;
   }
@@ -511,11 +561,11 @@ hal_status_t hal_lora_radio_configure(hal_lora_radio_t radio,
   context->operation_busy = false;
   if (status == HAL_OK) {
     context->configured = true;
-    context->state = HAL_LORA_RADIO_STATE_STANDBY;
+    set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
   } else {
     context->modem = previous;
     context->configured = previously_configured;
-    context->state = HAL_LORA_RADIO_STATE_ERROR;
+    set_state(context, HAL_LORA_RADIO_STATE_ERROR);
     record_error(context, status);
   }
   hal_mutex_unlock(context->mutex);
@@ -548,9 +598,183 @@ hal_lora_modem_config_t hal_lora_default_fast_eu868(void) {
   return eu868_preset(7u);
 }
 
-hal_status_t hal_lora_radio_transmit(hal_lora_radio_t radio,
-                                     const uint8_t *data, size_t length,
-                                     uint32_t timeout_ms) {
+static hal_status_t auto_tx_timeout(const hal_lora_modem_config_t *modem,
+                                    size_t length, uint32_t *out_timeout_ms) {
+  uint32_t airtime_ms = 0u;
+  const hal_status_t status = jh_sx126x_time_on_air(modem, length, &airtime_ms);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (airtime_ms > UINT32_MAX - JH_LORA_AUTO_TX_MARGIN_MS) {
+    return HAL_EOVERFLOW;
+  }
+  *out_timeout_ms = airtime_ms + JH_LORA_AUTO_TX_MARGIN_MS;
+  return HAL_OK;
+}
+
+static void complete_tx_locked(jh_lora_radio_context_t *context,
+                               hal_status_t status) {
+  if (status == HAL_OK) {
+    context->tx_status.state = HAL_LORA_OPERATION_SUCCEEDED;
+    context->tx_status.result = HAL_OK;
+    ++context->diagnostics.transmitted_packets;
+    set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    queue_event(context, HAL_LORA_RADIO_EVENT_TX_COMPLETE,
+                HAL_LORA_OPERATION_KIND_TRANSMIT, HAL_OK);
+    return;
+  }
+  if (status == HAL_ETIMEOUT) {
+    context->tx_status.state = HAL_LORA_OPERATION_TIMED_OUT;
+    context->tx_status.result = HAL_ETIMEOUT;
+    ++context->diagnostics.tx_timeouts;
+    set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    record_error(context, status);
+    queue_event(context, HAL_LORA_RADIO_EVENT_TIMEOUT,
+                HAL_LORA_OPERATION_KIND_TRANSMIT, status);
+    return;
+  }
+  if (status == HAL_ECANCELED) {
+    context->tx_status.state = HAL_LORA_OPERATION_CANCELLED;
+    context->tx_status.result = HAL_ECANCELED;
+    ++context->diagnostics.cancelled_operations;
+    set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    queue_event(context, HAL_LORA_RADIO_EVENT_CANCELLED,
+                HAL_LORA_OPERATION_KIND_TRANSMIT, status);
+    return;
+  }
+  context->tx_status.state = HAL_LORA_OPERATION_FAILED;
+  context->tx_status.result = status;
+  set_state(context, HAL_LORA_RADIO_STATE_ERROR);
+  record_error(context, status);
+  queue_event(context, HAL_LORA_RADIO_EVENT_ERROR,
+              HAL_LORA_OPERATION_KIND_TRANSMIT, status);
+}
+
+static void complete_rx_locked(jh_lora_radio_context_t *context,
+                               hal_status_t status,
+                               jh_lora_provider_events_t events) {
+  if (status != HAL_OK && status != HAL_ETIMEOUT && status != HAL_EPROTO) {
+    context->rx_result = status;
+    set_state(context, HAL_LORA_RADIO_STATE_ERROR);
+    record_error(context, status);
+    queue_event(context, HAL_LORA_RADIO_EVENT_ERROR,
+                HAL_LORA_OPERATION_KIND_RECEIVE, status);
+    return;
+  }
+  if ((events & (JH_LORA_PROVIDER_EVENT_CRC_ERROR |
+                 JH_LORA_PROVIDER_EVENT_HEADER_ERROR)) != 0u) {
+    if ((events & JH_LORA_PROVIDER_EVENT_CRC_ERROR) != 0u) {
+      ++context->diagnostics.crc_errors;
+    }
+    if ((events & JH_LORA_PROVIDER_EVENT_HEADER_ERROR) != 0u) {
+      ++context->diagnostics.header_errors;
+    }
+    context->rx_result = HAL_EPROTO;
+    if (!context->receive_continuous) {
+      set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    }
+    record_error(context, HAL_EPROTO);
+    queue_event(context, HAL_LORA_RADIO_EVENT_ERROR,
+                HAL_LORA_OPERATION_KIND_RECEIVE, HAL_EPROTO);
+    return;
+  }
+  if ((events & JH_LORA_PROVIDER_EVENT_RX_DONE) != 0u && status == HAL_OK) {
+    context->rx_result = HAL_OK;
+    if (!context->receive_continuous) {
+      set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    }
+    queue_event(context, HAL_LORA_RADIO_EVENT_RX_READY,
+                HAL_LORA_OPERATION_KIND_RECEIVE, HAL_OK);
+    return;
+  }
+  if ((events & JH_LORA_PROVIDER_EVENT_TIMEOUT) != 0u ||
+      status == HAL_ETIMEOUT) {
+    context->rx_result = HAL_ETIMEOUT;
+    ++context->diagnostics.rx_timeouts;
+    set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+    record_error(context, HAL_ETIMEOUT);
+    queue_event(context, HAL_LORA_RADIO_EVENT_TIMEOUT,
+                HAL_LORA_OPERATION_KIND_RECEIVE, HAL_ETIMEOUT);
+    return;
+  }
+  context->rx_result = status;
+  set_state(context, HAL_LORA_RADIO_STATE_ERROR);
+  record_error(context, status);
+  queue_event(context, HAL_LORA_RADIO_EVENT_ERROR,
+              HAL_LORA_OPERATION_KIND_RECEIVE, status);
+}
+
+static hal_status_t service_active_operation(hal_lora_radio_t radio) {
+  jh_lora_radio_context_t *context = NULL;
+  hal_status_t status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (context->operation_busy) {
+    jh_lora_radio_context_unlock(context);
+    return HAL_EBUSY;
+  }
+  const hal_lora_radio_state_t active_state = context->state;
+  if (active_state != HAL_LORA_RADIO_STATE_TX &&
+      active_state != HAL_LORA_RADIO_STATE_RX) {
+    jh_lora_radio_context_unlock(context);
+    return HAL_OK;
+  }
+  if (active_state == HAL_LORA_RADIO_STATE_RX &&
+      (context->rx_ready || context->rx_result != HAL_EAGAIN)) {
+    status = context->rx_result;
+    jh_lora_radio_context_unlock(context);
+    return status;
+  }
+  context->operation_busy = true;
+  const jh_lora_radio_provider_ops_t *provider = context->provider;
+  jh_lora_radio_context_unlock(context);
+
+  jh_lora_provider_events_t events = JH_LORA_PROVIDER_EVENT_NONE;
+  status = provider->process(context, &events);
+  hal_mutex_lock(context->mutex);
+  context->operation_busy = false;
+  if ((events & JH_LORA_PROVIDER_EVENT_IRQ) != 0u) {
+    ++context->diagnostics.irq_events;
+  }
+  if (status == HAL_EAGAIN) {
+    hal_mutex_unlock(context->mutex);
+    return HAL_EAGAIN;
+  }
+  if (active_state == HAL_LORA_RADIO_STATE_TX) {
+    if (status == HAL_OK && (events & JH_LORA_PROVIDER_EVENT_TIMEOUT) != 0u) {
+      status = HAL_ETIMEOUT;
+      complete_tx_locked(context, status);
+    } else if (status == HAL_OK &&
+               (events & JH_LORA_PROVIDER_EVENT_TX_DONE) == 0u) {
+      status = HAL_EAGAIN;
+    } else {
+      complete_tx_locked(context, status);
+    }
+  } else if (status != HAL_OK ||
+             (events &
+              (JH_LORA_PROVIDER_EVENT_RX_DONE | JH_LORA_PROVIDER_EVENT_TIMEOUT |
+               JH_LORA_PROVIDER_EVENT_CRC_ERROR |
+               JH_LORA_PROVIDER_EVENT_HEADER_ERROR)) != 0u) {
+    if (status == HAL_OK && (events & JH_LORA_PROVIDER_EVENT_TIMEOUT) != 0u) {
+      status = HAL_ETIMEOUT;
+    } else if (status == HAL_OK &&
+               (events & (JH_LORA_PROVIDER_EVENT_CRC_ERROR |
+                          JH_LORA_PROVIDER_EVENT_HEADER_ERROR)) != 0u) {
+      status = HAL_EPROTO;
+    }
+    complete_rx_locked(context, status, events);
+  } else {
+    status = HAL_EAGAIN;
+  }
+  hal_mutex_unlock(context->mutex);
+  return status;
+}
+
+static hal_status_t transmit_start_with_timeout(hal_lora_radio_t radio,
+                                                const uint8_t *data,
+                                                size_t length,
+                                                uint32_t timeout_ms) {
   if (data == NULL || length == 0u || length > HAL_LORA_RADIO_MAX_PAYLOAD) {
     return HAL_EINVAL;
   }
@@ -568,39 +792,75 @@ hal_status_t hal_lora_radio_transmit(hal_lora_radio_t radio,
     jh_lora_radio_context_unlock(context);
     return HAL_EBUSY;
   }
+  if (timeout_ms == 0u) {
+    status = auto_tx_timeout(&context->modem, length, &timeout_ms);
+    if (status != HAL_OK) {
+      jh_lora_radio_context_unlock(context);
+      return status;
+    }
+  }
   memcpy(context->tx_buffer, data, length);
   context->tx_length = length;
+  context->transmit_started_ms = hal_millis();
+  context->transmit_timeout_ms = timeout_ms;
+  context->tx_status.state = HAL_LORA_OPERATION_IN_PROGRESS;
+  context->tx_status.result = HAL_EAGAIN;
   context->operation_busy = true;
-  context->state = HAL_LORA_RADIO_STATE_TX;
-  if (timeout_ms == 0u) {
-    uint32_t airtime_ms = 0u;
-    status = jh_sx126x_time_on_air(&context->modem, length, &airtime_ms);
-    if (status != HAL_OK ||
-        airtime_ms > UINT32_MAX - JH_LORA_AUTO_TX_MARGIN_MS) {
-      context->operation_busy = false;
-      context->state = HAL_LORA_RADIO_STATE_STANDBY;
-      jh_lora_radio_context_unlock(context);
-      return status == HAL_OK ? HAL_EOVERFLOW : status;
-    }
-    timeout_ms = airtime_ms + JH_LORA_AUTO_TX_MARGIN_MS;
-  }
+  set_state(context, HAL_LORA_RADIO_STATE_TX);
+  const jh_lora_radio_provider_ops_t *provider = context->provider;
   jh_lora_radio_context_unlock(context);
 
-  status = context->provider->transmit(context, timeout_ms);
+  status = provider->transmit_start(context, timeout_ms);
   hal_mutex_lock(context->mutex);
   context->operation_busy = false;
-  if (status == HAL_OK) {
-    ++context->diagnostics.transmitted_packets;
-    context->state = HAL_LORA_RADIO_STATE_STANDBY;
-  } else if (status == HAL_ETIMEOUT) {
-    ++context->diagnostics.tx_timeouts;
-    context->state = HAL_LORA_RADIO_STATE_STANDBY;
-    record_error(context, status);
-  } else {
-    context->state = HAL_LORA_RADIO_STATE_ERROR;
-    record_error(context, status);
+  if (status != HAL_OK) {
+    complete_tx_locked(context, status);
   }
   hal_mutex_unlock(context->mutex);
+  return status;
+}
+
+hal_status_t hal_lora_radio_transmit_start(hal_lora_radio_t radio,
+                                           const uint8_t *data, size_t length) {
+  return transmit_start_with_timeout(radio, data, length, 0u);
+}
+
+hal_status_t
+hal_lora_radio_get_tx_status(hal_lora_radio_t radio,
+                             hal_lora_operation_status_t *out_status) {
+  if (out_status == NULL) {
+    return HAL_EINVAL;
+  }
+  jh_lora_radio_context_t *context = NULL;
+  const hal_status_t status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  *out_status = context->tx_status;
+  jh_lora_radio_context_unlock(context);
+  return HAL_OK;
+}
+
+hal_status_t hal_lora_radio_transmit(hal_lora_radio_t radio,
+                                     const uint8_t *data, size_t length,
+                                     uint32_t timeout_ms) {
+  hal_status_t status =
+      transmit_start_with_timeout(radio, data, length, timeout_ms);
+  while (status == HAL_OK) {
+    hal_lora_operation_status_t operation = {};
+    status = hal_lora_radio_get_tx_status(radio, &operation);
+    if (status != HAL_OK) {
+      return status;
+    }
+    if (operation.state != HAL_LORA_OPERATION_IN_PROGRESS) {
+      return operation.result;
+    }
+    status = service_active_operation(radio);
+    if (status == HAL_EAGAIN) {
+      status = HAL_OK;
+      hal_delay_ms(1u);
+    }
+  }
   return status;
 }
 
@@ -629,10 +889,19 @@ static hal_status_t receive_start(hal_lora_radio_t radio, uint32_t timeout_ms,
   context->receive_continuous = continuous;
   context->receive_started_ms = hal_millis();
   context->receive_timeout_ms = timeout_ms;
+  context->rx_result = HAL_EAGAIN;
+  set_state(context, HAL_LORA_RADIO_STATE_RX);
+  const jh_lora_radio_provider_ops_t *provider = context->provider;
   jh_lora_radio_context_unlock(context);
 
-  status = context->provider->receive_start(context, timeout_ms, continuous);
-  return finish_operation(context, status, HAL_LORA_RADIO_STATE_RX);
+  status = provider->receive_start(context, timeout_ms, continuous);
+  hal_mutex_lock(context->mutex);
+  context->operation_busy = false;
+  if (status != HAL_OK) {
+    complete_rx_locked(context, status, JH_LORA_PROVIDER_EVENT_NONE);
+  }
+  hal_mutex_unlock(context->mutex);
+  return status;
 }
 
 hal_status_t hal_lora_radio_receive_start(hal_lora_radio_t radio,
@@ -663,17 +932,23 @@ hal_status_t hal_lora_radio_receive(hal_lora_radio_t radio, uint8_t *buffer,
     jh_lora_radio_context_unlock(context);
     return HAL_EBUSY;
   }
-  if (context->state != HAL_LORA_RADIO_STATE_RX) {
+  const bool should_service = context->state == HAL_LORA_RADIO_STATE_RX &&
+                              !context->rx_ready &&
+                              context->rx_result == HAL_EAGAIN;
+  if (!should_service && !context->rx_ready && context->rx_result == HAL_NONE) {
     jh_lora_radio_context_unlock(context);
     return HAL_ESTATE;
   }
-  context->operation_busy = true;
   jh_lora_radio_context_unlock(context);
 
-  status = context->provider->receive_poll(context);
-  hal_mutex_lock(context->mutex);
-  context->operation_busy = false;
-  if (status == HAL_OK && context->rx_ready) {
+  if (should_service) {
+    (void)service_active_operation(radio);
+  }
+  status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (context->rx_ready) {
     const size_t copy_length =
         context->rx_length < buffer_size ? context->rx_length : buffer_size;
     if (copy_length > 0u) {
@@ -684,29 +959,122 @@ hal_status_t hal_lora_radio_receive(hal_lora_radio_t radio, uint8_t *buffer,
       *out_info = context->rx_info;
     }
     context->diagnostics.last_rssi_dbm = context->rx_info.rssi_dbm;
+    context->diagnostics.last_signal_rssi_dbm =
+        context->rx_info.signal_rssi_dbm;
     context->diagnostics.last_snr_db = context->rx_info.snr_db;
     ++context->diagnostics.received_packets;
     context->rx_ready = false;
-    if (!context->receive_continuous) {
-      context->state = HAL_LORA_RADIO_STATE_STANDBY;
-    }
+    context->rx_result = context->receive_continuous ? HAL_EAGAIN : HAL_NONE;
+    status = HAL_OK;
     if (copy_length < context->rx_length) {
       ++context->diagnostics.dropped_packets;
       status = HAL_EOVERFLOW;
     }
-  } else if (status == HAL_ETIMEOUT) {
-    ++context->diagnostics.rx_timeouts;
-    context->state = HAL_LORA_RADIO_STATE_STANDBY;
-    record_error(context, status);
-  } else if (status == HAL_EPROTO) {
-    ++context->diagnostics.crc_errors;
-    if (!context->receive_continuous) {
-      context->state = HAL_LORA_RADIO_STATE_STANDBY;
+  } else if (context->rx_result != HAL_EAGAIN &&
+             context->rx_result != HAL_NONE) {
+    status = context->rx_result;
+    context->rx_result = context->receive_continuous ? HAL_EAGAIN : HAL_NONE;
+  } else {
+    status =
+        context->state == HAL_LORA_RADIO_STATE_RX ? HAL_EAGAIN : HAL_ESTATE;
+  }
+  jh_lora_radio_context_unlock(context);
+  return status;
+}
+
+hal_status_t hal_lora_radio_process(hal_lora_radio_t radio) {
+  hal_status_t status = service_active_operation(radio);
+  if (status == HAL_EBUSY || status == HAL_EUNINIT) {
+    return status;
+  }
+
+  jh_lora_radio_context_t *context = NULL;
+  const hal_status_t lock_status = jh_lora_radio_context_lock(radio, &context);
+  if (lock_status != HAL_OK) {
+    return lock_status;
+  }
+  hal_lora_radio_event_callback_t callback = NULL;
+  void *user_data = NULL;
+  hal_lora_radio_event_t event = {};
+  if (context->event_pending && context->event_callback != NULL) {
+    callback = context->event_callback;
+    user_data = context->event_user_data;
+    event = context->pending_event;
+    context->event_pending = false;
+    ++context->diagnostics.callback_events;
+  }
+  jh_lora_radio_context_unlock(context);
+  if (callback != NULL) {
+    callback(radio, &event, user_data);
+    if (event.result != HAL_OK) {
+      status = event.result;
+    } else if (status == HAL_EAGAIN) {
+      status = HAL_OK;
     }
+  }
+  return status;
+}
+
+hal_status_t
+hal_lora_radio_set_event_callback(hal_lora_radio_t radio,
+                                  hal_lora_radio_event_callback_t callback,
+                                  void *user_data) {
+  jh_lora_radio_context_t *context = NULL;
+  const hal_status_t status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  context->event_callback = callback;
+  context->event_user_data = callback == NULL ? NULL : user_data;
+  if (callback == NULL) {
+    context->event_pending = false;
+  }
+  jh_lora_radio_context_unlock(context);
+  return HAL_OK;
+}
+
+hal_status_t hal_lora_radio_cancel(hal_lora_radio_t radio) {
+  jh_lora_radio_context_t *context = NULL;
+  hal_status_t status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (context->operation_busy) {
+    jh_lora_radio_context_unlock(context);
+    return HAL_EBUSY;
+  }
+  const hal_lora_radio_state_t active_state = context->state;
+  if (active_state != HAL_LORA_RADIO_STATE_TX &&
+      active_state != HAL_LORA_RADIO_STATE_RX &&
+      active_state != HAL_LORA_RADIO_STATE_CAD) {
+    jh_lora_radio_context_unlock(context);
+    return HAL_ESTATE;
+  }
+  context->operation_busy = true;
+  const jh_lora_radio_provider_ops_t *provider = context->provider;
+  jh_lora_radio_context_unlock(context);
+
+  status = provider->cancel(context);
+  hal_mutex_lock(context->mutex);
+  context->operation_busy = false;
+  if (status == HAL_OK) {
+    if (active_state == HAL_LORA_RADIO_STATE_TX) {
+      complete_tx_locked(context, HAL_ECANCELED);
+    } else {
+      context->rx_result = HAL_ECANCELED;
+      ++context->diagnostics.cancelled_operations;
+      set_state(context, HAL_LORA_RADIO_STATE_STANDBY);
+      queue_event(context, HAL_LORA_RADIO_EVENT_CANCELLED,
+                  HAL_LORA_OPERATION_KIND_RECEIVE, HAL_ECANCELED);
+    }
+  } else {
+    set_state(context, HAL_LORA_RADIO_STATE_ERROR);
     record_error(context, status);
-  } else if (status != HAL_EAGAIN) {
-    context->state = HAL_LORA_RADIO_STATE_ERROR;
-    record_error(context, status);
+    queue_event(context, HAL_LORA_RADIO_EVENT_ERROR,
+                active_state == HAL_LORA_RADIO_STATE_TX
+                    ? HAL_LORA_OPERATION_KIND_TRANSMIT
+                    : HAL_LORA_OPERATION_KIND_RECEIVE,
+                status);
   }
   hal_mutex_unlock(context->mutex);
   return status;
@@ -749,17 +1117,31 @@ static hal_status_t set_power_state(hal_lora_radio_t radio, bool sleep) {
   if (status != HAL_OK) {
     return status;
   }
-  if (context->operation_busy || context->state == HAL_LORA_RADIO_STATE_TX) {
+  if (context->operation_busy || context->state == HAL_LORA_RADIO_STATE_TX ||
+      context->state == HAL_LORA_RADIO_STATE_RX ||
+      context->state == HAL_LORA_RADIO_STATE_CAD) {
     jh_lora_radio_context_unlock(context);
     return HAL_EBUSY;
   }
+  if (sleep && context->state != HAL_LORA_RADIO_STATE_STANDBY) {
+    jh_lora_radio_context_unlock(context);
+    return HAL_ESTATE;
+  }
   context->operation_busy = true;
+  const jh_lora_radio_provider_ops_t *provider = context->provider;
   jh_lora_radio_context_unlock(context);
-  status = sleep ? context->provider->sleep(context)
-                 : context->provider->standby(context);
-  return finish_operation(context, status,
-                          sleep ? HAL_LORA_RADIO_STATE_SLEEP
-                                : HAL_LORA_RADIO_STATE_STANDBY);
+  status = sleep ? provider->sleep(context) : provider->standby(context);
+  hal_mutex_lock(context->mutex);
+  context->operation_busy = false;
+  if (status == HAL_OK) {
+    set_state(context, sleep ? HAL_LORA_RADIO_STATE_SLEEP
+                             : HAL_LORA_RADIO_STATE_STANDBY);
+  } else {
+    set_state(context, HAL_LORA_RADIO_STATE_ERROR);
+    record_error(context, status);
+  }
+  hal_mutex_unlock(context->mutex);
+  return status;
 }
 
 hal_status_t hal_lora_radio_sleep(hal_lora_radio_t radio) {
@@ -776,7 +1158,7 @@ hal_status_t hal_lora_time_on_air(const hal_lora_modem_config_t *config,
   return jh_sx126x_time_on_air(config, payload_length, out_time_ms);
 }
 
-#if HAL_TARGET_IS_MOCK
+#if HAL_TARGET_IS_MOCK || defined(JH_LORA_PROVIDER_TESTING)
 hal_status_t jh_lora_radio_set_provider_for_test(
     const jh_lora_radio_provider_ops_t *provider) {
   if (provider != NULL && !provider_valid(provider)) {

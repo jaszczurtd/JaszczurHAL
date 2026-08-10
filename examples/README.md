@@ -95,7 +95,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `24_epd_display` | E-paper display facade and refresh path | `55_epd_display` | R0, RA, RV, S | R0, S | - |
 | `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | `57_ota` | R0, RA | R0 | - |
 | `26_ble_stream` | Experimental BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, S | R0, S | - |
-| `27_lora_point_to_point` | Raw SX1262 ping/pong, polling RX, packet diagnostics and radio power/lifecycle recovery | `60_lora_point_to_point` | R0, S | R0, S | `responder` on R0, S; gate on R0, S |
+| `27_lora_point_to_point` | Raw SX1262 ping/pong with DIO1-driven asynchronous TX/RX, callbacks, diagnostics and radio power/lifecycle recovery | `60_lora_point_to_point` | R0, S | R0, S | `responder` on R0, S; gate on R0, S |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474
