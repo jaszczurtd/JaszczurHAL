@@ -26,6 +26,7 @@ configs = (
     "lwip_version.conf",
     "littlefs_version.conf",
     "btstack_version.conf",
+    "sx126x_driver_version.conf",
     "freertos_core_version.conf",
     "pico_sdk_version.conf",
     "picotool_version.conf",
@@ -137,6 +138,7 @@ wrapper_components = {
     "ensure_jpeg.sh": "jpeg",
     "ensure_littlefs.sh": "littlefs",
     "ensure_btstack.sh": "btstack",
+    "ensure_sx126x.sh": "sx126x",
     "ensure_lodepng.sh": "lodepng",
     "ensure_lwip.sh": "lwip",
     "ensure_pico_sdk.sh": "pico-sdk",
@@ -183,6 +185,7 @@ for component in (
     "lwip",
     "littlefs",
     "BTstack",
+    "sx126x_driver",
 ):
     ignored = subprocess.run(
         ["git", "check-ignore", "-q", f"third_party/{component}/sentinel"],

@@ -332,6 +332,7 @@ expected_registry_names = [
     "24_epd_display",
     "25_ota",
     "26_ble_stream",
+    "27_lora_point_to_point",
 ]
 active_example_names = sorted(
     path.parent.parent.name
@@ -341,8 +342,8 @@ active_example_names = sorted(
 )
 require(
     registry_names == expected_registry_names
-    and len(set(registry_names)) == 26,
-    "example registry must contain the ordered 01..26 active catalog",
+    and len(set(registry_names)) == 27,
+    "example registry must contain the ordered 01..27 active catalog",
 )
 
 legacy_coverage: list[str] = []
@@ -391,31 +392,31 @@ for entry in examples_dispatcher.EXAMPLES:
                 gate_configuration_counts[target] += 1
 
 require(
-    len(legacy_coverage) == 59
-    and len(set(legacy_coverage)) == 59
+    len(legacy_coverage) == 60
+    and len(set(legacy_coverage)) == 60
     and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
-    "the dispatcher must cover each of the 59 legacy examples exactly once",
+    "the dispatcher must cover each of the 60 examples exactly once",
 )
 require(
     full_configuration_counts
     == {
-        "rp2040": 27,
+        "rp2040": 29,
         "rp2350-arm": 26,
         "rp2350-riscv": 22,
-        "stm32g474": 25,
+        "stm32g474": 27,
     }
-    and sum(full_configuration_counts.values()) == 100,
+    and sum(full_configuration_counts.values()) == 104,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 27,
+        "rp2040": 29,
         "rp2350-arm": 0,
         "rp2350-riscv": 0,
-        "stm32g474": 25,
+        "stm32g474": 27,
     }
-    and sum(gate_configuration_counts.values()) == 52,
+    and sum(gate_configuration_counts.values()) == 56,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 
@@ -558,7 +559,7 @@ require(
     not examples_dispatcher.generated_file_mismatches(),
     "checked-in example VS Code files are outside the generator drift gate",
 )
-require(len(examples_dispatcher.EXAMPLES) == 26, "example registry size changed unexpectedly")
+require(len(examples_dispatcher.EXAMPLES) == 27, "example registry size changed unexpectedly")
 for entry in examples_dispatcher.EXAMPLES:
     vscode_dir = ROOT / "examples" / str(entry["dir"]) / ".vscode"
     tasks = load_json(vscode_dir / "tasks.json")

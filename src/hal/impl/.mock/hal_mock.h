@@ -305,6 +305,43 @@ void hal_mock_spi_push_rx(uint8_t bus, const uint8_t *data, size_t len);
 size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
 void hal_mock_spi_reset(void);
 
+// ── LoRa radio
+// ──────────────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_LORA
+#include "../../hal_lora_radio.h"
+
+typedef enum {
+  HAL_MOCK_LORA_CONFIGURE = 0,
+  HAL_MOCK_LORA_TRANSMIT,
+  HAL_MOCK_LORA_RECEIVE_START,
+  HAL_MOCK_LORA_RECEIVE_POLL,
+  HAL_MOCK_LORA_SLEEP,
+  HAL_MOCK_LORA_STANDBY,
+} hal_mock_lora_operation_t;
+
+/** @brief Fail the next radio initialization; HAL_OK restores success. */
+void hal_mock_lora_set_next_initialize_status(hal_status_t status);
+/** @brief Set one per-handle provider result consumed by the next operation. */
+hal_status_t hal_mock_lora_set_next_status(hal_lora_radio_t radio,
+                                           hal_mock_lora_operation_t operation,
+                                           hal_status_t status);
+/** @brief Queue one packet and its metadata for the selected virtual radio. */
+hal_status_t hal_mock_lora_inject_receive(hal_lora_radio_t radio,
+                                          const uint8_t *data, size_t length,
+                                          const hal_lora_packet_info_t *info);
+/** @brief Copy the most recent packet passed to blocking transmit. */
+hal_status_t hal_mock_lora_get_last_transmit(hal_lora_radio_t radio,
+                                             uint8_t *buffer,
+                                             size_t buffer_size,
+                                             size_t *out_length);
+/** @brief Route successful transmissions between two virtual radios. */
+hal_status_t hal_mock_lora_connect(hal_lora_radio_t first,
+                                   hal_lora_radio_t second);
+/** @brief Reset global mock injection state when no radio handles are active.
+ */
+void hal_mock_lora_reset(void);
+#endif
+
 // ── OneWire
 // ───────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_ONEWIRE

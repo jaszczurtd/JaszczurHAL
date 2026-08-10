@@ -69,6 +69,25 @@ target_include_directories(test_hal_config_headers_cpp PRIVATE
 jh_enable_host_warnings(test_hal_config_headers_cpp ERRORS)
 add_test(NAME test_hal_config_headers_cpp COMMAND test_hal_config_headers_cpp)
 
+add_executable(test_hal_lora_radio_header_c test_hal_lora_radio_header_c.c)
+target_compile_definitions(test_hal_lora_radio_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1)
+target_include_directories(test_hal_lora_radio_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_radio_header_c ERRORS)
+add_test(NAME test_hal_lora_radio_header_c COMMAND test_hal_lora_radio_header_c)
+
+add_executable(test_hal_lora_radio_header_cpp test_hal_lora_radio_header.cpp)
+target_compile_definitions(test_hal_lora_radio_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1)
+target_include_directories(test_hal_lora_radio_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_radio_header_cpp ERRORS)
+add_test(NAME test_hal_lora_radio_header_cpp
+    COMMAND test_hal_lora_radio_header_cpp)
+
 # The public socket declaration surface is portable and compiled by both MSVC
 # and GNU-like host gates. The full adapter intentionally exports POSIX symbol
 # names and remains a firmware/Linux-host contract rather than a Winsock ABI.
@@ -294,6 +313,7 @@ add_test(NAME test_ble_hci_transport COMMAND test_ble_hci_transport)
 
 add_executable(test_network_backend
     test_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/jh_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
@@ -329,6 +349,7 @@ add_test(NAME test_network_backend_contract_host
 add_executable(test_network_backend_contract_offload
     test_network_backend_contract.cpp
     fakes/network_contract_offload_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/jh_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
@@ -524,6 +545,7 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
         ${SRC_DIR}/hal/hal_tcp.cpp
         ${SRC_DIR}/hal/hal_udp.cpp
         ${SRC_DIR}/hal/hal_wifi.cpp
+        ${SRC_DIR}/hal/impl/shared/jh_handle_pool.cpp
         ${SRC_DIR}/hal/impl/shared/network/jh_network_backend.cpp
         ${SRC_DIR}/hal/impl/shared/network/jh_network_handle_pool.cpp
         ${SRC_DIR}/utils/unity.c
@@ -1019,6 +1041,9 @@ add_hal_test(test_hal_pga2311)
 add_hal_test(test_hal_pcnt)
 add_hal_test(test_hal_spi)
 add_hal_test(test_hal_spi_device)
+add_hal_test(test_hal_lora_radio_lifecycle)
+add_hal_test(test_hal_lora_radio)
+add_hal_test(test_sx126x_adapter)
 add_hal_test(test_hal_i2c)
 add_hal_test(test_hal_i2c_slave)
 add_hal_test(test_hal_rgb_led)

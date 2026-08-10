@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 93)
-    message(FATAL_ERROR "Expected 93 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 95)
+    message(FATAL_ERROR "Expected 95 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")
@@ -33,6 +33,10 @@ endif()
 if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_NET_COMMANDS_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_CJSON;HAL_ENABLE_HTTP_SERVER;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WEBSOCKET;HAL_ENABLE_WIFI")
     message(FATAL_ERROR "NET_COMMANDS transitive dependency table drifted")
+endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_SX126X_TRANSITIVE_IMPLIES}" STREQUAL
+       "HAL_ENABLE_LORA;HAL_ENABLE_SPI")
+    message(FATAL_ERROR "SX126X transitive dependency table drifted")
 endif()
 
 jh_hal_resolve_features(_requested _resolved

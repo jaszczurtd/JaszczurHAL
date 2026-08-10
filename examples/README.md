@@ -1,7 +1,7 @@
 # JaszczurHAL Examples
 
-The `examples/` tree contains 26 dispatcher-backed firmware projects that
-preserve the coverage of the former 59 examples. Each project has its own
+The `examples/` tree contains 27 dispatcher-backed firmware projects that
+preserve the coverage of the former 60 examples. Each project has its own
 generated `.vscode/jaszczurhal.project.json`; opening that directory directly
 in VS Code exposes the same Build, Upload, Serial Monitor, Clean, Config Dump,
 OTA, and board-selection tasks as a standalone firmware project.
@@ -14,14 +14,14 @@ by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
 ## Matrix and gate policy
 
 A configuration is one base project or project variant built for one target.
-The complete supported matrix contains 100 configurations:
+The complete supported matrix contains 104 configurations:
 
 | Matrix | `rp2040` | `rp2350-arm` | `rp2350-riscv` | `stm32g474` | Total |
 |---|---:|---:|---:|---:|---:|
-| Full supported matrix | 27 | 26 | 22 | 25 | **100** |
-| Default examples gate | 27 | 0 | 0 | 25 | **52** |
+| Full supported matrix | 29 | 26 | 22 | 27 | **104** |
+| Default examples gate | 29 | 0 | 0 | 27 | **56** |
 | Representative Gate 6 builds | 2 | 2 | 2 | 0 | **6** |
-| Example-related default HAL gate builds | 29 | 2 | 2 | 25 | **58** |
+| Example-related default HAL gate builds | 31 | 2 | 2 | 27 | **62** |
 
 The six Gate 6 invocations build the core-runtime and FreeRTOS representative
 firmware once with each RP toolchain/architecture. They deliberately exercise
@@ -49,7 +49,7 @@ the run to configurations whose `gateTargets` contain that target:
 # Complete matrix for one target.
 scripts/examples_dispatcher.py build --target rp2350-arm --jobs "$(nproc)"
 
-# Default examples gate: 27 RP2040 plus 25 STM32G474 configurations.
+# Default examples gate: 29 RP2040 plus 27 STM32G474 configurations.
 scripts/examples_dispatcher.py build \
   --target rp2040 --gate --jobs "$(nproc)"
 scripts/examples_dispatcher.py build \
@@ -95,11 +95,17 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `24_epd_display` | E-paper display facade and refresh path | `55_epd_display` | R0, RA, RV, S | R0, S | - |
 | `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | `57_ota` | R0, RA | R0 | - |
 | `26_ble_stream` | Experimental BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, S | R0, S | - |
+| `27_lora_point_to_point` | Raw SX1262 ping/pong, polling RX, packet diagnostics and radio power/lifecycle recovery | `60_lora_point_to_point` | R0, S | R0, S | `responder` on R0, S; gate on R0, S |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474
 network and Bluetooth projects select the NUCLEO-G474RE plus the external
 PIM730/RM2 profile.
+
+The LoRa project selects the integrated Waveshare RP2040-LoRa-LF profile for
+RP2040 and an explicitly wired Core1262-HF on NUCLEO-G474RE. These target
+configurations use different frequency bands and belong to separate physical
+radio pairs.
 
 ## Supported build targets
 

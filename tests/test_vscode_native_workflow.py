@@ -219,6 +219,54 @@ require(
     "WiFi preflight does not accept the registry-owned PIM730 backend",
 )
 
+lora_project = ROOT / "examples" / "27_lora_point_to_point"
+lora_responder_result = subprocess.run(
+    [
+        str(ENTRY),
+        "config-dump",
+        "--project",
+        str(lora_project),
+        "--target",
+        "rp2040",
+        "--board",
+        "rp2040-lora-lf",
+        "--variant",
+        "responder",
+        "--json",
+    ],
+    check=True,
+    capture_output=True,
+    text=True,
+)
+lora_responder = json.loads(lora_responder_result.stdout)
+lora_base_build_dir = ROOT / ".build" / "examples" / "27_lora_point_to_point"
+lora_responder_build_dir = lora_base_build_dir / "variants" / "responder"
+require(
+    same_path(lora_responder["buildDir"], lora_responder_build_dir),
+    "example variant shares the base stable artifact directory",
+)
+require(
+    same_path(
+        lora_responder["cmake"]["cache"]["JH_ARTIFACT_DIR"],
+        lora_responder_build_dir,
+    ),
+    "example variant CMake artifacts share the base stable artifact directory",
+)
+require(
+    same_path(
+        lora_responder["artifacts"]["uf2"],
+        lora_responder_build_dir / "firmware.uf2",
+    ),
+    "example variant upload artifact still resolves to the base firmware",
+)
+require(
+    same_path(
+        lora_responder["cmakeBuildDir"],
+        lora_base_build_dir / "cmake" / "variants" / "responder",
+    ),
+    "example variant lost its isolated CMake directory",
+)
+
 storage = load_json(
     ROOT / "examples" / "10_storage" / ".vscode" / "jaszczurhal.project.json"
 )
@@ -292,8 +340,8 @@ registered_names = {
 }
 examples_dispatcher.validate_example_registry()
 require(
-    len(examples_dispatcher.EXAMPLES) == 26 and len(registered_names) == 26,
-    "dispatcher registry must contain exactly 26 active examples",
+    len(examples_dispatcher.EXAMPLES) == 27 and len(registered_names) == 27,
+    "dispatcher registry must contain exactly 27 active examples",
 )
 require(
     registered_names == manifest_example_names,
@@ -412,42 +460,42 @@ for example_dir in example_dirs:
 require(
     example_counts
     == {
-        "rp2040": 25,
+        "rp2040": 26,
         "rp2350-arm": 24,
         "rp2350-riscv": 21,
-        "stm32g474": 24,
+        "stm32g474": 25,
     },
     f"declared example target matrix changed without review: {example_counts}",
 )
 require(
     full_configuration_counts
     == {
-        "rp2040": 27,
+        "rp2040": 29,
         "rp2350-arm": 26,
         "rp2350-riscv": 22,
-        "stm32g474": 25,
+        "stm32g474": 27,
     }
-    and sum(full_configuration_counts.values()) == 100,
-    "full example build matrix must contain exactly 100 configurations: "
+    and sum(full_configuration_counts.values()) == 104,
+    "full example build matrix must contain exactly 104 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 27,
+        "rp2040": 29,
         "rp2350-arm": 0,
         "rp2350-riscv": 0,
-        "stm32g474": 25,
+        "stm32g474": 27,
     }
-    and sum(gate_configuration_counts.values()) == 52,
-    "example gate matrix must contain exactly 52 configurations: "
+    and sum(gate_configuration_counts.values()) == 56,
+    "example gate matrix must contain exactly 56 configurations: "
     f"{gate_configuration_counts}",
 )
 require(
-    len(legacy_coverage) == 59
-    and len(set(legacy_coverage)) == 59
+    len(legacy_coverage) == 60
+    and len(set(legacy_coverage)) == 60
     and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
-    "the 59 legacy examples must each be covered exactly once",
+    "the 60 covered examples must each be covered exactly once",
 )
 
 legacy_feature_surface = {

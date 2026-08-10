@@ -50,9 +50,7 @@
         "rfSwitchIdleLevelA": true,
         "rfSwitchRxLevelA": true,
         "rfSwitchTxLevelA": false,
-        "tcxoControl": "dio3",
-        "tcxoVoltage": "1v7",
-        "tcxoStartupUs": 5000
+        "tcxoControl": "none"
       }
     }
   },

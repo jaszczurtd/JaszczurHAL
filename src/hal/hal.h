@@ -21,6 +21,9 @@
 #ifdef HAL_ENABLE_BLE_STREAM
 #include "hal_ble_stream.h"
 #endif
+#ifdef HAL_ENABLE_LORA
+#include "hal_lora_radio.h"
+#endif
 #include "hal_gpio.h"
 #include "hal_math.h"
 #include "hal_net.h"

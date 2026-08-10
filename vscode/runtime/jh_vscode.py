@@ -703,11 +703,32 @@ def apply_example_variant(config: dict[str, Any], variant_id: str | None) -> Non
 
     module = str(variant.get("module") or f"{config.get('module', 'firmware')}_{variant_id}")
     config["module"] = module
+    base_build_dir = str(config.get("buildDir") or "")
+    if base_build_dir:
+        variant_build_dir = str(Path(base_build_dir) / "variants" / variant_id)
+        config["buildDir"] = variant_build_dir
+
+        artifacts = config.get("artifacts")
+        if isinstance(artifacts, dict):
+            rebased_artifacts: dict[str, Any] = {}
+            for name, value in artifacts.items():
+                if isinstance(value, str):
+                    try:
+                        relative = Path(value).relative_to(Path(base_build_dir))
+                    except ValueError:
+                        pass
+                    else:
+                        value = str(Path(variant_build_dir) / relative)
+                rebased_artifacts[name] = value
+            config["artifacts"] = rebased_artifacts
+
     if config.get("cmakeBuildDir"):
         config["cmakeBuildDir"] = f"{config['cmakeBuildDir']}/variants/{variant_id}"
 
     cmake = dict(config.get("cmake") or {})
     cache = dict(cmake.get("cache") or {})
+    if base_build_dir and cache.get("JH_ARTIFACT_DIR") == base_build_dir:
+        cache["JH_ARTIFACT_DIR"] = config["buildDir"]
     cache["JH_MODULE_NAME"] = module
     sources = variant.get("sources")
     if isinstance(sources, list) and sources:

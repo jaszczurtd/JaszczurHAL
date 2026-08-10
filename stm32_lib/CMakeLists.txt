@@ -99,6 +99,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_btstack.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_sx126x.cmake)
 jh_bearssl_source_manifest(
     _jh_stm32_bearssl_sources
     _jh_stm32_bearssl_include_dirs)
@@ -139,6 +140,16 @@ if(_jh_stm32_has_mqtt)
         ${SRC}/hal/impl/shared/frameworks/PubSubClient/src)
 endif()
 list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
+jh_cmake_defines_contain(_jh_stm32_has_sx126x HAL_ENABLE_SX126X
+    ${_jh_stm32_selection_defines})
+set(STM32_SX126X_INCLUDE_DIRS)
+set(STM32_SX126X_SOURCES)
+if(_jh_stm32_has_sx126x)
+    jh_sx126x_source_manifest(
+        STM32_SX126X_SOURCES
+        STM32_SX126X_INCLUDE_DIRS)
+    list(APPEND STM32_IMPL_SOURCES ${STM32_SX126X_SOURCES})
+endif()
 
 # ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
 set(HAL_COMMON_SOURCES
@@ -146,6 +157,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp
     ${SRC}/hal/hal_tls.cpp
@@ -185,11 +197,16 @@ add_library(JaszczurHAL STATIC
 set_source_files_properties(${STM32_LITTLEFS_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-w"
 )
+if(STM32_SX126X_SOURCES)
+    set_source_files_properties(${STM32_SX126X_SOURCES} PROPERTIES
+        COMPILE_OPTIONS "-w")
+endif()
 
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
     ${JH_BOARD_GENERATED_DIR}
     ${STM32_LITTLEFS_INCLUDE_DIRS}
+    ${STM32_SX126X_INCLUDE_DIRS}
     ${STM32_MQTT_INCLUDE_DIRS}
     ${_jh_stm32_bearssl_include_dirs}
     ${_jh_stm32_framework_include_dirs}

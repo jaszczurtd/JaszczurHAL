@@ -1,35 +1,14 @@
 #pragma once
 
-#include "../../../hal_status.h"
-
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
+#include "../jh_handle_pool.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-typedef struct {
-  void *backend_token;
-  uint32_t generation;
-  uint32_t active_operations;
-  bool in_use;
-  bool closing;
-} jh_network_handle_slot_t;
-
-typedef struct {
-  void *backend_token;
-  size_t index;
-  uint32_t generation;
-  bool active;
-} jh_network_handle_lease_t;
-
-typedef struct {
-  jh_network_handle_slot_t *slots;
-  size_t capacity;
-  uintptr_t kind;
-} jh_network_handle_pool_t;
+typedef jh_handle_slot_t jh_network_handle_slot_t;
+typedef jh_handle_lease_t jh_network_handle_lease_t;
+typedef jh_handle_pool_t jh_network_handle_pool_t;
 
 hal_status_t jh_network_handle_pool_init(jh_network_handle_pool_t *pool,
                                          jh_network_handle_slot_t *slots,

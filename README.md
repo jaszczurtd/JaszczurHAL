@@ -73,8 +73,8 @@ flash of a blank board, and the full task reference are documented in
 
 ## Examples
 
-The `examples/` tree contains 26 consolidated applications that preserve the
-coverage of the former 59 examples while demonstrating related HAL modules
+The `examples/` tree contains 27 consolidated applications that preserve the
+coverage of the former 60 examples while demonstrating related HAL modules
 together. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h`, built on the portable entry-point contract:
 `app_start()`, `app_task0()`, and optional `app_task1()`

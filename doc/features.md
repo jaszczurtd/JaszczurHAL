@@ -48,6 +48,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/hal_i2c_slave.h) |
 | SPI | Portable SPI master/controller API plus target-neutral per-device bus/CS/settings descriptors, including status-returning transfer APIs and blocking/asynchronous DMA-capable write paths where supported. | [hal_spi.h](../src/hal/hal_spi.h), [hal_spi_device.h](../src/hal/hal_spi_device.h) |
+| Raw LoRa radio | Provider-neutral SX1262 lifecycle with integrated-board and external-module hardware descriptors, EU868 technical presets, blocking TX, polling RX, packet metadata, diagnostics, power states and time-on-air. | [LoRa radio API](api/21_lora.md), [hal_lora_radio.h](../src/hal/hal_lora_radio.h) |
 | Network status API | Additive `hal_status_t` operations for WiFi/DNS, TCP/UDP, MQTT and WireGuard with legacy wrappers preserved and exact absent/inactive/failed board-hardware status mapping. | [connectivity API](api/15_connectivity.md) |
 | CAN facade | Backend-selectable CAN surface for classic CAN and CAN FD-capable backends. | [hal_can.h](../src/hal/hal_can.h) |
 | MCP2515 CAN | Shared SPI CAN backend. | [mcp2515 driver](../src/hal/impl/shared/drivers/mcp2515/) |

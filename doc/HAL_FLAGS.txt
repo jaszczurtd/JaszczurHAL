@@ -231,6 +231,20 @@ Connectivity
     HAL_ENABLE_BLE and HAL_ENABLE_CRYPTO. A client reads the protocol version
     and capabilities without a session; payload exchange requires proof of the
     per-device secret installed with hal_ble_stream_set_secret().
+  HAL_ENABLE_LORA
+    Feature selection for the provider-neutral raw LoRa radio facade. Requires
+    exactly one provider; the current provider is HAL_ENABLE_SX126X. The public
+    C/C++ declaration surface is hal/hal_lora_radio.h. Opaque lifecycle handles
+    use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
+    (default 2, valid range 1..255). The facade provides raw modem presets and
+    validation, blocking TX, bounded or continuous polling RX, packet metadata,
+    diagnostics, standby/sleep and time-on-air calculation.
+  HAL_ENABLE_SX126X
+    Selects the pinned official Semtech SX126x provider and propagates LORA and
+    SPI. The shared adapter owns SX1262 command framing, BUSY deadlines, RF
+    switch/TCXO/regulator setup and band-aware image calibration through HAL
+    SPI/GPIO. HAL_LORA_SX126X_BUSY_TIMEOUT_MS defaults to 1000 and accepts
+    values from 1 through 60000 milliseconds.
   HAL_ENABLE_WIFI
     WiFi. A profile without the selected network hardware compiles but public
     runtime access returns HAL_EUNSUPPORTED.
@@ -505,6 +519,7 @@ internal edges to the derived HAL_ENABLE_NETWORK_CORE symbol are omitted.
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT, HAL_ENABLE_EEPROM, HAL_ENABLE_SPI
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE, HAL_ENABLE_CRYPTO
+HAL_ENABLE_SX126X      -> HAL_ENABLE_LORA, HAL_ENABLE_SPI
 HAL_ENABLE_TIME        -> HAL_ENABLE_UDP, HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_TCP, HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI
@@ -581,7 +596,7 @@ Conditional feature propagation
 Provider and choice rules
   Network configuration selects exactly one backend and verifies its required
   capabilities. Provider checks cover RTC, CELLULAR_MODEM, THERMOCOUPLE, CAN,
-  DIGIPOT, the GPS transport, DISPLAY and TFT.
+  DIGIPOT, LORA, the GPS transport, DISPLAY and TFT.
 
 Target and board rules
   BLE controller/target/board support; CYW43 bus, stack, profile, pin, target
@@ -593,7 +608,7 @@ Defaults, tunables, layout and ranges
   layout, CYW43 pin/clock/country defaults, pool sizes, backlog and TLS limits,
   and the remaining tunable defaults and range checks.
 
-These retained sections contain all 46 production compile-time #error checks.
+These retained sections contain all 49 production compile-time #error checks.
 
 Registry `resolvedFeatures` and its feature hash describe only the registry v1
 closure; they do not append the two contextual propagation results. A GPS-only
