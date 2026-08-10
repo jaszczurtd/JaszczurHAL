@@ -54,6 +54,7 @@
 #include "hal_status.h"
 #include "hal_sync.h"
 #include "hal_system.h"
+#include "hal_time.h"
 #include "hal_timer.h"
 #include "hal_usb.h"
 #ifdef HAL_ENABLE_UART
@@ -165,9 +166,6 @@
 #endif
 #ifdef HAL_ENABLE_A7670
 #include "hal_simcom_a76xx.h"
-#endif
-#ifdef HAL_ENABLE_TIME
-#include "hal_time.h"
 #endif
 #ifdef HAL_ENABLE_RTC
 #include "hal_rtc.h"

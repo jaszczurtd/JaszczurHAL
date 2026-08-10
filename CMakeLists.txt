@@ -101,6 +101,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_ble_stream.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_time.cpp
     ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp
@@ -125,6 +126,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/impl/shared/network/services/net_console/hal_net_console.cpp
     ${SRC}/hal/impl/shared/network/services/net_commands/hal_net_commands.cpp
     ${SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+    ${SRC}/hal/impl/shared/time/jh_calendar.c
     ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/hal_crypto.cpp

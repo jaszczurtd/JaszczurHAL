@@ -1884,11 +1884,22 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 
 ---
 
-## `hal_time` - System time & NTP  *(optional - `HAL_ENABLE_TIME`)*
+## `hal_time` - Calendar helpers and optional system time/NTP
 
 ```c
 #include <hal/hal_time.h>
 
+// Always available; no network dependency.
+uint32_t hal_time_from_components(int year, int month, int day,
+                                  int hour, int minute, int second);
+bool     hal_time_is_daylight_saving_time(int year, int month, int day);
+void     hal_time_adjust_cet_cest(int *year, int *month, int *day,
+                                  int *hour, int *minute);
+bool     hal_time_is_in_range(long now, long start, long end);
+void     hal_time_extract_minutes(long time_in_minutes,
+                                  int *hours, int *minutes);
+
+// Available with HAL_ENABLE_TIME.
 bool     hal_time_set_timezone(const char *tz);     // POSIX TZ string
 bool     hal_time_sync_ntp(const char *primary_server, const char *secondary_server);
 uint64_t hal_time_unix(void);                       // seconds since epoch (Y2038-safe)
@@ -1897,10 +1908,24 @@ bool     hal_time_get_local(struct tm *out_tm);
 bool     hal_time_format_local(char *out, size_t out_size, const char *format);
 ```
 
+The pure helpers use the shared proleptic-Gregorian calendar core. Component
+conversion accepts dates from the Unix epoch through the last second
+representable by `uint32_t`; its compatibility return value is `0` for both an
+error and the valid epoch start. The CET/CEST helper uses the date-only legacy
+policy: daylight saving starts on the last Sunday in March (inclusive) and ends
+on the last Sunday in October (exclusive), with each transition taking effect
+at 00:00 because no time-of-day argument is available. Invalid dates are
+rejected, and adjustment normalizes day/month/year rollover.
+
+`hal_time_is_in_range()` implements the half-open interval `[start, end)`.
+`hal_time_extract_minutes()` uses C quotient/remainder semantics and accepts
+either output pointer as optional.
+
 **impl/rp2040/stm32g474:** bounded NTP request over HAL UDP, synchronized Unix
 epoch tracking, POSIX timezone handling, and `localtime_r()`.
 **impl/.mock:** state injection via mock helpers.
-**Thread safety:** Not thread-safe. Serialize all calls from the caller side.
+**Thread safety:** The pure helpers are reentrant. The optional system/NTP APIs
+are not thread-safe; serialize those calls from the caller side.
 
 **Mock helpers:**
 ```c

@@ -41,7 +41,7 @@
 | `hal_wireguard` | shared WireGuard/lwIP engine + capability-advertised host-lwIP backend |
 | `hal_mqtt` | bundled `PubSubClient` over HAL TCP, with optional BearSSL MQTTS transport |
 | `hal_ota` | RP staging/applier with authenticated VS Code transport over HAL UDP/TCP |
-| `hal_time` | HAL UDP/NTP client and target timekeeping integration |
+| `hal_time` | Shared Gregorian/CET/CEST and interval helpers, plus HAL UDP/NTP client and target timekeeping integration |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
 | `hal_sdlogger` | pinned FatFs R0.16 core plus the shared file layer in `impl/shared/frameworks/filesystem/` |
 | `tools` | HAL APIs |
@@ -283,9 +283,11 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
-| `test_hal_rtc` | RTC init/get/set datetime, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
+| `test_hal_rtc` | RTC init/get/set datetime, full Gregorian validation, 1970/2000/2099 epoch boundaries and overflow, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
+| `test_jh_calendar` | Gregorian leap-year/month-length/day-of-week validation, impossible dates, Unix epoch zero, leap-day round-trip, RTC upper boundary and 64-bit overflow statuses |
+| `test_calendar_architecture` | Shared calendar source ownership, HAL-only legacy time wrappers, and rejection of target/driver-local calendar algorithms or `hal_time_from_components()` copies |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
-| `test_hal_serial` | `println` capture, `deb`/`derr` capture, streamed debug formatter coverage beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred log ring behavior, mute semantics, RX inject + `available`/`read` |
+| `test_hal_serial` | Serial wire/message boundaries, binary RX inject + `available`/`read`, task/ISR debug prefixes, accepted/rejected timestamps, rate-limit configuration/lifecycle/source isolation, streamed formatting beyond `HAL_DEBUG_BUF_SIZE`, ISR-deferred ring/drop summaries, mute and flush semantics |
 | `test_hal_serial_session` | Framed HELLO handshake (encode/decode + CRC), unknown-payload reply (`SC_UNKNOWN_CMD`) and custom unknown-handler dispatch, request<->response seq echo, non-framed input is silently dropped, multi-frame RX handling, null-arg safety |
 | `test_hal_swserial` | software UART status success/failure paths, pool exhaustion, RX inject, TX capture, frame format and pin reassignment |
 | `test_rp2040_swserial_backend` | RP2040 source-selection guard: Pico SDK PIO programs required; wrapper serial implementations, GPIO RX callbacks, microsecond bit delays and HAL critical sections forbidden |
@@ -339,7 +341,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_ota_image` | Versioned OTA manifest and redundant boot-state encoding, CRC/HMAC validation, corruption handling, sequence wraparound and newest-record selection |
 | `test_ota_swap_engine` | Resumable program/staging sector swap across every simulated pre/post-mutation failure boundary, reverse swap rollback and corrupt phase rejection |
 | `test_rp_ota_artifacts` | Native RP OTA packaging helper, including RP2040-E14 sector padding, real-page preservation, UF2 renumbering and overlap rejection |
-| `test_hal_time` | timezone, NTP sync, Unix time, local time formatting |
+| `test_hal_time` | timezone, NTP sync, Unix/local time formatting, component conversion and uint32 overflow, CET/CEST boundaries and rollover, half-open ranges, and minute extraction |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates, direct EEPROM-status propagation, uninitialised/range/capacity errors and output initialization |
 | `test_hal_crypto` | Base64/MD5/one-shot and incremental SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
 | `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |
@@ -347,7 +349,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_SmartTimers` | `tick`, callback firing, `abort`, `restart` (core behavior used by `hal_soft_timer_*`) |
 | `test_pidController` | P output, output clamping, integral reset, stability detection (core behavior used by `hal_pid_controller_*`) |
 | `test_multicoreWatchdog` | dual-core liveness gating, external reset path, pre-setup no-op safety |
-| `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/time/string helpers, and buffer-safe formatting helpers |
+| `test_tools` | utility coverage from `tools.cpp` using HAL mocks, including `debugInit`, `setDebugPrefixWithColon`, numeric/string helpers, HAL-delegating legacy time wrappers, and buffer-safe formatting helpers |
 | `test_hal_critical_section` | critical-section nesting and interrupt-state restoration behavior |
 | `test_hal_dac` | DAC init compatibility plus status-first raw/millivolt writes, channel/range/uninitialised validation and unsupported-target reporting |
 | `test_hal_digipot` | MCP401x/MAX5395 facade init/set behavior, range validation and status mapping |

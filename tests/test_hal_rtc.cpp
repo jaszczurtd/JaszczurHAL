@@ -138,6 +138,16 @@ void test_set_datetime_rejects_invalid_values(void) {
   bad.month = 1;
   bad.year = 2100;
   TEST_ASSERT_FALSE(hal_rtc_set_datetime(s_rtc, &bad));
+
+  bad.year = 2026;
+  bad.month = 4;
+  bad.day = 31;
+  TEST_ASSERT_FALSE(hal_rtc_set_datetime(s_rtc, &bad));
+
+  bad.year = 2023;
+  bad.month = 2;
+  bad.day = 29;
+  TEST_ASSERT_FALSE(hal_rtc_set_datetime(s_rtc, &bad));
 }
 
 void test_epoch_roundtrip_from_unix_epoch_start(void) {
@@ -196,8 +206,16 @@ void test_get_epoch_from_datetime(void) {
 }
 
 void test_set_epoch_rejects_out_of_supported_range(void) {
+  TEST_ASSERT_TRUE(hal_rtc_set_epoch(s_rtc, 4102444799ull));
+  hal_rtc_datetime_t maximum = {};
+  TEST_ASSERT_TRUE(hal_rtc_get_datetime(s_rtc, &maximum));
+  TEST_ASSERT_EQUAL_UINT16(2099u, maximum.year);
+  TEST_ASSERT_EQUAL_UINT8(12u, maximum.month);
+  TEST_ASSERT_EQUAL_UINT8(31u, maximum.day);
+
   /* 2100-01-01 00:00:00 UTC */
   TEST_ASSERT_FALSE(hal_rtc_set_epoch(s_rtc, 4102444800ull));
+  TEST_ASSERT_FALSE(hal_rtc_set_epoch(s_rtc, UINT64_MAX));
 }
 
 void test_get_epoch_rejects_pre_unix_datetime(void) {

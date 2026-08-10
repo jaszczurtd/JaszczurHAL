@@ -258,6 +258,14 @@ int   getRandomEverySomeMillis(uint32_t time, int maxValue);
 float getRandomFloatEverySomeMillis(uint32_t time, float maxValue);
 ```
 
+The four legacy time helpers above are compatibility wrappers only. Their
+implementations delegate directly to
+`hal_time_is_daylight_saving_time()`, `hal_time_adjust_cet_cest()`,
+`hal_time_is_in_range()`, and `hal_time_extract_minutes()` respectively. New
+code should include `<hal/hal_time.h>` and call the HAL API directly; see
+[Calendar helpers and optional system time/NTP](15_connectivity.md)
+for boundary, validation, and rollover semantics.
+
 ---
 
 ## `hal_crc` - CRC checksums

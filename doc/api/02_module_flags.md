@@ -60,7 +60,7 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
 | `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `impl/shared/drivers/sx126x/*` + pinned Semtech driver | SX1262 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
-| `HAL_ENABLE_TIME` | `hal_time.h` | `hal_time.cpp` | WiFi NTP helpers (propagates UDP + WIFI) |
+| `HAL_ENABLE_TIME` | optional declarations in `hal_time.h` | target `hal_time.cpp` | WiFi NTP helpers (propagates UDP + WIFI); pure calendar/range helpers stay unconditional |
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates TCP + WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
@@ -412,9 +412,11 @@ Actual compiled dependencies are controlled by the module set:
 - modules left disabled (the default) compile out both declarations and
   implementation details
 
-\* `HAL_ENABLE_TIME` enables NTP/local-time APIs;
-`hal_time_from_components(...)` remains available unconditionally as a pure
-conversion helper with no network dependency.
+\* `HAL_ENABLE_TIME` enables NTP/local-time APIs. The pure
+`hal_time_from_components(...)`, `hal_time_is_daylight_saving_time(...)`,
+`hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)`, and
+`hal_time_extract_minutes(...)` helpers remain available unconditionally with
+no network dependency.
 
 ---
 

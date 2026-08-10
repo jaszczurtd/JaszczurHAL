@@ -214,6 +214,12 @@ void test_set_datetime_validates_ranges(void) {
 
   TEST_ASSERT_FALSE(pcf8563_set_datetime(&s_dev, &dt));
   TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_write_frame_count());
+
+  dt.second = 0u;
+  dt.month = 4u;
+  dt.day = 31u;
+  TEST_ASSERT_FALSE(pcf8563_set_datetime(&s_dev, &dt));
+  TEST_ASSERT_EQUAL_INT(0, hal_mock_i2c_get_write_frame_count());
 }
 
 void test_get_clock_integrity_reads_vl_bit(void) {

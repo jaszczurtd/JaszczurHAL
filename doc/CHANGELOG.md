@@ -56,6 +56,15 @@ All notable changes to this project will be documented in this file.
 - Unified runtime profile names with board IDs such as `picow`, `pico2w`,
   `pico-rm2`, and `nucleo-g474re`; the fallback now covers all declared boards
   and rejects target combinations excluded by their descriptors.
+- Expanded serial/debug characterization tests for wire boundaries, binary RX,
+  task prefixes, rejected timestamps, rate-limit configuration and lifecycle,
+  and independent rate-limit sources before the shared-core refactor.
+- Consolidated Gregorian validation and 64-bit Unix epoch conversion in the
+  shared `jh_calendar` core used by RTC, PCF8563, DS3231 and
+  `hal_time_from_components()`, with explicit RTC and 32-bit overflow handling.
+- Moved CET/CEST date adjustment, half-open time-range checks, and minute
+  extraction from `tools.cpp` into the always-available `hal_time` API; legacy
+  utility names now remain as HAL-only compatibility wrappers.
 
 ## [1.9.1] - 2026-08-07
 

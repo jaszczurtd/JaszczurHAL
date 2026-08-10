@@ -398,6 +398,24 @@ void test_set_epoch_and_datetime_helpers(void) {
   TEST_ASSERT_EQUAL_UINT8(0x00u, f[1]);
 }
 
+void test_datetime_helpers_use_full_gregorian_calendar(void) {
+  TEST_ASSERT_TRUE(isleapYear(0u)); /* Legacy 2000-based year offset. */
+  TEST_ASSERT_FALSE(isleapYear(1900u));
+  TEST_ASSERT_TRUE(isleapYear(2000u));
+
+  const DateTime leap_day(2000u, 2u, 29u, 12u, 34u, 56u);
+  TEST_ASSERT_EQUAL_UINT32(951827696u, leap_day.unixtime());
+  TEST_ASSERT_EQUAL_UINT8(2u, leap_day.dayOfTheWeek());
+
+  const DateTime roundtrip(leap_day.unixtime());
+  TEST_ASSERT_EQUAL_UINT16(2000u, roundtrip.year());
+  TEST_ASSERT_EQUAL_UINT8(2u, roundtrip.month());
+  TEST_ASSERT_EQUAL_UINT8(29u, roundtrip.day());
+  TEST_ASSERT_EQUAL_UINT8(12u, roundtrip.hour());
+  TEST_ASSERT_EQUAL_UINT8(34u, roundtrip.minute());
+  TEST_ASSERT_EQUAL_UINT8(56u, roundtrip.second());
+}
+
 void test_temperature_read_failure_returns_sentinel(void) {
   /* Busy bus forces endTransmission != 0, making readBytes() fail. */
   hal_mock_i2c_set_busy(true);
@@ -441,6 +459,7 @@ int main(void) {
   RUN_TEST(test_alarm_enable_disable_and_flags_paths);
   RUN_TEST(test_control_register_helpers_enable_oscillator_and_32khz);
   RUN_TEST(test_set_epoch_and_datetime_helpers);
+  RUN_TEST(test_datetime_helpers_use_full_gregorian_calendar);
   RUN_TEST(test_get_temperature_positive);
   RUN_TEST(test_get_temperature_negative);
   RUN_TEST(test_temperature_read_failure_returns_sentinel);

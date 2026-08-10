@@ -35,6 +35,11 @@ extern "C" {
 #define HAL_RTC_MAX_INSTANCES 4
 #endif
 
+/** @brief Lowest calendar year accepted by RTC date-time APIs. */
+#define HAL_RTC_MIN_YEAR 1900u
+/** @brief Highest calendar year accepted by RTC date-time APIs. */
+#define HAL_RTC_MAX_YEAR 2099u
+
 /** @brief Default 7-bit I2C address for PCF8563. */
 #ifndef HAL_RTC_PCF8563_DEFAULT_I2C_ADDR
 #define HAL_RTC_PCF8563_DEFAULT_I2C_ADDR 0x51
@@ -84,10 +89,10 @@ typedef hal_rtc_impl_t *hal_rtc_t;
  * - second:   0..59
  * - minute:   0..59
  * - hour:     0..23
- * - day:      1..31
+ * - day:      1..days in the selected month
  * - weekday:  0..6
  * - month:    1..12
- * - year:     1900..2099
+ * - year:     HAL_RTC_MIN_YEAR..HAL_RTC_MAX_YEAR
  *
  * @ref clock_integrity is filled by @ref hal_rtc_get_datetime and indicates
  * whether the backend reported valid oscillator/time integrity.

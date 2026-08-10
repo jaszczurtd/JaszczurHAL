@@ -625,6 +625,9 @@ and event/IRQ controls.
 #define HAL_RTC_MAX_INSTANCES 4
 #endif
 
+#define HAL_RTC_MIN_YEAR 1900u
+#define HAL_RTC_MAX_YEAR 2099u
+
 typedef struct hal_rtc_impl_s *hal_rtc_t;
 
 typedef enum {
@@ -651,10 +654,10 @@ typedef struct {
   uint8_t  second;    // 0..59
   uint8_t  minute;    // 0..59
   uint8_t  hour;      // 0..23
-  uint8_t  day;       // 1..31
+  uint8_t  day;       // 1..days in selected month
   uint8_t  weekday;   // 0..6
   uint8_t  month;     // 1..12
-  uint16_t year;      // 1900..2099
+  uint16_t year;      // HAL_RTC_MIN_YEAR..HAL_RTC_MAX_YEAR
   bool     clock_integrity;
 } hal_rtc_datetime_t;
 
@@ -728,6 +731,10 @@ bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
   and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
   Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
 **impl/.mock:** in-memory state model with deterministic behavior for unit tests.
+All three facades and both chip drivers use the shared Gregorian calendar core,
+which rejects impossible dates such as April 31 and a non-leap February 29.
+Unix conversion accepts 1970-01-01 through 2099-12-31 and reports
+`HAL_EOVERFLOW` outside that range.
 **Thread safety:** Hardware backends: per-handle mutex serializes runtime API calls;
 I2C traffic is additionally protected by the `hal_i2c` bus mutex. Create/destroy
 should follow the project-wide single-core init/deinit policy. Mock backend is

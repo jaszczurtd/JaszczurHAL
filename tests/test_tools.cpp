@@ -252,6 +252,16 @@ void test_adjustTime_null_safe(void) {
   adjustTime(NULL, NULL, NULL, NULL, NULL); /* must not crash */
 }
 
+void test_adjustTime_month_and_year_rollover(void) {
+  int y = 2023, mo = 12, d = 31, h = 23, mi = 17;
+  adjustTime(&y, &mo, &d, &h, &mi);
+  TEST_ASSERT_EQUAL_INT(2024, y);
+  TEST_ASSERT_EQUAL_INT(1, mo);
+  TEST_ASSERT_EQUAL_INT(1, d);
+  TEST_ASSERT_EQUAL_INT(0, h);
+  TEST_ASSERT_EQUAL_INT(17, mi);
+}
+
 /* ── MSB / LSB / MsbLsbToInt ───────────────────────────────────────────── */
 
 void test_MSB(void) { TEST_ASSERT_EQUAL_INT(0xAB, MSB(0xABCD)); }
@@ -616,6 +626,13 @@ void test_extract_time_exact_hour(void) {
   TEST_ASSERT_EQUAL_INT(0, m);
 }
 
+void test_extract_time_null_safe(void) {
+  int h = 99;
+  extract_time(60, &h, NULL);
+  TEST_ASSERT_EQUAL_INT(1, h);
+  extract_time(60, NULL, NULL);
+}
+
 /* ── mapfloat ──────────────────────────────────────────────────────────── */
 
 void test_mapfloat_midpoint(void) {
@@ -853,6 +870,7 @@ int main(void) {
   RUN_TEST(test_adjustTime_no_dst_plus1);
   RUN_TEST(test_adjustTime_midnight_overflow);
   RUN_TEST(test_adjustTime_null_safe);
+  RUN_TEST(test_adjustTime_month_and_year_rollover);
 
   RUN_TEST(test_MSB);
   RUN_TEST(test_LSB);
@@ -926,6 +944,7 @@ int main(void) {
   RUN_TEST(test_extract_time_basic);
   RUN_TEST(test_extract_time_zero);
   RUN_TEST(test_extract_time_exact_hour);
+  RUN_TEST(test_extract_time_null_safe);
 
   RUN_TEST(test_mapfloat_midpoint);
   RUN_TEST(test_mapfloat_min);
