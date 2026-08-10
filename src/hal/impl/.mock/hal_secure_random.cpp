@@ -6,7 +6,6 @@
 #include "hal_mock.h"
 
 #include <stdint.h>
-#include <string.h>
 
 namespace {
 
@@ -28,7 +27,7 @@ extern "C" hal_status_t jh_secure_random_bytes(void *buffer, size_t length) {
     return HAL_EINVAL;
   }
   if (s_status != HAL_OK) {
-    memset(buffer, 0, length);
+    jh_secure_zeroize(buffer, length);
     return s_status;
   }
   uint8_t *bytes = static_cast<uint8_t *>(buffer);

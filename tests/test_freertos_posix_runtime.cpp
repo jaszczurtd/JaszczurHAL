@@ -1,3 +1,5 @@
+#include "freertos_posix_serial_port.h"
+#include "hal/hal_serial.h"
 #include "hal/hal_sync.h"
 #include "hal/hal_system.h"
 #include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
@@ -11,12 +13,16 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
 namespace {
 
 constexpr int kWorkerCount = 2;
 constexpr int kWorkerIterations = 80;
 constexpr int kOnceWorkerCount = 4;
+constexpr int kSerialWorkerCount = 3;
+constexpr int kSerialWorkerIterations = 40;
 constexpr int kNetworkWorkerCount = 3;
 constexpr int kNetworkWorkerIterations = 40;
 
@@ -137,6 +143,74 @@ void once_worker(void *arg) {
   vTaskDelete(NULL);
 }
 
+void serial_worker(void *arg) {
+  const int worker = (int)(intptr_t)arg;
+
+  for (int i = 0; i < kSerialWorkerIterations; ++i) {
+    if ((i & 1) == 0) {
+      hal_deb("serial-worker-%d-message-%d", worker, i);
+    } else {
+      char line[48];
+      (void)snprintf(line, sizeof(line), "serial-worker-%d-message-%d", worker,
+                     i);
+      hal_serial_println(line);
+    }
+    taskYIELD();
+  }
+
+  give_done();
+  vTaskDelete(NULL);
+}
+
+void verify_serial_message_boundaries(void) {
+  bool seen[kSerialWorkerCount][kSerialWorkerIterations] = {};
+  const char *cursor = jh_test_serial_capture_data();
+  int line_count = 0;
+
+  if (jh_test_serial_capture_overflowed() || cursor == NULL ||
+      jh_test_serial_capture_size() == 0u) {
+    record_failure();
+    return;
+  }
+
+  while (*cursor != '\0') {
+    const char *newline = strchr(cursor, '\n');
+    if (newline == NULL) {
+      record_failure();
+      return;
+    }
+
+    const size_t line_len = (size_t)(newline - cursor);
+    if (line_len == 0u || line_len >= 64u) {
+      record_failure();
+      return;
+    }
+
+    char line[64];
+    memcpy(line, cursor, line_len);
+    line[line_len] = '\0';
+
+    int worker = -1;
+    int iteration = -1;
+    char trailing = '\0';
+    if (sscanf(line, "serial-worker-%d-message-%d%c", &worker, &iteration,
+               &trailing) != 2 ||
+        worker < 0 || worker >= kSerialWorkerCount || iteration < 0 ||
+        iteration >= kSerialWorkerIterations || seen[worker][iteration]) {
+      record_failure();
+      return;
+    }
+
+    seen[worker][iteration] = true;
+    ++line_count;
+    cursor = newline + 1;
+  }
+
+  if (line_count != kSerialWorkerCount * kSerialWorkerIterations) {
+    record_failure();
+  }
+}
+
 void network_worker(void *arg) {
   (void)arg;
   for (int i = 0; i < kNetworkWorkerIterations; ++i) {
@@ -209,6 +283,24 @@ void supervisor_task(void *arg) {
   if (s_once_hits != kOnceWorkerCount || s_once_mutex == NULL) {
     record_failure();
   }
+
+  vSemaphoreDelete(s_done_sem);
+  s_done_sem = xSemaphoreCreateCounting(kSerialWorkerCount, 0);
+  if (s_done_sem == NULL) {
+    record_failure();
+    vTaskEndScheduler();
+    vTaskDelete(NULL);
+  }
+
+  jh_test_serial_capture_reset();
+  for (int i = 0; i < kSerialWorkerCount; ++i) {
+    if (xTaskCreate(serial_worker, "serial", 768, (void *)(intptr_t)i, 3,
+                    NULL) != pdPASS) {
+      record_failure();
+    }
+  }
+  wait_for_done(kSerialWorkerCount);
+  verify_serial_message_boundaries();
 
   vSemaphoreDelete(s_done_sem);
   s_done_sem = xSemaphoreCreateCounting(kWorkerCount, 0);
@@ -338,6 +430,7 @@ void setUp(void) {
   s_network_reentry_requested = 0;
   s_network_service = {};
   s_network_port = {};
+  jh_test_serial_capture_reset();
 }
 
 void tearDown(void) {}

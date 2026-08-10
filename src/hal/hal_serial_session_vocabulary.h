@@ -46,28 +46,30 @@ extern "C" {
  * borrowed - strings must remain valid for the lifetime of the session.
  */
 typedef struct {
-    /* Inbound command tokens (matched verbatim, except cmd_auth_prove which
-     * is a prefix followed by a space and the response hex). */
-    const char *cmd_bye;
-    const char *cmd_auth_begin;
-    const char *cmd_auth_prove;
-    const char *cmd_reboot_bootloader;
+  /* Inbound command tokens (matched verbatim, except cmd_auth_prove which
+   * is a prefix followed by a space and the response hex). */
+  const char *cmd_bye;
+  const char *cmd_auth_begin;
+  const char *cmd_auth_prove;
+  const char *cmd_reboot_bootloader;
 
-    /* Outbound reply payloads. */
-    const char *reply_bye_ok;
-    const char *reply_unknown_cmd;
-    const char *reply_not_ready_hello_required;
-    /** Format string carrying one %s for the hex challenge. */
-    const char *reply_auth_challenge_fmt;
-    const char *reply_auth_ok;
-    const char *reply_auth_failed_no_challenge;
-    const char *reply_auth_failed_bad_length;
-    const char *reply_auth_failed_bad_hex;
-    const char *reply_auth_failed_key_derivation;
-    const char *reply_auth_failed_mac_compute;
-    const char *reply_auth_failed_bad_mac;
-    const char *reply_not_authorized;
-    const char *reply_reboot_ok;
+  /* Outbound reply payloads. */
+  const char *reply_bye_ok;
+  const char *reply_unknown_cmd;
+  const char *reply_not_ready_hello_required;
+  /** Format string carrying one %s for the hex challenge. */
+  const char *reply_auth_challenge_fmt;
+  const char *reply_auth_ok;
+  const char *reply_auth_failed_no_challenge;
+  const char *reply_auth_failed_bad_length;
+  const char *reply_auth_failed_bad_hex;
+  const char *reply_auth_failed_key_derivation;
+  const char *reply_auth_failed_mac_compute;
+  const char *reply_auth_failed_bad_mac;
+  const char *reply_not_authorized;
+  const char *reply_reboot_ok;
+  /** Entropy-provider failure while starting an authentication handshake. */
+  const char *reply_auth_failed_entropy;
 } hal_serial_session_vocabulary_t;
 
 /**
@@ -103,6 +105,7 @@ static const hal_serial_session_vocabulary_t
         .reply_auth_failed_bad_mac = NULL,
         .reply_not_authorized = NULL,
         .reply_reboot_ok = NULL,
+        .reply_auth_failed_entropy = NULL,
 };
 
 /**
@@ -115,10 +118,10 @@ static const hal_serial_session_vocabulary_t
  * @note The macro evaluates @p vocab_ptr twice; pass a side-effect-free
  *       lvalue (typically @c session->vocab).
  */
-#define HAL_SERIAL_SESSION_VOCAB_FIELD(vocab_ptr, field)                        \
-    (((vocab_ptr) != NULL && (vocab_ptr)->field != NULL)                        \
-         ? (vocab_ptr)->field                                                   \
-         : hal_serial_session_vocabulary_default.field)
+#define HAL_SERIAL_SESSION_VOCAB_FIELD(vocab_ptr, field)                       \
+  (((vocab_ptr) != NULL && (vocab_ptr)->field != NULL)                         \
+       ? (vocab_ptr)->field                                                    \
+       : hal_serial_session_vocabulary_default.field)
 
 #ifdef __cplusplus
 }

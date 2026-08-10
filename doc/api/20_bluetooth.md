@@ -194,6 +194,12 @@ the profile into a bounded backoff window during which handshakes are refused.
 Rotating or clearing the secret invalidates any session built on the previous
 one.
 
+BLE Stream shares the target-neutral `jh_secure_random_bytes()`,
+`jh_secure_zeroize()` and `jh_constant_time_compare()` primitives with Serial
+Session. Proof, nonce, transcript, directional-key and queued plaintext
+buffers are erased on their terminal paths; no BLE-local zeroize or tag
+comparison implementation exists.
+
 The device address and link-layer pairing are not authorization. `Just Works`
 encrypts the link without MITM protection, which is why product operations
 depend on the application session rather than on the BLE link alone.

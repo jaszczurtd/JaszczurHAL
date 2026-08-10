@@ -112,7 +112,7 @@ src/
         freertos/           # native RP FreeRTOSConfig and hooks
         frameworks/         # RP-specific framework integrations
       shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        debug/              # shared serial/debug formatting
+        debug/              # shared serial/debug formatting and port contract
         drivers/            # hardware-oriented drivers and transaction engines
         frameworks/         # reusable engines/stacks and bundled portable libs
         network/
@@ -391,7 +391,7 @@ The complete reference is split across the following focused documents:
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
 | 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_compiler` (portable attributes and builtins), `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
-| 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (TX-serialized console output, streamed debug formatting, ISR-deferred logging, rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
+| 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (one TX-serialized core with link-time transport ports, streamed debug formatting, ISR-deferred logging and rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi` (status `_ex` transfer and DMA helpers), `hal_i2c` (status-first master API, bounded scanner with watchdog callback, one-shot helpers and bus clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (status-first TFT/OLED/LCD/EPD facade, raw writes, EPD refresh, GFX primitives, streaming, text and fonts) |
 | 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (MCP9600/MAX6675), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |

@@ -430,7 +430,9 @@ jobs:
           ./scripts/ensure_freertos_kernel.sh --force
 
       - name: Configure
-        run: cmake -B .build/ci/host
+        run: >-
+          cmake -B .build/ci/host
+          -DJH_ENABLE_FREERTOS_POSIX_TESTS=ON
 
       - name: Build
         run: cmake --build .build/ci/host --parallel

@@ -19,7 +19,8 @@
  *
  * Constructions:
  *   - K_device = HMAC-SHA256(key=salt, message=uid_bytes)
- *   - response = HMAC-SHA256(key=K_device, message=challenge || session_id_be32)
+ *   - response = HMAC-SHA256(key=K_device, message=challenge ||
+ * session_id_be32)
  *
  * The salt value @ref HAL_SC_AUTH_SALT must stay byte-for-byte identical
  * with the host-side mirror implementation used by companion host tooling.
@@ -42,7 +43,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,8 +55,7 @@ extern "C" {
 #define HAL_SC_AUTH_SCHEME_TAG_LEN 17u
 
 /** @brief Compile-time salt for K_device derivation (no NUL terminator). */
-#define HAL_SC_AUTH_SALT \
-    ((const uint8_t *)HAL_SC_AUTH_SCHEME_TAG)
+#define HAL_SC_AUTH_SALT ((const uint8_t *)HAL_SC_AUTH_SCHEME_TAG)
 
 /** @brief Length of the salt in bytes. */
 #define HAL_SC_AUTH_SALT_LEN HAL_SC_AUTH_SCHEME_TAG_LEN
@@ -84,18 +83,8 @@ extern "C" {
  * @param out_key Output buffer of @ref HAL_SC_AUTH_KEY_BYTES bytes.
  * @return true on success, false on invalid args.
  */
-static inline bool hal_sc_auth_derive_device_key(
-    const uint8_t *uid,
-    size_t uid_len,
-    uint8_t out_key[HAL_SC_AUTH_KEY_BYTES])
-{
-    if (uid == NULL || uid_len == 0u || out_key == NULL) {
-        return false;
-    }
-    return hal_hmac_sha256(HAL_SC_AUTH_SALT, HAL_SC_AUTH_SALT_LEN,
-                           uid, uid_len,
-                           out_key);
-}
+bool hal_sc_auth_derive_device_key(const uint8_t *uid, size_t uid_len,
+                                   uint8_t out_key[HAL_SC_AUTH_KEY_BYTES]);
 
 /**
  * @brief Compute the expected challenge response.
@@ -106,36 +95,19 @@ static inline bool hal_sc_auth_derive_device_key(
  * The session id is serialised in big-endian for cross-platform stability
  * (matches @ref hal_u32_to_bytes_be).
  *
- * @param device_key       Per-device key from @ref hal_sc_auth_derive_device_key.
+ * @param device_key       Per-device key from @ref
+ * hal_sc_auth_derive_device_key.
  * @param challenge        Challenge nonce (must not be NULL).
- * @param challenge_len    Challenge length (typically @ref HAL_SC_AUTH_CHALLENGE_BYTES).
+ * @param challenge_len    Challenge length (typically @ref
+ * HAL_SC_AUTH_CHALLENGE_BYTES).
  * @param session_id       Session id echoed in the challenge.
  * @param out_response     Output MAC of @ref HAL_SC_AUTH_RESPONSE_BYTES bytes.
  * @return true on success, false on invalid args.
  */
-static inline bool hal_sc_auth_compute_response(
-    const uint8_t device_key[HAL_SC_AUTH_KEY_BYTES],
-    const uint8_t *challenge,
-    size_t challenge_len,
-    uint32_t session_id,
-    uint8_t out_response[HAL_SC_AUTH_RESPONSE_BYTES])
-{
-    if (device_key == NULL || challenge == NULL || challenge_len == 0u ||
-        out_response == NULL) {
-        return false;
-    }
-
-    uint8_t message[HAL_SC_AUTH_CHALLENGE_BYTES + 4u];
-    if (challenge_len > HAL_SC_AUTH_CHALLENGE_BYTES) {
-        return false;
-    }
-    memcpy(message, challenge, challenge_len);
-    hal_u32_to_bytes_be(session_id, &message[challenge_len]);
-
-    return hal_hmac_sha256(device_key, HAL_SC_AUTH_KEY_BYTES,
-                           message, challenge_len + 4u,
-                           out_response);
-}
+bool hal_sc_auth_compute_response(
+    const uint8_t device_key[HAL_SC_AUTH_KEY_BYTES], const uint8_t *challenge,
+    size_t challenge_len, uint32_t session_id,
+    uint8_t out_response[HAL_SC_AUTH_RESPONSE_BYTES]);
 
 /**
  * @brief Constant-time comparison of two MAC tags.
@@ -143,19 +115,7 @@ static inline bool hal_sc_auth_compute_response(
  * Returns true iff @p a and @p b are equal. Uses an OR-accumulator over the
  * full length to keep timing independent of where the bytes diverge.
  */
-static inline bool hal_sc_auth_macs_equal(const uint8_t *a,
-                                          const uint8_t *b,
-                                          size_t len)
-{
-    if (a == NULL || b == NULL) {
-        return false;
-    }
-    uint8_t diff = 0u;
-    for (size_t i = 0u; i < len; ++i) {
-        diff = (uint8_t)(diff | (a[i] ^ b[i]));
-    }
-    return diff == 0u;
-}
+bool hal_sc_auth_macs_equal(const uint8_t *a, const uint8_t *b, size_t len);
 
 #ifdef __cplusplus
 }

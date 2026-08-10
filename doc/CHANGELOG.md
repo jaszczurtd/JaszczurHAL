@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-09 (LoRa Stage 1)
+## [Unreleased] - 2026-08-10
 
 - Added the target-neutral `hal_spi_device_t` descriptor with status-first
   initialisation, effective per-device settings and optional active-low CS
@@ -59,6 +59,13 @@ All notable changes to this project will be documented in this file.
 - Expanded serial/debug characterization tests for wire boundaries, binary RX,
   task prefixes, rejected timestamps, rate-limit configuration and lifecycle,
   and independent rate-limit sources before the shared-core refactor.
+- Replaced the duplicated RP2040, STM32G474 and mock serial/debug cores with
+  one target-independent `hal_serial.cpp` owning formatting, common state,
+  rate limiting, ISR deferral, net-console mirroring and atomic mutex/lazy-init
+  publication; three small link-time ports retain target transport behavior.
+- Preserved RP USB CDC flush and lock-free assertion output, STM32 USART2/host
+  stdout, mock capture/binary RX and target-specific line endings; added an
+  architecture gate plus concurrent FreeRTOS message-boundary coverage.
 - Consolidated Gregorian validation and 64-bit Unix epoch conversion in the
   shared `jh_calendar` core used by RTC, PCF8563, DS3231 and
   `hal_time_from_components()`, with explicit RTC and 32-bit overflow handling.
@@ -77,6 +84,19 @@ All notable changes to this project will be documented in this file.
 - Routed mock GPS injection and raw NMEA encoding through the shared GPS engine
   and its mutex-protected public getters; added architecture and public-engine
   regression coverage.
+- Added shared internal secure-zeroization and constant-time comparison
+  primitives beside the existing target entropy API, and routed BLE Stream
+  plus SC authentication through them.
+- Moved the Serial Session protocol/authentication engine out of the public
+  header into compiled sources, preserving the framed command format while
+  preventing one engine copy per consumer translation unit.
+- Changed Serial Session challenges to use only `jh_secure_random_bytes()`;
+  unavailable entropy now rejects the handshake and clears prior authority
+  instead of falling back to UID/time/counter-derived bytes.
+- Added deterministic entropy and SC authentication vectors, fail-closed
+  Serial Session coverage, secret-buffer cleanup, and an architecture gate
+  that prevents local security primitives or header-owned protocol code from
+  returning.
 
 ## [1.9.1] - 2026-08-07
 

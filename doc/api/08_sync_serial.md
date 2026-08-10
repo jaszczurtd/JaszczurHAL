@@ -195,8 +195,8 @@ void hal_debug_loop(void);  // drain ISR-deferred debug records (call from main 
 
 In task context, `hal_deb()`, `hal_derr()` and the full-message path of
 `hal_derr_limited()` no longer build the whole formatted log line in a fixed
-`HAL_DEBUG_BUF_SIZE` buffer. Target backends stream the output directly into
-the mutex-protected serial writer:
+`HAL_DEBUG_BUF_SIZE` buffer. The shared serial/debug core streams output
+directly into the mutex-protected transport writer:
 
 - literal spans and `%s` payloads are emitted in chunks without a whole-line
   staging buffer
@@ -217,7 +217,7 @@ the ISR path must not allocate, lock or touch the serial transport.
 `hal_deb()`, `hal_derr()` and `hal_derr_limited()` may now be called from interrupt context, but still - **you should avoid that**. They detect ISR context via `hal_in_isr()` and on
 the hot path do **no** mutex acquisition, **no** lazy init, **no**
 timestamp hook, **no** rate-limiter table lookup, and **no** UART I/O.
-The formatted payload is enqueued into a per-backend single-producer /
+The formatted payload is enqueued into the shared core's single-producer /
 single-consumer (SPSC) lock-free ring (`HAL_DEBUG_ISR_SLOT_COUNT`
 slots × `HAL_DEBUG_ISR_TEXT_MAX` bytes each, default 64 × 160 B) using
 release/acquire atomics. For `hal_derr_limited()` the `[source]` tag
@@ -259,20 +259,21 @@ void     hal_mock_debug_isr_restore_default_ring(void);  // restore production r
 
 `hal_deb()` and `hal_derr()` use **lazy init** - if `hal_debug_init()` has not been called
 before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAULT_BAUD`
-(default 9600, overridable via `-D`). The lazy init path is atomically gated on
-RP2040/STM32G474 so two FreeRTOS tasks do not concurrently reset the debug
-state. Calling `debugInit()` is no longer mandatory.
+(default 9600, overridable via `-D`). The lazy init path and singleton mutex
+publication are atomically gated on RP2040/RP2350, STM32G474 and mock, so two
+tasks or cores do not concurrently reset the debug state or leak competing
+mutex allocations. Calling `debugInit()` is no longer mandatory.
 
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
 
 ### TX serialization (R1.8)
 
-`hal_serial_print()` and `hal_serial_println()` take a single global TX
-mutex around the underlying debug-console write path. On RP2040 that path
-writes through `hal_usb` CDC; STM32 / mock builds use their respective
-stdio-style backends. This serialises every emitter that ever reaches the
-wire - the debug helpers (`hal_deb`, `hal_derr`,
+`hal_serial_print()` and `hal_serial_println()` take the shared core's single
+global TX mutex around the underlying debug-console write path. The linked RP
+port writes through `hal_usb` CDC, while STM32 and mock select their respective
+transport ports. This serialises every emitter that ever reaches the wire -
+the debug helpers (`hal_deb`, `hal_derr`,
 `hal_derr_limited`), the framed session helper
 (`hal_serial_session_println`), and any direct caller - against each
 other.
@@ -306,6 +307,30 @@ It does not bypass the write loop's bounded retry when the CDC FIFO is full.
 STM32G474 and mock backends accept the same setter for portable code, but have
 no USB CDC flush to perform.
 
+### Shared core and link-time transport ports
+
+`src/hal/hal_serial.cpp` is the only serial/debug core. It owns public serial
+and debug entry points, streamed formatting, prefixes, timestamp hooks, mute
+state, rate-limit slots, the ISR SPSC ring, net-console mirroring, lazy init and
+all common mutexes. The internal `jh_serial_port.h` contract is resolved at
+link time and deliberately exposes only transport operations: begin/configure,
+logical message boundary, byte write, target line ending/flush and byte RX.
+
+The three production ports are intentionally small:
+
+- `impl/rp2040/hal_serial.cpp` owns USB CDC begin, TX/RX and optional flush;
+- `impl/stm32g474/hal_serial.cpp` owns USART2 on hardware, host stdout for
+  target sanity builds, and the currently unsupported RX result;
+- `impl/.mock/hal_serial.cpp` owns deterministic last-message capture, stdout
+  observation and injectable binary RX.
+
+Line endings remain transport-specific: RP and STM32 hardware emit `\r\n`,
+while host-style STM32 and mock output use `\n`. Mock capture intentionally
+stores the message without its line ending, matching the historical test API.
+The RP assertion path uses the same raw transport and net-console mirror but
+does not acquire the TX mutex, so fault output cannot block on a lock held by
+the failing context.
+
 Limiter implementation details:
 - source matching uses `hash + source string` (collision-safe lookup)
 - limiter state is protected by an internal mutex (thread-safe)
@@ -326,14 +351,11 @@ void  setDebugPrefixWithColon(const char *moduleName); // appends ':' and forwar
 `setDebugPrefixWithColon(...)` truncates the module name if needed so the
 generated `<module>:` prefix always fits inside `HAL_DEBUG_PREFIX_SIZE`.
 
-**impl/rp2040:** `hal_serial` is a transport client of `hal_usb`. The Pico SDK
-runtime owns TinyUSB, CDC descriptors, synchronization, the background task
-pump and BOOTSEL reset. `hal_serial` writes through that shared USB runtime.
-**impl/stm32g474:** USART2 debug UART on hardware builds; stdio in host-style
-builds.
-**impl/.mock:** `printf`; last line injectable via `hal_mock_deb_last_line()`.
-RX input injectable via `hal_mock_serial_inject_rx(data, len)` for testing
-`hal_serial_available()` / `hal_serial_read()`.
+The architecture and concurrency contract is covered by
+`test_serial_architecture`, `test_hal_serial`, and the FreeRTOS POSIX runtime
+test. They prevent target-local debug cores from returning and exercise lazy
+mutex publication, complete message boundaries, ISR FIFO/overflow summaries,
+mute behavior, target line boundaries and mock binary RX.
 
 ### Error Handling Policy
 
@@ -411,11 +433,12 @@ typedef struct {
     void       *unknown_user;
     bool        in_request;   // gates `hal_serial_session_println`
     uint16_t    request_seq;  // seq echoed in framed replies
+    const hal_serial_session_vocabulary_t *vocab;
     // Authentication state (Phase 3)
     bool        authenticated;
     bool        challenge_pending;
     uint8_t     challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
-    uint32_t    auth_counter;
+    uint32_t    auth_counter; // successfully issued random challenges
     uint32_t    auth_failures;
 } hal_serial_session_t;
 
@@ -532,9 +555,11 @@ Authentication (Phase 3) - opt-in:
 - See [`hal_sc_auth`](#halscauth-auth-handshake-helper-opt-in-halenablecrypto)
   for the salt + key-derivation primitives.
 - The AUTH_BEGIN handler requires an active (HELLO-acknowledged) session
-  and mints a fresh challenge derived from
-  `SHA-256(uid || hal_micros64() || session_id || hello_counter || auth_counter)`,
-  taking the first 16 bytes.
+  and obtains each fresh 16-byte challenge exclusively from the target's
+  `jh_secure_random_bytes()` provider. If secure entropy is unavailable, the
+  handshake fails closed, any previous authenticated state and pending
+  challenge are cleared, and `reply_auth_failed_entropy` is emitted when the
+  vocabulary supplies it. There is no deterministic fallback.
 - The AUTH_PROVE handler is one-shot per challenge: success or failure
   both consume the pending challenge, so a captured valid response
   cannot be replayed against the same challenge.
@@ -567,10 +592,15 @@ Vocabulary configuration (R1.0 + R1.6 + R1.7):
 - Reply strings ending in `_fmt` (currently only `reply_auth_challenge_fmt`)
   are passed to `printf`-family formatters; overrides MUST preserve the
   `%s` placeholder for the hex challenge.
+- `reply_auth_failed_entropy` is additive and describes failure before a
+  challenge is issued. Existing command and success-response wire formats are
+  unchanged.
 
 Notes:
 - parser is line-based (`\r` / `\n` terminate a frame),
-- helpers are header-only (`static inline`) and state lives in `hal_serial_session_t`,
+- public types, configuration and declarations live in
+  `hal_serial_session.h`; parsing, dispatch and authentication are compiled
+  once in `hal_serial_session.cpp`,
 - session id is non-cryptographic and intended for bootstrap tracking only,
 - the HELLO inner-payload buffer is sized for the six mandatory fields plus
   reasonable slack; the implementation uses a 192-byte internal buffer.
@@ -615,6 +645,9 @@ Test observability (mock backend):
   reply seq matches the request seq.
 - Use `hal_mock_set_device_uid(...)` to simulate a different physical board
   when asserting `uid=` values.
+- Use `hal_mock_secure_random_set_seed(...)` with status `HAL_OK` for stable
+  challenge vectors, or set an error status to exercise entropy failure and
+  verify that the session remains unauthenticated with a zeroed challenge.
 
 ### Examples
 
@@ -658,9 +691,13 @@ static const hal_serial_session_vocabulary_t s_vocab = {
   .reply_auth_challenge_fmt = "SC_OK AUTH_CHALLENGE %s",
   .cmd_auth_prove = "SC_AUTH_PROVE",
   .reply_auth_ok = "SC_OK AUTH",
-  .reply_auth_failed = "SC_ERR AUTH_FAILED",
+  .reply_auth_failed_no_challenge = "SC_ERR AUTH_NO_CHALLENGE",
+  .reply_auth_failed_bad_length = "SC_ERR AUTH_BAD_LENGTH",
   .reply_auth_failed_bad_hex = "SC_ERR AUTH_BAD_HEX",
-  .reply_auth_failed_not_ready = "SC_ERR AUTH_NOT_READY",
+  .reply_auth_failed_key_derivation = "SC_ERR AUTH_KEY_DERIVATION",
+  .reply_auth_failed_mac_compute = "SC_ERR AUTH_MAC_COMPUTE",
+  .reply_auth_failed_bad_mac = "SC_ERR AUTH_BAD_MAC",
+  .reply_auth_failed_entropy = "SC_ERR AUTH_ENTROPY",
   .cmd_reboot_bootloader = "SC_REBOOT_BOOTLOADER",
   .reply_reboot_ok = "SC_OK REBOOT",
   .reply_not_ready_hello_required = "SC_ERR HELLO_REQUIRED",
@@ -804,9 +841,9 @@ The session id is serialised big-endian via `hal_u32_to_bytes_be` so the
 firmware and host MAC the exact same byte sequence regardless of host
 endianness.
 
-`hal_sc_auth_macs_equal` is a constant-time OR-accumulator comparison
-intended for MAC verification - it does not short-circuit on first
-difference, so timing does not leak where the bytes diverged.
+`hal_sc_auth_macs_equal` delegates to the single internal
+`jh_constant_time_compare` implementation. Authentication message buffers and
+failed outputs are erased through `jh_secure_zeroize` before return.
 
 The salt is a public, project-wide compile-time constant. Secrecy of the
 scheme rests on HMAC-SHA256 + the per-device UID, **not** on salt

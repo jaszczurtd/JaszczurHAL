@@ -685,6 +685,18 @@ add_test(NAME test_gps_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_gps_architecture.cmake
 )
 
+add_test(NAME test_security_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_security_architecture.cmake
+)
+
+add_test(NAME test_serial_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_serial_architecture.cmake
+)
+
 get_filename_component(_jh_workspace_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
     ABSOLUTE)
 set(JH_CW43_FIXTURE_SETUP_SCRIPT
@@ -1074,8 +1086,10 @@ add_hal_test(test_hal_i2c)
 add_hal_test(test_hal_i2c_slave)
 add_hal_test(test_hal_rgb_led)
 add_hal_test(test_hal_serial)
+add_hal_test(test_hal_sc_auth)
 add_hal_test(test_hal_serial_session)
 add_hal_test(test_hal_serial_session_vocabulary)
+add_hal_test(test_jh_security_primitives)
 add_hal_test(test_hal_status)
 add_hal_test(test_hal_usb)
 add_hal_test(test_flash_transaction_engine)

@@ -4,8 +4,9 @@
  * @file hal_serial.h
  * @brief Hardware abstraction for serial console I/O and debug logging.
  *
- * Target backends route this API to the active debug console transport.
- * Mock builds use stdio printf/puts.
+ * One target-independent core owns formatting, synchronization, rate limiting
+ * and ISR deferral. A small link-time port routes bytes to RP USB CDC, STM32
+ * USART2/host stdout, or the mock capture/RX transport.
  */
 
 #include <stdbool.h>
@@ -19,7 +20,7 @@ extern "C" {
 /**
  * @brief Legacy debug buffer size used by bounded mock capture/RX helpers.
  *
- * Task-level hal_deb() / hal_derr() output is streamed by target backends and
+ * Task-level hal_deb() / hal_derr() output is streamed by the shared core and
  * is not capped by this value. ISR-deferred records remain bounded separately
  * by @ref HAL_DEBUG_ISR_TEXT_MAX.
  */
@@ -44,7 +45,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Slot count of the per-backend SPSC ring buffer that holds debug
+ * @brief Slot count of the shared core's SPSC ring buffer that holds debug
  *        records produced from interrupt context (drained by
  *        @ref hal_debug_loop). Must be >= 2; the effective capacity is
  *        slot_count - 1 because one slot is reserved to distinguish full

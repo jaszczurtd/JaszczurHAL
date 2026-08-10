@@ -21,25 +21,6 @@ enum {
 
 #define JH_BLE_STREAM_AAD_LEN (4u + HAL_BLE_STREAM_AEAD_COUNTER_LEN)
 
-static void zeroize(void *buffer, size_t length) {
-  volatile uint8_t *bytes = (volatile uint8_t *)buffer;
-  for (size_t index = 0u; index < length; ++index) {
-    bytes[index] = 0u;
-  }
-}
-
-bool jh_ble_stream_equal_ct(const uint8_t *left, const uint8_t *right,
-                            size_t length) {
-  if (left == NULL || right == NULL) {
-    return false;
-  }
-  uint8_t difference = 0u;
-  for (size_t index = 0u; index < length; ++index) {
-    difference = (uint8_t)(difference | (uint8_t)(left[index] ^ right[index]));
-  }
-  return difference == 0u;
-}
-
 static void store_u16_le(uint8_t *out, uint16_t value) {
   out[0] = (uint8_t)(value & 0xFFu);
   out[1] = (uint8_t)((value >> 8) & 0xFFu);
@@ -98,7 +79,7 @@ static bool derive(const jh_ble_stream_session_t *session, uint8_t domain,
   build_transcript(session, domain, transcript);
   const bool ok = hal_hmac_sha256(session->secret, session->secret_length,
                                   transcript, sizeof(transcript), out);
-  zeroize(transcript, sizeof(transcript));
+  jh_secure_zeroize(transcript, sizeof(transcript));
   return ok;
 }
 
@@ -140,11 +121,13 @@ void jh_ble_stream_session_reset(jh_ble_stream_session_t *session) {
   if (session == NULL) {
     return;
   }
-  zeroize(session->session_id, sizeof(session->session_id));
-  zeroize(session->client_nonce, sizeof(session->client_nonce));
-  zeroize(session->device_nonce, sizeof(session->device_nonce));
-  zeroize(session->key_device_to_client, sizeof(session->key_device_to_client));
-  zeroize(session->key_client_to_device, sizeof(session->key_client_to_device));
+  jh_secure_zeroize(session->session_id, sizeof(session->session_id));
+  jh_secure_zeroize(session->client_nonce, sizeof(session->client_nonce));
+  jh_secure_zeroize(session->device_nonce, sizeof(session->device_nonce));
+  jh_secure_zeroize(session->key_device_to_client,
+                    sizeof(session->key_device_to_client));
+  jh_secure_zeroize(session->key_client_to_device,
+                    sizeof(session->key_client_to_device));
   session->peer_capabilities = 0u;
   session->tx_counter = 0u;
   session->rx_counter = 0u;
@@ -156,7 +139,7 @@ void jh_ble_stream_session_clear(jh_ble_stream_session_t *session) {
     return;
   }
   jh_ble_stream_session_reset(session);
-  zeroize(session->secret, sizeof(session->secret));
+  jh_secure_zeroize(session->secret, sizeof(session->secret));
   session->secret_length = 0u;
   session->local_capabilities = 0u;
 }
@@ -170,7 +153,7 @@ hal_status_t jh_ble_stream_session_set_secret(jh_ble_stream_session_t *session,
     return HAL_EINVAL;
   }
   jh_ble_stream_session_reset(session);
-  zeroize(session->secret, sizeof(session->secret));
+  jh_secure_zeroize(session->secret, sizeof(session->secret));
   memcpy(session->secret, secret, length);
   session->secret_length = length;
   return HAL_OK;
@@ -203,8 +186,9 @@ static hal_status_t handle_hello(jh_ble_stream_session_t *session,
     return HAL_EINTERNAL;
   }
 
-  uint8_t device_proof[HAL_SHA256_DIGEST_BYTES];
+  uint8_t device_proof[HAL_SHA256_DIGEST_BYTES] = {0u};
   if (!derive(session, JH_BLE_STREAM_DOMAIN_DEVICE_PROOF, device_proof)) {
+    jh_secure_zeroize(device_proof, sizeof(device_proof));
     jh_ble_stream_session_reset(session);
     close_with(result, HAL_BLE_STREAM_CLOSE_PROTOCOL_ERROR);
     return HAL_EINTERNAL;
@@ -225,7 +209,7 @@ static hal_status_t handle_hello(jh_ble_stream_session_t *session,
   memcpy(&result->response[offset], device_proof, HAL_BLE_STREAM_PROOF_LEN);
   offset += HAL_BLE_STREAM_PROOF_LEN;
   result->response_length = offset;
-  zeroize(device_proof, sizeof(device_proof));
+  jh_secure_zeroize(device_proof, sizeof(device_proof));
 
   session->state = JH_BLE_STREAM_SESSION_HANDSHAKING;
   return HAL_OK;
@@ -243,14 +227,16 @@ static hal_status_t handle_auth(jh_ble_stream_session_t *session,
     return HAL_EPROTO;
   }
 
-  uint8_t expected[HAL_SHA256_DIGEST_BYTES];
+  uint8_t expected[HAL_SHA256_DIGEST_BYTES] = {0u};
   if (!derive(session, JH_BLE_STREAM_DOMAIN_CLIENT_PROOF, expected)) {
+    jh_secure_zeroize(expected, sizeof(expected));
+    jh_ble_stream_session_reset(session);
     close_with(result, HAL_BLE_STREAM_CLOSE_PROTOCOL_ERROR);
     return HAL_EINTERNAL;
   }
   const bool matches =
-      jh_ble_stream_equal_ct(expected, body, HAL_BLE_STREAM_PROOF_LEN);
-  zeroize(expected, sizeof(expected));
+      jh_constant_time_compare(expected, body, HAL_BLE_STREAM_PROOF_LEN);
+  jh_secure_zeroize(expected, sizeof(expected));
   if (!matches) {
     close_with(result, HAL_BLE_STREAM_CLOSE_AUTH_FAILED);
     return HAL_EAUTH;
@@ -260,6 +246,7 @@ static hal_status_t handle_auth(jh_ble_stream_session_t *session,
               session->key_device_to_client) ||
       !derive(session, JH_BLE_STREAM_DOMAIN_KEY_C2D,
               session->key_client_to_device)) {
+    jh_ble_stream_session_reset(session);
     close_with(result, HAL_BLE_STREAM_CLOSE_PROTOCOL_ERROR);
     return HAL_EINTERNAL;
   }
@@ -314,9 +301,10 @@ static hal_status_t handle_data(jh_ble_stream_session_t *session, uint8_t flags,
   const bool ok = hal_chacha20_poly1305_decrypt(
       session->key_client_to_device, nonce, aad, sizeof(aad), ciphertext,
       text_length, tag, result->payload);
-  zeroize(nonce, sizeof(nonce));
+  jh_secure_zeroize(nonce, sizeof(nonce));
+  jh_secure_zeroize(aad, sizeof(aad));
   if (!ok) {
-    zeroize(result->payload, sizeof(result->payload));
+    jh_secure_zeroize(result->payload, sizeof(result->payload));
     close_with(result, HAL_BLE_STREAM_CLOSE_AUTH_FAILED);
     return HAL_EAUTH;
   }
@@ -406,8 +394,10 @@ hal_status_t jh_ble_stream_session_build_data(jh_ble_stream_session_t *session,
   const bool ok = hal_chacha20_poly1305_encrypt(
       session->key_device_to_client, nonce, aad, sizeof(aad), payload, length,
       &out_frame[offset], &out_frame[offset + length]);
-  zeroize(nonce, sizeof(nonce));
+  jh_secure_zeroize(nonce, sizeof(nonce));
+  jh_secure_zeroize(aad, sizeof(aad));
   if (!ok) {
+    jh_secure_zeroize(out_frame, HAL_BLE_STREAM_FRAME_HEADER_LEN + body_length);
     return HAL_EINTERNAL;
   }
 

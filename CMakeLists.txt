@@ -103,6 +103,9 @@ set(UTIL_SOURCES
     ${SRC}/hal/hal_config.cpp
     ${SRC}/hal/hal_gps.cpp
     ${SRC}/hal/hal_rtc.cpp
+    ${SRC}/hal/hal_sc_auth.cpp
+    ${SRC}/hal/hal_serial.cpp
+    ${SRC}/hal/hal_serial_session.cpp
     ${SRC}/hal/hal_time.cpp
     ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
@@ -352,7 +355,10 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
 
     add_library(hal_freertos_posix STATIC
         ${SRC}/hal/hal_assert.cpp
+        ${SRC}/hal/hal_serial.cpp
         ${SRC}/hal/impl/stm32g474/hal_sync.cpp
+        ${SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/freertos_posix_serial_port.cpp
         ${SRC}/hal/impl/stm32g474/hal_system.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
