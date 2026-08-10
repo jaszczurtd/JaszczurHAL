@@ -109,13 +109,13 @@ static inline float u32_to_float(uint32_t u) {
 /** @{ */
 /** @brief Return current uptime in seconds. */
 unsigned long getSeconds(void);
-/** @brief Return true when date falls into DST interval. */
+/** @brief Legacy wrapper for hal_time_is_daylight_saving_time(). */
 bool isDaylightSavingTime(int year, int month, int day);
-/** @brief Adjust date/time values by daylight-saving rules. */
+/** @brief Legacy wrapper for hal_time_adjust_cet_cest(). */
 void adjustTime(int *year, int *month, int *day, int *hour, int *minute);
-/** @brief Return true when @p now is inside [start, end] range in minutes. */
+/** @brief Legacy wrapper for hal_time_is_in_range(). */
 bool is_time_in_range(long now, long start, long end);
-/** @brief Split minute-of-day value into hours and minutes. */
+/** @brief Legacy wrapper for hal_time_extract_minutes(). */
 void extract_time(long timeInMinutes, int *hours, int *minutes);
 /** @} */
 

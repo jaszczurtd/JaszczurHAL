@@ -13,64 +13,34 @@
 #include "ds3231.h"
 
 #include "hal/hal_i2c.h"
+#include "hal/impl/shared/time/jh_calendar.h"
 
+#include <climits>
 #include <cstdio>
 #include <cstring>
 
 #define CLOCK_ADDRESS 0x68u
 #define SECONDS_FROM_1970_TO_2000 946684800u
 
-static const uint8_t daysInMonth[] = {31u, 28u, 31u, 30u, 31u, 30u,
-                                      31u, 31u, 30u, 31u, 30u, 31u};
-
-static uint16_t date2days(uint16_t y, uint8_t m, uint8_t d) {
-  if (y >= 2000u) {
-    y = (uint16_t)(y - 2000u);
-  }
-
-  uint16_t days = d;
-  for (uint8_t i = 1u; i < m; ++i) {
-    days = (uint16_t)(days + daysInMonth[i - 1u]);
-  }
-  if (m > 2u && isleapYear(y)) {
-    ++days;
-  }
-  return (uint16_t)(days + (uint16_t)(365u * y) + (uint16_t)((y + 3u) / 4u) -
-                    1u);
-}
-
-static long time2long(uint16_t days, uint8_t h, uint8_t m, uint8_t s) {
-  return ((days * 24L + h) * 60L + m) * 60L + s;
-}
-
 DateTime::DateTime(uint32_t t) {
-  t -= SECONDS_FROM_1970_TO_2000;
+  jh_calendar_datetime_t datetime = {};
+  if (t < SECONDS_FROM_1970_TO_2000 ||
+      jh_calendar_epoch_to_datetime(t, 2255u, &datetime) != HAL_OK) {
+    yOff = 0u;
+    m = 1u;
+    d = 1u;
+    hh = 0u;
+    mm = 0u;
+    ss = 0u;
+    return;
+  }
 
-  ss = (uint8_t)(t % 60u);
-  t /= 60u;
-  mm = (uint8_t)(t % 60u);
-  t /= 60u;
-  hh = (uint8_t)(t % 24u);
-  uint16_t days = (uint16_t)(t / 24u);
-  uint8_t leap = 0u;
-  for (yOff = 0u;; ++yOff) {
-    leap = isleapYear((uint16_t)yOff) ? 1u : 0u;
-    if (days < (uint16_t)(365u + leap)) {
-      break;
-    }
-    days = (uint16_t)(days - (365u + leap));
-  }
-  for (m = 1u;; ++m) {
-    uint8_t daysPerMonth = daysInMonth[m - 1u];
-    if (leap && m == 2u) {
-      ++daysPerMonth;
-    }
-    if (days < daysPerMonth) {
-      break;
-    }
-    days = (uint16_t)(days - daysPerMonth);
-  }
-  d = (uint8_t)(days + 1u);
+  yOff = (uint8_t)(datetime.year - 2000u);
+  m = datetime.month;
+  d = datetime.day;
+  hh = datetime.hour;
+  mm = datetime.minute;
+  ss = datetime.second;
 }
 
 DateTime::DateTime(uint16_t year, uint8_t month, uint8_t day, uint8_t hour,
@@ -98,26 +68,42 @@ DateTime::DateTime(const char *date, const char *time) {
 }
 
 uint8_t DateTime::dayOfTheWeek() const {
-  const uint16_t day = date2days(yOff, m, d);
-  return (uint8_t)((day + 6u) % 7u);
+  jh_calendar_datetime_t datetime = {
+      year(), m, d, hh, mm, ss, 0u,
+  };
+  uint64_t epoch = 0u;
+  if (jh_calendar_datetime_to_epoch(&datetime, &epoch) != HAL_OK ||
+      jh_calendar_epoch_to_datetime(epoch, 2255u, &datetime) != HAL_OK) {
+    return 0u;
+  }
+  return datetime.weekday;
 }
 
 uint32_t DateTime::unixtime(void) const {
-  const uint16_t days = date2days(yOff, m, d);
-  uint32_t t = (uint32_t)time2long(days, hh, mm, ss);
-  t += SECONDS_FROM_1970_TO_2000;
-  return t;
+  const jh_calendar_datetime_t datetime = {
+      year(), m, d, hh, mm, ss, 0u,
+  };
+  uint64_t epoch = 0u;
+  if (jh_calendar_datetime_to_epoch(&datetime, &epoch) != HAL_OK ||
+      epoch > UINT32_MAX) {
+    return 0u;
+  }
+  return (uint32_t)epoch;
 }
 
 long DateTime::secondstime() const {
-  return time2long(date2days(yOff, m, d), hh, mm, ss);
+  const uint64_t epoch = unixtime();
+  if (epoch < SECONDS_FROM_1970_TO_2000 ||
+      epoch - SECONDS_FROM_1970_TO_2000 > LONG_MAX) {
+    return 0L;
+  }
+  return (long)(epoch - SECONDS_FROM_1970_TO_2000);
 }
 
 bool isleapYear(const uint16_t y) {
-  if (y & 3u) {
-    return false;
-  }
-  return (y % 100u) || (y % 400u == 0u);
+  bool is_leap = false;
+  const uint16_t calendar_year = (y == 0u) ? 2000u : y;
+  return jh_calendar_is_leap_year(calendar_year, &is_leap) == HAL_OK && is_leap;
 }
 
 DS3231::DS3231(uint8_t i2c_bus, uint8_t i2c_addr)

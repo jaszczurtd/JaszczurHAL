@@ -48,15 +48,17 @@ per-module section below. The general pattern is:
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
 - **Singleton mutexes** protect global modules (`hal_eeprom`, `hal_display`, `hal_gps`, `hal_external_adc`, `hal_wifi`, `hal_udp`, `hal_wireguard`, `hal_mqtt`, `hal_kv`, debug serial).
-- **Stateless helpers** (`hal_bits`, `hal_math`, `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
+- **Stateless helpers** (`hal_bits`, `hal_math`, pure `hal_time` helpers,
+  `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Singleton and per-bus mutexes use an internal atomic create-once fallback, so
 two FreeRTOS tasks or RP2040 cores cannot publish different locks for the same
 module. Module init/begin calls still remain the preferred place to create
 those locks before normal runtime sharing.
 
-Modules documented as **"Not thread-safe"** (`hal_uart`, `hal_time`, `pidController`)
-must be serialized by the caller or used from a single core.
+Modules documented as **"Not thread-safe"** (`hal_uart`, the optional
+`hal_time` NTP/system-time surface, `pidController`) must be serialized by the
+caller or used from a single core.
 
 ### Mock backend
 
@@ -155,10 +157,29 @@ converts date/time components to Unix epoch seconds.
 
 Validation:
 
-- returns `0` for out-of-range values (year < 1970, invalid month/day/time)
+- returns `0` for out-of-range values (year < 1970, invalid month/day/time, or
+  Unix epoch beyond `UINT32_MAX`)
 - supports leap-year rules (including century exceptions)
 
-This helper is implemented for the RP2040, STM32G474 and mock backends.
+The compatibility API returns `0` both for errors and for the valid Unix epoch
+start. Internally, the shared `impl/shared/time/jh_calendar` core uses
+`hal_status_t` and a 64-bit epoch so callers can distinguish those cases. The
+same core validates and converts RTC, PCF8563 and DS3231 dates on RP2040,
+STM32G474 and mock builds.
+
+The always-available `hal_time` surface also owns the former `tools.cpp` time
+algorithms:
+
+- `hal_time_is_daylight_saving_time(...)` applies the date-only CET/CEST
+  last-Sunday policy and rejects invalid Gregorian dates
+- `hal_time_adjust_cet_cest(...)` applies the corresponding offset and
+  normalizes date rollover
+- `hal_time_is_in_range(...)` checks a half-open `[start, end)` interval
+- `hal_time_extract_minutes(...)` splits a minute count with optional outputs
+
+The established `isDaylightSavingTime()`, `adjustTime()`,
+`is_time_in_range()`, and `extract_time()` utilities remain source-compatible
+wrappers and contain no calendar or interval logic.
 
 ---
 

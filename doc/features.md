@@ -71,7 +71,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | HTTP/HTTPS client | Bounded one-shot HTTP/1.1 requests over HAL TCP or verified BearSSL TLS, with caller-owned headers/body and explicit response metadata. | [hal_http_client.h](../src/hal/hal_http_client.h), [connectivity API](api/15_connectivity.md#halhttpclient-httphttps-client-opt-in-halenablehttpclient) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/hal_mqtt.h) |
 | OTA | Authenticated RP firmware updates over HAL UDP/TCP with versioned images, resumable program/staging swap, boot confirmation, rollback, discovery, and VS Code upload. | [hal_ota.h](../src/hal/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
-| NTP / time-of-day sync | Network time helpers for connected builds. | [hal_time.h](../src/hal/hal_time.h) |
+| Calendar / NTP / time-of-day | Always-available Gregorian conversion, CET/CEST adjustment, range and minute helpers, plus network time synchronization for connected builds. | [hal_time.h](../src/hal/hal_time.h) |
 | WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/hal_wireguard.h), [WireGuard engine](../src/hal/impl/shared/frameworks/wireguard/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/hal_simcom_a76xx.h) |
 
@@ -90,7 +90,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 | Area | What it offers | Source |
 |---|---|---|
-| RTC facade | Common real-time-clock surface with multiple chip backends, including status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs. | [hal_rtc.h](../src/hal/hal_rtc.h) |
+| RTC facade | Common real-time-clock surface with multiple chip backends, status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs, and shared Gregorian date validation. | [hal_rtc.h](../src/hal/hal_rtc.h), [calendar core](../src/hal/impl/shared/time/) |
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/impl/shared/drivers/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/impl/shared/drivers/ds3231/) |
 | GPS / NMEA | Portable NMEA parser and GPS abstraction for UART/software-serial receivers, with transport-specific RP2040 IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/hal_gps.h), [GPS framework](../src/hal/impl/shared/frameworks/gps/) |

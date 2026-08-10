@@ -157,6 +157,7 @@ set(HAL_COMMON_SOURCES
     ${SRC}/hal/hal_board.cpp
     ${SRC}/hal/hal_ble.cpp
     ${SRC}/hal/hal_config.cpp
+    ${SRC}/hal/hal_time.cpp
     ${SRC}/hal/hal_lora_radio.cpp
     ${SRC}/hal/hal_spi_device.cpp
     ${SRC}/hal/hal_network_status.cpp

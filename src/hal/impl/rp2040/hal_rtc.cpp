@@ -7,6 +7,7 @@
 #include "../../hal_rtc.h"
 #include "../../hal_serial.h"
 #include "../../hal_sync.h"
+#include "../shared/time/jh_calendar.h"
 
 #ifdef HAL_ENABLE_PCF8563
 #include "../shared/drivers/pcf8563/pcf8563.h"
@@ -62,22 +63,13 @@ static bool rtc_validate_datetime(const hal_rtc_datetime_t *dt) {
   if (!dt) {
     return false;
   }
-  if (dt->second > 59u || dt->minute > 59u || dt->hour > 23u) {
-    return false;
-  }
-  if (dt->day < 1u || dt->day > 31u) {
-    return false;
-  }
-  if (dt->weekday > 6u) {
-    return false;
-  }
-  if (dt->month < 1u || dt->month > 12u) {
-    return false;
-  }
-  if (dt->year < 1900u || dt->year > 2099u) {
-    return false;
-  }
-  return true;
+
+  const jh_calendar_datetime_t calendar = {
+      dt->year,   dt->month,  dt->day,     dt->hour,
+      dt->minute, dt->second, dt->weekday,
+  };
+  return jh_calendar_validate_datetime(&calendar, HAL_RTC_MIN_YEAR,
+                                       HAL_RTC_MAX_YEAR) == HAL_OK;
 }
 
 static bool rtc_validate_alarm(const hal_rtc_alarm_t *alarm) {
@@ -125,121 +117,41 @@ static bool rtc_validate_timer_clock(hal_rtc_timer_clock_t timer_clock) {
   }
 }
 
-static bool rtc_is_leap_year(uint16_t year) {
-  return ((year % 4u) == 0u && (year % 100u) != 0u) || ((year % 400u) == 0u);
+static hal_status_t rtc_datetime_to_epoch(const hal_rtc_datetime_t *dt,
+                                          uint64_t *out_epoch) {
+  if (!dt || !out_epoch) {
+    return HAL_EINVAL;
+  }
+
+  const jh_calendar_datetime_t calendar = {
+      dt->year,   dt->month,  dt->day,     dt->hour,
+      dt->minute, dt->second, dt->weekday,
+  };
+  return jh_calendar_datetime_to_epoch(&calendar, out_epoch);
 }
 
-static uint8_t rtc_days_in_month(uint16_t year, uint8_t month) {
-  switch (month) {
-  case 1u:
-    return 31u;
-  case 2u:
-    return rtc_is_leap_year(year) ? 29u : 28u;
-  case 3u:
-    return 31u;
-  case 4u:
-    return 30u;
-  case 5u:
-    return 31u;
-  case 6u:
-    return 30u;
-  case 7u:
-    return 31u;
-  case 8u:
-    return 31u;
-  case 9u:
-    return 30u;
-  case 10u:
-    return 31u;
-  case 11u:
-    return 30u;
-  case 12u:
-    return 31u;
-  default:
-    return 0u;
-  }
-}
-
-static bool rtc_datetime_to_epoch(const hal_rtc_datetime_t *dt,
-                                  uint64_t *out_epoch) {
-  if (!dt || !out_epoch || !rtc_validate_datetime(dt) || dt->year < 1970u) {
-    return false;
-  }
-
-  uint64_t days = 0u;
-
-  for (uint16_t year = 1970u; year < dt->year; ++year) {
-    days += rtc_is_leap_year(year) ? 366u : 365u;
-  }
-
-  for (uint8_t month = 1u; month < dt->month; ++month) {
-    const uint8_t dim = rtc_days_in_month(dt->year, month);
-    if (dim == 0u) {
-      return false;
-    }
-    days += dim;
-  }
-
-  days += (uint64_t)(dt->day - 1u);
-
-  *out_epoch = days * 86400ull + (uint64_t)dt->hour * 3600ull +
-               (uint64_t)dt->minute * 60ull + (uint64_t)dt->second;
-  return true;
-}
-
-static bool rtc_epoch_to_datetime(uint64_t epoch, hal_rtc_datetime_t *out_dt) {
+static hal_status_t rtc_epoch_to_datetime(uint64_t epoch,
+                                          hal_rtc_datetime_t *out_dt) {
   if (!out_dt) {
-    return false;
+    return HAL_EINVAL;
   }
 
-  const uint64_t epoch_days = epoch / 86400ull;
-  uint64_t remaining_days = epoch_days;
-  uint32_t sod = (uint32_t)(epoch % 86400ull);
-
-  uint16_t year = 1970u;
-  while (year <= 2099u) {
-    const uint16_t diy = rtc_is_leap_year(year) ? 366u : 365u;
-    if (remaining_days < (uint64_t)diy) {
-      break;
-    }
-    remaining_days -= (uint64_t)diy;
-    ++year;
+  jh_calendar_datetime_t calendar = {};
+  const hal_status_t status =
+      jh_calendar_epoch_to_datetime(epoch, HAL_RTC_MAX_YEAR, &calendar);
+  if (status != HAL_OK) {
+    return status;
   }
 
-  if (year > 2099u) {
-    return false;
-  }
-
-  uint8_t month = 1u;
-  while (month <= 12u) {
-    const uint8_t dim = rtc_days_in_month(year, month);
-    if (dim == 0u) {
-      return false;
-    }
-    if (remaining_days < (uint64_t)dim) {
-      break;
-    }
-    remaining_days -= (uint64_t)dim;
-    ++month;
-  }
-
-  if (month > 12u) {
-    return false;
-  }
-
-  out_dt->year = year;
-  out_dt->month = month;
-  out_dt->day = (uint8_t)(remaining_days + 1u);
-
-  out_dt->hour = (uint8_t)(sod / 3600u);
-  sod %= 3600u;
-  out_dt->minute = (uint8_t)(sod / 60u);
-  out_dt->second = (uint8_t)(sod % 60u);
-
-  out_dt->weekday = (uint8_t)((epoch_days + 4ull) % 7ull);
+  out_dt->year = calendar.year;
+  out_dt->month = calendar.month;
+  out_dt->day = calendar.day;
+  out_dt->hour = calendar.hour;
+  out_dt->minute = calendar.minute;
+  out_dt->second = calendar.second;
+  out_dt->weekday = calendar.weekday;
   out_dt->clock_integrity = true;
-
-  return rtc_validate_datetime(out_dt);
+  return HAL_OK;
 }
 
 #ifdef HAL_ENABLE_PCF8563
@@ -816,7 +728,7 @@ hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch) {
     return status;
   }
 
-  return rtc_datetime_to_epoch(&dt, out_epoch) ? HAL_OK : HAL_EOVERFLOW;
+  return rtc_datetime_to_epoch(&dt, out_epoch);
 }
 
 bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch) {
@@ -829,8 +741,9 @@ hal_status_t hal_rtc_set_epoch_ex(hal_rtc_t h, uint64_t epoch) {
   }
 
   hal_rtc_datetime_t dt = {};
-  if (!rtc_epoch_to_datetime(epoch, &dt)) {
-    return HAL_EOVERFLOW;
+  const hal_status_t status = rtc_epoch_to_datetime(epoch, &dt);
+  if (status != HAL_OK) {
+    return status;
   }
 
   return hal_rtc_set_datetime_ex(h, &dt);

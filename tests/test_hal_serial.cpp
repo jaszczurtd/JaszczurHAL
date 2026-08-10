@@ -18,6 +18,17 @@ static bool fixed_ts_hook(char *out, size_t out_size, void *user) {
   return true;
 }
 
+static bool rejecting_ts_hook(char *out, size_t out_size, void *user) {
+  bool *invoked = (bool *)user;
+  if (invoked != NULL) {
+    *invoked = true;
+  }
+  if (out != NULL && out_size > 0u) {
+    snprintf(out, out_size, "ignored timestamp");
+  }
+  return false;
+}
+
 static bool s_ts_hook_invoked = false;
 static bool tracking_ts_hook(char *out, size_t out_size, void *user) {
   (void)user;
@@ -126,6 +137,8 @@ static void fill_payload(char *payload, size_t size, char ch) {
 }
 
 void setUp(void) {
+  hal_mock_set_millis(0u);
+  hal_mock_set_micros(0u);
   hal_debug_init(115200);
   hal_mock_serial_reset();
   hal_debug_set_muted(false);
@@ -154,6 +167,33 @@ void test_print_appends_and_println_starts_new_captured_line(void) {
 
   hal_serial_println("fresh");
   TEST_ASSERT_EQUAL_STRING("fresh", hal_mock_serial_last_line());
+}
+
+void test_serial_print_and_println_preserve_wire_message_boundaries(void) {
+  char out[32];
+  stdout_capture_t capture;
+  TEST_ASSERT_TRUE(stdout_capture_begin(&capture));
+
+  hal_serial_print("left");
+  hal_serial_println("-right");
+
+  size_t n = stdout_capture_end(&capture, out, sizeof(out));
+  TEST_ASSERT_EQUAL_size_t(strlen("left-right\n"), n);
+  TEST_ASSERT_EQUAL_STRING("left-right\n", out);
+  TEST_ASSERT_EQUAL_STRING("-right", hal_mock_serial_last_line());
+}
+
+void test_serial_rx_preserves_binary_bytes_and_empty_read_contract(void) {
+  const char rx[] = {'A', '\0', (char)0xff};
+  hal_mock_serial_inject_rx(rx, (int)sizeof(rx));
+
+  TEST_ASSERT_EQUAL_INT(3, hal_serial_available());
+  TEST_ASSERT_EQUAL_INT('A', hal_serial_read());
+  TEST_ASSERT_EQUAL_INT(2, hal_serial_available());
+  TEST_ASSERT_EQUAL_INT(0, hal_serial_read());
+  TEST_ASSERT_EQUAL_INT(0xff, hal_serial_read());
+  TEST_ASSERT_EQUAL_INT(0, hal_serial_available());
+  TEST_ASSERT_EQUAL_INT(-1, hal_serial_read());
 }
 
 void test_serial_null_strings_are_treated_as_empty(void) {
@@ -191,6 +231,13 @@ void test_deb_captured(void) {
   TEST_ASSERT_EQUAL_STRING("deb_test", hal_mock_deb_last_line());
 }
 
+void test_task_debug_prefix_is_applied_with_single_separator(void) {
+  hal_deb_set_prefix("[task]");
+  hal_deb("value=%d", 7);
+
+  TEST_ASSERT_EQUAL_STRING("[task] value=7", hal_mock_deb_last_line());
+}
+
 void test_derr_without_timestamp_hook(void) {
   hal_derr("plain error");
   const char *line = hal_mock_serial_last_line();
@@ -204,6 +251,82 @@ void test_derr_with_timestamp_hook(void) {
   const char *line = hal_mock_serial_last_line();
   TEST_ASSERT_NOT_NULL(strstr(line, "[T+1.234s]"));
   TEST_ASSERT_NOT_NULL(strstr(line, "hooked error"));
+}
+
+void test_derr_omits_timestamp_when_hook_rejects_it(void) {
+  bool invoked = false;
+  hal_debug_set_timestamp_hook(rejecting_ts_hook, &invoked);
+
+  hal_derr("untimestamped error");
+
+  const char *line = hal_mock_serial_last_line();
+  TEST_ASSERT_TRUE(invoked);
+  TEST_ASSERT_NULL(strstr(line, "ignored timestamp"));
+  TEST_ASSERT_NOT_NULL(strstr(line, "ERROR!"));
+  TEST_ASSERT_NOT_NULL(strstr(line, "untimestamped error"));
+}
+
+void test_rate_limit_config_defaults_zero_sanitization_and_custom_values(void) {
+  hal_debug_rate_limit_t defaults = hal_debug_rate_limit_defaults();
+  TEST_ASSERT_EQUAL_UINT16(5u, defaults.full_logs_limit);
+  TEST_ASSERT_EQUAL_UINT32(1000u, defaults.min_gap_ms);
+  TEST_ASSERT_EQUAL_UINT32(30000u, defaults.summary_every_ms);
+
+  const hal_debug_rate_limit_t zeros = {0u, 0u, 0u};
+  hal_debug_init(115200u, &zeros);
+  const hal_debug_rate_limit_t *active = hal_debug_get_rate_limit();
+  TEST_ASSERT_NOT_NULL(active);
+  TEST_ASSERT_EQUAL_UINT16(defaults.full_logs_limit, active->full_logs_limit);
+  TEST_ASSERT_EQUAL_UINT32(defaults.min_gap_ms, active->min_gap_ms);
+  TEST_ASSERT_EQUAL_UINT32(defaults.summary_every_ms, active->summary_every_ms);
+
+  const hal_debug_rate_limit_t custom = {2u, 123u, 456u};
+  hal_debug_init(115200u, &custom);
+  active = hal_debug_get_rate_limit();
+  TEST_ASSERT_EQUAL_UINT16(custom.full_logs_limit, active->full_logs_limit);
+  TEST_ASSERT_EQUAL_UINT32(custom.min_gap_ms, active->min_gap_ms);
+  TEST_ASSERT_EQUAL_UINT32(custom.summary_every_ms, active->summary_every_ms);
+}
+
+void test_rate_limiter_emits_notice_silence_and_periodic_summary(void) {
+  const hal_debug_rate_limit_t config = {1u, 100u, 1000u};
+  hal_debug_init(115200u, &config);
+
+  hal_derr_limited("gps", "first failure");
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "[gps]"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "first failure"));
+
+  hal_derr_limited("gps", "second failure");
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(),
+                              "repeated errors are being suppressed"));
+
+  char out[16];
+  stdout_capture_t capture;
+  TEST_ASSERT_TRUE(stdout_capture_begin(&capture));
+  hal_derr_limited("gps", "third failure");
+  size_t n = stdout_capture_end(&capture, out, sizeof(out));
+  TEST_ASSERT_EQUAL_size_t(0u, n);
+
+  hal_mock_advance_millis(1000u);
+  hal_derr_limited("gps", "fourth failure");
+  const char *summary = hal_mock_serial_last_line();
+  TEST_ASSERT_NOT_NULL(strstr(summary, "[gps]"));
+  TEST_ASSERT_NOT_NULL(strstr(summary, "suppressed 3 repeated errors"));
+  TEST_ASSERT_NOT_NULL(strstr(summary, "last 1000 ms"));
+}
+
+void test_rate_limiter_tracks_sources_independently(void) {
+  const hal_debug_rate_limit_t config = {1u, 1000u, 30000u};
+  hal_debug_init(115200u, &config);
+
+  hal_derr_limited("source-a", "A1");
+  hal_derr_limited("source-a", "A2");
+  hal_derr_limited("source-b", "B1");
+
+  const char *line = hal_mock_serial_last_line();
+  TEST_ASSERT_NOT_NULL(strstr(line, "[source-b]"));
+  TEST_ASSERT_NOT_NULL(strstr(line, "B1"));
+  TEST_ASSERT_NULL(strstr(line, "suppressed"));
 }
 
 void test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output(
@@ -695,13 +818,20 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_println_captured);
   RUN_TEST(test_print_appends_and_println_starts_new_captured_line);
+  RUN_TEST(test_serial_print_and_println_preserve_wire_message_boundaries);
+  RUN_TEST(test_serial_rx_preserves_binary_bytes_and_empty_read_contract);
   RUN_TEST(test_serial_null_strings_are_treated_as_empty);
   RUN_TEST(test_serial_set_flush_is_portable_noop_on_mock);
   RUN_TEST(test_println_overwrites_previous);
   RUN_TEST(test_reset_clears_last_line);
   RUN_TEST(test_deb_captured);
+  RUN_TEST(test_task_debug_prefix_is_applied_with_single_separator);
   RUN_TEST(test_derr_without_timestamp_hook);
   RUN_TEST(test_derr_with_timestamp_hook);
+  RUN_TEST(test_derr_omits_timestamp_when_hook_rejects_it);
+  RUN_TEST(test_rate_limit_config_defaults_zero_sanitization_and_custom_values);
+  RUN_TEST(test_rate_limiter_emits_notice_silence_and_periodic_summary);
+  RUN_TEST(test_rate_limiter_tracks_sources_independently);
   RUN_TEST(
       test_debug_muting_suppresses_debug_logs_but_not_serial_protocol_output);
   RUN_TEST(test_debug_formatter_streams_beyond_hal_debug_buf_size);

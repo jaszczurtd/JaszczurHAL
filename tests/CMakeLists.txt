@@ -667,6 +667,12 @@ add_test(NAME test_lwip_dependency_boundary
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_lwip_dependency_boundary.cmake
 )
 
+add_test(NAME test_calendar_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_calendar_architecture.cmake
+)
+
 get_filename_component(_jh_workspace_root "${CMAKE_CURRENT_SOURCE_DIR}/../../.."
     ABSOLUTE)
 set(JH_CW43_FIXTURE_SETUP_SCRIPT
@@ -1190,6 +1196,7 @@ add_hal_test(test_ota_image)
 add_hal_test(test_ota_swap_engine)
 add_hal_test(test_hal_time)
 add_hal_test(test_hal_rtc)
+add_hal_test(test_jh_calendar)
 add_hal_test(test_hal_kv)
 add_hal_test(test_hal_external_adc)
 add_hal_test(test_hal_gps)

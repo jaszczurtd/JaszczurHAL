@@ -7,6 +7,8 @@
 
 #include "tools.h"
 
+#include "hal/hal_time.h"
+
 #include <math.h>
 #include <stdlib.h>
 
@@ -267,55 +269,11 @@ int percentFrom(int givenVal, int maxVal) {
 unsigned long getSeconds(void) { return ((hal_millis() + 500) / 1000); }
 
 bool isDaylightSavingTime(int year, int month, int day) {
-  if (month < 3 || month > 10)
-    return false;
-  if (month > 3 && month < 10)
-    return true;
-  // Tomohiko Sakamoto's day-of-week algorithm (0 = Sunday)
-  static const int t[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
-  int dow31 =
-      (year + year / 4 - year / 100 + year / 400 + t[month - 1] + 31) % 7;
-  int lastSunday = 31 - dow31;
-  if (month == 3)
-    return day >= lastSunday;
-  return day < lastSunday; // October
+  return hal_time_is_daylight_saving_time(year, month, day);
 }
 
 void adjustTime(int *year, int *month, int *day, int *hour, int *minute) {
-  if (!year || !month || !day || !hour || !minute) {
-    return;
-  }
-
-  (void)minute;
-
-  if (isDaylightSavingTime(*year, *month, *day)) {
-    *hour += 2; // CEST = UTC+2
-  } else {
-    *hour += 1; // CET  = UTC+1
-  }
-
-  while (*hour >= 24) {
-    *hour -= 24;
-    (*day)++;
-
-    int daysInMonth = 31;
-    if (*month == 4 || *month == 6 || *month == 9 || *month == 11) {
-      daysInMonth = 30;
-    } else if (*month == 2) {
-      const bool leap =
-          ((*year % 4 == 0) && (*year % 100 != 0)) || (*year % 400 == 0);
-      daysInMonth = leap ? 29 : 28;
-    }
-
-    if (*day > daysInMonth) {
-      *day = 1;
-      (*month)++;
-      if (*month > 12) {
-        *month = 1;
-        (*year)++;
-      }
-    }
-  }
+  hal_time_adjust_cet_cest(year, month, day, hour, minute);
 }
 
 uint8_t MSB(unsigned short value) { return (uint8_t)(value >> 8) & 0xFF; }
@@ -882,12 +840,11 @@ bool startsWith(const char *str, const char *prefix) {
 }
 
 bool is_time_in_range(long now, long start, long end) {
-  return (now >= start && now < end);
+  return hal_time_is_in_range(now, start, end);
 }
 
 void extract_time(long timeInMinutes, int *hours, int *minutes) {
-  *hours = (int)(timeInMinutes / 60);
-  *minutes = (int)(timeInMinutes % 60);
+  hal_time_extract_minutes(timeInMinutes, hours, minutes);
 }
 
 int getRandomEverySomeMillis(uint32_t time, int maxValue) {

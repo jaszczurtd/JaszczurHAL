@@ -14,6 +14,7 @@
 #include "pcf8563.h"
 
 #include "hal/hal_i2c.h"
+#include "hal/impl/shared/time/jh_calendar.h"
 
 #include <string.h>
 
@@ -54,22 +55,12 @@ static bool pcf8563_validate_datetime(const pcf8563_datetime_t *dt) {
   if (!dt) {
     return false;
   }
-  if (dt->second > 59u || dt->minute > 59u || dt->hour > 23u) {
-    return false;
-  }
-  if (dt->day < 1u || dt->day > 31u) {
-    return false;
-  }
-  if (dt->weekday > 6u) {
-    return false;
-  }
-  if (dt->month < 1u || dt->month > 12u) {
-    return false;
-  }
-  if (dt->year < 1900u || dt->year > 2099u) {
-    return false;
-  }
-  return true;
+
+  const jh_calendar_datetime_t calendar = {
+      dt->year,   dt->month,  dt->day,     dt->hour,
+      dt->minute, dt->second, dt->weekday,
+  };
+  return jh_calendar_validate_datetime(&calendar, 1900u, 2099u) == HAL_OK;
 }
 
 static bool pcf8563_validate_alarm(const pcf8563_alarm_t *alarm) {

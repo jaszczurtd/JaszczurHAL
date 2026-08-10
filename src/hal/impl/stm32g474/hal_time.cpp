@@ -15,40 +15,6 @@
 #include <sys/time.h>
 #include <time.h>
 
-uint32_t hal_time_from_components(int year, int month, int day, int hour,
-                                  int minute, int second) {
-  if (year < 1970 || month < 1 || month > 12 || day < 1 || day > 31 ||
-      hour < 0 || hour > 23 || minute < 0 || minute > 59 || second < 0 ||
-      second > 59) {
-    return 0u;
-  }
-
-  static const uint8_t days_in_month[] = {31, 28, 31, 30, 31, 30,
-                                          31, 31, 30, 31, 30, 31};
-  bool leap = ((year % 4 == 0) && (year % 100 != 0)) || (year % 400 == 0);
-  int max_day = days_in_month[month - 1] + ((month == 2 && leap) ? 1 : 0);
-  if (day > max_day) {
-    return 0u;
-  }
-
-  uint32_t days = 0u;
-  for (int y = 1970; y < year; y++) {
-    bool y_leap = ((y % 4 == 0) && (y % 100 != 0)) || (y % 400 == 0);
-    days += y_leap ? 366u : 365u;
-  }
-
-  static const uint16_t days_before_month[] = {0,   31,  59,  90,  120, 151,
-                                               181, 212, 243, 273, 304, 334};
-  days += (uint32_t)days_before_month[month - 1];
-  if (month > 2 && leap) {
-    days += 1u;
-  }
-  days += (uint32_t)(day - 1);
-
-  return days * 86400u + (uint32_t)hour * 3600u + (uint32_t)minute * 60u +
-         (uint32_t)second;
-}
-
 #ifdef HAL_ENABLE_TIME
 
 namespace {
