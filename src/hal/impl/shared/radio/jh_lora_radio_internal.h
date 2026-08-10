@@ -10,15 +10,27 @@
 
 typedef struct jh_lora_radio_context_s jh_lora_radio_context_t;
 
+typedef uint32_t jh_lora_provider_events_t;
+
+#define JH_LORA_PROVIDER_EVENT_NONE UINT32_C(0)
+#define JH_LORA_PROVIDER_EVENT_TX_DONE (UINT32_C(1) << 0u)
+#define JH_LORA_PROVIDER_EVENT_RX_DONE (UINT32_C(1) << 1u)
+#define JH_LORA_PROVIDER_EVENT_TIMEOUT (UINT32_C(1) << 2u)
+#define JH_LORA_PROVIDER_EVENT_CRC_ERROR (UINT32_C(1) << 3u)
+#define JH_LORA_PROVIDER_EVENT_HEADER_ERROR (UINT32_C(1) << 4u)
+#define JH_LORA_PROVIDER_EVENT_IRQ (UINT32_C(1) << 5u)
+
 typedef struct {
   hal_status_t (*initialize)(jh_lora_radio_context_t *context);
   hal_status_t (*deinitialize)(jh_lora_radio_context_t *context);
   hal_status_t (*configure)(jh_lora_radio_context_t *context);
-  hal_status_t (*transmit)(jh_lora_radio_context_t *context,
-                           uint32_t timeout_ms);
+  hal_status_t (*transmit_start)(jh_lora_radio_context_t *context,
+                                 uint32_t timeout_ms);
   hal_status_t (*receive_start)(jh_lora_radio_context_t *context,
                                 uint32_t timeout_ms, bool continuous);
-  hal_status_t (*receive_poll)(jh_lora_radio_context_t *context);
+  hal_status_t (*process)(jh_lora_radio_context_t *context,
+                          jh_lora_provider_events_t *out_events);
+  hal_status_t (*cancel)(jh_lora_radio_context_t *context);
   hal_status_t (*sleep)(jh_lora_radio_context_t *context);
   hal_status_t (*standby)(jh_lora_radio_context_t *context);
 } jh_lora_radio_provider_ops_t;
@@ -35,14 +47,24 @@ struct jh_lora_radio_context_s {
   hal_lora_packet_info_t rx_info;
   size_t tx_length;
   size_t rx_length;
+  uint32_t transmit_started_ms;
+  uint32_t transmit_timeout_ms;
   uint32_t receive_started_ms;
   uint32_t receive_timeout_ms;
+  hal_lora_operation_status_t tx_status;
+  hal_status_t rx_result;
+  hal_lora_radio_event_callback_t event_callback;
+  void *event_user_data;
+  hal_lora_radio_event_t pending_event;
+  hal_lora_radio_t handle;
   hal_status_t provider_last_status;
   bool configured;
   bool receive_continuous;
   bool rx_ready;
+  bool event_pending;
   bool operation_busy;
   bool provider_sleeping;
+  bool provider_irq_attached;
   bool board_device;
   bool allocated;
 };
@@ -55,8 +77,8 @@ hal_status_t jh_lora_radio_context_lock(hal_lora_radio_t radio,
                                         jh_lora_radio_context_t **out_context);
 void jh_lora_radio_context_unlock(jh_lora_radio_context_t *context);
 
-#if HAL_TARGET_IS_MOCK
-/** Install a provider for host tests; NULL restores the mock provider. */
+#if HAL_TARGET_IS_MOCK || defined(JH_LORA_PROVIDER_TESTING)
+/** Install a provider for host tests; NULL restores the default provider. */
 hal_status_t jh_lora_radio_set_provider_for_test(
     const jh_lora_radio_provider_ops_t *provider);
 #endif

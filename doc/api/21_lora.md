@@ -8,9 +8,10 @@ driver and a shared adapter that uses only HAL SPI, GPIO, timing and mutex
 services. The same implementation builds for RP2040, RP2350 and STM32G474;
 the deterministic mock provides host tests.
 
-The Stage 1 API uses blocking transmit and polling receive. Applications own
-hardware and modem descriptors. Each opaque handle owns its TX/RX packet
-buffers, state, mutex and diagnostics.
+The API supports blocking and asynchronous transmit, asynchronous receive,
+DIO1-driven task-context processing, callbacks, cancellation and explicit
+operation states. Applications own hardware and modem descriptors. Each opaque
+handle owns its TX/RX packet buffers, state, mutex and diagnostics.
 
 ## Enable the module
 
@@ -41,9 +42,11 @@ mode 0 and MSB-first settings for each transaction. It owns the radio CS,
 RESET, BUSY, DIO1, RF-switch and optional DIO3 TCXO behavior described by the
 hardware descriptor.
 
-The SPI controller may be shared with other HAL devices. Destroying a radio
-returns the SX1262 to standby and releases its handle without deinitializing
-the shared bus.
+The SPI controller may be shared with other HAL devices. The provider attaches
+a rising-edge DIO1 interrupt during create; its ISR only records pending work.
+SPI commands and callbacks run later from task context. Destroying a radio
+detaches DIO1, returns the SX1262 to standby and releases its handle without
+deinitializing the shared bus.
 
 ## Integrated board configuration
 
@@ -121,7 +124,8 @@ if (status != HAL_OK) {
 
 Handles carry a generation tag. Calls through a destroyed or otherwise stale
 handle return `HAL_EUNINIT`. `hal_lora_radio_create()` returns `HAL_ENOMEM`
-when the configured static pool is full.
+when the configured static pool is full. Active TX/RX must be completed or
+cancelled before destroy.
 
 Modem validation covers SX1262 hardware frequency/power limits, supported LoRa
 bandwidths, spreading factors 5 through 12, coding rates 5 through 8, preamble,
@@ -163,13 +167,70 @@ Successful and timed-out operations return the handle to standby. A bus or
 device failure moves it to `HAL_LORA_RADIO_STATE_ERROR`; a successful
 `hal_lora_radio_configure()` can restore the configured standby state.
 
+The blocking function uses the same start/process state machine as asynchronous
+TX. It does not retain the caller's payload buffer.
+
+## Asynchronous operation and callbacks
+
+`hal_lora_radio_transmit_start()` copies the payload, starts the radio and
+returns before TX-done. Its deadline is calculated from time-on-air plus the
+driver margin. Call `hal_lora_radio_process()` from `app_task0()` or a FreeRTOS
+task and inspect the stable status snapshot:
+
+```c
+static void radio_event(hal_lora_radio_t radio,
+                        const hal_lora_radio_event_t *event,
+                        void *user_data) {
+  (void)radio;
+  (void)user_data;
+  if (event->type == HAL_LORA_RADIO_EVENT_TX_COMPLETE) {
+    /* Start RX or schedule the next packet. */
+  }
+}
+
+status = hal_lora_radio_set_event_callback(radio, radio_event, NULL);
+if (status == HAL_OK) {
+  status = hal_lora_radio_transmit_start(radio, payload, payload_length);
+}
+
+for (;;) {
+  status = hal_lora_radio_process(radio);
+  if (status != HAL_OK && status != HAL_EAGAIN) {
+    /* The callback receives the same terminal result. */
+  }
+
+  hal_lora_operation_status_t tx;
+  if (hal_lora_radio_get_tx_status(radio, &tx) == HAL_OK &&
+      tx.state == HAL_LORA_OPERATION_SUCCEEDED) {
+    break;
+  }
+  hal_idle();
+}
+```
+
+TX status distinguishes `IDLE`, `IN_PROGRESS`, `SUCCEEDED`, `TIMED_OUT`,
+`CANCELLED` and `FAILED`; `result` retains the matching `hal_status_t`.
+Callbacks report TX completion, RX readiness, timeout, cancellation or error,
+plus the operation kind and task-context timestamp. They are invoked
+synchronously by `hal_lora_radio_process()`, outside internal locks, and may
+call radio APIs. Passing a null callback clears registration.
+
+`hal_lora_radio_cancel()` stops active TX, bounded RX or continuous RX and
+enters standby. Cancellation is explicit: power-state and destroy operations
+return `HAL_EBUSY` while a radio operation is active.
+
 ## Polling receive
 
-Start one bounded receive window and poll until a terminal result:
+Start one bounded receive window, service DIO1 and copy the completed packet:
 
 ```c
 status = hal_lora_radio_receive_start(radio, 1500u);
 while (status == HAL_OK) {
+  const hal_status_t process = hal_lora_radio_process(radio);
+  if (process != HAL_OK && process != HAL_EAGAIN) {
+    status = process;
+    break;
+  }
   uint8_t packet[HAL_LORA_RADIO_MAX_PAYLOAD];
   size_t length = 0;
   hal_lora_packet_info_t info;
@@ -187,7 +248,9 @@ while (status == HAL_OK) {
 ```
 
 `hal_lora_radio_receive_start_continuous()` keeps the receiver active after a
-packet. Call `hal_lora_radio_standby()` to stop continuous receive.
+packet. Call `hal_lora_radio_cancel()` to stop continuous receive.
+`hal_lora_radio_receive()` remains a compatibility polling entry: it services
+one pending DIO1/timeout step itself before copying a packet.
 
 Receive results have the following meanings:
 
@@ -204,16 +267,20 @@ timestamp and CRC validity.
 
 ## State, power and diagnostics
 
-`hal_lora_radio_get_state()` returns the stable public state. Stage 1 uses
+`hal_lora_radio_get_state()` returns the stable public state. The explicit
+state machine uses
 `STANDBY`, `RX`, `TX`, `SLEEP` and `ERROR`; `CAD` is reserved for later radio
 operations.
 
 `hal_lora_radio_sleep()` enters the SX1262 warm-start sleep configuration.
-`hal_lora_radio_standby()` wakes a sleeping radio or ends receive mode.
+`hal_lora_radio_standby()` wakes a sleeping or error-state radio. Active RX/TX
+is ended through `hal_lora_radio_cancel()`.
 
 `hal_lora_radio_get_diagnostics()` copies counters for transmitted/received
-packets, CRC errors, TX/RX timeouts, dropped packets, bus errors and resets,
-plus the latest RSSI, SNR and error status.
+packets, CRC/header errors, TX/RX timeouts, cancellations, operation/bus errors,
+DIO1 events, callback delivery, dropped packets/events and resets. It also
+reports the latest packet RSSI, signal RSSI, SNR, error, event timestamp and
+state-change timestamp.
 
 ## Time-on-air
 
@@ -233,11 +300,13 @@ duty-cycle behavior.
 ## Concurrency and validation
 
 Runtime calls serialize per handle. Lifecycle operations (`create` and
-`destroy`) follow the library-wide single-core/single-owner rule. The polling
-API does not dispatch callbacks and does not retain caller packet buffers.
+`destroy`) follow the library-wide single-core/single-owner rule and must run on
+the core that owns the DIO1 interrupt. Packet buffers are copied before a start
+call returns. Callback dispatch never holds the handle mutex.
 
 Host coverage lives in `test_hal_lora_radio_lifecycle`,
-`test_hal_lora_radio`, and `test_sx126x_adapter`. The buildable
+`test_hal_lora_radio`, `test_sx126x_adapter`, and the real-scheduler
+`test_lora_freertos_posix`. The buildable
 [`27_lora_point_to_point`](../../examples/27_lora_point_to_point/) project
 targets RP2040 and STM32G474. The repeatable two-device procedure and serial
 verifier are in

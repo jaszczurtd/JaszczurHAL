@@ -1,8 +1,13 @@
 # 27 - LoRa point-to-point
 
-Raw SX1262 ping/pong example covering blocking transmit, polling receive,
-packet metadata, bounded receive timeouts and continuous receive. Build one
-device as the initiator and the other with the `responder` variant.
+Raw SX1262 ping/pong example covering DIO1-driven asynchronous transmit and
+receive, callbacks, cancellation, packet metadata, bounded receive timeouts and
+continuous receive. Build one device as the initiator and the other with the
+`responder` variant.
+
+When the selected board exposes a GPIO status LED, the LED remains on during
+transmit and pulses for 120 ms after a packet is received. Boards without a
+GPIO status LED keep the same radio behavior without visual signaling.
 
 The RP2040 configuration selects the integrated `rp2040-lora-lf` profile and
 uses an explicit 434.0 MHz test configuration. This is intentionally not named

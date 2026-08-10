@@ -235,10 +235,11 @@ Connectivity
     Feature selection for the provider-neutral raw LoRa radio facade. Requires
     exactly one provider; the current provider is HAL_ENABLE_SX126X. The public
     C/C++ declaration surface is hal/hal_lora_radio.h. Opaque lifecycle handles
-    use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
+    support DIO1-driven asynchronous TX/RX, task callbacks and cancellation.
+    They use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
     (default 2, valid range 1..255). The facade provides raw modem presets and
-    validation, blocking TX, bounded or continuous polling RX, packet metadata,
-    diagnostics, standby/sleep and time-on-air calculation.
+    validation, blocking TX compatibility, bounded or continuous RX, packet
+    metadata, diagnostics, standby/sleep and time-on-air calculation.
   HAL_ENABLE_SX126X
     Selects the pinned official Semtech SX126x provider and propagates LORA and
     SPI. The shared adapter owns SX1262 command framing, BUSY deadlines, RF

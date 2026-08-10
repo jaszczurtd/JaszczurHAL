@@ -78,13 +78,16 @@ static hal_status_t mock_configure(jh_lora_radio_context_t *context) {
   return consume(find_state(context), HAL_MOCK_LORA_CONFIGURE);
 }
 
-static hal_status_t mock_transmit(jh_lora_radio_context_t *context,
-                                  uint32_t timeout_ms) {
+static hal_status_t mock_transmit_start(jh_lora_radio_context_t *context,
+                                        uint32_t timeout_ms) {
   (void)timeout_ms;
+  return consume(find_state(context), HAL_MOCK_LORA_TRANSMIT);
+}
+
+static hal_status_t mock_deliver_transmit(jh_lora_radio_context_t *context) {
   jh_mock_lora_state_t *state = find_state(context);
-  const hal_status_t status = consume(state, HAL_MOCK_LORA_TRANSMIT);
-  if (status != HAL_OK || state->peer == NULL) {
-    return status;
+  if (state == NULL || state->peer == NULL) {
+    return state == NULL ? HAL_EUNINIT : HAL_OK;
   }
   jh_mock_lora_state_t *peer = find_state(state->peer);
   if (peer == NULL || context->tx_length > sizeof(peer->pending_rx)) {
@@ -111,7 +114,22 @@ static hal_status_t mock_receive_start(jh_lora_radio_context_t *context,
   return consume(find_state(context), HAL_MOCK_LORA_RECEIVE_START);
 }
 
-static hal_status_t mock_receive_poll(jh_lora_radio_context_t *context) {
+static hal_status_t mock_process(jh_lora_radio_context_t *context,
+                                 jh_lora_provider_events_t *out_events) {
+  if (out_events == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_events = JH_LORA_PROVIDER_EVENT_NONE;
+  if (context->state == HAL_LORA_RADIO_STATE_TX) {
+    const hal_status_t status = mock_deliver_transmit(context);
+    if (status == HAL_OK) {
+      *out_events = JH_LORA_PROVIDER_EVENT_TX_DONE | JH_LORA_PROVIDER_EVENT_IRQ;
+    }
+    return status;
+  }
+  if (context->state != HAL_LORA_RADIO_STATE_RX) {
+    return HAL_EAGAIN;
+  }
   jh_mock_lora_state_t *state = find_state(context);
   hal_status_t status = consume(state, HAL_MOCK_LORA_RECEIVE_POLL);
   if (status != HAL_OK) {
@@ -120,21 +138,29 @@ static hal_status_t mock_receive_poll(jh_lora_radio_context_t *context) {
   if (state->pending_rx_ready) {
     if (!state->pending_info.crc_valid) {
       state->pending_rx_ready = false;
-      return HAL_EPROTO;
+      *out_events =
+          JH_LORA_PROVIDER_EVENT_CRC_ERROR | JH_LORA_PROVIDER_EVENT_IRQ;
+      return HAL_OK;
     }
     memcpy(context->rx_buffer, state->pending_rx, state->pending_rx_length);
     context->rx_length = state->pending_rx_length;
     context->rx_info = state->pending_info;
     context->rx_ready = true;
     state->pending_rx_ready = false;
+    *out_events = JH_LORA_PROVIDER_EVENT_RX_DONE | JH_LORA_PROVIDER_EVENT_IRQ;
     return HAL_OK;
   }
   if (!context->receive_continuous &&
       (uint32_t)(hal_millis() - context->receive_started_ms) >=
           context->receive_timeout_ms) {
-    return HAL_ETIMEOUT;
+    *out_events = JH_LORA_PROVIDER_EVENT_TIMEOUT;
+    return HAL_OK;
   }
   return HAL_EAGAIN;
+}
+
+static hal_status_t mock_cancel(jh_lora_radio_context_t *context) {
+  return consume(find_state(context), HAL_MOCK_LORA_CANCEL);
 }
 
 static hal_status_t mock_sleep(jh_lora_radio_context_t *context) {
@@ -146,8 +172,9 @@ static hal_status_t mock_standby(jh_lora_radio_context_t *context) {
 }
 
 static const jh_lora_radio_provider_ops_t s_mock_provider = {
-    mock_initialize,    mock_deinitialize, mock_configure, mock_transmit,
-    mock_receive_start, mock_receive_poll, mock_sleep,     mock_standby,
+    mock_initialize,     mock_deinitialize,  mock_configure,
+    mock_transmit_start, mock_receive_start, mock_process,
+    mock_cancel,         mock_sleep,         mock_standby,
 };
 
 const jh_lora_radio_provider_ops_t *jh_lora_radio_default_provider(void) {

@@ -2,7 +2,21 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 
+#include <atomic>
 #include <string.h>
+#include <thread>
+
+static uint32_t s_callback_count;
+static hal_lora_radio_event_t s_last_event;
+static hal_status_t s_callback_reentrant_status;
+
+static void radio_event_callback(hal_lora_radio_t radio,
+                                 const hal_lora_radio_event_t *event, void *) {
+  ++s_callback_count;
+  s_last_event = *event;
+  hal_lora_radio_state_t state = HAL_LORA_RADIO_STATE_ERROR;
+  s_callback_reentrant_status = hal_lora_radio_get_state(radio, &state);
+}
 
 static hal_lora_radio_config_t test_radio_config(void) {
   hal_lora_radio_config_t config = {};
@@ -36,6 +50,9 @@ static hal_lora_radio_t create_configured_radio(void) {
 void setUp(void) {
   hal_mock_set_millis(0u);
   hal_mock_lora_reset();
+  s_callback_count = 0u;
+  memset(&s_last_event, 0, sizeof(s_last_event));
+  s_callback_reentrant_status = HAL_NONE;
 }
 
 void tearDown(void) { hal_mock_lora_reset(); }
@@ -185,7 +202,7 @@ void test_continuous_receive_survives_packets_and_counts_crc_errors(void) {
                         hal_lora_radio_get_diagnostics(radio, &diagnostics));
   TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.crc_errors);
   TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.received_packets);
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_standby(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(radio));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_sleep(radio));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_get_state(radio, &state));
   TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_STATE_SLEEP, state);
@@ -210,7 +227,99 @@ void test_connected_mock_radios_exchange_only_while_receiving(void) {
   TEST_ASSERT_EQUAL_UINT(sizeof(payload), length);
   TEST_ASSERT_EQUAL_MEMORY(payload, received, sizeof(payload));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(first));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(second));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(second));
+}
+
+void test_async_transmit_status_callback_and_irq_diagnostics(void) {
+  const hal_lora_radio_t radio = create_configured_radio();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_set_event_callback(
+                                    radio, radio_event_callback, NULL));
+  const uint8_t payload[] = {'a', 's', 'y', 'n', 'c'};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_transmit_start(radio, payload, sizeof(payload)));
+
+  hal_lora_operation_status_t operation = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_tx_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_IN_PROGRESS, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, operation.result);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_callback_count);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_TX_COMPLETE, s_last_event.type);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_KIND_TRANSMIT,
+                        s_last_event.operation);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_last_event.result);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_callback_reentrant_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_tx_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_SUCCEEDED, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, operation.result);
+  hal_lora_radio_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_diagnostics(radio, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.transmitted_packets);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.irq_events);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.callback_events);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+}
+
+void test_receive_timeout_and_cancel_have_stable_terminal_results(void) {
+  const hal_lora_radio_t radio = create_configured_radio();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_set_event_callback(
+                                    radio, radio_event_callback, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_receive_start(radio, 10u));
+  hal_mock_advance_millis(10u);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_TIMEOUT, s_last_event.type);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_KIND_RECEIVE,
+                        s_last_event.operation);
+
+  uint8_t byte = 0u;
+  size_t length = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ETIMEOUT,
+      hal_lora_radio_receive(radio, &byte, sizeof(byte), &length, NULL));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_receive_start_continuous(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_ECANCELED, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_UINT32(2u, s_callback_count);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_CANCELLED, s_last_event.type);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_ECANCELED,
+      hal_lora_radio_receive(radio, &byte, sizeof(byte), &length, NULL));
+
+  hal_lora_radio_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_diagnostics(radio, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.rx_timeouts);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.cancelled_operations);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+}
+
+void test_concurrent_transmit_start_serializes_one_handle(void) {
+  const hal_lora_radio_t radio = create_configured_radio();
+  const uint8_t payload[] = {0x42u};
+  std::atomic<bool> start{false};
+  hal_status_t results[2] = {HAL_NONE, HAL_NONE};
+  auto worker = [&](size_t index) {
+    while (!start.load(std::memory_order_acquire)) {
+    }
+    results[index] =
+        hal_lora_radio_transmit_start(radio, payload, sizeof(payload));
+  };
+  std::thread first(worker, 0u);
+  std::thread second(worker, 1u);
+  start.store(true, std::memory_order_release);
+  first.join();
+  second.join();
+
+  const bool serialized = (results[0] == HAL_OK && results[1] == HAL_EBUSY) ||
+                          (results[1] == HAL_OK && results[0] == HAL_EBUSY);
+  TEST_ASSERT_TRUE(serialized);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
 }
 
 int main(void) {
@@ -220,5 +329,8 @@ int main(void) {
   RUN_TEST(test_bounded_receive_reports_progress_packet_overflow_and_timeout);
   RUN_TEST(test_continuous_receive_survives_packets_and_counts_crc_errors);
   RUN_TEST(test_connected_mock_radios_exchange_only_while_receiving);
+  RUN_TEST(test_async_transmit_status_callback_and_irq_diagnostics);
+  RUN_TEST(test_receive_timeout_and_cancel_have_stable_terminal_results);
+  RUN_TEST(test_concurrent_transmit_start_serializes_one_handle);
   return UNITY_END();
 }

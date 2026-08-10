@@ -1253,8 +1253,12 @@ add_hal_test(test_pidController)
 
 if(TARGET hal_freertos_posix)
     add_hal_freertos_posix_test(test_freertos_posix_runtime)
+    add_hal_freertos_posix_test(test_lora_freertos_posix)
 elseif(WIN32)
     add_platform_disabled_test(test_freertos_posix_runtime
+        "upstream FreeRTOS GCC/Posix host port is unavailable on Windows"
+        "freertos_posix;windows_disabled")
+    add_platform_disabled_test(test_lora_freertos_posix
         "upstream FreeRTOS GCC/Posix host port is unavailable on Windows"
         "freertos_posix;windows_disabled")
 endif()

@@ -19,6 +19,10 @@ SLEEP_WAKE = re.compile(
     r"Sleep/wake sequence=(\d+) sleep=(HAL_[A-Z]+) wake=(HAL_[A-Z]+)"
 )
 REINITIALIZE = re.compile(r"Reinitialize sequence=(\d+) status=(HAL_[A-Z]+)")
+ASYNC_READY = re.compile(r"Async DIO1 event loop enabled")
+ASYNC_DIAGNOSTICS = re.compile(
+    r"Async diagnostics sequence=(\d+) irq=(\d+) callbacks=(\d+) cancelled=(\d+)"
+)
 
 
 def open_port(path: str) -> serial.Serial:
@@ -50,6 +54,8 @@ def main() -> int:
     snr_values: list[int] = []
     sleep_wake_ok = False
     reinitialize_ok = False
+    async_ready: set[str] = set()
+    async_diagnostics_ok = False
 
     with open_port(args.initiator_port) as initiator, open_port(
         args.responder_port
@@ -64,6 +70,7 @@ def main() -> int:
                 match = PING_TX.search(line)
                 if role == "initiator" and match:
                     ping_tx.add(int(match.group(1)))
+                    async_ready.add(role)
                 match = PING_RX.search(line)
                 if role == "responder" and match:
                     ping_rx.add(int(match.group(1)))
@@ -72,6 +79,7 @@ def main() -> int:
                 match = REPLY_TX.search(line)
                 if role == "responder" and match:
                     reply_tx.add(int(match.group(1)))
+                    async_ready.add(role)
                 match = REPLY_RX.search(line)
                 if role == "initiator" and match:
                     reply_rx.add(int(match.group(1)))
@@ -85,6 +93,15 @@ def main() -> int:
                 match = REINITIALIZE.search(line)
                 if role == "responder" and match:
                     reinitialize_ok = match.group(2) == "HAL_OK"
+                if ASYNC_READY.search(line):
+                    async_ready.add(role)
+                match = ASYNC_DIAGNOSTICS.search(line)
+                if role == "responder" and match:
+                    async_diagnostics_ok = (
+                        int(match.group(2)) > 0
+                        and int(match.group(3)) > 0
+                        and int(match.group(4)) > 0
+                    )
 
     matched = ping_tx & ping_rx & reply_tx & reply_rx
     failures: list[str] = []
@@ -98,6 +115,10 @@ def main() -> int:
         failures.append("HAL_OK sleep/wake probe was not observed")
     if not reinitialize_ok:
         failures.append("HAL_OK radio reinitialization was not observed")
+    if async_ready != {"initiator", "responder"}:
+        failures.append("asynchronous DIO1 event loop was not enabled on both radios")
+    if not async_diagnostics_ok:
+        failures.append("IRQ/callback/cancel diagnostics were not observed")
 
     result = {
         "status": "fail" if failures else "pass",
@@ -115,6 +136,8 @@ def main() -> int:
         },
         "sleepWake": sleep_wake_ok,
         "reinitialize": reinitialize_ok,
+        "asyncReady": sorted(async_ready),
+        "asyncDiagnostics": async_diagnostics_ok,
         "failures": failures,
     }
     print(json.dumps(result, indent=2))

@@ -193,6 +193,9 @@ void test_provider_initialize_resets_and_emits_electrical_profile_commands(
                                   sizeof(clear_device_errors)));
   TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, tcxo, sizeof(tcxo)));
   TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, pa, sizeof(pa)));
+  TEST_ASSERT_TRUE(context.provider_irq_attached);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->deinitialize(&context));
+  TEST_ASSERT_FALSE(context.provider_irq_attached);
 }
 
 void test_provider_encodes_lora_configuration_and_tx_timeout(void) {
@@ -226,9 +229,17 @@ void test_provider_encodes_lora_configuration_and_tx_timeout(void) {
   context.tx_buffer[0] = 0xA5u;
   context.tx_buffer[1] = 0x5Au;
   context.tx_length = 2u;
+  context.state = HAL_LORA_RADIO_STATE_TX;
+  context.transmit_started_ms = hal_millis();
+  context.transmit_timeout_ms = 2u;
   const uint8_t no_irq[256] = {};
   hal_mock_spi_push_rx(1u, no_irq, sizeof(no_irq));
-  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, provider->transmit(&context, 2u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->transmit_start(&context, 2u));
+  hal_mock_advance_millis(2u);
+  jh_lora_provider_events_t events = JH_LORA_PROVIDER_EVENT_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->process(&context, &events));
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_TIMEOUT,
+                   JH_LORA_PROVIDER_EVENT_TIMEOUT, events);
   tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
   const uint8_t write_buffer[] = {0x0Eu, 0x00u, 0xA5u, 0x5Au};
   const uint8_t set_tx[] = {0x83u};
@@ -239,7 +250,7 @@ void test_provider_encodes_lora_configuration_and_tx_timeout(void) {
   TEST_ASSERT_FALSE(hal_mock_gpio_get_state(22u));
 }
 
-void test_provider_receive_poll_maps_crc_irq(void) {
+void test_provider_process_maps_crc_irq(void) {
   jh_lora_radio_context_t context = adapter_context();
   configure_context_modem(&context);
   const jh_lora_radio_provider_ops_t *provider = jh_sx126x_provider_ops();
@@ -247,10 +258,17 @@ void test_provider_receive_poll_maps_crc_irq(void) {
   context.receive_started_ms = hal_millis();
   context.receive_timeout_ms = 50u;
   context.receive_continuous = false;
+  context.state = HAL_LORA_RADIO_STATE_RX;
   TEST_ASSERT_EQUAL_INT(HAL_OK, provider->receive_start(&context, 50u, false));
   const uint8_t crc_irq[] = {0u, 0u, 0x00u, 0x40u};
   hal_mock_spi_push_rx(1u, crc_irq, sizeof(crc_irq));
-  TEST_ASSERT_EQUAL_INT(HAL_EPROTO, provider->receive_poll(&context));
+  hal_mock_gpio_inject_level(context.config.hardware.sx126x.dio1_pin, true);
+  jh_lora_provider_events_t events = JH_LORA_PROVIDER_EVENT_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->process(&context, &events));
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_CRC_ERROR,
+                   JH_LORA_PROVIDER_EVENT_CRC_ERROR, events);
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_IRQ, JH_LORA_PROVIDER_EVENT_IRQ,
+                   events);
   TEST_ASSERT_FALSE(hal_mock_gpio_get_state(21u));
   TEST_ASSERT_FALSE(hal_mock_gpio_get_state(22u));
 }
@@ -265,6 +283,6 @@ int main(void) {
   RUN_TEST(
       test_provider_initialize_resets_and_emits_electrical_profile_commands);
   RUN_TEST(test_provider_encodes_lora_configuration_and_tx_timeout);
-  RUN_TEST(test_provider_receive_poll_maps_crc_irq);
+  RUN_TEST(test_provider_process_maps_crc_irq);
   return UNITY_END();
 }

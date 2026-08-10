@@ -32,11 +32,19 @@ All notable changes to this project will be documented in this file.
 - Implemented validated raw LoRa configuration, balanced/long-range/fast
   EU868 technical presets, blocking TX, bounded and continuous polling RX,
   packet RSSI/SNR metadata, standby/sleep, basic diagnostics and time-on-air.
+- Added DIO1-driven asynchronous LoRa TX/RX processing, stable TX operation
+  status, task-context callbacks, explicit cancellation and a shared validated
+  state machine while retaining blocking TX and polling-RX compatibility.
+- Extended per-radio diagnostics with header, IRQ, callback, cancellation,
+  operation-error, signal-RSSI and event/state timestamp data, and added
+  concurrent host plus real-scheduler FreeRTOS POSIX regressions.
 - Added a deterministic mock provider with packet injection/capture and a
   two-radio link, plus lifecycle, facade and low-level adapter tests.
 - Added `27_lora_point_to_point` for integrated LF RP2040 boards and explicitly
   wired Core1262-HF modules on RP2040/STM32G474, including initiator/responder
   variants and a serial-log hardware verifier.
+- Migrated the LoRa point-to-point example and hardware verifier to the
+  asynchronous callback lifecycle with IRQ/callback/cancel evidence.
 - Pinned the official Semtech SX126x driver at `v2.5.0` and exact commit
   `a10c5dfdf89788c6ac805e9fe98889de44175aa2`, retained its Clear BSD license,
   and added it to managed components, provenance inventory, and the generated
