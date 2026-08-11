@@ -40,12 +40,13 @@
  *
  * ## Thread safety
  *
- * Both back-ends are thread-safe and multicore-safe:
- * - `HAL_EEPROM_AT24C256`: protected by the `hal_i2c` bus mutex.
- * - `HAL_EEPROM_FLASH` / native flash: protected by a dedicated internal
- *   mutex.
+ * The target-independent facade serializes init, reads, writes, commit, reset,
+ * size queries, and provider selection with one internal mutex. The portable
+ * AT24C256 provider additionally uses the `hal_i2c` bus mutex; native flash
+ * providers retain their target flash coordination.
  *
- * `hal_eeprom_init()` must be called from one core only.
+ * Configure the progress callback before concurrent access. It runs while the
+ * facade owns its mutex and therefore must not re-enter hal_eeprom_* APIs.
  */
 
 #include "hal/core/hal_status.h"
@@ -54,8 +55,9 @@
 /**
  * @brief Optional callback invoked during long EEPROM operations.
  *
- * The callback runs from inside the EEPROM critical section. Keep it short:
- * feed an application-owned watchdog, update a counter, or set a flag.
+ * The callback runs from inside the EEPROM critical section. Keep it short,
+ * and do not call hal_eeprom_* from it: feed an application-owned watchdog,
+ * update a counter, or set a flag.
  */
 typedef void (*hal_eeprom_progress_callback_t)(void *ctx);
 

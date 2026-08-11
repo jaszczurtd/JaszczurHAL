@@ -71,7 +71,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | HTTP/HTTPS client | Bounded one-shot HTTP/1.1 requests over HAL TCP or verified BearSSL TLS, with caller-owned headers/body and explicit response metadata. | [hal_http_client.h](../src/hal/network/http/hal_http_client.h), [connectivity API](api/15_connectivity.md#halhttpclient-httphttps-client-opt-in-halenablehttpclient) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/network/mqtt/hal_mqtt.h) |
 | OTA | Authenticated RP firmware updates over HAL UDP/TCP with versioned images, resumable program/staging swap, boot confirmation, rollback, discovery, and VS Code upload. | [hal_ota.h](../src/hal/network/ota/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
-| Calendar / NTP / time-of-day | Always-available Gregorian conversion, CET/CEST adjustment, range and minute helpers, plus network time synchronization for connected builds. | [hal_time.h](../src/hal/time/hal_time.h) |
+| Calendar / NTP / time-of-day | Always-available Gregorian conversion, CET/CEST adjustment, range and minute helpers, plus a shared thread-safe NTP state machine with bounded primary/secondary fallback for connected builds. | [hal_time.h](../src/hal/time/hal_time.h) |
 | WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/network/wireguard/hal_wireguard.h), [WireGuard engine](../src/hal/network/wireguard/core/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/modem/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/modem/hal_simcom_a76xx.h) |
 
@@ -80,7 +80,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Area | What it offers | Source |
 |---|---|---|
 | Flash transaction coordinator | Single internal coordinator for all native flash mutations: serializes callers, makes the other core safe, pauses TinyUSB, rejects XIP-resident callbacks and active DMA, applies bounded timeouts and restores runtime state. EEPROM/KV, LittleFS and OTA staging route through it on native RP; STM32G474 uses its coordinated flash services. | [rp flash drivers](../src/hal/impl/rp2040/drivers/flash/), [storage API](api/14_storage.md) |
-| EEPROM abstraction | Target flash or external EEPROM-style persistent storage facade, including status-returning (`hal_status_t`) access APIs with range validation. | [hal_eeprom.h](../src/hal/storage/hal_eeprom.h) |
+| EEPROM abstraction | One provider-dispatched persistent-storage facade with shared locking/range behavior, a portable AT24C256 driver, target flash providers, a host-memory provider, and status-returning (`hal_status_t`) APIs. | [hal_eeprom.h](../src/hal/storage/hal_eeprom.h) |
 | Key-value storage | Small persistent key-value layer on top of EEPROM-style storage, including status-returning (`hal_status_t`) get/set/commit APIs. | [hal_kv.h](../src/hal/storage/hal_kv.h) |
 | LittleFS | Lightweight filesystem lifecycle/helpers, including status-returning (`hal_status_t`) mount/format/path APIs; native RP and STM32G474 use linker-reserved internal flash partitions. | [hal_littlefs.h](../src/hal/storage/hal_littlefs.h) |
 | FatFs / SD over SPI | Exact-commit FatFs R0.16 checkout and shared SD-over-SPI disk I/O. | [filesystem framework](../src/hal/storage/filesystem/) |
@@ -94,7 +94,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/rtc/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/rtc/ds3231/) |
 | GPS / NMEA | One target-independent GPS facade with compile-time HAL UART/SoftwareSerial selection, a shared mutex-protected NMEA engine and deterministic mock injection. RP UART retains IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/gps/hal_gps.h), [hal_gps.cpp](../src/hal/gps/hal_gps.cpp), [GPS framework](../src/hal/gps/) |
-| Thermocouple facade | Common temperature surface for thermocouple backends. | [hal_thermocouple.h](../src/hal/temperature/hal_thermocouple.h) |
+| Thermocouple facade | One target-independent, provider-dispatched facade owns lifecycle, locking, validation, chip capabilities and deterministic mock injection for MCP9600/MCP9601 and MAX6675. | [hal_thermocouple.h](../src/hal/temperature/hal_thermocouple.h), [facade/providers](../src/hal/temperature/) |
 | MCP9600/MCP9601 | Shared I2C thermocouple amplifier driver. | [mcp9600 driver](../src/hal/temperature/mcp9600/) |
 | MAX6675 | Shared GPIO bit-banged thermocouple converter driver. | [max6675 driver](../src/hal/temperature/max6675/) |
 | DS18B20 | Shared 1-Wire digital temperature sensor support. | [hal_ds18b20.h](../src/hal/temperature/hal_ds18b20.h), [ds18b20 driver](../src/hal/temperature/ds18b20/) |

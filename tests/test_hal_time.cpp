@@ -1,12 +1,54 @@
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/jh_ntp_client.h"
 #include "hal/time/hal_time.h"
 #include "utils/unity.h"
 
+#include <atomic>
+#include <cstring>
 #include <string.h>
+#include <thread>
+
+namespace {
+
+constexpr uint64_t kNtpEpochOffset = UINT64_C(2208988800);
+
+void make_ntp_response(uint8_t response[JH_NTP_PACKET_SIZE], uint64_t unix_time,
+                       uint32_t fraction) {
+  const uint8_t *request = hal_mock_udp_get_last_tx_payload();
+  TEST_ASSERT_NOT_NULL(request);
+  TEST_ASSERT_EQUAL_UINT16(JH_NTP_PACKET_SIZE, hal_mock_udp_get_last_tx_len());
+  memset(response, 0, JH_NTP_PACKET_SIZE);
+  response[0] = 0x24u;
+  response[1] = 2u;
+  memcpy(&response[24], &request[40], 8u);
+  const uint32_t ntp_seconds =
+      static_cast<uint32_t>(unix_time + kNtpEpochOffset);
+  response[40] = static_cast<uint8_t>(ntp_seconds >> 24u);
+  response[41] = static_cast<uint8_t>(ntp_seconds >> 16u);
+  response[42] = static_cast<uint8_t>(ntp_seconds >> 8u);
+  response[43] = static_cast<uint8_t>(ntp_seconds);
+  response[44] = static_cast<uint8_t>(fraction >> 24u);
+  response[45] = static_cast<uint8_t>(fraction >> 16u);
+  response[46] = static_cast<uint8_t>(fraction >> 8u);
+  response[47] = static_cast<uint8_t>(fraction);
+}
+
+void reentrant_time_read(void *ctx) {
+  bool *called = static_cast<bool *>(ctx);
+  *called = true;
+  (void)hal_time_unix();
+}
+
+} // namespace
 
 void setUp(void) {
-  hal_mock_serial_reset();
   hal_mock_time_reset();
+  hal_mock_udp_reset();
+  hal_mock_net_reset();
+  hal_mock_serial_reset();
+  hal_mock_set_millis(0u);
+  TEST_ASSERT_TRUE(hal_mock_net_set_dns_entry("pool.ntp.org", "192.0.2.10"));
+  TEST_ASSERT_TRUE(hal_mock_net_set_dns_entry("time.nist.gov", "192.0.2.20"));
 }
 
 void tearDown(void) {}
@@ -44,6 +86,72 @@ void test_sync_check_and_formatting(void) {
   TEST_ASSERT_TRUE(
       hal_time_format_local(buf, sizeof(buf), "%d/%m/%Y %H:%M:%S"));
   TEST_ASSERT_EQUAL_STRING("30/03/2026 12:34:56", buf);
+}
+
+void test_ntp_state_machine_accepts_response_and_keeps_fraction(void) {
+  TEST_ASSERT_TRUE(hal_time_sync_ntp("pool.ntp.org", "time.nist.gov"));
+  TEST_ASSERT_EQUAL_STRING("192.0.2.10",
+                           hal_mock_udp_get_last_begin_packet_host());
+
+  uint8_t response[JH_NTP_PACKET_SIZE] = {};
+  make_ntp_response(response, UINT64_C(200000), UINT32_C(0x80000000));
+  hal_mock_udp_inject_packet("192.0.2.10", JH_NTP_PORT, response,
+                             sizeof(response));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(200000), hal_time_unix());
+
+  hal_mock_advance_millis(600u);
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(200001), hal_time_unix());
+}
+
+void test_ntp_timeout_retries_secondary_server(void) {
+  TEST_ASSERT_TRUE(hal_time_sync_ntp("pool.ntp.org", "time.nist.gov"));
+  hal_mock_advance_millis(5000u);
+  TEST_ASSERT_EQUAL_UINT64(0u, hal_time_unix());
+  TEST_ASSERT_EQUAL_STRING("192.0.2.20",
+                           hal_mock_udp_get_last_begin_packet_host());
+
+  uint8_t response[JH_NTP_PACKET_SIZE] = {};
+  make_ntp_response(response, UINT64_C(300000), 0u);
+  hal_mock_udp_inject_packet("192.0.2.20", JH_NTP_PORT, response,
+                             sizeof(response));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(300000), hal_time_unix());
+}
+
+void test_network_service_can_reenter_time_getter(void) {
+  TEST_ASSERT_TRUE(hal_time_sync_ntp("pool.ntp.org", nullptr));
+  bool callback_called = false;
+  hal_mock_net_set_service_callback(reentrant_time_read, &callback_called);
+
+  TEST_ASSERT_EQUAL_UINT64(0u, hal_time_unix());
+  TEST_ASSERT_TRUE(callback_called);
+}
+
+void test_time_snapshots_are_safe_during_concurrent_updates(void) {
+  constexpr uint64_t kFirst = UINT64_C(1000000);
+  constexpr uint64_t kLast = kFirst + UINT64_C(1999);
+  hal_mock_time_set_unix(kFirst);
+  std::atomic<bool> start{false};
+  std::atomic<bool> failed{false};
+
+  std::thread writer([&]() {
+    while (!start.load(std::memory_order_acquire)) {
+    }
+    for (uint64_t value = kFirst; value <= kLast; ++value) {
+      hal_mock_time_set_unix(value);
+    }
+  });
+  std::thread reader([&]() {
+    start.store(true, std::memory_order_release);
+    for (unsigned i = 0u; i < 4000u; ++i) {
+      const uint64_t value = hal_time_unix();
+      if (value < kFirst || value > kLast) {
+        failed.store(true, std::memory_order_relaxed);
+      }
+    }
+  });
+  writer.join();
+  reader.join();
+  TEST_ASSERT_FALSE(failed.load(std::memory_order_relaxed));
 }
 
 void test_invalid_inputs_are_rejected(void) {
@@ -183,6 +291,10 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_timezone_and_ntp_sync_requests_are_recorded);
   RUN_TEST(test_sync_check_and_formatting);
+  RUN_TEST(test_ntp_state_machine_accepts_response_and_keeps_fraction);
+  RUN_TEST(test_ntp_timeout_retries_secondary_server);
+  RUN_TEST(test_network_service_can_reenter_time_getter);
+  RUN_TEST(test_time_snapshots_are_safe_during_concurrent_updates);
   RUN_TEST(test_invalid_inputs_are_rejected);
   RUN_TEST(test_time_from_components_epoch_base);
   RUN_TEST(test_time_from_components_leap_day);

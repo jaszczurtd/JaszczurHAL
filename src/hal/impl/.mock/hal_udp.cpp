@@ -130,6 +130,11 @@ static hal_udp_socket_t default_socket(void) {
   if (is_valid_socket(s_default_udp)) {
     return s_default_udp;
   }
+  for (size_t i = 0u; i < HAL_UDP_SOCKET_MAX_INSTANCES; ++i) {
+    if (s_udp_pool[i].in_use) {
+      return &s_udp_pool[i];
+    }
+  }
   return NULL;
 }
 

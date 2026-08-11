@@ -679,10 +679,26 @@ add_test(NAME test_calendar_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_calendar_architecture.cmake
 )
 
+add_test(NAME test_time_ntp_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_time_ntp_architecture.cmake
+)
+
 add_test(NAME test_rtc_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rtc_architecture.cmake
+)
+add_test(NAME test_eeprom_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_eeprom_architecture.cmake
+)
+add_test(NAME test_thermocouple_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_thermocouple_architecture.cmake
 )
 
 add_test(NAME test_gps_architecture
@@ -1238,6 +1254,7 @@ add_hal_test(test_hal_ota)
 add_hal_test(test_ota_image)
 add_hal_test(test_ota_swap_engine)
 add_hal_test(test_hal_time)
+add_hal_test(test_at24c256_provider)
 add_hal_test(test_hal_rtc)
 add_hal_test(test_jh_calendar)
 add_hal_test(test_hal_kv)

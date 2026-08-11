@@ -32,6 +32,11 @@
  * Multiple simultaneous instances are supported up to
  * HAL_THERMOCOUPLE_MAX_INSTANCES (default 4, override via -D flag).
  *
+ * One target-independent facade owns the handle pool, validation, locking and
+ * capability dispatch. Hardware targets select the shared MCP9600/MAX6675
+ * providers, while host tests select deterministic providers with mock value
+ * injection. Public operations on a live handle are serialized by its mutex.
+ *
  * Obtain a handle with hal_thermocouple_init(); release with
  * hal_thermocouple_deinit().
  */
