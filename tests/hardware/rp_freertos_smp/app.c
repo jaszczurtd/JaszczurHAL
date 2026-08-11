@@ -1,11 +1,11 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_sync.h>
-#include <hal/hal_system.h>
-#include <hal/hal_usb.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/system/hal_sync.h>
+#include <hal/system/hal_system.h>
+#include <hal/usb/hal_usb.h>
 
 #include <pico/multicore.h>
 #if defined(JH_FREERTOS_BOOTSEL_PROBE)

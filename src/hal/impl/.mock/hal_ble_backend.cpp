@@ -1,9 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_MOCK && defined(HAL_ENABLE_BLE)
 
-#include "../../hal_ble.h"
-#include "../shared/bluetooth/jh_ble_backend.h"
+#include "hal/bluetooth/hal_ble.h"
+#include "hal/bluetooth/jh_ble_backend.h"
 #include "hal_mock.h"
 
 #include <atomic>

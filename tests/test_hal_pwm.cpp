@@ -1,5 +1,5 @@
-#include "hal/hal_pwm.h"
-#include "hal/hal_pwm_freq.h"
+#include "hal/gpio/hal_pwm.h"
+#include "hal/gpio/hal_pwm_freq.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

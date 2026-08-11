@@ -1,6 +1,7 @@
-#include "hal/hal_system.h"
-#include "hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.h"
-#include "hal/impl/shared/network/mqtt/jh_pubsub_hal_client.h"
+#include "hal/network/mqtt/PubSubClient/src/PubSubClient.h"
+#include "hal/network/mqtt/jh_pubsub_hal_client.h"
+#include "hal/system/hal_system.h"
+#include "support/tls_test_helpers.h"
 #include "utils/unity.h"
 
 #include <algorithm>
@@ -468,22 +469,9 @@ static hal_status_t tls_test_entropy(void *, void *buffer, size_t length) {
 }
 
 void test_tls_adapter_uses_tls_io_and_performs_bounded_shutdown(void) {
-  static const uint8_t dn[] = {0x30u, 0x00u};
-  static const uint8_t modulus[] = {0x01u};
-  static const uint8_t exponent[] = {0x03u};
-  hal_tls_trust_anchor_t anchor = {};
-  anchor.subject_dn = dn;
-  anchor.subject_dn_length = sizeof(dn);
-  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
-  anchor.key.rsa.modulus = modulus;
-  anchor.key.rsa.modulus_length = sizeof(modulus);
-  anchor.key.rsa.exponent = exponent;
-  anchor.key.rsa.exponent_length = sizeof(exponent);
-  hal_tls_security_config_t security = {};
-  security.trust_anchors = &anchor;
-  security.trust_anchor_count = 1u;
-  security.get_time = tls_test_time;
-  security.get_entropy = tls_test_entropy;
+  hal_tls_trust_anchor_t anchor = jh_test_tls_rsa_anchor();
+  hal_tls_security_config_t security =
+      jh_test_tls_security_config(&anchor, tls_test_time, tls_test_entropy);
 
   JHPubSubHalClient client;
   client.set_timeout_ms(25u);

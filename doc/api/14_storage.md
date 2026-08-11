@@ -33,7 +33,7 @@ an external AT24C256 chip through the same `hal_eeprom_*` API. `hal_kv` sits on
 top of whichever EEPROM back-end was selected.
 
 ```c
-#include <hal/hal_eeprom.h>
+#include <hal/storage/hal_eeprom.h>
 
 typedef enum {
     HAL_EEPROM_DEFAULT     = 0, // Target default persistent storage
@@ -164,7 +164,7 @@ hal_eeprom_write_byte(0, 0xAB);
 
 **Example: write and read configuration data**
 ```c
-#include <hal/hal_eeprom.h>
+#include <hal/storage/hal_eeprom.h>
 
 void example_eeprom(void) {
     // Initialize target-native flash EEPROM (512 bytes)
@@ -236,7 +236,7 @@ Automatic garbage-collection (GC) compacts live records into the alternate bank
 when the active bank runs out of space.
 
 ```c
-#include <hal/hal_kv.h>
+#include <hal/storage/hal_kv.h>
 
 typedef struct {
     uint32_t generation;       // bank generation counter
@@ -272,8 +272,8 @@ coalesce multiple writes, then flush once with `hal_kv_commit()`.
 
 **Example: key-value storage with integers and blobs**
 ```c
-#include <hal/hal_kv.h>
-#include <hal/hal_eeprom.h>
+#include <hal/storage/hal_kv.h>
+#include <hal/storage/hal_eeprom.h>
 #include <string.h>
 
 void example_kv(void) {
@@ -372,7 +372,7 @@ default:            break;
 Thread-safe wrapper for LittleFS mount/format and lightweight path helpers.
 
 ```c
-#include <hal/hal_littlefs.h>
+#include <hal/storage/hal_littlefs.h>
 
 hal_status_t hal_littlefs_set_progress_callback(
     hal_littlefs_progress_callback_t callback, void *ctx);
@@ -425,7 +425,7 @@ watchdog or report progress.
 
 **Example: mount, format-on-first-use, inspect and remove a path**
 ```c
-#include <hal/hal_littlefs.h>
+#include <hal/storage/hal_littlefs.h>
 #include <tools_c.h>
 
 void example_littlefs(void) {
@@ -496,7 +496,7 @@ SD-over-SPI layer, so enabling it propagates `HAL_ENABLE_FAT`,
 `HAL_ENABLE_EEPROM`, and `HAL_ENABLE_SPI`.
 
 ```c
-#include <hal/hal_sdlogger.h>
+#include <hal/storage/hal_sdlogger.h>
 
 int  hal_sdlogger_get_log_number(void);
 int  hal_sdlogger_get_crash_number(void);
@@ -554,9 +554,9 @@ Buildable example: `examples/10_storage`.
 
 **Example: SD card periodic logging**
 ```c
-#include <hal/hal_sdlogger.h>
-#include <hal/hal_eeprom.h>
-#include <hal/hal_spi.h>
+#include <hal/storage/hal_sdlogger.h>
+#include <hal/storage/hal_eeprom.h>
+#include <hal/spi/hal_spi.h>
 
 void setup_sd_logging(void) {
     // Initialize EEPROM (SD logger stores counters there)
@@ -602,9 +602,9 @@ void shutdown_logging(void) {
 
 **Example: SD card crash logger**
 ```c
-#include <hal/hal_sdlogger.h>
-#include <hal/hal_eeprom.h>
-#include <hal/hal_spi.h>
+#include <hal/storage/hal_sdlogger.h>
+#include <hal/storage/hal_eeprom.h>
+#include <hal/spi/hal_spi.h>
 
 void setup_crash_logging(void) {
     // Initialize EEPROM and crash logger
@@ -638,7 +638,7 @@ void watchdog_reboot_handler(void) {
 ```
 
 ---
-**impl/shared/frameworks/filesystem:** SD file helpers and the portable SD logger
+**hal/storage/filesystem:** SD file helpers and the portable SD logger
 implementation used by RP2040 and STM32G474. The unchanged FatFs R0.16 core is
 loaded from an exact-commit checkout of the project-owned `jaszczurtd/ff16`
 mirror in `third_party/FatFs`; tracked wrappers provide the feature gate and the

@@ -75,7 +75,7 @@ the same way `test_mcp9600_driver` / `test_pcf8563_driver` do.
 | digipot | (ok) already wire-level | `test_hal_digipot` (reference pattern) |
 
 Process guard worth adding: a CI check that every datasheet-backed driver
-directory under `src/hal/impl/shared/drivers/` has a corresponding `tests/`
+driver directory under the relevant `src/hal/<domain>/` has a corresponding `tests/`
 file, so a driver with zero host coverage can't slip in unnoticed.
 
 ## Naming

@@ -1,8 +1,8 @@
-#include <hal/hal_app.h>
-#include <hal/hal_i2c.h>
-#include <hal/hal_rtc.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/i2c/hal_i2c.h>
+#include <hal/rtc/hal_rtc.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #include <stdbool.h>

@@ -2,11 +2,11 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-set(_facade "${JH_ROOT}/src/hal/hal_gps.cpp")
+set(_facade "${JH_ROOT}/src/hal/gps/hal_gps.cpp")
 set(_engine
-    "${JH_ROOT}/src/hal/impl/shared/frameworks/gps/hal_gps_core.cpp")
+    "${JH_ROOT}/src/hal/gps/hal_gps_core.cpp")
 set(_parser
-    "${JH_ROOT}/src/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp")
+    "${JH_ROOT}/src/hal/gps/gps_nmea_parser.cpp")
 set(_mock_injection "${JH_ROOT}/src/hal/impl/.mock/hal_gps.cpp")
 
 foreach(_required IN ITEMS
@@ -108,10 +108,8 @@ endforeach()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
 file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
-foreach(_manifest IN ITEMS _root_cmake _stm32_cmake)
-    if(NOT ${_manifest} MATCHES "hal/hal_gps\\.cpp" OR
-       NOT ${_manifest} MATCHES
-       "shared/frameworks/gps/hal_gps_core\\.cpp|impl/shared/\\*\\.cpp")
-        message(FATAL_ERROR "Shared GPS sources are missing from a source manifest")
-    endif()
-endforeach()
+if(NOT _root_cmake MATCHES "hal/gps/hal_gps\\.cpp" OR
+   NOT _root_cmake MATCHES "hal/gps/hal_gps_core\\.cpp" OR
+   NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")
+    message(FATAL_ERROR "Shared GPS sources are missing from a source manifest")
+endif()

@@ -1,4 +1,4 @@
-#include "hal/impl/shared/drivers/flash/jh_flash_transaction_engine.h"
+#include "hal/storage/flash/jh_flash_transaction_engine.h"
 #include "utils/unity.h"
 
 #include <stddef.h>

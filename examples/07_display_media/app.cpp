@@ -1,10 +1,10 @@
 #include "media_assets.h"
 
-#include <hal/hal_app.h>
-#include <hal/hal_display.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
-#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
+#include <hal/codecs/lodepng/lodepng.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/display/hal_display.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #include <stdint.h>

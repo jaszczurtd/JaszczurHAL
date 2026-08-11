@@ -1,13 +1,14 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_SDLOGGER
 
-#include "../../hal_eeprom.h"
-#include "../../hal_sdlogger.h"
-#include "../../hal_serial.h"
-#include "../../hal_system.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_sdlogger.h"
+#include "hal/storage/hal_sdlogger_internal.h"
+#include "hal/system/hal_system.h"
 #include "hal_mock.h"
 
 #include <stdarg.h>
@@ -82,60 +83,6 @@ static hal_status_t append_line_to_log_buffer(const char *data) {
   return HAL_EOVERFLOW;
 }
 
-static unsigned sdlogger_bounded_filename_number(int number, unsigned modulo) {
-  if (number < 0) {
-    return 0u;
-  }
-  if (modulo == 0u) {
-    return 0u;
-  }
-  return (unsigned)number % modulo;
-}
-
-static void sdlogger_make_log_filename(char *dst, size_t dst_size,
-                                       int log_number) {
-  if (dst == NULL || dst_size == 0u) {
-    return;
-  }
-
-  /* FF_USE_LFN is disabled, so keep log files in strict 8.3 form. */
-  snprintf(dst, dst_size, "log%05u.txt",
-           sdlogger_bounded_filename_number(log_number, 100000u));
-}
-
-static void sdlogger_make_crash_filename(char *dst, size_t dst_size,
-                                         int crash_number) {
-  if (dst == NULL || dst_size == 0u) {
-    return;
-  }
-
-  /* FF_USE_LFN is disabled, so keep crash reports in strict 8.3 form. */
-  snprintf(dst, dst_size, "wd%06u.txt",
-           sdlogger_bounded_filename_number(crash_number, 1000000u));
-}
-
-static void sdlogger_make_crash_tag_line(char *dst, size_t dst_size,
-                                         const char *tag) {
-  if (dst == NULL || dst_size == 0u) {
-    return;
-  }
-
-  dst[0] = '\0';
-  if (tag == NULL || tag[0] == '\0') {
-    return;
-  }
-
-  const char prefix[] = "crash tag: ";
-  size_t pos = 0u;
-  for (size_t i = 0u; prefix[i] != '\0' && pos + 1u < dst_size; ++i) {
-    dst[pos++] = prefix[i];
-  }
-  for (size_t i = 0u; tag[i] != '\0' && pos + 1u < dst_size; ++i) {
-    dst[pos++] = tag[i];
-  }
-  dst[pos] = '\0';
-}
-
 void hal_mock_sdlogger_reset(void) {
   s_sd_begin_result = true;
   s_log_open_result = true;
@@ -189,20 +136,12 @@ bool hal_mock_sdlogger_log_was_closed(void) { return s_log_closed; }
 
 bool hal_mock_sdlogger_crash_was_closed(void) { return s_crash_closed; }
 
-int hal_sdlogger_get_log_number(void) {
-  return hal_eeprom_read_int(HAL_SDLOGGER_EEPROM_LOGGER_ADDR);
-}
-
-int hal_sdlogger_get_crash_number(void) {
-  return hal_eeprom_read_int(HAL_SDLOGGER_EEPROM_CRASH_ADDR);
-}
-
 hal_status_t hal_sdlogger_init_ex(int cs) {
   (void)cs;
 
   char name[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
   int log_number = hal_sdlogger_get_log_number();
-  sdlogger_make_log_filename(name, sizeof(name), log_number);
+  jh_sdlogger_make_log_filename(name, sizeof(name), log_number);
 
   if (!s_sd_started) {
     s_sd_begin_count++;
@@ -274,7 +213,7 @@ hal_status_t hal_sdlogger_crash_init_ex(const char *add_to_name, int cs) {
 
   char name[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
   int crash_number = hal_sdlogger_get_crash_number();
-  sdlogger_make_crash_filename(name, sizeof(name), crash_number);
+  jh_sdlogger_make_crash_filename(name, sizeof(name), crash_number);
 
   if (!s_sd_started) {
     s_sd_begin_count++;
@@ -302,21 +241,7 @@ hal_status_t hal_sdlogger_crash_init_ex(const char *add_to_name, int cs) {
     snprintf(s_crash_filename, sizeof(s_crash_filename), "%s", name);
     s_crash_closed = false;
 
-    if (add_to_name != NULL && add_to_name[0] != '\0') {
-      char tag_line[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
-      sdlogger_make_crash_tag_line(tag_line, sizeof(tag_line), add_to_name);
-      status = hal_sdlogger_crash_append(tag_line);
-      if (status != HAL_OK) {
-        return status;
-      }
-    }
-
-    char log_name[sizeof("log00000.txt")] = {};
-    sdlogger_make_log_filename(log_name, sizeof(log_name),
-                               hal_sdlogger_get_log_number() - 1);
-    char line[HAL_SDLOGGER_NAME_BUFFER_SIZE] = {};
-    snprintf(line, sizeof(line), "corresponded log file: %s", log_name);
-    status = hal_sdlogger_crash_append(line);
+    status = jh_sdlogger_append_crash_context(add_to_name);
     if (status != HAL_OK) {
       return status;
     }

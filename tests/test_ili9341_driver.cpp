@@ -1,7 +1,8 @@
 #include "utils/unity.h"
 
+#include "hal/display/drivers/ili9341_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/display/ili9341_driver.h"
+#include "support/display_spi_test_helpers.h"
 
 #include <string.h>
 
@@ -22,15 +23,6 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
-
-static bool tx_has_tail(const uint8_t *tail, size_t tail_len) {
-  uint8_t tx[512] = {};
-  const size_t tx_len = hal_mock_spi_get_tx(0u, tx, sizeof(tx));
-  if (tx_len < tail_len) {
-    return false;
-  }
-  return memcmp(&tx[tx_len - tail_len], tail, tail_len) == 0;
-}
 
 void test_init_sends_ili9341_sequence_over_hal_spi(void) {
   jh_ili9341_t dev = {};

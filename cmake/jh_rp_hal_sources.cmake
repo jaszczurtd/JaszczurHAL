@@ -186,12 +186,17 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
     file(GLOB _rp_impl_sources CONFIGURE_DEPENDS
         "${SRC_DIR}/hal/impl/rp2040/*.cpp"
     )
-    file(GLOB_RECURSE _rp_shared_sources CONFIGURE_DEPENDS
-        "${SRC_DIR}/hal/impl/shared/*.cpp"
-        "${SRC_DIR}/hal/impl/shared/*.c"
+    file(GLOB_RECURSE _common_sources CONFIGURE_DEPENDS
+        "${SRC_DIR}/hal/*.cpp"
+        "${SRC_DIR}/hal/*.c"
     )
-    list(FILTER _rp_shared_sources EXCLUDE REGEX "/frameworks/PubSubClient/")
-    list(FILTER _rp_shared_sources EXCLUDE REGEX "/bluetooth/")
+    list(FILTER _common_sources EXCLUDE REGEX "/hal/impl/")
+    list(FILTER _common_sources EXCLUDE REGEX "/network/mqtt/PubSubClient/")
+    list(FILTER _common_sources EXCLUDE REGEX "/bluetooth/")
+    list(APPEND _common_sources
+        "${SRC_DIR}/hal/bluetooth/hal_ble.cpp"
+        "${SRC_DIR}/hal/bluetooth/hal_ble_stream.cpp"
+    )
 
     file(GLOB_RECURSE _driver_sources CONFIGURE_DEPENDS
         "${SRC_DIR}/hal/impl/rp2040/drivers/*.cpp"
@@ -202,15 +207,12 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
     jh_hal_define_enabled(_enable_mqtt HAL_ENABLE_MQTT)
     if(_enable_mqtt)
         file(GLOB_RECURSE _mqtt_sources CONFIGURE_DEPENDS
-            "${SRC_DIR}/hal/impl/shared/frameworks/PubSubClient/*.cpp"
-            "${SRC_DIR}/hal/impl/shared/frameworks/PubSubClient/*.c"
+            "${SRC_DIR}/hal/network/mqtt/PubSubClient/*.cpp"
+            "${SRC_DIR}/hal/network/mqtt/PubSubClient/*.c"
         )
         list(APPEND _framework_sources ${_mqtt_sources})
     endif()
 
-    file(GLOB _common_sources CONFIGURE_DEPENDS
-        "${SRC_DIR}/hal/*.cpp"
-    )
     if(NOT JH_RP_SOURCES_EXCLUDE_APP_ENTRY)
         list(APPEND _common_sources "${SRC_DIR}/hal_app_entry.cpp")
     endif()
@@ -228,7 +230,6 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
 
     set(${OUT_VAR}
         ${_rp_impl_sources}
-        ${_rp_shared_sources}
         ${_driver_sources}
         ${_framework_sources}
         ${_common_sources}

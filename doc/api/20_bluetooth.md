@@ -4,7 +4,7 @@
 
 The `hal_ble` module is an **experimental**, opt-in Bluetooth Low Energy
 Peripheral and passive Observer API. Define `HAL_ENABLE_BLE` and include
-`hal/hal_ble.h` or the umbrella `JaszczurHAL.h` header.
+`hal/bluetooth/hal_ble.h` or the umbrella `JaszczurHAL.h` header.
 
 The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure

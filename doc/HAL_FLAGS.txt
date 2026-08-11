@@ -29,7 +29,7 @@ Target (backend) selection
 ---------------------------
 
 Separate from the per-module HAL_ENABLE_* flags, JaszczurHAL selects exactly
-one hardware backend via a single switch (see src/hal/hal_target.h). Define ONE
+one hardware backend via a single switch (see src/hal/core/hal_target.h). Define ONE
 of the following in your `hal_project_config.h` (or via -D):
 
     HAL_TARGET_RP2040        RP2040 / Cortex-M0+
@@ -234,7 +234,7 @@ Connectivity
   HAL_ENABLE_LORA
     Feature selection for the provider-neutral raw LoRa radio facade. Requires
     exactly one provider; the current provider is HAL_ENABLE_SX126X. The public
-    C/C++ declaration surface is hal/hal_lora_radio.h. Opaque lifecycle handles
+    C/C++ declaration surface is hal/radio/hal_lora_radio.h. Opaque lifecycle handles
     support DIO1-driven asynchronous TX/RX, task callbacks and cancellation.
     They use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
     (default 2, valid range 1..255). The facade provides raw modem presets and

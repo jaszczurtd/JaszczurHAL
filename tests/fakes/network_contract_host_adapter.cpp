@@ -1,9 +1,9 @@
 #include "network_contract_control.h"
 
-#include "hal/hal_tcp.h"
-#include "hal/hal_udp.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/network/jh_net_address_utils.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/hal_udp.h"
+#include "hal/network/jh_net_address_utils.h"
 
 #include <stdio.h>
 

@@ -1,19 +1,19 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_STM32G474
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_TLS) || defined(HAL_ENABLE_WIREGUARD) ||                \
     defined(HAL_ENABLE_BLE_STREAM)
 
-#include "../../hal_status.h"
-#include "../../hal_sync.h"
-#include "../shared/jh_secure_random.h"
+#include "hal/core/hal_status.h"
+#include "hal/security/jh_secure_random.h"
+#include "hal/system/hal_sync.h"
 #include "stm32g474_secure_random.h"
 #if defined(HAL_ENABLE_TLS)
-#include "../shared/frameworks/BearSSL/jh_bearssl_provider.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_provider.h"
 #endif
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
 
 #include <stddef.h>
 #include <stdint.h>

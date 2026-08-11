@@ -7,7 +7,7 @@ Covers: `hal_can`, `hal_hd44780`, `hal_display`.
 ## `hal_can` - CAN bus  *(optional - `HAL_ENABLE_CAN`, backends `HAL_ENABLE_MCP2515` / `HAL_ENABLE_MCP251XFD` / `HAL_ENABLE_STM32G474_FDCAN`)*
 
 ```c
-#include <hal/hal_can.h>
+#include <hal/can/hal_can.h>
 
 #define HAL_CAN_MAX_DATA_LEN 8
 #define HAL_CAN_FD_MAX_DATA_LEN 64
@@ -190,12 +190,12 @@ bool hal_can_frame_matches_filter(const hal_can_frame_t *frame,
 uint8_t hal_can_encode_temp_i8(float temp_c);
 ```
 
-**impl/shared:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
+**shared thematic implementation:** Target `hal_can.cpp` files own the CAN facade, handle lifetime,
 mutexing and backend dispatch. MCP2515-specific operations live in
-`impl/shared/drivers/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
-register/SPI driver in `impl/shared/drivers/mcp2515/mcp2515_driver.*`. MCP251XFD
-operations live in `impl/shared/drivers/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
-HAL-only polling register/SPI driver in `impl/shared/drivers/mcp251xfd/mcp251xfd_driver.*`.
+`hal/can/mcp2515/hal_can_mcp2515.*`, backed by the HAL-only MCP2515
+register/SPI driver in `hal/can/mcp2515/mcp2515_driver.*`. MCP251XFD
+operations live in `hal/can/mcp251xfd/hal_can_mcp251xfd.*`, backed by the
+HAL-only polling register/SPI driver in `hal/can/mcp251xfd/mcp251xfd_driver.*`.
 STM32G474 native FDCAN operations live in
 `impl/stm32g474/hal_can_stm32g474_fdcan.*` and program FDCAN1 registers plus
 the fixed STM32G4 message RAM layout directly.
@@ -254,7 +254,7 @@ including optional `RW`, custom CGRAM characters, cursor/display control,
 scrolling, autoscroll and row-offset overrides.
 
 ```cpp
-#include <hal/hal_hd44780.h>
+#include <hal/display/hal_hd44780.h>
 
 // 4-bit mode, RW tied to GND:
 HD44780 lcd(rs_pin, enable_pin, d4_pin, d5_pin, d6_pin, d7_pin);
@@ -278,7 +278,7 @@ lcd.createChar(0, glyph);
 lcd.write((uint8_t)0);
 ```
 
-**impl/shared:** `impl/shared/drivers/hd44780/hd44780.*`, reused by RP2040,
+**shared thematic implementation:** `hal/display/hd44780/hd44780.*`, reused by RP2040,
 STM32G474 and host tests. The driver uses HAL GPIO, `hal_delay_us()` and an
 instance `hal_mutex_t`.
 **Display class scope:** This is a character LCD driver, not the bitmap
@@ -317,7 +317,7 @@ monochrome e-paper controllers over I2C/SPI/GPIO.
 ```
 
 ```c
-#include <hal/hal_display.h>
+#include <hal/display/hal_display.h>
 
 // --- Common RGB565 colors ---
 #define HAL_COLOR_BLACK   0x0000

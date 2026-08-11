@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
+#include "hal/network/cyw43/jh_cyw43_radio_runtime.h"
 
 #ifdef __cplusplus
 extern "C" {

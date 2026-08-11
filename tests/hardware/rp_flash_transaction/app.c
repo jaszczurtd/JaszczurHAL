@@ -1,9 +1,9 @@
-#include <hal/hal_app.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_usb.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
 #include <hal/impl/rp2040/drivers/flash/rp_flash_runtime.h>
 #include <hal/impl/rp2040/drivers/flash/rp_flash_transaction.h>
+#include <hal/system/hal_system.h>
+#include <hal/usb/hal_usb.h>
 
 #include <hardware/dma.h>
 #include <hardware/flash.h>

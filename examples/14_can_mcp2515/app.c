@@ -3,11 +3,11 @@
  * @brief Portable MCP2515 CAN example over JaszczurHAL SPI + CAN abstractions.
  */
 
-#include <hal/hal_app.h>
-#include <hal/hal_can.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/can/hal_can.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #if HAL_TARGET_IS_RP

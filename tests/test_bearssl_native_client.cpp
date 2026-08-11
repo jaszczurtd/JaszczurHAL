@@ -1,7 +1,7 @@
-#include "hal/hal_tls.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_bsd_io.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_engine.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_provider.h"
+#include "hal/network/tls/hal_tls.h"
 
 #include <arpa/inet.h>
 #include <chrono>

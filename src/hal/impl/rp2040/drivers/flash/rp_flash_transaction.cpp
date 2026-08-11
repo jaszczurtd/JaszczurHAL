@@ -1,12 +1,12 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
 
-#include "../../../../hal_config.h"
-#include "../../../../hal_sync.h"
-#include "../../../../hal_system.h"
-#include "../../../shared/drivers/flash/jh_flash_transaction_engine.h"
-#include "../../../shared/hal_mutex_once.h"
+#include "hal/core/hal_config.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/storage/flash/jh_flash_transaction_engine.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 #include "rp_flash_runtime.h"
 #include "rp_flash_transaction.h"
 

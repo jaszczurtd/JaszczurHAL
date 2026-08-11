@@ -18,7 +18,7 @@
  * scratch marker -- cannot lose the information.
  */
 
-#include "hal/hal_compiler.h"
+#include "hal/core/hal_compiler.h"
 
 #include <stdbool.h>
 #include <stddef.h>

@@ -1,4 +1,4 @@
-set(_driver "${JH_ROOT}/src/hal/impl/shared/drivers/cyw43-driver")
+set(_driver "${JH_ROOT}/src/hal/network/cyw43")
 
 file(READ "${_driver}/cyw43_configport.h" _cyw43_port_config)
 if(NOT _cyw43_port_config MATCHES
@@ -107,7 +107,7 @@ if(_implicit_sources)
 endif()
 
 set(_backend_sources
-    "${JH_ROOT}/src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp"
+    "${JH_ROOT}/src/hal/network/cyw43/jh_cyw43_radio.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_platform.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_gspi.cpp"
@@ -118,10 +118,10 @@ set(_backend_sources
     "${JH_ROOT}/src/hal/impl/rp2040/rp2040_lwip_extension_port.cpp"
     "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_platform.cpp"
     "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp"
-    "${JH_ROOT}/src/hal/hal_net.cpp"
-    "${JH_ROOT}/src/hal/hal_tcp.cpp"
-    "${JH_ROOT}/src/hal/hal_udp.cpp"
-    "${JH_ROOT}/src/hal/hal_wifi.cpp"
+    "${JH_ROOT}/src/hal/network/hal_net.cpp"
+    "${JH_ROOT}/src/hal/network/hal_tcp.cpp"
+    "${JH_ROOT}/src/hal/network/hal_udp.cpp"
+    "${JH_ROOT}/src/hal/network/hal_wifi.cpp"
 )
 foreach(_source IN LISTS _backend_sources)
     file(READ "${_source}" _contents)
@@ -135,12 +135,12 @@ foreach(_source IN LISTS _backend_sources)
 endforeach()
 
 foreach(_source IN ITEMS
-        "${JH_ROOT}/src/hal/hal_wifi.cpp"
-        "${JH_ROOT}/src/hal/hal_net.cpp"
-        "${JH_ROOT}/src/hal/hal_tcp.cpp"
-        "${JH_ROOT}/src/hal/hal_udp.cpp"
-        "${JH_ROOT}/src/hal/impl/shared/network/mqtt/hal_mqtt.cpp"
-        "${JH_ROOT}/src/hal/impl/shared/network/wireguard/hal_wireguard.cpp")
+        "${JH_ROOT}/src/hal/network/hal_wifi.cpp"
+        "${JH_ROOT}/src/hal/network/hal_net.cpp"
+        "${JH_ROOT}/src/hal/network/hal_tcp.cpp"
+        "${JH_ROOT}/src/hal/network/hal_udp.cpp"
+        "${JH_ROOT}/src/hal/network/mqtt/hal_mqtt.cpp"
+        "${JH_ROOT}/src/hal/network/wireguard/hal_wireguard.cpp")
     file(READ "${_source}" _contents)
     if(NOT _contents MATCHES "jh_network_require_(hardware|ready)")
         message(FATAL_ERROR
@@ -155,7 +155,7 @@ foreach(_source IN ITEMS
         "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp")
     file(READ "${_source}" _contents)
     if(NOT _contents MATCHES
-       "drivers/cyw43-driver/jh_cyw43_driver\\.h")
+       "hal/network/cyw43/jh_cyw43_driver\\.h")
         message(FATAL_ERROR "Pinned CYW43 include boundary missing in ${_source}")
     endif()
 endforeach()

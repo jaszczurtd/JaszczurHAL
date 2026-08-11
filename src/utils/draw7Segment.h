@@ -1,7 +1,7 @@
 #ifndef DRAW_7_SEGMENT_H
 #define DRAW_7_SEGMENT_H
 
-#include <hal/hal_config.h>
+#include <hal/core/hal_config.h>
 #ifdef HAL_ENABLE_DISPLAY
 
 /**
@@ -15,10 +15,10 @@
  * implements hal_display.h.
  */
 
+#include <hal/display/hal_display.h>
+#include <hal/serial/hal_serial.h>
 #include <stdint.h>
 #include <string.h>
-#include <hal/hal_display.h>
-#include <hal/hal_serial.h>
 
 /**
  * @brief Draw a 7-segment string at the given position.
@@ -30,7 +30,8 @@
  * @param thickness   Segment thickness in pixels.
  * @param color       RGB565 colour.
  */
-void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeight, float thickness, uint16_t color);
+void draw7SegString(const char *str, int x, int y, int digitWidth,
+                    int digitHeight, float thickness, uint16_t color);
 
 /**
  * @brief Calculate the pixel width of a 7-segment string.
@@ -39,7 +40,7 @@ void draw7SegString(const char* str, int x, int y, int digitWidth, int digitHeig
  * @param thickness  Segment thickness in pixels.
  * @return Total width in pixels.
  */
-int get7SegStringWidth(const char* str, int digitWidth, float thickness);
+int get7SegStringWidth(const char *str, int digitWidth, float thickness);
 
 #endif /* HAL_ENABLE_DISPLAY */
 #endif /* DRAW_7_SEGMENT_H */

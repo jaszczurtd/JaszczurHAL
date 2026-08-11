@@ -3,8 +3,8 @@
  * @brief Build-only probe for the native app entry and core-1 policy.
  */
 
-#include "hal/hal_app.h"
-#include "hal/hal_system.h"
+#include "hal/core/hal_app.h"
+#include "hal/system/hal_system.h"
 
 void app_start(void) {}
 

@@ -172,7 +172,7 @@ def check_macro_dump_parity(compiler: str) -> None:
             continue
         support = ("HAL_ENABLE_ILI9341",) if name == "HAL_ENABLE_TFT" else ()
         legacy = preprocess_feature_macros(
-            compiler, "hal/hal_config.h", name, support
+            compiler, "hal/core/hal_config.h", name, support
         ) & registered
         generated = preprocess_feature_macros(
             compiler, "hal/generated/jh_hal_features.h", name, support
@@ -295,7 +295,7 @@ def check_effective_matrix_parity(compiler: str, report: dict) -> None:
         expected = set(record["resolvedFeatures"])
         legacy = preprocess_feature_set(
             compiler,
-            "hal/hal_config.h",
+            "hal/core/hal_config.h",
             requested,
             record["target"],
             record["board"],
@@ -324,7 +324,7 @@ def check_direct_compiler_zero_presence(compiler: str) -> None:
         [
             "#define HAL_TARGET_MOCK 1",
             "#define HAL_ENABLE_TIME 0",
-            '#include "hal/hal_config.h"',
+            '#include "hal/core/hal_config.h"',
             "",
         ]
     )
@@ -363,7 +363,7 @@ def preprocess_hal_config_features(
 ) -> set[str]:
     source = [
         *(f"#define {definition.replace('=', ' ', 1)}" for definition in definitions),
-        '#include "hal/hal_config.h"',
+        '#include "hal/core/hal_config.h"',
         "",
     ]
     result = subprocess.run(
@@ -400,7 +400,7 @@ def preprocess_hal_config_verbose(
     source = [
         "#define HAL_CONFIG_VERBOSE 1",
         *(f"#define {definition.replace('=', ' ', 1)}" for definition in definitions),
-        '#include "hal/hal_config.h"',
+        '#include "hal/core/hal_config.h"',
         "",
     ]
     result = subprocess.run(
@@ -431,7 +431,7 @@ def require_hal_config_failure(
 ) -> None:
     source = [
         *(f"#define {definition.replace('=', ' ', 1)}" for definition in definitions),
-        '#include "hal/hal_config.h"',
+        '#include "hal/core/hal_config.h"',
         "",
     ]
     result = subprocess.run(
@@ -646,19 +646,19 @@ require(
     "HAL sources use a feature symbol outside the registry",
 )
 
-hal_config_text = (ROOT / "src/hal/hal_config.h").read_text(encoding="utf-8")
+hal_config_text = (ROOT / "src/hal/core/hal_config.h").read_text(encoding="utf-8")
 require(
     re.search(
-        r'#include "hal_board\.h"[^\n]*\n'
+        r'#include "hal/system/hal_board\.h"[^\n]*\n'
         r"#define JH_HAL_FEATURE_VERBOSE_REPORT_DEFERRED 1\n"
-        r'#include "generated/jh_hal_features\.h"',
+        r'#include "hal/generated/jh_hal_features\.h"',
         hal_config_text,
     )
     is not None,
     "hal_config.h must include the generated feature header after hal_board.h",
 )
 require(
-    hal_config_text.count('#include "generated/jh_hal_features.h"') == 2,
+    hal_config_text.count('#include "hal/generated/jh_hal_features.h"') == 2,
     "hal_config.h must include generated features once for closure and once for report",
 )
 require(

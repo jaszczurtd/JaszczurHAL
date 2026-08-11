@@ -1,4 +1,4 @@
-#include "hal/hal_pcnt.h"
+#include "hal/analog/hal_pcnt.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

@@ -1,4 +1,4 @@
-#include "hal/hal_sc_auth.h"
+#include "hal/security/hal_sc_auth.h"
 #include "utils/unity.h"
 
 #include <string.h>

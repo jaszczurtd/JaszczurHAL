@@ -14,7 +14,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef __cplusplus
 extern "C" {

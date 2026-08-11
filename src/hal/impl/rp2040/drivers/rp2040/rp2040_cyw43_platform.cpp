@@ -1,18 +1,18 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
-#include "../../../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if (defined(HAL_ENABLE_NETWORK_CORE) || defined(JH_BLUETOOTH_BTSTACK)) &&     \
     defined(HAL_NETWORK_BACKEND_CYW43) && HAL_BOARD_HAS_CYW43
 
-#include "../../../../hal_serial.h"
-#include "../../../../hal_sync.h"
-#include "../../../../hal_system.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
-#include "../../../../impl/shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/cyw43/jh_cyw43_lwip.h"
+#include "hal/network/cyw43/jh_cyw43_radio_runtime.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 #include "rp2040_cyw43_gspi.h"
 #include "rp2040_cyw43_platform.h"
 

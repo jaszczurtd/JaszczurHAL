@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../../../../hal_status.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
+#include "hal/core/hal_status.h"
+#include "hal/network/cyw43/jh_cyw43_radio_runtime.h"
 
 #include <stdint.h>
 

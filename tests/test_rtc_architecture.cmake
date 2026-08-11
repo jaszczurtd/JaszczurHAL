@@ -2,11 +2,11 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-set(_facade "${JH_ROOT}/src/hal/hal_rtc.cpp")
+set(_facade "${JH_ROOT}/src/hal/rtc/hal_rtc.cpp")
 set(_provider_header
-    "${JH_ROOT}/src/hal/impl/shared/rtc/jh_rtc_provider.h")
+    "${JH_ROOT}/src/hal/rtc/jh_rtc_provider.h")
 set(_i2c_provider
-    "${JH_ROOT}/src/hal/impl/shared/rtc/jh_rtc_i2c_provider.cpp")
+    "${JH_ROOT}/src/hal/rtc/jh_rtc_i2c_provider.cpp")
 set(_mock_provider
     "${JH_ROOT}/src/hal/impl/.mock/jh_rtc_provider.cpp")
 
@@ -78,8 +78,8 @@ if(_mock_contents MATCHES "jh_calendar_|rtc_validate_datetime")
 endif()
 
 foreach(_driver IN ITEMS
-        "${JH_ROOT}/src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp"
-        "${JH_ROOT}/src/hal/impl/shared/drivers/ds3231/ds3231.cpp")
+        "${JH_ROOT}/src/hal/rtc/pcf8563/pcf8563.cpp"
+        "${JH_ROOT}/src/hal/rtc/ds3231/ds3231.cpp")
     file(READ "${_driver}" _driver_contents)
     if(NOT _driver_contents MATCHES "hal_i2c")
         message(FATAL_ERROR "RTC chip driver bypasses public HAL I2C: ${_driver}")
@@ -92,7 +92,7 @@ endforeach()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
 file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
-if(NOT _root_cmake MATCHES "src/hal/hal_rtc\\.cpp|hal/hal_rtc\\.cpp" OR
-   NOT _stm32_cmake MATCHES "hal/hal_rtc\\.cpp")
+if(NOT _root_cmake MATCHES "hal/rtc/hal_rtc\\.cpp" OR
+   NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")
     message(FATAL_ERROR "Shared RTC facade is missing from a source manifest")
 endif()

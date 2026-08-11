@@ -1,9 +1,9 @@
 #include "utils/unity.h"
 
+#include "hal/display/drivers/epd_spi_transport.h"
+#include "hal/display/drivers/ssd16xx_driver.h"
+#include "hal/display/drivers/uc81xx_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/display/epd_spi_transport.h"
-#include "hal/impl/shared/drivers/display/ssd16xx_driver.h"
-#include "hal/impl/shared/drivers/display/uc81xx_driver.h"
 
 #include <string.h>
 

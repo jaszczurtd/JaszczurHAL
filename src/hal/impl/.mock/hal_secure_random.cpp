@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_MOCK
 
-#include "../shared/jh_secure_random.h"
+#include "hal/security/jh_secure_random.h"
 #include "hal_mock.h"
 
 #include <stdint.h>

@@ -1,6 +1,6 @@
-#include "hal/hal_i2c.h"
+#include "hal/analog/ads1x15/ads1x15_driver.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/ads1x15/ads1x15_driver.h"
 #include "utils/unity.h"
 
 /* Datasheet anchors used by these tests (ADS111x/ADS101x):

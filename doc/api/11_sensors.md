@@ -11,7 +11,7 @@ bit-bang over HAL GPIO). Functions not available on the
 selected chip return a safe default (NAN / 0 / false) and print an error.
 
 ```c
-#include <hal/hal_thermocouple.h>
+#include <hal/temperature/hal_thermocouple.h>
 
 // Chip selector
 typedef enum {
@@ -131,7 +131,7 @@ Non-blocking sensor workflow:
 3. `hal_ds18b20_take_latest()` reads cached sample (`fresh=true` only once per new sample).
 
 ```c
-#include <hal/hal_ds18b20.h>
+#include <hal/temperature/hal_ds18b20.h>
 
 #ifndef HAL_DS18B20_MAX_INSTANCES
 #define HAL_DS18B20_MAX_INSTANCES 4
@@ -179,7 +179,7 @@ polling before the conversion deadline returns `HAL_EAGAIN`, polling while idle
 returns `HAL_ESTATE`, and scratchpad/CRC/decode failure returns `HAL_EPROTO`.
 
 **impl/rp2040 + impl/stm32g474:** Both use the shared HAL-only
-`src/hal/impl/shared/drivers/onewire/` implementation. The backend performs DS18B20
+`src/hal/onewire/` implementation. The backend performs DS18B20
 presence/address probing, scratchpad CRC verification, resolution writes,
 non-blocking conversion scheduling with `hal_micros64()`, and temperature decode
 over the shared 1-Wire bit-bang transport.
@@ -203,7 +203,7 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 Blocking single-frame DHT reader over HAL GPIO.
 
 ```c
-#include <hal/hal_dht.h>
+#include <hal/temperature/hal_dht.h>
 
 #ifndef HAL_DHT_MAX_INSTANCES
 #define HAL_DHT_MAX_INSTANCES 4
@@ -261,7 +261,7 @@ signed 16-bit temperature fields with 0.1 unit resolution.
 wrapper. The scalar cached getters keep their value-returning fallback shape.
 
 **impl/rp2040 + impl/stm32g474 + impl/.mock:** all use
-`impl/shared/drivers/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
+`hal/temperature/dht/hal_dht.cpp` over HAL GPIO/system/sync primitives.
 **Thread safety:** handle creation uses a singleton pool mutex created with
 `jh_hal_mutex_create_once`; each handle has its own mutex for read/get/deinit.
 The timing-critical frame read masks interrupts only for the short DHT
@@ -272,7 +272,7 @@ bit-bang window.
 ## `hal_bh1750` - BH1750 ambient-light sensor  *(optional - `HAL_ENABLE_BH1750`)*
 
 ```c
-#include <hal/hal_bh1750.h>
+#include <hal/sensors/hal_bh1750.h>
 
 #define HAL_BH1750_I2C_ADDR_LOW      0x23u
 #define HAL_BH1750_I2C_ADDR_HIGH     0x5Cu
@@ -305,7 +305,7 @@ returns lux as `raw / 1.2f` through `out_lux`; failed reads return `HAL_EBUS`
 and set the output to `-1.0f`. The legacy `hal_bh1750_init()` and
 `hal_bh1750_light()` wrappers preserve the original `bool` / `-1.0f` behavior.
 
-**impl/shared:** `impl/shared/drivers/bh1750/hal_bh1750.cpp` is used by RP2040,
+**shared thematic implementation:** `hal/sensors/bh1750/hal_bh1750.cpp` is used by RP2040,
 STM32G474, and mock tests. The default address is `0x5C` to preserve the source
 driver constructor default; boards with ADDR tied low should set `0x23`.
 **Thread safety:** per-instance mutex serializes driver calls; I2C byte reads
@@ -317,7 +317,7 @@ mutex.
 ## `hal_adp5360` - ADP5360 PMIC  *(optional - `HAL_ENABLE_ADP5360`)*
 
 ```c
-#include <hal/hal_adp5360.h>
+#include <hal/power/hal_adp5360.h>
 
 #define HAL_ADP5360_I2C_ADDR_DEFAULT 0x46u
 #define HAL_ADP5360_DEVICE_ID        0x10u
@@ -357,7 +357,7 @@ regulator voltage/current/mode/enable/active-discharge control. The low-level
 `hal_adp5360_reg_read/write/burst/update()` helpers are public for board bring
 up and diagnostics.
 
-**impl/shared:** `impl/shared/drivers/adp5360/hal_adp5360.cpp` is used by
+**shared thematic implementation:** `hal/power/adp5360/hal_adp5360.cpp` is used by
 RP2040, STM32G474 and mock tests. It uses HAL I2C/GPIO/time primitives and a
 per-device mutex created with `jh_hal_mutex_create_once()`, so the driver is
 safe to call from multicore/FreeRTOS task contexts when the underlying HAL I2C
@@ -371,7 +371,7 @@ callback registration for ADP5360 INT/PGOOD/reset-status pins.
 ## `hal_tsc2007` - TSC2007 resistive touch controller  *(optional - `HAL_ENABLE_TSC2007`)*
 
 ```c
-#include <hal/hal_tsc2007.h>
+#include <hal/input/hal_tsc2007.h>
 
 #define HAL_TSC2007_I2C_ADDR_DEFAULT      0x48u
 #define HAL_TSC2007_TOUCH_INVALID         4095u
@@ -435,7 +435,7 @@ transaction failures return `HAL_EBUS`, and invalid arguments return
 `hal_tsc2007_get_point()` returns `{x, y, z1}` or `{0, 0, 0}` when the sample
 is rejected.
 
-**impl/shared:** `impl/shared/drivers/tsc2007/tsc2007.cpp` is used by RP2040,
+**shared thematic implementation:** `hal/input/tsc2007/tsc2007.cpp` is used by RP2040,
 STM32G474, and mock tests over HAL I2C and HAL system timing.
 **Thread safety:** per-instance mutex serializes public driver calls and is
 created with the shared create-once helper, so first access is safe under
@@ -447,7 +447,7 @@ with other operations on the same instance.
 ## `hal_stmpe610` - STMPE610 resistive touch controller  *(optional - `HAL_ENABLE_STMPE610`)*
 
 ```c
-#include <hal/hal_stmpe610.h>
+#include <hal/input/hal_stmpe610.h>
 
 #define HAL_STMPE610_I2C_ADDR_DEFAULT 0x41u
 #define HAL_STMPE610_CHIP_ID          0x0811u
@@ -531,7 +531,7 @@ interrupt status when the FIFO is empty. The I2C 16-bit register read path is
 dispatched only through I2C; this avoids the fall-through transport bug present
 in the source import.
 
-**impl/shared:** `impl/shared/drivers/stmpe610/stmpe610.cpp` is used by RP2040,
+**shared thematic implementation:** `hal/input/stmpe610/stmpe610.cpp` is used by RP2040,
 STM32G474, and mock tests. I2C uses HAL bus-selecting transfers; hardware SPI
 uses HAL SPI transactions plus a caller-provided CS pin; soft SPI bit-bangs
 MSB-first over HAL GPIO.
@@ -546,7 +546,7 @@ concurrently with other operations on the same instance.
 ## `hal_irsmall_decoder` - IR receiver decoder  *(optional - `HAL_ENABLE_IRSMALL_DECODER`)*
 
 ```c
-#include <hal/hal_irsmall_decoder.h>
+#include <hal/input/hal_irsmall_decoder.h>
 
 typedef enum {
   HAL_IRSMALL_PROTOCOL_NEC,
@@ -598,7 +598,7 @@ interrupt with the edge mode used by the selected protocol, and uses
 frames. `hal_irsmall_decoder_data_available()` copies and clears one decoded
 frame; `hal_irsmall_decoder_has_data()` clears pending data without copying it.
 
-**impl/shared:** `impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp` is used by
+**shared thematic implementation:** `hal/input/irsmall_decoder/irsmall_decoder.cpp` is used by
 RP2040, STM32G474, and mock tests over HAL GPIO interrupts and HAL system
 timing. The shared implementation keeps the source timing thresholds and repeat
 suppression behavior; NEC extended address bytes are assembled explicitly to
@@ -619,7 +619,7 @@ The API is vendor-neutral and already exposes generic alarm/timer/clock-output
 and event/IRQ controls.
 
 ```c
-#include <hal/hal_rtc.h>
+#include <hal/rtc/hal_rtc.h>
 
 #ifndef HAL_RTC_MAX_INSTANCES
 #define HAL_RTC_MAX_INSTANCES 4
@@ -722,7 +722,7 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
 bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
 ```
 
-**Architecture:** `src/hal/hal_rtc.cpp` is the only public facade. It owns the
+**Architecture:** `src/hal/rtc/hal_rtc.cpp` is the only public facade. It owns the
 static handle pool, configuration/date/alarm validation, per-handle locking,
 epoch conversion, status propagation, and legacy `bool`/handle wrappers.
 Internal provider operations separate that lifecycle from backend behavior:
@@ -787,7 +787,7 @@ if (hal_rtc_get_epoch_ex(rtc, &epoch) == HAL_OK) {
 ## `hal_external_adc` - ADS1115 external ADC  *(optional - `HAL_ENABLE_EXTERNAL_ADC`)*
 
 ```c
-#include <hal/hal_external_adc.h>
+#include <hal/analog/hal_external_adc.h>
 
 // Init ADS1115 at the given 7-bit I2C address.
 // adc_range: LSB size in millivolts (e.g. 0.1875 for ±6.144 V full-scale).
@@ -804,7 +804,7 @@ int16_t hal_ext_adc_read(uint8_t channel);
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
 
-**impl/shared:** HAL-only ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
+**shared thematic implementation:** HAL-only ADS1X15/ADS1115 driver over HAL I2C, used by RP2040 and STM32G474.
 **Thread safety:** RP2040/STM32G474: thread-safe and multicore-safe where the backend mutex implementation provides it. A dedicated internal `hal_mutex_t` serializes ADC channel selection and range access; HAL I2C transactions protect the bus. `hal_ext_adc_init()` / `hal_ext_adc_init_bus()` modify global singleton state and should be called during init. Mock backend does not synchronize concurrent access.
 
 **Mock helpers:**
@@ -829,7 +829,7 @@ and 7N1 and re-initialises the port once. This handles genuine u-blox modules
 (8N1) and clone NEO-6M boards that ship as 7N1.
 
 ```c
-#include <hal/hal_gps.h>
+#include <hal/gps/hal_gps.h>
 
 // Initialise the GPS subsystem (first successful hardware call takes effect).
 // config: UART frame format - HAL_UART_CFG_8N1 (recommended default) or
@@ -889,13 +889,13 @@ uint32_t hal_gps_sentences_with_fix(void); // valid sentences containing a locat
 int      hal_gps_serial_available(void);   // bytes waiting in the serial RX buffer
 ```
 
-**Architecture:** `src/hal/hal_gps.cpp` is the only transport facade. It owns
+**Architecture:** `src/hal/gps/hal_gps.cpp` is the only transport facade. It owns
 initialization, polling, SoftwareSerial framing fallback, serial availability
 and compile-time selection between `hal_uart` and `hal_swserial`. RP2040 and
 STM32G474 use the same file and only the selected HAL transport supplies
 target-specific behavior.
 
-The shared `impl/shared/frameworks/gps/hal_gps_core.cpp` owns the mutex, byte
+The shared `hal/gps/hal_gps_core.cpp` owns the mutex, byte
 feed, fix age, diagnostics and every public data getter around
 `gps_nmea_parser.cpp`. The parser logic is ported from TinyGPS++ (LGPL), with
 GSA/GSV/GST support based on the minmea field layouts. Mock injectors update a
@@ -928,12 +928,12 @@ installed RP2040 UART IRQ between cores.
 
 **UART config default:**
 
-`HAL_GPS_DEFAULT_UART_CONFIG` (defined in `hal/hal_config.h`) defaults to
+`HAL_GPS_DEFAULT_UART_CONFIG` (defined in `hal/core/hal_config.h`) defaults to
 `HAL_UART_CFG_8N1` (the NMEA 0183 standard). The SoftwareSerial path can switch
 to 7N1 automatically after repeated checksum failures.
 
 ```c
-// hal/hal_config.h default (can be overridden in build flags):
+// hal/core/hal_config.h default (can be overridden in build flags):
 #define HAL_GPS_DEFAULT_UART_CONFIG  HAL_UART_CFG_8N1
 
 // Usage:
@@ -966,7 +966,7 @@ void hal_mock_gps_reset(void);                                 // zero all state
 ## `hal_mcp3221` - MCP3221 12-bit ADC  *(optional - `HAL_ENABLE_MCP3221`)*
 
 ```c
-#include <hal/hal_mcp3221.h>
+#include <hal/analog/hal_mcp3221.h>
 
 hal_i2c_init(sda_pin, scl_pin, HAL_I2C_CLOCK_STANDARD_HZ);
 

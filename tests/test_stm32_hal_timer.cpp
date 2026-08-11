@@ -1,5 +1,5 @@
-#include "hal/hal_system.h"
-#include "hal/hal_timer.h"
+#include "hal/system/hal_system.h"
+#include "hal/timers/hal_timer.h"
 #include "utils/unity.h"
 
 extern "C" void hal_stm32g474_timer_test_reset(void);

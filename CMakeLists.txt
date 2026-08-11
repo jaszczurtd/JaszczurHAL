@@ -96,89 +96,98 @@ file(GLOB MOCK_SOURCES ${SRC}/hal/impl/.mock/*.cpp)
 # Excluded sources are compiled by dedicated tests when they need local stubs or
 # extra fixtures.
 set(UTIL_SOURCES
-    ${SRC}/hal/hal_assert.cpp
-    ${SRC}/hal/hal_board.cpp
-    ${SRC}/hal/hal_ble.cpp
-    ${SRC}/hal/hal_ble_stream.cpp
-    ${SRC}/hal/hal_config.cpp
-    ${SRC}/hal/hal_gps.cpp
-    ${SRC}/hal/hal_rtc.cpp
-    ${SRC}/hal/hal_sc_auth.cpp
-    ${SRC}/hal/hal_serial.cpp
-    ${SRC}/hal/hal_serial_session.cpp
-    ${SRC}/hal/hal_time.cpp
-    ${SRC}/hal/hal_lora_radio.cpp
-    ${SRC}/hal/hal_spi_device.cpp
-    ${SRC}/hal/hal_network_status.cpp
-    ${SRC}/hal/hal_tls.cpp
-    ${SRC}/hal/impl/shared/bluetooth/jh_ble_stream_session.c
-    ${SRC}/hal/impl/shared/jh_handle_pool.cpp
-    ${SRC}/hal/impl/shared/drivers/sx126x/jh_sx126x_adapter.cpp
-    ${SRC}/hal/impl/shared/jh_secure_random.cpp
-    ${SRC}/hal/impl/shared/network/http/hal_http_client.cpp
-    ${SRC}/hal/impl/shared/network/jh_network_backend.cpp
-    ${SRC}/hal/impl/shared/network/jh_network_handle_pool.cpp
-    ${SRC}/hal/impl/shared/network/jh_public_network_backend_adapter.cpp
-    ${SRC}/hal/impl/shared/network/ota/jh_ota_image.cpp
-    ${SRC}/hal/impl/shared/network/ota/jh_ota_swap_engine.cpp
-    ${SRC}/hal/hal_can_util.cpp
-    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
-    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
-    ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp
-    ${SRC}/hal/impl/shared/frameworks/gps/gps_nmea_parser.cpp
-    ${SRC}/hal/impl/shared/frameworks/gps/hal_gps_core.cpp
-    ${SRC}/hal/impl/shared/network/services/http_server/hal_http_server.cpp
-    ${SRC}/hal/impl/shared/network/services/http_files/hal_http_files.cpp
-    ${SRC}/hal/impl/shared/network/services/websocket/hal_websocket.cpp
-    ${SRC}/hal/impl/shared/network/services/net_console/hal_net_console.cpp
-    ${SRC}/hal/impl/shared/network/services/net_commands/hal_net_commands.cpp
-    ${SRC}/hal/impl/shared/debug/hal_debug_format.cpp
-    ${SRC}/hal/impl/shared/time/jh_calendar.c
-    ${SRC}/hal/impl/shared/drivers/mcp2515/hal_can_mcp2515_config.cpp
-    ${SRC}/hal/impl/shared/drivers/mcp251xfd/mcp251xfd_driver.cpp
-    ${SRC}/hal/hal_crypto.cpp
-    ${SRC}/hal/hal_crc.cpp
-    ${SRC}/hal/hal_pga2311.cpp
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/blake2s.c
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20.c
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/chacha20poly1305.c
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/crypto.c
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/poly1305-donna.c
-    ${SRC}/hal/impl/shared/frameworks/wireguard/crypto/x25519.c
-    ${SRC}/hal/hal_digipot.cpp
-    ${SRC}/hal/impl/shared/drivers/digipot/digipot_mcp401x.cpp
-    ${SRC}/hal/impl/shared/drivers/digipot/digipot_max5395.cpp
-    ${SRC}/hal/impl/shared/drivers/pga2311/pga2311_driver.cpp
-    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522.cpp
-    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522_spi.cpp
-    ${SRC}/hal/impl/shared/drivers/mfrc522/mfrc522_i2c.cpp
-    ${SRC}/hal/impl/shared/drivers/pn532/pn532.cpp
-    ${SRC}/hal/impl/shared/drivers/pn532/pn532_spi.cpp
-    ${SRC}/hal/impl/shared/drivers/pn532/pn532_i2c.cpp
-    ${SRC}/hal/impl/shared/drivers/pn532/pn532_uart.cpp
-    ${SRC}/hal/impl/shared/drivers/simple_io/hal_simple_io_drivers.cpp
-    ${SRC}/hal/impl/shared/drivers/dacless/dacless.cpp
-    ${SRC}/hal/impl/shared/drivers/dht/hal_dht.cpp
-    ${SRC}/hal/impl/shared/drivers/adp5360/hal_adp5360.cpp
-    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_driver.cpp
-    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_gspi_transport.cpp
-    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.cpp
-    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp
-    ${SRC}/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.cpp
-    ${SRC}/hal/impl/shared/drivers/swserial/hal_swserial.cpp
-    ${SRC}/hal/impl/shared/drivers/flash/jh_flash_transaction_engine.cpp
-    ${SRC}/hal/hal_kv.cpp
-    ${SRC}/hal/hal_modem_at.cpp
-    ${SRC}/hal/hal_simcom_a76xx.cpp
-    ${SRC}/hal/hal_timer_ext.cpp
-    ${SRC}/hal/hal_soft_timer.cpp
-    ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
+    ${SRC}/hal/core/hal_assert.cpp
+    ${SRC}/hal/system/hal_board.cpp
+    ${SRC}/hal/bluetooth/hal_ble.cpp
+    ${SRC}/hal/bluetooth/hal_ble_stream.cpp
+    ${SRC}/hal/core/hal_config.cpp
+    ${SRC}/hal/gps/hal_gps.cpp
+    ${SRC}/hal/rtc/hal_rtc.cpp
+    ${SRC}/hal/security/hal_sc_auth.cpp
+    ${SRC}/hal/serial/hal_serial.cpp
+    ${SRC}/hal/serial/hal_serial_session.cpp
+    ${SRC}/hal/time/hal_time.cpp
+    ${SRC}/hal/radio/hal_lora_radio.cpp
+    ${SRC}/hal/spi/hal_spi_device.cpp
+    ${SRC}/hal/network/hal_network_status.cpp
+    ${SRC}/hal/network/tls/hal_tls.cpp
+    ${SRC}/hal/bluetooth/jh_ble_stream_session.c
+    ${SRC}/hal/core/jh_handle_pool.cpp
+    ${SRC}/hal/radio/sx126x/jh_sx126x_adapter.cpp
+    ${SRC}/hal/security/jh_secure_random.cpp
+    ${SRC}/hal/i2c/hal_i2c.cpp
+    ${SRC}/hal/display/hal_display.cpp
+    ${SRC}/hal/storage/hal_sdlogger.cpp
+    ${SRC}/hal/serial/hal_swserial.cpp
+    ${SRC}/hal/network/hal_udp.cpp
+    ${SRC}/hal/timers/hal_timer.cpp
+    ${SRC}/hal/spi/hal_spi.cpp
+    ${SRC}/hal/serial/hal_uart.cpp
+    ${SRC}/hal/network/wireguard/hal_wireguard.cpp
+    ${SRC}/hal/network/http/hal_http_client.cpp
+    ${SRC}/hal/network/jh_network_backend.cpp
+    ${SRC}/hal/network/jh_network_handle_pool.cpp
+    ${SRC}/hal/network/jh_public_network_backend_adapter.cpp
+    ${SRC}/hal/network/ota/jh_ota_image.cpp
+    ${SRC}/hal/network/ota/jh_ota_swap_engine.cpp
+    ${SRC}/hal/can/hal_can_util.cpp
+    ${SRC}/hal/network/tls/BearSSL/jh_bearssl_engine.cpp
+    ${SRC}/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp
+    ${SRC}/hal/network/tls/BearSSL/jh_bearssl_provider.cpp
+    ${SRC}/hal/gps/gps_nmea_parser.cpp
+    ${SRC}/hal/gps/hal_gps_core.cpp
+    ${SRC}/hal/network/http/hal_http_server.cpp
+    ${SRC}/hal/network/http/hal_http_files.cpp
+    ${SRC}/hal/network/websocket/hal_websocket.cpp
+    ${SRC}/hal/network/net_console/hal_net_console.cpp
+    ${SRC}/hal/network/net_commands/hal_net_commands.cpp
+    ${SRC}/hal/debug/hal_debug_format.cpp
+    ${SRC}/hal/time/jh_calendar.c
+    ${SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
+    ${SRC}/hal/can/mcp251xfd/mcp251xfd_driver.cpp
+    ${SRC}/hal/security/hal_crypto.cpp
+    ${SRC}/hal/security/hal_crc.cpp
+    ${SRC}/hal/audio/hal_pga2311.cpp
+    ${SRC}/hal/network/wireguard/core/crypto/blake2s.c
+    ${SRC}/hal/network/wireguard/core/crypto/chacha20.c
+    ${SRC}/hal/network/wireguard/core/crypto/chacha20poly1305.c
+    ${SRC}/hal/network/wireguard/core/crypto/crypto.c
+    ${SRC}/hal/network/wireguard/core/crypto/poly1305-donna.c
+    ${SRC}/hal/network/wireguard/core/crypto/x25519.c
+    ${SRC}/hal/analog/hal_digipot.cpp
+    ${SRC}/hal/analog/digipot/digipot_mcp401x.cpp
+    ${SRC}/hal/analog/digipot/digipot_max5395.cpp
+    ${SRC}/hal/audio/pga2311/pga2311_driver.cpp
+    ${SRC}/hal/nfc/mfrc522/mfrc522.cpp
+    ${SRC}/hal/nfc/mfrc522/mfrc522_spi.cpp
+    ${SRC}/hal/nfc/mfrc522/mfrc522_i2c.cpp
+    ${SRC}/hal/nfc/pn532/pn532.cpp
+    ${SRC}/hal/nfc/pn532/pn532_spi.cpp
+    ${SRC}/hal/nfc/pn532/pn532_i2c.cpp
+    ${SRC}/hal/nfc/pn532/pn532_uart.cpp
+    ${SRC}/hal/gpio/simple_io/hal_simple_io_drivers.cpp
+    ${SRC}/hal/audio/dacless/dacless.cpp
+    ${SRC}/hal/temperature/dht/hal_dht.cpp
+    ${SRC}/hal/power/adp5360/hal_adp5360.cpp
+    ${SRC}/hal/network/cyw43/jh_cyw43_driver.cpp
+    ${SRC}/hal/network/cyw43/jh_cyw43_gspi_transport.cpp
+    ${SRC}/hal/network/cyw43/jh_cyw43_lwip.cpp
+    ${SRC}/hal/network/cyw43/jh_cyw43_radio.cpp
+    ${SRC}/hal/network/cyw43/jh_cyw43_radio_runtime.cpp
+    ${SRC}/hal/serial/swserial/hal_swserial.cpp
+    ${SRC}/hal/storage/flash/jh_flash_transaction_engine.cpp
+    ${SRC}/hal/storage/hal_kv.cpp
+    ${SRC}/hal/modem/hal_modem_at.cpp
+    ${SRC}/hal/modem/hal_simcom_a76xx.cpp
+    ${SRC}/hal/timers/hal_timer_ext.cpp
+    ${SRC}/hal/timers/hal_soft_timer.cpp
+    ${SRC}/hal/timers/smart_timers/SmartTimers.cpp
     ${SRC}/utils/tools.cpp
     ${SRC}/utils/pidController.cpp
-    ${SRC}/hal/impl/shared/frameworks/cjson/cJSON.c
-    ${SRC}/hal/impl/shared/frameworks/cjson/cJSON_Utils.c
-    ${SRC}/hal/impl/shared/frameworks/lodepng/lodepng.cpp
-    ${SRC}/hal/impl/shared/frameworks/jpeg/tjpgd.c
+    ${SRC}/hal/codecs/cjson/cJSON.c
+    ${SRC}/hal/codecs/cjson/cJSON_Utils.c
+    ${SRC}/hal/codecs/lodepng/lodepng.cpp
+    ${SRC}/hal/codecs/jpeg/tjpgd.c
     ${JH_SX126X_SOURCES}
 )
 
@@ -190,8 +199,8 @@ add_library(hal_mock STATIC
 )
 if(NOT WIN32)
     target_sources(hal_mock PRIVATE
-        ${SRC}/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp
-        ${SRC}/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
+        ${SRC}/hal/network/adapters/bsd/hal_bsd_sockets.cpp
+        ${SRC}/hal/network/tls/BearSSL/jh_bearssl_bsd_io.cpp
     )
 endif()
 
@@ -210,7 +219,7 @@ else()
 endif()
 
 target_compile_definitions(hal_mock PUBLIC
-    HAL_TARGET_MOCK         # base backend selection (see src/hal/hal_target.h)
+    HAL_TARGET_MOCK         # base backend selection (see src/hal/core/hal_target.h)
     UNITY_INCLUDE_CONFIG_H  # use the project's unity_config.h
     HAL_DISPLAY_ILI9341     # explicit TFT driver choice for host tests
     # Opt-in modules: host tests exercise the full HAL surface, so we
@@ -354,20 +363,20 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         COMPILE_OPTIONS "-w")
 
     add_library(hal_freertos_posix STATIC
-        ${SRC}/hal/hal_assert.cpp
-        ${SRC}/hal/hal_serial.cpp
+        ${SRC}/hal/core/hal_assert.cpp
+        ${SRC}/hal/serial/hal_serial.cpp
         ${SRC}/hal/impl/stm32g474/hal_sync.cpp
-        ${SRC}/hal/impl/shared/debug/hal_debug_format.cpp
+        ${SRC}/hal/debug/hal_debug_format.cpp
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/freertos_posix_serial_port.cpp
         ${SRC}/hal/impl/stm32g474/hal_system.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
         ${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
-        ${SRC}/hal/hal_config.cpp
-        ${SRC}/hal/impl/shared/network/jh_network_service.cpp
-        ${SRC}/hal/impl/shared/frameworks/smart_timers/SmartTimers.cpp
-        ${SRC}/hal/hal_lora_radio.cpp
-        ${SRC}/hal/impl/shared/drivers/sx126x/jh_sx126x_adapter.cpp
-        ${SRC}/hal/impl/shared/jh_handle_pool.cpp
+        ${SRC}/hal/core/hal_config.cpp
+        ${SRC}/hal/network/jh_network_service.cpp
+        ${SRC}/hal/timers/smart_timers/SmartTimers.cpp
+        ${SRC}/hal/radio/hal_lora_radio.cpp
+        ${SRC}/hal/radio/sx126x/jh_sx126x_adapter.cpp
+        ${SRC}/hal/core/jh_handle_pool.cpp
         ${JH_SX126X_SOURCES}
         ${SRC}/utils/unity.c
         ${CMAKE_CURRENT_SOURCE_DIR}/tests/freertos_posix_lora_port.cpp

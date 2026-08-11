@@ -1,7 +1,7 @@
-#include "hal/hal_bh1750.h"
-#include "hal/hal_i2c.h"
-#include "hal/hal_system.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/sensors/hal_bh1750.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 static hal_bh1750_t dev;

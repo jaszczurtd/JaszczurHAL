@@ -1,10 +1,10 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_TCP
 
-#include "../shared/network/jh_network_backend.h"
+#include "hal/network/jh_network_backend.h"
 #define hal_tcp_socket_impl_t jh_cyw43_tcp_socket_impl_t
 #define hal_tcp_listener_impl_t jh_cyw43_tcp_listener_impl_t
 #define hal_tcp_socket_t jh_cyw43_tcp_socket_t
@@ -33,15 +33,15 @@
 #define hal_tcp_listener_can_accept jh_cyw43_tcp_listener_can_accept
 #define hal_tcp_listener_close jh_cyw43_tcp_listener_close
 
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../../hal_system.h"
-#include "../../hal_tcp.h"
-#include "../shared/hal_mutex_once.h"
-#include "../shared/network/jh_net_address_utils.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/jh_net_address_utils.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 
-#include "../shared/network/jh_lwip_tcp.h"
 #include "drivers/rp2040/rp2040_cyw43_provider.h"
+#include "hal/network/jh_lwip_tcp.h"
 #include "rp2040_network_lifecycle.h"
 #include <limits.h>
 #include <string.h>

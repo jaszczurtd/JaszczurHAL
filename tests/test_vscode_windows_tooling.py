@@ -228,16 +228,16 @@ attributes = {
     "vscode/entry/jh-vscode": "lf",
     "vscode/entry/jh-vscode.cmd": "crlf",
     "vscode/entry/jh_vscode.py": "lf",
-    "src/hal/impl/shared/drivers/cyw43-driver/vendor/src/cyw43_ll.c.upstream": "lf",
+    "src/hal/network/cyw43/vendor/src/cyw43_ll.c.upstream": "lf",
     "src/hal/impl/rp2040/drivers/swserial/swserial.pio": "lf",
     "tests/fixtures/tls_test_ca_der.inc": "lf",
-    "src/hal/impl/shared/drivers/cyw43-driver/LICENSE.RP": "lf",
+    "src/hal/network/cyw43/LICENSE.RP": "lf",
 }
 for path, expected in attributes.items():
     result = run_checked(["git", "check-attr", "eol", "--", path], cwd=ROOT)
     require(result.stdout.strip().endswith(f"eol: {expected}"), f"wrong eol policy for {path}")
 upstream_files = sorted(
-    ROOT.glob("src/hal/impl/shared/drivers/cyw43-driver/vendor/src/*.upstream")
+    ROOT.glob("src/hal/network/cyw43/vendor/src/*.upstream")
 )
 require(len(upstream_files) == 9, "CYW43 upstream fixture set changed unexpectedly")
 for path in upstream_files:

@@ -1,5 +1,5 @@
-#include "hal/hal_time.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/time/hal_time.h"
 #include "utils/unity.h"
 
 #include <string.h>

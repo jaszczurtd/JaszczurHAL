@@ -1,9 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_PCNT
 
-#include "../../hal_pcnt.h"
+#include "hal/analog/hal_pcnt.h"
 #include "hal_mock.h"
 
 #define MOCK_PCNT_CHANNELS 4

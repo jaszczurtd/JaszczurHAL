@@ -1,6 +1,6 @@
-#include "hal/hal_adp5360.h"
-#include "hal/hal_i2c.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/power/hal_adp5360.h"
 #include "utils/unity.h"
 
 static hal_adp5360_t dev;

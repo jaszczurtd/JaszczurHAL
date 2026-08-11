@@ -1,12 +1,13 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_UDP
 
-#include "../../hal_serial.h"
-#include "../../hal_udp.h"
-#include "../shared/network/jh_net_address_utils.h"
+#include "hal/network/hal_udp.h"
+#include "hal/network/jh_net_address_utils.h"
+#include "hal/network/jh_net_validation.h"
+#include "hal/serial/hal_serial.h"
 #include "hal_mock.h"
 
 #include <stdio.h>
@@ -45,43 +46,14 @@ struct hal_udp_socket_impl_t {
 static hal_udp_socket_impl_t s_udp_pool[HAL_UDP_SOCKET_MAX_INSTANCES];
 static hal_udp_socket_t s_default_udp = NULL;
 
-static bool validate_out(char *out, size_t out_size, const char *fn) {
-  if (!out) {
-    hal_derr("%s: output buffer is NULL", fn);
-    return false;
-  }
-  if (out_size == 0u) {
-    hal_derr("%s: output buffer size is 0", fn);
-    return false;
-  }
-  return true;
-}
-
-static bool validate_non_empty(const char *value, const char *fn,
-                               const char *name) {
-  if (!value || value[0] == '\0') {
-    hal_derr("%s: %s is NULL/empty", fn, name);
-    return false;
-  }
-  return true;
-}
+#define validate_out jh_net_validate_output
+#define validate_non_empty jh_net_validate_non_empty
 
 static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
                                       bool allow_unspecified_address,
                                       const char *fn, const char *name) {
-  const hal_status_t shape =
-      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
-  if (shape != HAL_OK) {
-    hal_derr("%s: %s endpoint is malformed", fn, name);
-    return shape;
-  }
-  const hal_net_capabilities_t required =
-      endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
-  if ((hal_net_get_capabilities() & required) == 0u) {
-    hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return HAL_EUNSUPPORTED;
-  }
-  return HAL_OK;
+  return jh_net_validate_supported_endpoint_logged(
+      endpoint, allow_unspecified_address, fn, name);
 }
 
 static void endpoint_to_ip_string(const hal_net_endpoint_t *endpoint, char *out,
@@ -591,34 +563,6 @@ hal_status_t hal_udp_write_ex(const uint8_t *data, uint16_t len,
 
   *out_written = to_copy;
   return to_copy == len ? HAL_OK : HAL_EOVERFLOW;
-}
-
-uint16_t hal_udp_write(const uint8_t *data, uint16_t len) {
-  uint16_t written = 0u;
-  (void)hal_udp_write_ex(data, len, &written);
-  return written;
-}
-
-hal_status_t hal_udp_write_str_ex(const char *text, uint16_t *out_written) {
-  if (!text) {
-    hal_derr("hal_udp_write_str: text is NULL");
-    return HAL_EINVAL;
-  }
-  if (!out_written) {
-    return HAL_EINVAL;
-  }
-  const size_t len = strlen(text);
-  if (len > UINT16_MAX) {
-    *out_written = 0u;
-    return HAL_EOVERFLOW;
-  }
-  return hal_udp_write_ex((const uint8_t *)text, (uint16_t)len, out_written);
-}
-
-uint16_t hal_udp_write_str(const char *text) {
-  uint16_t written = 0u;
-  (void)hal_udp_write_str_ex(text, &written);
-  return written;
 }
 
 hal_status_t hal_udp_end_packet_ex(void) {

@@ -1,6 +1,6 @@
 #include "fakes/lwip_fake.h"
-#include "hal/impl/shared/network/jh_lwip_tcp.h"
-#include "hal/impl/shared/network/jh_lwip_udp.h"
+#include "hal/network/jh_lwip_tcp.h"
+#include "hal/network/jh_lwip_udp.h"
 #include "utils/unity.h"
 
 #include <string.h>

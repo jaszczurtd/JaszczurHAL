@@ -1,4 +1,4 @@
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifndef HAL_ENABLE_TLS
 #error "TLS probe must enable HAL_ENABLE_TLS"

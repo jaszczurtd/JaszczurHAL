@@ -1,7 +1,7 @@
 #pragma once
 
-#include "hal/hal_status.h"
-#include "hal/impl/shared/network/ota/jh_ota_image.h"
+#include "hal/core/hal_status.h"
+#include "hal/network/ota/jh_ota_image.h"
 
 #include <stddef.h>
 #include <stdint.h>

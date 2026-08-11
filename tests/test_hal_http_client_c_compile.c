@@ -1,4 +1,4 @@
-#include "hal/hal_http_client.h"
+#include "hal/network/http/hal_http_client.h"
 
 int main(void) {
   hal_http_client_request_t request;

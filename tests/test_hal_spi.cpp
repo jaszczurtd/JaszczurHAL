@@ -1,5 +1,5 @@
-#include "hal/hal_spi.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/spi/hal_spi.h"
 #include "utils/unity.h"
 
 void setUp(void) { hal_mock_spi_reset(); }

@@ -1,10 +1,11 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_ONEWIRE
 
-#include "../../hal_onewire.h"
-#include "../../hal_sync.h"
+#include "hal/onewire/hal_onewire.h"
+#include "hal/onewire/hal_onewire_pool.h"
+#include "hal/system/hal_sync.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -83,25 +84,11 @@ static inline void onewire_exit_op(hal_onewire_t h) {
 }
 
 hal_onewire_t hal_onewire_init(uint8_t data_pin) {
-  hal_critical_section_enter();
-  int slot = -1;
-  for (int i = 0; i < HAL_ONEWIRE_MAX_INSTANCES; ++i) {
-    if (!s_pool[i].in_use) {
-      slot = i;
-      s_pool[i].in_use = true;
-      break;
-    }
-  }
-  hal_critical_section_exit();
-
-  HAL_ASSERT(
-      slot >= 0,
-      "hal_onewire: pool exhausted - increase HAL_ONEWIRE_MAX_INSTANCES");
-  if (slot < 0) {
+  hal_onewire_impl_t *h =
+      jh_onewire_allocate_pool_slot(s_pool, HAL_ONEWIRE_MAX_INSTANCES);
+  if (h == NULL) {
     return NULL;
   }
-
-  hal_onewire_impl_t *h = &s_pool[slot];
   memset(h, 0, sizeof(*h));
   h->in_use = true;
   h->pin = data_pin;

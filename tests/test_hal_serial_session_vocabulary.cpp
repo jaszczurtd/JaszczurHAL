@@ -1,69 +1,17 @@
-#include "hal/hal_serial.h"
-#include "hal/hal_serial_frame.h"
-#include "hal/hal_serial_session.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/serial/hal_serial_frame.h"
+#include "hal/serial/hal_serial_session.h"
+#include "support/serial_session_test_helpers.h"
 #include "utils/unity.h"
 
 #include <stdio.h>
 #include <string.h>
 
-/* ── Test framing helpers (copied from test_hal_serial_session.cpp) ─────── */
-
-static bool build_framed_line(uint16_t seq, const char *payload, char *out,
-                              size_t out_size, char terminator) {
-  size_t frame_len = 0u;
-  if (!hal_serial_frame_encode(seq, payload, out, out_size, &frame_len)) {
-    return false;
-  }
-  if (frame_len + 2u > out_size) {
-    return false;
-  }
-  out[frame_len] = terminator;
-  out[frame_len + 1u] = '\0';
-  return true;
-}
-
-static void inject_framed_line(uint16_t seq, const char *payload,
-                               char terminator) {
-  char line[HAL_SERIAL_FRAME_LINE_MAX + 2u];
-  TEST_ASSERT_TRUE(
-      build_framed_line(seq, payload, line, sizeof(line), terminator));
-  hal_mock_serial_inject_rx(line, -1);
-}
-
-static bool decode_last_framed_reply(uint16_t *seq_out, char *payload_out,
-                                     size_t payload_out_size) {
-  return hal_serial_frame_decode(hal_mock_serial_last_line(), seq_out,
-                                 payload_out, payload_out_size);
-}
-
 /* Mock UID matches the default mock device UID set by
  * hal_mock_reset_device_uid. */
 static const uint8_t k_mock_uid[HAL_DEVICE_UID_BYTES] = {
     0xE6u, 0x61u, 0xA4u, 0xD1u, 0x23u, 0x45u, 0x67u, 0xABu};
-
-static void bytes_to_hex_lower(const uint8_t *bytes, size_t len, char *out,
-                               size_t out_size) {
-  static const char k_hex[] = "0123456789abcdef";
-  if (len * 2u + 1u > out_size) {
-    if (out_size > 0u)
-      out[0] = '\0';
-    return;
-  }
-  for (size_t i = 0u; i < len; ++i) {
-    out[i * 2u] = k_hex[(bytes[i] >> 4) & 0x0Fu];
-    out[i * 2u + 1u] = k_hex[bytes[i] & 0x0Fu];
-  }
-  out[len * 2u] = '\0';
-}
-
-static void hex_to_bytes(const char *hex, uint8_t *out, size_t out_len) {
-  for (size_t i = 0u; i < out_len; ++i) {
-    unsigned int v = 0u;
-    sscanf(hex + i * 2u, "%2x", &v);
-    out[i] = (uint8_t)v;
-  }
-}
 
 /* ── Custom vocabulary used by the override tests ───────────────────────── */
 
@@ -95,6 +43,29 @@ static const hal_serial_session_vocabulary_t k_partial_vocab = {
     /* cmd_* and reply_auth_* fields are zero-initialised -> NULL -> default. */
     .reply_unknown_cmd = "Y_UNKNOWN",
 };
+
+static void submit_custom_auth_proof(hal_serial_session_t *session,
+                                     const char *challenge_payload) {
+  static const char k_prefix[] = "X_OK AUTH_CHALLENGE ";
+  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
+  hex_to_bytes(challenge_payload + sizeof(k_prefix) - 1u, challenge,
+               sizeof(challenge));
+
+  uint8_t key[HAL_SC_AUTH_KEY_BYTES];
+  TEST_ASSERT_TRUE(
+      hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
+  uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
+  TEST_ASSERT_TRUE(hal_sc_auth_compute_response(
+      key, challenge, sizeof(challenge), hal_serial_session_id(session), mac));
+  char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
+  bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
+
+  char prove_line[256];
+  snprintf(prove_line, sizeof(prove_line), "X_AUTH_PROVE %s", hex);
+  inject_framed_line(3u, prove_line, '\n');
+  hal_serial_session_poll(session);
+  TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(session));
+}
 
 void setUp(void) {
   hal_debug_init(115200);
@@ -185,26 +156,7 @@ void test_custom_vocab_renames_auth_command_and_replies(void) {
   TEST_ASSERT_EQUAL_INT(
       0, strncmp(reply_payload, k_prefix, sizeof(k_prefix) - 1u));
 
-  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
-  hex_to_bytes(reply_payload + sizeof(k_prefix) - 1u, challenge,
-               sizeof(challenge));
-
-  /* Compute valid response and submit via renamed prove command. */
-  uint8_t key[HAL_SC_AUTH_KEY_BYTES];
-  TEST_ASSERT_TRUE(
-      hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
-  uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
-  TEST_ASSERT_TRUE(hal_sc_auth_compute_response(
-      key, challenge, sizeof(challenge), hal_serial_session_id(&s), mac));
-  char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
-  bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
-
-  char prove_line[256];
-  snprintf(prove_line, sizeof(prove_line), "X_AUTH_PROVE %s", hex);
-  inject_framed_line(3u, prove_line, '\n');
-  hal_serial_session_poll(&s);
-
-  TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(&s));
+  submit_custom_auth_proof(&s, reply_payload);
   TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, reply_payload,
                                             sizeof(reply_payload)));
   TEST_ASSERT_EQUAL_UINT16(3u, reply_seq);
@@ -249,27 +201,10 @@ void test_custom_vocab_reboot_emits_renamed_reply(void) {
   inject_framed_line(2u, "X_AUTH_BEGIN", '\n');
   hal_serial_session_poll(&s);
 
-  static const char k_prefix[] = "X_OK AUTH_CHALLENGE ";
   char challenge_payload[192];
   TEST_ASSERT_TRUE(decode_last_framed_reply(&reply_seq, challenge_payload,
                                             sizeof(challenge_payload)));
-  uint8_t challenge[HAL_SC_AUTH_CHALLENGE_BYTES];
-  hex_to_bytes(challenge_payload + sizeof(k_prefix) - 1u, challenge,
-               sizeof(challenge));
-
-  uint8_t key[HAL_SC_AUTH_KEY_BYTES];
-  TEST_ASSERT_TRUE(
-      hal_sc_auth_derive_device_key(k_mock_uid, sizeof(k_mock_uid), key));
-  uint8_t mac[HAL_SC_AUTH_RESPONSE_BYTES];
-  TEST_ASSERT_TRUE(hal_sc_auth_compute_response(
-      key, challenge, sizeof(challenge), hal_serial_session_id(&s), mac));
-  char hex[HAL_SC_AUTH_RESPONSE_BYTES * 2u + 1u];
-  bytes_to_hex_lower(mac, sizeof(mac), hex, sizeof(hex));
-  char prove_line[256];
-  snprintf(prove_line, sizeof(prove_line), "X_AUTH_PROVE %s", hex);
-  inject_framed_line(3u, prove_line, '\n');
-  hal_serial_session_poll(&s);
-  TEST_ASSERT_TRUE(hal_serial_session_is_authenticated(&s));
+  submit_custom_auth_proof(&s, challenge_payload);
 
   /* Reboot via renamed command, expect renamed ACK + bootloader entry. */
   inject_framed_line(4u, "X_REBOOT", '\n');

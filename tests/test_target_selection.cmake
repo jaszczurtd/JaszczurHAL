@@ -160,7 +160,7 @@ check_project_target(umbrella "${mock_CONFIG_DIR}" TRUE ""
 
 # STM32 firmware force-includes hal_target.h before compiling each source.
 check_project_target(forced_include_stm32 "${stm32_CONFIG_DIR}" TRUE ""
-    -D__arm__=1 -include "${_include}/hal/hal_target.h"
+    -D__arm__=1 -include "${_include}/hal/core/hal_target.h"
     -DJH_PROBE_FORCED_TARGET=1
     -DJH_EXPECT_BOARD_ID=HAL_BOARD_STM32G474_GENERIC
     -DJH_EXPECT_STM32G474=1 -DJH_EXPECT_NAME_STM32G474=1)

@@ -1,5 +1,5 @@
-#include "hal/hal_ds18b20.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/temperature/hal_ds18b20.h"
 #include "utils/unity.h"
 
 #include <atomic>

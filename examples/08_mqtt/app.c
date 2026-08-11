@@ -1,7 +1,7 @@
-#include <hal/hal_app.h>
-#include <hal/hal_mqtt.h>
-#include <hal/hal_system.h>
-#include <hal/hal_wifi.h>
+#include <hal/core/hal_app.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/network/mqtt/hal_mqtt.h>
+#include <hal/system/hal_system.h>
 #include <stdio.h>
 #include <tools_c.h>
 

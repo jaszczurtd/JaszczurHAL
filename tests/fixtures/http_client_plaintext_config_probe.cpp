@@ -1,4 +1,4 @@
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifndef HAL_ENABLE_HTTP_CLIENT
 #error "HTTP client must remain enabled"

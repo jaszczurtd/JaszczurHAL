@@ -96,12 +96,24 @@ src/
   libConfig.h               # backward-compat include
   tools.h, tools_c.h        # utility aggregators (C++ / C)
   arpa/, netinet/, sys/     # host/embedded socket compatibility headers
-  hal/                      # HAL public headers + common wrappers
-    hal_target.h            # backend selection
-    hal_config.h            # compile-time configuration compatibility facade
-    hal_runtime_config.h    # runtime pool-limit configuration API
-    hal_assert.h            # portable HAL assertion API
-    hal_compat.h            # portable source-compatibility helpers
+  hal/                      # HAL umbrella + thematic shared domains
+    hal.h                   # HAL-only umbrella include
+    core/                   # configuration, status, assertions, compatibility
+    bluetooth/              # BLE public API, facade, and shared BTstack glue
+    i2c/, spi/, serial/     # bus and serial APIs with common implementations
+    time/, rtc/             # time-of-day, calendar, NTP, and RTC drivers
+    timers/                 # hardware, extended, soft, and SmartTimers APIs
+    temperature/            # DHT, DS18B20, MAX6675, and MCP9600
+    network/                # core TCP/UDP/Wi-Fi and shared network runtime
+      http/, mqtt/, ota/    # co-located public APIs and implementations
+      tls/, wireguard/      # secure transports and reusable engines
+      websocket/            # WebSocket public API and implementation
+      net_console/          # remote console public API and implementation
+      net_commands/         # command API and implementation
+      cyw43/, lwip/         # radio and IP-stack integration
+    storage/                # EEPROM, KV, SD logger, filesystem, flash helpers
+    display/, gpio/         # display/GFX and GPIO-oriented drivers
+    analog/, audio/, can/   # additional thematic API and driver domains
     generated/              # generated production C feature closure/report
     impl/
       .mock/                # deterministic host/test backend
@@ -111,13 +123,6 @@ src/
         drivers/usb/        # native TinyUSB CDC configuration/descriptors
         freertos/           # native RP FreeRTOSConfig and hooks
         frameworks/         # RP-specific framework integrations
-      shared/               # target-neutral drivers/engines reused by RP2040 + STM32
-        debug/              # shared serial/debug formatting and port contract
-        drivers/            # hardware-oriented drivers and transaction engines
-        frameworks/         # reusable engines/stacks and bundled portable libs
-        network/
-          adapters/bsd/     # public BSD/POSIX adapter over HAL UDP/TCP
-          services/         # HTTP, WebSocket, console and command services
       stm32g474/            # STM32G474 backend
         drivers/
           stm32g474/        # STM32G474 SoC services (fault/system)
@@ -133,10 +138,12 @@ third_party/                # tracked pins + ignored managed component installs
   littlefs/                 # ignored pinned upstream filesystem checkout
 ```
 
-`src/hal/impl/shared/` contains internal, backend-agnostic implementation code
-reused by at least two hardware backends. It depends only on HAL-level
-contracts, behaves identically across supported targets, and keeps per-target
-`#if HAL_TARGET_IS_*` branches out of shared implementation files.
+Target-independent code is co-located with its public API in the corresponding
+`src/hal/<domain>/` directory. A domain may contain public `hal_*.h` headers,
+common facades, private `jh_*` helpers, device-driver subdirectories, and
+reusable engines. This keeps one thematic hierarchy for both declarations and
+implementations. `src/hal/impl/` is reserved for target-specific ports and
+backends; portable domain code must depend only on HAL-level contracts.
 
 ### Compile-time feature resolution
 
@@ -193,33 +200,37 @@ link the fixed package without invoking Python.
 - `security/vulnerability_log.md` - CVE/CVSS assessment and patch-decision log.
 - `src/JaszczurHAL.h` - umbrella include for HAL + utility modules.
 - `doc/HAL_FLAGS.txt` - concise `HAL_ENABLE_*` flag summary.
-- `src/libConfig.h` - backward-compat redirect to `hal/hal_config.h`.
+- `src/libConfig.h` - backward-compat redirect to `hal/core/hal_config.h`.
 - `src/tools.h` - C++ utility aggregator.
 - `src/tools_c.h` - C-compatible utility declarations.
 - `src/hal/hal.h` - HAL-only umbrella include.
-- `src/hal/hal_config.h` - compatibility facade for build-time feature
+- `src/hal/core/hal_config.h` - compatibility facade for build-time feature
   selection, dependency propagation and project configuration.
-- `src/hal/hal_runtime_config.h` and `src/hal/hal_config.cpp` - runtime
+- `src/hal/core/hal_runtime_config.h` and `src/hal/core/hal_config.cpp` - runtime
   pool-limit configuration API and implementation.
-- `src/hal/hal_assert.h` and `src/hal/hal_assert.cpp` - portable assertion API
+- `src/hal/core/hal_assert.h` and `src/hal/core/hal_assert.cpp` - portable assertion API
   and target-aware failure implementation.
-- `src/hal/hal_compat.h` - `PROGMEM`, `F()`, `hal_min()` and `hal_max()`
+- `src/hal/core/hal_compat.h` - `PROGMEM`, `F()`, `hal_min()` and `hal_max()`
   source-compatibility helpers.
-- `src/hal/*.h` - public HAL module interfaces such as GPIO, ADC, PWM, timers, sync, serial, crypto, I2C, SPI, OneWire, CAN, display, thermocouple/DS18B20 sensors, RTC, GPS, EEPROM, SD logger, simple external I/O chips, WiFi, UDP, WireGuard, MQTT, and time.
-- `src/hal/hal_can_util.cpp`, `src/hal/hal_crypto.cpp`, `src/hal/hal_crc.cpp`, `src/hal/hal_gps.cpp`, `src/hal/hal_kv.cpp`, `src/hal/hal_pga2311.cpp`, `src/hal/hal_rtc.cpp`, `src/hal/hal_soft_timer.cpp`, `src/hal/hal_pid_controller.cpp` - shared HAL wrapper and facade implementations.
-- `src/hal/hal_uart_config.h` - UART configuration constants and helpers.
-- `src/hal/hal_status.h` - shared `hal_status_t` result codes for new public
+- `src/hal/<domain>/hal_*.h` - public HAL module interfaces grouped by topic,
+  such as GPIO, buses, serial, security, sensors, storage, display, and network.
+- `src/hal/can/hal_can_util.cpp`, `src/hal/security/hal_crypto.cpp`, `src/hal/security/hal_crc.cpp`, `src/hal/gps/hal_gps.cpp`, `src/hal/storage/hal_kv.cpp`, `src/hal/audio/hal_pga2311.cpp`, `src/hal/rtc/hal_rtc.cpp`, `src/hal/timers/hal_soft_timer.cpp`, `src/hal/control/hal_pid_controller.cpp` - shared HAL wrapper and facade implementations.
+- `src/hal/serial/hal_uart_config.h` - UART configuration constants and helpers.
+- `src/hal/core/hal_status.h` - shared `hal_status_t` result codes for new public
   APIs.
-- `src/hal/hal_board.h` and `src/hal/hal_board.cpp` - board-profile identity,
+- `src/hal/system/hal_board.h` and `src/hal/system/hal_board.cpp` - board-profile identity,
   compile-time physical facts and thread-safe runtime capability state.
 - `src/hal/impl/rp2040/` - RP-family backend.
 - `src/hal/impl/stm32g474/` - STM32G474 backend (real register-level core domains; remaining modules in progress).
 - `src/hal/impl/.mock/` - deterministic host-test backend.
-- `src/hal/impl/shared/` - internal backend-agnostic code reused by multiple hardware backends. Hardware-oriented modules live under `drivers/` (`ads1x15/`, `digipot/`, `display/`, `ds18b20/`, `ds3231/`, `max6675/`, `mcp2515/`, `mcp251xfd/`, `mcp9600/`, `mfrc522/`, `neopixel/`, `onewire/`, `pcf8563/`, `pga2311/`, `simple_io/`, etc.); RTC provider dispatch lives under `rtc/`; Gregorian validation and Unix conversion live under `time/`. Larger reusable stacks and engines live under `frameworks/` (`cjson/`, `filesystem/`, `gps/`, `irsmall_decoder/`, `jpeg/`, `lodepng/`, `smart_timers/`, `wireguard/`).
+- `src/hal/<domain>/` - public headers and backend-agnostic implementations in
+  one thematic directory; examples include `bluetooth/`, `network/`, `time/`,
+  `timers/`, `temperature/`, `i2c/`, `spi/`, `display/`, and `storage/`.
 - `src/hal/impl/rp2040/drivers/` - bundled low-level third-party drivers used by optional HAL modules.
 - `src/hal/impl/rp2040/drivers/rp2040/` - SoC-specific drivers: `rp2040_fault.{h,cpp}` (HardFault capture, stack guard, reset-reason latch) and `rp2040_system.{h,cpp}` (watchdog, USB-boot entry, on-die temperature, free-heap, unique board id, idle hint).
 - `src/hal/impl/stm32g474/drivers/stm32g474/` - SoC-specific drivers: `stm32g474_fault.{h,cpp}` (reset-reason classification, retained fault handoff, stack guard) and `stm32g474_system.{h,cpp}` (time, delay, watchdog, temperature, UID, idle / ISR-sensitive helpers).
-- `src/hal/impl/shared/frameworks/` - bundled target-neutral high-level engines, including PubSubClient and WireGuard.
+- `src/hal/network/mqtt/PubSubClient/` and
+  `src/hal/network/wireguard/core/` - bundled target-neutral network engines.
 - `src/utils/` - higher-level utilities: `tools`, `pidController`, `multicoreWatchdog`, `draw7Segment`, and managed Unity integration.
 
 `JaszczurHAL.h` is the current top-level public include and should be the
@@ -323,7 +334,7 @@ A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
 
-Public types and functions (`hal/hal_board.h`):
+Public types and functions (`hal/system/hal_board.h`):
 
 ```c
 typedef uint32_t hal_board_capabilities_t;   /* HAL_BOARD_CAP_* bitmask */

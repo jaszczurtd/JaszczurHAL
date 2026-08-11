@@ -1,7 +1,7 @@
-#include <hal/hal_app.h>
-#include <hal/hal_irsmall_decoder.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/input/hal_irsmall_decoder.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #include <stdint.h>

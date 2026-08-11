@@ -433,9 +433,9 @@ metadata, and credentials according to
 
 
 APP_CPP_TEMPLATE = """#include <JaszczurHAL.h>
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_system.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/system/hal_system.h>
 #include <utils/tools_api.h>
 
 extern "C" void app_start(void) {

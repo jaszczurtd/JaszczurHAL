@@ -1,4 +1,4 @@
-#include "hal/hal_display.h"
+#include "hal/display/hal_display.h"
 #include "utils/unity.h"
 
 void hal_mock_spi_reset(void);

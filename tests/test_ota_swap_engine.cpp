@@ -1,4 +1,4 @@
-#include "hal/impl/shared/network/ota/jh_ota_swap_engine.h"
+#include "hal/network/ota/jh_ota_swap_engine.h"
 #include "utils/unity.h"
 
 #include <initializer_list>

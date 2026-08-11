@@ -2,7 +2,7 @@
 
 /* Transitional include for target code.  The provider contract and symbols
  * are backend-common; only the Pico bus/scheduler port lives under rp2040/. */
-#include "../../../../impl/shared/network/jh_cyw43_provider.h"
+#include "hal/network/jh_cyw43_provider.h"
 
 #define jh_rp2040_cyw43_provider_init jh_cyw43_provider_init
 #define jh_rp2040_cyw43_provider_deinit_for_baseline jh_cyw43_provider_deinit

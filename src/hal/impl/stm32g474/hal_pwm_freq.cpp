@@ -1,13 +1,14 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_PWM_FREQ
 
-#include "../../hal_pwm_freq.h"
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/gpio/hal_pwm_freq.h"
+#include "hal/gpio/hal_pwm_freq_pool.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
 #include "hal_pwm_stm32g474.h"
 
 #include <string.h>
@@ -34,13 +35,8 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin, uint32_t frequency_hz,
   pwm_ensure_mutex();
   hal_mutex_lock(pwm_mutex);
 
-  hal_pwm_freq_channel_impl_t *cfg = NULL;
-  for (int i = 0; i < hal_get_config()->pwm_freq_max_channels; i++) {
-    if (!s_pool[i].in_use) {
-      cfg = &s_pool[i];
-      break;
-    }
-  }
+  hal_pwm_freq_channel_impl_t *cfg =
+      jh_hal_pwm_freq_reserve(s_pool, hal_get_config()->pwm_freq_max_channels);
   if (!cfg) {
     hal_mutex_unlock(pwm_mutex);
     HAL_ASSERT(

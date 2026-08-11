@@ -1,19 +1,20 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
-#include "../../../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
 
 #if HAL_BOARD_HAS_CYW43
 
-#include "../../../../hal_sync.h"
-#include "../../../../hal_system.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_radio.h"
-#include "../../../../impl/shared/hal_mutex_once.h"
-#include "../../../../impl/shared/network/jh_cyw43_scan.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/cyw43/jh_cyw43_lwip.h"
+#include "hal/network/cyw43/jh_cyw43_radio.h"
+#include "hal/network/cyw43/jh_cyw43_scan_results.h"
+#include "hal/network/jh_cyw43_scan.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 #include "rp2040_cyw43_platform.h"
 #include "rp2040_cyw43_provider.h"
 
@@ -84,39 +85,10 @@ uint32_t ipv4_from_bytes(const uint8_t address[HAL_NET_IPV4_ADDR_LEN]) {
   return value.addr;
 }
 
-size_t find_scan_result(const uint8_t bssid[HAL_WIFI_BSSID_LEN]) {
-  for (size_t index = 0u; index < s_scan_count; ++index) {
-    if (memcmp(s_scan_results[index].bssid, bssid, HAL_WIFI_BSSID_LEN) == 0) {
-      return index;
-    }
-  }
-  return s_scan_count;
-}
-
 int scan_result_callback(void *, const cyw43_ev_scan_result_t *result) {
-  if (result == nullptr) {
-    return 0;
-  }
-  size_t index = find_scan_result(result->bssid);
-  if (index == s_scan_count) {
-    if (s_scan_count >= HAL_CYW43_SCAN_RESULT_CAPACITY) {
-      s_scan_overflow = true;
-      return 0;
-    }
-    ++s_scan_count;
-  }
-  hal_wifi_scan_result_t *destination = &s_scan_results[index];
-  memset(destination, 0, sizeof(*destination));
-  size_t ssid_length = result->ssid_len;
-  if (ssid_length >= sizeof(destination->ssid)) {
-    ssid_length = sizeof(destination->ssid) - 1u;
-  }
-  memcpy(destination->ssid, result->ssid, ssid_length);
-  memcpy(destination->bssid, result->bssid, HAL_WIFI_BSSID_LEN);
-  destination->encryption = jh_cyw43_scan_auth_to_hal(result->auth_mode);
-  destination->rssi = result->rssi;
-  destination->channel = result->channel;
-  return 0;
+  return jh_cyw43_collect_scan_result(s_scan_results,
+                                      HAL_CYW43_SCAN_RESULT_CAPACITY,
+                                      &s_scan_count, &s_scan_overflow, result);
 }
 
 } // namespace
@@ -477,7 +449,7 @@ jh_rp2040_cyw43_provider_get_scan_result(size_t index,
 
 #else
 
-#include "../../../../impl/shared/network/jh_cyw43_provider.h"
+#include "hal/network/jh_cyw43_provider.h"
 
 struct netif;
 extern "C" struct netif *__getCYW43Netif(void) { return nullptr; }

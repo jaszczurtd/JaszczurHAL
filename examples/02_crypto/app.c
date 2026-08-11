@@ -1,6 +1,6 @@
-#include <hal/hal_app.h>
-#include <hal/hal_crypto.h>
-#include <hal/hal_system.h>
+#include <hal/core/hal_app.h>
+#include <hal/security/hal_crypto.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 static const uint8_t key[HAL_CHACHA20_KEY_BYTES] = {};

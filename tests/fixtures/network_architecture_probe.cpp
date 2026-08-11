@@ -1,4 +1,4 @@
-#include "hal/impl/shared/network/jh_network_architecture.h"
+#include "hal/network/jh_network_architecture.h"
 
 #include <cstring>
 

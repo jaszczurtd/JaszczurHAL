@@ -3,7 +3,7 @@
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
 Covers: `hal_status_t`, the status helper functions in
-[`hal_status.h`](../../src/hal/hal_status.h), in-place status migration and
+[`hal_status.h`](../../src/hal/core/hal_status.h), in-place status migration and
 status-returning `_ex` companions used by migrated modules.
 
 ## Why it exists
@@ -62,7 +62,7 @@ with `errno.h` and the BSD-sockets compatibility layer.
 
 ## Helper functions
 
-All are `static inline` in [`hal_status.h`](../../src/hal/hal_status.h) and are
+All are `static inline` in [`hal_status.h`](../../src/hal/core/hal_status.h) and are
 available from both C and C++:
 
 ```c

@@ -36,12 +36,12 @@ class CpdGateTests(unittest.TestCase):
             "src/hal/impl/stm32g474/hal_eeprom.cpp",
             "src/hal/impl/stm32g474/hal_i2c.cpp",
             "src/hal/impl/stm32g474/hal_can.cpp",
-            "src/hal/impl/shared/network/wireguard/hal_wireguard.cpp",
+            "src/hal/network/wireguard/hal_wireguard.cpp",
         ):
             self.assertIn(expected, sources)
         for excluded in (
             "src/utils/unity.c",
-            "src/hal/impl/shared/frameworks/wireguard/wireguard.c",
+            "src/hal/network/wireguard/core/wireguard.c",
         ):
             self.assertNotIn(excluded, sources)
 
@@ -103,7 +103,7 @@ class CpdGateTests(unittest.TestCase):
                             "src/hal/impl/.mock/a.cpp", 10, 50, 99
                         ),
                         cpd.Occurrence(
-                            "src/hal/impl/shared/a.cpp", 1, 2000, 2049
+                            "src/hal/time/a.cpp", 1, 2000, 2049
                         ),
                     ),
                 ),
@@ -111,14 +111,14 @@ class CpdGateTests(unittest.TestCase):
             {
                 "src/hal/impl/.mock/a.cpp": 200,
                 "src/hal/impl/rp2040/a.cpp": 400,
-                "src/hal/impl/shared/a.cpp": 100,
-                "src/hal/hal_time.cpp": 100,
+                "src/hal/time/a.cpp": 100,
+                "src/utils/tools.cpp": 100,
             },
         )
         coverage = {item.scope: item for item in cpd.duplicate_coverage(report)}
         self.assertEqual(100, coverage["mock"].duplicated_tokens)
         self.assertEqual(100, coverage["rp2040"].duplicated_tokens)
-        self.assertEqual(50, coverage["shared"].duplicated_tokens)
+        self.assertEqual(50, coverage["portable-hal"].duplicated_tokens)
         self.assertEqual(0, coverage["portable-other"].duplicated_tokens)
         self.assertEqual(250, coverage["global"].duplicated_tokens)
         self.assertEqual(800, coverage["global"].total_tokens)

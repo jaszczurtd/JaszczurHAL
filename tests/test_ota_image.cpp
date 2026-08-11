@@ -1,5 +1,5 @@
-#include "hal/hal_crc.h"
-#include "hal/impl/shared/network/ota/jh_ota_image.h"
+#include "hal/network/ota/jh_ota_image.h"
+#include "hal/security/hal_crc.h"
 #include "utils/unity.h"
 
 #include <string.h>

@@ -1,6 +1,6 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_pwm.h"
+#include "hal/gpio/hal_pwm.h"
 #include "hal_mock.h"
 
 static uint8_t s_resolution = 8;

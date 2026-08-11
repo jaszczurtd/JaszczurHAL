@@ -1,9 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_GPS
 
-#include "../shared/frameworks/gps/hal_gps_core.h"
+#include "hal/gps/hal_gps_core.h"
 
 void hal_mock_gps_set_location(double lat, double lng) {
   hal_gps_engine_mock_set_location(lat, lng);

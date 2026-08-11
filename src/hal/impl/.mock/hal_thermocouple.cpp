@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../../hal_thermocouple.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
+#include "hal/temperature/hal_thermocouple.h"
 #include "hal_mock.h"
 #include <math.h>
 #include <stdio.h>

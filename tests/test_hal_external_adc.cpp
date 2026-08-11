@@ -1,4 +1,4 @@
-#include "hal/hal_external_adc.h"
+#include "hal/analog/hal_external_adc.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

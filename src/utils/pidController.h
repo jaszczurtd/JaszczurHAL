@@ -8,10 +8,10 @@
  */
 
 #include "libConfig.h"
-#include <hal/hal_system.h>
-#include <hal/hal_math.h>  // hal_constrain (type-independent macro)
-#include <inttypes.h>
 #include <float.h>
+#include <hal/core/hal_math.h> // hal_constrain (type-independent macro)
+#include <hal/system/hal_system.h>
+#include <inttypes.h>
 #include <math.h>
 
 /** @brief Size of the error history window for oscillation detection. */
@@ -21,8 +21,9 @@
  * @brief Backward-compatible clamp alias.
  * @deprecated Use hal_constrain() directly in new code.
  */
-template<typename T>
-static inline T pid_clamp(T v, T lo, T hi) { return hal_constrain(v, lo, hi); }
+template <typename T> static inline T pid_clamp(T v, T lo, T hi) {
+  return hal_constrain(v, lo, hi);
+}
 
 /** @brief PID direction. */
 enum Direction { FORWARD, BACKWARD };
@@ -32,10 +33,10 @@ enum Direction { FORWARD, BACKWARD };
 
 /** @brief Grouping of PID tuning parameters. */
 typedef struct {
-  float kP;   /**< Proportional gain. */
-  float kI;   /**< Integral gain. */
-  float kD;   /**< Derivative gain. */
-  float Tf;   /**< Derivative low-pass filter time constant. */
+  float kP; /**< Proportional gain. */
+  float kI; /**< Integral gain. */
+  float kD; /**< Derivative gain. */
+  float Tf; /**< Derivative low-pass filter time constant. */
 } PIDValues;
 
 /**
@@ -48,10 +49,11 @@ typedef struct {
 class PIDController {
 public:
   /** @brief Default constructor (all gains zero, limits uninitialised). */
-  PIDController() : dt(0.001f), last_time(0.0f), integral(0.0f), previous(0.0f),
-                    output(0.0f), pid_kp(0.0f), pid_ki(0.0f), pid_kd(0.0f),
-                    max_integral(0.0f), dir(FORWARD),
-                    errorHistory{}, errorHistoryHead(0), errorHistoryCount(0) {
+  PIDController()
+      : dt(0.001f), last_time(0.0f), integral(0.0f), previous(0.0f),
+        output(0.0f), pid_kp(0.0f), pid_ki(0.0f), pid_kd(0.0f),
+        max_integral(0.0f), dir(FORWARD), errorHistory{}, errorHistoryHead(0),
+        errorHistoryCount(0) {
     setOutputLimits(PID_UNINITIALIZED, PID_UNINITIALIZED);
   }
 
@@ -65,7 +67,7 @@ public:
   PIDController(float kp, float ki, float kd, float mi);
 
   /** @brief Set proportional gain. */
-  void setKp(float kp); 
+  void setKp(float kp);
   /** @brief Set integral gain. */
   void setKi(float ki);
   /** @brief Set derivative gain. */
@@ -125,7 +127,8 @@ public:
   /**
    * @brief Detect oscillation in the recent error history.
    * @param currentError Current error value.
-   * @param windowSize   Number of history samples to analyse (max PID_OSCILLATION_WINDOW).
+   * @param windowSize   Number of history samples to analyse (max
+   * PID_OSCILLATION_WINDOW).
    * @return true if oscillation is detected (frequent zero-crossings).
    */
   bool isOscillating(float currentError, int windowSize = 20);

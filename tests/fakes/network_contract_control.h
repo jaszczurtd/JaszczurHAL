@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hal/hal_net.h"
+#include "hal/network/hal_net.h"
 
 #include <stdbool.h>
 #include <stddef.h>

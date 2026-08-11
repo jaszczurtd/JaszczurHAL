@@ -5,7 +5,7 @@
 ## `hal_status` - Shared status codes
 
 ```c
-#include <hal/hal_status.h>
+#include <hal/core/hal_status.h>
 
 typedef enum {
     HAL_NONE = 0,
@@ -54,7 +54,7 @@ collisions with POSIX `errno` names used by the BSD sockets compatibility layer.
 ## `hal_timer` - Hardware alarms
 
 ```c
-#include <hal/hal_timer.h>
+#include <hal/timers/hal_timer.h>
 
 typedef int32_t hal_alarm_id_t;
 #define HAL_ALARM_INVALID (-1)
@@ -123,8 +123,8 @@ hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_re
 
 **Example: One-shot alarm (low-level)**
 ```c
-#include <hal/hal_timer.h>
-#include <hal/hal_system.h>
+#include <hal/timers/hal_timer.h>
+#include <hal/system/hal_system.h>
 
 static bool alarm_fired = false;
 
@@ -156,7 +156,7 @@ void example_alarm(void) {
 
 **Example: Managed periodic timer**
 ```c
-#include <hal/hal_timer.h>
+#include <hal/timers/hal_timer.h>
 
 static uint32_t tick_count = 0;
 
@@ -210,7 +210,7 @@ void example_managed_timer(void) {
 
 **Example: Alarm pool for many timers**
 ```c
-#include <hal/hal_timer.h>
+#include <hal/timers/hal_timer.h>
 
 static int64_t pool_callback(hal_alarm_id_t id, void *user_data) {
     uint32_t timer_num = (uint32_t)(uintptr_t)user_data;
@@ -256,7 +256,7 @@ void example_alarm_pool(void) {
 ## `hal_system` - Timing, watchdog & system info
 
 ```c
-#include <hal/hal_system.h>
+#include <hal/system/hal_system.h>
 
 // Time-conversion macros (also included by SmartTimers.h)
 #define SECOND      1000UL
@@ -401,7 +401,7 @@ an `error:` label.
 
 **Example: Architecture snapshot**
 ```c
-#include <hal/hal_system.h>
+#include <hal/system/hal_system.h>
 
 void example_architecture_snapshot(void) {
     hal_system_architecture_t arch = {0};
@@ -428,8 +428,8 @@ void example_architecture_snapshot(void) {
 
 **Example: System timing and watchdog**
 ```c
-#include <hal/hal_system.h>
-#include <hal/hal_serial.h>
+#include <hal/system/hal_system.h>
+#include <hal/serial/hal_serial.h>
 
 void example_system_timing(void) {
     // Get current time
@@ -477,7 +477,7 @@ void example_system_timing(void) {
 
 **Example: Non-blocking loop interval callback**
 ```c
-#include <hal/hal_system.h>
+#include <hal/system/hal_system.h>
 
 static uint32_t last_publish_ms = 0;
 
@@ -509,8 +509,8 @@ if (hal_millis_interval_elapsed(now, &last_publish_ms, PUBLISH_INTERVAL)) {
 
 **Example: Device UID and reset diagnostics**
 ```c
-#include <hal/hal_system.h>
-#include <hal/hal_serial.h>
+#include <hal/system/hal_system.h>
+#include <hal/serial/hal_serial.h>
 
 void example_device_uid_and_reset(void) {
     // Very first: initialize fault diagnostics
@@ -565,7 +565,7 @@ void example_device_uid_and_reset(void) {
 
 **Example: Check if running in interrupt**
 ```c
-#include <hal/hal_system.h>
+#include <hal/system/hal_system.h>
 
 static volatile uint32_t isr_counter = 0;
 
@@ -724,7 +724,7 @@ void hal_mock_fault_diagnostics_reset(void);
 ## `hal_bits` - Bit helpers
 
 ```c
-#include <hal/hal_bits.h>
+#include <hal/core/hal_bits.h>
 
 #define is_set(x, mask)      ...
 #define set_bit(var, mask)   ...
@@ -744,7 +744,7 @@ void hal_mock_fault_diagnostics_reset(void);
 ## `hal_compiler` - Compiler attributes and builtins
 
 ```c
-#include <hal/hal_compiler.h>
+#include <hal/core/hal_compiler.h>
 
 #define HAL_COMPILER_IS_GNU_LIKE  0 or 1
 #define HAL_COMPILER_IS_MSVC      0 or 1
@@ -788,7 +788,7 @@ Both identity macros can be pre-defined to `0`, which selects the portable fallb
 
 **Example: Bit manipulation with masks**
 ```c
-#include <hal/hal_bits.h>
+#include <hal/core/hal_bits.h>
 
 void example_bit_manipulation(void) {
     uint8_t status_reg = 0x00;
@@ -826,7 +826,7 @@ void example_bit_manipulation(void) {
 
 **Example: Register bit manipulation (volatile)**
 ```c
-#include <hal/hal_bits.h>
+#include <hal/core/hal_bits.h>
 
 // Simulated hardware register (volatile)
 static volatile uint32_t *hw_control_reg = NULL;  // Would be: (uint32_t*)0x40000000
@@ -854,7 +854,7 @@ void example_register_bits(void) {
 ## `hal_math` - Platform-independent math helpers
 
 ```c
-#include <hal/hal_math.h>
+#include <hal/core/hal_math.h>
 
 // Clamp to [lo, hi] - type-independent macro
 #define hal_constrain(v, lo, hi) ...
@@ -864,7 +864,7 @@ void example_register_bits(void) {
 ```
 
 **Note:** Macros are available in both C and C++ and are re-exported via
-`hal/hal_system.h`. `hal_constrain` is also re-exported as `pid_clamp` for
+`hal/system/hal_system.h`. `hal_constrain` is also re-exported as `pid_clamp` for
 backward compatibility.
 Macro arguments may be evaluated more than once, so avoid side effects in
 arguments (for example `i++` or function calls that modify state).
@@ -876,8 +876,8 @@ integer division by zero. This matches the behaviour of `mapfloat()`.
 
 **Example: Clamping values**
 ```c
-#include <hal/hal_math.h>
-#include <hal/hal_system.h>
+#include <hal/core/hal_math.h>
+#include <hal/system/hal_system.h>
 
 void example_constrain(void) {
     // Clamp integer to range
@@ -899,7 +899,7 @@ void example_constrain(void) {
 
 **Example: Remapping/scaling values**
 ```c
-#include <hal/hal_math.h>
+#include <hal/core/hal_math.h>
 
 void example_map(void) {
     // Map ADC reading (0-4095) to voltage (0.0-3.3V)
@@ -926,7 +926,7 @@ void example_map(void) {
 
 **Example: Joystick/potentiometer deadzone**
 ```c
-#include <hal/hal_math.h>
+#include <hal/core/hal_math.h>
 
 void example_joystick_with_deadzone(void) {
     uint16_t joystick_x = 500;  // Raw ADC reading (0-1023)

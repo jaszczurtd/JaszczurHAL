@@ -1,6 +1,6 @@
 #include "fakes/network_contract_control.h"
-#include "hal/impl/shared/network/jh_network_backend.h"
-#include "hal/impl/shared/network/jh_network_handle_pool.h"
+#include "hal/network/jh_network_backend.h"
+#include "hal/network/jh_network_handle_pool.h"
 #include "utils/unity.h"
 
 #include <string.h>

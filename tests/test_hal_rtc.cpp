@@ -1,6 +1,6 @@
-#include "hal/hal_i2c.h"
-#include "hal/hal_rtc.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/rtc/hal_rtc.h"
 #include "utils/unity.h"
 
 #ifdef HAL_ENABLE_RTC

@@ -1,6 +1,6 @@
-#include "hal/hal_can.h"
-#include "hal/hal_system.h"
+#include "hal/can/hal_can.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 static hal_can_t can;

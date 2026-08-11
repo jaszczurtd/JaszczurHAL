@@ -1,8 +1,8 @@
 #define HAL_DISABLE_ASSERTS
 
-#include "hal/hal_assert.h"
-#include "hal/hal_compat.h"
-#include "hal/hal_runtime_config.h"
+#include "hal/core/hal_assert.h"
+#include "hal/core/hal_compat.h"
+#include "hal/core/hal_runtime_config.h"
 
 static const char test_progmem_text[] PROGMEM = "compat";
 

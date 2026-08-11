@@ -3,7 +3,7 @@ include_guard(GLOBAL)
 function(_jh_target_enable_btstack TARGET_NAME MODE)
     set(_jh_btstack_root "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/BTstack")
     set(_jh_bluetooth_root
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/bluetooth")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/bluetooth")
     if(NOT EXISTS "${_jh_btstack_root}/src/bluetooth.h")
         message(FATAL_ERROR
             "Pinned BTstack is missing; run scripts/ensure_btstack.sh")

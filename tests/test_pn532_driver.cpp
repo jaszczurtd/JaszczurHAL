@@ -1,5 +1,5 @@
-#include "hal/hal_pn532.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/nfc/hal_pn532.h"
 #include "utils/unity.h"
 
 #include <cstring>

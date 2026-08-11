@@ -1,11 +1,11 @@
 #ifdef HAL_ENABLE_A7670
 
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_modem_at.h>
-#include <hal/hal_simcom_a76xx.h>
-#include <hal/hal_system.h>
-#include <hal/hal_uart.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/modem/hal_modem_at.h>
+#include <hal/modem/hal_simcom_a76xx.h>
+#include <hal/serial/hal_uart.h>
+#include <hal/system/hal_system.h>
 #include <string.h>
 #include <tools_c.h>
 
@@ -193,7 +193,7 @@ void app_task0(void) {
 
 #else /* HAL_ENABLE_A7670 not defined */
 
-#include <hal/hal_app.h>
+#include <hal/core/hal_app.h>
 #include <tools_c.h>
 
 void app_start(void) { derr("Enable HAL_ENABLE_A7670 to build this example"); }

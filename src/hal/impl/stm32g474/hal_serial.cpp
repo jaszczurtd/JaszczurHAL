@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../shared/debug/jh_serial_port.h"
+#include "hal/debug/jh_serial_port.h"
 
 #include <stdio.h>
 

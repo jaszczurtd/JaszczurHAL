@@ -1,7 +1,7 @@
 #include "utils/unity.h"
 
+#include "hal/core/hal_status.h"
 #include "hal/hal.h"
-#include "hal/hal_status.h"
 
 static hal_status_t return_status(hal_status_t status) { return status; }
 

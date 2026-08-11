@@ -1,4 +1,4 @@
-#include "hal/hal_gpio.h"
+#include "hal/gpio/hal_gpio.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

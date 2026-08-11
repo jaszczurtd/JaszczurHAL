@@ -1,5 +1,5 @@
-#include "hal/hal_swserial.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/serial/hal_swserial.h"
 #include "utils/unity.h"
 
 static hal_swserial_t s_port = NULL;

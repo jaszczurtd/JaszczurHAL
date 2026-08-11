@@ -1,4 +1,4 @@
-#include "hal/impl/shared/frameworks/gps/gps_nmea_parser.h"
+#include "hal/gps/gps_nmea_parser.h"
 #include "utils/unity.h"
 #include <math.h>
 #include <stdio.h>

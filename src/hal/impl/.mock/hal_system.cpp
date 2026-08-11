@@ -1,7 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_system.h"
-#include "../shared/network/jh_network_architecture.h"
+#include "hal/network/jh_network_architecture.h"
+#include "hal/system/hal_system.h"
+#include "hal/system/hal_system_common.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -210,29 +211,7 @@ void hal_fault_subsystem_init(void) {
 hal_reset_reason_t hal_get_reset_reason(void) { return s_reset_reason; }
 
 const char *hal_reset_reason_str(hal_reset_reason_t reason) {
-  switch (reason) {
-  case HAL_RESET_REASON_POWER_ON:
-    return "POWER_ON";
-  case HAL_RESET_REASON_RUN_PIN:
-    return "RUN_PIN";
-  case HAL_RESET_REASON_SOFT:
-    return "SOFT";
-  case HAL_RESET_REASON_WATCHDOG:
-    return "WATCHDOG";
-  case HAL_RESET_REASON_DEBUG:
-    return "DEBUG";
-  case HAL_RESET_REASON_GLITCH:
-    return "GLITCH";
-  case HAL_RESET_REASON_BROWNOUT:
-    return "BROWNOUT";
-  case HAL_RESET_REASON_HARDFAULT:
-    return "HARDFAULT";
-  case HAL_RESET_REASON_STACK_OVERFLOW:
-    return "STACK_OVERFLOW";
-  case HAL_RESET_REASON_UNKNOWN:
-  default:
-    return "UNKNOWN";
-  }
+  return jh_hal_reset_reason_str(reason);
 }
 
 hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out) {

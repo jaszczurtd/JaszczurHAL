@@ -1,12 +1,13 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_TCP
 
-#include "../../hal_serial.h"
-#include "../../hal_tcp.h"
-#include "../shared/network/jh_net_address_utils.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/jh_net_address_utils.h"
+#include "hal/network/jh_net_validation.h"
+#include "hal/serial/hal_serial.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -57,19 +58,8 @@ static void reset_endpoint(hal_net_endpoint_t *endpoint) {
 static hal_status_t validate_endpoint(const hal_net_endpoint_t *endpoint,
                                       bool allow_unspecified_address,
                                       const char *fn, const char *name) {
-  const hal_status_t shape =
-      jh_net_validate_endpoint_shape(endpoint, true, allow_unspecified_address);
-  if (shape != HAL_OK) {
-    hal_derr("%s: %s endpoint is malformed", fn, name);
-    return shape;
-  }
-  const hal_net_capabilities_t required =
-      endpoint->family == HAL_NET_AF_INET ? HAL_NET_CAP_IPV4 : HAL_NET_CAP_IPV6;
-  if ((hal_net_get_capabilities() & required) == 0u) {
-    hal_derr("%s: %s endpoint family is unsupported", fn, name);
-    return HAL_EUNSUPPORTED;
-  }
-  return HAL_OK;
+  return jh_net_validate_supported_endpoint_logged(
+      endpoint, allow_unspecified_address, fn, name);
 }
 
 static uint8_t capped_backlog(uint8_t backlog) {

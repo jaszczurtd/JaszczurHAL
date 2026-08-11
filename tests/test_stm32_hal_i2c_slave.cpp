@@ -1,4 +1,4 @@
-#include "hal/hal_i2c_slave.h"
+#include "hal/i2c/hal_i2c_slave.h"
 #include "utils/unity.h"
 
 void setUp(void) {

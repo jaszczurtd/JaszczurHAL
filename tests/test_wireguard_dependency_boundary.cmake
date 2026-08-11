@@ -1,5 +1,5 @@
 set(_wireguard
-    "${JH_ROOT}/src/hal/impl/shared/frameworks/wireguard")
+    "${JH_ROOT}/src/hal/network/wireguard/core")
 set(_legacy
     "${JH_ROOT}/src/hal/impl/rp2040/frameworks/arduino-wireguard-pico-w")
 

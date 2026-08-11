@@ -6,8 +6,8 @@
  * bare-metal port primitives such as g474_debug_uart and linker symbols, but it
  * must not call app-facing HAL modules such as hal_serial.
  */
-#include "hal/hal_compiler.h"
-#include "hal/hal_target.h"
+#include "hal/core/hal_compiler.h"
+#include "hal/core/hal_target.h"
 
 #ifdef JH_STM32G474_HW
 

@@ -1,4 +1,4 @@
-#include "hal/hal_gps.h"
+#include "hal/gps/hal_gps.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 #include <math.h>

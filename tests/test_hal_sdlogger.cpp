@@ -1,6 +1,6 @@
-#include "hal/hal_eeprom.h"
-#include "hal/hal_sdlogger.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_sdlogger.h"
 #include "utils/unity.h"
 
 #include <string.h>

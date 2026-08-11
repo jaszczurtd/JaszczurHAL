@@ -1,9 +1,9 @@
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if HAL_TARGET_IS_MOCK && defined(HAL_ENABLE_LORA)
 
-#include "../../hal_system.h"
-#include "hal/impl/shared/radio/jh_lora_radio_internal.h"
+#include "hal/radio/jh_lora_radio_internal.h"
+#include "hal/system/hal_system.h"
 #include "hal_mock.h"
 
 #include <string.h>

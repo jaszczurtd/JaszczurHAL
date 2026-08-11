@@ -1,8 +1,8 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
 
-#include "../../../../hal_config.h"
+#include "hal/core/hal_config.h"
 #include "rp_flash_storage.h"
 #include "rp_flash_transaction.h"
 

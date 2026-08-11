@@ -1,4 +1,4 @@
-#include "hal/impl/shared/network/jh_ntp_client.h"
+#include "hal/network/jh_ntp_client.h"
 #include "utils/unity.h"
 
 #include <cstring>

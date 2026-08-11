@@ -1,10 +1,10 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
-#include "../../hal_dma_pwm_audio.h"
+#include "hal/audio/hal_dma_pwm_audio.h"
 #include "hal_pwm_stm32g474.h"
 
 #include <stddef.h>
@@ -12,6 +12,7 @@
 #include <string.h>
 
 #ifdef JH_STM32G474_HW
+#include "port/stm32g474_adc_channels.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -41,39 +42,6 @@ static constexpr uint8_t kAdcDmaChannel = 1u; /* DMA1 Channel2 */
 static constexpr uint32_t kAdcDmaCfgrMask =
     ADC_CFGR_DMAEN | ADC_CFGR_DMACFG | ADC_CFGR_OVRMOD | ADC_CFGR_CONT;
 
-static uint32_t adc1_channel_for_pin(uint8_t pin) {
-  switch (pin) {
-  case 0x00:
-    return 1u; /* PA0  -> ADC1_IN1  */
-  case 0x01:
-    return 2u; /* PA1  -> ADC1_IN2  */
-  case 0x02:
-    return 3u; /* PA2  -> ADC1_IN3  */
-  case 0x03:
-    return 4u; /* PA3  -> ADC1_IN4  */
-  case 0x10:
-    return 15u; /* PB0  -> ADC1_IN15 */
-  case 0x11:
-    return 12u; /* PB1  -> ADC1_IN12 */
-  case 0x1B:
-    return 14u; /* PB11 -> ADC1_IN14 */
-  case 0x1C:
-    return 11u; /* PB12 -> ADC1_IN11 */
-  case 0x1E:
-    return 5u; /* PB14 -> ADC1_IN5  */
-  case 0x20:
-    return 6u; /* PC0  -> ADC1_IN6  */
-  case 0x21:
-    return 7u; /* PC1  -> ADC1_IN7  */
-  case 0x22:
-    return 8u; /* PC2  -> ADC1_IN8  */
-  case 0x23:
-    return 9u; /* PC3  -> ADC1_IN9  */
-  default:
-    return 0u;
-  }
-}
-
 static bool adc_pin_channels(const uint8_t *pins, uint8_t count,
                              uint32_t channels[4]) {
   if (count == 0u) {
@@ -83,7 +51,7 @@ static bool adc_pin_channels(const uint8_t *pins, uint8_t count,
     return false;
   }
   for (uint8_t i = 0u; i < count; ++i) {
-    channels[i] = adc1_channel_for_pin(pins[i]);
+    channels[i] = jh_stm32g474_adc1_channel_for_pin(pins[i]);
     if (channels[i] == 0u) {
       return false;
     }
@@ -280,15 +248,6 @@ extern "C" void DMA1_Channel1_IRQHandler(void) {
   }
 }
 #endif /* JH_STM32G474_HW */
-
-bool hal_dma_pwm_audio_supported(void) { return true; }
-
-hal_dma_pwm_audio_t
-hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
-  hal_dma_pwm_audio_t audio = nullptr;
-  (void)hal_dma_pwm_audio_create_ex(cfg, &audio);
-  return audio;
-}
 
 hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
                                          hal_dma_pwm_audio_t *out_audio) {

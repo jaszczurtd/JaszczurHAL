@@ -44,10 +44,11 @@ entry point.
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 
-JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG, FatFs and Unity integration
-wrappers, along with the lwIP port configuration, remain tracked under
-`src/hal/impl/shared/frameworks/`. Their upstream source trees are managed
-here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean
+JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
+along with the lwIP port configuration, remain tracked in their thematic
+`src/hal/network/`, `src/hal/codecs/`, and `src/hal/storage/` domains. Unity
+integration remains in the test infrastructure. Their upstream source trees
+are managed here. The cJSON, LodePNG, TJpg_Decoder and Unity helpers require clean
 exact-commit checkouts; verify-only mode rejects local or untracked changes.
 Configured repository origins are enforced, including the project-owned
 BearSSL, LodePNG, FatFs and Unity repositories. The `jaszczurtd/ff16` checkout

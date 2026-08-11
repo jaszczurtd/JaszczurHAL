@@ -1,7 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
-#include "../../hal_uart.h"
+#include "hal/core/hal_config.h"
+#include "hal/serial/hal_uart.h"
+#include "hal/serial/hal_uart_common.h"
+#include "hal/serial/hal_uart_internal.h"
 #include "hal_mock.h"
 
 #include <string.h>
@@ -24,49 +26,15 @@ struct hal_uart_impl_s {
 
 static hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES];
 
-hal_uart_t hal_uart_create(hal_uart_port_t port, uint8_t rx_pin,
-                           uint8_t tx_pin) {
-  for (int i = 0; i < hal_get_config()->uart_max_instances; i++) {
-    if (s_pool[i].in_use && s_pool[i].port == port) {
-      HAL_ASSERT(0, "hal_uart: port already in use");
-      return NULL;
-    }
-  }
-  for (int i = 0; i < hal_get_config()->uart_max_instances; i++) {
-    if (!s_pool[i].in_use) {
-      memset(&s_pool[i], 0, sizeof(s_pool[i]));
-      s_pool[i].port = port;
-      s_pool[i].rx_pin = rx_pin;
-      s_pool[i].tx_pin = tx_pin;
-      s_pool[i].in_use = 1;
-      return &s_pool[i];
-    }
-  }
-
-  HAL_ASSERT(0, "hal_uart: pool exhausted - increase HAL_UART_MAX_INSTANCES");
-  return NULL;
+hal_uart_t jh_hal_uart_create_for_target(hal_uart_port_t port, uint8_t rx_pin,
+                                         uint8_t tx_pin) {
+  return jh_hal_uart_create_from_pool(
+      s_pool, hal_get_config()->uart_max_instances, port, rx_pin, tx_pin);
 }
 
-hal_status_t hal_uart_set_rx_ex(hal_uart_t h, uint8_t rx_pin) {
-  if (!h)
-    return HAL_EINVAL;
-  h->rx_pin = rx_pin;
-  return HAL_OK;
-}
-
-bool hal_uart_set_rx(hal_uart_t h, uint8_t rx_pin) {
-  return hal_status_to_bool(hal_uart_set_rx_ex(h, rx_pin));
-}
-
-hal_status_t hal_uart_set_tx_ex(hal_uart_t h, uint8_t tx_pin) {
-  if (!h)
-    return HAL_EINVAL;
-  h->tx_pin = tx_pin;
-  return HAL_OK;
-}
-
-bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin) {
-  return hal_status_to_bool(hal_uart_set_tx_ex(h, tx_pin));
+hal_status_t jh_hal_uart_set_pin_for_target(hal_uart_t handle, uint8_t pin,
+                                            bool receive) {
+  return jh_hal_uart_set_pin(handle, pin, receive);
 }
 
 hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {

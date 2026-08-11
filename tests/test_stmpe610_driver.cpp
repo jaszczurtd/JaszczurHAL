@@ -1,10 +1,10 @@
 #include "utils/unity.h"
 
-#include "hal/hal_i2c.h"
-#include "hal/hal_spi.h"
-#include "hal/hal_stmpe610.h"
-#include "hal/hal_system.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/input/hal_stmpe610.h"
+#include "hal/spi/hal_spi.h"
+#include "hal/system/hal_system.h"
 
 #include <stddef.h>
 #include <string.h>

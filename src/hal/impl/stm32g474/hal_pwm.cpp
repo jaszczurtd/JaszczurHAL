@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_pwm.h"
+#include "hal/gpio/hal_pwm.h"
 #include "hal_pwm_stm32g474.h"
 
 static uint8_t s_resolution = 8u;

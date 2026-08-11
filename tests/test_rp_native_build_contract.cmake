@@ -14,12 +14,12 @@ set(_board_cmake "${JH_ROOT}/cmake/jh_board_profiles.cmake")
 set(_sources "${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 set(_app_entry "${JH_ROOT}/src/hal_app_entry.cpp")
 set(_core_runtime "${JH_ROOT}/examples/01_core_runtime/app.cpp")
-set(_usb_header "${JH_ROOT}/src/hal/hal_usb.h")
+set(_usb_header "${JH_ROOT}/src/hal/usb/hal_usb.h")
 set(_usb_impl "${JH_ROOT}/src/hal/impl/rp2040/hal_usb.cpp")
 set(_flash_engine_header
-    "${JH_ROOT}/src/hal/impl/shared/drivers/flash/jh_flash_transaction_engine.h")
+    "${JH_ROOT}/src/hal/storage/flash/jh_flash_transaction_engine.h")
 set(_flash_engine
-    "${JH_ROOT}/src/hal/impl/shared/drivers/flash/jh_flash_transaction_engine.cpp")
+    "${JH_ROOT}/src/hal/storage/flash/jh_flash_transaction_engine.cpp")
 set(_flash_header
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_transaction.h")
 set(_flash_impl
@@ -31,6 +31,8 @@ set(_flash_storage
 set(_flash_runtime
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/flash/rp_flash_runtime.h")
 set(_rp_eeprom "${JH_ROOT}/src/hal/impl/rp2040/hal_eeprom.cpp")
+set(_shared_eeprom
+    "${JH_ROOT}/src/hal/storage/hal_eeprom.cpp")
 set(_rp_littlefs "${JH_ROOT}/src/hal/impl/rp2040/hal_littlefs.cpp")
 set(_littlefs_core
     "${JH_ROOT}/third_party/littlefs/lfs.c")
@@ -70,6 +72,7 @@ foreach(_file IN ITEMS
         "${_usb_impl}" "${_flash_engine_header}" "${_flash_engine}"
         "${_flash_header}" "${_flash_impl}" "${_flash_storage_header}"
         "${_flash_storage}" "${_flash_runtime}" "${_rp_eeprom}"
+        "${_shared_eeprom}"
         "${_rp_littlefs}" "${_littlefs_core}" "${_littlefs_cmake}"
         "${_flash_probe}" "${_flash_verifier}"
         "${_usb_descriptors}" "${_tusb_config}"
@@ -104,6 +107,7 @@ file(READ "${_flash_storage_header}" _flash_storage_header_text)
 file(READ "${_flash_storage}" _flash_storage_text)
 file(READ "${_flash_runtime}" _flash_runtime_text)
 file(READ "${_rp_eeprom}" _rp_eeprom_text)
+file(READ "${_shared_eeprom}" _shared_eeprom_text)
 file(READ "${_rp_littlefs}" _rp_littlefs_text)
 file(READ "${_littlefs_core}" _littlefs_core_text)
 file(READ "${_flash_probe}" _flash_probe_text)
@@ -230,7 +234,8 @@ endforeach()
 foreach(_storage_client_contract IN ITEMS
         "jh_rp_flash_storage_replace"
         "JH_RP_FLASH_PARTITION_EEPROM")
-    string(FIND "${_rp_eeprom_text}" "${_storage_client_contract}"
+    string(FIND "${_rp_eeprom_text}\n${_shared_eeprom_text}"
+        "${_storage_client_contract}"
         _eeprom_storage_at)
     if(_eeprom_storage_at EQUAL -1)
         message(FATAL_ERROR

@@ -1,11 +1,11 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_WIFI
 
-#include "../../hal_net.h"
-#include "../shared/network/jh_net_address_utils.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/jh_net_address_utils.h"
 #include "hal_mock.h"
 
 #include <string.h>

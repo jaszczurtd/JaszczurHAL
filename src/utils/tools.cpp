@@ -7,17 +7,17 @@
 
 #include "tools.h"
 
-#include "hal/hal_time.h"
+#include "hal/time/hal_time.h"
 
 #include <math.h>
 #include <stdlib.h>
 
 #ifdef HAL_ENABLE_PNG_AS_BASE64
-#include "hal/impl/shared/frameworks/lodepng/lodepng.h"
+#include "hal/codecs/lodepng/lodepng.h"
 #endif
 
 #ifdef HAL_ENABLE_JPEG
-#include "hal/impl/shared/frameworks/jpeg/tjpgd.h"
+#include "hal/codecs/jpeg/tjpgd.h"
 #endif
 
 void debugInit(void) { hal_debug_init(HAL_DEBUG_DEFAULT_BAUD); }

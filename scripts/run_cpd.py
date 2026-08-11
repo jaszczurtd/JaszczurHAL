@@ -18,14 +18,14 @@ COVERAGE_SCOPE_ORDER = (
     "mock",
     "rp2040",
     "stm32g474",
-    "shared",
+    "portable-hal",
     "portable-other",
 )
 PRODUCTION_EXCLUDED_PREFIXES = (
     "src/hal/generated/",
-    "src/hal/impl/shared/frameworks/PubSubClient/",
-    "src/hal/impl/shared/frameworks/smart_timers/",
-    "src/hal/impl/shared/frameworks/wireguard/",
+    "src/hal/network/mqtt/PubSubClient/",
+    "src/hal/timers/smart_timers/",
+    "src/hal/network/wireguard/core/",
 )
 PRODUCTION_EXCLUDED_FILES = frozenset({"src/utils/unity.c"})
 
@@ -264,8 +264,8 @@ def _coverage_scope(path: str) -> str:
         return "rp2040"
     if path.startswith("src/hal/impl/stm32g474/"):
         return "stm32g474"
-    if path.startswith("src/hal/impl/shared/"):
-        return "shared"
+    if path.startswith("src/hal/") and not path.startswith("src/hal/impl/"):
+        return "portable-hal"
     return "portable-other"
 
 

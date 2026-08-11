@@ -1,4 +1,4 @@
-#include "hal/hal_board.h"
+#include "hal/system/hal_board.h"
 
 #ifndef JH_EXPECT_PROFILE
 #error "JH_EXPECT_PROFILE is required."

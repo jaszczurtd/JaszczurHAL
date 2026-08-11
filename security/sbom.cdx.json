@@ -175,7 +175,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/bluetooth",
+          "url": "src/hal/bluetooth",
           "comment": "repository path"
         }
       ],
@@ -194,7 +194,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/impl/shared/bluetooth"
+          "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/bluetooth"
         }
       ]
     },
@@ -425,7 +425,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/BearSSL",
+          "url": "src/hal/network/tls/BearSSL",
           "comment": "repository path"
         }
       ],
@@ -444,7 +444,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/BearSSL,third_party/bearssl_version.conf,src/hal/impl/shared/frameworks/BearSSL"
+          "value": "third_party/BearSSL,third_party/bearssl_version.conf,src/hal/network/tls/BearSSL"
         }
       ]
     },
@@ -482,7 +482,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/lwip/port",
+          "url": "src/hal/network/lwip/port",
           "comment": "repository path"
         }
       ],
@@ -501,7 +501,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/lwip,third_party/lwip_version.conf,src/hal/impl/shared/frameworks/lwip/port"
+          "value": "third_party/lwip,third_party/lwip_version.conf,src/hal/network/lwip/port"
         }
       ]
     },
@@ -539,7 +539,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/cjson",
+          "url": "src/hal/codecs/cjson",
           "comment": "repository path"
         }
       ],
@@ -558,7 +558,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/cJSON,third_party/cjson_version.conf,src/hal/impl/shared/frameworks/cjson"
+          "value": "third_party/cJSON,third_party/cjson_version.conf,src/hal/codecs/cjson"
         }
       ]
     },
@@ -596,7 +596,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/lodepng",
+          "url": "src/hal/codecs/lodepng",
           "comment": "repository path"
         }
       ],
@@ -615,7 +615,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/lodepng,third_party/lodepng_version.conf,src/hal/impl/shared/frameworks/lodepng"
+          "value": "third_party/lodepng,third_party/lodepng_version.conf,src/hal/codecs/lodepng"
         }
       ]
     },
@@ -653,7 +653,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/filesystem/ff16",
+          "url": "src/hal/storage/filesystem/ff16",
           "comment": "repository path"
         }
       ],
@@ -672,7 +672,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/FatFs,third_party/fatfs_version.conf,src/hal/impl/shared/frameworks/filesystem/ff16"
+          "value": "third_party/FatFs,third_party/fatfs_version.conf,src/hal/storage/filesystem/ff16"
         }
       ]
     },
@@ -752,12 +752,12 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/PubSubClient",
+          "url": "src/hal/network/mqtt/PubSubClient",
           "comment": "repository path"
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/PubSubClient/LICENSE.txt",
+          "url": "src/hal/network/mqtt/PubSubClient/LICENSE.txt",
           "comment": "repository path"
         }
       ],
@@ -776,7 +776,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/PubSubClient,src/hal/impl/shared/frameworks/PubSubClient/LICENSE.txt"
+          "value": "src/hal/network/mqtt/PubSubClient,src/hal/network/mqtt/PubSubClient/LICENSE.txt"
         }
       ]
     },
@@ -804,12 +804,12 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/wireguard",
+          "url": "src/hal/network/wireguard/core",
           "comment": "repository path"
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/wireguard/LICENSE",
+          "url": "src/hal/network/wireguard/core/LICENSE",
           "comment": "repository path"
         }
       ],
@@ -828,7 +828,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/wireguard,src/hal/impl/shared/frameworks/wireguard/LICENSE"
+          "value": "src/hal/network/wireguard/core,src/hal/network/wireguard/core/LICENSE"
         }
       ]
     },
@@ -861,17 +861,17 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/wireguard/crypto",
+          "url": "src/hal/network/wireguard/core/crypto",
           "comment": "repository path"
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/wireguard/LICENSE",
+          "url": "src/hal/network/wireguard/core/LICENSE",
           "comment": "repository path"
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/wireguard/crypto/x25519-license.txt",
+          "url": "src/hal/network/wireguard/core/crypto/x25519-license.txt",
           "comment": "repository path"
         }
       ],
@@ -890,7 +890,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/wireguard/crypto,src/hal/impl/shared/frameworks/wireguard/LICENSE,src/hal/impl/shared/frameworks/wireguard/crypto/x25519-license.txt"
+          "value": "src/hal/network/wireguard/core/crypto,src/hal/network/wireguard/core/LICENSE,src/hal/network/wireguard/core/crypto/x25519-license.txt"
         }
       ]
     },
@@ -933,7 +933,7 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/jpeg",
+          "url": "src/hal/codecs/jpeg",
           "comment": "repository path"
         }
       ],
@@ -952,7 +952,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/TJpg_Decoder,third_party/jpeg_version.conf,src/hal/impl/shared/frameworks/jpeg"
+          "value": "third_party/TJpg_Decoder,third_party/jpeg_version.conf,src/hal/codecs/jpeg"
         }
       ]
     },
@@ -1052,12 +1052,12 @@
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/smart_timers",
+          "url": "src/hal/timers/smart_timers",
           "comment": "repository path"
         },
         {
           "type": "other",
-          "url": "src/hal/impl/shared/frameworks/smart_timers/LICENSE.Nettigo-Timers",
+          "url": "src/hal/timers/smart_timers/LICENSE.Nettigo-Timers",
           "comment": "repository path"
         }
       ],
@@ -1072,7 +1072,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "src/hal/impl/shared/frameworks/smart_timers,src/hal/impl/shared/frameworks/smart_timers/LICENSE.Nettigo-Timers"
+          "value": "src/hal/timers/smart_timers,src/hal/timers/smart_timers/LICENSE.Nettigo-Timers"
         }
       ]
     }

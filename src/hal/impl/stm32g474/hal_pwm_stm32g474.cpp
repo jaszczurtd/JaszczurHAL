@@ -1,7 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
 #include "hal_pwm_stm32g474.h"
+#include "port/stm32g474_gpio_af.h"
 #include "port/stm32g474_regs.h"
 
 #include <stddef.h>
@@ -99,33 +100,6 @@ static void enable_timer_clock(const TimerHw &timer) {
   } else {
     RCC_APB1ENR1 |= timer.rcc_mask;
     (void)RCC_APB1ENR1;
-  }
-}
-
-static void gpio_set_af(uint8_t pin, uint8_t af) {
-  const uint32_t port = (uint32_t)(pin >> 4);
-  const uint32_t n = (uint32_t)(pin & 0x0Fu);
-  if (port > 6u) {
-    return;
-  }
-
-  RCC_AHB2ENR |= (1u << port);
-  (void)RCC_AHB2ENR;
-
-  GPIO_MODER(port) =
-      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_AF << (n * 2u));
-  GPIO_OTYPER(port) &= ~(1u << n);
-  GPIO_OSPEEDR(port) |= (0x3u << (n * 2u));
-  GPIO_PUPDR(port) =
-      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_NONE << (n * 2u));
-
-  if (n < 8u) {
-    GPIO_AFRL(port) =
-        (GPIO_AFRL(port) & ~(0xFu << (n * 4u))) | ((uint32_t)af << (n * 4u));
-  } else {
-    const uint32_t p = n - 8u;
-    GPIO_AFRH(port) =
-        (GPIO_AFRH(port) & ~(0xFu << (p * 4u))) | ((uint32_t)af << (p * 4u));
   }
 }
 
@@ -373,7 +347,7 @@ void jh_stm32_pwm_start_output(const jh_stm32_pwm_channel_desc *ch) {
     return;
   }
   const TimerHw &timer = kTimerHw[ch->timer];
-  gpio_set_af(map->pin, map->af);
+  jh_stm32g474_gpio_set_af(map->pin, map->af);
   enable_channel(timer.base, ch->channel);
   if (timer.has_bdtr) {
     TIM_BDTR(timer.base) |= TIM_BDTR_MOE;

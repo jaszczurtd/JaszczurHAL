@@ -1,5 +1,5 @@
-#include "hal/hal_digipot.h"
-#include "hal/hal_i2c.h"
+#include "hal/analog/hal_digipot.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

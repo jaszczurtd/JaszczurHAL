@@ -1,7 +1,7 @@
-#include "hal/hal_net_console.h"
-#include "hal/hal_serial.h"
-#include "hal/hal_tcp.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/net_console/hal_net_console.h"
+#include "hal/serial/hal_serial.h"
 #include "utils/unity.h"
 
 #include <stdio.h>

@@ -8,9 +8,9 @@
  * SD-card logging moved to the HAL module `hal_sdlogger`.
  */
 
-#include <hal/hal_config.h>
+#include <hal/core/hal_config.h>
 #ifdef HAL_ENABLE_SDLOGGER
-#include <hal/hal_sdlogger.h>
+#include <hal/storage/hal_sdlogger.h>
 #endif
 
 /** @brief First EEPROM address available to tools utilities. */

@@ -179,7 +179,7 @@ try:
         for entry in compile_commands
     }
     for suffix in (
-        "/frameworks/PubSubClient/src/PubSubClient.cpp",
+        "/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp",
         "/third_party/BearSSL/src/aead/ccm.c",
         "/third_party/BTstack/src/ble/att_db.c",
         "/third_party/FreeRTOS-Kernel/tasks.c",
@@ -380,7 +380,7 @@ try:
     direct_consumer.mkdir(parents=True)
     consumer_source = direct_consumer / "consumer.c"
     consumer_source.write_text(
-        "#include <hal/hal_config.h>\n"
+        "#include <hal/core/hal_config.h>\n"
         "#include <hal/generated/jh_board_registry.h>\n"
         "#ifndef HAL_ENABLE_DS18B20\n"
         '#error "missing requested DS18B20"\n'

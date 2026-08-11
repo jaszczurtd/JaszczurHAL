@@ -5,7 +5,7 @@
 ## `hal_sync` - Mutex
 
 ```c
-#include <hal/hal_sync.h>
+#include <hal/system/hal_sync.h>
 
 typedef hal_mutex_impl_t* hal_mutex_t;   // opaque
 
@@ -56,7 +56,7 @@ task access across RP2040 cores; use `hal_mutex_t` for task mutual exclusion.
 
 **Example: Protect shared state with `hal_mutex_t`**
 ```c
-#include <hal/hal_sync.h>
+#include <hal/system/hal_sync.h>
 
 static hal_mutex_t s_stats_mutex;
 static uint32_t s_success_count = 0;
@@ -84,7 +84,7 @@ uint32_t stats_snapshot(void) {
 
 **Example: Short interrupt-masked section for ISR-shared flags**
 ```c
-#include <hal/hal_sync.h>
+#include <hal/system/hal_sync.h>
 
 static volatile bool s_alarm_fired = false;
 
@@ -111,7 +111,7 @@ bool consume_alarm_flag(void) {
 ## `hal_usb` - USB device lifecycle and CDC
 
 ```c
-#include <hal/hal_usb.h>
+#include <hal/usb/hal_usb.h>
 
 hal_status_t hal_usb_init(void);
 hal_status_t hal_usb_deinit(void);
@@ -149,7 +149,7 @@ deterministic RX/TX buffers and reset observation for unit tests.
 ## `hal_serial` - Serial & debug output
 
 ```c
-#include <hal/hal_serial.h>
+#include <hal/serial/hal_serial.h>
 
 // Configurable debug sizing knobs (define before including if needed):
 // #define HAL_DEBUG_BUF_SIZE    1024   // legacy mock capture/RX helper buffer
@@ -309,7 +309,7 @@ no USB CDC flush to perform.
 
 ### Shared core and link-time transport ports
 
-`src/hal/hal_serial.cpp` is the only serial/debug core. It owns public serial
+`src/hal/serial/hal_serial.cpp` is the only serial/debug core. It owns public serial
 and debug entry points, streamed formatting, prefixes, timestamp hooks, mute
 state, rate-limit slots, the ISR SPSC ring, net-console mirroring, lazy init and
 all common mutexes. The internal `jh_serial_port.h` contract is resolved at
@@ -371,7 +371,7 @@ mute behavior, target line boundaries and mock binary RX.
 
 **Example: Initialize debug output with a custom rate limit**
 ```c
-#include <hal/hal_serial.h>
+#include <hal/serial/hal_serial.h>
 
 void debug_setup(void) {
   hal_debug_rate_limit_t cfg = hal_debug_rate_limit_defaults();
@@ -390,7 +390,7 @@ void debug_setup(void) {
 
 **Example: Main loop with RX polling and deferred ISR log drain**
 ```c
-#include <hal/hal_serial.h>
+#include <hal/serial/hal_serial.h>
 
 void app_loop(void) {
   hal_debug_loop();
@@ -409,7 +409,7 @@ void app_loop(void) {
 ## `hal_serial_session` - Framed serial session helper
 
 ```c
-#include <hal/hal_serial_session.h>
+#include <hal/serial/hal_serial_session.h>
 
 #define HAL_SERIAL_SESSION_PROTOCOL_VERSION 1u
 #define HAL_SERIAL_SESSION_MAX_LINE         128u
@@ -608,7 +608,7 @@ Notes:
 Typical wiring (firmware module, HELLO + project-specific commands via
 unknown-handler - no AUTH/REBOOT):
 ```c
-#include <hal/hal_serial_session.h>
+#include <hal/serial/hal_serial_session.h>
 
 static hal_serial_session_t s_session;
 
@@ -653,7 +653,7 @@ Test observability (mock backend):
 
 **Example: HELLO + custom command handler**
 ```c
-#include <hal/hal_serial_session.h>
+#include <hal/serial/hal_serial_session.h>
 #include <string.h>
 
 static hal_serial_session_t s_session;
@@ -681,8 +681,8 @@ void sc_tick(void) {
 
 **Example: Enable vocabulary-driven AUTH / BYE / REBOOT handling**
 ```c
-#include <hal/hal_serial_session.h>
-#include <hal/hal_serial_session_vocabulary.h>
+#include <hal/serial/hal_serial_session.h>
+#include <hal/serial/hal_serial_session_vocabulary.h>
 
 static const hal_serial_session_vocabulary_t s_vocab = {
   .cmd_bye = "SC_BYE",
@@ -721,7 +721,7 @@ void secure_sc_init(void) {
 ## `hal_serial_frame` - Wire framing helpers
 
 ```c
-#include <hal/hal_serial_frame.h>
+#include <hal/serial/hal_serial_frame.h>
 
 #define HAL_SERIAL_FRAME_PREFIX        "$SC,"
 #define HAL_SERIAL_FRAME_PREFIX_LEN    4u
@@ -764,8 +764,8 @@ both sides should assert the same CRC reference vector in test suites.
 
 **Example: Encode a framed request**
 ```c
-#include <hal/hal_serial_frame.h>
-#include <hal/hal_serial.h>
+#include <hal/serial/hal_serial_frame.h>
+#include <hal/serial/hal_serial.h>
 
 void send_hello(void) {
   char line[HAL_SERIAL_FRAME_LINE_MAX];
@@ -779,8 +779,8 @@ void send_hello(void) {
 
 **Example: Decode a received frame**
 ```c
-#include <hal/hal_serial_frame.h>
-#include <hal/hal_serial.h>
+#include <hal/serial/hal_serial_frame.h>
+#include <hal/serial/hal_serial.h>
 
 void inspect_line(const char *line) {
   uint16_t seq = 0;
@@ -807,7 +807,7 @@ vocabulary supplies) and `hal_serial_session_is_authenticated()`
 returns `false`.
 
 ```c
-#include <hal/hal_sc_auth.h>
+#include <hal/security/hal_sc_auth.h>
 
 #define HAL_SC_AUTH_SCHEME_TAG          "FIESTA-SC-AUTH-v1"
 #define HAL_SC_AUTH_SCHEME_TAG_LEN      17u
@@ -866,7 +866,7 @@ and do not need to call the helpers below directly.
 
 **Example: Derive device key and compute AUTH response**
 ```c
-#include <hal/hal_sc_auth.h>
+#include <hal/security/hal_sc_auth.h>
 
 bool build_auth_response(const uint8_t *uid,
              size_t uid_len,
@@ -889,7 +889,7 @@ bool build_auth_response(const uint8_t *uid,
 
 **Example: Constant-time verification of a host response**
 ```c
-#include <hal/hal_sc_auth.h>
+#include <hal/security/hal_sc_auth.h>
 
 bool auth_response_matches(const uint8_t expected[HAL_SC_AUTH_RESPONSE_BYTES],
                const uint8_t actual[HAL_SC_AUTH_RESPONSE_BYTES]) {

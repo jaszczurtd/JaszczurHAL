@@ -1,14 +1,14 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_LITTLEFS
 
-#include "../../hal_littlefs.h"
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
 #include "drivers/stm32g474/stm32g474_flash.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/storage/hal_littlefs.h"
+#include "hal/system/hal_sync.h"
 
 #include <lfs.h>
 #include <stdint.h>

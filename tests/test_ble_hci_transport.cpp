@@ -1,4 +1,4 @@
-#include "hal/impl/shared/bluetooth/jh_ble_hci_transport.h"
+#include "hal/bluetooth/jh_ble_hci_transport.h"
 #include "utils/unity.h"
 
 #include <cstring>

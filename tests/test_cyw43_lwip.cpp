@@ -1,6 +1,6 @@
 #include "utils/unity.h"
 
-#include <hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.h>
+#include <hal/network/cyw43/jh_cyw43_lwip.h>
 
 void setUp(void) {}
 void tearDown(void) {}

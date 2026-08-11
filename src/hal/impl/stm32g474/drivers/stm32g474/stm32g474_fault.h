@@ -19,7 +19,7 @@
  * is symmetrical across backends.
  */
 
-#include "../../../../hal_system.h"
+#include "hal/system/hal_system.h"
 
 #ifdef __cplusplus
 extern "C" {

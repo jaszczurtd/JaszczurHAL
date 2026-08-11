@@ -121,23 +121,28 @@ file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
 # SoC-specific drivers under impl/stm32g474/drivers/<soc>/
 file(GLOB STM32_DRIVER_SOURCES ${SRC}/hal/impl/stm32g474/drivers/*/*.cpp)
 list(APPEND STM32_IMPL_SOURCES ${STM32_DRIVER_SOURCES})
-# Backend-agnostic implementations shared with the RP2040 backend
-# (e.g. the portable NMEA GPS engine + parser).
+# Target-independent implementations are co-located with their public headers
+# in thematic directories below hal/.
 file(GLOB_RECURSE STM32_SHARED_SOURCES
-    ${SRC}/hal/impl/shared/*.cpp
-    ${SRC}/hal/impl/shared/*.c
+    ${SRC}/hal/*.cpp
+    ${SRC}/hal/*.c
 )
-list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/frameworks/PubSubClient/")
+list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/hal/impl/")
+list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/network/mqtt/PubSubClient/")
 list(FILTER STM32_SHARED_SOURCES EXCLUDE REGEX "/bluetooth/")
+list(APPEND STM32_SHARED_SOURCES
+    ${SRC}/hal/bluetooth/hal_ble.cpp
+    ${SRC}/hal/bluetooth/hal_ble_stream.cpp
+)
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
 set(STM32_MQTT_INCLUDE_DIRS)
 jh_cmake_defines_contain(_jh_stm32_has_mqtt HAL_ENABLE_MQTT
     ${_jh_stm32_selection_defines})
 if(_jh_stm32_has_mqtt)
     list(APPEND STM32_IMPL_SOURCES
-        ${SRC}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp)
+        ${SRC}/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp)
     list(APPEND STM32_MQTT_INCLUDE_DIRS
-        ${SRC}/hal/impl/shared/frameworks/PubSubClient/src)
+        ${SRC}/hal/network/mqtt/PubSubClient/src)
 endif()
 list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
 jh_cmake_defines_contain(_jh_stm32_has_sx126x HAL_ENABLE_SX126X
@@ -151,31 +156,8 @@ if(_jh_stm32_has_sx126x)
     list(APPEND STM32_IMPL_SOURCES ${STM32_SX126X_SOURCES})
 endif()
 
-# ── Common HAL sources (backend-agnostic wrappers) ──────────────────────────
+# ── Common entry source ─────────────────────────────────────────────────────
 set(HAL_COMMON_SOURCES
-    ${SRC}/hal/hal_assert.cpp
-    ${SRC}/hal/hal_board.cpp
-    ${SRC}/hal/hal_ble.cpp
-    ${SRC}/hal/hal_config.cpp
-    ${SRC}/hal/hal_gps.cpp
-    ${SRC}/hal/hal_rtc.cpp
-    ${SRC}/hal/hal_sc_auth.cpp
-    ${SRC}/hal/hal_serial.cpp
-    ${SRC}/hal/hal_serial_session.cpp
-    ${SRC}/hal/hal_time.cpp
-    ${SRC}/hal/hal_lora_radio.cpp
-    ${SRC}/hal/hal_spi_device.cpp
-    ${SRC}/hal/hal_network_status.cpp
-    ${SRC}/hal/hal_tls.cpp
-    ${SRC}/hal/hal_can_util.cpp
-    ${SRC}/hal/hal_crypto.cpp
-    ${SRC}/hal/hal_crc.cpp
-    ${SRC}/hal/hal_pga2311.cpp
-    ${SRC}/hal/hal_digipot.cpp
-    ${SRC}/hal/hal_kv.cpp
-    ${SRC}/hal/hal_timer_ext.cpp
-    ${SRC}/hal/hal_soft_timer.cpp
-    ${SRC}/hal/hal_pid_controller.cpp
     ${SRC}/hal_app_entry.cpp
 )
 
@@ -255,7 +237,7 @@ endif()
 # EXTRA_HAL_DEFINES (e.g. -DEXTRA_HAL_DEFINES=HAL_ENABLE_MCP2515) once their
 # STM32G474 backend lands.
 target_compile_definitions(JaszczurHAL PUBLIC
-    HAL_TARGET_STM32G474=1   # exact backend selection (see src/hal/hal_target.h)
+    HAL_TARGET_STM32G474=1   # exact backend selection (see src/hal/core/hal_target.h)
     JH_TARGET_STM32G474=1    # legacy alias, kept until all refs migrate
     ${_jh_stm32_default_features}
 )

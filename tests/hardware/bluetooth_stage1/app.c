@@ -1,7 +1,7 @@
-#include <hal/hal_app.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/impl/shared/bluetooth/jh_bluetooth_stage1_probe.h>
+#include <hal/bluetooth/jh_bluetooth_stage1_probe.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #include <stdbool.h>

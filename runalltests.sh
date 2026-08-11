@@ -224,10 +224,9 @@ cppcheck --enable=warning,performance,portability \
     --inline-suppr \
     --suppressions-list=tests/cppcheck-suppressions.txt \
     -i src/hal/impl/rp2040/drivers \
-    -i src/hal/impl/rp2040/frameworks \
-    -i src/hal/impl/shared/frameworks/cjson \
-    -i src/hal/impl/shared/frameworks/jpeg \
-    -i src/hal/impl/shared/frameworks/lodepng \
+    -i src/hal/codecs/cjson \
+    -i src/hal/codecs/jpeg \
+    -i src/hal/codecs/lodepng \
     -i src/utils/unity.c \
     --error-exitcode=1 --quiet \
     src

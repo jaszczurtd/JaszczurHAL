@@ -1,4 +1,4 @@
-#include "hal/hal_lora_radio.h"
+#include "hal/radio/hal_lora_radio.h"
 
 _Static_assert(HAL_LORA_RADIO_MAX_INSTANCES >= 1u,
                "LoRa instance pool must not be empty");

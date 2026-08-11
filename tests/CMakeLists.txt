@@ -42,7 +42,7 @@ add_test(NAME test_host_warning_profiles
 add_executable(test_host_compiler_smoke
     test_host_compiler_smoke.cpp
     test_host_compiler_portable.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/hal_crc.cpp)
+    ${CMAKE_SOURCE_DIR}/src/hal/security/hal_crc.cpp)
 target_compile_definitions(test_host_compiler_smoke PRIVATE
     HAL_TARGET_MOCK=1
     HAL_ENABLE_CRC)
@@ -102,13 +102,13 @@ function(add_stm32_host_test NAME)
     add_executable(${NAME}
         ${NAME}.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_timer.cpp
-        ${SRC_DIR}/hal/hal_timer_ext.cpp
+        ${SRC_DIR}/hal/timers/hal_timer_ext.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_sync.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.cpp
         ${SRC_DIR}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp
-        ${SRC_DIR}/hal/hal_assert.cpp
-        ${SRC_DIR}/hal/hal_config.cpp
+        ${SRC_DIR}/hal/core/hal_assert.cpp
+        ${SRC_DIR}/hal/core/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )
     target_include_directories(${NAME} PRIVATE
@@ -129,8 +129,8 @@ function(add_stm32_i2c_slave_host_test NAME)
         ${NAME}.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_i2c_slave.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_sync.cpp
-        ${SRC_DIR}/hal/hal_assert.cpp
-        ${SRC_DIR}/hal/hal_config.cpp
+        ${SRC_DIR}/hal/core/hal_assert.cpp
+        ${SRC_DIR}/hal/core/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )
     target_include_directories(${NAME} PRIVATE
@@ -151,8 +151,8 @@ function(add_stm32_gpio_host_test NAME)
     add_executable(${NAME}
         ${NAME}.cpp
         ${SRC_DIR}/hal/impl/stm32g474/hal_gpio.cpp
-        ${SRC_DIR}/hal/hal_assert.cpp
-        ${SRC_DIR}/hal/hal_config.cpp
+        ${SRC_DIR}/hal/core/hal_assert.cpp
+        ${SRC_DIR}/hal/core/hal_config.cpp
         ${SRC_DIR}/utils/unity.c
     )
     target_include_directories(${NAME} PRIVATE
@@ -241,8 +241,8 @@ add_test(NAME test_jh_entry_adapter COMMAND test_jh_entry_adapter)
 add_executable(test_lwip_raw_engines
     test_lwip_raw_engines.cpp
     fakes/lwip_fake.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_udp.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_tcp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_lwip_udp.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_lwip_tcp.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_lwip_raw_engines PRIVATE
@@ -264,7 +264,7 @@ add_test(NAME test_lwip_raw_engines COMMAND test_lwip_raw_engines)
 
 add_executable(test_network_service
     test_network_service.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_service.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_service.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_network_service PRIVATE
@@ -280,8 +280,8 @@ add_test(NAME test_network_service COMMAND test_network_service)
 
 add_executable(test_cyw43_radio_runtime
     test_cyw43_radio_runtime.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_service.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/cyw43/jh_cyw43_radio_runtime.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_service.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_cyw43_radio_runtime PRIVATE
@@ -297,7 +297,7 @@ add_test(NAME test_cyw43_radio_runtime COMMAND test_cyw43_radio_runtime)
 
 add_executable(test_ble_hci_transport
     test_ble_hci_transport.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/bluetooth/jh_ble_hci_transport.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_ble_hci_transport.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_ble_hci_transport PRIVATE
@@ -313,9 +313,9 @@ add_test(NAME test_ble_hci_transport COMMAND test_ble_hci_transport)
 
 add_executable(test_network_backend
     test_network_backend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/jh_handle_pool.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/jh_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_network_backend PRIVATE
@@ -349,9 +349,9 @@ add_test(NAME test_network_backend_contract_host
 add_executable(test_network_backend_contract_offload
     test_network_backend_contract.cpp
     fakes/network_contract_offload_backend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/jh_handle_pool.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_backend.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_network_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/core/jh_handle_pool.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_backend.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_network_handle_pool.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_network_backend_contract_offload PRIVATE
@@ -526,7 +526,7 @@ add_test(NAME test_sbom_inventory
 
 add_executable(test_hal_board_runtime
     test_hal_board_runtime.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/hal_board.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/system/hal_board.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_hal_board_runtime PRIVATE
@@ -545,14 +545,14 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
     set(SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../src")
     add_executable(${NAME}
         test_network_board_runtime.cpp
-        ${SRC_DIR}/hal/hal_board.cpp
-        ${SRC_DIR}/hal/hal_net.cpp
-        ${SRC_DIR}/hal/hal_tcp.cpp
-        ${SRC_DIR}/hal/hal_udp.cpp
-        ${SRC_DIR}/hal/hal_wifi.cpp
-        ${SRC_DIR}/hal/impl/shared/jh_handle_pool.cpp
-        ${SRC_DIR}/hal/impl/shared/network/jh_network_backend.cpp
-        ${SRC_DIR}/hal/impl/shared/network/jh_network_handle_pool.cpp
+        ${SRC_DIR}/hal/system/hal_board.cpp
+        ${SRC_DIR}/hal/network/hal_net.cpp
+        ${SRC_DIR}/hal/network/hal_tcp.cpp
+        ${SRC_DIR}/hal/network/hal_udp.cpp
+        ${SRC_DIR}/hal/network/hal_wifi.cpp
+        ${SRC_DIR}/hal/core/jh_handle_pool.cpp
+        ${SRC_DIR}/hal/network/jh_network_backend.cpp
+        ${SRC_DIR}/hal/network/jh_network_handle_pool.cpp
         ${SRC_DIR}/utils/unity.c
     )
     target_include_directories(${NAME} PRIVATE ${SRC_DIR})
@@ -563,6 +563,7 @@ function(add_network_board_runtime_test NAME BOARD_DEFINE TEST_DEFINE)
         HAL_ENABLE_WIFI=1
         HAL_ENABLE_TCP=1
         HAL_ENABLE_UDP=1
+        JH_HAL_UDP_SOCKET_API_ONLY=1
         HAL_NETWORK_BACKEND_CYW43=1
         HAL_CYW43_BUS_PICO_PIO=1
         HAL_CYW43_STACK_LWIP=1
@@ -586,7 +587,7 @@ add_network_board_runtime_test(
 )
 
 add_library(test_hal_http_client_plaintext_compile OBJECT
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/http/hal_http_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/http/hal_http_client.cpp
 )
 target_include_directories(test_hal_http_client_plaintext_compile PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
@@ -599,8 +600,8 @@ jh_enable_host_warnings(test_hal_http_client_plaintext_compile ERRORS)
 
 add_executable(test_pubsub_hal_client
     test_pubsub_hal_client.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/mqtt/jh_pubsub_hal_client.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/mqtt/jh_pubsub_hal_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_pubsub_hal_client PRIVATE
@@ -623,8 +624,8 @@ add_test(NAME test_pubsub_hal_client COMMAND test_pubsub_hal_client)
 
 add_executable(test_wireguard_lwip_port
     test_wireguard_lwip_port.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/jh_lwip_extension.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/jh_wireguard_client.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/jh_lwip_extension.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/jh_wireguard_client.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_wireguard_lwip_port BEFORE PRIVATE
@@ -730,45 +731,45 @@ add_hal_test(test_hal_thermocouple)
 add_hal_test(test_hal_critical_section)
 add_executable(test_pcf8563_driver
     test_pcf8563_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/pcf8563/pcf8563.cpp
 )
 target_link_libraries(test_pcf8563_driver PRIVATE hal_mock)
 add_test(NAME test_pcf8563_driver COMMAND test_pcf8563_driver)
 add_executable(test_ds3231_driver
     test_ds3231_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ds3231/ds3231.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/ds3231/ds3231.cpp
 )
 target_link_libraries(test_ds3231_driver PRIVATE hal_mock)
 add_test(NAME test_ds3231_driver COMMAND test_ds3231_driver)
 add_executable(test_jh_rtc_i2c_provider
     test_jh_rtc_i2c_provider.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/rtc/jh_rtc_i2c_provider.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ds3231/ds3231.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/jh_rtc_i2c_provider.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/pcf8563/pcf8563.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/rtc/ds3231/ds3231.cpp
 )
 target_link_libraries(test_jh_rtc_i2c_provider PRIVATE hal_mock)
 add_test(NAME test_jh_rtc_i2c_provider COMMAND test_jh_rtc_i2c_provider)
 add_executable(test_max6675_driver
     test_max6675_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/max6675/max6675_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/temperature/max6675/max6675_driver.cpp
 )
 target_link_libraries(test_max6675_driver PRIVATE hal_mock)
 add_test(NAME test_max6675_driver COMMAND test_max6675_driver)
 add_executable(test_mcp9600_driver
     test_mcp9600_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mcp9600/mcp9600_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/temperature/mcp9600/mcp9600_driver.cpp
 )
 target_link_libraries(test_mcp9600_driver PRIVATE hal_mock)
 add_test(NAME test_mcp9600_driver COMMAND test_mcp9600_driver)
 add_executable(test_bh1750_driver
     test_bh1750_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/bh1750/hal_bh1750.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/sensors/bh1750/hal_bh1750.cpp
 )
 target_link_libraries(test_bh1750_driver PRIVATE hal_mock)
 add_test(NAME test_bh1750_driver COMMAND test_bh1750_driver)
 add_executable(test_adp5360_driver
     test_adp5360_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/adp5360/hal_adp5360.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/power/adp5360/hal_adp5360.cpp
 )
 target_compile_definitions(test_adp5360_driver PRIVATE HAL_ENABLE_ADP5360)
 target_link_libraries(test_adp5360_driver PRIVATE hal_mock)
@@ -776,48 +777,48 @@ add_test(NAME test_adp5360_driver COMMAND test_adp5360_driver)
 add_hal_test(test_simple_io_drivers)
 add_executable(test_hd44780_driver
     test_hd44780_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/hd44780/hd44780.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hd44780/hd44780.cpp
 )
 target_compile_definitions(test_hd44780_driver PRIVATE HAL_ENABLE_HD44780)
 target_link_libraries(test_hd44780_driver PRIVATE hal_mock)
 add_test(NAME test_hd44780_driver COMMAND test_hd44780_driver)
 add_executable(test_tsc2007_driver
     test_tsc2007_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/tsc2007/tsc2007.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/input/tsc2007/tsc2007.cpp
 )
 target_compile_definitions(test_tsc2007_driver PRIVATE HAL_ENABLE_TSC2007)
 target_link_libraries(test_tsc2007_driver PRIVATE hal_mock)
 add_test(NAME test_tsc2007_driver COMMAND test_tsc2007_driver)
 add_executable(test_stmpe610_driver
     test_stmpe610_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/stmpe610/stmpe610.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/input/stmpe610/stmpe610.cpp
 )
 target_compile_definitions(test_stmpe610_driver PRIVATE HAL_ENABLE_STMPE610)
 target_link_libraries(test_stmpe610_driver PRIVATE hal_mock)
 add_test(NAME test_stmpe610_driver COMMAND test_stmpe610_driver)
 add_executable(test_irsmall_decoder_driver
     test_irsmall_decoder_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/input/irsmall_decoder/irsmall_decoder.cpp
 )
 target_compile_definitions(test_irsmall_decoder_driver PRIVATE HAL_ENABLE_IRSMALL_DECODER)
 target_link_libraries(test_irsmall_decoder_driver PRIVATE hal_mock)
 add_test(NAME test_irsmall_decoder_driver COMMAND test_irsmall_decoder_driver)
 add_executable(test_ads1x15_driver
     test_ads1x15_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/ads1x15/ads1x15_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/analog/ads1x15/ads1x15_driver.cpp
 )
 target_link_libraries(test_ads1x15_driver PRIVATE hal_mock)
 add_test(NAME test_ads1x15_driver COMMAND test_ads1x15_driver)
 add_hal_test(test_dacless_driver)
 add_executable(test_ili9341_driver
     test_ili9341_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ili9341_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ili9341_driver.cpp
 )
 target_link_libraries(test_ili9341_driver PRIVATE hal_mock)
 add_test(NAME test_ili9341_driver COMMAND test_ili9341_driver)
 add_executable(test_st77xx_driver
     test_st77xx_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st77xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/st77xx_driver.cpp
 )
 target_compile_definitions(test_st77xx_driver PRIVATE
     HAL_ENABLE_ST7735
@@ -829,13 +830,13 @@ target_link_libraries(test_st77xx_driver PRIVATE hal_mock)
 add_test(NAME test_st77xx_driver COMMAND test_st77xx_driver)
 add_executable(test_ssd1306_driver
     test_ssd1306_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd1306_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ssd1306_driver.cpp
 )
 target_link_libraries(test_ssd1306_driver PRIVATE hal_mock)
 add_test(NAME test_ssd1306_driver COMMAND test_ssd1306_driver)
 add_executable(test_rgb_oled_driver
     test_rgb_oled_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/rgb_oled_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/rgb_oled_driver.cpp
 )
 target_compile_definitions(test_rgb_oled_driver PRIVATE
     HAL_ENABLE_SSD1331
@@ -845,7 +846,7 @@ target_link_libraries(test_rgb_oled_driver PRIVATE hal_mock)
 add_test(NAME test_rgb_oled_driver COMMAND test_rgb_oled_driver)
 add_executable(test_st7567_driver
     test_st7567_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st7567_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/st7567_driver.cpp
 )
 target_compile_definitions(test_st7567_driver PRIVATE HAL_ENABLE_ST7567)
 target_link_libraries(test_st7567_driver PRIVATE hal_mock)
@@ -853,9 +854,9 @@ add_test(NAME test_st7567_driver COMMAND test_st7567_driver)
 
 add_executable(test_epd_drivers
     test_epd_drivers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/epd_spi_transport.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd16xx_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/uc81xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/epd_spi_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ssd16xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/uc81xx_driver.cpp
 )
 target_compile_definitions(test_epd_drivers PRIVATE
     HAL_ENABLE_SSD16XX
@@ -866,9 +867,10 @@ add_test(NAME test_epd_drivers COMMAND test_epd_drivers)
 
 add_executable(test_hal_display_rgb_oled_facade
     test_hal_display_rgb_oled_facade.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/rgb_oled_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/rgb_oled_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
 )
 target_include_directories(test_hal_display_rgb_oled_facade PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
@@ -893,9 +895,10 @@ add_test(NAME test_hal_display_rgb_oled_facade
 
 add_executable(test_hal_display_st7567_facade
     test_hal_display_st7567_facade.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/st7567_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/st7567_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
 )
 target_include_directories(test_hal_display_st7567_facade PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
@@ -920,11 +923,12 @@ add_test(NAME test_hal_display_st7567_facade
 
 add_executable(test_hal_display_epd_facade
     test_hal_display_epd_facade.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/hal_display.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/epd_spi_transport.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/ssd16xx_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/uc81xx_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/hal_display.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/epd_spi_transport.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/ssd16xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/uc81xx_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
 )
 target_include_directories(test_hal_display_epd_facade PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../src
@@ -948,34 +952,34 @@ add_test(NAME test_hal_display_epd_facade
          COMMAND test_hal_display_epd_facade)
 add_executable(test_jh_gfx_geometry
     test_jh_gfx_geometry.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display/jh_gfx.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers/jh_gfx.cpp
 )
 target_include_directories(test_jh_gfx_geometry BEFORE PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/display
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/display/drivers
 )
 target_link_libraries(test_jh_gfx_geometry PRIVATE hal_mock)
 add_test(NAME test_jh_gfx_geometry COMMAND test_jh_gfx_geometry)
 add_executable(test_mcp2515_driver
     test_mcp2515_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mcp2515/mcp2515_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/can/mcp2515/mcp2515_driver.cpp
 )
 target_link_libraries(test_mcp2515_driver PRIVATE hal_mock)
 add_test(NAME test_mcp2515_driver COMMAND test_mcp2515_driver)
 add_executable(test_mfrc522_driver
     test_mfrc522_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522_spi.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/mfrc522/mfrc522_i2c.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/mfrc522/mfrc522.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/mfrc522/mfrc522_spi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/mfrc522/mfrc522_i2c.cpp
 )
 target_compile_definitions(test_mfrc522_driver PRIVATE HAL_ENABLE_MFRC522)
 target_link_libraries(test_mfrc522_driver PRIVATE hal_mock)
 add_test(NAME test_mfrc522_driver COMMAND test_mfrc522_driver)
 add_executable(test_pn532_driver
     test_pn532_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_spi.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_i2c.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/pn532/pn532_uart.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/pn532/pn532.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/pn532/pn532_spi.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/pn532/pn532_i2c.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/nfc/pn532/pn532_uart.cpp
 )
 target_compile_definitions(test_pn532_driver PRIVATE HAL_ENABLE_PN532)
 target_link_libraries(test_pn532_driver PRIVATE hal_mock)
@@ -984,8 +988,8 @@ add_executable(test_wireguard_crypto_shared
     test_wireguard_crypto_shared.cpp
 )
 target_include_directories(test_wireguard_crypto_shared PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard/crypto
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/wireguard
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core/crypto
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/wireguard/core
 )
 target_link_libraries(test_wireguard_crypto_shared PRIVATE hal_mock)
 add_test(NAME test_wireguard_crypto_shared COMMAND test_wireguard_crypto_shared)
@@ -1021,7 +1025,7 @@ jh_enable_host_warnings(test_ntp_client ERRORS)
 add_test(NAME test_ntp_client COMMAND test_ntp_client)
 add_executable(test_ota_protocol
     test_ota_protocol.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/network/ota/jh_ota_protocol.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/ota/jh_ota_protocol.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_ota_protocol PRIVATE
@@ -1036,7 +1040,7 @@ jh_enable_host_warnings(test_ota_protocol ERRORS)
 add_test(NAME test_ota_protocol COMMAND test_ota_protocol)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/frameworks/filesystem/ff16/ff.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/storage/filesystem/ff16/ff.c
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
 )
 target_include_directories(test_ff16_memdisk PRIVATE
@@ -1105,7 +1109,7 @@ add_hal_test(test_hal_onewire)
 # is faked under MOCK). Guards the onewire_drive_high write-before-mode ordering.
 add_executable(test_hal_onewire_driver
     test_hal_onewire_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/onewire/onewire_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/onewire/onewire_driver.cpp
 )
 target_link_libraries(test_hal_onewire_driver PRIVATE hal_mock)
 add_test(NAME test_hal_onewire_driver COMMAND test_hal_onewire_driver)
@@ -1152,10 +1156,10 @@ add_hal_test(test_bearssl_provider)
 
 add_library(test_tls_without_bsd_compile OBJECT
     fixtures/tls_without_bsd_config_probe.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/hal_tls.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.cpp
-    ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp)
+    ${CMAKE_SOURCE_DIR}/src/hal/network/tls/hal_tls.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp)
 target_compile_definitions(test_tls_without_bsd_compile PRIVATE
     HAL_TARGET_MOCK=1 HAL_ENABLE_TLS)
 target_include_directories(test_tls_without_bsd_compile PRIVATE
@@ -1166,7 +1170,7 @@ jh_enable_host_warnings(test_tls_without_bsd_compile ERRORS)
 if(NOT WIN32)
     add_library(test_bsd_without_tls_compile OBJECT
         fixtures/bsd_without_tls_config_probe.cpp
-        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp)
+        ${CMAKE_SOURCE_DIR}/src/hal/network/adapters/bsd/hal_bsd_sockets.cpp)
     target_compile_definitions(test_bsd_without_tls_compile PRIVATE
         HAL_TARGET_MOCK=1 HAL_ENABLE_BSD_SOCKETS)
     target_include_directories(test_bsd_without_tls_compile PRIVATE
@@ -1182,9 +1186,9 @@ find_program(JH_OPENSSL_EXECUTABLE openssl)
 if(JH_OPENSSL_EXECUTABLE AND NOT WIN32)
     add_executable(test_bearssl_native_client
         test_bearssl_native_client.cpp
-        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.cpp
-        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.cpp
-        ${CMAKE_SOURCE_DIR}/src/hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.cpp)
+        ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_bsd_io.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp)
     target_compile_definitions(test_bearssl_native_client PRIVATE
         HAL_ENABLE_TLS HAL_ENABLE_BSD_SOCKETS)
     target_include_directories(test_bearssl_native_client PRIVATE

@@ -1,5 +1,5 @@
-#include "hal/hal_websocket.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/websocket/hal_websocket.h"
 
 #include <algorithm>
 #include <cstddef>

@@ -1,4 +1,4 @@
-#include "hal/hal_gpio.h"
+#include "hal/gpio/hal_gpio.h"
 #include "utils/unity.h"
 
 namespace {

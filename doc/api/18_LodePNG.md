@@ -8,7 +8,7 @@ enabled by `HAL_ENABLE_PNG_AS_BASE64`.
 `LodePNG` is a standalone PNG encoder/decoder fetched into
 `third_party/lodepng` at the commit pinned by
 `third_party/lodepng_version.conf`. Thin integration wrappers in
-`src/hal/impl/shared/frameworks/lodepng/` gate the upstream source behind
+`src/hal/codecs/lodepng/` gate the upstream source behind
 `HAL_ENABLE_PNG` and expose the memory-based API through the existing include
 path.
 
@@ -53,7 +53,7 @@ flag.
 Direct include, safe from both C and C++:
 
 ```c
-#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
+#include <hal/codecs/lodepng/lodepng.h>
 ```
 
 For C++ files that already use the utility aggregator, `tools.h` also exposes
@@ -76,7 +76,7 @@ By default JaszczurHAL keeps the upstream memory-based C API and disables:
 
 If an application really needs those upstream optional sections, define
 `HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP` before including
-`hal/impl/shared/frameworks/lodepng/lodepng.h`.
+`hal/codecs/lodepng/lodepng.h`.
 
 The usual upstream `LODEPNG_NO_COMPILE_*` flags still work for further trimming,
 for example disabling the encoder or decoder in a tightly constrained build.
@@ -119,7 +119,7 @@ Rules that matter most:
 
 ```c
 #include <tools_c.h>
-#include <hal/impl/shared/frameworks/lodepng/lodepng.h>
+#include <hal/codecs/lodepng/lodepng.h>
 #include <stdbool.h>
 #include <stdlib.h>
 

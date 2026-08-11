@@ -1,5 +1,5 @@
-#include "hal/hal_sync.h"
 #include "hal/impl/rp2040/rp2040_adc_shared.h"
+#include "hal/system/hal_sync.h"
 #include "utils/unity.h"
 
 #include <atomic>

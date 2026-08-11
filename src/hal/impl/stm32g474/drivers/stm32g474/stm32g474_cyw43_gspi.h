@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../../shared/drivers/cyw43-driver/jh_cyw43_gspi_transport.h"
+#include "hal/network/cyw43/jh_cyw43_gspi_transport.h"
 
 #include <stddef.h>
 #include <stdint.h>

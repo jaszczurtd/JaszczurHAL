@@ -1,8 +1,8 @@
-#include "hal/hal_ble.h"
-#include "hal/hal_ble_stream.h"
-#include "hal/hal_crypto.h"
+#include "hal/bluetooth/hal_ble.h"
+#include "hal/bluetooth/hal_ble_stream.h"
+#include "hal/bluetooth/jh_ble_stream_session.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/bluetooth/jh_ble_stream_session.h"
+#include "hal/security/hal_crypto.h"
 #include "utils/unity.h"
 
 #include <string.h>

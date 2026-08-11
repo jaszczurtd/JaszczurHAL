@@ -1,7 +1,7 @@
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_engine.h"
-#include "hal/impl/shared/frameworks/BearSSL/jh_bearssl_provider.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_bsd_io.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_engine.h"
+#include "hal/network/tls/BearSSL/jh_bearssl_provider.h"
 #include "utils/unity.h"
 
 #include <arpa/inet.h>

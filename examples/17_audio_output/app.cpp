@@ -1,9 +1,9 @@
-#include <hal/hal_app.h>
-#include <hal/hal_dacless.h>
-#include <hal/hal_pga2311.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/audio/hal_dacless.h>
+#include <hal/audio/hal_pga2311.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #include <new>

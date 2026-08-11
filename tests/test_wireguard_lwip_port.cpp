@@ -1,8 +1,8 @@
-#include "hal/impl/shared/frameworks/wireguard/jh_wireguard_client.h"
-#include "hal/impl/shared/frameworks/wireguard/wireguard-platform.h"
-#include "hal/impl/shared/frameworks/wireguard/wireguard_allowed_ip.h"
-#include "hal/impl/shared/frameworks/wireguard/wireguardif.h"
-#include "hal/impl/shared/network/jh_lwip_extension.h"
+#include "hal/network/jh_lwip_extension.h"
+#include "hal/network/wireguard/core/jh_wireguard_client.h"
+#include "hal/network/wireguard/core/wireguard-platform.h"
+#include "hal/network/wireguard/core/wireguard_allowed_ip.h"
+#include "hal/network/wireguard/core/wireguardif.h"
 #include "utils/unity.h"
 
 #include <cstring>

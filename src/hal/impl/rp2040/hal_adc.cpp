@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_adc.h"
-#include "../../hal_config.h"
+#include "hal/analog/hal_adc.h"
+#include "hal/core/hal_config.h"
 #include "rp2040_adc_shared.h"
 
 static uint8_t clamp_resolution(uint8_t bits) {

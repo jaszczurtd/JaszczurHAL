@@ -55,7 +55,7 @@
         "third_party/BTstack",
         "third_party/btstack_version.conf",
         "third_party/LICENSE.BTstack",
-        "src/hal/impl/shared/bluetooth"
+        "src/hal/bluetooth"
       ],
       "upstream": "https://github.com/bluekitchen/btstack",
       "feature_flags": ["HAL_ENABLE_BLE"],
@@ -131,7 +131,7 @@
       "paths": [
         "third_party/BearSSL",
         "third_party/bearssl_version.conf",
-        "src/hal/impl/shared/frameworks/BearSSL"
+        "src/hal/network/tls/BearSSL"
       ],
       "upstream": "https://github.com/jaszczurtd/bearssl-esp8266",
       "feature_flags": ["HAL_ENABLE_TLS"],
@@ -149,7 +149,7 @@
       "paths": [
         "third_party/lwip",
         "third_party/lwip_version.conf",
-        "src/hal/impl/shared/frameworks/lwip/port"
+        "src/hal/network/lwip/port"
       ],
       "upstream": "https://github.com/lwip-tcpip/lwip",
       "feature_flags": ["HAL_ENABLE_WIFI", "HAL_ENABLE_WIREGUARD"],
@@ -167,7 +167,7 @@
       "paths": [
         "third_party/cJSON",
         "third_party/cjson_version.conf",
-        "src/hal/impl/shared/frameworks/cjson"
+        "src/hal/codecs/cjson"
       ],
       "upstream": "https://github.com/DaveGamble/cJSON",
       "feature_flags": ["HAL_ENABLE_CJSON", "HAL_ENABLE_NET_COMMANDS"],
@@ -185,7 +185,7 @@
       "paths": [
         "third_party/lodepng",
         "third_party/lodepng_version.conf",
-        "src/hal/impl/shared/frameworks/lodepng"
+        "src/hal/codecs/lodepng"
       ],
       "upstream": "https://github.com/jaszczurtd/lodepng",
       "feature_flags": ["HAL_ENABLE_PNG"],
@@ -203,7 +203,7 @@
       "paths": [
         "third_party/FatFs",
         "third_party/fatfs_version.conf",
-        "src/hal/impl/shared/frameworks/filesystem/ff16"
+        "src/hal/storage/filesystem/ff16"
       ],
       "upstream": "https://github.com/jaszczurtd/ff16",
       "feature_flags": ["HAL_ENABLE_FAT", "HAL_ENABLE_SDLOGGER"],
@@ -233,8 +233,8 @@
       "licenses": ["MIT"],
       "purl": "pkg:github/knolleary/pubsubclient@2d228f2f862a95846c65a8518c79f48dfc8f188c",
       "paths": [
-        "src/hal/impl/shared/frameworks/PubSubClient",
-        "src/hal/impl/shared/frameworks/PubSubClient/LICENSE.txt"
+        "src/hal/network/mqtt/PubSubClient",
+        "src/hal/network/mqtt/PubSubClient/LICENSE.txt"
       ],
       "upstream": "https://github.com/knolleary/pubsubclient",
       "feature_flags": ["HAL_ENABLE_MQTT"],
@@ -250,8 +250,8 @@
       "licenses": ["BSD-3-Clause"],
       "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@ba409a040c78bcf86f6c8026ba86c014035b8c63",
       "paths": [
-        "src/hal/impl/shared/frameworks/wireguard",
-        "src/hal/impl/shared/frameworks/wireguard/LICENSE"
+        "src/hal/network/wireguard/core",
+        "src/hal/network/wireguard/core/LICENSE"
       ],
       "upstream": "https://github.com/jaszczurtd/arduino-wireguard-pico-w",
       "feature_flags": ["HAL_ENABLE_WIREGUARD"],
@@ -267,9 +267,9 @@
       "licenses": ["BSD-3-Clause", "MIT"],
       "purl": "pkg:github/jaszczurtd/arduino-wireguard-pico-w@ba409a040c78bcf86f6c8026ba86c014035b8c63",
       "paths": [
-        "src/hal/impl/shared/frameworks/wireguard/crypto",
-        "src/hal/impl/shared/frameworks/wireguard/LICENSE",
-        "src/hal/impl/shared/frameworks/wireguard/crypto/x25519-license.txt"
+        "src/hal/network/wireguard/core/crypto",
+        "src/hal/network/wireguard/core/LICENSE",
+        "src/hal/network/wireguard/core/crypto/x25519-license.txt"
       ],
       "upstream": "https://github.com/jaszczurtd/arduino-wireguard-pico-w",
       "feature_flags": ["HAL_ENABLE_WIREGUARD"],
@@ -287,7 +287,7 @@
       "paths": [
         "third_party/TJpg_Decoder",
         "third_party/jpeg_version.conf",
-        "src/hal/impl/shared/frameworks/jpeg"
+        "src/hal/codecs/jpeg"
       ],
       "upstream": "https://github.com/jaszczurtd/TJpg_Decoder",
       "feature_flags": ["HAL_ENABLE_JPEG"],
@@ -324,8 +324,8 @@
       "licenses": ["MIT"],
       "purl": "pkg:github/nettigo/Timers@651b205ab6b6ac64ab08983f2ecf158459c19d16",
       "paths": [
-        "src/hal/impl/shared/frameworks/smart_timers",
-        "src/hal/impl/shared/frameworks/smart_timers/LICENSE.Nettigo-Timers"
+        "src/hal/timers/smart_timers",
+        "src/hal/timers/smart_timers/LICENSE.Nettigo-Timers"
       ],
       "upstream": "https://github.com/nettigo/Timers",
       "feature_flags": [],

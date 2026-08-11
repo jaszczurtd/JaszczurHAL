@@ -9,7 +9,7 @@ Covers: `hal_rgb_led`, `hal_digipot`, `hal_pga2311`, `hal_mcp23017`, `hal_pca965
 `hal_math.h` provides platform-independent helpers usable from both C and C++.
 
 ```c
-#include <hal/hal_math.h>
+#include <hal/core/hal_math.h>
 
 #define hal_constrain(v, lo, hi) ...
 #define hal_map(x, in_min, in_max, out_min, out_max) ...
@@ -26,7 +26,7 @@ Half values are rounded away from zero.
 ## `hal_rgb_led` - NeoPixel status LED  *(optional - `HAL_ENABLE_RGB_LED`)*
 
 ```c
-#include <hal/hal_rgb_led.h>
+#include <hal/gpio/hal_rgb_led.h>
 
 typedef enum {
     HAL_RGB_LED_NONE   = 0,
@@ -68,8 +68,8 @@ counts/types or colours return `HAL_EINVAL`, colour writes before init return
 failures return `HAL_EIO`. `hal_rgb_led_init_ex()` keeps its historical name
 because `_ex` already denotes the explicit pixel-type variant.
 
-**impl/rp2040:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`impl/shared/drivers/neopixel/rp2040_pio.h`).
-**impl/stm32g474:** shared `impl/shared/drivers/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
+**impl/rp2040:** shared `hal/gpio/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`hal/gpio/neopixel/rp2040_pio.h`).
+**impl/stm32g474:** shared `hal/gpio/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
 **Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
 
@@ -92,7 +92,7 @@ void                hal_mock_rgb_led_fail_next_write(bool fail);
 ## `hal_digipot` - I2C digital potentiometers  *(optional - `HAL_ENABLE_DIGIPOT`)*
 
 ```c
-#include <hal/hal_digipot.h>
+#include <hal/analog/hal_digipot.h>
 
 hal_status_t hal_digipot_init_ex(const hal_digipot_config_t *cfg,
                                  hal_digipot_t *out);
@@ -115,9 +115,9 @@ pool exhaustion (`HAL_ENOMEM`) and chip/bus initialisation failures
 `hal_digipot_init()` and `hal_digipot_set_resistance()` wrappers remain for
 source compatibility.
 
-**impl/shared:** `hal_digipot.cpp` owns the handle pool, validation dispatch and
+**shared thematic implementation:** `hal_digipot.cpp` owns the handle pool, validation dispatch and
 per-instance mutex; chip-specific MCP401x/MAX5395 transaction logic lives under
-`impl/shared/drivers/digipot/`.
+`hal/analog/digipot/`.
 
 **Thread safety:** runtime operations are serialized per instance and each chip
 transaction uses HAL I2C helpers.
@@ -128,7 +128,7 @@ transaction uses HAL I2C helpers.
 ## `hal_pga2311` - PGA2311 stereo volume controller  *(optional - `HAL_ENABLE_PGA2311`)*
 
 ```c
-#include <hal/hal_pga2311.h>
+#include <hal/audio/hal_pga2311.h>
 
 #define HAL_PGA2311_PIN_NONE            0xFFu
 #define HAL_PGA2311_MUTE_PIN_NONE       HAL_PGA2311_PIN_NONE
@@ -215,7 +215,7 @@ bool hal_pga2311_raw_to_gain_half_db(uint8_t code, int16_t *out_half_db);
 - With a hardware mute pin configured, mute toggles only GPIO and does not send
   extra SPI frames.
 
-**impl/shared:** `impl/shared/drivers/pga2311/pga2311_driver.*` (HAL SPI/GPIO transport)
+**shared thematic implementation:** `hal/audio/pga2311/pga2311_driver.*` (HAL SPI/GPIO transport)
 plus `hal_pga2311.cpp` facade with static handle pool + per-instance mutex.
 
 **Thread safety:** per-instance mutex serializes API calls; SPI transactions are
@@ -226,7 +226,7 @@ wrapped in `hal_spi_lock()` / `hal_spi_unlock()`.
 ## `hal_mfrc522` - MFRC522 RFID reader  *(optional - `HAL_ENABLE_MFRC522`)*
 
 ```cpp
-#include <hal/hal_mfrc522.h>
+#include <hal/nfc/hal_mfrc522.h>
 
 hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
 
@@ -261,7 +261,7 @@ Example: `examples/22_rfid_nfc`.
 ## `hal_pn532` - PN532 NFC/RFID reader  *(optional - `HAL_ENABLE_PN532`)*
 
 ```cpp
-#include <hal/hal_pn532.h>
+#include <hal/nfc/hal_pn532.h>
 
 hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
 
@@ -299,11 +299,11 @@ Example: `examples/22_rfid_nfc`.
 ## Simple I/O chips  *(optional - `HAL_ENABLE_MCP23017`, `HAL_ENABLE_PCA9654E`, `HAL_ENABLE_PCF8574`, `HAL_ENABLE_HC595`, `HAL_ENABLE_MCP4725`)*
 
 ```c
-#include <hal/hal_mcp23017.h>
-#include <hal/hal_pca9654e.h>
-#include <hal/hal_pcf8574.h>
-#include <hal/hal_hc595.h>
-#include <hal/hal_mcp4725.h>
+#include <hal/gpio/hal_mcp23017.h>
+#include <hal/gpio/hal_pca9654e.h>
+#include <hal/gpio/hal_pcf8574.h>
+#include <hal/gpio/hal_hc595.h>
+#include <hal/analog/hal_mcp4725.h>
 
 hal_i2c_init(sda_pin, scl_pin, HAL_I2C_CLOCK_STANDARD_HZ);
 hal_spi_init(0, miso_pin, mosi_pin, sck_pin);
