@@ -109,6 +109,8 @@ and belong to separate physical radio pairs. The `probe` variant validates
 capabilities, calibration, current RSSI and CAD without transmitting. The base
 and `responder` variants use SF9/10 dBm, while `sf7` and `responder-sf7` provide
 the deterministic SF7/6 dBm hardware-test pair.
+SX1261, SX1276 and SX1278 remain experimental software-only integrations and
+do not add example board profiles or claim physical support for this fixture.
 
 ## Supported build targets
 

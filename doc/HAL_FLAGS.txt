@@ -235,10 +235,10 @@ Connectivity
     per-device secret installed with hal_ble_stream_set_secret().
   HAL_ENABLE_LORA
     Feature selection for the provider-neutral raw LoRa radio facade. Requires
-    exactly one provider; the current provider is HAL_ENABLE_SX126X. The public
+    exactly one family provider: HAL_ENABLE_SX126X or HAL_ENABLE_SX127X. The public
     C/C++ declaration surface is hal/radio/hal_lora_radio.h. Opaque lifecycle
-    handles support DIO1-driven asynchronous TX/RX/CAD, current RSSI, explicit
-    calibration, provider capabilities, task callbacks and cancellation.
+    handles support DIO-driven asynchronous TX/RX/CAD, current RSSI, provider
+    capabilities, task callbacks and cancellation.
     They use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
     (default 2, valid range 1..255). The facade provides raw modem presets and
     validation, blocking TX compatibility, bounded or continuous RX, packet
@@ -246,10 +246,17 @@ Connectivity
     calculation.
   HAL_ENABLE_SX126X
     Selects the pinned official Semtech SX126x provider and propagates LORA and
-    SPI. The shared adapter owns SX1262 command framing, BUSY deadlines, RF
+    SPI. The shared adapter owns validated SX1262 and experimental, software-only
+    SX1261 command framing, model-specific PA/OCP limits, BUSY deadlines, RF
     switch/TCXO/regulator setup and band-aware image calibration through HAL
-    SPI/GPIO. HAL_LORA_SX126X_BUSY_TIMEOUT_MS defaults to 1000 and accepts
-    values from 1 through 60000 milliseconds.
+    SPI/GPIO. HAL_LORA_SX126X_BUSY_TIMEOUT_MS defaults to 1000 and accepts values
+    from 1 through 60000 milliseconds. Conflicts with HAL_ENABLE_SX127X.
+  HAL_ENABLE_SX127X
+    Selects the experimental, software-only SX1276/SX1278 provider and propagates
+    LORA and SPI. The HAL-owned register driver supports the common lifecycle,
+    DIO IRQ mapping, TX/RX/CAD, RSSI, sleep/wake and RFO/PA_BOOST selection.
+    HAL_LORA_SX127X_RESET_SETTLE_MS defaults to 10 and accepts values from 5
+    through 1000 milliseconds. Conflicts with HAL_ENABLE_SX126X.
   HAL_ENABLE_WIFI
     WiFi. A profile without the selected network hardware compiles but public
     runtime access returns HAL_EUNSUPPORTED.
@@ -525,6 +532,7 @@ HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT, HAL_ENABLE_EEPROM, HAL_ENABLE_SPI
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE, HAL_ENABLE_CRYPTO
 HAL_ENABLE_SX126X      -> HAL_ENABLE_LORA, HAL_ENABLE_SPI
+HAL_ENABLE_SX127X      -> HAL_ENABLE_LORA, HAL_ENABLE_SPI
 HAL_ENABLE_TIME        -> HAL_ENABLE_UDP, HAL_ENABLE_WIFI
 HAL_ENABLE_MQTT        -> HAL_ENABLE_TCP, HAL_ENABLE_WIFI
 HAL_ENABLE_UDP         -> HAL_ENABLE_WIFI

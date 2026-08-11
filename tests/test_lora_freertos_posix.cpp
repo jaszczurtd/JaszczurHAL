@@ -27,7 +27,7 @@ hal_status_t
 provider_get_capabilities(jh_lora_radio_context_t *context,
                           hal_lora_radio_capabilities_t *out_capabilities) {
   return jh_lora_radio_describe_capabilities(
-      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+      context, JH_LORA_PROVIDER_CAP_SX126X, out_capabilities);
 }
 
 hal_status_t provider_get_instant_rssi(jh_lora_radio_context_t *,

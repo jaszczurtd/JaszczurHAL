@@ -23,9 +23,15 @@ static_assert(std::is_same_v<decltype(&hal_lora_time_on_air),
                                               size_t, uint32_t *)>);
 
 int main() {
+  hal_lora_radio_config_t hardware{};
+  hardware.model = HAL_LORA_RADIO_SX1276;
+  hardware.hardware.sx127x.pa_output = HAL_LORA_SX127X_PA_BOOST;
   hal_lora_modem_config_t modem{};
   modem.frequency_hz = UINT32_C(868100000);
   modem.bandwidth_hz = UINT32_C(125000);
   modem.spreading_factor = 7u;
-  return modem.frequency_hz == UINT32_C(868100000) ? 0 : 1;
+  return modem.frequency_hz == UINT32_C(868100000) &&
+                 hardware.model == HAL_LORA_RADIO_SX1276
+             ? 0
+             : 1;
 }

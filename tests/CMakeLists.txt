@@ -81,7 +81,7 @@ add_test(NAME test_hal_lora_radio_header_c COMMAND test_hal_lora_radio_header_c)
 add_executable(test_hal_lora_radio_header_cpp test_hal_lora_radio_header.cpp)
 target_compile_definitions(test_hal_lora_radio_header_cpp PRIVATE
     HAL_TARGET_MOCK=1
-    HAL_ENABLE_SX126X=1)
+    HAL_ENABLE_SX127X=1)
 target_include_directories(test_hal_lora_radio_header_cpp PRIVATE
     ${CMAKE_SOURCE_DIR}/src)
 jh_enable_host_warnings(test_hal_lora_radio_header_cpp ERRORS)
@@ -461,6 +461,11 @@ add_test(NAME test_vscode_build_environment
 add_test(NAME test_build_artifact_layout
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_build_artifact_layout.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_ci_library_matrix
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_ci_library_matrix.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_stm32_host_sanity_build
@@ -1107,6 +1112,57 @@ add_hal_test(test_hal_spi_device)
 add_hal_test(test_hal_lora_radio_lifecycle)
 add_hal_test(test_hal_lora_radio)
 add_hal_test(test_sx126x_adapter)
+
+add_executable(test_sx127x_adapter
+    test_sx127x_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/radio/sx127x/jh_sx127x_adapter.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_gpio.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_spi.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/spi/hal_spi.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_system.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_sync.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_assert.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_sx127x_adapter PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_sx127x_adapter PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX127X=1
+    HAL_ENABLE_UNITY=1
+    HAL_ENABLE_PWM_FREQ=1
+    HAL_ENABLE_MCP2515=1
+    HAL_ENABLE_RGB_LED=1
+    HAL_ENABLE_WIFI=1
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_sx127x_adapter ERRORS)
+add_test(NAME test_sx127x_adapter COMMAND test_sx127x_adapter)
+
+add_executable(test_hal_lora_sx127x
+    test_hal_lora_sx127x.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/radio/hal_lora_radio.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/radio/jh_lora_modem.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_lora_radio.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_system.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/.mock/hal_sync.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/jh_handle_pool.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_assert.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/system/hal_board.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_hal_lora_sx127x PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_hal_lora_sx127x PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX127X=1
+    HAL_ENABLE_UNITY=1
+    HAL_ENABLE_PWM_FREQ=1
+    HAL_ENABLE_MCP2515=1
+    HAL_ENABLE_RGB_LED=1
+    HAL_ENABLE_WIFI=1
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_hal_lora_sx127x ERRORS)
+add_test(NAME test_hal_lora_sx127x COMMAND test_hal_lora_sx127x)
 add_hal_test(test_hal_i2c)
 add_hal_test(test_hal_i2c_slave)
 add_hal_test(test_hal_rgb_led)

@@ -68,6 +68,11 @@
       ]
     },
     "HAL_ENABLE_SX126X": {
+      "conflicts": ["HAL_ENABLE_SX127X"],
+      "implies": ["HAL_ENABLE_LORA", "HAL_ENABLE_SPI"]
+    },
+    "HAL_ENABLE_SX127X": {
+      "conflicts": ["HAL_ENABLE_SX126X"],
       "implies": ["HAL_ENABLE_LORA", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_TCP": {

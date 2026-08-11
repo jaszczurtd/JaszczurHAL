@@ -3,6 +3,7 @@
 #ifdef HAL_ENABLE_SX126X
 
 #include "hal/gpio/hal_gpio.h"
+#include "hal/radio/jh_lora_modem.h"
 #include "hal/spi/hal_spi.h"
 #include "hal/system/hal_system.h"
 
@@ -329,22 +330,6 @@ static bool bandwidth_to_sx126x(uint32_t bandwidth_hz,
   }
 }
 
-bool jh_sx126x_modem_config_valid(
-    const hal_lora_modem_config_t *config,
-    const hal_lora_sx126x_hardware_config_t *hardware) {
-  sx126x_lora_bw_t bandwidth;
-  return config != NULL && hardware != NULL &&
-         config->frequency_hz >= hardware->min_frequency_hz &&
-         config->frequency_hz <= hardware->max_frequency_hz &&
-         bandwidth_to_sx126x(config->bandwidth_hz, &bandwidth) &&
-         config->spreading_factor >= 5u && config->spreading_factor <= 12u &&
-         config->coding_rate >= 5u && config->coding_rate <= 8u &&
-         config->tx_power_dbm >= hardware->min_tx_power_dbm &&
-         config->tx_power_dbm <= hardware->max_tx_power_dbm &&
-         config->preamble_symbols > 0u &&
-         (config->explicit_header || config->implicit_payload_length > 0u);
-}
-
 static bool build_modulation(const hal_lora_modem_config_t *config,
                              sx126x_mod_params_lora_t *out_modulation) {
   sx126x_lora_bw_t bandwidth;
@@ -384,22 +369,6 @@ static bool build_packet(const hal_lora_modem_config_t *config,
   out_packet->crc_is_on = config->crc_enabled;
   out_packet->invert_iq_is_on = config->invert_iq;
   return true;
-}
-
-hal_status_t jh_sx126x_time_on_air(const hal_lora_modem_config_t *config,
-                                   size_t payload_length,
-                                   uint32_t *out_time_ms) {
-  if (out_time_ms != NULL) {
-    *out_time_ms = 0u;
-  }
-  sx126x_mod_params_lora_t modulation = {};
-  sx126x_pkt_params_lora_t packet = {};
-  if (out_time_ms == NULL || !build_modulation(config, &modulation) ||
-      !build_packet(config, payload_length, &packet)) {
-    return HAL_EINVAL;
-  }
-  *out_time_ms = sx126x_get_lora_time_on_air_in_ms(&packet, &modulation);
-  return *out_time_ms > 0u ? HAL_OK : HAL_EINVAL;
 }
 
 static hal_status_t configure_packet(jh_lora_radio_context_t *context,
@@ -487,6 +456,27 @@ static hal_status_t calibrate_blocks(jh_lora_radio_context_t *context) {
   return status;
 }
 
+static hal_status_t configure_pa(jh_lora_radio_context_t *context,
+                                 int8_t power_dbm) {
+  const bool sx1261 = context->config.model == HAL_LORA_RADIO_SX1261;
+  const sx126x_pa_cfg_params_t pa =
+      sx1261 ? sx126x_pa_cfg_params_t{static_cast<uint8_t>(
+                                          power_dbm == 15 ? 0x06u : 0x04u),
+                                      0x00u, 0x01u, 0x01u}
+             : sx126x_pa_cfg_params_t{0x04u, 0x07u, 0x00u, 0x01u};
+  hal_status_t status = map_status(context, sx126x_set_pa_cfg(context, &pa));
+  if (status == HAL_OK) {
+    status = map_status(
+        context,
+        sx126x_set_ocp_value(context, sx1261 ? SX126X_OCP_PARAM_VALUE_60_MA
+                                             : SX126X_OCP_PARAM_VALUE_140_MA));
+  }
+  if (status == HAL_OK && !sx1261) {
+    status = map_status(context, sx126x_cfg_tx_clamp(context));
+  }
+  return status;
+}
+
 static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
   const hal_lora_sx126x_hardware_config_t *hardware =
       &context->config.hardware.sx126x;
@@ -561,15 +551,8 @@ static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
   if (status != HAL_OK) {
     return status;
   }
-  const sx126x_pa_cfg_params_t pa = {0x04u, 0x07u, 0x00u, 0x01u};
-  status = map_status(context, sx126x_set_pa_cfg(context, &pa));
-  if (status == HAL_OK) {
-    status = map_status(
-        context, sx126x_set_ocp_value(context, SX126X_OCP_PARAM_VALUE_140_MA));
-  }
-  if (status == HAL_OK) {
-    status = map_status(context, sx126x_cfg_tx_clamp(context));
-  }
+  status = configure_pa(
+      context, context->config.model == HAL_LORA_RADIO_SX1261 ? 14 : 22);
   if (status == HAL_OK) {
     status = map_status(context, sx126x_set_rx_tx_fallback_mode(
                                      context, SX126X_FALLBACK_STDBY_RC));
@@ -646,6 +629,9 @@ static hal_status_t sx126x_configure(jh_lora_radio_context_t *context) {
         context, sx126x_set_lora_sync_word(context, context->modem.sync_word));
   }
   if (status == HAL_OK) {
+    status = configure_pa(context, context->modem.tx_power_dbm);
+  }
+  if (status == HAL_OK) {
     status = map_status(
         context, sx126x_set_tx_params(context, context->modem.tx_power_dbm,
                                       SX126X_RAMP_200_US));
@@ -657,7 +643,7 @@ static hal_status_t
 sx126x_get_capabilities(jh_lora_radio_context_t *context,
                         hal_lora_radio_capabilities_t *out_capabilities) {
   return jh_lora_radio_describe_capabilities(
-      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+      context, JH_LORA_PROVIDER_CAP_SX126X, out_capabilities);
 }
 
 static hal_status_t sx126x_get_instant_rssi(jh_lora_radio_context_t *context,

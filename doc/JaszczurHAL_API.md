@@ -294,7 +294,8 @@ logic from board-specific SDK calls:
 - `hal_crypto`, `hal_crc`
 - `hal_pid_controller`
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
-- `hal_lora_radio` for provider-neutral raw LoRa/SX1262 operation
+- `hal_lora_radio` for provider-neutral raw LoRa operation with SX126x and
+  SX127x family providers
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`, `hal_pn532`
 - `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
@@ -424,7 +425,7 @@ The complete reference is split across the following focused documents:
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
-| 21 | [Raw LoRa radio](api/21_lora.md) | SX1262 profiles, DIO1-driven asynchronous TX/RX/CAD, current RSSI, explicit calibration, capabilities, callbacks, diagnostics and time-on-air |
+| 21 | [Raw LoRa radio](api/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 
 ---
 

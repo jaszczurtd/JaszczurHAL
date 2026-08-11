@@ -22,7 +22,7 @@
 | `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`hal/input/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
 | `hal_irsmall_decoder` | shared IR receiver decoder (`hal/input/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
-| `hal_lora_radio` | Pinned official Semtech SX126x driver plus the shared HAL SPI/GPIO adapter; SX1262 on RP2040 and STM32G474, deterministic provider on mock |
+| `hal_lora_radio` | Mutually exclusive family providers: the pinned official Semtech SX126x driver with the HAL adapter for validated SX1262 and experimental software-only SX1261, or the HAL-owned register provider for experimental software-only SX1276/SX1278; both compile for RP and STM32G474 and have deterministic mock coverage |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
@@ -310,8 +310,10 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_uart` | hardware UART RX inject, TX capture, pin reassignment |
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_lora_radio_lifecycle` | Opaque-handle allocation limits, stale handles, lifecycle cleanup and provider error propagation |
-| `test_hal_lora_radio` | SX1262 profiles and presets, blocking TX, bounded/continuous polling RX, overflow/CRC/timeout diagnostics, power state, time-on-air and two connected mock radios |
-| `test_sx126x_adapter` | Official driver command orchestration, SPI transaction cleanup, BUSY deadlines, RF switch levels, electrical setup, band calibration, TX timeout and RX CRC IRQ mapping |
+| `test_hal_lora_radio` | SX1262 profiles and presets, SX1261 model limits, blocking TX, bounded/continuous polling RX, overflow/CRC/timeout diagnostics, power state, time-on-air and two connected mock radios |
+| `test_sx126x_adapter` | Official driver command orchestration, SX1261/SX1262 PA and OCP selection, SPI transaction cleanup, BUSY deadlines, RF switch levels, electrical setup, band calibration, TX timeout and RX CRC IRQ mapping |
+| `test_hal_lora_sx127x` | SX1276/SX1278 model-specific descriptor validation and the common facade lifecycle, capabilities, calibration boundary, TX, RX, CAD and power states |
+| `test_sx127x_adapter` | SX127x register transport, version probe, modem/frequency/PA configuration, IRQ/status mapping, FIFO metadata, RSSI, CAD, timeout, cancellation, bus errors and TCXO sleep/wake behavior |
 | `test_hal_pga2311` | PGA2311 status/config validation, pool exhaustion, injected SPI failures and retry, frame writes, dB/code conversion, soft/hardware mute behavior |
 | `test_irsmall_decoder_driver` | IRsmallDecoder NEC/NECx/SIRC/Samsung frame decode, RC5 transition-table decode including extended command bit, repeat/held reporting, timeout reset and interrupt disable/enable paths |
 | `test_hal_i2c` | bus0/bus1 transfer and status paths, direct read helpers, locking, init/deinit, bus clear, bounded scan results, count-only/overflow behavior and per-address callback coverage |

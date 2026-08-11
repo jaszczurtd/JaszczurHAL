@@ -8,10 +8,10 @@
  * @file hal_lora_radio.h
  * @brief Provider-neutral raw LoRa radio API.
  *
- * The MVP exposes SX1262 hardware through an opaque handle. Applications own
- * radio configuration, while the HAL owns per-instance packet buffers and
- * runtime state. SPI controller initialization remains an application-level
- * responsibility and destroying a radio never deinitializes the shared bus.
+ * SX126x and SX127x providers expose supported radios through the same opaque
+ * handle. Applications own radio configuration, while the HAL owns
+ * per-instance packet buffers and runtime state. Destroying a radio never
+ * deinitializes the shared SPI bus.
  */
 
 #include "hal/core/hal_status.h"
@@ -30,7 +30,7 @@ extern "C" {
 /** @brief Safe SPI transaction clock selected when config clock is zero. */
 #define HAL_LORA_SPI_CLOCK_DEFAULT_HZ UINT32_C(8000000)
 
-/** @brief Maximum SX126x LoRa packet payload owned by one radio handle. */
+/** @brief Maximum LoRa packet payload owned by one radio handle. */
 #define HAL_LORA_RADIO_MAX_PAYLOAD 255u
 
 /** @brief Opaque raw LoRa radio handle. */
@@ -39,7 +39,19 @@ typedef struct hal_lora_radio_impl_s *hal_lora_radio_t;
 /** @brief Radio models with an implemented provider. */
 typedef enum {
   HAL_LORA_RADIO_SX1262 = 0,
+  /** Experimental SX1261 model; software validation only. */
+  HAL_LORA_RADIO_SX1261,
+  /** Experimental SX1276 model; software validation only. */
+  HAL_LORA_RADIO_SX1276,
+  /** Experimental SX1278 model; software validation only. */
+  HAL_LORA_RADIO_SX1278,
 } hal_lora_radio_model_t;
+
+/** @brief SX127x RF power amplifier output wired by the module. */
+typedef enum {
+  HAL_LORA_SX127X_PA_RFO = 0,
+  HAL_LORA_SX127X_PA_BOOST,
+} hal_lora_sx127x_pa_output_t;
 
 /** @brief SX126x RF switch control topology. */
 typedef enum {
@@ -101,6 +113,30 @@ typedef struct {
   int8_t max_tx_power_dbm;
 } hal_lora_sx126x_hardware_config_t;
 
+/** @brief Module-specific SX127x wiring and electrical limits. */
+typedef struct {
+  uint8_t reset_pin;
+  uint8_t dio0_pin;
+  uint8_t dio1_pin;
+  uint8_t dio2_pin;
+
+  uint8_t rf_switch_rx_pin;
+  uint8_t rf_switch_tx_pin;
+  bool rf_switch_rx_active_level;
+  bool rf_switch_tx_active_level;
+
+  uint8_t tcxo_enable_pin;
+  bool tcxo_active_level;
+  uint32_t tcxo_startup_us;
+
+  hal_lora_sx127x_pa_output_t pa_output;
+  uint32_t min_frequency_hz;
+  uint32_t max_frequency_hz;
+  uint32_t max_spi_clock_hz;
+  int8_t min_tx_power_dbm;
+  int8_t max_tx_power_dbm;
+} hal_lora_sx127x_hardware_config_t;
+
 /** @brief Complete provider-neutral radio construction descriptor. */
 typedef struct {
   hal_lora_radio_model_t model;
@@ -114,6 +150,7 @@ typedef struct {
 
   union {
     hal_lora_sx126x_hardware_config_t sx126x;
+    hal_lora_sx127x_hardware_config_t sx127x;
   } hardware;
 } hal_lora_radio_config_t;
 
@@ -393,8 +430,9 @@ hal_lora_radio_get_diagnostics(hal_lora_radio_t radio,
                                hal_lora_radio_diagnostics_t *out_diagnostics);
 
 /**
- * @brief Force full provider calibration and image calibration for the
- * configured frequency while in standby.
+ * @brief Force provider calibration for the configured frequency in standby.
+ * @return HAL_EUNSUPPORTED when the selected provider reports
+ *         supports_explicit_calibration as false.
  */
 hal_status_t hal_lora_radio_calibrate(hal_lora_radio_t radio);
 

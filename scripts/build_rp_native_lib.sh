@@ -37,6 +37,7 @@ Options:
   --example NAME           Build examples/NAME through the native app entry
   --example-source FILE    Select one source from the example (repeatable)
   --freertos               Enable the pinned native FreeRTOS SMP kernel
+  --all-features           Enable every feature supported by the target
   --library-only           Build only the linkable libJaszczurHAL.a archive
   -p, --project-config DIR Directory containing hal_project_config.h
   -D KEY=VALUE             Extra HAL compile definition (repeatable)
@@ -60,6 +61,7 @@ EXAMPLE_SOURCES=()
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 FREERTOS=0
+ALL_FEATURES=0
 LIBRARY_ONLY=0
 OUTPUT_DIR=""
 CLEAN=0
@@ -77,6 +79,7 @@ while [[ $# -gt 0 ]]; do
         --example) EXAMPLE="$2"; shift 2 ;;
         --example-source) EXAMPLE_SOURCES+=("$2"); shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
+        --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
         --library-only) LIBRARY_ONLY=1; shift ;;
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
@@ -210,6 +213,9 @@ CMAKE_ARGS=(
     "-DJH_BOARD=${BOARD}"
     "-DCMAKE_BUILD_TYPE=Release"
 )
+if [[ ${ALL_FEATURES} -eq 1 ]]; then
+    CMAKE_ARGS+=("-DJH_ENABLE_ALL_FEATURES=ON")
+fi
 if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
     CMAKE_ARGS+=(
         "-DJH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF"

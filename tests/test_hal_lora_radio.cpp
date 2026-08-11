@@ -94,6 +94,44 @@ void test_core1262_hf_defaults_and_presets_are_valid(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
                         hal_lora_time_on_air(&balanced, 256u, &fast_ms));
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_lora_time_on_air(&balanced, 1u, NULL));
+
+  hal_lora_modem_config_t short_symbol = fast;
+  short_symbol.spreading_factor = 5u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_time_on_air(&short_symbol, 1u, &fast_ms));
+  TEST_ASSERT_EQUAL_UINT32(9u, fast_ms);
+  short_symbol.spreading_factor = 6u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_time_on_air(&short_symbol, 1u, &fast_ms));
+  TEST_ASSERT_EQUAL_UINT32(14u, fast_ms);
+  short_symbol.bandwidth_hz = 7800u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_time_on_air(&short_symbol, 1u, &fast_ms));
+  TEST_ASSERT_EQUAL_UINT32(224u, fast_ms);
+}
+
+void test_sx1261_model_limits_share_the_sx126x_lifecycle(void) {
+  hal_lora_radio_config_t hardware = test_radio_config();
+  hardware.model = HAL_LORA_RADIO_SX1261;
+  hardware.hardware.sx126x.min_tx_power_dbm = -17;
+  hardware.hardware.sx126x.max_tx_power_dbm = 15;
+  hal_lora_radio_t radio = NULL;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_create(&hardware, &radio));
+  hal_lora_modem_config_t modem = hal_lora_default_eu868();
+  modem.tx_power_dbm = 15;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_configure(radio, &modem));
+  hal_lora_radio_capabilities_t capabilities = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_capabilities(radio, &capabilities));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_SX1261, capabilities.model);
+  TEST_ASSERT_EQUAL_INT(-17, capabilities.min_tx_power_dbm);
+  TEST_ASSERT_EQUAL_INT(15, capabilities.max_tx_power_dbm);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+
+  hardware.hardware.sx126x.max_tx_power_dbm = 16;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_lora_radio_create(&hardware, &radio));
+  hardware.model = HAL_LORA_RADIO_SX1276;
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_lora_radio_create(&hardware, &radio));
 }
 
 void test_transmit_copies_payload_and_updates_state_and_diagnostics(void) {
@@ -472,6 +510,7 @@ void test_concurrent_transmit_start_serializes_one_handle(void) {
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_core1262_hf_defaults_and_presets_are_valid);
+  RUN_TEST(test_sx1261_model_limits_share_the_sx126x_lifecycle);
   RUN_TEST(test_transmit_copies_payload_and_updates_state_and_diagnostics);
   RUN_TEST(test_bounded_receive_reports_progress_packet_overflow_and_timeout);
   RUN_TEST(test_continuous_receive_survives_packets_and_counts_crc_errors);
