@@ -318,16 +318,43 @@ EXAMPLES: list[dict[str, Any]] = [
         "dir": "27_lora_point_to_point",
         "targets": ["rp2040", "stm32g474"],
         "expandRpTargets": False,
-        "board": "rp2040-lora-lf",
-        "stm32Board": "nucleo-g474re",
+        "board": "pico-core1262-hf",
+        "stm32Board": "nucleo-g474re-core1262-hf",
         "covers": ["60_lora_point_to_point"],
         "variants": [
+            {
+                "id": "probe",
+                "module": "27_lora_point_to_point_probe",
+                "targets": ["rp2040", "stm32g474"],
+                "extraDefines": ["HAL_LORA_EXAMPLE_PROBE_ONLY=1"],
+            },
             {
                 "id": "responder",
                 "module": "27_lora_point_to_point_responder",
                 "targets": ["rp2040", "stm32g474"],
                 "extraDefines": ["HAL_LORA_EXAMPLE_RESPONDER=1"],
-            }
+            },
+            {
+                "id": "sf7",
+                "module": "27_lora_point_to_point_sf7",
+                "targets": ["rp2040", "stm32g474"],
+                "gateTargets": [],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_SF=7",
+                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6",
+                ],
+            },
+            {
+                "id": "responder-sf7",
+                "module": "27_lora_point_to_point_responder_sf7",
+                "targets": ["rp2040", "stm32g474"],
+                "gateTargets": [],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_RESPONDER=1",
+                    "HAL_LORA_EXAMPLE_SF=7",
+                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6",
+                ],
+            },
         ],
     },
 ]

@@ -27,12 +27,37 @@ static hal_status_t fake_deinitialize(jh_lora_radio_context_t *) {
 
 static hal_status_t fake_configure(jh_lora_radio_context_t *) { return HAL_OK; }
 
+static hal_status_t
+fake_get_capabilities(jh_lora_radio_context_t *,
+                      hal_lora_radio_capabilities_t *out_capabilities) {
+  if (out_capabilities == NULL) {
+    return HAL_EINVAL;
+  }
+  memset(out_capabilities, 0, sizeof(*out_capabilities));
+  out_capabilities->model = HAL_LORA_RADIO_SX1262;
+  return HAL_OK;
+}
+
+static hal_status_t fake_get_instant_rssi(jh_lora_radio_context_t *,
+                                          int16_t *out_rssi_dbm) {
+  if (out_rssi_dbm == NULL) {
+    return HAL_EINVAL;
+  }
+  *out_rssi_dbm = -100;
+  return HAL_OK;
+}
+
 static hal_status_t fake_transmit_start(jh_lora_radio_context_t *, uint32_t) {
   return HAL_OK;
 }
 
 static hal_status_t fake_receive_start(jh_lora_radio_context_t *, uint32_t,
                                        bool) {
+  return HAL_OK;
+}
+
+static hal_status_t
+fake_channel_activity_detect_start(jh_lora_radio_context_t *, uint32_t) {
   return HAL_OK;
 }
 
@@ -47,10 +72,22 @@ static hal_status_t fake_sleep(jh_lora_radio_context_t *) { return HAL_OK; }
 
 static hal_status_t fake_standby(jh_lora_radio_context_t *) { return HAL_OK; }
 
+static hal_status_t fake_calibrate(jh_lora_radio_context_t *) { return HAL_OK; }
+
 static const jh_lora_radio_provider_ops_t s_fake_provider = {
-    fake_initialize,     fake_deinitialize,  fake_configure,
-    fake_transmit_start, fake_receive_start, fake_process,
-    fake_cancel,         fake_sleep,         fake_standby,
+    fake_initialize,
+    fake_deinitialize,
+    fake_configure,
+    fake_get_capabilities,
+    fake_get_instant_rssi,
+    fake_transmit_start,
+    fake_receive_start,
+    fake_channel_activity_detect_start,
+    fake_process,
+    fake_cancel,
+    fake_sleep,
+    fake_standby,
+    fake_calibrate,
 };
 
 static hal_lora_radio_config_t valid_config(void) {

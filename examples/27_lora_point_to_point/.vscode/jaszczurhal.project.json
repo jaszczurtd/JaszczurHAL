@@ -8,8 +8,8 @@
             "stm32g474"
         ],
         "boards": {
-            "rp2040": "rp2040-lora-lf",
-            "stm32g474": "nucleo-g474re"
+            "rp2040": "pico-core1262-hf",
+            "stm32g474": "nucleo-g474re-core1262-hf"
         },
         "gateTargets": [
             "rp2040",
@@ -19,6 +19,21 @@
             "60_lora_point_to_point"
         ],
         "variants": [
+            {
+                "id": "probe",
+                "module": "27_lora_point_to_point_probe",
+                "targets": [
+                    "rp2040",
+                    "stm32g474"
+                ],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_PROBE_ONLY=1"
+                ],
+                "gateTargets": [
+                    "rp2040",
+                    "stm32g474"
+                ]
+            },
             {
                 "id": "responder",
                 "module": "27_lora_point_to_point_responder",
@@ -33,12 +48,39 @@
                     "rp2040",
                     "stm32g474"
                 ]
+            },
+            {
+                "id": "sf7",
+                "module": "27_lora_point_to_point_sf7",
+                "targets": [
+                    "rp2040",
+                    "stm32g474"
+                ],
+                "gateTargets": [],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_SF=7",
+                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6"
+                ]
+            },
+            {
+                "id": "responder-sf7",
+                "module": "27_lora_point_to_point_responder_sf7",
+                "targets": [
+                    "rp2040",
+                    "stm32g474"
+                ],
+                "gateTargets": [],
+                "extraDefines": [
+                    "HAL_LORA_EXAMPLE_RESPONDER=1",
+                    "HAL_LORA_EXAMPLE_SF=7",
+                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6"
+                ]
             }
         ]
     },
     "toolchain": "cmake",
     "target": "rp2040",
-    "board": "rp2040-lora-lf",
+    "board": "pico-core1262-hf",
     "buildDir": "${jhRoot}/.build/examples/27_lora_point_to_point",
     "cmakeBuildDir": "${buildDir}/cmake",
     "cmake": {

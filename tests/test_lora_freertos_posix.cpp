@@ -23,12 +23,33 @@ hal_status_t provider_initialize(jh_lora_radio_context_t *) { return HAL_OK; }
 hal_status_t provider_deinitialize(jh_lora_radio_context_t *) { return HAL_OK; }
 hal_status_t provider_configure(jh_lora_radio_context_t *) { return HAL_OK; }
 
+hal_status_t
+provider_get_capabilities(jh_lora_radio_context_t *context,
+                          hal_lora_radio_capabilities_t *out_capabilities) {
+  return jh_lora_radio_describe_capabilities(
+      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+}
+
+hal_status_t provider_get_instant_rssi(jh_lora_radio_context_t *,
+                                       int16_t *out_rssi_dbm) {
+  if (out_rssi_dbm == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_rssi_dbm = -100;
+  return HAL_OK;
+}
+
 hal_status_t provider_transmit_start(jh_lora_radio_context_t *, uint32_t) {
   hal_delay_ms(2u);
   return HAL_OK;
 }
 
 hal_status_t provider_receive_start(jh_lora_radio_context_t *, uint32_t, bool) {
+  return HAL_OK;
+}
+
+hal_status_t provider_channel_activity_detect_start(jh_lora_radio_context_t *,
+                                                    uint32_t) {
   return HAL_OK;
 }
 
@@ -47,11 +68,22 @@ hal_status_t provider_process(jh_lora_radio_context_t *context,
 hal_status_t provider_cancel(jh_lora_radio_context_t *) { return HAL_OK; }
 hal_status_t provider_sleep(jh_lora_radio_context_t *) { return HAL_OK; }
 hal_status_t provider_standby(jh_lora_radio_context_t *) { return HAL_OK; }
+hal_status_t provider_calibrate(jh_lora_radio_context_t *) { return HAL_OK; }
 
 const jh_lora_radio_provider_ops_t s_provider = {
-    provider_initialize,     provider_deinitialize,  provider_configure,
-    provider_transmit_start, provider_receive_start, provider_process,
-    provider_cancel,         provider_sleep,         provider_standby,
+    provider_initialize,
+    provider_deinitialize,
+    provider_configure,
+    provider_get_capabilities,
+    provider_get_instant_rssi,
+    provider_transmit_start,
+    provider_receive_start,
+    provider_channel_activity_detect_start,
+    provider_process,
+    provider_cancel,
+    provider_sleep,
+    provider_standby,
+    provider_calibrate,
 };
 
 hal_lora_radio_config_t radio_config(void) {

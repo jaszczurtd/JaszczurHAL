@@ -142,6 +142,20 @@ typedef struct {
   bool crc_valid;
 } hal_lora_packet_info_t;
 
+/** @brief Provider-neutral limits and optional operations of one radio. */
+typedef struct {
+  hal_lora_radio_model_t model;
+  uint16_t max_payload_length;
+  uint32_t min_frequency_hz;
+  uint32_t max_frequency_hz;
+  int8_t min_tx_power_dbm;
+  int8_t max_tx_power_dbm;
+  bool supports_continuous_receive;
+  bool supports_channel_activity_detection;
+  bool supports_instant_rssi;
+  bool supports_explicit_calibration;
+} hal_lora_radio_capabilities_t;
+
 /** @brief Per-handle counters and the most recent radio observations. */
 typedef struct {
   uint32_t transmitted_packets;
@@ -158,9 +172,19 @@ typedef struct {
   uint32_t irq_events;
   uint32_t callback_events;
   uint32_t dropped_events;
+  uint32_t channel_activity_checks;
+  uint32_t channel_activity_detected;
+  uint32_t channel_activity_clear;
+  uint32_t channel_activity_timeouts;
+  uint32_t instant_rssi_reads;
+  uint32_t full_calibrations;
+  uint32_t image_calibrations;
   int16_t last_rssi_dbm;
   int16_t last_signal_rssi_dbm;
+  int16_t last_instant_rssi_dbm;
   int8_t last_snr_db;
+  uint32_t calibrated_frequency_min_hz;
+  uint32_t calibrated_frequency_max_hz;
   uint32_t last_event_timestamp_ms;
   uint32_t last_state_change_ms;
   hal_status_t last_error;
@@ -192,17 +216,26 @@ typedef struct {
   hal_status_t result;
 } hal_lora_operation_status_t;
 
+/** @brief Snapshot of the current or most recent channel activity check. */
+typedef struct {
+  hal_lora_operation_state_t state;
+  hal_status_t result;
+  bool detected;
+} hal_lora_channel_activity_status_t;
+
 /** @brief Radio operation associated with an event. */
 typedef enum {
   HAL_LORA_OPERATION_KIND_NONE = 0,
   HAL_LORA_OPERATION_KIND_TRANSMIT,
   HAL_LORA_OPERATION_KIND_RECEIVE,
+  HAL_LORA_OPERATION_KIND_CHANNEL_ACTIVITY_DETECTION,
 } hal_lora_operation_kind_t;
 
 /** @brief Events delivered from task context by hal_lora_radio_process(). */
 typedef enum {
   HAL_LORA_RADIO_EVENT_TX_COMPLETE = 0,
   HAL_LORA_RADIO_EVENT_RX_READY,
+  HAL_LORA_RADIO_EVENT_CHANNEL_ACTIVITY_COMPLETE,
   HAL_LORA_RADIO_EVENT_TIMEOUT,
   HAL_LORA_RADIO_EVENT_CANCELLED,
   HAL_LORA_RADIO_EVENT_ERROR,
@@ -214,6 +247,7 @@ typedef struct {
   hal_lora_operation_kind_t operation;
   hal_status_t result;
   uint32_t timestamp_ms;
+  bool channel_activity_detected;
 } hal_lora_radio_event_t;
 
 /** @brief Callback invoked from task context, never from the DIO1 ISR. */
@@ -256,6 +290,11 @@ hal_status_t hal_lora_radio_destroy(hal_lora_radio_t radio);
 /** @brief Configure raw LoRa modulation and packet parameters. */
 hal_status_t hal_lora_radio_configure(hal_lora_radio_t radio,
                                       const hal_lora_modem_config_t *config);
+
+/** @brief Copy the provider-neutral limits and supported optional operations.
+ */
+hal_status_t hal_lora_radio_get_capabilities(
+    hal_lora_radio_t radio, hal_lora_radio_capabilities_t *out_capabilities);
 
 /** @brief Return the balanced EU868 technical preset for an HF module. */
 hal_lora_modem_config_t hal_lora_default_eu868(void);
@@ -308,6 +347,22 @@ hal_status_t hal_lora_radio_receive(hal_lora_radio_t radio, uint8_t *buffer,
                                     hal_lora_packet_info_t *out_info);
 
 /**
+ * @brief Read current RSSI while the radio is in RX mode.
+ * @return HAL_OK, HAL_ESTATE outside RX, or a provider/backend status.
+ */
+hal_status_t hal_lora_radio_get_instant_rssi(hal_lora_radio_t radio,
+                                             int16_t *out_rssi_dbm);
+
+/** @brief Start an asynchronous LoRa channel activity detection operation. */
+hal_status_t
+hal_lora_radio_channel_activity_detect_start(hal_lora_radio_t radio,
+                                             uint32_t timeout_ms);
+
+/** @brief Copy the current or most recent channel activity result. */
+hal_status_t hal_lora_radio_get_channel_activity_status(
+    hal_lora_radio_t radio, hal_lora_channel_activity_status_t *out_status);
+
+/**
  * @brief Service DIO1 events and software timeouts from task context.
  *
  * HAL_EAGAIN means an active operation has no event yet. Registered callbacks
@@ -325,17 +380,23 @@ hal_lora_radio_set_event_callback(hal_lora_radio_t radio,
                                   hal_lora_radio_event_callback_t callback,
                                   void *user_data);
 
-/** @brief Cancel the active TX or RX operation and enter standby. */
+/** @brief Cancel the active TX, RX or CAD operation and enter standby. */
 hal_status_t hal_lora_radio_cancel(hal_lora_radio_t radio);
 
 /** @brief Read the current stable public radio state. */
 hal_status_t hal_lora_radio_get_state(hal_lora_radio_t radio,
                                       hal_lora_radio_state_t *out_state);
 
-/** @brief Copy basic counters and the most recent error for one handle. */
+/** @brief Copy operation counters and recent observations for one handle. */
 hal_status_t
 hal_lora_radio_get_diagnostics(hal_lora_radio_t radio,
                                hal_lora_radio_diagnostics_t *out_diagnostics);
+
+/**
+ * @brief Force full provider calibration and image calibration for the
+ * configured frequency while in standby.
+ */
+hal_status_t hal_lora_radio_calibrate(hal_lora_radio_t radio);
 
 /** @brief Enter the provider's low-power sleep state. */
 hal_status_t hal_lora_radio_sleep(hal_lora_radio_t radio);

@@ -15,9 +15,10 @@ devices, capabilities, and controlled build components. Application features
 remain opt-in through `HAL_ENABLE_*`; a hardware capability never enables a
 feature by itself.
 
-Supported profiles include `pico`, `picow`, `pico2`, `pico2w`,
-`pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`, `nucleo-g474re`,
-`nucleo-g474re-pim730`, and `host-mock`. The build generator validates target
+Supported profiles include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
+`pico-core1262-hf`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`,
+`nucleo-g474re`, `nucleo-g474re-pim730`,
+`nucleo-g474re-core1262-hf`, and `host-mock`. The build generator validates target
 compatibility, flash size, pins, components, and feature contracts before
 toolchain import. The same descriptors generate the source fallback, so board
 names and compile-time facts stay identical without a build-generated config.
@@ -76,6 +77,14 @@ Reservations are `hard` when an application cannot use the pin and `soft` when
 the pin has a board-owned function that an application can intentionally
 drive. Application wiring, partition layout, USB identity, clock selection,
 secrets, and WS2812 pixel order do not belong in a board descriptor.
+
+A composite profile must preserve the base board's physical devices, aliases,
+and public HAL definitions. Do not remove a built-in device such as
+`HAL_LED_BUILTIN` merely to reuse its pin for an attached module: the original
+device remains electrically connected and can load or toggle the shared line
+even when the overlap looks harmless. Select non-conflicting wiring instead.
+Intentional PCB rework, such as opening a solder bridge, requires a distinct
+profile whose description states the physical modification.
 
 ## Board-owned devices
 
@@ -244,15 +253,22 @@ the integrated SX1262 wiring, exports `sx126x-radio` as a feature-gated
 component, and declares `HAL_BOARD_CAP_SX1262_RADIO`. Its checked-in electrical
 facts include SPI1 at a safe default 8 MHz, a strict sub-18-MHz ceiling, the
 conservative 410-450 MHz LF range from the manufacturer wiki, DCDC regulation,
-XTAL oscillator mode and combined DIO2 plus GPIO17
-antenna-path control. Until the Stage 1 runtime owner exists, this lifecycle
-capability remains inactive at runtime even though the hardware is declared.
+XTAL oscillator mode and combined DIO2 plus GPIO17 antenna-path control. The
+`hal_lora_radio` lifecycle publishes the declared radio capability at runtime.
 
-Core1262-HF modules wired by jumper leads do not create new Pico or Nucleo board
-profiles: their host pins and SPI instance are project configuration. Stage 1
-will add a reusable module helper for electrical defaults while leaving the
-physical host profiles unchanged. A fixed carrier or shield may receive its own
-board profile later.
+The experimental `pico-core1262-hf` and
+`nucleo-g474re-core1262-hf` profiles describe fixed project fixtures built from
+a base board and an external Waveshare Core1262-HF. They reserve the complete
+SPI/control/RF-switch wiring, declare `loraRadio`, and export both
+`external-radio-frontend` and `sx1262-radio`. The Nucleo profile uses SPI2 on
+PB13/PB14/PB15 and deliberately preserves LD2 plus `HAL_LED_BUILTIN` on PA5.
+Both fixtures passed no-transmit CAD/RSSI/calibration probes and bidirectional
+OTA tests, but remain experimental because jumper-wire assembly and one tested
+host of each type are not equivalent to a stable carrier design.
+
+Different Core1262 wiring uses the plain `pico` or `nucleo-g474re` profile and
+an explicit application descriptor. It must not select a composite profile
+whose fixed pin contract does not match the physical assembly.
 
 The archive defines:
 

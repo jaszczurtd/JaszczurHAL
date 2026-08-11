@@ -325,7 +325,9 @@ boundary conceptually.
 profile from `boards/profiles/`; the generator emits the matching
 `HAL_BOARD_PROFILE_*` selector and target configuration. Supported profiles
 include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
-`rp2040-plus-4mb`, `rp2040-zero`, `rp2040-lora-lf`, and `nucleo-g474re`.
+`pico-core1262-hf`, `rp2040-plus-4mb`, `rp2040-zero`, `rp2040-lora-lf`,
+`nucleo-g474re`, `nucleo-g474re-pim730`, and
+`nucleo-g474re-core1262-hf`.
 
 `HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
 Runtime users should query `hal_board_get_info()` or
@@ -349,7 +351,9 @@ typedef enum {                               /* stable board identity */
   HAL_BOARD_STM32G474_NUCLEO_G474RE, HAL_BOARD_HOST_MOCK,
   HAL_BOARD_RP2040_ZERO, HAL_BOARD_RP2040_PLUS_4MB,
   HAL_BOARD_RP2040_LORA_LF,
-  HAL_BOARD_STM32G474_NUCLEO_PIM730
+  HAL_BOARD_STM32G474_NUCLEO_PIM730,
+  HAL_BOARD_RP_PICO_CORE1262_HF,
+  HAL_BOARD_STM32G474_NUCLEO_CORE1262_HF
 } hal_board_profile_t;
 
 typedef enum {                               /* runtime state of one capability */
@@ -419,7 +423,7 @@ The complete reference is split across the following focused documents:
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
-| 21 | [Raw LoRa radio](api/21_lora.md) | SX1262 profiles, DIO1-driven asynchronous TX/RX, callbacks, cancellation, explicit states, diagnostics and time-on-air |
+| 21 | [Raw LoRa radio](api/21_lora.md) | SX1262 profiles, DIO1-driven asynchronous TX/RX/CAD, current RSSI, explicit calibration, capabilities, callbacks, diagnostics and time-on-air |
 
 ---
 

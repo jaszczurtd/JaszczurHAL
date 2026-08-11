@@ -74,8 +74,10 @@ profile with `JH_BOARD`; the board generator emits one selector:
     HAL_BOARD_PROFILE_RP2040_PLUS_4MB
     HAL_BOARD_PROFILE_RP2040_ZERO
     HAL_BOARD_PROFILE_RP2040_LORA_LF
+    HAL_BOARD_PROFILE_RP_PICO_CORE1262_HF
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730
+    HAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF
     HAL_BOARD_PROFILE_HOST_MOCK
 
 Pico/Pico W/PIM730 require HAL_TARGET_RP2040. Pico 2/Pico 2 W require an
@@ -234,12 +236,14 @@ Connectivity
   HAL_ENABLE_LORA
     Feature selection for the provider-neutral raw LoRa radio facade. Requires
     exactly one provider; the current provider is HAL_ENABLE_SX126X. The public
-    C/C++ declaration surface is hal/radio/hal_lora_radio.h. Opaque lifecycle handles
-    support DIO1-driven asynchronous TX/RX, task callbacks and cancellation.
+    C/C++ declaration surface is hal/radio/hal_lora_radio.h. Opaque lifecycle
+    handles support DIO1-driven asynchronous TX/RX/CAD, current RSSI, explicit
+    calibration, provider capabilities, task callbacks and cancellation.
     They use a generation-tagged static pool sized by HAL_LORA_RADIO_MAX_INSTANCES
     (default 2, valid range 1..255). The facade provides raw modem presets and
     validation, blocking TX compatibility, bounded or continuous RX, packet
-    metadata, diagnostics, standby/sleep and time-on-air calculation.
+    metadata, CAD/calibration diagnostics, standby/sleep and time-on-air
+    calculation.
   HAL_ENABLE_SX126X
     Selects the pinned official Semtech SX126x provider and propagates LORA and
     SPI. The shared adapter owns SX1262 command framing, BUSY deadlines, RF
