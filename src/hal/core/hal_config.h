@@ -619,6 +619,40 @@
 #endif
 
 /**
+ * @def HAL_LORA_LINK_MAX_INSTANCES
+ * Maximum number of simultaneous reliable LoRa link handles.
+ */
+#ifndef HAL_LORA_LINK_MAX_INSTANCES
+#define HAL_LORA_LINK_MAX_INSTANCES 2u
+#endif
+#if HAL_LORA_LINK_MAX_INSTANCES < 1u || HAL_LORA_LINK_MAX_INSTANCES > 255u
+#error "HAL_LORA_LINK_MAX_INSTANCES must be in range 1..255"
+#endif
+
+/**
+ * @def HAL_LORA_LINK_MAX_MESSAGE_SIZE
+ * Static TX and RX message-buffer size owned by each reliable link.
+ */
+#ifndef HAL_LORA_LINK_MAX_MESSAGE_SIZE
+#define HAL_LORA_LINK_MAX_MESSAGE_SIZE 1024u
+#endif
+#if HAL_LORA_LINK_MAX_MESSAGE_SIZE < 1u ||                                     \
+    HAL_LORA_LINK_MAX_MESSAGE_SIZE > 4096u
+#error "HAL_LORA_LINK_MAX_MESSAGE_SIZE must be in range 1..4096"
+#endif
+
+/**
+ * @def HAL_LORA_LINK_MAX_PEERS
+ * Number of source/session duplicate windows retained by each link.
+ */
+#ifndef HAL_LORA_LINK_MAX_PEERS
+#define HAL_LORA_LINK_MAX_PEERS 8u
+#endif
+#if HAL_LORA_LINK_MAX_PEERS < 1u || HAL_LORA_LINK_MAX_PEERS > 32u
+#error "HAL_LORA_LINK_MAX_PEERS must be in range 1..32"
+#endif
+
+/**
  * @def HAL_CAN_MAX_INSTANCES
  * Maximum number of CAN-bus controller interfaces. One instance per physical
  * controller, whether it is native or attached over SPI.

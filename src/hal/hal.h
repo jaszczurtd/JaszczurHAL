@@ -24,6 +24,9 @@
 #ifdef HAL_ENABLE_LORA
 #include "hal/radio/hal_lora_radio.h"
 #endif
+#ifdef HAL_ENABLE_LORA_LINK
+#include "hal/radio/hal_lora_link.h"
+#endif
 #include "hal/core/hal_math.h"
 #include "hal/gpio/hal_gpio.h"
 #include "hal/network/hal_net.h"

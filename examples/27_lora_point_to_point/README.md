@@ -6,6 +6,13 @@ continuous receive. Build one device as the initiator and the other with the
 `responder` variant. The no-transmit `probe` variant checks capabilities,
 explicit calibration, current RSSI, CAD and standby.
 
+The `link` and `link-responder` variants replace the raw ping/pong application
+with `hal_lora_link`. The initiator sends an acknowledged 360-byte message to
+address `0x1002`; the responder at `0x1002` reassembles it and automatically
+returns an ACK. Since one plaintext link frame carries at most 230 data bytes,
+every successful exchange exercises fragmentation as well as addressing,
+message sequences, duplicate suppression and bounded retransmission.
+
 When the selected board exposes a GPIO status LED, the LED remains on during
 transmit and pulses for 120 ms after a packet is received. Boards without a
 GPIO status LED keep the same radio behavior without visual signaling.
@@ -26,9 +33,27 @@ devices.
   --target stm32g474 --example 27_lora_point_to_point
 ```
 
-The representative gate builds the base initiator plus `probe` and `responder`.
-Hardware-only variants `sf7` and `responder-sf7` remain available through
-`jh-vscode`; they are excluded from the representative compile gate.
+The representative gate builds the base initiator plus `probe`, `responder`,
+`link` and `link-responder`. Hardware-only variants `sf7` and
+`responder-sf7` remain available through `jh-vscode`; they are excluded from
+the representative compile gate.
+
+Build only the reliable pair from the VS Code variant selector, or directly:
+
+```bash
+vscode/entry/jh-vscode build \
+  --project examples/27_lora_point_to_point \
+  --target rp2040 --board pico-core1262-hf --variant link
+vscode/entry/jh-vscode build \
+  --project examples/27_lora_point_to_point \
+  --target stm32g474 --board nucleo-g474re-core1262-hf \
+  --variant link-responder
+```
+
+The link example intentionally uses CRC-protected plaintext. Encrypted links
+also require `HAL_ENABLE_CRYPTO`, a provisioned 32-byte secret and a session ID
+that is never reused for the same address/key. See the
+[reliable LoRa link API](../../doc/api/22_lora_link.md) before enabling AEAD.
 
 ## External Core1262-HF wiring
 

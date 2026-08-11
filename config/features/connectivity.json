@@ -33,6 +33,9 @@
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
     "HAL_ENABLE_LORA": {},
+    "HAL_ENABLE_LORA_LINK": {
+      "implies": ["HAL_ENABLE_CRC", "HAL_ENABLE_LORA"]
+    },
     "HAL_ENABLE_MQTT": {
       "implies": [
         "HAL_ENABLE_NETWORK_CORE",

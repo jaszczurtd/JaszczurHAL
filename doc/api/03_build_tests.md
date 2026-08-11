@@ -23,6 +23,7 @@
 | `hal_irsmall_decoder` | shared IR receiver decoder (`hal/input/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
 | `hal_lora_radio` | Mutually exclusive family providers: the pinned official Semtech SX126x driver with the HAL adapter for validated SX1262 and experimental software-only SX1261, or the HAL-owned register provider for experimental software-only SX1276/SX1278; both compile for RP and STM32G474 and have deterministic mock coverage |
+| `hal_lora_link` | HAL-owned protocol over one configured `hal_lora_radio`; CRC-32 is internal, ChaCha20-Poly1305 uses the optional `hal_crypto` module, and no additional third-party dependency is introduced |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
@@ -311,6 +312,10 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_spi` | SPI init/reinit, reset, per-bus locks, transfers, status validation and DMA failure mapping |
 | `test_hal_lora_radio_lifecycle` | Opaque-handle allocation limits, stale handles, lifecycle cleanup and provider error propagation |
 | `test_hal_lora_radio` | SX1262 profiles and presets, SX1261 model limits, blocking TX, bounded/continuous polling RX, overflow/CRC/timeout diagnostics, power state, time-on-air and two connected mock radios |
+| `test_hal_lora_link` | Link defaults/lifecycle, stale handles, addressed plaintext and AEAD fragmentation, ACK loss/retransmission, bounded timeout including the maximum retry count, duplicate delivery suppression, whole-message integrity, out-of-order/incomplete reassembly, corrupt packets during ACK wait, later-fragment start recovery and concurrent send serialization over connected mock radios |
+| `test_lora_link_frame` | Strict versioned-frame shapes, plaintext capacity/round-trip, authenticated encryption, header/ciphertext tamper rejection, ACK encoding, truncation and output bounds |
+| `test_hal_lora_link_header_c`, `test_hal_lora_link_header_cpp` | Standalone public link-header compatibility in C11 and C++17 |
+| `test_lora_link_plain_compile` | Strict warning-as-error compilation of the link and frame codec without the optional crypto feature |
 | `test_sx126x_adapter` | Official driver command orchestration, SX1261/SX1262 PA and OCP selection, SPI transaction cleanup, BUSY deadlines, RF switch levels, electrical setup, band calibration, TX timeout and RX CRC IRQ mapping |
 | `test_hal_lora_sx127x` | SX1276/SX1278 model-specific descriptor validation and the common facade lifecycle, capabilities, calibration boundary, TX, RX, CAD and power states |
 | `test_sx127x_adapter` | SX127x register transport, version probe, modem/frequency/PA configuration, IRQ/status mapping, FIFO metadata, RSSI, CAD, timeout, cancellation, bus errors and TCXO sleep/wake behavior |

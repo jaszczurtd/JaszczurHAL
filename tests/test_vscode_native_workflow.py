@@ -470,25 +470,25 @@ require(
 require(
     full_configuration_counts
     == {
-        "rp2040": 32,
+        "rp2040": 34,
         "rp2350-arm": 26,
         "rp2350-riscv": 22,
-        "stm32g474": 30,
+        "stm32g474": 32,
     }
-    and sum(full_configuration_counts.values()) == 110,
-    "full example build matrix must contain exactly 110 configurations: "
+    and sum(full_configuration_counts.values()) == 114,
+    "full example build matrix must contain exactly 114 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
-        "rp2040": 30,
+        "rp2040": 32,
         "rp2350-arm": 0,
         "rp2350-riscv": 0,
-        "stm32g474": 28,
+        "stm32g474": 30,
     }
-    and sum(gate_configuration_counts.values()) == 58,
-    "example gate matrix must contain exactly 58 configurations: "
+    and sum(gate_configuration_counts.values()) == 62,
+    "example gate matrix must contain exactly 62 configurations: "
     f"{gate_configuration_counts}",
 )
 require(

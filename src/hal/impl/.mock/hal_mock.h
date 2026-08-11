@@ -348,6 +348,9 @@ hal_status_t hal_mock_lora_get_last_transmit(hal_lora_radio_t radio,
 /** @brief Route successful transmissions between two virtual radios. */
 hal_status_t hal_mock_lora_connect(hal_lora_radio_t first,
                                    hal_lora_radio_t second);
+/** @brief Drop the next successful over-the-air deliveries from one radio. */
+hal_status_t hal_mock_lora_drop_next_transmits(hal_lora_radio_t radio,
+                                               uint8_t count);
 /** @brief Reset global mock injection state when no radio handles are active.
  */
 void hal_mock_lora_reset(void);

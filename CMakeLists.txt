@@ -110,6 +110,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/time/hal_time_ntp.cpp
     ${SRC}/hal/temperature/hal_thermocouple.cpp
     ${SRC}/hal/radio/hal_lora_radio.cpp
+    ${SRC}/hal/radio/hal_lora_link.cpp
+    ${SRC}/hal/radio/jh_lora_link_frame.cpp
     ${SRC}/hal/radio/jh_lora_modem.cpp
     ${SRC}/hal/spi/hal_spi_device.cpp
     ${SRC}/hal/network/hal_network_status.cpp
@@ -235,6 +237,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_BLE
     HAL_ENABLE_BLE_STREAM
     HAL_ENABLE_SX126X       # propagates HAL_ENABLE_LORA + HAL_ENABLE_SPI
+    HAL_ENABLE_LORA_LINK    # reliable private link over the selected radio
     HAL_ENABLE_TIME
     HAL_ENABLE_MQTT
     HAL_ENABLE_UDP

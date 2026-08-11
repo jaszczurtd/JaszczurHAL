@@ -170,7 +170,12 @@ def check_macro_dump_parity(compiler: str) -> None:
     for name, feature in sorted(model.features.items()):
         if not feature.implies:
             continue
-        support = ("HAL_ENABLE_ILI9341",) if name == "HAL_ENABLE_TFT" else ()
+        if name == "HAL_ENABLE_TFT":
+            support = ("HAL_ENABLE_ILI9341",)
+        elif name == "HAL_ENABLE_LORA_LINK":
+            support = ("HAL_ENABLE_SX126X",)
+        else:
+            support = ()
         legacy = preprocess_feature_macros(
             compiler, "hal/core/hal_config.h", name, support
         ) & registered
@@ -478,6 +483,19 @@ def check_production_feature_facade(compiler: str) -> None:
         {"HAL_ENABLE_SX127X", "HAL_ENABLE_LORA", "HAL_ENABLE_SPI"} <= sx127x,
         "hal_config.h did not expose the SX127x provider closure",
     )
+    lora_link = preprocess_hal_config_features(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_LORA_LINK=1",
+        ),
+    )
+    require(
+        {"HAL_ENABLE_LORA_LINK", "HAL_ENABLE_LORA", "HAL_ENABLE_CRC"}
+        <= lora_link,
+        "hal_config.h did not expose the reliable LoRa link closure",
+    )
     require_hal_config_failure(
         compiler,
         (
@@ -500,6 +518,36 @@ def check_production_feature_facade(compiler: str) -> None:
             "HAL_LORA_RADIO_MAX_INSTANCES=0",
         ),
         "HAL_LORA_RADIO_MAX_INSTANCES must be in range 1..255",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_LORA_LINK=1",
+            "HAL_LORA_LINK_MAX_INSTANCES=0",
+        ),
+        "HAL_LORA_LINK_MAX_INSTANCES must be in range 1..255",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_LORA_LINK=1",
+            "HAL_LORA_LINK_MAX_MESSAGE_SIZE=4097",
+        ),
+        "HAL_LORA_LINK_MAX_MESSAGE_SIZE must be in range 1..4096",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_LORA_LINK=1",
+            "HAL_LORA_LINK_MAX_PEERS=33",
+        ),
+        "HAL_LORA_LINK_MAX_PEERS must be in range 1..32",
     )
     require_hal_config_failure(
         compiler,
@@ -627,13 +675,13 @@ if TEST_ROOT.exists():
 TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 96, "feature registry symbol count drifted")
+require(len(model.features) == 97, "feature registry symbol count drifted")
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 61,
+    sum(bool(feature.implies) for feature in model.features.values()) == 62,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 112,
+    sum(len(feature.implies) for feature in model.features.values()) == 114,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -649,6 +697,11 @@ require(
     model.features["HAL_ENABLE_SX127X"].implies
     == ("HAL_ENABLE_LORA", "HAL_ENABLE_SPI"),
     "SX127x provider dependencies drifted",
+)
+require(
+    model.features["HAL_ENABLE_LORA_LINK"].implies
+    == ("HAL_ENABLE_CRC", "HAL_ENABLE_LORA"),
+    "reliable LoRa link dependencies drifted",
 )
 source_symbols: set[str] = set()
 for source_path in (ROOT / "src/hal").rglob("*"):
@@ -718,8 +771,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 50,
-    "hal_config.h retained validation inventory drifted from 50 #error checks",
+    == 53,
+    "hal_config.h retained validation inventory drifted from 53 #error checks",
 )
 
 checked = run_generator("--check")

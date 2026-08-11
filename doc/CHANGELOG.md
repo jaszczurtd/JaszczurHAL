@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added the `HAL_ENABLE_LORA_LINK` reliable private messaging layer over one
+  configured raw LoRa handle: 16-bit addressing, 32-bit message sequences,
+  complete-message ACKs, bounded whole-message retransmission, duplicate
+  suppression, fragmentation and plaintext CRC-32 integrity.
+- Added optional ChaCha20-Poly1305 protection for link data and ACK frames,
+  with caller-managed unique sessions, immutable retransmission identities,
+  key zeroization and encrypted sequence-exhaustion guards.
+- Added deterministic connected-radio tests for fragmented plaintext and AEAD
+  messages, dropped ACK recovery, duplicate suppression, timeout, corruption,
+  strict frame decoding and concurrent starts, plus C/C++ headers and a
+  crypto-disabled compile gate. Extended the LoRa example with reliable-link
+  initiator/responder variants that force multi-frame delivery.
 - Added experimental, software-only SX1261, SX1276 and SX1278 integrations.
   SX1261 reuses the pinned SX126x driver with model-specific PA, OCP and power
   validation. SX1276/SX1278 use a small HAL-only register provider with a

@@ -400,6 +400,42 @@
             ],
             "group": "build",
             "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: link",
+            "detail": "Compile example variant link",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "link"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Build variant: link-responder",
+            "detail": "Compile example variant link-responder",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "link-responder"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
         }
     ]
 }
