@@ -244,6 +244,17 @@ Connectivity
     validation, blocking TX compatibility, bounded or continuous RX, packet
     metadata, CAD/calibration diagnostics, standby/sleep and time-on-air
     calculation.
+  HAL_ENABLE_LORA_LINK
+    Reliable private point-to-point messages over one configured hal_lora_radio
+    handle. Propagates HAL_ENABLE_LORA and HAL_ENABLE_CRC. Adds 16-bit
+    addressing, 32-bit message sequences, bounded ACK/retry, duplicate
+    suppression and fragmentation. HAL_ENABLE_CRYPTO remains optional; when it
+    is selected, the link can protect data and ACK frames with
+    ChaCha20-Poly1305. The generation-tagged pool is sized by
+    HAL_LORA_LINK_MAX_INSTANCES (default 2, valid range 1..255), copied TX/RX
+    message buffers by HAL_LORA_LINK_MAX_MESSAGE_SIZE (default 1024, valid range
+    1..4096), and peer replay windows by HAL_LORA_LINK_MAX_PEERS (default 8,
+    valid range 1..32).
   HAL_ENABLE_SX126X
     Selects the pinned official Semtech SX126x provider and propagates LORA and
     SPI. The shared adapter owns validated SX1262 and experimental, software-only
@@ -531,6 +542,7 @@ internal edges to the derived HAL_ENABLE_NETWORK_CORE symbol are omitted.
 HAL_ENABLE_KV          -> HAL_ENABLE_EEPROM
 HAL_ENABLE_SDLOGGER    -> HAL_ENABLE_FAT, HAL_ENABLE_EEPROM, HAL_ENABLE_SPI
 HAL_ENABLE_BLE_STREAM  -> HAL_ENABLE_BLE, HAL_ENABLE_CRYPTO
+HAL_ENABLE_LORA_LINK   -> HAL_ENABLE_LORA, HAL_ENABLE_CRC
 HAL_ENABLE_SX126X      -> HAL_ENABLE_LORA, HAL_ENABLE_SPI
 HAL_ENABLE_SX127X      -> HAL_ENABLE_LORA, HAL_ENABLE_SPI
 HAL_ENABLE_TIME        -> HAL_ENABLE_UDP, HAL_ENABLE_WIFI

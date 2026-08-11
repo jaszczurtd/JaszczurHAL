@@ -1,5 +1,6 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/radio/hal_lora_radio.h"
+#include "lora_test_fixture.h"
 #include "utils/unity.h"
 
 #include <atomic>
@@ -18,27 +19,8 @@ static void radio_event_callback(hal_lora_radio_t radio,
   s_callback_reentrant_status = hal_lora_radio_get_state(radio, &state);
 }
 
-static hal_lora_radio_config_t test_radio_config(void) {
-  hal_lora_radio_config_t config = {};
-  config.model = HAL_LORA_RADIO_SX1262;
-  config.spi_bus = 0u;
-  config.spi_miso_pin = 16u;
-  config.spi_mosi_pin = 19u;
-  config.spi_sck_pin = 18u;
-  config.cs_pin = 17u;
-  config.spi_clock_hz = HAL_LORA_SPI_CLOCK_DEFAULT_HZ;
-  TEST_ASSERT_EQUAL_INT(
-      HAL_OK, hal_lora_sx126x_core1262_hf_defaults(&config.hardware.sx126x));
-  config.hardware.sx126x.reset_pin = 20u;
-  config.hardware.sx126x.busy_pin = 21u;
-  config.hardware.sx126x.dio1_pin = 22u;
-  config.hardware.sx126x.rf_switch_pin_a = 10u;
-  config.hardware.sx126x.rf_switch_pin_b = 11u;
-  return config;
-}
-
 static hal_lora_radio_t create_configured_radio(void) {
-  const hal_lora_radio_config_t hardware = test_radio_config();
+  const hal_lora_radio_config_t hardware = jh_test_lora_radio_config();
   hal_lora_radio_t radio = NULL;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_create(&hardware, &radio));
   TEST_ASSERT_NOT_NULL(radio);
@@ -111,7 +93,7 @@ void test_core1262_hf_defaults_and_presets_are_valid(void) {
 }
 
 void test_sx1261_model_limits_share_the_sx126x_lifecycle(void) {
-  hal_lora_radio_config_t hardware = test_radio_config();
+  hal_lora_radio_config_t hardware = jh_test_lora_radio_config();
   hardware.model = HAL_LORA_RADIO_SX1261;
   hardware.hardware.sx126x.min_tx_power_dbm = -17;
   hardware.hardware.sx126x.max_tx_power_dbm = 15;

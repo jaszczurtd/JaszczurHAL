@@ -16,6 +16,7 @@ typedef struct {
   size_t pending_rx_length;
   hal_lora_packet_info_t pending_info;
   int16_t instant_rssi_dbm;
+  uint8_t dropped_transmits;
   bool pending_rx_ready;
   bool pending_cad_ready;
   bool pending_cad_detected;
@@ -133,6 +134,10 @@ static hal_status_t mock_transmit_start(jh_lora_radio_context_t *context,
 
 static hal_status_t mock_deliver_transmit(jh_lora_radio_context_t *context) {
   jh_mock_lora_state_t *state = find_state(context);
+  if (state != NULL && state->dropped_transmits > 0u) {
+    --state->dropped_transmits;
+    return HAL_OK;
+  }
   if (state == NULL || state->peer == NULL) {
     return state == NULL ? HAL_EUNINIT : HAL_OK;
   }
@@ -425,6 +430,23 @@ hal_status_t hal_mock_lora_connect(hal_lora_radio_t first,
   }
   jh_lora_radio_context_unlock(second_context);
   jh_lora_radio_context_unlock(first_context);
+  return status;
+}
+
+hal_status_t hal_mock_lora_drop_next_transmits(hal_lora_radio_t radio,
+                                               uint8_t count) {
+  jh_lora_radio_context_t *context = NULL;
+  hal_status_t status = jh_lora_radio_context_lock(radio, &context);
+  if (status != HAL_OK) {
+    return status;
+  }
+  jh_mock_lora_state_t *state = find_state(context);
+  if (state == NULL) {
+    status = HAL_EUNINIT;
+  } else {
+    state->dropped_transmits = count;
+  }
+  jh_lora_radio_context_unlock(context);
   return status;
 }
 

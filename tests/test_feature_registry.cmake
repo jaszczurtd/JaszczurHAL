@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 96)
-    message(FATAL_ERROR "Expected 96 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 97)
+    message(FATAL_ERROR "Expected 97 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")
@@ -42,6 +42,10 @@ if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_SX127X_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_LORA;HAL_ENABLE_SPI")
     message(FATAL_ERROR "SX127X transitive dependency table drifted")
 endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_LORA_LINK_TRANSITIVE_IMPLIES}" STREQUAL
+       "HAL_ENABLE_CRC;HAL_ENABLE_LORA")
+    message(FATAL_ERROR "LORA_LINK transitive dependency table drifted")
+endif()
 
 jh_hal_resolve_features(_requested _resolved
     HAL_ENABLE_MQTT HAL_ENABLE_BLE_STREAM=1)
@@ -58,6 +62,7 @@ foreach(_target IN ITEMS rp2040 rp2350-arm rp2350-riscv stm32g474)
     jh_all_features_for_target(_all_features "${_target}")
     foreach(_required IN ITEMS
             HAL_ENABLE_FREERTOS
+            HAL_ENABLE_LORA_LINK
             HAL_ENABLE_SX127X
             HAL_DISPLAY_ILI9341)
         list(FIND _all_features "${_required}" _required_index)

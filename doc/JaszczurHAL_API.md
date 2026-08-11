@@ -296,6 +296,8 @@ logic from board-specific SDK calls:
 - `hal_uart`, `hal_swserial`, `hal_spi`, `hal_i2c`, `hal_onewire`
 - `hal_lora_radio` for provider-neutral raw LoRa operation with SX126x and
   SX127x family providers
+- `hal_lora_link` for addressed, acknowledged, fragmented private messages
+  over one raw LoRa radio, with optional authenticated encryption
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`, `hal_pn532`
 - `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
@@ -426,6 +428,7 @@ The complete reference is split across the following focused documents:
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
 | 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
 | 21 | [Raw LoRa radio](api/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
+| 22 | [Reliable LoRa link](api/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
 
 ---
 
@@ -457,6 +460,7 @@ The complete reference is split across the following focused documents:
 | `hal_kv` | [Storage](api/14_storage.md) |
 | `hal_littlefs` | [Storage](api/14_storage.md) |
 | `hal_lora_radio` | [Raw LoRa radio](api/21_lora.md) |
+| `hal_lora_link` | [Reliable LoRa link](api/22_lora_link.md) |
 | `hal_math` | [Timers and system](api/06_timers_system.md) / [Output devices](api/13_output_devices.md) |
 | `hal_mcp23017` | [Output devices](api/13_output_devices.md) |
 | `hal_mcp3221` | [Sensors](api/11_sensors.md) |

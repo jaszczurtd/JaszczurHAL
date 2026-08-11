@@ -88,6 +88,41 @@ jh_enable_host_warnings(test_hal_lora_radio_header_cpp ERRORS)
 add_test(NAME test_hal_lora_radio_header_cpp
     COMMAND test_hal_lora_radio_header_cpp)
 
+add_executable(test_hal_lora_link_header_c test_hal_lora_link_header.c)
+target_compile_definitions(test_hal_lora_link_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1
+    HAL_ENABLE_LORA_LINK=1)
+target_include_directories(test_hal_lora_link_header_c PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_link_header_c ERRORS)
+add_test(NAME test_hal_lora_link_header_c COMMAND test_hal_lora_link_header_c)
+
+add_executable(test_hal_lora_link_header_cpp test_hal_lora_link_header.cpp)
+target_compile_definitions(test_hal_lora_link_header_cpp PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1
+    HAL_ENABLE_LORA_LINK=1)
+target_include_directories(test_hal_lora_link_header_cpp PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_hal_lora_link_header_cpp ERRORS)
+add_test(NAME test_hal_lora_link_header_cpp
+    COMMAND test_hal_lora_link_header_cpp)
+
+# The reliable link must remain usable without the optional crypto module.
+# Compile its implementation independently from the all-features mock library,
+# whose public definitions intentionally enable HAL_ENABLE_CRYPTO.
+add_library(test_lora_link_plain_compile OBJECT
+    ${CMAKE_SOURCE_DIR}/src/hal/radio/hal_lora_link.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/radio/jh_lora_link_frame.cpp)
+target_compile_definitions(test_lora_link_plain_compile PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_SX126X=1
+    HAL_ENABLE_LORA_LINK=1)
+target_include_directories(test_lora_link_plain_compile PRIVATE
+    ${CMAKE_SOURCE_DIR}/src)
+jh_enable_host_warnings(test_lora_link_plain_compile ERRORS)
+
 # The public socket declaration surface is portable and compiled by both MSVC
 # and GNU-like host gates. The full adapter intentionally exports POSIX symbol
 # names and remains a firmware/Linux-host contract rather than a Winsock ABI.
@@ -1111,6 +1146,8 @@ add_hal_test(test_hal_spi)
 add_hal_test(test_hal_spi_device)
 add_hal_test(test_hal_lora_radio_lifecycle)
 add_hal_test(test_hal_lora_radio)
+add_hal_test(test_hal_lora_link)
+add_hal_test(test_lora_link_frame)
 add_hal_test(test_sx126x_adapter)
 
 add_executable(test_sx127x_adapter
