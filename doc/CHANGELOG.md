@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased] - 2026-08-10
+## [Unreleased] - 2026-08-11
 
 - Reorganized `src/hal/` into a single thematic hierarchy that co-locates
   public headers, target-independent facades, drivers, and reusable engines in
@@ -53,14 +53,19 @@ All notable changes to this project will be documented in this file.
 - Added DIO1-driven asynchronous LoRa TX/RX processing, stable TX operation
   status, task-context callbacks, explicit cancellation and a shared validated
   state machine while retaining blocking TX and polling-RX compatibility.
+- Added provider-neutral LoRa capabilities, current RSSI, asynchronous CAD
+  with detected/clear/timeout/cancel results, and explicit full plus band-aware
+  image calibration with cached frequency ranges.
 - Extended per-radio diagnostics with header, IRQ, callback, cancellation,
-  operation-error, signal-RSSI and event/state timestamp data, and added
-  concurrent host plus real-scheduler FreeRTOS POSIX regressions.
+  operation-error, signal/current-RSSI, CAD, calibration and event/state
+  timestamp data, and added concurrent host plus real-scheduler FreeRTOS POSIX
+  regressions.
 - Added a deterministic mock provider with packet injection/capture and a
   two-radio link, plus lifecycle, facade and low-level adapter tests.
-- Added `27_lora_point_to_point` for integrated LF RP2040 boards and explicitly
-  wired Core1262-HF modules on RP2040/STM32G474, including initiator/responder
-  variants and a serial-log hardware verifier.
+- Added `27_lora_point_to_point` for integrated LF RP2040 boards and fixed
+  Core1262-HF fixtures on RP2040/STM32G474, including no-transmit probe,
+  initiator/responder, deterministic SF7 variants and a serial-log hardware
+  verifier.
 - Migrated the LoRa point-to-point example and hardware verifier to the
   asynchronous callback lifecycle with IRQ/callback/cancel evidence.
 - Pinned the official Semtech SX126x driver at `v2.5.0` and exact commit
@@ -70,8 +75,17 @@ All notable changes to this project will be documented in this file.
 - Activated the lifecycle-owned `sx1262-radio` board capability and added the
   experimental `rp2040-lora-lf` profile for Waveshare SKU 26592 with fixed SPI,
   DIO1, BUSY, RESET, DIO2 plus GPIO antenna control, DCDC, and DIO3 TCXO facts.
-- Kept the externally wired Core1262-HF as project configuration and added a
-  reusable helper for its electrical limits, TCXO and RF-switch truth table.
+- Added experimental `pico-core1262-hf` and
+  `nucleo-g474re-core1262-hf` composite profiles with fixed external-module
+  wiring, hard pin reservations, SX1262 capabilities and a reusable helper for
+  alternate application-owned wiring. Both profiles passed no-transmit
+  CAD/RSSI/calibration probes and four bidirectional HF OTA runs at SF9/10 dBm
+  and SF7/6 dBm.
+- Validated the no-transmit Stage 3A capabilities, calibration, current-RSSI,
+  CAD and standby probe on both available integrated RP2040-LoRa-LF boards.
+- Preserved NUCLEO-G474RE LD2 and `HAL_LED_BUILTIN` on PA5 by moving the
+  Core1262 fixture to SPI2 on PB13/PB14/PB15; documented that hiding a base
+  device from a composite profile does not remove the physical pin conflict.
 - Made `boards/` the single maintained source for public board IDs, runtime
   names, capability bits, target compatibility, provider autodetection, and
   device facts. The generator now maintains a tracked public registry and a

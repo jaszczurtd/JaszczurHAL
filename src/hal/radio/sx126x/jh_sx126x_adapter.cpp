@@ -412,6 +412,81 @@ static hal_status_t configure_packet(jh_lora_radio_context_t *context,
   return map_status(context, sx126x_set_lora_pkt_params(context, &packet));
 }
 
+typedef struct {
+  uint8_t lower;
+  uint8_t upper;
+  uint32_t min_frequency_hz;
+  uint32_t max_frequency_hz;
+} jh_sx126x_image_calibration_t;
+
+static jh_sx126x_image_calibration_t
+image_calibration_for_frequency(uint32_t frequency_hz) {
+  static const uint32_t one_mhz = UINT32_C(1000000);
+  jh_sx126x_image_calibration_t calibration = {};
+  if (frequency_hz >= UINT32_C(430000000) &&
+      frequency_hz <= UINT32_C(440000000)) {
+    calibration = {0x6Bu, 0x6Fu, UINT32_C(430000000), UINT32_C(440000000)};
+  } else if (frequency_hz >= UINT32_C(470000000) &&
+             frequency_hz <= UINT32_C(510000000)) {
+    calibration = {0x75u, 0x81u, UINT32_C(470000000), UINT32_C(510000000)};
+  } else if (frequency_hz >= UINT32_C(779000000) &&
+             frequency_hz <= UINT32_C(787000000)) {
+    calibration = {0xC1u, 0xC5u, UINT32_C(779000000), UINT32_C(787000000)};
+  } else if (frequency_hz >= UINT32_C(863000000) &&
+             frequency_hz <= UINT32_C(870000000)) {
+    calibration = {0xD7u, 0xDBu, UINT32_C(863000000), UINT32_C(870000000)};
+  } else if (frequency_hz >= UINT32_C(902000000) &&
+             frequency_hz <= UINT32_C(928000000)) {
+    calibration = {0xE1u, 0xE9u, UINT32_C(902000000), UINT32_C(928000000)};
+  } else {
+    const uint32_t step_hz =
+        (uint32_t)SX126X_IMAGE_CALIBRATION_STEP_IN_MHZ * one_mhz;
+    const uint32_t lower = frequency_hz / step_hz;
+    const uint32_t upper = (frequency_hz + step_hz - 1u) / step_hz;
+    calibration.lower = static_cast<uint8_t>(lower);
+    calibration.upper = static_cast<uint8_t>(upper);
+    calibration.min_frequency_hz = lower * step_hz;
+    calibration.max_frequency_hz = upper * step_hz;
+  }
+  return calibration;
+}
+
+static hal_status_t calibrate_image(jh_lora_radio_context_t *context,
+                                    bool force) {
+  const uint32_t frequency_hz = context->modem.frequency_hz;
+  if (!force && context->calibrated_frequency_min_hz != 0u &&
+      frequency_hz >= context->calibrated_frequency_min_hz &&
+      frequency_hz <= context->calibrated_frequency_max_hz) {
+    return HAL_OK;
+  }
+  const jh_sx126x_image_calibration_t calibration =
+      image_calibration_for_frequency(frequency_hz);
+  const hal_status_t status = map_status(
+      context, sx126x_cal_img(context, calibration.lower, calibration.upper));
+  if (status == HAL_OK) {
+    context->calibrated_frequency_min_hz = calibration.min_frequency_hz;
+    context->calibrated_frequency_max_hz = calibration.max_frequency_hz;
+    context->diagnostics.calibrated_frequency_min_hz =
+        calibration.min_frequency_hz;
+    context->diagnostics.calibrated_frequency_max_hz =
+        calibration.max_frequency_hz;
+    ++context->diagnostics.image_calibrations;
+  }
+  return status;
+}
+
+static hal_status_t calibrate_blocks(jh_lora_radio_context_t *context) {
+  const sx126x_cal_mask_t calibration =
+      SX126X_CAL_RC64K | SX126X_CAL_RC13M | SX126X_CAL_PLL |
+      SX126X_CAL_ADC_PULSE | SX126X_CAL_ADC_BULK_N | SX126X_CAL_ADC_BULK_P;
+  const hal_status_t status =
+      map_status(context, sx126x_cal(context, calibration));
+  if (status == HAL_OK) {
+    ++context->diagnostics.full_calibrations;
+  }
+  return status;
+}
+
 static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
   const hal_lora_sx126x_hardware_config_t *hardware =
       &context->config.hardware.sx126x;
@@ -504,10 +579,7 @@ static hal_status_t sx126x_initialize(jh_lora_radio_context_t *context) {
         map_status(context, sx126x_set_buffer_base_address(context, 0u, 0u));
   }
   if (status == HAL_OK) {
-    const sx126x_cal_mask_t calibration =
-        SX126X_CAL_RC64K | SX126X_CAL_RC13M | SX126X_CAL_PLL |
-        SX126X_CAL_ADC_PULSE | SX126X_CAL_ADC_BULK_N | SX126X_CAL_ADC_BULK_P;
-    status = map_status(context, sx126x_cal(context, calibration));
+    status = calibrate_blocks(context);
   }
   sx126x_chip_status_t chip_status = {};
   if (status == HAL_OK) {
@@ -553,31 +625,7 @@ static hal_status_t sx126x_configure(jh_lora_radio_context_t *context) {
   hal_status_t status =
       map_status(context, sx126x_set_pkt_type(context, SX126X_PKT_TYPE_LORA));
   if (status == HAL_OK) {
-    const uint16_t frequency_mhz =
-        static_cast<uint16_t>(context->modem.frequency_hz / UINT32_C(1000000));
-    uint8_t calibration_lower = static_cast<uint8_t>(
-        frequency_mhz / SX126X_IMAGE_CALIBRATION_STEP_IN_MHZ);
-    uint8_t calibration_upper = static_cast<uint8_t>(
-        (frequency_mhz + SX126X_IMAGE_CALIBRATION_STEP_IN_MHZ - 1u) /
-        SX126X_IMAGE_CALIBRATION_STEP_IN_MHZ);
-    if (frequency_mhz >= 430u && frequency_mhz <= 440u) {
-      calibration_lower = 0x6Bu;
-      calibration_upper = 0x6Fu;
-    } else if (frequency_mhz >= 470u && frequency_mhz <= 510u) {
-      calibration_lower = 0x75u;
-      calibration_upper = 0x81u;
-    } else if (frequency_mhz >= 779u && frequency_mhz <= 787u) {
-      calibration_lower = 0xC1u;
-      calibration_upper = 0xC5u;
-    } else if (frequency_mhz >= 863u && frequency_mhz <= 870u) {
-      calibration_lower = 0xD7u;
-      calibration_upper = 0xDBu;
-    } else if (frequency_mhz >= 902u && frequency_mhz <= 928u) {
-      calibration_lower = 0xE1u;
-      calibration_upper = 0xE9u;
-    }
-    status = map_status(
-        context, sx126x_cal_img(context, calibration_lower, calibration_upper));
+    status = calibrate_image(context, false);
   }
   if (status == HAL_OK) {
     status = map_status(
@@ -603,6 +651,21 @@ static hal_status_t sx126x_configure(jh_lora_radio_context_t *context) {
                                       SX126X_RAMP_200_US));
   }
   return status;
+}
+
+static hal_status_t
+sx126x_get_capabilities(jh_lora_radio_context_t *context,
+                        hal_lora_radio_capabilities_t *out_capabilities) {
+  return jh_lora_radio_describe_capabilities(
+      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+}
+
+static hal_status_t sx126x_get_instant_rssi(jh_lora_radio_context_t *context,
+                                            int16_t *out_rssi_dbm) {
+  if (out_rssi_dbm == NULL) {
+    return HAL_EINVAL;
+  }
+  return map_status(context, sx126x_get_rssi_inst(context, out_rssi_dbm));
 }
 
 static hal_status_t sx126x_transmit_start(jh_lora_radio_context_t *context,
@@ -664,6 +727,47 @@ static hal_status_t sx126x_receive_start(jh_lora_radio_context_t *context,
   return status;
 }
 
+static uint8_t cad_detect_peak(uint8_t spreading_factor) {
+  static const uint8_t peak_by_sf[] = {0u,  0u,  0u,  0u,  0u,  18u, 19u,
+                                       22u, 22u, 23u, 24u, 25u, 28u};
+  return spreading_factor < sizeof(peak_by_sf) ? peak_by_sf[spreading_factor]
+                                               : 22u;
+}
+
+static hal_status_t
+sx126x_channel_activity_detect_start(jh_lora_radio_context_t *context,
+                                     uint32_t timeout_ms) {
+  (void)timeout_ms;
+  const sx126x_cad_params_t parameters = {
+      SX126X_CAD_02_SYMB,
+      cad_detect_peak(context->modem.spreading_factor),
+      10u,
+      SX126X_CAD_ONLY,
+      0u,
+  };
+  const sx126x_irq_mask_t irq_mask =
+      SX126X_IRQ_CAD_DONE | SX126X_IRQ_CAD_DETECTED;
+  hal_status_t status =
+      map_status(context, sx126x_set_cad_params(context, &parameters));
+  if (status == HAL_OK) {
+    status =
+        map_status(context, sx126x_clear_irq_status(context, SX126X_IRQ_ALL));
+  }
+  if (status == HAL_OK) {
+    status = map_status(
+        context, sx126x_set_dio_irq_params(context, irq_mask, irq_mask,
+                                           SX126X_IRQ_NONE, SX126X_IRQ_NONE));
+  }
+  if (status == HAL_OK) {
+    jh_sx126x_set_rf_rx(context);
+    status = map_status(context, sx126x_set_cad(context));
+  }
+  if (status != HAL_OK) {
+    jh_sx126x_set_rf_idle(context);
+  }
+  return status;
+}
+
 static hal_status_t sx126x_cancel(jh_lora_radio_context_t *context) {
   jh_sx126x_set_rf_idle(context);
   hal_status_t status =
@@ -697,9 +801,13 @@ static hal_status_t sx126x_process(jh_lora_radio_context_t *context,
                           !context->receive_continuous &&
                           (uint32_t)(now - context->receive_started_ms) >=
                               context->receive_timeout_ms;
+  const bool cad_timeout =
+      context->state == HAL_LORA_RADIO_STATE_CAD &&
+      (uint32_t)(now - context->channel_activity_started_ms) >=
+          context->channel_activity_timeout_ms;
   if (!s_dio1_pending &&
       !hal_gpio_read(context->config.hardware.sx126x.dio1_pin) && !tx_timeout &&
-      !rx_timeout) {
+      !rx_timeout && !cad_timeout) {
     return HAL_EAGAIN;
   }
   s_dio1_pending = false;
@@ -727,7 +835,18 @@ static hal_status_t sx126x_process(jh_lora_radio_context_t *context,
     }
     return status;
   }
-  if ((irq & SX126X_IRQ_TIMEOUT) != 0u || tx_timeout || rx_timeout) {
+  if (context->state == HAL_LORA_RADIO_STATE_CAD &&
+      (irq & (SX126X_IRQ_CAD_DONE | SX126X_IRQ_CAD_DETECTED)) != 0u) {
+    *out_events |= JH_LORA_PROVIDER_EVENT_CAD_DONE;
+    if ((irq & SX126X_IRQ_CAD_DETECTED) != 0u) {
+      *out_events |= JH_LORA_PROVIDER_EVENT_CAD_DETECTED;
+    }
+    status = map_status(context, sx126x_clear_irq_status(context, irq));
+    jh_sx126x_set_rf_idle(context);
+    return status;
+  }
+  if ((irq & SX126X_IRQ_TIMEOUT) != 0u || tx_timeout || rx_timeout ||
+      cad_timeout) {
     *out_events |= JH_LORA_PROVIDER_EVENT_TIMEOUT;
     status = sx126x_cancel(context);
     return status;
@@ -794,10 +913,32 @@ static hal_status_t sx126x_standby(jh_lora_radio_context_t *context) {
                     sx126x_set_standby(context, SX126X_STANDBY_CFG_RC));
 }
 
+static hal_status_t sx126x_calibrate(jh_lora_radio_context_t *context) {
+  hal_status_t status =
+      map_status(context, sx126x_set_standby(context, SX126X_STANDBY_CFG_RC));
+  if (status == HAL_OK) {
+    status = calibrate_blocks(context);
+  }
+  if (status == HAL_OK) {
+    status = calibrate_image(context, true);
+  }
+  return status;
+}
+
 [[maybe_unused]] static const jh_lora_radio_provider_ops_t s_sx126x_provider = {
-    sx126x_initialize,     sx126x_deinitialize,  sx126x_configure,
-    sx126x_transmit_start, sx126x_receive_start, sx126x_process,
-    sx126x_cancel,         sx126x_sleep,         sx126x_standby,
+    sx126x_initialize,
+    sx126x_deinitialize,
+    sx126x_configure,
+    sx126x_get_capabilities,
+    sx126x_get_instant_rssi,
+    sx126x_transmit_start,
+    sx126x_receive_start,
+    sx126x_channel_activity_detect_start,
+    sx126x_process,
+    sx126x_cancel,
+    sx126x_sleep,
+    sx126x_standby,
+    sx126x_calibrate,
 };
 
 const jh_lora_radio_provider_ops_t *jh_sx126x_provider_ops(void) {

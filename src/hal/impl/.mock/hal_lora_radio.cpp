@@ -15,7 +15,10 @@ typedef struct {
   uint8_t pending_rx[HAL_LORA_RADIO_MAX_PAYLOAD];
   size_t pending_rx_length;
   hal_lora_packet_info_t pending_info;
+  int16_t instant_rssi_dbm;
   bool pending_rx_ready;
+  bool pending_cad_ready;
+  bool pending_cad_detected;
 } jh_mock_lora_state_t;
 
 static jh_mock_lora_state_t s_states[HAL_LORA_RADIO_MAX_INSTANCES] = {};
@@ -35,6 +38,7 @@ static jh_mock_lora_state_t *allocate_state(jh_lora_radio_context_t *context) {
     if (s_states[index].context == NULL) {
       memset(&s_states[index], 0, sizeof(s_states[index]));
       s_states[index].context = context;
+      s_states[index].instant_rssi_dbm = -100;
       return &s_states[index];
     }
   }
@@ -57,7 +61,11 @@ static hal_status_t mock_initialize(jh_lora_radio_context_t *context) {
   if (status != HAL_OK) {
     return status;
   }
-  return allocate_state(context) != NULL ? HAL_OK : HAL_ENOMEM;
+  if (allocate_state(context) == NULL) {
+    return HAL_ENOMEM;
+  }
+  ++context->diagnostics.full_calibrations;
+  return HAL_OK;
 }
 
 static hal_status_t mock_deinitialize(jh_lora_radio_context_t *context) {
@@ -75,7 +83,41 @@ static hal_status_t mock_deinitialize(jh_lora_radio_context_t *context) {
 }
 
 static hal_status_t mock_configure(jh_lora_radio_context_t *context) {
-  return consume(find_state(context), HAL_MOCK_LORA_CONFIGURE);
+  const hal_status_t status =
+      consume(find_state(context), HAL_MOCK_LORA_CONFIGURE);
+  if (status == HAL_OK &&
+      (context->calibrated_frequency_min_hz == 0u ||
+       context->modem.frequency_hz < context->calibrated_frequency_min_hz ||
+       context->modem.frequency_hz > context->calibrated_frequency_max_hz)) {
+    context->calibrated_frequency_min_hz = context->modem.frequency_hz;
+    context->calibrated_frequency_max_hz = context->modem.frequency_hz;
+    context->diagnostics.calibrated_frequency_min_hz =
+        context->modem.frequency_hz;
+    context->diagnostics.calibrated_frequency_max_hz =
+        context->modem.frequency_hz;
+    ++context->diagnostics.image_calibrations;
+  }
+  return status;
+}
+
+static hal_status_t
+mock_get_capabilities(jh_lora_radio_context_t *context,
+                      hal_lora_radio_capabilities_t *out_capabilities) {
+  return jh_lora_radio_describe_capabilities(
+      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+}
+
+static hal_status_t mock_get_instant_rssi(jh_lora_radio_context_t *context,
+                                          int16_t *out_rssi_dbm) {
+  if (out_rssi_dbm == NULL) {
+    return HAL_EINVAL;
+  }
+  jh_mock_lora_state_t *state = find_state(context);
+  const hal_status_t status = consume(state, HAL_MOCK_LORA_GET_INSTANT_RSSI);
+  if (status == HAL_OK) {
+    *out_rssi_dbm = state->instant_rssi_dbm;
+  }
+  return status;
 }
 
 static hal_status_t mock_transmit_start(jh_lora_radio_context_t *context,
@@ -114,6 +156,13 @@ static hal_status_t mock_receive_start(jh_lora_radio_context_t *context,
   return consume(find_state(context), HAL_MOCK_LORA_RECEIVE_START);
 }
 
+static hal_status_t
+mock_channel_activity_detect_start(jh_lora_radio_context_t *context,
+                                   uint32_t timeout_ms) {
+  (void)timeout_ms;
+  return consume(find_state(context), HAL_MOCK_LORA_CAD_START);
+}
+
 static hal_status_t mock_process(jh_lora_radio_context_t *context,
                                  jh_lora_provider_events_t *out_events) {
   if (out_events == NULL) {
@@ -126,6 +175,28 @@ static hal_status_t mock_process(jh_lora_radio_context_t *context,
       *out_events = JH_LORA_PROVIDER_EVENT_TX_DONE | JH_LORA_PROVIDER_EVENT_IRQ;
     }
     return status;
+  }
+  if (context->state == HAL_LORA_RADIO_STATE_CAD) {
+    jh_mock_lora_state_t *state = find_state(context);
+    const hal_status_t status = consume(state, HAL_MOCK_LORA_CAD_POLL);
+    if (status != HAL_OK) {
+      return status;
+    }
+    if (state->pending_cad_ready) {
+      *out_events =
+          JH_LORA_PROVIDER_EVENT_CAD_DONE | JH_LORA_PROVIDER_EVENT_IRQ;
+      if (state->pending_cad_detected) {
+        *out_events |= JH_LORA_PROVIDER_EVENT_CAD_DETECTED;
+      }
+      state->pending_cad_ready = false;
+      return HAL_OK;
+    }
+    if ((uint32_t)(hal_millis() - context->channel_activity_started_ms) >=
+        context->channel_activity_timeout_ms) {
+      *out_events = JH_LORA_PROVIDER_EVENT_TIMEOUT;
+      return HAL_OK;
+    }
+    return HAL_EAGAIN;
   }
   if (context->state != HAL_LORA_RADIO_STATE_RX) {
     return HAL_EAGAIN;
@@ -171,10 +242,36 @@ static hal_status_t mock_standby(jh_lora_radio_context_t *context) {
   return consume(find_state(context), HAL_MOCK_LORA_STANDBY);
 }
 
+static hal_status_t mock_calibrate(jh_lora_radio_context_t *context) {
+  const hal_status_t status =
+      consume(find_state(context), HAL_MOCK_LORA_CALIBRATE);
+  if (status == HAL_OK) {
+    ++context->diagnostics.full_calibrations;
+    ++context->diagnostics.image_calibrations;
+    context->calibrated_frequency_min_hz = context->modem.frequency_hz;
+    context->calibrated_frequency_max_hz = context->modem.frequency_hz;
+    context->diagnostics.calibrated_frequency_min_hz =
+        context->modem.frequency_hz;
+    context->diagnostics.calibrated_frequency_max_hz =
+        context->modem.frequency_hz;
+  }
+  return status;
+}
+
 static const jh_lora_radio_provider_ops_t s_mock_provider = {
-    mock_initialize,     mock_deinitialize,  mock_configure,
-    mock_transmit_start, mock_receive_start, mock_process,
-    mock_cancel,         mock_sleep,         mock_standby,
+    mock_initialize,
+    mock_deinitialize,
+    mock_configure,
+    mock_get_capabilities,
+    mock_get_instant_rssi,
+    mock_transmit_start,
+    mock_receive_start,
+    mock_channel_activity_detect_start,
+    mock_process,
+    mock_cancel,
+    mock_sleep,
+    mock_standby,
+    mock_calibrate,
 };
 
 const jh_lora_radio_provider_ops_t *jh_lora_radio_default_provider(void) {
@@ -231,6 +328,41 @@ hal_status_t hal_mock_lora_inject_receive(hal_lora_radio_t radio,
       state->pending_info.timestamp_ms = hal_millis();
     }
     state->pending_rx_ready = true;
+  }
+  jh_lora_radio_context_unlock(context);
+  return result;
+}
+
+hal_status_t hal_mock_lora_set_instant_rssi(hal_lora_radio_t radio,
+                                            int16_t rssi_dbm) {
+  jh_lora_radio_context_t *context = NULL;
+  hal_status_t result = jh_lora_radio_context_lock(radio, &context);
+  if (result != HAL_OK) {
+    return result;
+  }
+  jh_mock_lora_state_t *state = find_state(context);
+  if (state == NULL) {
+    result = HAL_EUNINIT;
+  } else {
+    state->instant_rssi_dbm = rssi_dbm;
+  }
+  jh_lora_radio_context_unlock(context);
+  return result;
+}
+
+hal_status_t hal_mock_lora_inject_channel_activity(hal_lora_radio_t radio,
+                                                   bool detected) {
+  jh_lora_radio_context_t *context = NULL;
+  hal_status_t result = jh_lora_radio_context_lock(radio, &context);
+  if (result != HAL_OK) {
+    return result;
+  }
+  jh_mock_lora_state_t *state = find_state(context);
+  if (state == NULL) {
+    result = HAL_EUNINIT;
+  } else {
+    state->pending_cad_ready = true;
+    state->pending_cad_detected = detected;
   }
   jh_lora_radio_context_unlock(context);
   return result;

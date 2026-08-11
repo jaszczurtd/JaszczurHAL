@@ -265,6 +265,153 @@ void test_async_transmit_status_callback_and_irq_diagnostics(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
 }
 
+void test_capabilities_instant_rssi_and_explicit_calibration(void) {
+  const hal_lora_radio_t radio = create_configured_radio();
+  hal_lora_radio_capabilities_t capabilities = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_capabilities(radio, &capabilities));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_SX1262, capabilities.model);
+  TEST_ASSERT_EQUAL_UINT16(HAL_LORA_RADIO_MAX_PAYLOAD,
+                           capabilities.max_payload_length);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(850000000), capabilities.min_frequency_hz);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(930000000), capabilities.max_frequency_hz);
+  TEST_ASSERT_TRUE(capabilities.supports_continuous_receive);
+  TEST_ASSERT_TRUE(capabilities.supports_channel_activity_detection);
+  TEST_ASSERT_TRUE(capabilities.supports_instant_rssi);
+  TEST_ASSERT_TRUE(capabilities.supports_explicit_calibration);
+
+  int16_t rssi_dbm = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_ESTATE,
+                        hal_lora_radio_get_instant_rssi(radio, &rssi_dbm));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_receive_start_continuous(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_lora_set_instant_rssi(radio, -87));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_instant_rssi(radio, &rssi_dbm));
+  TEST_ASSERT_EQUAL_INT(-87, rssi_dbm);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUSY, hal_lora_radio_calibrate(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_calibrate(radio));
+
+  hal_lora_radio_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_diagnostics(radio, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.instant_rssi_reads);
+  TEST_ASSERT_EQUAL_INT(-87, diagnostics.last_instant_rssi_dbm);
+  TEST_ASSERT_EQUAL_UINT32(2u, diagnostics.full_calibrations);
+  TEST_ASSERT_EQUAL_UINT32(2u, diagnostics.image_calibrations);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(868100000),
+                           diagnostics.calibrated_frequency_min_hz);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(868100000),
+                           diagnostics.calibrated_frequency_max_hz);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+}
+
+void test_channel_activity_detected_clear_timeout_cancel_and_callback(void) {
+  const hal_lora_radio_t radio = create_configured_radio();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_set_event_callback(
+                                    radio, radio_event_callback, NULL));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_lora_radio_channel_activity_detect_start(radio, 0u));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_channel_activity_detect_start(radio, 50u));
+  hal_lora_channel_activity_status_t operation = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_IN_PROGRESS, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, operation.result);
+  TEST_ASSERT_FALSE(operation.detected);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_inject_channel_activity(radio, true));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_SUCCEEDED, operation.state);
+  TEST_ASSERT_TRUE(operation.detected);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_CHANNEL_ACTIVITY_COMPLETE,
+                        s_last_event.type);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_KIND_CHANNEL_ACTIVITY_DETECTION,
+                        s_last_event.operation);
+  TEST_ASSERT_TRUE(s_last_event.channel_activity_detected);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_callback_reentrant_status);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_channel_activity_detect_start(radio, 50u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_inject_channel_activity(radio, false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_SUCCEEDED, operation.state);
+  TEST_ASSERT_FALSE(operation.detected);
+  TEST_ASSERT_FALSE(s_last_event.channel_activity_detected);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_channel_activity_detect_start(radio, 10u));
+  hal_mock_advance_millis(10u);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_TIMED_OUT, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, operation.result);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_TIMEOUT, s_last_event.type);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_channel_activity_detect_start(radio, 50u));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_ECANCELED, hal_lora_radio_process(radio));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_CANCELLED, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_ECANCELED, operation.result);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_EVENT_CANCELLED, s_last_event.type);
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_KIND_CHANNEL_ACTIVITY_DETECTION,
+                        s_last_event.operation);
+
+  hal_lora_radio_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_diagnostics(radio, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(4u, diagnostics.channel_activity_checks);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.channel_activity_detected);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.channel_activity_clear);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.channel_activity_timeouts);
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.cancelled_operations);
+  TEST_ASSERT_EQUAL_UINT32(2u, diagnostics.irq_events);
+  TEST_ASSERT_EQUAL_UINT32(4u, diagnostics.callback_events);
+  TEST_ASSERT_EQUAL_UINT32(4u, s_callback_count);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+}
+
+void test_channel_activity_and_rssi_provider_errors_are_reported(void) {
+  hal_lora_radio_t radio = create_configured_radio();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_lora_set_next_status(
+                                    radio, HAL_MOCK_LORA_CAD_START, HAL_EBUS));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EBUS, hal_lora_radio_channel_activity_detect_start(radio, 10u));
+  hal_lora_channel_activity_status_t operation = {};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_lora_radio_get_channel_activity_status(radio, &operation));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_OPERATION_FAILED, operation.state);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, operation.result);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+
+  radio = create_configured_radio();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_receive_start_continuous(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_lora_set_next_status(
+                            radio, HAL_MOCK_LORA_GET_INSTANT_RSSI, HAL_EIO));
+  int16_t rssi_dbm = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        hal_lora_radio_get_instant_rssi(radio, &rssi_dbm));
+  hal_lora_radio_diagnostics_t diagnostics = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_lora_radio_get_diagnostics(radio, &diagnostics));
+  TEST_ASSERT_EQUAL_UINT32(1u, diagnostics.bus_errors);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, diagnostics.last_error);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_cancel(radio));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_destroy(radio));
+}
+
 void test_receive_timeout_and_cancel_have_stable_terminal_results(void) {
   const hal_lora_radio_t radio = create_configured_radio();
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_lora_radio_set_event_callback(
@@ -330,6 +477,9 @@ int main(void) {
   RUN_TEST(test_continuous_receive_survives_packets_and_counts_crc_errors);
   RUN_TEST(test_connected_mock_radios_exchange_only_while_receiving);
   RUN_TEST(test_async_transmit_status_callback_and_irq_diagnostics);
+  RUN_TEST(test_capabilities_instant_rssi_and_explicit_calibration);
+  RUN_TEST(test_channel_activity_detected_clear_timeout_cancel_and_callback);
+  RUN_TEST(test_channel_activity_and_rssi_provider_errors_are_reported);
   RUN_TEST(test_receive_timeout_and_cancel_have_stable_terminal_results);
   RUN_TEST(test_concurrent_transmit_start_serializes_one_handle);
   return UNITY_END();

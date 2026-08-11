@@ -95,17 +95,20 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `24_epd_display` | E-paper display facade and refresh path | `55_epd_display` | R0, RA, RV, S | R0, S | - |
 | `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | `57_ota` | R0, RA | R0 | - |
 | `26_ble_stream` | Experimental BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, S | R0, S | - |
-| `27_lora_point_to_point` | Raw SX1262 ping/pong with DIO1-driven asynchronous TX/RX, callbacks, diagnostics and radio power/lifecycle recovery | `60_lora_point_to_point` | R0, S | R0, S | `responder` on R0, S; gate on R0, S |
+| `27_lora_point_to_point` | Raw SX1262 ping/pong with DIO1-driven asynchronous TX/RX, callbacks, diagnostics and radio power/lifecycle recovery | `60_lora_point_to_point` | R0, S | R0, S | `probe` and `responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474
 network and Bluetooth projects select the NUCLEO-G474RE plus the external
 PIM730/RM2 profile.
 
-The LoRa project selects the integrated Waveshare RP2040-LoRa-LF profile for
-RP2040 and an explicitly wired Core1262-HF on NUCLEO-G474RE. These target
-configurations use different frequency bands and belong to separate physical
-radio pairs.
+The LoRa project defaults to the fixed `pico-core1262-hf` and
+`nucleo-g474re-core1262-hf` fixtures. Use `rp2040-lora-lf` explicitly for the
+integrated Waveshare LF board; LF and HF devices use different frequency bands
+and belong to separate physical radio pairs. The `probe` variant validates
+capabilities, calibration, current RSSI and CAD without transmitting. The base
+and `responder` variants use SF9/10 dBm, while `sf7` and `responder-sf7` provide
+the deterministic SF7/6 dBm hardware-test pair.
 
 ## Supported build targets
 
@@ -249,8 +252,8 @@ supported because the early source-selection collector reads the file
 textually.
 
 The build flow supplies `HAL_PROVIDE_APP_ENTRY`. Board-specific pin facts come
-from the selected generated profile; project wiring remains in the project
-configuration.
+from the selected generated profile. Application-owned wiring remains possible
+through an explicit hardware descriptor when no fixed composite profile fits.
 
 ## VS Code
 

@@ -82,7 +82,7 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 5 targets and 11 boards",
+    validated.stdout.strip() == "validated 5 targets and 13 boards",
     "unexpected validated registry size",
 )
 require(
@@ -95,8 +95,10 @@ require(
     == [
         "host-mock",
         "nucleo-g474re",
+        "nucleo-g474re-core1262-hf",
         "nucleo-g474re-pim730",
         "pico",
+        "pico-core1262-hf",
         "pico-rm2",
         "pico2",
         "pico2w",
@@ -375,6 +377,86 @@ require(
     'set(PICO_BOARD "pico")'
     in (lora_output / "jh_board_config.cmake").read_text(encoding="utf-8"),
     "LoRa board must use the compatible Pico SDK board definition",
+)
+
+pico_core1262_output = TEST_ROOT / "generated/pico-core1262-hf"
+run(
+    "--target",
+    "rp2040",
+    "--board",
+    "pico-core1262-hf",
+    "--output-dir",
+    str(pico_core1262_output),
+    "--requested-feature",
+    "HAL_ENABLE_SX126X",
+)
+pico_core1262_resolved = load(pico_core1262_output / "jh_board_resolved.json")
+pico_core1262_config = (pico_core1262_output / "jh_board_config.h").read_text(
+    encoding="utf-8"
+)
+require(pico_core1262_resolved["profileId"] == 12, "Pico Core1262 profile ID changed")
+require(
+    pico_core1262_resolved["components"] == ["rp-native", "sx126x-radio"],
+    "Pico Core1262 component contract changed",
+)
+for expected in (
+    "#define HAL_BOARD_PROFILE_RP_PICO_CORE1262_HF 1",
+    "#define HAL_BOARD_DECLARED_CAPABILITIES UINT32_C(0x0000000d)",
+    "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN",
+    "#define HAL_BOARD_LORA_RADIO_SPI_BUS 0u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_MISO 16u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_SCK 18u",
+    "#define HAL_BOARD_LORA_RADIO_RF_SWITCH_MODE_IS_DUAL_GPIO 1",
+    "#define HAL_BOARD_LORA_RADIO_TCXO_CONTROL_IS_DIO3 1",
+):
+    require(expected in pico_core1262_config, f"Pico Core1262 lacks {expected!r}")
+
+nucleo_core1262_output = TEST_ROOT / "generated/nucleo-core1262-hf"
+run(
+    "--target",
+    "stm32g474",
+    "--board",
+    "nucleo-g474re-core1262-hf",
+    "--output-dir",
+    str(nucleo_core1262_output),
+    "--requested-feature",
+    "HAL_ENABLE_SX126X",
+)
+nucleo_core1262_resolved = load(
+    nucleo_core1262_output / "jh_board_resolved.json"
+)
+nucleo_core1262_config = (
+    nucleo_core1262_output / "jh_board_config.h"
+).read_text(encoding="utf-8")
+require(
+    nucleo_core1262_resolved["profileId"] == 13,
+    "NUCLEO Core1262 profile ID changed",
+)
+require(
+    nucleo_core1262_resolved["components"]
+    == ["stm32g474-native", "sx126x-radio"],
+    "NUCLEO Core1262 component contract changed",
+)
+for expected in (
+    "#define HAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF 1",
+    "#define HAL_BOARD_DECLARED_CAPABILITIES UINT32_C(0x0000000c)",
+    "#define HAL_BOARD_STATUS_LED_PIN 5u",
+    "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN",
+    "#define HAL_BOARD_LORA_RADIO_SPI_BUS 1u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_MISO 30u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_MOSI 31u",
+    "#define HAL_BOARD_LORA_RADIO_PIN_SCK 29u",
+):
+    require(expected in nucleo_core1262_config, f"NUCLEO Core1262 lacks {expected!r}")
+require(
+    nucleo_core1262_resolved["devices"]["statusLed"]["endpoint"]["id"]
+    == "PA5",
+    "NUCLEO Core1262 must preserve the physical PA5/LD2 status LED",
+)
+require(
+    nucleo_core1262_resolved["devices"]["loraRadio"]["signals"]["sck"]["id"]
+    == "PB13",
+    "NUCLEO Core1262 must not share PA5/LD2 with the radio clock",
 )
 
 picow_output = TEST_ROOT / "generated/picow"

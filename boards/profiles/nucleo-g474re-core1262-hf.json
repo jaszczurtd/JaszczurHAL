@@ -1,0 +1,77 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "nucleo-g474re-core1262-hf",
+  "displayName": "ST NUCLEO-G474RE with Core1262-HF",
+  "description": "NUCLEO-G474RE with an external Waveshare Core1262-HF (SKU 20855) using the project fixture wiring.",
+  "status": "experimental",
+  "compatibleTargets": ["stm32g474"],
+  "build": { "provider": "jh-stm32-baremetal" },
+  "hal": { "profileId": 13, "selector": "HAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF", "legacySelectors": [], "autoDetectSelectors": [] },
+  "memory": { "flash": { "source": "target", "expectedBytes": 524288 } },
+  "gpio": {
+    "exposedPins": { "values": ["PA0", "PA1", "PA2", "PA3", "PA4", "PA5", "PA6", "PA7", "PA8", "PA9", "PA10", "PA11", "PA12", "PA15", "PB0", "PB1", "PB2", "PB3", "PB4", "PB5", "PB6", "PB7", "PB8", "PB9", "PB10", "PB11", "PB12", "PB13", "PB14", "PB15", "PC0", "PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "PC7", "PC8", "PC9", "PC10", "PC11", "PC12", "PC13", "PD2", "PD3", "PD4", "PD5", "PD6", "PD7", "PD8", "PD9", "PD10", "PD11", "PD12", "PD13", "PD14", "PD15", "PE0", "PE1", "PE2", "PE3", "PE4", "PE5", "PE6", "PE7", "PE8", "PE9", "PE10", "PE11", "PE12", "PE13", "PE14", "PE15", "PF0", "PF1", "PF2", "PF9", "PF10", "PG10"] },
+    "connectors": {
+      "arduino-uno-v3": { "pins": [{ "domain": "soc-gpio", "id": "PA0" }, { "domain": "soc-gpio", "id": "PA1" }, { "domain": "soc-gpio", "id": "PA4" }, { "domain": "soc-gpio", "id": "PA5" }, { "domain": "soc-gpio", "id": "PA6" }, { "domain": "soc-gpio", "id": "PA7" }, { "domain": "soc-gpio", "id": "PA8" }, { "domain": "soc-gpio", "id": "PA9" }, { "domain": "soc-gpio", "id": "PA10" }, { "domain": "soc-gpio", "id": "PB0" }, { "domain": "soc-gpio", "id": "PB4" }, { "domain": "soc-gpio", "id": "PB5" }, { "domain": "soc-gpio", "id": "PB8" }, { "domain": "soc-gpio", "id": "PB9" }, { "domain": "soc-gpio", "id": "PC0" }, { "domain": "soc-gpio", "id": "PC1" }, { "domain": "soc-gpio", "id": "PC2" }, { "domain": "soc-gpio", "id": "PC3" }, { "domain": "soc-gpio", "id": "PC7" }, { "domain": "soc-gpio", "id": "PC13" }] }
+    },
+    "reservations": {
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": "PA5" }], "owner": "board.status-led", "strength": "soft", "reason": "User LED LD2." },
+      "user-button": { "pins": [{ "domain": "soc-gpio", "id": "PC13" }], "owner": "board.user-button", "strength": "soft", "reason": "User button B1." },
+      "swd": { "pins": [{ "domain": "soc-gpio", "id": "PA13" }, { "domain": "soc-gpio", "id": "PA14" }], "owner": "debug.swd", "strength": "hard", "reason": "ST-LINK SWD connection." },
+      "lora-radio": { "pins": [{ "domain": "soc-gpio", "id": "PB0" }, { "domain": "soc-gpio", "id": "PB1" }, { "domain": "soc-gpio", "id": "PB2" }, { "domain": "soc-gpio", "id": "PB3" }, { "domain": "soc-gpio", "id": "PB4" }, { "domain": "soc-gpio", "id": "PB5" }, { "domain": "soc-gpio", "id": "PB13" }, { "domain": "soc-gpio", "id": "PB14" }, { "domain": "soc-gpio", "id": "PB15" }], "owner": "board.lora-radio", "strength": "hard", "reason": "Frozen SPI2, control, IRQ, and RF-switch wiring of the external Core1262-HF fixture; SPI2 keeps the PA5 user LED available." }
+    },
+    "aliases": {
+      "status-led": { "endpoint": { "domain": "soc-gpio", "id": "PA5" } },
+      "user-button": { "endpoint": { "domain": "soc-gpio", "id": "PC13" } }
+    }
+  },
+  "capabilities": { "usb-device": { "present": false }, "cyw43": { "present": false }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": true } },
+  "devices": {
+    "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PA5" }, "activeLevel": "high" },
+    "userButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": "PC13" }, "activeLevel": "low" },
+    "loraRadio": {
+      "kind": "bus-device",
+      "role": "sx1262-radio",
+      "bus": { "kind": "spi", "index": 1 },
+      "signals": {
+        "sck": { "domain": "soc-gpio", "id": "PB13" },
+        "mosi": { "domain": "soc-gpio", "id": "PB15" },
+        "miso": { "domain": "soc-gpio", "id": "PB14" },
+        "cs": { "domain": "soc-gpio", "id": "PB0" },
+        "reset": { "domain": "soc-gpio", "id": "PB1" },
+        "busy": { "domain": "soc-gpio", "id": "PB2" },
+        "dio1": { "domain": "soc-gpio", "id": "PB3" },
+        "rfSwitchA": { "domain": "soc-gpio", "id": "PB4" },
+        "rfSwitchB": { "domain": "soc-gpio", "id": "PB5" }
+      },
+      "attributes": {
+        "minFrequencyHz": 850000000,
+        "maxFrequencyHz": 930000000,
+        "maxSpiClockHz": 18000000,
+        "defaultSpiClockHz": 8000000,
+        "minTxPowerDbm": -9,
+        "maxTxPowerDbm": 22,
+        "regulator": "dcdc",
+        "rfSwitchMode": "dual-gpio",
+        "rfSwitchIdleLevelA": false,
+        "rfSwitchRxLevelA": false,
+        "rfSwitchTxLevelA": true,
+        "rfSwitchIdleLevelB": false,
+        "rfSwitchRxLevelB": true,
+        "rfSwitchTxLevelB": false,
+        "tcxoControl": "dio3",
+        "tcxoVoltage": "1v8",
+        "tcxoStartupUs": 5000
+      }
+    }
+  },
+  "peripherals": {
+    "defaults": {
+      "i2c1": { "sda": { "domain": "soc-gpio", "id": "PB9" }, "scl": { "domain": "soc-gpio", "id": "PB8" } },
+      "spi1": { "sck": { "domain": "soc-gpio", "id": "PA5" }, "miso": { "domain": "soc-gpio", "id": "PA6" }, "mosi": { "domain": "soc-gpio", "id": "PA7" }, "cs": { "domain": "soc-gpio", "id": "PB0" } },
+      "fdcan1": { "rx": { "domain": "soc-gpio", "id": "PA11" }, "tx": { "domain": "soc-gpio", "id": "PA12" } }
+    }
+  },
+  "components": { "sx126x-radio": { "mode": "feature-gated" } }
+}

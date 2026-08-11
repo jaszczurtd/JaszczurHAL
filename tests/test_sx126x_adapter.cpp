@@ -44,6 +44,20 @@ static bool contains_bytes(const uint8_t *bytes, size_t length,
   return false;
 }
 
+static size_t count_bytes(const uint8_t *bytes, size_t length,
+                          const uint8_t *expected, size_t expected_length) {
+  size_t count = 0u;
+  if (expected_length == 0u || expected_length > length) {
+    return count;
+  }
+  for (size_t offset = 0u; offset <= length - expected_length; ++offset) {
+    if (memcmp(&bytes[offset], expected, expected_length) == 0) {
+      ++count;
+    }
+  }
+  return count;
+}
+
 static void configure_context_modem(jh_lora_radio_context_t *context) {
   context->config.hardware.sx126x.min_frequency_hz = UINT32_C(850000000);
   context->config.hardware.sx126x.max_frequency_hz = UINT32_C(930000000);
@@ -53,12 +67,16 @@ static void configure_context_modem(jh_lora_radio_context_t *context) {
   context->modem.tx_power_dbm = 10;
 }
 
-void setUp(void) {
+static void reset_mock_transport(void) {
   hal_mock_spi_reset();
-  hal_mock_set_millis(0u);
   hal_mock_gpio_inject_level(2u, false);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_spi_init(1u, 12u, 11u, 10u));
   hal_gpio_set_mode(3u, HAL_GPIO_OUTPUT_HIGH);
+}
+
+void setUp(void) {
+  hal_mock_set_millis(0u);
+  reset_mock_transport();
 }
 
 void tearDown(void) {}
@@ -194,8 +212,169 @@ void test_provider_initialize_resets_and_emits_electrical_profile_commands(
   TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, tcxo, sizeof(tcxo)));
   TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, pa, sizeof(pa)));
   TEST_ASSERT_TRUE(context.provider_irq_attached);
+  TEST_ASSERT_EQUAL_UINT32(1u, context.diagnostics.full_calibrations);
   TEST_ASSERT_EQUAL_INT(HAL_OK, provider->deinitialize(&context));
   TEST_ASSERT_FALSE(context.provider_irq_attached);
+}
+
+void test_provider_reports_capabilities_and_instant_rssi(void) {
+  jh_lora_radio_context_t context = adapter_context();
+  configure_context_modem(&context);
+  const jh_lora_radio_provider_ops_t *provider = jh_sx126x_provider_ops();
+  hal_lora_radio_capabilities_t capabilities = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        provider->get_capabilities(&context, &capabilities));
+  TEST_ASSERT_EQUAL_INT(HAL_LORA_RADIO_SX1262, capabilities.model);
+  TEST_ASSERT_EQUAL_UINT16(HAL_LORA_RADIO_MAX_PAYLOAD,
+                           capabilities.max_payload_length);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(850000000), capabilities.min_frequency_hz);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(930000000), capabilities.max_frequency_hz);
+  TEST_ASSERT_TRUE(capabilities.supports_channel_activity_detection);
+  TEST_ASSERT_TRUE(capabilities.supports_instant_rssi);
+  TEST_ASSERT_TRUE(capabilities.supports_explicit_calibration);
+
+  const uint8_t scripted_rssi[] = {0u, 0u, 0xA0u};
+  hal_mock_spi_push_rx(1u, scripted_rssi, sizeof(scripted_rssi));
+  int16_t rssi_dbm = 0;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        provider->get_instant_rssi(&context, &rssi_dbm));
+  TEST_ASSERT_EQUAL_INT(-80, rssi_dbm);
+  uint8_t tx[32] = {};
+  const size_t tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  const uint8_t get_rssi[] = {0x15u, 0x00u};
+  TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, get_rssi, sizeof(get_rssi)));
+}
+
+void test_image_calibration_boundaries_cache_and_explicit_calibration(void) {
+  typedef struct {
+    uint32_t frequency_hz;
+    uint8_t lower;
+    uint8_t upper;
+  } calibration_case_t;
+  static const calibration_case_t cases[] = {
+      {UINT32_C(430000000), 0x6Bu, 0x6Fu}, {UINT32_C(440000000), 0x6Bu, 0x6Fu},
+      {UINT32_C(470000000), 0x75u, 0x81u}, {UINT32_C(510000000), 0x75u, 0x81u},
+      {UINT32_C(779000000), 0xC1u, 0xC5u}, {UINT32_C(787000000), 0xC1u, 0xC5u},
+      {UINT32_C(863000000), 0xD7u, 0xDBu}, {UINT32_C(870000000), 0xD7u, 0xDBu},
+      {UINT32_C(902000000), 0xE1u, 0xE9u}, {UINT32_C(928000000), 0xE1u, 0xE9u},
+  };
+  const jh_lora_radio_provider_ops_t *provider = jh_sx126x_provider_ops();
+  uint8_t tx[4096] = {};
+  for (size_t index = 0u; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+    reset_mock_transport();
+    jh_lora_radio_context_t context = adapter_context();
+    configure_context_modem(&context);
+    context.config.hardware.sx126x.min_frequency_hz = UINT32_C(150000000);
+    context.config.hardware.sx126x.max_frequency_hz = UINT32_C(960000000);
+    context.modem.frequency_hz = cases[index].frequency_hz;
+    const uint8_t expected[] = {0x98u, cases[index].lower, cases[index].upper};
+    TEST_ASSERT_EQUAL_INT(HAL_OK, provider->configure(&context));
+    const size_t tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+    TEST_ASSERT_EQUAL_UINT(
+        1u, count_bytes(tx, tx_length, expected, sizeof(expected)));
+  }
+
+  reset_mock_transport();
+  jh_lora_radio_context_t context = adapter_context();
+  configure_context_modem(&context);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->configure(&context));
+  size_t tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  const uint8_t image_calibration_opcode[] = {0x98u};
+  const size_t first_calibrations =
+      count_bytes(tx, tx_length, image_calibration_opcode,
+                  sizeof(image_calibration_opcode));
+  context.modem.frequency_hz = UINT32_C(870000000);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->configure(&context));
+  tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  TEST_ASSERT_EQUAL_UINT(first_calibrations,
+                         count_bytes(tx, tx_length, image_calibration_opcode,
+                                     sizeof(image_calibration_opcode)));
+
+  context.modem.frequency_hz = UINT32_C(870000001);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->configure(&context));
+  tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  TEST_ASSERT_EQUAL_UINT(first_calibrations + 1u,
+                         count_bytes(tx, tx_length, image_calibration_opcode,
+                                     sizeof(image_calibration_opcode)));
+  const uint32_t full_before = context.diagnostics.full_calibrations;
+  const uint32_t image_before = context.diagnostics.image_calibrations;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->calibrate(&context));
+  TEST_ASSERT_EQUAL_UINT32(full_before + 1u,
+                           context.diagnostics.full_calibrations);
+  TEST_ASSERT_EQUAL_UINT32(image_before + 1u,
+                           context.diagnostics.image_calibrations);
+  TEST_ASSERT_TRUE(context.modem.frequency_hz >=
+                   context.diagnostics.calibrated_frequency_min_hz);
+  TEST_ASSERT_TRUE(context.modem.frequency_hz <=
+                   context.diagnostics.calibrated_frequency_max_hz);
+
+  const uint32_t full_after_success = context.diagnostics.full_calibrations;
+  const uint32_t image_after_success = context.diagnostics.image_calibrations;
+  hal_mock_spi_fail_next_write(1u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS, provider->calibrate(&context));
+  TEST_ASSERT_EQUAL_UINT32(full_after_success,
+                           context.diagnostics.full_calibrations);
+  TEST_ASSERT_EQUAL_UINT32(image_after_success,
+                           context.diagnostics.image_calibrations);
+}
+
+void test_channel_activity_detection_maps_irq_timeout_and_spi_error(void) {
+  jh_lora_radio_context_t context = adapter_context();
+  configure_context_modem(&context);
+  const jh_lora_radio_provider_ops_t *provider = jh_sx126x_provider_ops();
+  context.state = HAL_LORA_RADIO_STATE_CAD;
+  context.channel_activity_started_ms = hal_millis();
+  context.channel_activity_timeout_ms = 20u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        provider->channel_activity_detect_start(&context, 20u));
+  uint8_t tx[512] = {};
+  size_t tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  const uint8_t cad_parameters[] = {0x88u, 0x01u, 0x17u, 0x0Au,
+                                    0x00u, 0x00u, 0x00u, 0x00u};
+  const uint8_t set_cad[] = {0xC5u};
+  TEST_ASSERT_TRUE(
+      contains_bytes(tx, tx_length, cad_parameters, sizeof(cad_parameters)));
+  TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, set_cad, sizeof(set_cad)));
+  TEST_ASSERT_TRUE(hal_mock_gpio_get_state(21u));
+  TEST_ASSERT_FALSE(hal_mock_gpio_get_state(22u));
+
+  const uint8_t cad_detected_irq[] = {0u, 0u, 0x01u, 0x80u};
+  hal_mock_spi_push_rx(1u, cad_detected_irq, sizeof(cad_detected_irq));
+  hal_mock_gpio_inject_level(context.config.hardware.sx126x.dio1_pin, true);
+  jh_lora_provider_events_t events = JH_LORA_PROVIDER_EVENT_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->process(&context, &events));
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_CAD_DONE,
+                   JH_LORA_PROVIDER_EVENT_CAD_DONE, events);
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_CAD_DETECTED,
+                   JH_LORA_PROVIDER_EVENT_CAD_DETECTED, events);
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_IRQ, JH_LORA_PROVIDER_EVENT_IRQ,
+                   events);
+  TEST_ASSERT_FALSE(hal_mock_gpio_get_state(21u));
+  TEST_ASSERT_FALSE(hal_mock_gpio_get_state(22u));
+
+  context = adapter_context();
+  configure_context_modem(&context);
+  context.state = HAL_LORA_RADIO_STATE_CAD;
+  context.channel_activity_started_ms = hal_millis();
+  context.channel_activity_timeout_ms = 5u;
+  hal_mock_gpio_inject_level(context.config.hardware.sx126x.dio1_pin, false);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        provider->channel_activity_detect_start(&context, 5u));
+  hal_mock_advance_millis(5u);
+  const uint8_t no_irq[] = {0u, 0u, 0u, 0u};
+  hal_mock_spi_push_rx(1u, no_irq, sizeof(no_irq));
+  events = JH_LORA_PROVIDER_EVENT_NONE;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->process(&context, &events));
+  TEST_ASSERT_BITS(JH_LORA_PROVIDER_EVENT_TIMEOUT,
+                   JH_LORA_PROVIDER_EVENT_TIMEOUT, events);
+
+  context = adapter_context();
+  configure_context_modem(&context);
+  hal_mock_spi_fail_next_write(1u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EBUS,
+                        provider->channel_activity_detect_start(&context, 5u));
+  TEST_ASSERT_FALSE(hal_mock_gpio_get_state(21u));
+  TEST_ASSERT_FALSE(hal_mock_gpio_get_state(22u));
 }
 
 void test_provider_encodes_lora_configuration_and_tx_timeout(void) {
@@ -284,5 +463,8 @@ int main(void) {
       test_provider_initialize_resets_and_emits_electrical_profile_commands);
   RUN_TEST(test_provider_encodes_lora_configuration_and_tx_timeout);
   RUN_TEST(test_provider_process_maps_crc_irq);
+  RUN_TEST(test_provider_reports_capabilities_and_instant_rssi);
+  RUN_TEST(test_image_calibration_boundaries_cache_and_explicit_calibration);
+  RUN_TEST(test_channel_activity_detection_maps_irq_timeout_and_spi_error);
   return UNITY_END();
 }

@@ -315,6 +315,10 @@ typedef enum {
   HAL_MOCK_LORA_TRANSMIT,
   HAL_MOCK_LORA_RECEIVE_START,
   HAL_MOCK_LORA_RECEIVE_POLL,
+  HAL_MOCK_LORA_GET_INSTANT_RSSI,
+  HAL_MOCK_LORA_CAD_START,
+  HAL_MOCK_LORA_CAD_POLL,
+  HAL_MOCK_LORA_CALIBRATE,
   HAL_MOCK_LORA_CANCEL,
   HAL_MOCK_LORA_SLEEP,
   HAL_MOCK_LORA_STANDBY,
@@ -330,6 +334,12 @@ hal_status_t hal_mock_lora_set_next_status(hal_lora_radio_t radio,
 hal_status_t hal_mock_lora_inject_receive(hal_lora_radio_t radio,
                                           const uint8_t *data, size_t length,
                                           const hal_lora_packet_info_t *info);
+/** @brief Set the value returned by the next instantaneous RSSI reads. */
+hal_status_t hal_mock_lora_set_instant_rssi(hal_lora_radio_t radio,
+                                            int16_t rssi_dbm);
+/** @brief Complete the next CAD poll with a detected or clear result. */
+hal_status_t hal_mock_lora_inject_channel_activity(hal_lora_radio_t radio,
+                                                   bool detected);
 /** @brief Copy the most recent packet passed to blocking transmit. */
 hal_status_t hal_mock_lora_get_last_transmit(hal_lora_radio_t radio,
                                              uint8_t *buffer,

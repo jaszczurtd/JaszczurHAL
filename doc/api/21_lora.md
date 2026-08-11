@@ -9,9 +9,10 @@ services. The same implementation builds for RP2040, RP2350 and STM32G474;
 the deterministic mock provides host tests.
 
 The API supports blocking and asynchronous transmit, asynchronous receive,
-DIO1-driven task-context processing, callbacks, cancellation and explicit
-operation states. Applications own hardware and modem descriptors. Each opaque
-handle owns its TX/RX packet buffers, state, mutex and diagnostics.
+DIO1-driven task-context processing, channel activity detection (CAD), current
+RSSI reads, explicit calibration, capabilities, callbacks, cancellation and
+explicit operation states. Applications own hardware and modem descriptors.
+Each opaque handle owns its TX/RX packet buffers, state, mutex and diagnostics.
 
 ## Enable the module
 
@@ -51,8 +52,8 @@ deinitializing the shared bus.
 ## Integrated board configuration
 
 `hal_lora_radio_config_from_board()` copies the active board profile's radio
-facts. It returns `HAL_EUNSUPPORTED` when the selected board has no integrated
-radio.
+facts. It returns `HAL_EUNSUPPORTED` when the selected board has no declared
+radio, whether integrated or part of a fixed composite fixture.
 
 ```c
 hal_lora_radio_config_t hardware;
@@ -69,13 +70,24 @@ The `rp2040-lora-lf` profile describes the integrated SX1262 on the Waveshare
 RP2040-LoRa-LF board, including its LF frequency limits. Choose an explicit
 frequency for the intended hardware test and regulatory environment.
 
+The experimental `pico-core1262-hf` and
+`nucleo-g474re-core1262-hf` profiles describe the two fixed project fixtures
+with external Waveshare Core1262-HF modules. Both have passed no-transmit
+CAD/RSSI/calibration probes and bidirectional OTA tests. The Nucleo fixture
+uses SPI2 on PB13/PB14/PB15 so the built-in LD2 and `HAL_LED_BUILTIN` remain
+available on PA5.
+
 ## External Waveshare Core1262-HF
 
-`hal_lora_sx126x_core1262_hf_defaults()` fills the module-owned electrical
-profile: dual RXEN/TXEN control, DCDC, DIO3-controlled 1.8 V TCXO, startup
-delay, RF range, SPI limit and output-power limits. Host bus and pin assignments
-remain application input. Assign RXEN to `rf_switch_pin_a` and TXEN to
-`rf_switch_pin_b`; the helper installs the module's documented level table.
+For the fixed project wiring, select `pico-core1262-hf` or
+`nucleo-g474re-core1262-hf` and use
+`hal_lora_radio_config_from_board()`. For a different application-owned wiring,
+select the plain host profile and use
+`hal_lora_sx126x_core1262_hf_defaults()`. The helper fills the module-owned
+electrical profile: dual RXEN/TXEN control, DCDC, DIO3-controlled 1.8 V TCXO,
+startup delay, RF range, SPI limit and output-power limits. Host bus and pin
+assignments remain application input. Assign RXEN to `rf_switch_pin_a` and
+TXEN to `rf_switch_pin_b`; the helper installs the documented level table.
 
 ```c
 hal_lora_radio_config_t hardware = {0};
@@ -124,7 +136,7 @@ if (status != HAL_OK) {
 
 Handles carry a generation tag. Calls through a destroyed or otherwise stale
 handle return `HAL_EUNINIT`. `hal_lora_radio_create()` returns `HAL_ENOMEM`
-when the configured static pool is full. Active TX/RX must be completed or
+when the configured static pool is full. Active TX/RX/CAD must be completed or
 cancelled before destroy.
 
 Modem validation covers SX1262 hardware frequency/power limits, supported LoRa
@@ -210,12 +222,13 @@ for (;;) {
 
 TX status distinguishes `IDLE`, `IN_PROGRESS`, `SUCCEEDED`, `TIMED_OUT`,
 `CANCELLED` and `FAILED`; `result` retains the matching `hal_status_t`.
-Callbacks report TX completion, RX readiness, timeout, cancellation or error,
-plus the operation kind and task-context timestamp. They are invoked
+Callbacks report TX completion, RX readiness, CAD completion, timeout,
+cancellation or error, plus the operation kind and task-context timestamp.
+CAD completion also carries `channel_activity_detected`. Callbacks are invoked
 synchronously by `hal_lora_radio_process()`, outside internal locks, and may
 call radio APIs. Passing a null callback clears registration.
 
-`hal_lora_radio_cancel()` stops active TX, bounded RX or continuous RX and
+`hal_lora_radio_cancel()` stops active TX, bounded RX, continuous RX or CAD and
 enters standby. Cancellation is explicit: power-state and destroy operations
 return `HAL_EBUSY` while a radio operation is active.
 
@@ -265,12 +278,65 @@ Receive results have the following meanings:
 `hal_lora_packet_info_t` reports packet RSSI, SNR, signal RSSI, receive
 timestamp and CRC validity.
 
+## Capabilities, current RSSI, CAD and calibration
+
+`hal_lora_radio_get_capabilities()` reports provider-neutral hardware limits
+and optional operations. The SX1262 provider exposes continuous RX, CAD,
+current RSSI and explicit calibration:
+
+```c
+hal_lora_radio_capabilities_t capabilities;
+status = hal_lora_radio_get_capabilities(radio, &capabilities);
+```
+
+`hal_lora_radio_get_instant_rssi()` reads the current receiver RSSI and is
+valid only while the radio is in RX mode. It returns `HAL_ESTATE` in standby,
+TX, CAD or sleep. The read updates `last_instant_rssi_dbm` and
+`instant_rssi_reads` diagnostics.
+
+CAD is an asynchronous operation serviced by the same DIO1/process lifecycle
+as TX and RX:
+
+```c
+status = hal_lora_radio_channel_activity_detect_start(radio, 100u);
+while (status == HAL_OK) {
+  const hal_status_t process = hal_lora_radio_process(radio);
+  if (process != HAL_OK && process != HAL_EAGAIN) {
+    status = process;
+    break;
+  }
+
+  hal_lora_channel_activity_status_t cad;
+  status = hal_lora_radio_get_channel_activity_status(radio, &cad);
+  if (status == HAL_OK && cad.state == HAL_LORA_OPERATION_IN_PROGRESS) {
+    hal_idle();
+    continue;
+  }
+  if (status == HAL_OK && cad.state == HAL_LORA_OPERATION_SUCCEEDED) {
+    /* cad.detected distinguishes an occupied channel from a clear channel. */
+  }
+  break;
+}
+```
+
+A zero CAD timeout is invalid. Timeout, cancellation and provider failures use
+the common operation-state and callback semantics. CAD is a channel observation,
+not a regulatory listen-before-talk policy; the application remains responsible
+for any required access procedure.
+
+The SX1262 provider performs full calibration during create and band-aware
+image calibration during configure. It caches the calibrated frequency range,
+so repeated configuration inside one range does not issue redundant image
+calibration. `hal_lora_radio_calibrate()` explicitly repeats full calibration
+and image calibration for the configured frequency while in standby. It
+returns `HAL_ESTATE` before modem configuration or while another operation is
+active.
+
 ## State, power and diagnostics
 
 `hal_lora_radio_get_state()` returns the stable public state. The explicit
 state machine uses
-`STANDBY`, `RX`, `TX`, `SLEEP` and `ERROR`; `CAD` is reserved for later radio
-operations.
+`STANDBY`, `RX`, `TX`, `CAD`, `SLEEP` and `ERROR`.
 
 `hal_lora_radio_sleep()` enters the SX1262 warm-start sleep configuration.
 `hal_lora_radio_standby()` wakes a sleeping or error-state radio. Active RX/TX
@@ -278,9 +344,11 @@ is ended through `hal_lora_radio_cancel()`.
 
 `hal_lora_radio_get_diagnostics()` copies counters for transmitted/received
 packets, CRC/header errors, TX/RX timeouts, cancellations, operation/bus errors,
-DIO1 events, callback delivery, dropped packets/events and resets. It also
-reports the latest packet RSSI, signal RSSI, SNR, error, event timestamp and
-state-change timestamp.
+DIO1 events, callback delivery, dropped packets/events and resets. CAD counters
+distinguish checks, detected, clear and timed-out results. Calibration counters
+distinguish full and image calibration and retain the cached frequency range.
+Diagnostics also report the latest packet RSSI, signal RSSI, current RSSI, SNR,
+error, event timestamp and state-change timestamp.
 
 ## Time-on-air
 

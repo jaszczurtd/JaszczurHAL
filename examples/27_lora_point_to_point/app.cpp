@@ -1,11 +1,10 @@
 /**
  * @file app.cpp
- * @brief Raw LoRa ping/pong example for integrated LF and external HF radios.
+ * @brief Raw LoRa ping/pong example for board-declared SX1262 radios.
  */
 
 #include <hal/core/hal_app.h>
 #include <hal/core/hal_status.h>
-#include <hal/core/hal_target.h>
 #include <hal/gpio/hal_gpio.h>
 #include <hal/radio/hal_lora_radio.h>
 #include <hal/spi/hal_spi.h>
@@ -30,6 +29,23 @@ hal_lora_modem_config_t s_modem{};
 bool s_ready = false;
 bool s_event_ready = false;
 hal_lora_radio_event_t s_event{};
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+bool s_probe_complete = false;
+hal_status_t s_probe_status = HAL_ESTATE;
+uint32_t s_probe_resets = 0u;
+uint32_t s_probe_full_calibrations = 0u;
+uint32_t s_probe_image_calibrations = 0u;
+int16_t s_probe_rssi_dbm = 0;
+bool s_probe_cad_detected = false;
+bool s_probe_cad_pending = false;
+const char *s_probe_stage = "startup";
+
+void record_probe_result(hal_status_t status, uint32_t resets = 0u) {
+  s_probe_status = status;
+  s_probe_resets = resets;
+  s_probe_complete = true;
+}
+#endif
 #ifdef HAL_LED_BUILTIN
 constexpr uint32_t kReceiveLedPulseMs = UINT32_C(120);
 uint32_t s_led_off_ms = 0u;
@@ -85,53 +101,9 @@ void radio_event_callback(hal_lora_radio_t, const hal_lora_radio_event_t *event,
   s_event_ready = true;
 }
 
-hal_status_t external_core1262_hf_config(hal_lora_radio_config_t *out_config) {
-  if (out_config == nullptr) {
-    return HAL_EINVAL;
-  }
-  hal_lora_radio_config_t &config = *out_config;
-  config = {};
-  config.model = HAL_LORA_RADIO_SX1262;
-  config.spi_bus = 0u;
-  config.spi_clock_hz = HAL_LORA_SPI_CLOCK_DEFAULT_HZ;
-#if HAL_TARGET_IS_RP
-  config.spi_miso_pin = 16u;
-  config.spi_mosi_pin = 19u;
-  config.spi_sck_pin = 18u;
-  config.cs_pin = 17u;
-  config.hardware.sx126x.reset_pin = 20u;
-  config.hardware.sx126x.busy_pin = 21u;
-  config.hardware.sx126x.dio1_pin = 22u;
-  config.hardware.sx126x.rf_switch_pin_a = 10u; /* RXEN */
-  config.hardware.sx126x.rf_switch_pin_b = 11u; /* TXEN */
-#else
-  /* STM32 pin id = port * 16 + pin: SPI1 PA6/PA7/PA5 and PB0..PB5. */
-  config.spi_miso_pin = 6u;
-  config.spi_mosi_pin = 7u;
-  config.spi_sck_pin = 5u;
-  config.cs_pin = 16u;
-  config.hardware.sx126x.reset_pin = 17u;
-  config.hardware.sx126x.busy_pin = 18u;
-  config.hardware.sx126x.dio1_pin = 19u;
-  config.hardware.sx126x.rf_switch_pin_a = 20u; /* PB4: RXEN */
-  config.hardware.sx126x.rf_switch_pin_b = 21u; /* PB5: TXEN */
-#endif
-  hal_lora_sx126x_hardware_config_t pins = config.hardware.sx126x;
-  const hal_status_t status =
-      hal_lora_sx126x_core1262_hf_defaults(&config.hardware.sx126x);
-  if (status != HAL_OK) {
-    return status;
-  }
-  config.hardware.sx126x.reset_pin = pins.reset_pin;
-  config.hardware.sx126x.busy_pin = pins.busy_pin;
-  config.hardware.sx126x.dio1_pin = pins.dio1_pin;
-  config.hardware.sx126x.rf_switch_pin_a = pins.rf_switch_pin_a;
-  config.hardware.sx126x.rf_switch_pin_b = pins.rf_switch_pin_b;
-  return HAL_OK;
-}
-
 hal_lora_modem_config_t modem_config(const hal_lora_radio_config_t &hardware) {
   hal_lora_modem_config_t modem = hal_lora_default_eu868();
+  modem.tx_power_dbm = 10;
   if (hardware.hardware.sx126x.max_frequency_hz < UINT32_C(800000000)) {
     /* Deliberate LF hardware-test configuration, not a regulatory preset. */
     modem.frequency_hz = kLfTestFrequencyHz;
@@ -389,7 +361,9 @@ void initiator_handle_event(const hal_lora_radio_event_t &event) {
 extern "C" void app_start(void) {
   debugInit();
   status_led_initialize();
-#ifdef HAL_LORA_EXAMPLE_RESPONDER
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+  deb("=== JaszczurHAL LoRa wiring probe (no RF transmit) ===");
+#elif defined(HAL_LORA_EXAMPLE_RESPONDER)
   deb("=== JaszczurHAL raw LoRa responder ===");
 #else
   deb("=== JaszczurHAL raw LoRa initiator ===");
@@ -397,36 +371,102 @@ extern "C" void app_start(void) {
 
   hal_status_t status = hal_lora_radio_config_from_board(&s_hardware);
   if (status == HAL_EUNSUPPORTED) {
-    status = external_core1262_hf_config(&s_hardware);
-    if (status != HAL_OK) {
-      derr("External radio config failed: %s", hal_status_to_string(status));
-      return;
-    }
-    deb("Using external Core1262-HF wiring");
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    s_probe_stage = "board-config-unsupported";
+#endif
+    derr("Selected board profile does not declare an SX1262 radio");
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    record_probe_result(status);
+#endif
+    return;
   } else if (status != HAL_OK) {
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    s_probe_stage = "board-config";
+#endif
     derr("Board radio config failed: %s", hal_status_to_string(status));
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    record_probe_result(status);
+#endif
     return;
   } else {
-    deb("Using integrated board radio");
+    deb("Using board-declared radio wiring");
   }
-
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+  s_probe_stage = "spi-init";
+#endif
   status = hal_spi_init(s_hardware.spi_bus, s_hardware.spi_miso_pin,
                         s_hardware.spi_mosi_pin, s_hardware.spi_sck_pin);
   if (status == HAL_OK) {
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    s_probe_stage = "radio-create";
+#endif
     status = hal_lora_radio_create(&s_hardware, &s_radio);
   }
   s_modem = modem_config(s_hardware);
   if (status == HAL_OK) {
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    s_probe_stage = "radio-configure";
+#endif
     status = hal_lora_radio_configure(s_radio, &s_modem);
   }
   if (status == HAL_OK) {
+#ifndef HAL_LORA_EXAMPLE_PROBE_ONLY
     status = hal_lora_radio_set_event_callback(s_radio, radio_event_callback,
                                                nullptr);
+#endif
   }
   if (status != HAL_OK) {
     derr("Radio setup failed: %s", hal_status_to_string(status));
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+    record_probe_result(status);
+#endif
     return;
   }
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+  hal_lora_radio_capabilities_t capabilities{};
+  s_probe_stage = "capabilities";
+  status = hal_lora_radio_get_capabilities(s_radio, &capabilities);
+  if (status == HAL_OK && (!capabilities.supports_channel_activity_detection ||
+                           !capabilities.supports_instant_rssi ||
+                           !capabilities.supports_explicit_calibration)) {
+    status = HAL_EUNSUPPORTED;
+  }
+  if (status == HAL_OK) {
+    s_probe_stage = "calibration";
+    status = hal_lora_radio_calibrate(s_radio);
+  }
+  if (status == HAL_OK) {
+    s_probe_stage = "receive-start";
+    status = hal_lora_radio_receive_start_continuous(s_radio);
+  }
+  if (status == HAL_OK) {
+    hal_delay_ms(20u);
+    s_probe_stage = "instant-rssi";
+    status = hal_lora_radio_get_instant_rssi(s_radio, &s_probe_rssi_dbm);
+  }
+  if (status == HAL_OK) {
+    s_probe_stage = "receive-cancel";
+    status = hal_lora_radio_cancel(s_radio);
+  }
+  if (status == HAL_OK) {
+    s_probe_stage = "event-callback";
+    status = hal_lora_radio_set_event_callback(s_radio, radio_event_callback,
+                                               nullptr);
+  }
+  if (status == HAL_OK) {
+    s_probe_stage = "cad-start";
+    status = hal_lora_radio_channel_activity_detect_start(s_radio, 250u);
+  }
+  if (status != HAL_OK) {
+    derr("JHLORA1 PROBE FAIL: stage=%s status=%s", s_probe_stage,
+         hal_status_to_string(status));
+    record_probe_result(status);
+    return;
+  }
+  s_probe_stage = "cad-process";
+  s_probe_cad_pending = true;
+  return;
+#endif
   deb("Radio ready: %lu Hz, SF%u, %ld Hz BW, %d dBm",
       (unsigned long)s_modem.frequency_hz, (unsigned)s_modem.spreading_factor,
       (long)s_modem.bandwidth_hz, (int)s_modem.tx_power_dbm);
@@ -443,6 +483,59 @@ extern "C" void app_start(void) {
 }
 
 extern "C" void app_task0(void) {
+#ifdef HAL_LORA_EXAMPLE_PROBE_ONLY
+  static uint32_t next_report_ms = 0u;
+  const uint32_t now = hal_millis();
+  if (s_probe_cad_pending) {
+    const hal_status_t process = hal_lora_radio_process(s_radio);
+    hal_lora_channel_activity_status_t cad{};
+    hal_status_t status =
+        hal_lora_radio_get_channel_activity_status(s_radio, &cad);
+    if (status == HAL_OK && process != HAL_OK && process != HAL_EAGAIN) {
+      status = process;
+    }
+    if (status != HAL_OK) {
+      s_probe_cad_pending = false;
+      record_probe_result(status);
+    } else if (cad.state != HAL_LORA_OPERATION_IN_PROGRESS) {
+      s_probe_cad_pending = false;
+      if (cad.state != HAL_LORA_OPERATION_SUCCEEDED || !s_event_ready ||
+          s_event.type != HAL_LORA_RADIO_EVENT_CHANNEL_ACTIVITY_COMPLETE) {
+        record_probe_result(cad.result == HAL_OK ? HAL_ESTATE : cad.result);
+      } else {
+        s_probe_cad_detected = cad.detected;
+        hal_lora_radio_diagnostics_t diagnostics{};
+        status = hal_lora_radio_get_diagnostics(s_radio, &diagnostics);
+        if (status == HAL_OK) {
+          s_probe_full_calibrations = diagnostics.full_calibrations;
+          s_probe_image_calibrations = diagnostics.image_calibrations;
+          s_probe_stage = "complete";
+          record_probe_result(HAL_OK, diagnostics.resets);
+        } else {
+          s_probe_stage = "diagnostics";
+          record_probe_result(status);
+        }
+      }
+    }
+  }
+  if (s_probe_complete && (int32_t)(now - next_report_ms) >= 0) {
+    if (s_probe_status == HAL_OK) {
+      deb("JHLORA1 PROBE PASS: SX1262 "
+          "capabilities/calibration/RSSI/CAD/standby; resets=%lu RSSI=%d dBm "
+          "CAD=%s full-cal=%lu image-cal=%lu; RF transmit disabled",
+          (unsigned long)s_probe_resets, (int)s_probe_rssi_dbm,
+          s_probe_cad_detected ? "detected" : "clear",
+          (unsigned long)s_probe_full_calibrations,
+          (unsigned long)s_probe_image_calibrations);
+    } else {
+      derr("JHLORA1 PROBE FAIL: stage=%s status=%s; RF transmit disabled",
+           s_probe_stage, hal_status_to_string(s_probe_status));
+    }
+    next_report_ms = now + UINT32_C(2000);
+  }
+  hal_delay_ms(10u);
+  return;
+#endif
   status_led_process();
   if (!s_ready) {
     hal_delay_ms(100u);
