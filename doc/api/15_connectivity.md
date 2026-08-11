@@ -1921,11 +1921,17 @@ rejected, and adjustment normalizes day/month/year rollover.
 `hal_time_extract_minutes()` uses C quotient/remainder semantics and accepts
 either output pointer as optional.
 
-**impl/rp2040/stm32g474:** bounded NTP request over HAL UDP, synchronized Unix
-epoch tracking, POSIX timezone handling, and `localtime_r()`.
-**impl/.mock:** state injection via mock helpers.
-**Thread safety:** The pure helpers are reentrant. The optional system/NTP APIs
-are not thread-safe; serialize those calls from the caller side.
+**Shared implementation:** `hal/time/hal_time_ntp.cpp` owns the bounded NTP
+state machine, primary/secondary fallback, response-token validation,
+synchronized 64-bit Unix epoch tracking, POSIX timezone handling, and local
+time conversion. Target files only bind synchronized time to their runtime;
+the host mock adds deterministic state and UDP injection.
+
+**Thread safety:** The pure helpers are reentrant. Optional system/NTP APIs use
+mutex-protected state snapshots and support concurrent tasks/cores. DNS and
+UDP operations run without the state mutex, so a network service callback may
+re-enter a time getter without deadlocking. Calling any time getter services a
+pending request; a 5-second primary timeout starts the optional secondary.
 
 **Mock helpers:**
 ```c

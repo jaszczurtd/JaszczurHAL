@@ -95,6 +95,12 @@ All notable changes to this project will be documented in this file.
 - Consolidated Gregorian validation and 64-bit Unix epoch conversion in the
   shared `jh_calendar` core used by RTC, PCF8563, DS3231 and
   `hal_time_from_components()`, with explicit RTC and 32-bit overflow handling.
+- Replaced the separate hardware and mock thermocouple frontends with one
+  target-independent `hal_thermocouple` facade that owns the instance pool,
+  validation, mutex lifecycle and capability dispatch. Hardware and mock
+  providers now share the same public path while MCP9600 and MAX6675 remain
+  portable HAL-only drivers; architecture and pool-reuse tests prevent a
+  second public facade from returning.
 - Moved CET/CEST date adjustment, half-open time-range checks, and minute
   extraction from `tools.cpp` into the always-available `hal_time` API; legacy
   utility names now remain as HAL-only compatibility wrappers.
@@ -104,6 +110,13 @@ All notable changes to this project will be documented in this file.
 - Added internal RTC provider operations with a shared HAL-I2C provider for
   PCF8563/DS3231 and a deterministic storage provider for host tests, plus
   provider-level and architecture regression coverage.
+- Made the shared NTP service thread-safe through mutex-protected clock/request
+  snapshots and lock-free network servicing, including primary/secondary
+  timeout, response, concurrent-reader, and network-callback re-entry tests.
+- Replaced target-conditional EEPROM logic and the duplicate mock facade with
+  one provider-dispatched public facade, one portable AT24C256 provider, one
+  shared buffered-flash provider, and small RP, STM32G474, and host-memory
+  storage mechanisms; added direct AT24C256 I2C-error and architecture tests.
 - Replaced the duplicate RP2040 and STM32G474 GPS transport files with one
   target-independent `hal_gps.cpp` facade selecting HAL UART or SoftwareSerial
   at compile time.

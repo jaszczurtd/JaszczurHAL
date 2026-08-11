@@ -17,6 +17,11 @@ See [RP memory map](../../rp_native_lib/MEMORY_MAP.md) and
 Single API for persistent byte-addressable storage. The back-end is selected at
 runtime in `hal_eeprom_init()`.
 
+The public API, range clipping, integer encoding, locking, callback ownership,
+and provider dispatch live in one target-independent facade. A single portable
+AT24C256 provider uses HAL I2C; the RP flash, STM32G474 flash, and host-memory
+providers contain only their storage mechanisms.
+
 For portable application code, prefer `HAL_EEPROM_FLASH`: it means "use the
 target-native internal flash EEPROM emulation". Existing RP2040 code that uses
 `HAL_EEPROM_RP2040` remains valid.
@@ -106,9 +111,9 @@ The STM32 linker also supports a separate LittleFS reservation before EEPROM.
 Keep `HAL_STM32_FLASH_EEPROM_SIZE` and `HAL_STM32_FLASH_LITTLEFS_SIZE`
 non-overlapping; EEPROM/KV and LittleFS do not share pages.
 
-**AT24C256 implementation:** `HAL_EEPROM_AT24C256` drives the external chip via
-`hal_i2c_*` primitives with write-cycle polling. Writes are split on 64-byte
-page boundaries and ACK-polled with a bounded timeout
+**AT24C256 implementation:** one target-independent provider drives the
+external chip via `hal_i2c_*` primitives on both hardware targets. Writes are
+split on 64-byte page boundaries and ACK-polled with a bounded timeout
 (`HAL_AT24C256_WRITE_TIMEOUT_US`, default 20000 us). Out-of-range writes are
 clipped; out-of-range reads return zero-filled bytes. The AT24C256 I2C address
 is `EEPROM_I2C_ADDRESS` (default `0x50`, defined in `hal_config.h`), unless an
@@ -119,12 +124,16 @@ explicit address is passed to `hal_eeprom_init()`.
 operations if the application wants to feed its own watchdog or report
 progress. A full AT24C256 reset touches 512 pages and can take seconds.
 
-**impl/.mock:** in-memory byte array (`MOCK_EEPROM_BUF_SIZE`, default 32768).
+**impl/.mock:** the same public facade dispatches to an in-memory provider
+(`MOCK_EEPROM_BUF_SIZE`, default 32768); the mock does not duplicate
+`hal_eeprom_*` behavior.
 
 **Thread safety:** Thread-safe and multicore-safe for both back-end families.
-`HAL_EEPROM_AT24C256` operations are protected by the `hal_i2c` bus mutex.
-Flash-backed operations are protected by a dedicated internal mutex.
-`hal_eeprom_init()` must be called from one core only.
+The shared facade mutex protects provider selection, active size, callbacks,
+range clipping and every operation. `HAL_EEPROM_AT24C256` transfers also use
+the `hal_i2c` bus mutex, while native flash providers retain their platform
+flash coordination. Configure progress reporting before concurrent access;
+the callback runs under the facade mutex and must not re-enter `hal_eeprom_*`.
 
 ### Mock helpers
 

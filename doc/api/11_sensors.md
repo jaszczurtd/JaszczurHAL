@@ -7,8 +7,12 @@ Covers: `hal_thermocouple`, `hal_ds18b20`, `hal_dht`, `hal_bh1750`, `hal_mcp3221
 ## `hal_thermocouple` - Thermocouple amplifier  *(optional - `HAL_ENABLE_THERMOCOUPLE`)*
 
 Supports MCP9600/MCP9601 (shared HAL I2C driver) and MAX6675 (shared SPI
-bit-bang over HAL GPIO). Functions not available on the
-selected chip return a safe default (NAN / 0 / false) and print an error.
+bit-bang over HAL GPIO). One target-independent facade owns the static handle
+pool, validation, per-instance locking and capability dispatch. Hardware and
+deterministic host-mock providers therefore exercise the same public lifecycle.
+Functions not available on the selected chip return `HAL_EUNSUPPORTED`; legacy
+value-returning wrappers return a safe default (`NAN` / `0` / `false`) and
+print an error.
 
 ```c
 #include <hal/temperature/hal_thermocouple.h>
@@ -61,27 +65,41 @@ typedef hal_thermocouple_impl_t *hal_thermocouple_t;  // opaque handle
 
 // Lifecycle
 hal_thermocouple_t hal_thermocouple_init(const hal_thermocouple_config_t *cfg);
+hal_status_t hal_thermocouple_init_ex(const hal_thermocouple_config_t *cfg,
+                                      hal_thermocouple_t *out);
 void               hal_thermocouple_deinit(hal_thermocouple_t h);  // NULL-safe
 
 // Readings
 float   hal_thermocouple_read(hal_thermocouple_t h);          // hot junction °C, NAN on fault
+hal_status_t hal_thermocouple_read_ex(hal_thermocouple_t h, float *out_c);
 float   hal_thermocouple_read_ambient(hal_thermocouple_t h);  // cold junction °C (MCP9600 only)
+hal_status_t hal_thermocouple_read_ambient_ex(hal_thermocouple_t h, float *out_c);
 int32_t hal_thermocouple_read_adc_raw(hal_thermocouple_t h);  // raw µV (MCP9600 only); 0 if unsupported
+hal_status_t hal_thermocouple_read_adc_raw_ex(hal_thermocouple_t h, int32_t *out_raw);
 
 // Configuration (MCP9600 only unless noted)
-void hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t type);
+hal_status_t hal_thermocouple_set_type(hal_thermocouple_t h, hal_thermocouple_type_t type);
 hal_thermocouple_type_t hal_thermocouple_get_type(hal_thermocouple_t h);  // MAX6675 always returns K
+hal_status_t hal_thermocouple_get_type_ex(hal_thermocouple_t h,
+                                          hal_thermocouple_type_t *out_type);
 
-void hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff);    // IIR coeff [0,7]
+hal_status_t hal_thermocouple_set_filter(hal_thermocouple_t h, uint8_t coeff); // IIR coeff [0,7]
 uint8_t hal_thermocouple_get_filter(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_get_filter_ex(hal_thermocouple_t h, uint8_t *out_coeff);
 
-void hal_thermocouple_set_adc_resolution(hal_thermocouple_t h, hal_thermocouple_adc_res_t res);
+hal_status_t hal_thermocouple_set_adc_resolution(hal_thermocouple_t h,
+                                                 hal_thermocouple_adc_res_t res);
 hal_thermocouple_adc_res_t hal_thermocouple_get_adc_resolution(hal_thermocouple_t h);
+hal_status_t hal_thermocouple_get_adc_resolution_ex(
+    hal_thermocouple_t h, hal_thermocouple_adc_res_t *out_res);
 
-void hal_thermocouple_set_ambient_resolution(hal_thermocouple_t h, hal_thermocouple_ambient_res_t res);
+hal_status_t hal_thermocouple_set_ambient_resolution(
+    hal_thermocouple_t h, hal_thermocouple_ambient_res_t res);
 
-void hal_thermocouple_enable(hal_thermocouple_t h, bool enable);  // false = sleep (MCP9600 only)
+hal_status_t hal_thermocouple_enable(hal_thermocouple_t h, bool enable); // false = sleep
 bool hal_thermocouple_is_enabled(hal_thermocouple_t h);           // MAX6675 always returns true
+hal_status_t hal_thermocouple_is_enabled_ex(hal_thermocouple_t h,
+                                            bool *out_enabled);
 
 // Alert channels 1-4 (MCP9600 only)
 typedef struct {
@@ -89,11 +107,16 @@ typedef struct {
     bool active_high;  bool interrupt_mode;
 } hal_thermocouple_alert_cfg_t;
 
-void  hal_thermocouple_set_alert(hal_thermocouple_t h, uint8_t alert_num,
-                                  bool enabled, const hal_thermocouple_alert_cfg_t *cfg);
+hal_status_t hal_thermocouple_set_alert(
+    hal_thermocouple_t h, uint8_t alert_num, bool enabled,
+    const hal_thermocouple_alert_cfg_t *cfg);
 float hal_thermocouple_get_alert_temp(hal_thermocouple_t h, uint8_t alert_num);
+hal_status_t hal_thermocouple_get_alert_temp_ex(
+    hal_thermocouple_t h, uint8_t alert_num, float *out_c);
 
 uint8_t hal_thermocouple_get_status(hal_thermocouple_t h);  // raw status register
+hal_status_t hal_thermocouple_get_status_ex(hal_thermocouple_t h,
+                                            uint8_t *out_status);
 ```
 
 Every field used by the selected chip must be initialized. Start with a
@@ -116,9 +139,15 @@ Native backends validate the bus index and initialization then fails. This
 also applies when migrating code that previously relied on permissive
 I2C defaults.
 
-**impl/rp2040:** MCP9600/MCP9601 and MAX6675 delegate to shared HAL-only drivers.
-**impl/stm32g474:** MCP9600/MCP9601 and MAX6675 delegate to the same shared drivers as RP2040.
-**Thread safety:** Thread-safe and multicore-safe. Each instance has its own per-instance `hal_mutex_t`. All read, configuration, and deinit operations are protected under this mutex.
+The shared facade selects a hardware provider on RP2040/RP2350 and STM32G474;
+that provider delegates MCP9600/MCP9601 and MAX6675 operations to the same
+portable HAL-only drivers. The host provider retains deterministic injection
+through `hal_mock_thermocouple_*()` without owning a second facade.
+
+**Thread safety:** Thread-safe and multicore-safe. Pool allocation is protected
+by a critical section. Each live instance owns a `hal_mutex_t`; read,
+configuration, mock injection and deinitialization operations are serialized by
+that mutex.
 
 ---
 

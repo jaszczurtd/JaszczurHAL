@@ -457,6 +457,11 @@ bool hal_mock_wifi_set_scan_result(size_t index, const char *ssid,
                                    int32_t channel, int32_t rssi);
 /** @brief Reset mock hostname resolver entries. */
 void hal_mock_net_reset(void);
+/** @brief Callback invoked by the mock hal_net_service() implementation. */
+typedef void (*hal_mock_net_service_callback_t)(void *ctx);
+/** @brief Install a service callback used to exercise reentrant clients. */
+void hal_mock_net_set_service_callback(hal_mock_net_service_callback_t callback,
+                                       void *ctx);
 /** @brief Select address families advertised by the mock network backend. */
 bool hal_mock_net_set_capabilities(hal_net_capabilities_t capabilities);
 /** @brief Add or replace a mock DNS resolver entry. */
@@ -741,6 +746,7 @@ const char *hal_mock_time_get_ntp_secondary(void);
 /** @brief Inject the hot-junction temperature returned by
  * hal_thermocouple_read(). */
 void hal_mock_thermocouple_set_temp(hal_thermocouple_t h, float temp);
+#ifdef HAL_ENABLE_MCP9600
 /** @brief Inject the cold-junction temperature returned by
  * hal_thermocouple_read_ambient(). */
 void hal_mock_thermocouple_set_ambient(hal_thermocouple_t h, float temp);
@@ -749,6 +755,7 @@ void hal_mock_thermocouple_set_ambient(hal_thermocouple_t h, float temp);
 void hal_mock_thermocouple_set_adc_raw(hal_thermocouple_t h, int32_t raw);
 /** @brief Inject the status byte returned by hal_thermocouple_get_status(). */
 void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
+#endif
 #endif
 
 // ── DS18B20

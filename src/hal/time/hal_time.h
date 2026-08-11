@@ -9,6 +9,11 @@ extern "C" {
 /**
  * @file hal_time.h
  * @brief Time helpers: date/time conversion plus optional system/NTP APIs.
+ *
+ * The optional NTP state is protected by short mutex-held snapshots. DNS,
+ * socket, UDP service, receive, send, close, and runtime-clock calls execute
+ * after releasing the state mutex, so network callbacks may safely re-enter
+ * time getters. Calls from concurrent tasks/cores are supported.
  */
 
 #include <stdbool.h>
@@ -92,7 +97,9 @@ bool hal_time_set_timezone(const char *tz);
  * @brief Start NTP synchronization.
  * @param primary_server Primary NTP server hostname.
  * @param secondary_server Optional secondary NTP server hostname (can be NULL).
- * @return true when request was accepted.
+ * @return true when request was accepted. Progress is serviced by subsequent
+ *         hal_time_unix(), hal_time_is_synced(), hal_time_get_local(), or
+ *         hal_time_format_local() calls.
  */
 bool hal_time_sync_ntp(const char *primary_server,
                        const char *secondary_server);

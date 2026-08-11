@@ -107,6 +107,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/serial/hal_serial.cpp
     ${SRC}/hal/serial/hal_serial_session.cpp
     ${SRC}/hal/time/hal_time.cpp
+    ${SRC}/hal/time/hal_time_ntp.cpp
+    ${SRC}/hal/temperature/hal_thermocouple.cpp
     ${SRC}/hal/radio/hal_lora_radio.cpp
     ${SRC}/hal/spi/hal_spi_device.cpp
     ${SRC}/hal/network/hal_network_status.cpp
@@ -118,6 +120,9 @@ set(UTIL_SOURCES
     ${SRC}/hal/i2c/hal_i2c.cpp
     ${SRC}/hal/display/hal_display.cpp
     ${SRC}/hal/storage/hal_sdlogger.cpp
+    ${SRC}/hal/storage/hal_eeprom.cpp
+    ${SRC}/hal/storage/jh_eeprom_flash_provider.cpp
+    ${SRC}/hal/storage/at24c256/jh_at24c256_provider.cpp
     ${SRC}/hal/serial/hal_swserial.cpp
     ${SRC}/hal/network/hal_udp.cpp
     ${SRC}/hal/timers/hal_timer.cpp

@@ -26,6 +26,8 @@ typedef struct {
 
 static hal_mock_dns_entry_t s_dns_entries[HAL_MOCK_NET_DNS_MAX_ENTRIES];
 static hal_net_capabilities_t s_capabilities = HAL_NET_CAP_IPV4;
+static hal_mock_net_service_callback_t s_service_callback = NULL;
+static void *s_service_callback_ctx = NULL;
 
 static bool copy_host(char *dst, size_t dst_size, const char *src) {
   if (!dst || dst_size == 0u || !src || src[0] == '\0') {
@@ -44,6 +46,14 @@ static bool copy_host(char *dst, size_t dst_size, const char *src) {
 void hal_mock_net_reset(void) {
   memset(s_dns_entries, 0, sizeof(s_dns_entries));
   s_capabilities = HAL_NET_CAP_IPV4;
+  s_service_callback = NULL;
+  s_service_callback_ctx = NULL;
+}
+
+void hal_mock_net_set_service_callback(hal_mock_net_service_callback_t callback,
+                                       void *ctx) {
+  s_service_callback = callback;
+  s_service_callback_ctx = ctx;
 }
 
 bool hal_mock_net_set_capabilities(hal_net_capabilities_t capabilities) {
@@ -133,7 +143,12 @@ hal_net_get_capabilities_ex(hal_net_capabilities_t *out_capabilities) {
 
 hal_net_capabilities_t hal_net_get_capabilities(void) { return s_capabilities; }
 
-hal_status_t hal_net_service(void) { return HAL_OK; }
+hal_status_t hal_net_service(void) {
+  if (s_service_callback != NULL) {
+    s_service_callback(s_service_callback_ctx);
+  }
+  return HAL_OK;
+}
 
 static bool family_supported(hal_net_family_t family) {
   if (family == HAL_NET_AF_INET) {
