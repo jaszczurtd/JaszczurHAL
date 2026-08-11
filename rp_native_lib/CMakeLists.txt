@@ -48,6 +48,7 @@ jh_generate_board_config(
     BOARD "${JH_BOARD}"
     OUTPUT_DIR
         "${CMAKE_BINARY_DIR}/generated/boards/${JH_TARGET}/${JH_BOARD}"
+    OUTPUT_ROOT "${CMAKE_BINARY_DIR}"
     DEFINES ${EXTRA_HAL_DEFINES} ${_jh_project_features}
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})

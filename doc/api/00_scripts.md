@@ -170,13 +170,15 @@ FreeRTOS-Kernel for `--freertos` and the RISC-V toolchain for
 `rp2350-riscv`. It can build a portable application with
 `--example <directory>`.
 
-Each build verifies the static library, ELF/BIN/UF2 artifact probes, core-entry
-symbols, and optional example firmware. Default output is
-`.build/static/<target>/<board>/`.
+By default, each build verifies the static library, ELF/BIN/UF2 artifact
+probes, core-entry symbols, and optional example firmware. `--library-only`
+builds only the `JaszczurHAL` CMake target and verifies the linkable
+`libJaszczurHAL.a` archive. Default output is `.build/static/<target>/<board>/`.
 
 Important options are `--target`, `--platform`, `--board`, `--sdk-dir`, `--toolchain`,
 `--picotool-dir`, `--picotool-build-dir`, `--example`, `--freertos`,
-`--project-config`, repeatable `-D`, `--output`, `--clean`, and `--jobs`.
+`--library-only`, `--project-config`, repeatable `-D`, `--output`, `--clean`,
+and `--jobs`.
 Both build output directories must remain below `.build/`.
 
 ### `scripts/build_stm32_lib.sh`

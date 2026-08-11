@@ -166,8 +166,9 @@ link the fixed package without invoking Python.
 - `CMakeLists.txt` - repository-root host/mock tests build.
 - `rp_native_lib/` - official Pico SDK static library and firmware probes.
 - `stm32_lib/` - STM32G474 static-library CMake, toolchain file, and linker script.
-- `scripts/build_rp_native_lib.sh` - RP2040/RP2350 native build helper,
-  including the optional pinned FreeRTOS SMP matrix.
+- `scripts/build_rp_native_lib.sh` - RP2040/RP2350 static-library and optional
+  firmware-probe helper, including an archive-only `--library-only` mode and
+  the optional pinned FreeRTOS SMP matrix.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
 - `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
   TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, the Semtech SX126x driver,
