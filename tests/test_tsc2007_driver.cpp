@@ -1,7 +1,7 @@
-#include "hal/hal_i2c.h"
-#include "hal/hal_system.h"
-#include "hal/hal_tsc2007.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/input/hal_tsc2007.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 #include <stdint.h>

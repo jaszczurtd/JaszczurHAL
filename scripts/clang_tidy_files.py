@@ -14,14 +14,14 @@ HOST_UTILS_EXCLUDES = {
     "unity.c",
 }
 
-HOST_SHARED_EXCLUDES = {
-    "src/hal/impl/shared/frameworks/cjson/cJSON.c",
-    "src/hal/impl/shared/frameworks/cjson/cJSON_Utils.c",
-    "src/hal/impl/shared/frameworks/filesystem/ff16/ff.c",
-    "src/hal/impl/shared/frameworks/filesystem/ff16/ffsystem.c",
-    "src/hal/impl/shared/frameworks/filesystem/ff16/ffunicode.c",
-    "src/hal/impl/shared/frameworks/jpeg/tjpgd.c",
-    "src/hal/impl/shared/frameworks/lodepng/lodepng.cpp",
+HOST_PORTABLE_HAL_EXCLUDES = {
+    "src/hal/codecs/cjson/cJSON.c",
+    "src/hal/codecs/cjson/cJSON_Utils.c",
+    "src/hal/storage/filesystem/ff16/ff.c",
+    "src/hal/storage/filesystem/ff16/ffsystem.c",
+    "src/hal/storage/filesystem/ff16/ffunicode.c",
+    "src/hal/codecs/jpeg/tjpgd.c",
+    "src/hal/codecs/lodepng/lodepng.cpp",
 }
 
 
@@ -152,11 +152,9 @@ def _include_host(path: Path, root: Path) -> bool:
 
     if not _is_c_or_cpp(path):
         return False
-    if rel in HOST_SHARED_EXCLUDES:
+    if rel in HOST_PORTABLE_HAL_EXCLUDES:
         return False
-    if rel.startswith("src/hal/hal_"):
-        return True
-    if rel.startswith("src/hal/impl/shared/"):
+    if rel.startswith("src/hal/") and not rel.startswith("src/hal/impl/"):
         return True
     if rel.startswith("src/utils/") and "/" not in rel[len("src/utils/") :]:
         return name not in HOST_UTILS_EXCLUDES

@@ -1,8 +1,8 @@
 #include "utils/unity.h"
 
-#include "hal/hal_i2c.h"
+#include "hal/display/drivers/ssd1306_driver.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/display/ssd1306_driver.h"
 
 #include <stdlib.h>
 #include <string.h>

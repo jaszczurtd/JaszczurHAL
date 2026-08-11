@@ -1,13 +1,13 @@
-#include <hal/hal_app.h>
-#include <hal/hal_board.h>
-#include <hal/hal_eeprom.h>
-#include <hal/hal_sdlogger.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
-#include <hal/hal_usb.h>
-#include <hal/impl/shared/frameworks/filesystem/sd/hal_sd_file.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/core/hal_target.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/storage/filesystem/sd/hal_sd_file.h>
+#include <hal/storage/hal_eeprom.h>
+#include <hal/storage/hal_sdlogger.h>
+#include <hal/system/hal_board.h>
+#include <hal/system/hal_system.h>
+#include <hal/usb/hal_usb.h>
 
 #include <stdbool.h>
 #include <stddef.h>

@@ -1,9 +1,9 @@
 #if defined(JH_RP_OTA_BOOT_IMAGE)
 
-#include "hal/hal_config.h"
-#include "hal/hal_crypto.h"
-#include "hal/impl/shared/network/ota/jh_ota_image.h"
-#include "hal/impl/shared/network/ota/jh_ota_swap_engine.h"
+#include "hal/core/hal_config.h"
+#include "hal/network/ota/jh_ota_image.h"
+#include "hal/network/ota/jh_ota_swap_engine.h"
+#include "hal/security/hal_crypto.h"
 
 #include <hardware/flash.h>
 #include <hardware/regs/addressmap.h>

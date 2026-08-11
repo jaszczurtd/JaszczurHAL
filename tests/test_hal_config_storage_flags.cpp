@@ -1,6 +1,6 @@
 #include "utils/unity.h"
 
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifndef HAL_ENABLE_SDLOGGER
 #error "test_hal_config_storage_flags must be built with HAL_ENABLE_SDLOGGER"

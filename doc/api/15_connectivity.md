@@ -162,7 +162,7 @@ and IPv6. The current CYW43 backends advertise IPv4; unsupported families
 return `HAL_EUNSUPPORTED`.
 
 ```c
-#include <hal/hal_net.h>
+#include <hal/network/hal_net.h>
 
 #define HAL_NET_IPV4_ADDR_LEN 4u
 #define HAL_NET_IPV6_ADDR_LEN 16u
@@ -264,7 +264,7 @@ bounded and blocking; requesting the non-blocking form returns
 `HAL_EUNSUPPORTED`.
 
 ```c
-#include <hal/hal_wifi.h>
+#include <hal/network/hal_wifi.h>
 
 typedef enum {
     HAL_WIFI_MODE_OFF    = 0,
@@ -438,7 +438,7 @@ verified BearSSL TLS client. The flag enables TCP and WiFi. Select
 `HAL_ENABLE_TLS` as well for HTTPS.
 
 ```c
-#include <hal/hal_http_client.h>
+#include <hal/network/http/hal_http_client.h>
 
 hal_http_client_request_t request;
 hal_http_client_request_init(&request);
@@ -474,7 +474,7 @@ connection close. Response bodies are copied without a terminator.
 `HAL_EOVERFLOW` reports the required body length when the caller buffer is too
 small. Chunked transfer encoding returns `HAL_EUNSUPPORTED`.
 
-**Implementation:** `impl/shared/network/http/hal_http_client.cpp`.
+**Implementation:** `hal/network/http/hal_http_client.cpp`.
 **Tests:** `test_hal_http_client` covers validation, fragmented response
 headers, response metadata, and bounded body copies.
 `test_hal_http_client_plaintext_compile` keeps the plaintext-only flag
@@ -502,7 +502,7 @@ The first version is intentionally compact and deterministic:
 - cooperative `hal_http_server_poll()` service loop.
 
 ```c
-#include <hal/hal_http_server.h>
+#include <hal/network/http/hal_http_server.h>
 
 typedef enum {
   HAL_HTTP_METHOD_UNKNOWN = 0,
@@ -608,7 +608,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_SERVER_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/network/services/http_server/hal_http_server.cpp`.
+**shared thematic implementation:** `hal/network/http/hal_http_server.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_http_server`.
 
@@ -636,7 +636,7 @@ Supported behavior:
 - path traversal rejection for `..` and backslashes.
 
 ```c
-#include <hal/hal_http_files.h>
+#include <hal/network/http/hal_http_files.h>
 
 typedef struct {
   bool exists;
@@ -760,7 +760,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_HTTP_FILES_IO_BUFFER_SIZE 128u
 ```
 
-**impl/shared:** `impl/shared/network/services/http_files/hal_http_files.cpp`.
+**shared thematic implementation:** `hal/network/http/hal_http_files.cpp`.
 **impl/.mock:** covered through mock HTTP/TCP and `test_hal_http_files`.
 
 ---
@@ -788,7 +788,7 @@ subprotocol negotiation. Put authentication or session policy in the
 application protocol or in the HTTP page that opens the socket.
 
 ```c
-#include <hal/hal_websocket.h>
+#include <hal/network/websocket/hal_websocket.h>
 
 typedef uint8_t hal_websocket_client_t;
 
@@ -877,7 +877,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_WEBSOCKET_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/network/services/websocket/hal_websocket.cpp`.
+**shared thematic implementation:** `hal/network/websocket/hal_websocket.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_websocket`.
 
@@ -901,7 +901,7 @@ is plain TCP. Use it only on trusted networks or behind a secure tunnel/VPN
 when remote access matters.
 
 ```c
-#include <hal/hal_net_console.h>
+#include <hal/network/net_console/hal_net_console.h>
 
 #define HAL_NET_CONSOLE_DEFAULT_PORT 2323u
 
@@ -978,7 +978,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_NET_CONSOLE_DEFAULT_BACKLOG 2u
 ```
 
-**impl/shared:** `impl/shared/network/services/net_console/hal_net_console.cpp`.
+**shared thematic implementation:** `hal/network/net_console/hal_net_console.cpp`.
 **impl/.mock:** covered through the mock TCP listener/socket backend and
 `test_hal_net_console`.
 
@@ -1009,7 +1009,7 @@ are exposed to handlers as `json_args`; string args are also mirrored through
 `args_text`.
 
 ```c
-#include <hal/hal_net_commands.h>
+#include <hal/network/net_commands/hal_net_commands.h>
 
 typedef enum {
   HAL_NET_COMMANDS_FORMAT_TEXT = 0,
@@ -1157,7 +1157,7 @@ Default static limits can be overridden before including HAL headers:
 #define HAL_NET_COMMANDS_RESPONSE_BUFFER_SIZE 512u
 ```
 
-**impl/shared:** `impl/shared/network/services/net_commands/hal_net_commands.cpp`.
+**shared thematic implementation:** `hal/network/net_commands/hal_net_commands.cpp`.
 **impl/.mock:** covered through mock HTTP/WebSocket TCP backends and
 `test_hal_net_commands`.
 
@@ -1171,7 +1171,7 @@ container, coordinated flash writes, and a fixed boot applier with automatic
 trial boot, confirmation, and rollback.
 
 ```c
-#include <hal/hal_ota.h>
+#include <hal/network/ota/hal_ota.h>
 
 typedef enum {
   HAL_OTA_COMMAND_SKETCH = 0,
@@ -1263,7 +1263,7 @@ single-socket `hal_udp_*` API remains available as a compatibility wrapper on a
 default UDP handle.
 
 ```c
-#include <hal/hal_udp.h>
+#include <hal/network/hal_udp.h>
 
 #define HAL_UDP_IP_STR_LEN 16u
 
@@ -1370,7 +1370,7 @@ Handle-based TCP transport API for outbound stream connections and inbound
 listener/server sockets.
 
 ```c
-#include <hal/hal_tcp.h>
+#include <hal/network/hal_tcp.h>
 
 typedef struct hal_tcp_socket_impl_t *hal_tcp_socket_t;
 typedef struct hal_tcp_listener_impl_t *hal_tcp_listener_t;
@@ -1477,7 +1477,7 @@ the bundled BearSSL engine. Enabling it automatically enables TCP and WiFi, but
 does not enable or require the optional BSD sockets adapter.
 
 ```c
-#include <hal/hal_tls.h>
+#include <hal/network/tls/hal_tls.h>
 
 hal_tls_client_config_t config;
 hal_tls_client_t client = NULL;
@@ -1545,10 +1545,10 @@ ownership or BSD semantics.
 
 - `hal_tls.cpp` owns lifecycle, DNS resolution, native HAL TCP transport and
   provider-independent security configuration;
-- `impl/shared/frameworks/BearSSL/jh_bearssl_hal_tcp_io.*` adapts HAL TCP;
-- `impl/shared/frameworks/BearSSL/jh_bearssl_bsd_io.*` is the optional
+- `hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.*` adapts HAL TCP;
+- `hal/network/tls/BearSSL/jh_bearssl_bsd_io.*` is the optional
   TLS-over-BSD bridge;
-- `impl/shared/frameworks/BearSSL/jh_bearssl_engine.*` advances records through
+- `hal/network/tls/BearSSL/jh_bearssl_engine.*` advances records through
   either transport without depending on either socket representation.
 
 **Tests:** `test_hal_tls` covers the public lifecycle, `test_bearssl_provider`
@@ -1680,7 +1680,7 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
   cancellable waits should use `O_NONBLOCK` plus `select()` polling.
 - Unsupported flags/operations fail with `errno`.
 
-**impl/shared:** `impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp`
+**shared thematic implementation:** `hal/network/adapters/bsd/hal_bsd_sockets.cpp`
 contains the fd-table adapter, address conversion helpers and `netdb.h`
 resolver glue.
 **impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
@@ -1695,7 +1695,7 @@ headers.
 Thread-safe facade over the shared WireGuard/lwIP engine.
 
 ```c
-#include <hal/hal_wireguard.h>
+#include <hal/network/wireguard/hal_wireguard.h>
 
 #define HAL_WIREGUARD_IPV4_OCTETS 4u
 #define HAL_WIREGUARD_IP_STR_LEN 16u
@@ -1761,7 +1761,7 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - `hal_wireguard_kick_handshake(...)` triggers non-blocking handshake probe.
 - `hal_wireguard_kick_handshake_text(...)` parses dotted probe IP text and delegates to `hal_wireguard_kick_handshake(...)`.
 
-**impl/shared:** bundled protocol/crypto engine plus a private lwIP-extension
+**shared thematic implementation:** bundled protocol/crypto engine plus a private lwIP-extension
 port used by capability-advertised host-stack backends.
 **impl/rp2040:** HAL-owned lwIP extension and secure platform hooks.
 **impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
@@ -1799,7 +1799,7 @@ Thread-safe MQTT wrapper around bundled PubSubClient with callback dispatch
 outside the internal mutex to avoid lock-order deadlocks in user handlers.
 
 ```c
-#include <hal/hal_mqtt.h>
+#include <hal/network/mqtt/hal_mqtt.h>
 
 typedef void (*hal_mqtt_message_callback_t)(const char *topic,
                                             const uint8_t *payload,
@@ -1887,7 +1887,7 @@ uint16_t    hal_mock_mqtt_get_socket_timeout(void);
 ## `hal_time` - Calendar helpers and optional system time/NTP
 
 ```c
-#include <hal/hal_time.h>
+#include <hal/time/hal_time.h>
 
 // Always available; no network dependency.
 uint32_t hal_time_from_components(int year, int month, int day,

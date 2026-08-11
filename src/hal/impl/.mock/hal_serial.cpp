@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
 
-#include "../../hal_serial.h"
-#include "../shared/debug/jh_serial_port.h"
+#include "hal/debug/jh_serial_port.h"
+#include "hal/serial/hal_serial.h"
 #include "hal_mock.h"
 
 #include <stdio.h>

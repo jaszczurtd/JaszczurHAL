@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_pwm.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/gpio/hal_pwm.h"
+#include "hal/system/hal_sync.h"
 
 #include <hardware/clocks.h>
 #include <hardware/gpio.h>

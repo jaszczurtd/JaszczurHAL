@@ -5,7 +5,7 @@
  * @brief Bounded IPv4/IPv6 getaddrinfo declarations for JaszczurHAL sockets.
  */
 
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_BSD_SOCKETS
 

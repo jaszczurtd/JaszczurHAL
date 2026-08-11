@@ -5,7 +5,7 @@
  * @brief Public utility aggregator include.
  *
  * This header re-exports utility modules from `src/utils/` and shared
- * framework modules from `src/hal/impl/shared/frameworks/`,
+ * reusable modules from their thematic directories under `src/hal/`,
  * providing a single include for:
  * - SmartTimers
  * - pidController
@@ -26,21 +26,21 @@
  *   this flag propagates `HAL_ENABLE_CRYPTO` and `HAL_ENABLE_JPEG`.
  */
 
-#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
+#include "hal/timers/smart_timers/SmartTimers.h"
 #include "tools_c.h"
 #include "utils/draw7Segment.h"
 #include "utils/multicoreWatchdog.h"
 #include "utils/pidController.h"
 
 #ifdef HAL_ENABLE_CJSON
-#include "hal/impl/shared/frameworks/cjson/cJSON.h"
-#include "hal/impl/shared/frameworks/cjson/cJSON_Utils.h"
+#include "hal/codecs/cjson/cJSON.h"
+#include "hal/codecs/cjson/cJSON_Utils.h"
 #endif
 
 #ifdef HAL_ENABLE_PNG
-#include "hal/impl/shared/frameworks/lodepng/lodepng.h"
+#include "hal/codecs/lodepng/lodepng.h"
 #endif
 
 #ifdef HAL_ENABLE_JPEG
-#include "hal/impl/shared/frameworks/jpeg/tjpgd.h"
+#include "hal/codecs/jpeg/tjpgd.h"
 #endif

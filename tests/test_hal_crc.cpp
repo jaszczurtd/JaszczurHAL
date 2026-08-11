@@ -1,4 +1,4 @@
-#include "hal/hal_crc.h"
+#include "hal/security/hal_crc.h"
 #include "utils/unity.h"
 
 #include <string.h>

@@ -1,7 +1,7 @@
-#include "hal/hal_ble.h"
+#include "hal/bluetooth/hal_ble.h"
+#include "hal/bluetooth/jh_ble_runtime.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/bluetooth/jh_ble_runtime.h"
-#include "hal/impl/shared/jh_board_runtime.h"
+#include "hal/system/jh_board_runtime.h"
 #include "utils/unity.h"
 
 #include <string.h>

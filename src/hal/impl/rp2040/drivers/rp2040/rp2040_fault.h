@@ -19,7 +19,7 @@
  *   [4..7] = owned by pico-sdk (watchdog magic / watchdog_reboot() args).
  */
 
-#include "../../../../hal_system.h"
+#include "hal/system/hal_system.h"
 
 #ifdef __cplusplus
 extern "C" {

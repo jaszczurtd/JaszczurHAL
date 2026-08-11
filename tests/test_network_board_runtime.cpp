@@ -1,14 +1,14 @@
 #include "utils/unity.h"
 
-#include "hal/hal_board.h"
-#include "hal/hal_net.h"
-#include "hal/hal_sync.h"
-#include "hal/hal_tcp.h"
-#include "hal/hal_udp.h"
-#include "hal/hal_wifi.h"
-#include "hal/impl/shared/jh_board_runtime.h"
-#include "hal/impl/shared/network/jh_network_backend.h"
-#include "hal/impl/shared/network/jh_network_runtime.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/hal_udp.h"
+#include "hal/network/hal_wifi.h"
+#include "hal/network/jh_network_backend.h"
+#include "hal/network/jh_network_runtime.h"
+#include "hal/system/hal_board.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/jh_board_runtime.h"
 
 #include <string.h>
 

@@ -9,7 +9,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "hal/hal_net.h"
+#include "hal/network/hal_net.h"
 
 _Static_assert(AF_INET6 == 10, "AF_INET6 value");
 _Static_assert(PF_INET6 == AF_INET6, "PF_INET6 alias");

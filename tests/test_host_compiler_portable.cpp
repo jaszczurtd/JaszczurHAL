@@ -1,7 +1,7 @@
 /* Built with both compiler identities forced to zero, so the portable
  * fallback that no real compiler selects still gets compiled and can be
  * compared against the builtin path in the same test run. */
-#include "hal/hal_compiler.h"
+#include "hal/core/hal_compiler.h"
 
 #include <cstdint>
 

@@ -1,10 +1,10 @@
-#include "hal/hal_mqtt.h"
-#include "hal/hal_net.h"
-#include "hal/hal_tcp.h"
-#include "hal/hal_udp.h"
-#include "hal/hal_wifi.h"
-#include "hal/hal_wireguard.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/hal_udp.h"
+#include "hal/network/hal_wifi.h"
+#include "hal/network/mqtt/hal_mqtt.h"
+#include "hal/network/wireguard/hal_wireguard.h"
 #include "utils/unity.h"
 
 void setUp(void) {

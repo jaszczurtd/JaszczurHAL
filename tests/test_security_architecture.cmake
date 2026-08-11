@@ -2,17 +2,17 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-set(_session_header "${JH_ROOT}/src/hal/hal_serial_session.h")
-set(_session_source "${JH_ROOT}/src/hal/hal_serial_session.cpp")
-set(_auth_header "${JH_ROOT}/src/hal/hal_sc_auth.h")
-set(_auth_source "${JH_ROOT}/src/hal/hal_sc_auth.cpp")
+set(_session_header "${JH_ROOT}/src/hal/serial/hal_serial_session.h")
+set(_session_source "${JH_ROOT}/src/hal/serial/hal_serial_session.cpp")
+set(_auth_header "${JH_ROOT}/src/hal/security/hal_sc_auth.h")
+set(_auth_source "${JH_ROOT}/src/hal/security/hal_sc_auth.cpp")
 set(_security_header
-    "${JH_ROOT}/src/hal/impl/shared/jh_secure_random.h")
+    "${JH_ROOT}/src/hal/security/jh_secure_random.h")
 set(_security_source
-    "${JH_ROOT}/src/hal/impl/shared/jh_secure_random.cpp")
-set(_ble_api "${JH_ROOT}/src/hal/hal_ble_stream.cpp")
+    "${JH_ROOT}/src/hal/security/jh_secure_random.cpp")
+set(_ble_api "${JH_ROOT}/src/hal/bluetooth/hal_ble_stream.cpp")
 set(_ble_session
-    "${JH_ROOT}/src/hal/impl/shared/bluetooth/jh_ble_stream_session.c")
+    "${JH_ROOT}/src/hal/bluetooth/jh_ble_stream_session.c")
 
 foreach(_required IN ITEMS
         "${_session_header}"
@@ -102,10 +102,9 @@ endif()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
 file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
-foreach(_manifest IN ITEMS _root_cmake _stm32_cmake)
-    if(NOT ${_manifest} MATCHES "hal/hal_serial_session\\.cpp" OR
-       NOT ${_manifest} MATCHES "hal/hal_sc_auth\\.cpp")
-        message(FATAL_ERROR
-            "Compiled Serial Session/auth sources are missing from a manifest")
-    endif()
-endforeach()
+if(NOT _root_cmake MATCHES "hal/serial/hal_serial_session\\.cpp" OR
+   NOT _root_cmake MATCHES "hal/security/hal_sc_auth\\.cpp" OR
+   NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")
+    message(FATAL_ERROR
+        "Compiled Serial Session/auth sources are missing from a manifest")
+endif()

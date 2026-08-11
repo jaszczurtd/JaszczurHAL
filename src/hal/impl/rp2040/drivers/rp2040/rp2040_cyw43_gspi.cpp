@@ -1,10 +1,10 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
 
 #include "rp2040_cyw43_gspi.h"
 
-#include "../../../../hal_system.h"
+#include "hal/system/hal_system.h"
 #include "rp2040_cyw43_gspi_clock.h"
 #include "rp2040_cyw43_pio_program.h"
 

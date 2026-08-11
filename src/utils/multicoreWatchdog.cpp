@@ -1,10 +1,10 @@
 
 #include "multicoreWatchdog.h"
-#include "../hal/impl/shared/hal_mutex_once.h"
-#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/timers/smart_timers/SmartTimers.h"
 #include <hal/hal.h>
 #ifdef HAL_ENABLE_SDLOGGER
-#include <hal/hal_sdlogger.h>
+#include <hal/storage/hal_sdlogger.h>
 #endif
 
 /*

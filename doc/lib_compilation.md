@@ -29,7 +29,7 @@ an output path outside this directory.
 
 ## Target and board contract
 
-The public target selectors live in `src/hal/hal_target.h`. Define exactly one
+The public target selectors live in `src/hal/core/hal_target.h`. Define exactly one
 selector when a toolchain does not provide enough information for automatic
 detection:
 
@@ -252,7 +252,7 @@ For an application directory, add:
 ```
 
 The application supplies `app_start()`, `app_task0()`, and optionally
-`app_task1()`. `src/hal/hal_app_entry.cpp` owns `main()` and maps these hooks to
+`app_task1()`. `src/hal_app_entry.cpp` owns `main()` and maps these hooks to
 the selected bare-metal or FreeRTOS execution model.
 
 ### Embedding the RP CMake support

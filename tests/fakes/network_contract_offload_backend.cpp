@@ -1,6 +1,6 @@
 #include "network_contract_control.h"
 
-#include "hal/impl/shared/network/jh_network_backend.h"
+#include "hal/network/jh_network_backend.h"
 
 #include <string.h>
 

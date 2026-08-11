@@ -1,8 +1,8 @@
-#include "hal/hal_gpio.h"
-#include "hal/hal_spi.h"
-#include "hal/hal_system.h"
+#include "hal/gpio/hal_gpio.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/sx126x/jh_sx126x_adapter.h"
+#include "hal/radio/sx126x/jh_sx126x_adapter.h"
+#include "hal/spi/hal_spi.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 #include <string.h>

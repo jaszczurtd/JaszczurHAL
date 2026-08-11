@@ -1,13 +1,14 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_SWSERIAL
 
-#include "../../hal_swserial.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
 #include "drivers/swserial/swserial.pio.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/serial/hal_swserial.h"
+#include "hal/serial/swserial/hal_swserial_common.h"
+#include "hal/system/hal_sync.h"
 
 #include <hardware/clocks.h>
 #include <hardware/dma.h>
@@ -102,43 +103,17 @@ static bool swserial_pin_valid(uint8_t pin) {
 }
 
 static bool swserial_config_valid(uint16_t config) {
-  if ((config & (uint16_t)~0x0733u) != 0u) {
-    return false;
-  }
-
-  const uint16_t data_bits = config & 0x0700u;
-  const uint16_t stop_bits = config & 0x0030u;
-  const uint16_t parity = config & 0x0003u;
-  return (data_bits == HAL_UART_DATA_5 || data_bits == HAL_UART_DATA_6 ||
-          data_bits == HAL_UART_DATA_7 || data_bits == HAL_UART_DATA_8) &&
-         (stop_bits == HAL_UART_STOP_BIT_1 ||
-          stop_bits == HAL_UART_STOP_BIT_2) &&
-         (parity == HAL_UART_PARITY_NONE || parity == HAL_UART_PARITY_EVEN ||
-          parity == HAL_UART_PARITY_ODD);
+  return jh_swserial_config_valid(config);
 }
 
-static int swserial_parity(uint32_t data) {
-  data ^= data >> 4u;
-  data &= 0x0Fu;
-  return (int)((0x6996u >> data) & 1u);
-}
+static int swserial_parity(uint32_t data) { return jh_swserial_parity(data); }
 
 static uint8_t swserial_data_bits(uint16_t config) {
-  switch (config & 0x0700u) {
-  case HAL_UART_DATA_5:
-    return 5u;
-  case HAL_UART_DATA_6:
-    return 6u;
-  case HAL_UART_DATA_7:
-    return 7u;
-  case HAL_UART_DATA_8:
-  default:
-    return 8u;
-  }
+  return jh_swserial_data_bits(config);
 }
 
 static uint8_t swserial_stop_bits(uint16_t config) {
-  return ((config & 0x0030u) == HAL_UART_STOP_BIT_2) ? 2u : 1u;
+  return jh_swserial_stop_bits(config);
 }
 
 static hal_swserial_parity_t swserial_parity_mode(uint16_t config) {
@@ -557,62 +532,12 @@ hal_status_t hal_swserial_create_ex(uint8_t rx_pin, uint8_t tx_pin,
   return HAL_ENOMEM;
 }
 
-hal_swserial_t hal_swserial_create(uint8_t rx_pin, uint8_t tx_pin) {
-  hal_swserial_t h = NULL;
-  (void)hal_swserial_create_ex(rx_pin, tx_pin, &h);
-  return h;
-}
-
 hal_status_t hal_swserial_set_rx_ex(hal_swserial_t h, uint8_t rx_pin) {
-  if (h == NULL || h->mutex == NULL || !swserial_pin_valid(rx_pin)) {
-    return HAL_EINVAL;
-  }
-  hal_mutex_lock(h->mutex);
-  if (rx_pin == h->rx_pin) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_OK;
-  }
-  if (rx_pin == h->tx_pin) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_EINVAL;
-  }
-  if (h->started) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_ESTATE;
-  }
-  h->rx_pin = rx_pin;
-  hal_mutex_unlock(h->mutex);
-  return HAL_OK;
-}
-
-bool hal_swserial_set_rx(hal_swserial_t h, uint8_t rx_pin) {
-  return hal_status_to_bool(hal_swserial_set_rx_ex(h, rx_pin));
+  return jh_swserial_set_pin(h, rx_pin, true, swserial_pin_valid);
 }
 
 hal_status_t hal_swserial_set_tx_ex(hal_swserial_t h, uint8_t tx_pin) {
-  if (h == NULL || h->mutex == NULL || !swserial_pin_valid(tx_pin)) {
-    return HAL_EINVAL;
-  }
-  hal_mutex_lock(h->mutex);
-  if (tx_pin == h->tx_pin) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_OK;
-  }
-  if (tx_pin == h->rx_pin) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_EINVAL;
-  }
-  if (h->started) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_ESTATE;
-  }
-  h->tx_pin = tx_pin;
-  hal_mutex_unlock(h->mutex);
-  return HAL_OK;
-}
-
-bool hal_swserial_set_tx(hal_swserial_t h, uint8_t tx_pin) {
-  return hal_status_to_bool(hal_swserial_set_tx_ex(h, tx_pin));
+  return jh_swserial_set_pin(h, tx_pin, false, swserial_pin_valid);
 }
 
 hal_status_t hal_swserial_begin(hal_swserial_t h, uint32_t baud,
@@ -695,88 +620,19 @@ hal_status_t hal_swserial_read_ex(hal_swserial_t h, uint8_t *out_value) {
   return HAL_OK;
 }
 
-int hal_swserial_read(hal_swserial_t h) {
-  uint8_t value = 0u;
-  return hal_status_to_bool(hal_swserial_read_ex(h, &value)) ? (int)value : -1;
-}
-
 hal_status_t hal_swserial_write_ex(hal_swserial_t h, const uint8_t *data,
                                    size_t len, size_t *out_written) {
-  if (out_written != NULL) {
-    *out_written = 0u;
-  }
-  if (h == NULL || h->mutex == NULL || (len > 0u && data == NULL)) {
-    return HAL_EINVAL;
-  }
-  hal_mutex_lock(h->mutex);
-  if (!h->started) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_EUNINIT;
-  }
-  if (len == 0u) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_OK;
-  }
-  const size_t written = swserial_write_locked(h, data, len);
-  hal_mutex_unlock(h->mutex);
-  if (out_written != NULL) {
-    *out_written = written;
-  }
-  return HAL_OK;
-}
-
-size_t hal_swserial_write(hal_swserial_t h, const uint8_t *data, size_t len) {
-  size_t written = 0u;
-  (void)hal_swserial_write_ex(h, data, len, &written);
-  return written;
+  return jh_swserial_write_common(h, data, len, out_written,
+                                  swserial_write_locked);
 }
 
 hal_status_t hal_swserial_println_ex(hal_swserial_t h, const char *s,
                                      size_t *out_written) {
-  if (out_written != NULL) {
-    *out_written = 0u;
-  }
-  if (h == NULL || h->mutex == NULL) {
-    return HAL_EINVAL;
-  }
-  const char *text = (s != NULL) ? s : "";
-  const size_t len = strlen(text);
-  static const uint8_t crlf[] = {'\r', '\n'};
-
-  hal_mutex_lock(h->mutex);
-  if (!h->started) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_EUNINIT;
-  }
-  if (len > 0u) {
-    (void)swserial_write_locked(h, (const uint8_t *)text, len);
-  }
-  (void)swserial_write_locked(h, crlf, sizeof(crlf));
-  hal_mutex_unlock(h->mutex);
-  if (out_written != NULL) {
-    *out_written = len;
-  }
-  return HAL_OK;
-}
-
-size_t hal_swserial_println(hal_swserial_t h, const char *s) {
-  size_t written = 0u;
-  (void)hal_swserial_println_ex(h, s, &written);
-  return written;
+  return jh_swserial_println_common(h, s, out_written, swserial_write_locked);
 }
 
 hal_status_t hal_swserial_flush(hal_swserial_t h) {
-  if (h == NULL || h->mutex == NULL) {
-    return HAL_EINVAL;
-  }
-  hal_mutex_lock(h->mutex);
-  if (!h->started) {
-    hal_mutex_unlock(h->mutex);
-    return HAL_EUNINIT;
-  }
-  swserial_wait_tx(h);
-  hal_mutex_unlock(h->mutex);
-  return HAL_OK;
+  return jh_swserial_flush_common(h, swserial_wait_tx);
 }
 
 void hal_swserial_destroy(hal_swserial_t h) {

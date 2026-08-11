@@ -102,24 +102,23 @@ function(jh_add_stm32g474_firmware TARGET)
             _jh_sx126x_include_dirs)
     endif()
 
-    # Backend + shared driver/engine sources (mirrors the proven examples recipe).
+    # Backend + target-independent thematic sources.
     file(GLOB _impl CONFIGURE_DEPENDS "${_g474}/*.cpp")
     file(GLOB _drivers CONFIGURE_DEPENDS "${_g474}/drivers/*/*.cpp")
-    file(GLOB_RECURSE _shared CONFIGURE_DEPENDS
-        "${_jh_src}/hal/impl/shared/*.cpp"
-        "${_jh_src}/hal/impl/shared/*.c"
+    file(GLOB_RECURSE _hal_common CONFIGURE_DEPENDS
+        "${_jh_src}/hal/*.cpp"
+        "${_jh_src}/hal/*.c"
     )
-    list(FILTER _shared EXCLUDE REGEX "/frameworks/PubSubClient/")
-    list(FILTER _shared EXCLUDE REGEX "/bluetooth/")
-    # All top-level HAL module facades (hal/*.cpp). Each module wrapper is guarded
-    # by its own HAL_ENABLE_* flag, so unused ones compile to empty TUs and are
-    # stripped by --gc-sections. Globbing (rather than a hand-picked list) means a
-    # consumer that enables any module - e.g. the SimCom A76xx cellular modem
-    # (hal_simcom_a76xx.cpp / hal_modem_at.cpp) - links without editing this recipe.
-    file(GLOB _hal_top CONFIGURE_DEPENDS "${_jh_src}/hal/*.cpp")
-    set(_hal_common ${_hal_top} "${_jh_src}/hal_app_entry.cpp")
-    # Base portable utils. SmartTimers/cJSON are NOT listed here: they live under
-    # hal/impl/shared and are already covered by the ${_shared} glob above.
+    list(FILTER _hal_common EXCLUDE REGEX "/hal/impl/")
+    list(FILTER _hal_common EXCLUDE REGEX "/network/mqtt/PubSubClient/")
+    list(FILTER _hal_common EXCLUDE REGEX "/bluetooth/")
+    list(APPEND _hal_common
+        "${_jh_src}/hal/bluetooth/hal_ble.cpp"
+        "${_jh_src}/hal/bluetooth/hal_ble_stream.cpp"
+        "${_jh_src}/hal_app_entry.cpp"
+    )
+    # Base portable utils. SmartTimers/cJSON are already covered by the thematic
+    # common-source inventory above.
     # multicoreWatchdog is kept (some consumers use it); --gc-sections strips it
     # when unused.
     set(_utils
@@ -141,9 +140,9 @@ function(jh_add_stm32g474_firmware TARGET)
     foreach(_definition IN LISTS _jh_selection_features)
         if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
             list(APPEND _jh_mqtt_sources
-                "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src/PubSubClient.cpp")
+                "${_jh_src}/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp")
             list(APPEND _jh_mqtt_includes
-                "${_jh_src}/hal/impl/shared/frameworks/PubSubClient/src")
+                "${_jh_src}/hal/network/mqtt/PubSubClient/src")
         endif()
         if("${_definition}" MATCHES "^HAL_ENABLE_TLS(=|$)")
             set(_jh_has_tls TRUE)
@@ -162,7 +161,6 @@ function(jh_add_stm32g474_firmware TARGET)
         ${_drivers}
         ${_littlefs}
         ${_jh_sx126x_sources}
-        ${_shared}
         ${_hal_common}
         ${_utils}
         ${_jh_mqtt_sources}
@@ -199,7 +197,7 @@ function(jh_add_stm32g474_firmware TARGET)
         -fdata-sections
         -Wall
         -Wextra
-        -include "${_jh_src}/hal/hal_target.h"
+        -include "${_jh_src}/hal/core/hal_target.h"
         $<$<COMPILE_LANGUAGE:C>:-ffreestanding>
         $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>
         ${ARG_OPTIONS}

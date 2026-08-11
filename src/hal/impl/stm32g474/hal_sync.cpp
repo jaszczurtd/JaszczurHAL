@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
-#include "../../hal_sync.h"
+#include "hal/core/hal_config.h"
+#include "hal/system/hal_sync.h"
 
 #if defined(HAL_ENABLE_FREERTOS)
 #include <FreeRTOS.h>

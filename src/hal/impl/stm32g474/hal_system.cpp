@@ -1,11 +1,12 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
-#include "../../hal_system.h"
-#include "../shared/network/jh_network_architecture.h"
 #include "drivers/stm32g474/stm32g474_fault.h"
 #include "drivers/stm32g474/stm32g474_system.h"
+#include "hal/core/hal_config.h"
+#include "hal/network/jh_network_architecture.h"
+#include "hal/system/hal_system.h"
+#include "hal/system/hal_system_common.h"
 #include "port/stm32g474_regs.h"
 
 #if defined(HAL_ENABLE_FREERTOS)
@@ -210,29 +211,7 @@ hal_reset_reason_t hal_get_reset_reason(void) {
 }
 
 const char *hal_reset_reason_str(hal_reset_reason_t reason) {
-  switch (reason) {
-  case HAL_RESET_REASON_POWER_ON:
-    return "POWER_ON";
-  case HAL_RESET_REASON_RUN_PIN:
-    return "RUN_PIN";
-  case HAL_RESET_REASON_SOFT:
-    return "SOFT";
-  case HAL_RESET_REASON_WATCHDOG:
-    return "WATCHDOG";
-  case HAL_RESET_REASON_DEBUG:
-    return "DEBUG";
-  case HAL_RESET_REASON_GLITCH:
-    return "GLITCH";
-  case HAL_RESET_REASON_BROWNOUT:
-    return "BROWNOUT";
-  case HAL_RESET_REASON_HARDFAULT:
-    return "HARDFAULT";
-  case HAL_RESET_REASON_STACK_OVERFLOW:
-    return "STACK_OVERFLOW";
-  case HAL_RESET_REASON_UNKNOWN:
-  default:
-    return "UNKNOWN";
-  }
+  return jh_hal_reset_reason_str(reason);
 }
 
 hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out) {

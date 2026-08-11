@@ -7,7 +7,7 @@ Covers: `hal_soft_timer`, `hal_pid_controller`, `tools.h/cpp`, `SmartTimers`, `p
 ## `hal_soft_timer` - C wrapper over `SmartTimers`
 
 ```c
-#include <hal/hal_soft_timer.h>
+#include <hal/timers/hal_soft_timer.h>
 
 typedef struct hal_soft_timer_impl_s *hal_soft_timer_t;
 typedef void (*hal_soft_timer_callback_t)(void);
@@ -45,7 +45,7 @@ bool hal_soft_timer_tick_table(const hal_soft_timer_table_entry_t *table,
 
 **Example: periodic callback with C wrapper**
 ```c
-#include <hal/hal_soft_timer.h>
+#include <hal/timers/hal_soft_timer.h>
 
 static hal_soft_timer_t status_timer;
 
@@ -74,7 +74,7 @@ void app_task0(void) {
 ## `hal_pid_controller` - C wrapper over `pidController`
 
 ```c
-#include <hal/hal_pid_controller.h>
+#include <hal/control/hal_pid_controller.h>
 
 typedef struct hal_pid_controller_impl_s *hal_pid_controller_t;
 typedef enum {
@@ -119,7 +119,7 @@ bool  hal_pid_controller_is_oscillating(hal_pid_controller_t controller, float c
 
 **Example: motor speed control**
 ```c
-#include <hal/hal_pid_controller.h>
+#include <hal/control/hal_pid_controller.h>
 
 static hal_pid_controller_t speed_pid;
 static float target_rpm = 1000.0f;
@@ -156,13 +156,13 @@ void app_task0(void) {
 ## Higher-level utilities (tools.h / tools.cpp)
 
 Physical location: core utility helpers live in `src/utils/*`; shared framework
-utilities such as SmartTimers live under `src/hal/impl/shared/frameworks/*`.
+utilities such as SmartTimers live with their domain under `src/hal/timers/*`.
 
 Recommended include options:
 - `#include <tools.h>` (aggregator include in `src/`)
 - `#include <tools_c.h>` (C-compatible utility declarations from `src/`)
 - direct include from the component path, for example
-  `#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>`
+  `#include <hal/timers/smart_timers/SmartTimers.h>`
 
 Utilities depend on HAL internally.
 
@@ -172,7 +172,7 @@ Bit aliases are defined with `#ifndef` guards so an application may provide
 equivalent definitions before including the header.
 
 ```c
-#include <hal/hal_bits.h>
+#include <hal/core/hal_bits.h>
 
 #define is_set(x, mask)      // true when any bit in mask is set in x
 #define set_bit(var, mask)   // OR mask into var
@@ -262,7 +262,7 @@ The four legacy time helpers above are compatibility wrappers only. Their
 implementations delegate directly to
 `hal_time_is_daylight_saving_time()`, `hal_time_adjust_cet_cest()`,
 `hal_time_is_in_range()`, and `hal_time_extract_minutes()` respectively. New
-code should include `<hal/hal_time.h>` and call the HAL API directly; see
+code should include `<hal/time/hal_time.h>` and call the HAL API directly; see
 [Calendar helpers and optional system time/NTP](15_connectivity.md)
 for boundary, validation, and rollover semantics.
 
@@ -271,7 +271,7 @@ for boundary, validation, and rollover semantics.
 ## `hal_crc` - CRC checksums
 
 ```c
-#include <hal/hal_crc.h>
+#include <hal/security/hal_crc.h>
 ```
 
 Backend-agnostic, table-free CRC checksums for data integrity (**not**
@@ -311,7 +311,7 @@ addition here; it never disturbs the existing entries.
 ## SmartTimers
 
 ```c
-#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>
+#include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers timer;
 
@@ -340,13 +340,13 @@ timer.restart();
 timer.abort();
 ```
 
-**Note:** `SECOND`, `SECS()`, `MINS()`, `HOURS()` macros are defined in `hal/hal_system.h`
-(included automatically by `hal/impl/shared/frameworks/smart_timers/SmartTimers.h`).
+**Note:** `SECOND`, `SECS()`, `MINS()`, `HOURS()` macros are defined in `hal/system/hal_system.h`
+(included automatically by `hal/timers/smart_timers/SmartTimers.h`).
 **Thread safety:** Thread-safe and multicore-safe after construction. Each instance eagerly creates a per-instance `hal_mutex_t` that serializes all method calls. Callbacks passed to `begin()` are invoked outside the mutex to prevent deadlock.
 
 **Example: multi-timer table**
 ```c
-#include <hal/impl/shared/frameworks/smart_timers/SmartTimers.h>
+#include <hal/timers/smart_timers/SmartTimers.h>
 
 SmartTimers heartbeat_timer;
 SmartTimers status_timer;
@@ -598,7 +598,7 @@ Characters have proportional widths: `1` and space are narrower, `^` slightly wi
 **Example: digital clock display**
 ```c
 #include <utils/draw7Segment.h>
-#include <hal/hal_display.h>
+#include <hal/display/hal_display.h>
 
 void app_start(void) {
     // Assume display is already initialized via hal_display_init(...)
@@ -634,7 +634,7 @@ void app_task0(void) {
 **Example: status LED counter**
 ```c
 #include <utils/draw7Segment.h>
-#include <hal/hal_gpio.h>
+#include <hal/gpio/hal_gpio.h>
 
 void show_counter_7seg(int value) {
     char counter_str[16];

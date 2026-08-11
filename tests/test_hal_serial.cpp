@@ -1,7 +1,7 @@
-#include "hal/hal_serial.h"
-#include "hal/hal_system.h"
+#include "hal/debug/hal_debug_format.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/debug/hal_debug_format.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 #include <stdarg.h>

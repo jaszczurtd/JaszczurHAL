@@ -13,9 +13,9 @@
  *   - 0x11/0x12 temperature: signed MSB integer, LSB[7:6] = 0.25 C fraction
  */
 
-#include "hal/hal_i2c.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/ds3231/ds3231.h"
+#include "hal/rtc/ds3231/ds3231.h"
 #include "utils/unity.h"
 
 #include <math.h>

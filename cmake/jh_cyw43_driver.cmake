@@ -3,7 +3,7 @@ include_guard(GLOBAL)
 function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
     cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH" "" "" ${ARGN})
     set(_jh_cyw43_root
-        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/drivers/cyw43-driver")
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/network/cyw43")
     set(_jh_cyw43_vendor "${_jh_cyw43_root}/vendor")
     # The ctrl layer (cyw43_init/cyw43_ensure_up/cyw43_gpio_set) is required for
     # every CYW43 bring-up, including the no-lwIP LED-only path; only the lwIP
@@ -33,7 +33,7 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
 
     if(JH_CYW43_LWIP)
         set(_jh_lwip_port
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/lwip/port")
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/network/lwip/port")
         set(_jh_lwip_root
             "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../third_party/lwip")
         list(APPEND _jh_cyw43_sources

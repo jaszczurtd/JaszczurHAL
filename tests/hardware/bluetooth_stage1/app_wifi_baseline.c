@@ -1,9 +1,9 @@
-#include <hal/hal_app.h>
-#include <hal/hal_config.h>
-#include <hal/hal_net.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_wifi.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_config.h>
+#include <hal/core/hal_status.h>
+#include <hal/network/hal_net.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #include <stdint.h>

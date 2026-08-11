@@ -3,14 +3,14 @@
  * @brief Raw LoRa ping/pong example for integrated LF and external HF radios.
  */
 
-#include <hal/hal_app.h>
-#include <hal/hal_board.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_lora_radio.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/core/hal_target.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/radio/hal_lora_radio.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_board.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #include <stdio.h>

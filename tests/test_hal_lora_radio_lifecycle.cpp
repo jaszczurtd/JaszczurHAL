@@ -1,5 +1,5 @@
-#include "hal/hal_lora_radio.h"
-#include "hal/impl/shared/radio/jh_lora_radio_internal.h"
+#include "hal/radio/hal_lora_radio.h"
+#include "hal/radio/jh_lora_radio_internal.h"
 #include "utils/unity.h"
 
 #include <string.h>

@@ -2,9 +2,9 @@ if(NOT DEFINED JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-set(_core "${JH_ROOT}/src/hal/hal_serial.cpp")
+set(_core "${JH_ROOT}/src/hal/serial/hal_serial.cpp")
 set(_port_header
-    "${JH_ROOT}/src/hal/impl/shared/debug/jh_serial_port.h")
+    "${JH_ROOT}/src/hal/debug/jh_serial_port.h")
 set(_ports
     "${JH_ROOT}/src/hal/impl/.mock/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/hal_serial.cpp"
@@ -86,7 +86,7 @@ foreach(_port IN LISTS _ports)
 endforeach()
 
 file(GLOB_RECURSE _serial_sources
-    "${JH_ROOT}/src/hal/hal_serial.cpp"
+    "${JH_ROOT}/src/hal/serial/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/*/hal_serial.cpp")
 list(LENGTH _serial_sources _serial_source_count)
 if(NOT _serial_source_count EQUAL 4)
@@ -96,9 +96,8 @@ endif()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)
 file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_cmake)
-foreach(_manifest IN ITEMS _root_cmake _stm32_cmake)
-    if(NOT ${_manifest} MATCHES "hal/hal_serial\\.cpp")
-        message(FATAL_ERROR
-            "Shared serial/debug core is missing from a source manifest")
-    endif()
-endforeach()
+if(NOT _root_cmake MATCHES "hal/serial/hal_serial\\.cpp" OR
+   NOT _stm32_cmake MATCHES "hal/\\*\\.cpp")
+    message(FATAL_ERROR
+        "Shared serial/debug core is missing from a source manifest")
+endif()

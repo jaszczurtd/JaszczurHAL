@@ -9,9 +9,9 @@
  * Wiring (I2C1): SCL = PB8, SDA = PB9, plus pull-ups to 3V3. See README.md.
  */
 
-#include <hal/hal_app.h>
-#include <hal/hal_i2c.h>
-#include <hal/hal_system.h>
+#include <hal/core/hal_app.h>
+#include <hal/i2c/hal_i2c.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 void app_start(void) {

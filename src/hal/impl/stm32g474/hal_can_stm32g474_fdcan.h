@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../hal_can.h"
+#include "hal/can/hal_can.h"
 
 typedef struct {
   bool initialized;

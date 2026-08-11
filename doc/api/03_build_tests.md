@@ -13,37 +13,37 @@
 | `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
-| `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`impl/shared/drivers/mcp2515/*`), MCP251XFD (`impl/shared/drivers/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
-| `hal_display` | Shared display stack (`impl/shared/drivers/display/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
-| `hal_hd44780` | shared HD44780-compatible character LCD driver (`impl/shared/drivers/hd44780/hd44780.*`) over HAL GPIO/system timing |
+| `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`hal/can/mcp2515/*`), MCP251XFD (`hal/can/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
+| `hal_display` | Shared display stack (`hal/display/drivers/hal_display.cpp`, `jh_gfx.*`, `ili9341_driver.*`, `st77xx_driver.*`, `ssd1306_driver.*`) reused by RP2040 and STM32G474; target backends provide SPI/I2C/GPIO transport |
+| `hal_hd44780` | shared HD44780-compatible character LCD driver (`hal/display/hd44780/hd44780.*`) over HAL GPIO/system timing |
 | `hal_dma_pwm_audio` | timer-paced PWM-audio DMA helper used by DACless on RP2040, STM32G474 and mock |
-| `hal_dacless` | shared DACless PWM-audio engine (`impl/shared/drivers/dacless/dacless.*`) over HAL DMA/PWM-freq, ADC, timing and synchronization |
-| `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`impl/shared/drivers/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
-| `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`impl/shared/drivers/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
-| `hal_irsmall_decoder` | shared IR receiver decoder (`impl/shared/frameworks/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
+| `hal_dacless` | shared DACless PWM-audio engine (`hal/audio/dacless/dacless.*`) over HAL DMA/PWM-freq, ADC, timing and synchronization |
+| `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`hal/input/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
+| `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`hal/input/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
+| `hal_irsmall_decoder` | shared IR receiver decoder (`hal/input/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
 | `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
 | `hal_lora_radio` | Pinned official Semtech SX126x driver plus the shared HAL SPI/GPIO adapter; SX1262 on RP2040 and STM32G474, deterministic provider on mock |
 | `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
-| `hal_rgb_led` | shared NeoPixel core (`impl/shared/drivers/neopixel/jh_neopixel.*`) + target transport glue |
-| `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`impl/shared/drivers/mcp9600/mcp9600_driver.*`) |
-| `hal_thermocouple` (MAX6675) | shared driver (`impl/shared/drivers/max6675/max6675_driver.*`) |
-| `hal_onewire` | shared bit-bang driver (`impl/shared/drivers/onewire/onewire_driver.*`) over HAL GPIO/time |
-| `hal_ds18b20` | shared DS18B20 backend (`impl/shared/drivers/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
-| `hal_external_adc` | shared ADS1X15/ADS1115 driver (`impl/shared/drivers/ads1x15/ads1x15_driver.*`) |
-| `hal_pga2311` | shared PGA2311 stereo volume driver (`impl/shared/drivers/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
+| `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport glue |
+| `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`hal/temperature/mcp9600/mcp9600_driver.*`) |
+| `hal_thermocouple` (MAX6675) | shared driver (`hal/temperature/max6675/max6675_driver.*`) |
+| `hal_onewire` | shared bit-bang driver (`hal/onewire/onewire_driver.*`) over HAL GPIO/time |
+| `hal_ds18b20` | shared DS18B20 backend (`hal/temperature/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
+| `hal_external_adc` | shared ADS1X15/ADS1115 driver (`hal/analog/ads1x15/ads1x15_driver.*`) |
+| `hal_pga2311` | shared PGA2311 stereo volume driver (`hal/audio/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
 | `hal_wifi` | pinned CYW43 driver and lwIP; RP uses PIO gSPI, while STM32G474 uses the configured gSPI bus |
 | `hal_littlefs` | pinned `third_party/littlefs` core plus coordinated internal flash on RP and STM32G474 |
 | `hal_udp` | shared lwIP raw UDP engine over the selected CYW43 network backend |
 | `hal_tls` | bundled BearSSL over native `hal_tcp`; the optional BSD transport adapter is built only when `HAL_ENABLE_BSD_SOCKETS` is also enabled |
-| BSD sockets adapter | shared `impl/shared/network/adapters/bsd/hal_bsd_sockets.cpp` over HAL UDP/TCP; remains independently selectable without TLS |
+| BSD sockets adapter | shared `hal/network/adapters/bsd/hal_bsd_sockets.cpp` over HAL UDP/TCP; remains independently selectable without TLS |
 | `hal_wireguard` | shared WireGuard/lwIP engine + capability-advertised host-lwIP backend |
 | `hal_mqtt` | bundled `PubSubClient` over HAL TCP, with optional BearSSL MQTTS transport |
 | `hal_ota` | RP staging/applier with authenticated VS Code transport over HAL UDP/TCP |
 | `hal_time` | Shared Gregorian/CET/CEST and interval helpers, plus HAL UDP/NTP client and target timekeeping integration |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
-| `hal_sdlogger` | pinned FatFs R0.16 core plus the shared file layer in `impl/shared/frameworks/filesystem/` |
+| `hal_sdlogger` | pinned FatFs R0.16 core plus the shared file layer in `hal/storage/filesystem/` |
 | `tools` | HAL APIs |
 | `multicoreWatchdog` | internal `SmartTimers` + `hal_sync` mutex |
 
@@ -232,7 +232,7 @@ Test using HAL mocks:
 
 ```cpp
 #include "utils/unity.h"
-#include "hal/hal_system.h"
+#include "hal/system/hal_system.h"
 #include "hal/impl/.mock/hal_mock.h"
 
 void setUp(void) {
@@ -268,7 +268,7 @@ When a test needs additional implementation files, create a dedicated target:
 ```cmake
 add_executable(test_my_driver
     test_my_driver.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/impl/shared/drivers/my_driver/my_driver.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/sensors/my_driver/my_driver.cpp
 )
 target_link_libraries(test_my_driver PRIVATE hal_mock)
 add_test(NAME test_my_driver COMMAND test_my_driver)

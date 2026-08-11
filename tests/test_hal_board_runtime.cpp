@@ -1,8 +1,8 @@
 #include "utils/unity.h"
 
-#include "hal/hal_board.h"
-#include "hal/hal_sync.h"
-#include "hal/impl/shared/jh_board_runtime.h"
+#include "hal/system/hal_board.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/jh_board_runtime.h"
 
 struct hal_mutex_impl_t {
   bool locked;

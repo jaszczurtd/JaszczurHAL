@@ -1,6 +1,6 @@
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_usb.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/usb/hal_usb.h>
 
 #include <stddef.h>
 #include <stdint.h>

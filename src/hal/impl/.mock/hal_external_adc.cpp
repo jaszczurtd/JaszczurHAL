@@ -1,6 +1,6 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_external_adc.h"
+#include "hal/analog/hal_external_adc.h"
 #include "hal_mock.h"
 
 static float s_adc_range = 0.1875f;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hal/hal_status.h"
+#include "hal/core/hal_status.h"
 
 #include <stddef.h>
 #include <stdint.h>

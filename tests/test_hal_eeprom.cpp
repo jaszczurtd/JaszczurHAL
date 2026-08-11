@@ -1,5 +1,5 @@
-#include "hal/hal_eeprom.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/storage/hal_eeprom.h"
 #include "utils/unity.h"
 
 static uint32_t s_progress_calls = 0u;

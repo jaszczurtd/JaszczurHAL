@@ -8,14 +8,14 @@
  * produces zero symbols, so existing projects with their own main() are
  * unaffected.
  *
- * See src/hal/hal_app.h for the full contract and backend mapping.
+ * See src/hal/core/hal_app.h for the full contract and backend mapping.
  */
 
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if defined(HAL_PROVIDE_APP_ENTRY)
 
-#include "hal/hal_app.h"
+#include "hal/core/hal_app.h"
 
 /* -- Weak default for app_task1 ----------------------------------------------
  * If the client enables HAL_ENABLE_APP_TASK1 but does not define app_task1(),
@@ -27,8 +27,8 @@ extern "C" __attribute__((weak)) void app_task1(void) {
 
 #if HAL_TARGET_IS_RP
 
-#include "hal/hal_usb.h"
 #include "hal/impl/rp2040/drivers/flash/rp_flash_transaction.h"
+#include "hal/usb/hal_usb.h"
 
 #if defined(HAL_ENABLE_FREERTOS)
 

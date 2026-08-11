@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_config.h"
-#include "../../hal_pwm_freq.h"
+#include "hal/core/hal_config.h"
+#include "hal/gpio/hal_pwm_freq.h"
 #include "hal_mock.h"
 
 #include <string.h>

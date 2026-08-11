@@ -1,6 +1,6 @@
-#include "hal/hal_config.h"
-#include "hal/hal_net.h"
+#include "hal/core/hal_config.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/hal_net.h"
 #include "utils/unity.h"
 
 #include <stdint.h>

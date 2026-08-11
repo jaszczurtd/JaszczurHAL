@@ -1,4 +1,4 @@
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifndef HAL_ENABLE_BSD_SOCKETS
 #error "BSD probe must enable HAL_ENABLE_BSD_SOCKETS"

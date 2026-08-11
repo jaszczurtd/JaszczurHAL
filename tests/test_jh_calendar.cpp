@@ -1,4 +1,4 @@
-#include "hal/impl/shared/time/jh_calendar.h"
+#include "hal/time/jh_calendar.h"
 #include "utils/unity.h"
 
 #include <stdint.h>

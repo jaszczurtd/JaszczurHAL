@@ -1,5 +1,5 @@
-#include <hal/hal_config.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_config.h>
+#include <hal/core/hal_target.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)
 #error "18_freertos_suite network variant requires HAL_ENABLE_FREERTOS"
@@ -46,21 +46,21 @@
 #include <semphr.h>
 #include <task.h>
 
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_http_client.h>
-#include <hal/hal_http_files.h>
-#include <hal/hal_http_server.h>
-#include <hal/hal_net_commands.h>
-#include <hal/hal_net_console.h>
-#include <hal/hal_serial.h>
-#include <hal/hal_system.h>
-#include <hal/hal_time.h>
-#include <hal/hal_tls.h>
-#include <hal/hal_websocket.h>
-#include <hal/hal_wifi.h>
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/codecs/cjson/cJSON_Utils.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/network/http/hal_http_client.h>
+#include <hal/network/http/hal_http_files.h>
+#include <hal/network/http/hal_http_server.h>
+#include <hal/network/net_commands/hal_net_commands.h>
+#include <hal/network/net_console/hal_net_console.h>
+#include <hal/network/tls/hal_tls.h>
+#include <hal/network/websocket/hal_websocket.h>
+#include <hal/serial/hal_serial.h>
+#include <hal/system/hal_system.h>
+#include <hal/time/hal_time.h>
 #include <tools_c.h>
 
 #if HAL_HTTP_SERVER_MAX_ROUTES < 7u

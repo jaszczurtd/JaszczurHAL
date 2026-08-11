@@ -1,5 +1,5 @@
-#include "hal/hal_system.h"
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
+#include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
 extern "C" void hal_stm32g474_fault_test_reset(void);

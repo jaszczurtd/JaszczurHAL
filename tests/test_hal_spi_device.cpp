@@ -1,5 +1,5 @@
-#include "hal/hal_spi_device.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/spi/hal_spi_device.h"
 #include "utils/unity.h"
 
 void setUp(void) {

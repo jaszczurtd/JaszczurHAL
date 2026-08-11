@@ -10,9 +10,9 @@
  * bit 7). Per the NXP PCF8563 datasheet (Table 13): C=0 -> 20xx, C=1 -> 19xx.
  */
 
-#include "hal/hal_i2c.h"
+#include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/pcf8563/pcf8563.h"
+#include "hal/rtc/pcf8563/pcf8563.h"
 #include "utils/unity.h"
 
 #define PCF8563_I2C_ADDR 0x51u

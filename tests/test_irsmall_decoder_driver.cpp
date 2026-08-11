@@ -1,9 +1,9 @@
 #include "utils/unity.h"
 
-#include "hal/hal_gpio.h"
-#include "hal/hal_irsmall_decoder.h"
-#include "hal/hal_system.h"
+#include "hal/gpio/hal_gpio.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/input/hal_irsmall_decoder.h"
+#include "hal/system/hal_system.h"
 
 #include <string.h>
 

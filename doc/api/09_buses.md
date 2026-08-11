@@ -7,7 +7,7 @@ Covers: `hal_spi`, `hal_spi_device`, `hal_i2c`, `hal_i2c_slave`, `hal_uart`, `ha
 ## `hal_spi` - SPI bus and transfer API
 
 ```c
-#include <hal/hal_spi.h>
+#include <hal/spi/hal_spi.h>
 
 // Fallible historical void operations now return status in place.
 hal_status_t hal_spi_init(uint8_t bus, uint8_t rx_pin, uint8_t tx_pin,
@@ -84,7 +84,7 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 ## `hal_spi_device` - target-neutral SPI device descriptor
 
 ```c
-#include <hal/hal_spi_device.h>
+#include <hal/spi/hal_spi_device.h>
 
 hal_spi_device_t device;
 hal_spi_settings_t settings = {
@@ -114,7 +114,7 @@ transaction paths call backend end, deassert CS and unlock the bus.
 ## `hal_i2c` - I2C bus  *(optional - `HAL_ENABLE_I2C`)*
 
 ```c
-#include <hal/hal_i2c.h>
+#include <hal/i2c/hal_i2c.h>
 
 // Common I2C clock constants:
 #define HAL_I2C_CLOCK_STANDARD_HZ    100000UL   // Standard-mode, 100 kHz
@@ -325,7 +325,7 @@ value. Using `hal_i2c_write_byte()` and `hal_i2c_read_byte()` keeps the
 driver code free of explicit begin/write/end or request/read sequences.
 
 ```c
-#include <hal/hal_i2c.h>
+#include <hal/i2c/hal_i2c.h>
 
 #define PCF8574_ADDR 0x38   // 7-bit address (A2..A0 = 0)
 
@@ -381,7 +381,7 @@ This is independent of the I2C master module (`hal_i2c`) - both can be
 disabled/enabled separately, but they cannot share the same bus simultaneously.
 
 ```c
-#include <hal/hal_i2c_slave.h>
+#include <hal/i2c/hal_i2c_slave.h>
 
 // Default register map size (override in hal_project_config.h)
 #ifndef HAL_I2C_SLAVE_REG_MAP_SIZE
@@ -451,10 +451,10 @@ int     hal_mock_i2c_slave_simulate_request_bus(uint8_t bus, uint8_t *out_buf, i
 
 ## `hal_swserial` - Software UART  *(optional - `HAL_ENABLE_SWSERIAL`)*
 
-UART frame-format constants for `config` are defined in `hal/hal_uart_config.h`.
+UART frame-format constants for `config` are defined in `hal/serial/hal_uart_config.h`.
 
 ```c
-#include <hal/hal_uart_config.h>
+#include <hal/serial/hal_uart_config.h>
 
 // 5/6/7/8 data bits, N/E/O parity, 1/2 stop bits
 HAL_UART_CFG_5N1  HAL_UART_CFG_6N1  HAL_UART_CFG_7N1  HAL_UART_CFG_8N1
@@ -468,7 +468,7 @@ HAL_UART_CFG_5O2  HAL_UART_CFG_6O2  HAL_UART_CFG_7O2  HAL_UART_CFG_8O2
 The numeric values retain their established public values.
 
 ```c
-#include <hal/hal_swserial.h>
+#include <hal/serial/hal_swserial.h>
 
 typedef hal_swserial_impl_t *hal_swserial_t;  // opaque handle
 
@@ -546,7 +546,7 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h);
 ## `hal_uart` - Hardware UART  *(optional - `HAL_ENABLE_UART`)*
 
 ```c
-#include <hal/hal_uart.h>
+#include <hal/serial/hal_uart.h>
 
 typedef enum {
     HAL_UART_PORT_1 = 1,
@@ -620,11 +620,11 @@ void        hal_mock_uart_set_write_callback(hal_uart_t h,
 
 Thread-safe wrapper for one 1-Wire bus bound to a single GPIO pin. Hardware
 builds use the shared HAL-only bit-bang driver in
-`src/hal/impl/shared/drivers/onewire/`; the mock backend keeps deterministic scripted
+`src/hal/onewire/`; the mock backend keeps deterministic scripted
 responses for host tests.
 
 ```c
-#include <hal/hal_onewire.h>
+#include <hal/onewire/hal_onewire.h>
 
 typedef struct hal_onewire_impl_s *hal_onewire_t;
 

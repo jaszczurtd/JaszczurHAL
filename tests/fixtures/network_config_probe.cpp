@@ -1,4 +1,4 @@
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef JH_EXPECT_CYW43_GSPI_TARGET_HZ
 static_assert(HAL_CYW43_GSPI_TARGET_HZ == JH_EXPECT_CYW43_GSPI_TARGET_HZ);

@@ -3,12 +3,12 @@
  * @brief Combined MFRC522 RFID and PN532 NFC example on one SPI bus.
  */
 
-#include <hal/hal_app.h>
-#include <hal/hal_mfrc522.h>
-#include <hal/hal_pn532.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/nfc/hal_mfrc522.h>
+#include <hal/nfc/hal_pn532.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #include <cstdio>

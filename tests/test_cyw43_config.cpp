@@ -1,7 +1,7 @@
-#include "hal/impl/shared/network/jh_cyw43_config.h"
-#include "hal/impl/shared/network/jh_cyw43_scan.h"
-#include "hal/impl/shared/network/jh_dns_request_state.h"
-#include "hal/impl/shared/network/jh_icmp_echo.h"
+#include "hal/network/jh_cyw43_config.h"
+#include "hal/network/jh_cyw43_scan.h"
+#include "hal/network/jh_dns_request_state.h"
+#include "hal/network/jh_icmp_echo.h"
 #include "utils/unity.h"
 #include <string.h>
 

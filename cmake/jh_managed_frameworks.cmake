@@ -42,7 +42,7 @@ function(jh_managed_framework_configure_sources)
     if(PICO_RISCV AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         set_property(
             SOURCE
-                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/impl/shared/frameworks/lodepng/lodepng.cpp"
+                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/codecs/lodepng/lodepng.cpp"
             APPEND PROPERTY COMPILE_OPTIONS -fno-inline)
     endif()
 endfunction()

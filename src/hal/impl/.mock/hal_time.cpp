@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_serial.h"
-#include "../../hal_time.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/time/hal_time.h"
 #include "hal_mock.h"
 
 #include <stdio.h>

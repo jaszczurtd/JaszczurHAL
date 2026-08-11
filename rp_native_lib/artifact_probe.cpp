@@ -3,7 +3,7 @@
  * @brief Build-only native Pico SDK link and artifact-generation probe.
  */
 
-#include "hal/hal_system.h"
+#include "hal/system/hal_system.h"
 
 #include <pico/stdlib.h>
 

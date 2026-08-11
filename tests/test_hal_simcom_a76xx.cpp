@@ -1,7 +1,7 @@
-#include "hal/hal_modem_at.h"
-#include "hal/hal_simcom_a76xx.h"
-#include "hal/hal_uart.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/modem/hal_modem_at.h"
+#include "hal/modem/hal_simcom_a76xx.h"
+#include "hal/serial/hal_uart.h"
 #include "utils/unity.h"
 
 #include <stdbool.h>

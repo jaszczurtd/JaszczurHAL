@@ -1,6 +1,6 @@
 #include "freertos_posix_serial_port.h"
 
-#include "hal/impl/shared/debug/jh_serial_port.h"
+#include "hal/debug/jh_serial_port.h"
 
 #include <string.h>
 

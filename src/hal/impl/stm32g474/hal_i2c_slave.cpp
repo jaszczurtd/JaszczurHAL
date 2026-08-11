@@ -1,16 +1,17 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_I2C_SLAVE
 
-#include "../../hal_i2c_slave.h"
-#include "../../hal_sync.h"
+#include "hal/i2c/hal_i2c_slave.h"
+#include "hal/system/hal_sync.h"
 
 #include <stddef.h>
 #include <string.h>
 
 #ifdef JH_STM32G474_HW
+#include "port/stm32g474_i2c_pins.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -61,13 +62,6 @@ enum {
 
 typedef struct {
   uint8_t controller;
-  bool is_sda;
-  uint8_t pin;
-  uint8_t af;
-} i2c_slave_pin_af_t;
-
-typedef struct {
-  uint8_t controller;
   uint32_t base;
   uint32_t rcc_mask;
   uint8_t ev_irqn;
@@ -76,20 +70,6 @@ typedef struct {
   uint8_t default_scl_pin;
 } i2c_slave_hw_desc_t;
 
-static const i2c_slave_pin_af_t k_i2c_slave_pin_map[] = {
-    {I2C_CTRL_1, false, JH_STM32_PIN(1u, 8u), 4u},
-    {I2C_CTRL_1, false, JH_STM32_PIN(0u, 13u), 4u},
-    {I2C_CTRL_1, false, JH_STM32_PIN(0u, 15u), 4u},
-    {I2C_CTRL_1, true, JH_STM32_PIN(1u, 7u), 4u},
-    {I2C_CTRL_1, true, JH_STM32_PIN(1u, 9u), 4u},
-    {I2C_CTRL_1, true, JH_STM32_PIN(0u, 14u), 4u},
-    {I2C_CTRL_2, false, JH_STM32_PIN(0u, 9u), 4u},
-    {I2C_CTRL_2, false, JH_STM32_PIN(2u, 4u), 4u},
-    {I2C_CTRL_2, false, JH_STM32_PIN(5u, 6u), 4u},
-    {I2C_CTRL_2, true, JH_STM32_PIN(0u, 8u), 4u},
-    {I2C_CTRL_2, true, JH_STM32_PIN(5u, 0u), 4u},
-};
-
 static const i2c_slave_hw_desc_t k_i2c_slave_hw_desc[2] = {
     {I2C_CTRL_1, I2C1_BASE, RCC_APB1ENR1_I2C1EN, I2C1_EV_IRQn, I2C1_ER_IRQn,
      JH_STM32_PIN(1u, 9u), JH_STM32_PIN(1u, 8u)},
@@ -97,60 +77,13 @@ static const i2c_slave_hw_desc_t k_i2c_slave_hw_desc[2] = {
      JH_STM32_PIN(0u, 8u), JH_STM32_PIN(0u, 9u)},
 };
 
-static inline uint32_t i2c_slave_pin_port(uint8_t pin) {
-  return (uint32_t)(pin >> 4);
-}
-
-static inline uint32_t i2c_slave_pin_num(uint8_t pin) {
-  return (uint32_t)(pin & 0x0Fu);
-}
-
 static bool i2c_slave_pin_find_af(uint8_t controller, bool is_sda, uint8_t pin,
                                   uint8_t *out_af) {
-  for (size_t i = 0u;
-       i < (sizeof(k_i2c_slave_pin_map) / sizeof(k_i2c_slave_pin_map[0]));
-       ++i) {
-    const i2c_slave_pin_af_t *m = &k_i2c_slave_pin_map[i];
-    if (m->controller == controller && m->is_sda == is_sda && m->pin == pin) {
-      if (out_af != NULL) {
-        *out_af = m->af;
-      }
-      return true;
-    }
-  }
-  return false;
-}
-
-static void i2c_slave_gpio_enable_clock(uint32_t port) {
-  if (port <= 6u) {
-    RCC_AHB2ENR |= (1u << port);
-    (void)RCC_AHB2ENR;
-  }
+  return jh_stm32g474_i2c_find_af(controller, is_sda, pin, out_af);
 }
 
 static void i2c_slave_gpio_set_af_od_pullup(uint8_t pin, uint8_t af) {
-  const uint32_t port = i2c_slave_pin_port(pin);
-  const uint32_t n = i2c_slave_pin_num(pin);
-  if (port > 6u) {
-    return;
-  }
-
-  i2c_slave_gpio_enable_clock(port);
-  GPIO_MODER(port) =
-      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_AF << (n * 2u));
-  GPIO_OTYPER(port) |= (1u << n);
-  GPIO_OSPEEDR(port) |= (0x3u << (n * 2u));
-  GPIO_PUPDR(port) =
-      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_UP << (n * 2u));
-
-  if (n < 8u) {
-    GPIO_AFRL(port) =
-        (GPIO_AFRL(port) & ~(0xFu << (n * 4u))) | ((uint32_t)af << (n * 4u));
-  } else {
-    const uint32_t p = n - 8u;
-    GPIO_AFRH(port) =
-        (GPIO_AFRH(port) & ~(0xFu << (p * 4u))) | ((uint32_t)af << (p * 4u));
-  }
+  jh_stm32g474_i2c_set_af_od_pullup(pin, af);
 }
 
 static void i2c_slave_nvic_enable(uint8_t irqn) {

@@ -1,11 +1,11 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #if defined(HAL_ENABLE_CAN) && defined(HAL_ENABLE_STM32G474_FDCAN) &&          \
     !defined(HAL_ENABLE_MCP2515) && !defined(HAL_ENABLE_MCP251XFD)
 
-#include "../../hal_can.h"
+#include "hal/can/hal_can.h"
 
 hal_can_config_t hal_can_default_config(void) {
   hal_can_config_t cfg = {};

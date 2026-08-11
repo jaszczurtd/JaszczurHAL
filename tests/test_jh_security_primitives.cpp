@@ -1,5 +1,5 @@
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/jh_secure_random.h"
+#include "hal/security/jh_secure_random.h"
 #include "utils/unity.h"
 
 #include <string.h>

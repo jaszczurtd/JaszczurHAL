@@ -1,4 +1,4 @@
-#include "hal/hal_dma_pwm_audio.h"
+#include "hal/audio/hal_dma_pwm_audio.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 

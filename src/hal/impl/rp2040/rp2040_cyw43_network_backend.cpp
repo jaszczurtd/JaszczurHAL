@@ -1,13 +1,13 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && defined(HAL_NETWORK_BACKEND_CYW43)
 
-#include "../shared/network/jh_cyw43_provider.h"
-#include "../shared/network/jh_net_address_utils.h"
-#include "../shared/network/jh_network_backend.h"
+#include "hal/network/jh_cyw43_provider.h"
+#include "hal/network/jh_net_address_utils.h"
+#include "hal/network/jh_network_backend.h"
 
 #include <string.h>
 

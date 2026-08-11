@@ -6,7 +6,7 @@ Covers: managed `cJSON` and `cJSON_Utils` enabled by `HAL_ENABLE_CJSON`.
 
 `cJSON` is a small C JSON parser/generator fetched into `third_party/cJSON` at
 the commit pinned by `third_party/cjson_version.conf`. Thin integration wrappers
-in `src/hal/impl/shared/frameworks/cjson/` gate the upstream headers and sources
+in `src/hal/codecs/cjson/` gate the upstream headers and sources
 behind `HAL_ENABLE_CJSON` while preserving the public include path.
 
 Managed version: `cJSON` 1.7.18.
@@ -34,8 +34,8 @@ flag.
 Direct include, safe from both C and C++:
 
 ```c
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/codecs/cjson/cJSON_Utils.h>
 ```
 
 For C++ files that already use the utility aggregator, `tools.h` also exposes
@@ -117,8 +117,8 @@ Important shared/global state:
 ## Example: Parse Configuration
 
 ```c
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/hal_serial.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/serial/hal_serial.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -172,8 +172,8 @@ Use `cJSON_PrintPreallocated()` when the output has a bounded size and you want
 to avoid allocating a print buffer.
 
 ```c
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/hal_serial.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/serial/hal_serial.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -223,8 +223,8 @@ This pattern works well with `cJSON_Add*ToObject()` helpers and
 `cJSON_PrintUnformatted()`, because both return pointers that must be checked.
 
 ```c
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/hal_system.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/system/hal_system.h>
 #include <stdbool.h>
 
 typedef struct {
@@ -265,8 +265,8 @@ creating the tree or printing the final JSON.
 ## Example: JSON Pointer And Merge Patch
 
 ```c
-#include <hal/impl/shared/frameworks/cjson/cJSON.h>
-#include <hal/impl/shared/frameworks/cjson/cJSON_Utils.h>
+#include <hal/codecs/cjson/cJSON.h>
+#include <hal/codecs/cjson/cJSON_Utils.h>
 #include <stdbool.h>
 
 static bool update_uart_config(cJSON **root_inout) {

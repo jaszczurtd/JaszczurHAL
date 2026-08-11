@@ -1,4 +1,4 @@
-#include "hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio_runtime.h"
+#include "hal/network/cyw43/jh_cyw43_radio_runtime.h"
 #include "utils/unity.h"
 
 #include <string.h>

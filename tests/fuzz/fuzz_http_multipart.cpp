@@ -1,5 +1,5 @@
-#include "hal/hal_http_files.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/http/hal_http_files.h"
 
 #include <algorithm>
 #include <cstddef>

@@ -1,9 +1,9 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_RP && defined(HAL_ENABLE_OTA)
 
-#include "../../../../hal_config.h"
-#include "../../../../hal_crypto.h"
+#include "hal/core/hal_config.h"
+#include "hal/security/hal_crypto.h"
 #include "rp_flash_storage.h"
 #include "rp_ota_storage.h"
 
@@ -219,8 +219,7 @@ hal_status_t flush_page(void) {
   }
   if (status == HAL_OK) {
     status = jh_rp_flash_storage_program(&s_writer.staging, page_offset,
-                                         s_writer.page,
-                                         sizeof(s_writer.page));
+                                         s_writer.page, sizeof(s_writer.page));
   }
   if (status == HAL_OK) {
     s_writer.page_used = 0u;

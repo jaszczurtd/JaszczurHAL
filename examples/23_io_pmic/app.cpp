@@ -3,20 +3,20 @@
  * @brief Combined external I/O, converter, PMIC and RGB LED example.
  */
 
-#include <hal/hal_adp5360.h>
-#include <hal/hal_app.h>
-#include <hal/hal_hc595.h>
-#include <hal/hal_i2c.h>
-#include <hal/hal_mcp23017.h>
-#include <hal/hal_mcp3221.h>
-#include <hal/hal_mcp4725.h>
-#include <hal/hal_pca9654e.h>
-#include <hal/hal_pcf8574.h>
-#include <hal/hal_rgb_led.h>
-#include <hal/hal_spi.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/analog/hal_mcp3221.h>
+#include <hal/analog/hal_mcp4725.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/core/hal_target.h>
+#include <hal/gpio/hal_hc595.h>
+#include <hal/gpio/hal_mcp23017.h>
+#include <hal/gpio/hal_pca9654e.h>
+#include <hal/gpio/hal_pcf8574.h>
+#include <hal/gpio/hal_rgb_led.h>
+#include <hal/i2c/hal_i2c.h>
+#include <hal/power/hal_adp5360.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #if HAL_TARGET_IS_RP

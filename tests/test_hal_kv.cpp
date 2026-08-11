@@ -1,6 +1,6 @@
-#include "hal/hal_eeprom.h"
-#include "hal/hal_kv.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/storage/hal_eeprom.h"
+#include "hal/storage/hal_kv.h"
 #include "utils/unity.h"
 
 #include <atomic>

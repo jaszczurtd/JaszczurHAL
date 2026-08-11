@@ -1,7 +1,7 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 #define private public
-#include "hal/impl/shared/drivers/mcp2515/mcp2515_driver.h"
+#include "hal/can/mcp2515/mcp2515_driver.h"
 #undef private
 
 /* MCP2515 datasheet (register map: TXBnSIDH/TXBnSIDL/TXBnEID8/TXBnEID0):

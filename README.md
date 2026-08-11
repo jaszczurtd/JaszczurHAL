@@ -110,7 +110,7 @@ see:
 ## Target selection example (multiplatform)
 
 Separate from the per-module flags, JaszczurHAL selects exactly one hardware
-backend through `src/hal/hal_target.h`. Define one
+backend through `src/hal/core/hal_target.h`. Define one
 of the following in `hal_project_config.h` (or via `-D`):
 
 ```c
@@ -295,7 +295,7 @@ Primary docs:
   (fork of [garthoff/Timers](https://github.com/garthoff/Timers)).
 - Unity test framework is pinned to the project fork:
   [Unity pin](third_party/unity_version.conf)
-- The shared display stack (`src/hal/impl/shared/drivers/display/`) is a portable,
+- The shared display stack (`src/hal/display/drivers/`) is a portable,
   HAL-based reimplementation. The GFX engine (`jh_gfx.*`) adapts rendering
   algorithms from [Adafruit GFX Library](https://github.com/adafruit/Adafruit-GFX-Library),
   and the panel drivers (`ili9341_driver.*`, `st77xx_driver.*`,
@@ -314,19 +314,19 @@ Primary docs:
   [lwIP pin](third_party/lwip_version.conf),
   [littlefs pin](third_party/littlefs_version.conf),
   [Semtech SX126x driver pin](third_party/sx126x_driver_version.conf),
-  [PubSubClient](src/hal/impl/shared/frameworks/PubSubClient/),
-  [shared WireGuard/lwIP engine](src/hal/impl/shared/frameworks/wireguard/),
-  [LiquidCrystal / HD44780](src/hal/impl/shared/drivers/hd44780/),
-  [Brian Varren DACless](src/hal/impl/shared/drivers/dacless/),
-  [Seeed/Loovee MCP_CAN / MCP2515](src/hal/impl/shared/drivers/mcp2515/),
-  [MCP251XFD](src/hal/impl/shared/drivers/mcp251xfd/),
-  [Adafruit NeoPixel](src/hal/impl/shared/drivers/neopixel/),
-  [Adafruit STMPE610](src/hal/impl/shared/drivers/stmpe610/),
-  [Adafruit TSC2007](src/hal/impl/shared/drivers/tsc2007/),
-  [Paul Stoffregen OneWire](src/hal/impl/shared/drivers/onewire/),
-  [Bonezegei DHT11/DHT22 by Bonezegei (Jofel Batutay)](src/hal/impl/shared/drivers/dht/),
-  [Adafruit MAX6675](src/hal/impl/shared/drivers/max6675/),
-  [Adafruit MCP9600](src/hal/impl/shared/drivers/mcp9600/),
-  [ArtronShop BH1750](src/hal/impl/shared/drivers/bh1750/),
-  [Eric Ayars / JeeLabs / RTClib-style DS3231](src/hal/impl/shared/drivers/ds3231/),
-  [IRsmallDecoder / RC5 decoder attribution](src/hal/impl/shared/frameworks/irsmall_decoder/).
+  [PubSubClient](src/hal/network/mqtt/PubSubClient/),
+  [shared WireGuard/lwIP engine](src/hal/network/wireguard/core/),
+  [LiquidCrystal / HD44780](src/hal/display/hd44780/),
+  [Brian Varren DACless](src/hal/audio/dacless/),
+  [Seeed/Loovee MCP_CAN / MCP2515](src/hal/can/mcp2515/),
+  [MCP251XFD](src/hal/can/mcp251xfd/),
+  [Adafruit NeoPixel](src/hal/gpio/neopixel/),
+  [Adafruit STMPE610](src/hal/input/stmpe610/),
+  [Adafruit TSC2007](src/hal/input/tsc2007/),
+  [Paul Stoffregen OneWire](src/hal/onewire/),
+  [Bonezegei DHT11/DHT22 by Bonezegei (Jofel Batutay)](src/hal/temperature/dht/),
+  [Adafruit MAX6675](src/hal/temperature/max6675/),
+  [Adafruit MCP9600](src/hal/temperature/mcp9600/),
+  [ArtronShop BH1750](src/hal/sensors/bh1750/),
+  [Eric Ayars / JeeLabs / RTClib-style DS3231](src/hal/rtc/ds3231/),
+  [IRsmallDecoder / RC5 decoder attribution](src/hal/input/irsmall_decoder/).

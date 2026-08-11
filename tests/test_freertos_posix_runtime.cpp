@@ -1,10 +1,10 @@
 #include "freertos_posix_serial_port.h"
-#include "hal/hal_serial.h"
-#include "hal/hal_sync.h"
-#include "hal/hal_system.h"
-#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
-#include "hal/impl/shared/hal_mutex_once.h"
-#include "hal/impl/shared/network/jh_network_service.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/network/jh_network_service.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
+#include "hal/timers/smart_timers/SmartTimers.h"
 #include "utils/unity.h"
 
 #include <FreeRTOS.h>

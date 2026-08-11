@@ -7,12 +7,12 @@
  * one firmware project.
  */
 
-#include <hal/hal_app.h>
-#include <hal/hal_display.h>
-#include <hal/hal_hd44780.h>
-#include <hal/hal_i2c.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/display/hal_display.h>
+#include <hal/display/hal_hd44780.h>
+#include <hal/i2c/hal_i2c.h>
+#include <hal/system/hal_system.h>
 #include <tools.h>
 
 #include <new>

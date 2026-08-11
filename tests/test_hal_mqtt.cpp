@@ -1,5 +1,6 @@
-#include "hal/hal_mqtt.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/mqtt/hal_mqtt.h"
+#include "support/tls_test_helpers.h"
 #include "utils/unity.h"
 
 #include <stdio.h>
@@ -141,22 +142,9 @@ void test_invalid_inputs_and_failed_connect_are_rejected(void) {
 void test_tls_configuration_is_fail_closed_and_plaintext_can_be_restored(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ECONFIG, hal_mqtt_configure_tls_ex(NULL));
 
-  static const uint8_t dn[] = {0x30u, 0x00u};
-  static const uint8_t modulus[] = {0x01u};
-  static const uint8_t exponent[] = {0x03u};
-  hal_tls_trust_anchor_t anchor = {};
-  anchor.subject_dn = dn;
-  anchor.subject_dn_length = sizeof(dn);
-  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
-  anchor.key.rsa.modulus = modulus;
-  anchor.key.rsa.modulus_length = sizeof(modulus);
-  anchor.key.rsa.exponent = exponent;
-  anchor.key.rsa.exponent_length = sizeof(exponent);
-  hal_tls_security_config_t security = {};
-  security.trust_anchors = &anchor;
-  security.trust_anchor_count = 1u;
-  security.get_time = mqtt_test_time;
-  security.get_entropy = mqtt_test_entropy;
+  hal_tls_trust_anchor_t anchor = jh_test_tls_rsa_anchor();
+  hal_tls_security_config_t security =
+      jh_test_tls_security_config(&anchor, mqtt_test_time, mqtt_test_entropy);
 
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mqtt_configure_tls_ex(&security));
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mqtt_disable_tls_ex());

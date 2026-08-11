@@ -1,5 +1,6 @@
-#include "hal/hal_http_server.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/http/hal_http_server.h"
+#include "support/http_server_test_helpers.h"
 #include "utils/unity.h"
 
 #include <string.h>
@@ -30,19 +31,6 @@ void setUp(void) {
 void tearDown(void) {
   hal_http_server_stop();
   hal_http_server_clear_routes();
-}
-
-static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
-                                        uint8_t d, uint16_t port) {
-  hal_net_endpoint_t endpoint = {};
-  endpoint.family = HAL_NET_AF_INET;
-  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  endpoint.addr[0] = a;
-  endpoint.addr[1] = b;
-  endpoint.addr[2] = c;
-  endpoint.addr[3] = d;
-  endpoint.port = port;
-  return endpoint;
 }
 
 static hal_status_t hello_handler(const hal_http_request_t *request,
@@ -99,42 +87,13 @@ static hal_status_t failing_handler(const hal_http_request_t *request,
   return HAL_EIO;
 }
 
-static hal_tcp_socket_t send_request(uint16_t port, const char *request) {
-  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_server_start(port));
-  hal_tcp_listener_t listener = hal_mock_tcp_listener_find_by_port(port);
-  TEST_ASSERT_NOT_NULL(listener);
-
-  hal_net_endpoint_t remote = make_endpoint(192u, 168u, 1u, 50u, 51000u);
-  TEST_ASSERT_TRUE(hal_mock_tcp_listener_inject_client(listener, &remote));
-  hal_http_server_poll();
-
-  hal_tcp_socket_t socket = hal_mock_tcp_get_last_accepted_socket();
-  TEST_ASSERT_NOT_NULL(socket);
-  hal_mock_tcp_inject_rx(socket, (const uint8_t *)request,
-                         (uint16_t)strlen(request));
-  hal_http_server_poll();
-  return socket;
-}
-
-static void assert_response_contains(hal_tcp_socket_t socket,
-                                     const char *needle) {
-  static char text[768];
-  uint16_t len = hal_mock_tcp_get_last_tx_len(socket);
-  TEST_ASSERT_LESS_THAN(sizeof(text), len);
-  memcpy(text, hal_mock_tcp_get_last_tx_payload(socket), len);
-  text[len] = '\0';
-  const char *payload = text;
-  TEST_ASSERT_NOT_NULL(payload);
-  TEST_ASSERT_NOT_NULL(strstr(payload, needle));
-}
-
 void test_get_route_sends_ok_response(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_http_server_route(HAL_HTTP_METHOD_GET, "/hello",
                                               hello_handler, NULL));
 
   hal_tcp_socket_t socket =
-      send_request(8080u, "GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+      send_http_request(8080u, "GET /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
 
   TEST_ASSERT_TRUE(s_seen_handler);
   assert_response_contains(socket, "HTTP/1.1 200 OK\r\n");
@@ -148,10 +107,10 @@ void test_post_route_exposes_query_and_body(void) {
       HAL_OK,
       hal_http_server_route(HAL_HTTP_METHOD_POST, "/api", post_handler, NULL));
 
-  hal_tcp_socket_t socket =
-      send_request(8081u, "POST /api?mode=test HTTP/1.1\r\nHost: unit\r\n"
-                          "Content-Type: application/json\r\nX-Unit: yes\r\n"
-                          "Content-Length: 7\r\n\r\npayload");
+  hal_tcp_socket_t socket = send_http_request(
+      8081u, "POST /api?mode=test HTTP/1.1\r\nHost: unit\r\n"
+             "Content-Type: application/json\r\nX-Unit: yes\r\n"
+             "Content-Length: 7\r\n\r\npayload");
 
   TEST_ASSERT_TRUE(s_seen_handler);
   TEST_ASSERT_EQUAL_STRING("/api", s_seen_path);
@@ -169,7 +128,7 @@ void test_post_route_exposes_query_and_body(void) {
 
 void test_unknown_route_returns_404(void) {
   hal_tcp_socket_t socket =
-      send_request(8082u, "GET /missing HTTP/1.1\r\nHost: unit\r\n\r\n");
+      send_http_request(8082u, "GET /missing HTTP/1.1\r\nHost: unit\r\n\r\n");
 
   TEST_ASSERT_FALSE(s_seen_handler);
   assert_response_contains(socket, "HTTP/1.1 404 Not Found\r\n");
@@ -182,7 +141,7 @@ void test_head_sends_headers_without_body(void) {
                                               hello_handler, NULL));
 
   hal_tcp_socket_t socket =
-      send_request(8083u, "HEAD /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
+      send_http_request(8083u, "HEAD /hello HTTP/1.1\r\nHost: unit\r\n\r\n");
 
   TEST_ASSERT_TRUE(s_seen_handler);
   assert_response_contains(socket, "HTTP/1.1 200 OK\r\n");
@@ -201,7 +160,7 @@ void test_handler_failure_returns_500(void) {
                                               failing_handler, NULL));
 
   hal_tcp_socket_t socket =
-      send_request(8084u, "GET /fail HTTP/1.1\r\nHost: unit\r\n\r\n");
+      send_http_request(8084u, "GET /fail HTTP/1.1\r\nHost: unit\r\n\r\n");
 
   assert_response_contains(socket, "HTTP/1.1 500 Internal Server Error\r\n");
   assert_response_contains(socket, "\r\n\r\nInternal Server Error\n");
@@ -236,8 +195,8 @@ void test_prefix_route_matches_nested_path(void) {
       HAL_OK, hal_http_server_route_prefix(HAL_HTTP_METHOD_GET, "/assets",
                                            prefix_handler, NULL));
 
-  hal_tcp_socket_t socket =
-      send_request(8085u, "GET /assets/app.js HTTP/1.1\r\nHost: unit\r\n\r\n");
+  hal_tcp_socket_t socket = send_http_request(
+      8085u, "GET /assets/app.js HTTP/1.1\r\nHost: unit\r\n\r\n");
 
   TEST_ASSERT_TRUE(s_seen_handler);
   TEST_ASSERT_EQUAL_STRING("/assets/app.js", s_seen_path);
@@ -246,9 +205,9 @@ void test_prefix_route_matches_nested_path(void) {
 }
 
 void test_content_length_overflow_is_rejected_before_body_indexing(void) {
-  hal_tcp_socket_t socket =
-      send_request(8086u, "POST /api HTTP/1.1\r\nHost: unit\r\nContent-Length: "
-                          "184467440737095516160\r\n\r\n");
+  hal_tcp_socket_t socket = send_http_request(
+      8086u, "POST /api HTTP/1.1\r\nHost: unit\r\nContent-Length: "
+             "184467440737095516160\r\n\r\n");
 
   TEST_ASSERT_FALSE(s_seen_handler);
   assert_response_contains(socket, "HTTP/1.1 413 Payload Too Large\r\n");
@@ -256,20 +215,20 @@ void test_content_length_overflow_is_rejected_before_body_indexing(void) {
 
 void test_ambiguous_request_framing_is_rejected(void) {
   hal_tcp_socket_t invalid =
-      send_request(8087u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
-                          "Content-Length: 1x\r\n\r\nx");
+      send_http_request(8087u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+                               "Content-Length: 1x\r\n\r\nx");
   assert_response_contains(invalid, "HTTP/1.1 400 Bad Request\r\n");
   hal_http_server_stop();
 
-  hal_tcp_socket_t duplicate =
-      send_request(8088u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
-                          "Content-Length: 1\r\nContent-Length: 1\r\n\r\nx");
+  hal_tcp_socket_t duplicate = send_http_request(
+      8088u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+             "Content-Length: 1\r\nContent-Length: 1\r\n\r\nx");
   assert_response_contains(duplicate, "HTTP/1.1 400 Bad Request\r\n");
   hal_http_server_stop();
 
   hal_tcp_socket_t transfer =
-      send_request(8089u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
-                          "Transfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
+      send_http_request(8089u, "POST /api HTTP/1.1\r\nHost: unit\r\n"
+                               "Transfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
   assert_response_contains(transfer, "HTTP/1.1 400 Bad Request\r\n");
 }
 
@@ -280,7 +239,7 @@ void test_route_owns_path_and_rejects_overlong_path(void) {
   path[1] = 'x';
 
   hal_tcp_socket_t socket =
-      send_request(8090u, "GET /owned HTTP/1.1\r\nHost: unit\r\n\r\n");
+      send_http_request(8090u, "GET /owned HTTP/1.1\r\nHost: unit\r\n\r\n");
   TEST_ASSERT_TRUE(s_seen_handler);
   assert_response_contains(socket, "HTTP/1.1 200 OK\r\n");
 

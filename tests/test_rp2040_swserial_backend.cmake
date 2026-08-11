@@ -8,7 +8,7 @@ set(_pio_program
 set(_pio_source
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/swserial/swserial.pio")
 set(_shared_impl
-    "${JH_ROOT}/src/hal/impl/shared/drivers/swserial/hal_swserial.cpp")
+    "${JH_ROOT}/src/hal/serial/swserial/hal_swserial.cpp")
 
 if(NOT EXISTS "${_rp2040_impl}")
     message(FATAL_ERROR

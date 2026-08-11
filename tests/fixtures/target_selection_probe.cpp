@@ -1,13 +1,13 @@
 #if defined(JH_PROBE_UMBRELLA)
 #include "JaszczurHAL.h"
 #elif defined(JH_PROBE_HAL_CONFIG)
-#include "hal/hal_config.h"
+#include "hal/core/hal_config.h"
 #elif defined(JH_PROBE_FORCED_TARGET)
-#include "hal/hal_board.h"
+#include "hal/system/hal_board.h"
 #else
-#include "hal/hal_target.h"
+#include "hal/core/hal_target.h"
 #if defined(JH_EXPECT_BOARD_ID)
-#include "hal/hal_board.h"
+#include "hal/system/hal_board.h"
 #endif
 #endif
 

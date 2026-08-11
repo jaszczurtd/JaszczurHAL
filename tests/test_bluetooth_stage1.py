@@ -68,7 +68,7 @@ for recipe, text in (("RP", rp_cmake), ("STM32", stm32_cmake)):
     )
 
 config = (
-    ROOT / "src/hal/impl/shared/bluetooth/btstack_config.h"
+    ROOT / "src/hal/bluetooth/btstack_config.h"
 ).read_text(encoding="utf-8")
 for expected in (
     "ENABLE_LE_PERIPHERAL",
@@ -80,7 +80,7 @@ for expected in (
 for forbidden in ("ENABLE_CLASSIC", "ENABLE_LE_CENTRAL", "ENABLE_MESH"):
     require(forbidden not in config, f"Stage 1 unexpectedly enables {forbidden}")
 
-shared_bus_dir = ROOT / "src/hal/impl/shared/drivers/cyw43-driver/vendor/src"
+shared_bus_dir = ROOT / "src/hal/network/cyw43/vendor/src"
 shared_bus = "\n".join(
     (shared_bus_dir / name).read_text(encoding="utf-8")
     for name in (
@@ -93,13 +93,13 @@ for forbidden in ("assert(", "panic(", "cyw43_malloc", "cyw43_free"):
 
 transport_adapter = (
     ROOT
-    / "src/hal/impl/shared/bluetooth/jh_btstack_hci_transport_cyw43.c"
+    / "src/hal/bluetooth/jh_btstack_hci_transport_cyw43.c"
 ).read_text(encoding="utf-8")
 transport = (
-    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_hci_transport.c"
+    ROOT / "src/hal/bluetooth/jh_ble_hci_transport.c"
 ).read_text(encoding="utf-8")
 transport_header = (
-    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_hci_transport.h"
+    ROOT / "src/hal/bluetooth/jh_ble_hci_transport.h"
 ).read_text(encoding="utf-8")
 require(
     "length != 0u && length < JH_BLE_HCI_FRAME_HEADER_SIZE" in transport,
@@ -133,7 +133,7 @@ require(
 )
 
 controller = (
-    ROOT / "src/hal/impl/shared/bluetooth/jh_ble_controller_cyw43.c"
+    ROOT / "src/hal/bluetooth/jh_ble_controller_cyw43.c"
 ).read_text(encoding="utf-8")
 for operation in (
     "cyw43_bluetooth_hci_init",
@@ -157,7 +157,7 @@ for backend in (
     )
 
 run_loop = (
-    ROOT / "src/hal/impl/shared/bluetooth/jh_btstack_run_loop.c"
+    ROOT / "src/hal/bluetooth/jh_btstack_run_loop.c"
 ).read_text(encoding="utf-8")
 require(
     "jh_btstack_run_loop_service_once" in run_loop
@@ -166,7 +166,7 @@ require(
 )
 
 probe = (
-    ROOT / "src/hal/impl/shared/bluetooth/jh_bluetooth_stage1_probe.c"
+    ROOT / "src/hal/bluetooth/jh_bluetooth_stage1_probe.c"
 ).read_text(encoding="utf-8")
 require(
     "hci_subevent_le_connection_complete_get_status(packet)" in probe,
@@ -195,7 +195,7 @@ require(
 
 radio_facade = (
     ROOT
-    / "src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_radio.cpp"
+    / "src/hal/network/cyw43/jh_cyw43_radio.cpp"
 ).read_text(encoding="utf-8")
 for transition in (
     "jh_board_runtime_set_available(kCyw43Capabilities)",
@@ -219,7 +219,7 @@ for backend in (
 
 lwip_service = (
     ROOT
-    / "src/hal/impl/shared/drivers/cyw43-driver/jh_cyw43_lwip.cpp"
+    / "src/hal/network/cyw43/jh_cyw43_lwip.cpp"
 ).read_text(encoding="utf-8")
 require(
     lwip_service.index("jh_cyw43_driver_service(&host_wake)")

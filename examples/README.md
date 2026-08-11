@@ -215,10 +215,10 @@ mode. Host demo applications use a cooperative loop.
 Minimal application:
 
 ```c
-#include <hal/hal_app.h>
-#include <hal/hal_board.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_system.h>
+#include <hal/core/hal_app.h>
+#include <hal/system/hal_board.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/system/hal_system.h>
 
 void app_start(void) {
   hal_gpio_set_mode(HAL_LED_BUILTIN, HAL_GPIO_OUTPUT);

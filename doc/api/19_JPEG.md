@@ -51,7 +51,7 @@ For the C or C++ RGB565 helpers, include:
 The managed TJpgDec C API is available through:
 
 ```c
-#include <hal/impl/shared/frameworks/jpeg/tjpgd.h>
+#include <hal/codecs/jpeg/tjpgd.h>
 ```
 
 `tools.h` also exposes that header when `HAL_ENABLE_JPEG` is defined.

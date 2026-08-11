@@ -2,12 +2,12 @@
 #include <semphr.h>
 #include <task.h>
 
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_serial.h>
-#include <hal/hal_sync.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/serial/hal_serial.h>
+#include <hal/system/hal_sync.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #if !defined(HAL_ENABLE_FREERTOS)

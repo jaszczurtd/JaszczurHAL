@@ -1,6 +1,6 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_gpio.h"
+#include "hal/gpio/hal_gpio.h"
 #if HAL_BOARD_HAS_CYW43 && defined(HAL_LED_BUILTIN)
 #include "drivers/rp2040/rp2040_cyw43.h"
 #endif

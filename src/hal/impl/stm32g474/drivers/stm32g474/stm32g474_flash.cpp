@@ -1,8 +1,8 @@
-#include "../../../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../../../hal_config.h"
 #include "../../port/stm32g474_regs.h"
+#include "hal/core/hal_config.h"
 #include "stm32g474_flash.h"
 
 #include <string.h>

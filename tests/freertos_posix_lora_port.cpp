@@ -3,8 +3,8 @@
  * @brief Link-only GPIO/SPI port for the FreeRTOS LoRa facade regression.
  */
 
-#include "hal/hal_gpio.h"
-#include "hal/hal_spi.h"
+#include "hal/gpio/hal_gpio.h"
+#include "hal/spi/hal_spi.h"
 
 void hal_gpio_set_mode(uint8_t, hal_gpio_mode_t) {}
 

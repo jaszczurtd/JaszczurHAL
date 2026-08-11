@@ -1,19 +1,20 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_STM32G474
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #if defined(HAL_ENABLE_WIREGUARD)
 
-#include "../../hal_net.h"
-#include "../../hal_system.h"
-#include "../../hal_time.h"
-#include "../shared/drivers/cyw43-driver/jh_cyw43_driver.h"
-#include "../shared/frameworks/wireguard/crypto/crypto.h"
-#include "../shared/jh_secure_random.h"
-#include "../shared/network/jh_lwip_extension.h"
-#include "../shared/network/jh_lwip_status.h"
-#include "../shared/network/jh_network_backend.h"
+#include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/jh_lwip_extension.h"
+#include "hal/network/jh_lwip_extension_port_common.h"
+#include "hal/network/jh_lwip_status.h"
+#include "hal/network/jh_network_backend.h"
+#include "hal/network/wireguard/core/crypto/crypto.h"
+#include "hal/security/jh_secure_random.h"
+#include "hal/system/hal_system.h"
+#include "hal/time/hal_time.h"
 
 #include <lwip/ip_addr.h>
 #include <lwip/netif.h>
@@ -57,15 +58,11 @@ hal_status_t underlay_netif(void *, void **out_netif) {
 
 hal_status_t resolve_ipv4(void *, const char *host_or_ip,
                           uint8_t out_address[JH_LWIP_EXTENSION_IPV4_SIZE]) {
-  return hal_net_resolve_ipv4_ex(host_or_ip, out_address);
+  return jh_lwip_extension_resolve_ipv4(host_or_ip, out_address);
 }
 
 hal_status_t monotonic_ms(void *, uint32_t *out_millis) {
-  if (out_millis == nullptr) {
-    return HAL_EINVAL;
-  }
-  *out_millis = hal_millis();
-  return HAL_OK;
+  return jh_lwip_extension_monotonic_ms(out_millis);
 }
 
 hal_status_t random_bytes(void *, void *buffer, size_t size) {
@@ -97,39 +94,7 @@ hal_status_t tai64n_now(void *,
 hal_status_t send_udp_probe(void *,
                             const uint8_t address[JH_LWIP_EXTENSION_IPV4_SIZE],
                             uint16_t port) {
-  jh_lwip_extension_guard_t guard = {};
-  hal_status_t status = jh_lwip_extension_guard_enter(
-      jh_lwip_extension_platform_port(), true, &guard);
-  if (status != HAL_OK) {
-    return status;
-  }
-
-  struct udp_pcb *pcb = udp_new_ip_type(IPADDR_TYPE_V4);
-  if (pcb == nullptr) {
-    jh_lwip_extension_guard_leave(&guard);
-    return HAL_ENOMEM;
-  }
-  struct pbuf *packet = pbuf_alloc(PBUF_TRANSPORT, 1u, PBUF_RAM);
-  if (packet == nullptr) {
-    udp_remove(pcb);
-    jh_lwip_extension_guard_leave(&guard);
-    return HAL_ENOMEM;
-  }
-
-  const uint8_t payload = 0u;
-  const err_t copy_status = pbuf_take(packet, &payload, sizeof(payload));
-  if (copy_status == ERR_OK) {
-    ip_addr_t remote = {};
-    IP_ADDR4(&remote, address[0], address[1], address[2], address[3]);
-    status = jh_lwip_status_to_hal(udp_sendto(pcb, packet, &remote, port));
-  } else {
-    status = jh_lwip_status_to_hal(copy_status);
-  }
-
-  pbuf_free(packet);
-  udp_remove(pcb);
-  jh_lwip_extension_guard_leave(&guard);
-  return status;
+  return jh_lwip_extension_send_udp_probe(address, port);
 }
 
 const jh_lwip_extension_port_t s_port = {

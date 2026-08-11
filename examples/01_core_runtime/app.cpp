@@ -1,8 +1,8 @@
-#include <hal/hal_app.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_soft_timer.h>
-#include <hal/hal_system.h>
-#include <hal/hal_timer.h>
+#include <hal/core/hal_app.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/system/hal_system.h>
+#include <hal/timers/hal_soft_timer.h>
+#include <hal/timers/hal_timer.h>
 #include <tools.h>
 #include <utils/pidController.h>
 

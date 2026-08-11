@@ -1,4 +1,4 @@
-#include "hal/impl/shared/network/jh_network_service.h"
+#include "hal/network/jh_network_service.h"
 #include "utils/unity.h"
 
 #include <string.h>

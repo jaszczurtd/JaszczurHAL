@@ -1,5 +1,5 @@
-#include "hal/hal_mfrc522.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/nfc/hal_mfrc522.h"
 #include "utils/unity.h"
 
 class InitProbeBus : public MFRC522_BUS_DEVICE {

@@ -5,7 +5,7 @@
 ## `hal_gpio` - GPIO
 
 ```c
-#include <hal/hal_gpio.h>
+#include <hal/gpio/hal_gpio.h>
 
 typedef enum {
     HAL_GPIO_INPUT                  = 0,
@@ -108,7 +108,7 @@ if (status != HAL_OK) {
 ## `hal_pwm` - PWM
 
 ```c
-#include <hal/hal_pwm.h>
+#include <hal/gpio/hal_pwm.h>
 
 void hal_pwm_set_resolution(uint8_t bits);
 bool hal_pwm_is_pin_supported(uint8_t pin);
@@ -148,7 +148,7 @@ pins sharing the same TIM channel are not independent. Call
 ## `hal_dac` - True DAC output  *(optional - `HAL_ENABLE_DAC`)*
 
 ```c
-#include <hal/hal_dac.h>
+#include <hal/analog/hal_dac.h>
 
 bool hal_dac_is_supported(void);
 uint8_t hal_dac_resolution_bits(void);
@@ -180,7 +180,7 @@ result.
 ## `hal_pcnt` - Pulse / edge counter  *(optional - `HAL_ENABLE_PCNT`)*
 
 ```c
-#include <hal/hal_pcnt.h>
+#include <hal/analog/hal_pcnt.h>
 
 bool hal_pcnt_is_supported(void);
 uint8_t hal_pcnt_channel_count(void);
@@ -218,7 +218,7 @@ legacy init/read/read-and-reset wrappers retain their `bool`/`uint32_t` shapes.
 Use this instead of `hal_pwm` when you need a specific PWM frequency (e.g. 160 Hz, 300 Hz).
 
 ```c
-#include <hal/hal_pwm_freq.h>
+#include <hal/gpio/hal_pwm_freq.h>
 
 // Opaque handle
 typedef hal_pwm_freq_channel_impl_t *hal_pwm_freq_channel_t;
@@ -269,7 +269,7 @@ bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 ## `DAClessAudio` - PWM audio engine  *(optional - `HAL_ENABLE_DACLESS`)*
 
 ```cpp
-#include <hal/hal_dacless.h>
+#include <hal/audio/hal_dacless.h>
 
 struct DAClessConfig {
     uint8_t  pinPWM;      // default 6
@@ -343,7 +343,7 @@ safe to call from normal task/core context. Do not call `service()` from an ISR.
 ## `hal_adc` - Analog input
 
 ```c
-#include <hal/hal_adc.h>
+#include <hal/analog/hal_adc.h>
 
 void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);

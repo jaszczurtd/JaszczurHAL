@@ -11,7 +11,7 @@ empty translation unit, and any caller of these helpers fails at link
 time with an undefined-reference error.
 
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 
 // ChaCha20 / AEAD constants
 #define HAL_CHACHA20_KEY_BYTES            32u
@@ -104,7 +104,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_md5_hex(...)` and `hal_sha256_hex(...)` / `hal_hmac_sha256_hex(...)` output lowercase hex.
 - `hal_chacha20_xor(...)` supports in-place processing (`output == input`).
 - `hal_chacha20_poly1305_decrypt(...)` verifies tag before decryption and returns `false` on mismatch.
-- ChaCha20 / Poly1305 paths are delegated to the shared `impl/shared/frameworks/wireguard/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
+- ChaCha20 / Poly1305 paths are delegated to the shared `hal/network/wireguard/core/crypto` backend so HAL and WireGuard use the same source-of-truth primitive implementation.
 - For ChaCha20/AEAD, nonce must be unique per key; nonce reuse breaks security.
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
 - The `_ex` SHA-256 API supports bounded-memory streaming. `final_ex`
@@ -122,7 +122,7 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 
 **Example: Base64 encoding and decoding**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_base64(void) {
@@ -152,7 +152,7 @@ void example_base64(void) {
 
 **Example: MD5 hash (legacy checksum)**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_md5(void) {
@@ -176,7 +176,7 @@ void example_md5(void) {
 
 **Example: SHA-256 hash (preferred for security)**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_sha256(void) {
@@ -201,7 +201,7 @@ void example_sha256(void) {
 
 **Example: HMAC-SHA256 (message authentication)**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_hmac_sha256(void) {
@@ -228,7 +228,7 @@ void example_hmac_sha256(void) {
 
 **Example: ChaCha20 stream encryption**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_chacha20(void) {
@@ -266,7 +266,7 @@ void example_chacha20(void) {
 
 **Example: ChaCha20-Poly1305 AEAD (authenticated encryption)**
 ```c
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #include <string.h>
 
 void example_chacha20_poly1305(void) {

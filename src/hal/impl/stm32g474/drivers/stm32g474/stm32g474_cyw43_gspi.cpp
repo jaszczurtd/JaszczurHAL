@@ -1,13 +1,13 @@
-#include "../../../../hal_compiler.h"
-#include "../../../../hal_target.h"
+#include "hal/core/hal_compiler.h"
+#include "hal/core/hal_target.h"
 
 #if HAL_TARGET_IS_STM32G474
 
 #include "stm32g474_cyw43_gspi.h"
 
-#include "../../../../hal_gpio.h"
-#include "../../../../hal_system.h"
 #include "../../port/stm32g474_regs.h"
+#include "hal/gpio/hal_gpio.h"
+#include "hal/system/hal_system.h"
 
 #include <string.h>
 

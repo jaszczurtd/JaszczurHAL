@@ -1,7 +1,8 @@
-#include "hal/hal_net.h"
-#include "hal/hal_tls.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/network/jh_tls_timeout_policy.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/tls/hal_tls.h"
+#include "hal/network/tls/jh_tls_timeout_policy.h"
+#include "support/tls_test_helpers.h"
 #include "utils/unity.h"
 
 #include <string.h>
@@ -32,21 +33,6 @@ static hal_status_t reentrant_time(void *context, uint64_t *out_unix_seconds) {
   }
   *out_unix_seconds = HAL_TLS_MIN_VALID_UNIX_TIME;
   return HAL_OK;
-}
-
-static hal_tls_trust_anchor_t fake_anchor(void) {
-  static const uint8_t dn[] = {0x30u, 0x00u};
-  static const uint8_t modulus[] = {1u};
-  static const uint8_t exponent[] = {3u};
-  hal_tls_trust_anchor_t anchor = {};
-  anchor.subject_dn = dn;
-  anchor.subject_dn_length = sizeof(dn);
-  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
-  anchor.key.rsa.modulus = modulus;
-  anchor.key.rsa.modulus_length = sizeof(modulus);
-  anchor.key.rsa.exponent = exponent;
-  anchor.key.rsa.exponent_length = sizeof(exponent);
-  return anchor;
 }
 
 void setUp(void) { hal_mock_time_reset(); }
@@ -173,17 +159,7 @@ void test_security_configuration_requires_ca_time_and_entropy(void) {
   hal_tls_security_config_t security = {};
   TEST_ASSERT_EQUAL_INT(
       HAL_ECONFIG, hal_tls_client_configure_security_ex(client, &security));
-  static const uint8_t dn[] = {0x30u, 0x00u};
-  static const uint8_t modulus[] = {1u};
-  static const uint8_t exponent[] = {3u};
-  hal_tls_trust_anchor_t anchor = {};
-  anchor.subject_dn = dn;
-  anchor.subject_dn_length = sizeof(dn);
-  anchor.key_type = HAL_TLS_TRUST_KEY_RSA;
-  anchor.key.rsa.modulus = modulus;
-  anchor.key.rsa.modulus_length = sizeof(modulus);
-  anchor.key.rsa.exponent = exponent;
-  anchor.key.rsa.exponent_length = sizeof(exponent);
+  hal_tls_trust_anchor_t anchor = jh_test_tls_rsa_anchor();
   uint64_t unix_seconds = HAL_TLS_MIN_VALID_UNIX_TIME;
   security.trust_anchors = &anchor;
   security.trust_anchor_count = 1u;
@@ -237,7 +213,7 @@ void test_security_callback_reentry_returns_busy_without_deadlock(void) {
   hal_tls_client_t client = nullptr;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_create_ex(&config, &client));
   callback_context_t context = {client, HAL_NONE, HAL_NONE, false};
-  hal_tls_trust_anchor_t anchor = fake_anchor();
+  hal_tls_trust_anchor_t anchor = jh_test_tls_rsa_anchor();
   hal_tls_security_config_t security = {};
   security.trust_anchors = &anchor;
   security.trust_anchor_count = 1u;
@@ -260,7 +236,7 @@ void test_security_callback_may_close_client_with_deferred_cleanup(void) {
   hal_tls_client_t client = nullptr;
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tls_client_create_ex(&config, &client));
   callback_context_t context = {client, HAL_NONE, HAL_NONE, true};
-  hal_tls_trust_anchor_t anchor = fake_anchor();
+  hal_tls_trust_anchor_t anchor = jh_test_tls_rsa_anchor();
   hal_tls_security_config_t security = {};
   security.trust_anchors = &anchor;
   security.trust_anchor_count = 1u;

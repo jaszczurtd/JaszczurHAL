@@ -1,8 +1,9 @@
 #include "utils/unity.h"
 
-#include "hal/hal_spi.h"
+#include "hal/display/drivers/st77xx_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/display/st77xx_driver.h"
+#include "hal/spi/hal_spi.h"
+#include "support/display_spi_test_helpers.h"
 
 #include <string.h>
 
@@ -90,15 +91,6 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
-
-static bool tx_has_tail(const uint8_t *tail, size_t tail_len) {
-  uint8_t tx[512] = {};
-  const size_t tx_len = hal_mock_spi_get_tx(0u, tx, sizeof(tx));
-  if (tx_len < tail_len) {
-    return false;
-  }
-  return memcmp(&tx[tx_len - tail_len], tail, tail_len) == 0;
-}
 
 void test_sequence_parser_handles_args_and_255_delay(void) {
   const uint8_t sequence[] = {2u, 0xAAu, 2u, 0x11u, 0x22u, 0xBBu, 0x80u, 255u};

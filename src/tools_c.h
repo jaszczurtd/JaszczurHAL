@@ -31,64 +31,64 @@
  */
 typedef struct hal_mutex_impl_t hal_mutex_impl_t;
 
-#include <hal/hal_config.h>
-#include <hal/hal_gpio.h>
-#include <hal/hal_pwm.h>
+#include <hal/core/hal_config.h>
+#include <hal/gpio/hal_gpio.h>
+#include <hal/gpio/hal_pwm.h>
 #ifdef HAL_ENABLE_PWM_FREQ
-#include <hal/hal_pwm_freq.h>
+#include <hal/gpio/hal_pwm_freq.h>
 #endif
-#include <hal/hal_adc.h>
-#include <hal/hal_pid_controller.h>
-#include <hal/hal_soft_timer.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_timer.h>
+#include <hal/analog/hal_adc.h>
+#include <hal/control/hal_pid_controller.h>
+#include <hal/core/hal_status.h>
+#include <hal/system/hal_system.h>
+#include <hal/timers/hal_soft_timer.h>
+#include <hal/timers/hal_timer.h>
 #ifdef HAL_ENABLE_CRYPTO
-#include <hal/hal_crypto.h>
+#include <hal/security/hal_crypto.h>
 #endif
 #ifdef HAL_ENABLE_MQTT
-#include <hal/hal_mqtt.h>
+#include <hal/network/mqtt/hal_mqtt.h>
 #endif
 #ifdef HAL_ENABLE_LITTLEFS
-#include <hal/hal_littlefs.h>
+#include <hal/storage/hal_littlefs.h>
 #endif
 #ifdef HAL_ENABLE_SDLOGGER
-#include <hal/hal_sdlogger.h>
+#include <hal/storage/hal_sdlogger.h>
 #endif
 #ifdef HAL_ENABLE_OTA
-#include <hal/hal_ota.h>
+#include <hal/network/ota/hal_ota.h>
 #endif
 #ifdef HAL_ENABLE_UDP
-#include <hal/hal_udp.h>
+#include <hal/network/hal_udp.h>
 #endif
 #ifdef HAL_ENABLE_TCP
-#include <hal/hal_tcp.h>
+#include <hal/network/hal_tcp.h>
 #endif
 #ifdef HAL_ENABLE_WIREGUARD
-#include <hal/hal_wireguard.h>
+#include <hal/network/wireguard/hal_wireguard.h>
 #endif
 #ifdef HAL_ENABLE_DHT
-#include <hal/hal_dht.h>
+#include <hal/temperature/hal_dht.h>
 #endif
-#include <hal/hal_spi.h>
-#include <hal/hal_sync.h>
+#include <hal/spi/hal_spi.h>
+#include <hal/system/hal_sync.h>
 #ifdef HAL_ENABLE_I2C
-#include <hal/hal_i2c.h>
+#include <hal/i2c/hal_i2c.h>
 #endif
 #ifdef HAL_ENABLE_EXTERNAL_ADC
-#include <hal/hal_external_adc.h>
+#include <hal/analog/hal_external_adc.h>
 #endif
 #ifdef HAL_ENABLE_CAN
-#include <hal/hal_can.h>
+#include <hal/can/hal_can.h>
 #endif
 #ifdef HAL_ENABLE_GPS
-#include <hal/hal_gps.h>
+#include <hal/gps/hal_gps.h>
 #endif
 #ifdef HAL_ENABLE_EEPROM
-#include <hal/hal_eeprom.h>
+#include <hal/storage/hal_eeprom.h>
 #endif
 #ifdef HAL_ENABLE_KV
-#include <hal/hal_kv.h>
+#include <hal/storage/hal_kv.h>
 #endif
 
 #include "utils/multicoreWatchdog.h"

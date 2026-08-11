@@ -1,9 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
-#include "../../hal_sync.h"
-#include "../../hal_timer.h"
+#include "hal/core/hal_config.h"
+#include "hal/system/hal_sync.h"
+#include "hal/timers/hal_timer.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -365,14 +365,6 @@ void hal_timer_pool_destroy(hal_timer_pool_t pool) {
 
   timer_program_next_locked();
   timer_unlock();
-}
-
-hal_alarm_id_t hal_timer_pool_add_alarm_us(hal_timer_pool_t pool,
-                                           uint32_t delay_us,
-                                           hal_alarm_callback_t callback,
-                                           void *user_data, bool fire_if_past) {
-  return hal_timer_pool_add_alarm_us_ex(pool, delay_us, callback, user_data,
-                                        fire_if_past, NULL);
 }
 
 hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(

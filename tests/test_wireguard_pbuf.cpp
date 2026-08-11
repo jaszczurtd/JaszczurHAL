@@ -1,5 +1,5 @@
 #include "fakes/lwip_fake.h"
-#include "hal/impl/shared/frameworks/wireguard/wireguard_pbuf.h"
+#include "hal/network/wireguard/core/wireguard_pbuf.h"
 #include "utils/unity.h"
 
 #include <cstring>

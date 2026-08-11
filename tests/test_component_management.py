@@ -68,15 +68,15 @@ require(
 )
 
 for path in (
-    ROOT / "src/hal/impl/shared/frameworks/BearSSL/vendor",
-    ROOT / "src/hal/impl/shared/frameworks/lwip/vendor",
-    ROOT / "src/hal/impl/shared/frameworks/littlefs",
-    ROOT / "src/hal/impl/shared/frameworks/cjson/LICENSE",
-    ROOT / "src/hal/impl/shared/frameworks/lodepng/LICENSE",
-    ROOT / "src/hal/impl/shared/frameworks/jpeg/LICENSE",
-    ROOT / "src/hal/impl/shared/frameworks/filesystem/ff16/LICENSE.txt",
-    ROOT / "src/hal/impl/shared/frameworks/filesystem/ff16/00history.txt",
-    ROOT / "src/hal/impl/shared/frameworks/filesystem/ff16/00readme.txt",
+    ROOT / "src/hal/network/tls/BearSSL/vendor",
+    ROOT / "src/hal/network/lwip/vendor",
+    ROOT / "src/hal/storage/littlefs/vendor",
+    ROOT / "src/hal/codecs/cjson/LICENSE",
+    ROOT / "src/hal/codecs/lodepng/LICENSE",
+    ROOT / "src/hal/codecs/jpeg/LICENSE",
+    ROOT / "src/hal/storage/filesystem/ff16/LICENSE.txt",
+    ROOT / "src/hal/storage/filesystem/ff16/00history.txt",
+    ROOT / "src/hal/storage/filesystem/ff16/00readme.txt",
 ):
     require(not path.exists(), f"tracked vendored dependency remains: {path}")
 

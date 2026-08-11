@@ -1,9 +1,9 @@
 #pragma once
 
-#include "../../hal_ble.h"
-#include "../../hal_gpio.h"
-#include "../../hal_net.h"
-#include "../../hal_system.h"
+#include "hal/bluetooth/hal_ble.h"
+#include "hal/gpio/hal_gpio.h"
+#include "hal/network/hal_net.h"
+#include "hal/system/hal_system.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -108,7 +108,7 @@ uint32_t hal_mock_pwm_get_value(uint8_t pin);
 uint8_t hal_mock_pwm_get_resolution(void);
 
 // ── PWM freq-controlled channels ─────────────────────────────────────────────
-#include "../../hal_pwm_freq.h"
+#include "hal/gpio/hal_pwm_freq.h"
 int hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
@@ -116,7 +116,7 @@ bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 
 // ── DMA PWM-audio ───────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
-#include "../../hal_dma_pwm_audio.h"
+#include "hal/audio/hal_dma_pwm_audio.h"
 void hal_mock_dma_pwm_audio_complete(hal_dma_pwm_audio_t audio,
                                      uint8_t buffer_index);
 void hal_mock_dma_pwm_audio_fail_next_create(bool fail);
@@ -134,7 +134,7 @@ void hal_mock_dac_reset(void);
 
 // ── PCNT (pulse counter) ─────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_PCNT
-#include "../../hal_pcnt.h"
+#include "hal/analog/hal_pcnt.h"
 void hal_mock_pcnt_inject(uint8_t channel, uint32_t pulses);
 hal_pcnt_edge_t hal_mock_pcnt_get_edge(uint8_t channel);
 uint8_t hal_mock_pcnt_get_pin(uint8_t channel);
@@ -232,7 +232,7 @@ void hal_mock_debug_isr_set_test_capacity(size_t cap);
 /** @brief Restore the built-in default ISR ring. */
 void hal_mock_debug_isr_restore_default_ring(void);
 // ── CAN ──────────────────────────────────────────────────────────────────────
-#include "../../hal_can.h"
+#include "hal/can/hal_can.h"
 void hal_mock_can_inject(hal_can_t h, uint32_t id, uint8_t len,
                          const uint8_t *data);
 bool hal_mock_can_get_sent(hal_can_t h, uint32_t *id, uint8_t *len,
@@ -250,7 +250,7 @@ void hal_mock_adc_inject(uint8_t pin, int value);
 // ── SoftwareSerial (swserial)
 // ─────────────────────────────────────────────────
 #ifdef HAL_ENABLE_SWSERIAL
-#include "../../hal_swserial.h"
+#include "hal/serial/hal_swserial.h"
 /** @brief Inject bytes into the mock software-serial RX buffer. */
 void hal_mock_swserial_push(hal_swserial_t h, const uint8_t *data, int len);
 /** @brief Reset RX buffer and last-write capture. */
@@ -262,7 +262,7 @@ const char *hal_mock_swserial_last_write(hal_swserial_t h);
 // ── Hardware UART
 // ─────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_UART
-#include "../../hal_uart.h"
+#include "hal/serial/hal_uart.h"
 /** @brief Inject bytes into the mock hardware-UART RX buffer. */
 void hal_mock_uart_push(hal_uart_t h, const uint8_t *data, int len);
 /** @brief Reset RX buffer and last-write capture. */
@@ -308,7 +308,7 @@ void hal_mock_spi_reset(void);
 // ── LoRa radio
 // ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_LORA
-#include "../../hal_lora_radio.h"
+#include "hal/radio/hal_lora_radio.h"
 
 typedef enum {
   HAL_MOCK_LORA_CONFIGURE = 0,
@@ -346,7 +346,7 @@ void hal_mock_lora_reset(void);
 // ── OneWire
 // ───────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_ONEWIRE
-#include "../../hal_onewire.h"
+#include "hal/onewire/hal_onewire.h"
 /** @brief Force presence response returned by hal_onewire_reset(). */
 void hal_mock_onewire_set_presence(hal_onewire_t h, bool present);
 /** @brief Inject byte stream consumed by hal_onewire_read/read_bytes/read_bit.
@@ -376,7 +376,7 @@ int hal_mock_onewire_get_max_lock_depth(hal_onewire_t h);
 
 // ── RGB LED
 // ───────────────────────────────────────────────────────────────────
-#include "../../hal_rgb_led.h"
+#include "hal/gpio/hal_rgb_led.h"
 bool hal_mock_rgb_led_is_initialized(void);
 hal_rgb_led_color_t hal_mock_rgb_led_get_color(void);
 uint8_t hal_mock_rgb_led_get_brightness(void);
@@ -390,7 +390,7 @@ void hal_mock_rgb_led_fail_next_write(bool fail);
 // ── Display
 // ───────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_DISPLAY
-#include "../../hal_display.h"
+#include "hal/display/hal_display.h"
 /** @brief Reset all mock display state to defaults. */
 void hal_mock_display_reset(void);
 /** @brief Make the next mock display flush fail as a backend I/O error. */
@@ -428,7 +428,7 @@ size_t hal_mock_display_get_stream_dma_bytes(void);
 #endif
 
 // ── WiFi ─────────────────────────────────────────────────────────────────────
-#include "../../hal_wifi.h"
+#include "hal/network/hal_wifi.h"
 /** @brief Reset all mock WiFi state to defaults. */
 void hal_mock_wifi_reset(void);
 /** @brief Inject the connected flag returned by hal_wifi_is_connected(). */
@@ -466,7 +466,7 @@ bool hal_mock_net_add_dns_entry(const char *host, const char *ip);
 
 // ── SD logger ───────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_SDLOGGER
-#include "../../hal_sdlogger.h"
+#include "hal/storage/hal_sdlogger.h"
 /** @brief Reset all mock SD logger state to defaults. */
 void hal_mock_sdlogger_reset(void);
 /** @brief Control SD.begin() result returned by the mock backend. */
@@ -497,7 +497,7 @@ bool hal_mock_sdlogger_crash_was_closed(void);
 
 // ── LittleFS ─────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_LITTLEFS
-#include "../../hal_littlefs.h"
+#include "hal/storage/hal_littlefs.h"
 /** @brief Reset all mock LittleFS state to defaults. */
 void hal_mock_littlefs_reset(void);
 /** @brief Control result returned by hal_littlefs_begin() (default: true). */
@@ -514,7 +514,7 @@ void hal_mock_littlefs_set_exists(const char *path, bool exists);
 
 // ── UDP ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_UDP
-#include "../../hal_udp.h"
+#include "hal/network/hal_udp.h"
 /** @brief Reset all mock UDP state to defaults. */
 void hal_mock_udp_reset(void);
 /** @brief Inject one inbound UDP datagram for hal_udp_parse_packet/read. */
@@ -554,7 +554,7 @@ bool hal_mock_udp_was_end_packet_called(void);
 
 // ── TCP ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_TCP
-#include "../../hal_tcp.h"
+#include "hal/network/hal_tcp.h"
 /** @brief Reset all mock TCP client state to defaults. */
 void hal_mock_tcp_reset(void);
 /** @brief Control result returned by hal_tcp_socket_connect() (default: true).
@@ -603,7 +603,7 @@ hal_tcp_listener_t hal_mock_bsd_socket_get_tcp_listener(int fd);
 
 // ── WireGuard ───────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_WIREGUARD
-#include "../../hal_wireguard.h"
+#include "hal/network/wireguard/hal_wireguard.h"
 /** @brief Reset all mock WireGuard state to defaults. */
 void hal_mock_wireguard_reset(void);
 /** @brief Control result returned by hal_wireguard_begin*() (default: true). */
@@ -646,7 +646,7 @@ uint32_t hal_mock_wireguard_get_last_probe_min_interval_ms(void);
 
 // ── MQTT ─────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_MQTT
-#include "../../hal_mqtt.h"
+#include "hal/network/mqtt/hal_mqtt.h"
 /** @brief Reset all mock MQTT state to defaults. */
 void hal_mock_mqtt_reset(void);
 /** @brief Control whether hal_mqtt_connect*() succeeds (default: true). */
@@ -686,7 +686,7 @@ uint16_t hal_mock_mqtt_get_socket_timeout(void);
 
 // ── TLS ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_TLS
-#include "../../hal_tls.h"
+#include "hal/network/tls/hal_tls.h"
 /** @brief Put a mock TLS client in a provider-free connected state.
  *
  * This state is intended only for exercising zero-length read/write contracts.
@@ -696,7 +696,7 @@ hal_status_t hal_mock_tls_mark_connected_for_zero_io(hal_tls_client_t client);
 
 // ── OTA ──────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_OTA
-#include "../../hal_ota.h"
+#include "hal/network/ota/hal_ota.h"
 /** @brief Reset all mock OTA state to defaults. */
 void hal_mock_ota_reset(void);
 /** @brief Control result returned by hal_ota_begin() (default: true). */
@@ -720,7 +720,7 @@ uint32_t hal_mock_ota_get_handle_count(void);
 #endif
 
 // ── Time / NTP ──────────────────────────────────────────────────────────────
-#include "../../hal_time.h"
+#include "hal/time/hal_time.h"
 /** @brief Reset all mock time state to defaults. */
 void hal_mock_time_reset(void);
 /** @brief Inject Unix timestamp returned by hal_time_unix(). */
@@ -737,7 +737,7 @@ const char *hal_mock_time_get_ntp_secondary(void);
 // ── Thermocouple
 // ──────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_THERMOCOUPLE
-#include "../../hal_thermocouple.h"
+#include "hal/temperature/hal_thermocouple.h"
 /** @brief Inject the hot-junction temperature returned by
  * hal_thermocouple_read(). */
 void hal_mock_thermocouple_set_temp(hal_thermocouple_t h, float temp);
@@ -754,7 +754,7 @@ void hal_mock_thermocouple_set_status(hal_thermocouple_t h, uint8_t status);
 // ── DS18B20
 // ───────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_DS18B20
-#include "../../hal_ds18b20.h"
+#include "hal/temperature/hal_ds18b20.h"
 /** @brief Inject value consumed by the next successful conversion completion.
  */
 void hal_mock_ds18b20_set_next_temp(hal_ds18b20_t h, float temp_c);
@@ -769,7 +769,7 @@ uint32_t hal_mock_ds18b20_get_request_count(hal_ds18b20_t h);
 
 // ── RTC ─────────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_RTC
-#include "../../hal_rtc.h"
+#include "hal/rtc/hal_rtc.h"
 /** @brief Replace current mock RTC date-time payload. */
 void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 /** @brief Inject clock integrity state returned by
@@ -816,7 +816,7 @@ void hal_mock_gps_reset(void);
 
 // ── EEPROM ───────────────────────────────────────────────────────────────────
 #ifdef HAL_ENABLE_EEPROM
-#include "../../hal_eeprom.h"
+#include "hal/storage/hal_eeprom.h"
 /** @brief Read a byte directly from the mock EEPROM backing store. */
 uint8_t hal_mock_eeprom_get_byte(uint16_t addr);
 /** @brief Return the EEPROM type set by hal_eeprom_init(). */
@@ -920,7 +920,7 @@ int hal_mock_i2c_get_write_frame_bus(uint8_t bus, int index, uint8_t *out,
                                      int max);
 
 // ── I2C Slave ────────────────────────────────────────────────────────────────
-#include "../../hal_i2c_slave.h"
+#include "hal/i2c/hal_i2c_slave.h"
 
 /** @brief Return true if I2C slave on default bus is initialized. */
 bool hal_mock_i2c_slave_is_initialized(void);

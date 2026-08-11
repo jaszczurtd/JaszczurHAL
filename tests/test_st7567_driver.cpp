@@ -1,8 +1,8 @@
 #include "utils/unity.h"
 
-#include "hal/hal_spi.h"
+#include "hal/display/drivers/st7567_driver.h"
 #include "hal/impl/.mock/hal_mock.h"
-#include "hal/impl/shared/drivers/display/st7567_driver.h"
+#include "hal/spi/hal_spi.h"
 
 #include <string.h>
 

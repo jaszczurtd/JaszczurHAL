@@ -490,7 +490,7 @@ def macro_dump(include_dirs: list[Path], definitions: list[str]) -> dict[str, st
             *(f"-D{definition}" for definition in definitions),
             "-",
         ],
-        input='#include "hal/hal_board.h"\n',
+        input='#include "hal/system/hal_board.h"\n',
         check=False,
         capture_output=True,
         text=True,

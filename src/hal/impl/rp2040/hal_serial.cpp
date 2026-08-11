@@ -1,9 +1,9 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
-#include "../../hal_config.h"
-#include "../../hal_usb.h"
-#include "../shared/debug/jh_serial_port.h"
+#include "hal/core/hal_config.h"
+#include "hal/debug/jh_serial_port.h"
+#include "hal/usb/hal_usb.h"
 
 #include <limits.h>
 

@@ -1,9 +1,9 @@
-#include <hal/hal_app.h>
-#include <hal/hal_board.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
-#include <hal/hal_usb.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/core/hal_target.h>
+#include <hal/system/hal_board.h>
+#include <hal/system/hal_system.h>
+#include <hal/usb/hal_usb.h>
 
 #include <pico/multicore.h>
 

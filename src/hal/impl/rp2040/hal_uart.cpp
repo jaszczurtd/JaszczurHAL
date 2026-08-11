@@ -1,10 +1,10 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_UART
 
-#include "../../hal_sync.h"
-#include "../../hal_uart.h"
+#include "hal/serial/hal_uart.h"
+#include "hal/system/hal_sync.h"
 
 #include <hardware/gpio.h>
 #include <hardware/irq.h>

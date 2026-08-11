@@ -552,11 +552,12 @@ jobs:
   #   cppcheck    - parses standalone, so it scans ALL own code: portable logic,
   #                 the mock/RP/STM32 backends.
   #   clang-tidy  - needs a compile database, so it covers the host-compilable
-  #                 production code: portable HAL (src/hal/hal_*.cpp), shared/,
-  #                 and the stm32g474 backend. The mock backend (test scaffolding)
-  #                 is intentionally out of scope.
-  #   PMD CPD     - compares C/C++ implementation tokens across the mock, RP,
-  #                 STM32G474 and shared backends without requiring compilation.
+  #                 production code in the thematic src/hal directories and the
+  #                 stm32g474 backend. The mock backend (test scaffolding) is
+  #                 intentionally out of scope.
+  #   PMD CPD     - compares C/C++ implementation tokens across the mock,
+  #                 thematic portable HAL, RP and STM32G474 code without
+  #                 requiring compilation.
   #
   # Tool configs live in .clang-tidy, tests/cppcheck-suppressions.txt and
   # scripts/run_cpd.py. PMD is an authenticated 7.26.0 archive managed under
@@ -601,10 +602,9 @@ jobs:
             --inline-suppr \
             --suppressions-list=tests/cppcheck-suppressions.txt \
             -i src/hal/impl/rp2040/drivers \
-            -i src/hal/impl/rp2040/frameworks \
-            -i src/hal/impl/shared/frameworks/cjson \
-            -i src/hal/impl/shared/frameworks/jpeg \
-            -i src/hal/impl/shared/frameworks/lodepng \
+            -i src/hal/codecs/cjson \
+            -i src/hal/codecs/jpeg \
+            -i src/hal/codecs/lodepng \
             -i src/utils/unity.c \
             --error-exitcode=1 --quiet \
             src
@@ -794,7 +794,7 @@ jobs:
   # dependency propagation (e.g. HAL_ENABLE_PCF8563 implies HAL_ENABLE_RTC
   # and HAL_ENABLE_I2C). The matrix profiles below exercise the
   # extreme corners of the flag space so any regression in
-  # src/hal/hal_config.h (broken propagation, missing #ifdef guard in a
+  # src/hal/core/hal_config.h (broken propagation, missing #ifdef guard in a
   # backend TU, stale consistency #error) shows up as a failed native RP
   # static-library build.
   #

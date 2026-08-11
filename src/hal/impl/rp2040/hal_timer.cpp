@@ -1,8 +1,8 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_sync.h"
-#include "../../hal_timer.h"
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/system/hal_sync.h"
+#include "hal/timers/hal_timer.h"
 #include "hardware/timer.h"
 #include <new>
 #include <pico/time.h>
@@ -122,14 +122,6 @@ void hal_timer_pool_destroy(hal_timer_pool_t pool) {
   }
   delete pool;
   hal_mutex_unlock(s_pool_api_mutex);
-}
-
-hal_alarm_id_t hal_timer_pool_add_alarm_us(hal_timer_pool_t pool,
-                                           uint32_t delay_us,
-                                           hal_alarm_callback_t callback,
-                                           void *user_data, bool fire_if_past) {
-  return hal_timer_pool_add_alarm_us_ex(pool, delay_us, callback, user_data,
-                                        fire_if_past, NULL);
 }
 
 hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(

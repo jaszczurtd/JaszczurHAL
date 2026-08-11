@@ -1,14 +1,14 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
-#include "../../hal_board.h"
-#include "../../hal_config.h"
-#include "../../hal_sync.h"
-#include "../../hal_system.h"
-#include "../../hal_usb.h"
-#include "../shared/hal_mutex_once.h"
-#include "../shared/jh_board_runtime.h"
 #include "drivers/flash/rp_flash_runtime.h"
+#include "hal/core/hal_config.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/system/hal_board.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
+#include "hal/system/jh_board_runtime.h"
+#include "hal/usb/hal_usb.h"
 
 #include <pico/bootrom.h>
 #include <pico/time.h>

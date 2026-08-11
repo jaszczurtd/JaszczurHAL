@@ -4,7 +4,7 @@
  */
 
 #include <JaszczurHAL.h>
-#include <hal/hal_app.h>
+#include <hal/core/hal_app.h>
 #include <tools.h>
 
 #include <string.h>

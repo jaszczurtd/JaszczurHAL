@@ -1,7 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_usb.h"
+#include "hal/usb/hal_usb.h"
 
 hal_status_t hal_usb_init(void) { return HAL_EUNSUPPORTED; }
 

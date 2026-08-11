@@ -1,7 +1,7 @@
 #include "rp2040_adc_shared.h"
 
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/system/hal_sync.h"
 
 #include <hardware/adc.h>
 #include <pico/stdlib.h>

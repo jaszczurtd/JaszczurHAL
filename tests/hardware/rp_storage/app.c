@@ -1,9 +1,9 @@
-#include <hal/hal_app.h>
-#include <hal/hal_eeprom.h>
-#include <hal/hal_littlefs.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_usb.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_status.h>
+#include <hal/storage/hal_eeprom.h>
+#include <hal/storage/hal_littlefs.h>
+#include <hal/system/hal_system.h>
+#include <hal/usb/hal_usb.h>
 
 #include <stdbool.h>
 #include <stddef.h>

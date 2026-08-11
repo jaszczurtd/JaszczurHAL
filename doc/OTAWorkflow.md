@@ -176,11 +176,11 @@ product-specific readiness checks pass.
 The following skeleton shows the complete application-side control flow:
 
 ```c
-#include <hal/hal_app.h>
-#include <hal/hal_ota.h>
-#include <hal/hal_status.h>
-#include <hal/hal_system.h>
-#include <hal/hal_wifi.h>
+#include <hal/core/hal_app.h>
+#include <hal/network/ota/hal_ota.h>
+#include <hal/core/hal_status.h>
+#include <hal/system/hal_system.h>
+#include <hal/network/hal_wifi.h>
 
 #include "ota_secrets.h"
 

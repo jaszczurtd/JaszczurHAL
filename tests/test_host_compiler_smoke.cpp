@@ -1,5 +1,5 @@
-#include "hal/hal_compiler.h"
-#include "hal/hal_crc.h"
+#include "hal/core/hal_compiler.h"
+#include "hal/security/hal_crc.h"
 
 #include <cstdint>
 #include <cstdlib>

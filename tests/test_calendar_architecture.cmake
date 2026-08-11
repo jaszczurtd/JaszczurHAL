@@ -3,10 +3,10 @@ if(NOT DEFINED JH_ROOT)
 endif()
 
 set(_calendar_source
-    "${JH_ROOT}/src/hal/impl/shared/time/jh_calendar.c")
+    "${JH_ROOT}/src/hal/time/jh_calendar.c")
 set(_calendar_header
-    "${JH_ROOT}/src/hal/impl/shared/time/jh_calendar.h")
-set(_public_time "${JH_ROOT}/src/hal/hal_time.cpp")
+    "${JH_ROOT}/src/hal/time/jh_calendar.h")
+set(_public_time "${JH_ROOT}/src/hal/time/hal_time.cpp")
 
 foreach(_required IN ITEMS
         "${_calendar_source}"
@@ -19,9 +19,9 @@ endforeach()
 
 set(_consumers
     "${_public_time}"
-    "${JH_ROOT}/src/hal/hal_rtc.cpp"
-    "${JH_ROOT}/src/hal/impl/shared/drivers/pcf8563/pcf8563.cpp"
-    "${JH_ROOT}/src/hal/impl/shared/drivers/ds3231/ds3231.cpp")
+    "${JH_ROOT}/src/hal/rtc/hal_rtc.cpp"
+    "${JH_ROOT}/src/hal/rtc/pcf8563/pcf8563.cpp"
+    "${JH_ROOT}/src/hal/rtc/ds3231/ds3231.cpp")
 
 foreach(_consumer IN LISTS _consumers)
     file(READ "${_consumer}" _contents)
@@ -48,11 +48,11 @@ endforeach()
 set(_hal_umbrella "${JH_ROOT}/src/hal/hal.h")
 file(READ "${_hal_umbrella}" _hal_umbrella_contents)
 if(NOT _hal_umbrella_contents MATCHES
-   "#[ \t]*include[ \t]*\"hal_time\\.h\"")
+   "#[ \t]*include[ \t]*\"hal/time/hal_time\\.h\"")
     message(FATAL_ERROR "hal.h does not expose the unconditional time helpers")
 endif()
 if(_hal_umbrella_contents MATCHES
-   "#[ \t]*ifdef[ \t]+HAL_ENABLE_TIME[\t\r\n ]+#[ \t]*include[ \t]*\"hal_time\\.h\"")
+   "#[ \t]*ifdef[ \t]+HAL_ENABLE_TIME[\t\r\n ]+#[ \t]*include[ \t]*\"hal/time/hal_time\\.h\"")
     message(FATAL_ERROR
         "hal.h hides unconditional time helpers behind HAL_ENABLE_TIME")
 endif()

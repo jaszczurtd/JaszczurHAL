@@ -1,7 +1,7 @@
-#include <hal/hal_app.h>
-#include <hal/hal_system.h>
-#include <hal/hal_wifi.h>
-#include <hal/hal_wireguard.h>
+#include <hal/core/hal_app.h>
+#include <hal/network/hal_wifi.h>
+#include <hal/network/wireguard/hal_wireguard.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 static const char *WIFI_SSID = "your-ssid";

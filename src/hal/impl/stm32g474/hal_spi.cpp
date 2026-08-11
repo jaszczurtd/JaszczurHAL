@@ -1,12 +1,15 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_STM32G474
 
-#include "../../hal_config.h"
-#include "../../hal_spi.h"
-#include "../../hal_sync.h"
-#include "../shared/hal_mutex_once.h"
+#include "hal/core/hal_config.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/spi/hal_spi.h"
+#include "hal/spi/hal_spi_internal.h"
+#include "hal/spi/hal_spi_settings.h"
+#include "hal/system/hal_sync.h"
 
 #ifdef JH_STM32G474_HW
+#include "port/stm32g474_gpio_af.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -35,33 +38,6 @@ static inline uint8_t spi_bus_index(uint8_t bus) {
 
 static inline hal_spi_bus_state_t *spi_state(uint8_t bus) {
   return &s_spi[spi_bus_index(bus)];
-}
-
-static bool spi_settings_valid(const hal_spi_settings_t *settings) {
-  return settings == nullptr || ((settings->bit_order == HAL_SPI_LSBFIRST ||
-                                  settings->bit_order == HAL_SPI_MSBFIRST) &&
-                                 settings->data_mode <= HAL_SPI_MODE3);
-}
-
-static hal_spi_settings_t spi_default_settings(void) {
-  hal_spi_settings_t s = {HAL_SPI_CLOCK_DEFAULT_HZ, HAL_SPI_MSBFIRST,
-                          HAL_SPI_MODE0};
-  return s;
-}
-
-static hal_spi_settings_t
-spi_normalize_settings(const hal_spi_settings_t *settings) {
-  hal_spi_settings_t s = settings ? *settings : spi_default_settings();
-  if (s.clock_hz == 0u) {
-    s.clock_hz = HAL_SPI_CLOCK_DEFAULT_HZ;
-  }
-  if (s.bit_order != HAL_SPI_LSBFIRST) {
-    s.bit_order = HAL_SPI_MSBFIRST;
-  }
-  if (s.data_mode > HAL_SPI_MODE3) {
-    s.data_mode = HAL_SPI_MODE0;
-  }
-  return s;
 }
 
 static void spi_default_pins(uint8_t idx, uint8_t *rx_pin, uint8_t *tx_pin,
@@ -94,19 +70,6 @@ static inline uint32_t spi_pclk_hz(uint8_t idx) {
   return idx == 1u ? JH_G474_PCLK1_HZ : JH_G474_PCLK2_HZ;
 }
 
-static inline uint32_t spi_pin_port(uint8_t pin) {
-  return (uint32_t)(pin >> 4);
-}
-static inline uint32_t spi_pin_num(uint8_t pin) {
-  return (uint32_t)(pin & 0x0Fu);
-}
-
-static void spi_gpio_clock_enable(uint32_t port) {
-  if (port <= 6u) {
-    RCC_AHB2ENR |= (1u << port);
-  }
-}
-
 static void spi_hw_clock_enable(uint8_t idx) {
   if (idx == 1u) {
     RCC_APB1ENR1 |= RCC_APB1ENR1_SPI2EN;
@@ -116,26 +79,7 @@ static void spi_hw_clock_enable(uint8_t idx) {
 }
 
 static void spi_config_af5_pin(uint8_t pin) {
-  const uint32_t port = spi_pin_port(pin);
-  const uint32_t n = spi_pin_num(pin);
-  if (port > 6u) {
-    return;
-  }
-  spi_gpio_clock_enable(port);
-  GPIO_MODER(port) =
-      (GPIO_MODER(port) & ~(0x3u << (n * 2u))) | (GPIO_MODE_AF << (n * 2u));
-  GPIO_OTYPER(port) &= ~(1u << n);          /* push-pull */
-  GPIO_OSPEEDR(port) |= (0x3u << (n * 2u)); /* very high speed */
-  GPIO_PUPDR(port) =
-      (GPIO_PUPDR(port) & ~(0x3u << (n * 2u))) | (GPIO_PUPD_NONE << (n * 2u));
-  if (n < 8u) {
-    GPIO_AFRL(port) = (GPIO_AFRL(port) & ~(0xFu << (n * 4u))) |
-                      (5u << (n * 4u)); /* AF5 = SPI1/SPI2 */
-  } else {
-    const uint32_t p = n - 8u;
-    GPIO_AFRH(port) =
-        (GPIO_AFRH(port) & ~(0xFu << (p * 4u))) | (5u << (p * 4u));
-  }
+  jh_stm32g474_gpio_set_af(pin, 5u);
 }
 
 static uint32_t spi_prescaler_bits(uint32_t requested_hz, uint32_t source_hz,
@@ -367,17 +311,8 @@ hal_status_t hal_spi_transfer_ex(uint8_t bus, uint8_t data,
 #endif
 }
 
-uint8_t hal_spi_transfer(uint8_t bus, uint8_t data) {
-  uint8_t received = 0xFFu;
-  (void)hal_spi_transfer_ex(bus, data, &received);
-  return received;
-}
-
-hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
-                                   uint16_t *out_received) {
-  if (bus > 1u || out_received == nullptr) {
-    return HAL_EINVAL;
-  }
+hal_status_t jh_hal_spi_transfer16_provider(uint8_t bus, uint16_t data,
+                                            uint16_t *out_received) {
   const uint8_t idx = spi_bus_index(bus);
   if (!s_spi[idx].initialized) {
     /* Initialise before reading bit_order so the byte order matches the
@@ -416,56 +351,14 @@ hal_status_t hal_spi_transfer16_ex(uint8_t bus, uint16_t data,
   return HAL_OK;
 }
 
-uint16_t hal_spi_transfer16(uint8_t bus, uint16_t data) {
-  uint16_t received = 0xFFFFu;
-  (void)hal_spi_transfer16_ex(bus, data, &received);
-  return received;
-}
-
-hal_status_t hal_spi_transfer_buffer(uint8_t bus, uint8_t *buffer, size_t len) {
-  if (bus > 1u || (len > 0u && buffer == nullptr)) {
-    return HAL_EINVAL;
-  }
-  return hal_spi_transfer_txrx(bus, buffer, buffer, len);
-}
-
 hal_status_t hal_spi_transfer_txrx(uint8_t bus, const uint8_t *tx, uint8_t *rx,
                                    size_t len) {
-  if (bus > 1u || (len > 0u && tx == nullptr && rx == nullptr)) {
-    return HAL_EINVAL;
-  }
-  for (size_t i = 0; i < len; ++i) {
-    const uint8_t out = tx ? tx[i] : 0xFFu;
-    uint8_t in = 0u;
-    const hal_status_t status = hal_spi_transfer_ex(bus, out, &in);
-    if (hal_status_is_error(status)) {
-      return status;
-    }
-    if (rx) {
-      rx[i] = in;
-    }
-  }
-  return HAL_OK;
+  return jh_hal_spi_transfer_txrx_generic(bus, tx, rx, len);
 }
 
-hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len) {
-  if (bus > 1u || (len > 0u && data == nullptr)) {
-    return HAL_EINVAL;
-  }
+hal_status_t jh_hal_spi_write_provider(uint8_t bus, const uint8_t *data,
+                                       size_t len) {
   return hal_spi_transfer_txrx(bus, data, nullptr, len);
-}
-
-hal_status_t hal_spi_write_dma_ex(uint8_t bus, const uint8_t *data,
-                                  size_t len) {
-  hal_status_t status = hal_spi_write_dma_async_start_ex(bus, data, len);
-  if (hal_status_is_error(status)) {
-    return status;
-  }
-  return hal_spi_write_dma_async_wait_ex(bus);
-}
-
-bool hal_spi_write_dma(uint8_t bus, const uint8_t *data, size_t len) {
-  return hal_status_to_bool(hal_spi_write_dma_ex(bus, data, len));
 }
 
 hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
@@ -479,11 +372,6 @@ hal_status_t hal_spi_write_dma_async_start_ex(uint8_t bus, const uint8_t *data,
   return hal_spi_write(bus, data, len);
 }
 
-bool hal_spi_write_dma_async_start(uint8_t bus, const uint8_t *data,
-                                   size_t len) {
-  return hal_status_to_bool(hal_spi_write_dma_async_start_ex(bus, data, len));
-}
-
 bool hal_spi_write_dma_async_busy(uint8_t bus) {
   (void)bus;
   return false;
@@ -491,10 +379,6 @@ bool hal_spi_write_dma_async_busy(uint8_t bus) {
 
 hal_status_t hal_spi_write_dma_async_wait_ex(uint8_t bus) {
   return bus <= 1u ? HAL_OK : HAL_EINVAL;
-}
-
-bool hal_spi_write_dma_async_wait(uint8_t bus) {
-  return hal_status_to_bool(hal_spi_write_dma_async_wait_ex(bus));
 }
 
 #endif // HAL_TARGET_IS_STM32G474

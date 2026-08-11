@@ -4,8 +4,8 @@
  */
 
 #include "stm32g474_fault.h"
-#include "../../../../hal_target.h"
 #include "../../port/stm32g474_regs.h"
+#include "hal/core/hal_target.h"
 
 #include <stddef.h>
 #include <stdint.h>

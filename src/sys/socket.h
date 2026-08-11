@@ -8,7 +8,7 @@
  * IPv4-only runtime rejects AF_INET6 deterministically.
  */
 
-#include "../hal/hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_BSD_SOCKETS
 

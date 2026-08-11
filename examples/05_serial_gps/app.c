@@ -1,8 +1,8 @@
-#include <hal/hal_app.h>
-#include <hal/hal_gps.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
-#include <hal/hal_uart.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/gps/hal_gps.h>
+#include <hal/serial/hal_uart.h>
+#include <hal/system/hal_system.h>
 #include <stdio.h>
 #include <tools_c.h>
 

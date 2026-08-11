@@ -1,4 +1,4 @@
-#include "hal/hal_app.h"
+#include "hal/core/hal_app.h"
 #include "utils/unity.h"
 
 #include <stddef.h>

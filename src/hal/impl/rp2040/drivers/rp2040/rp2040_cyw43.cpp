@@ -1,10 +1,10 @@
 #include "rp2040_cyw43.h"
 
-#include "../../../../hal_config.h"
+#include "hal/core/hal_config.h"
 #if defined(HAL_NETWORK_BACKEND_CYW43) && defined(HAL_ENABLE_WIFI) &&          \
     HAL_BOARD_HAS_CYW43
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
-#include "../../../../impl/shared/network/jh_cyw43_provider.h"
+#include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/jh_cyw43_provider.h"
 
 static bool cyw43_wl_gpio(uint8_t pin, unsigned int *wl_gpio) {
   if (pin < 64u) {
@@ -63,8 +63,8 @@ extern "C" bool hal_cyw43_digitalRead(uint8_t pin) {
 
 #elif defined(JH_RP_CYW43_LED_ONLY)
 
-#include "../../../../hal_system.h"
-#include "../../../../impl/shared/drivers/cyw43-driver/jh_cyw43_driver.h"
+#include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/system/hal_system.h"
 #include "rp2040_cyw43_gspi.h"
 
 static bool s_cyw43_led_init_attempted = false;

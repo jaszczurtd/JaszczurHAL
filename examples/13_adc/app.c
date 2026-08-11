@@ -1,9 +1,9 @@
-#include <hal/hal_adc.h>
-#include <hal/hal_app.h>
-#include <hal/hal_external_adc.h>
-#include <hal/hal_i2c.h>
-#include <hal/hal_system.h>
-#include <hal/hal_target.h>
+#include <hal/analog/hal_adc.h>
+#include <hal/analog/hal_external_adc.h>
+#include <hal/core/hal_app.h>
+#include <hal/core/hal_target.h>
+#include <hal/i2c/hal_i2c.h>
+#include <hal/system/hal_system.h>
 #include <tools_c.h>
 
 #if HAL_TARGET_IS_RP

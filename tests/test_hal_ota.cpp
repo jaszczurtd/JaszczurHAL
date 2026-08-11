@@ -1,5 +1,5 @@
-#include "hal/hal_ota.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/ota/hal_ota.h"
 #include "utils/unity.h"
 
 #include <string.h>

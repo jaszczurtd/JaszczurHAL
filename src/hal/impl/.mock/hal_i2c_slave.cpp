@@ -1,6 +1,6 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_i2c_slave.h"
+#include "hal/i2c/hal_i2c_slave.h"
 #include "hal_mock.h"
 
 #include <string.h>

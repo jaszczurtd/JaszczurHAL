@@ -21,7 +21,7 @@
 #ifdef HAL_ENABLE_UNITY
 #include "unity.h"
 #endif
-#include "hal/impl/shared/frameworks/smart_timers/SmartTimers.h"
+#include "hal/timers/smart_timers/SmartTimers.h"
 
 #include "tools_api.h"
 #include "tools_common_defs.h"

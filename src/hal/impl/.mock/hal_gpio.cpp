@@ -1,6 +1,7 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
-#include "../../hal_gpio.h"
+#include "hal/gpio/hal_gpio.h"
+#include "hal/gpio/hal_gpio_common.h"
 #include "hal_mock.h"
 
 #include <stddef.h>
@@ -25,10 +26,6 @@ static hal_mock_gpio_event_t s_trace[MOCK_GPIO_TRACE_MAX] = {};
 static size_t s_trace_count = 0u;
 
 static bool gpio_pin_valid(uint8_t pin) { return pin < MOCK_GPIO_MAX_PINS; }
-
-static bool gpio_mode_valid(hal_gpio_mode_t mode) {
-  return mode >= HAL_GPIO_INPUT && mode <= HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH;
-}
 
 static bool gpio_irq_mode_valid(hal_gpio_irq_mode_t mode) {
   return mode >= HAL_GPIO_IRQ_FALLING && mode <= HAL_GPIO_IRQ_CHANGE;
@@ -70,25 +67,9 @@ static void hal_mock_gpio_trace_push(hal_mock_gpio_event_type_t type,
  * driver test that asserts pin levels catches the antipattern. */
 
 void hal_gpio_set_mode(uint8_t pin, hal_gpio_mode_t mode) {
-  if (!gpio_pin_valid(pin)) {
-    HAL_ASSERT(false, "hal_gpio_set_mode: invalid pin");
+  if (!jh_hal_gpio_store_mode(pin, mode, s_state, s_mode, gpio_pin_valid)) {
     return;
   }
-  if (!gpio_mode_valid(mode)) {
-    HAL_ASSERT(false, "hal_gpio_set_mode: invalid mode");
-    return;
-  }
-  if (mode == HAL_GPIO_OUTPUT || mode == HAL_GPIO_OUTPUT_LOW ||
-      mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW) {
-    /* Mirror gpio_init(): entering OUTPUT mode resets the latch to 0. A HIGH
-     * written before this call is therefore discarded (drives LOW). */
-    s_state[pin] = false;
-  } else if (mode == HAL_GPIO_OUTPUT_HIGH ||
-             mode == HAL_GPIO_OUTPUT_OPEN_DRAIN ||
-             mode == HAL_GPIO_OUTPUT_OPEN_DRAIN_HIGH) {
-    s_state[pin] = true;
-  }
-  s_mode[pin] = mode;
   hal_mock_gpio_trace_push(HAL_MOCK_GPIO_EVENT_SET_MODE, pin, (int)mode);
 }
 

@@ -12,7 +12,7 @@ state-machine and command grammar live in family-specific drivers
 (today: `hal_simcom_a76xx`).
 
 ```c
-#include <hal/hal_modem_at.h>
+#include <hal/modem/hal_modem_at.h>
 
 typedef enum {
     HAL_MODEM_AT_OK = 0,
@@ -66,7 +66,7 @@ void hal_modem_at_set_tick_callback(hal_modem_at_t h,
 void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 ```
 
-**Backend:** single implementation (`src/hal/hal_modem_at.cpp`) shared
+**Backend:** single implementation (`src/hal/modem/hal_modem_at.cpp`) shared
 between hardware and mock targets - sits entirely on `hal_uart` +
 `hal_millis` + `hal_mutex`.
 **Thread safety:** every handle serialises access internally via a
@@ -91,7 +91,7 @@ a full MQTT client (**publish and subscribe**) on top of the `CMQTT*`
 command family.
 
 ```c
-#include <hal/hal_simcom_a76xx.h>
+#include <hal/modem/hal_simcom_a76xx.h>
 
 typedef enum {
     HAL_SIMCOM_A76XX_OK = 0,

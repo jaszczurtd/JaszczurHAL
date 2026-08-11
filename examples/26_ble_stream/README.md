@@ -41,7 +41,7 @@ keys come from HMAC-SHA256 over a transcript covering the profile name, the
 protocol version, both capability sets, the session identifier and both nonces.
 `DATA` frames use ChaCha20-Poly1305 with a directional counter. The frame layout
 and every constant live in
-[`hal_ble_stream.h`](../../src/hal/hal_ble_stream.h).
+[`hal_ble_stream.h`](../../src/hal/bluetooth/hal_ble_stream.h).
 
 The negotiated ATT MTU must reach `HAL_BLE_STREAM_MIN_ATT_MTU` before a
 handshake fits in one write; the example logs the MTU it observes.

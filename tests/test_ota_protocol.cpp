@@ -1,4 +1,4 @@
-#include "hal/impl/shared/network/ota/jh_ota_protocol.h"
+#include "hal/network/ota/jh_ota_protocol.h"
 #include "utils/unity.h"
 
 #include <cstring>

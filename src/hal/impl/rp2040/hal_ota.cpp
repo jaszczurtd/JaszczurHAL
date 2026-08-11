@@ -1,19 +1,19 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_OTA
 
-#include "../../hal_crypto.h"
-#include "../../hal_net.h"
-#include "../../hal_ota.h"
-#include "../../hal_serial.h"
-#include "../../hal_sync.h"
-#include "../../hal_system.h"
-#include "../../hal_tcp.h"
-#include "../../hal_udp.h"
-#include "../shared/hal_mutex_once.h"
-#include "../shared/network/ota/jh_ota_protocol.h"
+#include "hal/core/hal_mutex_once.h"
+#include "hal/network/hal_net.h"
+#include "hal/network/hal_tcp.h"
+#include "hal/network/hal_udp.h"
+#include "hal/network/ota/hal_ota.h"
+#include "hal/network/ota/jh_ota_protocol.h"
+#include "hal/security/hal_crypto.h"
+#include "hal/serial/hal_serial.h"
+#include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 
 #include "drivers/flash/rp_ota_storage.h"
 #include <hardware/watchdog.h>

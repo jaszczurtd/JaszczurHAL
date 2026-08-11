@@ -1,11 +1,11 @@
-#include "../../hal_target.h"
+#include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_RP
 
-#include "../../hal_config.h"
+#include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
-#include "../../hal_dma_pwm_audio.h"
-#include "../../hal_serial.h"
+#include "hal/audio/hal_dma_pwm_audio.h"
+#include "hal/serial/hal_serial.h"
 
 #include <hardware/adc.h>
 #include <hardware/clocks.h>
@@ -245,15 +245,6 @@ static void configure_adc_dma(hal_dma_pwm_audio_impl_t *audio) {
   dma_channel_configure((uint)audio->dma_adc_control, &control_cfg,
                         &dma_hw->ch[audio->dma_adc_sample].al2_write_addr_trig,
                         &audio->adc_write_addr, 1u, false);
-}
-
-bool hal_dma_pwm_audio_supported(void) { return true; }
-
-hal_dma_pwm_audio_t
-hal_dma_pwm_audio_create(const hal_dma_pwm_audio_config_t *cfg) {
-  hal_dma_pwm_audio_t audio = nullptr;
-  (void)hal_dma_pwm_audio_create_ex(cfg, &audio);
-  return audio;
 }
 
 hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,

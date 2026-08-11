@@ -1,5 +1,6 @@
-#include "hal/hal_tcp.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/network/hal_tcp.h"
+#include "support/network_test_helpers.h"
 #include "utils/unity.h"
 
 #include <string.h>
@@ -11,19 +12,6 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
-
-static hal_net_endpoint_t make_endpoint(uint8_t a, uint8_t b, uint8_t c,
-                                        uint8_t d, uint16_t port) {
-  hal_net_endpoint_t endpoint = {};
-  endpoint.family = HAL_NET_AF_INET;
-  endpoint.addr_len = HAL_NET_IPV4_ADDR_LEN;
-  endpoint.addr[0] = a;
-  endpoint.addr[1] = b;
-  endpoint.addr[2] = c;
-  endpoint.addr[3] = d;
-  endpoint.port = port;
-  return endpoint;
-}
 
 static hal_net_endpoint_t make_ipv6_endpoint(uint16_t port, uint32_t scope_id) {
   static const uint8_t address[HAL_NET_IPV6_ADDR_LEN] = {

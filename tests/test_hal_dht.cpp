@@ -1,5 +1,5 @@
-#include "hal/hal_dht.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/temperature/hal_dht.h"
 #include "utils/unity.h"
 
 #include <stddef.h>

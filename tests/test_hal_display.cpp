@@ -1,4 +1,4 @@
-#include "hal/hal_display.h"
+#include "hal/display/hal_display.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "utils/unity.h"
 #include <string.h>

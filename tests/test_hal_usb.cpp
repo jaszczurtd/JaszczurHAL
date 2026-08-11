@@ -1,5 +1,5 @@
-#include "hal/hal_usb.h"
 #include "hal/impl/.mock/hal_mock.h"
+#include "hal/usb/hal_usb.h"
 #include "utils/unity.h"
 
 #include <string.h>
