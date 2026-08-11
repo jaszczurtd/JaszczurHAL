@@ -28,10 +28,14 @@ typedef uint32_t jh_lora_provider_capabilities_t;
 #define JH_LORA_PROVIDER_CAP_CAD (UINT32_C(1) << 1u)
 #define JH_LORA_PROVIDER_CAP_INSTANT_RSSI (UINT32_C(1) << 2u)
 #define JH_LORA_PROVIDER_CAP_EXPLICIT_CALIBRATION (UINT32_C(1) << 3u)
-#define JH_LORA_PROVIDER_CAP_SX1262                                            \
+#define JH_LORA_PROVIDER_CAP_ALL                                               \
   (JH_LORA_PROVIDER_CAP_CONTINUOUS_RX | JH_LORA_PROVIDER_CAP_CAD |             \
    JH_LORA_PROVIDER_CAP_INSTANT_RSSI |                                         \
    JH_LORA_PROVIDER_CAP_EXPLICIT_CALIBRATION)
+#define JH_LORA_PROVIDER_CAP_SX126X JH_LORA_PROVIDER_CAP_ALL
+#define JH_LORA_PROVIDER_CAP_SX127X                                            \
+  (JH_LORA_PROVIDER_CAP_CONTINUOUS_RX | JH_LORA_PROVIDER_CAP_CAD |             \
+   JH_LORA_PROVIDER_CAP_INSTANT_RSSI)
 
 typedef struct {
   hal_status_t (*initialize)(jh_lora_radio_context_t *context);
@@ -95,7 +99,7 @@ struct jh_lora_radio_context_s {
   bool allocated;
 };
 
-/** Return the target's normal provider (mock or the shared SX126x adapter). */
+/** Return the target's normal provider selected by the feature registry. */
 const jh_lora_radio_provider_ops_t *jh_lora_radio_default_provider(void);
 
 /** Internal locked handle access used by the mock control surface. */

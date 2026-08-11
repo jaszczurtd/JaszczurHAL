@@ -10,6 +10,9 @@ set(JH_RP_NATIVE_APP_DIR "" CACHE PATH
     "Optional portable app directory containing app.c or app.cpp")
 set(JH_RP_NATIVE_APP_SOURCES "" CACHE STRING
     "Optional source list relative to JH_RP_NATIVE_APP_DIR")
+option(JH_ENABLE_ALL_FEATURES
+    "Enable every feature supported by the selected production target"
+    OFF)
 if(JH_RP_NATIVE_APP_DIR)
     get_filename_component(JH_RP_NATIVE_APP_DIR
         "${JH_RP_NATIVE_APP_DIR}" ABSOLUTE BASE_DIR "${JH_ROOT}")
@@ -25,6 +28,10 @@ if(JH_RP_NATIVE_APP_DIR)
 endif()
 
 include("${JH_ROOT}/cmake/jh_project_features.cmake")
+if(JH_ENABLE_ALL_FEATURES)
+    jh_all_features_for_target(_jh_all_features "${JH_TARGET}")
+    list(APPEND EXTRA_HAL_DEFINES ${_jh_all_features})
+endif()
 jh_collect_cmake_feature_defines(_jh_cmake_feature_defines)
 list(APPEND EXTRA_HAL_DEFINES ${_jh_cmake_feature_defines})
 jh_normalize_feature_defines(EXTRA_HAL_DEFINES ${EXTRA_HAL_DEFINES})

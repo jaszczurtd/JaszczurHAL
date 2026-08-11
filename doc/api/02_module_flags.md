@@ -58,7 +58,8 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | Experimental BLE Peripheral over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W, STM32G474+PIM730, and mock. BTstack carries a non-commercial-use restriction; see the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
 | `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Experimental bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
-| `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
+| `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 plus experimental, software-only SX1261 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
+| `HAL_ENABLE_SX127X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx127x/*` | Experimental, software-only SX1276/SX1278 provider over HAL SPI/GPIO (propagates LORA + SPI and conflicts with SX126X); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
 | `HAL_ENABLE_TIME` | optional declarations in `hal_time.h` | target `hal_time.cpp` | WiFi NTP helpers (propagates UDP + WIFI); pure calendar/range helpers stay unconditional |
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates TCP + WIFI) |

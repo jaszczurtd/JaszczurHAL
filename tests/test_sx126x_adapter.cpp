@@ -217,6 +217,38 @@ void test_provider_initialize_resets_and_emits_electrical_profile_commands(
   TEST_ASSERT_FALSE(context.provider_irq_attached);
 }
 
+void test_sx1261_initialize_uses_low_power_pa_and_ocp_profile(void) {
+  jh_lora_radio_context_t context = adapter_context();
+  context.config.model = HAL_LORA_RADIO_SX1261;
+  context.config.hardware.sx126x.rf_switch_mode = HAL_LORA_RF_SWITCH_DUAL_GPIO;
+  context.config.hardware.sx126x.regulator_mode = HAL_LORA_REGULATOR_DCDC;
+  uint8_t responses[256];
+  memset(responses, 0x22, sizeof(responses));
+  hal_mock_spi_push_rx(1u, responses, sizeof(responses));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_sx126x_provider_ops()->initialize(&context));
+  uint8_t tx[512] = {};
+  const size_t tx_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  const uint8_t pa[] = {0x95u, 0x04u, 0x00u, 0x01u, 0x01u};
+  const uint8_t ocp[] = {0x0Du, 0x08u, 0xE7u, 0x18u};
+  const uint8_t sx1262_clamp_register[] = {0x1Du, 0x08u, 0xD8u};
+  TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, pa, sizeof(pa)));
+  TEST_ASSERT_TRUE(contains_bytes(tx, tx_length, ocp, sizeof(ocp)));
+  TEST_ASSERT_FALSE(contains_bytes(tx, tx_length, sx1262_clamp_register,
+                                   sizeof(sx1262_clamp_register)));
+  configure_context_modem(&context);
+  context.config.hardware.sx126x.min_tx_power_dbm = -17;
+  context.config.hardware.sx126x.max_tx_power_dbm = 15;
+  context.modem.tx_power_dbm = 15;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_sx126x_provider_ops()->configure(&context));
+  const size_t configured_length = hal_mock_spi_get_tx(1u, tx, sizeof(tx));
+  const uint8_t maximum_power_pa[] = {0x95u, 0x06u, 0x00u, 0x01u, 0x01u};
+  const uint8_t maximum_power[] = {0x8Eu, 0x0Fu, 0x04u};
+  TEST_ASSERT_TRUE(contains_bytes(tx, configured_length, maximum_power_pa,
+                                  sizeof(maximum_power_pa)));
+  TEST_ASSERT_TRUE(contains_bytes(tx, configured_length, maximum_power,
+                                  sizeof(maximum_power)));
+}
+
 void test_provider_reports_capabilities_and_instant_rssi(void) {
   jh_lora_radio_context_t context = adapter_context();
   configure_context_modem(&context);
@@ -461,6 +493,7 @@ int main(void) {
   RUN_TEST(test_rf_switch_helpers_drive_declared_dual_gpio_truth_table);
   RUN_TEST(
       test_provider_initialize_resets_and_emits_electrical_profile_commands);
+  RUN_TEST(test_sx1261_initialize_uses_low_power_pa_and_ocp_profile);
   RUN_TEST(test_provider_encodes_lora_configuration_and_tx_timeout);
   RUN_TEST(test_provider_process_maps_crc_irq);
   RUN_TEST(test_provider_reports_capabilities_and_instant_rssi);

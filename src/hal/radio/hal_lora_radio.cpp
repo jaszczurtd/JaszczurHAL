@@ -4,8 +4,8 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/jh_handle_pool.h"
+#include "hal/radio/jh_lora_modem.h"
 #include "hal/radio/jh_lora_radio_internal.h"
-#include "hal/radio/sx126x/jh_sx126x_adapter.h"
 #include "hal/system/hal_board.h"
 #include "hal/system/hal_system.h"
 #include "hal/system/jh_board_runtime.h"
@@ -22,23 +22,68 @@ static hal_mutex_t s_pool_mutex = NULL;
 static bool s_pool_initialized = false;
 static const jh_lora_radio_provider_ops_t *s_provider = NULL;
 
+typedef struct {
+  uint32_t min_frequency_hz;
+  uint32_t max_frequency_hz;
+  uint32_t max_spi_clock_hz;
+  int8_t min_tx_power_dbm;
+  int8_t max_tx_power_dbm;
+} jh_lora_hardware_limits_t;
+
+static bool model_is_sx126x(hal_lora_radio_model_t model) {
+  return model == HAL_LORA_RADIO_SX1261 || model == HAL_LORA_RADIO_SX1262;
+}
+
+static bool model_is_sx127x(hal_lora_radio_model_t model) {
+  return model == HAL_LORA_RADIO_SX1276 || model == HAL_LORA_RADIO_SX1278;
+}
+
+static bool model_enabled(hal_lora_radio_model_t model) {
+#if defined(HAL_ENABLE_SX126X)
+  return model_is_sx126x(model);
+#elif defined(HAL_ENABLE_SX127X)
+  return model_is_sx127x(model);
+#else
+  (void)model;
+  return false;
+#endif
+}
+
+static jh_lora_hardware_limits_t
+hardware_limits(const hal_lora_radio_config_t *config) {
+  jh_lora_hardware_limits_t limits = {};
+  if (model_is_sx126x(config->model)) {
+    limits.min_frequency_hz = config->hardware.sx126x.min_frequency_hz;
+    limits.max_frequency_hz = config->hardware.sx126x.max_frequency_hz;
+    limits.max_spi_clock_hz = config->hardware.sx126x.max_spi_clock_hz;
+    limits.min_tx_power_dbm = config->hardware.sx126x.min_tx_power_dbm;
+    limits.max_tx_power_dbm = config->hardware.sx126x.max_tx_power_dbm;
+  } else if (model_is_sx127x(config->model)) {
+    limits.min_frequency_hz = config->hardware.sx127x.min_frequency_hz;
+    limits.max_frequency_hz = config->hardware.sx127x.max_frequency_hz;
+    limits.max_spi_clock_hz = config->hardware.sx127x.max_spi_clock_hz;
+    limits.min_tx_power_dbm = config->hardware.sx127x.min_tx_power_dbm;
+    limits.max_tx_power_dbm = config->hardware.sx127x.max_tx_power_dbm;
+  }
+  return limits;
+}
+
 hal_status_t jh_lora_radio_describe_capabilities(
     const jh_lora_radio_context_t *context,
     jh_lora_provider_capabilities_t supported,
     hal_lora_radio_capabilities_t *out_capabilities) {
   if (context == NULL || out_capabilities == NULL ||
-      (supported & ~JH_LORA_PROVIDER_CAP_SX1262) != 0u) {
+      (supported & ~JH_LORA_PROVIDER_CAP_ALL) != 0u) {
     return HAL_EINVAL;
   }
-  const hal_lora_sx126x_hardware_config_t *hardware =
-      &context->config.hardware.sx126x;
+  const jh_lora_hardware_limits_t limits = hardware_limits(&context->config);
   *out_capabilities = {};
   out_capabilities->model = context->config.model;
   out_capabilities->max_payload_length = HAL_LORA_RADIO_MAX_PAYLOAD;
-  out_capabilities->min_frequency_hz = hardware->min_frequency_hz;
-  out_capabilities->max_frequency_hz = hardware->max_frequency_hz;
-  out_capabilities->min_tx_power_dbm = hardware->min_tx_power_dbm;
-  out_capabilities->max_tx_power_dbm = hardware->max_tx_power_dbm;
+  out_capabilities->min_frequency_hz = limits.min_frequency_hz;
+  out_capabilities->max_frequency_hz = limits.max_frequency_hz;
+  out_capabilities->min_tx_power_dbm = limits.min_tx_power_dbm;
+  out_capabilities->max_tx_power_dbm = limits.max_tx_power_dbm;
   out_capabilities->supports_continuous_receive =
       (supported & JH_LORA_PROVIDER_CAP_CONTINUOUS_RX) != 0u;
   out_capabilities->supports_channel_activity_detection =
@@ -85,10 +130,14 @@ static hal_status_t pool_lock(void) {
 static void pool_unlock(void) { hal_mutex_unlock(s_pool_mutex); }
 
 static bool enum_config_valid(const hal_lora_radio_config_t *config) {
-  const hal_lora_sx126x_hardware_config_t *hardware = &config->hardware.sx126x;
-  if (config->model != HAL_LORA_RADIO_SX1262 || config->spi_bus > 1u) {
+  if (!model_enabled(config->model) || config->spi_bus > 1u) {
     return false;
   }
+  if (model_is_sx127x(config->model)) {
+    return config->hardware.sx127x.pa_output == HAL_LORA_SX127X_PA_RFO ||
+           config->hardware.sx127x.pa_output == HAL_LORA_SX127X_PA_BOOST;
+  }
+  const hal_lora_sx126x_hardware_config_t *hardware = &config->hardware.sx126x;
   switch (hardware->rf_switch_mode) {
   case HAL_LORA_RF_SWITCH_NONE:
   case HAL_LORA_RF_SWITCH_DIO2:
@@ -133,25 +182,41 @@ rf_switch_pins_valid(const hal_lora_sx126x_hardware_config_t *hardware) {
 }
 
 static bool required_pins_valid(const hal_lora_radio_config_t *config) {
-  const hal_lora_sx126x_hardware_config_t *hardware = &config->hardware.sx126x;
-  const uint8_t pins[] = {
-      config->spi_miso_pin,      config->spi_mosi_pin,
-      config->spi_sck_pin,       config->cs_pin,
-      hardware->reset_pin,       hardware->dio1_pin,
-      hardware->busy_pin,        hardware->rf_switch_pin_a,
-      hardware->rf_switch_pin_b,
-  };
-  for (size_t index = 0u; index < 7u; ++index) {
+  uint8_t pins[12] = {config->spi_miso_pin, config->spi_mosi_pin,
+                      config->spi_sck_pin, config->cs_pin};
+  size_t pin_count = 4u;
+  size_t required_count = 0u;
+  if (model_is_sx126x(config->model)) {
+    const hal_lora_sx126x_hardware_config_t *hardware =
+        &config->hardware.sx126x;
+    pins[pin_count++] = hardware->reset_pin;
+    pins[pin_count++] = hardware->dio1_pin;
+    pins[pin_count++] = hardware->busy_pin;
+    required_count = pin_count;
+    pins[pin_count++] = hardware->rf_switch_pin_a;
+    pins[pin_count++] = hardware->rf_switch_pin_b;
+  } else {
+    const hal_lora_sx127x_hardware_config_t *hardware =
+        &config->hardware.sx127x;
+    pins[pin_count++] = hardware->reset_pin;
+    pins[pin_count++] = hardware->dio0_pin;
+    required_count = pin_count;
+    pins[pin_count++] = hardware->dio1_pin;
+    pins[pin_count++] = hardware->dio2_pin;
+    pins[pin_count++] = hardware->rf_switch_rx_pin;
+    pins[pin_count++] = hardware->rf_switch_tx_pin;
+    pins[pin_count++] = hardware->tcxo_enable_pin;
+  }
+  for (size_t index = 0u; index < required_count; ++index) {
     if (pins[index] == HAL_LORA_PIN_NONE) {
       return false;
     }
   }
-  for (size_t left = 0u; left < sizeof(pins) / sizeof(pins[0]); ++left) {
+  for (size_t left = 0u; left < pin_count; ++left) {
     if (pins[left] == HAL_LORA_PIN_NONE) {
       continue;
     }
-    for (size_t right = left + 1u; right < sizeof(pins) / sizeof(pins[0]);
-         ++right) {
+    for (size_t right = left + 1u; right < pin_count; ++right) {
       if (pins[left] == pins[right]) {
         return false;
       }
@@ -161,21 +226,41 @@ static bool required_pins_valid(const hal_lora_radio_config_t *config) {
 }
 
 static bool limits_valid(const hal_lora_radio_config_t *config) {
-  const hal_lora_sx126x_hardware_config_t *hardware = &config->hardware.sx126x;
+  const jh_lora_hardware_limits_t limits = hardware_limits(config);
   const uint32_t spi_clock_hz = config->spi_clock_hz == 0u
                                     ? HAL_LORA_SPI_CLOCK_DEFAULT_HZ
                                     : config->spi_clock_hz;
-  return hardware->min_frequency_hz > 0u &&
-         hardware->min_frequency_hz <= hardware->max_frequency_hz &&
-         hardware->max_spi_clock_hz > 0u &&
-         spi_clock_hz <= hardware->max_spi_clock_hz &&
-         hardware->min_tx_power_dbm <= hardware->max_tx_power_dbm;
+  const uint32_t chip_max_frequency_hz = config->model == HAL_LORA_RADIO_SX1278
+                                             ? UINT32_C(525000000)
+                                             : UINT32_C(960000000);
+  int8_t chip_min_power = config->model == HAL_LORA_RADIO_SX1261 ? -17 : -9;
+  int8_t chip_max_power = config->model == HAL_LORA_RADIO_SX1261 ? 15 : 22;
+  if (model_is_sx127x(config->model)) {
+    const bool pa_boost =
+        config->hardware.sx127x.pa_output == HAL_LORA_SX127X_PA_BOOST;
+    chip_min_power = pa_boost ? 2 : -4;
+    chip_max_power = pa_boost ? 20 : 15;
+  }
+  const uint32_t chip_min_frequency_hz = model_is_sx126x(config->model)
+                                             ? UINT32_C(150000000)
+                                             : UINT32_C(137000000);
+  return limits.min_frequency_hz >= chip_min_frequency_hz &&
+         limits.min_frequency_hz <= limits.max_frequency_hz &&
+         limits.max_frequency_hz <= chip_max_frequency_hz &&
+         limits.max_spi_clock_hz > 0u &&
+         spi_clock_hz <= limits.max_spi_clock_hz &&
+         limits.min_tx_power_dbm >= chip_min_power &&
+         limits.max_tx_power_dbm <= chip_max_power &&
+         limits.min_tx_power_dbm <= limits.max_tx_power_dbm;
 }
 
 static bool config_valid(const hal_lora_radio_config_t *config) {
-  return config != NULL && enum_config_valid(config) &&
-         rf_switch_pins_valid(&config->hardware.sx126x) &&
-         required_pins_valid(config) && limits_valid(config);
+  if (config == NULL || !enum_config_valid(config) ||
+      !required_pins_valid(config) || !limits_valid(config)) {
+    return false;
+  }
+  return !model_is_sx126x(config->model) ||
+         rf_switch_pins_valid(&config->hardware.sx126x);
 }
 
 static void clear_context(jh_lora_radio_context_t *context) {
@@ -192,8 +277,9 @@ static void clear_context(jh_lora_radio_context_t *context) {
 }
 
 static bool board_config_matches(const hal_lora_radio_config_t *config) {
-#if HAL_BOARD_LORA_RADIO_PRESENT
-  return config->spi_bus == HAL_BOARD_LORA_RADIO_SPI_BUS &&
+#if HAL_BOARD_LORA_RADIO_PRESENT && defined(HAL_ENABLE_SX126X)
+  return config->model == HAL_LORA_RADIO_SX1262 &&
+         config->spi_bus == HAL_BOARD_LORA_RADIO_SPI_BUS &&
          config->spi_miso_pin == HAL_BOARD_LORA_RADIO_PIN_MISO &&
          config->spi_mosi_pin == HAL_BOARD_LORA_RADIO_PIN_MOSI &&
          config->spi_sck_pin == HAL_BOARD_LORA_RADIO_PIN_SCK &&
@@ -208,7 +294,7 @@ static bool board_config_matches(const hal_lora_radio_config_t *config) {
 }
 
 static void set_board_radio_state(bool board_device, hal_status_t status) {
-#if HAL_BOARD_LORA_RADIO_PRESENT
+#if HAL_BOARD_LORA_RADIO_PRESENT && defined(HAL_ENABLE_SX126X)
   if (!board_device) {
     return;
   }
@@ -397,7 +483,7 @@ hal_lora_radio_config_from_board(hal_lora_radio_config_t *out_config) {
     return HAL_EINVAL;
   }
   memset(out_config, 0, sizeof(*out_config));
-#if !HAL_BOARD_LORA_RADIO_PRESENT
+#if !HAL_BOARD_LORA_RADIO_PRESENT || !defined(HAL_ENABLE_SX126X)
   return HAL_EUNSUPPORTED;
 #else
   out_config->model = HAL_LORA_RADIO_SX1262;
@@ -575,7 +661,13 @@ hal_status_t hal_lora_radio_configure(hal_lora_radio_t radio,
   if (status != HAL_OK) {
     return status;
   }
-  if (!jh_sx126x_modem_config_valid(config, &context->config.hardware.sx126x)) {
+  const jh_lora_hardware_limits_t limits = hardware_limits(&context->config);
+  const uint8_t minimum_spreading_factor =
+      model_is_sx127x(context->config.model) ? 6u : 5u;
+  if (!jh_lora_modem_config_valid(
+          config, limits.min_frequency_hz, limits.max_frequency_hz,
+          limits.min_tx_power_dbm, limits.max_tx_power_dbm,
+          minimum_spreading_factor)) {
     jh_lora_radio_context_unlock(context);
     return HAL_EINVAL;
   }
@@ -656,7 +748,8 @@ hal_lora_modem_config_t hal_lora_default_fast_eu868(void) {
 static hal_status_t auto_tx_timeout(const hal_lora_modem_config_t *modem,
                                     size_t length, uint32_t *out_timeout_ms) {
   uint32_t airtime_ms = 0u;
-  const hal_status_t status = jh_sx126x_time_on_air(modem, length, &airtime_ms);
+  const hal_status_t status =
+      jh_lora_modem_time_on_air(modem, length, &airtime_ms);
   if (status != HAL_OK) {
     return status;
   }
@@ -1358,7 +1451,7 @@ hal_status_t hal_lora_radio_calibrate(hal_lora_radio_t radio) {
   status = provider->calibrate(context);
   hal_mutex_lock(context->mutex);
   context->operation_busy = false;
-  if (status != HAL_OK) {
+  if (status != HAL_OK && status != HAL_EUNSUPPORTED) {
     set_state(context, HAL_LORA_RADIO_STATE_ERROR);
     record_error(context, status);
   }
@@ -1410,7 +1503,7 @@ hal_status_t hal_lora_radio_standby(hal_lora_radio_t radio) {
 hal_status_t hal_lora_time_on_air(const hal_lora_modem_config_t *config,
                                   size_t payload_length,
                                   uint32_t *out_time_ms) {
-  return jh_sx126x_time_on_air(config, payload_length, out_time_ms);
+  return jh_lora_modem_time_on_air(config, payload_length, out_time_ms);
 }
 
 #if HAL_TARGET_IS_MOCK || defined(JH_LORA_PROVIDER_TESTING)

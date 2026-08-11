@@ -486,8 +486,10 @@
     "HAL_ENABLE_CELLULAR_MODEM requires at least one backend: HAL_ENABLE_A7670"
 #endif
 
-#if defined(HAL_ENABLE_LORA) && !defined(HAL_ENABLE_SX126X)
-#error "HAL_ENABLE_LORA requires exactly one provider; select HAL_ENABLE_SX126X"
+#if defined(HAL_ENABLE_LORA) && !defined(HAL_ENABLE_SX126X) &&                 \
+    !defined(HAL_ENABLE_SX127X)
+#error                                                                         \
+    "HAL_ENABLE_LORA requires exactly one provider; select HAL_ENABLE_SX126X or HAL_ENABLE_SX127X"
 #endif
 
 #if defined(HAL_ENABLE_THERMOCOUPLE) && !defined(HAL_ENABLE_MCP9600) &&        \
@@ -590,6 +592,18 @@
 #if HAL_LORA_SX126X_BUSY_TIMEOUT_MS < 1u ||                                    \
     HAL_LORA_SX126X_BUSY_TIMEOUT_MS > 60000u
 #error "HAL_LORA_SX126X_BUSY_TIMEOUT_MS must be in range 1..60000"
+#endif
+
+/**
+ * @def HAL_LORA_SX127X_RESET_SETTLE_MS
+ * Delay after releasing SX127x reset before the version probe.
+ */
+#ifndef HAL_LORA_SX127X_RESET_SETTLE_MS
+#define HAL_LORA_SX127X_RESET_SETTLE_MS 10u
+#endif
+#if HAL_LORA_SX127X_RESET_SETTLE_MS < 5u ||                                    \
+    HAL_LORA_SX127X_RESET_SETTLE_MS > 1000u
+#error "HAL_LORA_SX127X_RESET_SETTLE_MS must be in range 5..1000"
 #endif
 
 /**

@@ -110,6 +110,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/time/hal_time_ntp.cpp
     ${SRC}/hal/temperature/hal_thermocouple.cpp
     ${SRC}/hal/radio/hal_lora_radio.cpp
+    ${SRC}/hal/radio/jh_lora_modem.cpp
     ${SRC}/hal/spi/hal_spi_device.cpp
     ${SRC}/hal/network/hal_network_status.cpp
     ${SRC}/hal/network/tls/hal_tls.cpp
@@ -380,6 +381,7 @@ if(JH_ENABLE_FREERTOS_POSIX_TESTS)
         ${SRC}/hal/network/jh_network_service.cpp
         ${SRC}/hal/timers/smart_timers/SmartTimers.cpp
         ${SRC}/hal/radio/hal_lora_radio.cpp
+        ${SRC}/hal/radio/jh_lora_modem.cpp
         ${SRC}/hal/radio/sx126x/jh_sx126x_adapter.cpp
         ${SRC}/hal/core/jh_handle_pool.cpp
         ${JH_SX126X_SOURCES}

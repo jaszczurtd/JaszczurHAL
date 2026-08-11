@@ -267,14 +267,14 @@ jobs:
       matrix:
         include:
           - target: rp2040
-            board: pico
+            board: picow
           - target: rp2350-arm
-            board: pico2
+            board: pico2w
           - target: rp2350-riscv
             board: pico2
           - target: stm32g474
-            board: nucleo-g474re
-    name: "Windows static library (${{ matrix.target }})"
+            board: nucleo-g474re-pim730
+    name: "Windows all-features library (${{ matrix.target }})"
 
     steps:
       - uses: actions/checkout@v5
@@ -331,6 +331,7 @@ jobs:
             "-DHAL_PROJECT_CONFIG_DIR=$project",
             '-DJH_TARGET=${{ matrix.target }}',
             '-DJH_BOARD=${{ matrix.board }}',
+            '-DJH_ENABLE_ALL_FEATURES=ON',
             '-DCMAKE_BUILD_TYPE=Release',
             '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
           )
@@ -675,348 +676,67 @@ jobs:
       - name: Run vulnerability scan
         run: JH_SECURITY_SCAN_SOURCE=1 ./scripts/check_vulnerabilities.sh
 
-  # ── STM32 skeleton compile gate ────────────────────────────────────────────
-  # This job builds the STM32G474 static-library target with the host compiler
-  # It catches backend regressions in src/hal/impl/stm32g474
-  # and contributes directly to CI quality scoring.
-  stm32-build:
+  # ── One all-features build per production architecture ─────────────────────
+  linux-static-library:
     runs-on: ubuntu-latest
     needs: test
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Prepare STM32 source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_sx126x.sh --force
-
-      - name: Configure STM32 host build
-        run: cmake -S stm32_lib -B .build/ci/stm32-host -DJH_STM32_HOST_SANITY=ON
-
-      - name: Build STM32 host static library
-        run: cmake --build .build/ci/stm32-host --target JaszczurHAL --parallel
-
-  # ── Official Pico SDK native build gate ───────────────────────────────────
-  # Builds the HAL source inventory for RP2040,
-  # RP2350 ARM and RP2350 Hazard3 RISC-V. Each build must produce the library,
-  # linkable static archive in both bare-metal and FreeRTOS configurations.
-  # Firmware probes and checked-in examples belong exclusively to runalltests.sh.
-  native-pico-build:
-    runs-on: ubuntu-latest
-    needs: test
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Install native Pico build prerequisites
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            gcc-arm-none-eabi binutils-arm-none-eabi \
-            libusb-1.0-0-dev pkg-config default-jre-headless
-
-      - name: Prepare pinned Pico SDK tools
-        run: ./third_party/update_components.sh
-
-      - name: Build RP2040, RP2350 ARM and RP2350 RISC-V static libraries
-        run: |
-          for platform in rp2040 rp2350-arm-s rp2350-riscv; do
-            ./scripts/build_rp_native_lib.sh \
-              --platform "${platform}" --library-only --clean --jobs 4 \
-              --output ".build/ci/native/${platform}/bare"
-            ./scripts/build_rp_native_lib.sh \
-              --platform "${platform}" --freertos --library-only --clean --jobs 4 \
-              --output ".build/ci/native/${platform}/freertos"
-          done
-
-      - name: Verify native RP link inputs
-        run: |
-          if find .build/ci/native \
-              -type f -name core.a -print -quit | grep -q .; then
-            echo "::error::Native RP build produced an unexpected core.a"
-            exit 1
-          fi
-          if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
-              .build/ci/native \
-              --include='link.txt' --include='*.map' \
-              --include='compile_commands.json' --include='CMakeCache.txt'; then
-            echo "::error::Native RP build metadata references the removed carrier"
-            exit 1
-          fi
-
-  # ── Flag-propagation regression matrix ─────────────────────────────────────
-  # JaszczurHAL uses an opt-in HAL_ENABLE_* model with automatic upstream
-  # dependency propagation (e.g. HAL_ENABLE_PCF8563 implies HAL_ENABLE_RTC
-  # and HAL_ENABLE_I2C). The matrix profiles below exercise the
-  # extreme corners of the flag space so any regression in
-  # src/hal/core/hal_config.h (broken propagation, missing #ifdef guard in a
-  # backend TU, stale consistency #error) shows up as a failed native RP
-  # static-library build.
-  #
-  #   empty-core   - no HAL_ENABLE_* flags at all. Validates that the
-  #                  bare-core library still compiles when every optional
-  #                  module is off (catches missing #ifdef guards).
-  #   lora-board-stage1 - integrated SX1262 board metadata, official provider,
-  #                  shared HAL adapter and complete raw-radio source path.
-  #   no-radio-network - public WiFi/TCP/UDP surface on a plain Pico profile.
-  #                  Validates runtime rejection without touching CYW43 pins.
-  #   typical-set  - a realistic subset chosen so that *every*
-  #                  propagation chain in hal_config.h fires at least
-  #                  once (KV->EEPROM, MQTT->WIFI, PCF8563->RTC+I2C,
-  #                  GPS->SWSERIAL, MCP9600->THERMOCOUPLE+I2C,
-  #                  DS18B20->ONEWIRE, ILI9341->TFT->DISPLAY).
-  #   udp-wireguard - UDP without TCP plus WireGuard/lwIP. Catches network
-  #                  helpers accidentally hidden behind HAL_ENABLE_TCP and
-  #                  warning regressions in bundled lwIP include ordering.
-  #   picow-owned  - Pico W profile with JaszczurHAL-owned CYW43/lwIP.
-  #   pim730-owned - Pico+PIM730 profile with the external radio frontend and
-  #                  JaszczurHAL-owned CYW43/lwIP.
-  #   all-enabled  - every concrete HAL_ENABLE_* module/backend flag set
-  #                  explicitly. Validates that no two backends collide
-  #                  and that all consistency #error checks stay satisfied.
-  native-flag-matrix:
-    runs-on: ubuntu-latest
-    needs: [test, stm32-build]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - profile: empty-core
-            board: pico
+          - target: rp2040
             platform: rp2040
-            flags: -D HAL_BOARD_PROFILE_RP_PICO
-          - profile: lora-board-stage1
-            board: rp2040-lora-lf
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_SX126X
-              -D HAL_BOARD_PROFILE_RP2040_LORA_LF
-          - profile: rp2350-arm-empty
-            board: pico2
+            board: picow
+          - target: rp2350-arm
             platform: rp2350-arm-s
-            flags: -D HAL_BOARD_PROFILE_RP_PICO_2
-          - profile: no-radio-network
-            board: pico
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_TCP
-              -D HAL_ENABLE_UDP
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: typical-set
-            board: picow
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_MQTT
-              -D HAL_ENABLE_KV
-              -D HAL_ENABLE_PCF8563
-              -D HAL_ENABLE_MCP9600
-              -D HAL_ENABLE_DS18B20
-              -D HAL_ENABLE_GPS
-              -D HAL_ENABLE_ILI9341
-              -D HAL_DISPLAY_ILI9341
-              -D HAL_ENABLE_PWM_FREQ
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_W
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: udp-wireguard
-            board: picow
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_UDP
-              -D HAL_ENABLE_WIREGUARD
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_W
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: picow-owned
-            board: picow
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_UDP
-              -D HAL_ENABLE_TCP
-              -D HAL_ENABLE_BSD_SOCKETS
-              -D HAL_ENABLE_TLS
-              -D HAL_ENABLE_HTTP_CLIENT
-              -D HAL_ENABLE_HTTP_SERVER
-              -D HAL_ENABLE_HTTP_FILES
-              -D HAL_ENABLE_WEBSOCKET
-              -D HAL_ENABLE_NET_CONSOLE
-              -D HAL_ENABLE_MQTT
-              -D HAL_ENABLE_WIREGUARD
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_W
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: pico2w-owned
             board: pico2w
-            platform: rp2350-arm-s
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_UDP
-              -D HAL_ENABLE_TCP
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_2_W
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: pim730-owned
-            board: pico-rm2
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_UDP
-              -D HAL_ENABLE_TCP
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_PIM730
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
-          - profile: all-enabled
-            board: picow
-            platform: rp2040
-            flags: >-
-              -D HAL_ENABLE_WIFI
-              -D HAL_ENABLE_TIME
-              -D HAL_ENABLE_MQTT
-              -D HAL_ENABLE_UDP
-              -D HAL_ENABLE_TCP
-              -D HAL_ENABLE_BSD_SOCKETS
-              -D HAL_ENABLE_TLS
-              -D HAL_ENABLE_HTTP_CLIENT
-              -D HAL_ENABLE_HTTP_SERVER
-              -D HAL_ENABLE_HTTP_FILES
-              -D HAL_ENABLE_WEBSOCKET
-              -D HAL_ENABLE_NET_CONSOLE
-              -D HAL_ENABLE_NET_COMMANDS
-              -D HAL_ENABLE_OTA
-              -D HAL_ENABLE_WIREGUARD
-              -D HAL_ENABLE_EEPROM
-              -D HAL_ENABLE_KV
-              -D HAL_ENABLE_LITTLEFS
-              -D HAL_ENABLE_FAT
-              -D HAL_ENABLE_SDLOGGER
-              -D HAL_ENABLE_UART
-              -D HAL_ENABLE_SWSERIAL
-              -D HAL_ENABLE_I2C
-              -D HAL_ENABLE_I2C_SLAVE
-              -D HAL_ENABLE_SX126X
-              -D HAL_ENABLE_MCP2515
-              -D HAL_ENABLE_PCF8563
-              -D HAL_ENABLE_DS3231
-              -D HAL_ENABLE_MCP9600
-              -D HAL_ENABLE_MAX6675
-              -D HAL_ENABLE_DS18B20
-              -D HAL_ENABLE_ONEWIRE
-              -D HAL_ENABLE_EXTERNAL_ADC
-              -D HAL_ENABLE_GPS
-              -D HAL_ENABLE_DAC
-              -D HAL_ENABLE_PCNT
-              -D HAL_ENABLE_PWM_FREQ
-              -D HAL_ENABLE_RGB_LED
-              -D HAL_ENABLE_ILI9341
-              -D HAL_DISPLAY_ILI9341
-              -D HAL_ENABLE_SSD1306
-              -D HAL_ENABLE_CRYPTO
-              -D HAL_ENABLE_CJSON
-              -D HAL_NETWORK_BACKEND_CYW43
-              -D HAL_CYW43_BUS_PICO_PIO
-              -D HAL_CYW43_STACK_LWIP
-              -D HAL_BOARD_PROFILE_RP_PICO_W
-              -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u
+          - target: rp2350-riscv
+            platform: rp2350-riscv
+            board: pico2
+          - target: stm32g474
+            platform: stm32g474
+            board: nucleo-g474re-pim730
+    name: "Linux all-features library (${{ matrix.target }})"
 
-    name: "Native RP lib (${{ matrix.profile }})"
     steps:
       - uses: actions/checkout@v5
 
-      - name: Prepare RP source dependencies
+      - name: Install native build prerequisites
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             gcc-arm-none-eabi binutils-arm-none-eabi \
             libusb-1.0-0-dev pkg-config default-jre-headless
-          ./third_party/update_components.sh
 
-      - name: "Quality Gate: Build native RP static library (${{ matrix.profile }})"
+      - name: Prepare pinned source dependencies
+        run: ./third_party/update_components.sh
+
+      - name: Build all-features static library
         run: |
-          ./scripts/build_rp_native_lib.sh --library-only --clean \
-            --platform ${{ matrix.platform }} \
-            --board ${{ matrix.board }} \
-            --output ".build/ci/flags/${{ matrix.profile }}" \
-            ${{ matrix.flags }}
-          test -f ".build/ci/flags/${{ matrix.profile }}/libJaszczurHAL.a"
-          if find ".build/ci/flags/${{ matrix.profile }}" \
-              -type f -name core.a -print -quit | grep -q .; then
-            echo "::error::Native RP flag build produced an unexpected core.a"
+          if [[ "${{ matrix.target }}" == "stm32g474" ]]; then
+            ./scripts/build_stm32_lib.sh \
+              --all-features --clean --jobs 4 \
+              --board "${{ matrix.board }}" \
+              --output ".build/ci/linux/${{ matrix.target }}"
+          else
+            ./scripts/build_rp_native_lib.sh \
+              --all-features --library-only --clean --jobs 4 \
+              --platform "${{ matrix.platform }}" \
+              --board "${{ matrix.board }}" \
+              --output ".build/ci/linux/${{ matrix.target }}"
+          fi
+
+          build_dir=".build/ci/linux/${{ matrix.target }}"
+          test -f "${build_dir}/libJaszczurHAL.a"
+          if find "${build_dir}" -type f -name core.a -print -quit |
+              grep -q .; then
+            echo "::error::Native build produced an unexpected core.a"
             exit 1
           fi
           if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
-              ".build/ci/flags/${{ matrix.profile }}" \
+              "${build_dir}" \
               --include='link.txt' --include='*.map' \
               --include='compile_commands.json' --include='CMakeCache.txt'; then
-            echo "::error::Native RP flag build references the removed carrier"
+            echo "::error::Native build metadata references the removed carrier"
             exit 1
           fi
-
-  # ── STM32G474 CYW43 static library ────────────────────────────────────────
-  # Keep target-specific CYW43 archive coverage in CI without compiling
-  # firmware; firmware fixtures and examples belong to runalltests.sh.
-  stm32-cyw43-library:
-    runs-on: ubuntu-latest
-    needs: test
-    name: "STM32G474 CYW43 static library"
-
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Prepare STM32 library source dependencies
-        run: |
-          ./scripts/ensure_bearssl.sh --force
-          ./scripts/ensure_cjson.sh --force
-          ./scripts/ensure_lodepng.sh --force
-          ./scripts/ensure_jpeg.sh --force
-          ./scripts/ensure_fatfs.sh --force
-          ./scripts/ensure_unity.sh --force
-          ./scripts/ensure_lwip.sh --force
-          ./scripts/ensure_littlefs.sh --force
-          ./scripts/ensure_btstack.sh --force
-          ./scripts/ensure_sx126x.sh --force
-
-      - name: Install STM32 toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi binutils-arm-none-eabi
-
-      - name: Compile STM32G474 CYW43 static library
-        run: |
-          scripts/build_stm32_lib.sh \
-            --output .build/ci/stm32-cyw43 \
-            --board nucleo-g474re-pim730 \
-            -D HAL_ENABLE_WIFI \
-            -D HAL_ENABLE_TCP \
-            -D HAL_ENABLE_UDP \
-            -D HAL_NETWORK_BACKEND_CYW43 \
-            -D HAL_CYW43_BUS_STM32_GSPI \
-            -D HAL_CYW43_STACK_LWIP \
-            -D HAL_CYW43_PIN_WL_ON=30u \
-            -D HAL_CYW43_PIN_CHIP_SELECT=28u \
-            -D HAL_CYW43_PIN_DATA=31u \
-            -D HAL_CYW43_PIN_CLOCK=29u \
-            -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u \
-            --jobs 4

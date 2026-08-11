@@ -471,6 +471,22 @@ def check_production_feature_facade(compiler: str) -> None:
         {"HAL_ENABLE_SX126X", "HAL_ENABLE_LORA", "HAL_ENABLE_SPI"} <= sx126x,
         "hal_config.h did not expose the SX126x provider closure",
     )
+    sx127x = preprocess_hal_config_features(
+        compiler, ("HAL_TARGET_MOCK=1", "HAL_ENABLE_SX127X=1")
+    )
+    require(
+        {"HAL_ENABLE_SX127X", "HAL_ENABLE_LORA", "HAL_ENABLE_SPI"} <= sx127x,
+        "hal_config.h did not expose the SX127x provider closure",
+    )
+    require_hal_config_failure(
+        compiler,
+        (
+            "HAL_TARGET_MOCK=1",
+            "HAL_ENABLE_SX126X=1",
+            "HAL_ENABLE_SX127X=1",
+        ),
+        "HAL_ENABLE_SX126X conflicts with HAL_ENABLE_SX127X",
+    )
     require_hal_config_failure(
         compiler,
         ("HAL_TARGET_MOCK=1", "HAL_ENABLE_LORA=1"),
@@ -611,13 +627,13 @@ if TEST_ROOT.exists():
 TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 95, "feature registry symbol count drifted")
+require(len(model.features) == 96, "feature registry symbol count drifted")
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 60,
+    sum(bool(feature.implies) for feature in model.features.values()) == 61,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 110,
+    sum(len(feature.implies) for feature in model.features.values()) == 112,
     "feature registry direct-edge count drifted",
 )
 require(
@@ -628,6 +644,11 @@ require(
     model.features["HAL_ENABLE_SX126X"].implies
     == ("HAL_ENABLE_LORA", "HAL_ENABLE_SPI"),
     "SX126x provider dependencies drifted",
+)
+require(
+    model.features["HAL_ENABLE_SX127X"].implies
+    == ("HAL_ENABLE_LORA", "HAL_ENABLE_SPI"),
+    "SX127x provider dependencies drifted",
 )
 source_symbols: set[str] = set()
 for source_path in (ROOT / "src/hal").rglob("*"):
@@ -697,8 +718,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 49,
-    "hal_config.h retained validation inventory drifted from 49 #error checks",
+    == 50,
+    "hal_config.h retained validation inventory drifted from 50 #error checks",
 )
 
 checked = run_generator("--check")

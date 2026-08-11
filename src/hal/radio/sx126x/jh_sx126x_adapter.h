@@ -10,12 +10,6 @@
 extern "C" {
 #endif
 
-bool jh_sx126x_modem_config_valid(
-    const hal_lora_modem_config_t *config,
-    const hal_lora_sx126x_hardware_config_t *hardware);
-hal_status_t jh_sx126x_time_on_air(const hal_lora_modem_config_t *config,
-                                   size_t payload_length,
-                                   uint32_t *out_time_ms);
 const jh_lora_radio_provider_ops_t *jh_sx126x_provider_ops(void);
 
 hal_status_t jh_sx126x_wait_while_busy(jh_lora_radio_context_t *context,

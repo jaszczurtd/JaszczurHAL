@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added experimental, software-only SX1261, SX1276 and SX1278 integrations.
+  SX1261 reuses the pinned SX126x driver with model-specific PA, OCP and power
+  validation. SX1276/SX1278 use a small HAL-only register provider with a
+  separate wiring descriptor and the existing common radio lifecycle.
+- Registered the mutually exclusive `HAL_ENABLE_SX126X` and
+  `HAL_ENABLE_SX127X` provider families, added deterministic SPI/GPIO,
+  lifecycle, public-header and RP2040/STM32G474 static-library gates, and kept
+  all three new models `experimental` because no physical radio was available.
 - Limited GitHub target-build jobs to linkable `libJaszczurHAL.a` archives;
   firmware probes, hardware fixtures, and the checked-in example matrix remain
   part of the full local `runalltests.sh` gate. Added

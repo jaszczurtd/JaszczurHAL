@@ -104,7 +104,12 @@ static hal_status_t
 mock_get_capabilities(jh_lora_radio_context_t *context,
                       hal_lora_radio_capabilities_t *out_capabilities) {
   return jh_lora_radio_describe_capabilities(
-      context, JH_LORA_PROVIDER_CAP_SX1262, out_capabilities);
+      context,
+      context->config.model == HAL_LORA_RADIO_SX1276 ||
+              context->config.model == HAL_LORA_RADIO_SX1278
+          ? JH_LORA_PROVIDER_CAP_SX127X
+          : JH_LORA_PROVIDER_CAP_SX126X,
+      out_capabilities);
 }
 
 static hal_status_t mock_get_instant_rssi(jh_lora_radio_context_t *context,
@@ -243,6 +248,10 @@ static hal_status_t mock_standby(jh_lora_radio_context_t *context) {
 }
 
 static hal_status_t mock_calibrate(jh_lora_radio_context_t *context) {
+  if (context->config.model == HAL_LORA_RADIO_SX1276 ||
+      context->config.model == HAL_LORA_RADIO_SX1278) {
+    return HAL_EUNSUPPORTED;
+  }
   const hal_status_t status =
       consume(find_state(context), HAL_MOCK_LORA_CALIBRATE);
   if (status == HAL_OK) {

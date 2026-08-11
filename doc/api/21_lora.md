@@ -2,31 +2,31 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-`hal_lora_radio` is the provider-neutral raw packet-radio facade. The current
-provider integrates an SX1262 through the pinned official Semtech SX126x
-driver and a shared adapter that uses only HAL SPI, GPIO, timing and mutex
-services. The same implementation builds for RP2040, RP2350 and STM32G474;
-the deterministic mock provides host tests.
+`hal_lora_radio` is the provider-neutral raw packet-radio facade. One selected
+family provider integrates SX1261/SX1262 through the pinned official Semtech
+SX126x driver or SX1276/SX1278 through the HAL-owned SX127x register driver.
+Both use only HAL SPI, GPIO, timing and mutex services and build for RP2040,
+RP2350 and STM32G474; the deterministic mock provides host tests.
 
 The API supports blocking and asynchronous transmit, asynchronous receive,
-DIO1-driven task-context processing, channel activity detection (CAD), current
+DIO-driven task-context processing, channel activity detection (CAD), current
 RSSI reads, explicit calibration, capabilities, callbacks, cancellation and
 explicit operation states. Applications own hardware and modem descriptors.
 Each opaque handle owns its TX/RX packet buffers, state, mutex and diagnostics.
 
 ## Enable the module
 
-Select the SX126x provider in `hal_project_config.h`:
+Select exactly one family provider in `hal_project_config.h`:
 
 ```c
 #pragma once
 
 #define HAL_ENABLE_SX126X
+/* or: #define HAL_ENABLE_SX127X */
 ```
 
 The feature registry propagates `HAL_ENABLE_LORA` and `HAL_ENABLE_SPI`.
-Selecting `HAL_ENABLE_LORA` alone is rejected because the facade requires one
-provider.
+Selecting `HAL_ENABLE_LORA` alone or both family providers is rejected.
 
 The following tunables are available before `hal_config.h` is included:
 
@@ -34,20 +34,39 @@ The following tunables are available before `hal_config.h` is included:
 |---|---:|---:|---|
 | `HAL_LORA_RADIO_MAX_INSTANCES` | 2 | 1..255 | Number of generation-tagged static handle slots |
 | `HAL_LORA_SX126X_BUSY_TIMEOUT_MS` | 1000 | 1..60000 | Maximum wait for the SX126x BUSY line around a command |
+| `HAL_LORA_SX127X_RESET_SETTLE_MS` | 10 | 5..1000 | Delay after releasing SX127x reset before its version probe |
+
+## Model maturity
+
+SX1262 is physically validated on the boards and fixtures described below.
+SX1261, SX1276 and SX1278 are `experimental`: their integration has passed
+deterministic host tests plus RP2040 and STM32G474 compile/link gates, but no
+physical radio was available. They deliberately add no board profile or
+runtime capability. Promotion requires a documented hardware test for the
+specific model.
+
+The Semtech SX127x implementations available in LoRaMac-node and LoRa Basics
+Modem are coupled to their respective board, timer and stack layers. Pulling
+either complete stack solely for raw-radio register access would create an
+unnecessary dependency boundary. JaszczurHAL therefore owns the compact
+SX127x provider; it follows the public register interface and remains behind
+the same provider-neutral facade.
 
 ## Hardware ownership
 
-Initialize the selected SPI controller before creating a radio. The facade
-serializes each command with the HAL bus lock and applies the device clock,
-mode 0 and MSB-first settings for each transaction. It owns the radio CS,
-RESET, BUSY, DIO1, RF-switch and optional DIO3 TCXO behavior described by the
-hardware descriptor.
+Creating a radio initializes the selected SPI controller with the descriptor's
+pins. The facade serializes each command with the HAL bus lock and applies the
+device clock, mode 0 and MSB-first settings for each transaction. It owns the
+radio CS, RESET and family-specific control behavior described by the hardware
+descriptor. SX126x owns BUSY, DIO1 and its RF-switch/TCXO topology. SX127x has
+a separate descriptor for DIO0 through DIO2, optional RX/TX switch GPIOs,
+optional TCXO enable and RFO versus PA_BOOST selection.
 
 The SPI controller may be shared with other HAL devices. The provider attaches
-a rising-edge DIO1 interrupt during create; its ISR only records pending work.
+rising-edge interrupts during create; their ISR only records pending work.
 SPI commands and callbacks run later from task context. Destroying a radio
-detaches DIO1, returns the SX1262 to standby and releases its handle without
-deinitializing the shared bus.
+detaches the family-specific DIO lines, returns the radio to a safe power state
+and releases its handle without deinitializing the shared bus.
 
 ## Integrated board configuration
 
@@ -114,6 +133,37 @@ sx->rf_switch_pin_b = 11;
 `HAL_LORA_PIN_NONE` marks a GPIO that is intentionally unconnected. Required
 pins and RF-switch topology are validated during `hal_lora_radio_create()`.
 
+For application-owned SX127x wiring, fill `hardware.sx127x` directly. DIO0 and
+RESET are required; DIO1/DIO2, RX/TX switch GPIOs and TCXO enable may use
+`HAL_LORA_PIN_NONE`. The selected PA path constrains the accepted power range:
+RFO supports -4..15 dBm and PA_BOOST supports 2..20 dBm. SX1278 is limited to
+137..525 MHz, while an SX1276 descriptor may extend to 960 MHz. Module limits
+may narrow these chip limits.
+
+```c
+hal_lora_radio_config_t hardware = {0};
+hardware.model = HAL_LORA_RADIO_SX1276;
+hardware.spi_bus = 0;
+hardware.spi_miso_pin = 16;
+hardware.spi_mosi_pin = 19;
+hardware.spi_sck_pin = 18;
+hardware.cs_pin = 17;
+hardware.spi_clock_hz = UINT32_C(4000000);
+hardware.hardware.sx127x.reset_pin = 20;
+hardware.hardware.sx127x.dio0_pin = 21;
+hardware.hardware.sx127x.dio1_pin = 22;
+hardware.hardware.sx127x.dio2_pin = HAL_LORA_PIN_NONE;
+hardware.hardware.sx127x.rf_switch_rx_pin = HAL_LORA_PIN_NONE;
+hardware.hardware.sx127x.rf_switch_tx_pin = HAL_LORA_PIN_NONE;
+hardware.hardware.sx127x.tcxo_enable_pin = HAL_LORA_PIN_NONE;
+hardware.hardware.sx127x.pa_output = HAL_LORA_SX127X_PA_BOOST;
+hardware.hardware.sx127x.min_frequency_hz = UINT32_C(850000000);
+hardware.hardware.sx127x.max_frequency_hz = UINT32_C(930000000);
+hardware.hardware.sx127x.max_spi_clock_hz = UINT32_C(10000000);
+hardware.hardware.sx127x.min_tx_power_dbm = 2;
+hardware.hardware.sx127x.max_tx_power_dbm = 20;
+```
+
 ## Lifecycle and modem configuration
 
 The normal sequence is SPI initialization, create/probe, modem configure,
@@ -139,9 +189,10 @@ handle return `HAL_EUNINIT`. `hal_lora_radio_create()` returns `HAL_ENOMEM`
 when the configured static pool is full. Active TX/RX/CAD must be completed or
 cancelled before destroy.
 
-Modem validation covers SX1262 hardware frequency/power limits, supported LoRa
-bandwidths, spreading factors 5 through 12, coding rates 5 through 8, preamble,
-header mode and implicit payload length.
+Modem validation covers model and module frequency/power limits, supported LoRa
+bandwidths, coding rates 5 through 8, preamble, header mode and implicit payload
+length. SX126x accepts spreading factors 5 through 12; SX127x accepts 6 through
+12.
 
 Three EU868 technical presets use 868.1 MHz, 125 kHz, coding rate 4/5, explicit
 header, CRC, an eight-symbol preamble and 14 dBm:
@@ -234,7 +285,8 @@ return `HAL_EBUSY` while a radio operation is active.
 
 ## Polling receive
 
-Start one bounded receive window, service DIO1 and copy the completed packet:
+Start one bounded receive window, service provider IRQs and copy the completed
+packet:
 
 ```c
 status = hal_lora_radio_receive_start(radio, 1500u);
@@ -263,7 +315,7 @@ while (status == HAL_OK) {
 `hal_lora_radio_receive_start_continuous()` keeps the receiver active after a
 packet. Call `hal_lora_radio_cancel()` to stop continuous receive.
 `hal_lora_radio_receive()` remains a compatibility polling entry: it services
-one pending DIO1/timeout step itself before copying a packet.
+one pending provider IRQ/timeout step itself before copying a packet.
 
 Receive results have the following meanings:
 
@@ -281,20 +333,25 @@ timestamp and CRC validity.
 ## Capabilities, current RSSI, CAD and calibration
 
 `hal_lora_radio_get_capabilities()` reports provider-neutral hardware limits
-and optional operations. The SX1262 provider exposes continuous RX, CAD,
-current RSSI and explicit calibration:
+and optional operations. SX126x exposes continuous RX, CAD, current RSSI and
+explicit calibration. SX127x exposes continuous RX, CAD and current RSSI, and
+reports explicit calibration as unsupported:
 
 ```c
 hal_lora_radio_capabilities_t capabilities;
 status = hal_lora_radio_get_capabilities(radio, &capabilities);
 ```
 
+Call `hal_lora_radio_calibrate()` only when
+`supports_explicit_calibration` is true. SX127x returns `HAL_EUNSUPPORTED`
+without changing the stable standby state.
+
 `hal_lora_radio_get_instant_rssi()` reads the current receiver RSSI and is
 valid only while the radio is in RX mode. It returns `HAL_ESTATE` in standby,
 TX, CAD or sleep. The read updates `last_instant_rssi_dbm` and
 `instant_rssi_reads` diagnostics.
 
-CAD is an asynchronous operation serviced by the same DIO1/process lifecycle
+CAD is an asynchronous operation serviced by the same DIO/process lifecycle
 as TX and RX:
 
 ```c
@@ -324,13 +381,15 @@ the common operation-state and callback semantics. CAD is a channel observation,
 not a regulatory listen-before-talk policy; the application remains responsible
 for any required access procedure.
 
-The SX1262 provider performs full calibration during create and band-aware
+The SX126x provider performs full calibration during create and band-aware
 image calibration during configure. It caches the calibrated frequency range,
 so repeated configuration inside one range does not issue redundant image
 calibration. `hal_lora_radio_calibrate()` explicitly repeats full calibration
 and image calibration for the configured frequency while in standby. It
 returns `HAL_ESTATE` before modem configuration or while another operation is
 active.
+SX127x capabilities report explicit calibration as unsupported, and its
+provider returns `HAL_EUNSUPPORTED` for that optional operation.
 
 ## State, power and diagnostics
 
@@ -338,13 +397,13 @@ active.
 state machine uses
 `STANDBY`, `RX`, `TX`, `CAD`, `SLEEP` and `ERROR`.
 
-`hal_lora_radio_sleep()` enters the SX1262 warm-start sleep configuration.
+`hal_lora_radio_sleep()` enters the selected radio's sleep configuration.
 `hal_lora_radio_standby()` wakes a sleeping or error-state radio. Active RX/TX
 is ended through `hal_lora_radio_cancel()`.
 
 `hal_lora_radio_get_diagnostics()` copies counters for transmitted/received
 packets, CRC/header errors, TX/RX timeouts, cancellations, operation/bus errors,
-DIO1 events, callback delivery, dropped packets/events and resets. CAD counters
+DIO events, callback delivery, dropped packets/events and resets. CAD counters
 distinguish checks, detected, clear and timed-out results. Calibration counters
 distinguish full and image calibration and retain the cached frequency range.
 Diagnostics also report the latest packet RSSI, signal RSSI, current RSSI, SNR,
@@ -369,12 +428,13 @@ duty-cycle behavior.
 
 Runtime calls serialize per handle. Lifecycle operations (`create` and
 `destroy`) follow the library-wide single-core/single-owner rule and must run on
-the core that owns the DIO1 interrupt. Packet buffers are copied before a start
-call returns. Callback dispatch never holds the handle mutex.
+the core that owns the provider IRQ GPIOs. Packet buffers are copied before a
+start call returns. Callback dispatch never holds the handle mutex.
 
 Host coverage lives in `test_hal_lora_radio_lifecycle`,
-`test_hal_lora_radio`, `test_sx126x_adapter`, and the real-scheduler
-`test_lora_freertos_posix`. The buildable
+`test_hal_lora_radio`, `test_hal_lora_sx127x`, `test_sx126x_adapter`,
+`test_sx127x_adapter`, and the real-scheduler `test_lora_freertos_posix`. The
+buildable
 [`27_lora_point_to_point`](../../examples/27_lora_point_to_point/) project
 targets RP2040 and STM32G474. The repeatable two-device procedure and serial
 verifier are in

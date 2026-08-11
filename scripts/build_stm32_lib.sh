@@ -16,6 +16,7 @@
 #   -D KEY=VALUE               Extra compile definitions (repeatable)
 #   --board NAME               Board profile (default: nucleo-g474re)
 #   --freertos                 Define HAL_ENABLE_FREERTOS and ensure FreeRTOS-Kernel
+#   --all-features             Enable every feature supported by STM32G474
 #   --freertos-kernel PATH     Path to FreeRTOS-Kernel checkout
 #   -o, --output DIR           Output directory below .build/
 #                              (default: .build/static/stm32g474/<board>)
@@ -48,6 +49,7 @@ PROJECT_CONFIG_DIR=""
 BOARD="nucleo-g474re"
 EXTRA_DEFS=()
 FREERTOS=0
+ALL_FEATURES=0
 FREERTOS_KERNEL_DIR=""
 OUTPUT_DIR=""
 TOOLCHAIN_FILE="${REPO_ROOT}/stm32_lib/toolchain_stm32g474.cmake"
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
         --board) BOARD="$2"; shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
+        --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
         --freertos-kernel) FREERTOS_KERNEL_DIR="$2"; shift 2 ;;
         -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
         -t|--toolchain) TOOLCHAIN_FILE="$2"; shift 2 ;;
@@ -106,6 +109,10 @@ fi
 mkdir -p "${OUTPUT_DIR}"
 
 CMAKE_EXTRA_ARGS=()
+
+if [[ ${ALL_FEATURES} -eq 1 ]]; then
+    CMAKE_EXTRA_ARGS+=("-DJH_ENABLE_ALL_FEATURES=ON")
+fi
 
 if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
     CMAKE_EXTRA_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")

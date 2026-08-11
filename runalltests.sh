@@ -258,6 +258,15 @@ info "Building real ARM STM32 static library..."
 cmake --build "${BUILD_STM32_TARGET}" --parallel "${JOBS}"
 pass "ARM STM32 compile database ready."
 
+BUILD_STM32_SX127X="${GATE_BUILD_ROOT}/stm32-target-sx127x"
+rm -rf "${BUILD_STM32_SX127X}"
+info "Building real ARM STM32 SX1276/SX1278 static library..."
+cmake -S stm32_lib -B "${BUILD_STM32_SX127X}" \
+    -DCMAKE_TOOLCHAIN_FILE="${SCRIPT_DIR}/stm32_lib/toolchain_stm32g474.cmake" \
+    -DEXTRA_HAL_DEFINES=HAL_ENABLE_SX127X
+cmake --build "${BUILD_STM32_SX127X}" --parallel "${JOBS}"
+pass "ARM STM32 SX1276/SX1278 static library ready."
+
 info "Running clang-tidy on host-compilable code..."
 TIDY_HOST_BUILD="${BUILD_DIR}/clang_tidy_db"
 mapfile -t TIDY_HOST_FILES < <(
@@ -354,6 +363,7 @@ pass "Native FreeRTOS SMP matrix built for RP2040 and both RP2350 ISAs."
 info "Building RP2040 flag matrix..."
 RP_FLAG_PROFILES=(
     empty-core
+    lora-sx127x
     typical-set
     udp-wireguard
     pim730-owned
@@ -365,6 +375,11 @@ for profile in "${RP_FLAG_PROFILES[@]}"; do
     board=pico
     case "${profile}" in
         empty-core)
+            ;;
+        lora-sx127x)
+            flags=(
+                -D HAL_ENABLE_SX127X
+            )
             ;;
         typical-set)
             board=picow

@@ -2,7 +2,7 @@ if(NOT JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 
-include("${JH_ROOT}/cmake/generated/jh_hal_features.cmake")
+include("${JH_ROOT}/cmake/jh_project_features.cmake")
 
 if(NOT JH_HAL_FEATURE_SCHEMA_VERSION EQUAL 1)
     message(FATAL_ERROR "Unexpected feature schema version")
@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 95)
-    message(FATAL_ERROR "Expected 95 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 96)
+    message(FATAL_ERROR "Expected 96 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")
@@ -38,6 +38,10 @@ if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_SX126X_TRANSITIVE_IMPLIES}" STREQUAL
        "HAL_ENABLE_LORA;HAL_ENABLE_SPI")
     message(FATAL_ERROR "SX126X transitive dependency table drifted")
 endif()
+if(NOT "${JH_HAL_FEATURE_HAL_ENABLE_SX127X_TRANSITIVE_IMPLIES}" STREQUAL
+       "HAL_ENABLE_LORA;HAL_ENABLE_SPI")
+    message(FATAL_ERROR "SX127X transitive dependency table drifted")
+endif()
 
 jh_hal_resolve_features(_requested _resolved
     HAL_ENABLE_MQTT HAL_ENABLE_BLE_STREAM=1)
@@ -49,3 +53,54 @@ if(NOT "${_resolved}" STREQUAL
        "HAL_ENABLE_BLE;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_CRYPTO;HAL_ENABLE_MQTT;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WIFI")
     message(FATAL_ERROR "Unexpected resolved feature set: ${_resolved}")
 endif()
+
+foreach(_target IN ITEMS rp2040 rp2350-arm rp2350-riscv stm32g474)
+    jh_all_features_for_target(_all_features "${_target}")
+    foreach(_required IN ITEMS
+            HAL_ENABLE_FREERTOS
+            HAL_ENABLE_SX127X
+            HAL_DISPLAY_ILI9341)
+        list(FIND _all_features "${_required}" _required_index)
+        if(_required_index EQUAL -1)
+            message(FATAL_ERROR
+                "All-features profile for ${_target} omitted ${_required}")
+        endif()
+    endforeach()
+    list(FIND _all_features HAL_ENABLE_SX126X _sx126x_index)
+    if(NOT _sx126x_index EQUAL -1)
+        message(FATAL_ERROR
+            "All-features profile for ${_target} selected both LoRa providers")
+    endif()
+endforeach()
+
+jh_all_features_for_target(_rp2040_features rp2040)
+list(FIND _rp2040_features HAL_ENABLE_BLE _rp2040_ble_index)
+list(FIND _rp2040_features HAL_ENABLE_OTA _rp2040_ota_index)
+if(_rp2040_ble_index EQUAL -1 OR _rp2040_ota_index EQUAL -1)
+    message(FATAL_ERROR "RP2040 all-features profile omitted BLE or OTA")
+endif()
+
+jh_all_features_for_target(_rp2350_arm_features rp2350-arm)
+list(FIND _rp2350_arm_features HAL_ENABLE_BLE _rp2350_arm_ble_index)
+list(FIND _rp2350_arm_features HAL_ENABLE_OTA _rp2350_arm_ota_index)
+if(NOT _rp2350_arm_ble_index EQUAL -1 OR _rp2350_arm_ota_index EQUAL -1)
+    message(FATAL_ERROR "RP2350 ARM all-features target filtering drifted")
+endif()
+
+jh_all_features_for_target(_rp2350_riscv_features rp2350-riscv)
+foreach(_unsupported IN ITEMS HAL_ENABLE_BLE HAL_ENABLE_OTA)
+    list(FIND _rp2350_riscv_features "${_unsupported}" _unsupported_index)
+    if(NOT _unsupported_index EQUAL -1)
+        message(FATAL_ERROR
+            "RP2350 RISC-V all-features profile retained ${_unsupported}")
+    endif()
+endforeach()
+
+jh_all_features_for_target(_stm32_features stm32g474)
+foreach(_supported IN ITEMS HAL_ENABLE_BLE HAL_ENABLE_OTA HAL_ENABLE_STM32G474_FDCAN)
+    list(FIND _stm32_features "${_supported}" _supported_index)
+    if(_supported_index EQUAL -1)
+        message(FATAL_ERROR
+            "STM32G474 all-features profile omitted ${_supported}")
+    endif()
+endforeach()
