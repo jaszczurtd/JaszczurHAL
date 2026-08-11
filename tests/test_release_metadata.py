@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
@@ -17,13 +19,30 @@ import check_release_metadata as release  # noqa: E402
 
 
 def git(root: Path, *arguments: str) -> None:
-    subprocess.run(
+    environment = os.environ.copy()
+    for variable in (
+        "ASAN_OPTIONS",
+        "LSAN_OPTIONS",
+        "MSAN_OPTIONS",
+        "TSAN_OPTIONS",
+        "UBSAN_OPTIONS",
+    ):
+        environment.pop(variable, None)
+
+    result = subprocess.run(
         ["git", *arguments],
         cwd=root,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
+        env=environment,
     )
+    if result.returncode != 0:
+        command = " ".join(("git", *arguments))
+        raise RuntimeError(
+            f"{command} failed with exit code {result.returncode}\n"
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
+        )
 
 
 def write_metadata(root: Path, version: str) -> None:
@@ -42,6 +61,25 @@ def write_metadata(root: Path, version: str) -> None:
 
 
 class ReleaseMetadataTests(unittest.TestCase):
+    def test_git_helper_does_not_forward_sanitizer_options(self) -> None:
+        sanitizer_variables = {
+            "ASAN_OPTIONS",
+            "LSAN_OPTIONS",
+            "MSAN_OPTIONS",
+            "TSAN_OPTIONS",
+            "UBSAN_OPTIONS",
+        }
+        injected = {variable: "enabled" for variable in sanitizer_variables}
+        with mock.patch.dict(os.environ, injected):
+            with mock.patch.object(subprocess, "run") as run:
+                run.return_value = subprocess.CompletedProcess(
+                    args=["git", "status"], returncode=0, stdout="", stderr=""
+                )
+                git(Path.cwd(), "status")
+
+        forwarded = run.call_args.kwargs["env"]
+        self.assertTrue(sanitizer_variables.isdisjoint(forwarded))
+
     def test_tracked_metadata_must_match(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-release-") as text:
             root = Path(text)
