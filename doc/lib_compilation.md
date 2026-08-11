@@ -191,6 +191,9 @@ From the repository root:
 
 # Native FreeRTOS SMP
 ./scripts/build_rp_native_lib.sh --target rp2040 --freertos
+
+# Linkable static library only, without firmware probes
+./scripts/build_rp_native_lib.sh --target rp2040 --library-only
 ```
 
 The main options are:
@@ -202,6 +205,7 @@ The main options are:
 | `--example NAME` | Build `examples/NAME` as firmware |
 | `--example-source FILE` | Select one source from a multi-profile example (repeatable) |
 | `--freertos` | Enable the pinned FreeRTOS SMP kernel |
+| `--library-only` | Build only the linkable `libJaszczurHAL.a` target, without firmware probes |
 | `-p`, `--project-config DIR` | Directory containing `hal_project_config.h` |
 | `-D KEY=VALUE` | Additional HAL definition; repeatable |
 | `--sdk-dir PATH` | Pico SDK checkout |
@@ -211,8 +215,9 @@ The main options are:
 | `--clean` | Recreate the selected build directory |
 | `-j`, `--jobs N` | Parallel build jobs |
 
-The default output is `.build/static/<target>/<board>/`. Every build verifies
-the static library and complete ELF/BIN/UF2 probe set:
+The default output is `.build/static/<target>/<board>/`. A default build
+verifies the static library and complete ELF/BIN/UF2 probe set; a
+`--library-only` build verifies only the archive:
 
 ```text
 .build/static/<target>/<board>/

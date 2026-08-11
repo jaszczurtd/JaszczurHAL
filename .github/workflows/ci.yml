@@ -260,7 +260,7 @@ jobs:
             }
           }
 
-  windows-firmware:
+  windows-static-library:
     runs-on: windows-2025
     strategy:
       fail-fast: false
@@ -268,17 +268,13 @@ jobs:
         include:
           - target: rp2040
             board: pico
-            uf2: true
           - target: rp2350-arm
             board: pico2
-            uf2: true
           - target: rp2350-riscv
             board: pico2
-            uf2: true
           - target: stm32g474
             board: nucleo-g474re
-            uf2: false
-    name: "Windows firmware (${{ matrix.target }})"
+    name: "Windows static library (${{ matrix.target }})"
 
     steps:
       - uses: actions/checkout@v5
@@ -308,63 +304,61 @@ jobs:
             --board '${{ matrix.board }}'
           if ($LASTEXITCODE -ne 0) { throw 'Consumer project generation failed.' }
 
-      - name: Build static library and representative firmware with Ninja
+      - name: Build linkable static library with Ninja
         shell: powershell
         run: |
-          $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
-          $entry = Join-Path $env:GITHUB_WORKSPACE 'vscode\entry\jh-vscode.cmd'
-          & $entry build --project $project `
-            --target '${{ matrix.target }}' --board '${{ matrix.board }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Representative firmware build failed.' }
-          & $entry refresh-intellisense --project $project `
-            --target '${{ matrix.target }}' --board '${{ matrix.board }}'
-          if ($LASTEXITCODE -ne 0) { throw 'Compile database refresh failed.' }
-
-          $artifactRoot = Join-Path $project '.build'
-          $expected = @('firmware.elf', 'firmware.bin', 'firmware.hex', 'firmware.map')
-          if ('${{ matrix.uf2 }}' -eq 'true') { $expected += 'firmware.uf2' }
-          $expected += 'compile_commands_patched.json'
-          foreach ($name in $expected) {
-            $path = Join-Path $artifactRoot $name
-            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-              throw "Missing managed artifact: $path"
-            }
-          }
-
-          $archives = Get-ChildItem -LiteralPath C:\jh\build -Recurse `
-            -File -Filter 'libJaszczurHAL.a'
-          if ('${{ matrix.target }}' -ne 'stm32g474' -and -not $archives) {
-            throw 'Native RP build did not produce libJaszczurHAL.a.'
-          }
-
-      - name: Build STM32G474 static library
-        if: matrix.target == 'stm32g474'
-        shell: powershell
-        run: |
-          $state = Get-Content .build/windows/host-environment.json -Raw | ConvertFrom-Json
+          $state = Get-Content .build/windows/host-environment.json -Raw |
+            ConvertFrom-Json
           $toolDirs = $state.tools.PSObject.Properties |
             ForEach-Object { Split-Path -Parent $_.Value } |
             Select-Object -Unique
           $env:Path = ($toolDirs -join ';') + ';' + $env:Path
           $env:JH_MANAGED_BUILD_ROOT = $state.buildRoot
-          $build = 'C:\jh\build\static-stm32g474'
-          & $state.tools.cmake -S stm32_lib -B $build -G Ninja `
-            "-DCMAKE_MAKE_PROGRAM=$($state.tools.ninja)" `
-            "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\stm32_lib\toolchain_stm32g474.cmake" `
-            "-DPython3_EXECUTABLE=$($state.python)" `
-            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-          if ($LASTEXITCODE -ne 0) { throw 'STM32 static-library configure failed.' }
-          & $state.tools.cmake --build $build --target JaszczurHAL
-          if ($LASTEXITCODE -ne 0) { throw 'STM32 static-library build failed.' }
-          if (-not (Test-Path "$build\libJaszczurHAL.a" -PathType Leaf)) {
-            throw 'STM32 static-library archive is missing.'
+
+          $project = Join-Path $env:GITHUB_WORKSPACE 'stage5 consumer with spaces'
+          $build = Join-Path $state.buildRoot 'ci-static-${{ matrix.target }}'
+          if ('${{ matrix.target }}' -eq 'stm32g474') {
+            $source = Join-Path $env:GITHUB_WORKSPACE 'stm32_lib'
+          } else {
+            $source = Join-Path $env:GITHUB_WORKSPACE 'rp_native_lib'
+          }
+          $arguments = @(
+            '-S', $source,
+            '-B', $build,
+            '-G', 'Ninja',
+            "-DCMAKE_MAKE_PROGRAM=$($state.tools.ninja)",
+            "-DPython3_EXECUTABLE=$($state.python)",
+            "-DHAL_PROJECT_CONFIG_DIR=$project",
+            '-DJH_TARGET=${{ matrix.target }}',
+            '-DJH_BOARD=${{ matrix.board }}',
+            '-DCMAKE_BUILD_TYPE=Release',
+            '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON'
+          )
+          if ('${{ matrix.target }}' -eq 'stm32g474') {
+            $arguments += "-DCMAKE_TOOLCHAIN_FILE=$env:GITHUB_WORKSPACE\stm32_lib\toolchain_stm32g474.cmake"
+          } else {
+            $arguments += "-DPICO_SDK_PATH=$env:GITHUB_WORKSPACE\third_party\pico-sdk"
+            $arguments += "-DJH_PICOTOOL_EXECUTABLE=$($state.tools.picotool)"
+            $arguments += '-DJH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF'
+            $arguments += '-DJH_RP_NATIVE_BUILD_CORE1_PROBE=OFF'
+          }
+          if ('${{ matrix.target }}' -eq 'rp2350-riscv') {
+            $arguments += "-DPICO_TOOLCHAIN_PATH=$(Split-Path -Parent (Split-Path -Parent $state.tools.riscv))"
           }
 
-      - name: Upload representative firmware artifacts
+          & $state.tools.cmake @arguments
+          if ($LASTEXITCODE -ne 0) { throw 'Static-library configure failed.' }
+          & $state.tools.cmake --build $build --target JaszczurHAL
+          if ($LASTEXITCODE -ne 0) { throw 'Static-library build failed.' }
+          if (-not (Test-Path "$build\libJaszczurHAL.a" -PathType Leaf)) {
+            throw 'Static-library archive is missing.'
+          }
+
+      - name: Upload linkable static library
         uses: actions/upload-artifact@v6
         with:
-          name: windows-${{ matrix.target }}-firmware
-          path: stage5 consumer with spaces/.build/*
+          name: windows-${{ matrix.target }}-static-library
+          path: C:\jh\build\ci-static-${{ matrix.target }}\libJaszczurHAL.a
           if-no-files-found: error
           include-hidden-files: true
 
@@ -708,13 +702,13 @@ jobs:
         run: cmake -S stm32_lib -B .build/ci/stm32-host -DJH_STM32_HOST_SANITY=ON
 
       - name: Build STM32 host static library
-        run: cmake --build .build/ci/stm32-host --parallel
+        run: cmake --build .build/ci/stm32-host --target JaszczurHAL --parallel
 
   # ── Official Pico SDK native build gate ───────────────────────────────────
   # Builds the HAL source inventory for RP2040,
   # RP2350 ARM and RP2350 Hazard3 RISC-V. Each build must produce the library,
-  # native entry/core probes, portable core-runtime firmware and the pinned
-  # FreeRTOS SMP integration.
+  # linkable static archive in both bare-metal and FreeRTOS configurations.
+  # Firmware probes and checked-in examples belong exclusively to runalltests.sh.
   native-pico-build:
     runs-on: ubuntu-latest
     needs: test
@@ -732,62 +726,31 @@ jobs:
       - name: Prepare pinned Pico SDK tools
         run: ./third_party/update_components.sh
 
-      - name: Build RP2040, RP2350 ARM and RP2350 RISC-V artifacts
+      - name: Build RP2040, RP2350 ARM and RP2350 RISC-V static libraries
         run: |
           for platform in rp2040 rp2350-arm-s rp2350-riscv; do
             ./scripts/build_rp_native_lib.sh \
-              --platform "${platform}" --example 01_core_runtime \
-              --clean --jobs 4
+              --platform "${platform}" --library-only --clean --jobs 4 \
+              --output ".build/ci/native/${platform}/bare"
             ./scripts/build_rp_native_lib.sh \
-              --platform "${platform}" --example 18_freertos_suite \
-              --example-source app.c \
-              --freertos --clean --jobs 4 \
+              --platform "${platform}" --freertos --library-only --clean --jobs 4 \
               --output ".build/ci/native/${platform}/freertos"
           done
 
-      - name: Build consolidated RP2040 example gate
-        run: scripts/examples_dispatcher.py build --target rp2040 --gate --jobs 4
-
       - name: Verify native RP link inputs
         run: |
-          if find .build/native .build/ci/native .build/examples \
+          if find .build/ci/native \
               -type f -name core.a -print -quit | grep -q .; then
             echo "::error::Native RP build produced an unexpected core.a"
             exit 1
           fi
           if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
-              .build/native .build/ci/native .build/examples \
+              .build/ci/native \
               --include='link.txt' --include='*.map' \
               --include='compile_commands.json' --include='CMakeCache.txt'; then
             echo "::error::Native RP build metadata references the removed carrier"
             exit 1
           fi
-
-      - name: Build native parity hardware fixtures
-        run: scripts/build_rp_native_parity_fixtures.sh --jobs 4
-
-      - name: Build RP2040 CYW43 Bluetooth ownership fixture
-        run: |
-          for variant in bluetooth wifi-only; do
-            vscode/entry/jh-vscode build \
-              --project tests/hardware/bluetooth_stage1 \
-              --target rp2040 --board picow --variant "${variant}"
-          done
-
-      - name: Build native OTA hardware fixture matrix
-        run: |
-          for selection in \
-            "rp2040 picow" \
-            "rp2040 pico-rm2" \
-            "rp2350-arm pico2w"; do
-            set -- ${selection}
-            vscode/entry/jh-vscode build \
-              --project tests/hardware/rp_ota \
-              --target "$1" --board "$2"
-            vscode/entry/jh-vscode build \
-              --project tests/hardware/rp_ota \
-              --target "$1" --board "$2" --variant freertos
-          done
 
   # ── Flag-propagation regression matrix ─────────────────────────────────────
   # JaszczurHAL uses an opt-in HAL_ENABLE_* model with automatic upstream
@@ -994,7 +957,7 @@ jobs:
 
       - name: "Quality Gate: Build native RP static library (${{ matrix.profile }})"
         run: |
-          ./scripts/build_rp_native_lib.sh --clean \
+          ./scripts/build_rp_native_lib.sh --library-only --clean \
             --platform ${{ matrix.platform }} \
             --board ${{ matrix.board }} \
             --output ".build/ci/flags/${{ matrix.profile }}" \
@@ -1013,19 +976,18 @@ jobs:
             exit 1
           fi
 
-  # ── Examples build gate ────────────────────────────────────────────────────
-  # Compile the representative example gate through dispatcher-backed VS Code
-  # manifests. Gate 6 covers the two RP2350 ISAs; the manifests retain the full
-  # supported-target matrix for explicit builds.
-  stm32-examples:
+  # ── STM32G474 CYW43 static library ────────────────────────────────────────
+  # Keep target-specific CYW43 archive coverage in CI without compiling
+  # firmware; firmware fixtures and examples belong to runalltests.sh.
+  stm32-cyw43-library:
     runs-on: ubuntu-latest
     needs: test
-    name: "Examples (STM32G474)"
+    name: "STM32G474 CYW43 static library"
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Prepare example source dependencies
+      - name: Prepare STM32 library source dependencies
         run: |
           ./scripts/ensure_bearssl.sh --force
           ./scripts/ensure_cjson.sh --force
@@ -1058,15 +1020,3 @@ jobs:
             -D HAL_CYW43_PIN_CLOCK=29u \
             -D HAL_CYW43_MAX_TRANSACTION_BYTES=2048u \
             --jobs 4
-
-      - name: Build STM32G474 CYW43 Bluetooth ownership fixture
-        run: |
-          for variant in bluetooth wifi-only; do
-            vscode/entry/jh-vscode build \
-              --project tests/hardware/bluetooth_stage1 \
-              --target stm32g474 --board nucleo-g474re-pim730 \
-              --variant "${variant}"
-          done
-
-      - name: Compile STM32G474 examples
-        run: scripts/examples_dispatcher.py build --target stm32g474 --gate --jobs 4

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Limited GitHub target-build jobs to linkable `libJaszczurHAL.a` archives;
+  firmware probes, hardware fixtures, and the checked-in example matrix remain
+  part of the full local `runalltests.sh` gate. Added
+  `build_rp_native_lib.sh --library-only` for that archive-only path.
 - Reorganized `src/hal/` into a single thematic hierarchy that co-locates
   public headers, target-independent facades, drivers, and reusable engines in
   domains such as `network/`, `serial/`, `time/`, `timers/`, `spi/`, `i2c/`,

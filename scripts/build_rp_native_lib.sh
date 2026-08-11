@@ -37,6 +37,7 @@ Options:
   --example NAME           Build examples/NAME through the native app entry
   --example-source FILE    Select one source from the example (repeatable)
   --freertos               Enable the pinned native FreeRTOS SMP kernel
+  --library-only           Build only the linkable libJaszczurHAL.a archive
   -p, --project-config DIR Directory containing hal_project_config.h
   -D KEY=VALUE             Extra HAL compile definition (repeatable)
   -o, --output DIR         Build directory below .build/
@@ -59,6 +60,7 @@ EXAMPLE_SOURCES=()
 PROJECT_CONFIG_DIR=""
 EXTRA_DEFS=()
 FREERTOS=0
+LIBRARY_ONLY=0
 OUTPUT_DIR=""
 CLEAN=0
 JOBS="$(nproc 2>/dev/null || echo 4)"
@@ -75,6 +77,7 @@ while [[ $# -gt 0 ]]; do
         --example) EXAMPLE="$2"; shift 2 ;;
         --example-source) EXAMPLE_SOURCES+=("$2"); shift 2 ;;
         --freertos) FREERTOS=1; shift ;;
+        --library-only) LIBRARY_ONLY=1; shift ;;
         -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
         -D) EXTRA_DEFS+=("$2"); shift 2 ;;
         -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
@@ -168,6 +171,9 @@ if [[ ${#EXAMPLE_SOURCES[@]} -gt 0 ]]; then
         fi
     done
 fi
+if [[ ${LIBRARY_ONLY} -eq 1 && -n "${APP_DIR}" ]]; then
+    die "--library-only cannot be combined with --example"
+fi
 
 case "${OUTPUT_DIR}" in
     /|"${REPO_ROOT}"|"$(dirname "${REPO_ROOT}")")
@@ -204,6 +210,12 @@ CMAKE_ARGS=(
     "-DJH_BOARD=${BOARD}"
     "-DCMAKE_BUILD_TYPE=Release"
 )
+if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
+    CMAKE_ARGS+=(
+        "-DJH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF"
+        "-DJH_RP_NATIVE_BUILD_CORE1_PROBE=OFF"
+    )
+fi
 PICOTOOL_EXECUTABLE="${PICOTOOL_BUILD_DIR}/picotool"
 [[ -x "${PICOTOOL_EXECUTABLE}" ]] ||
     die "picotool executable not found: ${PICOTOOL_EXECUTABLE}"
@@ -230,7 +242,11 @@ info "Configuring native Pico SDK build (${TARGET}, board ${BOARD})..."
 cmake -S "${REPO_ROOT}/rp_native_lib" -B "${OUTPUT_DIR}" "${CMAKE_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
-cmake --build "${OUTPUT_DIR}" --parallel "${JOBS}"
+if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
+    cmake --build "${OUTPUT_DIR}" --target JaszczurHAL --parallel "${JOBS}"
+else
+    cmake --build "${OUTPUT_DIR}" --parallel "${JOBS}"
+fi
 
 LIB_FILE="${OUTPUT_DIR}/libJaszczurHAL.a"
 GENERATED_SOURCE="${OUTPUT_DIR}/generated/boards/${TARGET}/${BOARD}"
@@ -242,56 +258,58 @@ for generated_header in \
         die "Generated board header not found: ${GENERATED_SOURCE}/${generated_header}"
     cp -f "${GENERATED_SOURCE}/${generated_header}" "${GENERATED_INCLUDE}/"
 done
-PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_artifact_probe"
-CORE1_PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_core1_probe"
 [[ -f "${LIB_FILE}" ]] || die "Static library not found: ${LIB_FILE}"
-for artifact_base in "${PROBE_BASE}" "${CORE1_PROBE_BASE}"; do
-    for extension in elf bin uf2; do
-        [[ -f "${artifact_base}.${extension}" ]] ||
-            die "Native ${extension^^} artifact not found: ${artifact_base}.${extension}"
-    done
-done
-if [[ -n "${APP_DIR}" ]]; then
-    FIRMWARE_BASE="${OUTPUT_DIR}/jh_rp_native_firmware"
-    for extension in elf bin uf2; do
-        [[ -f "${FIRMWARE_BASE}.${extension}" ]] ||
-            die "Native example ${extension^^} not found: ${FIRMWARE_BASE}.${extension}"
-    done
-fi
-
-if [[ "${PLATFORM}" == "rp2350-riscv" ]]; then
-    NM_TOOL="${TOOLCHAIN_DIR}/bin/riscv32-unknown-elf-nm"
-else
-    NM_TOOL="$(command -v arm-none-eabi-nm || true)"
-fi
-[[ -x "${NM_TOOL}" ]] || die "Target nm tool not found: ${NM_TOOL:-unknown}"
-
-verify_symbol() {
-    local elf_file="$1"
-    local symbol="$2"
-    "${NM_TOOL}" --defined-only "${elf_file}" |
-        awk -v expected="${symbol}" '$NF == expected { found = 1 } END { exit !found }' ||
-        die "Required symbol '${symbol}' not found in ${elf_file}"
-}
-
-ENTRY_SYMBOLS=(main app_start app_task0 app_task1)
-if [[ ${FREERTOS} -eq 1 ]]; then
-    ENTRY_SYMBOLS+=(vTaskStartScheduler xTaskCreateAffinitySet)
-else
-    ENTRY_SYMBOLS+=(multicore_launch_core1 multicore_lockout_victim_init)
-fi
-for symbol in "${ENTRY_SYMBOLS[@]}"; do
-    verify_symbol "${CORE1_PROBE_BASE}.elf" "${symbol}"
-done
-if [[ -n "${APP_DIR}" ]]; then
-    for symbol in main app_start app_task0; do
-        verify_symbol "${FIRMWARE_BASE}.elf" "${symbol}"
-    done
-fi
-
 ok "Native Pico SDK library built: ${LIB_FILE}"
-ok "Artifacts: ${PROBE_BASE}.{elf,bin,uf2}"
-ok "Core-1 entry probe: ${CORE1_PROBE_BASE}.{elf,bin,uf2}"
-if [[ -n "${APP_DIR}" ]]; then
-    ok "Native example ${EXAMPLE}: ${FIRMWARE_BASE}.{elf,bin,uf2}"
+if [[ ${LIBRARY_ONLY} -eq 0 ]]; then
+    PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_artifact_probe"
+    CORE1_PROBE_BASE="${OUTPUT_DIR}/jh_rp_native_core1_probe"
+    for artifact_base in "${PROBE_BASE}" "${CORE1_PROBE_BASE}"; do
+        for extension in elf bin uf2; do
+            [[ -f "${artifact_base}.${extension}" ]] ||
+                die "Native ${extension^^} artifact not found: ${artifact_base}.${extension}"
+        done
+    done
+    if [[ -n "${APP_DIR}" ]]; then
+        FIRMWARE_BASE="${OUTPUT_DIR}/jh_rp_native_firmware"
+        for extension in elf bin uf2; do
+            [[ -f "${FIRMWARE_BASE}.${extension}" ]] ||
+                die "Native example ${extension^^} not found: ${FIRMWARE_BASE}.${extension}"
+        done
+    fi
+
+    if [[ "${PLATFORM}" == "rp2350-riscv" ]]; then
+        NM_TOOL="${TOOLCHAIN_DIR}/bin/riscv32-unknown-elf-nm"
+    else
+        NM_TOOL="$(command -v arm-none-eabi-nm || true)"
+    fi
+    [[ -x "${NM_TOOL}" ]] || die "Target nm tool not found: ${NM_TOOL:-unknown}"
+
+    verify_symbol() {
+        local elf_file="$1"
+        local symbol="$2"
+        "${NM_TOOL}" --defined-only "${elf_file}" |
+            awk -v expected="${symbol}" '$NF == expected { found = 1 } END { exit !found }' ||
+            die "Required symbol '${symbol}' not found in ${elf_file}"
+    }
+
+    ENTRY_SYMBOLS=(main app_start app_task0 app_task1)
+    if [[ ${FREERTOS} -eq 1 ]]; then
+        ENTRY_SYMBOLS+=(vTaskStartScheduler xTaskCreateAffinitySet)
+    else
+        ENTRY_SYMBOLS+=(multicore_launch_core1 multicore_lockout_victim_init)
+    fi
+    for symbol in "${ENTRY_SYMBOLS[@]}"; do
+        verify_symbol "${CORE1_PROBE_BASE}.elf" "${symbol}"
+    done
+    if [[ -n "${APP_DIR}" ]]; then
+        for symbol in main app_start app_task0; do
+            verify_symbol "${FIRMWARE_BASE}.elf" "${symbol}"
+        done
+    fi
+
+    ok "Artifacts: ${PROBE_BASE}.{elf,bin,uf2}"
+    ok "Core-1 entry probe: ${CORE1_PROBE_BASE}.{elf,bin,uf2}"
+    if [[ -n "${APP_DIR}" ]]; then
+        ok "Native example ${EXAMPLE}: ${FIRMWARE_BASE}.{elf,bin,uf2}"
+    fi
 fi

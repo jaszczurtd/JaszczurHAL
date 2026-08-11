@@ -560,6 +560,7 @@ foreach(_cmake_contract IN ITEMS
         "HAL_PROVIDE_APP_ENTRY=1"
         "JH_RP_NATIVE_APP_DIR"
         "JH_RP_NATIVE_APP_SOURCES"
+        "OUTPUT_ROOT"
         "jh_generate_board_config"
         "jh_apply_board_components"
         "JH_BOARD"
@@ -611,7 +612,11 @@ endforeach()
 foreach(_script_contract IN ITEMS
         "--example"
         "--example-source"
+        "--library-only"
         "examples/"
+        "JH_RP_NATIVE_BUILD_ARTIFACT_PROBE=OFF"
+        "JH_RP_NATIVE_BUILD_CORE1_PROBE=OFF"
+        "--target JaszczurHAL"
         "jh_rp_native_core1_probe"
         "jh_rp_native_firmware")
     string(FIND "${_script_text}" "${_script_contract}" _script_contract_at)

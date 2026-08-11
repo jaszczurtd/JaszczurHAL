@@ -149,7 +149,7 @@ cmake -S "${REPO_ROOT}/stm32_lib" -B "${OUTPUT_DIR}" \
     "${CMAKE_EXTRA_ARGS[@]}"
 
 info "Building with ${JOBS} parallel jobs..."
-cmake --build "${OUTPUT_DIR}" -j "${JOBS}"
+cmake --build "${OUTPUT_DIR}" --target JaszczurHAL -j "${JOBS}"
 
 LIB_FILE=$(find "${OUTPUT_DIR}" -name "libJaszczurHAL.a" -print -quit 2>/dev/null)
 if [[ -n "${LIB_FILE}" ]]; then
