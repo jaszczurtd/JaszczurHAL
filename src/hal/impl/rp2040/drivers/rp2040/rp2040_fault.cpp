@@ -16,39 +16,21 @@
 #include <hardware/structs/vreg_and_chip_reset.h>
 #endif
 
+#if defined(HAL_ENABLE_STACK_GUARD) &&                                         \
+    (!defined(PICO_USE_STACK_GUARDS) || !PICO_USE_STACK_GUARDS)
+#error "HAL_ENABLE_STACK_GUARD requires PICO_USE_STACK_GUARDS=1"
+#endif
+
 namespace {
 
 constexpr uint32_t kStateSignatureMask = 0xFFFFFF00u;
 constexpr uint32_t kStateSignature = 0x4A484400u; // 'J','H','D',0
 constexpr uint32_t kFlagFault = 0x01u;
 constexpr uint32_t kFlagAlive = 0x02u;
-constexpr uint32_t kFlagStackOverflow = 0x04u;
-
-// Sentinel PC value reported when stack overflow is detected by the canary
-// check (no real exception frame is captured; the corruption is observed
-// asynchronously, not at the moment it occurred).
-constexpr uint32_t kStackOverflowSentinelPc = 0xDEADD000u;
-
-// Canary value written at the bottom of the stack region. Chosen so a single
-// stuck bit or zero-write does not look like the canary.
-constexpr uint32_t kStackCanary = 0xC4314EA5u;
-
-// The pico-sdk linker script exports the stack limit as a single byte
-// (`char __StackLimit`). We need to read a 32-bit word at that address; route
-// the address through an inline-asm "memory operand" so the optimiser's
-// -Warray-bounds analysis cannot reach the underlying `char [1]` type.
-extern "C" char __StackLimit;
-
-inline uint32_t *stack_canary_addr(void) {
-  char *p = &__StackLimit;
-  __asm__("" : "+r"(p));
-  return reinterpret_cast<uint32_t *>(p);
-}
 
 hal_reset_reason_t g_reset_reason = HAL_RESET_REASON_UNKNOWN;
 hal_fault_info_t g_fault_info = {false, 0u, 0u, 0u};
 bool g_brownout_suspected = false;
-bool g_stack_guard_armed = false;
 bool g_initialised = false;
 
 // Set by the same logic that decides hal_watchdog_caused_reboot(): true if
@@ -190,7 +172,6 @@ void rp2040_fault_init(void) {
   uint32_t state = state_word();
   if (state_signature_valid(state)) {
     bool fault_flag = (state & kFlagFault) != 0u;
-    bool stack_flag = (state & kFlagStackOverflow) != 0u;
     bool alive_flag = (state & kFlagAlive) != 0u;
 
     if (fault_flag) {
@@ -199,10 +180,7 @@ void rp2040_fault_init(void) {
       g_fault_info.lr = watchdog_hw->scratch[2];
       g_fault_info.psr = watchdog_hw->scratch[3];
 
-      // Stack overflow takes priority over generic HardFault in the
-      // reason classification -- it is the actionable root cause.
-      g_reset_reason = stack_flag ? HAL_RESET_REASON_STACK_OVERFLOW
-                                  : HAL_RESET_REASON_HARDFAULT;
+      g_reset_reason = HAL_RESET_REASON_HARDFAULT;
     }
 
     // Brown-out heuristic: silicon reports POR but our alive marker
@@ -260,31 +238,11 @@ void rp2040_fault_alive_mark(void) {
 }
 
 bool rp2040_fault_stack_guard_init(void) {
-  *stack_canary_addr() = kStackCanary;
-  g_stack_guard_armed = true;
+#ifdef HAL_ENABLE_STACK_GUARD
   return true;
+#else
+  return false;
+#endif
 }
 
-void rp2040_fault_stack_guard_check(void) {
-  if (!g_stack_guard_armed) {
-    return;
-  }
-  if (*stack_canary_addr() == kStackCanary) {
-    return;
-  }
-
-  uint32_t state = state_word();
-  if (!state_signature_valid(state)) {
-    state = kStateSignature;
-  }
-  state |= (kFlagFault | kFlagStackOverflow);
-  state_word_set(state);
-  watchdog_hw->scratch[1] = kStackOverflowSentinelPc;
-  watchdog_hw->scratch[2] = 0u;
-  watchdog_hw->scratch[3] = 0u;
-
-  watchdog_reboot(0, 0, 0);
-  while (true) {
-    tight_loop_contents();
-  }
-}
+void rp2040_fault_stack_guard_check(void) {}

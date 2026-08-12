@@ -230,7 +230,6 @@ foreach(_required IN ITEMS
 endforeach()
 foreach(_forbidden IN ITEMS
         "picow-shared"
-        "JH_RP2040_BOARD_DEFINES"
         "PICO_CYW43_SUPPORTED"
         "CYW43_PIN_WL_DYNAMIC"
         "CYW43_PIO_CLOCK_DIV_DYNAMIC")

@@ -12,10 +12,10 @@
  *   - reset-reason classification from @c RCC->CSR flags,
  *   - retained fault-frame handoff from @c exception_info (captured by
  *     HardFault/MemManage/BusFault/UsageFault handlers),
- *   - stack-overflow marker path used by @c hal_stack_guard_check,
+ *   - synchronous stack-overflow detection through a 32-byte MPU guard,
  *   - alive-marker persistence used to avoid over-reporting BOR on cold boot.
  *
- * The public surface matches the RP2040 driver exactly so the HAL layer
+ * The public surface matches the RP-family driver exactly so the HAL layer
  * is symmetrical across backends.
  */
 
@@ -46,10 +46,11 @@ bool stm32g474_fault_brownout_suspected(void);
  *  detection on STM32 makes the heuristic optional). */
 void stm32g474_fault_alive_mark(void);
 
-/** Install the stack-bottom canary. */
+/** Install the stack-bottom MPU guard when HAL_ENABLE_STACK_GUARD is enabled.
+ */
 bool stm32g474_fault_stack_guard_init(void);
 
-/** Verify the stack canary. On corruption triggers system reset. */
+/** Compatibility no-op: the MPU reports violations synchronously. */
 void stm32g474_fault_stack_guard_check(void);
 
 #ifdef __cplusplus

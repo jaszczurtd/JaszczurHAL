@@ -294,6 +294,18 @@ require(
     "equivalent MQTT closures produced different link contracts",
 )
 config = (first_output / "jh_board_config.h").read_text(encoding="utf-8")
+for target_fact in (
+    '#define HAL_TARGET_DESCRIPTOR_ID "rp2040"',
+    '#define HAL_TARGET_BACKEND_NAME "rp/pico-sdk"',
+    '#define HAL_TARGET_MCU_NAME "RP2040"',
+    '#define HAL_TARGET_MCU_SUBTYPE_NAME "RP2040"',
+    '#define HAL_TARGET_CPU_ARCH_NAME "ARM Cortex-M0+"',
+    "#define HAL_TARGET_CPU_CORES 2u",
+    "#define HAL_TARGET_HAS_FPU 0",
+    "#define HAL_TARGET_RAM_TOTAL_BYTES UINT32_C(270336)",
+    "#define HAL_TARGET_RAM_USABLE_BYTES UINT32_C(262144)",
+):
+    require(target_fact in config, f"missing generated RP2040 fact: {target_fact}")
 require("HAL_BOARD_STATUS_LED_KIND_ADDRESSABLE 1" in config, "missing WS2812 fact")
 require("HAL_BOARD_STATUS_LED_PIN 16u" in config, "incorrect WS2812 pin")
 require("HAL_LED_BUILTIN" not in config, "RP2040-Zero exposes a GPIO LED")
@@ -488,6 +500,18 @@ require(
     in (nucleo_output / "jh_board_config.h").read_text(encoding="utf-8"),
     "NUCLEO PA5 HAL encoding mismatch",
 )
+nucleo_config = (nucleo_output / "jh_board_config.h").read_text(encoding="utf-8")
+for target_fact in (
+    '#define HAL_TARGET_DESCRIPTOR_ID "stm32g474"',
+    '#define HAL_TARGET_BACKEND_NAME "stm32g474/bare-metal"',
+    '#define HAL_TARGET_MCU_NAME "STM32G474RE"',
+    '#define HAL_TARGET_CPU_ARCH_NAME "ARM Cortex-M4F"',
+    "#define HAL_TARGET_CPU_CORES 1u",
+    "#define HAL_TARGET_HAS_FPU 1",
+    "#define HAL_TARGET_RAM_TOTAL_BYTES UINT32_C(131072)",
+    "#define HAL_TARGET_RAM_USABLE_BYTES UINT32_C(98304)",
+):
+    require(target_fact in nucleo_config, f"missing generated STM32 fact: {target_fact}")
 
 pim730_output = TEST_ROOT / "generated/nucleo-pim730"
 run(

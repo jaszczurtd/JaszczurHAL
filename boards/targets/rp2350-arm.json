@@ -6,7 +6,18 @@
   "displayName": "Raspberry Pi RP2350 ARM",
   "description": "RP2350 Cortex-M33 target built with the pinned Pico SDK.",
   "status": "supported",
-  "architecture": { "vendor": "raspberry-pi", "family": "rp", "soc": "rp2350", "isa": "armv8-m.main", "cores": 2 },
+  "architecture": {
+    "vendor": "raspberry-pi",
+    "family": "rp",
+    "soc": "rp2350",
+    "isa": "armv8-m.main",
+    "cores": 2,
+    "mcuName": "RP2350",
+    "mcuSubtype": "RP2350",
+    "cpuArchName": "ARM Cortex-M33",
+    "hasFpu": true,
+    "backendName": "rp/pico-sdk"
+  },
   "hal": { "targetSelector": "HAL_TARGET_RP2350_ARM" },
   "build": { "provider": "pico-sdk", "recipe": "rp-native", "platform": "rp2350-arm-s" },
   "gpio": {
@@ -14,7 +25,12 @@
     "validPins": { "ranges": [{ "first": 0, "last": 47 }] },
     "halEncoding": { "kind": "identity-u8" }
   },
-  "memory": { "regions": { "sram": { "kind": "ram", "sizeBytes": 532480, "dmaCapable": true } } },
+  "memory": {
+    "regions": {
+      "sram": { "kind": "ram", "sizeBytes": 532480, "dmaCapable": true }
+    },
+    "ramUsableBytes": 532480
+  },
   "defaultBoard": "pico2",
   "components": { "rp-native": { "mode": "required" } }
 }

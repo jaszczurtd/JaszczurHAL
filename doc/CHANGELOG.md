@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Made target descriptors the single source for architecture snapshots by
+  generating neutral `HAL_TARGET_*` identity, CPU, FPU, and RAM facts. RP,
+  STM32G474, and mock system backends no longer duplicate those values, while
+  total flash now comes from the selected board profile.
+- Moved MQTT callback dispatch storage from the caller stack to one serialized
+  static slot, preserving callback re-entry while removing the 2.5 KiB local
+  message-copy buffers from `hal_mqtt_loop_ex()`.
+- Added target-family-neutral `HAL_RP_CORE0_STACK_SIZE` and
+  `HAL_RP_CORE1_STACK_SIZE` configuration names for RP2040 and RP2350 and
+  removed the misleading chip-specific spellings. This is an intentional
+  configuration compatibility break.
+- Added opt-in `HAL_ENABLE_STACK_GUARD` with synchronous hardware protection
+  on RP2040, RP2350, and STM32G474, plus FreeRTOS task-stack overflow checking.
+  The public `hal_stack_guard_*` API is target independent and no longer
+  requires periodic canary polling.
+- Removed the chip-specific RP EEPROM selector; portable and native RP
+  firmware now uses `HAL_EEPROM_FLASH`.
 - Added the `HAL_ENABLE_LORA_LINK` reliable private messaging layer over one
   configured raw LoRa handle: 16-bit addressing, 32-bit message sequences,
   complete-message ACKs, bounded whole-message retransmission, duplicate

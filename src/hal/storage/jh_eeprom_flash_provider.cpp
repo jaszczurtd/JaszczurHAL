@@ -118,7 +118,7 @@ const jh_eeprom_provider_ops_t *jh_eeprom_hardware_provider_get_ops(
   if (type == HAL_EEPROM_AT24C256) {
     return jh_at24c256_provider_get_ops();
   }
-  const bool flash = type == HAL_EEPROM_DEFAULT || type == HAL_EEPROM_RP2040 ||
+  const bool flash = type == HAL_EEPROM_DEFAULT ||
                      type == HAL_EEPROM_STM32_FLASH || type == HAL_EEPROM_FLASH;
   return flash ? jh_eeprom_flash_provider_configure(flash_backend) : nullptr;
 }

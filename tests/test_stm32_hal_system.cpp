@@ -8,7 +8,7 @@ extern "C" void hal_stm32g474_fault_test_set_fault_frame(uint32_t pc,
                                                          uint32_t lr,
                                                          uint32_t psr);
 extern "C" void hal_stm32g474_fault_test_set_alive_marker(bool marked);
-extern "C" void hal_stm32g474_fault_test_set_stack_overflow_marker(bool set);
+extern "C" void hal_stm32g474_fault_test_set_stack_guard_fault(void);
 
 void setUp(void) { hal_stm32g474_fault_test_reset(); }
 
@@ -73,9 +73,9 @@ void test_stm32_fault_frame_overrides_rcc_reason(void) {
   TEST_ASSERT_FALSE(hal_get_last_fault(&info));
 }
 
-void test_stm32_stack_overflow_marker_overrides_reason(void) {
+void test_stm32_stack_guard_fault_overrides_reason(void) {
   hal_stm32g474_fault_test_set_rcc_csr(RCC_CSR_SFTRSTF);
-  hal_stm32g474_fault_test_set_stack_overflow_marker(true);
+  hal_stm32g474_fault_test_set_stack_guard_fault();
 
   hal_fault_subsystem_init();
 
@@ -85,7 +85,13 @@ void test_stm32_stack_overflow_marker_overrides_reason(void) {
   hal_fault_info_t info = {false, 0u, 0u, 0u};
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_last_fault_ex(&info));
   TEST_ASSERT_TRUE(info.valid);
-  TEST_ASSERT_EQUAL_HEX32(0xDEADD000u, info.pc);
+  TEST_ASSERT_EQUAL_HEX32(0x0800DEADu, info.pc);
+}
+
+void test_stm32_stack_guard_api_reports_active_protection(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stack_guard_init_ex());
+  TEST_ASSERT_TRUE(hal_stack_guard_init());
+  hal_stack_guard_check();
 }
 
 void test_stm32_system_status_reports_unsupported_services(void) {
@@ -97,11 +103,21 @@ void test_stm32_system_status_reports_unsupported_services(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
 }
 
-void test_stm32_architecture_reports_no_network_stack(void) {
+void test_stm32_architecture_reports_generated_target_metadata(void) {
   hal_system_architecture_t architecture = {};
 
   TEST_ASSERT_EQUAL_INT(HAL_OK,
                         hal_system_get_current_architecture(&architecture));
+  TEST_ASSERT_EQUAL_STRING("stm32g474", architecture.target_name);
+  TEST_ASSERT_EQUAL_STRING("stm32g474/bare-metal", architecture.backend_name);
+  TEST_ASSERT_EQUAL_STRING("STM32G474RE", architecture.mcu);
+  TEST_ASSERT_EQUAL_STRING("STM32G474RETx", architecture.mcu_subtype);
+  TEST_ASSERT_EQUAL_STRING("ARM Cortex-M4F", architecture.cpu_arch);
+  TEST_ASSERT_EQUAL_UINT8(1u, architecture.cpu_cores);
+  TEST_ASSERT_TRUE(architecture.has_fpu);
+  TEST_ASSERT_EQUAL_UINT32(512u * 1024u, architecture.flash_total_bytes);
+  TEST_ASSERT_EQUAL_UINT32(128u * 1024u, architecture.ram_total_bytes);
+  TEST_ASSERT_EQUAL_UINT32(96u * 1024u, architecture.ram_usable_bytes);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_backend_name);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_stack_name);
   TEST_ASSERT_EQUAL_INT(HAL_SYSTEM_NETWORK_STACK_TYPE_NONE,
@@ -115,8 +131,9 @@ int main(void) {
   RUN_TEST(test_stm32_reset_reason_bor_pin_without_alive_maps_to_power_on);
   RUN_TEST(test_stm32_reset_reason_bor_with_alive_maps_to_brownout);
   RUN_TEST(test_stm32_fault_frame_overrides_rcc_reason);
-  RUN_TEST(test_stm32_stack_overflow_marker_overrides_reason);
+  RUN_TEST(test_stm32_stack_guard_fault_overrides_reason);
+  RUN_TEST(test_stm32_stack_guard_api_reports_active_protection);
   RUN_TEST(test_stm32_system_status_reports_unsupported_services);
-  RUN_TEST(test_stm32_architecture_reports_no_network_stack);
+  RUN_TEST(test_stm32_architecture_reports_generated_target_metadata);
   return UNITY_END();
 }

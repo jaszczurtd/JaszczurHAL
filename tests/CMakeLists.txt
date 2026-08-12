@@ -151,6 +151,7 @@ function(add_stm32_host_test NAME)
     )
     target_compile_definitions(${NAME} PRIVATE
         HAL_TARGET_STM32G474=1
+        HAL_ENABLE_STACK_GUARD
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )
@@ -438,6 +439,24 @@ add_test(NAME test_rp_native_build_contract
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rp_native_build_contract.cmake
+)
+
+add_test(NAME test_mqtt_dispatch_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_mqtt_dispatch_contract.cmake
+)
+
+add_test(NAME test_stack_guard_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_stack_guard_contract.cmake
+)
+
+add_test(NAME test_system_architecture_metadata_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_system_architecture_metadata_contract.cmake
 )
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)

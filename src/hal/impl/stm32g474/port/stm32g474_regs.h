@@ -631,7 +631,8 @@
 #define SCB_VTOR JH_REG32(SCB_BASE + 0x08u)
 #define SCB_AIRCR JH_REG32(SCB_BASE + 0x0Cu)
 #define SCB_SHCSR JH_REG32(SCB_BASE + 0x24u)
-#define SCB_CFSR JH_REG32(SCB_BASE + 0x28u)  /* configurable fault status */
+#define SCB_CFSR JH_REG32(SCB_BASE + 0x28u) /* configurable fault status */
+#define SCB_CFSR_MMARVALID (1u << 7)
 #define SCB_HFSR JH_REG32(SCB_BASE + 0x2Cu)  /* hard fault status         */
 #define SCB_MMFAR JH_REG32(SCB_BASE + 0x34u) /* mem-manage fault address  */
 #define SCB_BFAR JH_REG32(SCB_BASE + 0x38u)  /* bus fault address         */
@@ -647,6 +648,21 @@
 
 /* CPACR: full access to CP10 & CP11 (the FPU). */
 #define SCB_CPACR_FPU_FULL (0xFu << 20)
+
+/* ── MPU (Cortex-M4 memory protection unit) ─────────────────────────────── */
+#define MPU_BASE 0xE000ED90u
+#define MPU_TYPE JH_REG32(MPU_BASE + 0x00u)
+#define MPU_CTRL JH_REG32(MPU_BASE + 0x04u)
+#define MPU_RNR JH_REG32(MPU_BASE + 0x08u)
+#define MPU_RBAR JH_REG32(MPU_BASE + 0x0Cu)
+#define MPU_RASR JH_REG32(MPU_BASE + 0x10u)
+
+#define MPU_CTRL_ENABLE (1u << 0)
+#define MPU_CTRL_PRIVDEFENA (1u << 2)
+#define MPU_RASR_ENABLE (1u << 0)
+#define MPU_RASR_SIZE_32B (4u << 1)
+#define MPU_RASR_XN (1u << 28)
+#define MPU_RBAR_ADDR_MASK 0xFFFFFFE0u
 
 /* ── Device electronic signature ─────────────────────────────────────────── */
 #define STM32_UID_BASE 0x1FFF7590u /* 96-bit unique device ID (3 words) */

@@ -115,7 +115,6 @@ which overrides the linker default for `_Min_Stack_Size`.
 | `HAL_LITTLEFS_FLASH` | Optional LittleFS linker region before EEPROM/KV |
 | `HAL_EEPROM_FLASH` | `HAL_EEPROM_FLASH` linker region at the end of internal flash |
 | `HAL_EEPROM_STM32_FLASH` | same as `HAL_EEPROM_FLASH` |
-| `HAL_EEPROM_RP2040` | accepted as a compatibility alias for target-native flash |
 | `HAL_EEPROM_AT24C256` | external I2C EEPROM; not part of the MCU memory map |
 
 `hal_kv` stores records on top of whichever `hal_eeprom` backend was selected.

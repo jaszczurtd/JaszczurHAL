@@ -1,5 +1,6 @@
 #include "hal/core/hal_target.h"
 #if HAL_TARGET_IS_MOCK
+#include "hal/core/hal_config.h"
 #include "hal/network/jh_network_architecture.h"
 #include "hal/system/hal_system.h"
 #include "hal/system/hal_system_common.h"
@@ -47,29 +48,20 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
     return HAL_EINVAL;
   }
 
-#if defined(__x86_64__) || defined(_M_X64)
-  const char *host_arch = "x86_64";
-#elif defined(__i386__) || defined(_M_IX86)
-  const char *host_arch = "x86";
-#elif defined(__aarch64__) || defined(_M_ARM64)
-  const char *host_arch = "aarch64";
-#elif defined(__arm__) || defined(_M_ARM)
-  const char *host_arch = "arm";
-#else
-  const char *host_arch = "host";
-#endif
-
   hal_system_architecture_t info = {};
-  info.target_name = HAL_TARGET_NAME;
-  info.backend_name = "mock/host";
-  info.mcu = "host";
-  info.mcu_subtype = host_arch;
-  info.cpu_arch = host_arch;
+  info.target_name = HAL_TARGET_DESCRIPTOR_ID;
+  info.backend_name = HAL_TARGET_BACKEND_NAME;
+  info.mcu = HAL_TARGET_MCU_NAME;
+  info.mcu_subtype = HAL_TARGET_MCU_SUBTYPE_NAME;
+  info.cpu_arch = HAL_TARGET_CPU_ARCH_NAME;
   info.rtos_name = "none";
-  info.cpu_cores = 1u;
+  info.cpu_cores = HAL_TARGET_CPU_CORES;
   info.is_hardware = false;
-  info.has_fpu = true;
+  info.has_fpu = HAL_TARGET_HAS_FPU != 0;
   info.has_rtos = false;
+  info.flash_total_bytes = HAL_BOARD_EXPECTED_FLASH_BYTES;
+  info.ram_total_bytes = HAL_TARGET_RAM_TOTAL_BYTES;
+  info.ram_usable_bytes = HAL_TARGET_RAM_USABLE_BYTES;
   info.heap_free_bytes = hal_get_free_heap();
   info.uid_bytes = HAL_DEVICE_UID_BYTES;
   jh_network_architecture_fill(&info);
@@ -198,7 +190,6 @@ static bool s_brownout_suspected = false;
 static bool s_alive_marked = false;
 static bool s_subsystem_init = false;
 static bool s_stack_guard_armed = false;
-static bool s_stack_guard_check_triggered = false;
 
 void hal_fault_subsystem_init(void) {
   s_subsystem_init = true;
@@ -241,23 +232,20 @@ bool hal_last_boot_was_brownout(void) { return s_brownout_suspected; }
 void hal_alive_mark(void) { s_alive_marked = true; }
 
 hal_status_t hal_stack_guard_init_ex(void) {
+#ifdef HAL_ENABLE_STACK_GUARD
   s_stack_guard_armed = true;
-  s_stack_guard_check_triggered = false;
   return HAL_OK;
+#else
+  s_stack_guard_armed = false;
+  return HAL_EUNSUPPORTED;
+#endif
 }
 
 bool hal_stack_guard_init(void) {
   return hal_status_to_bool(hal_stack_guard_init_ex());
 }
 
-void hal_stack_guard_check(void) {
-  if (!s_stack_guard_armed) {
-    return;
-  }
-  /* Mock does not actually reboot. Tests can observe the trigger flag
-   * via hal_mock_stack_guard_check_was_triggered(). */
-  s_stack_guard_check_triggered = true;
-}
+void hal_stack_guard_check(void) {}
 
 // ── Mock-only test hooks ────────────────────────────────────────────────────
 
@@ -286,10 +274,6 @@ bool hal_mock_fault_subsystem_was_inited(void) { return s_subsystem_init; }
 
 bool hal_mock_stack_guard_is_armed(void) { return s_stack_guard_armed; }
 
-bool hal_mock_stack_guard_check_was_triggered(void) {
-  return s_stack_guard_check_triggered;
-}
-
 void hal_mock_fault_diagnostics_reset(void) {
   s_reset_reason = HAL_RESET_REASON_UNKNOWN;
   s_fault_info = {false, 0u, 0u, 0u};
@@ -297,6 +281,5 @@ void hal_mock_fault_diagnostics_reset(void) {
   s_alive_marked = false;
   s_subsystem_init = false;
   s_stack_guard_armed = false;
-  s_stack_guard_check_triggered = false;
 }
 #endif // HAL_TARGET_IS_MOCK

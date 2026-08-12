@@ -645,11 +645,57 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
         path,
         "$.architecture",
         target["architecture"],
-        {"vendor", "family", "soc", "isa", "cores"},
-        {"vendor", "family", "soc", "isa", "cores"},
+        {
+            "vendor",
+            "family",
+            "soc",
+            "isa",
+            "cores",
+            "mcuName",
+            "mcuSubtype",
+            "cpuArchName",
+            "hasFpu",
+            "backendName",
+        },
+        {
+            "vendor",
+            "family",
+            "soc",
+            "isa",
+            "cores",
+            "mcuName",
+            "mcuSubtype",
+            "cpuArchName",
+            "hasFpu",
+            "backendName",
+        },
     )
     if not isinstance(architecture["cores"], int) or architecture["cores"] < 1:
         fail(path, "$.architecture.cores", architecture["cores"], "a positive integer")
+    for field in (
+        "vendor",
+        "family",
+        "soc",
+        "isa",
+        "mcuName",
+        "mcuSubtype",
+        "cpuArchName",
+        "backendName",
+    ):
+        if not isinstance(architecture[field], str) or not architecture[field]:
+            fail(
+                path,
+                f"$.architecture.{field}",
+                architecture[field],
+                "a non-empty string",
+            )
+    if not isinstance(architecture["hasFpu"], bool):
+        fail(
+            path,
+            "$.architecture.hasFpu",
+            architecture["hasFpu"],
+            "a boolean",
+        )
     hal = exact_fields(
         path, "$.hal", target["hal"], {"targetSelector"}, {"targetSelector"}
     )
@@ -698,10 +744,15 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
         {"kind"},
     )
     memory = exact_fields(
-        path, "$.memory", target["memory"], {"regions"}, {"regions"}
+        path,
+        "$.memory",
+        target["memory"],
+        {"regions", "ramUsableBytes"},
+        {"regions", "ramUsableBytes"},
     )
     if not isinstance(memory["regions"], dict):
         fail(path, "$.memory.regions", memory["regions"], "an object")
+    ram_total_bytes = 0
     for region_id, region in memory["regions"].items():
         exact_fields(
             path,
@@ -726,6 +777,19 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
                 region["dmaCapable"],
                 "a boolean",
             )
+        if region["kind"] == "ram":
+            ram_total_bytes += region["sizeBytes"]
+    if (
+        not isinstance(memory["ramUsableBytes"], int)
+        or memory["ramUsableBytes"] < 0
+        or memory["ramUsableBytes"] > ram_total_bytes
+    ):
+        fail(
+            path,
+            "$.memory.ramUsableBytes",
+            memory["ramUsableBytes"],
+            f"an integer in range 0..{ram_total_bytes}",
+        )
     if not isinstance(target["defaultBoard"], str):
         fail(path, "$.defaultBoard", target["defaultBoard"], "a board ID")
     if "sourceFallbackBoard" in target and not isinstance(
@@ -1445,6 +1509,35 @@ def selected_board_fact_lines(
     return lines
 
 
+def target_ram_total_bytes(target: dict[str, Any]) -> int:
+    return sum(
+        region["sizeBytes"]
+        for region in target["memory"]["regions"].values()
+        if region["kind"] == "ram"
+    )
+
+
+def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
+    architecture = target["architecture"]
+    return [
+        f'#define HAL_TARGET_DESCRIPTOR_ID "{target["id"]}"',
+        f'#define HAL_TARGET_VENDOR_NAME "{architecture["vendor"]}"',
+        f'#define HAL_TARGET_FAMILY_NAME "{architecture["family"]}"',
+        f'#define HAL_TARGET_SOC_NAME "{architecture["soc"]}"',
+        f'#define HAL_TARGET_ISA_NAME "{architecture["isa"]}"',
+        f'#define HAL_TARGET_BACKEND_NAME "{architecture["backendName"]}"',
+        f'#define HAL_TARGET_MCU_NAME "{architecture["mcuName"]}"',
+        f'#define HAL_TARGET_MCU_SUBTYPE_NAME "{architecture["mcuSubtype"]}"',
+        f'#define HAL_TARGET_CPU_ARCH_NAME "{architecture["cpuArchName"]}"',
+        f'#define HAL_TARGET_CPU_CORES {architecture["cores"]}u',
+        f'#define HAL_TARGET_HAS_FPU {1 if architecture["hasFpu"] else 0}',
+        "#define HAL_TARGET_RAM_TOTAL_BYTES "
+        f'UINT32_C({target_ram_total_bytes(target)})',
+        "#define HAL_TARGET_RAM_USABLE_BYTES "
+        f'UINT32_C({target["memory"]["ramUsableBytes"]})',
+    ]
+
+
 def fallback_compile_definitions(
     board: dict[str, Any], targets: dict[str, dict[str, Any]]
 ) -> list[str]:
@@ -1604,7 +1697,15 @@ def render_board_fallback_config(
                 "#endif",
             ]
         )
-    lines.extend(["", "/* Materialize the selected board facts. */"])
+    lines.extend(["", "/* Materialize the selected target facts. */"])
+    for index, target in enumerate(
+        sorted(targets.values(), key=lambda item: item["id"])
+    ):
+        lines.append(
+            f"#{'if' if index == 0 else 'elif'} {target_is_macro(target)}"
+        )
+        lines.extend(selected_target_fact_lines(target))
+    lines.extend(["#endif", "", "/* Materialize the selected board facts. */"])
     for index, board in enumerate(ordered_boards):
         lines.append(
             f"#{'if' if index == 0 else 'elif'} {board_is_macro(board)}"
@@ -1782,6 +1883,7 @@ def generate(
         "#pragma once",
         "/* Generated by generate_board_config.py; do not edit. */",
     ]
+    config_lines.extend(selected_target_fact_lines(target))
     config_lines.extend(
         selected_board_fact_lines(
             board,

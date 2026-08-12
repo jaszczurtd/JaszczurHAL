@@ -4,30 +4,32 @@
  */
 
 #include "stm32g474_fault.h"
+#include "../../port/exception_info.h"
 #include "../../port/stm32g474_regs.h"
 #include "hal/core/hal_target.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
-#ifdef JH_STM32G474_HW
-#include "../../port/exception_info.h"
-#endif
-
 namespace {
 
 constexpr uint32_t kRetainedSignature = 0x4A485346u; /* 'JHSF' */
 constexpr uint32_t kRetainedAlive = 0x01u;
-constexpr uint32_t kRetainedStackOverflow = 0x02u;
-constexpr uint32_t kStackOverflowSentinelPc = 0xDEADD000u;
-constexpr uint32_t kStackCanary = 0xC4314EA5u;
+#ifdef HAL_ENABLE_STACK_GUARD
+constexpr uint32_t kStackGuardBytes = 32u;
+#ifdef JH_STM32G474_HW
+constexpr uint32_t kStackGuardRegion = 7u;
+constexpr uint32_t kStackGuardRasr =
+    MPU_RASR_XN | MPU_RASR_SIZE_32B | MPU_RASR_ENABLE;
+#endif
+#endif
+#ifndef JH_STM32G474_HW
+constexpr uintptr_t kHostStackGuardBase = 0x20017800u;
+#endif
 
 typedef struct {
   uint32_t signature;
   uint32_t flags;
-  uint32_t pc;
-  uint32_t lr;
-  uint32_t psr;
 } stm32_fault_retained_t;
 
 #ifdef JH_STM32G474_HW
@@ -36,7 +38,8 @@ extern "C" char JH_StackLimit;
 #else
 static stm32_fault_retained_t s_retained;
 static uint32_t s_host_rcc_csr = 0u;
-static hal_fault_info_t s_host_fault_frame = {false, 0u, 0u, 0u};
+static jh_exception_info_t s_host_fault_frame = {};
+static bool s_host_fault_valid = false;
 #endif
 
 static bool g_initialised = false;
@@ -49,9 +52,6 @@ static void retained_seed_if_needed(void) {
   if (s_retained.signature != kRetainedSignature) {
     s_retained.signature = kRetainedSignature;
     s_retained.flags = 0u;
-    s_retained.pc = 0u;
-    s_retained.lr = 0u;
-    s_retained.psr = 0u;
   }
 }
 
@@ -68,16 +68,13 @@ static void retained_set_flag(uint32_t flag) {
 static void retained_clear_flags(void) {
   retained_seed_if_needed();
   s_retained.flags = 0u;
-  s_retained.pc = 0u;
-  s_retained.lr = 0u;
-  s_retained.psr = 0u;
 }
 
 static hal_reset_reason_t classify_reset_reason(uint32_t csr,
                                                 bool has_fault_record,
-                                                bool has_stack_overflow_marker,
+                                                bool stack_overflow,
                                                 bool alive_marker) {
-  if (has_stack_overflow_marker) {
+  if (stack_overflow) {
     return HAL_RESET_REASON_STACK_OVERFLOW;
   }
   if (has_fault_record) {
@@ -138,7 +135,27 @@ static uint32_t read_reset_flags_raw(void) { return RCC_CSR; }
 
 static void clear_reset_flags(void) { RCC_CSR |= RCC_CSR_RMVF; }
 
-static bool take_fault_frame(hal_fault_info_t *out) {
+#ifdef HAL_ENABLE_STACK_GUARD
+static uintptr_t stack_guard_base(void) {
+  return reinterpret_cast<uintptr_t>(&JH_StackLimit);
+}
+#endif
+
+static bool fault_hits_stack_guard(uint32_t kind, uint32_t cfsr,
+                                   uint32_t mmfar) {
+#ifdef HAL_ENABLE_STACK_GUARD
+  const uintptr_t guard_base = stack_guard_base();
+  return kind == JH_FAULT_MEMMANAGE && (cfsr & SCB_CFSR_MMARVALID) != 0u &&
+         mmfar >= guard_base && mmfar < guard_base + kStackGuardBytes;
+#else
+  (void)kind;
+  (void)cfsr;
+  (void)mmfar;
+  return false;
+#endif
+}
+
+static bool take_fault_frame(hal_fault_info_t *out, bool *stack_overflow) {
   jh_exception_info_t rec;
   if (!exception_info_take_last(&rec)) {
     return false;
@@ -148,48 +165,46 @@ static bool take_fault_frame(hal_fault_info_t *out) {
   out->pc = rec.pc;
   out->lr = rec.lr;
   out->psr = rec.xpsr;
+  *stack_overflow = fault_hits_stack_guard(rec.kind, rec.cfsr, rec.mmfar);
   return true;
-}
-
-static volatile uint32_t *stack_canary_addr(void) {
-  char *p = &JH_StackLimit;
-  __asm__("" : "+r"(p));
-  return reinterpret_cast<volatile uint32_t *>(p);
-}
-
-[[noreturn]] static void force_system_reset(void) {
-  SCB_AIRCR = SCB_AIRCR_VECTKEY | SCB_AIRCR_SYSRESETREQ;
-  __asm volatile("dsb");
-  for (;;) {
-  }
 }
 #else
 static uint32_t read_reset_flags_raw(void) { return s_host_rcc_csr; }
 
 static void clear_reset_flags(void) {}
 
-static bool take_fault_frame(hal_fault_info_t *out) {
-  if (!s_host_fault_frame.valid) {
+#ifdef HAL_ENABLE_STACK_GUARD
+static uintptr_t stack_guard_base(void) { return kHostStackGuardBase; }
+#endif
+
+static bool fault_hits_stack_guard(uint32_t kind, uint32_t cfsr,
+                                   uint32_t mmfar) {
+#ifdef HAL_ENABLE_STACK_GUARD
+  const uintptr_t guard_base = stack_guard_base();
+  return kind == JH_FAULT_MEMMANAGE && (cfsr & SCB_CFSR_MMARVALID) != 0u &&
+         mmfar >= guard_base && mmfar < guard_base + kStackGuardBytes;
+#else
+  (void)kind;
+  (void)cfsr;
+  (void)mmfar;
+  return false;
+#endif
+}
+
+static bool take_fault_frame(hal_fault_info_t *out, bool *stack_overflow) {
+  if (!s_host_fault_valid) {
     return false;
   }
-  *out = s_host_fault_frame;
-  s_host_fault_frame.valid = false;
-  s_host_fault_frame.pc = 0u;
-  s_host_fault_frame.lr = 0u;
-  s_host_fault_frame.psr = 0u;
+  out->valid = true;
+  out->pc = s_host_fault_frame.pc;
+  out->lr = s_host_fault_frame.lr;
+  out->psr = s_host_fault_frame.xpsr;
+  *stack_overflow =
+      fault_hits_stack_guard(s_host_fault_frame.kind, s_host_fault_frame.cfsr,
+                             s_host_fault_frame.mmfar);
+  s_host_fault_valid = false;
+  s_host_fault_frame = {};
   return true;
-}
-
-static uint32_t s_host_stack_canary = 0u;
-
-static volatile uint32_t *stack_canary_addr(void) {
-  return &s_host_stack_canary;
-}
-
-[[noreturn]] static void force_system_reset(void) {
-  /* Host build cannot reset hardware; keep behavior deterministic for tests. */
-  for (;;) {
-  }
 }
 #endif
 
@@ -207,21 +222,13 @@ void stm32g474_fault_init(void) {
 
   retained_seed_if_needed();
   const bool alive_marker = retained_flag(kRetainedAlive);
-  const bool stack_overflow = retained_flag(kRetainedStackOverflow);
-
-  if (stack_overflow) {
-    g_fault_info.valid = true;
-    g_fault_info.pc =
-        (s_retained.pc != 0u) ? s_retained.pc : kStackOverflowSentinelPc;
-    g_fault_info.lr = s_retained.lr;
-    g_fault_info.psr = s_retained.psr;
-  } else {
-    (void)take_fault_frame(&g_fault_info);
-  }
+  bool stack_overflow = false;
+  const bool has_fault_record =
+      take_fault_frame(&g_fault_info, &stack_overflow);
 
   const uint32_t csr = read_reset_flags_raw();
-  g_reset_reason = classify_reset_reason(csr, g_fault_info.valid,
-                                         stack_overflow, alive_marker);
+  g_reset_reason = classify_reset_reason(csr, has_fault_record, stack_overflow,
+                                         alive_marker);
   g_brownout_suspected = should_report_brownout(csr, alive_marker);
 
   clear_reset_flags();
@@ -252,27 +259,43 @@ bool stm32g474_fault_brownout_suspected(void) { return g_brownout_suspected; }
 void stm32g474_fault_alive_mark(void) { retained_set_flag(kRetainedAlive); }
 
 bool stm32g474_fault_stack_guard_init(void) {
-  *stack_canary_addr() = kStackCanary;
+#ifndef HAL_ENABLE_STACK_GUARD
+  return false;
+#else
+  if (g_stack_guard_armed) {
+    return true;
+  }
+#ifdef JH_STM32G474_HW
+  const uintptr_t guard_base = stack_guard_base();
+  if ((guard_base & (kStackGuardBytes - 1u)) != 0u ||
+      ((MPU_TYPE >> 8u) & 0xFFu) <= kStackGuardRegion) {
+    return false;
+  }
+
+  const uint32_t previous_region = MPU_RNR;
+  MPU_RNR = kStackGuardRegion;
+  if ((MPU_RASR & MPU_RASR_ENABLE) != 0u) {
+    const bool already_configured =
+        (MPU_RBAR & MPU_RBAR_ADDR_MASK) == guard_base &&
+        MPU_RASR == kStackGuardRasr;
+    MPU_RNR = previous_region;
+    g_stack_guard_armed = already_configured;
+    return already_configured;
+  }
+
+  MPU_RBAR = (uint32_t)guard_base;
+  MPU_RASR = kStackGuardRasr;
+  MPU_CTRL |= MPU_CTRL_ENABLE | MPU_CTRL_PRIVDEFENA;
+  MPU_RNR = previous_region;
+  __asm volatile("dsb" ::: "memory");
+  __asm volatile("isb" ::: "memory");
+#endif
   g_stack_guard_armed = true;
   return true;
+#endif
 }
 
-void stm32g474_fault_stack_guard_check(void) {
-  if (!g_stack_guard_armed) {
-    return;
-  }
-  if (*stack_canary_addr() == kStackCanary) {
-    return;
-  }
-
-  retained_seed_if_needed();
-  s_retained.flags |= kRetainedStackOverflow;
-  s_retained.pc = kStackOverflowSentinelPc;
-  s_retained.lr = 0u;
-  s_retained.psr = 0u;
-
-  force_system_reset();
-}
+void stm32g474_fault_stack_guard_check(void) {}
 
 #ifndef JH_STM32G474_HW
 extern "C" void hal_stm32g474_fault_test_reset(void) {
@@ -282,9 +305,9 @@ extern "C" void hal_stm32g474_fault_test_reset(void) {
   g_brownout_suspected = false;
   g_stack_guard_armed = false;
   s_host_rcc_csr = 0u;
-  s_host_fault_frame = {false, 0u, 0u, 0u};
-  s_host_stack_canary = 0u;
-  s_retained = {0u, 0u, 0u, 0u, 0u};
+  s_host_fault_frame = {};
+  s_host_fault_valid = false;
+  s_retained = {0u, 0u};
 }
 
 extern "C" void hal_stm32g474_fault_test_set_rcc_csr(uint32_t csr) {
@@ -294,10 +317,11 @@ extern "C" void hal_stm32g474_fault_test_set_rcc_csr(uint32_t csr) {
 extern "C" void hal_stm32g474_fault_test_set_fault_frame(uint32_t pc,
                                                          uint32_t lr,
                                                          uint32_t psr) {
-  s_host_fault_frame.valid = true;
+  s_host_fault_frame.kind = JH_FAULT_HARD;
   s_host_fault_frame.pc = pc;
   s_host_fault_frame.lr = lr;
-  s_host_fault_frame.psr = psr;
+  s_host_fault_frame.xpsr = psr;
+  s_host_fault_valid = true;
 }
 
 extern "C" void hal_stm32g474_fault_test_set_alive_marker(bool marked) {
@@ -309,14 +333,13 @@ extern "C" void hal_stm32g474_fault_test_set_alive_marker(bool marked) {
   }
 }
 
-extern "C" void hal_stm32g474_fault_test_set_stack_overflow_marker(bool set) {
-  retained_seed_if_needed();
-  if (set) {
-    s_retained.flags |= kRetainedStackOverflow;
-    s_retained.pc = kStackOverflowSentinelPc;
-  } else {
-    s_retained.flags &= ~kRetainedStackOverflow;
-    s_retained.pc = 0u;
-  }
+extern "C" void hal_stm32g474_fault_test_set_stack_guard_fault(void) {
+  s_host_fault_frame = {};
+  s_host_fault_frame.kind = JH_FAULT_MEMMANAGE;
+  s_host_fault_frame.pc = 0x0800DEADu;
+  s_host_fault_frame.xpsr = 0x21000000u;
+  s_host_fault_frame.cfsr = SCB_CFSR_MMARVALID;
+  s_host_fault_frame.mmfar = (uint32_t)kHostStackGuardBase;
+  s_host_fault_valid = true;
 }
 #endif

@@ -53,6 +53,12 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 |---|---|
 | `HAL_ENABLE_FREERTOS` | Enables FreeRTOS for the selected target. RP builds use the pinned kernel and SMP ports for RP2040, RP2350 ARM and RP2350 RISC-V; HAL starts the scheduler and pins application tasks to their corresponding cores. STM32G474 uses the pinned Cortex-M4F port. `hal_mutex_*`, `hal_delay_ms()`, `hal_idle()` and runtime reporting select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
+Stack protection is a separate target-runtime opt-in:
+
+| Flag | Effect |
+|---|---|
+| `HAL_ENABLE_STACK_GUARD` | Enables synchronous hardware protection for native RP2040/RP2350 system stacks and the STM32G474 main stack. FreeRTOS builds additionally enable kernel task-stack overflow checking. The target-independent `hal_stack_guard_init_ex()` API reports whether protection is active; periodic polling is unnecessary. |
+
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
 | `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | Experimental BLE Peripheral over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W, STM32G474+PIM730, and mock. BTstack carries a non-commercial-use restriction; see the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
@@ -356,8 +362,8 @@ Platform stack-size overrides:
 | Macro | Default | Unit / meaning |
 |---|---|---|
 | `HAL_STM32_MAIN_STACK_SIZE` | `0x800` | Bytes reserved as STM32 `_Min_Stack_Size` (linker reserve between heap and top-of-RAM stack) |
-| `HAL_RP2040_STACK_SIZE` | `0x800` | Bytes mapped to `PICO_STACK_SIZE` (core-0 stack reservation) |
-| `HAL_RP2040_CORE1_STACK_SIZE` | `HAL_RP2040_STACK_SIZE` / `0x800` | Bytes mapped to `PICO_CORE1_STACK_SIZE` (core1 stack reservation) |
+| `HAL_RP_CORE0_STACK_SIZE` | `0x800` | Bytes mapped to `PICO_STACK_SIZE` for any native RP target |
+| `HAL_RP_CORE1_STACK_SIZE` | `HAL_RP_CORE0_STACK_SIZE` / `0x800` | Bytes mapped to `PICO_CORE1_STACK_SIZE` for any native RP target |
 
 Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
 mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full

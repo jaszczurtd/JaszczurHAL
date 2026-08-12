@@ -350,7 +350,15 @@ void               hal_stack_guard_check(void);
 
 ```
 
-`hal_system_get_current_architecture()` returns a by-value snapshot copied into the caller-provided output struct. String fields point to backend-owned static storage; numeric fields use `0` when the backend cannot report a meaningful value. The API does not allocate and the caller does not own or free the returned strings.
+`hal_system_get_current_architecture()` returns a by-value snapshot copied into
+the caller-provided output struct. Static target identity, backend, MCU,
+subtype, CPU description, core count, FPU presence, and total/usable RAM come
+directly from the selected generated target descriptor. Program-flash capacity
+comes from the selected generated board descriptor. Runtime values such as
+clocks and current free heap remain backend queries. String fields point to
+static generated or backend-owned storage; numeric fields use `0` when a value
+is not meaningful for the current target. The API does not allocate and the
+caller does not own or free the returned strings.
 
 The status-first system calls distinguish invalid output pointers
 (`HAL_EINVAL`), absent retained fault data (`HAL_ENOENT`) and services that the
@@ -369,22 +377,24 @@ after a successful elapsed check and returns `true` for that iteration.
 `to_ms_since_boot(get_absolute_time())`; `hal_micros()` and
 `hal_micros64()` use `time_us_64()`. The SoC bindings for watchdog, idle,
 heap reporting, chip temperature, BOOTSEL reset, device identity, ISR
-detection, and architecture metadata live in
+detection, and other runtime system services live in
 `src/hal/impl/rp2040/drivers/rp2040/rp2040_system.{h,cpp}`. Reset-reason
 decode and ARM HardFault capture live in `rp2040_fault.{h,cpp}`. In FreeRTOS
 builds, millisecond delay yields only from valid task context; pre-scheduler,
 ISR, and HAL-critical paths use bounded SDK waits. Microsecond delay always
-uses `busy_wait_us()`. The architecture snapshot derives flash reservations
-from the selected linker layout and reports FreeRTOS heap capacity when that
-runtime is active. The watchdog reset bit is latched before application entry
-so enabling the watchdog later cannot erase the previous-boot result.
+uses `busy_wait_us()`. The architecture snapshot combines generated target and
+board facts with flash reservations from the selected linker layout and
+FreeRTOS heap capacity when that runtime is active. The watchdog reset bit is
+latched before application entry so enabling the watchdog later cannot erase
+the previous-boot result.
 **impl/stm32g474:** SysTick/FreeRTOS time, DWT fallback delays, watchdog,
-idle, chip temperature, device identity, ISR detection, and architecture
-metadata live in
+idle, chip temperature, device identity, ISR detection, and other runtime
+system services live in
 `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
 FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
-critical paths use DWT waits. The architecture snapshot derives flash, RAM,
-heap, stack, EEPROM, and LittleFS spans from the selected linker layout.
+critical paths use DWT waits. The architecture snapshot combines generated
+target and board capacities with heap, stack, EEPROM, and LittleFS spans from
+the selected runtime and linker layout.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 **Thread safety:** RP-family time/watchdog APIs are safe to call from both
 cores. In RP and STM32G474 FreeRTOS modes, `hal_delay_ms()` yields or blocks
@@ -668,10 +678,16 @@ boot, before any code that could fault. It latches the silicon reset-reason
 flags, snapshots any HardFault info left over from the previous boot into
 RAM, and clears the volatile flag bits so the next event is detected fresh.
 
+Define `HAL_ENABLE_STACK_GUARD` to enable the hardware protection. Platform
+startup installs it before application code runs; the public init call is an
+idempotent availability check.
+
 **Typical wiring (application setup / loop):**
 ```c
 hal_fault_subsystem_init();                   // very first call in setup
-hal_stack_guard_init();                       // install stack-bottom canary
+if (hal_stack_guard_init_ex() != HAL_OK) {    // verify configured protection
+    log("stack guard unavailable");
+}
 log("reset: %s", hal_reset_reason_str(hal_get_reset_reason()));
 hal_fault_info_t f;
 if (hal_get_last_fault(&f) && f.valid) {
@@ -682,25 +698,34 @@ if (hal_last_boot_was_brownout()) {
 }
 // ... in main loop:
 hal_alive_mark();                             // refresh brown-out heuristic marker
-hal_stack_guard_check();                      // validate canary
 ```
 
-**impl/rp2040 (RP2040):** Implemented by the SoC-specific driver
+`hal_stack_guard_check()` remains available as a target-independent no-op for
+source compatibility with earlier polling code. Hardware and FreeRTOS report
+violations synchronously, so new applications do not call it.
+
+**impl/rp2040 (RP family):** Implemented by the SoC-specific driver
 `src/hal/impl/rp2040/drivers/rp2040/rp2040_fault.{h,cpp}`. The HAL layer
 forwards to thin `rp2040_fault_*` wrappers. Retained state lives in
 `watchdog_hw->scratch[0..3]` (scratch `[4..7]` is reserved by pico-sdk for
 `WATCHDOG_NON_REBOOT_MAGIC` / `watchdog_reboot()` arguments). The HardFault
 handler is naked ASM that captures the exception frame (PC/LR/PSR - Cortex-M0+
 has no CFSR/HFSR/MMFAR/BFAR), stores it into scratch with a `'JHD'` signature,
-then triggers `watchdog_reboot(0, 0, 0)`. The stack canary is placed at
-`__StackLimit` and the address is laundered through inline asm to avoid a GCC
-`-Warray-bounds` false positive caused by the linker-symbol declaration.
+then triggers `watchdog_reboot(0, 0, 0)`. With `HAL_ENABLE_STACK_GUARD`, CMake
+sets `PICO_USE_STACK_GUARDS=1`: Pico SDK uses its RP2040 MPU guard and its
+RP2350 architecture-specific stack-limit/PMP implementation for every started
+core.
 `HAL_RESET_REASON_BROWNOUT` is not reported by
 silicon (POR and BOR share one flag) - `hal_last_boot_was_brownout()` is a
 heuristic that returns true when the silicon reported POR but the retained
 alive marker survived (suggesting V<sub>DD</sub> dipped below the BOR
 threshold without losing scratch).
-**impl/stm32g474:** Implemented backend behind the same dispatch pattern as RP2040: `src/hal/impl/stm32g474/hal_system.cpp` forwards to `stm32g474_fault_*` wrappers, while the SoC logic lives in `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.{h,cpp}`. Reset reason is classified from `RCC->CSR` flags (`IWDGRSTF`/`WWDGRSTF`, `SFTRSTF`, `PINRSTF`, `BORRSTF`, `LPWRRSTF`, `OBLRSTF`), with reset flags cleared via `RMVF` after latching. Captured fault state is taken from the retained Cortex-M4 exception record (`exception_info` `.noinit` handoff) and surfaced through `hal_get_last_fault()` as `{pc, lr, psr}` with reset reason `HARDFAULT`. `hal_stack_guard_*` is also active on STM32G474: it places a canary at the linker-provided stack limit, stores a retained `STACK_OVERFLOW` marker on corruption, and forces a system reset so the next boot reports `HAL_RESET_REASON_STACK_OVERFLOW`.
+**impl/stm32g474:** Implemented behind the same dispatch pattern as the RP
+family. Reset reason is classified from `RCC->CSR`; captured state is taken
+from the retained Cortex-M4 exception record. With `HAL_ENABLE_STACK_GUARD`,
+`SystemInit()` reserves MPU region 7 as a 32-byte execute-never, no-access
+region at `JH_StackLimit`. A MemManage fault inside that range is retained and
+reported on the next boot as `HAL_RESET_REASON_STACK_OVERFLOW`.
 **impl/.mock:** All state is injectable; see the mock helpers below. The
 mock `hal_fault_subsystem_init()` does NOT reset the staged reset-reason /
 fault-info so tests can pre-populate state and observe behaviour across an
@@ -715,7 +740,6 @@ bool hal_mock_alive_was_marked(void);
 void hal_mock_alive_reset_flag(void);
 bool hal_mock_fault_subsystem_was_inited(void);
 bool hal_mock_stack_guard_is_armed(void);
-bool hal_mock_stack_guard_check_was_triggered(void);
 void hal_mock_fault_diagnostics_reset(void);
 ```
 

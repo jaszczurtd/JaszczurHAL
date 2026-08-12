@@ -6,7 +6,18 @@
   "displayName": "STMicroelectronics STM32G474",
   "description": "STM32G474 Cortex-M4F bare-metal and FreeRTOS target.",
   "status": "supported",
-  "architecture": { "vendor": "st", "family": "stm32g4", "soc": "stm32g474re", "isa": "armv7e-m", "cores": 1 },
+  "architecture": {
+    "vendor": "st",
+    "family": "stm32g4",
+    "soc": "stm32g474re",
+    "isa": "armv7e-m",
+    "cores": 1,
+    "mcuName": "STM32G474RE",
+    "mcuSubtype": "STM32G474RETx",
+    "cpuArchName": "ARM Cortex-M4F",
+    "hasFpu": true,
+    "backendName": "stm32g474/bare-metal"
+  },
   "hal": { "targetSelector": "HAL_TARGET_STM32G474" },
   "build": { "provider": "jh-stm32-baremetal", "recipe": "stm32g474-native" },
   "gpio": {
@@ -21,7 +32,8 @@
       "flash": { "kind": "flash", "sizeBytes": 524288, "dmaCapable": false },
       "sram": { "kind": "ram", "sizeBytes": 98304, "dmaCapable": true },
       "ccmram": { "kind": "ram", "sizeBytes": 32768, "dmaCapable": false }
-    }
+    },
+    "ramUsableBytes": 98304
   },
   "defaultBoard": "nucleo-g474re",
   "sourceFallbackBoard": "nucleo-g474re",

@@ -92,13 +92,16 @@ void test_get_current_architecture_reports_mock_snapshot(void) {
   TEST_ASSERT_EQUAL_STRING("mock", arch.target_name);
   TEST_ASSERT_EQUAL_STRING("mock/host", arch.backend_name);
   TEST_ASSERT_EQUAL_STRING("host", arch.mcu);
-  TEST_ASSERT_NOT_NULL(arch.mcu_subtype);
-  TEST_ASSERT_NOT_NULL(arch.cpu_arch);
+  TEST_ASSERT_EQUAL_STRING("host", arch.mcu_subtype);
+  TEST_ASSERT_EQUAL_STRING("host", arch.cpu_arch);
   TEST_ASSERT_EQUAL_STRING("none", arch.rtos_name);
   TEST_ASSERT_EQUAL_UINT8(1u, arch.cpu_cores);
   TEST_ASSERT_FALSE(arch.is_hardware);
   TEST_ASSERT_TRUE(arch.has_fpu);
   TEST_ASSERT_FALSE(arch.has_rtos);
+  TEST_ASSERT_EQUAL_UINT32(0u, arch.flash_total_bytes);
+  TEST_ASSERT_EQUAL_UINT32(0u, arch.ram_total_bytes);
+  TEST_ASSERT_EQUAL_UINT32(0u, arch.ram_usable_bytes);
   TEST_ASSERT_EQUAL_UINT32(123456u, arch.heap_free_bytes);
   TEST_ASSERT_EQUAL_UINT32(HAL_DEVICE_UID_BYTES, arch.uid_bytes);
   TEST_ASSERT_EQUAL_STRING("mock-host-stack", arch.network_backend_name);
@@ -222,7 +225,7 @@ void test_fault_snapshot_status_distinguishes_invalid_and_missing(void) {
   TEST_ASSERT_TRUE(hal_get_last_fault(&out));
 }
 
-void test_stack_guard_status_and_legacy_wrapper_succeed(void) {
+void test_stack_guard_status_and_bool_wrapper_succeed(void) {
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_stack_guard_init_ex());
   TEST_ASSERT_TRUE(hal_mock_stack_guard_is_armed());
   TEST_ASSERT_TRUE(hal_stack_guard_init());
@@ -371,7 +374,7 @@ int main(void) {
   RUN_TEST(test_get_device_uid_reflects_injected_value);
   RUN_TEST(test_get_device_uid_null_arg_is_safe);
   RUN_TEST(test_fault_snapshot_status_distinguishes_invalid_and_missing);
-  RUN_TEST(test_stack_guard_status_and_legacy_wrapper_succeed);
+  RUN_TEST(test_stack_guard_status_and_bool_wrapper_succeed);
   RUN_TEST(test_get_device_uid_hex_formats_default_as_uppercase);
   RUN_TEST(test_get_device_uid_hex_formats_injected_value);
   RUN_TEST(test_get_device_uid_hex_rejects_small_buffer);

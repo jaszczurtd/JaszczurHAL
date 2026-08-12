@@ -63,9 +63,14 @@ features. Inspect the generated CMake cache, linker script, ELF map, or
 RP SRAM placement follows the selected Pico SDK target linker template.
 JaszczurHAL may additionally place flash-operation code in RAM and uses:
 
-- `HAL_RP2040_STACK_SIZE` for the core-0 `PICO_STACK_SIZE` reservation;
-- `HAL_RP2040_CORE1_STACK_SIZE` for the core-1 stack reservation;
+- `HAL_RP_CORE0_STACK_SIZE` for the core-0 `PICO_STACK_SIZE` reservation;
+- `HAL_RP_CORE1_STACK_SIZE` for the core-1 stack reservation;
 - the selected FreeRTOS heap and task stacks in FreeRTOS builds.
+
+With `HAL_ENABLE_STACK_GUARD`, the native build enables the Pico SDK hardware
+guard implementation. RP2040 uses an MPU no-access region, while RP2350 uses
+the architecture-specific stack-limit/PMP protection. Violations fault
+synchronously; application polling is not required.
 
 The RP FreeRTOS configuration defaults `HAL_FREERTOS_HEAP_SIZE` to 164 KiB.
 The HAL-provided `app_task0()` and optional `app_task1()` stacks default to 512

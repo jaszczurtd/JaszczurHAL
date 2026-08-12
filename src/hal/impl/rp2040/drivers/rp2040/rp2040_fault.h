@@ -12,7 +12,7 @@
  *
  * Retained scratch layout (watchdog_hw->scratch[]):
  *   [0] = state word: upper 24 bits signature 'JHD' (0x4A4844 << 8),
- *                     lower 8  bits flag bits (FAULT, ALIVE, STACK_OVF)
+ *                     lower 8  bits flag bits (FAULT, ALIVE)
  *   [1] = stacked PC  at fault (valid iff FLAG_FAULT)
  *   [2] = stacked LR  at fault (valid iff FLAG_FAULT)
  *   [3] = stacked PSR at fault (valid iff FLAG_FAULT)
@@ -46,12 +46,10 @@ bool rp2040_fault_brownout_suspected(void);
 /** Refresh the retained alive marker used by the brown-out heuristic. */
 void rp2040_fault_alive_mark(void);
 
-/** Install the stack-bottom canary. Returns true on success. */
+/** Report whether the Pico SDK hardware stack guard is enabled. */
 bool rp2040_fault_stack_guard_init(void);
 
-/** Verify the stack canary. On corruption: record a synthetic fault snapshot
- *  with reason STACK_OVERFLOW and reboot; does not return. No-op when no
- *  guard was installed. */
+/** Hardware guards fault synchronously, so periodic checking is unnecessary. */
 void rp2040_fault_stack_guard_check(void);
 
 #ifdef __cplusplus

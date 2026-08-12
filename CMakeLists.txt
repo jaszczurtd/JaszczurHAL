@@ -292,6 +292,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DAC
     HAL_ENABLE_DACLESS       # shared DACless PWM-audio driver
     HAL_ENABLE_DMA_PWM_AUDIO
+    HAL_ENABLE_STACK_GUARD   # target-independent synchronous stack protection API
     HAL_ENABLE_PCNT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED

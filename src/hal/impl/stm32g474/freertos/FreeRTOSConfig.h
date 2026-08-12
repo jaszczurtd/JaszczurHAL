@@ -40,7 +40,11 @@
 #define configSUPPORT_DYNAMIC_ALLOCATION 1
 #define configSUPPORT_STATIC_ALLOCATION 0
 #define configUSE_MALLOC_FAILED_HOOK 1
+#ifdef HAL_ENABLE_STACK_GUARD
 #define configCHECK_FOR_STACK_OVERFLOW 2
+#else
+#define configCHECK_FOR_STACK_OVERFLOW 0
+#endif
 
 #define configUSE_IDLE_HOOK 0
 #define configUSE_TICK_HOOK 0

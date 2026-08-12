@@ -68,8 +68,10 @@ typedef enum {
 /**
  * @brief Snapshot of the currently running HAL architecture/backend.
  *
- * String fields point to static storage owned by the backend. Numeric fields
- * use zero when a value is not known or not meaningful for the current target.
+ * Static target identity and memory capacities come from generated target and
+ * board descriptors. Runtime fields are supplied by the active backend.
+ * String fields point to generated or backend-owned static storage. Numeric
+ * fields use zero when a value is not known or meaningful for the target.
  *
  * Memory fields deliberately separate physical capacity from the region
  * available to the application. For example, STM32G474 reports the whole
@@ -421,45 +423,34 @@ bool hal_last_boot_was_brownout(void);
 void hal_alive_mark(void);
 
 /**
- * @brief Install a stack-overflow detector for the calling core.
+ * @brief Confirm that synchronous stack-overflow protection is active.
  *
- * This is the status-returning implementation used by
- * @ref hal_stack_guard_init.
+ * Define @c HAL_ENABLE_STACK_GUARD in the project configuration to enable the
+ * target implementation. Native RP builds use the Pico SDK hardware guard
+ * (MPU on RP2040, stack limit/PMP on RP2350); STM32G474 protects the bottom
+ * 32 bytes of the main stack with an MPU region. FreeRTOS builds additionally
+ * enable kernel task-stack overflow checking.
  *
- * @return HAL_OK when the guard was installed or HAL_EUNSUPPORTED when the
- *         active backend cannot provide a stack guard.
+ * Protection is installed during platform startup. This function is
+ * idempotent and provides a target-independent way to verify availability.
+ *
+ * @return HAL_OK when protection is active or HAL_EUNSUPPORTED when the
+ *         feature is disabled or unavailable on the active backend.
  */
 hal_status_t hal_stack_guard_init_ex(void);
 
 /**
- * @brief Install a stack-overflow detector for the calling core.
+ * @brief Boolean wrapper over @ref hal_stack_guard_init_ex.
  *
- * Compatibility wrapper over @ref hal_stack_guard_init_ex.
- * Implementation strategy depends on the backend:
- * - RP2040: writes a canary word at the bottom of the linker
- *   stack region (@c __StackLimit). @ref hal_stack_guard_check verifies the
- *   canary; corruption indicates the stack grew past its allocation. On
- *   detection the HAL synthesises a HardFault-equivalent reset with reason
- *   @ref HAL_RESET_REASON_STACK_OVERFLOW.
- * - STM32G474: uses the linker-provided stack limit and the backend's retained
- *   stack-overflow marker path.
- * - Unsupported backends return false.
- *
- * The detector is *soft* -- it does not trap at the instant of overflow,
- * only at the next @ref hal_stack_guard_check call. For instant trapping,
- * an MPU-based guard region would be required (not provided here).
- *
- * @return true if the guard was installed. false if unsupported on this
- *         target.
+ * @return true when protection is active; false when disabled or unsupported.
  */
 bool hal_stack_guard_init(void);
 
 /**
- * @brief Verify the stack canary installed by @ref hal_stack_guard_init.
+ * @brief Legacy polling point retained as a target-independent no-op.
  *
- * Call periodically (e.g. once per main loop iteration). On corruption the
- * function records the event in retained scratch storage and reboots the
- * MCU; it does not return. If no guard was installed, this is a no-op.
+ * Stack violations are reported synchronously by hardware (and by FreeRTOS
+ * for task stacks), so applications do not need to call this periodically.
  */
 void hal_stack_guard_check(void);
 

@@ -24,20 +24,6 @@
 extern "C" {
 #endif
 
-typedef struct {
-  const char *backend_name;
-  const char *mcu;
-  const char *mcu_subtype;
-  const char *cpu_arch;
-  uint8_t cpu_cores;
-  uint32_t ram_total_bytes;
-  uint32_t ram_usable_bytes;
-  bool has_fpu;
-} stm32g474_system_arch_info_t;
-
-/** @brief Return static architecture metadata for the STM32G474 backend. */
-void stm32g474_system_get_arch_info(stm32g474_system_arch_info_t *out);
-
 /** @brief Return the main stack reservation in bytes.
  *  On hardware builds this is derived from linker symbols; host fallback uses
  *  the backend default reserve.

@@ -646,10 +646,10 @@ endforeach()
 
 include("${_sources}")
 set(EXTRA_HAL_DEFINES
-    "HAL_RP2040_STACK_SIZE=3072u"
-    "HAL_RP2040_CORE1_STACK_SIZE=2048u")
-jh_hal_define_value(_stack0 HAL_RP2040_STACK_SIZE)
-jh_hal_define_value(_stack1 HAL_RP2040_CORE1_STACK_SIZE)
+    "HAL_RP_CORE0_STACK_SIZE=3072u"
+    "HAL_RP_CORE1_STACK_SIZE=2048u")
+jh_hal_define_value(_stack0 HAL_RP_CORE0_STACK_SIZE)
+jh_hal_define_value(_stack1 HAL_RP_CORE1_STACK_SIZE)
 if(NOT "${_stack0}" STREQUAL "3072u" OR
    NOT "${_stack1}" STREQUAL "2048u")
     message(FATAL_ERROR "RP native stack define mapping is broken")

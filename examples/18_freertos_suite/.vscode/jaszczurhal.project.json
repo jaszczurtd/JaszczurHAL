@@ -83,8 +83,7 @@
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
             "JH_MODULE_NAME": "18_freertos_suite",
-            "JH_PROJECT_SOURCES": "app.c",
-            "JH_RP2040_FREERTOS": true
+            "JH_PROJECT_SOURCES": "app.c"
         }
     },
     "artifacts": {

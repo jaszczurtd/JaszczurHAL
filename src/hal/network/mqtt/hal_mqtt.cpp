@@ -34,8 +34,7 @@ static void *s_user_callback_user = NULL;
 // publishes inside a single s_client.loop() call; the original single-slot
 // pending buffer overwrote earlier messages, which produced "module stopped
 // responding" symptoms during MQTT bursts. The queue is drained from
-// hal_mqtt_loop() one message at a time with the user callback invoked
-// outside the module mutex.
+// hal_mqtt_loop() with the user callback invoked outside the module mutex.
 typedef struct {
   char topic[HAL_MQTT_TOPIC_BUF_SIZE];
   uint8_t payload[HAL_MQTT_PAYLOAD_BUF_SIZE];
@@ -43,10 +42,13 @@ typedef struct {
 } hal_mqtt_rx_slot_t;
 
 static hal_mqtt_rx_slot_t s_rx_queue[HAL_MQTT_RX_QUEUE_DEPTH];
+static hal_mqtt_rx_slot_t s_dispatch_slot;
 static uint8_t s_rx_head = 0; // next slot to read
 static uint8_t s_rx_tail = 0; // next slot to write
 static uint8_t s_rx_count = 0;
 static uint32_t s_rx_overflow_count = 0;
+// Protected by s_mqtt_mutex. Only its owner may use s_dispatch_slot.
+static bool s_dispatch_active = false;
 
 static inline void mqtt_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_mqtt_mutex);
@@ -352,36 +354,39 @@ hal_status_t hal_mqtt_loop_ex(void) {
 
   hal_mqtt_message_callback_t callback = s_user_callback;
   void *callback_user = s_user_callback_user;
+  bool owns_dispatch = false;
+  if (!s_dispatch_active) {
+    s_dispatch_active = true;
+    owns_dispatch = true;
+  }
 
   hal_mutex_unlock(s_mqtt_mutex);
 
-  // Drain the inbound queue one message at a time. The user callback is
-  // invoked OUTSIDE the module mutex so it may safely re-enter publish/
-  // subscribe operations.
-  while (true) {
-    char topic_copy[HAL_MQTT_TOPIC_BUF_SIZE] = {};
-    uint8_t payload_copy[HAL_MQTT_PAYLOAD_BUF_SIZE] = {};
-    uint16_t payload_len = 0;
-    bool has_message = false;
-
+  // A concurrent or re-entrant loop may service the network, but one owner
+  // serializes callbacks through the static dispatch slot. This keeps the
+  // callback outside the module mutex without placing message buffers on the
+  // caller's stack.
+  while (owns_dispatch) {
     hal_mutex_lock(s_mqtt_mutex);
-    if (s_rx_count > 0u) {
-      hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_head];
-      snprintf(topic_copy, sizeof(topic_copy), "%s", slot->topic);
-      payload_len = slot->length;
-      if (payload_len > 0u) {
-        memcpy(payload_copy, slot->payload, payload_len);
-      }
-      s_rx_head = (uint8_t)((s_rx_head + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
-      s_rx_count--;
-      has_message = true;
+    if (s_rx_count == 0u) {
+      s_dispatch_active = false;
+      hal_mutex_unlock(s_mqtt_mutex);
+      break;
     }
+
+    const hal_mqtt_rx_slot_t *slot = &s_rx_queue[s_rx_head];
+    memcpy(s_dispatch_slot.topic, slot->topic, sizeof(s_dispatch_slot.topic));
+    s_dispatch_slot.length = slot->length;
+    if (s_dispatch_slot.length > 0u) {
+      memcpy(s_dispatch_slot.payload, slot->payload, s_dispatch_slot.length);
+    }
+    s_rx_head = (uint8_t)((s_rx_head + 1u) % HAL_MQTT_RX_QUEUE_DEPTH);
+    s_rx_count--;
     hal_mutex_unlock(s_mqtt_mutex);
 
-    if (!has_message)
-      break;
     if (callback) {
-      callback(topic_copy, payload_copy, payload_len, callback_user);
+      callback(s_dispatch_slot.topic, s_dispatch_slot.payload,
+               s_dispatch_slot.length, callback_user);
     }
   }
 

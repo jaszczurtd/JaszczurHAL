@@ -229,7 +229,6 @@ EXAMPLES: list[dict[str, Any]] = [
             "56_http_https_client",
         ],
         "sources": ["app.c"],
-        "cache": {"JH_RP2040_FREERTOS": True},
         "variants": [
             {
                 "id": "network",

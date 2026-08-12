@@ -76,7 +76,7 @@ int32_t decode_int(const uint8_t raw[4]) {
 
 hal_status_t hal_eeprom_init(hal_eeprom_type_t type, uint16_t size,
                              uint8_t i2c_addr) {
-  if (type < HAL_EEPROM_DEFAULT || type > HAL_EEPROM_FLASH) {
+  if (type < HAL_EEPROM_DEFAULT || type > HAL_EEPROM_STM32_FLASH) {
     return HAL_EINVAL;
   }
 
