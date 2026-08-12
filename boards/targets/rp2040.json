@@ -6,7 +6,18 @@
   "displayName": "Raspberry Pi RP2040",
   "description": "RP2040 Cortex-M0+ target built with the pinned Pico SDK.",
   "status": "supported",
-  "architecture": { "vendor": "raspberry-pi", "family": "rp", "soc": "rp2040", "isa": "armv6-m", "cores": 2 },
+  "architecture": {
+    "vendor": "raspberry-pi",
+    "family": "rp",
+    "soc": "rp2040",
+    "isa": "armv6-m",
+    "cores": 2,
+    "mcuName": "RP2040",
+    "mcuSubtype": "RP2040",
+    "cpuArchName": "ARM Cortex-M0+",
+    "hasFpu": false,
+    "backendName": "rp/pico-sdk"
+  },
   "hal": { "targetSelector": "HAL_TARGET_RP2040" },
   "build": { "provider": "pico-sdk", "recipe": "rp-native", "platform": "rp2040" },
   "gpio": {
@@ -14,7 +25,12 @@
     "validPins": { "ranges": [{ "first": 0, "last": 29 }] },
     "halEncoding": { "kind": "identity-u8" }
   },
-  "memory": { "regions": { "sram": { "kind": "ram", "sizeBytes": 270336, "dmaCapable": true } } },
+  "memory": {
+    "regions": {
+      "sram": { "kind": "ram", "sizeBytes": 270336, "dmaCapable": true }
+    },
+    "ramUsableBytes": 262144
+  },
   "defaultBoard": "pico",
   "components": { "rp-native": { "mode": "required" } }
 }

@@ -14,13 +14,13 @@
 #endif
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
-#define JH_RP2040_HAL_SYNC_FREERTOS 1
+#define JH_RP_HAL_SYNC_FREERTOS 1
 #else
-#define JH_RP2040_HAL_SYNC_FREERTOS 0
+#define JH_RP_HAL_SYNC_FREERTOS 0
 #endif
 
 struct hal_mutex_impl_t {
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   SemaphoreHandle_t handle;
 #else
   mutex_t mtx;
@@ -30,7 +30,7 @@ struct hal_mutex_impl_t {
 hal_mutex_t hal_mutex_create(void) {
   hal_mutex_impl_t *m = new hal_mutex_impl_t();
   HAL_ASSERT(m != NULL, "hal_mutex_create: allocation failed");
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   if (m == NULL) {
     return NULL;
   }
@@ -53,7 +53,7 @@ void hal_mutex_lock(hal_mutex_t mutex) {
     return;
   }
 
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   HAL_ASSERT(!portCHECK_IF_IN_ISR(),
              "hal_mutex_lock: FreeRTOS mutex cannot be locked from ISR");
   if (portCHECK_IF_IN_ISR()) {
@@ -77,7 +77,7 @@ bool hal_mutex_try_lock(hal_mutex_t mutex) {
     return false;
   }
 
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   if (portCHECK_IF_IN_ISR()) {
     return false;
   }
@@ -93,7 +93,7 @@ void hal_mutex_unlock(hal_mutex_t mutex) {
     return;
   }
 
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   HAL_ASSERT(!portCHECK_IF_IN_ISR(),
              "hal_mutex_unlock: FreeRTOS mutex cannot be unlocked from ISR");
   if (portCHECK_IF_IN_ISR()) {
@@ -114,7 +114,7 @@ void hal_mutex_destroy(hal_mutex_t mutex) {
     return;
   }
 
-#if JH_RP2040_HAL_SYNC_FREERTOS
+#if JH_RP_HAL_SYNC_FREERTOS
   vSemaphoreDelete(mutex->handle);
 #endif
   delete mutex;

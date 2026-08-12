@@ -6,7 +6,18 @@
   "displayName": "Host mock",
   "description": "Deterministic host target for tests.",
   "status": "supported",
-  "architecture": { "vendor": "host", "family": "host", "soc": "host", "isa": "host", "cores": 1 },
+  "architecture": {
+    "vendor": "host",
+    "family": "host",
+    "soc": "host",
+    "isa": "host",
+    "cores": 1,
+    "mcuName": "host",
+    "mcuSubtype": "host",
+    "cpuArchName": "host",
+    "hasFpu": true,
+    "backendName": "mock/host"
+  },
   "hal": { "targetSelector": "HAL_TARGET_MOCK" },
   "build": { "provider": "host", "recipe": "host-mock" },
   "gpio": {
@@ -14,7 +25,7 @@
     "validPins": { "ranges": [{ "first": 0, "last": 255 }] },
     "halEncoding": { "kind": "identity-u8" }
   },
-  "memory": { "regions": {} },
+  "memory": { "regions": {}, "ramUsableBytes": 0 },
   "defaultBoard": "host-mock",
   "sourceFallbackBoard": "host-mock",
   "components": { "host-mock": { "mode": "required" } }

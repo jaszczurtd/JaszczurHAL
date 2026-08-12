@@ -44,15 +44,25 @@ Every descriptor contains `schemaVersion`, `kind`, `id`, `displayName`,
 
 Target descriptors additionally define:
 
-- `architecture`: vendor, family, SoC, ISA, and core count;
+- `architecture`: vendor, family, SoC, ISA, core count, public MCU/subtype/CPU
+  names, FPU presence, and the runtime backend name;
 - `hal.targetSelector`;
 - `build`: provider, controlled recipe, and provider platform when required;
 - `gpio`: pin ID format, exact valid pins, and HAL encoding;
-- `memory.regions`;
+- `memory.regions` plus `memory.ramUsableBytes`; total RAM is generated from
+  every RAM region, while usable RAM describes the region normally exposed by
+  the default application linker;
 - `defaultBoard`;
 - optional `sourceFallbackBoard`, used only when source-level selection may
   safely choose a board without the build generator;
 - target-owned component IDs.
+
+The resolved `jh_board_config.h` projects target descriptors into
+`HAL_TARGET_*` facts and board descriptors into `HAL_BOARD_*` facts.
+`hal_system_get_current_architecture()` consumes those generated target facts
+instead of maintaining a second MCU/ISA/memory table in backend source. Total
+flash remains a board fact because boards for one target may carry different
+flash devices.
 
 Board descriptors additionally define:
 

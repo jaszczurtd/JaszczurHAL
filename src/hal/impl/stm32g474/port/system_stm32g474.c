@@ -19,7 +19,12 @@
 #ifdef JH_STM32G474_HW
 
 #include "stm32g474_regs.h"
+#include <stdbool.h>
 #include <stdint.h>
+
+#ifdef HAL_ENABLE_STACK_GUARD
+extern bool stm32g474_fault_stack_guard_init(void);
+#endif
 
 #ifdef HAL_ENABLE_FREERTOS
 #include <FreeRTOS.h>
@@ -67,6 +72,17 @@ void SystemInit(void) {
    * a generic HardFault. */
   SCB_SHCSR |=
       SCB_SHCSR_MEMFAULTENA | SCB_SHCSR_BUSFAULTENA | SCB_SHCSR_USGFAULTENA;
+
+#ifdef HAL_ENABLE_STACK_GUARD
+  /* Protect the bottom 32 bytes of the main stack before application code or
+   * interrupts can use it. Failure means the requested protection cannot be
+   * guaranteed, so do not continue with a falsely guarded system. */
+  if (!stm32g474_fault_stack_guard_init()) {
+    for (;;) {
+      __asm volatile("nop");
+    }
+  }
+#endif
 
 #ifndef HAL_ENABLE_FREERTOS
   /* SysTick @ 1 kHz from the 16 MHz core clock. */

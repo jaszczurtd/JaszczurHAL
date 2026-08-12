@@ -10,5 +10,39 @@
     "displayName": { "type": "string" },
     "description": { "type": "string" },
     "status": { "enum": ["supported", "experimental", "skeleton", "deprecated"] }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "target" } } },
+      "then": {
+        "required": ["architecture", "memory"],
+        "properties": {
+          "architecture": {
+            "type": "object",
+            "required": ["vendor", "family", "soc", "isa", "cores", "mcuName", "mcuSubtype", "cpuArchName", "hasFpu", "backendName"],
+            "properties": {
+              "vendor": { "type": "string", "minLength": 1 },
+              "family": { "type": "string", "minLength": 1 },
+              "soc": { "type": "string", "minLength": 1 },
+              "isa": { "type": "string", "minLength": 1 },
+              "cores": { "type": "integer", "minimum": 1 },
+              "mcuName": { "type": "string", "minLength": 1 },
+              "mcuSubtype": { "type": "string", "minLength": 1 },
+              "cpuArchName": { "type": "string", "minLength": 1 },
+              "hasFpu": { "type": "boolean" },
+              "backendName": { "type": "string", "minLength": 1 }
+            }
+          },
+          "memory": {
+            "type": "object",
+            "required": ["regions", "ramUsableBytes"],
+            "properties": {
+              "regions": { "type": "object" },
+              "ramUsableBytes": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    }
+  ]
 }

@@ -191,10 +191,6 @@ void hal_mock_alive_reset_flag(void);
 bool hal_mock_fault_subsystem_was_inited(void);
 /** @brief Return true if hal_stack_guard_init() has armed the guard. */
 bool hal_mock_stack_guard_is_armed(void);
-/** @brief Return true if hal_stack_guard_check() detected corruption.
- *         The mock backend does NOT actually reboot; it only records the
- *         event so tests can observe it. */
-bool hal_mock_stack_guard_check_was_triggered(void);
 /** @brief Reset all fault-diagnostic mock state to defaults. */
 void hal_mock_fault_diagnostics_reset(void);
 

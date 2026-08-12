@@ -12,7 +12,6 @@
  * STM32G474 internal flash reservation) and the external AT24C256 I2C EEPROM.
  * The backing storage is selected at runtime via hal_eeprom_init().
  * Use HAL_EEPROM_FLASH for portable internal-flash storage across targets.
- * HAL_EEPROM_RP2040 remains available for existing RP2040 applications.
  *
  * ## Usage
  *
@@ -67,10 +66,9 @@ typedef void (*hal_eeprom_progress_callback_t)(void *ctx);
 typedef enum {
   HAL_EEPROM_DEFAULT = 0,  /**< Target default persistent storage. */
   HAL_EEPROM_AT24C256 = 1, /**< External AT24C256 I2C EEPROM (32 KB). */
-  HAL_EEPROM_RP2040 = 2, /**< RP2040 internal flash-backed EEPROM emulation. */
+  HAL_EEPROM_FLASH = 2,    /**< Target-native internal flash EEPROM. */
   HAL_EEPROM_STM32_FLASH =
       3, /**< STM32G474 internal flash-backed EEPROM emulation. */
-  HAL_EEPROM_FLASH = 4, /**< Target-native internal flash EEPROM. */
 } hal_eeprom_type_t;
 
 #ifdef __cplusplus

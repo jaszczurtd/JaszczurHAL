@@ -92,45 +92,38 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
     return HAL_EINVAL;
   }
 
-  stm32g474_system_arch_info_t arch_info = {};
-  stm32g474_system_get_arch_info(&arch_info);
-
-#ifndef HAL_STM32_FLASH_SIZE
-#define HAL_STM32_FLASH_SIZE (512u * 1024u)
-#endif
-
   const uint32_t flash_reserved = (uint32_t)HAL_STM32_FLASH_EEPROM_SIZE +
                                   (uint32_t)HAL_STM32_FLASH_LITTLEFS_SIZE;
-  const uint32_t flash_total = (uint32_t)HAL_STM32_FLASH_SIZE;
+  const uint32_t flash_total = (uint32_t)HAL_BOARD_EXPECTED_FLASH_BYTES;
   const uint32_t flash_usable =
       flash_total > flash_reserved ? flash_total - flash_reserved : 0u;
 
   hal_system_architecture_t info = {};
-  info.target_name = HAL_TARGET_NAME;
-  info.backend_name = arch_info.backend_name;
-  info.mcu = arch_info.mcu;
-  info.mcu_subtype = arch_info.mcu_subtype;
-  info.cpu_arch = arch_info.cpu_arch;
+  info.target_name = HAL_TARGET_DESCRIPTOR_ID;
+  info.backend_name = HAL_TARGET_BACKEND_NAME;
+  info.mcu = HAL_TARGET_MCU_NAME;
+  info.mcu_subtype = HAL_TARGET_MCU_SUBTYPE_NAME;
+  info.cpu_arch = HAL_TARGET_CPU_ARCH_NAME;
 #if JH_STM32_HAL_SYSTEM_FREERTOS
   info.rtos_name = "FreeRTOS";
 #else
   info.rtos_name = "none";
 #endif
-  info.cpu_cores = arch_info.cpu_cores;
+  info.cpu_cores = HAL_TARGET_CPU_CORES;
 #if defined(JH_STM32G474_HW)
   info.is_hardware = true;
 #else
   info.is_hardware = false;
 #endif
-  info.has_fpu = arch_info.has_fpu;
+  info.has_fpu = HAL_TARGET_HAS_FPU != 0;
   info.has_rtos = JH_STM32_HAL_SYSTEM_FREERTOS != 0;
   info.cpu_clock_hz = JH_G474_CORE_CLOCK_HZ;
   info.peripheral_clock_hz = JH_G474_PCLK1_HZ;
   info.flash_total_bytes = flash_total;
   info.flash_usable_bytes = flash_usable;
   info.flash_reserved_bytes = flash_reserved;
-  info.ram_total_bytes = arch_info.ram_total_bytes;
-  info.ram_usable_bytes = arch_info.ram_usable_bytes;
+  info.ram_total_bytes = HAL_TARGET_RAM_TOTAL_BYTES;
+  info.ram_usable_bytes = HAL_TARGET_RAM_USABLE_BYTES;
   info.heap_total_bytes = stm32g474_system_heap_total_bytes();
   info.heap_free_bytes = hal_get_free_heap();
   info.stack_total_bytes = stm32g474_system_main_stack_bytes();

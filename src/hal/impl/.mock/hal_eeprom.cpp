@@ -99,8 +99,9 @@ const jh_eeprom_provider_ops_t kProvider = {initialize, read_bytes, write_bytes,
 
 const jh_eeprom_provider_ops_t *
 jh_eeprom_provider_get_ops(hal_eeprom_type_t type) {
-  return type >= HAL_EEPROM_DEFAULT && type <= HAL_EEPROM_FLASH ? &kProvider
-                                                                : nullptr;
+  return type >= HAL_EEPROM_DEFAULT && type <= HAL_EEPROM_STM32_FLASH
+             ? &kProvider
+             : nullptr;
 }
 
 uint8_t hal_mock_eeprom_get_byte(uint16_t addr) {

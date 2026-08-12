@@ -53,7 +53,7 @@ hal_status_t store(void *context, const uint8_t *mirror, uint16_t storage_size,
   return status;
 }
 
-const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_RP2040,
+const jh_eeprom_flash_backend_t kFlashBackend = {HAL_EEPROM_FLASH,
                                                  s_mirror,
                                                  sizeof(s_mirror),
                                                  false,

@@ -13,22 +13,22 @@
 #include <pico/critical_section.h>
 #include <string.h>
 
-#define HAL_RP2040_UART_BUF_SIZE 512
-#define HAL_RP2040_UART_PIN_NONE 255u
-#define HAL_RP2040_UART_DR_ERROR_BITS                                          \
+#define HAL_RP_UART_BUF_SIZE 512
+#define HAL_RP_UART_PIN_NONE 255u
+#define HAL_RP_UART_DR_ERROR_BITS                                              \
   (UART_UARTDR_OE_BITS | UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS |           \
    UART_UARTDR_FE_BITS)
-#define HAL_RP2040_UART_DR_CORRUPT_BITS                                        \
+#define HAL_RP_UART_DR_CORRUPT_BITS                                            \
   (UART_UARTDR_BE_BITS | UART_UARTDR_PE_BITS | UART_UARTDR_FE_BITS)
-#define HAL_RP2040_UART_IMSC_ERROR_BITS                                        \
+#define HAL_RP_UART_IMSC_ERROR_BITS                                            \
   (UART_UARTIMSC_OEIM_BITS | UART_UARTIMSC_BEIM_BITS |                         \
    UART_UARTIMSC_PEIM_BITS | UART_UARTIMSC_FEIM_BITS)
-#define HAL_RP2040_UART_ICR_RX_BITS                                            \
+#define HAL_RP_UART_ICR_RX_BITS                                                \
   (UART_UARTICR_OEIC_BITS | UART_UARTICR_BEIC_BITS | UART_UARTICR_PEIC_BITS |  \
    UART_UARTICR_FEIC_BITS | UART_UARTICR_RTIC_BITS | UART_UARTICR_RXIC_BITS)
 
 struct hal_uart_impl_s {
-  uint8_t rx_buf[HAL_RP2040_UART_BUF_SIZE];
+  uint8_t rx_buf[HAL_RP_UART_BUF_SIZE];
   uart_inst_t *uart;
   hal_uart_port_t port;
   uint8_t rx_pin;
@@ -71,7 +71,7 @@ static bool uart_pin_bit_is_set(uint8_t pin, uint64_t mask) {
 }
 
 static bool uart_rx_pin_valid(uart_inst_t *uart, uint8_t pin) {
-  if (pin == HAL_RP2040_UART_PIN_NONE) {
+  if (pin == HAL_RP_UART_PIN_NONE) {
     return true;
   }
 #if defined(PICO_RP2350) && !PICO_RP2350A
@@ -100,7 +100,7 @@ static bool uart_rx_pin_valid(uart_inst_t *uart, uint8_t pin) {
 }
 
 static bool uart_tx_pin_valid(uart_inst_t *uart, uint8_t pin) {
-  if (pin == HAL_RP2040_UART_PIN_NONE) {
+  if (pin == HAL_RP_UART_PIN_NONE) {
     return true;
   }
 #if defined(PICO_RP2350) && !PICO_RP2350A
@@ -208,8 +208,7 @@ static rp2040_uart_format_t uart_decode_format(uint16_t config) {
 }
 
 static int uart_ring_available(const hal_uart_impl_t *h) {
-  return (h->tail - h->head + HAL_RP2040_UART_BUF_SIZE) %
-         HAL_RP2040_UART_BUF_SIZE;
+  return (h->tail - h->head + HAL_RP_UART_BUF_SIZE) % HAL_RP_UART_BUF_SIZE;
 }
 
 static void uart_ring_reset(hal_uart_impl_t *h) {
@@ -218,7 +217,7 @@ static void uart_ring_reset(hal_uart_impl_t *h) {
 }
 
 static bool uart_ring_push(hal_uart_impl_t *h, uint8_t data) {
-  const int next = (h->tail + 1) % HAL_RP2040_UART_BUF_SIZE;
+  const int next = (h->tail + 1) % HAL_RP_UART_BUF_SIZE;
   if (next == h->head) {
     return false;
   }
@@ -273,7 +272,7 @@ static void uart_record_rsr_errors(hal_uart_impl_t *h, uint32_t rsr) {
 
 static void uart_clear_rx_errors(uart_hw_t *hw) {
   hw->rsr = UART_UARTRSR_BITS;
-  hw->icr = HAL_RP2040_UART_ICR_RX_BITS;
+  hw->icr = HAL_RP_UART_ICR_RX_BITS;
 }
 
 static void uart_drain_rx_locked(hal_uart_impl_t *h) {
@@ -286,9 +285,9 @@ static void uart_drain_rx_locked(hal_uart_impl_t *h) {
   uint32_t errors_seen = 0u;
   while (uart_is_readable(h->uart)) {
     const uint32_t raw = hw->dr;
-    if ((raw & HAL_RP2040_UART_DR_ERROR_BITS) != 0u) {
+    if ((raw & HAL_RP_UART_DR_ERROR_BITS) != 0u) {
       errors_seen |= uart_record_dr_errors(h, raw);
-      if ((raw & HAL_RP2040_UART_DR_CORRUPT_BITS) != 0u) {
+      if ((raw & HAL_RP_UART_DR_CORRUPT_BITS) != 0u) {
         continue;
       }
     }
@@ -353,7 +352,7 @@ static bool uart_enable_rx_irq(hal_uart_impl_t *h) {
   irq_set_exclusive_handler(irqn, handler);
   irq_set_enabled(irqn, true);
   uart_set_irq_enables(h->uart, true, false);
-  hw->imsc |= HAL_RP2040_UART_IMSC_ERROR_BITS;
+  hw->imsc |= HAL_RP_UART_IMSC_ERROR_BITS;
   return true;
 }
 
@@ -483,10 +482,10 @@ hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
   uart_ring_reset(h);
   h->errors = {};
   uart_rx_unlock(h);
-  if (h->tx_pin != HAL_RP2040_UART_PIN_NONE) {
+  if (h->tx_pin != HAL_RP_UART_PIN_NONE) {
     gpio_set_function(h->tx_pin, uart_gpio_function(h->tx_pin));
   }
-  if (h->rx_pin != HAL_RP2040_UART_PIN_NONE) {
+  if (h->rx_pin != HAL_RP_UART_PIN_NONE) {
     gpio_set_function(h->rx_pin, uart_gpio_function(h->rx_pin));
   }
 
@@ -539,7 +538,7 @@ hal_status_t hal_uart_read_ex(hal_uart_t h, uint8_t *out_value) {
     return HAL_EAGAIN;
   }
   *out_value = h->rx_buf[h->head];
-  h->head = (h->head + 1) % HAL_RP2040_UART_BUF_SIZE;
+  h->head = (h->head + 1) % HAL_RP_UART_BUF_SIZE;
   uart_rx_unlock(h);
   uart_unlock(h);
   return HAL_OK;

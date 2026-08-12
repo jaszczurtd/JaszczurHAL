@@ -11,7 +11,7 @@ void test_gspi_clock_tracks_rp2040_clk_sys(void) {
   TEST_ASSERT_EQUAL_UINT16(2u, config.divider_int);
   TEST_ASSERT_EQUAL_UINT8(0u, config.divider_frac8);
   TEST_ASSERT_EQUAL_UINT32(31250000u, config.actual_gspi_hz);
-  TEST_ASSERT_EQUAL_INT(JH_RP2040_CYW43_PIO_PROGRAM_HIGH_SPEED, config.program);
+  TEST_ASSERT_EQUAL_INT(JH_RP_CYW43_PIO_PROGRAM_HIGH_SPEED, config.program);
 }
 
 void test_gspi_clock_tracks_rp2350_clk_sys_without_exceeding_target(void) {
@@ -22,7 +22,7 @@ void test_gspi_clock_tracks_rp2350_clk_sys_without_exceeding_target(void) {
   TEST_ASSERT_EQUAL_UINT8(103u, config.divider_frac8);
   TEST_ASSERT_EQUAL_UINT32(31219512u, config.actual_gspi_hz);
   TEST_ASSERT_LESS_OR_EQUAL_UINT32(31250000u, config.actual_gspi_hz);
-  TEST_ASSERT_EQUAL_INT(JH_RP2040_CYW43_PIO_PROGRAM_HIGH_SPEED, config.program);
+  TEST_ASSERT_EQUAL_INT(JH_RP_CYW43_PIO_PROGRAM_HIGH_SPEED, config.program);
 }
 
 void test_gspi_clock_tracks_overclocked_clk_sys(void) {
@@ -41,7 +41,7 @@ void test_gspi_clock_selects_low_speed_sampling_for_slow_bus(void) {
   TEST_ASSERT_EQUAL_UINT16(4u, config.divider_int);
   TEST_ASSERT_EQUAL_UINT8(0u, config.divider_frac8);
   TEST_ASSERT_EQUAL_UINT32(15625000u, config.actual_gspi_hz);
-  TEST_ASSERT_EQUAL_INT(JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED, config.program);
+  TEST_ASSERT_EQUAL_INT(JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED, config.program);
 }
 
 void test_gspi_clock_preserves_explicit_diagnostic_override(void) {
@@ -51,7 +51,7 @@ void test_gspi_clock_preserves_explicit_diagnostic_override(void) {
   TEST_ASSERT_EQUAL_UINT16(4u, config.divider_int);
   TEST_ASSERT_EQUAL_UINT8(0u, config.divider_frac8);
   TEST_ASSERT_EQUAL_UINT32(15625000u, config.actual_gspi_hz);
-  TEST_ASSERT_EQUAL_INT(JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED, config.program);
+  TEST_ASSERT_EQUAL_INT(JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED, config.program);
 }
 
 void test_gspi_clock_rejects_unrepresentable_configuration(void) {

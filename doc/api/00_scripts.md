@@ -422,6 +422,12 @@ compiler use. The generated GCC/Clang contract reference uses a
 `constructor, used` root so target/board/feature mismatches remain link errors
 with section garbage collection enabled.
 
+The generated header also exposes the selected target descriptor ID, backend,
+MCU and subtype names, CPU description and core count, FPU presence, and
+total/usable RAM as `HAL_TARGET_*` facts. System architecture snapshots consume
+those facts directly. Board-specific program-flash capacity remains available
+as `HAL_BOARD_EXPECTED_FLASH_BYTES`.
+
 `--write-static` refreshes the tracked `jh_board_registry.h` and
 `jh_board_fallback_config.h` directly from `boards/`; `--check-static` rejects
 missing or stale copies. CI runs the check independently of per-build board

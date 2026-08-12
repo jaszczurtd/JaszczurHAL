@@ -288,8 +288,11 @@ require(
     "18_freertos_suite does not default to the native RP2040 target",
 )
 require(
-    freertos_suite["cmake"]["cache"]["JH_RP2040_FREERTOS"] is True,
-    "18_freertos_suite does not enable native RP FreeRTOS",
+    "HAL_ENABLE_FREERTOS"
+    in (ROOT / "examples" / "18_freertos_suite" / "hal_project_config.h").read_text(
+        encoding="utf-8"
+    ),
+    "18_freertos_suite does not enable FreeRTOS through project configuration",
 )
 
 ota_fixture = load_json(

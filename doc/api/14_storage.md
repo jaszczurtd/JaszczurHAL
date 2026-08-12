@@ -22,14 +22,12 @@ and provider dispatch live in one target-independent facade. A single portable
 AT24C256 provider uses HAL I2C; the RP flash, STM32G474 flash, and host-memory
 providers contain only their storage mechanisms.
 
-For portable application code, prefer `HAL_EEPROM_FLASH`: it means "use the
-target-native internal flash EEPROM emulation". Existing RP2040 code that uses
-`HAL_EEPROM_RP2040` remains valid.
+`HAL_EEPROM_FLASH` means "use the target-native internal flash EEPROM
+emulation" and is the portable selector for RP and STM32G474 firmware.
 
 | Back-end selector | RP2040/RP2350 | STM32G474 |
 |---|---|---|
 | `HAL_EEPROM_FLASH` | Coordinated internal flash reservation | Internal flash reservation |
-| `HAL_EEPROM_RP2040` | Same as target flash; retained API name | Alias for target-native flash |
 | `HAL_EEPROM_STM32_FLASH` | STM32-specific selector; use `HAL_EEPROM_FLASH` for portable code | Internal flash reservation |
 | `HAL_EEPROM_AT24C256` | External AT24C256 over HAL I2C | External AT24C256 over HAL I2C |
 
@@ -43,9 +41,8 @@ top of whichever EEPROM back-end was selected.
 typedef enum {
     HAL_EEPROM_DEFAULT     = 0, // Target default persistent storage
     HAL_EEPROM_AT24C256    = 1, // External AT24C256 I2C EEPROM - 32 KB
-    HAL_EEPROM_RP2040      = 2, // RP2040 internal flash-backed EEPROM emulation
+    HAL_EEPROM_FLASH       = 2, // Target-native internal flash EEPROM
     HAL_EEPROM_STM32_FLASH = 3, // STM32G474 internal flash-backed EEPROM emulation
-    HAL_EEPROM_FLASH       = 4, // Target-native internal flash EEPROM
 } hal_eeprom_type_t;
 
 // Initialise EEPROM. Call before any other hal_eeprom_* function.
@@ -90,17 +87,17 @@ Call `hal_eeprom_commit()` once after a group of writes to persist them to
 flash. For `HAL_EEPROM_AT24C256`, writes are committed synchronously to the
 chip in page-sized chunks; `hal_eeprom_commit()` is a no-op.
 
-**Native RP implementation:** `HAL_EEPROM_FLASH` and `HAL_EEPROM_RP2040` use
-the final `HAL_RP_FLASH_EEPROM_SIZE` bytes of physical flash (4096 bytes by
-default). Writes update a RAM mirror. A dirty commit performs the complete
+**Native RP implementation:** `HAL_EEPROM_FLASH` uses the final
+`HAL_RP_FLASH_EEPROM_SIZE` bytes of physical flash (4096 bytes by default).
+Writes update a RAM mirror. A dirty commit performs the complete
 partition erase and program inside one `jh_rp_flash_transaction_execute()`
 operation, so core 1, interrupts, DMA and TinyUSB follow the same safety policy
 as every other native flash mutation. The generated linker region excludes the
 reservation from firmware.
 
-**STM32G474 implementation:** `HAL_EEPROM_FLASH`,
-`HAL_EEPROM_STM32_FLASH`, and the compatibility alias `HAL_EEPROM_RP2040` use
-the last pages of internal flash reserved by the STM32 linker script. The
+**STM32G474 implementation:** `HAL_EEPROM_FLASH` and
+`HAL_EEPROM_STM32_FLASH` use the last pages of internal flash reserved by the
+STM32 linker script. The
 default reservation is `HAL_STM32_FLASH_EEPROM_SIZE = 4096` bytes, with
 `HAL_STM32_FLASH_PAGE_SIZE = 2048` bytes. This reduces the flash available for
 application code by 4 KB. If the reservation size is changed, keep the compile

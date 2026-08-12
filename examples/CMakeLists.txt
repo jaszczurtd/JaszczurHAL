@@ -19,10 +19,10 @@ set_property(CACHE JH_EXAMPLE_TARGET PROPERTY STRINGS
     rp2040 rp2350-arm rp2350-riscv stm32g474)
 set(JH_EXAMPLE_JOBS "1" CACHE STRING "Parallel example project builds used by the dispatcher runner")
 
-if(DEFINED JH_STM32_FREERTOS OR DEFINED JH_RP2040_FREERTOS OR DEFINED EXTRA_HAL_DEFINES)
+if(DEFINED JH_STM32_FREERTOS OR DEFINED EXTRA_HAL_DEFINES)
     message(WARNING
-        "The legacy examples CMake switches JH_STM32_FREERTOS, "
-        "JH_RP2040_FREERTOS and EXTRA_HAL_DEFINES are retired. "
+        "The legacy examples CMake switches JH_STM32_FREERTOS and "
+        "EXTRA_HAL_DEFINES are retired. "
         "Per-example flags now live in examples/*/.vscode/jaszczurhal.project.json.")
 endif()
 

@@ -9,8 +9,8 @@ extern "C" {
 #endif
 
 typedef enum {
-  JH_RP2040_CYW43_PIO_PROGRAM_HIGH_SPEED = 0,
-  JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED = 1,
+  JH_RP_CYW43_PIO_PROGRAM_HIGH_SPEED = 0,
+  JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED = 1,
 } jh_rp2040_cyw43_pio_program_t;
 
 typedef struct {
@@ -29,7 +29,7 @@ typedef struct {
  * spi_gap0_sample1 timing instead. That low-speed path is hardware-validated
  * at 15.625 MHz on RP2040 with an external PIM730/RM2.
  */
-#define JH_RP2040_CYW43_HIGH_SPEED_MIN_GSPI_HZ 20000000u
+#define JH_RP_CYW43_HIGH_SPEED_MIN_GSPI_HZ 20000000u
 
 static inline bool jh_rp2040_cyw43_gspi_clock_calculate(
     uint32_t clk_sys_hz, uint32_t target_gspi_hz,
@@ -64,10 +64,9 @@ static inline bool jh_rp2040_cyw43_gspi_clock_calculate(
   clock_config->divider_int = (uint16_t)(divider_x256 >> 8u);
   clock_config->divider_frac8 = (uint8_t)divider_x256;
   clock_config->actual_gspi_hz = actual_gspi_hz;
-  clock_config->program =
-      actual_gspi_hz < JH_RP2040_CYW43_HIGH_SPEED_MIN_GSPI_HZ
-          ? JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED
-          : JH_RP2040_CYW43_PIO_PROGRAM_HIGH_SPEED;
+  clock_config->program = actual_gspi_hz < JH_RP_CYW43_HIGH_SPEED_MIN_GSPI_HZ
+                              ? JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED
+                              : JH_RP_CYW43_PIO_PROGRAM_HIGH_SPEED;
   return true;
 }
 

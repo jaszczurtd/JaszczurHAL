@@ -2,6 +2,7 @@
 #if HAL_TARGET_IS_RP
 #include "drivers/rp2040/rp2040_fault.h"
 #include "drivers/rp2040/rp2040_system.h"
+#include "hal/core/hal_config.h"
 #include "hal/network/jh_network_architecture.h"
 #include "hal/system/hal_system.h"
 #include "hal/system/hal_system_common.h"
@@ -15,14 +16,14 @@
 #endif
 
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
-#define JH_RP2040_HAL_SYSTEM_FREERTOS 1
+#define JH_RP_HAL_SYSTEM_FREERTOS 1
 #else
-#define JH_RP2040_HAL_SYSTEM_FREERTOS 0
+#define JH_RP_HAL_SYSTEM_FREERTOS 0
 #endif
 
 extern "C" bool hal_rp2040_critical_section_active(void);
 
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
+#if JH_RP_HAL_SYSTEM_FREERTOS
 static bool hal_freertos_can_block_current_context(void) {
   return !portCHECK_IF_IN_ISR() && !hal_rp2040_critical_section_active() &&
          xTaskGetSchedulerState() == taskSCHEDULER_RUNNING;
@@ -48,7 +49,7 @@ uint32_t hal_micros(void) { return (uint32_t)time_us_64(); }
 uint64_t hal_micros64(void) { return time_us_64(); }
 
 void hal_delay_ms(uint32_t ms) {
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
+#if JH_RP_HAL_SYSTEM_FREERTOS
   if (hal_freertos_can_block_current_context()) {
     if (ms == 0u) {
       taskYIELD();
@@ -103,14 +104,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
     return HAL_EINVAL;
   }
 
-  rp2040_system_arch_info_t arch_info = {};
-  rp2040_system_get_arch_info(&arch_info);
-
-#if defined(PICO_FLASH_SIZE_BYTES)
-  const uint32_t flash_total = (uint32_t)PICO_FLASH_SIZE_BYTES;
-#else
-  const uint32_t flash_total = 0u;
-#endif
+  const uint32_t flash_total = (uint32_t)HAL_BOARD_EXPECTED_FLASH_BYTES;
 
 #if HAL_RP_OTA_SLOT_SIZE > 0u
   const uint32_t flash_usable = (uint32_t)HAL_RP_OTA_SLOT_SIZE;
@@ -125,35 +119,35 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
 
 #if defined(PICO_STACK_SIZE)
   const uint32_t stack_total = (uint32_t)PICO_STACK_SIZE;
-#elif defined(HAL_RP2040_STACK_SIZE)
-  const uint32_t stack_total = (uint32_t)HAL_RP2040_STACK_SIZE;
+#elif defined(HAL_RP_CORE0_STACK_SIZE)
+  const uint32_t stack_total = (uint32_t)HAL_RP_CORE0_STACK_SIZE;
 #else
   const uint32_t stack_total = 0u;
 #endif
 
   hal_system_architecture_t info = {};
-  info.target_name = HAL_TARGET_NAME;
-  info.backend_name = arch_info.backend_name;
-  info.mcu = arch_info.mcu;
-  info.mcu_subtype = arch_info.mcu_subtype;
-  info.cpu_arch = arch_info.cpu_arch;
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  info.target_name = HAL_TARGET_DESCRIPTOR_ID;
+  info.backend_name = HAL_TARGET_BACKEND_NAME;
+  info.mcu = HAL_TARGET_MCU_NAME;
+  info.mcu_subtype = HAL_TARGET_MCU_SUBTYPE_NAME;
+  info.cpu_arch = HAL_TARGET_CPU_ARCH_NAME;
+#if JH_RP_HAL_SYSTEM_FREERTOS
   info.rtos_name = "FreeRTOS SMP";
 #else
   info.rtos_name = "none";
 #endif
-  info.cpu_cores = arch_info.cpu_cores;
+  info.cpu_cores = HAL_TARGET_CPU_CORES;
   info.is_hardware = true;
-  info.has_fpu = arch_info.has_fpu;
-  info.has_rtos = JH_RP2040_HAL_SYSTEM_FREERTOS != 0;
+  info.has_fpu = HAL_TARGET_HAS_FPU != 0;
+  info.has_rtos = JH_RP_HAL_SYSTEM_FREERTOS != 0;
   info.cpu_clock_hz = clock_get_hz(clk_sys);
   info.peripheral_clock_hz = clock_get_hz(clk_peri);
   info.flash_total_bytes = flash_total;
   info.flash_usable_bytes = flash_usable;
   info.flash_reserved_bytes = flash_reserved;
-  info.ram_total_bytes = arch_info.ram_total_bytes;
-  info.ram_usable_bytes = arch_info.ram_usable_bytes;
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
+  info.ram_total_bytes = HAL_TARGET_RAM_TOTAL_BYTES;
+  info.ram_usable_bytes = HAL_TARGET_RAM_USABLE_BYTES;
+#if JH_RP_HAL_SYSTEM_FREERTOS
   info.heap_total_bytes = (uint32_t)configTOTAL_HEAP_SIZE;
 #else
   info.heap_total_bytes = 0u;
@@ -167,7 +161,7 @@ hal_system_get_current_architecture(hal_system_architecture_t *out) {
 }
 
 void hal_idle(void) {
-#if JH_RP2040_HAL_SYSTEM_FREERTOS
+#if JH_RP_HAL_SYSTEM_FREERTOS
   if (hal_freertos_can_block_current_context()) {
     taskYIELD();
     return;
@@ -226,7 +220,7 @@ bool hal_get_device_uid_hex(char *buf, size_t buflen) {
 // Fault / crash diagnostics
 //
 // All architecture-specific logic (HardFault handler, retained scratch
-// layout, stack canary placement, reset-reason latching) lives in the
+// layout, hardware stack protection, reset-reason latching) lives in the
 // RP2040 SoC driver. The wrappers below keep the HAL surface uniform
 // across backends.
 // ─────────────────────────────────────────────────────────────────────────────

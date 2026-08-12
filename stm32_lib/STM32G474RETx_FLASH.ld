@@ -66,6 +66,8 @@ _Min_Stack_Size = DEFINED(HAL_STM32_MIN_STACK_SIZE) ? HAL_STM32_MIN_STACK_SIZE :
 /* Stack-guard anchor used by stm32g474_fault.cpp. */
 JH_StackLimit = ORIGIN(RAM) + LENGTH(RAM) - _Min_Stack_Size;
 PROVIDE(__jh_stm32_stack_limit = JH_StackLimit);
+ASSERT((JH_StackLimit % 32) == 0,
+       "HAL_STM32_MIN_STACK_SIZE must preserve 32-byte stack-guard alignment");
 
 SECTIONS
 {

@@ -292,9 +292,13 @@
    Platform stack-size override helpers:
      - HAL_STM32_MAIN_STACK_SIZE: bytes; overrides STM32 linker
        _Min_Stack_Size reserve (default 0x800)
-     - HAL_RP2040_STACK_SIZE: bytes; mapped to PICO_STACK_SIZE
-     - HAL_RP2040_CORE1_STACK_SIZE: bytes; mapped to
-       PICO_CORE1_STACK_SIZE
+     - HAL_RP_CORE0_STACK_SIZE: bytes; mapped to PICO_STACK_SIZE
+     - HAL_RP_CORE1_STACK_SIZE: bytes; mapped to PICO_CORE1_STACK_SIZE
+
+   HAL_ENABLE_STACK_GUARD enables synchronous system-stack protection on
+   native RP and STM32G474 targets. FreeRTOS builds additionally enable the
+   kernel task-stack overflow checker. Applications use the target-independent
+   hal_stack_guard_* API and do not need periodic guard polling.
 
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 

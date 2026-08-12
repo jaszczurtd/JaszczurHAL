@@ -113,7 +113,7 @@ bool configure_clock(rp2040_gspi_context_t *context) {
     return false;
   }
 
-  if (context->clock.program == JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED) {
+  if (context->clock.program == JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED) {
     context->program_definition = &jh_cyw43_pio_low_speed_program;
     context->pio_offset_lp1_end = jh_cyw43_pio_low_speed_offset_lp1_end;
     context->pio_offset_end = jh_cyw43_pio_low_speed_offset_end;
@@ -154,7 +154,7 @@ hal_status_t platform_initialize(void *opaque_context) {
   }
 
   pio_sm_config sm_config =
-      context->clock.program == JH_RP2040_CYW43_PIO_PROGRAM_LOW_SPEED
+      context->clock.program == JH_RP_CYW43_PIO_PROGRAM_LOW_SPEED
           ? jh_cyw43_pio_low_speed_program_get_default_config(
                 context->pio_offset)
           : jh_cyw43_pio_high_speed_program_get_default_config(

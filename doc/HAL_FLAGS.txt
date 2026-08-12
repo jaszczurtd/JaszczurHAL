@@ -129,6 +129,18 @@ Application entry flags
     single-loop/single-task applications.
 
 
+Stack protection flag
+---------------------
+
+  HAL_ENABLE_STACK_GUARD
+    Enables synchronous stack-overflow protection through the target-neutral
+    hal_stack_guard_* API. Native RP builds enable Pico SDK hardware guards on
+    RP2040 and RP2350. STM32G474 installs a 32-byte no-access MPU region at the
+    main-stack limit. FreeRTOS builds also enable kernel task-stack overflow
+    checking. hal_stack_guard_check() is a no-op; periodic polling is not
+    required.
+
+
 FreeRTOS integration flag
 -------------------------
 
@@ -192,10 +204,10 @@ FreeRTOS integration flag
         Platform stack-size overrides:
           HAL_STM32_MAIN_STACK_SIZE     bytes; overrides STM32 linker
                                         _Min_Stack_Size reserve (default 0x800)
-          HAL_RP2040_STACK_SIZE         bytes; mapped to PICO_STACK_SIZE
-                                        (core0 stack reservation)
-          HAL_RP2040_CORE1_STACK_SIZE   bytes; mapped to
-                                        PICO_CORE1_STACK_SIZE
+          HAL_RP_CORE0_STACK_SIZE       bytes; mapped to PICO_STACK_SIZE for
+                                        every native RP target
+          HAL_RP_CORE1_STACK_SIZE       bytes; mapped to PICO_CORE1_STACK_SIZE
+                                        for every native RP target
 
         Full module task-safety remains conservative. Singleton/per-bus mutex
         creation uses atomic create-once fallbacks where defensive lazy creation
