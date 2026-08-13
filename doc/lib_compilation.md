@@ -138,6 +138,12 @@ with `lib/libJaszczurHAL.a`. For example, the command shape is:
   <prefix>/lib/libJaszczurHAL.a <platform libraries> -o firmware.elf
 ```
 
+When the recorded direct requests include `HAL_ENABLE_STACK_PROTECTOR`, add
+`-fstack-protector-strong` to every application C/C++ compilation. The native
+firmware CMake recipes propagate this automatically. The installed archive
+already contains the matching `__stack_chk_guard` / `__stack_chk_fail` runtime;
+do not provide a second stack-protector runtime.
+
 `hal_config.h` includes the installed generated feature header, so the direct
 compiler receives the same resolved closure without running Python. The
 installed `jh_board_config.h` also provides every board/provider definition

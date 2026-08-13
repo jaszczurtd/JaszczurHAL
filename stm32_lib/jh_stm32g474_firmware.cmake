@@ -29,6 +29,7 @@ include_guard(GLOBAL)
 # Directory of this module == <jh_root>/stm32_lib.
 set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_project_features.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../cmake/jh_stack_protector.cmake")
 
 # jh_add_stm32g474_firmware(<target>
 #     SOURCES  <portable app sources (.c/.cpp)>
@@ -94,6 +95,8 @@ function(jh_add_stm32g474_firmware TARGET)
         _jh_littlefs_include_dirs)
     jh_cmake_defines_contain(_jh_has_sx126x HAL_ENABLE_SX126X
         ${_jh_selection_features})
+    jh_cmake_defines_contain(_jh_has_stack_protector
+        HAL_ENABLE_STACK_PROTECTOR ${_jh_selection_features})
     set(_jh_sx126x_sources)
     set(_jh_sx126x_include_dirs)
     if(_jh_has_sx126x)
@@ -202,6 +205,16 @@ function(jh_add_stm32g474_firmware TARGET)
         $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>
         ${ARG_OPTIONS}
     )
+    if(_jh_has_stack_protector)
+        jh_target_enable_stack_protector(${TARGET} PRIVATE)
+        jh_stack_protector_disable_sources(
+            "${_jh_src}/hal/system/jh_stack_protector.c"
+            "${_g474}/port/startup_stm32g474.c"
+            "${_g474}/port/system_stm32g474.c"
+            "${_g474}/port/exception_info.c"
+            "${_g474}/drivers/stm32g474/stm32g474_fault.cpp"
+            "${_g474}/freertos/freertos_hooks.c")
+    endif()
     set_source_files_properties(${_littlefs} PROPERTIES COMPILE_OPTIONS "-w")
     if(_jh_sx126x_sources)
         set_source_files_properties(${_jh_sx126x_sources}

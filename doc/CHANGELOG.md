@@ -19,6 +19,16 @@ All notable changes to this project will be documented in this file.
   on RP2040, RP2350, and STM32G474, plus FreeRTOS task-stack overflow checking.
   The public `hal_stack_guard_*` API is target independent and no longer
   requires periodic canary polling.
+- Added independent opt-in `HAL_ENABLE_STACK_PROTECTOR` compiler frame canaries
+  with `-fstack-protector-strong` across supported RP and STM32G474 firmware
+  builds. Canary failures now use the retained stack-overflow reset path.
+- Stack-guard availability checks now verify the executing core's actual
+  MPU/MSPLIM/PMP state and report `HAL_EHW` on a mismatch. RP, STM32G474,
+  FreeRTOS, and compiler-canary overflow paths retain the specific
+  `STACK_OVERFLOW` cause before resetting; fault handlers use emergency stacks
+  instead of continuing on the damaged application stack. Fatal overflow paths
+  preserve available PC/LR/xPSR and Cortex-M fault-status data before making a
+  bounded best-effort `STACK OVERFLOW; resetting` hardware-UART write.
 - Removed the chip-specific RP EEPROM selector; portable and native RP
   firmware now uses `HAL_EEPROM_FLASH`.
 - Added the `HAL_ENABLE_LORA_LINK` reliable private messaging layer over one

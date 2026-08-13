@@ -453,6 +453,38 @@ add_test(NAME test_stack_guard_contract
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_stack_guard_contract.cmake
 )
 
+add_test(NAME test_stack_protector_contract
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_stack_protector_contract.cmake
+)
+
+if(CMAKE_C_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$")
+    include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_stack_protector.cmake)
+    add_library(test_stack_protector_compile_contract_library STATIC
+        test_stack_protector_compile_contract_library.c)
+    target_compile_definitions(test_stack_protector_compile_contract_library
+        PUBLIC HAL_TARGET_MOCK=1 HAL_ENABLE_STACK_PROTECTOR=1)
+    jh_target_enable_stack_protector(
+        test_stack_protector_compile_contract_library PUBLIC)
+    jh_enable_host_warnings(
+        test_stack_protector_compile_contract_library ERRORS)
+
+    add_executable(test_stack_protector_compile_contract
+        test_stack_protector_compile_contract.c
+        test_stack_protector_compile_contract_cpp.cpp
+        ${CMAKE_SOURCE_DIR}/src/hal/system/jh_stack_protector.c)
+    target_include_directories(test_stack_protector_compile_contract PRIVATE
+        ${CMAKE_SOURCE_DIR}/src)
+    target_link_libraries(test_stack_protector_compile_contract PRIVATE
+        test_stack_protector_compile_contract_library)
+    jh_stack_protector_disable_sources(
+        ${CMAKE_SOURCE_DIR}/src/hal/system/jh_stack_protector.c)
+    jh_enable_host_warnings(test_stack_protector_compile_contract ERRORS)
+    add_test(NAME test_stack_protector_compile_contract
+        COMMAND test_stack_protector_compile_contract)
+endif()
+
 add_test(NAME test_system_architecture_metadata_contract
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..

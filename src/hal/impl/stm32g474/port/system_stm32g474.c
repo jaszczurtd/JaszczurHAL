@@ -23,7 +23,7 @@
 #include <stdint.h>
 
 #ifdef HAL_ENABLE_STACK_GUARD
-extern bool stm32g474_fault_stack_guard_init(void);
+#include "hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.h"
 #endif
 
 #ifdef HAL_ENABLE_FREERTOS
@@ -77,7 +77,7 @@ void SystemInit(void) {
   /* Protect the bottom 32 bytes of the main stack before application code or
    * interrupts can use it. Failure means the requested protection cannot be
    * guaranteed, so do not continue with a falsely guarded system. */
-  if (!stm32g474_fault_stack_guard_init()) {
+  if (stm32g474_fault_stack_guard_init() != HAL_OK) {
     for (;;) {
       __asm volatile("nop");
     }

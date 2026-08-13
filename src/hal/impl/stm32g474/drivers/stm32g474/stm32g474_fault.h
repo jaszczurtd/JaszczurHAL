@@ -19,6 +19,7 @@
  * is symmetrical across backends.
  */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/system/hal_system.h"
 
 #ifdef __cplusplus
@@ -37,6 +38,10 @@ bool stm32g474_fault_get_last_fault(hal_fault_info_t *out);
 /** Forget any captured fault info. */
 void stm32g474_fault_clear_last_fault(void);
 
+/** Print the full latched Cortex-M fault record after console initialisation.
+ */
+bool stm32g474_fault_report_last(void);
+
 /** Whether the previous boot is suspected to have been a brown-out.
  *  STM32G474 has native BOR detection in @c RCC->CSR, so this will become
  *  a direct silicon read rather than the heuristic used on RP2040. */
@@ -46,12 +51,20 @@ bool stm32g474_fault_brownout_suspected(void);
  *  detection on STM32 makes the heuristic optional). */
 void stm32g474_fault_alive_mark(void);
 
-/** Install the stack-bottom MPU guard when HAL_ENABLE_STACK_GUARD is enabled.
+/**
+ * Install or verify the stack-bottom MPU guard.
+ *
+ * @return HAL_OK when the exact guard is active, HAL_EUNSUPPORTED when the
+ * feature is disabled, or HAL_EHW when an armed guard no longer matches the
+ * required MPU configuration.
  */
-bool stm32g474_fault_stack_guard_init(void);
+hal_status_t stm32g474_fault_stack_guard_init(void);
 
 /** Compatibility no-op: the MPU reports violations synchronously. */
 void stm32g474_fault_stack_guard_check(void);
+
+/** Persist a software-detected stack violation and reset immediately. */
+HAL_NORETURN void jh_stack_overflow_reset(void);
 
 #ifdef __cplusplus
 }

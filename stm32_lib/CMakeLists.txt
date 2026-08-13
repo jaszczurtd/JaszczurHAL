@@ -107,6 +107,7 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_btstack.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_sx126x.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_stack_protector.cmake)
 jh_bearssl_source_manifest(
     _jh_stm32_bearssl_sources
     _jh_stm32_bearssl_include_dirs)
@@ -304,6 +305,8 @@ endif()
 
 jh_cmake_defines_contain(_jh_stm32_freertos_enabled HAL_ENABLE_FREERTOS
     ${_jh_stm32_selection_defines})
+jh_cmake_defines_contain(_jh_stm32_stack_protector_enabled
+    HAL_ENABLE_STACK_PROTECTOR ${_jh_stm32_selection_defines})
 
 if(_jh_stm32_freertos_enabled)
     jh_stm32g474_enable_freertos(JaszczurHAL)
@@ -329,6 +332,17 @@ target_compile_options(JaszczurHAL PRIVATE
     ${_common_flags}
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions -fno-rtti>
 )
+
+if(_jh_stm32_stack_protector_enabled)
+    # Preserve the usage requirement for consumers that link this target in
+    # the same CMake build. Installed archive consumers must pass the option
+    # recorded in the feature documentation explicitly.
+    jh_target_enable_stack_protector(JaszczurHAL PUBLIC)
+    jh_stack_protector_disable_sources(
+        "${SRC}/hal/system/jh_stack_protector.c"
+        "${SRC}/hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.cpp"
+        "${SRC}/hal/impl/stm32g474/freertos/freertos_hooks.c")
+endif()
 
 install(TARGETS JaszczurHAL ARCHIVE DESTINATION lib)
 install(DIRECTORY ${SRC}/ DESTINATION include

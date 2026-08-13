@@ -26,6 +26,7 @@
     "HAL_ENABLE_PWM_FREQ": {},
     "HAL_ENABLE_RGB_LED": {},
     "HAL_ENABLE_STACK_GUARD": {},
+    "HAL_ENABLE_STACK_PROTECTOR": {},
     "HAL_ENABLE_UNITY": {}
   }
 }

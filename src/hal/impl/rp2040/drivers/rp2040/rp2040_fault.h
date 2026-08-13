@@ -12,13 +12,16 @@
  *
  * Retained scratch layout (watchdog_hw->scratch[]):
  *   [0] = state word: upper 24 bits signature 'JHD' (0x4A4844 << 8),
- *                     lower 8  bits flag bits (FAULT, ALIVE)
+ *                     lower 8  bits flag bits (FAULT, ALIVE, STACK_OVERFLOW)
  *   [1] = stacked PC  at fault (valid iff FLAG_FAULT)
  *   [2] = stacked LR  at fault (valid iff FLAG_FAULT)
- *   [3] = stacked PSR at fault (valid iff FLAG_FAULT)
+ *   [3] = stacked xPSR at fault, or mcause on RP2350 RISC-V
  *   [4..7] = owned by pico-sdk (watchdog magic / watchdog_reboot() args).
+ * RP2350 ARM additionally keeps CFSR/HFSR/MMFAR/BFAR in a private retained
+ * `.uninitialized_data` record because the four watchdog slots are exhausted.
  */
 
+#include "hal/core/hal_compiler.h"
 #include "hal/system/hal_system.h"
 
 #ifdef __cplusplus
@@ -46,8 +49,15 @@ bool rp2040_fault_brownout_suspected(void);
 /** Refresh the retained alive marker used by the brown-out heuristic. */
 void rp2040_fault_alive_mark(void);
 
-/** Report whether the Pico SDK hardware stack guard is enabled. */
-bool rp2040_fault_stack_guard_init(void);
+/** Verify the executing core's Pico SDK hardware stack guard configuration. */
+hal_status_t rp2040_fault_stack_guard_init(void);
+
+/** Record a stack overflow and reset through retained fault diagnostics. */
+HAL_NORETURN void jh_stack_overflow_reset(void);
+
+/** Same terminal path with a best-effort call-site address for retention. */
+HAL_NORETURN void jh_stack_overflow_reset_with_context(uintptr_t pc,
+                                                       uintptr_t lr);
 
 /** Hardware guards fault synchronously, so periodic checking is unnecessary. */
 void rp2040_fault_stack_guard_check(void);

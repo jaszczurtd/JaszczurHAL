@@ -632,8 +632,14 @@
 #define SCB_AIRCR JH_REG32(SCB_BASE + 0x0Cu)
 #define SCB_SHCSR JH_REG32(SCB_BASE + 0x24u)
 #define SCB_CFSR JH_REG32(SCB_BASE + 0x28u) /* configurable fault status */
+#define SCB_CFSR_MMFSR_DACCVIOL (1u << 1)
+#define SCB_CFSR_MMFSR_MSTKERR (1u << 4)
+#define SCB_CFSR_MMFSR_MLSPERR (1u << 5)
 #define SCB_CFSR_MMARVALID (1u << 7)
-#define SCB_HFSR JH_REG32(SCB_BASE + 0x2Cu)  /* hard fault status         */
+#define SCB_CFSR_BFSR_STKERR (1u << 12)
+#define SCB_CFSR_BFSR_LSPERR (1u << 13)
+#define SCB_HFSR JH_REG32(SCB_BASE + 0x2Cu) /* hard fault status         */
+#define SCB_HFSR_FORCED (1u << 30)
 #define SCB_MMFAR JH_REG32(SCB_BASE + 0x34u) /* mem-manage fault address  */
 #define SCB_BFAR JH_REG32(SCB_BASE + 0x38u)  /* bus fault address         */
 #define SCB_CPACR JH_REG32(SCB_BASE + 0x88u) /* coprocessor (FPU) access  */
@@ -658,6 +664,7 @@
 #define MPU_RASR JH_REG32(MPU_BASE + 0x10u)
 
 #define MPU_CTRL_ENABLE (1u << 0)
+#define MPU_CTRL_HFNMIENA (1u << 1)
 #define MPU_CTRL_PRIVDEFENA (1u << 2)
 #define MPU_RASR_ENABLE (1u << 0)
 #define MPU_RASR_SIZE_32B (4u << 1)

@@ -311,21 +311,25 @@ typedef enum {
 } hal_reset_reason_t;
 
 /**
- * @brief Captured CPU state at the moment of the last HardFault.
+ * @brief Captured CPU state at the moment of the last fatal fault.
  *
  * Populated by the HAL's HardFault handler from the exception stack frame
  * before a reboot is forced. Survives the reboot via retained scratch
  * registers (RP2040: watchdog scratch[0..3]).
  *
- * On Cortex-M0+ there are no CFSR/HFSR/BFAR/MMFAR registers, so the field
- * set is intentionally minimal. PC plus LR is usually enough to identify the
- * crashing call site via @c arm-none-eabi-addr2line.
+ * PC plus LR is usually enough to identify the crashing call site via
+ * @c arm-none-eabi-addr2line. Cortex-M4/M33 backends also retain their fault
+ * status/address registers; targets without them report those fields as zero.
  */
 typedef struct {
-  bool valid;   /**< true when the previous boot was preceded by a fault */
-  uint32_t pc;  /**< stacked PC (return address at fault)               */
-  uint32_t lr;  /**< stacked LR (caller return address)                  */
-  uint32_t psr; /**< stacked xPSR                                        */
+  bool valid;     /**< true when the previous boot was preceded by a fault */
+  uint32_t pc;    /**< stacked PC, or best-effort compiler failure caller */
+  uint32_t lr;    /**< stacked LR (caller return address)                 */
+  uint32_t psr;   /**< stacked xPSR; RP2350 RISC-V reports mcause here */
+  uint32_t cfsr;  /**< Cortex-M CFSR, or 0 when unavailable              */
+  uint32_t hfsr;  /**< Cortex-M HFSR, or 0 when unavailable              */
+  uint32_t mmfar; /**< Cortex-M MMFAR, or 0/invalid when unavailable     */
+  uint32_t bfar;  /**< Cortex-M BFAR, or 0/invalid when unavailable      */
 } hal_fault_info_t;
 
 /**
@@ -358,7 +362,7 @@ hal_reset_reason_t hal_get_reset_reason(void);
 const char *hal_reset_reason_str(hal_reset_reason_t reason);
 
 /**
- * @brief Retrieve the CPU state captured by the previous HardFault.
+ * @brief Retrieve the CPU state captured by the previous fatal fault.
  *
  * This is the status-returning implementation used by
  * @ref hal_get_last_fault.
@@ -370,19 +374,19 @@ const char *hal_reset_reason_str(hal_reset_reason_t reason);
 hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out);
 
 /**
- * @brief Retrieve the CPU state captured by the previous HardFault.
+ * @brief Retrieve the CPU state captured by the previous fatal fault.
  *
  * Compatibility wrapper over @ref hal_get_last_fault_ex.
  *
  * @param out Destination, populated only when the function returns true.
  * @return true if a fault snapshot is available (i.e. the previous boot
- *         followed a HardFault captured by this HAL). false otherwise, in
+ *         followed a fatal fault captured by this HAL). false otherwise, in
  *         which case @p out is left untouched.
  */
 bool hal_get_last_fault(hal_fault_info_t *out);
 
 /**
- * @brief Discard any captured HardFault snapshot.
+ * @brief Discard any captured fatal-fault snapshot.
  *
  * Subsequent calls to @ref hal_get_last_fault return false until another
  * fault occurs and the device reboots through the HAL handler.
@@ -434,15 +438,17 @@ void hal_alive_mark(void);
  * Protection is installed during platform startup. This function is
  * idempotent and provides a target-independent way to verify availability.
  *
- * @return HAL_OK when protection is active or HAL_EUNSUPPORTED when the
- *         feature is disabled or unavailable on the active backend.
+ * @return HAL_OK when protection is active, HAL_EUNSUPPORTED when the feature
+ *         is disabled or unavailable, or HAL_EHW when the compiled feature's
+ *         live MPU/MSPLIM/PMP configuration does not match the required guard.
  */
 hal_status_t hal_stack_guard_init_ex(void);
 
 /**
  * @brief Boolean wrapper over @ref hal_stack_guard_init_ex.
  *
- * @return true when protection is active; false when disabled or unsupported.
+ * @return true when protection is active; false when disabled, unsupported,
+ *         or present but misconfigured.
  */
 bool hal_stack_guard_init(void);
 

@@ -201,6 +201,7 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
     file(GLOB_RECURSE _driver_sources CONFIGURE_DEPENDS
         "${SRC_DIR}/hal/impl/rp2040/drivers/*.cpp"
         "${SRC_DIR}/hal/impl/rp2040/drivers/*.c"
+        "${SRC_DIR}/hal/impl/rp2040/drivers/*.S"
     )
 
     set(_framework_sources)

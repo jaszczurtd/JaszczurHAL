@@ -227,7 +227,7 @@ bool hal_last_boot_was_brownout(void) {
 void hal_alive_mark(void) { stm32g474_fault_alive_mark(); }
 
 hal_status_t hal_stack_guard_init_ex(void) {
-  return stm32g474_fault_stack_guard_init() ? HAL_OK : HAL_EUNSUPPORTED;
+  return stm32g474_fault_stack_guard_init();
 }
 
 bool hal_stack_guard_init(void) {

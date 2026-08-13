@@ -53,11 +53,12 @@ FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 |---|---|
 | `HAL_ENABLE_FREERTOS` | Enables FreeRTOS for the selected target. RP builds use the pinned kernel and SMP ports for RP2040, RP2350 ARM and RP2350 RISC-V; HAL starts the scheduler and pins application tasks to their corresponding cores. STM32G474 uses the pinned Cortex-M4F port. `hal_mutex_*`, `hal_delay_ms()`, `hal_idle()` and runtime reporting select FreeRTOS-aware paths. This flag does not add a public `hal_rtos_*` API and does not by itself make every HAL module task-safe. |
 
-Stack protection is a separate target-runtime opt-in:
+Stack protection uses two independent opt-ins:
 
 | Flag | Effect |
 |---|---|
 | `HAL_ENABLE_STACK_GUARD` | Enables synchronous hardware protection for native RP2040/RP2350 system stacks and the STM32G474 main stack. FreeRTOS builds additionally enable kernel task-stack overflow checking. The target-independent `hal_stack_guard_init_ex()` API reports whether protection is active; periodic polling is unnecessary. |
+| `HAL_ENABLE_STACK_PROTECTOR` | Enables GCC/Clang `-fstack-protector-strong` instrumentation for HAL and application sources in supported RP and STM32G474 firmware recipes. A canary mismatch uses the target retained stack-overflow reset path. It is independent from `HAL_ENABLE_STACK_GUARD`. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
