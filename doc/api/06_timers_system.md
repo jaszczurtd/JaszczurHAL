@@ -549,6 +549,10 @@ void example_device_uid_and_reset(void) {
         hal_deb("  PC:  0x%08lx", fault_info.pc);
         hal_deb("  LR:  0x%08lx", fault_info.lr);
         hal_deb("  PSR: 0x%08lx", fault_info.psr);
+        hal_deb("  CFSR:  0x%08lx", fault_info.cfsr);
+        hal_deb("  HFSR:  0x%08lx", fault_info.hfsr);
+        hal_deb("  MMFAR: 0x%08lx", fault_info.mmfar);
+        hal_deb("  BFAR:  0x%08lx", fault_info.bfar);
         hal_clear_last_fault();  // Clear for next boot
     }
 
@@ -657,7 +661,11 @@ typedef struct {
     bool     valid;   // true if pc/lr/psr below are meaningful
     uint32_t pc;      // stacked PC at fault
     uint32_t lr;      // stacked LR at fault
-    uint32_t psr;     // stacked xPSR at fault
+    uint32_t psr;     // stacked xPSR; mcause on RP2350 RISC-V
+    uint32_t cfsr;    // Cortex-M CFSR; zero when unavailable
+    uint32_t hfsr;    // Cortex-M HFSR; zero when unavailable
+    uint32_t mmfar;   // Cortex-M MMFAR; zero/invalid when unavailable
+    uint32_t bfar;    // Cortex-M BFAR; zero/invalid when unavailable
 } hal_fault_info_t;
 
 void               hal_fault_subsystem_init(void);
@@ -673,14 +681,16 @@ bool               hal_stack_guard_init(void);
 void               hal_stack_guard_check(void);
 ```
 
-`hal_fault_subsystem_init()` must be called once, as early as possible in
-boot, before any code that could fault. It latches the silicon reset-reason
-flags, snapshots any HardFault info left over from the previous boot into
-RAM, and clears the volatile flag bits so the next event is detected fresh.
+`hal_fault_subsystem_init()` must run once, as early as possible in boot. The
+HAL-owned `main()` calls it before `app_start()`; applications that provide a
+custom `main()` call it themselves. It latches the silicon reset-reason flags,
+snapshots retained fault information into RAM, and clears volatile markers so
+the next event is detected fresh.
 
 Define `HAL_ENABLE_STACK_GUARD` to enable the hardware protection. Platform
-startup installs it before application code runs; the public init call is an
-idempotent availability check.
+startup installs it before application code runs; the public init call reads
+back the executing core's MPU/MSPLIM/PMP state. It returns `HAL_EHW` if the
+compiled feature is present but the required hardware configuration is not.
 
 **Typical wiring (application setup / loop):**
 ```c
@@ -692,6 +702,8 @@ log("reset: %s", hal_reset_reason_str(hal_get_reset_reason()));
 hal_fault_info_t f;
 if (hal_get_last_fault(&f) && f.valid) {
     log("previous fault: PC=0x%08lx LR=0x%08lx PSR=0x%08lx", f.pc, f.lr, f.psr);
+    log("fault status: CFSR=0x%08lx HFSR=0x%08lx MMFAR=0x%08lx BFAR=0x%08lx",
+        f.cfsr, f.hfsr, f.mmfar, f.bfar);
 }
 if (hal_last_boot_was_brownout()) {
     log("suspected brown-out on previous boot");
@@ -704,17 +716,37 @@ hal_alive_mark();                             // refresh brown-out heuristic mar
 source compatibility with earlier polling code. Hardware and FreeRTOS report
 violations synchronously, so new applications do not call it.
 
+`HAL_ENABLE_STACK_PROTECTOR` is a separate compiler-hardening opt-in. Supported
+GCC/Clang firmware recipes compile HAL and application translation units with
+`-fstack-protector-strong`. A damaged function-frame canary enters the same
+retained stack-overflow reset path, while `HAL_ENABLE_STACK_GUARD` continues to
+own hardware stack-boundary and FreeRTOS checks. Either flag can be used alone.
+
 **impl/rp2040 (RP family):** Implemented by the SoC-specific driver
 `src/hal/impl/rp2040/drivers/rp2040/rp2040_fault.{h,cpp}`. The HAL layer
 forwards to thin `rp2040_fault_*` wrappers. Retained state lives in
 `watchdog_hw->scratch[0..3]` (scratch `[4..7]` is reserved by pico-sdk for
 `WATCHDOG_NON_REBOOT_MAGIC` / `watchdog_reboot()` arguments). The HardFault
-handler is naked ASM that captures the exception frame (PC/LR/PSR - Cortex-M0+
-has no CFSR/HFSR/MMFAR/BFAR), stores it into scratch with a `'JHD'` signature,
-then triggers `watchdog_reboot(0, 0, 0)`. With `HAL_ENABLE_STACK_GUARD`, CMake
-sets `PICO_USE_STACK_GUARDS=1`: Pico SDK uses its RP2040 MPU guard and its
-RP2350 architecture-specific stack-limit/PMP implementation for every started
-core.
+handler switches to a per-core emergency stack, captures the available fault
+state into scratch with a `'JHD'` signature, then triggers
+`watchdog_reboot(0, 0, 0)`. A retained overflow flag takes precedence over the
+generic fault marker, so the next boot reports
+`HAL_RESET_REASON_STACK_OVERFLOW`. RP2350 ARM uses the architectural `STKOF`
+status. RP2040 has no CFSR/MMFAR, so attribution of an MPU fault to the stack
+guard uses a deliberately narrow exception-frame proximity heuristic. RP2350
+RISC-V switches stacks in the top-level trap and decodes the faulting memory
+instruction because Hazard3 does not provide a fault address in `mtval`.
+With `HAL_ENABLE_STACK_GUARD`, CMake sets `PICO_USE_STACK_GUARDS=1`: Pico SDK
+uses its RP2040 MPU guard and its RP2350 architecture-specific stack-limit/PMP
+implementation for every started core.
+
+The RP retained-capture implementation assumes the normal XIP mapping is
+executable. A fault during the short interval in which a coordinated flash
+operation has deliberately disabled XIP is outside this diagnostic guarantee:
+even though the RISC-V entry stub is in SRAM, the complete classifier/reset
+path is not wholly SRAM-resident. This does not weaken the hardware guard in
+normal execution, but applications must not rely on a retained record from a
+fault inside an XIP-disabled flash operation.
 `HAL_RESET_REASON_BROWNOUT` is not reported by
 silicon (POR and BOR share one flag) - `hal_last_boot_was_brownout()` is a
 heuristic that returns true when the silicon reported POR but the retained
@@ -724,8 +756,22 @@ threshold without losing scratch).
 family. Reset reason is classified from `RCC->CSR`; captured state is taken
 from the retained Cortex-M4 exception record. With `HAL_ENABLE_STACK_GUARD`,
 `SystemInit()` reserves MPU region 7 as a 32-byte execute-never, no-access
-region at `JH_StackLimit`. A MemManage fault inside that range is retained and
-reported on the next boot as `HAL_RESET_REASON_STACK_OVERFLOW`.
+region at `JH_StackLimit`. Fault entry switches to a dedicated CCMRAM stack,
+validates basic/extended exception frames, and never waits indefinitely on the
+debug UART. When the application later initializes its serial console, the
+latched full PC/LR/xPSR/CFSR/HFSR/MMFAR/BFAR record is printed once. An MPU
+guard fault, a FreeRTOS task-stack report, or a compiler canary failure is
+retained and reported on the next boot as
+`HAL_RESET_REASON_STACK_OVERFLOW`.
+
+After a stack violation the HAL does not return to application code: stack data
+and return addresses are no longer trustworthy. The retained record is written
+first and reset is mandatory. The emergency path then attempts the bounded
+message `STACK OVERFLOW; resetting` on an already-active hardware UART and
+skips it when no idle panic-safe UART is available. The default RP console is
+USB CDC, which is intentionally not touched from fault context, so RP shows the
+live message only when the application has an idle hardware UART active. The
+full record is consumed only after reboot through the normal diagnostics path.
 **impl/.mock:** All state is injectable; see the mock helpers below. The
 mock `hal_fault_subsystem_init()` does NOT reset the staged reset-reason /
 fault-info so tests can pre-populate state and observe behaviour across an

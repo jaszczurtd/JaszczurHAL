@@ -16,6 +16,7 @@
 #if defined(HAL_PROVIDE_APP_ENTRY)
 
 #include "hal/core/hal_app.h"
+#include "hal/system/hal_system.h"
 
 /* -- Weak default for app_task1 ----------------------------------------------
  * If the client enables HAL_ENABLE_APP_TASK1 but does not define app_task1(),
@@ -70,6 +71,7 @@ static void hal_rp_freertos_app_task1(void *arg) {
 #endif
 
 int main(void) {
+  hal_fault_subsystem_init();
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
   HAL_ASSERT(flash_status == HAL_OK,
              "hal_app_entry: flash coordinator init failed");
@@ -124,6 +126,7 @@ static void hal_rp_native_core1_entry(void) {
 #endif
 
 int main(void) {
+  hal_fault_subsystem_init();
   const hal_status_t flash_status = jh_rp_flash_transaction_core_init();
   HAL_ASSERT(flash_status == HAL_OK,
              "hal_app_entry: flash coordinator init failed");
@@ -156,11 +159,11 @@ int main(void) {
 #include <task.h>
 
 #ifndef HAL_FREERTOS_TASK0_STACK
-#define HAL_FREERTOS_TASK0_STACK 512u
+#define HAL_FREERTOS_TASK0_STACK 768u
 #endif
 
 #ifndef HAL_FREERTOS_TASK1_STACK
-#define HAL_FREERTOS_TASK1_STACK 512u
+#define HAL_FREERTOS_TASK1_STACK 768u
 #endif
 
 #ifndef HAL_FREERTOS_TASK0_PRIORITY
@@ -190,6 +193,7 @@ static void hal_freertos_app_task1(void *arg) {
 #endif
 
 int main(void) {
+  hal_fault_subsystem_init();
   app_start();
 
   BaseType_t created =
@@ -216,6 +220,7 @@ int main(void) {
 #else
 
 int main(void) {
+  hal_fault_subsystem_init();
   app_start();
 
   for (;;) {
@@ -238,6 +243,7 @@ int main(void) {
 #elif HAL_TARGET_IS_MOCK
 
 int main(void) {
+  hal_fault_subsystem_init();
   app_start();
 
   for (;;) {

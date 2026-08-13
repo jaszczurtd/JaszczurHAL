@@ -63,6 +63,19 @@
 #define HAL_NORETURN
 #endif
 
+/** @def HAL_NO_STACK_PROTECTOR
+ *  @brief Excludes a function from compiler stack-canary instrumentation.
+ *
+ *  Use only in the stack-protector runtime and its terminal fault/reset path.
+ *  Those functions must remain callable after the compiler has detected a
+ *  damaged stack frame and must not recursively depend on the same canary.
+ */
+#if HAL_COMPILER_IS_GNU_LIKE
+#define HAL_NO_STACK_PROTECTOR __attribute__((no_stack_protector))
+#else
+#define HAL_NO_STACK_PROTECTOR
+#endif
+
 /** @def HAL_FORCE_INLINE
  *  @brief Requests inlining regardless of the optimizer's own decision.
  *

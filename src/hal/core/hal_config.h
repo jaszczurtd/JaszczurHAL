@@ -18,6 +18,11 @@
 #include "hal/serial/hal_uart_config.h"
 #include <stdint.h>
 
+#if defined(HAL_ENABLE_STACK_PROTECTOR) && !HAL_COMPILER_IS_GNU_LIKE
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_STACK_PROTECTOR requires GCC or Clang-compatible stack-protector support."
+#endif
+
 /* ── Application feature toggles ─────────────────────────────────────── */
 /* These were previously in libConfig.h.  Override with -D flags or edit
    directly as needed for your project.                                  */
@@ -299,6 +304,11 @@
    native RP and STM32G474 targets. FreeRTOS builds additionally enable the
    kernel task-stack overflow checker. Applications use the target-independent
    hal_stack_guard_* API and do not need periodic guard polling.
+
+   HAL_ENABLE_STACK_PROTECTOR independently enables compiler-generated stack
+   canaries with -fstack-protector-strong for HAL and application translation
+   units built by the supported firmware recipes. A failed canary check uses
+   the target retained stack-overflow reset path.
 
    No default runtime behavior changes when HAL_ENABLE_FREERTOS is undefined. */
 

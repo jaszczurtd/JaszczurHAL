@@ -7,6 +7,7 @@
 
 #ifdef JH_STM32G474_HW
 /* Real hardware uses USART2 through the ST-Link virtual COM port. */
+#include "drivers/stm32g474/stm32g474_fault.h"
 #include "port/g474_debug_uart.h"
 #endif
 
@@ -14,6 +15,8 @@ void jh_serial_port_begin(uint32_t baud) {
   (void)baud;
 #ifdef JH_STM32G474_HW
   g474_debug_uart_init();
+  stm32g474_fault_init();
+  (void)stm32g474_fault_report_last();
 #endif
 }
 

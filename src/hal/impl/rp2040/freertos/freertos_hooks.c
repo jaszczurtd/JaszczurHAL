@@ -3,6 +3,8 @@
 
 #include <hardware/sync.h>
 
+#include "hal/impl/rp2040/drivers/rp2040/rp2040_fault.h"
+
 void jh_rp_freertos_assert_fail(const char *file, int line) {
   (void)file;
   (void)line;
@@ -19,5 +21,5 @@ void vApplicationMallocFailedHook(void) {
 void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name) {
   (void)task;
   (void)task_name;
-  jh_rp_freertos_assert_fail("stack", 0);
+  jh_stack_overflow_reset();
 }

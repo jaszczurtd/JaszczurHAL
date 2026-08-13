@@ -27,6 +27,7 @@ include("${JH_ROOT}/cmake/jh_bearssl.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
 include("${JH_ROOT}/cmake/jh_littlefs.cmake")
 include("${JH_ROOT}/cmake/jh_sx126x.cmake")
+include("${JH_ROOT}/cmake/jh_stack_protector.cmake")
 jh_bearssl_source_manifest(
     _jh_native_bearssl_sources
     _jh_native_bearssl_include_dirs)
@@ -38,6 +39,7 @@ jh_hal_define_enabled(_jh_native_littlefs HAL_ENABLE_LITTLEFS)
 jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
 jh_hal_define_enabled(_jh_native_sx126x HAL_ENABLE_SX126X)
 jh_hal_define_enabled(_jh_native_stack_guard HAL_ENABLE_STACK_GUARD)
+jh_hal_define_enabled(_jh_native_stack_protector HAL_ENABLE_STACK_PROTECTOR)
 if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
     message(FATAL_ERROR
         "HAL_ENABLE_OTA is not supported for rp2350-riscv; "
@@ -222,6 +224,16 @@ target_compile_options(JaszczurHAL PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-fno-exceptions>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>
 )
+
+if(_jh_native_stack_protector)
+    # PUBLIC is intentional: the firmware/app target linking JaszczurHAL must
+    # receive the same compiler instrumentation as the HAL archive.
+    jh_target_enable_stack_protector(JaszczurHAL PUBLIC)
+    jh_stack_protector_disable_sources(
+        "${SRC}/hal/system/jh_stack_protector.c"
+        "${SRC}/hal/impl/rp2040/drivers/rp2040/rp2040_fault.cpp"
+        "${SRC}/hal/impl/rp2040/freertos/freertos_hooks.c")
+endif()
 
 target_link_libraries(JaszczurHAL PUBLIC
     pico_stdlib

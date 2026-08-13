@@ -19,8 +19,8 @@ if(NOT _digest_length EQUAL 64)
 endif()
 
 list(LENGTH JH_HAL_FEATURE_SYMBOLS _symbol_count)
-if(NOT _symbol_count EQUAL 98)
-    message(FATAL_ERROR "Expected 98 registered symbols, got ${_symbol_count}")
+if(NOT _symbol_count EQUAL 99)
+    message(FATAL_ERROR "Expected 99 registered symbols, got ${_symbol_count}")
 endif()
 if(NOT "${JH_HAL_FEATURE_DERIVED_SYMBOLS}" STREQUAL
        "HAL_ENABLE_NETWORK_CORE")
@@ -63,6 +63,7 @@ foreach(_target IN ITEMS rp2040 rp2350-arm rp2350-riscv stm32g474)
     foreach(_required IN ITEMS
             HAL_ENABLE_FREERTOS
             HAL_ENABLE_LORA_LINK
+            HAL_ENABLE_STACK_PROTECTOR
             HAL_ENABLE_SX127X
             HAL_DISPLAY_ILI9341)
         list(FIND _all_features "${_required}" _required_index)

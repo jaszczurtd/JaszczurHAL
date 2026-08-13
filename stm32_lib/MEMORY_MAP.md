@@ -10,11 +10,14 @@ FreeRTOS backends. The authoritative source is
 |---|---:|---:|---|
 | Internal flash | `0x08000000` - `0x08080000` | 512 KB | STM32G474RE |
 | SRAM1 + SRAM2 | `0x20000000` - `0x20018000` | 96 KB | STM32G474RE |
-| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | intentionally left out |
+| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | CPU-only `.ccmram`, including emergency fault stack |
 
-The current linker script keeps the first STM32 backend conservative and uses
-only the 96 KB SRAM window at `0x20000000`. The 32 KB CCM SRAM window is not
-part of the HAL linker layout yet.
+Normal heap and application-stack allocation stays in the 96 KB SRAM window at
+`0x20000000`. CPU-only objects may use `.ccmram`; fault handling reserves a
+512-byte emergency stack there so diagnostics do not continue on an exhausted
+main stack. The switch happens after Cortex-M exception entry; if the core
+cannot create even the initial exception frame on an exhausted MSP, software
+cannot guarantee capture without a larger Thread-mode PSP redesign.
 
 ## Flash Layout
 
@@ -85,6 +88,7 @@ Important symbols and sections:
 | `.data` | RAM, loaded from flash | Initialized globals copied by `Reset_Handler` |
 | `.bss` | RAM | Zeroed globals |
 | `.noinit` | RAM | Retained across reset; used for fault handoff data |
+| `.ccmram.jh_fault_stack` | CCMRAM | 512-byte emergency fault-handler stack |
 | `end` / `_end` | after `.noinit` | Heap base used by `_sbrk` |
 | `_Min_Heap_Size` | `0x400` | Link-time sanity reservation |
 | `_Min_Stack_Size` | default `0x800` | Stack safety reservation |

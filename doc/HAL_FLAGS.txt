@@ -129,8 +129,8 @@ Application entry flags
     single-loop/single-task applications.
 
 
-Stack protection flag
----------------------
+Stack protection flags
+----------------------
 
   HAL_ENABLE_STACK_GUARD
     Enables synchronous stack-overflow protection through the target-neutral
@@ -139,6 +139,13 @@ Stack protection flag
     main-stack limit. FreeRTOS builds also enable kernel task-stack overflow
     checking. hal_stack_guard_check() is a no-op; periodic polling is not
     required.
+
+  HAL_ENABLE_STACK_PROTECTOR
+    Enables GCC/Clang -fstack-protector-strong instrumentation for HAL and
+    application sources built by the native RP and STM32G474 firmware recipes.
+    A canary mismatch records a stack-overflow reset through the target fault
+    path. This flag is independent from HAL_ENABLE_STACK_GUARD and does not
+    enable hardware stack limits or FreeRTOS boundary checking.
 
 
 FreeRTOS integration flag

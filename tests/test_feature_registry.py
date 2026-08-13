@@ -675,7 +675,7 @@ if TEST_ROOT.exists():
 TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 98, "feature registry symbol count drifted")
+require(len(model.features) == 99, "feature registry symbol count drifted")
 require(
     sum(bool(feature.implies) for feature in model.features.values()) == 62,
     "feature registry implies-source count drifted",
@@ -771,8 +771,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 53,
-    "hal_config.h retained validation inventory drifted from 53 #error checks",
+    == 54,
+    "hal_config.h retained validation inventory drifted from 54 #error checks",
 )
 
 checked = run_generator("--check")

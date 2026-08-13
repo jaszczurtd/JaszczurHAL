@@ -212,16 +212,21 @@ void test_get_device_uid_null_arg_is_safe(void) {
 }
 
 void test_fault_snapshot_status_distinguishes_invalid_and_missing(void) {
-  hal_fault_info_t out = {false, 0u, 0u, 0u};
+  hal_fault_info_t out = {};
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_get_last_fault_ex(NULL));
   TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_get_last_fault_ex(&out));
   TEST_ASSERT_FALSE(hal_get_last_fault(&out));
 
-  const hal_fault_info_t staged = {true, 0x12345678u, 0xABCDEF00u, 0x21000000u};
+  const hal_fault_info_t staged = {true,        0x12345678u, 0xABCDEF00u,
+                                   0x21000000u, 0x00000082u, 0x40000000u,
+                                   0x20000100u, 0u};
   hal_mock_set_last_fault(&staged);
   TEST_ASSERT_EQUAL_INT(HAL_OK, hal_get_last_fault_ex(&out));
   TEST_ASSERT_TRUE(out.valid);
   TEST_ASSERT_EQUAL_HEX32(staged.pc, out.pc);
+  TEST_ASSERT_EQUAL_HEX32(staged.cfsr, out.cfsr);
+  TEST_ASSERT_EQUAL_HEX32(staged.hfsr, out.hfsr);
+  TEST_ASSERT_EQUAL_HEX32(staged.mmfar, out.mmfar);
   TEST_ASSERT_TRUE(hal_get_last_fault(&out));
 }
 

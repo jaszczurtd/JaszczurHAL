@@ -70,7 +70,20 @@ JaszczurHAL may additionally place flash-operation code in RAM and uses:
 With `HAL_ENABLE_STACK_GUARD`, the native build enables the Pico SDK hardware
 guard implementation. RP2040 uses an MPU no-access region, while RP2350 uses
 the architecture-specific stack-limit/PMP protection. Violations fault
-synchronously; application polling is not required.
+synchronously; application polling is not required. JaszczurHAL reads the
+per-core protection registers back from `hal_stack_guard_init_ex()` and uses a
+512-byte emergency fault stack per core while retaining diagnostics and
+resetting after an overflow.
+
+The fatal path first persists the reset reason and available PC/LR/PSR. It then
+attempts a bounded `STACK OVERFLOW; resetting` write only through an already
+enabled hardware UART; USB CDC is intentionally skipped because it is not a
+panic-safe transport after arbitrary stack corruption.
+
+Retained fault capture assumes the normal XIP mapping is executable. A fault
+during the interval in which a coordinated flash operation intentionally
+disables XIP is outside that diagnostic guarantee; the complete terminal path
+is not wholly SRAM-resident.
 
 The RP FreeRTOS configuration defaults `HAL_FREERTOS_HEAP_SIZE` to 164 KiB.
 The HAL-provided `app_task0()` and optional `app_task1()` stacks default to 512

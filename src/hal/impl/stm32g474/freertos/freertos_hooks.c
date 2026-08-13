@@ -5,6 +5,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 
+#include "hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.h"
+
 void vApplicationMallocFailedHook(void) {
   taskDISABLE_INTERRUPTS();
   for (;;) {
@@ -15,9 +17,7 @@ void vApplicationStackOverflowHook(TaskHandle_t task, char *task_name) {
   (void)task;
   (void)task_name;
 
-  taskDISABLE_INTERRUPTS();
-  for (;;) {
-  }
+  jh_stack_overflow_reset();
 }
 
 #endif

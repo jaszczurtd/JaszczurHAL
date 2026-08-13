@@ -185,7 +185,7 @@ void hal_mock_reset_device_uid(void) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 static hal_reset_reason_t s_reset_reason = HAL_RESET_REASON_UNKNOWN;
-static hal_fault_info_t s_fault_info = {false, 0u, 0u, 0u};
+static hal_fault_info_t s_fault_info = {};
 static bool s_brownout_suspected = false;
 static bool s_alive_marked = false;
 static bool s_subsystem_init = false;
@@ -225,6 +225,10 @@ void hal_clear_last_fault(void) {
   s_fault_info.pc = 0;
   s_fault_info.lr = 0;
   s_fault_info.psr = 0;
+  s_fault_info.cfsr = 0u;
+  s_fault_info.hfsr = 0u;
+  s_fault_info.mmfar = 0u;
+  s_fault_info.bfar = 0u;
 }
 
 bool hal_last_boot_was_brownout(void) { return s_brownout_suspected; }
@@ -259,6 +263,10 @@ void hal_mock_set_last_fault(const hal_fault_info_t *info) {
     s_fault_info.pc = 0;
     s_fault_info.lr = 0;
     s_fault_info.psr = 0;
+    s_fault_info.cfsr = 0u;
+    s_fault_info.hfsr = 0u;
+    s_fault_info.mmfar = 0u;
+    s_fault_info.bfar = 0u;
     return;
   }
   s_fault_info = *info;
@@ -276,7 +284,7 @@ bool hal_mock_stack_guard_is_armed(void) { return s_stack_guard_armed; }
 
 void hal_mock_fault_diagnostics_reset(void) {
   s_reset_reason = HAL_RESET_REASON_UNKNOWN;
-  s_fault_info = {false, 0u, 0u, 0u};
+  s_fault_info = {};
   s_brownout_suspected = false;
   s_alive_marked = false;
   s_subsystem_init = false;

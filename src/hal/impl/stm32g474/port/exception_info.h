@@ -5,10 +5,11 @@
  * @brief Cortex-M4 fault capture for STM32G474.
  *
  * On a HardFault/MemManage/BusFault/UsageFault the naked handlers capture the
- * stacked exception frame (R0-R3, R12, LR, PC, xPSR) plus the SCB fault-status
- * registers (CFSR/HFSR/MMFAR/BFAR), store them in a `.noinit` record that
- * survives the subsequent reset, dump a human-readable summary over the debug
- * UART, and reset the MCU.
+ * valid stacked exception frame (R0-R3, R12, LR, PC, xPSR) plus the SCB
+ * fault-status registers (CFSR/HFSR/MMFAR/BFAR), store them in a `.noinit`
+ * record that survives the subsequent reset, and reset the MCU. Fault entry
+ * switches to a dedicated CCMRAM emergency stack; reporting happens after the
+ * next boot so fault handling never blocks on UART.
  *
  * After reboot, exception_info_report_last() prints the previously captured
  * fault (if any) so a crash that happened in the field is visible on the next
@@ -22,6 +23,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
+#include "hal/core/hal_compiler.h"
+
+/** Dedicated CCMRAM stack used only by terminal fault/reset paths. */
+#define JH_STM32_FAULT_STACK_BYTES 512u
 
 #ifdef __cplusplus
 extern "C" {
@@ -45,7 +51,11 @@ typedef struct {
   /* SCB fault status. */
   uint32_t cfsr, hfsr, mmfar, bfar, shcsr;
   uint32_t exc_return; /**< EXC_RETURN (LR on entry): stack/FP context info */
+  uint32_t raw_sp; /**< MSP/PSP selected on entry, before stack replacement */
 } jh_exception_info_t;
+
+/** Emergency-stack storage owned by the fault driver. */
+extern uint8_t jh_stm32_fault_emergency_stack[JH_STM32_FAULT_STACK_BYTES];
 
 /**
  * @brief Check for a retained fault record and, if present, dump it over the
@@ -54,6 +64,17 @@ typedef struct {
  * @return true if a fault record was found and reported.
  */
 bool exception_info_report_last(void);
+
+/**
+ * @brief Print an already-latched fault record over the debug UART.
+ *
+ * Unlike @ref exception_info_report_last, this does not access or consume the
+ * retained `.noinit` slot. It is used after early boot has safely copied that
+ * slot into ordinary RAM.
+ *
+ * @return true when @p record was non-NULL and contained a fault kind.
+ */
+bool exception_info_report_record(const jh_exception_info_t *record);
 
 /** @brief Read-only pointer to the retained record (NULL semantics via .kind).
  */
@@ -68,6 +89,17 @@ const jh_exception_info_t *exception_info_last(void);
  * @return true when a valid retained record was consumed.
  */
 bool exception_info_take_last(jh_exception_info_t *out);
+
+/** Invalidate a retained record without reporting it. */
+void exception_info_discard_last(void) HAL_NO_STACK_PROTECTOR;
+
+/** Shared live/post-boot classifier for an STM32 MPU stack-guard hit. */
+bool jh_stm32_fault_hits_stack_guard(const jh_exception_info_t *record)
+    HAL_NO_STACK_PROTECTOR;
+
+/** Terminal reset path used after a Cortex-M hardware stack-guard fault. */
+void jh_stm32_stack_fault_reset(const jh_exception_info_t *record)
+    HAL_NORETURN HAL_NO_STACK_PROTECTOR;
 
 #ifdef __cplusplus
 }
