@@ -331,6 +331,26 @@ target_compile_definitions(test_cyw43_radio_runtime PRIVATE
 jh_enable_host_warnings(test_cyw43_radio_runtime ERRORS)
 add_test(NAME test_cyw43_radio_runtime COMMAND test_cyw43_radio_runtime)
 
+add_executable(test_cyw43_hostname_mdns
+    test_cyw43_hostname_mdns.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/cyw43/jh_cyw43_hostname.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/cyw43/jh_cyw43_mdns.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_cyw43_hostname_mdns PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+)
+target_compile_definitions(test_cyw43_hostname_mdns PRIVATE
+    HAL_TARGET_MOCK=1
+    JH_CYW43_HOSTNAME_TEST=1
+    JH_CYW43_MDNS_TEST=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_cyw43_hostname_mdns ERRORS)
+add_test(NAME test_cyw43_hostname_mdns COMMAND test_cyw43_hostname_mdns)
+
 add_executable(test_ble_hci_transport
     test_ble_hci_transport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_ble_hci_transport.c

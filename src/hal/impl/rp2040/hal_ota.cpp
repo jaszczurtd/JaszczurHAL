@@ -5,9 +5,11 @@
 #ifdef HAL_ENABLE_OTA
 
 #include "hal/core/hal_mutex_once.h"
+#include "hal/network/cyw43/jh_cyw43_mdns.h"
 #include "hal/network/hal_net.h"
 #include "hal/network/hal_tcp.h"
 #include "hal/network/hal_udp.h"
+#include "hal/network/jh_cyw43_provider.h"
 #include "hal/network/ota/hal_ota.h"
 #include "hal/network/ota/jh_ota_protocol.h"
 #include "hal/security/hal_crypto.h"
@@ -17,6 +19,7 @@
 
 #include "drivers/flash/rp_ota_storage.h"
 #include <hardware/watchdog.h>
+#include <lwip/netif.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -27,6 +30,7 @@
 #define HAL_OTA_DEFAULT_PORT 8266u
 #define HAL_OTA_CONNECT_TIMEOUT_MS 5000u
 #define HAL_OTA_RECEIVE_TIMEOUT_MS 5000u
+#define HAL_OTA_HOSTNAME_MAX_LENGTH 63u
 
 typedef enum {
   HAL_OTA_EVENT_NONE = 0,
@@ -110,6 +114,18 @@ static void update_abort_no_lock(void) { jh_rp_ota_storage_abort(); }
 
 static inline void ota_ensure_mutex(void) {
   (void)jh_hal_mutex_create_once(&s_ota.mutex);
+}
+
+static hal_status_t publish_mdns_no_lock(const char *hostname) {
+  hal_status_t status = jh_cyw43_provider_stack_enter(false);
+  if (status != HAL_OK) {
+    return status;
+  }
+  struct netif *netif = jh_cyw43_provider_netif();
+  status =
+      netif == nullptr ? HAL_EUNINIT : jh_cyw43_mdns_publish(netif, hostname);
+  jh_cyw43_provider_stack_leave();
+  return status;
 }
 
 static bool validate_non_empty(const char *value, const char *fn,
@@ -505,11 +521,20 @@ bool hal_ota_set_hostname(const char *hostname) {
   if (!validate_non_empty(hostname, "hal_ota_set_hostname", "hostname")) {
     return false;
   }
+  const size_t length = strlen(hostname);
+  if (length > HAL_OTA_HOSTNAME_MAX_LENGTH) {
+    hal_derr("hal_ota_set_hostname: hostname exceeds 63 bytes");
+    return false;
+  }
   ota_ensure_mutex();
   hal_mutex_lock(s_ota.mutex);
-  const int length =
-      snprintf(s_ota.hostname, sizeof(s_ota.hostname), "%s", hostname);
-  const bool accepted = length > 0 && (size_t)length < sizeof(s_ota.hostname);
+  bool accepted = true;
+  if (s_ota.started) {
+    accepted = publish_mdns_no_lock(hostname) == HAL_OK;
+  }
+  if (accepted) {
+    memcpy(s_ota.hostname, hostname, length + 1u);
+  }
   hal_mutex_unlock(s_ota.mutex);
   return accepted;
 }
@@ -592,6 +617,9 @@ bool hal_ota_begin(void) {
     local.addr_len = HAL_NET_IPV4_ADDR_LEN;
     local.port = s_ota.port;
     status = hal_udp_socket_bind_ex(socket, &local);
+  }
+  if (status == HAL_OK) {
+    status = publish_mdns_no_lock(s_ota.hostname);
   }
   if (status != HAL_OK) {
     if (socket != nullptr) {

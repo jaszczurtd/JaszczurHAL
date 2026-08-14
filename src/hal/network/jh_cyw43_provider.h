@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+struct netif;
+
 typedef enum {
   JH_CYW43_LINK_DOWN = 0,
   JH_CYW43_LINK_CONNECTING,
@@ -32,6 +34,7 @@ jh_cyw43_provider_link_status(jh_cyw43_link_status_t *out_link_status);
 hal_status_t jh_cyw43_provider_get_mac(uint8_t mac[HAL_WIFI_BSSID_LEN]);
 hal_status_t jh_cyw43_provider_get_rssi(int32_t *out_rssi);
 hal_status_t jh_cyw43_provider_set_hostname(const char *hostname);
+struct netif *jh_cyw43_provider_netif(void);
 hal_status_t jh_cyw43_provider_stack_enter(bool require_ipv4);
 void jh_cyw43_provider_stack_leave(void);
 hal_status_t jh_cyw43_provider_service(void);

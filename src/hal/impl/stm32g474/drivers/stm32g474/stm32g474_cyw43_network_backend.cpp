@@ -8,6 +8,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/cyw43/jh_cyw43_hostname.h"
 #include "hal/network/cyw43/jh_cyw43_lwip.h"
 #include "hal/network/cyw43/jh_cyw43_radio.h"
 #include "hal/network/cyw43/jh_cyw43_scan_results.h"
@@ -151,7 +152,8 @@ hal_status_t service_initialize(void) {
   }
   s_initialized = true;
   if (s_hostname[0] != '\0') {
-    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
+    (void)jh_cyw43_hostname_apply(&cyw43_state.netif[CYW43_ITF_STA],
+                                  s_hostname);
   }
   hal_mutex_unlock(s_lifecycle_mutex);
   return HAL_OK;
@@ -249,9 +251,10 @@ hal_status_t wifi_set_hostname(const char *hostname) {
   if (!s_initialized) {
     return HAL_OK;
   }
-  const hal_status_t status = stack_enter(false);
+  hal_status_t status = stack_enter(false);
   if (status == HAL_OK) {
-    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
+    status =
+        jh_cyw43_hostname_apply(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
     stack_leave();
   }
   return status;

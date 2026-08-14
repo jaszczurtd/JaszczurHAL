@@ -114,7 +114,10 @@ bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user);
  */
 bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user);
 
-/** @brief Initialize OTA service.
+/** @brief Initialize OTA service and publish its hostname via mDNS.
+ *
+ * The configured name becomes reachable as `<hostname>.local` on native RP
+ * CYW43 builds. The hostname must fit in one DNS label (at most 63 bytes).
  *  @return true when service is started.
  */
 bool hal_ota_begin(void);

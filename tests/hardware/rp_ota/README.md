@@ -101,6 +101,12 @@ effective gSPI rates, 16.8 divider and selected PIO timing program. The
 verifier creates signed A/B containers below `.build/hardware/rp_ota` and
 leaves the device in stable image A after proving rollback from image B.
 
+`hal_ota_begin()` also publishes the configured hostname through mDNS. While
+the probe is connected, verify the responder independently with, for example,
+`getent hosts jh-ota-rp2040.local` (or the RP2350 hostname). The WiFi hostname
+is sent in DHCP option 12 and changing it with an active lease triggers a DHCP
+renewal.
+
 The OTA upload callback is a TCP connection from the board to host TCP/8266.
 Run `./runmefirst.sh` and approve its persistent, LAN-scoped OTA rule before
 the hardware test. Verify the rule without changing it with:
