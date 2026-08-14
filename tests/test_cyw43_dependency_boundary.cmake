@@ -18,6 +18,67 @@ if(_cyw43_driver_wrapper MATCHES "uint8_t[ \t]+s_mac\\[6\\]")
         "CYW43 port must not shadow the controller MAC with a separate cache")
 endif()
 
+file(READ "${_driver}/jh_cyw43_hostname.cpp" _cyw43_hostname)
+file(READ "${_driver}/jh_cyw43_mdns.cpp" _cyw43_mdns)
+file(READ "${JH_ROOT}/cmake/jh_cyw43_driver.cmake" _cyw43_cmake)
+file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp_native_cmake)
+file(READ "${JH_ROOT}/src/hal/network/lwip/port/lwipopts.h" _lwipopts)
+file(READ "${JH_ROOT}/src/hal/impl/rp2040/hal_ota.cpp" _rp_ota)
+file(READ
+    "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
+    _rp_provider)
+file(READ
+    "${JH_ROOT}/src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_cyw43_network_backend.cpp"
+    _stm32_provider)
+
+foreach(_hostname_contract IN ITEMS
+        "netif_set_hostname"
+        "dhcp_supplied_address"
+        "dhcp_renew")
+    string(FIND "${_cyw43_hostname}" "${_hostname_contract}"
+        _hostname_contract_at)
+    if(_hostname_contract_at EQUAL -1)
+        message(FATAL_ERROR
+            "CYW43 DHCP hostname contract is missing: ${_hostname_contract}")
+    endif()
+endforeach()
+
+foreach(_hostname_provider IN ITEMS _rp_provider _stm32_provider)
+    if(NOT "${${_hostname_provider}}" MATCHES "jh_cyw43_hostname_apply")
+        message(FATAL_ERROR
+            "CYW43 backend bypasses the shared DHCP hostname helper: "
+            "${_hostname_provider}")
+    endif()
+endforeach()
+
+foreach(_mdns_source IN ITEMS
+        "src/apps/mdns/mdns.c"
+        "src/apps/mdns/mdns_domain.c"
+        "src/apps/mdns/mdns_out.c")
+    string(FIND "${_cyw43_cmake}" "${_mdns_source}" _mdns_source_at)
+    if(_mdns_source_at EQUAL -1)
+        message(FATAL_ERROR
+            "CYW43 mDNS source manifest is missing: ${_mdns_source}")
+    endif()
+endforeach()
+
+foreach(_mdns_contract IN ITEMS
+        "list(APPEND _jh_native_cyw43_options MDNS)"
+        "LWIP_MDNS_RESPONDER 1"
+        "LWIP_MDNS_SEARCH 0"
+        "LWIP_NUM_NETIF_CLIENT_DATA 1"
+        "LWIP_NETIF_EXT_STATUS_CALLBACK 1"
+        "jh_cyw43_mdns_publish"
+        "jh_cyw43_mdns_remove")
+    string(FIND
+        "${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}"
+        "${_mdns_contract}" _mdns_contract_at)
+    if(_mdns_contract_at EQUAL -1)
+        message(FATAL_ERROR
+            "CYW43 OTA mDNS contract is missing: ${_mdns_contract}")
+    endif()
+endforeach()
+
 string(FIND "${_cyw43_driver_wrapper}"
     "jh_cyw43_port_pin_read" _cyw43_pin_read_begin)
 string(FIND "${_cyw43_driver_wrapper}"

@@ -28,7 +28,11 @@
 #define LWIP_IGMP 1
 
 #define LWIP_UDP 1
+#if defined(HAL_ENABLE_OTA)
+#define MEMP_NUM_UDP_PCB 7
+#else
 #define MEMP_NUM_UDP_PCB 6
+#endif
 #if defined(HAL_ENABLE_TCP)
 #define LWIP_TCP 1
 #define TCP_MSS 1460
@@ -53,12 +57,21 @@
 #define DNS_MAX_NAME_LENGTH 128
 #define LWIP_DNS_SUPPORT_MDNS_QUERIES 0
 
+#if defined(HAL_ENABLE_OTA)
+#define LWIP_MDNS_RESPONDER 1
+#define LWIP_MDNS_SEARCH 0
+#define LWIP_NUM_NETIF_CLIENT_DATA 1
+#define LWIP_NETIF_EXT_STATUS_CALLBACK 1
+#endif
+
 /*
  * The upstream default sizes this pool for lwIP's internal cyclic timers
- * only.  A live WireGuard netif owns one additional periodic timeout and
- * releases it in wireguardif_shutdown().
+ * only. A live WireGuard netif and the mDNS responder each own one additional
+ * periodic timeout and release it during their respective teardown paths.
  */
-#if defined(HAL_ENABLE_WIREGUARD)
+#if defined(HAL_ENABLE_WIREGUARD) && defined(HAL_ENABLE_OTA)
+#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 2)
+#elif defined(HAL_ENABLE_WIREGUARD) || defined(HAL_ENABLE_OTA)
 #define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
 #endif
 

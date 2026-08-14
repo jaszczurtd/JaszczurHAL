@@ -1,7 +1,10 @@
 include_guard(GLOBAL)
 
 function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
-    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH" "" "" ${ARGN})
+    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH;MDNS" "" "" ${ARGN})
+    if(JH_CYW43_MDNS AND NOT JH_CYW43_LWIP)
+        message(FATAL_ERROR "CYW43 mDNS requires lwIP")
+    endif()
     set(_jh_cyw43_root
         "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/network/cyw43")
     set(_jh_cyw43_vendor "${_jh_cyw43_root}/vendor")
@@ -64,6 +67,12 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
             "${_jh_lwip_root}/src/core/ipv4/ip4_addr.c"
             "${_jh_lwip_root}/src/core/ipv4/ip4_frag.c"
             "${_jh_lwip_root}/src/netif/ethernet.c")
+        if(JH_CYW43_MDNS)
+            list(APPEND _jh_cyw43_sources
+                "${_jh_lwip_root}/src/apps/mdns/mdns.c"
+                "${_jh_lwip_root}/src/apps/mdns/mdns_domain.c"
+                "${_jh_lwip_root}/src/apps/mdns/mdns_out.c")
+        endif()
         list(APPEND _jh_cyw43_includes
             "${_jh_lwip_port}"
             "${_jh_lwip_root}/src/include")
@@ -81,13 +90,16 @@ function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
 endfunction()
 
 function(jh_target_enable_cyw43_driver TARGET_NAME)
-    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH" "" "" ${ARGN})
+    cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH;MDNS" "" "" ${ARGN})
     set(_jh_cyw43_options)
     if(JH_CYW43_LWIP)
         list(APPEND _jh_cyw43_options LWIP)
     endif()
     if(JH_CYW43_BLUETOOTH)
         list(APPEND _jh_cyw43_options BLUETOOTH)
+    endif()
+    if(JH_CYW43_MDNS)
+        list(APPEND _jh_cyw43_options MDNS)
     endif()
     jh_cyw43_source_manifest(_jh_cyw43_sources _jh_cyw43_includes
         ${_jh_cyw43_options})

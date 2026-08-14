@@ -36,6 +36,7 @@ struct netif *netif_add(struct netif *network_interface,
 void netif_remove(struct netif *network_interface);
 void netif_set_up(struct netif *network_interface);
 void netif_set_default(struct netif *network_interface);
+void netif_set_hostname(struct netif *network_interface, const char *hostname);
 
 #ifdef __cplusplus
 }

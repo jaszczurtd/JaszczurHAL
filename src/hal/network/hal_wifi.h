@@ -92,7 +92,9 @@ bool hal_wifi_set_mode(hal_wifi_mode_t mode);
 bool hal_wifi_disconnect(bool erase_credentials);
 
 /**
- * @brief Set station hostname.
+ * @brief Set the station hostname used by DHCP option 12.
+ *
+ * An active DHCP lease is renewed so the server receives a changed name.
  * @param hostname Null-terminated hostname string.
  */
 bool hal_wifi_set_hostname(const char *hostname);

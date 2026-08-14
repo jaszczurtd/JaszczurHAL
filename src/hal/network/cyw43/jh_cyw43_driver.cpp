@@ -10,6 +10,9 @@
 
 #if defined(HAL_CYW43_STACK_LWIP)
 #include "jh_cyw43_lwip.h"
+#if defined(HAL_ENABLE_OTA)
+#include "jh_cyw43_mdns.h"
+#endif
 #endif
 
 extern "C" {
@@ -129,6 +132,9 @@ extern "C" hal_status_t jh_cyw43_driver_stop(void) {
   if (s_transport == nullptr) {
     return HAL_EUNINIT;
   }
+#if defined(HAL_CYW43_STACK_LWIP) && defined(HAL_ENABLE_OTA)
+  (void)jh_cyw43_mdns_remove(&cyw43_state.netif[CYW43_ITF_STA]);
+#endif
   cyw43_deinit(&cyw43_state);
   const hal_status_t wake_status = jh_cyw43_gspi_host_wake_detach(s_transport);
   s_transport = nullptr;
@@ -144,6 +150,9 @@ jh_cyw43_driver_restart(jh_cyw43_driver_result_t *result) {
   if (s_transport == nullptr) {
     return HAL_EUNINIT;
   }
+#if defined(HAL_CYW43_STACK_LWIP) && defined(HAL_ENABLE_OTA)
+  (void)jh_cyw43_mdns_remove(&cyw43_state.netif[CYW43_ITF_STA]);
+#endif
   cyw43_deinit(&cyw43_state);
   const hal_status_t wake_status = jh_cyw43_gspi_host_wake_detach(s_transport);
   if (wake_status != HAL_OK) {

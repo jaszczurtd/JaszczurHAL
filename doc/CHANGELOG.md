@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Made native RP and STM32G474 CYW43 hostname changes renew an active DHCP
+  lease, and made the native RP OTA service publish its configured hostname as
+  `<hostname>.local` over mDNS.
 - Made target descriptors the single source for architecture snapshots by
   generating neutral `HAL_TARGET_*` identity, CPU, FPU, and RAM facts. RP,
   STM32G474, and mock system backends no longer duplicate those values, while

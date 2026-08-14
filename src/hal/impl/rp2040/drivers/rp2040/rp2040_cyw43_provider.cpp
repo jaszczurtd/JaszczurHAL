@@ -9,6 +9,7 @@
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/cyw43/jh_cyw43_driver.h"
+#include "hal/network/cyw43/jh_cyw43_hostname.h"
 #include "hal/network/cyw43/jh_cyw43_lwip.h"
 #include "hal/network/cyw43/jh_cyw43_radio.h"
 #include "hal/network/cyw43/jh_cyw43_scan_results.h"
@@ -93,9 +94,11 @@ int scan_result_callback(void *, const cyw43_ev_scan_result_t *result) {
 
 } // namespace
 
-extern "C" struct netif *__getCYW43Netif() {
+struct netif *jh_cyw43_provider_netif(void) {
   return s_initialized ? &cyw43_state.netif[CYW43_ITF_STA] : nullptr;
 }
+
+extern "C" struct netif *__getCYW43Netif() { return jh_cyw43_provider_netif(); }
 
 hal_status_t jh_rp2040_cyw43_provider_init(void) {
   if (s_initialized) {
@@ -107,7 +110,8 @@ hal_status_t jh_rp2040_cyw43_provider_init(void) {
   }
   s_initialized = true;
   if (s_hostname[0] != '\0') {
-    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
+    (void)jh_cyw43_hostname_apply(&cyw43_state.netif[CYW43_ITF_STA],
+                                  s_hostname);
   }
   return HAL_OK;
 }
@@ -290,10 +294,10 @@ hal_status_t jh_rp2040_cyw43_provider_set_hostname(const char *hostname) {
   if (!s_initialized) {
     return HAL_OK;
   }
-  const hal_status_t status =
-      jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
+  hal_status_t status = jh_cyw43_radio_enter(JH_CYW43_RADIO_CLIENT_WIFI, false);
   if (status == HAL_OK) {
-    netif_set_hostname(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
+    status =
+        jh_cyw43_hostname_apply(&cyw43_state.netif[CYW43_ITF_STA], s_hostname);
     (void)jh_cyw43_radio_leave();
   }
   return status;
@@ -453,6 +457,7 @@ jh_rp2040_cyw43_provider_get_scan_result(size_t index,
 
 struct netif;
 extern "C" struct netif *__getCYW43Netif(void) { return nullptr; }
+struct netif *jh_cyw43_provider_netif(void) { return nullptr; }
 
 hal_status_t jh_cyw43_provider_init(void) { return HAL_EUNSUPPORTED; }
 hal_status_t jh_cyw43_provider_deinit(void) { return HAL_EUNSUPPORTED; }
