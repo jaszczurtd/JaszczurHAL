@@ -29,8 +29,9 @@ def git(root: Path, *arguments: str) -> None:
     ):
         environment.pop(variable, None)
 
+    command = ["git", "-c", "maintenance.auto=false", *arguments]
     result = subprocess.run(
-        ["git", *arguments],
+        command,
         cwd=root,
         check=False,
         capture_output=True,
@@ -38,9 +39,9 @@ def git(root: Path, *arguments: str) -> None:
         env=environment,
     )
     if result.returncode != 0:
-        command = " ".join(("git", *arguments))
+        command_text = " ".join(command)
         raise RuntimeError(
-            f"{command} failed with exit code {result.returncode}\n"
+            f"{command_text} failed with exit code {result.returncode}\n"
             f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
         )
 
@@ -61,7 +62,7 @@ def write_metadata(root: Path, version: str) -> None:
 
 
 class ReleaseMetadataTests(unittest.TestCase):
-    def test_git_helper_does_not_forward_sanitizer_options(self) -> None:
+    def test_git_helper_uses_isolated_invocation(self) -> None:
         sanitizer_variables = {
             "ASAN_OPTIONS",
             "LSAN_OPTIONS",
@@ -79,6 +80,10 @@ class ReleaseMetadataTests(unittest.TestCase):
 
         forwarded = run.call_args.kwargs["env"]
         self.assertTrue(sanitizer_variables.isdisjoint(forwarded))
+        self.assertEqual(
+            ["git", "-c", "maintenance.auto=false", "status"],
+            run.call_args.args[0],
+        )
 
     def test_tracked_metadata_must_match(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-release-") as text:
