@@ -564,6 +564,11 @@ add_test(NAME test_vscode_build_environment
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_build_environment.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_vscode_library_workspace
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_library_workspace.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_build_artifact_layout
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_build_artifact_layout.py

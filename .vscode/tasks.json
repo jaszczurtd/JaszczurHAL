@@ -1,76 +1,80 @@
 {
     "version": "2.0.0",
+    "inputs": [
+        {
+            "id": "libraryBoardSelection",
+            "description": "JaszczurHAL library target/board",
+            "type": "pickString",
+            "options": [
+                "mock:host-mock - Host mock board",
+                "rp2040:pico - Raspberry Pi Pico",
+                "rp2040:pico-core1262-hf - Raspberry Pi Pico with Core1262-HF (experimental)",
+                "rp2040:pico-rm2 - Raspberry Pi Pico with PIM730/RM2 (experimental)",
+                "rp2040:picow - Raspberry Pi Pico W",
+                "rp2040:rp2040-lora-lf - Waveshare RP2040-LoRa-LF (experimental)",
+                "rp2040:rp2040-plus-4mb - Waveshare RP2040-Plus 4 MB",
+                "rp2040:rp2040-zero - Waveshare RP2040-Zero compatible",
+                "rp2350-arm:pico2 - Raspberry Pi Pico 2",
+                "rp2350-arm:pico2w - Raspberry Pi Pico 2 W",
+                "rp2350-riscv:pico2 - Raspberry Pi Pico 2",
+                "stm32g474:nucleo-g474re - ST NUCLEO-G474RE",
+                "stm32g474:nucleo-g474re-core1262-hf - ST NUCLEO-G474RE with Core1262-HF (experimental)",
+                "stm32g474:nucleo-g474re-pim730 - ST NUCLEO-G474RE with PIM730/RM2 (experimental)"
+            ],
+            "default": "rp2040:pico - Raspberry Pi Pico"
+        }
+    ],
     "tasks": [
         {
-            "label": "Build RP2040",
-            "detail": "Ctrl+Shift+1 - compile RP2040 static library",
+            "label": "Project: Build",
+            "detail": "Ctrl+Shift+1 - build the active linkable JaszczurHAL library",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/build_rp_native_lib.sh",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "build"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": "$gcc",
             "group": {
                 "kind": "build",
                 "isDefault": true
-            },
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            },
-            "problemMatcher": {
-                "owner": "cpp",
-                "fileLocation": [
-                    "autoDetect",
-                    "${workspaceFolder}"
-                ],
-                "pattern": {
-                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
-                    "file": 1,
-                    "line": 2,
-                    "column": 3,
-                    "severity": 4,
-                    "message": 5
-                }
             }
         },
         {
-            "label": "Build STM32",
-            "detail": "Ctrl+Shift+2 - compile STM32G474 static library",
+            "label": "Project: Refresh IntelliSense",
+            "detail": "Ctrl+Shift+6 - build the active profile and select its compile database",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/build_stm32_lib.sh",
-            "group": "build",
-            "presentation": {
-                "echo": true,
-                "reveal": "always",
-                "focus": false,
-                "panel": "shared",
-                "showReuseMessage": false,
-                "clear": true
-            },
-            "problemMatcher": {
-                "owner": "cpp",
-                "fileLocation": [
-                    "autoDetect",
-                    "${workspaceFolder}"
-                ],
-                "pattern": {
-                    "regexp": "^(.+):(\\d+):(\\d+):\\s+(warning|error):\\s+(.+)$",
-                    "file": 1,
-                    "line": 2,
-                    "column": 3,
-                    "severity": 4,
-                    "message": 5
-                }
-            }
-        },
-        {
-            "label": "Refresh IntelliSense RP2040",
-            "detail": "Ctrl+Shift+4 - regenerate RP2040 compile_commands.json and select it for C/C++ IntelliSense",
-            "type": "shell",
-            "command": "${workspaceFolder}/scripts/vscode_refresh_intellisense.sh",
+            "command": "python3",
             "args": [
-                "rp2040"
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "refresh-intellisense"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Clean",
+            "detail": "Ctrl+Shift+7 - remove only the active library build and install trees",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "clean"
             ],
             "presentation": {
                 "echo": true,
@@ -83,12 +87,34 @@
             "problemMatcher": []
         },
         {
-            "label": "Refresh IntelliSense STM32",
-            "detail": "Ctrl+Shift+5 - regenerate STM32 compile_commands.json and select it for C/C++ IntelliSense",
+            "label": "Project: Install library",
+            "detail": "Ctrl+Shift+0 - install the active archive, headers, and link contract",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/vscode_refresh_intellisense.sh",
+            "command": "python3",
             "args": [
-                "stm32"
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "install"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Project: Select board (GUI)",
+            "detail": "Ctrl+Shift+Alt+1 - select the active library target and board",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "select",
+                "--selection",
+                "${input:libraryBoardSelection}"
             ],
             "presentation": {
                 "echo": true,
@@ -101,10 +127,34 @@
             "problemMatcher": []
         },
         {
-            "label": "Clear Build Artifacts",
-            "detail": "Ctrl+Shift+7 - remove the repository .build artifact tree",
+            "label": "Project: Select board",
+            "detail": "Ctrl+Shift+Alt+2 - select the active library target and board in the terminal",
             "type": "shell",
-            "command": "${workspaceFolder}/scripts/vscode_clear_build_artifacts.sh",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "select",
+                "--interactive"
+            ],
+            "presentation": {
+                "echo": true,
+                "reveal": "always",
+                "focus": false,
+                "panel": "shared",
+                "showReuseMessage": false,
+                "clear": true
+            },
+            "problemMatcher": []
+        },
+        {
+            "label": "Library: Show active profile",
+            "detail": "Print the active target, board, build paths, and install paths",
+            "type": "shell",
+            "command": "python3",
+            "args": [
+                "${workspaceFolder}/scripts/vscode_library_workspace.py",
+                "config-dump"
+            ],
             "presentation": {
                 "echo": true,
                 "reveal": "always",

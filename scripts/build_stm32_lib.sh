@@ -151,6 +151,7 @@ fi
 info "Configuring CMake..."
 cmake -S "${REPO_ROOT}/stm32_lib" -B "${OUTPUT_DIR}" \
     -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
+    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
     -DJH_TARGET=stm32g474 \
     -DJH_BOARD="${BOARD}" \
     "${CMAKE_EXTRA_ARGS[@]}"

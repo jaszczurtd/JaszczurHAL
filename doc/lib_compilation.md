@@ -357,6 +357,54 @@ still fails with the expected undefined contract symbol. See
 [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) for flash, SRAM, persistent
 storage, and OTA reservations.
 
+## Repository workspace and VS Code
+
+Open the JaszczurHAL repository root as the VS Code folder to use the
+static-library workflow. It is separate from the firmware-project workflow and
+uses the global task labels already shared by JaszczurHAL consumers:
+
+| Shortcut | Repository task |
+|---|---|
+| `Ctrl+Shift+1` | `Project: Build` |
+| `Ctrl+Shift+6` | `Project: Refresh IntelliSense` |
+| `Ctrl+Shift+7` | `Project: Clean` |
+| `Ctrl+Shift+0` | `Project: Install library` |
+| `Ctrl+Shift+Alt+1` | `Project: Select board (GUI)` |
+| `Ctrl+Shift+Alt+2` | `Project: Select board` |
+
+The initial profile is `rp2040:pico`. Selection reads target and board data
+from `boards/` and is stored in the gitignored
+`.vscode/jaszczurhal.library.local.json`. Supported profiles include host mock,
+all three native RP target families, and STM32G474. Build artifacts stay in:
+
+```text
+.build/vscode/library/<target>/<board>/
+```
+
+`Project: Build` produces the active linkable archive and selects its generated
+compile database for cpptools. `Project: Refresh IntelliSense` performs the
+same incremental build explicitly before rewriting the gitignored
+`.vscode/c_cpp_properties.json`. Each production build contains
+`libJaszczurHAL.a`; the mock profile contains `libhal_mock.a`.
+
+`Project: Install library` builds the active production profile and installs
+its archive, public headers, generated board headers, and link-contract data to
+`.build/install/<target>/<board>/`. The mock target has no installation
+contract. `Project: Clean` removes only these two directories for the active
+profile and its matching managed IntelliSense file. It preserves other builds,
+managed tools, and dependency sources.
+
+The tracked root `.vscode` files are derived from the board registry. Verify or
+regenerate them after a registry or workspace-task change:
+
+```bash
+python3 scripts/vscode_library_workspace.py sync-vscode --check
+python3 scripts/vscode_library_workspace.py sync-vscode
+```
+
+Upload, serial-monitor, and debug-probe shortcuts remain firmware-only and are
+intentionally undefined when the repository root is open.
+
 ## Firmware projects and VS Code
 
 Create, inspect, and build a project through the maintained workflow:

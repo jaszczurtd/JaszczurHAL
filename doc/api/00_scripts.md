@@ -582,27 +582,41 @@ artifacts remain below the resolved `.build/` directory. See
 [Native RP OTA Workflow](../OTAWorkflow.md) for the complete consumer workflow
 around these artifacts.
 
+### `scripts/vscode_library_workspace.py`
+
+Owns the repository-root VS Code static-library workflow. The `select` action
+validates target/board pairs against `boards/` and stores the active profile in
+gitignored local state. `build`, `refresh-intellisense`, `install`, `clean`, and
+`config-dump` then resolve the same build and install paths from that profile.
+
+RP builds delegate to `build_rp_native_lib.sh --library-only`, STM32G474 builds
+delegate to `build_stm32_lib.sh`, and mock builds select the root `hal_mock`
+CMake target. Every build exports `compile_commands.json`; the IntelliSense
+actions write a local `.vscode/c_cpp_properties.json` without changing tracked
+settings. Clean removes only the active profile's managed build/install trees.
+
+`sync-vscode` deterministically writes the tracked root tasks, settings,
+extension recommendations, and keybinding reference from the board registry.
+Use `sync-vscode --check` to reject drift without changing files.
+
+This is not the firmware-project workflow. Dispatcher-backed projects use
+`jh-vscode <action> --project <dir>`.
+
 ### `scripts/vscode_refresh_intellisense.sh`
 
-Repository-workspace helper used by the root `.vscode/tasks.json`. It accepts
-exactly one profile:
-
-- `rp2040` configures the official Pico SDK RP2040/Pico recipe;
-- `stm32` configures the STM32G474 static-library recipe.
-
-It generates a compile database below `.build/intellisense/` and updates
-`.vscode/settings.json` so cpptools uses that database.
-
-This is not the firmware-project workflow. Dispatcher-backed projects should
-use `jh-vscode refresh-intellisense --project <dir>`.
+Compatibility wrapper for the former repository IntelliSense entrypoint. It
+maps `mock`, `rp2040`, `rp2350-arm`, `rp2350-riscv`, `stm32`, or `stm32g474` to
+the default board, selects that library profile, and delegates to
+`vscode_library_workspace.py refresh-intellisense`.
 
 ### `scripts/vscode_clear_build_artifacts.sh`
 
-Repository-workspace clean helper used by the root VS Code task. It removes the
-entire repository `.build/` tree and nothing outside it. There are no options.
-This also removes cached target builds, examples, tests, IntelliSense data, and
-the built picotool executable; ignored component sources under `third_party/`
-are retained.
+Manual full-clean helper. It removes the entire repository `.build/` tree and
+nothing outside it. There are no options. This also removes cached target
+builds, examples, tests, IntelliSense data, and the built picotool executable;
+ignored component sources under `third_party/` are retained. The root VS Code
+`Project: Clean` task deliberately uses the scoped library-workspace action
+instead.
 
 ## Static Analysis And Security Scripts
 

@@ -243,6 +243,13 @@ starts persistent serial monitors, and refreshes IntelliSense.
   [OTAWorkflow.md](doc/OTAWorkflow.md)
 - [Full list of keyboard shortcuts](vscode/README.md#vs-code-keyboard-shortcuts)
 
+When the JaszczurHAL repository root itself is opened in VS Code, the tracked
+`.vscode/` configuration provides a separate static-library workflow. The
+existing global shortcuts build, install, clean, and refresh IntelliSense for
+one target/board profile selected directly from the shared board registry.
+Artifacts remain below `.build/vscode/library/`; details are in the
+[library compilation guide](doc/lib_compilation.md#repository-workspace-and-vs-code).
+
 ## Debugging with VS Code
 
 Generated Cortex-Debug profiles support RP2040 and RP2350 Arm over SWD with a

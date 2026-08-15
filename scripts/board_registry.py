@@ -9,6 +9,41 @@ from typing import Any
 from generate_board_config import load_registry
 
 
+def library_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
+    """Return every supported static-library target and compatible board."""
+    targets, boards, _ = load_registry(jh_root / "boards")
+    registry: dict[str, dict[str, Any]] = {}
+
+    for target_id, target in sorted(targets.items()):
+        provider = target["build"]["provider"]
+        if provider not in {"host", "pico-sdk", "jh-stm32-baremetal"}:
+            continue
+
+        target_boards = []
+        for board_id, board in sorted(boards.items()):
+            if target_id not in board["compatibleTargets"]:
+                continue
+            target_boards.append(
+                {
+                    "id": board_id,
+                    "displayName": board["displayName"],
+                    "status": board["status"],
+                }
+            )
+
+        registry[target_id] = {
+            "id": target_id,
+            "displayName": target["displayName"],
+            "description": target["description"],
+            "status": target["status"],
+            "provider": provider,
+            "defaultBoard": target["defaultBoard"],
+            "boards": target_boards,
+        }
+
+    return registry
+
+
 def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
     """Return the jh-vscode registry derived exclusively from ``boards/``."""
     targets, boards, _ = load_registry(jh_root / "boards")

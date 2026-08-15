@@ -4,6 +4,11 @@ This directory contains the shared VS Code firmware workflow for projects that
 use JaszczurHAL: build, debug build, upload, UF2 upload, serial monitor,
 IntelliSense refresh, board/port helpers, and USB identity cleanup.
 
+The tracked configuration used when the JaszczurHAL repository root itself is
+opened in VS Code is a separate static-library workflow documented in the
+[library compilation guide](../doc/lib_compilation.md#repository-workspace-and-vs-code).
+It deliberately does not treat the repository root as a firmware project.
+
 The stable public surface is `entry/`. Project `.vscode/tasks.json` files should
 call `entry/jh-vscode` on Unix and `entry/jh-vscode.cmd` on Windows, and keep
 project-specific behavior in configuration.

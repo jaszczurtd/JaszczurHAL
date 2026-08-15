@@ -2,31 +2,31 @@
     {
         "key": "ctrl+shift+1",
         "command": "workbench.action.tasks.runTask",
-        "args": "Build RP2040",
-        "when": "resourceExtname == .h || resourceExtname == .cpp || resourceExtname == .c || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Build"
     },
     {
-        "key": "ctrl+shift+2",
+        "key": "ctrl+shift+6",
         "command": "workbench.action.tasks.runTask",
-        "args": "Build STM32",
-        "when": "resourceExtname == .h || resourceExtname == .cpp || resourceExtname == .c || editorLangId == cpp || editorLangId == c"
-    },
-    {
-        "key": "ctrl+shift+4",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Refresh IntelliSense RP2040",
-        "when": "resourceExtname == .h || resourceExtname == .cpp || resourceExtname == .c || editorLangId == cpp || editorLangId == c"
-    },
-    {
-        "key": "ctrl+shift+5",
-        "command": "workbench.action.tasks.runTask",
-        "args": "Refresh IntelliSense STM32",
-        "when": "resourceExtname == .h || resourceExtname == .cpp || resourceExtname == .c || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Refresh IntelliSense"
     },
     {
         "key": "ctrl+shift+7",
         "command": "workbench.action.tasks.runTask",
-        "args": "Clear Build Artifacts",
-        "when": "resourceExtname == .h || resourceExtname == .cpp || resourceExtname == .c || editorLangId == cpp || editorLangId == c"
+        "args": "Project: Clean"
+    },
+    {
+        "key": "ctrl+shift+0",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Install library"
+    },
+    {
+        "key": "ctrl+shift+alt+1",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Select board (GUI)"
+    },
+    {
+        "key": "ctrl+shift+alt+2",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Project: Select board"
     }
 ]
