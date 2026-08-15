@@ -16,6 +16,11 @@ All notable changes to this project will be documented in this file.
   probe, announcement, delayed response, and truncated question alongside
   WireGuard, preventing mDNS startup from faulting when the pool is exhausted.
   Native builds also compile the upstream mDNS parser for bounded stack use.
+- Made CYW43 mDNS teardown cancel every pending responder timeout and release
+  stored truncated questions before freeing its netif state. The responder is
+  detached before multicast filters change, preventing reentrant or stale
+  callbacks from accessing a stopped or restarted network interface. STM32
+  CYW43 OTA builds now select the same mDNS lifecycle overlay as native RP.
 - Made target descriptors the single source for architecture snapshots by
   generating neutral `HAL_TARGET_*` identity, CPU, FPU, and RAM facts. RP,
   STM32G474, and mock system backends no longer duplicate those values, while

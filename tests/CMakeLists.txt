@@ -351,6 +351,22 @@ target_compile_definitions(test_cyw43_hostname_mdns PRIVATE
 jh_enable_host_warnings(test_cyw43_hostname_mdns ERRORS)
 add_test(NAME test_cyw43_hostname_mdns COMMAND test_cyw43_hostname_mdns)
 
+add_executable(test_lwip_mdns_teardown
+    test_lwip_mdns_teardown.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c
+)
+target_include_directories(test_lwip_mdns_teardown PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/network/lwip/port
+)
+target_compile_definitions(test_lwip_mdns_teardown PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H
+)
+jh_enable_host_warnings(test_lwip_mdns_teardown ERRORS)
+add_test(NAME test_lwip_mdns_teardown COMMAND test_lwip_mdns_teardown)
+
 add_executable(test_ble_hci_transport
     test_ble_hci_transport.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../src/hal/bluetooth/jh_ble_hci_transport.c

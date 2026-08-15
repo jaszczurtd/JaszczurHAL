@@ -265,6 +265,8 @@ if(_jh_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE ${_jh_stm32_selection_defines})
     jh_cmake_defines_contain(_jh_stm32_has_ble_stream
         HAL_ENABLE_BLE_STREAM ${_jh_stm32_selection_defines})
+    jh_cmake_defines_contain(_jh_stm32_has_ota
+        HAL_ENABLE_OTA ${_jh_stm32_selection_defines})
     if(_jh_stm32_has_bluetooth_stage1 AND _jh_stm32_has_ble)
         message(FATAL_ERROR
             "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
@@ -272,6 +274,9 @@ if(_jh_stm32_has_cyw43_gspi)
     set(_jh_stm32_cyw43_options)
     if(_jh_stm32_has_cyw43_lwip)
         list(APPEND _jh_stm32_cyw43_options LWIP)
+    endif()
+    if(_jh_stm32_has_ota)
+        list(APPEND _jh_stm32_cyw43_options MDNS)
     endif()
     if(_jh_stm32_has_bluetooth_stage1 OR _jh_stm32_has_ble)
         list(APPEND _jh_stm32_cyw43_options BLUETOOTH)
