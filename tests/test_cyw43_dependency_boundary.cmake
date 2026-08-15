@@ -22,7 +22,16 @@ file(READ "${_driver}/jh_cyw43_hostname.cpp" _cyw43_hostname)
 file(READ "${_driver}/jh_cyw43_mdns.cpp" _cyw43_mdns)
 file(READ "${JH_ROOT}/cmake/jh_cyw43_driver.cmake" _cyw43_cmake)
 file(READ "${JH_ROOT}/cmake/jh_rp_native_sdk.cmake" _rp_native_cmake)
+file(READ "${JH_ROOT}/cmake/targets/stm32g474.cmake"
+    _stm32_firmware_cmake)
+file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
 file(READ "${JH_ROOT}/src/hal/network/lwip/port/lwipopts.h" _lwipopts)
+file(READ
+    "${JH_ROOT}/src/hal/network/lwip/port/jh_lwip_mdns_adapter.inc"
+    _mdns_adapter)
+file(READ
+    "${JH_ROOT}/src/hal/network/lwip/port/jh_lwip_mdns_teardown.inc"
+    _mdns_teardown)
 file(READ "${JH_ROOT}/src/hal/impl/rp2040/hal_ota.cpp" _rp_ota)
 file(READ
     "${JH_ROOT}/src/hal/impl/rp2040/drivers/rp2040/rp2040_cyw43_provider.cpp"
@@ -73,15 +82,108 @@ foreach(_mdns_contract IN ITEMS
         "JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE"
         "JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE"
         "_jh_generated_mdns_core"
+        "jh_lwip_mdns_upstream.inc"
+        "jh_lwip_mdns_teardown.inc"
         "-fconserve-stack"
         "jh_cyw43_mdns_publish"
         "jh_cyw43_mdns_remove")
     string(FIND
-        "${_cyw43_cmake}\n${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}"
+        "${_cyw43_cmake}\n${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}\n${_mdns_adapter}\n${_mdns_teardown}"
         "${_mdns_contract}" _mdns_contract_at)
     if(_mdns_contract_at EQUAL -1)
         message(FATAL_ERROR
             "CYW43 OTA mDNS contract is missing: ${_mdns_contract}")
+    endif()
+endforeach()
+
+foreach(_stm32_mdns_contract IN ITEMS
+        "HAL_ENABLE_OTA \${_feature_defines}|list(APPEND _stm32_cyw43_options MDNS)"
+        "HAL_ENABLE_OTA \${_jh_stm32_selection_defines}|list(APPEND _jh_stm32_cyw43_options MDNS)")
+    string(REPLACE "|" ";" _stm32_mdns_parts
+        "${_stm32_mdns_contract}")
+    list(GET _stm32_mdns_parts 0 _stm32_ota_detection)
+    list(GET _stm32_mdns_parts 1 _stm32_mdns_selection)
+    if(_stm32_mdns_selection MATCHES "_jh_stm32")
+        set(_stm32_mdns_cmake "${_stm32_library_cmake}")
+    else()
+        set(_stm32_mdns_cmake "${_stm32_firmware_cmake}")
+    endif()
+    foreach(_stm32_mdns_fragment IN ITEMS
+            "${_stm32_ota_detection}" "${_stm32_mdns_selection}")
+        string(FIND "${_stm32_mdns_cmake}" "${_stm32_mdns_fragment}"
+            _stm32_mdns_fragment_at)
+        if(_stm32_mdns_fragment_at EQUAL -1)
+            message(FATAL_ERROR
+                "STM32 CYW43 OTA build does not select mDNS: "
+                "${_stm32_mdns_fragment}")
+        endif()
+    endforeach()
+endforeach()
+
+foreach(_mdns_teardown_handler IN ITEMS
+        "mdns_probe_and_announce"
+        "mdns_multicast_timeout_reset_ipv4"
+        "mdns_multicast_probe_timeout_reset_ipv4"
+        "mdns_multicast_timeout_25ttl_reset_ipv4"
+        "mdns_send_multicast_msg_delayed_ipv4"
+        "mdns_send_unicast_msg_delayed_ipv4"
+        "mdns_multicast_timeout_reset_ipv6"
+        "mdns_multicast_probe_timeout_reset_ipv6"
+        "mdns_multicast_timeout_25ttl_reset_ipv6"
+        "mdns_send_multicast_msg_delayed_ipv6"
+        "mdns_send_unicast_msg_delayed_ipv6"
+        "mdns_handle_tc_question"
+        "pending_tc_questions")
+    string(FIND "${_mdns_teardown}" "${_mdns_teardown_handler}"
+        _mdns_teardown_handler_at)
+    if(_mdns_teardown_handler_at EQUAL -1)
+        message(FATAL_ERROR
+            "CYW43 mDNS teardown misses pending work: ${_mdns_teardown_handler}")
+    endif()
+endforeach()
+
+string(FIND "${_mdns_teardown}"
+    "\n  JH_LWIP_MDNS_SET_CLIENT_DATA(netif, NULL);"
+    _mdns_detach_at)
+string(FIND "${_mdns_teardown}" "\n  JH_LWIP_MDNS_LEAVE_IPV4(netif);"
+    _mdns_leave_at)
+string(FIND "${_mdns_teardown}" "\n  JH_LWIP_MDNS_MEM_FREE(mdns);"
+    _mdns_host_free_at)
+if(_mdns_detach_at LESS 0 OR _mdns_leave_at LESS_EQUAL _mdns_detach_at OR
+   _mdns_host_free_at LESS_EQUAL _mdns_leave_at)
+    message(FATAL_ERROR
+        "CYW43 mDNS teardown must detach before multicast leave and free last")
+endif()
+
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_driver_stop(void)" _driver_stop_begin)
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_driver_restart" _driver_restart_begin)
+string(FIND "${_cyw43_driver_wrapper}"
+    "jh_cyw43_driver_is_ready" _driver_restart_end)
+if(_driver_stop_begin LESS 0 OR _driver_restart_begin LESS 0 OR
+   _driver_restart_end LESS 0 OR
+   _driver_restart_begin LESS_EQUAL _driver_stop_begin OR
+   _driver_restart_end LESS_EQUAL _driver_restart_begin)
+    message(FATAL_ERROR "CYW43 driver lifecycle functions cannot be located")
+endif()
+math(EXPR _driver_stop_length
+    "${_driver_restart_begin} - ${_driver_stop_begin}")
+math(EXPR _driver_restart_length
+    "${_driver_restart_end} - ${_driver_restart_begin}")
+string(SUBSTRING "${_cyw43_driver_wrapper}" ${_driver_stop_begin}
+    ${_driver_stop_length} _driver_stop_body)
+string(SUBSTRING "${_cyw43_driver_wrapper}" ${_driver_restart_begin}
+    ${_driver_restart_length} _driver_restart_body)
+foreach(_driver_lifecycle_body IN ITEMS _driver_stop_body _driver_restart_body)
+    string(FIND "${${_driver_lifecycle_body}}" "jh_cyw43_mdns_remove"
+        _mdns_remove_at)
+    string(FIND "${${_driver_lifecycle_body}}" "cyw43_deinit"
+        _cyw43_deinit_at)
+    if(_mdns_remove_at LESS 0 OR _cyw43_deinit_at LESS 0 OR
+       _cyw43_deinit_at LESS_EQUAL _mdns_remove_at)
+        message(FATAL_ERROR
+            "CYW43 ${_driver_lifecycle_body} must remove mDNS before netif teardown")
     endif()
 endforeach()
 

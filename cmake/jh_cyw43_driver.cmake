@@ -103,6 +103,19 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
     endif()
     jh_cyw43_source_manifest(_jh_cyw43_sources _jh_cyw43_includes
         ${_jh_cyw43_options})
+    if(JH_CYW43_MDNS)
+        set(_jh_mdns_adapter
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/network/lwip/port/jh_lwip_mdns_adapter.inc")
+        set(_jh_mdns_teardown
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/hal/network/lwip/port/jh_lwip_mdns_teardown.inc")
+        foreach(_jh_mdns_overlay IN ITEMS
+                "${_jh_mdns_adapter}" "${_jh_mdns_teardown}")
+            if(NOT EXISTS "${_jh_mdns_overlay}")
+                message(FATAL_ERROR
+                    "CYW43 mDNS lifecycle overlay is missing: ${_jh_mdns_overlay}")
+            endif()
+        endforeach()
+    endif()
     set(_jh_generated_sources)
     foreach(_jh_source IN LISTS _jh_cyw43_sources)
         get_filename_component(_jh_name "${_jh_source}" NAME)
@@ -111,7 +124,15 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
             "${CMAKE_CURRENT_BINARY_DIR}/jh_cyw43/${TARGET_NAME}/${_jh_name}")
         get_filename_component(_jh_generated_dir "${_jh_generated}" DIRECTORY)
         file(MAKE_DIRECTORY "${_jh_generated_dir}")
-        configure_file("${_jh_source}" "${_jh_generated}" COPYONLY)
+        if(JH_CYW43_MDNS AND _jh_name STREQUAL "mdns.c")
+            configure_file("${_jh_source}"
+                "${_jh_generated_dir}/jh_lwip_mdns_upstream.inc" COPYONLY)
+            configure_file("${_jh_mdns_adapter}" "${_jh_generated}" COPYONLY)
+            configure_file("${_jh_mdns_teardown}"
+                "${_jh_generated_dir}/jh_lwip_mdns_teardown.inc" COPYONLY)
+        else()
+            configure_file("${_jh_source}" "${_jh_generated}" COPYONLY)
+        endif()
         list(APPEND _jh_generated_sources "${_jh_generated}")
         if(JH_CYW43_MDNS AND _jh_name STREQUAL "mdns.c")
             set(_jh_generated_mdns_core "${_jh_generated}")
