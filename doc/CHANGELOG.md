@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added a repository-root VS Code static-library workflow for mock, RP2040,
+  RP2350 Arm/RISC-V, and STM32G474 profiles. Global project keybindings now
+  resolve to root-local build, scoped clean, install, board selection, and
+  compile-database actions without changing firmware projects or tracked local
+  paths.
 - Made native RP and STM32G474 CYW43 hostname changes renew an active DHCP
   lease, and made the native RP OTA service publish its configured hostname as
   `<hostname>.local` over mDNS.

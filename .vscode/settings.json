@@ -1,5 +1,11 @@
 {
-    "C_Cpp.default.compileCommands": "/home/jaszczurtd/development/projects_git/libraries/JaszczurHAL/.build/intellisense/rp2040/compile_commands.json",
     "C_Cpp.default.configurationProvider": "",
-    "jaszczurhal.activeIntelliSenseTarget": "rp2040"
+    "C_Cpp.errorSquiggles": "enabled",
+    "cmake.configureOnOpen": false,
+    "files.exclude": {
+        "**/.build": true
+    },
+    "search.exclude": {
+        "**/.build": true
+    }
 }

@@ -27,6 +27,8 @@ third_party/riscv-toolchain/
 # Keep root workspace automation tracked:
 !/.vscode/
 !/.vscode/**
+/.vscode/c_cpp_properties.json
+/.vscode/jaszczurhal.library.local.json
 !examples/*/.vscode/
 !examples/*/.vscode/**
 examples/*/.vscode/jaszczurhal.local.json
