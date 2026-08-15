@@ -12,6 +12,10 @@ All notable changes to this project will be documented in this file.
 - Made native RP and STM32G474 CYW43 hostname changes renew an active DHCP
   lease, and made the native RP OTA service publish its configured hostname as
   `<hostname>.local` over mDNS.
+- Sized the native CYW43 lwIP timeout pool for every concurrent IPv4 mDNS
+  probe, announcement, delayed response, and truncated question alongside
+  WireGuard, preventing mDNS startup from faulting when the pool is exhausted.
+  Native builds also compile the upstream mDNS parser for bounded stack use.
 - Made target descriptors the single source for architecture snapshots by
   generating neutral `HAL_TARGET_*` identity, CPU, FPU, and RAM facts. RP,
   STM32G474, and mock system backends no longer duplicate those values, while

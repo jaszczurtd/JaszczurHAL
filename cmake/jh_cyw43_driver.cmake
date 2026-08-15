@@ -113,11 +113,21 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
         file(MAKE_DIRECTORY "${_jh_generated_dir}")
         configure_file("${_jh_source}" "${_jh_generated}" COPYONLY)
         list(APPEND _jh_generated_sources "${_jh_generated}")
+        if(JH_CYW43_MDNS AND _jh_name STREQUAL "mdns.c")
+            set(_jh_generated_mdns_core "${_jh_generated}")
+        endif()
     endforeach()
 
     target_sources(${TARGET_NAME} PRIVATE ${_jh_generated_sources})
     set_source_files_properties(${_jh_generated_sources} PROPERTIES
         COMPILE_OPTIONS "-Wno-unused-parameter")
+    if(_jh_generated_mdns_core AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        # mdns.c has deeply nested packet parsing paths. Keep their frames
+        # bounded on firmware targets whose cooperative lwIP stack is serviced
+        # from the application's fixed-size main stack.
+        set_property(SOURCE "${_jh_generated_mdns_core}" APPEND PROPERTY
+            COMPILE_OPTIONS -fconserve-stack)
+    endif()
     # The pinned JaszczurHAL headers must win over any CYW43/lwIP headers
     # exposed by the surrounding SDK.
     target_include_directories(${TARGET_NAME} BEFORE PRIVATE ${_jh_cyw43_includes})
