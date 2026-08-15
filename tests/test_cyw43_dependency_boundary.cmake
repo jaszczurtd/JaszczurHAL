@@ -68,16 +68,33 @@ foreach(_mdns_contract IN ITEMS
         "LWIP_MDNS_SEARCH 0"
         "LWIP_NUM_NETIF_CLIENT_DATA 1"
         "LWIP_NETIF_EXT_STATUS_CALLBACK 1"
+        "MDNS_MAX_STORED_PKTS 4"
+        "JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE (6 + MDNS_MAX_STORED_PKTS)"
+        "JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE"
+        "JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE"
+        "_jh_generated_mdns_core"
+        "-fconserve-stack"
         "jh_cyw43_mdns_publish"
         "jh_cyw43_mdns_remove")
     string(FIND
-        "${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}"
+        "${_cyw43_cmake}\n${_rp_native_cmake}\n${_lwipopts}\n${_rp_ota}\n${_cyw43_mdns}\n${_cyw43_driver_wrapper}"
         "${_mdns_contract}" _mdns_contract_at)
     if(_mdns_contract_at EQUAL -1)
         message(FATAL_ERROR
             "CYW43 OTA mDNS contract is missing: ${_mdns_contract}")
     endif()
 endforeach()
+
+set(_lwipopts_compact "${_lwipopts}")
+foreach(_format_character IN ITEMS " " "\t" "\r" "\n" "\\")
+    string(REPLACE "${_format_character}" "" _lwipopts_compact
+        "${_lwipopts_compact}")
+endforeach()
+if(NOT _lwipopts_compact MATCHES
+   "MEMP_NUM_SYS_TIMEOUT\\(LWIP_NUM_SYS_TIMEOUT_INTERNAL\\+JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE\\+JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE\\)")
+    message(FATAL_ERROR
+        "CYW43 lwIP timeout pool must reserve independent WireGuard and full mDNS capacity")
+endif()
 
 string(FIND "${_cyw43_driver_wrapper}"
     "jh_cyw43_port_pin_read" _cyw43_pin_read_begin)

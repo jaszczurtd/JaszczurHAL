@@ -62,18 +62,33 @@
 #define LWIP_MDNS_SEARCH 0
 #define LWIP_NUM_NETIF_CLIENT_DATA 1
 #define LWIP_NETIF_EXT_STATUS_CALLBACK 1
+#ifndef MDNS_MAX_STORED_PKTS
+#define MDNS_MAX_STORED_PKTS 4
+#endif
 #endif
 
 /*
  * The upstream default sizes this pool for lwIP's internal cyclic timers
- * only. A live WireGuard netif and the mDNS responder each own one additional
- * periodic timeout and release it during their respective teardown paths.
+ * only. A live WireGuard netif owns one additional periodic timeout. The
+ * pinned IPv4 mDNS responder can simultaneously own one probe/announce timer,
+ * three multicast suppression timers, two delayed-response timers, and one
+ * timeout for every stored truncated question. Keep the reserve tied to the
+ * configured packet pool so an incoming mDNS burst cannot exhaust SYS_TIMEOUT
+ * and turn lwIP's allocation assertion into a target fault.
  */
-#if defined(HAL_ENABLE_WIREGUARD) && defined(HAL_ENABLE_OTA)
-#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 2)
-#elif defined(HAL_ENABLE_WIREGUARD) || defined(HAL_ENABLE_OTA)
-#define MEMP_NUM_SYS_TIMEOUT (LWIP_NUM_SYS_TIMEOUT_INTERNAL + 1)
+#if defined(HAL_ENABLE_WIREGUARD)
+#define JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE 1
+#else
+#define JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE 0
 #endif
+#if defined(HAL_ENABLE_OTA)
+#define JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE (6 + MDNS_MAX_STORED_PKTS)
+#else
+#define JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE 0
+#endif
+#define MEMP_NUM_SYS_TIMEOUT                                                   \
+  (LWIP_NUM_SYS_TIMEOUT_INTERNAL + JH_LWIP_WIREGUARD_SYS_TIMEOUT_RESERVE +     \
+   JH_LWIP_MDNS_SYS_TIMEOUT_RESERVE)
 
 #define LWIP_NETIF_HOSTNAME 1
 #define LWIP_NETIF_STATUS_CALLBACK 1
