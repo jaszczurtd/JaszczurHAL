@@ -16,9 +16,9 @@ static const uint8_t kTftCsPin = 17u;
 static const uint8_t kTftDcPin = 20u;
 static const uint8_t kTftRstPin = 21u;
 #elif HAL_TARGET_IS_STM32G474
-static const uint8_t kTftCsPin = 4u;   /* PA4 */
-static const uint8_t kTftDcPin = 16u;  /* PB0 */
-static const uint8_t kTftRstPin = 17u; /* PB1 */
+static const uint8_t kTftCsPin = 22u; /* PB6, CN10 pin 17 / CN5 D10 */
+static const uint8_t kTftDcPin = 39u; /* PC7, CN10 pin 19 / CN5 D9 */
+static const uint8_t kTftRstPin = 9u; /* PA9, CN10 pin 21 / CN5 D8 */
 #else
 static const uint8_t kTftCsPin = 17u;
 static const uint8_t kTftDcPin = 20u;

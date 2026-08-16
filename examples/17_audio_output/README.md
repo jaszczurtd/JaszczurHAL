@@ -10,5 +10,7 @@ shown by `28_pga2311` and `44_dacless_audio`:
 Polling is a runtime DACless configuration (`DAClessConfig::useDma`), so it no
 longer consumes a second, functionally identical firmware build in the gate.
 
-RP targets use SPI0 on GP16/GP19/GP18 with CS GP17. STM32G474 uses SPI2 on
-PB14/PB15/PB13 with CS PB12, leaving PA6 available for the PWM audio output.
+RP targets use SPI0 on GP16/GP19/GP18 with CS GP17. NUCLEO-G474RE uses SPI1 on
+PA6/PA7/PA5 with CS PB6: CN10 pins 13/15/11/17, equivalent to
+D12/D11/D13/D10. Its PWM audio output moves to PB0 (CN7 pin 34 / A3), while
+the ADC input remains on PA0 (A0).

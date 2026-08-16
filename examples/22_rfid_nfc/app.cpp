@@ -22,8 +22,16 @@
 #define EXAMPLE_MFRC522_RST 20u
 #define EXAMPLE_PN532_CS 21u
 #define EXAMPLE_PN532_RST 22u
+#elif HAL_TARGET_IS_STM32G474
+/* STM32 pin id = port * 16 + pin: SPI1, primary CS on Nucleo D10. */
+#define EXAMPLE_SPI_MISO 6u
+#define EXAMPLE_SPI_MOSI 7u
+#define EXAMPLE_SPI_SCK 5u
+#define EXAMPLE_MFRC522_CS 22u
+#define EXAMPLE_MFRC522_RST 17u
+#define EXAMPLE_PN532_CS 18u
+#define EXAMPLE_PN532_RST 19u
 #else
-/* STM32 pin id = port * 16 + pin: SPI1 and four independent PB pins. */
 #define EXAMPLE_SPI_MISO 6u
 #define EXAMPLE_SPI_MOSI 7u
 #define EXAMPLE_SPI_SCK 5u

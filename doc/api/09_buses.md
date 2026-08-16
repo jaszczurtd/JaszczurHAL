@@ -59,8 +59,9 @@ retain their checked-build assertions.
 The API reports `HAL_EINVAL` for invalid buses, settings, output pointers and
 non-empty NULL buffers; async DMA start reports `HAL_EBUSY` when a transfer is
 already active. Zero-length buffer operations succeed without requiring a
-buffer. STM32G474 polling paths additionally report `HAL_ETIMEOUT`, while
-RP2040 blocking SDK calls report `HAL_EIO` if they transfer fewer items than
+buffer. STM32G474 polling and DMA wait paths additionally report
+`HAL_ETIMEOUT`, and its DMA path reports `HAL_EIO` on a transfer error. RP2040
+blocking SDK calls report `HAL_EIO` if they transfer fewer items than
 requested. Backends expose only errors they can distinguish honestly.
 
 **DMA writes:** `hal_spi_write_dma()` is the blocking convenience wrapper: it
@@ -75,7 +76,14 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 `_async_wait()` return immediately.
 
 **impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
-**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex, software NSS, polling transfer, AF5 pin setup. Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. The async DMA API currently falls back to the synchronous polling write path.
+**impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex,
+software NSS, polling transfer, AF5 pin setup and interrupt-driven TX DMA.
+Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. SPI1 TX
+reserves DMA1 Channel7 and SPI2 TX reserves DMA1 Channel8; the corresponding
+DMAMUX requests and DMA interrupts chain buffers larger than the 65,535-byte
+hardware counter limit. Async start returns before the bus is idle, while
+transaction end and deinit wait for completion. Buffers in CPU-only CCM SRAM
+use the synchronous polling path because DMA1 cannot access that memory.
 **impl/.mock:** stores init/settings, lock depth, scripted RX bytes and TX log for tests.
 **Thread safety:** `hal_spi_begin_transaction()` applies bus settings but does not lock. Use `hal_spi_lock()` / `hal_spi_unlock()` around multi-step driver operations on shared buses. Treat async DMA lifetime as part of the same transaction/critical section: keep chip-select and bus ownership valid until `_async_wait()` completes.
 

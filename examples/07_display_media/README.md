@@ -22,10 +22,42 @@ Enabled features:
 
 ## Wiring
 
-The application uses SPI bus 0. RP-family targets use CS 17, DC 20, and reset
-21. STM32G474 uses PA4, PB0, and PB1 respectively; PB0/PB1 deliberately avoid
-the PA2/PA3 USART2 debug console. Connect the panel's SPI
-clock and data pins to the bus-0 pins selected by the target backend.
+The application uses SPI bus 0.
+
+### NUCLEO-G474RE
+
+The following table names the connectors printed on the NUCLEO-G474RE PCB.
+The ST morpho connection is listed first; the electrically equivalent Arduino
+Uno V3 header pin is included where one is available. Connector orientation
+and numbering follow Figure 18 and Table 16 in the
+[STM32G4 Nucleo-64 board user manual (UM2505)](https://www.st.com/resource/en/user_manual/um2505-stm32g4-nucleo64-boards-mb1367-stmicroelectronics.pdf).
+
+| ILI9341 module signal | STM32G474RE signal | ST morpho connection | Arduino Uno V3 alternative |
+|---|---|---|---|
+| `SCK` / `CLK` | `PA5` (`SPI1_SCK`) | `CN10` pin 11 | `CN5` pin 6 (`D13`) |
+| `MOSI` / `SDI` / `SDA` | `PA7` (`SPI1_MOSI`) | `CN10` pin 15 | `CN5` pin 4 (`D11`) |
+| `MISO` / `SDO` | `PA6` (`SPI1_MISO`) | `CN10` pin 13 | `CN5` pin 5 (`D12`) |
+| `CS` | `PB6` | `CN10` pin 17 | `CN5` pin 3 (`D10`) |
+| `DC` / `RS` / `A0` | `PC7` | `CN10` pin 19 | `CN5` pin 2 (`D9`) |
+| `RST` / `RESET` | `PA9` | `CN10` pin 21 | `CN5` pin 1 (`D8`) |
+| `GND` | GND | `CN10` pin 20 | `CN6` pin 6 or 7 |
+| `VCC` | 3.3 V | `CN7` pin 16 | `CN6` pin 4 (`3V3`) |
+| `LED` / `BL` | 3.3 V through 100 ohm | `CN7` pin 16 | `CN6` pin 4 (`3V3`) |
+
+This example only writes to the display, so `MISO` / `SDO` may remain
+unconnected. The SPI and control signals are grouped on `CN10`; the equivalent
+Arduino connections are the standard SPI pins plus `D10`, `D9`, and `D8`.
+`PA5` is also connected to the on-board user LED (`LD2`), which may flicker
+during SPI transfers. The GPIO signals use 3.3 V logic; never connect a 5 V
+logic output to them. If the display module includes its own regulator or
+backlight resistor, follow the module schematic instead of bypassing those
+components.
+
+### RP family
+
+RP-family targets use GPIO 17 for `CS`, GPIO 20 for `DC`, and GPIO 21 for
+`RESET`. Connect the panel's SPI clock and data pins to the SPI bus-0 pins
+selected by the target backend.
 
 ## Memory limits
 

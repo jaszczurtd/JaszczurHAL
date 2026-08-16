@@ -62,6 +62,10 @@ void EXTI9_5_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void EXTI15_10_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void DMA1_Channel1_IRQHandler(void)
     __attribute__((weak, alias("Default_Handler")));
+void DMA1_Channel7_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
+void DMA1_Channel8_IRQHandler(void)
+    __attribute__((weak, alias("Default_Handler")));
 void I2C1_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C1_ER_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
 void I2C2_EV_IRQHandler(void) __attribute__((weak, alias("Default_Handler")));
@@ -86,6 +90,7 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_EXTI3 9u
 #define STM32_IRQ_EXTI4 10u
 #define STM32_IRQ_DMA1_CHANNEL1 11u
+#define STM32_IRQ_DMA1_CHANNEL7 17u
 #define STM32_IRQ_EXTI9_5 23u
 #define STM32_IRQ_I2C1_EV 31u
 #define STM32_IRQ_I2C1_ER 32u
@@ -93,6 +98,7 @@ void SysTick_Handler(void) __attribute__((weak, alias("Default_Handler")));
 #define STM32_IRQ_I2C2_ER 34u
 #define STM32_IRQ_EXTI15_10 40u
 #define STM32_IRQ_TIM6_DACUNDER 54u
+#define STM32_IRQ_DMA1_CHANNEL8 96u
 
 /* Vector table: initial SP + 15 system exceptions + populated peripheral IRQs.
  * Unlisted peripheral entries stay zero; only enabled IRQs must be present. */
@@ -115,6 +121,7 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_EXTI3] = EXTI3_IRQHandler,
     [16u + STM32_IRQ_EXTI4] = EXTI4_IRQHandler,
     [16u + STM32_IRQ_DMA1_CHANNEL1] = DMA1_Channel1_IRQHandler,
+    [16u + STM32_IRQ_DMA1_CHANNEL7] = DMA1_Channel7_IRQHandler,
     [16u + STM32_IRQ_EXTI9_5] = EXTI9_5_IRQHandler,
     [16u + STM32_IRQ_I2C1_EV] = I2C1_EV_IRQHandler,
     [16u + STM32_IRQ_I2C1_ER] = I2C1_ER_IRQHandler,
@@ -122,6 +129,7 @@ __attribute__((section(".isr_vector"),
     [16u + STM32_IRQ_I2C2_ER] = I2C2_ER_IRQHandler,
     [16u + STM32_IRQ_EXTI15_10] = EXTI15_10_IRQHandler,
     [16u + STM32_IRQ_TIM6_DACUNDER] = TIM6_DACUNDER_IRQHandler,
+    [16u + STM32_IRQ_DMA1_CHANNEL8] = DMA1_Channel8_IRQHandler,
 };
 
 void Reset_Handler(void) {

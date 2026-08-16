@@ -17,8 +17,16 @@
 #define EXAMPLE_PGA_CS 17u
 #define EXAMPLE_AUDIO_PWM 6u
 #define EXAMPLE_AUDIO_ADC 26u
+#elif HAL_TARGET_IS_STM32G474
+/* SPI1 uses the Nucleo D13/D12/D11/D10 pins; PB0 carries PWM audio. */
+#define EXAMPLE_PGA_BUS 0u
+#define EXAMPLE_PGA_MISO 6u
+#define EXAMPLE_PGA_MOSI 7u
+#define EXAMPLE_PGA_SCK 5u
+#define EXAMPLE_PGA_CS 22u
+#define EXAMPLE_AUDIO_PWM 16u
+#define EXAMPLE_AUDIO_ADC 0u
 #else
-/* SPI2 on PB14/PB15/PB13 keeps PA6 free for the PWM audio output. */
 #define EXAMPLE_PGA_BUS 1u
 #define EXAMPLE_PGA_MISO 30u
 #define EXAMPLE_PGA_MOSI 31u

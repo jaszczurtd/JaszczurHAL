@@ -17,8 +17,16 @@
 #define EPD_DC 20
 #define EPD_RST 21
 #define EPD_BUSY 22
-#else
+#elif HAL_TARGET_IS_STM32G474
 /* STM32 pin id = port * 16 + pin: SPI1 PA6/PA7/PA5. */
+#define EPD_SPI_MISO 6u
+#define EPD_SPI_MOSI 7u
+#define EPD_SPI_SCK 5u
+#define EPD_CS 22u
+#define EPD_DC 39u
+#define EPD_RST 9u
+#define EPD_BUSY 8u
+#else
 #define EPD_SPI_MISO 6u
 #define EPD_SPI_MOSI 7u
 #define EPD_SPI_SCK 5u

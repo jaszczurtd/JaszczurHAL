@@ -189,7 +189,7 @@
 #define RNG_SR_ERRORS (RNG_SR_CECS | RNG_SR_SECS | RNG_SR_CEIS | RNG_SR_SEIS)
 #define RNG_POLL_TIMEOUT 200000u
 
-/* ── DMA1 + DMAMUX1 (minimal Channel1 memory-to-peripheral support) ─────── */
+/* ── DMA1 + DMAMUX1 ─────────────────────────────────────────────────────── */
 #define DMA1_BASE 0x40020000u
 #define DMAMUX1_BASE 0x40020800u
 
@@ -222,9 +222,10 @@
 
 #define DMAMUX_CCR_DMAREQ_ID_MASK 0x7Fu
 
-/* Values from ST stm32g4xx_hal_dma.h for STM32G4 DMAMUX1 timer update
- * requests plus ADC1. */
+/* Values from ST stm32g4xx_hal_dma.h for STM32G4 DMAMUX1 requests. */
 #define DMA_REQUEST_ADC1 5u
+#define DMA_REQUEST_SPI1_TX 11u
+#define DMA_REQUEST_SPI2_TX 13u
 #define DMA_REQUEST_TIM2_UP 60u
 #define DMA_REQUEST_TIM3_UP 65u
 #define DMA_REQUEST_TIM4_UP 71u
@@ -411,6 +412,7 @@
 #define SPI_CR1_SSI (1u << 8)
 #define SPI_CR1_SSM (1u << 9)
 
+#define SPI_CR2_TXDMAEN (1u << 1)
 #define SPI_CR2_DS_POS 8u
 #define SPI_CR2_DS_8BIT (0x7u << SPI_CR2_DS_POS)
 #define SPI_CR2_FRXTH (1u << 12)
@@ -595,11 +597,14 @@
 
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
+#define NVIC_ICER(n) JH_REG32(0xE000E180u + ((uint32_t)(n) * 4u))
 #define NVIC_ICPR(n) JH_REG32(0xE000E280u + ((uint32_t)(n) * 4u))
 #define NVIC_IPR8(irqn) JH_REG8(0xE000E400u + (uint32_t)(irqn))
 
 #define TIM6_DACUNDER_IRQn 54u
 #define DMA1_Channel1_IRQn 11u
+#define DMA1_Channel7_IRQn 17u
+#define DMA1_Channel8_IRQn 96u
 #define I2C1_EV_IRQn 31u
 #define I2C1_ER_IRQn 32u
 #define I2C2_EV_IRQn 33u
