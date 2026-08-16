@@ -17,9 +17,12 @@ module's address pins accordingly.
 
 | Bus or signal | RP family | STM32G474 |
 | --- | --- | --- |
-| I2C SDA / SCL | GP4 / GP5 | PB7 / PB6 |
+| I2C SDA / SCL | GP4 / GP5 | PB9 / PB8 (D14 / D15) |
 | SPI MISO / MOSI / SCK | GP16 / GP19 / GP18 | PA6 / PA7 / PA5 |
-| 74HC595 CS | GP17 | PB0 |
+| 74HC595 CS | GP17 | PB6 |
 | RGB data | GP22 | PA8 |
+
+On NUCLEO-G474RE, SPI MISO/MOSI/SCK and the 74HC595 CS are available on CN10
+pins 13/15/11/17, equivalent to D12/D11/D13/D10.
 
 Use appropriate I2C addresses and external pull-ups for the attached modules.

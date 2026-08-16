@@ -16,10 +16,12 @@ runtime. SDLogger owns bytes 0-7 and the KV store uses bytes 64-575, so their
 records cannot overlap. Native builds reserve separate physical flash regions:
 the default 4 KiB EEPROM region and a 64 KiB LittleFS region.
 
-The SD card uses SPI0. RP targets use MISO/MOSI/SCK/CS GPIO 16/19/18/17;
-STM32G474 uses PA6/PA7/PA5/PA4. Failed SDLogger operations close the current log
-through the public API and retry initialization every five seconds. A failed
-boot-report write is cleaned up and retried independently.
+The SD card uses SPI0. RP targets use MISO/MOSI/SCK/CS GPIO 16/19/18/17.
+NUCLEO-G474RE uses PA6/PA7/PA5/PB6: MISO is on CN10 pin 13 (D12), MOSI on
+CN10 pin 15 (D11), SCK on CN10 pin 11 (D13), and CS on CN10 pin 17 (D10).
+Failed SDLogger operations close the current log through the public API and
+retry initialization every five seconds. A failed boot-report write is cleaned
+up and retried independently.
 
 LittleFS formatting is disabled by default so a mount error cannot erase an
 existing partition. Set `EXAMPLE_STORAGE_ALLOW_LITTLEFS_FORMAT=1` in

@@ -15,6 +15,11 @@
 #define SD_MOSI_PIN 19u
 #define SD_SCK_PIN 18u
 #define SD_CS_PIN 17u
+#elif HAL_TARGET_IS_STM32G474
+#define SD_MISO_PIN 6u
+#define SD_MOSI_PIN 7u
+#define SD_SCK_PIN 5u
+#define SD_CS_PIN 22u
 #else
 #define SD_MISO_PIN 6u
 #define SD_MOSI_PIN 7u

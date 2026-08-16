@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added real interrupt-driven STM32G474 SPI1/SPI2 TX DMA with asynchronous
+  start/busy/wait semantics, automatic chaining beyond the 16-bit DMA counter,
+  bounded completion waits, transfer-error reporting and a safe polling
+  fallback for CPU-only CCM SRAM buffers.
+- Aligned STM32G474 SPI example wiring with the NUCLEO-G474RE SPI1 defaults:
+  PA5/PA6/PA7 for SCK/MISO/MOSI and PB6 for the primary chip select. RP-family
+  example wiring and the frozen external Core1262-HF fixture remain unchanged.
 - Added a repository-root VS Code static-library workflow for mock, RP2040,
   RP2350 Arm/RISC-V, and STM32G474 profiles. Global project keybindings now
   resolve to root-local build, scoped clean, install, board selection, and

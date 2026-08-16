@@ -27,8 +27,16 @@
 #define EXAMPLE_SPI_SCK 18u
 #define EXAMPLE_HC595_CS 17u
 #define EXAMPLE_RGB_PIN 22u
+#elif HAL_TARGET_IS_STM32G474
+/* STM32 pin id = port * 16 + pin: PB9/PB8, SPI1, PB6 and PA8. */
+#define EXAMPLE_I2C_SDA 25u
+#define EXAMPLE_I2C_SCL 24u
+#define EXAMPLE_SPI_MISO 6u
+#define EXAMPLE_SPI_MOSI 7u
+#define EXAMPLE_SPI_SCK 5u
+#define EXAMPLE_HC595_CS 22u
+#define EXAMPLE_RGB_PIN 8u
 #else
-/* STM32 pin id = port * 16 + pin: PB7/PB6, SPI1, PB0 and PA8. */
 #define EXAMPLE_I2C_SDA 23u
 #define EXAMPLE_I2C_SCL 22u
 #define EXAMPLE_SPI_MISO 6u

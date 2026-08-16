@@ -23,10 +23,10 @@ generic CAN facade and SPI dependency.
 
 ### STM32G474
 
-- MISO: PA6
-- MOSI: PA7
-- SCK: PA5
-- CS: PA4
+- MISO: PA6, CN10 pin 13 / D12
+- MOSI: PA7, CN10 pin 15 / D11
+- SCK: PA5, CN10 pin 11 / D13
+- CS: PB6, CN10 pin 17 / D10
 
 Use an MCP2515 board with a CAN transceiver and a properly terminated CAN bus.
 Because `hal_can_create()` enables one-shot TX, a missing ACK on an otherwise
