@@ -643,9 +643,10 @@ critical sections for timeout/reset paths. Up to
 
 ## `hal_rtc` - Real-time clock  *(optional - `HAL_ENABLE_RTC`)*
 
-Handle-based RTC abstraction. Current backends are PCF8563 and DS3231 over I2C.
-The API is vendor-neutral and already exposes generic alarm/timer/clock-output
-and event/IRQ controls.
+Handle-based RTC abstraction. Backends include PCF8563 and DS3231 over I2C,
+the STM32G474 backup-domain RTC, and the RP2040/RP2350 always-on timer. The API
+is vendor-neutral and exposes generic alarm/timer/clock-output,
+source-diagnostic, and event/IRQ controls.
 
 ```c
 #include <hal/rtc/hal_rtc.h>
@@ -662,7 +663,17 @@ typedef struct hal_rtc_impl_s *hal_rtc_t;
 typedef enum {
   HAL_RTC_CHIP_PCF8563 = 0,
   HAL_RTC_CHIP_DS3231,
+  HAL_RTC_CHIP_INTERNAL,
 } hal_rtc_chip_t;
+
+typedef enum {
+  HAL_RTC_CLOCK_SOURCE_AUTO = 0,
+  HAL_RTC_CLOCK_SOURCE_EXTERNAL,
+  HAL_RTC_CLOCK_SOURCE_LSE,
+  HAL_RTC_CLOCK_SOURCE_LSI,
+  HAL_RTC_CLOCK_SOURCE_HSE_DIV32,
+  HAL_RTC_CLOCK_SOURCE_AON,
+} hal_rtc_clock_source_t;
 
 typedef struct {
   uint8_t  sda_pin;
@@ -673,9 +684,14 @@ typedef struct {
 } hal_rtc_i2c_cfg_t;
 
 typedef struct {
+  hal_rtc_clock_source_t clock_source;
+} hal_rtc_internal_cfg_t;
+
+typedef struct {
   hal_rtc_chip_t chip;
   union {
     hal_rtc_i2c_cfg_t i2c;
+    hal_rtc_internal_cfg_t internal;
   } bus;
 } hal_rtc_config_t;
 
@@ -692,9 +708,22 @@ typedef struct {
 
 #define HAL_RTC_FLAG_ALARM (1u << 0)
 #define HAL_RTC_FLAG_TIMER (1u << 1)
+#define HAL_RTC_FLAG_WAKEUP (1u << 2)
 
 #define HAL_RTC_IRQ_ALARM  (1u << 0)
 #define HAL_RTC_IRQ_TIMER  (1u << 1)
+#define HAL_RTC_IRQ_WAKEUP (1u << 2)
+
+#define HAL_RTC_WAKEUP_LOW_POWER (1u << 0)
+
+typedef struct {
+  bool     armed;
+  bool     pending;
+  uint64_t requested_timeout_us;
+  uint64_t programmed_timeout_us;
+  uint64_t resolution_us;
+  uint32_t flags;
+} hal_rtc_wakeup_state_t;
 
 typedef enum {
   HAL_RTC_CLKOUT_DISABLED = 0,
@@ -729,6 +758,7 @@ void      hal_rtc_deinit(hal_rtc_t h);
 bool hal_rtc_get_datetime(hal_rtc_t h, hal_rtc_datetime_t *out_dt);
 bool hal_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok);
+bool hal_rtc_get_clock_source(hal_rtc_t h, hal_rtc_clock_source_t *out_source);
 
 bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask);
 bool hal_rtc_get_interrupt_enable(hal_rtc_t h, uint8_t *out_irq_mask);
@@ -743,11 +773,17 @@ bool hal_rtc_get_timer(hal_rtc_t h, hal_rtc_timer_clock_t *out_timer_clock, uint
 bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 
+hal_status_t hal_rtc_wakeup_arm_ex(hal_rtc_t h, uint64_t timeout_us,
+                                   uint32_t flags);
+hal_status_t hal_rtc_wakeup_cancel_ex(hal_rtc_t h);
+hal_status_t hal_rtc_wakeup_get_state_ex(hal_rtc_t h,
+                                         hal_rtc_wakeup_state_t *out_state);
+
 // Unix epoch helpers (seconds since 1970-01-01 UTC)
 bool hal_rtc_get_epoch(hal_rtc_t h, uint64_t *out_epoch);
 bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
 
-// On-die temperature (DS3231 only; PCF8563 returns false)
+// On-die temperature (DS3231 only)
 bool hal_rtc_get_temperature(hal_rtc_t h, float *out_temperature_c);
 ```
 
@@ -756,31 +792,94 @@ static handle pool, configuration/date/alarm validation, per-handle locking,
 epoch conversion, status propagation, and legacy `bool`/handle wrappers.
 Internal provider operations separate that lifecycle from backend behavior:
 
-- **Shared I2C provider:**
-- PCF8563 backend: direct register access over `hal_i2c` (date-time,
+- **PCF8563:** direct register access over the shared I2C provider (date-time,
   clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
   interrupt enable mask and read-clear event flags).
-- DS3231 backend: shared portable DS3231 driver over `hal_i2c` with date-time,
+- **DS3231:** shared portable driver over the shared I2C provider with date-time,
   clock integrity via OSF/`oscillatorCheck()`, alarm/IRQ mapping using Alarm2,
   and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
   Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
+- **STM32G474 internal RTC:** register-level backup-domain calendar using LSE
+  or LSI, retained-time integrity, Alarm A polling and IRQ delivery through
+  EXTI line 18, a one-shot relative wake-up timer through EXTI line 20 / IRQ 3,
+  and disabled/1 Hz calibration-output modes. Relative timeouts are rounded up
+  to whole seconds and accept values through 65,536 seconds. It supports years
+  2000..2099. Temperature, the generic countdown timer, and the other CLKOUT
+  rates return `HAL_EUNSUPPORTED`; day and weekday cannot both be selected in
+  one Alarm A match.
+- **RP2040/RP2350 internal RTC:** Pico SDK `pico_aon_timer` provider. RP2040
+  uses its hardware calendar RTC; RP2350 uses the Powman linear always-on
+  timer. The backend supports date/time, epoch, integrity, and source queries
+  and reports `HAL_RTC_CLOCK_SOURCE_AON`. Its relative wake-up alarm rounds to
+  the hardware resolution (one second on RP2040 and one millisecond on RP2350)
+  and can request low-power wake routing. Generic calendar alarms, countdown
+  timers, temperature, and active CLKOUT modes return `HAL_EUNSUPPORTED`.
 - **Mock provider:** in-memory state with deterministic injection for unit
   tests; it contains no facade, validation, calendar, pool, or mutex copy.
 
-The facade and both chip drivers use the shared Gregorian calendar core, which
+Relative wake-up is a target-native provider operation. Arming replaces any
+previous relative event on the same internal RTC, reports the requested and
+rounded timeout through `hal_rtc_wakeup_get_state_ex()`, and behaves as a
+one-shot at the HAL boundary. `hal_rtc_get_and_clear_flags_ex()` consumes the
+pending `HAL_RTC_FLAG_WAKEUP`; cancellation also clears it. External I2C
+providers return `HAL_EUNSUPPORTED`. `HAL_RTC_WAKEUP_LOW_POWER` requests the
+backend routing needed by a deeper state, but does not enter that state.
+
+The facade and chip providers use the shared Gregorian calendar core, which
 rejects impossible dates such as April 31 and a non-leap February 29.
 Unix conversion accepts 1970-01-01 through 2099-12-31 and reports
-`HAL_EOVERFLOW` outside that range.
+`HAL_EOVERFLOW` outside that range. The STM32G474 hardware calendar narrows its
+accepted range to 2000-01-01 through 2099-12-31. The RP2350 linear conversion
+accepts dates from the Unix epoch through 2099-12-31.
+
+For the STM32G474 internal backend, `HAL_RTC_CLOCK_SOURCE_AUTO` preserves a
+supported LSE/LSI source already selected in the backup domain. On a fresh
+domain it waits for LSE and uses LSI as a bounded fallback. Explicit `LSE` and
+`LSI` requests never reset the backup domain; a request conflicting with a
+retained source returns `HAL_EBUSY`. `HSE_DIV32` belongs to the portable source
+enum but is unsupported by the current STM32G474 provider. RP targets accept
+`AUTO` or `AON`; both resolve to `AON` without I2C.
+
+The STM32G474 provider reserves TAMP backup register 31 for its `JHRT`
+clock-valid marker. Override `HAL_STM32_RTC_BACKUP_REGISTER_INDEX` when an
+application owns that register. `HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS` and
+`HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS` configure the oscillator waits. The
+relative wake-up API only configures the RTC source; it never changes the MCU
+power state. Use the separately gated `hal_power` API for a complete
+Sleep/STOP/Standby transition.
+
+The RP provider leaves a running AON clock untouched on deinitialization and
+restores it after a reset when the hardware still reports a running, decodable
+calendar. RP boards have no battery-backed RTC supply, so this is warm-reset
+retention while power remains available, not guaranteed timekeeping across a
+power loss. Setting the first valid date starts the AON timer.
+
+```c
+const hal_rtc_config_t cfg = {
+    .chip = HAL_RTC_CHIP_INTERNAL,
+    .bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_AUTO,
+};
+
+hal_rtc_t rtc = NULL;
+if (hal_rtc_init_ex(&cfg, &rtc) == HAL_OK) {
+    hal_rtc_clock_source_t source;
+    (void)hal_rtc_get_clock_source_ex(rtc, &source);
+}
+```
+
 **Thread safety:** the shared facade serializes every runtime provider call with
 a per-handle mutex; I2C traffic is additionally protected by the `hal_i2c` bus
 mutex. Create/destroy follows the project-wide single-core init/deinit policy.
-The mock provider remains intended for deterministic single-threaded tests.
+Each supported MCU exposes one internal RTC/AON resource, so a second
+simultaneous internal handle returns `HAL_EBUSY`. The mock provider remains
+intended for deterministic single-threaded tests.
 
 **Mock helpers:**
 ```c
 void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
 void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
+void hal_mock_rtc_fire_wakeup(hal_rtc_t h);
 ```
 
 **Status-returning `_ex` variants:** every fallible handle/bool operation above
@@ -792,8 +891,10 @@ and intentionally has no `_ex` companion.
 The shared facade reports invalid arguments or configuration (`HAL_EINVAL`),
 pool/mutex exhaustion (`HAL_ENOMEM`), and Unix epoch conversion outside
 1970..2099 (`HAL_EOVERFLOW`). Providers report unsupported chips or chip
-features (`HAL_EUNSUPPORTED`) and backend failures (`HAL_EIO`). I2C bus init
-status is propagated unchanged.
+features (`HAL_EUNSUPPORTED`), retained-source conflicts (`HAL_EBUSY`), an
+incompatible retained 12-hour calendar (`HAL_ECONFIG`), bounded
+startup/register waits (`HAL_ETIMEOUT`), and backend failures (`HAL_EIO`). I2C
+bus init status is propagated unchanged.
 
 ```c
 hal_rtc_t rtc = NULL;

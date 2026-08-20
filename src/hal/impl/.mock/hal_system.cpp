@@ -10,6 +10,7 @@
 
 static uint32_t s_millis = 0;
 static uint32_t s_micros = 0;
+static uint64_t s_micros64 = 0;
 static bool s_watchdog_fed = false;
 static bool s_caused_reboot = false;
 static uint32_t s_free_heap = 256 * 1024;
@@ -23,14 +24,18 @@ uint32_t hal_millis(void) { return s_millis; }
 
 uint32_t hal_micros(void) { return s_micros; }
 
-uint64_t hal_micros64(void) { return (uint64_t)s_micros; }
+uint64_t hal_micros64(void) { return s_micros64; }
 
 void hal_delay_ms(uint32_t ms) {
   s_millis += ms;
   s_micros += ms * 1000;
+  s_micros64 += static_cast<uint64_t>(ms) * UINT64_C(1000);
 }
 
-void hal_delay_us(uint32_t us) { s_micros += us; }
+void hal_delay_us(uint32_t us) {
+  s_micros += us;
+  s_micros64 += us;
+}
 
 void hal_watchdog_feed(void) { s_watchdog_fed = true; }
 
@@ -85,21 +90,35 @@ void hal_mock_set_in_isr(bool in_isr) { s_in_isr = in_isr; }
 void hal_mock_set_millis(uint32_t ms) {
   s_millis = ms;
   s_micros = ms * 1000;
+  s_micros64 = static_cast<uint64_t>(ms) * UINT64_C(1000);
 }
 
 void hal_mock_advance_millis(uint32_t ms) {
   s_millis += ms;
   s_micros += ms * 1000;
+  s_micros64 += static_cast<uint64_t>(ms) * UINT64_C(1000);
 }
 
 void hal_mock_set_micros(uint32_t us) {
   s_micros = us;
   s_millis = us / 1000;
+  s_micros64 = us;
 }
 
 void hal_mock_advance_micros(uint32_t us) {
   s_micros += us;
   s_millis = s_micros / 1000;
+  s_micros64 += us;
+}
+
+void hal_mock_set_micros64(uint64_t us) {
+  s_micros64 = us;
+  s_micros = static_cast<uint32_t>(us);
+  s_millis = static_cast<uint32_t>(us / UINT64_C(1000));
+}
+
+void hal_mock_advance_micros64(uint64_t us) {
+  hal_mock_set_micros64(s_micros64 + us);
 }
 
 bool hal_mock_watchdog_was_fed(void) { return s_watchdog_fed; }

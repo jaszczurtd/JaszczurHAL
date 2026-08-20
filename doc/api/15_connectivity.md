@@ -1990,12 +1990,35 @@ void     hal_time_extract_minutes(long time_in_minutes,
                                   int *hours, int *minutes);
 
 // Available with HAL_ENABLE_TIME.
+typedef enum {
+  HAL_TIME_SOURCE_UNSET = 0,
+  HAL_TIME_SOURCE_MANUAL,
+  HAL_TIME_SOURCE_RTC,
+  HAL_TIME_SOURCE_NTP,
+} hal_time_source_t;
+
+typedef enum {
+  HAL_TIME_NTP_IDLE = 0,
+  HAL_TIME_NTP_IN_PROGRESS,
+  HAL_TIME_NTP_SYNCHRONIZED,
+  HAL_TIME_NTP_FAILED,
+} hal_time_ntp_state_t;
+
+hal_status_t hal_time_set_unix_ex(uint64_t unix_time, uint32_t micros,
+                                  hal_time_source_t source);
+hal_status_t hal_time_get_status_ex(hal_time_status_t *out_status);
 bool     hal_time_set_timezone(const char *tz);     // POSIX TZ string
 bool     hal_time_sync_ntp(const char *primary_server, const char *secondary_server);
+hal_status_t hal_time_sync_ntp_ex(const char *primary_server,
+                                  const char *secondary_server);
 uint64_t hal_time_unix(void);                       // seconds since epoch (Y2038-safe)
-bool     hal_time_is_synced(uint64_t min_unix);     // true when time >= min_unix
+bool     hal_time_is_synced(uint64_t min_unix);     // valid and time >= min_unix
 bool     hal_time_get_local(struct tm *out_tm);
 bool     hal_time_format_local(char *out, size_t out_size, const char *format);
+
+// Additionally available with HAL_ENABLE_RTC.
+hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags);
+hal_status_t hal_time_detach_rtc_ex(void);
 ```
 
 The pure helpers use the shared proleptic-Gregorian calendar core. Component
@@ -2011,17 +2034,37 @@ rejected, and adjustment normalizes day/month/year rollover.
 `hal_time_extract_minutes()` uses C quotient/remainder semantics and accepts
 either output pointer as optional.
 
-**Shared implementation:** `hal/time/hal_time_ntp.cpp` owns the bounded NTP
-state machine, primary/secondary fallback, response-token validation,
-synchronized 64-bit Unix epoch tracking, POSIX timezone handling, and local
-time conversion. Target files only bind synchronized time to their runtime;
-the host mock adds deterministic state and UDP injection.
+**Shared implementation:** `hal/time/hal_time_ntp.cpp` is the single runtime
+wall-clock owner. `hal_time_set_unix_ex()` is the common setter used by manual
+callers, RTC restore, NTP, and target libc adapters. The clock advances from a
+64-bit monotonic-microsecond base, so a wrap of the 32-bit millisecond counter
+does not move wall time backwards. RP and STM32G474 `gettimeofday()` and
+`settimeofday()` adapters read and update this same state rather than keeping a
+second software epoch.
+
+`hal_time_status_t` returns one coherent snapshot: validity, source, Unix
+seconds and microseconds, NTP state, the last NTP result and synchronization
+epoch, plus RTC attachment/result fields. `HAL_TIME_NTP_IN_PROGRESS` uses
+`HAL_EAGAIN`; `HAL_TIME_NTP_FAILED` retains the concrete transport or timeout
+error. `HAL_TIME_NTP_IDLE` has no history and reports `HAL_NONE`. This lets an
+application distinguish a valid clock restored from RTC from completion of a
+new NTP request.
+
+With RTC enabled, attach a caller-owned RTC using
+`HAL_TIME_RTC_RESTORE_IF_VALID`, `HAL_TIME_RTC_WRITE_AFTER_NTP`, or both. A
+valid RTC seeds only an unset runtime clock. An invalid RTC stays attached and
+is initialized by the next validated NTP result. A restore read error likewise
+keeps the attachment and is exposed through `last_rtc_status`. The RTC handle
+must outlive the attachment; `hal_time_detach_rtc_ex()` waits for any active NTP
+persistence write before returning, after which the caller may deinitialize the
+RTC.
 
 **Thread safety:** The pure helpers are reentrant. Optional system/NTP APIs use
-mutex-protected state snapshots and support concurrent tasks/cores. DNS and
-UDP operations run without the state mutex, so a network service callback may
-re-enter a time getter without deadlocking. Calling any time getter services a
-pending request; a 5-second primary timeout starts the optional secondary.
+mutex-protected state snapshots and support concurrent tasks/cores. DNS, UDP,
+and RTC I/O run without the wall-clock state mutex, so a network service
+callback may re-enter a time getter without deadlocking. Calling any time
+getter or `hal_time_get_status_ex()` services a pending request; a 5-second
+primary timeout starts the optional secondary.
 
 **Mock helpers:**
 ```c

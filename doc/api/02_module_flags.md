@@ -69,7 +69,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 plus experimental, software-only SX1261 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_SX127X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx127x/*` | Experimental, software-only SX1276/SX1278 provider over HAL SPI/GPIO (propagates LORA + SPI and conflicts with SX126X); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
-| `HAL_ENABLE_TIME` | optional declarations in `hal_time.h` | target `hal_time.cpp` | WiFi NTP helpers (propagates UDP + WIFI); pure calendar/range helpers stay unconditional |
+| `HAL_ENABLE_TIME` | optional declarations in `hal_time.h` | shared runtime clock + target libc bridge | Runtime setter/status and WiFi NTP helpers (propagates UDP + WIFI); pure calendar/range helpers stay unconditional |
 | `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates TCP + WIFI) |
 | `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
 | `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
@@ -98,9 +98,11 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_MCP2515` | `hal_can.h` + `hal/can/mcp2515/mcp2515_driver.h` | target `hal_can.cpp` facade + `hal/can/mcp2515/hal_can_mcp2515.cpp` + `hal/can/mcp2515/hal_can_mcp2515_config.cpp` + `hal/can/mcp2515/mcp2515_driver.cpp` | Shared HAL-only MCP2515 CAN backend (propagates CAN + SPI) |
 | `HAL_ENABLE_MCP251XFD` | `hal_can.h` + `hal/can/mcp251xfd/mcp251xfd_driver.h` | target `hal_can.cpp` facade + `hal/can/mcp251xfd/hal_can_mcp251xfd.cpp` + `hal/can/mcp251xfd/hal_can_mcp251xfd_config.cpp` + `hal/can/mcp251xfd/mcp251xfd_driver.cpp` | Shared MCP2517FD/MCP2518FD CAN FD backend (propagates CAN + SPI) |
 | `HAL_ENABLE_STM32G474_FDCAN` | `hal_can.h` | `impl/stm32g474/hal_can.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan.cpp` + `impl/stm32g474/hal_can_stm32g474_fdcan_config.cpp` | Native STM32G474 FDCAN1 CAN FD backend (propagates CAN; compile-time rejected outside STM32G474) |
-| `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563 or DS3231 backend)* |
+| `HAL_ENABLE_RTC` | `hal_rtc.h` | `hal_rtc.cpp` | *(needs PCF8563, DS3231, or internal backend)* |
 | `HAL_ENABLE_PCF8563` | `hal_rtc.h` | `hal_rtc.cpp` | PCF8563 backend (propagates RTC + I2C) |
 | `HAL_ENABLE_DS3231` | `hal_rtc.h` | `hal_rtc.cpp` | DS3231 backend (propagates RTC + I2C) |
+| `HAL_ENABLE_INTERNAL_RTC` | `hal_rtc.h` | target RTC provider | Target-native RTC backend for STM32G474 and RP2040/RP2350 (propagates RTC; no I2C) |
+| `HAL_ENABLE_POWER_MANAGEMENT` | `hal_power.h` | target `hal_power.cpp` | Capability-driven Sleep/deep-sleep/power-down API (propagates INTERNAL_RTC + RTC); see [Timers and system](06_timers_system.md#halpower-low-power-transitions-optional-halenablepowermanagement) |
 | `HAL_ENABLE_THERMOCOUPLE` | `hal_thermocouple.h` | `hal_thermocouple.cpp` | *(needs MCP9600 or MAX6675 backend)* |
 | `HAL_ENABLE_MCP9600` | `hal_thermocouple.h` + `hal/temperature/mcp9600/mcp9600_driver.h` | `hal_thermocouple.cpp` + `hal/temperature/mcp9600/mcp9600_driver.cpp` | shared HAL-only MCP9600/MCP9601 driver (propagates THERMOCOUPLE + I2C) |
 | `HAL_ENABLE_MAX6675` | `hal_thermocouple.h` + `hal/temperature/max6675/max6675_driver.h` | `hal_thermocouple.cpp` + `hal/temperature/max6675/max6675_driver.cpp` | shared HAL-only MAX6675 bit-bang driver (propagates THERMOCOUPLE) |
@@ -208,6 +210,8 @@ HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C + HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC + HAL_ENABLE_I2C
+HAL_ENABLE_INTERNAL_RTC-> HAL_ENABLE_RTC
+HAL_ENABLE_POWER_MANAGEMENT -> HAL_ENABLE_INTERNAL_RTC -> HAL_ENABLE_RTC
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT + HAL_ENABLE_I2C
@@ -286,6 +290,8 @@ modules you use:
 #define HAL_ENABLE_DACLESS // DACless PWM-audio engine -> DMA_PWM_AUDIO + PWM_FREQ
 #define HAL_ENABLE_UART
 #define HAL_ENABLE_PCF8563       // -> propagates RTC + I2C
+#define HAL_ENABLE_INTERNAL_RTC  // -> RTC; native on STM32G474 and RP family
+#define HAL_ENABLE_POWER_MANAGEMENT // -> INTERNAL_RTC + RTC
 #define HAL_ENABLE_PWM_FREQ
 ```
 
@@ -426,7 +432,9 @@ Actual compiled dependencies are controlled by the module set:
 - modules left disabled (the default) compile out both declarations and
   implementation details
 
-\* `HAL_ENABLE_TIME` enables NTP/local-time APIs. The pure
+\* `HAL_ENABLE_TIME` enables the shared runtime clock, status, NTP, and
+local-time APIs. With `HAL_ENABLE_RTC`, it can restore from RTC and persist
+validated NTP results. The pure
 `hal_time_from_components(...)`, `hal_time_is_daylight_saving_time(...)`,
 `hal_time_adjust_cet_cest(...)`, `hal_time_is_in_range(...)`, and
 `hal_time_extract_minutes(...)` helpers remain available unconditionally with

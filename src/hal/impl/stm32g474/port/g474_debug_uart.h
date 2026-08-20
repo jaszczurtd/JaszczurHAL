@@ -24,6 +24,9 @@ void g474_debug_uart_init(void);
 /** Blocking write of one byte. */
 void g474_debug_uart_putc(char c);
 
+/** Wait until every queued byte has left the USART transmitter. */
+void g474_debug_uart_flush(void);
+
 /** Blocking write of a NUL-terminated string. */
 void g474_debug_uart_puts(const char *s);
 

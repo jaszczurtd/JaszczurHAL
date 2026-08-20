@@ -11,6 +11,8 @@
 #include "port/g474_debug_uart.h"
 #endif
 
+static volatile bool s_serial_flush_enabled = false;
+
 void jh_serial_port_begin(uint32_t baud) {
   (void)baud;
 #ifdef JH_STM32G474_HW
@@ -20,7 +22,9 @@ void jh_serial_port_begin(uint32_t baud) {
 #endif
 }
 
-void jh_serial_port_set_flush(bool enabled) { (void)enabled; }
+void jh_serial_port_set_flush(bool enabled) {
+  __atomic_store_n(&s_serial_flush_enabled, enabled, __ATOMIC_RELEASE);
+}
 
 void jh_serial_port_message_begin(jh_serial_port_message_t kind) { (void)kind; }
 
@@ -51,7 +55,16 @@ size_t jh_serial_port_finish_line(char line_ending[2]) {
 #endif
 }
 
-void jh_serial_port_flush(void) {}
+void jh_serial_port_flush(void) {
+  if (!__atomic_load_n(&s_serial_flush_enabled, __ATOMIC_ACQUIRE)) {
+    return;
+  }
+#ifdef JH_STM32G474_HW
+  g474_debug_uart_flush();
+#else
+  (void)fflush(stdout);
+#endif
+}
 
 int jh_serial_port_available(void) { return 0; }
 

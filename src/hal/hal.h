@@ -191,6 +191,9 @@
 #ifdef HAL_ENABLE_ADP5360
 #include "hal/power/hal_adp5360.h"
 #endif
+#ifdef HAL_ENABLE_POWER_MANAGEMENT
+#include "hal/power/hal_power.h"
+#endif
 #ifdef HAL_ENABLE_TSC2007
 #include "hal/input/hal_tsc2007.h"
 #endif

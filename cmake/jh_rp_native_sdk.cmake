@@ -35,6 +35,7 @@ jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
+jh_hal_define_enabled(_jh_native_internal_rtc HAL_ENABLE_INTERNAL_RTC)
 jh_hal_define_enabled(_jh_native_littlefs HAL_ENABLE_LITTLEFS)
 jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
 jh_hal_define_enabled(_jh_native_sx126x HAL_ENABLE_SX126X)
@@ -257,6 +258,9 @@ target_link_libraries(JaszczurHAL PUBLIC
     hardware_uart
     hardware_watchdog
 )
+if(_jh_native_internal_rtc)
+    target_link_libraries(JaszczurHAL PUBLIC pico_aon_timer)
+endif()
 
 jh_hal_define_enabled(_jh_native_tls HAL_ENABLE_TLS)
 if(_jh_native_tls)

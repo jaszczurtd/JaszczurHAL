@@ -802,6 +802,127 @@ void hal_mock_fault_diagnostics_reset(void);
 
 ---
 
+## `hal_power` - Low-power transitions *(optional - `HAL_ENABLE_POWER_MANAGEMENT`)*
+
+The power API is separate from RTC ownership. `hal_rtc_wakeup_arm_ex()` can
+configure a relative hardware wake-up event, while `hal_power_enter_ex()` owns
+the complete processor transition, clock restoration, monotonic-time
+compensation, callbacks, and wake classification. Enabling power management
+propagates `HAL_ENABLE_INTERNAL_RTC` and `HAL_ENABLE_RTC`.
+
+```c
+#include <hal/power/hal_power.h>
+
+typedef enum {
+  HAL_POWER_STATE_SLEEP = 0,
+  HAL_POWER_STATE_DEEP_SLEEP,
+  HAL_POWER_STATE_POWER_DOWN,
+} hal_power_state_t;
+
+typedef enum {
+  HAL_POWER_POLICY_FAST_WAKE = 0,
+  HAL_POWER_POLICY_LOWEST_POWER,
+} hal_power_policy_t;
+
+#define HAL_POWER_WAKE_SOURCE_RTC       (1u << 0)
+#define HAL_POWER_WAKE_SOURCE_INTERRUPT (1u << 1)
+
+typedef enum {
+  HAL_POWER_WAKE_REASON_UNKNOWN = 0,
+  HAL_POWER_WAKE_REASON_RTC,
+  HAL_POWER_WAKE_REASON_INTERRUPT,
+} hal_power_wake_reason_t;
+
+typedef struct {
+  bool supported;
+  bool resumes_execution;
+  bool retains_ram;
+  bool can_compensate_monotonic_time;
+  uint32_t supported_policies;
+  uint32_t wake_sources;
+  uint64_t minimum_rtc_timeout_us;
+  uint64_t maximum_rtc_timeout_us;
+  uint64_t rtc_resolution_us;
+} hal_power_capabilities_t;
+
+typedef struct hal_power_result_s {
+  hal_power_state_t state;
+  hal_power_wake_reason_t reason;
+  uint32_t wake_sources;
+  uint64_t elapsed_us;
+  bool resumed_from_reset;
+} hal_power_result_t;
+
+typedef struct {
+  hal_power_state_t state;
+  hal_power_policy_t policy;
+  uint32_t wake_sources;
+  hal_rtc_t rtc;
+  uint64_t rtc_timeout_us;
+  hal_power_prepare_callback_t prepare;
+  hal_power_resume_callback_t resume;
+  void *user_data;
+} hal_power_request_t;
+
+hal_status_t hal_power_get_capabilities_ex(
+    hal_power_state_t state, hal_power_capabilities_t *out_capabilities);
+hal_status_t hal_power_enter_ex(const hal_power_request_t *request,
+                                hal_power_result_t *out_result);
+hal_status_t hal_power_get_last_wake_ex(hal_power_result_t *out_result);
+```
+
+Always query capabilities before selecting a state. A successful query may
+return `supported=false`; this is how one portable binary can degrade to a
+shallower mode. RTC requests accept every positive timeout through the reported
+maximum and round upward to `rtc_resolution_us`. The RTC handle must be the
+target-native internal provider. External PCF8563/DS3231 handles return
+`HAL_EUNSUPPORTED` for relative wake-up.
+
+| Target/runtime | `SLEEP` | `DEEP_SLEEP` | `POWER_DOWN` |
+|---|---|---|---|
+| STM32G474 bare metal | Cortex-M4 Sleep / WFI, fast-wake policy | STOP0 for fast wake, STOP1 for lowest power | Standby, lowest-power policy, reset-style RTC wake |
+| RP2040/RP2350 bare metal | CPU WFI with RTC AON or an already-enabled interrupt | unsupported with the pinned Pico SDK integration | unsupported with the pinned Pico SDK integration |
+| Mock | deterministic resume simulation | deterministic resume simulation | deterministic reset-style result; no `resume` callback |
+| FreeRTOS | unsupported until scheduler/tickless-idle ownership is integrated | unsupported | unsupported |
+
+`HAL_POWER_WAKE_SOURCE_INTERRUPT` means an interrupt source already configured
+by its owning module, such as GPIO/EXTI. The power API does not configure pins,
+interrupt polarity, peripheral wake mode, or active transfers. The optional
+`prepare` callback runs after the RTC wake event is armed and should suspend
+display, radio, DMA, USB, and application-owned peripherals. On a resume-style
+wake, clocks and the system time base are restored before `resume` is called.
+Buffered diagnostics must also be drained before returning from `prepare`;
+`hal_serial_set_flush(true)` makes the STM32G474 USART2 port wait for physical
+transmission completion. The callback is not called after `POWER_DOWN`, because
+execution restarts from reset.
+
+On STM32G474, RTC-timed Sleep/STOP transitions keep `hal_micros64()` and
+`hal_millis()` monotonic by adding the programmed RTC interval while SysTick is
+stopped. The 170 MHz PLL tree and SysTick are restored before returning to the
+caller. `can_compensate_monotonic_time` describes this RTC-timed guarantee; an
+arbitrary interrupt-only STOP interval has no precise elapsed-time source and
+must not be interpreted as a measured sleep duration.
+
+STM32G474 Standby stores an owned marker and programmed timeout in TAMP backup
+registers 30 and 29 by default. On the next boot, `SystemInit()` captures and
+consumes the marker before RTC initialization can clear the hardware flags.
+`hal_power_get_last_wake_ex()` reports `resumed_from_reset=true` only when the
+Standby flag and marker were present; it reports RTC as the reason only when
+the RTC wake-up flag was also present. Early capture also disables the hardware
+wake-up timer left in the backup domain. Override
+`HAL_STM32_POWER_BACKUP_REGISTER_INDEX` and
+`HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX` when an application owns those
+registers; both indexes and the RTC integrity-marker index must be distinct.
+
+The transition is synchronous and single-owner. A concurrent transition
+returns `HAL_EBUSY`. `prepare` may abort by returning an error, in which case
+the armed RTC event is canceled. A reset-style transition returns `HAL_EAGAIN`
+without entering Standby if its one-shot RTC event expires during `prepare`.
+`out_result` is optional for resume-style transitions because the same result
+remains available through `hal_power_get_last_wake_ex()`.
+
+---
+
 ## `hal_bits` - Bit helpers
 
 ```c

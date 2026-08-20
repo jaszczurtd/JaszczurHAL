@@ -295,9 +295,12 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_ds18b20` | non-blocking request/poll/take_latest flow, busy-state behavior, CRC/presence handling |
 | `test_hal_dht` | DHT GPIO transaction timing, checksum handling, cached sample getters and critical-section restoration |
 | `test_hal_onewire` | reset/read/write/select/search wrappers, CRC8/CRC16 helpers and mock bus locking |
-| `test_hal_rtc` | RTC init/get/set datetime, full Gregorian validation, 1970/2000/2099 epoch boundaries and overflow, integrity flag, interrupt mask, read-clear event flags, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
+| `test_hal_rtc` | RTC init/get/set datetime, internal/external clock-source reporting, non-I2C provider dispatch, full Gregorian validation, 1970/2000/2099 epoch boundaries and overflow, integrity flag, interrupt mask, read-clear event flags, relative wake-up one-shot/state behavior, CLKOUT/timer/alarm configuration, legacy invalid-input guards and `_ex` status mapping |
 | `test_jh_rtc_i2c_provider` | Shared PCF8563/DS3231 provider selection, metadata, datetime/event translation, and backend capability status mapping over mock HAL I2C |
-| `test_rtc_architecture` | Single RTC facade ownership, deleted target-local copies, provider boundaries, shared validation/locking, HAL-only chip drivers, and source-manifest wiring |
+| `test_stm32_rtc_codec` | STM32G474 RTC TR/DR and Alarm A BCD register encoding, calendar/range rejection, day-versus-weekday constraints, LSE/LSI 1 Hz prescalers, and wake-up counter rounding/bounds |
+| `test_rtc_architecture` | Single RTC facade ownership, I2C/internal provider boundaries, shared validation/locking, HAL-only chip drivers, STM32G474 WUT and RP AON alarm dispatch, and source-manifest wiring |
+| `test_hal_power` / `test_hal_power_header_c` | Power capabilities, request validation, callback ordering, RTC wake, monotonic elapsed time, reset-style mock behavior, cleanup, and C header compatibility |
+| `test_power_architecture` | Separate RTC/power ownership, target backend presence, STM32 STOP/Standby mappings, RP AON integration, generated feature dependency, and example wiring |
 | `test_jh_calendar` | Gregorian leap-year/month-length/day-of-week validation, impossible dates, Unix epoch zero, leap-day round-trip, RTC upper boundary and 64-bit overflow statuses |
 | `test_calendar_architecture` | Shared calendar source ownership, HAL-only legacy time wrappers, and rejection of target/driver-local calendar algorithms or `hal_time_from_components()` copies |
 | `test_hal_eeprom` | byte/int write-read, `commit` flag |
@@ -367,7 +370,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_ota_image` | Versioned OTA manifest and redundant boot-state encoding, CRC/HMAC validation, corruption handling, sequence wraparound and newest-record selection |
 | `test_ota_swap_engine` | Resumable program/staging sector swap across every simulated pre/post-mutation failure boundary, reverse swap rollback and corrupt phase rejection |
 | `test_rp_ota_artifacts` | Native RP OTA packaging helper, including RP2040-E14 sector padding, real-page preservation, UF2 renumbering and overlap rejection |
-| `test_hal_time` | timezone, NTP sync, Unix/local time formatting, component conversion and uint32 overflow, CET/CEST boundaries and rollover, half-open ranges, and minute extraction |
+| `test_hal_time` | shared setter/status, 64-bit monotonic progression across 32-bit wrap, RTC restore and NTP persistence, NTP success/failure state, timezone/local formatting, component conversion, CET/CEST, ranges, and minute extraction |
 | `test_hal_kv` | u32/blob CRUD, delete, unchanged-skip, GC, concurrent updates, direct EEPROM-status propagation, uninitialised/range/capacity errors and output initialization |
 | `test_hal_crypto` | Base64/MD5/one-shot and incremental SHA-256/HMAC-SHA256/ChaCha20/ChaCha20-Poly1305 helper behavior, input validation, and ChaCha20 counter-wrap rejection regression checks |
 | `test_wireguard_crypto_shared` | shared WireGuard crypto primitives (`crypto_equal/zero`, BLAKE2s, X25519, ChaCha20, ChaCha20-Poly1305 including RFC8439 IETF detached AEAD vectors) |

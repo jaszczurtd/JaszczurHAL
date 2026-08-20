@@ -10,11 +10,17 @@
 
 #include <sys/time.h>
 
-void jh_time_platform_apply_unix(uint64_t unix_time, uint32_t micros) {
-  struct timeval system_time = {};
-  system_time.tv_sec = static_cast<time_t>(unix_time);
-  system_time.tv_usec = static_cast<suseconds_t>(micros);
-  (void)settimeofday(&system_time, nullptr);
+void jh_time_platform_clock_changed(void) {}
+
+extern "C" int _gettimeofday(struct timeval *time_value, void *timezone) {
+  (void)timezone;
+  return jh_time_libc_gettimeofday(time_value);
+}
+
+extern "C" int settimeofday(const struct timeval *time_value,
+                            const struct timezone *timezone) {
+  (void)timezone;
+  return jh_time_libc_settimeofday(time_value);
 }
 
 #endif /* HAL_ENABLE_TIME */

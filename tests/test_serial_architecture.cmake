@@ -9,8 +9,11 @@ set(_ports
     "${JH_ROOT}/src/hal/impl/.mock/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/stm32g474/hal_serial.cpp")
+set(_stm32_uart
+    "${JH_ROOT}/src/hal/impl/stm32g474/port/g474_debug_uart.c")
 
-foreach(_required IN ITEMS "${_core}" "${_port_header}" ${_ports})
+foreach(_required IN ITEMS "${_core}" "${_port_header}" ${_ports}
+                           "${_stm32_uart}")
     if(NOT EXISTS "${_required}")
         message(FATAL_ERROR "Serial core/port source is missing: ${_required}")
     endif()
@@ -84,6 +87,16 @@ foreach(_port IN LISTS _ports)
             "Target-local serial/debug core logic returned: ${_port}")
     endif()
 endforeach()
+
+file(READ "${JH_ROOT}/src/hal/impl/stm32g474/hal_serial.cpp"
+     _stm32_port_contents)
+file(READ "${_stm32_uart}" _stm32_uart_contents)
+if(NOT _stm32_port_contents MATCHES
+   "g474_debug_uart_flush[ \t\r\n]*\\(" OR
+   NOT _stm32_uart_contents MATCHES "USART_ISR_TC")
+    message(FATAL_ERROR
+        "STM32 serial flush must wait for physical USART transmission")
+endif()
 
 file(GLOB_RECURSE _serial_sources
     "${JH_ROOT}/src/hal/serial/hal_serial.cpp"

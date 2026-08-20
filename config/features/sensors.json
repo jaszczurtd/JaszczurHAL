@@ -21,6 +21,9 @@
       "implies": ["HAL_ENABLE_I2C"]
     },
     "HAL_ENABLE_GPS": {},
+    "HAL_ENABLE_INTERNAL_RTC": {
+      "implies": ["HAL_ENABLE_RTC"]
+    },
     "HAL_ENABLE_IRSMALL_DECODER": {},
     "HAL_ENABLE_MAX5395": {
       "implies": ["HAL_ENABLE_DIGIPOT", "HAL_ENABLE_I2C"]

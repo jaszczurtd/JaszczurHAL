@@ -76,6 +76,112 @@ void test_init_ds3231_backend_returns_handle(void) {
   hal_rtc_deinit(rtc);
 }
 
+void test_clock_source_reports_external_provider(void) {
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_clock_source_ex(s_rtc, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_EXTERNAL, source);
+}
+
+void test_internal_backend_skips_i2c_config_and_resolves_clock(void) {
+  hal_rtc_config_t cfg = {};
+  cfg.chip = HAL_RTC_CHIP_INTERNAL;
+  cfg.bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_AUTO;
+
+  hal_rtc_t rtc = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &rtc));
+  TEST_ASSERT_NOT_NULL(rtc);
+
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_clock_source_ex(rtc, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_LSE, source);
+  hal_rtc_deinit(rtc);
+
+  cfg.bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_LSI;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &rtc));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_clock_source_ex(rtc, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_LSI, source);
+  hal_rtc_deinit(rtc);
+}
+
+void test_internal_backend_rejects_unsupported_clock_source(void) {
+  hal_rtc_config_t cfg = {};
+  cfg.chip = HAL_RTC_CHIP_INTERNAL;
+  cfg.bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_HSE_DIV32;
+
+  hal_rtc_t rtc = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_rtc_init_ex(&cfg, &rtc));
+  TEST_ASSERT_NULL(rtc);
+}
+
+void test_internal_mock_accepts_aon_clock_source(void) {
+  hal_rtc_config_t cfg = {};
+  cfg.chip = HAL_RTC_CHIP_INTERNAL;
+  cfg.bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_AON;
+
+  hal_rtc_t rtc = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &rtc));
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_clock_source_ex(rtc, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_AON, source);
+  hal_rtc_deinit(rtc);
+}
+
+void test_relative_wakeup_is_internal_and_one_shot(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_rtc_wakeup_arm_ex(s_rtc, 1000000u, 0u));
+
+  hal_rtc_config_t cfg = {};
+  cfg.chip = HAL_RTC_CHIP_INTERNAL;
+  cfg.bus.internal.clock_source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  hal_rtc_t rtc = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&cfg, &rtc));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_wakeup_arm_ex(rtc, 0u, 0u));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_rtc_wakeup_arm_ex(rtc, 2500001u, UINT32_C(0x80000000)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_rtc_wakeup_arm_ex(rtc, 2500001u, HAL_RTC_WAKEUP_LOW_POWER));
+
+  hal_rtc_wakeup_state_t state = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_wakeup_get_state_ex(rtc, &state));
+  TEST_ASSERT_TRUE(state.armed);
+  TEST_ASSERT_FALSE(state.pending);
+  TEST_ASSERT_EQUAL_UINT64(2500001u, state.requested_timeout_us);
+  TEST_ASSERT_EQUAL_UINT64(2500001u, state.programmed_timeout_us);
+  TEST_ASSERT_EQUAL_UINT64(1u, state.resolution_us);
+  TEST_ASSERT_EQUAL_HEX32(HAL_RTC_WAKEUP_LOW_POWER, state.flags);
+
+  uint8_t irq_mask = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_rtc_get_interrupt_enable_ex(rtc, &irq_mask));
+  TEST_ASSERT_EQUAL_HEX8(HAL_RTC_IRQ_WAKEUP, irq_mask);
+
+  hal_mock_rtc_fire_wakeup(rtc);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_wakeup_get_state_ex(rtc, &state));
+  TEST_ASSERT_FALSE(state.armed);
+  TEST_ASSERT_TRUE(state.pending);
+
+  uint8_t flags = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_and_clear_flags_ex(rtc, &flags));
+  TEST_ASSERT_EQUAL_HEX8(HAL_RTC_FLAG_WAKEUP, flags);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_wakeup_get_state_ex(rtc, &state));
+  TEST_ASSERT_FALSE(state.pending);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_wakeup_cancel_ex(rtc));
+  hal_rtc_deinit(rtc);
+}
+
+void test_relative_wakeup_rejects_invalid_arguments(void) {
+  hal_rtc_wakeup_state_t state = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_wakeup_arm_ex(nullptr, 1000u, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_rtc_wakeup_cancel_ex(nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_wakeup_get_state_ex(nullptr, &state));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_rtc_wakeup_get_state_ex(s_rtc, nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED,
+                        hal_rtc_wakeup_get_state_ex(s_rtc, &state));
+}
+
 void test_init_rejects_unknown_backend(void) {
   hal_rtc_config_t cfg = default_cfg();
   cfg.chip = (hal_rtc_chip_t)255;
@@ -371,6 +477,7 @@ void test_invalid_arguments_return_false(void) {
   uint8_t flags = 0;
   uint8_t irq = 0;
   hal_rtc_clkout_mode_t clkout = HAL_RTC_CLKOUT_DISABLED;
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
   hal_rtc_timer_clock_t timer_clock = HAL_RTC_TIMER_DISABLED;
   uint8_t timer_count = 0;
   hal_rtc_alarm_t alarm = valid_alarm();
@@ -388,6 +495,8 @@ void test_invalid_arguments_return_false(void) {
 
   TEST_ASSERT_FALSE(hal_rtc_get_clock_integrity(nullptr, &ok));
   TEST_ASSERT_FALSE(hal_rtc_get_clock_integrity(s_rtc, nullptr));
+  TEST_ASSERT_FALSE(hal_rtc_get_clock_source(nullptr, &source));
+  TEST_ASSERT_FALSE(hal_rtc_get_clock_source(s_rtc, nullptr));
 
   TEST_ASSERT_FALSE(hal_rtc_set_interrupt_enable(nullptr, HAL_RTC_IRQ_ALARM));
   TEST_ASSERT_FALSE(hal_rtc_get_interrupt_enable(nullptr, &irq));
@@ -601,6 +710,12 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_init_returns_handle);
   RUN_TEST(test_init_ds3231_backend_returns_handle);
+  RUN_TEST(test_clock_source_reports_external_provider);
+  RUN_TEST(test_internal_backend_skips_i2c_config_and_resolves_clock);
+  RUN_TEST(test_internal_backend_rejects_unsupported_clock_source);
+  RUN_TEST(test_internal_mock_accepts_aon_clock_source);
+  RUN_TEST(test_relative_wakeup_is_internal_and_one_shot);
+  RUN_TEST(test_relative_wakeup_rejects_invalid_arguments);
   RUN_TEST(test_init_rejects_unknown_backend);
   RUN_TEST(test_default_datetime_is_readable);
   RUN_TEST(test_set_and_get_datetime_roundtrip);

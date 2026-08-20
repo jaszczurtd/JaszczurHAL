@@ -2,7 +2,9 @@
 
 #ifdef HAL_ENABLE_RTC
 
+#ifdef HAL_ENABLE_I2C
 #include "hal/i2c/hal_i2c.h"
+#endif
 #include "hal/rtc/jh_rtc_provider.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
@@ -27,11 +29,18 @@ struct hal_rtc_impl_s {
 static hal_rtc_impl_t s_pool[HAL_RTC_MAX_INSTANCES];
 
 static bool rtc_provider_valid(const jh_rtc_provider_ops_t *provider) {
-  return provider != nullptr && provider->default_i2c_addr <= 0x7fu &&
-         provider->initialize != nullptr && provider->deinitialize != nullptr &&
+  const bool valid_bus =
+      provider != nullptr && (provider->bus == JH_RTC_PROVIDER_BUS_I2C ||
+                              provider->bus == JH_RTC_PROVIDER_BUS_INTERNAL);
+  const bool valid_address =
+      provider != nullptr && (provider->bus != JH_RTC_PROVIDER_BUS_I2C ||
+                              provider->default_i2c_addr <= 0x7fu);
+  return valid_bus && valid_address && provider->initialize != nullptr &&
+         provider->deinitialize != nullptr &&
          provider->get_datetime != nullptr &&
          provider->set_datetime != nullptr &&
          provider->get_clock_integrity != nullptr &&
+         provider->get_clock_source != nullptr &&
          provider->set_interrupt_enable != nullptr &&
          provider->get_interrupt_enable != nullptr &&
          provider->get_and_clear_flags != nullptr &&
@@ -39,7 +48,10 @@ static bool rtc_provider_valid(const jh_rtc_provider_ops_t *provider) {
          provider->set_clkout_mode != nullptr &&
          provider->get_clkout_mode != nullptr &&
          provider->set_timer != nullptr && provider->get_timer != nullptr &&
-         provider->set_alarm != nullptr && provider->get_alarm != nullptr;
+         provider->set_alarm != nullptr && provider->get_alarm != nullptr &&
+         provider->wakeup_arm != nullptr &&
+         provider->wakeup_cancel != nullptr &&
+         provider->wakeup_get_state != nullptr;
 }
 
 static bool rtc_handle_valid(hal_rtc_t handle) {
@@ -183,25 +195,32 @@ hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *config,
   }
 
   hal_rtc_config_t normalized = *config;
-  hal_rtc_i2c_cfg_t *i2c = &normalized.bus.i2c;
-  if (i2c->i2c_addr == 0u) {
-    i2c->i2c_addr = provider->default_i2c_addr;
-  }
-  if (provider->default_i2c_addr == 0u || i2c->i2c_addr > 0x7fu ||
-      i2c->clock_hz == 0u ||
-      (provider->fixed_i2c_addr &&
-       i2c->i2c_addr != provider->default_i2c_addr)) {
-    hal_derr("hal_rtc_init: invalid I2C config (addr=0x%02X, clock=%lu)",
-             (unsigned)i2c->i2c_addr, (unsigned long)i2c->clock_hz);
-    rtc_discard_handle(handle);
-    return HAL_EINVAL;
-  }
+  if (provider->bus == JH_RTC_PROVIDER_BUS_I2C) {
+#ifdef HAL_ENABLE_I2C
+    hal_rtc_i2c_cfg_t *i2c = &normalized.bus.i2c;
+    if (i2c->i2c_addr == 0u) {
+      i2c->i2c_addr = provider->default_i2c_addr;
+    }
+    if (provider->default_i2c_addr == 0u || i2c->i2c_addr > 0x7fu ||
+        i2c->clock_hz == 0u ||
+        (provider->fixed_i2c_addr &&
+         i2c->i2c_addr != provider->default_i2c_addr)) {
+      hal_derr("hal_rtc_init: invalid I2C config (addr=0x%02X, clock=%lu)",
+               (unsigned)i2c->i2c_addr, (unsigned long)i2c->clock_hz);
+      rtc_discard_handle(handle);
+      return HAL_EINVAL;
+    }
 
-  const hal_status_t i2c_status =
-      hal_i2c_init_bus(i2c->i2c_bus, i2c->sda_pin, i2c->scl_pin, i2c->clock_hz);
-  if (i2c_status != HAL_OK) {
+    const hal_status_t i2c_status = hal_i2c_init_bus(
+        i2c->i2c_bus, i2c->sda_pin, i2c->scl_pin, i2c->clock_hz);
+    if (i2c_status != HAL_OK) {
+      rtc_discard_handle(handle);
+      return i2c_status;
+    }
+#else
     rtc_discard_handle(handle);
-    return i2c_status;
+    return HAL_EUNSUPPORTED;
+#endif
   }
 
   const hal_status_t provider_status =
@@ -328,6 +347,28 @@ bool hal_rtc_get_clock_integrity(hal_rtc_t handle, bool *out_ok) {
   return hal_status_to_bool(hal_rtc_get_clock_integrity_ex(handle, out_ok));
 }
 
+hal_status_t hal_rtc_get_clock_source_ex(hal_rtc_t handle,
+                                         hal_rtc_clock_source_t *out_source) {
+  if (!rtc_handle_valid(handle) || out_source == nullptr) {
+    return HAL_EINVAL;
+  }
+
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  hal_mutex_lock(handle->mutex);
+  const hal_status_t status =
+      handle->provider->get_clock_source(handle->provider_context, &source);
+  hal_mutex_unlock(handle->mutex);
+  if (status == HAL_OK) {
+    *out_source = source;
+  }
+  return status;
+}
+
+bool hal_rtc_get_clock_source(hal_rtc_t handle,
+                              hal_rtc_clock_source_t *out_source) {
+  return hal_status_to_bool(hal_rtc_get_clock_source_ex(handle, out_source));
+}
+
 hal_status_t hal_rtc_set_interrupt_enable_ex(hal_rtc_t handle,
                                              uint8_t irq_mask) {
   if (!rtc_handle_valid(handle)) {
@@ -335,7 +376,8 @@ hal_status_t hal_rtc_set_interrupt_enable_ex(hal_rtc_t handle,
   }
 
   const uint8_t normalized_mask =
-      (uint8_t)(irq_mask & (HAL_RTC_IRQ_ALARM | HAL_RTC_IRQ_TIMER));
+      (uint8_t)(irq_mask &
+                (HAL_RTC_IRQ_ALARM | HAL_RTC_IRQ_TIMER | HAL_RTC_IRQ_WAKEUP));
   hal_mutex_lock(handle->mutex);
   const hal_status_t status = handle->provider->set_interrupt_enable(
       handle->provider_context, normalized_mask);
@@ -360,7 +402,8 @@ hal_status_t hal_rtc_get_interrupt_enable_ex(hal_rtc_t handle,
   hal_mutex_unlock(handle->mutex);
   if (status == HAL_OK) {
     *out_irq_mask =
-        (uint8_t)(irq_mask & (HAL_RTC_IRQ_ALARM | HAL_RTC_IRQ_TIMER));
+        (uint8_t)(irq_mask &
+                  (HAL_RTC_IRQ_ALARM | HAL_RTC_IRQ_TIMER | HAL_RTC_IRQ_WAKEUP));
   }
   return status;
 }
@@ -382,7 +425,8 @@ hal_status_t hal_rtc_get_and_clear_flags_ex(hal_rtc_t handle,
       handle->provider->get_and_clear_flags(handle->provider_context, &flags);
   hal_mutex_unlock(handle->mutex);
   if (status == HAL_OK) {
-    *out_flags = (uint8_t)(flags & (HAL_RTC_FLAG_ALARM | HAL_RTC_FLAG_TIMER));
+    *out_flags = (uint8_t)(flags & (HAL_RTC_FLAG_ALARM | HAL_RTC_FLAG_TIMER |
+                                    HAL_RTC_FLAG_WAKEUP));
   }
   return status;
 }
@@ -545,6 +589,49 @@ bool hal_rtc_get_alarm(hal_rtc_t handle, hal_rtc_alarm_t *out_alarm) {
   return hal_status_to_bool(hal_rtc_get_alarm_ex(handle, out_alarm));
 }
 
+hal_status_t hal_rtc_wakeup_arm_ex(hal_rtc_t handle, uint64_t timeout_us,
+                                   uint32_t flags) {
+  if (!rtc_handle_valid(handle) || timeout_us == 0u ||
+      (flags & ~HAL_RTC_WAKEUP_LOW_POWER) != 0u) {
+    return HAL_EINVAL;
+  }
+
+  hal_mutex_lock(handle->mutex);
+  const hal_status_t status =
+      handle->provider->wakeup_arm(handle->provider_context, timeout_us, flags);
+  hal_mutex_unlock(handle->mutex);
+  return status;
+}
+
+hal_status_t hal_rtc_wakeup_cancel_ex(hal_rtc_t handle) {
+  if (!rtc_handle_valid(handle)) {
+    return HAL_EINVAL;
+  }
+
+  hal_mutex_lock(handle->mutex);
+  const hal_status_t status =
+      handle->provider->wakeup_cancel(handle->provider_context);
+  hal_mutex_unlock(handle->mutex);
+  return status;
+}
+
+hal_status_t hal_rtc_wakeup_get_state_ex(hal_rtc_t handle,
+                                         hal_rtc_wakeup_state_t *out_state) {
+  if (!rtc_handle_valid(handle) || out_state == nullptr) {
+    return HAL_EINVAL;
+  }
+
+  hal_rtc_wakeup_state_t state = {};
+  hal_mutex_lock(handle->mutex);
+  const hal_status_t status =
+      handle->provider->wakeup_get_state(handle->provider_context, &state);
+  hal_mutex_unlock(handle->mutex);
+  if (status == HAL_OK) {
+    *out_state = state;
+  }
+  return status;
+}
+
 #if HAL_TARGET_IS_MOCK
 void hal_mock_rtc_set_datetime(hal_rtc_t handle,
                                const hal_rtc_datetime_t *datetime) {
@@ -574,6 +661,16 @@ void hal_mock_rtc_set_flags(hal_rtc_t handle, uint8_t flags) {
 
   hal_mutex_lock(handle->mutex);
   (void)jh_rtc_mock_provider_set_flags(handle->provider_context, flags);
+  hal_mutex_unlock(handle->mutex);
+}
+
+void hal_mock_rtc_fire_wakeup(hal_rtc_t handle) {
+  if (!rtc_handle_valid(handle)) {
+    return;
+  }
+
+  hal_mutex_lock(handle->mutex);
+  (void)jh_rtc_mock_provider_fire_wakeup(handle->provider_context);
   hal_mutex_unlock(handle->mutex);
 }
 #endif

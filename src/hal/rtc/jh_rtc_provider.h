@@ -12,7 +12,13 @@
 /** Storage reserved in each public RTC handle for the selected provider. */
 #define JH_RTC_PROVIDER_STORAGE_SIZE 128u
 
+typedef enum {
+  JH_RTC_PROVIDER_BUS_I2C = 0,
+  JH_RTC_PROVIDER_BUS_INTERNAL,
+} jh_rtc_provider_bus_t;
+
 typedef struct {
+  jh_rtc_provider_bus_t bus;
   uint8_t default_i2c_addr;
   bool fixed_i2c_addr;
   hal_status_t (*initialize)(void *context, const hal_rtc_config_t *config);
@@ -21,6 +27,8 @@ typedef struct {
   hal_status_t (*set_datetime)(void *context,
                                const hal_rtc_datetime_t *datetime);
   hal_status_t (*get_clock_integrity)(void *context, bool *out_ok);
+  hal_status_t (*get_clock_source)(void *context,
+                                   hal_rtc_clock_source_t *out_source);
   hal_status_t (*set_interrupt_enable)(void *context, uint8_t irq_mask);
   hal_status_t (*get_interrupt_enable)(void *context, uint8_t *out_irq_mask);
   hal_status_t (*get_and_clear_flags)(void *context, uint8_t *out_flags);
@@ -35,6 +43,11 @@ typedef struct {
                             uint8_t *out_count);
   hal_status_t (*set_alarm)(void *context, const hal_rtc_alarm_t *alarm);
   hal_status_t (*get_alarm)(void *context, hal_rtc_alarm_t *out_alarm);
+  hal_status_t (*wakeup_arm)(void *context, uint64_t timeout_us,
+                             uint32_t flags);
+  hal_status_t (*wakeup_cancel)(void *context);
+  hal_status_t (*wakeup_get_state)(void *context,
+                                   hal_rtc_wakeup_state_t *out_state);
 } jh_rtc_provider_ops_t;
 
 /** Return the provider selected for a chip on the active target. */
@@ -49,6 +62,7 @@ jh_rtc_mock_provider_set_datetime(void *context,
                                   const hal_rtc_datetime_t *datetime);
 hal_status_t jh_rtc_mock_provider_set_clock_integrity(void *context, bool ok);
 hal_status_t jh_rtc_mock_provider_set_flags(void *context, uint8_t flags);
+hal_status_t jh_rtc_mock_provider_fire_wakeup(void *context);
 #endif
 
 #endif /* HAL_ENABLE_RTC */

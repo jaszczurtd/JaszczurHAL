@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
+  monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
+  persistence after validated NTP synchronization.
+- Added the RP2040/RP2350 internal RTC backend over `pico_aon_timer`, using the
+  RP2040 calendar RTC or RP2350 Powman AON timer with warm-reset retention and
+  explicit non-battery-backed semantics.
+- Added an opt-in STM32G474 internal RTC backend with retained backup-domain
+  calendar state, LSE/LSI clock selection and diagnostics, Gregorian
+  date/epoch support for 2000..2099, Alarm A polling/interrupt delivery, and
+  disabled/1 Hz calibration-output control. STM32G474 and RP2040/RP2350
+  internal providers now also expose one-shot relative wake-up state and
+  interrupt flags. The shared RTC facade supports non-I2C providers, and
+  `16_rtc_backends` validates initialization, retention, progression, alarms,
+  and target-native wake-up behavior.
+- Added opt-in `hal_power` capabilities and synchronous transition APIs.
+  STM32G474 bare metal maps portable states to Sleep, STOP0, STOP1, and
+  reset-style Standby with RTC wake classification, PLL/SysTick restoration,
+  monotonic-time compensation, and optional USART transmission draining before
+  clock suspension. RP2040/RP2350 currently exposes CPU Sleep over the AON
+  alarm and keeps RTC-only requests asleep across unrelated enabled interrupts.
+  The AON wake path is physically verified on RP2040 and on RP2350 using both
+  Arm and RISC-V. Deeper RP modes and FreeRTOS transitions remain explicitly
+  unsupported. The host mock models resume and reset-style paths.
 - Configured the STM32G474 HSI16/PLL clock tree for 170 MHz SYSCLK, HCLK,
   PCLK1, and PCLK2; updated SysTick/FreeRTOS, UART, I2C, ADC, PWM, timers,
   FDCAN, RGB LED, and CYW43 gSPI clock dependencies. SPI display traffic now

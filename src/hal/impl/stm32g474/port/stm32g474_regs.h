@@ -35,6 +35,7 @@
 #define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
 #define RCC_APB2ENR JH_REG32(RCC_BASE + 0x60u)  /* TIM15.. / USART1 / SPI1 */
 #define RCC_CCIPR JH_REG32(RCC_BASE + 0x88u)    /* peripheral clock muxes  */
+#define RCC_BDCR JH_REG32(RCC_BASE + 0x90u)     /* backup-domain clocks    */
 #define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
 #define RCC_CRRCR JH_REG32(RCC_BASE + 0x98u)    /* HSI48 control/status    */
 
@@ -83,6 +84,7 @@
 #define RCC_APB1ENR1_TIM4EN (1u << 2)
 #define RCC_APB1ENR1_TIM6EN (1u << 4)
 #define RCC_APB1ENR1_TIM7EN (1u << 5)
+#define RCC_APB1ENR1_RTCAPBEN (1u << 10)
 #define RCC_APB1ENR1_USART2EN (1u << 17)
 #define RCC_APB1ENR1_SPI2EN (1u << 14)
 #define RCC_APB1ENR1_SPI3EN (1u << 15)
@@ -110,6 +112,20 @@
 #define RCC_CCIPR_FDCANSEL_PCLK1 (0x2u << 24)
 #define RCC_CRRCR_HSI48ON (1u << 0)
 #define RCC_CRRCR_HSI48RDY (1u << 1)
+
+#define RCC_BDCR_LSEON (1u << 0)
+#define RCC_BDCR_LSERDY (1u << 1)
+#define RCC_BDCR_LSEBYP (1u << 2)
+#define RCC_BDCR_LSECSSD (1u << 6)
+#define RCC_BDCR_RTCSEL_MASK (0x3u << 8)
+#define RCC_BDCR_RTCSEL_LSE (0x1u << 8)
+#define RCC_BDCR_RTCSEL_LSI (0x2u << 8)
+#define RCC_BDCR_RTCSEL_HSE_DIV32 (0x3u << 8)
+#define RCC_BDCR_RTCEN (1u << 15)
+#define RCC_BDCR_BDRST (1u << 16)
+
+#define RCC_CSR_LSION (1u << 0)
+#define RCC_CSR_LSIRDY (1u << 1)
 
 /* RCC_CSR reset flags (RM0440 / CMSIS stm32g474xx.h). */
 #define RCC_CSR_RMVF (1u << 23)
@@ -641,8 +657,63 @@
 
 /* ── PWR (voltage scaling / Range 1 boost) ──────────────────────────────── */
 #define PWR_BASE 0x40007000u
+#define PWR_CR1 JH_REG32(PWR_BASE + 0x00u)
+#define PWR_SR1 JH_REG32(PWR_BASE + 0x10u)
+#define PWR_SCR JH_REG32(PWR_BASE + 0x18u)
 #define PWR_CR5 JH_REG32(PWR_BASE + 0x80u)
+#define PWR_CR1_LPMS_MASK (0x7u << 0)
+#define PWR_CR1_LPMS_STOP0 (0x0u << 0)
+#define PWR_CR1_LPMS_STOP1 (0x1u << 0)
+#define PWR_CR1_LPMS_STANDBY (0x3u << 0)
+#define PWR_CR1_DBP (1u << 8)
+#define PWR_SR1_SBF (1u << 8)
+#define PWR_SCR_CSBF (1u << 8)
+#define PWR_SCR_CWUF_MASK (0x1Fu << 0)
 #define PWR_CR5_R1MODE (1u << 8)
+
+/* ── RTC + TAMP backup registers ────────────────────────────────────────── */
+#define RTC_BASE 0x40002800u
+#define RTC_TR JH_REG32(RTC_BASE + 0x00u)
+#define RTC_DR JH_REG32(RTC_BASE + 0x04u)
+#define RTC_SSR JH_REG32(RTC_BASE + 0x08u)
+#define RTC_ICSR JH_REG32(RTC_BASE + 0x0Cu)
+#define RTC_PRER JH_REG32(RTC_BASE + 0x10u)
+#define RTC_WUTR JH_REG32(RTC_BASE + 0x14u)
+#define RTC_CR JH_REG32(RTC_BASE + 0x18u)
+#define RTC_WPR JH_REG32(RTC_BASE + 0x24u)
+#define RTC_ALRMAR JH_REG32(RTC_BASE + 0x40u)
+#define RTC_ALRMASSR JH_REG32(RTC_BASE + 0x44u)
+#define RTC_SR JH_REG32(RTC_BASE + 0x50u)
+#define RTC_SCR JH_REG32(RTC_BASE + 0x5Cu)
+
+#define RTC_ICSR_INIT (1u << 7)
+#define RTC_ICSR_INITF (1u << 6)
+#define RTC_ICSR_RSF (1u << 5)
+#define RTC_ICSR_INITS (1u << 4)
+#define RTC_ICSR_WUTWF (1u << 2)
+#define RTC_ICSR_ALRAWF (1u << 0)
+
+#define RTC_CR_COE (1u << 23)
+#define RTC_CR_COSEL (1u << 19)
+#define RTC_CR_WUTIE (1u << 14)
+#define RTC_CR_ALRAIE (1u << 12)
+#define RTC_CR_WUTE (1u << 10)
+#define RTC_CR_ALRAE (1u << 8)
+#define RTC_CR_FMT (1u << 6)
+#define RTC_CR_WUCKSEL_MASK (0x7u << 0)
+#define RTC_CR_WUCKSEL_CK_SPRE_16BITS (0x4u << 0)
+
+#define RTC_SR_WUTF (1u << 2)
+#define RTC_SR_ALRAF (1u << 0)
+#define RTC_SCR_CWUTF (1u << 2)
+#define RTC_SCR_CALRAF (1u << 0)
+
+#define RTC_WPR_KEY1 0xCAu
+#define RTC_WPR_KEY2 0x53u
+#define RTC_WPR_LOCK 0xFFu
+
+#define TAMP_BASE 0x40002400u
+#define TAMP_BKPR(index) JH_REG32(TAMP_BASE + 0x100u + ((uint32_t)(index) * 4u))
 
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
@@ -651,6 +722,8 @@
 #define NVIC_IPR8(irqn) JH_REG8(0xE000E400u + (uint32_t)(irqn))
 
 #define TIM6_DACUNDER_IRQn 54u
+#define RTC_WKUP_IRQn 3u
+#define RTC_Alarm_IRQn 41u
 #define DMA1_Channel1_IRQn 11u
 #define DMA1_Channel7_IRQn 17u
 #define DMA1_Channel8_IRQn 96u
@@ -666,6 +739,7 @@
 #define EXTI9_5_IRQn 23u
 #define EXTI15_10_IRQn 40u
 #define JH_NVIC_PRIO_TIMER 0x80u
+#define JH_NVIC_PRIO_RTC 0x80u
 
 /* ── DWT cycle counter (Cortex-M debug block) ────────────────────────────── */
 #define DWT_BASE 0xE0001000u
@@ -685,6 +759,7 @@
 #define SCB_ICSR JH_REG32(SCB_BASE + 0x04u)
 #define SCB_VTOR JH_REG32(SCB_BASE + 0x08u)
 #define SCB_AIRCR JH_REG32(SCB_BASE + 0x0Cu)
+#define SCB_SCR JH_REG32(SCB_BASE + 0x10u)
 #define SCB_SHCSR JH_REG32(SCB_BASE + 0x24u)
 #define SCB_CFSR JH_REG32(SCB_BASE + 0x28u) /* configurable fault status */
 #define SCB_CFSR_MMFSR_DACCVIOL (1u << 1)
@@ -702,7 +777,9 @@
 #define SCB_SHCSR_MEMFAULTENA (1u << 16)
 #define SCB_SHCSR_BUSFAULTENA (1u << 17)
 #define SCB_SHCSR_USGFAULTENA (1u << 18)
+#define SCB_ICSR_PENDSTCLR (1u << 25)
 #define SCB_ICSR_PENDSTSET (1u << 26)
+#define SCB_SCR_SLEEPDEEP (1u << 2)
 
 /* AIRCR: write VECTKEY in the top half-word, SYSRESETREQ to reboot. */
 #define SCB_AIRCR_VECTKEY (0x05FAu << 16)

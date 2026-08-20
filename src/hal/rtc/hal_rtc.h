@@ -8,18 +8,22 @@
  * @brief Hardware abstraction for real-time clocks (RTC).
  *
  * The module is designed to support multiple RTC backends under one API.
- * Currently available backends are PCF8563 and DS3231 (I2C).
+ * Available backends are PCF8563 and DS3231 over I2C plus an optional
+ * target-native internal RTC.
  *
  * Backend selection (compile-time, opt-in):
  *   HAL_ENABLE_PCF8563 - enable the PCF8563 backend (propagates
  *                        HAL_ENABLE_RTC + HAL_ENABLE_I2C).
  *   HAL_ENABLE_DS3231  - enable the DS3231 backend  (propagates
  *                        HAL_ENABLE_RTC + HAL_ENABLE_I2C).
+ *   HAL_ENABLE_INTERNAL_RTC - enable the target-native RTC backend
+ *                             (propagates HAL_ENABLE_RTC).
  *
- * Both backends may be enabled simultaneously; chip selection is then
+ * Multiple backends may be enabled simultaneously; chip selection is then
  * made per-handle via @ref hal_rtc_config_t::chip. Enabling
- * HAL_ENABLE_RTC alone (without a backend) triggers a compile-time
- * #error from hal_config.h.
+ * HAL_ENABLE_RTC alone (without a backend) triggers a compile-time #error
+ * from hal_config.h. Internal backends are available on STM32G474 and the
+ * RP2040/RP2350 family; unsupported targets reject them at runtime.
  *
  * The target-independent facade owns handle allocation, validation, locking,
  * epoch conversion, and legacy wrappers. Internal providers implement only
@@ -43,7 +47,6 @@ extern "C" {
 #define HAL_RTC_MIN_YEAR 1900u
 /** @brief Highest calendar year accepted by RTC date-time APIs. */
 #define HAL_RTC_MAX_YEAR 2099u
-
 /** @brief Default 7-bit I2C address for PCF8563. */
 #ifndef HAL_RTC_PCF8563_DEFAULT_I2C_ADDR
 #define HAL_RTC_PCF8563_DEFAULT_I2C_ADDR 0x51
@@ -58,7 +61,18 @@ extern "C" {
 typedef enum {
   HAL_RTC_CHIP_PCF8563 = 0, /**< PCF8563 over I2C. */
   HAL_RTC_CHIP_DS3231,      /**< DS3231 over I2C.  */
+  HAL_RTC_CHIP_INTERNAL,    /**< Target-native internal RTC. */
 } hal_rtc_chip_t;
+
+/** @brief RTC oscillator source selected by a backend. */
+typedef enum {
+  HAL_RTC_CLOCK_SOURCE_AUTO = 0,  /**< Choose a suitable internal source. */
+  HAL_RTC_CLOCK_SOURCE_EXTERNAL,  /**< Oscillator owned by an external RTC. */
+  HAL_RTC_CLOCK_SOURCE_LSE,       /**< Low-speed external crystal/clock. */
+  HAL_RTC_CLOCK_SOURCE_LSI,       /**< Low-speed internal RC oscillator. */
+  HAL_RTC_CLOCK_SOURCE_HSE_DIV32, /**< HSE divided by 32. */
+  HAL_RTC_CLOCK_SOURCE_AON,       /**< Target always-on timer clock domain. */
+} hal_rtc_clock_source_t;
 
 /** @brief I2C bus parameters used by I2C RTC backends (PCF8563 / DS3231). */
 typedef struct {
@@ -68,6 +82,15 @@ typedef struct {
   uint8_t i2c_bus;   /**< I2C bus index: 0 = default, 1 = second. */
   uint8_t i2c_addr;  /**< 7-bit I2C address (0 = backend default address). */
 } hal_rtc_i2c_cfg_t;
+
+/** @brief Configuration used by a target-native internal RTC backend. */
+typedef struct {
+  /**
+   * Requested oscillator. AUTO selects the target default while preserving
+   * an already configured clock domain whenever the backend supports it.
+   */
+  hal_rtc_clock_source_t clock_source;
+} hal_rtc_internal_cfg_t;
 
 /**
  * @brief Runtime configuration for an RTC handle.
@@ -79,6 +102,7 @@ typedef struct {
   union {
     hal_rtc_i2c_cfg_t
         i2c; /**< Used for HAL_RTC_CHIP_PCF8563 and HAL_RTC_CHIP_DS3231. */
+    hal_rtc_internal_cfg_t internal; /**< Used for HAL_RTC_CHIP_INTERNAL. */
   } bus;
 } hal_rtc_config_t;
 
@@ -116,11 +140,28 @@ typedef struct {
 #define HAL_RTC_FLAG_ALARM (1u << 0)
 /** @brief Generic RTC event flag: timer condition occurred. */
 #define HAL_RTC_FLAG_TIMER (1u << 1)
+/** @brief Generic RTC event flag: relative wake-up condition occurred. */
+#define HAL_RTC_FLAG_WAKEUP (1u << 2)
 
 /** @brief Generic RTC interrupt-enable bit: alarm interrupt. */
 #define HAL_RTC_IRQ_ALARM (1u << 0)
 /** @brief Generic RTC interrupt-enable bit: timer interrupt. */
 #define HAL_RTC_IRQ_TIMER (1u << 1)
+/** @brief Generic RTC interrupt-enable bit: relative wake-up interrupt. */
+#define HAL_RTC_IRQ_WAKEUP (1u << 2)
+
+/** @brief Request backend wake routing suitable for deep low-power modes. */
+#define HAL_RTC_WAKEUP_LOW_POWER (UINT32_C(1) << 0u)
+
+/** @brief Current state of the target-native relative wake-up timer. */
+typedef struct {
+  bool armed;                    /**< A relative wake-up is currently armed. */
+  bool pending;                  /**< Wake-up fired and has not been cleared. */
+  uint64_t requested_timeout_us; /**< Timeout supplied by the caller. */
+  uint64_t programmed_timeout_us; /**< Rounded hardware timeout. */
+  uint64_t resolution_us;         /**< Active hardware timer resolution. */
+  uint32_t flags;                 /**< Active HAL_RTC_WAKEUP_* flags. */
+} hal_rtc_wakeup_state_t;
 
 /** @brief Clock output mode. */
 typedef enum {
@@ -231,10 +272,19 @@ bool hal_rtc_set_epoch(hal_rtc_t h, uint64_t epoch);
 bool hal_rtc_get_clock_integrity(hal_rtc_t h, bool *out_ok);
 
 /**
+ * @brief Read the oscillator source used by the selected RTC backend.
+ *
+ * External I2C RTCs report HAL_RTC_CLOCK_SOURCE_EXTERNAL. Internal backends
+ * report the source resolved during initialization.
+ */
+bool hal_rtc_get_clock_source(hal_rtc_t h, hal_rtc_clock_source_t *out_source);
+
+/**
  * @brief Configure RTC interrupt enables.
  *
- * Use HAL_RTC_IRQ_ALARM and HAL_RTC_IRQ_TIMER bits in @p irq_mask.
- * Unknown bits are ignored.
+ * Use HAL_RTC_IRQ_ALARM, HAL_RTC_IRQ_TIMER, and HAL_RTC_IRQ_WAKEUP bits in
+ * @p irq_mask. Unknown bits are ignored. A provider may reject a supported bit
+ * that its hardware does not implement.
  */
 bool hal_rtc_set_interrupt_enable(hal_rtc_t h, uint8_t irq_mask);
 
@@ -287,6 +337,24 @@ bool hal_rtc_set_alarm(hal_rtc_t h, const hal_rtc_alarm_t *alarm);
 /** @brief Read RTC alarm match fields. */
 bool hal_rtc_get_alarm(hal_rtc_t h, hal_rtc_alarm_t *out_alarm);
 
+/**
+ * @brief Arm a one-shot relative wake-up on a target-native RTC.
+ *
+ * The backend rounds upward to its supported resolution and reports the
+ * programmed value through @ref hal_rtc_wakeup_get_state_ex. External RTC
+ * providers may return HAL_EUNSUPPORTED. HAL_RTC_WAKEUP_LOW_POWER requests
+ * routing that remains active in a target deep-sleep state.
+ */
+hal_status_t hal_rtc_wakeup_arm_ex(hal_rtc_t h, uint64_t timeout_us,
+                                   uint32_t flags);
+
+/** @brief Cancel an armed relative wake-up and clear its pending event. */
+hal_status_t hal_rtc_wakeup_cancel_ex(hal_rtc_t h);
+
+/** @brief Read relative wake-up state without clearing its pending event. */
+hal_status_t hal_rtc_wakeup_get_state_ex(hal_rtc_t h,
+                                         hal_rtc_wakeup_state_t *out_state);
+
 /* ---- Status-returning APIs ---------------------------------------------- */
 /*
  * Status-returning RTC APIs are implemented by the shared facade. Legacy
@@ -300,6 +368,8 @@ hal_status_t hal_rtc_set_datetime_ex(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 hal_status_t hal_rtc_get_epoch_ex(hal_rtc_t h, uint64_t *out_epoch);
 hal_status_t hal_rtc_set_epoch_ex(hal_rtc_t h, uint64_t epoch);
 hal_status_t hal_rtc_get_clock_integrity_ex(hal_rtc_t h, bool *out_ok);
+hal_status_t hal_rtc_get_clock_source_ex(hal_rtc_t h,
+                                         hal_rtc_clock_source_t *out_source);
 hal_status_t hal_rtc_set_interrupt_enable_ex(hal_rtc_t h, uint8_t irq_mask);
 hal_status_t hal_rtc_get_interrupt_enable_ex(hal_rtc_t h,
                                              uint8_t *out_irq_mask);
