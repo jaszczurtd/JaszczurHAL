@@ -18,6 +18,8 @@
 
 #include <stdint.h>
 
+#include "stm32g474_clock.h"
+
 #define JH_REG8(addr)                                                          \
   (*(volatile uint8_t *)(addr)) /* NOLINT(performance-no-int-to-ptr) */
 #define JH_REG32(addr)                                                         \
@@ -25,6 +27,9 @@
 
 /* ── RCC (Reset & Clock Control) ─────────────────────────────────────────── */
 #define RCC_BASE 0x40021000u
+#define RCC_CR JH_REG32(RCC_BASE + 0x00u)
+#define RCC_CFGR JH_REG32(RCC_BASE + 0x08u)
+#define RCC_PLLCFGR JH_REG32(RCC_BASE + 0x0Cu)
 #define RCC_AHB1ENR JH_REG32(RCC_BASE + 0x48u)  /* DMA / DMAMUX clocks   */
 #define RCC_AHB2ENR JH_REG32(RCC_BASE + 0x4Cu)  /* GPIO port clocks      */
 #define RCC_APB1ENR1 JH_REG32(RCC_BASE + 0x58u) /* TIM2.. / USART2 / SPI2 */
@@ -32,6 +37,33 @@
 #define RCC_CCIPR JH_REG32(RCC_BASE + 0x88u)    /* peripheral clock muxes  */
 #define RCC_CSR JH_REG32(RCC_BASE + 0x94u)      /* reset flags / clear    */
 #define RCC_CRRCR JH_REG32(RCC_BASE + 0x98u)    /* HSI48 control/status    */
+
+#define RCC_CR_HSION (1u << 8)
+#define RCC_CR_HSIRDY (1u << 10)
+#define RCC_CR_PLLON (1u << 24)
+#define RCC_CR_PLLRDY (1u << 25)
+
+#define RCC_CFGR_SW_MASK (0x3u << 0)
+#define RCC_CFGR_SW_PLL (0x3u << 0)
+#define RCC_CFGR_SWS_MASK (0x3u << 2)
+#define RCC_CFGR_SWS_PLL (0x3u << 2)
+#define RCC_CFGR_HPRE_MASK (0xFu << 4)
+#define RCC_CFGR_HPRE_DIV1 (0x0u << 4)
+#define RCC_CFGR_HPRE_DIV2 (0x8u << 4)
+#define RCC_CFGR_PPRE1_MASK (0x7u << 8)
+#define RCC_CFGR_PPRE1_DIV1 (0x0u << 8)
+#define RCC_CFGR_PPRE2_MASK (0x7u << 11)
+#define RCC_CFGR_PPRE2_DIV1 (0x0u << 11)
+
+#define RCC_PLLCFGR_PLLSRC_MASK (0x3u << 0)
+#define RCC_PLLCFGR_PLLSRC_HSI (0x2u << 0)
+#define RCC_PLLCFGR_PLLM_MASK (0x7u << 4)
+#define RCC_PLLCFGR_PLLM_DIV4 (0x3u << 4)
+#define RCC_PLLCFGR_PLLN_MASK (0x7Fu << 8)
+#define RCC_PLLCFGR_PLLN_MUL85 (85u << 8)
+#define RCC_PLLCFGR_PLLREN (1u << 24)
+#define RCC_PLLCFGR_PLLR_MASK (0x3u << 25)
+#define RCC_PLLCFGR_PLLR_DIV2 (0x0u << 25)
 
 #define RCC_AHB1ENR_DMA1EN (1u << 0)
 #define RCC_AHB1ENR_DMA2EN (1u << 1)
@@ -57,6 +89,7 @@
 #define RCC_APB1ENR1_I2C1EN (1u << 21)
 #define RCC_APB1ENR1_I2C2EN (1u << 22)
 #define RCC_APB1ENR1_FDCANEN (1u << 25)
+#define RCC_APB1ENR1_PWREN (1u << 28)
 
 #define RCC_APB2ENR_SPI1EN (1u << 12)
 #define RCC_APB2ENR_TIM15EN (1u << 16)
@@ -69,6 +102,12 @@
 
 #define RCC_CCIPR_CLK48SEL_MASK (0x3u << 26)
 #define RCC_CCIPR_CLK48SEL_HSI48 (0x0u << 26)
+#define RCC_CCIPR_I2C1SEL_MASK (0x3u << 12)
+#define RCC_CCIPR_I2C1SEL_HSI16 (0x2u << 12)
+#define RCC_CCIPR_I2C2SEL_MASK (0x3u << 14)
+#define RCC_CCIPR_I2C2SEL_HSI16 (0x2u << 14)
+#define RCC_CCIPR_FDCANSEL_MASK (0x3u << 24)
+#define RCC_CCIPR_FDCANSEL_PCLK1 (0x2u << 24)
 #define RCC_CRRCR_HSI48ON (1u << 0)
 #define RCC_CRRCR_HSI48RDY (1u << 1)
 
@@ -91,6 +130,12 @@
 
 #define FLASH_KEY1 0x45670123u
 #define FLASH_KEY2 0xCDEF89ABu
+
+#define FLASH_ACR_LATENCY_MASK (0xFu << 0)
+#define FLASH_ACR_LATENCY_4WS (0x4u << 0)
+#define FLASH_ACR_PRFTEN (1u << 8)
+#define FLASH_ACR_ICEN (1u << 9)
+#define FLASH_ACR_DCEN (1u << 10)
 
 #define FLASH_SR_EOP (1u << 0)
 #define FLASH_SR_OPERR (1u << 1)
@@ -118,8 +163,8 @@
 #define FLASH_CR_LOCK (1u << 31)
 
 /* ── ADC1 + ADC12 common (single-channel polled regular conversions) ───────
- * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/1
- * (CKMODE=01) so the HSI16 bring-up clock yields a 16 MHz ADC clock, in spec.
+ * ADC1 inputs are single-ended; the ADC kernel clock is taken from HCLK/4
+ * (CKMODE=11), yielding 42.5 MHz with the 170 MHz system clock.
  * Register layout / bit positions per RM0440; pending on-silicon validation
  * (see examples/g474_adc_read). */
 #define ADC1_BASE 0x50000000u
@@ -163,9 +208,9 @@
 #define ADC_SQR1_SQ3_POS 18u
 #define ADC_SQR1_SQ4_POS 24u
 
-/* Common CCR CKMODE [17:16]: 01 = synchronous HCLK/1. */
+/* Common CCR CKMODE [17:16]: 11 = synchronous HCLK/4. */
 #define ADC_CCR_CKMODE_MASK (0x3u << 16)
-#define ADC_CCR_CKMODE_HCLK_DIV1 (0x1u << 16)
+#define ADC_CCR_CKMODE_HCLK_DIV4 (0x3u << 16)
 
 /* SMPR 3-bit sample-time code: 0b110 = 247.5 ADC clock cycles (safe for
  * higher-impedance sources during bring-up). */
@@ -380,13 +425,12 @@
 #define I2C_ICR_ARLOCF (1u << 9)
 #define I2C_ICR_OVRCF (1u << 10)
 
-/* TIMINGR for I2CCLK = 16 MHz (HSI16 / PCLK1 default), standard mode 100 kHz.
- * Value per STM32CubeMX / RM0440 timing tables. If the core clock is later
- * raised (PLL), this must be recomputed for the new PCLK1. */
+/* TIMINGR for I2CCLK = 16 MHz. Startup explicitly selects HSI16 as the I2C1
+ * and I2C2 kernel source, so these values are independent of PCLK1. */
 #define I2C_TIMINGR_100K_16MHZ 0x30420F13u
 
-/* Conservative bring-up presets for I2CCLK = 16 MHz.
- * These keep the first STM32 backend dependency-free while still honoring
+/* Conservative presets for I2CCLK = 16 MHz. They keep the backend
+ * dependency-free while still honoring
  * HAL_I2C_CLOCK_{STANDARD,FAST,FAST_PLUS}_HZ requests. */
 #define I2C_TIMINGR_400K_16MHZ 0x1010060Cu
 #define I2C_TIMINGR_1M_16MHZ 0x00100509u
@@ -595,6 +639,11 @@
 #define SYSTICK_CTRL_TICKINT (1u << 1)
 #define SYSTICK_CTRL_CLKSOURCE (1u << 2) /* processor clock */
 
+/* ── PWR (voltage scaling / Range 1 boost) ──────────────────────────────── */
+#define PWR_BASE 0x40007000u
+#define PWR_CR5 JH_REG32(PWR_BASE + 0x80u)
+#define PWR_CR5_R1MODE (1u << 8)
+
 /* ── NVIC (Cortex-M interrupt controller) ───────────────────────────────── */
 #define NVIC_ISER(n) JH_REG32(0xE000E100u + ((uint32_t)(n) * 4u))
 #define NVIC_ICER(n) JH_REG32(0xE000E180u + ((uint32_t)(n) * 4u))
@@ -633,6 +682,7 @@
 
 /* ── SCB (System Control Block) ──────────────────────────────────────────── */
 #define SCB_BASE 0xE000ED00u
+#define SCB_ICSR JH_REG32(SCB_BASE + 0x04u)
 #define SCB_VTOR JH_REG32(SCB_BASE + 0x08u)
 #define SCB_AIRCR JH_REG32(SCB_BASE + 0x0Cu)
 #define SCB_SHCSR JH_REG32(SCB_BASE + 0x24u)
@@ -652,6 +702,7 @@
 #define SCB_SHCSR_MEMFAULTENA (1u << 16)
 #define SCB_SHCSR_BUSFAULTENA (1u << 17)
 #define SCB_SHCSR_USGFAULTENA (1u << 18)
+#define SCB_ICSR_PENDSTSET (1u << 26)
 
 /* AIRCR: write VECTKEY in the top half-word, SYSRESETREQ to reboot. */
 #define SCB_AIRCR_VECTKEY (0x05FAu << 16)
@@ -678,19 +729,3 @@
 
 /* ── Device electronic signature ─────────────────────────────────────────── */
 #define STM32_UID_BASE 0x1FFF7590u /* 96-bit unique device ID (3 words) */
-
-/* ── Core clock after reset ──────────────────────────────────────────────── */
-/* STM32G4 boots on HSI16 (16 MHz). The first bring-up keeps this default
- * clock instead of configuring the PLL: correctness over speed. */
-#define JH_G474_CORE_CLOCK_HZ 16000000u
-
-/* ── Peripheral (APB) kernel clocks ──────────────────────────────────────── */
-/* SPI/UART baud is derived from the APB clock (PCLK), which need NOT equal the
- * core clock once the PLL and APB prescalers are configured. With the current
- * HSI16 bring-up (no PLL, no APB prescaler) both PCLKs equal the core clock.
- * SPI1 is on APB2 (PCLK2), SPI2 on APB1 (PCLK1). STM32 TIM kernels are a
- * special case: when the APB prescaler is not 1, timer clock is 2 * PCLKx.
- * Current PWM code assumes APB prescaler == 1 and uses these PCLK values as
- * timer clocks; update both contracts alongside any clock-tree change. */
-#define JH_G474_PCLK1_HZ JH_G474_CORE_CLOCK_HZ /* APB1 -> SPI2 */
-#define JH_G474_PCLK2_HZ JH_G474_CORE_CLOCK_HZ /* APB2 -> SPI1 */

@@ -12,6 +12,7 @@
 #include <string.h>
 
 #ifdef JH_STM32G474_HW
+#include "port/stm32g474_fdcan_timing.h"
 #include "port/stm32g474_regs.h"
 #endif
 
@@ -136,59 +137,21 @@ static bool fdcan_leave_init(void) {
 }
 
 static uint32_t fdcan_encode_nbtp(uint32_t bitrate_hz) {
-  if (bitrate_hz == 0u) {
+  jh_stm32g474_fdcan_timing_t timing = {};
+  if (!jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ, bitrate_hz,
+                                         false, &timing)) {
     return 0u;
   }
-  uint32_t brp = JH_G474_PCLK1_HZ / (bitrate_hz * 16u);
-  if (brp == 0u) {
-    brp = 1u;
-  }
-  uint32_t tq = JH_G474_PCLK1_HZ / (bitrate_hz * brp);
-  if (tq < 8u) {
-    tq = 8u;
-  }
-  if (tq > 80u) {
-    tq = 80u;
-  }
-  uint32_t tseg2 = tq / 5u;
-  if (tseg2 < 2u) {
-    tseg2 = 2u;
-  }
-  uint32_t tseg1 = tq - 1u - tseg2;
-  uint32_t sjw = tseg2;
-  if (sjw > 16u) {
-    sjw = 16u;
-  }
-  return ((sjw - 1u) << 25) | ((brp - 1u) << 16) | ((tseg1 - 1u) << 8) |
-         (tseg2 - 1u);
+  return jh_stm32g474_fdcan_encode_nbtp(&timing);
 }
 
 static uint32_t fdcan_encode_dbtp(uint32_t bitrate_hz) {
-  if (bitrate_hz == 0u) {
+  jh_stm32g474_fdcan_timing_t timing = {};
+  if (!jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ, bitrate_hz,
+                                         true, &timing)) {
     return 0u;
   }
-  uint32_t brp = JH_G474_PCLK1_HZ / (bitrate_hz * 8u);
-  if (brp == 0u) {
-    brp = 1u;
-  }
-  uint32_t tq = JH_G474_PCLK1_HZ / (bitrate_hz * brp);
-  if (tq < 5u) {
-    tq = 5u;
-  }
-  if (tq > 32u) {
-    tq = 32u;
-  }
-  uint32_t tseg2 = tq / 4u;
-  if (tseg2 < 1u) {
-    tseg2 = 1u;
-  }
-  uint32_t tseg1 = tq - 1u - tseg2;
-  uint32_t sjw = tseg2;
-  if (sjw > 8u) {
-    sjw = 8u;
-  }
-  return ((brp - 1u) << 16) | ((tseg1 - 1u) << 8) | ((tseg2 - 1u) << 4) |
-         (sjw - 1u);
+  return jh_stm32g474_fdcan_encode_dbtp(&timing);
 }
 
 static void fdcan_clear_mram(void) {
@@ -235,6 +198,7 @@ bool hal_can_stm32g474_fdcan_init(hal_can_stm32g474_fdcan_t *fdcan,
   fdcan_gpio_af9(rx_pin);
   fdcan_gpio_af9(tx_pin);
 
+  RCC_CCIPR = (RCC_CCIPR & ~RCC_CCIPR_FDCANSEL_MASK) | RCC_CCIPR_FDCANSEL_PCLK1;
   RCC_APB1ENR1 |= RCC_APB1ENR1_FDCANEN;
   (void)RCC_APB1ENR1;
 

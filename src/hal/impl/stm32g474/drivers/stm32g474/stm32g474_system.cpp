@@ -21,6 +21,7 @@
 #include "../../port/stm32g474_regs.h"
 extern "C" uint32_t stm32g474_systick_millis(void);
 extern "C" uint32_t stm32g474_systick_micros(void);
+extern "C" uint64_t stm32g474_systick_micros64(void);
 extern uint8_t __jh_stm32_stack_top;
 extern uint8_t __jh_stm32_stack_limit;
 extern "C" uint32_t stm32g474_runtime_heap_total_bytes(void);
@@ -57,8 +58,7 @@ namespace {
 #ifndef JH_STM32G474_HW
 /* Host-stub time source and placeholder UID (replaced by SysTick / UID_BASE
  * on the hardware build). */
-uint32_t g_millis = 0u;
-uint32_t g_micros = 0u;
+uint64_t g_micros64 = 0u;
 
 uint8_t g_device_uid[8] = {0x47, 0x34, 0x74, 0x00, 0x00, 0x00, 0x00, 0x01};
 #endif
@@ -80,6 +80,12 @@ static uint32_t host_freertos_millis(void) {
 }
 #endif
 
+#if defined(JH_STM32G474_SYSTEM_TESTING) && !defined(JH_STM32G474_HW)
+extern "C" void stm32g474_system_test_set_micros64(uint64_t micros) {
+  g_micros64 = micros;
+}
+#endif
+
 } // namespace
 
 uint32_t stm32g474_system_main_stack_bytes(void) {
@@ -96,9 +102,9 @@ uint32_t stm32g474_system_millis(void) {
   return stm32g474_systick_millis();
 #elif defined(HAL_ENABLE_FREERTOS)
   return host_freertos_scheduler_has_ticks() ? host_freertos_millis()
-                                             : g_millis;
+                                             : (uint32_t)(g_micros64 / 1000u);
 #else
-  return g_millis;
+  return (uint32_t)(g_micros64 / 1000u);
 #endif
 }
 
@@ -107,21 +113,21 @@ uint32_t stm32g474_system_micros(void) {
   return stm32g474_systick_micros();
 #elif defined(HAL_ENABLE_FREERTOS)
   return host_freertos_scheduler_has_ticks() ? (host_freertos_millis() * 1000u)
-                                             : g_micros;
+                                             : (uint32_t)g_micros64;
 #else
-  return g_micros;
+  return (uint32_t)g_micros64;
 #endif
 }
 
 uint64_t stm32g474_system_micros64(void) {
 #ifdef JH_STM32G474_HW
-  return (uint64_t)stm32g474_systick_micros();
+  return stm32g474_systick_micros64();
 #elif defined(HAL_ENABLE_FREERTOS)
   return host_freertos_scheduler_has_ticks()
              ? ((uint64_t)host_freertos_millis() * 1000u)
-             : (uint64_t)g_micros;
+             : g_micros64;
 #else
-  return (uint64_t)g_micros;
+  return g_micros64;
 #endif
 }
 
@@ -139,8 +145,7 @@ void stm32g474_system_delay_ms(uint32_t ms) {
   }
 #endif
 #else
-  g_millis += ms;
-  g_micros += (ms * 1000u);
+  g_micros64 += (uint64_t)ms * 1000u;
 #endif
 }
 
@@ -155,8 +160,7 @@ void stm32g474_system_delay_us(uint32_t us) {
   }
 #endif
 #else
-  g_micros += us;
-  g_millis = g_micros / 1000u;
+  g_micros64 += us;
 #endif
 }
 

@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Configured the STM32G474 HSI16/PLL clock tree for 170 MHz SYSCLK, HCLK,
+  PCLK1, and PCLK2; updated SysTick/FreeRTOS, UART, I2C, ADC, PWM, timers,
+  FDCAN, RGB LED, and CYW43 gSPI clock dependencies. SPI display traffic now
+  reaches 21.25 MHz for a 24 MHz request on NUCLEO-G474RE.
+- Made STM32G474 `hal_micros64()` use a true 64-bit tick epoch in bare-metal
+  and FreeRTOS builds, with consistent ISR snapshots, pending-SysTick handling,
+  committed FreeRTOS tick synchronization, and deterministic 32-bit-wrap
+  regression coverage.
 - Added opt-in `HAL_ENABLE_NOTIFY` with generation-checked notification
   channels, backend descriptors, a Telegram Bot API backend over the existing
   HTTP/HTTPS client, canonical public-host HTTPS enforcement, custom HTTP host

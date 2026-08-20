@@ -66,9 +66,11 @@ bool jh_hal_rgb_led_write_pixels(const uint8_t *pixels, uint32_t num_bytes,
   cycles_enable();
   const uint32_t bit_cycles = JH_G474_CORE_CLOCK_HZ / 800000u;
   const uint32_t zero_high_cycles =
-      ((JH_G474_CORE_CLOCK_HZ * 35u) + 50000000u) / 100000000u;
+      (uint32_t)((((uint64_t)JH_G474_CORE_CLOCK_HZ * 35u) + 50000000u) /
+                 100000000u);
   const uint32_t one_high_cycles =
-      ((JH_G474_CORE_CLOCK_HZ * 80u) + 50000000u) / 100000000u;
+      (uint32_t)((((uint64_t)JH_G474_CORE_CLOCK_HZ * 80u) + 50000000u) /
+                 100000000u);
   if (zero_high_cycles == 0u ||
       !(zero_high_cycles < one_high_cycles && one_high_cycles < bit_cycles)) {
     return false;

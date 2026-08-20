@@ -79,18 +79,15 @@ struct TimerHw {
   bool has_bdtr;
 };
 
-/* STM32 TIM kernels run at PCLKx only while the corresponding APB prescaler is
- * 1. If a future clock tree uses an APB divider, the timer kernel clock becomes
- * 2 * PCLKx and this table must switch to explicit timer-clock constants.
- * Keeping one source here preserves consistency between timer programming and
- * jh_stm32_pwm_source_clock_hz() under the current APB prescaler == 1 setup. */
+/* Explicit timer-kernel clocks keep timer programming correct if APB
+ * prescalers are changed independently from the core clock in the future. */
 static const TimerHw kTimerHw[PWM_TIMER_COUNT] = {
-    {TIM2_BASE, JH_G474_PCLK1_HZ, RCC_APB1ENR1_TIM2EN, false, false},
-    {TIM3_BASE, JH_G474_PCLK1_HZ, RCC_APB1ENR1_TIM3EN, false, false},
-    {TIM4_BASE, JH_G474_PCLK1_HZ, RCC_APB1ENR1_TIM4EN, false, false},
-    {TIM15_BASE, JH_G474_PCLK2_HZ, RCC_APB2ENR_TIM15EN, true, true},
-    {TIM16_BASE, JH_G474_PCLK2_HZ, RCC_APB2ENR_TIM16EN, true, true},
-    {TIM17_BASE, JH_G474_PCLK2_HZ, RCC_APB2ENR_TIM17EN, true, true},
+    {TIM2_BASE, JH_G474_TIMCLK1_HZ, RCC_APB1ENR1_TIM2EN, false, false},
+    {TIM3_BASE, JH_G474_TIMCLK1_HZ, RCC_APB1ENR1_TIM3EN, false, false},
+    {TIM4_BASE, JH_G474_TIMCLK1_HZ, RCC_APB1ENR1_TIM4EN, false, false},
+    {TIM15_BASE, JH_G474_TIMCLK2_HZ, RCC_APB2ENR_TIM15EN, true, true},
+    {TIM16_BASE, JH_G474_TIMCLK2_HZ, RCC_APB2ENR_TIM16EN, true, true},
+    {TIM17_BASE, JH_G474_TIMCLK2_HZ, RCC_APB2ENR_TIM17EN, true, true},
 };
 
 static void enable_timer_clock(const TimerHw &timer) {

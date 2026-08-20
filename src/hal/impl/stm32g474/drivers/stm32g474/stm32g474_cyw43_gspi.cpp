@@ -61,8 +61,12 @@ HAL_FORCE_INLINE void fast_write_pin(uint32_t port, uint32_t mask, bool high) {
 }
 
 HAL_FORCE_INLINE void gspi_half_period(void) {
-  /* HSI16 plus GPIO/register overhead gives the verified polling baseline. */
-  __asm volatile("nop\n\tnop\n\tnop\n\tnop" ::: "memory");
+  constexpr uint32_t kHalfPeriodCycles =
+      (JH_G474_CORE_CLOCK_HZ + 3999999u) / 4000000u;
+  const uint32_t start = DWT_CYCCNT;
+  while ((uint32_t)(DWT_CYCCNT - start) < kHalfPeriodCycles) {
+    __asm volatile("nop" ::: "memory");
+  }
 }
 
 HAL_FORCE_INLINE void set_data_mode(stm32g474_gspi_context_t *context,

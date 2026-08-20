@@ -4,6 +4,7 @@
 #include "hal/analog/hal_adc.h"
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 
 #ifdef JH_STM32G474_HW
 #include "port/stm32g474_adc_channels.h"
@@ -56,16 +57,14 @@ static void adc1_hw_init(void) {
   if (s_adc_ready) {
     return;
   }
-  /* Kernel clock = HCLK/1 (synchronous); peripheral bus clock via RCC. */
+  /* Kernel clock = HCLK/4 (42.5 MHz); peripheral bus clock via RCC. */
   RCC_AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-  ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV1;
+  ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV4;
 
-  /* Leave deep-power-down, enable the internal regulator, wait tADCVREG_STUP
-   * (~20 us; a generous spin at the 16 MHz bring-up clock). */
+  /* Leave deep-power-down and wait the documented regulator startup time. */
   ADC1_CR &= ~ADC_CR_DEEPPWD;
   ADC1_CR |= ADC_CR_ADVREGEN;
-  for (volatile uint32_t i = 0; i < 4000u; ++i) {
-  }
+  hal_delay_us(20u);
 
   /* Single-ended calibration - ADEN must be 0 here (it is after reset). */
   ADC1_CR &= ~ADC_CR_ADCALDIF;

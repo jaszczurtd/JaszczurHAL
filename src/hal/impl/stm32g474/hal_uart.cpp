@@ -42,11 +42,15 @@ static hal_uart_impl_t s_pool[HAL_UART_MAX_INSTANCES] = {};
 /* ── Real USART backend (polled): PORT_1 -> USART1, PORT_2 -> USART2 ───────
  * RX is drained from RDR into the ring on every available() call, so a caller
  * that polls in a tight loop (the GPS update loop) never loses bytes at the
- * typical 9600 baud. USART AF is 7 for both instances; the kernel clock is the
- * 16 MHz HSI bring-up clock. Pending on-silicon validation. */
+ * typical 9600 baud. USART AF is 7 for both instances; USART1 uses PCLK2 and
+ * USART2 uses PCLK1. */
 
 static inline uint32_t usart_base(hal_uart_port_t port) {
   return (port == HAL_UART_PORT_2) ? USART2_BASE : USART1_BASE;
+}
+
+static inline uint32_t usart_clock_hz(hal_uart_port_t port) {
+  return (port == HAL_UART_PORT_2) ? JH_G474_PCLK1_HZ : JH_G474_PCLK2_HZ;
 }
 
 static inline void usart_clock_enable(hal_uart_port_t port) {
@@ -179,7 +183,7 @@ hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config) {
   gpio_af7(h->rx_pin);
 
   USART_CR1(base) &= ~USART_CR1_UE; /* disable to program BRR */
-  USART_BRR(base) = (JH_G474_CORE_CLOCK_HZ + baud / 2u) / baud; /* OVER16 */
+  USART_BRR(base) = (usart_clock_hz(h->port) + baud / 2u) / baud; /* OVER16 */
   USART_CR1(base) = USART_CR1_RE_BIT | USART_CR1_TE_BIT | USART_CR1_UE;
 #else
   (void)baud;

@@ -152,6 +152,7 @@ function(add_stm32_host_test NAME)
     target_compile_definitions(${NAME} PRIVATE
         HAL_TARGET_STM32G474=1
         HAL_ENABLE_STACK_GUARD
+        JH_STM32G474_SYSTEM_TESTING=1
         UNITY_INCLUDE_CONFIG_H
         HAL_ENABLE_UNITY
     )

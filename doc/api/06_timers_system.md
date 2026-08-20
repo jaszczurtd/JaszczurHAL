@@ -114,7 +114,11 @@ hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_re
 **Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
 **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
 **impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0` are treated as invalid and mapped to explicit result codes in `_ex`.
-**impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler. Long delays are chunked across 16-bit TIM6 periods, callback return values greater than zero reschedule the same alarm, and software pools provide the same public pool/cancel contract as RP2040.
+**impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
+the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
+16-bit TIM6 periods, callback return values greater than zero reschedule the
+same alarm, and software pools provide the same public pool/cancel contract as
+RP2040.
 **Thread safety:** The RP-family backend is thread-safe and multicore-safe for scheduling/canceling and managed-timer state transitions. STM32G474 protects its alarm slot scheduler with short PRIMASK critical sections; alarm callbacks execute from the TIM6 IRQ on hardware. Keep callbacks short and non-blocking. Mock backend is deterministic for tests but not synchronized for concurrent host threads.
 
 ---
@@ -387,14 +391,21 @@ board facts with flash reservations from the selected linker layout and
 FreeRTOS heap capacity when that runtime is active. The watchdog reset bit is
 latched before application entry so enabling the watchdog later cannot erase
 the previous-boot result.
-**impl/stm32g474:** SysTick/FreeRTOS time, DWT fallback delays, watchdog,
-idle, chip temperature, device identity, ISR detection, and other runtime
-system services live in
+**impl/stm32g474:** Startup derives a 170 MHz SYSCLK from HSI16 through the PLL
+and runs AHB, APB1, and APB2 without a prescaler. SysTick (bare metal) or the
+committed FreeRTOS tick (RTOS builds) advances a double-buffered 64-bit
+millisecond epoch. Bare-metal reads add the current SysTick microsecond
+fraction and account for a pending rollover. Consequently `hal_micros()` keeps
+its compatibility 32-bit wrap while `hal_micros64()` remains monotonic across
+that boundary. DWT fallback delays, watchdog, idle, chip temperature, device
+identity, ISR detection, and other runtime system services are split between
+`src/hal/impl/stm32g474/port/system_stm32g474.c` and
 `src/hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.{h,cpp}`.
 FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
 critical paths use DWT waits. The architecture snapshot combines generated
 target and board capacities with heap, stack, EEPROM, and LittleFS spans from
-the selected runtime and linker layout.
+the selected runtime and linker layout, and reports 170 MHz for both CPU and
+the primary peripheral clock.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 **Thread safety:** RP-family time/watchdog APIs are safe to call from both
 cores. In RP and STM32G474 FreeRTOS modes, `hal_delay_ms()` yields or blocks

@@ -133,10 +133,11 @@ hardware slice (`gpio/2 mod 8`) share one frequency/wrap but keep independent
 duty. Use `hal_pwm_freq` when exact frequency matters.
 
 **impl/stm32g474:** register-level TIM PWM output on mapped timer channels;
-default simple-PWM target frequency is 1 kHz best-effort from the current TIM
-clock. The STM32G474 PWM backend currently assumes APB prescaler == 1, so TIMx
-clock == `JH_G474_PCLK1_HZ` / `JH_G474_PCLK2_HZ`; if a future clock tree adds
-an APB divider, the STM32 timer x2 clock rule must be reflected in the backend.
+default simple-PWM target frequency is 1 kHz best-effort. The backend uses
+explicit `JH_G474_TIMCLK1_HZ` / `JH_G474_TIMCLK2_HZ` constants. Both are
+170 MHz in the current clock tree because APB1 and APB2 run without a
+prescaler; future APB changes must update the timer-kernel constants according
+to the STM32 timer x2 clock rule.
 
 **Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins
 to TIM channels. Channels sharing a timer also share frequency/resolution, and
@@ -244,10 +245,8 @@ to achieve the exact requested frequency, with pseudo/slow-scale correction for 
 **impl/stm32g474:** register-level TIM PWM on mapped
 TIM2/TIM3/TIM4/TIM15/TIM16/TIM17 channels. Frequency is a timer-level
 resource, so multiple channels on the same TIM share the same frequency and
-effective period. The reported source clock follows the same APB prescaler == 1
-assumption as `hal_pwm`; this keeps DACless sample-rate reporting consistent
-with the timer programming, but must be revisited if APB prescalers are
-introduced.
+effective period. Like `hal_pwm`, it uses the explicit 170 MHz TIMCLK constants,
+which keeps DACless sample-rate reporting consistent with timer programming.
 The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** - the GPIO
 function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
@@ -355,6 +354,9 @@ backends).
 **impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
 `adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
 the 12-bit hardware sample is rescaled to the configured resolution.
+**impl/stm32g474:** ADC1 single-ended regular conversions with lazy regulator
+startup, calibration, and pin-to-channel validation. ADC12 is synchronously
+clocked from HCLK/4, or 42.5 MHz with the current 170 MHz clock tree.
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
 **Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
 

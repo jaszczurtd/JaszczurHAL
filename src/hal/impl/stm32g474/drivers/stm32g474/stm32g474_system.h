@@ -8,12 +8,9 @@
  * layer pure dispatch.
  *
  * @par Status
- * Host-stub backend: timing is driven by static counters advanced from
- * @c stm32g474_system_delay_*(); watchdog / bootloader / UID / heap /
- * temperature are observable stubs. A real implementation (RCC, IWDG,
- * system bootloader entry via @c BOOT0 / @c PA13, on-die temperature via
- * ADC1 channel 16, UID via @c UID_BASE) will replace these without
- * changing the public surface.
+ * Hardware builds use the RCC and SysTick implementation from the STM32G474
+ * port layer. Host builds retain deterministic timing and test hooks. Some
+ * auxiliary services remain observable stubs on both targets.
  */
 
 #include <stdbool.h>
@@ -35,6 +32,10 @@ uint32_t stm32g474_system_main_stack_bytes(void);
 uint32_t stm32g474_system_millis(void);
 uint32_t stm32g474_system_micros(void);
 uint64_t stm32g474_system_micros64(void);
+
+#ifdef JH_STM32G474_SYSTEM_TESTING
+void stm32g474_system_test_set_micros64(uint64_t micros);
+#endif
 
 void stm32g474_system_delay_ms(uint32_t ms);
 void stm32g474_system_delay_us(uint32_t us);

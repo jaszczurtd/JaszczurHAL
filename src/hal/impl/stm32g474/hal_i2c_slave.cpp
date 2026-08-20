@@ -116,6 +116,7 @@ static bool i2c_slave_hw_configure(uint8_t bus, uint8_t sda_pin,
   st->hw_rcc_mask = desc->rcc_mask;
   RCC_APB1ENR1 |= st->hw_rcc_mask;
   (void)RCC_APB1ENR1;
+  jh_stm32g474_i2c_select_hsi16(desc->controller);
 
   i2c_slave_gpio_set_af_od_pullup(scl_pin, scl_af);
   i2c_slave_gpio_set_af_od_pullup(sda_pin, sda_af);

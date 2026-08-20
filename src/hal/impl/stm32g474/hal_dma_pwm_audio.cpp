@@ -5,6 +5,7 @@
 #ifdef HAL_ENABLE_DMA_PWM_AUDIO
 
 #include "hal/audio/hal_dma_pwm_audio.h"
+#include "hal/system/hal_system.h"
 #include "hal_pwm_stm32g474.h"
 
 #include <stddef.h>
@@ -84,7 +85,7 @@ static void stop_adc_conversion(void) {
 static void adc_hw_enable_if_needed(void) {
   RCC_AHB2ENR |= RCC_AHB2ENR_ADC12EN;
   (void)RCC_AHB2ENR;
-  ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV1;
+  ADC12_CCR = (ADC12_CCR & ~ADC_CCR_CKMODE_MASK) | ADC_CCR_CKMODE_HCLK_DIV4;
 
   if ((ADC1_CR & ADC_CR_ADEN) != 0u) {
     return;
@@ -92,8 +93,7 @@ static void adc_hw_enable_if_needed(void) {
 
   ADC1_CR &= ~ADC_CR_DEEPPWD;
   ADC1_CR |= ADC_CR_ADVREGEN;
-  for (volatile uint32_t i = 0u; i < 4000u; ++i) {
-  }
+  hal_delay_us(20u);
 
   ADC1_CR &= ~ADC_CR_ADCALDIF;
   ADC1_CR |= ADC_CR_ADCAL;
