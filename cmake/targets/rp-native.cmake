@@ -12,6 +12,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON CACHE BOOL
 
 set(JH_PICOTOOL_EXECUTABLE "" CACHE FILEPATH
     "Verified picotool executable used by Pico SDK post-processing")
+if(NOT JH_PICOTOOL_EXECUTABLE)
+    set(_jh_managed_picotool_name "picotool")
+    if(CMAKE_HOST_WIN32)
+        set(_jh_managed_picotool_name "picotool.exe")
+    endif()
+    set(_jh_managed_picotool
+        "${JH_ROOT}/.build/tools/picotool/${_jh_managed_picotool_name}")
+    if(EXISTS "${_jh_managed_picotool}")
+        set(JH_PICOTOOL_EXECUTABLE "${_jh_managed_picotool}"
+            CACHE FILEPATH
+            "Verified picotool executable used by Pico SDK post-processing"
+            FORCE)
+    endif()
+endif()
 if(JH_PICOTOOL_EXECUTABLE AND NOT TARGET picotool)
     if(NOT EXISTS "${JH_PICOTOOL_EXECUTABLE}")
         message(FATAL_ERROR

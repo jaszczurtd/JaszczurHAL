@@ -66,9 +66,31 @@ void test_plain_http_get_parses_fragment_safe_content_length_response(void) {
   TEST_ASSERT_NOT_NULL(strstr(sent, "X-Unit: yes\r\n"));
 }
 
+void test_content_length_requires_a_complete_decimal_value(void) {
+  hal_http_client_request_t request = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_http_client_request_init(&request));
+  request.host = "localhost";
+  request.port = 18080u;
+  request.timeout_ms = 5000u;
+
+  uint8_t body[8] = {};
+  hal_http_client_response_t response = {};
+  static const char reply[] =
+      "HTTP/1.1 200 OK\r\nContent-Length: 5x\r\n\r\nhello";
+  hal_mock_tcp_set_next_rx(reinterpret_cast<const uint8_t *>(reply),
+                           (uint16_t)(sizeof(reply) - 1u));
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EPROTO,
+      hal_http_client_perform_ex(&request, body, sizeof(body), &response));
+  TEST_ASSERT_EQUAL_UINT16(200u, response.status_code);
+  TEST_ASSERT_FALSE(response.content_length_known);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_request_defaults_and_validation_are_bounded);
   RUN_TEST(test_plain_http_get_parses_fragment_safe_content_length_response);
+  RUN_TEST(test_content_length_requires_a_complete_decimal_value);
   return UNITY_END();
 }

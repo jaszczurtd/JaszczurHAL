@@ -41,6 +41,7 @@
 | BSD sockets adapter | shared `hal/network/adapters/bsd/hal_bsd_sockets.cpp` over HAL UDP/TCP; remains independently selectable without TLS |
 | `hal_wireguard` | shared WireGuard/lwIP engine + capability-advertised host-lwIP backend |
 | `hal_mqtt` | bundled `PubSubClient` over HAL TCP, with optional BearSSL MQTTS transport |
+| `hal_notify` | backend-dispatched facade plus Telegram over the shared HTTP/HTTPS client |
 | `hal_ota` | RP staging/applier with authenticated VS Code transport over HAL UDP/TCP |
 | `hal_time` | Shared Gregorian/CET/CEST and interval helpers, plus HAL UDP/NTP client and target timekeeping integration |
 | `hal_kv` | internal `hal_eeprom` + `hal_sync` |
@@ -353,6 +354,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_websocket` | HTTP Upgrade handshake, `Sec-WebSocket-Accept`, masked text frames, broadcast, ping/pong, close callbacks and invalid handshakes |
 | `test_hal_net_console` | Password-required TCP console start/auth flow, serial/debug mirroring to authenticated clients, multi-client broadcast, bidirectional command input, per-client replies and disconnect callbacks |
 | `test_hal_net_commands` | JSON/text command registration and dispatch, HTTP route integration, WebSocket message integration, structured errors and API validation |
+| `test_hal_notify` | Notification facade validation, fake-backend dispatch, generation-checked handle lifetime, Telegram request JSON, public-host HTTP rejection and rate-limit mapping |
 | `test_bsd_sockets` | BSD/POSIX adapter fd mapping, sockaddr translation, errno/EAI paths, TCP/UDP flow, nonblocking mode, `select()`, `getaddrinfo()` and `setsockopt()` |
 | `test_bsd_socket_headers_c` | portable C declaration/constant/structure contract for BSD socket headers; runs under GNU-like hosts and MSVC |
 | `test_hal_tls` / `test_bearssl_provider` | public TLS lifecycle, native HAL TCP transport, bounded BearSSL progression and optional TLS-over-BSD callbacks |

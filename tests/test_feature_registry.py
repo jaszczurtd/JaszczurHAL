@@ -675,13 +675,13 @@ if TEST_ROOT.exists():
 TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
-require(len(model.features) == 99, "feature registry symbol count drifted")
+require(len(model.features) == 101, "feature registry symbol count drifted")
 require(
-    sum(bool(feature.implies) for feature in model.features.values()) == 62,
+    sum(bool(feature.implies) for feature in model.features.values()) == 63,
     "feature registry implies-source count drifted",
 )
 require(
-    sum(len(feature.implies) for feature in model.features.values()) == 114,
+    sum(len(feature.implies) for feature in model.features.values()) == 118,
     "feature registry direct-edge count drifted",
 )
 require(

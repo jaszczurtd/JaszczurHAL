@@ -394,6 +394,19 @@ foreach(_unsupported_picotool_contract IN ITEMS
     endif()
 endforeach()
 
+foreach(_managed_picotool_contract IN ITEMS
+        "JH_ROOT}/.build/tools/picotool/"
+        "CMAKE_HOST_WIN32"
+        "JH_PICOTOOL_EXECUTABLE")
+    string(FIND "${_native_recipe_text}" "${_managed_picotool_contract}"
+        _managed_picotool_at)
+    if(_managed_picotool_at EQUAL -1)
+        message(FATAL_ERROR
+            "Native RP recipe does not probe the managed picotool fallback: "
+            "${_managed_picotool_contract}")
+    endif()
+endforeach()
+
 foreach(_freertos_port IN ITEMS RP2040 RP2350_ARM_NTZ RP2350_RISC-V)
     string(FIND "${_freertos_cmake_text}" "${_freertos_port}" _port_at)
     if(_port_at EQUAL -1)

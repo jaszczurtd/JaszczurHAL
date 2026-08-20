@@ -7,8 +7,10 @@ This consolidated example has two dispatcher profiles:
   additional workers, delays, idle processing, GPIO, and shared state;
 - the `network` variant builds `network_app.cpp` on WiFi-capable RP targets and
   STM32G474 with PIM730. It runs one coordinated HTTP/WebSocket/file/command
-  service, a network console, a BSD TCP/UDP worker, and an HTTP/HTTPS client
-  worker while retaining the two application-task smoke path.
+  service, a network console, a BSD TCP/UDP worker, an HTTP/HTTPS client
+  worker while retaining the two application-task smoke paths. The profile also
+  compiles the Telegram notification backend as an integration check, without
+  embedding notification credentials or sending a runtime probe.
 
 The network variant deliberately owns each singleton service only once. Its
 HTTP server uses seven of the default eight routes: `/`, `/api/status`, the
@@ -46,8 +48,9 @@ const unsigned int http_example_ca_der_len = sizeof(http_example_ca_der);
 ```
 
 The worker waits for NTP synchronization, converts that DER certificate to a
-HAL trust anchor, and then performs the verified TLS request. TLS is compiled
-into the normal network variant even when the certificate is not supplied, so
-the gate still checks the full HTTP/TLS integration surface. Runtime RAM on
-STM32G474 is intentionally tight; validate the HTTPS-enabled configuration on
-the intended board and inspect its link map before deployment.
+HAL trust anchor, and then performs the verified TLS request. TLS and the
+Telegram backend are compiled into the normal network variant even when the
+certificate is not supplied, so the gate still checks the full integration
+surface. Runtime RAM on STM32G474 is
+intentionally tight; validate the HTTPS-enabled configuration on the intended
+board and inspect its link map before deployment.

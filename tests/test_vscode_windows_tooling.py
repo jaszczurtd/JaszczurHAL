@@ -658,6 +658,43 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
         generated_settings["cortex-debug.gdbPath.linux"] == "gdb-multiarch",
         "standalone generator omitted Linux Arm GDB selection",
     )
+    require(
+        generated_settings["cmake.generator"] == "Ninja",
+        "standalone generator omitted the CMake Tools generator",
+    )
+    require(
+        generated_settings["cmake.buildDirectory"].endswith(
+            "/.build/cmake-tools/rp2040-pico"
+        ),
+        "standalone generator did not isolate the CMake Tools cache",
+    )
+    generated_cmake_settings = generated_settings.get("cmake.configureSettings")
+    require(
+        isinstance(generated_cmake_settings, dict),
+        "standalone generator omitted CMake Tools configure settings",
+    )
+    require(
+        generated_cmake_settings.get("JH_PROJECT_DIR") == "${workspaceFolder}",
+        "standalone generator omitted JH_PROJECT_DIR for CMake Tools",
+    )
+    require(
+        generated_cmake_settings.get("JH_MODULE_NAME") == "example",
+        "standalone generator omitted JH_MODULE_NAME for CMake Tools",
+    )
+    require(
+        generated_cmake_settings.get("JH_TARGET") == "rp2040",
+        "standalone generator omitted JH_TARGET for CMake Tools",
+    )
+    require(
+        generated_cmake_settings.get("JH_BOARD") == "pico",
+        "standalone generator omitted JH_BOARD for CMake Tools",
+    )
+    require(
+        str(generated_cmake_settings.get("PICO_SDK_PATH", "")).endswith(
+            "/third_party/pico-sdk"
+        ),
+        "standalone generator omitted PICO_SDK_PATH for CMake Tools",
+    )
     require_launch_contract(
         load_json(project_dir / ".vscode" / "launch.json"),
         "${workspaceFolder}/.build/firmware.elf",
@@ -708,6 +745,16 @@ with tempfile.TemporaryDirectory(prefix="jh generator spacje ") as temp_dir:
     require(
         cross_settings["cmake.sourceDirectory"] == expected_dispatcher,
         "cross-volume settings prefixed an absolute dispatcher path",
+    )
+    cross_cmake_settings = cross_settings["cmake.configureSettings"]
+    require(
+        cross_cmake_settings["JH_ROOT"] == ROOT.resolve().as_posix(),
+        "cross-volume settings did not keep an absolute JaszczurHAL root",
+    )
+    require(
+        cross_cmake_settings["PICO_SDK_PATH"]
+        == f"{ROOT.resolve().as_posix()}/third_party/pico-sdk",
+        "cross-volume settings prefixed an absolute Pico SDK path",
     )
     require(
         cross_manifest["$schema"].startswith("file:"),

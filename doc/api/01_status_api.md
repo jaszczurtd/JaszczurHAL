@@ -138,7 +138,7 @@ next to each other** in the module reference, with worked examples:
 | Output devices (`hal_dac`, `hal_rgb_led`, `hal_pga2311`) | [Output devices](13_output_devices.md) |
 | RTC (`hal_rtc`) | [Sensors](11_sensors.md) |
 | Storage (`hal_eeprom`, `hal_kv`, `hal_littlefs`) | [Storage](14_storage.md) |
-| Networking (`hal_wifi`, `hal_tcp`, `hal_udp`, `hal_mqtt`, `hal_wireguard`) | [Network connectivity](15_connectivity.md) |
+| Networking (`hal_wifi`, `hal_tcp`, `hal_udp`, `hal_mqtt`, `hal_notify`, `hal_wireguard`) | [Network connectivity](15_connectivity.md) |
 
 ## Migration guidance
 

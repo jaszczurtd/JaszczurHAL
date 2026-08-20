@@ -499,9 +499,11 @@ templates. The user-facing behavior of every generated task is documented in
 Generates a standalone dispatcher-backed firmware project with a manifest,
 blink application, HAL project configuration, launch configuration, shared
 Unix/Windows task commands, extension recommendations, and keybinding
-reference. `--target` and `--board` select the initial profile. `--force`
-replaces only files owned by the generator in the requested project directory;
-`--dry-run` lists the paths without writing them.
+reference. The generated VS Code settings include `cmake.configureSettings` for
+the initial target and board, allowing CMake Tools to configure the shared
+dispatcher directly. `--target` and `--board` select the initial profile.
+`--force` replaces only files owned by the generator in the requested project
+directory; `--dry-run` lists the paths without writing them.
 
 ### `vscode/tools/manage_vscode_extensions.py`
 

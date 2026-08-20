@@ -12,9 +12,9 @@
 #if !defined(HAL_ENABLE_BSD_SOCKETS) || !defined(HAL_ENABLE_HTTP_CLIENT) ||    \
     !defined(HAL_ENABLE_HTTP_FILES) || !defined(HAL_ENABLE_HTTP_SERVER) ||     \
     !defined(HAL_ENABLE_NET_COMMANDS) || !defined(HAL_ENABLE_NET_CONSOLE) ||   \
-    !defined(HAL_ENABLE_TIME) || !defined(HAL_ENABLE_TLS) ||                   \
-    !defined(HAL_ENABLE_WEBSOCKET) || !defined(HAL_ENABLE_WIFI) ||             \
-    !defined(HAL_ENABLE_CJSON)
+    !defined(HAL_ENABLE_NOTIFY_TELEGRAM) || !defined(HAL_ENABLE_TIME) ||       \
+    !defined(HAL_ENABLE_TLS) || !defined(HAL_ENABLE_WEBSOCKET) ||              \
+    !defined(HAL_ENABLE_WIFI) || !defined(HAL_ENABLE_CJSON)
 #error "18_freertos_suite network variant is missing required feature flags"
 #endif
 
@@ -56,6 +56,7 @@
 #include <hal/network/http/hal_http_server.h>
 #include <hal/network/net_commands/hal_net_commands.h>
 #include <hal/network/net_console/hal_net_console.h>
+#include <hal/network/notify/hal_notify.h>
 #include <hal/network/tls/hal_tls.h>
 #include <hal/network/websocket/hal_websocket.h>
 #include <hal/serial/hal_serial.h>

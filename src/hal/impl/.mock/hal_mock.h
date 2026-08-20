@@ -581,6 +581,8 @@ void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
                             uint16_t len);
 /** @brief Queue inbound bytes for the next successful mock TCP connection. */
 void hal_mock_tcp_set_next_rx(const uint8_t *payload, uint16_t len);
+/** @brief Append inbound bytes for a later successful mock TCP connection. */
+bool hal_mock_tcp_queue_next_rx(const uint8_t *payload, uint16_t len);
 /** @brief Return payload captured from a specific mock TCP socket. */
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket);
 /** @brief Return captured payload length for a specific mock TCP socket. */

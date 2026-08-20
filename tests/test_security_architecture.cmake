@@ -10,6 +10,10 @@ set(_security_header
     "${JH_ROOT}/src/hal/security/jh_secure_random.h")
 set(_security_source
     "${JH_ROOT}/src/hal/security/jh_secure_random.cpp")
+set(_rp_security_source
+    "${JH_ROOT}/src/hal/impl/rp2040/rp2040_secure_random.cpp")
+set(_stm32_security_source
+    "${JH_ROOT}/src/hal/impl/stm32g474/stm32g474_tls_entropy.cpp")
 set(_ble_api "${JH_ROOT}/src/hal/bluetooth/hal_ble_stream.cpp")
 set(_ble_session
     "${JH_ROOT}/src/hal/bluetooth/jh_ble_stream_session.c")
@@ -21,10 +25,31 @@ foreach(_required IN ITEMS
         "${_auth_source}"
         "${_security_header}"
         "${_security_source}"
+        "${_rp_security_source}"
+        "${_stm32_security_source}"
         "${_ble_api}"
         "${_ble_session}")
     if(NOT EXISTS "${_required}")
         message(FATAL_ERROR "Security/session source is missing: ${_required}")
+    endif()
+endforeach()
+
+file(READ "${_security_source}" _security_source_contents)
+if(NOT _security_source_contents MATCHES
+   "#if[ \t]+!HAL_TARGET_IS_RP[ \t]+&&[ \t]+!HAL_TARGET_IS_STM32G474")
+    message(FATAL_ERROR
+        "Hardware archives can select the weak secure-random fallback")
+endif()
+foreach(_hardware_source IN ITEMS
+        "${_rp_security_source}" "${_stm32_security_source}")
+    file(READ "${_hardware_source}" _hardware_security_contents)
+    if(NOT _hardware_security_contents MATCHES
+       "jh_secure_random_bytes[ \t\r\n]*\\(" OR
+       _hardware_security_contents MATCHES
+       "weak[^\n]*jh_secure_random_bytes")
+        message(FATAL_ERROR
+            "Hardware secure-random provider is not a strong definition: "
+            "${_hardware_source}")
     endif()
 endforeach()
 
@@ -73,7 +98,6 @@ if(NOT _auth_source_contents MATCHES "jh_constant_time_compare" OR
         "SC authentication bypasses shared security primitives")
 endif()
 
-file(READ "${_security_source}" _security_source_contents)
 foreach(_primitive IN ITEMS
         jh_secure_random_bytes
         jh_secure_zeroize

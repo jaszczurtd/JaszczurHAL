@@ -4,8 +4,8 @@
 
 Covers: `hal_wifi`, `hal_udp`, `hal_tcp`, `hal_http_server`,
 `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`,
-`hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`, and the optional
-`HAL_ENABLE_BSD_SOCKETS` compatibility adapter.
+`hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`, and the
+optional `HAL_ENABLE_BSD_SOCKETS` compatibility adapter.
 Shared network types live in `hal_net.h`.
 
 ## Status-returning network API
@@ -26,6 +26,7 @@ Representative entries include `hal_wifi_begin_station_ex()`,
 `hal_tcp_listener_{bind,listen,accept}_ex()`,
 `hal_udp_socket_{bind,sendto,recvfrom}_ex()`, legacy-packet UDP `_ex` helpers,
 `hal_mqtt_{connect,publish,subscribe}_ex()` and
+`hal_notify_{open,send,poll,close}()` and
 `hal_wireguard_{begin,peer_up,kick_handshake}_ex()`.
 
 The complete additive status surface is:
@@ -480,6 +481,92 @@ headers, response metadata, and bounded body copies.
 `test_hal_http_client_plaintext_compile` keeps the plaintext-only flag
 combination buildable. The verified HTTP/HTTPS client path is part of
 [`examples/18_freertos_suite`](../../examples/18_freertos_suite/README.md).
+
+---
+
+## `hal_notify` - notifications  *(opt-in - `HAL_ENABLE_NOTIFY`)*
+
+`hal_notify` is a small notification facade with generation-checked channel
+handles and backend descriptors. The facade owns channel lifetime, default
+format/timeout resolution and per-channel serialization; concrete delivery
+backends own their protocol configuration.
+
+```c
+#include <hal/network/notify/hal_notify.h>
+
+hal_notify_telegram_config_t telegram;
+hal_notify_telegram_config_init(&telegram);
+telegram.bot_token = TELEGRAM_BOT_TOKEN;
+telegram.default_chat_id = TELEGRAM_CHAT_ID;
+telegram.tls_security = &telegram_tls_security;
+
+hal_notify_config_t notify;
+hal_notify_config_init(&notify);
+notify.backend = hal_notify_telegram_backend();
+notify.backend_config = &telegram;
+notify.device_name = "garage";
+
+hal_notify_channel_t channel;
+hal_notify_open(&notify, &channel);
+
+hal_notify_message_t message;
+hal_notify_message_init(&message);
+message.title = "ECU alert";
+message.body = "Coolant temperature threshold exceeded.";
+message.severity = HAL_NOTIFY_SEVERITY_ERROR;
+
+hal_notify_receipt_t receipt;
+hal_notify_send(channel, &message, &receipt);
+```
+
+The first backend is enabled by `HAL_ENABLE_NOTIFY_TELEGRAM`, which propagates
+`HAL_ENABLE_NOTIFY`, `HAL_ENABLE_HTTP_CLIENT`, `HAL_ENABLE_TLS` and
+`HAL_ENABLE_CJSON`. It sends Telegram Bot API `sendMessage` calls through
+`hal_http_client_perform_ex()`. Public `api.telegram.org` delivery requires
+HTTPS and a non-NULL `hal_tls_security_config_t`; plain HTTP is accepted only
+for a caller-provided custom host such as a local proxy or local Bot API
+deployment. Public-host matching is ASCII case-insensitive and accepts the DNS
+absolute-name trailing dot, so spelling variants cannot bypass this policy.
+
+Backend configs keep referenced strings and TLS security storage caller-owned.
+JaszczurHAL does not persist or provision the bot token or chat ID. Applications
+should obtain them from their credentials/storage component, keep the referenced
+buffers alive through `hal_notify_close()`, and then release them according to
+that component's ownership contract. Channel-level `device_name` is inherited
+by messages that do not provide their own override.
+
+The Telegram backend prepends severity and optional device identity, for
+example `[ERROR] [garage] ECU alert`. Plain-text messages longer than the
+per-request `HAL_NOTIFY_TELEGRAM_TEXT_MAX` limit (3500 bytes by default) are
+split at UTF-8 boundaries, preferably near whitespace, and marked `(1/N)`,
+`(2/N)`, and so on. The limit includes the generated prefix and leaves margin
+below Telegram's 4096-character `sendMessage` limit. Rich MarkdownV2/HTML text
+is not split automatically because splitting may break caller-supplied entities;
+an oversized rich-text message returns `HAL_EOVERFLOW`.
+
+`HAL_NOTIFY_MESSAGE_SILENT` maps to Telegram `disable_notification`, while
+`HAL_NOTIFY_MESSAGE_SUPPRESS_LINK_PREVIEW` uses Telegram link preview options.
+Telegram HTTP/API failures are reported through `hal_status_t` and optional
+`hal_notify_receipt_t` fields: HTTP/API status, provider error, retry-after and
+provider message ID. `parts_sent` and `parts_total` expose multipart progress;
+`HAL_NOTIFY_RECEIPT_PARTIAL_DELIVERY` means at least one part was accepted
+before a later part failed. Multipart delivery is therefore not atomic.
+
+`hal_notify_send()` is a bounded synchronous call and may perform multiple HTTP
+requests for a split message. Call it from a dedicated application/RTOS worker
+when the main control loop must remain responsive. `hal_notify_poll()` only
+services backends that implement poll-driven progress; it does not make a
+synchronous backend asynchronous. `hal_notify_close()` returns the backend
+close status when closure is immediate. If another operation already holds the
+channel, close is deferred and its result is returned by that final operation
+when the operation itself otherwise succeeds.
+
+**Implementation:** `hal/network/notify/hal_notify.cpp` and
+`hal/network/notify/hal_notify_telegram.cpp`.
+**Tests:** `test_hal_notify` covers facade validation, fake-backend dispatch,
+handle lifetime and close errors, Telegram request JSON/prefixes, canonical
+public-host HTTP rejection, multipart delivery and rate-limit mapping.
+`test_hal_notify_c_compile` covers the C header contract.
 
 ---
 
@@ -1457,6 +1544,8 @@ void        hal_mock_tcp_set_connect_result(bool result);
 void        hal_mock_tcp_inject_rx(hal_tcp_socket_t socket,
                                    const uint8_t *payload,
                                    uint16_t len);
+void        hal_mock_tcp_set_next_rx(const uint8_t *payload, uint16_t len);
+bool        hal_mock_tcp_queue_next_rx(const uint8_t *payload, uint16_t len);
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket);
 uint16_t    hal_mock_tcp_get_last_tx_len(hal_tcp_socket_t socket);
 bool        hal_mock_tcp_get_remote_endpoint(hal_tcp_socket_t socket,
