@@ -1,17 +1,13 @@
 /**
  * @file system_stm32g474.c
- * @brief SystemInit + SysTick time base for the STM32G474 bring-up.
+ * @brief SystemInit, PLL clock tree, and monotonic time for STM32G474.
  *
- * The STM32G4 boots on HSI16 (16 MHz); this first step keeps that default
- * clock (no PLL) and only:
+ * The STM32G4 boots on HSI16 (16 MHz). Startup configures HSI16 as the PLL
+ * source and runs the core and both APB buses at 170 MHz. It also:
  *   - relocates the vector table to flash base (VTOR),
  *   - enables the FPU (CPACR),
  *   - enables the dedicated fault handlers so CFSR/HFSR are meaningful,
  *   - starts SysTick at 1 kHz in non-FreeRTOS builds.
- *
- * This replaces the host-stub time source (`g_millis += ms`) with hardware
- * time, which is the single highest-leverage change: every timeout/timer in
- * the library depends on hal_millis().
  *
  * Only built for the ARM hardware target (JH_STM32G474_HW).
  */
@@ -19,6 +15,7 @@
 #ifdef JH_STM32G474_HW
 
 #include "stm32g474_regs.h"
+#include "stm32g474_time.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -26,28 +23,114 @@
 #include "hal/impl/stm32g474/drivers/stm32g474/stm32g474_fault.h"
 #endif
 
-#ifdef HAL_ENABLE_FREERTOS
-#include <FreeRTOS.h>
-#include <task.h>
-#endif
+typedef struct {
+  uint32_t high;
+  uint32_t low;
+} stm32g474_millis_epoch_t;
 
-/* Milliseconds since boot, advanced by the SysTick interrupt. */
-#ifndef HAL_ENABLE_FREERTOS
-volatile uint32_t g_systick_ms = 0u;
+/* The inactive slot is written completely before the active index flips. This
+ * keeps snapshots valid even when a higher-priority interrupt preempts the
+ * SysTick writer. */
+static volatile stm32g474_millis_epoch_t g_millis_epoch[2] = {{0u, 0u},
+                                                              {0u, 0u}};
+static volatile uint32_t g_millis_epoch_active = 0u;
 
-void SysTick_Handler(void) { g_systick_ms++; }
-#else
-static int stm32g474_system_in_isr_local(void) {
-  uint32_t ipsr;
-  __asm volatile("MRS %0, ipsr" : "=r"(ipsr));
-  return (ipsr & 0x1FFu) != 0u;
+static void stm32g474_time_barrier(void) { __asm volatile("dmb" ::: "memory"); }
+
+static void stm32g474_millis_advance(uint32_t milliseconds) {
+  if (milliseconds == 0u) {
+    return;
+  }
+  const uint32_t active = g_millis_epoch_active;
+  const uint32_t next = active ^ 1u;
+  uint32_t high = g_millis_epoch[active].high;
+  uint32_t low = g_millis_epoch[active].low;
+
+  const uint32_t previous_low = low;
+  low += milliseconds;
+  if (low < previous_low) {
+    high += 1u;
+  }
+  g_millis_epoch[next].high = high;
+  g_millis_epoch[next].low = low;
+  stm32g474_time_barrier();
+  g_millis_epoch_active = next;
 }
 
-static TickType_t stm32g474_freertos_tick_count(void) {
-  if (stm32g474_system_in_isr_local()) {
-    return xTaskGetTickCountFromISR();
+static void stm32g474_millis_snapshot(uint32_t *high, uint32_t *low) {
+  uint32_t before;
+  uint32_t after;
+
+  do {
+    before = g_millis_epoch_active;
+    stm32g474_time_barrier();
+    *high = g_millis_epoch[before].high;
+    *low = g_millis_epoch[before].low;
+    stm32g474_time_barrier();
+    after = g_millis_epoch_active;
+  } while (before != after);
+}
+
+static void stm32g474_clock_init(void) {
+  RCC_APB1ENR1 |= RCC_APB1ENR1_PWREN;
+  (void)RCC_APB1ENR1;
+
+  /* 170 MHz requires voltage Range 1 boost and four flash wait states. */
+  PWR_CR5 &= ~PWR_CR5_R1MODE;
+  FLASH_ACR = (FLASH_ACR & ~FLASH_ACR_LATENCY_MASK) | FLASH_ACR_LATENCY_4WS |
+              FLASH_ACR_PRFTEN | FLASH_ACR_ICEN | FLASH_ACR_DCEN;
+  while ((FLASH_ACR & FLASH_ACR_LATENCY_MASK) != FLASH_ACR_LATENCY_4WS) {
   }
-  return xTaskGetTickCount();
+
+  RCC_CR |= RCC_CR_HSION;
+  while ((RCC_CR & RCC_CR_HSIRDY) == 0u) {
+  }
+
+  RCC_CR &= ~RCC_CR_PLLON;
+  while ((RCC_CR & RCC_CR_PLLRDY) != 0u) {
+  }
+
+  RCC_PLLCFGR = RCC_PLLCFGR_PLLSRC_HSI | RCC_PLLCFGR_PLLM_DIV4 |
+                RCC_PLLCFGR_PLLN_MUL85 | RCC_PLLCFGR_PLLREN |
+                RCC_PLLCFGR_PLLR_DIV2;
+  RCC_CR |= RCC_CR_PLLON;
+  while ((RCC_CR & RCC_CR_PLLRDY) == 0u) {
+  }
+
+  /* Keep HCLK at 85 MHz during the SYSCLK transition, then expose the full
+   * 170 MHz after PLL is selected and stable. Both APB buses remain /1. */
+  RCC_CFGR = (RCC_CFGR & ~(RCC_CFGR_HPRE_MASK | RCC_CFGR_PPRE1_MASK |
+                           RCC_CFGR_PPRE2_MASK)) |
+             RCC_CFGR_HPRE_DIV2 | RCC_CFGR_PPRE1_DIV1 | RCC_CFGR_PPRE2_DIV1;
+  RCC_CFGR = (RCC_CFGR & ~RCC_CFGR_SW_MASK) | RCC_CFGR_SW_PLL;
+  while ((RCC_CFGR & RCC_CFGR_SWS_MASK) != RCC_CFGR_SWS_PLL) {
+  }
+
+  for (volatile uint32_t delay = 0u; delay < 200u; ++delay) {
+    __asm volatile("nop");
+  }
+  RCC_CFGR = (RCC_CFGR & ~RCC_CFGR_HPRE_MASK) | RCC_CFGR_HPRE_DIV1;
+
+  /* Keep timing-sensitive I2C on HSI16 and give FDCAN a live PCLK1 source. */
+  RCC_CCIPR = (RCC_CCIPR & ~(RCC_CCIPR_I2C1SEL_MASK | RCC_CCIPR_I2C2SEL_MASK |
+                             RCC_CCIPR_FDCANSEL_MASK)) |
+              RCC_CCIPR_I2C1SEL_HSI16 | RCC_CCIPR_I2C2SEL_HSI16 |
+              RCC_CCIPR_FDCANSEL_PCLK1;
+
+  __asm volatile("dsb");
+  __asm volatile("isb");
+}
+
+#ifndef HAL_ENABLE_FREERTOS
+
+void SysTick_Handler(void) { stm32g474_millis_advance(1u); }
+#else
+static uint32_t g_freertos_tick_last = 0u;
+
+void stm32g474_freertos_tick_sync(uint32_t tick_count) {
+  const uint32_t elapsed = tick_count - g_freertos_tick_last;
+  g_freertos_tick_last = tick_count;
+  stm32g474_millis_advance(elapsed);
 }
 #endif
 
@@ -59,6 +142,8 @@ void SystemInit(void) {
   SCB_CPACR |= SCB_CPACR_FPU_FULL;
   __asm volatile("dsb");
   __asm volatile("isb");
+
+  stm32g474_clock_init();
 
   /* Keep a hardware cycle counter available for FreeRTOS fallback delays.
    * SysTick belongs to the scheduler in that mode, so pre-scheduler and
@@ -85,7 +170,7 @@ void SystemInit(void) {
 #endif
 
 #ifndef HAL_ENABLE_FREERTOS
-  /* SysTick @ 1 kHz from the 16 MHz core clock. */
+  /* SysTick @ 1 kHz from the 170 MHz core clock. */
   SYSTICK_LOAD = (JH_G474_CORE_CLOCK_HZ / 1000u) - 1u;
   SYSTICK_VAL = 0u;
   SYSTICK_CTRL =
@@ -100,35 +185,58 @@ void SystemInit(void) {
 /* ── Time source consumed by the stm32g474_system driver under HW build ──── */
 
 uint32_t stm32g474_systick_millis(void) {
+  uint32_t high;
+  uint32_t low;
+  stm32g474_millis_snapshot(&high, &low);
+  (void)high;
+  return low;
+}
+
+uint64_t stm32g474_systick_micros64(void) {
 #ifdef HAL_ENABLE_FREERTOS
-  return (uint32_t)stm32g474_freertos_tick_count();
+  uint32_t high;
+  uint32_t low;
+  stm32g474_millis_snapshot(&high, &low);
+  return jh_stm32g474_compose_micros(high, low, 0u);
 #else
-  return g_systick_ms;
+  uint32_t before;
+  uint32_t after;
+  uint32_t high;
+  uint32_t low;
+  uint32_t value;
+  uint32_t pending;
+
+  /* Snapshot the epoch and down-counter together. If SysTick rolled while its
+   * interrupt was masked, account for the pending millisecond locally. */
+  do {
+    before = g_millis_epoch_active;
+    stm32g474_time_barrier();
+    high = g_millis_epoch[before].high;
+    low = g_millis_epoch[before].low;
+    value = SYSTICK_VAL;
+    pending = SCB_ICSR & SCB_ICSR_PENDSTSET;
+    if (pending != 0u) {
+      value = SYSTICK_VAL;
+    }
+    stm32g474_time_barrier();
+    after = g_millis_epoch_active;
+  } while (before != after);
+
+  if (pending != 0u) {
+    jh_stm32g474_increment_millis(&high, &low);
+  }
+
+  uint32_t micros_in_millis = 0u;
+  if (value != 0u) {
+    const uint32_t elapsed_cycles = SYSTICK_LOAD - value;
+    micros_in_millis = elapsed_cycles / (JH_G474_CORE_CLOCK_HZ / 1000000u);
+  }
+  return jh_stm32g474_compose_micros(high, low, micros_in_millis);
 #endif
 }
 
-/* Sub-millisecond fraction in microseconds, derived from the SysTick
- * down-counter (LOAD..0 over 1 ms). */
 uint32_t stm32g474_systick_micros(void) {
-#ifdef HAL_ENABLE_FREERTOS
-  return (uint32_t)stm32g474_freertos_tick_count() * 1000u;
-#else
-  uint32_t ms1, ms2;
-  uint32_t val;
-  const uint32_t load = SYSTICK_LOAD + 1u;
-
-  /* Read consistently across a possible tick rollover. */
-  do {
-    ms1 = g_systick_ms;
-    val = SYSTICK_VAL;
-    ms2 = g_systick_ms;
-  } while (ms1 != ms2);
-
-  /* Elapsed core cycles within the current ms / cycles-per-us. */
-  const uint32_t elapsed_cycles = load - val;
-  const uint32_t us_in_ms = elapsed_cycles / (JH_G474_CORE_CLOCK_HZ / 1000000u);
-  return (ms1 * 1000u) + us_in_ms;
-#endif
+  return (uint32_t)stm32g474_systick_micros64();
 }
 
 #endif /* JH_STM32G474_HW */

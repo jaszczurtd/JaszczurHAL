@@ -44,10 +44,9 @@ void g474_debug_uart_init(void) {
   set_af(GPIOA_INDEX, PIN_TX, AF7);
   set_af(GPIOA_INDEX, PIN_RX, AF7);
 
-  /* USART2 clocked from PCLK1 = 16 MHz (HSI16, no prescaler after reset).
-   * BRR = fck / baud with oversampling by 16. */
+  /* BRR = PCLK1 / baud with oversampling by 16. */
   USART2_CR1 = 0u;
-  USART2_BRR = JH_G474_CORE_CLOCK_HZ / 115200u; /* 16e6 / 115200 = 139 */
+  USART2_BRR = (JH_G474_PCLK1_HZ + 57600u) / 115200u;
   USART2_CR1 = USART_CR1_TE | USART_CR1_RE | USART_CR1_UE;
 
   s_initialised = 1;

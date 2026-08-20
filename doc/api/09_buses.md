@@ -78,6 +78,9 @@ write inside `_async_start()`, report `_async_busy() == false`, and let
 **impl/rp2040:** Native Pico SDK `hardware/spi.h` on SPI0/SPI1 plus `hardware/gpio.h` pin muxing. `hal_spi_write_dma_async_start()` uses SPI TX DMA for MSB-first byte streams and returns before the bus is idle; `hal_spi_end_transaction()` / `hal_spi_deinit()` wait for any active async TX DMA before closing the transaction or releasing the channel.
 **impl/stm32g474:** register-level SPI1/SPI2 master, 8-bit full-duplex,
 software NSS, polling transfer, AF5 pin setup and interrupt-driven TX DMA.
+SPI1 is sourced from the 170 MHz PCLK2 and SPI2 from the 170 MHz PCLK1; the
+backend selects the fastest power-of-two prescaler that does not exceed the
+requested clock.
 Default pins: SPI bus 0 = PA6/PA7/PA5, bus 1 = PB14/PB15/PB13. SPI1 TX
 reserves DMA1 Channel7 and SPI2 TX reserves DMA1 Channel8; the corresponding
 DMAMUX requests and DMA interrupts chain buffers larger than the 65,535-byte
@@ -301,7 +304,7 @@ be verified on the target platform.
 Standard-mode, Fast-mode, Fast-mode Plus, and High-speed mode.
 
 **impl/rp2040:** Native Pico SDK `hardware/i2c.h` on I2C0/I2C1 plus `hardware/gpio.h` pin muxing; per-bus mutex guards all transactions. Clock requests above Fast-mode Plus are clamped to 1 MHz because RP2040 I2C does not implement Hs-mode. `hal_i2c_bus_clear()` uses GPIO-level SCL/SDA recovery before restoring the I2C pin function.
-**impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers via 16 MHz TIMINGR presets, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear before init.
+**impl/stm32g474:** Register-level I2C v2 master on I2C1/I2C2. Both controllers explicitly select HSI16 as their kernel source, so the validated 16 MHz TIMINGR presets remain independent of the 170 MHz APB clock. The backend validates SDA/SCL alternate-function mappings, configures GPIO open-drain pull-ups, supports the HAL clock tiers, handles write/read/write-read/is-busy paths on both buses, and performs GPIO-level bus clear with clock-independent microsecond pacing before init.
 **impl/.mock:** ring buffer; injectable via mock helpers. Injected RX bytes are consumed sequentially by request/read transactions, which lets tests script multi-register flows. `hal_i2c_end_transmission()` returns `HAL_I2C_ERROR_GENERIC` when the mock busy flag is set, `HAL_I2C_RESULT_OK` otherwise. `hal_i2c_bus_clear()` increments an internal counter (query via `hal_mock_i2c_get_bus_clear_count()`); counter resets on `hal_i2c_init()`.
 **Thread safety:** Hardware backends serialize transfer APIs with an internal per-bus `hal_mutex_t`; use `hal_i2c_lock` / `hal_i2c_unlock` to extend critical regions around direct third-party/backend bus calls. `hal_i2c_init*()` / `hal_i2c_deinit*()` reconfigure shared bus objects and must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
@@ -435,7 +438,7 @@ trigger `HAL_ASSERT` in checked builds.
 3. Master writes: `[reg_address, data0, data1, ...]` - sets pointer, then writes data sequentially
 
 **impl/rp2040:** Native Pico SDK `hardware/i2c.h` peripheral mode on I2C0/I2C1 plus `hardware/irq.h` event handling. RX FIFO, read-request, START and STOP/TX-abort interrupts drive the register-map protocol directly.
-**impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
+**impl/stm32g474:** Register-level I2C v2 target mode on I2C1/I2C2. The backend selects HSI16 as the kernel clock and configures SDA/SCL alternate functions, own-address match, conservative `TIMINGR`, RX/TX/ADDR/STOP/NACK/error interrupts, TXDR flush on NACK/STOP, and serves the same register-map protocol from I2C EV/ER IRQ handlers.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 
@@ -602,7 +605,9 @@ lifecycle call; cross-core serialization by itself does not change that IRQ
 affinity requirement. In FreeRTOS/SMP builds, perform UART lifecycle operations
 from a task pinned to the intended core and do not migrate that task while the
 UART is active.
-**impl/stm32g474:** register-level USART1/USART2, polled RX drain; counts ORE, PE, FE, NE, and explicit LIN-break flags when reported by USART_ISR.
+**impl/stm32g474:** register-level USART1/USART2 using their respective
+170 MHz PCLK2/PCLK1 sources and a polled RX drain; counts ORE, PE, FE, NE, and
+explicit LIN-break flags when reported by USART_ISR.
 **impl/.mock:** ring buffer plus last-write capture; injectable via mock helpers.
 **Error counters:** cumulative since `hal_uart_begin()`; mock reset also clears them.
 **Thread safety:** Not thread-safe. All calls must be serialized by the caller;

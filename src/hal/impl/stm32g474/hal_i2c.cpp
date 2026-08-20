@@ -8,6 +8,7 @@
 #include "hal/i2c/hal_i2c.h"
 #include "hal/i2c/hal_i2c_internal.h"
 #include "hal/system/hal_sync.h"
+#include "hal/system/hal_system.h"
 
 #include <string.h>
 
@@ -237,13 +238,7 @@ static bool i2c_gpio_read(uint8_t pin) {
   return (GPIO_IDR(port) & (1u << n)) != 0u;
 }
 
-static void i2c_bus_clear_delay(void) {
-  for (volatile uint32_t i = 0u; i < 80u; ++i) {
-#if defined(__arm__) || defined(__thumb__)
-    __asm volatile("nop");
-#endif
-  }
-}
+static void i2c_bus_clear_delay(void) { hal_delay_us(5u); }
 
 static uint32_t i2c_timing_from_clock(uint32_t clock_hz) {
   if (clock_hz >= HAL_I2C_CLOCK_FAST_PLUS_HZ) {
@@ -290,6 +285,7 @@ static bool i2c_hw_configure_bus(i2c_bus_state_t *st, const i2c_hw_desc_t *desc,
 
   RCC_APB1ENR1 |= st->hw_rcc_mask;
   (void)RCC_APB1ENR1;
+  jh_stm32g474_i2c_select_hsi16(desc->controller);
 
   i2c_gpio_set_af_od_pullup(st->scl_pin, scl_af);
   i2c_gpio_set_af_od_pullup(st->sda_pin, sda_af);

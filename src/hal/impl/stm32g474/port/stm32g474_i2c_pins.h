@@ -53,6 +53,14 @@ static inline uint32_t jh_stm32g474_pin_number(uint8_t pin) {
   return (uint32_t)(pin & 0x0Fu);
 }
 
+static inline void jh_stm32g474_i2c_select_hsi16(uint8_t controller) {
+  if (controller == 1u) {
+    RCC_CCIPR = (RCC_CCIPR & ~RCC_CCIPR_I2C1SEL_MASK) | RCC_CCIPR_I2C1SEL_HSI16;
+  } else if (controller == 2u) {
+    RCC_CCIPR = (RCC_CCIPR & ~RCC_CCIPR_I2C2SEL_MASK) | RCC_CCIPR_I2C2SEL_HSI16;
+  }
+}
+
 static inline void jh_stm32g474_i2c_set_af_od_pullup(uint8_t pin, uint8_t af) {
   const uint32_t port = jh_stm32g474_pin_port(pin);
   const uint32_t number = jh_stm32g474_pin_number(pin);

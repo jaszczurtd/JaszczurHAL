@@ -59,6 +59,18 @@ RP-family targets use GPIO 17 for `CS`, GPIO 20 for `DC`, and GPIO 21 for
 `RESET`. Connect the panel's SPI clock and data pins to the SPI bus-0 pins
 selected by the target backend.
 
+## STM32G474 clock validation
+
+The NUCLEO-G474RE path has been validated on hardware with the backend's
+170 MHz HSI16/PLL clock tree. SPI1 is sourced from the 170 MHz PCLK2; the
+example requests 24 MHz and the hardware prescaler selects 21.25 MHz
+(`170 MHz / 8`), up from 8 MHz with the former HSI16-only startup.
+
+For the same firmware and connected ILI9341, a DWT measurement from entry to
+`app_start()` through the first `app_task0()` call improved from 1.338830 s to
+0.838869 s. This is an end-to-end initialization/media/display measurement,
+not a pure SPI throughput benchmark.
+
 ## Memory limits
 
 Firmware assets are limited to 4096 encoded bytes and 64 x 64 decoded pixels.

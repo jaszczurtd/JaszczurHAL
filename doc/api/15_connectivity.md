@@ -408,8 +408,9 @@ The equivalent generated configuration is:
 
 The four pins must be distinct, valid STM32G474 GPIOs. Transaction capacity is
 at least eight bytes and a multiple of four. The polling gSPI data path is
-optimized for the HSI16 baseline. DAT changes direction between transmit and
-receive. The host-wake edge is handled by a high-priority one-shot EXTI: the
+paced from DWT cycle counts, preserving its conservative half-period across
+system-clock changes. DAT changes direction between transmit and receive. The
+host-wake edge is handled by a high-priority one-shot EXTI: the
 ISR masks the line and schedules work, and the service path rearms it after
 draining CYW43/lwIP work.
 

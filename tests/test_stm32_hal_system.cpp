@@ -1,4 +1,7 @@
+#include "hal/impl/stm32g474/drivers/stm32g474/stm32g474_system.h"
+#include "hal/impl/stm32g474/port/stm32g474_fdcan_timing.h"
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
+#include "hal/impl/stm32g474/port/stm32g474_time.h"
 #include "hal/system/hal_system.h"
 #include "utils/unity.h"
 
@@ -220,6 +223,58 @@ void test_stm32_system_status_reports_unsupported_services(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
 }
 
+void test_stm32_micros64_remains_monotonic_across_micros32_wrap(void) {
+  constexpr uint64_t kBeforeWrap = UINT64_C(0x00000000FFFFFFF0);
+  stm32g474_system_test_set_micros64(kBeforeWrap);
+
+  TEST_ASSERT_EQUAL_UINT64(kBeforeWrap, hal_micros64());
+  TEST_ASSERT_EQUAL_HEX32(0xFFFFFFF0u, hal_micros());
+
+  hal_delay_us(32u);
+
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(0x0000000100000010), hal_micros64());
+  TEST_ASSERT_EQUAL_HEX32(0x00000010u, hal_micros());
+}
+
+void test_stm32_hardware_time_composition_crosses_micros32_wrap(void) {
+  const uint64_t last_32_bit_microsecond =
+      jh_stm32g474_compose_micros(0u, 4294967u, 295u);
+  const uint64_t first_64_bit_only_microsecond =
+      jh_stm32g474_compose_micros(0u, 4294967u, 296u);
+
+  TEST_ASSERT_EQUAL_UINT64(UINT32_MAX, last_32_bit_microsecond);
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(0x100000000),
+                           first_64_bit_only_microsecond);
+  TEST_ASSERT_GREATER_THAN_UINT64(last_32_bit_microsecond,
+                                  first_64_bit_only_microsecond);
+}
+
+void test_stm32_fdcan_timing_is_exact_at_170mhz(void) {
+  jh_stm32g474_fdcan_timing_t nominal = {};
+  jh_stm32g474_fdcan_timing_t data = {};
+
+  TEST_ASSERT_TRUE(jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ,
+                                                     500000u, false, &nominal));
+  TEST_ASSERT_TRUE(jh_stm32g474_fdcan_compute_timing(JH_G474_FDCAN_CLOCK_HZ,
+                                                     2000000u, true, &data));
+
+  TEST_ASSERT_EQUAL_UINT32(500000u, nominal.actual_bitrate_hz);
+  TEST_ASSERT_EQUAL_UINT32(340u,
+                           (uint32_t)nominal.prescaler *
+                               (1u + nominal.segment1 + nominal.segment2));
+  TEST_ASSERT_EQUAL_UINT32(2000000u, data.actual_bitrate_hz);
+  TEST_ASSERT_EQUAL_UINT32(85u, (uint32_t)data.prescaler *
+                                    (1u + data.segment1 + data.segment2));
+  TEST_ASSERT_NOT_EQUAL(0u, jh_stm32g474_fdcan_encode_nbtp(&nominal));
+  TEST_ASSERT_NOT_EQUAL(0u, jh_stm32g474_fdcan_encode_dbtp(&data));
+}
+
+void test_stm32_fdcan_timing_rejects_unreachable_bitrate(void) {
+  jh_stm32g474_fdcan_timing_t timing = {};
+  TEST_ASSERT_FALSE(jh_stm32g474_fdcan_compute_timing(
+      JH_G474_FDCAN_CLOCK_HZ, JH_G474_FDCAN_CLOCK_HZ, true, &timing));
+}
+
 void test_stm32_architecture_reports_generated_target_metadata(void) {
   hal_system_architecture_t architecture = {};
 
@@ -235,6 +290,8 @@ void test_stm32_architecture_reports_generated_target_metadata(void) {
   TEST_ASSERT_EQUAL_UINT32(512u * 1024u, architecture.flash_total_bytes);
   TEST_ASSERT_EQUAL_UINT32(128u * 1024u, architecture.ram_total_bytes);
   TEST_ASSERT_EQUAL_UINT32(96u * 1024u, architecture.ram_usable_bytes);
+  TEST_ASSERT_EQUAL_UINT32(170000000u, architecture.cpu_clock_hz);
+  TEST_ASSERT_EQUAL_UINT32(170000000u, architecture.peripheral_clock_hz);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_backend_name);
   TEST_ASSERT_EQUAL_STRING("none", architecture.network_stack_name);
   TEST_ASSERT_EQUAL_INT(HAL_SYSTEM_NETWORK_STACK_TYPE_NONE,
@@ -259,6 +316,10 @@ int main(void) {
   RUN_TEST(test_stm32_stack_guard_api_reports_active_protection);
   RUN_TEST(test_stm32_stack_guard_api_detects_runtime_corruption);
   RUN_TEST(test_stm32_system_status_reports_unsupported_services);
+  RUN_TEST(test_stm32_micros64_remains_monotonic_across_micros32_wrap);
+  RUN_TEST(test_stm32_hardware_time_composition_crosses_micros32_wrap);
+  RUN_TEST(test_stm32_fdcan_timing_is_exact_at_170mhz);
+  RUN_TEST(test_stm32_fdcan_timing_rejects_unreachable_bitrate);
   RUN_TEST(test_stm32_architecture_reports_generated_target_metadata);
   return UNITY_END();
 }

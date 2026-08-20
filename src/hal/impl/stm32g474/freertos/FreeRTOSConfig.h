@@ -10,10 +10,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "../port/stm32g474_clock.h"
+
 #define configUSE_PREEMPTION 1
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 1
 #define configUSE_TICKLESS_IDLE 0
-#define configCPU_CLOCK_HZ ((uint32_t)16000000UL)
+#define configCPU_CLOCK_HZ ((uint32_t)JH_G474_CORE_CLOCK_HZ)
 #define configTICK_RATE_HZ ((TickType_t)1000)
 #define configMAX_PRIORITIES 8
 #define configMINIMAL_STACK_SIZE ((uint16_t)128)
@@ -79,6 +81,22 @@
 #define vPortSVCHandler SVC_Handler
 #define xPortPendSVHandler PendSV_Handler
 #define xPortSysTickHandler SysTick_Handler
+
+/* Synchronize the HAL's 64-bit epoch after the kernel has committed its tick.
+ * Deferred ticks are therefore counted during xTaskResumeAll(), not once when
+ * pended and again when replayed. The application tick-hook remains free. */
+#ifdef __cplusplus
+extern "C" {
+#endif
+void stm32g474_freertos_tick_sync(uint32_t tick_count);
+#ifdef __cplusplus
+}
+#endif
+#define traceRETURN_xTaskIncrementTick(xSwitchRequired)                        \
+  do {                                                                         \
+    (void)(xSwitchRequired);                                                   \
+    stm32g474_freertos_tick_sync((uint32_t)xTickCount);                        \
+  } while (0)
 
 #define configASSERT(x)                                                        \
   do {                                                                         \
