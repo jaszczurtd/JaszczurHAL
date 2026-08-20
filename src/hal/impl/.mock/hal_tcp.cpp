@@ -13,6 +13,7 @@
 #include <string.h>
 
 #define MOCK_TCP_PAYLOAD_BUF_SIZE 512u
+#define MOCK_TCP_PENDING_RX_MAX 8u
 
 struct hal_tcp_socket_impl_t {
   bool in_use;
@@ -44,8 +45,11 @@ static hal_tcp_listener_impl_t
 static bool s_connect_result = true;
 static hal_tcp_socket_t s_last_accepted_socket = NULL;
 static hal_tcp_socket_t s_last_opened_socket = NULL;
-static uint8_t s_next_rx_payload[MOCK_TCP_PAYLOAD_BUF_SIZE];
-static uint16_t s_next_rx_len = 0u;
+static uint8_t s_pending_rx_payloads[MOCK_TCP_PENDING_RX_MAX]
+                                    [MOCK_TCP_PAYLOAD_BUF_SIZE];
+static uint16_t s_pending_rx_lengths[MOCK_TCP_PENDING_RX_MAX];
+static uint8_t s_pending_rx_head = 0u;
+static uint8_t s_pending_rx_count = 0u;
 
 static void reset_endpoint(hal_net_endpoint_t *endpoint) {
   if (!endpoint) {
@@ -153,7 +157,8 @@ void hal_mock_tcp_reset(void) {
   s_connect_result = true;
   s_last_accepted_socket = NULL;
   s_last_opened_socket = NULL;
-  s_next_rx_len = 0u;
+  s_pending_rx_head = 0u;
+  s_pending_rx_count = 0u;
 }
 
 void hal_mock_tcp_set_connect_result(bool result) { s_connect_result = result; }
@@ -203,10 +208,13 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
   }
 
   socket->connected = true;
-  if (s_next_rx_len > 0u) {
-    memcpy(socket->rx_payload, s_next_rx_payload, s_next_rx_len);
-    socket->rx_len = s_next_rx_len;
-    s_next_rx_len = 0u;
+  if (s_pending_rx_count > 0u) {
+    memcpy(socket->rx_payload, s_pending_rx_payloads[s_pending_rx_head],
+           s_pending_rx_lengths[s_pending_rx_head]);
+    socket->rx_len = s_pending_rx_lengths[s_pending_rx_head];
+    s_pending_rx_head =
+        (uint8_t)((s_pending_rx_head + 1u) % MOCK_TCP_PENDING_RX_MAX);
+    --s_pending_rx_count;
   }
   return HAL_OK;
 }
@@ -493,17 +501,29 @@ void hal_mock_tcp_inject_rx(hal_tcp_socket_t socket, const uint8_t *payload,
 }
 
 void hal_mock_tcp_set_next_rx(const uint8_t *payload, uint16_t len) {
+  s_pending_rx_head = 0u;
+  s_pending_rx_count = 0u;
   if (payload == NULL) {
-    s_next_rx_len = 0u;
     return;
   }
-  s_next_rx_len = len;
-  if (s_next_rx_len > MOCK_TCP_PAYLOAD_BUF_SIZE) {
-    s_next_rx_len = MOCK_TCP_PAYLOAD_BUF_SIZE;
+  (void)hal_mock_tcp_queue_next_rx(payload, len);
+}
+
+bool hal_mock_tcp_queue_next_rx(const uint8_t *payload, uint16_t len) {
+  if (payload == NULL || s_pending_rx_count >= MOCK_TCP_PENDING_RX_MAX) {
+    return false;
   }
-  if (s_next_rx_len > 0u) {
-    memcpy(s_next_rx_payload, payload, s_next_rx_len);
+  const uint8_t index = (uint8_t)((s_pending_rx_head + s_pending_rx_count) %
+                                  MOCK_TCP_PENDING_RX_MAX);
+  s_pending_rx_lengths[index] = len;
+  if (s_pending_rx_lengths[index] > MOCK_TCP_PAYLOAD_BUF_SIZE) {
+    s_pending_rx_lengths[index] = MOCK_TCP_PAYLOAD_BUF_SIZE;
   }
+  if (s_pending_rx_lengths[index] > 0u) {
+    memcpy(s_pending_rx_payloads[index], payload, s_pending_rx_lengths[index]);
+  }
+  ++s_pending_rx_count;
+  return true;
 }
 
 const uint8_t *hal_mock_tcp_get_last_tx_payload(hal_tcp_socket_t socket) {

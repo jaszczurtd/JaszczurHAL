@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <new>
 #include <strings.h>
@@ -231,6 +232,37 @@ static const char *find_header_value(const char *headers, const char *name) {
   return NULL;
 }
 
+static bool parse_size_header_value(const char *value, size_t *out_value) {
+  if (value == NULL || out_value == NULL) {
+    return false;
+  }
+  while (*value == ' ' || *value == '\t') {
+    ++value;
+  }
+  if (*value < '0' || *value > '9') {
+    return false;
+  }
+
+  size_t parsed = 0u;
+  do {
+    const size_t digit = (size_t)(*value - '0');
+    if (parsed > (std::numeric_limits<size_t>::max() - digit) / 10u) {
+      return false;
+    }
+    parsed = parsed * 10u + digit;
+    ++value;
+  } while (*value >= '0' && *value <= '9');
+
+  while (*value == ' ' || *value == '\t') {
+    ++value;
+  }
+  if (value[0] != '\r' || value[1] != '\n') {
+    return false;
+  }
+  *out_value = parsed;
+  return true;
+}
+
 hal_status_t hal_http_client_request_init(hal_http_client_request_t *request) {
   if (request == NULL) {
     return HAL_EINVAL;
@@ -370,7 +402,7 @@ hal_http_client_perform_ex(const hal_http_client_request_t *request,
             find_header_value(response_headers, "Content-Length");
         if (status == HAL_OK && length != NULL) {
           size_t value = 0u;
-          if (sscanf(length, "%zu", &value) != 1) {
+          if (!parse_size_header_value(length, &value)) {
             status = HAL_EPROTO;
           } else {
             out_response->content_length_known = true;

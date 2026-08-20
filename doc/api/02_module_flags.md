@@ -78,6 +78,8 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `hal/network/websocket/hal_websocket.cpp` | Small poll-driven WebSocket server over HAL TCP (propagates TCP + WIFI) |
 | `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `hal/network/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
 | `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `hal/network/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
+| `HAL_ENABLE_NOTIFY` | `hal_notify.h` | `hal/network/notify/hal_notify.cpp` | Backend-dispatched notification facade with generation-checked channel handles |
+| `HAL_ENABLE_NOTIFY_TELEGRAM` | `hal_notify.h` | `hal/network/notify/hal_notify_telegram.cpp` | Telegram Bot API backend over `hal_http_client`; public Telegram delivery uses HTTPS, while custom HTTP hosts may be used for local/proxy deployments (propagates NOTIFY + HTTP_CLIENT + TLS + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `hal/network/adapters/bsd/hal_bsd_sockets.cpp` | Public BSD/POSIX adapter over HAL UDP/TCP, including `getaddrinfo()` (propagates UDP + TCP + WIFI); remains usable with or without TLS |
 | `HAL_ENABLE_TLS` | `hal_tls.h` | `hal/network/tls/hal_tls.cpp` + `hal/network/tls/BearSSL/*` | BearSSL TLS client over native HAL TCP (propagates TCP + WIFI); does not force BSD sockets, while the optional BearSSL BSD transport keeps TLS-over-BSD available |
 | `HAL_ENABLE_HTTP_CLIENT` | `hal_http_client.h` | `hal/network/http/hal_http_client.cpp` | Bounded one-shot HTTP/1.1 client over HAL TCP with an HTTPS transport when TLS is selected (propagates TCP + WIFI) |
@@ -190,6 +192,9 @@ HAL_ENABLE_WEBSOCKET   -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
                            HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
+HAL_ENABLE_NOTIFY_TELEGRAM -> HAL_ENABLE_NOTIFY + HAL_ENABLE_HTTP_CLIENT +
+                              HAL_ENABLE_TLS + HAL_ENABLE_CJSON +
+                              HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_HTTP_CLIENT -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
@@ -257,7 +262,7 @@ and AT24 EEPROM can finish with `HAL_ENABLE_I2C`, even though those additions
 are absent from `resolvedFeatures` and the feature hash.
 
 With `HAL_CONFIG_VERBOSE`, the generated header checks the complete inventory
-of all 93 registered `HAL_ENABLE_*` and `HAL_DISABLE_*` symbols. The report is
+of all 101 registered `HAL_ENABLE_*` and `HAL_DISABLE_*` symbols. The report is
 emitted after the retained conditional propagation, so its `#pragma message`
 output describes the final preprocessor state, including contextual I2C or
 UART additions.

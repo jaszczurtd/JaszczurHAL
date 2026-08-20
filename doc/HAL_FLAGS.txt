@@ -312,6 +312,14 @@ Connectivity
   HAL_ENABLE_NET_COMMANDS
     JSON/text command dispatcher for HTTP and WebSocket control channels.
     Propagates: HTTP_SERVER, WEBSOCKET, CJSON, TCP, WIFI.
+  HAL_ENABLE_NOTIFY
+    Backend-dispatched notification facade with generation-checked channel
+    handles. Backend implementations are selected by the caller.
+  HAL_ENABLE_NOTIFY_TELEGRAM
+    Telegram Bot API notification backend over hal_http_client. Public
+    api.telegram.org delivery uses HTTPS. Custom HTTP hosts are allowed for
+    local/proxy Bot API deployments. Propagates: NOTIFY, HTTP_CLIENT, TLS,
+    CJSON, TCP, WIFI.
   HAL_ENABLE_BSD_SOCKETS
     Minimal POSIX/BSD socket adapter over HAL UDP/TCP. Propagates: UDP, TCP,
     WIFI. May be combined with TLS, but does not require it.
@@ -574,6 +582,9 @@ HAL_ENABLE_WEBSOCKET   -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_CONSOLE -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_NET_COMMANDS -> HAL_ENABLE_HTTP_SERVER + HAL_ENABLE_WEBSOCKET +
                            HAL_ENABLE_CJSON + HAL_ENABLE_TCP + HAL_ENABLE_WIFI
+HAL_ENABLE_NOTIFY_TELEGRAM -> HAL_ENABLE_NOTIFY + HAL_ENABLE_HTTP_CLIENT +
+                              HAL_ENABLE_TLS + HAL_ENABLE_CJSON +
+                              HAL_ENABLE_TCP + HAL_ENABLE_WIFI
 HAL_ENABLE_BSD_SOCKETS -> HAL_ENABLE_UDP + HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_TLS         -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI
 HAL_ENABLE_HTTP_CLIENT -> HAL_ENABLE_TCP -> HAL_ENABLE_WIFI

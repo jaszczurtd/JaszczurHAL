@@ -243,6 +243,7 @@ EXAMPLES: list[dict[str, Any]] = [
                     "HAL_ENABLE_HTTP_SERVER",
                     "HAL_ENABLE_NET_COMMANDS",
                     "HAL_ENABLE_NET_CONSOLE",
+                    "HAL_ENABLE_NOTIFY_TELEGRAM",
                     "HAL_ENABLE_TIME",
                     "HAL_ENABLE_TLS",
                     "HAL_ENABLE_WEBSOCKET",

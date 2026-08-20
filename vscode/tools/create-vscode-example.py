@@ -9,6 +9,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Any
 
 
 DEFAULT_PROJECT_NAME = "jaszczurhal-vscode-example"
@@ -46,6 +47,65 @@ def variable_path(variable: str, reference: str) -> str:
     if Path(reference).is_absolute():
         return reference
     return f"${{{variable}}}/{reference}"
+
+
+def cmake_tools_cache_value(
+    value: Any,
+    *,
+    jh_root_ref: str,
+    project_ref: str,
+    build_ref: str,
+) -> Any:
+    if not isinstance(value, str):
+        return value
+    return (
+        value.replace("${jhRoot}", jh_root_ref)
+        .replace("${project}", project_ref)
+        .replace("${projectDir}", project_ref)
+        .replace("${workspaceFolder}", project_ref)
+        .replace("${buildDir}", build_ref)
+    )
+
+
+def target_board_cache(registry: dict[str, dict], target: str, board: str) -> dict[str, Any]:
+    target_desc = registry.get(target) or {}
+    cache: dict[str, Any] = dict(target_desc.get("cache") or {})
+    for board_desc in target_desc.get("boards") or []:
+        if isinstance(board_desc, dict) and board_desc.get("id") == board:
+            cache.update(board_desc.get("cache") or {})
+            break
+    return cache
+
+
+def cmake_tools_configure_settings(
+    registry: dict[str, dict],
+    *,
+    target: str,
+    board: str,
+    module: str,
+    jh_root_ref: str,
+    project_ref: str = "${workspaceFolder}",
+    build_ref: str = "${workspaceFolder}/.build",
+) -> dict[str, Any]:
+    settings = {
+        key: cmake_tools_cache_value(
+            value,
+            jh_root_ref=jh_root_ref,
+            project_ref=project_ref,
+            build_ref=build_ref,
+        )
+        for key, value in target_board_cache(registry, target, board).items()
+    }
+    settings.update(
+        {
+            "JH_ROOT": jh_root_ref,
+            "JH_PROJECT_DIR": project_ref,
+            "JH_MODULE_NAME": module,
+            "JH_TARGET": target,
+            "JH_BOARD": board,
+        }
+    )
+    return settings
 
 
 def schema_reference(from_dir: Path, to_path: Path) -> str:
@@ -190,6 +250,7 @@ def build_files(
             jh_root / "vscode" / "schema" / "jh_vscode_project.schema.json",
         ),
     }
+    jh_root_ref = variable_path("workspaceFolder", values["JH_ROOT_REL"])
 
     files: dict[str, str] = {
         ".gitignore": GITIGNORE_TEMPLATE,
@@ -239,7 +300,17 @@ def build_files(
                 "cmake.sourceDirectory": variable_path(
                     "workspaceFolder", values["JH_DISPATCHER_REL"]
                 ),
-                "cmake.buildDirectory": "${workspaceFolder}/.build/cmake",
+                "cmake.buildDirectory": (
+                    f"${{workspaceFolder}}/.build/cmake-tools/{target}-{board}"
+                ),
+                "cmake.generator": "Ninja",
+                "cmake.configureSettings": cmake_tools_configure_settings(
+                    registry,
+                    target=target,
+                    board=board,
+                    module=module,
+                    jh_root_ref=jh_root_ref,
+                ),
             }
         ),
         ".vscode/tasks.json": json_text(tasks_document),

@@ -300,7 +300,7 @@ logic from board-specific SDK calls:
   over one raw LoRa radio, with optional authenticated encryption
 - `hal_can`, `hal_display`, `hal_rgb_led`
 - `hal_thermocouple`, `hal_ds18b20`, `hal_rtc`, `hal_external_adc`, `hal_gps`, `hal_digipot`, `hal_pga2311`, `hal_pn532`
-- `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
+- `hal_eeprom`, `hal_kv`, `hal_sdlogger`, `hal_wifi`, `hal_littlefs`, `hal_udp`, `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_notify`, `hal_wireguard`, `hal_mqtt`, `hal_ota`, `hal_time`
 - always-available `hal_time` helpers for deterministic Gregorian
   date/time-to-epoch conversion, CET/CEST adjustment, half-open range checks,
   and minute extraction; optional NTP/local-time APIs remain flag-controlled
@@ -421,7 +421,7 @@ The complete reference is split across the following focused documents:
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 - power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_digipot` (MCP401x/MAX5395 I2C digital potentiometers), `hal_pga2311` (stereo volume controller), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (I2C GPIO/output expanders), `hal_hc595` (SPI shift-register output expander), `hal_mcp4725` (I2C 12-bit DAC), `hal_mfrc522`/`hal_pn532` (RFID/NFC readers), `hal_math` (constrain, map, roundToN) |
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
-| 15 | [Network connectivity](api/15_connectivity.md) | status-returning `_ex` APIs for `hal_wifi`, resolver, `hal_udp`, `hal_tcp`, `hal_tls`, `hal_mqtt` and `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, independent BSD sockets adapter with `getaddrinfo()` and optional TLS transport, `hal_ota`, always-available `hal_time` calendar helpers plus optional NTP/local time |
+| 15 | [Network connectivity](api/15_connectivity.md) | status-returning `_ex` APIs for `hal_wifi`, resolver, `hal_udp`, `hal_tcp`, `hal_tls`, `hal_mqtt` and `hal_wireguard`; `hal_http_server`, `hal_http_files`, `hal_websocket`, `hal_net_console`, `hal_net_commands`, `hal_notify`, independent BSD sockets adapter with `getaddrinfo()` and optional TLS transport, `hal_ota`, always-available `hal_time` calendar helpers plus optional NTP/local time |
 | 16 | [Utilities](api/16_utilities.md) | `hal_soft_timer` (C wrapper over SmartTimers), `hal_pid_controller` (C wrapper over pidController), `hal_crc` (generic CRC-8/16/32 checksums), `tools.h/cpp` helper functions, `SmartTimers`, `pidController`, `multicoreWatchdog`, `draw7Segment` |
 | 17 | [cJSON](api/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
@@ -467,6 +467,7 @@ The complete reference is split across the following focused documents:
 | `hal_mcp4725` | [Output devices](api/13_output_devices.md) |
 | `hal_modem_at` | [Cellular modem](api/12_modem.md) |
 | `hal_mqtt` | [Network connectivity](api/15_connectivity.md) |
+| `hal_notify` | [Network connectivity](api/15_connectivity.md) |
 | `hal_onewire` | [Communication buses](api/09_buses.md) |
 | `hal_ota` | [Network connectivity](api/15_connectivity.md) |
 | `hal_pca9654e` | [Output devices](api/13_output_devices.md) |

@@ -1344,6 +1344,7 @@ add_hal_test(test_hal_http_files)
 add_hal_test(test_hal_websocket)
 add_hal_test(test_hal_net_console)
 add_hal_test(test_hal_net_commands)
+add_hal_test(test_hal_notify)
 if(WIN32)
     add_platform_disabled_test(test_bsd_sockets
         "POSIX socket facade is pending a Winsock port"
@@ -1430,6 +1431,10 @@ set_target_properties(test_hal_http_client_c_compile PROPERTIES
     LINKER_LANGUAGE CXX)
 add_test(NAME test_hal_http_client_c_compile
     COMMAND test_hal_http_client_c_compile)
+add_executable(test_hal_notify_c_compile test_hal_notify_c_compile.c)
+target_link_libraries(test_hal_notify_c_compile PRIVATE hal_mock)
+set_target_properties(test_hal_notify_c_compile PROPERTIES LINKER_LANGUAGE CXX)
+add_test(NAME test_hal_notify_c_compile COMMAND test_hal_notify_c_compile)
 add_hal_test(test_hal_wireguard)
 add_hal_test(test_hal_mqtt)
 add_hal_test(test_hal_network_status)

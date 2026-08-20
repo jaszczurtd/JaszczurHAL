@@ -149,6 +149,8 @@ set(UTIL_SOURCES
     ${SRC}/hal/network/websocket/hal_websocket.cpp
     ${SRC}/hal/network/net_console/hal_net_console.cpp
     ${SRC}/hal/network/net_commands/hal_net_commands.cpp
+    ${SRC}/hal/network/notify/hal_notify.cpp
+    ${SRC}/hal/network/notify/hal_notify_telegram.cpp
     ${SRC}/hal/debug/hal_debug_format.cpp
     ${SRC}/hal/time/jh_calendar.c
     ${SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
@@ -247,6 +249,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_WEBSOCKET      # small WebSocket server over HAL TCP
     HAL_ENABLE_NET_CONSOLE    # password-protected serial/debug mirror over TCP
     HAL_ENABLE_NET_COMMANDS   # HTTP/WebSocket JSON/text command dispatch
+    HAL_ENABLE_NOTIFY_TELEGRAM # notification facade + Telegram backend
     HAL_ENABLE_TLS            # portable TLS API + private BearSSL provider
     HAL_ENABLE_HTTP_CLIENT    # portable HTTP/HTTPS client
     HAL_ENABLE_OTA

@@ -60,6 +60,15 @@
     "HAL_ENABLE_NET_CONSOLE": {
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
+    "HAL_ENABLE_NOTIFY": {},
+    "HAL_ENABLE_NOTIFY_TELEGRAM": {
+      "implies": [
+        "HAL_ENABLE_CJSON",
+        "HAL_ENABLE_HTTP_CLIENT",
+        "HAL_ENABLE_NOTIFY",
+        "HAL_ENABLE_TLS"
+      ]
+    },
     "HAL_ENABLE_OTA": {
       "implies": [
         "HAL_ENABLE_CRC",

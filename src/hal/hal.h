@@ -155,6 +155,9 @@
 #ifdef HAL_ENABLE_NET_COMMANDS
 #include "hal/network/net_commands/hal_net_commands.h"
 #endif
+#ifdef HAL_ENABLE_NOTIFY
+#include "hal/network/notify/hal_notify.h"
+#endif
 #ifdef HAL_ENABLE_WIREGUARD
 #include "hal/network/wireguard/hal_wireguard.h"
 #endif
