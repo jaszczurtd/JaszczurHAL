@@ -1,5 +1,6 @@
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/network/jh_ntp_client.h"
+#include "hal/rtc/hal_rtc.h"
 #include "hal/time/hal_time.h"
 #include "utils/unity.h"
 
@@ -37,6 +38,17 @@ void reentrant_time_read(void *ctx) {
   bool *called = static_cast<bool *>(ctx);
   *called = true;
   (void)hal_time_unix();
+}
+
+hal_rtc_t make_internal_rtc(void) {
+  const hal_rtc_config_t config = {
+      .chip = HAL_RTC_CHIP_INTERNAL,
+      .bus = {.internal = {.clock_source = HAL_RTC_CLOCK_SOURCE_AUTO}},
+  };
+  hal_rtc_t rtc = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_init_ex(&config, &rtc));
+  TEST_ASSERT_NOT_NULL(rtc);
+  return rtc;
 }
 
 } // namespace
@@ -88,6 +100,43 @@ void test_sync_check_and_formatting(void) {
   TEST_ASSERT_EQUAL_STRING("30/03/2026 12:34:56", buf);
 }
 
+void test_shared_setter_reports_source_and_subseconds(void) {
+  hal_mock_set_micros64(UINT64_C(1000000));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_time_set_unix_ex(UINT64_C(1000), UINT32_C(250000),
+                                             HAL_TIME_SOURCE_MANUAL));
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_TRUE(status.valid);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_SOURCE_MANUAL, status.source);
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(1000), status.unix_time);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(250000), status.micros);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_IDLE, status.ntp_state);
+  TEST_ASSERT_EQUAL_INT(HAL_NONE, status.last_ntp_status);
+  TEST_ASSERT_FALSE(status.rtc_attached);
+  TEST_ASSERT_EQUAL_INT(HAL_NONE, status.last_rtc_status);
+
+  hal_mock_advance_micros64(UINT64_C(750000));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(1001), status.unix_time);
+  TEST_ASSERT_EQUAL_UINT32(0u, status.micros);
+}
+
+void test_wall_clock_uses_64_bit_monotonic_base_across_millis_wrap(void) {
+  hal_mock_set_micros64(0u);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_set_unix_ex(UINT64_C(10), 0u, HAL_TIME_SOURCE_MANUAL));
+  const uint64_t elapsed =
+      (UINT64_C(1) << 32u) * UINT64_C(1000) + UINT64_C(123456);
+  hal_mock_advance_micros64(elapsed);
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(4294977), status.unix_time);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_C(419456), status.micros);
+}
+
 void test_ntp_state_machine_accepts_response_and_keeps_fraction(void) {
   TEST_ASSERT_TRUE(hal_time_sync_ntp("pool.ntp.org", "time.nist.gov"));
   TEST_ASSERT_EQUAL_STRING("192.0.2.10",
@@ -99,8 +148,129 @@ void test_ntp_state_machine_accepts_response_and_keeps_fraction(void) {
                              sizeof(response));
   TEST_ASSERT_EQUAL_UINT64(UINT64_C(200000), hal_time_unix());
 
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_SOURCE_NTP, status.source);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_SYNCHRONIZED, status.ntp_state);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, status.last_ntp_status);
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(200000), status.last_ntp_sync_unix);
+
   hal_mock_advance_millis(600u);
   TEST_ASSERT_EQUAL_UINT64(UINT64_C(200001), hal_time_unix());
+}
+
+void test_ntp_status_distinguishes_pending_request_from_valid_clock(void) {
+  hal_mock_time_set_unix(UINT64_C(100000));
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_time_sync_ntp_ex("pool.ntp.org", "time.nist.gov"));
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_TRUE(status.valid);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_SOURCE_MANUAL, status.source);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_IN_PROGRESS, status.ntp_state);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, status.last_ntp_status);
+}
+
+void test_ntp_status_reports_final_timeout(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_sync_ntp_ex("pool.ntp.org", nullptr));
+  hal_mock_advance_millis(5000u);
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_FALSE(status.valid);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_NTP_FAILED, status.ntp_state);
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, status.last_ntp_status);
+}
+
+void test_valid_rtc_restores_unset_wall_clock(void) {
+  hal_rtc_t rtc = make_internal_rtc();
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_rtc_set_epoch_ex(rtc, UINT64_C(1760000000)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_attach_rtc_ex(rtc, HAL_TIME_RTC_RESTORE_IF_VALID |
+                                              HAL_TIME_RTC_WRITE_AFTER_NTP));
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_TRUE(status.valid);
+  TEST_ASSERT_EQUAL_INT(HAL_TIME_SOURCE_RTC, status.source);
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(1760000000), status.unix_time);
+  TEST_ASSERT_TRUE(status.rtc_attached);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, status.last_rtc_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_detach_rtc_ex());
+  hal_rtc_deinit(rtc);
+}
+
+void test_invalid_rtc_attaches_without_seeding_wall_clock(void) {
+  hal_rtc_t rtc = make_internal_rtc();
+  hal_mock_rtc_set_clock_integrity(rtc, false);
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_attach_rtc_ex(rtc, HAL_TIME_RTC_RESTORE_IF_VALID |
+                                              HAL_TIME_RTC_WRITE_AFTER_NTP));
+
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_FALSE(status.valid);
+  TEST_ASSERT_TRUE(status.rtc_attached);
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, status.last_rtc_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_detach_rtc_ex());
+  hal_rtc_deinit(rtc);
+}
+
+void test_rtc_restore_error_keeps_handle_attached_for_ntp_recovery(void) {
+  hal_rtc_t rtc = make_internal_rtc();
+  const hal_rtc_datetime_t pre_unix = {
+      59u, 59u, 23u, 31u, 3u, 12u, 1969u, true,
+  };
+  hal_mock_rtc_set_datetime(rtc, &pre_unix);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_attach_rtc_ex(rtc, HAL_TIME_RTC_RESTORE_IF_VALID |
+                                              HAL_TIME_RTC_WRITE_AFTER_NTP));
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_FALSE(status.valid);
+  TEST_ASSERT_TRUE(status.rtc_attached);
+  TEST_ASSERT_EQUAL_INT(HAL_EOVERFLOW, status.last_rtc_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_sync_ntp_ex("pool.ntp.org", nullptr));
+  uint8_t response[JH_NTP_PACKET_SIZE] = {};
+  make_ntp_response(response, UINT64_C(450000), 0u);
+  hal_mock_udp_inject_packet("192.0.2.10", JH_NTP_PORT, response,
+                             sizeof(response));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(450000), hal_time_unix());
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, status.last_rtc_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_detach_rtc_ex());
+  hal_rtc_deinit(rtc);
+}
+
+void test_successful_ntp_sync_is_written_to_attached_rtc(void) {
+  hal_rtc_t rtc = make_internal_rtc();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_set_epoch_ex(rtc, UINT64_C(100000)));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, hal_time_attach_rtc_ex(rtc, HAL_TIME_RTC_WRITE_AFTER_NTP));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_sync_ntp_ex("pool.ntp.org", nullptr));
+
+  uint8_t response[JH_NTP_PACKET_SIZE] = {};
+  make_ntp_response(response, UINT64_C(400000), 0u);
+  hal_mock_udp_inject_packet("192.0.2.10", JH_NTP_PORT, response,
+                             sizeof(response));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(400000), hal_time_unix());
+
+  uint64_t rtc_epoch = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_rtc_get_epoch_ex(rtc, &rtc_epoch));
+  TEST_ASSERT_EQUAL_UINT64(UINT64_C(400000), rtc_epoch);
+  hal_time_status_t status = {};
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_get_status_ex(&status));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, status.last_rtc_status);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_time_detach_rtc_ex());
+  hal_rtc_deinit(rtc);
 }
 
 void test_ntp_timeout_retries_secondary_server(void) {
@@ -155,12 +325,21 @@ void test_time_snapshots_are_safe_during_concurrent_updates(void) {
 }
 
 void test_invalid_inputs_are_rejected(void) {
+  TEST_ASSERT_FALSE(hal_time_is_synced(0u));
   TEST_ASSERT_FALSE(hal_time_set_timezone(NULL));
   TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
 
   hal_mock_serial_reset();
   TEST_ASSERT_FALSE(hal_time_sync_ntp(NULL, NULL));
   TEST_ASSERT_TRUE(strlen(hal_mock_serial_last_line()) > 0);
+
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      hal_time_set_unix_ex(0u, UINT32_C(1000000), HAL_TIME_SOURCE_MANUAL));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        hal_time_set_unix_ex(0u, 0u, HAL_TIME_SOURCE_UNSET));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_time_get_status_ex(nullptr));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_time_detach_rtc_ex());
 }
 
 void test_time_from_components_epoch_base(void) {
@@ -291,8 +470,16 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_timezone_and_ntp_sync_requests_are_recorded);
   RUN_TEST(test_sync_check_and_formatting);
+  RUN_TEST(test_shared_setter_reports_source_and_subseconds);
+  RUN_TEST(test_wall_clock_uses_64_bit_monotonic_base_across_millis_wrap);
   RUN_TEST(test_ntp_state_machine_accepts_response_and_keeps_fraction);
+  RUN_TEST(test_ntp_status_distinguishes_pending_request_from_valid_clock);
+  RUN_TEST(test_ntp_status_reports_final_timeout);
   RUN_TEST(test_ntp_timeout_retries_secondary_server);
+  RUN_TEST(test_valid_rtc_restores_unset_wall_clock);
+  RUN_TEST(test_invalid_rtc_attaches_without_seeding_wall_clock);
+  RUN_TEST(test_rtc_restore_error_keeps_handle_attached_for_ntp_recovery);
+  RUN_TEST(test_successful_ntp_sync_is_written_to_attached_rtc);
   RUN_TEST(test_network_service_can_reenter_time_getter);
   RUN_TEST(test_time_snapshots_are_safe_during_concurrent_updates);
   RUN_TEST(test_invalid_inputs_are_rejected);

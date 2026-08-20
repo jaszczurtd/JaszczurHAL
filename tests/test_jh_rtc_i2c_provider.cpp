@@ -36,12 +36,20 @@ void test_provider_selection_reports_chip_metadata(void) {
       jh_rtc_i2c_provider_get_ops(HAL_RTC_CHIP_DS3231);
 
   TEST_ASSERT_NOT_NULL(pcf);
+  TEST_ASSERT_EQUAL_INT(JH_RTC_PROVIDER_BUS_I2C, pcf->bus);
   TEST_ASSERT_EQUAL_HEX8(HAL_RTC_PCF8563_DEFAULT_I2C_ADDR,
                          pcf->default_i2c_addr);
   TEST_ASSERT_FALSE(pcf->fixed_i2c_addr);
   TEST_ASSERT_NOT_NULL(ds);
+  TEST_ASSERT_EQUAL_INT(JH_RTC_PROVIDER_BUS_I2C, ds->bus);
   TEST_ASSERT_EQUAL_HEX8(HAL_RTC_DS3231_DEFAULT_I2C_ADDR, ds->default_i2c_addr);
   TEST_ASSERT_TRUE(ds->fixed_i2c_addr);
+
+  hal_rtc_clock_source_t source = HAL_RTC_CLOCK_SOURCE_AUTO;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, pcf->get_clock_source(s_context, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_EXTERNAL, source);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, ds->get_clock_source(s_context, &source));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLOCK_SOURCE_EXTERNAL, source);
 }
 
 void test_pcf8563_provider_translates_datetime_and_flags(void) {

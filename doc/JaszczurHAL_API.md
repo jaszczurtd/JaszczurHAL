@@ -101,7 +101,7 @@ src/
     core/                   # configuration, status, assertions, compatibility
     bluetooth/              # BLE public API, facade, and shared BTstack glue
     i2c/, spi/, serial/     # bus and serial APIs with common implementations
-    time/, rtc/             # time-of-day, calendar, NTP, and RTC drivers
+    time/, rtc/, power/     # wall time, RTC wake, and power management
     timers/                 # hardware, extended, soft, and SmartTimers APIs
     temperature/            # DHT, DS18B20, MAX6675, and MCP9600
     network/                # core TCP/UDP/Wi-Fi and shared network runtime
@@ -217,7 +217,8 @@ link the fixed package without invoking Python.
   such as GPIO, buses, serial, security, sensors, storage, display, and network.
 - `src/hal/can/hal_can_util.cpp`, `src/hal/security/hal_crypto.cpp`, `src/hal/security/hal_crc.cpp`, `src/hal/gps/hal_gps.cpp`, `src/hal/storage/hal_kv.cpp`, `src/hal/audio/hal_pga2311.cpp`, `src/hal/rtc/hal_rtc.cpp`, `src/hal/timers/hal_soft_timer.cpp`, `src/hal/control/hal_pid_controller.cpp` - shared HAL wrapper and facade implementations.
 - `src/hal/time/hal_time_ntp.cpp` and `src/hal/storage/hal_eeprom.cpp` - shared
-  thread-safe NTP and provider-dispatched EEPROM facades; portable AT24C256 and
+  thread-safe wall-clock/NTP/RTC integration and provider-dispatched EEPROM
+  facades; portable AT24C256 and
   buffered-flash provider code stays beside the EEPROM API, while target
   directories supply only physical flash mechanisms.
 - `src/hal/serial/hal_uart_config.h` - UART configuration constants and helpers.
@@ -288,7 +289,7 @@ These are the portability-oriented interfaces intended to decouple application
 logic from board-specific SDK calls:
 
 - `hal_gpio`, `hal_adc`, `hal_pwm`, `hal_pwm_freq`
-- `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_bits`, `hal_sync`,
+- `hal_timer`, `hal_soft_timer`, `hal_system`, `hal_power`, `hal_bits`, `hal_sync`,
   `hal_usb`, `hal_serial`
 - `hal_board` for target-independent board identity and runtime hardware state
 - `hal_crypto`, `hal_crc`
@@ -412,12 +413,12 @@ The complete reference is split across the following focused documents:
 | 4 | [Multicore safety and drivers](api/04_multicore_drivers_migration.md) | Multicore init/runtime rules, bundled driver inventory and licences, logging timestamp hook, time conversion helper, examples overview, host-test coverage, and portable API mapping |
 | S | [Security supply chain](security_supply_chain.md) | Third-party inventory, CycloneDX SBOM generation, vulnerability scanning and CVE/CVSS assessment workflow |
 | 5 | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) | `hal_gpio`, `hal_pwm`, `hal_dac`, `hal_pcnt`, `hal_pwm_freq`, `hal_dacless`, `hal_adc` |
-| 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_bits`, `hal_compiler` (portable attributes and builtins), `hal_math` |
+| 6 | [Timers and system](api/06_timers_system.md) | `hal_timer` (alarms + managed timers), `hal_system` (millis/watchdog/crash diagnostics/UID), `hal_power` (Sleep/deep-sleep/power-down transitions), `hal_bits`, `hal_compiler` (portable attributes and builtins), `hal_math` |
 | 7 | [Cryptography](api/07_crypto.md) | `hal_crypto` - Base64, MD5, SHA-256, HMAC-SHA256, ChaCha20, ChaCha20-Poly1305 |
 | 8 | [Sync, USB, serial, framing and auth](api/08_sync_serial.md) | `hal_sync` (mutex/critical-section), `hal_usb` (status-first USB lifecycle and CDC), `hal_serial` (one TX-serialized core with link-time transport ports, streamed debug formatting, ISR-deferred logging and rate-limiter), `hal_serial_session` (framed SC protocol), `hal_serial_frame` (wire codec), `hal_sc_auth` (HMAC challenge/response) |
 | 9 | [Communication buses](api/09_buses.md) | `hal_spi` (status `_ex` transfer and DMA helpers), `hal_i2c` (status-first master API, bounded scanner with watchdog callback, one-shot helpers and bus clear), `hal_i2c_slave` (register map), `hal_uart`, `hal_swserial`, `hal_onewire` |
 | 10 | [CAN bus and display](api/10_can_display.md) | `hal_can` (backend-selected CAN: MCP2515 classic CAN, MCP251XFD CAN FD, and STM32G474 native FDCAN), `hal_display` (status-first TFT/OLED/LCD/EPD facade, raw writes, EPD refresh, GFX primitives, streaming, text and fonts) |
-| 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (one provider-dispatched MCP9600/MAX6675/mock facade), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
+| 11 | [Sensors](api/11_sensors.md) | `hal_thermocouple` (one provider-dispatched MCP9600/MAX6675/mock facade), `hal_ds18b20` (non-blocking workflow), `hal_dht` (DHT11/DHT22), `hal_bh1750` (ambient light), `hal_adp5360` (PMIC charger/fuel-gauge/regulators), `hal_mcp3221` (I2C 12-bit ADC), `hal_rtc` (PCF8563/DS3231/internal AON providers and relative wake), `hal_external_adc` (ADS1115), `hal_gps` (NMEA, auto-detect framing) |
 | 12 | [Cellular modem](api/12_modem.md) | `hal_modem_at` (AT engine, URC, watchdog cooperation), `hal_simcom_a76xx` (A7670/A7672 - power, boot, SIM, PDP, LBS, GNSS, MQTT subscribe) |
 | 13 | [Output devices](api/13_output_devices.md) | `hal_rgb_led` (NeoPixel, PIO/GPIO transport), `hal_digipot` (MCP401x/MAX5395 I2C digital potentiometers), `hal_pga2311` (stereo volume controller), `hal_mcp23017`/`hal_pca9654e`/`hal_pcf8574` (I2C GPIO/output expanders), `hal_hc595` (SPI shift-register output expander), `hal_mcp4725` (I2C 12-bit DAC), `hal_mfrc522`/`hal_pn532` (RFID/NFC readers), `hal_math` (constrain, map, roundToN) |
 | 14 | [Storage](api/14_storage.md) | `hal_eeprom` (target flash / AT24C256), `hal_kv` (append-only KV store with GC), `hal_littlefs` (LittleFS mount/format helpers), `hal_sdlogger` (SD-card buffered logger and crash reporter) |
@@ -475,6 +476,7 @@ The complete reference is split across the following focused documents:
 | `hal_pga2311` | [Output devices](api/13_output_devices.md) |
 | `hal_pn532` | [Output devices](api/13_output_devices.md) |
 | `hal_pid_controller` | [Utilities](api/16_utilities.md) |
+| `hal_power` | [Timers and system](api/06_timers_system.md) |
 | `hal_pwm` / `hal_pwm_freq` / `hal_dacless` / `hal_pcnt` | [GPIO, ADC and PWM](api/05_gpio_adc_pwm.md) |
 | `hal_rgb_led` | [Output devices](api/13_output_devices.md) |
 | `hal_rtc` | [Sensors](api/11_sensors.md) |

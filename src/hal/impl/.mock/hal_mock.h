@@ -152,6 +152,8 @@ void hal_mock_set_millis(uint32_t ms);
 void hal_mock_advance_millis(uint32_t ms);
 void hal_mock_set_micros(uint32_t us);
 void hal_mock_advance_micros(uint32_t us);
+void hal_mock_set_micros64(uint64_t us);
+void hal_mock_advance_micros64(uint64_t us);
 bool hal_mock_watchdog_was_fed(void);
 void hal_mock_watchdog_reset_flag(void);
 void hal_mock_set_caused_reboot(bool val);
@@ -795,6 +797,15 @@ void hal_mock_rtc_set_datetime(hal_rtc_t h, const hal_rtc_datetime_t *dt);
 void hal_mock_rtc_set_clock_integrity(hal_rtc_t h, bool ok);
 /** @brief Inject event flags consumed by hal_rtc_get_and_clear_flags(). */
 void hal_mock_rtc_set_flags(hal_rtc_t h, uint8_t flags);
+/** @brief Complete an armed mock relative RTC wake-up. */
+void hal_mock_rtc_fire_wakeup(hal_rtc_t h);
+#endif
+
+// ── Power management
+// ─────────────────────────────────────────────────────────────
+#ifdef HAL_ENABLE_POWER_MANAGEMENT
+/** @brief Reset retained mock wake state between tests. */
+void hal_mock_power_reset(void);
 #endif
 
 // ── GPS ───────────────────────────────────────────────────────────────────

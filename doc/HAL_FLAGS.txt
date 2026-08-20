@@ -291,7 +291,9 @@ Connectivity
     WiFi. A profile without the selected network hardware compiles but public
     runtime access returns HAL_EUNSUPPORTED.
   HAL_ENABLE_TIME
-    NTP / system time. Propagates: UDP, WIFI.
+    Shared runtime wall clock, status, NTP, and libc time adapters. With RTC it
+    can restore retained time and persist validated NTP results. Propagates:
+    UDP, WIFI.
   HAL_ENABLE_MQTT
     PubSubClient wrapper. Propagates: TCP, WIFI.
   HAL_ENABLE_UDP
@@ -375,12 +377,37 @@ Buses
     Native STM32G474 FDCAN1 backend. Propagates: CAN. Requires
     HAL_TARGET_STM32G474 and is rejected on all other targets.
 
+Power management
+  HAL_ENABLE_POWER_MANAGEMENT
+    Portable capability query and synchronous Sleep/deep-sleep/power-down
+    transitions. Propagates: INTERNAL_RTC, RTC. STM32G474 bare metal maps to
+    Sleep, STOP0/STOP1 and Standby. RP2040/RP2350 bare metal currently supports
+    CPU Sleep; deeper modes and every FreeRTOS transition report unsupported.
+
+  STM32G474 power tunables:
+    HAL_STM32_POWER_BACKUP_REGISTER_INDEX
+      Backup register reserved for the Standby wake marker; default 30.
+    HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX
+      Backup register reserved for the Standby RTC timeout; default 29.
+    Both indexes and HAL_STM32_RTC_BACKUP_REGISTER_INDEX must be distinct.
+
 Time-of-day (RTC)
   HAL_ENABLE_RTC
     Generic RTC API. Requires at least one backend below, otherwise a
     compile-time #error is emitted.
   HAL_ENABLE_PCF8563       PCF8563 backend. Propagates: RTC, I2C.
   HAL_ENABLE_DS3231        DS3231 backend.  Propagates: RTC, I2C.
+  HAL_ENABLE_INTERNAL_RTC  Target-native RTC backend. Propagates: RTC.
+                           Implemented by STM32G474 and RP2040/RP2350; it does
+                           not require I2C. Both target families expose a
+                           relative wake-up timer; RP uses Pico SDK AON.
+
+  STM32G474 internal RTC tunables:
+    HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS  LSE ready timeout; default 2000.
+    HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS  LSI ready timeout; default 100.
+    HAL_STM32_RTC_BACKUP_REGISTER_INDEX   Backup register reserved for the
+                                          clock-valid marker; default 31,
+                                          valid range 0..31.
 
 Sensors
   HAL_ENABLE_THERMOCOUPLE
@@ -600,6 +627,8 @@ HAL_ENABLE_TSC2007     -> HAL_ENABLE_I2C
 HAL_ENABLE_STMPE610    -> HAL_ENABLE_I2C, HAL_ENABLE_SPI
 HAL_ENABLE_PCF8563     -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
 HAL_ENABLE_DS3231      -> HAL_ENABLE_RTC, HAL_ENABLE_I2C
+HAL_ENABLE_INTERNAL_RTC-> HAL_ENABLE_RTC
+HAL_ENABLE_POWER_MANAGEMENT -> HAL_ENABLE_INTERNAL_RTC -> HAL_ENABLE_RTC
 HAL_ENABLE_MCP9600     -> HAL_ENABLE_THERMOCOUPLE, HAL_ENABLE_I2C
 HAL_ENABLE_MAX6675     -> HAL_ENABLE_THERMOCOUPLE
 HAL_ENABLE_MCP401X     -> HAL_ENABLE_DIGIPOT, HAL_ENABLE_I2C

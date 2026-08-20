@@ -59,6 +59,15 @@ void g474_debug_uart_putc(char c) {
   USART2_TDR = (uint32_t)(uint8_t)c;
 }
 
+void g474_debug_uart_flush(void) {
+  if (!s_initialised) {
+    return;
+  }
+  while ((USART2_ISR & USART_ISR_TC) == 0u) {
+    /* wait for the final stop bit to leave the transmitter */
+  }
+}
+
 void g474_debug_uart_puts(const char *s) {
   if (s == 0) {
     return;

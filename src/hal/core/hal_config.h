@@ -490,9 +490,48 @@
   the user with a non-functional binary. */
 
 #if defined(HAL_ENABLE_RTC) && !defined(HAL_ENABLE_PCF8563) &&                 \
-    !defined(HAL_ENABLE_DS3231)
+    !defined(HAL_ENABLE_DS3231) && !defined(HAL_ENABLE_INTERNAL_RTC)
 #error                                                                         \
-    "HAL_ENABLE_RTC requires at least one backend: HAL_ENABLE_PCF8563 or HAL_ENABLE_DS3231"
+    "HAL_ENABLE_RTC requires HAL_ENABLE_PCF8563, HAL_ENABLE_DS3231, or HAL_ENABLE_INTERNAL_RTC"
+#endif
+
+#if defined(HAL_ENABLE_INTERNAL_RTC) && HAL_TARGET_IS_STM32G474
+#ifndef HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS
+#define HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS 2000u
+#endif
+#ifndef HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS
+#define HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS 100u
+#endif
+#ifndef HAL_STM32_RTC_BACKUP_REGISTER_INDEX
+#define HAL_STM32_RTC_BACKUP_REGISTER_INDEX 31u
+#endif
+#if HAL_STM32_RTC_LSE_STARTUP_TIMEOUT_MS == 0u ||                              \
+    HAL_STM32_RTC_LSI_STARTUP_TIMEOUT_MS == 0u
+#error "STM32G474 RTC oscillator startup timeouts must be non-zero"
+#endif
+#if HAL_STM32_RTC_BACKUP_REGISTER_INDEX > 31u
+#error "HAL_STM32_RTC_BACKUP_REGISTER_INDEX must be in 0..31"
+#endif
+#ifdef HAL_ENABLE_POWER_MANAGEMENT
+#ifndef HAL_STM32_POWER_BACKUP_REGISTER_INDEX
+#define HAL_STM32_POWER_BACKUP_REGISTER_INDEX 30u
+#endif
+#ifndef HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX
+#define HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX 29u
+#endif
+#if HAL_STM32_POWER_BACKUP_REGISTER_INDEX > 31u ||                             \
+    HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX > 31u
+#error "STM32G474 power backup register indexes must be in 0..31"
+#endif
+#if HAL_STM32_POWER_BACKUP_REGISTER_INDEX ==                                   \
+        HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX ||                       \
+    HAL_STM32_POWER_BACKUP_REGISTER_INDEX ==                                   \
+        HAL_STM32_RTC_BACKUP_REGISTER_INDEX ||                                 \
+    HAL_STM32_POWER_TIMEOUT_BACKUP_REGISTER_INDEX ==                           \
+        HAL_STM32_RTC_BACKUP_REGISTER_INDEX
+#error "STM32G474 RTC and power backup register indexes must be distinct"
+#endif
+#endif
 #endif
 
 #if defined(HAL_ENABLE_CELLULAR_MODEM) && !defined(HAL_ENABLE_A7670)

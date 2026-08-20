@@ -14,6 +14,7 @@
 
 #ifdef JH_STM32G474_HW
 
+#include "stm32g474_power_port.h"
 #include "stm32g474_regs.h"
 #include "stm32g474_time.h"
 #include <stdbool.h>
@@ -34,6 +35,9 @@ typedef struct {
 static volatile stm32g474_millis_epoch_t g_millis_epoch[2] = {{0u, 0u},
                                                               {0u, 0u}};
 static volatile uint32_t g_millis_epoch_active = 0u;
+static volatile stm32g474_millis_epoch_t g_monotonic_offset_us[2] = {{0u, 0u},
+                                                                     {0u, 0u}};
+static volatile uint32_t g_monotonic_offset_active = 0u;
 
 static void stm32g474_time_barrier(void) { __asm volatile("dmb" ::: "memory"); }
 
@@ -57,6 +61,7 @@ static void stm32g474_millis_advance(uint32_t milliseconds) {
   g_millis_epoch_active = next;
 }
 
+#ifdef HAL_ENABLE_FREERTOS
 static void stm32g474_millis_snapshot(uint32_t *high, uint32_t *low) {
   uint32_t before;
   uint32_t after;
@@ -69,6 +74,40 @@ static void stm32g474_millis_snapshot(uint32_t *high, uint32_t *low) {
     stm32g474_time_barrier();
     after = g_millis_epoch_active;
   } while (before != after);
+}
+#endif
+
+static uint64_t stm32g474_monotonic_offset_snapshot(void) {
+  uint32_t before;
+  uint32_t after;
+  uint32_t high;
+  uint32_t low;
+
+  do {
+    before = g_monotonic_offset_active;
+    stm32g474_time_barrier();
+    high = g_monotonic_offset_us[before].high;
+    low = g_monotonic_offset_us[before].low;
+    stm32g474_time_barrier();
+    after = g_monotonic_offset_active;
+  } while (before != after);
+  return ((uint64_t)high << 32u) | low;
+}
+
+void stm32g474_monotonic_compensate_us(uint64_t elapsed_us) {
+  if (elapsed_us == 0u) {
+    return;
+  }
+  const uint32_t active = g_monotonic_offset_active;
+  const uint32_t next = active ^ 1u;
+  const uint64_t current =
+      ((uint64_t)g_monotonic_offset_us[active].high << 32u) |
+      g_monotonic_offset_us[active].low;
+  const uint64_t updated = current + elapsed_us;
+  g_monotonic_offset_us[next].high = (uint32_t)(updated >> 32u);
+  g_monotonic_offset_us[next].low = (uint32_t)updated;
+  stm32g474_time_barrier();
+  g_monotonic_offset_active = next;
 }
 
 static void stm32g474_clock_init(void) {
@@ -121,6 +160,13 @@ static void stm32g474_clock_init(void) {
   __asm volatile("isb");
 }
 
+void stm32g474_system_clock_restore_after_stop(void) {
+  stm32g474_clock_init();
+  COREDEBUG_DEMCR |= COREDEBUG_DEMCR_TRCENA;
+  DWT_CYCCNT = 0u;
+  DWT_CTRL |= DWT_CTRL_CYCCNTENA;
+}
+
 #ifndef HAL_ENABLE_FREERTOS
 
 void SysTick_Handler(void) { stm32g474_millis_advance(1u); }
@@ -144,6 +190,12 @@ void SystemInit(void) {
   __asm volatile("isb");
 
   stm32g474_clock_init();
+
+#if defined(HAL_ENABLE_POWER_MANAGEMENT) && !defined(HAL_ENABLE_FREERTOS)
+  /* Preserve the RTC/Standby reason before an RTC handle can reconfigure WUT.
+   */
+  stm32g474_power_capture_boot_wake();
+#endif
 
   /* Keep a hardware cycle counter available for FreeRTOS fallback delays.
    * SysTick belongs to the scheduler in that mode, so pre-scheduler and
@@ -184,15 +236,13 @@ void SystemInit(void) {
 
 /* ── Time source consumed by the stm32g474_system driver under HW build ──── */
 
+uint64_t stm32g474_systick_micros64(void);
+
 uint32_t stm32g474_systick_millis(void) {
-  uint32_t high;
-  uint32_t low;
-  stm32g474_millis_snapshot(&high, &low);
-  (void)high;
-  return low;
+  return (uint32_t)(stm32g474_systick_micros64() / UINT64_C(1000));
 }
 
-uint64_t stm32g474_systick_micros64(void) {
+static uint64_t stm32g474_systick_micros64_raw(void) {
 #ifdef HAL_ENABLE_FREERTOS
   uint32_t high;
   uint32_t low;
@@ -233,6 +283,11 @@ uint64_t stm32g474_systick_micros64(void) {
   }
   return jh_stm32g474_compose_micros(high, low, micros_in_millis);
 #endif
+}
+
+uint64_t stm32g474_systick_micros64(void) {
+  return stm32g474_systick_micros64_raw() +
+         stm32g474_monotonic_offset_snapshot();
 }
 
 uint32_t stm32g474_systick_micros(void) {

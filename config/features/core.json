@@ -19,6 +19,9 @@
       "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_JPEG"]
     },
     "HAL_ENABLE_PCNT": {},
+    "HAL_ENABLE_POWER_MANAGEMENT": {
+      "implies": ["HAL_ENABLE_INTERNAL_RTC"]
+    },
     "HAL_ENABLE_PNG": {},
     "HAL_ENABLE_PNG_AS_BASE64": {
       "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_PNG"]

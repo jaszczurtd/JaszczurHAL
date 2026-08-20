@@ -269,6 +269,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_MCP251XFD     # second CAN backend with CAN FD support
     HAL_ENABLE_PCF8563        # propagates HAL_ENABLE_RTC + HAL_ENABLE_I2C
     HAL_ENABLE_DS3231         # second RTC backend
+    HAL_ENABLE_INTERNAL_RTC   # target-native RTC backend
     HAL_ENABLE_MCP9600        # propagates HAL_ENABLE_THERMOCOUPLE + HAL_ENABLE_I2C
     HAL_ENABLE_MAX6675        # second thermocouple backend
     HAL_ENABLE_DS18B20        # propagates HAL_ENABLE_ONEWIRE
@@ -297,6 +298,7 @@ target_compile_definitions(hal_mock PUBLIC
     HAL_ENABLE_DMA_PWM_AUDIO
     HAL_ENABLE_STACK_GUARD   # target-independent synchronous stack protection API
     HAL_ENABLE_PCNT
+    HAL_ENABLE_POWER_MANAGEMENT
     HAL_ENABLE_PWM_FREQ
     HAL_ENABLE_RGB_LED
     HAL_ENABLE_HD44780        # shared HD44780 character LCD over HAL GPIO

@@ -823,6 +823,11 @@ add_test(NAME test_rtc_architecture
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_rtc_architecture.cmake
 )
+add_test(NAME test_power_architecture
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_power_architecture.cmake
+)
 add_test(NAME test_eeprom_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_SOURCE_DIR}
@@ -1208,8 +1213,31 @@ add_hal_test(test_hal_ds18b20)
 add_hal_test(test_hal_dht)
 add_hal_test(test_hal_eeprom)
 add_hal_test(test_hal_timer)
+add_hal_test(test_hal_power)
 add_stm32_host_test(test_stm32_hal_timer)
 add_stm32_host_test(test_stm32_hal_system)
+
+add_executable(test_stm32_rtc_codec
+    test_stm32_rtc_codec.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/utils/unity.c)
+target_include_directories(test_stm32_rtc_codec PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_compile_definitions(test_stm32_rtc_codec PRIVATE
+    HAL_TARGET_STM32G474=1
+    HAL_ENABLE_INTERNAL_RTC=1
+    HAL_ENABLE_UNITY
+    UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_rtc_codec ERRORS)
+add_test(NAME test_stm32_rtc_codec COMMAND test_stm32_rtc_codec)
+
+add_executable(test_hal_power_header_c test_hal_power_header_c.c)
+target_include_directories(test_hal_power_header_c PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_compile_definitions(test_hal_power_header_c PRIVATE
+    HAL_TARGET_MOCK=1
+    HAL_ENABLE_POWER_MANAGEMENT=1)
+jh_enable_host_warnings(test_hal_power_header_c ERRORS)
+add_test(NAME test_hal_power_header_c COMMAND test_hal_power_header_c)
 add_stm32_i2c_slave_host_test(test_stm32_hal_i2c_slave)
 add_stm32_gpio_host_test(test_stm32_hal_gpio)
 add_executable(test_stm32_pwm_clock

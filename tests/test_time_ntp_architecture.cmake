@@ -23,10 +23,17 @@ endforeach()
 
 file(READ "${_service}" _service_contents)
 foreach(_required_symbol IN ITEMS
+        "hal_time_set_unix_ex"
+        "hal_time_get_status_ex"
+        "jh_time_platform_clock_changed"
         "hal_time_sync_ntp"
         "hal_time_unix"
+        "hal_time_attach_rtc_ex"
         "jh_time_runtime_snapshot"
+        "jh_time_libc_gettimeofday"
+        "jh_time_libc_settimeofday"
         "jh_ntp_validate_response"
+        "hal_micros64"
         "hal_mutex_lock"
         "hal_net_service")
     if(NOT _service_contents MATCHES "${_required_symbol}")
@@ -35,25 +42,39 @@ foreach(_required_symbol IN ITEMS
     endif()
 endforeach()
 if(_service_contents MATCHES
-   "settimeofday|jh_stm32g474_runtime_gettimeofday")
+   "jh_stm32g474_runtime_gettimeofday|jh_time_platform_apply_unix")
     message(FATAL_ERROR "Shared time/NTP service gained target runtime coupling")
 endif()
 
-foreach(_hook IN ITEMS "${_mock_hook}" "${_rp_hook}" "${_stm_hook}")
-    file(READ "${_hook}" _hook_contents)
-    if(NOT _hook_contents MATCHES "jh_time_platform_apply_unix" OR
-       _hook_contents MATCHES
-       "bool[ \t\r\n]+hal_time_|uint64_t[ \t\r\n]+hal_time_")
-        message(FATAL_ERROR
-            "Target time file is not limited to platform hooks: ${_hook}")
-    endif()
-endforeach()
+file(READ "${_rp_hook}" _rp_hook_contents)
+if(NOT _rp_hook_contents MATCHES "_gettimeofday" OR
+   NOT _rp_hook_contents MATCHES "settimeofday" OR
+   NOT _rp_hook_contents MATCHES "jh_time_libc_gettimeofday" OR
+   NOT _rp_hook_contents MATCHES "jh_time_libc_settimeofday")
+    message(FATAL_ERROR "RP libc time bridge lost shared-clock delegation")
+endif()
+
+file(READ "${_stm_hook}" _stm_hook_contents)
+if(NOT _stm_hook_contents MATCHES "jh_stm32g474_runtime_gettimeofday" OR
+   NOT _stm_hook_contents MATCHES "settimeofday" OR
+   NOT _stm_hook_contents MATCHES "jh_time_libc_gettimeofday" OR
+   NOT _stm_hook_contents MATCHES "jh_time_libc_settimeofday")
+    message(FATAL_ERROR "STM32 libc time bridge lost shared-clock delegation")
+endif()
+
+file(READ "${_mock_hook}" _mock_hook_contents)
+if(_mock_hook_contents MATCHES "jh_time_platform_apply_unix")
+    message(FATAL_ERROR "Removed platform clock setter returned in mock")
+endif()
 
 file(READ "${_runtime_test}" _test_contents)
 foreach(_required_test IN ITEMS
         "test_ntp_timeout_retries_secondary_server"
         "test_network_service_can_reenter_time_getter"
-        "test_time_snapshots_are_safe_during_concurrent_updates")
+        "test_time_snapshots_are_safe_during_concurrent_updates"
+        "test_wall_clock_uses_64_bit_monotonic_base_across_millis_wrap"
+        "test_valid_rtc_restores_unset_wall_clock"
+        "test_successful_ntp_sync_is_written_to_attached_rtc")
     if(NOT _test_contents MATCHES "${_required_test}")
         message(FATAL_ERROR
             "Time/NTP regression coverage is missing: ${_required_test}")

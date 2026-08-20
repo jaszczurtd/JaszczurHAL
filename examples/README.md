@@ -84,7 +84,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `13_adc` | Internal ADC sampling and external ADS1115 conversion | `21_adc_read`, `23_external_adc_ads1115` | R0, RA, RV, S | R0, S | - |
 | `14_can_mcp2515` | MCP2515 classic CAN backend | `24_can_mcp2515` | R0, RA, RV, S | R0, S | - |
 | `15_display_oled_lcd` | SSD1306 OLED and HD44780 character LCD | `25_display_oled`, `31_hd44780` | R0, RA, RV, S | R0, S | - |
-| `16_rtc_backends` | RTC facade with PCF8563 and DS3231 behavior | `26_rtc_clock`, `27_rtc_ds3231` | R0, RA, RV, S | R0, S | - |
+| `16_rtc_backends` | RTC facade, target-native relative wake-up, and portable low-power transitions | `26_rtc_clock`, `27_rtc_ds3231` | R0, RA, RV, S | R0, S | - |
 | `17_audio_output` | PGA2311 volume control and DMA/PWM audio output | `28_pga2311`, `44_dacless_audio` | R0, RA, RV, S | R0, S | - |
 | `18_freertos_suite` | FreeRTOS tasks/affinity, WiFi, cJSON, BSD sockets, HTTP/HTTPS client/server, files, WebSocket, network console, commands, and Telegram notifications | `15_wifi`, `29_freertos_smoke`, `35_cJSON`, `42_bsd_sockets_tcp_udp`, `48_http_server`, `49_websocket`, `50_net_console`, `51_net_commands`, `52_http_files`, `56_http_https_client` | R0, RA, RV, S | R0, S | `network` on R0, RA, S; gate on R0, S |
 | `19_touch` | TSC2007 and STMPE610 touch controllers | `32_tsc2007_touch`, `33_stmpe610_touch` | R0, RA, RV, S | R0, S | - |

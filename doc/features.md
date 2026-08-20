@@ -34,6 +34,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | PWM | Portable PWM output plus frequency-controlled PWM helpers. | [hal_pwm.h](../src/hal/gpio/hal_pwm.h), [hal_pwm_freq.h](../src/hal/gpio/hal_pwm_freq.h) |
 | Pulse counting | Edge/pulse counting for signal measurement and simple counter applications. | [hal_pcnt.h](../src/hal/analog/hal_pcnt.h) |
 | Timers and system time | Basic timers, extended timer helpers, idle/delay, watchdog, unique device ID and crash/fault diagnostics with target fault handlers. | [hal_timer.h](../src/hal/timers/hal_timer.h), [hal_system.h](../src/hal/system/hal_system.h) |
+| Low-power management | Capability-driven CPU Sleep, STM32G474 STOP0/STOP1/Standby, RTC wake classification, clock restoration, callbacks, and monotonic-time compensation for RTC-timed transitions. | [hal_power.h](../src/hal/power/hal_power.h), [power API](api/06_timers_system.md#halpower-low-power-transitions-optional-halenablepowermanagement) |
 | Synchronization | Mutexes and critical sections with target-specific implementations. | [hal_sync.h](../src/hal/system/hal_sync.h) |
 | Soft timers | Lightweight cooperative software timers. | [hal_soft_timer.h](../src/hal/timers/hal_soft_timer.h) |
 | Utility primitives | Bit helpers, math helpers, PID control, watchdog support and common utility APIs. | [tools.h](../src/tools.h), [utils](../src/utils/) |
@@ -74,7 +75,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Notifications | Backend-dispatched notification facade with a Telegram Bot API backend over the existing HTTP/HTTPS client. | [hal_notify.h](../src/hal/network/notify/hal_notify.h), [connectivity API](api/15_connectivity.md#halnotify-notifications-opt-in-halenablenotify) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/network/mqtt/hal_mqtt.h) |
 | OTA | Authenticated RP firmware updates over HAL UDP/TCP with versioned images, resumable program/staging swap, boot confirmation, rollback, discovery, and VS Code upload. | [hal_ota.h](../src/hal/network/ota/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
-| Calendar / NTP / time-of-day | Always-available Gregorian conversion, CET/CEST adjustment, range and minute helpers, plus a shared thread-safe NTP state machine with bounded primary/secondary fallback for connected builds. | [hal_time.h](../src/hal/time/hal_time.h) |
+| Calendar / NTP / time-of-day | Always-available Gregorian helpers plus one thread-safe runtime wall clock with source/status snapshots, RTC restore, NTP persistence, libc adapters, and bounded primary/secondary fallback. | [hal_time.h](../src/hal/time/hal_time.h) |
 | WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/network/wireguard/hal_wireguard.h), [WireGuard engine](../src/hal/network/wireguard/core/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/modem/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/modem/hal_simcom_a76xx.h) |
 
@@ -93,9 +94,11 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 | Area | What it offers | Source |
 |---|---|---|
-| RTC facade | One target-independent real-time-clock facade with provider-dispatched chip/mock backends, status-returning (`hal_status_t`) datetime/epoch/alarm/timer APIs, shared lifecycle/locking, and Gregorian validation. | [hal_rtc.h](../src/hal/rtc/hal_rtc.h), [hal_rtc.cpp](../src/hal/rtc/hal_rtc.cpp), [providers](../src/hal/rtc/), [calendar core](../src/hal/time/) |
+| RTC facade | One target-independent real-time-clock facade with provider-dispatched chip/mock backends, status-returning (`hal_status_t`) datetime/epoch/alarm/timer/relative-wake APIs, shared lifecycle/locking, and Gregorian validation. | [hal_rtc.h](../src/hal/rtc/hal_rtc.h), [hal_rtc.cpp](../src/hal/rtc/hal_rtc.cpp), [providers](../src/hal/rtc/), [calendar core](../src/hal/time/) |
 | PCF8563 RTC | Shared I2C PCF8563 backend. | [pcf8563 driver](../src/hal/rtc/pcf8563/) |
 | DS3231 RTC | Shared I2C DS3231 backend. | [ds3231 driver](../src/hal/rtc/ds3231/) |
+| STM32G474 internal RTC | Native backup-domain calendar with LSE/LSI selection, retained-time integrity, Alarm A IRQ/polling, one-shot WUT wake-up, source diagnostics, and 1 Hz calibration output. | [STM32G474 provider](../src/hal/impl/stm32g474/jh_stm32g474_rtc_provider.cpp) |
+| RP2040/RP2350 AON RTC | Native Pico SDK AON provider using the RP2040 calendar RTC or RP2350 Powman timer, with warm-reset retention, relative wake-up alarms, and shared RTC/NTP integration. | [RP provider](../src/hal/impl/rp2040/jh_rp_rtc_provider.cpp) |
 | GPS / NMEA | One target-independent GPS facade with compile-time HAL UART/SoftwareSerial selection, a shared mutex-protected NMEA engine and deterministic mock injection. RP UART retains IRQ/core-affinity guidance. | [hal_gps.h](../src/hal/gps/hal_gps.h), [hal_gps.cpp](../src/hal/gps/hal_gps.cpp), [GPS framework](../src/hal/gps/) |
 | Thermocouple facade | One target-independent, provider-dispatched facade owns lifecycle, locking, validation, chip capabilities and deterministic mock injection for MCP9600/MCP9601 and MAX6675. | [hal_thermocouple.h](../src/hal/temperature/hal_thermocouple.h), [facade/providers](../src/hal/temperature/) |
 | MCP9600/MCP9601 | Shared I2C thermocouple amplifier driver. | [mcp9600 driver](../src/hal/temperature/mcp9600/) |

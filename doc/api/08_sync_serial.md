@@ -304,8 +304,10 @@ that want an extra transport poll before the TX mutex is released.
 Leaving `hal_serial_set_flush(false)` keeps the RP backend on its default
 path and avoids the optional extra poll/flush while preserving the TX mutex.
 It does not bypass the write loop's bounded retry when the CDC FIFO is full.
-STM32G474 and mock backends accept the same setter for portable code, but have
-no USB CDC flush to perform.
+On STM32G474, enabling the option waits for USART2's transmission-complete flag
+after each message. This is useful before STOP changes the peripheral clock or
+an application disables the console. The mock backend accepts the setter
+without target timing semantics.
 
 ### Shared core and link-time transport ports
 

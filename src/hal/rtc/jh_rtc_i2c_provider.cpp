@@ -19,6 +19,38 @@
 #include <cstddef>
 #include <cstring>
 
+#if defined(HAL_ENABLE_PCF8563) || defined(HAL_ENABLE_DS3231)
+static hal_status_t
+external_get_clock_source(void *context, hal_rtc_clock_source_t *out_source) {
+  if (context == nullptr || out_source == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_source = HAL_RTC_CLOCK_SOURCE_EXTERNAL;
+  return HAL_OK;
+}
+
+static hal_status_t external_wakeup_arm(void *context, uint64_t timeout_us,
+                                        uint32_t flags) {
+  if (context == nullptr || timeout_us == 0u) {
+    return HAL_EINVAL;
+  }
+  (void)flags;
+  return HAL_EUNSUPPORTED;
+}
+
+static hal_status_t external_wakeup_cancel(void *context) {
+  return context == nullptr ? HAL_EINVAL : HAL_EUNSUPPORTED;
+}
+
+static hal_status_t
+external_wakeup_get_state(void *context, hal_rtc_wakeup_state_t *out_state) {
+  if (context == nullptr || out_state == nullptr) {
+    return HAL_EINVAL;
+  }
+  return HAL_EUNSUPPORTED;
+}
+#endif
+
 #ifdef HAL_ENABLE_PCF8563
 typedef struct {
   pcf8563_t device;
@@ -395,6 +427,7 @@ static hal_status_t pcf_get_alarm(void *context, hal_rtc_alarm_t *out_alarm) {
 }
 
 static const jh_rtc_provider_ops_t s_pcf8563_provider = {
+    JH_RTC_PROVIDER_BUS_I2C,
     HAL_RTC_PCF8563_DEFAULT_I2C_ADDR,
     false,
     pcf_initialize,
@@ -402,6 +435,7 @@ static const jh_rtc_provider_ops_t s_pcf8563_provider = {
     pcf_get_datetime,
     pcf_set_datetime,
     pcf_get_clock_integrity,
+    external_get_clock_source,
     pcf_set_interrupt_enable,
     pcf_get_interrupt_enable,
     pcf_get_and_clear_flags,
@@ -412,6 +446,9 @@ static const jh_rtc_provider_ops_t s_pcf8563_provider = {
     pcf_get_timer,
     pcf_set_alarm,
     pcf_get_alarm,
+    external_wakeup_arm,
+    external_wakeup_cancel,
+    external_wakeup_get_state,
 };
 #endif /* HAL_ENABLE_PCF8563 */
 
@@ -737,6 +774,7 @@ static hal_status_t ds_get_alarm(void *context, hal_rtc_alarm_t *out_alarm) {
 }
 
 static const jh_rtc_provider_ops_t s_ds3231_provider = {
+    JH_RTC_PROVIDER_BUS_I2C,
     HAL_RTC_DS3231_DEFAULT_I2C_ADDR,
     true,
     ds_initialize,
@@ -744,6 +782,7 @@ static const jh_rtc_provider_ops_t s_ds3231_provider = {
     ds_get_datetime,
     ds_set_datetime,
     ds_get_clock_integrity,
+    external_get_clock_source,
     ds_set_interrupt_enable,
     ds_get_interrupt_enable,
     ds_get_and_clear_flags,
@@ -754,6 +793,9 @@ static const jh_rtc_provider_ops_t s_ds3231_provider = {
     ds_get_timer,
     ds_set_alarm,
     ds_get_alarm,
+    external_wakeup_arm,
+    external_wakeup_cancel,
+    external_wakeup_get_state,
 };
 #endif /* HAL_ENABLE_DS3231 */
 
@@ -772,7 +814,7 @@ const jh_rtc_provider_ops_t *jh_rtc_i2c_provider_get_ops(hal_rtc_chip_t chip) {
   }
 }
 
-#if !HAL_TARGET_IS_MOCK
+#if !HAL_TARGET_IS_MOCK && !HAL_TARGET_IS_STM32G474 && !HAL_TARGET_IS_RP
 const jh_rtc_provider_ops_t *jh_rtc_provider_get_ops(hal_rtc_chip_t chip) {
   return jh_rtc_i2c_provider_get_ops(chip);
 }
