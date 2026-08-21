@@ -73,13 +73,27 @@ class ArtifactTests(unittest.TestCase):
                     "project_name": "jh_esp_idf_phase0",
                     "app_elf": "jh_esp_idf_phase0.elf",
                     "app_bin": "jh_esp_idf_phase0.bin",
+                    "build_components": ["esp_system", "jaszczurhal", "main"],
                 }
             ),
             encoding="utf-8",
         )
         (build_dir / "compile_commands.json").write_text(
             json.dumps(
-                [{"file": "/project/main/phase0_main.c", "command": "cc"}]
+                [
+                    {"file": "/project/main/phase0_main.c", "command": "cc"},
+                    {
+                        "file": "/jh/src/hal/core/jh_handle_pool.cpp",
+                        "command": "c++",
+                    },
+                    {
+                        "file": (
+                            "/build/generated/jaszczurhal/"
+                            "jh_link_contract_definition.c"
+                        ),
+                        "command": "cc",
+                    },
+                ]
             ),
             encoding="utf-8",
         )
@@ -96,6 +110,12 @@ class ArtifactTests(unittest.TestCase):
                 }
             ),
             encoding="utf-8",
+        )
+        phase0.generate_component_config(
+            build_dir,
+            target="esp32s3",
+            idf_version="6.0.2",
+            idf_commit="a" * 40,
         )
 
     def test_artifact_manifest_is_relocatable_and_complete(self) -> None:
@@ -120,6 +140,9 @@ class ArtifactTests(unittest.TestCase):
                 encoding="utf-8"
             )
             self.assertNotIn(str(build_dir), serialized)
+            self.assertEqual(
+                manifest["integration"]["component"], "jaszczurhal"
+            )
 
     def test_artifact_manifest_rejects_incomplete_flash_set(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-phase0-") as text:
@@ -148,6 +171,29 @@ class ArtifactTests(unittest.TestCase):
                     write_manifest=False,
                 )
 
+    def test_artifact_manifest_rejects_missing_hal_component(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-phase0-") as text:
+            build_dir = Path(text)
+            self._fixture(build_dir)
+            description_path = build_dir / "project_description.json"
+            description = json.loads(
+                description_path.read_text(encoding="utf-8")
+            )
+            description["build_components"].remove("jaszczurhal")
+            description_path.write_text(
+                json.dumps(description), encoding="utf-8"
+            )
+            with self.assertRaisesRegex(
+                phase0.Phase0Error, "does not include the jaszczurhal component"
+            ):
+                phase0.validate_artifacts(
+                    build_dir,
+                    target="esp32s3",
+                    idf_version="6.0.2",
+                    idf_commit="a" * 40,
+                    write_manifest=False,
+                )
+
     def test_build_output_must_be_below_dot_build(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-phase0-root-") as text:
             root = Path(text)
@@ -161,15 +207,35 @@ class ArtifactTests(unittest.TestCase):
 
 
 class ProjectFixtureTests(unittest.TestCase):
-    def test_fixture_uses_standard_esp_idf_flow_without_hal(self) -> None:
+    def test_component_config_rejects_invalid_provenance(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-phase0-") as text:
+            with self.assertRaises(phase0.Phase0Error):
+                phase0.generate_component_config(
+                    Path(text),
+                    target="esp32-s3",
+                    idf_version="6.0.2",
+                    idf_commit="not-a-commit",
+                )
+
+    def test_fixture_uses_standard_esp_idf_component_flow(self) -> None:
         fixture = ROOT / "tests/fixtures/esp_idf_phase0"
         cmake = (fixture / "CMakeLists.txt").read_text(encoding="utf-8")
+        main_cmake = (fixture / "main/CMakeLists.txt").read_text(
+            encoding="utf-8"
+        )
         main = (fixture / "main/phase0_main.c").read_text(encoding="utf-8")
+        component = (
+            ROOT / "cmake/esp-idf/components/jaszczurhal/CMakeLists.txt"
+        ).read_text(encoding="utf-8")
         self.assertIn("tools/cmake/project.cmake", cmake)
         self.assertIn("idf_build_set_property(MINIMAL_BUILD ON)", cmake)
         self.assertIn('IDF_TARGET STREQUAL "esp32s3"', cmake)
+        self.assertIn("EXTRA_COMPONENT_DIRS", cmake)
+        self.assertIn("REQUIRES jaszczurhal", main_cmake)
+        self.assertIn("jh_handle_pool.cpp", component)
+        self.assertIn("ENV{JH_PHASE0_GENERATED_DIR}", component)
         self.assertIn("void app_main(void)", main)
-        self.assertNotIn("JaszczurHAL", main)
+        self.assertIn("JH_BOARD_CONTRACT_SYMBOL", main)
 
 
 if __name__ == "__main__":
