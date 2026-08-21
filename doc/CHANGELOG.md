@@ -11,6 +11,8 @@ All notable changes to this project will be documented in this file.
   discovers a controlled `jaszczurhal` ESP-IDF component, compiles an existing
   shared C++ source, consumes a generated per-build include/link contract, and
   verifies the integration sources and component graph in ESP-IDF metadata.
+  Linux and Windows builds are verified; the component recipe normalizes the
+  generated contract directory before ESP-IDF serializes its source list.
 - Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
   monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
   persistence after validated NTP synchronization.

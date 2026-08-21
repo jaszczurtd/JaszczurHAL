@@ -234,6 +234,9 @@ class ProjectFixtureTests(unittest.TestCase):
         self.assertIn("REQUIRES jaszczurhal", main_cmake)
         self.assertIn("jh_handle_pool.cpp", component)
         self.assertIn("ENV{JH_PHASE0_GENERATED_DIR}", component)
+        self.assertIn(
+            'file(TO_CMAKE_PATH "$ENV{JH_PHASE0_GENERATED_DIR}"', component
+        )
         self.assertIn("void app_main(void)", main)
         self.assertIn("JH_BOARD_CONTRACT_SYMBOL", main)
 

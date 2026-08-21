@@ -3,7 +3,7 @@ if(NOT "$ENV{JH_ESP_IDF_PHASE0}" STREQUAL "1")
         "The native JaszczurHAL ESP-IDF backend is not implemented; "
         "this component recipe currently supports only the controlled Phase 0 spike")
 endif()
-set(_jh_generated_dir "$ENV{JH_PHASE0_GENERATED_DIR}")
+file(TO_CMAKE_PATH "$ENV{JH_PHASE0_GENERATED_DIR}" _jh_generated_dir)
 if(NOT _jh_generated_dir OR NOT IS_DIRECTORY "${_jh_generated_dir}")
     message(FATAL_ERROR
         "JH_PHASE0_GENERATED_DIR must name the generated Phase 0 contract directory")
