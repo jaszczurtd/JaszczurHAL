@@ -6,12 +6,12 @@
 
 | HAL module | External dependency |
 |---|---|
-| ESP32-S3 Phase 1 entry/build contract | Pinned ESP-IDF `freertos`, `esp_system`, `esp_psram`, and `spi_flash` components. The production recipe uses a fixed minimal graph; ESP peripheral HAL modules are not released in Phase 1. |
-| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
+| ESP32-S3 component contract | Pinned ESP-IDF with one generated source/dependency graph: baseline core/simple-PWM sources, feature-selected Phase 2 peripherals, and native Phase 3 connectivity/services. |
+| `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend; ESP-IDF GPIO, LEDC PWM, ADC and system services for ESP32-S3. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds. |
 | `hal_usb` | HAL-owned TinyUSB device on RP: CDC descriptors, IRQ/timer pump in bare builds, core-0 worker task in FreeRTOS builds, and BOOTSEL reset. STM32G474 is currently unsupported. Mock provides deterministic CDC buffers and a reset observer. |
-| `hal_serial` | One target-independent serial/debug core plus link-time ports: RP `hal_usb` CDC, STM32G474 debug USART2/host stdout, and mock stdout capture/injectable RX. |
-| `hal_sync` | RP: Pico SDK `pico/mutex.h` in bare builds and FreeRTOS `semphr.h` / `task.h` in `HAL_ENABLE_FREERTOS` builds. STM32G474: atomic spinlock in bare builds and FreeRTOS mutex/task APIs in `HAL_ENABLE_FREERTOS` builds |
-| `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend |
+| `hal_serial` | One target-independent serial/debug core plus link-time ports: RP `hal_usb` CDC, ESP32-S3 startup-owned USB Serial/JTAG VFS, STM32G474 debug USART2/host stdout, and mock stdout capture/injectable RX. |
+| `hal_sync` | RP: Pico SDK `pico/mutex.h` in bare builds and FreeRTOS semaphores in RTOS builds. STM32G474: atomic spinlock in bare builds and FreeRTOS mutexes in RTOS builds. ESP32-S3: ESP-IDF FreeRTOS mutexes and `portMUX_TYPE` critical sections. |
+| `hal_timer` | RP2040: pico SDK alarm/time APIs (`pico/time.h`); STM32G474: TIM6 + NVIC register backend; ESP32-S3: ESP-IDF GPTimer default and dedicated pools. |
 | `hal_soft_timer` | internal `SmartTimers` utility |
 | `hal_pid_controller` | internal `pidController` utility |
 | `hal_can` | generic CAN facade plus backend-selected CAN drivers: MCP2515 (`hal/can/mcp2515/*`), MCP251XFD (`hal/can/mcp251xfd/*`) and STM32G474 native FDCAN (`impl/stm32g474/hal_can_stm32g474_fdcan.*`) |
@@ -22,20 +22,20 @@
 | `hal_tsc2007` | shared TSC2007 resistive touch controller driver (`hal/input/tsc2007/tsc2007.cpp`) over HAL I2C/system timing |
 | `hal_stmpe610` | shared STMPE610 resistive touch controller driver (`hal/input/stmpe610/stmpe610.cpp`) over HAL I2C or HAL SPI/GPIO |
 | `hal_irsmall_decoder` | shared IR receiver decoder (`hal/input/irsmall_decoder/irsmall_decoder.cpp`) over HAL GPIO interrupts and system timing |
-| `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend |
+| `hal_spi` | RP2040 native Pico SDK `hardware/spi.h`; STM32G474 register backend; ESP32-S3 ESP-IDF SPI master on SPI2/SPI3. |
 | `hal_lora_radio` | Mutually exclusive family providers: the pinned official Semtech SX126x driver with the HAL adapter for validated SX1262 and experimental software-only SX1261, or the HAL-owned register provider for experimental software-only SX1276/SX1278; both compile for RP and STM32G474 and have deterministic mock coverage |
 | `hal_lora_link` | HAL-owned protocol over one configured `hal_lora_radio`; CRC-32 is internal, ChaCha20-Poly1305 uses the optional `hal_crypto` module, and no additional third-party dependency is introduced |
-| `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend |
+| `hal_i2c` | RP2040 native Pico SDK `hardware/i2c.h`; STM32G474 register backend; ESP32-S3 ESP-IDF I2C master on I2C0/I2C1. |
 | `hal_swserial` | native Pico SDK PIO/DMA backend on RP2040; shared HAL GPIO/timing/sync backend on other targets |
 | `hal_gps` | one portable facade selecting `hal_uart` / `hal_swserial` at compile time, plus the shared in-tree NMEA engine |
-| `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport glue |
+| `hal_rgb_led` | shared NeoPixel core (`hal/gpio/neopixel/jh_neopixel.*`) + target transport glue, including ESP32-S3 RMT |
 | `hal_thermocouple` (MCP9600/MCP9601) | shared driver (`hal/temperature/mcp9600/mcp9600_driver.*`) |
 | `hal_thermocouple` (MAX6675) | shared driver (`hal/temperature/max6675/max6675_driver.*`) |
 | `hal_onewire` | shared bit-bang driver (`hal/onewire/onewire_driver.*`) over HAL GPIO/time |
 | `hal_ds18b20` | shared DS18B20 backend (`hal/temperature/ds18b20/hal_ds18b20.cpp`) over shared OneWire |
 | `hal_external_adc` | shared ADS1X15/ADS1115 driver (`hal/analog/ads1x15/ads1x15_driver.*`) |
 | `hal_pga2311` | shared PGA2311 stereo volume driver (`hal/audio/pga2311/pga2311_driver.*`) over HAL SPI/GPIO |
-| `hal_wifi` | pinned CYW43 driver and lwIP; RP uses PIO gSPI, while STM32G474 uses the configured gSPI bus |
+| `hal_wifi` | pinned CYW43 driver/lwIP on RP and STM32G474, or native ESP-IDF WiFi/`esp_netif`/lwIP on ESP32-S3 |
 | `hal_littlefs` | pinned `third_party/littlefs` core plus coordinated internal flash on RP and STM32G474 |
 | `hal_udp` | shared lwIP raw UDP engine over the selected CYW43 network backend |
 | `hal_tls` | bundled BearSSL over native `hal_tcp`; the optional BSD transport adapter is built only when `HAL_ENABLE_BSD_SOCKETS` is also enabled |
@@ -103,7 +103,8 @@ Runs the complete quality-gate suite (8 gates, in order):
 7. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
    entry/core probes, RP feature profiles, six representative
    `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
-   ESP32-S3 build with the pinned ESP-IDF and validated multi-image manifest)
+   compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
+   and validated multi-image manifest)
 8. Examples build (62 dispatcher-backed `gateTargets` configurations: 32 for
    RP2040 and 30 for STM32G474, plus the dedicated target/runtime fixtures)
 
@@ -167,7 +168,8 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
 | `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional packets, RSSI/SNR, sleep/wake and destroy/create reinitialization on integrated LF or external HF pairs |
-| `tests/hardware/esp32s3_phase1` | ESP32-S3 target/board identity, generated link contract, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. Peripheral HAL surfaces remain Phase 2. |
+| `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link contract, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
+| `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, default-pool timer callbacks, and explicit unsupported system operations. |
 
 Each fixture contains its exact build, upload and verifier commands in its
 local `README.md`. The storage probe supports `rp2040`, `rp2350-arm` and
@@ -175,6 +177,28 @@ local `README.md`. The storage probe supports `rp2040`, `rp2350-arm` and
 three full three-image flashes, exact S3/two-core/4 MiB flash/initialized 2 MiB
 PSRAM runtime facts, and persistent-monitor release/reconnect with a repeated
 task heartbeat.
+
+The ESP32-S3 Phase 2 fixture has also completed its physical closure on the
+Waveshare ESP32-S3-Zero: task0/task1 affinity was cores 0/1, two GPIO callbacks
+ran in ISR context, ADC pull-down/pull-up readings were 37/4095, UART GPIO
+loopback and SPI passed, an unwired I2C scan returned `HAL_OK` with zero devices,
+20 GPTimer callbacks ran in ISR context, and bidirectional USB Serial/JTAG plus
+system/synchronization and documented unsupported-operation checks passed.
+
+That Phase 2 result covers the fixture's original subset only. It does not
+validate the later I2C-target, PWM/PWM_FREQ, RMT/RGB, PCNT, dedicated timer
+pool, boot-entry, stack-guard, or retained-fault implementations.
+
+### ESP32-S3 compile/link fixture
+
+| Fixture | Coverage |
+|---|---|
+| `tests/fixtures/esp32s3_phase3` | Compile-only ESP-IDF project selecting every ESP32-S3 backend delivered through Phase 3. It checks feature/source/dependency resolution, compilation, linking, `two-ota-large` partition generation, and artifact publication. |
+
+CI and local Gate 7 build this fixture. A passing build does not establish
+runtime WiFi/socket/TLS/service/OTA/WireGuard behavior or the newly completed
+Phase 2 peripheral behavior; those require a separate hardware, lifecycle, and
+negative-security verification campaign.
 
 ---
 

@@ -152,7 +152,7 @@ class ProjectModelTests(unittest.TestCase):
             (project / "app.c").write_text("void app_start(void) {}\n")
             with self.assertRaisesRegex(
                 esp_idf.EspIdfError,
-                r"\[JH-CFG-UNSUPPORTED\].*HAL_ENABLE_UART",
+                r"\[JH-CFG-UNSUPPORTED\].*HAL_ENABLE_DAC",
             ):
                 esp_idf.resolve_build_model(
                     ROOT,
@@ -161,7 +161,7 @@ class ProjectModelTests(unittest.TestCase):
                     board="waveshare-esp32-s3-zero",
                     project_name="firmware",
                     requested_sources=[],
-                    features=["HAL_ENABLE_UART"],
+                    features=["HAL_ENABLE_DAC"],
                     definitions=[],
                 )
 
@@ -321,7 +321,7 @@ class ArtifactTests(unittest.TestCase):
         generated = build_dir / esp_idf.GENERATED_DIR_NAME
         compile_sources = [
             app,
-            *(ROOT / source for source in esp_idf.INTEGRATION_SOURCES),
+            *(ROOT / source for source in model["integrationSources"]),
             generated / "jh_link_contract_reference.c",
             generated / "jh_link_contract_definition.c",
         ]
@@ -980,6 +980,8 @@ class CommandContractTests(unittest.TestCase):
         self.assertNotIn("PHASE0", combined)
         self.assertIn("JH_ESP_IDF_PROJECT_CONFIG", combined)
         self.assertIn("JH_ESP_IDF_GENERATED_DIR", combined)
+        self.assertIn("JH_ESP_IDF_COMPONENT_SOURCES", component)
+        self.assertIn("JH_ESP_IDF_COMPONENT_PRIV_REQUIRES", component)
         self.assertIn("jh_link_contract_reference.c", main)
         self.assertIn("jaszczurhal esp_system esp_psram spi_flash", main)
 

@@ -5,7 +5,7 @@
   "id": "esp32s3",
   "displayName": "Espressif ESP32-S3",
   "description": "Dual-core Xtensa LX7 target built with the pinned ESP-IDF.",
-  "status": "experimental",
+  "status": "supported",
   "architecture": {
     "vendor": "espressif",
     "family": "esp32",
@@ -43,5 +43,32 @@
   "defaultBoard": "waveshare-esp32-s3-zero",
   "components": { "esp-idf-native": { "mode": "required" } },
   "requiredFeatures": ["HAL_ENABLE_FREERTOS"],
-  "supportedFeatures": ["HAL_ENABLE_FREERTOS"]
+  "supportedFeatures": [
+    "HAL_ENABLE_APP_TASK1",
+    "HAL_ENABLE_BSD_SOCKETS",
+    "HAL_ENABLE_CRC",
+    "HAL_ENABLE_CRYPTO",
+    "HAL_ENABLE_FREERTOS",
+    "HAL_ENABLE_HTTP_CLIENT",
+    "HAL_ENABLE_HTTP_FILES",
+    "HAL_ENABLE_HTTP_SERVER",
+    "HAL_ENABLE_I2C",
+    "HAL_ENABLE_I2C_SLAVE",
+    "HAL_ENABLE_MQTT",
+    "HAL_ENABLE_NETWORK_CORE",
+    "HAL_ENABLE_OTA",
+    "HAL_ENABLE_PCNT",
+    "HAL_ENABLE_PWM_FREQ",
+    "HAL_ENABLE_RGB_LED",
+    "HAL_ENABLE_SPI",
+    "HAL_ENABLE_STACK_GUARD",
+    "HAL_ENABLE_TCP",
+    "HAL_ENABLE_TIME",
+    "HAL_ENABLE_TLS",
+    "HAL_ENABLE_UART",
+    "HAL_ENABLE_UDP",
+    "HAL_ENABLE_WEBSOCKET",
+    "HAL_ENABLE_WIFI",
+    "HAL_ENABLE_WIREGUARD"
+  ]
 }

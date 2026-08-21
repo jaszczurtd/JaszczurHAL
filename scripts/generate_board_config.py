@@ -877,7 +877,43 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
                 supported_features,
                 "a superset of target-required features",
             )
-        resolve_features(supported_features, target)
+        try:
+            feature_model = generate_hal_features.load_registry(
+                Path(__file__).resolve().parents[1] / "config"
+            )
+        except generate_hal_features.RegistryError as error:
+            raise DescriptorError(str(error)) from error
+        unknown_supported = sorted(supported_symbols - feature_model.features.keys())
+        if unknown_supported:
+            fail(
+                path,
+                "$.supportedFeatures",
+                unknown_supported,
+                "registered HAL feature symbols",
+            )
+        requestable_supported = [
+            item
+            for item in normalized_supported
+            if feature_model.features[item.removesuffix("=1")].kind != "derived"
+        ]
+        _, resolved_supported, _ = resolve_features(requestable_supported, target)
+        resolved_supported_symbols = set(resolved_supported)
+        if supported_symbols != resolved_supported_symbols:
+            missing = sorted(resolved_supported_symbols - supported_symbols)
+            unreachable = sorted(supported_symbols - resolved_supported_symbols)
+            details = []
+            if missing:
+                details.append(f"missing closure {missing}")
+            if unreachable:
+                details.append(f"unreachable entries {unreachable}")
+            fail(
+                path,
+                "$.supportedFeatures",
+                supported_features,
+                "the exact closure of requestable supported features ("
+                + "; ".join(details)
+                + ")",
+            )
     resolve_features([], target)
     return valid_pins
 
@@ -1465,6 +1501,32 @@ def encode_hal_pin(endpoint: dict[str, Any]) -> int | None:
     return endpoint.get("halPin")
 
 
+def integer_pin_mask(pins: set[Any]) -> int | None:
+    """Encode an integer GPIO set into the generated 64-bit target mask."""
+    if any(not isinstance(pin, int) or pin < 0 or pin >= 64 for pin in pins):
+        return None
+    mask = 0
+    for pin in pins:
+        mask |= 1 << pin
+    return mask
+
+
+def endpoint_pin_mask(endpoints: list[dict[str, Any]]) -> int | None:
+    """Encode SoC GPIO endpoints when every HAL pin fits the common mask."""
+    pins: set[int] = set()
+    for endpoint in endpoints:
+        pin = encode_hal_pin(endpoint)
+        if pin is None or pin < 0 or pin >= 64:
+            return None
+        pins.add(pin)
+    return integer_pin_mask(pins)
+
+
+def append_gpio_mask(lines: list[str], name: str, mask: int | None) -> None:
+    if mask is not None:
+        lines.append(f"#define {name} UINT64_C(0x{mask:016x})")
+
+
 def device_config_lines(board: dict[str, Any]) -> list[str]:
     """Materialize bus-device facts for every known role."""
     devices = {
@@ -1678,6 +1740,33 @@ def selected_board_fact_lines(
         f"#define HAL_BOARD_DECLARED_CAPABILITIES "
         f"UINT32_C(0x{capability_mask:08x})"
     )
+    exposed = expand_pin_set(
+        Path(f"boards/profiles/{board['id']}.json"),
+        "$.gpio.exposedPins",
+        board["gpio"]["exposedPins"],
+    )
+    hard_reserved: list[dict[str, Any]] = []
+    soft_reserved: list[dict[str, Any]] = []
+    for reservation in board["gpio"]["reservations"].values():
+        destination = (
+            hard_reserved
+            if reservation["strength"] == "hard"
+            else soft_reserved
+        )
+        destination.extend(reservation["pins"])
+    append_gpio_mask(
+        lines, "HAL_BOARD_GPIO_EXPOSED_MASK", integer_pin_mask(exposed)
+    )
+    append_gpio_mask(
+        lines,
+        "HAL_BOARD_GPIO_HARD_RESERVED_MASK",
+        endpoint_pin_mask(hard_reserved),
+    )
+    append_gpio_mask(
+        lines,
+        "HAL_BOARD_GPIO_SOFT_RESERVED_MASK",
+        endpoint_pin_mask(soft_reserved),
+    )
     status_led = board["devices"].get("statusLed")
     if status_led:
         lines.append(
@@ -1710,7 +1799,7 @@ def target_ram_total_bytes(target: dict[str, Any]) -> int:
 
 def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
     architecture = target["architecture"]
-    return [
+    lines = [
         f'#define HAL_TARGET_DESCRIPTOR_ID "{target["id"]}"',
         f'#define HAL_TARGET_VENDOR_NAME "{architecture["vendor"]}"',
         f'#define HAL_TARGET_FAMILY_NAME "{architecture["family"]}"',
@@ -1727,6 +1816,25 @@ def selected_target_fact_lines(target: dict[str, Any]) -> list[str]:
         "#define HAL_TARGET_RAM_USABLE_BYTES "
         f'UINT32_C({target["memory"]["ramUsableBytes"]})',
     ]
+    descriptor_path = Path(f"boards/targets/{target['id']}.json")
+    valid_pins = expand_pin_set(
+        descriptor_path, "$.gpio.validPins", target["gpio"]["validPins"]
+    )
+    append_gpio_mask(
+        lines, "HAL_TARGET_GPIO_VALID_MASK", integer_pin_mask(valid_pins)
+    )
+    for trait_id, macro_name in (
+        ("input-only", "HAL_TARGET_GPIO_INPUT_ONLY_MASK"),
+        ("adc", "HAL_TARGET_GPIO_ADC_MASK"),
+    ):
+        trait = target["gpio"].get("traits", {}).get(trait_id)
+        if trait is None:
+            continue
+        pins = expand_pin_set(
+            descriptor_path, f"$.gpio.traits.{trait_id}", trait
+        )
+        append_gpio_mask(lines, macro_name, integer_pin_mask(pins))
+    return lines
 
 
 def fallback_compile_definitions(

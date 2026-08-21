@@ -786,8 +786,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 60,
-    "hal_config.h retained validation inventory drifted from 60 #error checks",
+    == 62,
+    "hal_config.h retained validation inventory drifted from 62 #error checks",
 )
 
 checked = run_generator("--check")
@@ -1650,19 +1650,31 @@ if ARGS.cmake or shutil.which("cmake"):
                 "endif()",
             ]
         )
-    effective_sets = {
-        tuple(record["requestedFeatures"]): tuple(record["resolvedFeatures"])
-        for record in root_effective_report["configurations"]
-    }
-    for index, (requested, expected_features) in enumerate(
+    effective_sets = {}
+    for record in root_effective_report["configurations"]:
+        target_required = {
+            feature
+            for feature, sources in record["provenance"].items()
+            if any(source.startswith("target:") for source in sources)
+        }
+        resolver_input = tuple(
+            sorted({*record["requestedFeatures"], *target_required})
+        )
+        expected_features = tuple(record["resolvedFeatures"])
+        previous = effective_sets.setdefault(resolver_input, expected_features)
+        require(
+            previous == expected_features,
+            "equal CMake resolver inputs produced different effective closures",
+        )
+    for index, (resolver_input, expected_features) in enumerate(
         sorted(effective_sets.items()), start=len(model.features)
     ):
-        arguments = " ".join(requested)
+        arguments = " ".join(resolver_input)
         expected = ";".join(expected_features)
         parity_lines.extend(
             [
                 f"jh_hal_resolve_features(requested_{index} resolved_{index} {arguments})",
-                f'if(NOT "${{requested_{index}}}" STREQUAL "{";".join(requested)}")',
+                f'if(NOT "${{requested_{index}}}" STREQUAL "{";".join(resolver_input)}")',
                 f'    message(FATAL_ERROR "effective requested mismatch: ${{requested_{index}}}")',
                 "endif()",
                 f'if(NOT "${{resolved_{index}}}" STREQUAL "{expected}")',

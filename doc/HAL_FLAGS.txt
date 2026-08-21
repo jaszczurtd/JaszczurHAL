@@ -62,10 +62,15 @@ exact ESP32-S3 target always resolves `HAL_ENABLE_FREERTOS`; requesting
 
 The production scripts/build_esp_idf.py runner and jh-vscode provider build,
 validate, and flash the exact target/board pair through pinned ESP-IDF. The
-current esp32s3 supportedFeatures allowlist contains only HAL_ENABLE_FREERTOS.
-Any other requested or transitively resolved HAL_ENABLE_* flag fails with
-[JH-CFG-UNSUPPORTED]. Portable ESP32 peripheral modules and APP_TASK1 are
-Phase 2 work.
+esp32s3 supportedFeatures allowlist includes target-required FREERTOS; APP_TASK1;
+UART, I2C, I2C_SLAVE and SPI; PWM_FREQ, RGB_LED and PCNT; STACK_GUARD; and the
+Phase 3 network graph BSD_SOCKETS, HTTP_CLIENT, HTTP_FILES, HTTP_SERVER, MQTT,
+OTA, TCP, TIME, TLS, UDP, WEBSOCKET, WIFI and WIREGUARD together with their
+internal CRC, CRYPTO and NETWORK_CORE dependencies. System, synchronization,
+GPIO, ADC, simple PWM, serial/debug, and timer support is part of the target
+baseline and needs no module flag. Other requested or transitively resolved
+HAL_ENABLE_* flags fail with [JH-CFG-UNSUPPORTED]. Public USB lifecycle and
+storage remain outside the ESP32-S3 backend.
 
 `rp_native_lib/` supports RP2040, RP2350 ARM and RP2350 RISC-V and generates
 ELF/BIN/UF2 artifacts. The HAL provides `main()` and starts core 1 only when
@@ -141,10 +146,9 @@ Application entry flags
   HAL_ENABLE_APP_TASK1
     Dispatch optional app_task1() from the HAL-provided entry path. Bare RP
     launches core 1; RP FreeRTOS creates a task pinned to core 1. STM32G474
-    FreeRTOS creates the second application task. Leave it undefined for
-    single-loop/single-task applications. The ESP-IDF entry source contains a
-    matching future task path, but the Phase 1 esp32s3 feature allowlist rejects
-    this flag.
+    FreeRTOS creates the second application task. ESP32-S3 creates it on core 1
+    by default; HAL_FREERTOS_TASK1_CORE may select core 0, core 1, or -1 for no
+    affinity. Leave it undefined for single-loop/single-task applications.
 
 
 Stack protection flags
@@ -154,9 +158,9 @@ Stack protection flags
     Enables synchronous stack-overflow protection through the target-neutral
     hal_stack_guard_* API. Native RP builds enable Pico SDK hardware guards on
     RP2040 and RP2350. STM32G474 installs a 32-byte no-access MPU region at the
-    main-stack limit. FreeRTOS builds also enable kernel task-stack overflow
-    checking. hal_stack_guard_check() is a no-op; periodic polling is not
-    required.
+    main-stack limit. ESP32-S3 verifies ESP-IDF's end-of-stack watchpoint.
+    FreeRTOS builds also enable kernel task-stack overflow checking.
+    hal_stack_guard_check() is a no-op; periodic polling is not required.
 
   HAL_ENABLE_STACK_PROTECTOR
     Enables GCC/Clang -fstack-protector-strong instrumentation for HAL and
@@ -243,12 +247,15 @@ FreeRTOS integration flag
         cover HAL mutex/delay and lazy create-once paths in ctest without
         hardware.
 
-      ESP32-S3 Phase 1:
+      ESP32-S3:
         Uses the FreeRTOS instance already started by pinned ESP-IDF. app_main()
-        calls app_start(), creates the repeating app_task0 task, and returns to
-        the scheduler. HAL_ENABLE_FREERTOS is target-required rather than
-        optional. The production build currently rejects all other registered
-        feature requests, including HAL_ENABLE_APP_TASK1.
+        calls app_start(), creates the repeating app_task0 task, optionally
+        creates app_task1, and returns to the scheduler. Task0/task1 default to
+        cores 0/1. HAL_FREERTOS_TASK0_CORE and HAL_FREERTOS_TASK1_CORE accept a
+        valid core or -1 for no affinity. Both task stacks default to 3072
+        ESP-IDF stack-depth bytes and both priorities default to
+        tskIDLE_PRIORITY + 1. HAL_ENABLE_FREERTOS is target-required rather
+        than optional.
 
 
 Module enable flags
@@ -313,8 +320,9 @@ Connectivity
     HAL_LORA_SX127X_RESET_SETTLE_MS defaults to 10 and accepts values from 5
     through 1000 milliseconds. Conflicts with HAL_ENABLE_SX126X.
   HAL_ENABLE_WIFI
-    WiFi. A profile without the selected network hardware compiles but public
-    runtime access returns HAL_EUNSUPPORTED.
+    WiFi. ESP32-S3 uses native ESP-IDF WiFi/esp_netif/lwIP. A profile without
+    the selected network hardware compiles but public runtime access returns
+    HAL_EUNSUPPORTED.
   HAL_ENABLE_TIME
     Shared runtime wall clock, status, NTP, and libc time adapters. With RTC it
     can restore retained time and persist validated NTP results. Propagates:
@@ -358,8 +366,10 @@ Connectivity
     Bounded one-shot HTTP/1.1 client over HAL TCP. Propagates: TCP, WIFI.
     HAL_ENABLE_TLS adds the verified HTTPS transport.
   HAL_ENABLE_OTA
-    Authenticated RP update service over HAL UDP/TCP with image staging,
-    trial boot, confirmation, rollback, discovery, and VS Code upload.
+    Native update service over HAL UDP/TCP with discovery, optional password
+    challenge, trial boot, confirmation, rollback, and VS Code upload. RP uses
+    a signed JaszczurHAL container and swap engine; ESP32-S3 stages a raw ESP
+    application image with ESP-IDF OTA partitions.
     Propagates: WIFI, UDP, TCP, CRYPTO, CRC.
   HAL_ENABLE_WIREGUARD
     Shared host-lwIP WireGuard wrapper. Propagates: UDP, WIFI. Requires
@@ -512,12 +522,15 @@ Analog out / status
                            DMA_PWM_AUDIO, PWM_FREQ.
   HAL_ENABLE_DMA_PWM_AUDIO Timer-paced PWM-audio DMA helper used by DACless.
   HAL_ENABLE_PWM_FREQ      Frequency-controlled PWM.
-  HAL_ENABLE_RGB_LED       NeoPixel RGB status LED.
+                           ESP32-S3 uses the LEDC driver.
+  HAL_ENABLE_RGB_LED       NeoPixel RGB status LED. ESP32-S3 uses ESP-IDF RMT
+                           for 800 kHz transports.
 
 Counters
   HAL_ENABLE_PCNT          Edge / pulse counter. STM32G474: hardware timer
                            (TIM2 ext-clock, ch0 = PA0). RP2040: software counter
                            via a GPIO edge interrupt (ISR-rate limited).
+                           ESP32-S3: four logical ESP-IDF PCNT units.
 
 Display
   HAL_ENABLE_HD44780 HD44780-compatible parallel character LCD driver

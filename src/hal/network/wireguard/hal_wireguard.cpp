@@ -1,5 +1,6 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 ||       \
+    HAL_TARGET_IS_ESP32_FAMILY
 #include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_WIREGUARD
@@ -407,4 +408,4 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 }
 
 #endif /* HAL_ENABLE_WIREGUARD */
-#endif // HAL_TARGET_IS_MOCK || HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
+#endif // supported mock or host-lwIP target

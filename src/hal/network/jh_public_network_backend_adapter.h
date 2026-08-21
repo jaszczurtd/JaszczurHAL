@@ -6,7 +6,8 @@
 extern "C" {
 #endif
 
-#if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43)
+#if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
+    !defined(HAL_NETWORK_BACKEND_ESP_IDF)
 
 const jh_network_wifi_ops_t *jh_public_network_wifi_ops(void);
 const jh_network_resolver_ops_t *jh_public_network_resolver_ops(void);

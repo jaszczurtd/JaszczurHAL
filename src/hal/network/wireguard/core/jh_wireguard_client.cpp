@@ -281,9 +281,18 @@ bool JHWireGuardClient::kick_handshake(const uint8_t probe_ip[4],
     return true;
   }
 
-  JHLwipExtensionGuard stack_guard(extension, false);
-  if (stack_guard.status() != HAL_OK ||
-      wireguardif_poll(&s_wg_netif) != ERR_OK) {
+  {
+    JHLwipExtensionGuard stack_guard(extension, false);
+    if (stack_guard.status() != HAL_OK ||
+        wireguardif_poll(&s_wg_netif) != ERR_OK) {
+      return false;
+    }
+  }
+
+  // send_udp_probe() enters the host-lwIP context itself. Release the poll
+  // guard first so non-recursive stack locks cannot deadlock here.
+  if (jh_lwip_extension_send_udp_probe(extension, probe_ip, probe_port) !=
+      HAL_OK) {
     return false;
   }
 

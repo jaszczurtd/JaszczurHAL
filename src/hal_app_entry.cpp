@@ -255,6 +255,33 @@ int main(void) {
 #define HAL_FREERTOS_TASK1_PRIORITY (tskIDLE_PRIORITY + 1u)
 #endif
 
+#ifndef HAL_FREERTOS_TASK0_CORE
+#define HAL_FREERTOS_TASK0_CORE 0
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_CORE
+#if HAL_TARGET_CPU_CORES > 1
+#define HAL_FREERTOS_TASK1_CORE 1
+#else
+#define HAL_FREERTOS_TASK1_CORE 0
+#endif
+#endif
+
+#if HAL_FREERTOS_TASK0_CORE < -1 ||                                            \
+    HAL_FREERTOS_TASK0_CORE >= HAL_TARGET_CPU_CORES
+#error "HAL_FREERTOS_TASK0_CORE must be -1 or name an existing target core"
+#endif
+
+#if HAL_FREERTOS_TASK1_CORE < -1 ||                                            \
+    HAL_FREERTOS_TASK1_CORE >= HAL_TARGET_CPU_CORES
+#error "HAL_FREERTOS_TASK1_CORE must be -1 or name an existing target core"
+#endif
+
+static constexpr BaseType_t hal_esp32_task_core(int configured_core) {
+  return configured_core == -1 ? (BaseType_t)tskNO_AFFINITY
+                               : (BaseType_t)configured_core;
+}
+
 static void hal_esp32_app_task0(void *arg) {
   (void)arg;
   for (;;) {
@@ -272,19 +299,22 @@ static void hal_esp32_app_task1(void *arg) {
 #endif
 
 extern "C" void app_main(void) {
+  hal_fault_subsystem_init();
   app_start();
 
-  BaseType_t created =
-      xTaskCreate(hal_esp32_app_task0, "jh_app0",
-                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
-                  (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, nullptr);
+  BaseType_t created = xTaskCreatePinnedToCore(
+      hal_esp32_app_task0, "jh_app0",
+      (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
+      (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, nullptr,
+      hal_esp32_task_core(HAL_FREERTOS_TASK0_CORE));
   configASSERT(created == pdPASS);
 
 #ifdef HAL_ENABLE_APP_TASK1
-  created =
-      xTaskCreate(hal_esp32_app_task1, "jh_app1",
-                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK1_STACK, nullptr,
-                  (UBaseType_t)HAL_FREERTOS_TASK1_PRIORITY, nullptr);
+  created = xTaskCreatePinnedToCore(
+      hal_esp32_app_task1, "jh_app1",
+      (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK1_STACK, nullptr,
+      (UBaseType_t)HAL_FREERTOS_TASK1_PRIORITY, nullptr,
+      hal_esp32_task_core(HAL_FREERTOS_TASK1_CORE));
   configASSERT(created == pdPASS);
 #endif
 }

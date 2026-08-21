@@ -51,11 +51,162 @@ PARTITION_PROFILE_SYMBOLS = (
     "CONFIG_PARTITION_TABLE_SINGLE_APP_TEE",
     "CONFIG_PARTITION_TABLE_TWO_OTA_TEE",
 )
-INTEGRATION_SOURCES = (
+ESP_IDF_BASE_SOURCES = (
+    "src/hal/core/hal_assert.cpp",
+    "src/hal/core/hal_config.cpp",
     "src/hal/core/jh_handle_pool.cpp",
+    "src/hal/debug/hal_debug_format.cpp",
+    "src/hal/serial/hal_serial.cpp",
+    "src/hal/system/hal_board.cpp",
+    "src/hal/timers/hal_timer.cpp",
+    "src/hal/timers/hal_timer_ext.cpp",
     "src/hal_app_entry.cpp",
+    "src/hal/impl/esp32/hal_adc.cpp",
     "src/hal/impl/esp32/hal_esp32_build_config.cpp",
+    "src/hal/impl/esp32/hal_gpio.cpp",
+    "src/hal/impl/esp32/hal_pwm.cpp",
+    "src/hal/impl/esp32/hal_serial.cpp",
+    "src/hal/impl/esp32/hal_sync.cpp",
+    "src/hal/impl/esp32/hal_system.cpp",
+    "src/hal/impl/esp32/hal_timer.cpp",
+    "src/hal/impl/esp32/jh_esp32_fault.cpp",
+    "src/hal/impl/esp32/jh_esp32_ledc.cpp",
 )
+ESP_IDF_FEATURE_SOURCES = {
+    "HAL_ENABLE_CRC": ("src/hal/security/hal_crc.cpp",),
+    "HAL_ENABLE_CRYPTO": (
+        "src/hal/security/hal_crypto.cpp",
+        "src/hal/network/wireguard/core/crypto/chacha20.c",
+        "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
+        "src/hal/network/wireguard/core/crypto/crypto.c",
+        "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
+    ),
+    "HAL_ENABLE_HTTP_CLIENT": (
+        "src/hal/network/http/hal_http_client.cpp",
+    ),
+    "HAL_ENABLE_HTTP_FILES": (
+        "src/hal/network/http/hal_http_files.cpp",
+    ),
+    "HAL_ENABLE_HTTP_SERVER": (
+        "src/hal/network/http/hal_http_server.cpp",
+    ),
+    "HAL_ENABLE_I2C": (
+        "src/hal/i2c/hal_i2c.cpp",
+        "src/hal/impl/esp32/hal_i2c.cpp",
+    ),
+    "HAL_ENABLE_I2C_SLAVE": (
+        "src/hal/impl/esp32/hal_i2c_slave.cpp",
+    ),
+    "HAL_ENABLE_MQTT": (
+        "src/hal/network/mqtt/hal_mqtt.cpp",
+        "src/hal/network/mqtt/jh_pubsub_hal_client.cpp",
+        "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp",
+    ),
+    "HAL_ENABLE_NETWORK_CORE": (
+        "src/hal/network/hal_net.cpp",
+        "src/hal/network/jh_network_backend.cpp",
+        "src/hal/network/jh_network_handle_pool.cpp",
+        "src/hal/impl/esp32/esp32_network_backend.cpp",
+    ),
+    "HAL_ENABLE_OTA": (
+        "src/hal/network/ota/jh_ota_protocol.cpp",
+        "src/hal/security/jh_secure_random.cpp",
+        "src/hal/impl/esp32/esp32_secure_random.cpp",
+        "src/hal/impl/esp32/hal_ota.cpp",
+    ),
+    "HAL_ENABLE_PCNT": ("src/hal/impl/esp32/hal_pcnt.cpp",),
+    "HAL_ENABLE_PWM_FREQ": (
+        "src/hal/impl/esp32/hal_pwm_freq.cpp",
+    ),
+    "HAL_ENABLE_RGB_LED": (
+        "src/hal/gpio/hal_rgb_led.cpp",
+        "src/hal/gpio/neopixel/jh_neopixel.cpp",
+        "src/hal/impl/esp32/hal_rgb_led.cpp",
+    ),
+    "HAL_ENABLE_SPI": (
+        "src/hal/spi/hal_spi.cpp",
+        "src/hal/spi/hal_spi_device.cpp",
+        "src/hal/impl/esp32/hal_spi.cpp",
+    ),
+    "HAL_ENABLE_TCP": (
+        "src/hal/network/hal_tcp.cpp",
+        "src/hal/impl/esp32/esp32_network_sockets.cpp",
+    ),
+    "HAL_ENABLE_TIME": (
+        "src/hal/time/hal_time.cpp",
+        "src/hal/time/hal_time_ntp.cpp",
+        "src/hal/time/jh_calendar.c",
+        "src/hal/impl/esp32/hal_time.cpp",
+    ),
+    "HAL_ENABLE_TLS": (
+        "src/hal/network/tls/hal_tls.cpp",
+        "src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp",
+        "src/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp",
+        "src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp",
+        "src/hal/security/jh_secure_random.cpp",
+        "src/hal/impl/esp32/esp32_secure_random.cpp",
+    ),
+    "HAL_ENABLE_UDP": (
+        "src/hal/network/hal_udp.cpp",
+        "src/hal/impl/esp32/esp32_network_sockets.cpp",
+    ),
+    "HAL_ENABLE_UART": ("src/hal/impl/esp32/hal_uart.cpp",),
+    "HAL_ENABLE_WEBSOCKET": (
+        "src/hal/network/websocket/hal_websocket.cpp",
+    ),
+    "HAL_ENABLE_WIFI": ("src/hal/network/hal_wifi.cpp",),
+    "HAL_ENABLE_WIREGUARD": (
+        "src/hal/network/jh_lwip_extension.cpp",
+        "src/hal/network/wireguard/hal_wireguard.cpp",
+        "src/hal/network/wireguard/hal_wireguard_provider.cpp",
+        "src/hal/network/wireguard/core/jh_wireguard_client.cpp",
+        "src/hal/network/wireguard/core/wireguard-platform.c",
+        "src/hal/network/wireguard/core/wireguard.c",
+        "src/hal/network/wireguard/core/wireguardif.c",
+        "src/hal/network/wireguard/core/crypto/blake2s.c",
+        "src/hal/network/wireguard/core/crypto/chacha20.c",
+        "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
+        "src/hal/network/wireguard/core/crypto/crypto.c",
+        "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
+        "src/hal/network/wireguard/core/crypto/x25519.c",
+        "src/hal/impl/esp32/esp32_secure_random.cpp",
+        "src/hal/impl/esp32/esp32_lwip_extension_port.cpp",
+    ),
+}
+ESP_IDF_PUBLIC_COMPONENT_DEPENDENCIES = ("freertos",)
+ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES = (
+    "app_update",
+    "esp_adc",
+    "esp_driver_gpio",
+    "esp_driver_gptimer",
+    "esp_driver_ledc",
+    "esp_driver_tsens",
+    "esp_driver_usb_serial_jtag",
+    "esp_hw_support",
+    "esp_psram",
+    "esp_rom",
+    "esp_system",
+    "esp_timer",
+    "heap",
+    "vfs",
+)
+ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
+    "HAL_ENABLE_I2C": ("esp_driver_i2c",),
+    "HAL_ENABLE_I2C_SLAVE": ("esp_driver_i2c",),
+    "HAL_ENABLE_NETWORK_CORE": (
+        "esp_event",
+        "esp_netif",
+        "esp_wifi",
+        "lwip",
+        "nvs_flash",
+    ),
+    "HAL_ENABLE_OTA": ("app_update", "esp_partition"),
+    "HAL_ENABLE_PCNT": ("esp_driver_pcnt",),
+    "HAL_ENABLE_RGB_LED": ("esp_driver_rmt",),
+    "HAL_ENABLE_SPI": ("esp_driver_spi",),
+    "HAL_ENABLE_TLS": ("jh_bearssl",),
+    "HAL_ENABLE_UART": ("esp_driver_uart",),
+}
 GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_board_resolved.json",
     "jh_board_config.cmake",
@@ -905,6 +1056,26 @@ def validate_supported_features(
     )
 
 
+def resolve_component_contract(
+    resolved_features: Sequence[str],
+) -> tuple[list[str], list[str], list[str]]:
+    """Resolve the ESP-IDF source/dependency graph from the feature set."""
+    enabled = set(resolved_features)
+    sources = list(ESP_IDF_BASE_SOURCES)
+    private_dependencies = list(ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES)
+    for feature in sorted(ESP_IDF_FEATURE_SOURCES):
+        if feature in enabled:
+            sources.extend(ESP_IDF_FEATURE_SOURCES[feature])
+            private_dependencies.extend(
+                ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES.get(feature, ())
+            )
+    return (
+        list(dict.fromkeys(sources)),
+        list(ESP_IDF_PUBLIC_COMPONENT_DEPENDENCIES),
+        list(dict.fromkeys(private_dependencies)),
+    )
+
+
 def _header_defines(project_dir: Path, name: str) -> bool:
     path = project_dir / "hal_project_config.h"
     if not path.is_file():
@@ -974,6 +1145,11 @@ def resolve_build_model(
     validate_supported_features(
         target_descriptor, requested_features, resolved_features
     )
+    (
+        integration_sources,
+        component_dependencies,
+        private_component_dependencies,
+    ) = resolve_component_contract(resolved_features)
     compile_features = set(command_line_features)
     for required in target_descriptor.get("requiredFeatures", []):
         symbol = required.removesuffix("=1")
@@ -995,6 +1171,7 @@ def resolve_build_model(
         key=lambda path: path.as_posix(),
     )
     return {
+        "repoRoot": repo_root,
         "target": target,
         "board": selected_board,
         "idfTarget": idf_target,
@@ -1003,6 +1180,9 @@ def resolve_build_model(
         "projectIncludeDirs": include_dirs,
         "requestedFeatures": requested_features,
         "resolvedFeatures": resolved_features,
+        "integrationSources": integration_sources,
+        "componentDependencies": component_dependencies,
+        "privateComponentDependencies": private_component_dependencies,
         "compileDefinitions": sorted(compile_definitions),
         "targetDescriptor": target_descriptor,
         "boardDescriptor": board_descriptor,
@@ -1038,6 +1218,38 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
     ]
     if model["idfTarget"] == "esp32s3":
         lines.append("CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y")
+    if "HAL_ENABLE_NETWORK_CORE" in model["resolvedFeatures"]:
+        # Four HAL TCP sockets, two listeners and four UDP sockets must not
+        # consume the entire lwIP descriptor pool; services such as DNS,
+        # ping, TLS and OTA need their own short-lived descriptors. Core
+        # locking provides the selected backend's nested stack guard and the
+        # raw-netif extension used by WireGuard.
+        lines.extend(
+            (
+                "CONFIG_LWIP_MAX_SOCKETS=16",
+                "CONFIG_LWIP_TCPIP_CORE_LOCKING=y",
+            )
+        )
+    if "HAL_ENABLE_OTA" in model["resolvedFeatures"]:
+        # The public OTA backend stages into the inactive ESP-IDF app slot
+        # and relies on the bootloader's pending-verify state for trial boot
+        # and rollback. A single-app layout cannot satisfy that contract.
+        lines.extend(
+            (
+                "CONFIG_PARTITION_TABLE_TWO_OTA_LARGE=y",
+                "CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y",
+            )
+        )
+    if "HAL_ENABLE_STACK_GUARD" in model["resolvedFeatures"]:
+        # ESP-IDF owns task stack creation, so the HAL feature selects both
+        # supported FreeRTOS protection layers instead of installing a
+        # second guard implementation at runtime.
+        lines.extend(
+            (
+                "CONFIG_FREERTOS_CHECK_STACKOVERFLOW_CANARY=y",
+                "CONFIG_FREERTOS_WATCHPOINT_END_OF_STACK=y",
+            )
+        )
     psram = board["memory"].get("psram")
     if psram is not None:
         lines.append("CONFIG_SPIRAM=y")
@@ -1084,6 +1296,32 @@ def _render_project_cmake(
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_COMPILE_DEFINITIONS", model["compileDefinitions"]
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
+            "JH_ESP_IDF_RESOLVED_FEATURES", model["resolvedFeatures"]
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
+            "JH_ESP_IDF_COMPONENT_SOURCES",
+            [
+                (model["repoRoot"] / path).as_posix()
+                for path in model["integrationSources"]
+            ],
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
+            "JH_ESP_IDF_COMPONENT_REQUIRES",
+            model["componentDependencies"],
+        )
+    )
+    lines.extend(
+        _render_cmake_list(
+            "JH_ESP_IDF_COMPONENT_PRIV_REQUIRES",
+            model["privateComponentDependencies"],
         )
     )
     lines.extend(
@@ -1581,7 +1819,7 @@ def validate_artifacts(
         raise EspIdfError("compile_commands.json must contain build entries")
     required_sources: list[Path | str] = [
         *model["projectSources"],
-        *(repo_root / path for path in INTEGRATION_SOURCES),
+        *(repo_root / path for path in model["integrationSources"]),
         f"/{GENERATED_DIR_NAME}/jh_link_contract_reference.c",
         f"/{GENERATED_DIR_NAME}/jh_link_contract_definition.c",
     ]
@@ -1680,7 +1918,7 @@ def validate_artifacts(
         "configuration": configuration,
         "integration": {
             "component": "jaszczurhal",
-            "sources": list(INTEGRATION_SOURCES),
+            "sources": list(model["integrationSources"]),
             "projectSources": project_config["projectSources"],
             "featureHash": resolved_board["featureHash"],
             "requestedFeatures": resolved_board["requestedFeatures"],
@@ -1787,6 +2025,16 @@ def _pin_config(repo_root: Path) -> dict[str, str]:
     return config
 
 
+def prepare_feature_dependencies(
+    repo_root: Path, model: Mapping[str, Any], *, verify_only: bool
+) -> None:
+    """Synchronize only third-party sources selected by the feature graph."""
+    if "HAL_ENABLE_TLS" in model["resolvedFeatures"]:
+        component_manager.ensure_git_component(
+            "bearssl", repo_root, verify_only=verify_only
+        )
+
+
 def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("build", "flash", "artifacts"))
@@ -1842,6 +2090,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise EspIdfError(
                 f"ESP-IDF target {model['idfTarget']!r} is not enabled by the pin"
             )
+
+        prepare_feature_dependencies(
+            repo_root, model, verify_only=arguments.action != "build"
+        )
 
         if arguments.action == "build":
             if arguments.clean and build_dir.exists():

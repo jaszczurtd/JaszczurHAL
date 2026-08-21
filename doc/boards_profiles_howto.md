@@ -19,8 +19,8 @@ Supported profiles include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
 `pico-core1262-hf`, `rp2040-zero`, `rp2040-plus-4mb`, `rp2040-lora-lf`,
 `nucleo-g474re`, `nucleo-g474re-pim730`,
 `nucleo-g474re-core1262-hf`, `waveshare-esp32-s3-zero`, and `host-mock`.
-Portable ESP32-S3 peripheral backends are scoped to Phase 2. The build
-generator validates target
+The ESP32-S3 target provides its delivered core/peripheral backend set and the
+Phase 3 native connectivity/service graph. The build generator validates target
 compatibility, flash size, pins, components, and feature contracts before
 toolchain import. The same descriptors generate the source fallback, so board
 names and compile-time facts stay identical without a build-generated config.
@@ -101,8 +101,12 @@ The decimal USB values are `303a:1001` in the usual hexadecimal display.
 not duplicate them. The Phase 1 hardware closure verified this programming
 identity, three complete three-image flashes, ESP32-S3/two-core detection, 4 MiB
 physical flash, initialized 2 MiB Quad PSRAM, and serial-monitor reconnect on the
-SKU 25081 board. This validates the board/build contract; peripheral HAL
-support remains scoped to Phase 2.
+SKU 25081 board. Phase 2 adds generated GPIO accessibility/reservation masks
+consumed by the ESP32-S3 GPIO, ADC, UART, I2C, and SPI backends. Its physical
+fixture subsequently passed both application cores, GPIO/IRQ, ADC, UART
+loopback, I2C master, SPI master, GPTimer, USB Serial/JTAG RX/TX, and
+system/synchronization checks on that board. The target and board profile are
+therefore marked `supported`.
 
 GPIO endpoints use an explicit domain:
 

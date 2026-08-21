@@ -1,6 +1,7 @@
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
+#if defined(HAL_ENABLE_WIFI) && (defined(HAL_NETWORK_BACKEND_CYW43) ||         \
+                                 defined(HAL_NETWORK_BACKEND_ESP_IDF))
 
 #include "hal/network/hal_net.h"
 #include "hal/network/jh_net_address_utils.h"
@@ -87,7 +88,27 @@ hal_status_t hal_net_resolve_ex(const char *host_or_ip,
     return HAL_OK;
   }
   if (strchr(host_or_ip, ':') != nullptr) {
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+    hal_net_endpoint_t ipv6_literal = {};
+    if (!jh_net_parse_ipv6_literal(host_or_ip, ipv6_literal.addr,
+                                   &ipv6_literal.scope_id, true)) {
+      return HAL_EINVAL;
+    }
+    if (family_hint == HAL_NET_AF_INET ||
+        (jh_network_backend_selected()->capabilities & JH_NET_CAP_IPV6) == 0u) {
+      return HAL_EUNSUPPORTED;
+    }
+    ipv6_literal.family = HAL_NET_AF_INET6;
+    ipv6_literal.addr_len = HAL_NET_IPV6_ADDR_LEN;
+    *out_count = 1u;
+    if (capacity < 1u) {
+      return HAL_EOVERFLOW;
+    }
+    results[0] = ipv6_literal;
+    return HAL_OK;
+#else
     return HAL_EUNSUPPORTED;
+#endif
   }
 
   const hal_status_t runtime_status = jh_network_require_ready();

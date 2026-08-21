@@ -373,8 +373,36 @@ require(
     "Waveshare programming identity/wiring facts changed",
 )
 require(
-    esp32_target["supportedFeatures"] == ["HAL_ENABLE_FREERTOS"],
-    "ESP32-S3 Phase 1 feature boundary changed",
+    esp32_target["supportedFeatures"]
+    == [
+        "HAL_ENABLE_APP_TASK1",
+        "HAL_ENABLE_BSD_SOCKETS",
+        "HAL_ENABLE_CRC",
+        "HAL_ENABLE_CRYPTO",
+        "HAL_ENABLE_FREERTOS",
+        "HAL_ENABLE_HTTP_CLIENT",
+        "HAL_ENABLE_HTTP_FILES",
+        "HAL_ENABLE_HTTP_SERVER",
+        "HAL_ENABLE_I2C",
+        "HAL_ENABLE_I2C_SLAVE",
+        "HAL_ENABLE_MQTT",
+        "HAL_ENABLE_NETWORK_CORE",
+        "HAL_ENABLE_OTA",
+        "HAL_ENABLE_PCNT",
+        "HAL_ENABLE_PWM_FREQ",
+        "HAL_ENABLE_RGB_LED",
+        "HAL_ENABLE_SPI",
+        "HAL_ENABLE_STACK_GUARD",
+        "HAL_ENABLE_TCP",
+        "HAL_ENABLE_TIME",
+        "HAL_ENABLE_TLS",
+        "HAL_ENABLE_UART",
+        "HAL_ENABLE_UDP",
+        "HAL_ENABLE_WEBSOCKET",
+        "HAL_ENABLE_WIFI",
+        "HAL_ENABLE_WIREGUARD",
+    ],
+    "ESP32-S3 Phase 3 feature boundary changed",
 )
 for expected in (
     '#define HAL_TARGET_DESCRIPTOR_ID "esp32s3"',
@@ -388,6 +416,12 @@ for expected in (
     "#define HAL_BOARD_PSRAM_INTERFACE_QUAD 1",
     "#define HAL_BOARD_HAS_NATIVE_WIFI 1",
     "#define HAL_BOARD_STATUS_LED_PIN 21u",
+    "#define HAL_TARGET_GPIO_VALID_MASK UINT64_C(0x0001fffffc3fffff)",
+    "#define HAL_TARGET_GPIO_INPUT_ONLY_MASK UINT64_C(0x0000400000000000)",
+    "#define HAL_TARGET_GPIO_ADC_MASK UINT64_C(0x00000000001ffffe)",
+    "#define HAL_BOARD_GPIO_EXPOSED_MASK UINT64_C(0x000027c00007fffe)",
+    "#define HAL_BOARD_GPIO_HARD_RESERVED_MASK UINT64_C(0x0000003e00180000)",
+    "#define HAL_BOARD_GPIO_SOFT_RESERVED_MASK UINT64_C(0x0000000000200001)",
 ):
     require(expected in esp32_config, f"ESP32-S3 config lacks {expected!r}")
 
@@ -1167,6 +1201,21 @@ require(
         expected_success=False,
     ).stderr,
     "unsupported target-required feature was not diagnosed",
+)
+
+incomplete_supported_closure = mutate(
+    "incomplete-supported-closure",
+    "targets/esp32s3.json",
+    lambda value: value["supportedFeatures"].remove("HAL_ENABLE_NETWORK_CORE"),
+)
+require(
+    "missing closure ['HAL_ENABLE_NETWORK_CORE']"
+    in run(
+        "--validate-only",
+        boards_root=incomplete_supported_closure,
+        expected_success=False,
+    ).stderr,
+    "a target allowlist that omitted a derived feature was not diagnosed",
 )
 
 # Typed multi-pin bus devices. rp2040-zero gains a synthetic SX1262 so the role

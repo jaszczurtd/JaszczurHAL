@@ -7,6 +7,7 @@ set(_port_header
     "${JH_ROOT}/src/hal/debug/jh_serial_port.h")
 set(_ports
     "${JH_ROOT}/src/hal/impl/.mock/hal_serial.cpp"
+    "${JH_ROOT}/src/hal/impl/esp32/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/rp2040/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/stm32g474/hal_serial.cpp")
 set(_stm32_uart
@@ -102,9 +103,9 @@ file(GLOB_RECURSE _serial_sources
     "${JH_ROOT}/src/hal/serial/hal_serial.cpp"
     "${JH_ROOT}/src/hal/impl/*/hal_serial.cpp")
 list(LENGTH _serial_sources _serial_source_count)
-if(NOT _serial_source_count EQUAL 4)
+if(NOT _serial_source_count EQUAL 5)
     message(FATAL_ERROR
-        "Expected one shared serial core and three target ports; found ${_serial_source_count}")
+        "Expected one shared serial core and four target ports; found ${_serial_source_count}")
 endif()
 
 file(READ "${JH_ROOT}/CMakeLists.txt" _root_cmake)

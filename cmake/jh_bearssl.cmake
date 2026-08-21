@@ -10,7 +10,11 @@ function(jh_bearssl_source_manifest OUT_SOURCES OUT_INCLUDES)
             "third_party/update_components.sh")
     endif()
 
-    file(GLOB_RECURSE _jh_bearssl_upstream_sources CONFIGURE_DEPENDS
+    # The checkout is pinned and verified before configuration. Avoid
+    # CONFIGURE_DEPENDS: ESP-IDF also evaluates component requirements in
+    # script mode, and a permanent VERIFY_GLOBS edge would make the
+    # post-build `ninja -n` freshness contract report false pending work.
+    file(GLOB_RECURSE _jh_bearssl_upstream_sources
         "${_jh_bearssl_root}/src/*.c")
     if(NOT _jh_bearssl_upstream_sources)
         message(FATAL_ERROR "Pinned BearSSL source set is empty")

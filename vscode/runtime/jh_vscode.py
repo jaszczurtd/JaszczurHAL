@@ -4174,6 +4174,41 @@ def ota_password(ota: dict[str, Any]) -> str:
     return str(ota.get("password") or "")
 
 
+def ota_auth2_tag(
+    password: str,
+    command: int,
+    tcp_port: int,
+    image_size: int,
+    image_md5: str,
+    device_nonce: str,
+    client_nonce: str,
+) -> str:
+    """Bind an OTA password proof to the exact invitation and both nonces."""
+    if (
+        command not in (0, 100)
+        or not 1 <= tcp_port <= 65535
+        or not 1 <= image_size <= 0xFFFFFFFF
+    ):
+        raise ValueError("invalid OTA AUTH2 invitation")
+    for name, value, length in (
+        ("image MD5", image_md5, 32),
+        ("device nonce", device_nonce, 32),
+        ("client nonce", client_nonce, 32),
+    ):
+        if len(value) != length or any(
+            character not in "0123456789abcdefABCDEF" for character in value
+        ):
+            raise ValueError(f"invalid OTA AUTH2 {name}")
+    password_md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+    transcript = (
+        f"JHOTA-AUTH-2:{command}:{tcp_port}:{image_size}:"
+        f"{image_md5.lower()}:{device_nonce.lower()}:{client_nonce.lower()}"
+    ).encode("ascii")
+    return hmac.new(
+        password_md5.encode("ascii"), transcript, hashlib.sha256
+    ).hexdigest()
+
+
 def print_ota_devices(devices: list[dict[str, Any]], *, as_json: bool) -> None:
     if as_json:
         print(json.dumps(devices, indent=2))
@@ -4227,6 +4262,59 @@ def find_ota(build_dir: Path) -> Path | None:
         return matches[0]
     exact = [path for path in matches if path.parent == build_dir]
     return exact[0] if len(exact) == 1 else None
+
+
+def esp_idf_ota_image(
+    config: dict[str, Any], project_dir: Path
+) -> tuple[Path, bytes]:
+    """Return the validated raw ESP-IDF application image for OTA."""
+    manifest, artifacts, flash_images = validate_esp_idf_artifact_manifest(
+        config, project_dir
+    )
+    integration = manifest.get("integration")
+    resolved = (
+        integration.get("resolvedFeatures")
+        if isinstance(integration, dict)
+        else None
+    )
+    if not isinstance(resolved, list) or "HAL_ENABLE_OTA" not in resolved:
+        raise ValueError("ESP-IDF artifact was not built with HAL_ENABLE_OTA")
+
+    application = artifacts.get("applicationBinary")
+    if application is None or application not in flash_images:
+        raise ValueError(
+            "ESP-IDF artifact manifest does not identify its application flash image"
+        )
+    record = next(
+        (
+            item
+            for item in manifest.get("flashImages", [])
+            if isinstance(item, dict)
+            and _esp_idf_artifact_path(
+                get_build_dir(config, project_dir).resolve(),
+                item.get("path"),
+                "flashImages[].path",
+            )
+            == application
+        ),
+        None,
+    )
+    if record is None:
+        raise ValueError("ESP-IDF application image has no flash manifest record")
+
+    image = application.read_bytes()
+    if not image:
+        raise ValueError("ESP-IDF OTA application image is empty")
+    expected_size = record.get("size")
+    expected_sha256 = record.get("sha256")
+    if (
+        not isinstance(expected_size, int)
+        or expected_size != len(image)
+        or not isinstance(expected_sha256, str)
+        or hashlib.sha256(image).hexdigest() != expected_sha256
+    ):
+        raise ValueError("ESP-IDF OTA application image differs from its manifest")
+    return application, image
 
 
 def sign_ota_container(source: Path, password: str, output: Path) -> bytes:
@@ -4302,28 +4390,50 @@ def upload_ota_container(
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
             udp.bind(("", 0))
             udp.settimeout(5.0)
-            udp.sendto(invitation, udp_address)
+            udp.connect(udp_address)
+            expected_peer = str(udp.getpeername()[0])
+            udp.send(invitation)
             try:
-                response, _ = udp.recvfrom(256)
+                response = udp.recv(256)
             except socket.timeout as exc:
                 raise TimeoutError(
                     "timed out waiting for the OTA invitation response"
                 ) from exc
             text = response.decode("ascii", errors="strict").strip()
-            if text.startswith("AUTH "):
+            if text.startswith("AUTH2 "):
                 nonce = text.split(maxsplit=1)[1]
-                password_md5 = hashlib.md5(password.encode("utf-8")).hexdigest()
+                if len(nonce) != 32 or any(
+                    character not in "0123456789abcdefABCDEF"
+                    for character in nonce
+                ):
+                    raise RuntimeError("device returned an invalid OTA nonce")
                 client_nonce = os.urandom(16).hex()
-                challenge = f"{password_md5}:{nonce}:{client_nonce}".encode("ascii")
-                digest = hashlib.md5(challenge).hexdigest()
-                udp.sendto(f"200 {client_nonce} {digest}\n".encode("ascii"), udp_address)
+                image_md5 = hashlib.md5(container).hexdigest()
+                digest = ota_auth2_tag(
+                    password,
+                    0,
+                    tcp_port,
+                    len(container),
+                    image_md5,
+                    nonce,
+                    client_nonce,
+                )
+                udp.send(f"201 {client_nonce} {digest}\n".encode("ascii"))
                 try:
-                    response, _ = udp.recvfrom(256)
+                    response = udp.recv(256)
                 except socket.timeout as exc:
                     raise TimeoutError(
                         "timed out waiting for the OTA authentication response"
                     ) from exc
                 text = response.decode("ascii", errors="strict").strip()
+            elif text.startswith("AUTH "):
+                raise RuntimeError(
+                    "device requested obsolete OTA authentication; AUTH2 is required"
+                )
+            elif text == "OK" and password:
+                raise RuntimeError(
+                    "device skipped AUTH2 while an OTA password is configured"
+                )
             if text != "OK":
                 raise RuntimeError(f"device rejected OTA invitation: {text}")
 
@@ -4333,6 +4443,11 @@ def upload_ota_container(
             raise TimeoutError(
                 "timed out waiting for the device's OTA TCP connection"
             ) from exc
+        if peer[0] != expected_peer:
+            connection.close()
+            raise RuntimeError(
+                "OTA TCP peer differs from the authenticated UDP endpoint"
+            )
         with connection:
             connection.settimeout(8.0)
             reader = connection.makefile("rb")
@@ -4360,8 +4475,14 @@ def command_upload_ota(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
-    if str(config.get("target") or "") not in NATIVE_RP_TARGETS:
-        print("error: upload-ota requires a native RP target", file=sys.stderr)
+    target = str(config.get("target") or "")
+    native_rp = target in NATIVE_RP_TARGETS
+    esp_idf = config.get("toolchain") == "esp-idf"
+    if not native_rp and not esp_idf:
+        print(
+            "error: upload-ota requires a native RP or ESP-IDF target",
+            file=sys.stderr,
+        )
         return EXIT_UNSUPPORTED
     build_status = command_build(args, debug=False, show_memory_overview=False)
     if build_status != 0:
@@ -4396,14 +4517,24 @@ def command_upload_ota(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_UNSAFE_DEVICE
-    build_dir = get_build_dir(config, project_dir)
-    source = find_configured_ota(config) or find_ota(build_dir)
-    if source is None:
-        print(f"error: no unique OTA artifact found in {build_dir}", file=sys.stderr)
-        return EXIT_UPLOAD
-    signed = build_dir / f"{source.stem}.signed.ota"
     try:
-        container = sign_ota_container(source, password, signed)
+        build_dir = get_build_dir(config, project_dir)
+        if esp_idf:
+            source, container = esp_idf_ota_image(config, project_dir)
+        else:
+            source = find_configured_ota(config) or find_ota(build_dir)
+            if source is None:
+                raise ValueError(
+                    f"no unique OTA artifact found in {build_dir}"
+                )
+            signed = build_dir / f"{source.stem}.signed.ota"
+            container = sign_ota_container(source, password, signed)
+        slot_size = device.get("slotSize")
+        if isinstance(slot_size, int) and len(container) > slot_size:
+            raise ValueError(
+                f"OTA image is {len(container)} bytes but the device slot is "
+                f"only {slot_size} bytes"
+            )
         listen_port = ota_listen_port(ota)
         upload_ota_container(device, container, password, listen_port)
     except (OSError, RuntimeError, ValueError, socket.timeout) as exc:

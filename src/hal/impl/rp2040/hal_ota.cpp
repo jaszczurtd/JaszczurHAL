@@ -13,6 +13,7 @@
 #include "hal/network/ota/hal_ota.h"
 #include "hal/network/ota/jh_ota_protocol.h"
 #include "hal/security/hal_crypto.h"
+#include "hal/security/jh_secure_random.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
@@ -227,33 +228,36 @@ static void transfer_fail_no_lock(hal_ota_error_t error,
 }
 
 static bool make_nonce_no_lock(void) {
-  char entropy[48]{};
-  const int length =
-      snprintf(entropy, sizeof(entropy), "%lu:%lu", (unsigned long)hal_millis(),
-               (unsigned long)hal_micros());
-  return length > 0 && (size_t)length < sizeof(entropy) &&
-         hal_md5_hex(reinterpret_cast<const uint8_t *>(entropy), (size_t)length,
-                     s_ota.nonce, sizeof(s_ota.nonce));
+  uint8_t random[16]{};
+  const bool generated =
+      jh_secure_random_bytes(random, sizeof(random)) == HAL_OK &&
+      hal_md5_hex(random, sizeof(random), s_ota.nonce, sizeof(s_ota.nonce));
+  jh_secure_zeroize(random, sizeof(random));
+  return generated;
 }
 
 static bool authenticate_no_lock(const jh_ota_auth_response_t *response) {
   if (response == nullptr) {
     return false;
   }
-  char challenge[3u * JH_OTA_MD5_HEX_BUFFER_SIZE]{};
-  const int length =
-      snprintf(challenge, sizeof(challenge), "%s:%s:%s", s_ota.password_md5,
-               s_ota.nonce, response->client_nonce);
-  if (length <= 0 || (size_t)length >= sizeof(challenge)) {
+  char transcript[JH_OTA_AUTH_TRANSCRIPT_BUFFER_SIZE]{};
+  size_t transcript_length = 0u;
+  if (jh_ota_format_auth_transcript(
+          &s_ota.invitation, s_ota.nonce, response->client_nonce, transcript,
+          sizeof(transcript), &transcript_length) != HAL_OK) {
     return false;
   }
 
-  char expected[JH_OTA_MD5_HEX_BUFFER_SIZE]{};
-  if (!hal_md5_hex(reinterpret_cast<const uint8_t *>(challenge), (size_t)length,
-                   expected, sizeof(expected))) {
-    return false;
-  }
-  return jh_ota_hex_equal(expected, response->response);
+  char expected[JH_OTA_AUTH_TAG_HEX_BUFFER_SIZE]{};
+  const bool hashed = hal_hmac_sha256_hex(
+      reinterpret_cast<const uint8_t *>(s_ota.password_md5),
+      JH_OTA_MD5_HEX_CHARS, reinterpret_cast<const uint8_t *>(transcript),
+      transcript_length, expected, sizeof(expected));
+  jh_secure_zeroize(transcript, sizeof(transcript));
+  const bool authenticated =
+      hashed && jh_ota_auth_tag_equal(expected, response->response);
+  jh_secure_zeroize(expected, sizeof(expected));
+  return authenticated;
 }
 
 static void invitation_received_no_lock(const jh_ota_invitation_t *invitation,
@@ -276,9 +280,9 @@ static void invitation_received_no_lock(const jh_ota_invitation_t *invitation,
     return;
   }
 
-  char response[5u + JH_OTA_MD5_HEX_BUFFER_SIZE]{};
+  char response[6u + JH_OTA_MD5_HEX_BUFFER_SIZE]{};
   const int length =
-      snprintf(response, sizeof(response), "AUTH %s", s_ota.nonce);
+      snprintf(response, sizeof(response), "AUTH2 %s", s_ota.nonce);
   if (length <= 0 || (size_t)length >= sizeof(response) ||
       !udp_send_no_lock(response)) {
     transfer_fail_no_lock(HAL_OTA_ERROR_AUTH, nullptr);
@@ -327,6 +331,9 @@ static void udp_service_no_lock(void) {
   }
 
   if (s_ota.state == HAL_OTA_STATE_WAIT_AUTH) {
+    if (!jh_ota_endpoint_equal(&remote, &s_ota.remote_udp)) {
+      return;
+    }
     jh_ota_auth_response_t response{};
     if (jh_ota_parse_auth_response(packet, received, &response) != HAL_OK ||
         !authenticate_no_lock(&response)) {

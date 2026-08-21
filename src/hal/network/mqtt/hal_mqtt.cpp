@@ -1,5 +1,5 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_ESP32_FAMILY
 #include "hal/core/hal_config.h"
 
 #ifdef HAL_ENABLE_MQTT
@@ -528,4 +528,4 @@ bool hal_mqtt_unsubscribe(const char *topic) {
 }
 
 #endif /* HAL_ENABLE_MQTT */
-#endif // HAL_TARGET_IS_RP
+#endif // supported hardware target

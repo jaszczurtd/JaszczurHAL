@@ -5,7 +5,7 @@
   "id": "waveshare-esp32-s3-zero",
   "displayName": "Waveshare ESP32-S3-Zero SKU 25081",
   "description": "ESP32-S3FH4R2 board with 4 MB flash, 2 MB Quad PSRAM, native USB, and WS2812 on GPIO21.",
-  "status": "experimental",
+  "status": "supported",
   "compatibleTargets": ["esp32s3"],
   "build": { "provider": "esp-idf" },
   "hal": { "profileId": 14, "selector": "HAL_BOARD_PROFILE_WAVESHARE_ESP32_S3_ZERO", "legacySelectors": [], "autoDetectSelectors": [] },

@@ -1,18 +1,145 @@
-# Native RP OTA Workflow
+# Native OTA Workflow
 
 This document is the complete operational contract for native JaszczurHAL OTA:
-supported targets, project and firmware configuration, build artifacts, first
+target-specific project and firmware configuration, build artifacts, first
 installation, VS Code integration, network flow, host firewall rules, trial
 confirmation, rollback, recovery, and security boundaries.
 
 The general dispatcher-backed project model remains in
 [Firmware Project Workflow](FwProjectWorkflow.md). The public API is documented
-under [`hal_ota`](api/15_connectivity.md), and the reference implementation is
+under [`hal_ota`](api/15_connectivity.md). The RP reference implementation is
 [`examples/25_ota`](../examples/25_ota/README.md).
 
-## Support Matrix And Workflow
+## Support Matrix
 
-Native OTA is supported by the official Pico SDK targets `rp2040` and
+| Target | Uploaded image | Activation model | Verification state |
+|---|---|---|---|
+| `rp2040`, `rp2350-arm` | Signed JaszczurHAL `.ota` container | HAL-owned program/staging swap, trial confirmation and rollback | Hardware validated on Pico W, Pico 2 W and Pico+PIM730/RM2 |
+| `esp32s3` | Raw ESP-IDF application BIN selected from the validated build manifest | ESP-IDF `two-ota-large` app partitions, pending-verify trial, confirmation and rollback | Implementation and compile/link complete; hardware/lifecycle/security-negative validation pending |
+
+The transport protocol and public callbacks are shared. The RP container and
+ESP application image are different artifacts and are never converted into one
+another.
+
+## Shared AUTH2 Transport Authentication
+
+With a configured password, the device and host use the fail-closed `AUTH2`
+exchange:
+
+1. The host sends `0 <tcp-port> <image-size> <image-md5>` from one connected
+   UDP socket. The device records that socket's IPv4 address and source port.
+2. The device generates a 16-byte random nonce and replies
+   `AUTH2 <device-nonce>` to that recorded endpoint.
+3. The host generates its own 16-byte random nonce. Both sides format the exact
+   ASCII transcript
+   `JHOTA-AUTH-2:<command>:<tcp-port>:<image-size>:<image-md5>:<device-nonce>:<client-nonce>`.
+   Hexadecimal fields are normalized to lowercase.
+4. Both sides derive the HMAC key as lowercase ASCII
+   `MD5(password UTF-8 bytes)` and compute HMAC-SHA256 over the transcript. The
+   host sends `201 <client-nonce> <64-hex-character-tag>`.
+5. The device accepts that response only from the original UDP address and
+   source port. It replies `OK`, then connects to the same IPv4 address at the
+   authenticated transcript's TCP port. The host transfers data only when the
+   TCP peer address matches the address selected by its connected UDP socket.
+
+When the host has a non-empty password, it requires `AUTH2`; a direct `OK`, the
+legacy `AUTH` challenge, and the legacy `200` response cannot downgrade the
+exchange. Endpoint binding also rejects a challenge response or TCP callback
+injected from another address. AUTH2 authenticates the password-derived proof
+and invitation but does not encrypt discovery, metadata, or firmware. The
+invitation binds the image through MD5 for transport compatibility, so target-
+specific image validation remains essential.
+
+Omitting `hal_ota_set_password()` makes the device accept invitations without
+AUTH2. Calling it with an empty string runs AUTH2 with a publicly known empty
+secret and provides no meaningful authenticity. The host permits either mode
+only when `ota.allowEmptyPassword` is explicitly `true`; that setting is an
+operator acknowledgement and does not configure the device. In either empty-
+secret mode, any network peer that can reach the OTA UDP service can initiate a
+transfer and supply an image that passes the target's remaining validation.
+Keep empty-secret mode limited to isolated development networks.
+
+## ESP32-S3 Workflow
+
+An ESP32-S3 project enables `HAL_ENABLE_OTA` in
+`hal_project_config.h`. The generated ESP-IDF defaults select the
+`two-ota-large` partition table and enable application rollback. The first
+installation uses the normal verified serial flash action because the device
+needs the matching bootloader, partition table, and initial application before
+network updates can work.
+
+Use the normal ESP-IDF project manifest plus the shared OTA endpoint settings:
+
+```json
+{
+  "project": "my-device",
+  "module": "my_device",
+  "toolchain": "esp-idf",
+  "target": "esp32s3",
+  "board": "waveshare-esp32-s3-zero",
+  "buildDir": "${project}/.build/esp32s3",
+  "ota": {
+    "hostname": "my-device",
+    "port": 8266,
+    "listenPort": 8266,
+    "passwordEnv": "MY_DEVICE_OTA_PASSWORD"
+  }
+}
+```
+
+Device code configures the shared service after WiFi is usable, calls
+`hal_ota_handle()` regularly, and confirms a trial only after product health
+checks succeed:
+
+```c
+#include <hal/network/ota/hal_ota.h>
+
+hal_ota_set_hostname("my-device");
+hal_ota_set_port(8266u);
+hal_ota_set_password(APP_OTA_PASSWORD);
+if (!hal_ota_begin()) {
+    /* Report partition or network setup failure. */
+}
+
+/* Repeated service path. */
+hal_ota_handle();
+
+/* Run only after the new image passes product startup checks. */
+hal_status_t confirm_status = hal_ota_confirm_boot_ex();
+```
+
+`Project: Upload (OTA)` or `jh-vscode upload-ota` performs a production build,
+requires `HAL_ENABLE_OTA` in the resolved feature set, validates the relocatable
+ESP-IDF artifact manifest, and checks the application BIN size and SHA-256
+against its flash-image record. It then transfers those raw application bytes;
+it does not sign or wrap them as an RP `.ota` container. Discovery, fixed
+`ota.host`, `listenPort`, `passwordEnv`, and firewall behavior use the shared
+host workflow described below.
+
+The device writes the inactive OTA application partition with `esp_ota_*`,
+checks the transferred-image MD5 and ESP-IDF application validation, selects
+the new boot partition, and restarts. `hal_ota_get_boot_info_ex()` maps ESP-IDF
+partition/image state to the public stable, pending, trial, rollback, and
+recovery modes. `hal_ota_confirm_boot_ex()` calls
+`esp_ota_mark_app_valid_cancel_rollback()` for a valid trial. If the application
+does not confirm, the ESP-IDF bootloader rolls back according to its configured
+policy.
+
+Use a unique high-entropy AUTH2 password in deployed systems. AUTH2 and the
+transfer MD5 do not provide modern image signing or confidentiality. Secure
+Boot V2, flash encryption, anti-rollback policy, protected keys, and recovery
+procedures are separate production controls. Standard upload and tests must not
+program irreversible eFuses.
+
+Serial/JTAG flashing of the complete validated manifest remains the recovery
+path when WiFi, the new application, or OTA metadata is unusable. The current
+ESP32-S3 OTA implementation has compile/link coverage only; trial/confirm/
+rollback, interrupted transfers, invalid image/authentication/transfer cases,
+and recovery still require physical verification.
+
+## RP Workflow
+
+Native RP OTA is supported by the official Pico SDK targets `rp2040` and
 `rp2350-arm`. The complete WiFi path has been validated on Pico W, Pico 2 W,
 and an ordinary Pico with a PIM730/RM2 add-on, in both bare-metal and FreeRTOS
 builds.
@@ -36,7 +163,7 @@ sector. This follows the Pico SDK workaround for
 without that padding, a sparse boundary between the boot applier and
 application can make BOOTSEL program an incomplete image.
 
-## Project Manifest
+## RP Project Manifest
 
 Enable OTA in `.vscode/jaszczurhal.project.json`, publish the generated
 artifact paths, and define the host-side discovery and authentication
@@ -106,7 +233,7 @@ matches the active dispatcher target. When more than one matching device is
 visible, use interactive selection or a fixed `ota.host`; automation must not
 guess.
 
-## Device-Side Secret And Configuration
+## RP Device-Side Secret And Configuration
 
 The password exists on both sides of the workflow:
 
@@ -166,7 +293,7 @@ code .
 The value of `passwordEnv` is the variable name only; do not write
 `"${TRACKER_OTA_PASSWORD}"` in the manifest.
 
-## Firmware Integration
+## RP Firmware Integration
 
 Configure hostname, UDP port, password, and optional callbacks before starting
 the OTA service. Start the service only after the network is usable, call
@@ -254,7 +381,8 @@ Additional API rules:
   service has started.
 - The hostname must be non-empty. The default hostname, when none is provided,
   is the HAL target name.
-- The device API accepts an empty password, but the host rejects it unless
+- Omitting the device password skips AUTH2. An empty device password uses a
+  publicly known key. The host rejects both empty-secret modes unless
   `allowEmptyPassword` is explicit. Always set a non-empty product secret.
 - `hal_ota_handle()` performs network service, processes discovery,
   authentication and transfer, and dispatches callbacks. Do not stop calling
@@ -283,7 +411,7 @@ uses 2048 FreeRTOS stack words, or 8 KiB on RP:
 Measure the final product's high-water mark rather than assuming this value is
 universally sufficient.
 
-## Build Artifacts And First Installation
+## RP Build Artifacts And First Installation
 
 Inspect the resolved target, board, paths, and OTA settings before the first
 build:
@@ -359,7 +487,7 @@ firmware's CDC 1200-bps reset only after firmware has been installed once.
 `upload` is not an OTA command. Manual BOOTSEL remains the recovery path when
 the application, WiFi, or OTA service cannot start.
 
-## Discovery And OTA Upload
+## RP Discovery And OTA Upload
 
 Wait until firmware has joined WiFi and `hal_ota_begin()` has succeeded, then
 list devices:
@@ -405,7 +533,7 @@ the override explicitly:
 `--variant` applies only when the manifest declares that variant. For example,
 a declared `freertos` variant is selected with `--variant freertos`.
 
-## VS Code Tasks And Keyboard Shortcuts
+## RP VS Code Tasks And Keyboard Shortcuts
 
 Generated projects contain these maintained tasks:
 
@@ -457,7 +585,7 @@ On Linux the user file is normally
 bindings. Do not confuse the repository-root shortcuts, which operate on the
 JaszczurHAL library itself, with firmware-project shortcuts.
 
-## Network Flow And Host Firewall
+## RP Network Flow And Host Firewall
 
 The OTA data connection is intentionally reversed:
 
@@ -608,7 +736,7 @@ If broadcast discovery is blocked but the address is known, use `ota.host`,
 `--host`, or a unicast `ota.broadcast` value. This avoids broadcast only; it
 does not remove the TCP callback firewall requirement.
 
-## Trial Confirmation, Rollback, And Recovery
+## RP Trial Confirmation, Rollback, And Recovery
 
 After a successful transfer, the boot applier swaps staging into the program
 slot and starts it in `HAL_OTA_BOOT_TRIAL`. Each unconfirmed boot increments
@@ -633,24 +761,14 @@ Keep a USB recovery path:
   ranges.
 - Physical BOOTSEL access remains outside the OTA trust boundary.
 
-## Security Boundary
+## RP Security Boundary
 
 The signed container authenticates its versioned header with HMAC-SHA256 and
 verifies payload SHA-256 plus header CRC before activation. The same password
-authenticates the UDP invitation flow. This provides authentication and
-integrity, not confidentiality:
-
-1. The device replies to an invitation with `AUTH <device-nonce>`.
-2. The host generates a 16-byte random client nonce and formats it as 32
-   lowercase hexadecimal characters.
-3. Both sides compute lowercase `MD5(password UTF-8)` and then lowercase
-   `MD5(password-md5:device-nonce:client-nonce)`.
-4. The host sends `200 <client-nonce> <digest>` and proceeds only after the
-   device replies `OK`.
-
-This challenge-response sequence is retained for protocol compatibility. The
-image HMAC remains the independent integrity check performed before staging is
-accepted.
+authenticates the [shared AUTH2 transport](#shared-auth2-transport-authentication).
+This provides authentication and integrity, not confidentiality. The RP image
+HMAC-SHA256 and payload SHA-256 remain independent checks performed before
+staging is accepted; AUTH2 does not replace them.
 
 - firmware and both `.ota` artifacts are plaintext;
 - anyone who knows the password can create an accepted image;
@@ -663,7 +781,7 @@ accepted.
 See [Security Supply Chain](security_supply_chain.md#native-ota-security-boundary)
 for the maintained security statement.
 
-## Troubleshooting Checklist
+## RP Troubleshooting Checklist
 
 If discovery or upload fails, check these in order:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guard ESP32-S3 Phase 1 integration in existing CI and local gates."""
+"""Guard ESP32-S3 integration in existing CI and local gates."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ def require_real_esp_build(body: str, context: str) -> None:
     )
     for fragment in (
         "--project",
-        "tests/hardware/esp32s3_phase1",
+        "tests/fixtures/esp32s3_phase3",
         "--target esp32s3",
         "--board waveshare-esp32-s3-zero",
         "--clean",
@@ -69,7 +69,8 @@ def require_uploaded_images(body: str, context: str) -> None:
         "build.log",
         "bootloader/bootloader.bin",
         "partition_table/partition-table.bin",
-        "esp32s3_phase1.bin",
+        "ota_data_initial.bin",
+        "esp32s3_phase3.bin",
         "if-no-files-found: error",
         "include-hidden-files: true",
     ):
@@ -80,7 +81,7 @@ windows = workflow_job("windows-tooling")
 linux = workflow_job("test")
 for body, context in ((windows, "windows-tooling"), (linux, "Linux test")):
     build_step = workflow_step(
-        body, "Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF"
+        body, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
     )
     require_real_esp_build(build_step, context)
     require(
@@ -92,13 +93,13 @@ for body, context in ((windows, "windows-tooling"), (linux, "Linux test")):
 
 require(
     "$env:GITHUB_WORKSPACE" in workflow_step(
-        windows, "Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF"
+        windows, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
     ),
     "windows-tooling ESP-IDF output is not rooted in GITHUB_WORKSPACE",
 )
 require(
-    "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase1" in workflow_step(
-        linux, "Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF"
+    "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3" in workflow_step(
+        linux, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
     ),
     "Linux test ESP-IDF output is not rooted in GITHUB_WORKSPACE",
 )
@@ -106,6 +107,14 @@ require(
 require(
     "tests/test_esp32s3_phase1.py" in windows,
     "windows-tooling does not run the ESP32-S3 Phase 1 host contract test",
+)
+require(
+    "tests/test_esp32s3_phase2.py" in windows,
+    "windows-tooling does not run the ESP32-S3 Phase 2 host contract test",
+)
+require(
+    "tests/test_esp32s3_phase3.py" in windows,
+    "windows-tooling does not run the ESP32-S3 Phase 3 host contract test",
 )
 require(
     "tests/test_esp_ci_contract.py" in windows,
@@ -124,9 +133,9 @@ require(
 
 gate7 = QUALITY_GATE.split("# GATE 7:", 1)[1].split("# GATE 8:", 1)[0]
 gate7_esp = gate7.split(
-    'info "Building the ESP32-S3 Phase 1 fixture with pinned ESP-IDF..."', 1
+    'info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."', 1
 )[1].split(
-    'pass "ESP32-S3 Phase 1 fixture produced a validated multi-image ESP-IDF build."',
+    'pass "ESP32-S3 Phase 3 fixture produced a validated multi-image ESP-IDF build."',
     1,
 )[0]
 require_real_esp_build(gate7_esp, "runalltests.sh Gate 7")
@@ -135,12 +144,12 @@ require(
     "Gate 7 passes the removed --jobs option to build_esp_idf.py",
 )
 require(
-    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase1"' in gate7,
+    '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"' in gate7,
     "Gate 7 ESP-IDF output is not below .build/gate",
 )
 require(
-    '"${LOG_ROOT}/jh_esp32s3_phase1.log"' in gate7,
+    '"${LOG_ROOT}/jh_esp32s3_phase3.log"' in gate7,
     "Gate 7 ESP-IDF command is not captured below .build/gate/logs",
 )
 
-print("ESP32-S3 Phase 1 CI and local gate integration verified")
+print("ESP32-S3 Phase 3 CI and local gate integration verified")

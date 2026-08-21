@@ -9,6 +9,8 @@ jh_network_required_board_capabilities(void) {
   return HAL_BOARD_CAP_CYW43 | (HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND
                                     ? HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND
                                     : 0u);
+#elif defined(HAL_NETWORK_BACKEND_ESP_IDF)
+  return HAL_BOARD_CAP_NATIVE_WIFI;
 #else
   return 0u;
 #endif

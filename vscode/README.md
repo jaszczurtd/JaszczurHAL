@@ -22,7 +22,7 @@ They ship as regular Python packages with an `__init__.py` in every level, so
 `vscode.runtime` always resolves inside this repository.
 For the full firmware project model, see
 [`doc/FwProjectWorkflow.md`](../doc/FwProjectWorkflow.md). For the complete
-native RP OTA contract, including firewall and recovery, see
+native RP and ESP32-S3 OTA contracts, including firewall and recovery, see
 [`doc/OTAWorkflow.md`](../doc/OTAWorkflow.md).
 
 ## Host Launchers
@@ -120,7 +120,7 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 | `Project: Build (Debug)` | `build-debug` | Uses a separate Debug CMake cache, publishes the Debug ELF, and serves as the pre-launch task for every managed Cortex-Debug profile. |
 | `Project: Upload` | `upload` | Builds and uploads through the active target backend: verified CDC-to-BOOTSEL UF2 for RP, OpenOCD for STM32G474, or a verified USB Serial/JTAG port for ESP32-S3. |
 | `Project: Upload (UF2 / BOOTSEL)` | `upload-uf2` | Builds an RP image, validates the UF2, and copies it to one verified BOOTSEL volume. It refuses ambiguous volumes. |
-| `Project: Upload (OTA)` | `upload-ota --interactive` | Builds and authenticates the OTA image, discovers matching native RP devices, and prompts when an explicit device choice is required. |
+| `Project: Upload (OTA)` | `upload-ota --interactive` | Builds the target-specific OTA image, discovers matching native RP or ESP-IDF devices, authenticates when configured, and prompts when an explicit device choice is required. |
 | `Project: Discover OTA devices` | `ota-discover` | Lists compatible OTA responders and their address, target, generation, slot, and boot state. |
 | `Project: List ports` | `list-ports` | Shows serial records, project identity matches, and BOOTSEL candidates without opening a device. |
 | `Project: Change port` | `change-port` | Selects a serial port interactively and stores it in the gitignored local project configuration. |
@@ -231,8 +231,8 @@ no explicit port is pinned.
 
 `refresh-intellisense` builds and validates the ESP-IDF artifacts, then patches
 the emitted compile database for cpptools while retaining its Xtensa compiler
-and flags. Phase 1 does not provide `build-debug`, Cortex-Debug launch profiles,
-or ESP peripheral HAL modules.
+and flags. ESP32-S3 does not provide `build-debug` or managed Cortex-Debug
+launch profiles.
 
 ## Adding Project Source Files
 
@@ -280,10 +280,12 @@ registry requirements and conflicts. `config-dump` exposes this result as
 Requested features remain the CMake inputs; preflight and OTA eligibility use
 the resolved set.
 
-The current `esp32s3` descriptor permits only its required
-`HAL_ENABLE_FREERTOS` feature. The production runner rejects requested or
-transitively resolved features outside that allowlist with
-`[JH-CFG-UNSUPPORTED]`.
+The `esp32s3` descriptor permits target-required `HAL_ENABLE_FREERTOS`, the
+delivered Phase 2 peripheral flags, and the Phase 3 network/service graph.
+System, synchronization, GPIO, ADC, simple PWM, serial/debug, and timer
+backends are included in the target baseline. The production runner rejects
+requested or transitively resolved features outside that descriptor allowlist
+with `[JH-CFG-UNSUPPORTED]`.
 
 The project header is a macro-only input loaded before target auto-detection;
 do not include JaszczurHAL headers or use derived target/board selectors in it.
@@ -530,7 +532,7 @@ WinAPI, merged-OTA, and copy-path automation is covered in CI. Real-device
 Windows smoke passed on both RP2040/Pico and RP2350/Pico 2, including volume
 identity, UF2 validation and copy, reboot, and verified CDC reconnection.
 
-## Native RP OTA
+## Native OTA
 
 `upload-ota` is the network update path for native `rp2040` and `rp2350-arm`
 WiFi board builds with `HAL_ENABLE_OTA`. It builds the project, locates its
@@ -540,30 +542,45 @@ is not embedded in the unsigned build artifact. The `rp2350-riscv` target can
 build the OTA container and boot applier, but the current RISC-V board profile
 has no CYW43 transport, so it has no operational network upload path.
 
+For ESP-IDF projects, `upload-ota` performs the same production build and
+device-selection flow, then validates `jh_esp_idf_artifacts.json`, requires
+`HAL_ENABLE_OTA` in the resolved feature set, and verifies the application BIN
+against its manifest size and SHA-256. It uploads those raw application bytes;
+it does not create or sign an RP `.ota` container. The ESP32-S3 device stages
+the image in its inactive `two-ota-large` app partition and uses ESP-IDF
+trial/confirm/rollback state. This path is implementation- and compile/link-
+complete but still requires hardware, interruption, rollback, and negative-
+security verification.
+
 `ota-discover` broadcasts a JaszczurHAL discovery request and lists hostname,
 address, target, port, slot size, image generation and boot mode. Upload
 automatically selects one device matching the active target and configured
 hostname. If several match, the generated task uses `--interactive`; automation
 should set manifest `ota.host` or pass `--host <address>` explicitly.
 
-The `ota` and `artifacts.ota` manifest fields are defined in
+The shared `ota` settings and RP-only `artifacts.ota` field are defined in
 [OTA Manifest Configuration](../doc/FwProjectWorkflow.md#ota-manifest-configuration).
 Keep secrets outside the tracked manifest with `ota.passwordEnv`. An inline
 `ota.password` is intended only for development examples. Empty passwords are
-rejected unless `ota.allowEmptyPassword` is explicitly true.
+rejected unless `ota.allowEmptyPassword` is explicitly true. With a non-empty
+password, the host requires the shared HMAC-SHA256 AUTH2 exchange and rejects a
+direct `OK` or legacy `AUTH` response. `allowEmptyPassword` explicitly permits
+an unauthenticated development transfer; it does not configure a password on
+the device.
 The host callback defaults to TCP/8266. `runmefirst.sh` offers a persistent,
 LAN-scoped firewall rule for that port after explicit confirmation.
 
 Firmware integration, first installation, host firewall rules, keyboard
 shortcuts, trial confirmation, rollback, recovery, and troubleshooting are
-owned by [Native RP OTA Workflow](../doc/OTAWorkflow.md).
+owned by [Native OTA Workflow](../doc/OTAWorkflow.md).
 
-The first installation still uses the merged UF2 through BOOTSEL. That image
+For RP, the first installation still uses the merged UF2 through BOOTSEL. That image
 contains the boot applier and application. Later OTA boots are trials:
 application code must call `hal_ota_confirm_boot_ex()` only after its startup
 self-tests and required services succeed. Otherwise the boot applier rolls
 back after the configured attempt limit. Manual BOOTSEL remains the recovery
-path.
+path. ESP32-S3 recovery instead reflashes the complete validated ESP-IDF image
+set over USB Serial/JTAG.
 
 The reference application is
 [`examples/25_ota`](../examples/25_ota/README.md). Its built-in WiFi transport

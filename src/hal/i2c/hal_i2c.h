@@ -17,8 +17,8 @@ extern "C" {
  * peripherals and can be tested on a PC using a mock implementation.
  *
  * Two I2C controllers are supported via bus-index APIs:
- *   - bus 0 -> default hardware controller (RP2040 I2C0, STM32G474 I2C1)
- *   - bus 1 -> second hardware controller (RP2040 I2C1, STM32G474 I2C2)
+ *   - bus 0 -> default controller (RP2040/ESP32-S3 I2C0, STM32G474 I2C1)
+ *   - bus 1 -> second controller (RP2040/ESP32-S3 I2C1, STM32G474 I2C2)
  * Any other bus value is invalid and triggers HAL_ASSERT in checked builds.
  *
  * The legacy no-bus APIs are preserved and operate on bus 0.
@@ -41,8 +41,8 @@ extern "C" {
  *
  * Mutex lifecycle: hal_i2c_init()/hal_i2c_init_bus() creates the per-bus
  * mutex early in normal use. Runtime calls keep an atomic create-once fallback
- * for defensive use before init, so two FreeRTOS tasks/RP2040 cores cannot
- * accidentally create different locks for the same bus.
+ * for defensive use before init, so two FreeRTOS tasks or hardware cores
+ * cannot accidentally create different locks for the same bus.
  *
  * Init order: hal_i2c_init()/hal_i2c_init_bus() is still required to
  * configure pins, clock and start the selected hardware controller before real

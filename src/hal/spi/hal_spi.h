@@ -11,8 +11,8 @@
  * byte/word transfer and in-place/buffer transfer.
  *
  * Two SPI controllers are supported via the @p bus parameter:
- *   - bus 0 -> default hardware controller (RP2040 SPI0, STM32G474 SPI1)
- *   - bus 1 -> second hardware controller (RP2040 SPI1, STM32G474 SPI2)
+ *   - bus 0 -> RP2040 SPI0, STM32G474 SPI1, or ESP32-S3 SPI2
+ *   - bus 1 -> RP2040 SPI1, STM32G474 SPI2, or ESP32-S3 SPI3
  * Any other bus value is rejected by status-returning operations. Low-level
  * synchronization and cleanup helpers retain HAL_ASSERT checks.
  */
@@ -177,7 +177,8 @@ hal_status_t hal_spi_write(uint8_t bus, const uint8_t *data, size_t len);
  * @brief Write a byte buffer using the fastest backend path available.
  *
  * On RP2040 this uses a blocking SPI TX DMA transfer when possible. Backends
- * without a hardware DMA implementation fall back to hal_spi_write().
+ * without a distinct HAL DMA path fall back to hal_spi_write(); ESP32-S3 uses
+ * that fallback even when ESP-IDF allocated a DMA-capable bus.
  *
  * The caller is responsible for holding any required SPI/device transaction
  * state, exactly like for hal_spi_write().

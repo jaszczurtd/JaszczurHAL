@@ -7,7 +7,13 @@
 
 #include "hal/core/hal_config.h"
 
-#ifdef HAL_ENABLE_BSD_SOCKETS
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+
+/* Keep ESP-IDF's native address types and lwIP conversion adapters. */
+#include_next <arpa/inet.h>
+#include <sys/socket.h>
+
+#elif defined(HAL_ENABLE_BSD_SOCKETS)
 
 #include <netinet/in.h>
 
@@ -30,4 +36,4 @@ const char *inet_ntop(int af, const void *src, char *dst, socklen_t size);
 }
 #endif
 
-#endif /* HAL_ENABLE_BSD_SOCKETS */
+#endif /* HAL_NETWORK_BACKEND_ESP_IDF / HAL_ENABLE_BSD_SOCKETS */

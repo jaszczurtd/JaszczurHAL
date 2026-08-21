@@ -45,7 +45,7 @@ Application entry flags are separate from optional HAL modules:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. Bare RP launches core 1; RP FreeRTOS creates a task pinned to core 1. STM32G474 FreeRTOS creates the second application task. Leave undefined for single-loop/single-task apps. |
+| `HAL_ENABLE_APP_TASK1` | Dispatches optional `app_task1()` from the HAL-provided entry path. Bare RP launches core 1; RP FreeRTOS creates a task pinned to core 1. STM32G474 FreeRTOS creates the second application task. ESP32-S3 creates it on core 1 by default and accepts a valid `HAL_FREERTOS_TASK1_CORE` or `-1` for no affinity. Leave undefined for single-loop/single-task apps. |
 
 FreeRTOS integration is also an explicit opt-in, but it is not a HAL module:
 
@@ -57,7 +57,7 @@ Stack protection uses two independent opt-ins:
 
 | Flag | Effect |
 |---|---|
-| `HAL_ENABLE_STACK_GUARD` | Enables synchronous hardware protection for native RP2040/RP2350 system stacks and the STM32G474 main stack. FreeRTOS builds additionally enable kernel task-stack overflow checking. The target-independent `hal_stack_guard_init_ex()` API reports whether protection is active; periodic polling is unnecessary. |
+| `HAL_ENABLE_STACK_GUARD` | Enables synchronous hardware protection for native RP2040/RP2350 system stacks, the STM32G474 main stack, and ESP32-S3 task-stack end watchpoints supplied by ESP-IDF. FreeRTOS builds additionally enable kernel task-stack overflow checking. The target-independent `hal_stack_guard_init_ex()` API reports whether protection is active; periodic polling is unnecessary. |
 | `HAL_ENABLE_STACK_PROTECTOR` | Enables GCC/Clang `-fstack-protector-strong` instrumentation for HAL and application sources in supported RP and STM32G474 firmware recipes. A canary mismatch uses the target retained stack-overflow reset path. It is independent from `HAL_ENABLE_STACK_GUARD`. |
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
@@ -68,14 +68,14 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_LORA_LINK` | `hal_lora_link.h` | `hal_lora_link.cpp` + `jh_lora_link_frame.cpp` | Reliable private messages with addressing, sequences, ACK/retry, duplicate suppression and fragmentation (propagates LORA + CRC); optional AEAD requires CRYPTO; see the [LoRa link API](22_lora_link.md) |
 | `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 plus experimental, software-only SX1261 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |
 | `HAL_ENABLE_SX127X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx127x/*` | Experimental, software-only SX1276/SX1278 provider over HAL SPI/GPIO (propagates LORA + SPI and conflicts with SX126X); see the [LoRa radio API](21_lora.md) |
-| `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP backend selected by the board and target configuration |
+| `HAL_ENABLE_WIFI` | `hal_wifi.h` | `hal_wifi.cpp` | CYW43/lwIP or native ESP-IDF WiFi/`esp_netif`/lwIP backend selected by target/board configuration |
 | `HAL_ENABLE_TIME` | optional declarations in `hal_time.h` | shared runtime clock + target libc bridge | Runtime setter/status and WiFi NTP helpers (propagates UDP + WIFI); pure calendar/range helpers stay unconditional |
-| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient (propagates TCP + WIFI) |
-| `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | WiFiUDP (propagates WIFI) |
-| `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | WiFiClient/WiFiServer TCP transport (propagates WIFI) |
-| `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `hal/network/http/hal_http_server.cpp` | Small poll-driven HTTP/1.1 server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_MQTT` | `hal_mqtt.h` | `hal_mqtt.cpp` | PubSubClient over HAL TCP or BearSSL TLS (propagates TCP + WIFI) |
+| `HAL_ENABLE_UDP`  | `hal_udp.h`  | `hal_udp.cpp`  | Handle-based UDP transport (propagates WIFI) |
+| `HAL_ENABLE_TCP` | `hal_tcp.h` | `hal_tcp.cpp` | TCP client/listener transport (propagates WIFI) |
+| `HAL_ENABLE_HTTP_SERVER` | `hal_http_server.h` | `hal/network/http/hal_http_server.cpp` | Small poll-driven plaintext HTTP/1.1 server over HAL TCP (propagates TCP + WIFI); no HTTPS-server API |
 | `HAL_ENABLE_HTTP_FILES` | `hal_http_files.h` | `hal/network/http/hal_http_files.cpp` | Callback-backed file serving, ETag and upload helpers over HAL HTTP routes (propagates HTTP_SERVER + TCP + WIFI) |
-| `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `hal/network/websocket/hal_websocket.cpp` | Small poll-driven WebSocket server over HAL TCP (propagates TCP + WIFI) |
+| `HAL_ENABLE_WEBSOCKET` | `hal_websocket.h` | `hal/network/websocket/hal_websocket.cpp` | Small poll-driven plaintext WebSocket server over HAL TCP (propagates TCP + WIFI); no WSS or WebSocket-client API |
 | `HAL_ENABLE_NET_CONSOLE` | `hal_net_console.h` | `hal/network/net_console/hal_net_console.cpp` | Password-protected serial/debug mirror and command stream over HAL TCP (propagates TCP + WIFI) |
 | `HAL_ENABLE_NET_COMMANDS` | `hal_net_commands.h` | `hal/network/net_commands/hal_net_commands.cpp` | Shared JSON/text command dispatcher for HTTP and WebSocket control channels (propagates HTTP_SERVER + WEBSOCKET + CJSON + TCP + WIFI) |
 | `HAL_ENABLE_NOTIFY` | `hal_notify.h` | `hal/network/notify/hal_notify.cpp` | Backend-dispatched notification facade with generation-checked channel handles |
@@ -83,8 +83,8 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_BSD_SOCKETS` | `sys/socket.h`, `netinet/in.h`, `arpa/inet.h`, `netdb.h`, `fcntl.h`, `sys/select.h`, `unistd.h` | `hal/network/adapters/bsd/hal_bsd_sockets.cpp` | Public BSD/POSIX adapter over HAL UDP/TCP, including `getaddrinfo()` (propagates UDP + TCP + WIFI); remains usable with or without TLS |
 | `HAL_ENABLE_TLS` | `hal_tls.h` | `hal/network/tls/hal_tls.cpp` + `hal/network/tls/BearSSL/*` | BearSSL TLS client over native HAL TCP (propagates TCP + WIFI); does not force BSD sockets, while the optional BearSSL BSD transport keeps TLS-over-BSD available |
 | `HAL_ENABLE_HTTP_CLIENT` | `hal_http_client.h` | `hal/network/http/hal_http_client.cpp` | Bounded one-shot HTTP/1.1 client over HAL TCP with an HTTPS transport when TLS is selected (propagates TCP + WIFI) |
-| `HAL_ENABLE_OTA`  | `hal_ota.h`  | target `hal_ota.cpp` + `hal/network/ota/*` boot/staging engine | Authenticated RP update service with staging, trial boot, confirmation and rollback over HAL UDP/TCP (propagates WIFI + UDP + TCP + CRYPTO + CRC) |
-| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` | bundled WireGuard (propagates UDP + WIFI) |
+| `HAL_ENABLE_OTA`  | `hal_ota.h`  | target `hal_ota.cpp` + shared OTA protocol | Native UDP/TCP update service with discovery, optional password challenge, trial boot, confirmation and rollback. RP uses a signed JaszczurHAL container/swap engine; ESP32-S3 stages a raw ESP application image through ESP-IDF OTA partitions (propagates WIFI + UDP + TCP + CRYPTO + CRC). |
+| `HAL_ENABLE_WIREGUARD` | `hal_wireguard.h` | `hal/network/wireguard/hal_wireguard.cpp` + target lwIP extension port | Bundled WireGuard over a capability-advertised host lwIP stack, including ESP32-S3 (propagates UDP + WIFI) |
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
@@ -130,10 +130,10 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_PN532` | `hal_pn532.h` + `hal/nfc/pn532/pn532.h` | `hal/nfc/pn532/pn532*.cpp` | PN532 NFC/RFID reader driver over HAL SPI/I2C/UART (propagates SPI) |
 | `HAL_ENABLE_DACLESS` | `hal_dacless.h` + `hal/audio/dacless/dacless.h` | `hal/audio/dacless/dacless.cpp` | Shared DACless PWM-audio engine with block/sample callbacks and ADC sampling (propagates DMA_PWM_AUDIO + PWM_FREQ) |
 | `HAL_ENABLE_DMA_PWM_AUDIO` | `hal_dma_pwm_audio.h` | `hal_dma_pwm_audio.cpp` | Timer-paced PWM-audio DMA helper used by DACless |
-| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm or STM32G474 TIM PWM |
+| `HAL_ENABLE_PWM_FREQ` | `hal_pwm_freq.h` | `hal_pwm_freq.cpp` | RP2040 hardware/pwm, STM32G474 TIM PWM, or ESP32-S3 LEDC |
 | `HAL_ENABLE_DAC` | `hal_dac.h` | target `hal_dac.cpp` | True-DAC capability facade; STM32G474 provides hardware output, while RP2040 reports the capability as unsupported |
-| `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, and mock targets |
-| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO) |
+| `HAL_ENABLE_PCNT` | `hal_pcnt.h` | target `hal_pcnt.cpp` | Target pulse-counter facade for RP2040, STM32G474, ESP32-S3 PCNT, and mock targets |
+| `HAL_ENABLE_RGB_LED` | `hal_rgb_led.h` + `hal/gpio/neopixel/jh_neopixel.h` | `hal_rgb_led.cpp` + `hal/gpio/neopixel/jh_neopixel.cpp` | Shared NeoPixel core + target transport (RP2040 PIO / STM32 cycle-timed GPIO / ESP32-S3 RMT) |
 | `HAL_ENABLE_HD44780` | `hal_hd44780.h` + `hal/display/hd44780/hd44780.h` | `hal/display/hd44780/hd44780.cpp` | HD44780-compatible parallel character LCD over HAL GPIO/system timing |
 | `HAL_ENABLE_DISPLAY` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(needs a TFT, OLED, LCD or EPD backend)* |
 | `HAL_ENABLE_TFT` | `hal_display.h` | `hal/display/drivers/hal_display.cpp` | *(needs at least one TFT driver below; propagates DISPLAY + SPI)* |
@@ -347,6 +347,11 @@ from RP `-D`), the CMake fallback still prepares the kernel. An external
   `HAL_PROVIDE_APP_ENTRY` is also defined, HAL calls `app_start()`, creates an
   `app_task0()` FreeRTOS task, creates `app_task1()` only when
   `HAL_ENABLE_APP_TASK1` is defined, and then calls `vTaskStartScheduler()`.
+- ESP32-S3: uses the FreeRTOS scheduler already started by the pinned ESP-IDF.
+  `app_main()` calls `app_start()`, creates `app_task0()` on core 0 by default,
+  optionally creates `app_task1()` on core 1, and returns to ESP-IDF. The target
+  requires `HAL_ENABLE_FREERTOS`. `HAL_FREERTOS_TASK0_CORE` and
+  `HAL_FREERTOS_TASK1_CORE` accept either target core or `-1` for no affinity.
 - Host/mock: `HAL_ENABLE_FREERTOS` is not supported by the normal mock backend.
   CI uses the optional `JH_ENABLE_FREERTOS_POSIX_TESTS` host build to compile the
   FreeRTOS kernel GCC/Posix port, run a real scheduler as pthreads, and exercise
@@ -365,6 +370,11 @@ HAL-provided native FreeRTOS entry task defaults:
 | `HAL_USB_FREERTOS_TASK_STACK` | `512` | RP core-0 USB worker stack in FreeRTOS words |
 | `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | RP core-0 USB worker priority |
 
+ESP32-S3 overrides both application stack defaults to `3072` ESP-IDF
+stack-depth bytes and adds core defaults `HAL_FREERTOS_TASK0_CORE=0` and
+`HAL_FREERTOS_TASK1_CORE=1`. Application task priorities retain the shared
+`tskIDLE_PRIORITY + 1` defaults.
+
 STM32G474 uses a 24 KiB `heap_4` pool from its target-local
 `FreeRTOSConfig.h`. Application task stacks use the same 512-word defaults;
 the linker `_Min_Stack_Size` remains the boot/exception stack reservation.
@@ -377,11 +387,12 @@ Platform stack-size overrides:
 | `HAL_RP_CORE0_STACK_SIZE` | `0x800` | Bytes mapped to `PICO_STACK_SIZE` for any native RP target |
 | `HAL_RP_CORE1_STACK_SIZE` | `HAL_RP_CORE0_STACK_SIZE` / `0x800` | Bytes mapped to `PICO_CORE1_STACK_SIZE` for any native RP target |
 
-Thread-safety note: RP2040 and STM32G474 FreeRTOS modes upgrade core
-mutex/delay/idle primitives, while hard `hal_critical_section_*` remains a full
-interrupt mask for timing-sensitive code. The implementation includes atomic
-create-once fallbacks for singleton/per-bus mutexes and hardens the RP2040
-I2C-slave callback path. Timer callback context and remaining per-module
+Thread-safety note: RP2040, STM32G474, and ESP32-S3 FreeRTOS modes provide
+mutex/delay/idle primitives, while `hal_critical_section_*` uses the target's
+hard interrupt-critical mechanism for timing-sensitive code. ESP32-S3 also
+serializes both cores with a shared `portMUX_TYPE`. The implementation includes
+atomic create-once fallbacks for singleton/per-bus mutexes and hardens the
+RP2040 I2C-slave callback path. Timer callback context and remaining per-module
 exceptions require dedicated module-level audits before stronger thread-safety
 guarantees are documented.
 
