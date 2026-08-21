@@ -43,6 +43,20 @@
       "notes": "Pinned official SDK for native RP2040, RP2350 ARM and RP2350 Hazard3 RISC-V builds. The configured checkout also initializes the upstream TinyUSB and Mbed TLS submodules used by later native USB work and picotool signing support."
     },
     {
+      "name": "ESP-IDF",
+      "version": "6.0.2",
+      "commit": "7101770dc6db2667b3c477cc31365dd1acd6db4e",
+      "type": "framework",
+      "scope": "optional",
+      "supplier": "Espressif Systems",
+      "licenses": ["Apache-2.0"],
+      "purl": "pkg:github/espressif/esp-idf@7101770dc6db2667b3c477cc31365dd1acd6db4e",
+      "paths": ["third_party/esp-idf", "third_party/esp_idf_version.conf"],
+      "upstream": "https://github.com/espressif/esp-idf",
+      "feature_flags": [],
+      "notes": "Exact official ESP-IDF release for native ESP32-family targets. The checkout is opt-in until the first ESP target lands; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+    },
+    {
       "name": "BTstack",
       "version": "v1.6.2-1-g501e6d2b8",
       "commit": "501e6d2b86e6c92bfb9c390bcf55709938e25ac1",

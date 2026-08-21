@@ -371,6 +371,88 @@ class ArchiveManagerTests(unittest.TestCase):
 
 
 class TrackedContractTests(unittest.TestCase):
+    def test_esp_idf_pin_is_exact_and_opt_in(self) -> None:
+        config = manager.parse_config(ROOT / "third_party/esp_idf_version.conf")
+        self.assertEqual(
+            config,
+            {
+                "ESP_IDF_REPO": "https://github.com/espressif/esp-idf.git",
+                "ESP_IDF_REF":
+                    "7101770dc6db2667b3c477cc31365dd1acd6db4e",
+                "ESP_IDF_VERSION": "6.0.2",
+                "ESP_IDF_DIR": "third_party/esp-idf",
+                "ESP_IDF_TARGETS": "esp32s3",
+            },
+        )
+        spec = manager.GIT_COMPONENTS["esp-idf"]
+        self.assertTrue(spec.recursive_submodules)
+        self.assertIs(spec.version_validator, manager._version_esp_idf)
+        self.assertNotIn("esp-idf", manager.SOURCE_COMPONENT_ORDER)
+
+        arguments = manager.build_parser().parse_args(
+            ["component", "esp-idf", "--repo-root", str(ROOT)]
+        )
+        with mock.patch.dict(manager.os.environ, {}, clear=True):
+            self.assertFalse(manager._component_enabled("esp-idf", arguments))
+        with mock.patch.dict(
+            manager.os.environ, {"JH_ENABLE_ESP_IDF": "1"}, clear=True
+        ):
+            self.assertTrue(manager._component_enabled("esp-idf", arguments))
+
+        with self.assertRaisesRegex(
+            manager.ComponentError, "complete recursive submodule set"
+        ):
+            manager.ensure_git_component(
+                "esp-idf", ROOT, verify_only=True, submodule_override=""
+            )
+
+    def test_esp_idf_tools_install_and_verify_official_environment(self) -> None:
+        directory = ROOT / "third_party/esp-idf"
+        completed = subprocess.CompletedProcess([], 0, "", "")
+        with mock.patch.object(manager, "_run", return_value=completed) as run:
+            manager.ensure_esp_idf_tools(
+                ROOT, directory, verify_only=False
+            )
+
+        commands = [call.args[0] for call in run.call_args_list]
+        installer = (
+            "cmd.exe", "/d", "/s", "/c", str(directory / "install.bat"),
+            "esp32s3",
+        ) if sys.platform == "win32" else (
+            "bash", str(directory / "install.sh"), "esp32s3",
+        )
+        self.assertEqual(installer, commands[0])
+        self.assertEqual("check", commands[1][-1])
+        self.assertEqual("check-python-dependencies", commands[2][-1])
+
+        with mock.patch.object(manager, "_run", return_value=completed) as run:
+            manager.ensure_esp_idf_tools(
+                ROOT, directory, verify_only=True
+            )
+        self.assertEqual(
+            ["check", "check-python-dependencies"],
+            [call.args[0][-1] for call in run.call_args_list],
+        )
+
+    def test_recursive_submodule_sync_is_verified(self) -> None:
+        directory = Path("esp-idf")
+        responses = iter(("-deadbeef component", "", " deadbeef component"))
+        with mock.patch.object(
+            manager,
+            "_git_output",
+            side_effect=lambda *_args, **_kwargs: next(responses),
+        ) as git_output:
+            manager._sync_submodules(
+                directory, (), verify_only=False, recursive=True
+            )
+        self.assertIn(
+            mock.call(
+                directory, "submodule", "update", "--init", "--recursive",
+                "--depth", "1",
+            ),
+            git_output.mock_calls,
+        )
+
     def test_sx126x_pin_and_license_are_exact(self) -> None:
         config = manager.parse_config(
             ROOT / "third_party/sx126x_driver_version.conf"

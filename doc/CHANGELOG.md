@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Pinned ESP-IDF v6.0.2 at its exact release commit and added opt-in,
+  recursive-submodule-aware SDK and `esp32s3` toolchain installation, SBOM
+  provenance, and a cross-platform Phase 0 `app_main()` build and flash-artifact
+  verification spike for the upcoming native ESP32-S3 target.
 - Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
   monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
   persistence after validated NTP synchronization.
