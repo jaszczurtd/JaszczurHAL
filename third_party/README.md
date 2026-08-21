@@ -82,7 +82,10 @@ terminal that invokes ESP-IDF tools directly.
 
 Before the native target lands, the isolated Phase 0 integration spike verifies
 the pinned SDK, standard `app_main()` project flow, minimal component graph and
-complete flash image set without compiling JaszczurHAL as an ESP-IDF component:
+complete flash image set. It discovers the controlled `jaszczurhal` ESP-IDF
+component, compiles one existing shared JaszczurHAL C++ source and consumes a
+generated per-build include/link contract. It does not provide the native ESP32
+target or backend planned for the next phase:
 
 ```bash
 python3 scripts/build_esp_idf_phase0.py --clean

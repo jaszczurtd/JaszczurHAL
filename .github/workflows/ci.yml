@@ -59,6 +59,7 @@ jobs:
             'tests/test_vscode_windows_tooling.py',
             'tests/test_vscode_build_environment.py',
             'tests/test_component_manager.py',
+            'tests/test_esp_idf_phase0.py',
             'tests/test_board_generator.py',
             'tests/test_feature_registry.py'
           )
