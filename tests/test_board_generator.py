@@ -74,6 +74,12 @@ if TEST_ROOT.exists():
     shutil.rmtree(TEST_ROOT)
 TEST_ROOT.mkdir(parents=True)
 
+schema = load(BOARDS / "board.schema.json")
+require(
+    schema.get("$schema") == "https://json-schema.org/draft/2020-12/schema",
+    "board descriptor schema is not valid draft 2020-12 JSON",
+)
+
 checked_static = run("--check-static")
 require(
     checked_static.stdout.strip() == "verified 2 generated board artifacts",
@@ -82,12 +88,12 @@ require(
 
 validated = run("--validate-only")
 require(
-    validated.stdout.strip() == "validated 5 targets and 13 boards",
+    validated.stdout.strip() == "validated 6 targets and 14 boards",
     "unexpected validated registry size",
 )
 require(
     run("--list", "targets").stdout.splitlines()
-    == ["mock", "rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474"],
+    == ["esp32s3", "mock", "rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474"],
     "target list is not deterministic",
 )
 require(
@@ -106,6 +112,7 @@ require(
         "rp2040-lora-lf",
         "rp2040-plus-4mb",
         "rp2040-zero",
+        "waveshare-esp32-s3-zero",
     ],
     "board list is not deterministic",
 )
@@ -327,6 +334,77 @@ require(
     "#define HAL_LED_BUILTIN HAL_BOARD_STATUS_LED_PIN"
     in (plus_output / "jh_board_config.h").read_text(encoding="utf-8"),
     "GPIO status LED must provide HAL_LED_BUILTIN",
+)
+
+esp32_output = TEST_ROOT / "generated/esp32s3"
+run(
+    "--target",
+    "esp32s3",
+    "--board",
+    "waveshare-esp32-s3-zero",
+    "--output-dir",
+    str(esp32_output),
+)
+esp32_resolved = load(esp32_output / "jh_board_resolved.json")
+esp32_config = (esp32_output / "jh_board_config.h").read_text(encoding="utf-8")
+esp32_board = load(BOARDS / "profiles/waveshare-esp32-s3-zero.json")
+esp32_target = load(BOARDS / "targets/esp32s3.json")
+require(esp32_resolved["idfTarget"] == "esp32s3", "ESP-IDF target mapping changed")
+require(esp32_resolved["components"] == ["esp-idf-native"], "ESP-IDF runtime component changed")
+require(esp32_resolved["requestedFeatures"] == [], "target feature became a project request")
+require(esp32_resolved["resolvedFeatures"] == ["HAL_ENABLE_FREERTOS"], "ESP32-S3 must require FreeRTOS")
+require(
+    esp32_resolved["featureProvenance"]["HAL_ENABLE_FREERTOS"]
+    == ["target:esp32s3:requiredFeatures[0]"],
+    "target-required FreeRTOS provenance changed",
+)
+require(
+    esp32_resolved["psram"] == {"interface": "quad", "sizeBytes": 2097152},
+    "Waveshare PSRAM facts changed",
+)
+require(
+    esp32_board["programming"]
+    == {
+        "transport": "usb-serial-jtag",
+        "usb": {"vid": 0x303A, "pid": 0x1001},
+        "reset": "usb-serial-jtag-control-lines",
+        "boot": "usb-serial-jtag-control-lines",
+    },
+    "Waveshare programming identity/wiring facts changed",
+)
+require(
+    esp32_target["supportedFeatures"] == ["HAL_ENABLE_FREERTOS"],
+    "ESP32-S3 Phase 1 feature boundary changed",
+)
+for expected in (
+    '#define HAL_TARGET_DESCRIPTOR_ID "esp32s3"',
+    '#define HAL_TARGET_BACKEND_NAME "esp-idf"',
+    "#define HAL_TARGET_CPU_CORES 2u",
+    "#define HAL_TARGET_HAS_FPU 1",
+    "#define HAL_BOARD_EXPECTED_FLASH_BYTES UINT32_C(4194304)",
+    "#define HAL_BOARD_EXPECTED_FLASH_MIB 4",
+    "#define HAL_BOARD_HAS_PSRAM 1",
+    "#define HAL_BOARD_PSRAM_BYTES UINT32_C(2097152)",
+    "#define HAL_BOARD_PSRAM_INTERFACE_QUAD 1",
+    "#define HAL_BOARD_HAS_NATIVE_WIFI 1",
+    "#define HAL_BOARD_STATUS_LED_PIN 21u",
+):
+    require(expected in esp32_config, f"ESP32-S3 config lacks {expected!r}")
+
+disabled_freertos = run(
+    "--target",
+    "esp32s3",
+    "--board",
+    "waveshare-esp32-s3-zero",
+    "--output-dir",
+    str(TEST_ROOT / "negative/esp32-disable-freertos"),
+    "--feature",
+    "HAL_DISABLE_FREERTOS",
+    expected_success=False,
+)
+require(
+    "[JH-CFG-TARGET-REQUIRED]" in disabled_freertos.stderr,
+    "disabling target-required FreeRTOS was not diagnosed",
 )
 
 lora_output = TEST_ROOT / "generated/rp2040-lora-lf"
@@ -1049,6 +1127,47 @@ flash_mismatch = mutate(
 )
 result = run("--validate-only", boards_root=flash_mismatch)
 require(result.returncode == 0, "descriptor-only validation should not guess SDK facts")
+
+psram_mismatch = mutate(
+    "psram-mismatch",
+    "profiles/waveshare-esp32-s3-zero.json",
+    lambda value: value["memory"]["psram"].update(sizeBytes=67108864),
+)
+require(
+    "external RAM supported by target esp32s3"
+    in run("--validate-only", boards_root=psram_mismatch, expected_success=False).stderr,
+    "unsupported PSRAM size was not diagnosed",
+)
+
+programming_usb_mismatch = mutate(
+    "programming-usb-mismatch",
+    "profiles/waveshare-esp32-s3-zero.json",
+    lambda value: value["programming"]["usb"].update(vid=0x10000),
+)
+require(
+    "a 16-bit USB identifier"
+    in run(
+        "--validate-only",
+        boards_root=programming_usb_mismatch,
+        expected_success=False,
+    ).stderr,
+    "invalid programming USB identity was not diagnosed",
+)
+
+unsupported_required_feature = mutate(
+    "unsupported-required-feature",
+    "targets/esp32s3.json",
+    lambda value: value.update(supportedFeatures=[]),
+)
+require(
+    "a superset of target-required features"
+    in run(
+        "--validate-only",
+        boards_root=unsupported_required_feature,
+        expected_success=False,
+    ).stderr,
+    "unsupported target-required feature was not diagnosed",
+)
 
 # Typed multi-pin bus devices. rp2040-zero gains a synthetic SX1262 so the role
 # model is covered before any board profile ships one.

@@ -36,6 +36,7 @@ of the following in your `hal_project_config.h` (or via -D):
     HAL_TARGET_RP2350_ARM    RP2350 / Cortex-M33
     HAL_TARGET_RP2350_RISCV  RP2350 / Hazard3 RISC-V
     HAL_TARGET_STM32G474     STM32G474 (bare-metal or FreeRTOS backend)
+    HAL_TARGET_ESP32_S3      ESP32-S3 native ESP-IDF target
     HAL_TARGET_MOCK          host unit-test / simulation backend
 
 If you define none, the target is AUTO-DETECTED from the toolchain, so existing
@@ -45,6 +46,7 @@ projects need no change:
     PICO_RP2350 + ARM / Pico 2 board -> HAL_TARGET_RP2350_ARM
     PICO_RP2350 + RISC-V             -> HAL_TARGET_RP2350_RISCV
     STM32G474xx (CubeG4 / -D)        -> HAL_TARGET_STM32G474
+    CONFIG_IDF_TARGET_ESP32S3        -> HAL_TARGET_ESP32_S3
     any host compiler                -> HAL_TARGET_MOCK
     bare-metal target, no match      -> compile-time #error
 
@@ -53,6 +55,17 @@ uses `HAL_TARGET_IS_RP` for the RP family, exact `HAL_TARGET_IS_RP2040 /
 _IS_RP2350_ARM / _IS_RP2350_RISCV` discriminators for chip-specific code,
 `HAL_RP_ARCH_ARM / _RISCV` for ISA-specific code and `HAL_TARGET_NAME` for the
 exact target string.
+
+ESP32 targets additionally expose `HAL_TARGET_IS_ESP32_FAMILY`. The current
+exact ESP32-S3 target always resolves `HAL_ENABLE_FREERTOS`; requesting
+`HAL_DISABLE_FREERTOS` is a configuration error.
+
+The production scripts/build_esp_idf.py runner and jh-vscode provider build,
+validate, and flash the exact target/board pair through pinned ESP-IDF. The
+current esp32s3 supportedFeatures allowlist contains only HAL_ENABLE_FREERTOS.
+Any other requested or transitively resolved HAL_ENABLE_* flag fails with
+[JH-CFG-UNSUPPORTED]. Portable ESP32 peripheral modules and APP_TASK1 are
+Phase 2 work.
 
 `rp_native_lib/` supports RP2040, RP2350 ARM and RP2350 RISC-V and generates
 ELF/BIN/UF2 artifacts. The HAL provides `main()` and starts core 1 only when
@@ -78,13 +91,15 @@ profile with `JH_BOARD`; the board generator emits one selector:
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_G474RE
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730
     HAL_BOARD_PROFILE_STM32G474_NUCLEO_CORE1262_HF
+    HAL_BOARD_PROFILE_WAVESHARE_ESP32_S3_ZERO
     HAL_BOARD_PROFILE_HOST_MOCK
 
 Pico/Pico W/PIM730 require HAL_TARGET_RP2040. Pico 2/Pico 2 W require an
 RP2350 target; Pico 2 W currently requires RP2350 ARM. HAL_BOARD_HAS_USB_DEVICE,
 HAL_BOARD_HAS_CYW43, HAL_BOARD_HAS_EXTERNAL_RADIO_FRONTEND,
-HAL_BOARD_HAS_SX1262_RADIO, and HAL_BOARD_HAS_BLUETOOTH_CONTROLLER expose
-compile-time physical facts. Profile names reported at runtime equal the board
+HAL_BOARD_HAS_SX1262_RADIO, HAL_BOARD_HAS_BLUETOOTH_CONTROLLER, and
+HAL_BOARD_HAS_NATIVE_WIFI expose compile-time physical facts. Profile names
+reported at runtime equal the board
 IDs from boards/profiles, for example picow, pico2w, and pico-rm2.
 The CMake registry resolves the matching Pico SDK board and validates expected
 flash size. Wireless builds can control HAL_LED_BUILTIN through the pinned
@@ -101,7 +116,8 @@ HAL_CYW43_PIO_CLOCK_DIV_OVERRIDE_X256 remains an explicit diagnostic escape
 hatch. The legacy HAL_CYW43_PIO_CLOCK_DIV_INT/FRAC8 pair maps to that override
 when both values are supplied; it is no longer a board default.
 
-The public hal_board API reports runtime states for:
+On targets that compile the public hal_board facade, the API reports runtime
+states for:
 
     HAL_BOARD_CAP_USB_DEVICE
     HAL_BOARD_CAP_CYW43
@@ -126,7 +142,9 @@ Application entry flags
     Dispatch optional app_task1() from the HAL-provided entry path. Bare RP
     launches core 1; RP FreeRTOS creates a task pinned to core 1. STM32G474
     FreeRTOS creates the second application task. Leave it undefined for
-    single-loop/single-task applications.
+    single-loop/single-task applications. The ESP-IDF entry source contains a
+    matching future task path, but the Phase 1 esp32s3 feature allowlist rejects
+    this flag.
 
 
 Stack protection flags
@@ -224,6 +242,13 @@ FreeRTOS integration flag
         FreeRTOS POSIX scheduler test target (JH_ENABLE_FREERTOS_POSIX_TESTS) to
         cover HAL mutex/delay and lazy create-once paths in ctest without
         hardware.
+
+      ESP32-S3 Phase 1:
+        Uses the FreeRTOS instance already started by pinned ESP-IDF. app_main()
+        calls app_start(), creates the repeating app_task0 task, and returns to
+        the scheduler. HAL_ENABLE_FREERTOS is target-required rather than
+        optional. The production build currently rejects all other registered
+        feature requests, including HAL_ENABLE_APP_TASK1.
 
 
 Module enable flags

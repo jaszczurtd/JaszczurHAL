@@ -46,11 +46,12 @@ generated settings select it through `cortex-debug.gdbPath.linux`. The
 STM32G474 profile uses `board/st_nucleo_g4.cfg` with connect-under-reset so the
 on-board ST-Link can recover a running target before GDB attaches.
 
-The tracked manifest selects `toolchain: "cmake"` and points
-`cmake.sourceDir` at `libraries/JaszczurHAL/cmake/jh_firmware_project`.
-`JH_PROJECT_DIR` identifies the application directory. The shared dispatcher
-selects the target recipe and compiles the project sources together with
-JaszczurHAL.
+RP and STM32 projects select `toolchain: "cmake"` and point `cmake.sourceDir`
+at `libraries/JaszczurHAL/cmake/jh_firmware_project`. `JH_PROJECT_DIR`
+identifies the application directory. ESP32-S3 projects select
+`toolchain: "esp-idf"`; their target registry entry supplies the production
+runner and artifact-manifest path. The shared entrypoint selects the provider
+without requiring a project-local CMake recipe.
 
 Generate a working standalone project with:
 
@@ -99,10 +100,10 @@ Automation can use `--install --yes` after obtaining consent.
 - **Local state**: gitignored `.vscode/jaszczurhal.local.json`, containing a
   developer's selected target, board, and serial port.
 - **Target**: stable build ID: `rp2040`, `rp2350-arm`, `rp2350-riscv`,
-  `stm32g474`, or `mock`.
+  `stm32g474`, `esp32s3`, or `mock`.
 - **Board**: stable physical profile ID such as `pico`, `picow`, `pico2`,
-  `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`, or
-  `nucleo-g474re`.
+  `pico2w`, `pico-rm2`, `rp2040-zero`, `rp2040-plus-4mb`,
+  `nucleo-g474re`, or `waveshare-esp32-s3-zero`.
 - **Board registry**: generated tooling view of `boards/targets/*.json`,
   `boards/profiles/*.json`, and `boards/capabilities.json`.
 - **`JH_TARGET` / `JH_BOARD`**: CMake cache values selected by the dispatcher
@@ -155,11 +156,13 @@ variant after all manifest overlays have been applied.
 | `rp2350-arm` | Cortex-M33 | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
 | `rp2350-riscv` | Hazard3 RISC-V | `pico2` | ELF/BIN/HEX/UF2/MAP | verified CDC to BOOTSEL, or direct BOOTSEL |
 | `stm32g474` | Cortex-M4F | `nucleo-g474re` | ELF/BIN/HEX/MAP | OpenOCD |
+| `esp32s3` | dual-core Xtensa LX7 | `waveshare-esp32-s3-zero` | ELF/MAP plus bootloader, partition-table, and application BIN images | ESP-IDF flash through verified USB Serial/JTAG |
 | `mock` | host | `host-mock` | host executable/library | none |
 
 The board registry validates target compatibility and supplies provider
-platform, physical flash size, GPIO domain, board components, capabilities,
-and upload defaults. Unknown target/board pairs fail before the compiler runs.
+platform, physical flash/PSRAM facts, GPIO domain, board components,
+capabilities, programmer identity, and upload defaults. Unknown target/board
+pairs fail before the compiler runs.
 
 ## Minimal manifest
 
@@ -215,6 +218,23 @@ small overlays:
 
 The resolved registry values always pin the final `JH_TARGET` and `JH_BOARD`.
 
+An ESP32-S3 project uses the smaller provider-specific manifest shape:
+
+```json
+{
+  "project": "my-device",
+  "module": "tracker",
+  "toolchain": "esp-idf",
+  "target": "esp32s3",
+  "board": "waveshare-esp32-s3-zero",
+  "buildDir": "${project}/.build/esp32s3"
+}
+```
+
+The target/board registry adds the runner, artifact manifest, upload strategy,
+required FreeRTOS feature, and exact `303a:1001` programmer identity. Do not
+copy those facts into the project manifest.
+
 ## Adding project source files
 
 The shared CMake project automatically discovers `*.c`, `*.cpp`, `*.h`, and
@@ -257,6 +277,11 @@ Additional shared files can be appended with `JH_EXTRA_SOURCES`:
 
 The dispatcher normalizes and de-duplicates resolved paths.
 
+The ESP-IDF runner discovers C, C++, and assembly sources directly under the
+project directory and recursively below `src/`. Direct runner calls may replace
+discovery with repeatable `--source <relative-path>` arguments. All source
+paths must remain inside the project.
+
 ## Feature and runtime configuration
 
 Project-owned feature flags live in `hal_project_config.h`:
@@ -289,6 +314,13 @@ Omit a feature symbol to disable it. Non-feature tunables such as
 inputs, every `HAL_ENABLE_*` entry must be a standalone simple token separated
 with semicolons. Whitespace does not separate multiple feature definitions,
 and CMake generator expressions are rejected.
+
+The current `esp32s3` descriptor exposes a deliberately narrow released
+allowlist: only target-required `HAL_ENABLE_FREERTOS` is supported. The
+production runner rejects a requested feature or any dependency that resolves
+outside that set with `[JH-CFG-UNSUPPORTED]`. Peripheral modules and
+`HAL_ENABLE_APP_TASK1` are Phase 2 work even though the shared application-entry
+source already contains their future dispatch shape.
 
 For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
 paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal
@@ -358,6 +390,11 @@ no-op after switching between previously configured targets.
 When the requested CMake source directory changes, a stale cache located
 inside the managed artifact root is recreated.
 
+ESP-IDF projects use `buildDir` directly as the IDF build tree; it must remain
+below either the project or JaszczurHAL repository `.build` root. The production
+runner owns the generated project configuration and SDK configuration inside
+that tree and never writes a second board registry.
+
 Generated outputs include:
 
 - resolved board CMake/header/JSON and link-contract translation units;
@@ -365,6 +402,9 @@ Generated outputs include:
   `compile_commands_patched.json` in `buildDir`;
 - `.vscode/c_cpp_properties.json`;
 - ELF/BIN/HEX/UF2/MAP or ELF/BIN/HEX/MAP target artifacts;
+- for ESP-IDF, `jh_esp_idf_artifacts.json`, the application ELF/MAP/BIN,
+  bootloader and partition-table images, `sdkconfig`, build log, generated
+  board/link contracts, toolchain provenance, and the raw compile database;
 - OTA container and merged recovery UF2 when OTA is enabled.
 
 Tracked configuration remains in the manifest and `hal_project_config.h`.
@@ -381,11 +421,22 @@ Tracked configuration remains in the manifest and `hal_project_config.h`.
 `Project: Upload` selects the registry upload strategy. RP targets use
 identity-verified USB CDC followed by BOOTSEL/UF2 when firmware is running; a
 blank board uses `Project: Upload (UF2 / BOOTSEL)`. STM32G474 delegates to the
-OpenOCD upload target.
+OpenOCD upload target. ESP32-S3 performs a validated production build,
+checks every path in the multi-image manifest, and passes the verified serial
+port to the ESP-IDF flash action. Its board profile supplies USB VID/PID
+`303a:1001`; zero, stale, mismatching, or multiple matching devices fail closed.
+`--allow-unverified-port` is an explicit escape hatch and must be paired with
+`--port`.
 
 Upload releases the project's persistent serial monitor and lets it reconnect
 after enumeration. Ambiguous BOOTSEL volumes or serial identities stop the
 action.
+
+For ESP32-S3, `Project: Serial Monitor` follows the single board matching the
+registry programmer identity when no explicit port is pinned. `Project:
+Refresh IntelliSense` consumes the Xtensa compile commands emitted by ESP-IDF
+without substituting an Arm IntelliSense mode. `build-debug` and managed
+Cortex-Debug profiles are not provided for ESP32-S3 in Phase 1.
 
 ## OTA manifest configuration
 

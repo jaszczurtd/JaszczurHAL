@@ -341,9 +341,19 @@
 #error                                                                         \
     "JaszczurHAL: HAL_ENABLE_FREERTOS on STM32G474 requires compiler support for __has_include so the FreeRTOS-Kernel and FreeRTOSConfig.h paths can be validated."
 #endif
+#elif HAL_TARGET_IS_ESP32_FAMILY
+#if defined(__has_include)
+#if !__has_include(<freertos/FreeRTOS.h>)
+#error                                                                         \
+    "JaszczurHAL: ESP32 FreeRTOS requires the ESP-IDF freertos component include path."
+#endif
 #else
 #error                                                                         \
-    "JaszczurHAL: HAL_ENABLE_FREERTOS is supported only for RP targets or HAL_TARGET_STM32G474."
+    "JaszczurHAL: ESP32 FreeRTOS requires compiler support for __has_include."
+#endif
+#else
+#error                                                                         \
+    "JaszczurHAL: HAL_ENABLE_FREERTOS is unsupported for the selected target."
 #endif
 #endif
 

@@ -20,6 +20,27 @@ SPEC.loader.exec_module(cpd)
 
 
 class CpdGateTests(unittest.TestCase):
+    def test_source_scope_excludes_nested_build_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-cpd-scope-") as text:
+            repo = Path(text)
+            owned = repo / "tests/fixture/app.c"
+            generated = repo / "tests/fixture/.build/CMakeCCompilerId.c"
+            owned.parent.mkdir(parents=True)
+            generated.parent.mkdir(parents=True)
+            owned.write_text("int app(void) { return 0; }\n", encoding="utf-8")
+            generated.write_text(
+                "int generated(void) { return 0; }\n", encoding="utf-8"
+            )
+
+            sources = {
+                path.relative_to(repo).as_posix()
+                for path in cpd.collect_sources(
+                    repo, ("tests",), production=False
+                )
+            }
+
+        self.assertEqual({"tests/fixture/app.c"}, sources)
+
     def test_owned_scope_includes_backends_and_excludes_vendored_sources(self) -> None:
         sources = {
             path.relative_to(ROOT).as_posix()

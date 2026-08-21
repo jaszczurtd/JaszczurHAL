@@ -74,6 +74,7 @@ jh_generate_board_config(
     DEFINES ${JH_EXTRA_DEFINES} ${_jh_project_feature_defines}
     REQUESTED_FEATURES ${JH_REQUESTED_FEATURES}
     RESOLVED_FEATURES ${JH_RESOLVED_FEATURES})
+set(JH_RESOLVED_FEATURES ${JH_BOARD_RESOLVED_FEATURES})
 set(JH_BOARD "${JH_RESOLVED_BOARD}" CACHE STRING
     "Resolved physical board profile" FORCE)
 
@@ -233,6 +234,12 @@ elseif(JH_TARGET STREQUAL "stm32g474")
     include("${JH_ROOT}/cmake/targets/stm32g474.cmake")
 elseif(_jh_native_rp)
     include("${JH_ROOT}/cmake/targets/rp-native.cmake")
+elseif(JH_TARGET STREQUAL "esp32s3")
+    message(FATAL_ERROR
+        "JH_TARGET=esp32s3 uses the ESP-IDF pre-project bootstrap. Run "
+        "'scripts/build_esp_idf.py build --project ${JH_PROJECT_DIR} "
+        "--target ${JH_TARGET} --board ${JH_BOARD}' instead of configuring "
+        "cmake/jh_firmware_project directly.")
 else()
     message(FATAL_ERROR
         "Unsupported JH_TARGET='${JH_TARGET}' (expected rp2040, rp2350-arm, "

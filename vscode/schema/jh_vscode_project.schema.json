@@ -71,12 +71,12 @@
     },
     "toolchain": {
       "type": "string",
-      "enum": ["cmake", "custom"]
+      "enum": ["cmake", "esp-idf", "custom"]
     },
     "target": {
       "type": "string",
       "minLength": 1,
-      "description": "Active target family id (e.g. rp2040, rp2350-arm, rp2350-riscv, stm32g474). Absent = rp2040."
+      "description": "Active target family id (e.g. rp2040, rp2350-arm, rp2350-riscv, stm32g474, esp32s3). Absent = rp2040."
     },
     "board": {
       "type": "string",
@@ -125,6 +125,21 @@
         }
       }
     },
+    "espIdf": {
+      "type": "object",
+      "description": "ESP-IDF tooling contract supplied by the target registry.",
+      "additionalProperties": true,
+      "properties": {
+        "runner": {
+          "type": "string",
+          "minLength": 1
+        },
+        "artifactManifest": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "targetProfiles": {
       "type": "object",
       "description": "Per-target overlay manifests, keyed by target id (rp2040, rp2350-arm, stm32g474, ...). Deliberately NOT named 'targets' to avoid colliding with cmake.targets. The active target's overlay is deep-merged over the base manifest during resolution; absent = single implicit native rp2040 profile.",
@@ -134,11 +149,12 @@
         "properties": {
           "toolchain": {
             "type": "string",
-            "enum": ["cmake", "custom"]
+            "enum": ["cmake", "esp-idf", "custom"]
           },
           "buildDir": { "type": "string" },
           "cmakeBuildDir": { "type": "string" },
           "cmake": { "type": "object", "additionalProperties": true },
+          "espIdf": { "type": "object", "additionalProperties": true },
           "upload": { "type": "object", "additionalProperties": true },
           "identity": { "type": "object", "additionalProperties": true },
           "artifacts": { "type": "object", "additionalProperties": true },
@@ -205,12 +221,12 @@
     },
     "upload": {
       "type": "object",
-      "description": "Upload configuration. Stable dispatcher paths cover RP-family UF2/serial-style upload and STM32 OpenOCD; custom/esptool are reserved extension points.",
+      "description": "Upload configuration. Stable dispatcher paths cover RP-family UF2/serial-style upload, STM32 OpenOCD, and ESP-IDF flash.",
       "additionalProperties": true,
       "properties": {
         "strategy": {
           "type": "string",
-          "enum": ["serial", "uf2", "custom", "openocd", "esptool"]
+          "enum": ["serial", "uf2", "custom", "openocd", "esptool", "esp-idf"]
         },
         "port": {
           "type": "string"

@@ -124,6 +124,13 @@ do not add example board profiles or claim physical support for this fixture.
 | `rp2350-riscv` | `pico2` | official Pico SDK + pinned Hazard3 toolchain | ELF, BIN, HEX, UF2, MAP |
 | `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
 
+The `esp32s3` target is intentionally absent from every example
+manifest in Phase 1. Its production build/flash/monitor path and generated
+target/board/memory contract are covered by
+`tests/hardware/esp32s3_phase1`. Add ESP32-S3 example targets only with the
+Phase 2 peripheral backends required by those applications; do not claim
+portable example support from the build plumbing alone.
+
 ## Requirements
 
 - CMake 3.20 or newer for dispatcher-backed firmware builds;

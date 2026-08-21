@@ -1237,6 +1237,58 @@ def resolve_feature_requests(
     return FeatureResolution(requested, resolved, provenance), findings
 
 
+def resolve_target_feature_requests(
+    requests: list[FeatureRequest],
+    model: FeatureModel,
+    context: str,
+    target: str | None,
+    target_descriptor: dict[str, Any] | None,
+) -> tuple[FeatureResolution, list[str]]:
+    """Resolve explicit requests together with target-mandated features."""
+    if target is None or target_descriptor is None:
+        return resolve_feature_requests(requests, model, context)
+
+    explicit_symbols = {request.symbol for request in requests}
+    required_features = target_descriptor.get("requiredFeatures", [])
+    required_requests: list[FeatureRequest] = []
+    findings: list[str] = []
+    for index, raw_feature in enumerate(required_features):
+        symbol = str(raw_feature).removesuffix("=1")
+        source = f"target:{target}:requiredFeatures[{index}]"
+        disabled = symbol.replace("HAL_ENABLE_", "HAL_DISABLE_", 1)
+        if disabled in explicit_symbols:
+            findings.append(
+                f"{context}: [JH-CFG-TARGET-REQUIRED] {target} requires "
+                f"{symbol}; {disabled} cannot be requested"
+            )
+        if symbol not in explicit_symbols:
+            required_requests.append(FeatureRequest(symbol, "1", source))
+
+    resolution, resolution_findings = resolve_feature_requests(
+        [*requests, *required_requests], model, context
+    )
+    findings.extend(resolution_findings)
+    provenance = dict(resolution.provenance)
+    for index, raw_feature in enumerate(required_features):
+        symbol = str(raw_feature).removesuffix("=1")
+        source = f"target:{target}:requiredFeatures[{index}]"
+        provenance[symbol] = tuple(
+            sorted({*provenance.get(symbol, ()), source})
+        )
+    return (
+        FeatureResolution(
+            tuple(
+                symbol
+                for symbol in resolution.requested
+                if symbol in explicit_symbols
+            ),
+            resolution.resolved,
+            provenance,
+        ),
+        findings,
+    )
+
+
 def resolved_features_digest(features: Iterable[str]) -> str:
     normalized = "\n".join(sorted(features))
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
@@ -1309,6 +1361,7 @@ def lint_effective_inputs(
             project / "hal_project_config.h", header_display
         )
         for target, board, variant_id in effective_axes(document):
+            target_descriptor = None
             if target is not None:
                 target_descriptor = target_registry.get(target)
                 if not isinstance(target_descriptor, dict):
@@ -1359,10 +1412,12 @@ def lint_effective_inputs(
                 variant_id,
             )
             findings.extend(cache_findings)
-            resolution, resolution_findings = resolve_feature_requests(
+            resolution, resolution_findings = resolve_target_feature_requests(
                 [*header_requests, *cache_requests],
                 model,
                 f"{project_display} [{axis}]",
+                active_target,
+                target_descriptor,
             )
             findings.extend(resolution_findings)
             records.append(

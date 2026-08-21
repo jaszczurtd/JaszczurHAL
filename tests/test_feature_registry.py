@@ -38,6 +38,7 @@ ROOT = ARGS.root.resolve()
 GENERATOR = ROOT / "scripts/generate_hal_features.py"
 CONFIG = ROOT / "config"
 TEST_ROOT = ROOT / ".build/tests/feature-registry"
+ESP_IDF_FAKE_INCLUDE = TEST_ROOT / "esp-idf-include"
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_hal_features  # noqa: E402
 
@@ -201,8 +202,16 @@ def preprocess_feature_set(
         "rp2350-arm": "HAL_TARGET_RP2350_ARM",
         "rp2350-riscv": "HAL_TARGET_RP2350_RISCV",
         "stm32g474": "HAL_TARGET_STM32G474",
+        "esp32s3": "HAL_TARGET_ESP32_S3",
     }
     target_macro = target_macros.get(target, "HAL_TARGET_MOCK")
+    compile_features = set(features)
+    if target is not None:
+        target_descriptor = load(ROOT / f"boards/targets/{target}.json")
+        compile_features.update(
+            item.removesuffix("=1")
+            for item in target_descriptor.get("requiredFeatures", [])
+        )
     board_macro: str | None = None
     board_defines: list[str] = []
     if board is not None:
@@ -236,13 +245,13 @@ def preprocess_feature_set(
         f"#define {target_macro} 1",
         *(
             ["#define __FREERTOS 1"]
-            if "HAL_ENABLE_FREERTOS" in features
+            if "HAL_ENABLE_FREERTOS" in compile_features
             and target in {"rp2040", "rp2350-arm", "rp2350-riscv"}
             else []
         ),
         *([f"#define {board_macro} 1"] if board_macro else []),
         *(f"#define {definition.replace('=', ' ', 1)}" for definition in board_defines),
-        *(f"#define {feature} 1" for feature in features),
+        *(f"#define {feature} 1" for feature in sorted(compile_features)),
         f'#include "{header}"',
         "",
     ]
@@ -262,6 +271,8 @@ def preprocess_feature_set(
             str(ROOT / "src/hal/impl/rp2040/freertos"),
             "-I",
             str(ROOT / "src/hal/impl/stm32g474/freertos"),
+            "-I",
+            str(ESP_IDF_FAKE_INCLUDE),
             "-",
         ],
         input="\n".join(source),
@@ -673,6 +684,10 @@ def preprocess_generated_header(
 if TEST_ROOT.exists():
     shutil.rmtree(TEST_ROOT)
 TEST_ROOT.mkdir(parents=True)
+(ESP_IDF_FAKE_INCLUDE / "freertos").mkdir(parents=True)
+(ESP_IDF_FAKE_INCLUDE / "freertos/FreeRTOS.h").write_text(
+    "#pragma once\n", encoding="utf-8"
+)
 
 model = generate_hal_features.load_registry(CONFIG)
 require(len(model.features) == 103, "feature registry symbol count drifted")
@@ -771,8 +786,8 @@ for facade in facade_provider_checks:
     )
 require(
     len(re.findall(r"^#error(?:\s|$)", hal_config_text, flags=re.MULTILINE))
-    == 58,
-    "hal_config.h retained validation inventory drifted from 58 #error checks",
+    == 60,
+    "hal_config.h retained validation inventory drifted from 60 #error checks",
 )
 
 checked = run_generator("--check")
@@ -1279,6 +1294,80 @@ run_generator(
 require(
     effective_report_path.read_bytes() == second_effective_report.read_bytes(),
     "effective resolution JSON is nondeterministic",
+)
+
+target_required_consumer = TEST_ROOT / "effective-target-required"
+(target_required_consumer / ".vscode").mkdir(parents=True)
+(target_required_consumer / ".vscode/jaszczurhal.project.json").write_text(
+    json.dumps(
+        {"target": "esp32s3", "board": "waveshare-esp32-s3-zero"}
+    )
+    + "\n",
+    encoding="utf-8",
+)
+target_required_report_path = TEST_ROOT / "effective-target-required.json"
+run_generator(
+    "--lint",
+    "--effective",
+    "--input-root",
+    str(target_required_consumer),
+    "--resolution-output",
+    str(target_required_report_path),
+)
+target_required_record = load(target_required_report_path)["configurations"][0]
+require(
+    target_required_record["requestedFeatures"] == [],
+    "a target-required feature leaked into explicit requested features",
+)
+require(
+    target_required_record["resolvedFeatures"] == ["HAL_ENABLE_FREERTOS"],
+    "a target-required feature was not merged into effective resolution",
+)
+require(
+    target_required_record["provenance"]["HAL_ENABLE_FREERTOS"]
+    == ["target:esp32s3:requiredFeatures[0]"],
+    "target-required feature provenance is missing",
+)
+(target_required_consumer / "hal_project_config.h").write_text(
+    "#define HAL_ENABLE_FREERTOS\n", encoding="utf-8"
+)
+explicit_target_report_path = TEST_ROOT / "effective-target-explicit.json"
+run_generator(
+    "--lint",
+    "--effective",
+    "--input-root",
+    str(target_required_consumer),
+    "--resolution-output",
+    str(explicit_target_report_path),
+)
+explicit_target_record = load(explicit_target_report_path)["configurations"][0]
+require(
+    explicit_target_record["requestedFeatures"] == ["HAL_ENABLE_FREERTOS"],
+    "an explicit target-required feature was removed from requested features",
+)
+require(
+    explicit_target_record["provenance"]["HAL_ENABLE_FREERTOS"]
+    == [
+        "hal_project_config.h:1",
+        "target:esp32s3:requiredFeatures[0]",
+    ],
+    "explicit target-required feature provenance is incomplete",
+)
+(target_required_consumer / "hal_project_config.h").write_text(
+    "#define HAL_DISABLE_FREERTOS\n", encoding="utf-8"
+)
+disabled_target_required = run_generator(
+    "--lint",
+    "--effective",
+    "--input-root",
+    str(target_required_consumer),
+    expected_success=False,
+)
+require(
+    "[JH-CFG-TARGET-REQUIRED] esp32s3 requires HAL_ENABLE_FREERTOS; "
+    "HAL_DISABLE_FREERTOS cannot be requested"
+    in disabled_target_required.stderr,
+    "a disabled target-required feature was not rejected",
 )
 
 local_only_consumer = TEST_ROOT / "effective-local-state"

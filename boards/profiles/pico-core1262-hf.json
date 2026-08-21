@@ -21,7 +21,7 @@
     },
     "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": true } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": true } },
   "devices": {
     "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" },
     "loraRadio": {

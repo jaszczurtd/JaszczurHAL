@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 
 
 SOURCE_EXTENSIONS = frozenset({".c", ".cc", ".cpp", ".cxx"})
+IGNORED_PATH_PARTS = frozenset({".build"})
 MINIMUM_TOKENS = 100
 COVERAGE_SCOPE_ORDER = (
     "mock",
@@ -80,6 +81,10 @@ def _is_production_excluded(relative: str) -> bool:
     )
 
 
+def _is_generated_build_artifact(relative: str) -> bool:
+    return any(part in IGNORED_PATH_PARTS for part in Path(relative).parts)
+
+
 def collect_sources(
     repo_root: Path, roots: tuple[str, ...], *, production: bool
 ) -> list[Path]:
@@ -92,6 +97,8 @@ def collect_sources(
             if not path.is_file() or path.suffix.lower() not in SOURCE_EXTENSIONS:
                 continue
             relative = _relative_text(path, repo_root)
+            if _is_generated_build_artifact(relative):
+                continue
             if production and _is_production_excluded(relative):
                 continue
             sources.append(path.resolve())

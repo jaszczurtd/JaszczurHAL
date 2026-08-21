@@ -54,7 +54,7 @@
       "paths": ["third_party/esp-idf", "third_party/esp_idf_version.conf"],
       "upstream": "https://github.com/espressif/esp-idf",
       "feature_flags": [],
-      "notes": "Exact official ESP-IDF release for native ESP32-family targets. The checkout is opt-in until the first ESP target lands; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+      "notes": "Exact official ESP-IDF release used by the experimental native ESP32-S3 target. The checkout remains fetched on demand; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
     },
     {
       "name": "BTstack",

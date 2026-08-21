@@ -2,13 +2,15 @@
 #include "esp_err.h"
 #include "esp_idf_version.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "hal/core/jh_handle_pool.h"
-#include "jh_esp_idf_phase0_config.h"
+#include "jh_board_config.h"
 #include "jh_link_contract.h"
 
 static const char *TAG = "jh_phase0";
 
-void app_main(void) {
+void app_start(void) {
   esp_chip_info_t chip_info;
   jh_handle_pool_t pool;
   jh_handle_slot_t slots[1];
@@ -31,6 +33,8 @@ void app_main(void) {
   ESP_LOGI(TAG,
            "JaszczurHAL component handoff for %s, ESP-IDF %s, %u core(s), "
            "silicon revision %u",
-           JH_ESP_IDF_PHASE0_TARGET, esp_get_idf_version(),
+           HAL_TARGET_DESCRIPTOR_ID, esp_get_idf_version(),
            (unsigned int)chip_info.cores, (unsigned int)chip_info.revision);
 }
+
+void app_task0(void) { vTaskDelay(pdMS_TO_TICKS(1000)); }

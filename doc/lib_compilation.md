@@ -7,13 +7,15 @@
 ./scripts/build_rp_native_lib.sh --target rp2350-arm
 ./scripts/build_rp_native_lib.sh --target rp2350-riscv
 ./scripts/build_stm32_lib.sh
+python3 scripts/build_esp_idf.py build \
+  --project tests/hardware/esp32s3_phase1 --clean
 ```
 
 > **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
 
-JaszczurHAL uses CMake for host tests and for every supported embedded target.
-Embedded builds select a target and a physical board from the declarative
-registry described in
+JaszczurHAL uses CMake for host, RP, and STM32 builds. The ESP32-S3 path invokes
+the pinned ESP-IDF build system through a controlled Python runner. Embedded
+builds select a target and a physical board from the declarative registry described in
 [Target and board profiles](boards_profiles_howto.md).
 
 | Target | Default board | Build entry | Backend selector |
@@ -23,6 +25,7 @@ registry described in
 | RP2350 ARM | `pico2` | `rp_native_lib/` | `HAL_TARGET_RP2350_ARM` |
 | RP2350 RISC-V | `pico2` | `rp_native_lib/` | `HAL_TARGET_RP2350_RISCV` |
 | STM32G474 | `nucleo-g474re` | `stm32_lib/` | `HAL_TARGET_STM32G474` |
+| ESP32-S3 | `waveshare-esp32-s3-zero` | controlled ESP-IDF component build | `HAL_TARGET_ESP32_S3` |
 
 Repository-produced artifacts stay below `.build/`. The helper scripts reject
 an output path outside this directory.
@@ -38,6 +41,7 @@ detection:
 #define HAL_TARGET_RP2350_ARM
 #define HAL_TARGET_RP2350_RISCV
 #define HAL_TARGET_STM32G474
+#define HAL_TARGET_ESP32_S3
 #define HAL_TARGET_MOCK
 ```
 
@@ -62,6 +66,10 @@ Production feature resolution distinguishes:
   and `hal_project_config.h`;
 - `resolvedFeatures`: the sorted transitive registry closure used for source,
   dependency, and link-contract selection.
+
+An exact target may add a required feature. ESP32-S3 always adds
+`HAL_ENABLE_FREERTOS` with target provenance because ESP-IDF starts its
+scheduler before `app_main()`.
 
 The resolved board JSON stores both sets and their full closure digest. Its
 `features` field remains as an alias of `resolvedFeatures`. The 12-character
@@ -356,6 +364,55 @@ live when `--gc-sections` is enabled; a missing or mismatched archive therefore
 still fails with the expected undefined contract symbol. See
 [STM32G474 memory map](../stm32_lib/MEMORY_MAP.md) for flash, SRAM, persistent
 storage, and OTA reservations.
+
+## ESP32-S3 with ESP-IDF
+
+The ESP32-S3 build is a firmware-project flow, not an installed
+`libJaszczurHAL.a` package. The production entrypoint is
+`scripts/build_esp_idf.py`; it accepts `build`, `artifacts`, and `flash`:
+
+```bash
+# Clean build using the target's default board.
+python3 scripts/build_esp_idf.py build \
+  --project tests/hardware/esp32s3_phase1 \
+  --target esp32s3 --board waveshare-esp32-s3-zero --clean
+
+# Revalidate an existing build without compiling.
+python3 scripts/build_esp_idf.py artifacts \
+  --project tests/hardware/esp32s3_phase1 \
+  --target esp32s3 --board waveshare-esp32-s3-zero
+
+# Revalidate, then flash all images at their manifest offsets.
+python3 scripts/build_esp_idf.py flash \
+  --project tests/hardware/esp32s3_phase1 \
+  --target esp32s3 --board waveshare-esp32-s3-zero \
+  --port /dev/serial/by-id/<Espressif-USB-Serial-JTAG-device>
+```
+
+The default build directory is
+`<project>/.build/esp-idf/esp32s3/waveshare-esp32-s3-zero/`. `--output` may
+select another location below the project or repository `.build` root.
+Repeatable `--source` arguments replace automatic discovery; without them, the
+runner includes supported source files in the project root and recursively
+under `src/`. Repeatable `--feature` and `--define` arguments extend project
+configuration. `--idf-dir` or `JH_ESP_IDF_DIR` selects an externally managed
+checkout only after its exact pin and tools pass verification.
+
+The runner generates board-derived flash/PSRAM `sdkconfig` defaults, builds the
+project sources with a small JaszczurHAL integration component, and validates
+the result before publishing `jh_esp_idf_artifacts.json`. The manifest contains
+relative paths for the ELF, MAP, application BIN, bootloader, partition table,
+compile database, generated board/link contracts, and logs. Its ordered
+`flashImages` retain each offset, size, and SHA-256. Configuration provenance
+includes the final `sdkconfig` digest and selected partition profile; toolchain
+provenance includes the pinned ESP-IDF version/commit, actual compiler, CMake,
+Ninja, IDF Python and esptool versions, and the ESP-IDF `tools.json` digest.
+
+The current target supports only its required `HAL_ENABLE_FREERTOS` feature.
+Other requested or transitively resolved `HAL_ENABLE_*` features fail with
+`[JH-CFG-UNSUPPORTED]`; portable ESP32 peripheral backends are Phase 2 work.
+`scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the
+isolated Phase 0 fixture.
 
 ## Repository workspace and VS Code
 

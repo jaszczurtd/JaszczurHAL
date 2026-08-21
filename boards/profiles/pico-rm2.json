@@ -21,7 +21,7 @@
     },
     "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": true }, "sx1262-radio": { "present": false } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": true }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": true }, "bluetooth-controller": { "present": true }, "sx1262-radio": { "present": false } },
   "devices": { "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" } },
   "peripherals": { "defaultsSource": "pico-sdk" },
   "components": { "cyw43-pico-pio": { "mode": "board-owned" }, "cyw43-lwip": { "mode": "feature-gated" }, "btstack-ble": { "mode": "feature-gated" } }

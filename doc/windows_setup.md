@@ -8,6 +8,9 @@ The supported host floor is Windows 10 1809 (build 17763), AMD64. Git for
 Windows and VS Code must already be installed so the repository can be checked
 out and opened. The bootstrap manages Python, CMake, Ninja, GNU Arm Embedded,
 GNU RISC-V, OpenOCD, picotool, pyserial, and the pinned source dependencies.
+The ESP32-S3 runner additionally prepares the pinned ESP-IDF
+checkout and its official target tools on first use; they are cached under
+`third_party\esp-idf` and `%USERPROFILE%\.espressif`.
 The GNU Arm completeness check includes GDB, and OpenOCD reuse requires the
 CMSIS-DAP, ST-Link, RP2040, RP2350, and STM32G4 scripts used by generated
 debug configurations.
@@ -198,6 +201,35 @@ if configuration or compilation fails, a previous target image cannot remain
 available for a later upload. `clean` removes both managed locations after
 applying the normal path-safety checks.
 
+ESP-IDF projects use their declared `buildDir` directly instead of the short
+CMake cache root. The production runner still enforces that the directory is
+below a project or repository `.build` root. It records only relative paths in
+`jh_esp_idf_artifacts.json`, so the manifest and selected bootloader,
+partition-table, application, log, and configuration artifacts can be uploaded
+from Windows CI without embedding a runner-specific absolute path.
+
+For the Phase 1 ESP32-S3 fixture, use native PowerShell and a COM port reported
+by the board's USB Serial/JTAG interface:
+
+```powershell
+.\vscode\entry\jh-vscode.cmd list-ports `
+  --project .\tests\hardware\esp32s3_phase1 --json
+.\vscode\entry\jh-vscode.cmd build `
+  --project .\tests\hardware\esp32s3_phase1
+.\vscode\entry\jh-vscode.cmd upload `
+  --project .\tests\hardware\esp32s3_phase1 --port COM7
+.\vscode\entry\jh-vscode.cmd monitor `
+  --project .\tests\hardware\esp32s3_phase1 --port COM7 `
+  --lock-policy replace-own
+```
+
+The selected COM record must match the board registry's `303a:1001` programmer
+identity. A stale port, mismatching VID/PID, or several auto-detected matches is
+rejected. Upload cooperatively releases a JaszczurHAL-owned monitor and allows
+it to reconnect after ESP-IDF resets the board. `--allow-unverified-port` is an
+explicit escape hatch for a deliberately selected `--port`; generated tasks do
+not use it. ESP32-S3 Debug builds and Cortex-Debug profiles are outside Phase 1.
+
 GitHub Actions builds a generated consumer project from a path containing
 spaces for RP2040, RP2350 ARM, RP2350 RISC-V, and STM32G474 on native Windows.
 The gate checks Ninja configuration, the target static library where
@@ -209,6 +241,11 @@ with `/W4 /permissive- /WX`. The full BSD adapter exports POSIX symbol names
 and remains a firmware/Linux-host test instead of pretending to implement the
 different Winsock ABI. The native BearSSL integration also remains Linux-only
 because its harness and transport use Bash and POSIX sockets.
+
+The existing `windows-tooling` job also caches the pinned ESP-IDF checkout and
+official tools, performs a clean production build of the ESP32-S3 Phase 1
+fixture, and uploads its relocatable manifest, build log, bootloader,
+partition-table, and application images.
 
 No Windows static-analysis profile is declared by this checkout. The current
 managed Windows tool set and this host provide neither `clang-tidy` nor
@@ -240,6 +277,10 @@ Common failure paths are:
   or `jh-vscode.cmd list-ports --project <path>` and inspect the reported
   identity and monitor-owner PID. The upload handoff closes only a verified
   JaszczurHAL monitor; close unrelated terminal programs manually.
+- An ESP32-S3 COM port is rejected as unverified. Confirm that Device Manager
+  or `list-ports --json` reports USB VID/PID `303a:1001` for the selected port;
+  disconnect duplicate matching boards or pass the intended verified COM port
+  explicitly.
 - More than one BOOTSEL device is visible. Disconnect the extra board or pass
   the intended drive root/volume GUID with `--bootsel-volume`; the runtime
   still verifies its label and FAT filesystem.
@@ -262,9 +303,10 @@ trial/rollback diagnostics are in [Native RP OTA Workflow](OTAWorkflow.md).
 ## Current support boundary
 
 The native launcher, shared build runtime, generated VS Code task override,
-line-ending policy, component manager, host bootstrap, four-family firmware
-matrix, COM/BOOTSEL upload paths, OTA firewall backend, debug-tool discovery,
-portable socket-header gate, and Windows CI are available. Full POSIX socket,
+line-ending policy, component manager, host bootstrap, four-family CMake
+firmware matrix, COM/BOOTSEL upload paths, OTA firewall backend, debug-tool
+discovery, portable socket-header gate, production ESP32-S3 ESP-IDF
+build/flash/monitor, and Windows CI are available. Full POSIX socket,
 FreeRTOS POSIX, and Bash-driven BearSSL integration tests remain explicitly
 Linux-only. The native Windows OTA callback, trial confirmation, and automatic
 rollback have been validated on Pico 2 W over a trusted `Private` LAN. OTA

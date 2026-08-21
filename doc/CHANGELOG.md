@@ -4,15 +4,31 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added the exact `esp32s3` target and Waveshare ESP32-S3-Zero
+  SKU 25081 board profile. The generated contract now carries ESP-IDF target,
+  4 MiB flash, 2 MiB Quad PSRAM, pin-trait, native WiFi/Bluetooth/USB,
+  `303a:1001` USB Serial/JTAG programming, and target-required FreeRTOS facts
+  with provenance. The controlled minimal ESP-IDF component builds the
+  portable `app_start()`/`app_task0()` entry and validates the final
+  `sdkconfig` against the generated target/board contract. The released target
+  allowlist rejects optional peripheral features until their ESP backends land.
 - Pinned ESP-IDF v6.0.2 at its exact release commit and added opt-in,
   recursive-submodule-aware SDK and `esp32s3` toolchain installation, SBOM
-  provenance, and a cross-platform Phase 0 `app_main()` build and flash-artifact
-  verification spike for the upcoming native ESP32-S3 target. The spike now
-  discovers a controlled `jaszczurhal` ESP-IDF component, compiles an existing
-  shared C++ source, consumes a generated per-build include/link contract, and
-  verifies the integration sources and component graph in ESP-IDF metadata.
-  Linux and Windows builds are verified; the component recipe normalizes the
-  generated contract directory before ESP-IDF serializes its source list.
+  provenance, and the production `build_esp_idf.py` project runner for build,
+  artifact validation, and flash. Its relocatable manifest retains the complete
+  image/offset/hash set, partition and `sdkconfig` provenance, generated
+  board/link contracts, and actual compiler/CMake/Ninja/Python/esptool tool
+  versions. The former Phase 0 command is now a thin compatibility wrapper.
+- Added ESP-IDF support to `jh-vscode` for build, identity-verified upload,
+  persistent monitor handoff/reconnect, and Xtensa compile-database
+  IntelliSense. Linux and native Windows CI cache the pinned SDK/tools, perform
+  a clean production ESP32-S3 build, and upload the manifest, log, bootloader,
+  partition table, and application image. The Phase 1 hardware fixture checks
+  chip/core/flash/PSRAM facts and a repeated `app_task0()` heartbeat. Physical
+  closure on the Waveshare board completed three full three-image uploads,
+  matched the exact S3/two-core/4 MiB flash/initialized 2 MiB Quad PSRAM
+  contract, and verified monitor release/reconnect across reset. Peripheral HAL
+  validation remains Phase 2.
 - Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
   monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
   persistence after validated NTP synchronization.

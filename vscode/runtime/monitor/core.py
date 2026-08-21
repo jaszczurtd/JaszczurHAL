@@ -60,6 +60,7 @@ NC = "\033[0m"
 
 PICO_USB_IDS = {"2e8a:000a", "2e8a:f00a", "2e8a:000f", "2e8a:f00f", "2e8a:0003", "2e8a:1020", "2e8a:103a"}
 DEBUG_PROBE_IDS = {"2e8a:000c", "2e8a:0004"}
+ESPRESSIF_USB_VENDOR_ID = "303a:"
 RELEASE_FOR_UPLOAD = False
 
 
@@ -91,6 +92,8 @@ def classify_port(port_info) -> str:
         return "probe"
     if uid in PICO_USB_IDS or (uid is not None and uid.startswith("2e8a:")):
         return "pico"
+    if uid is not None and uid.startswith(ESPRESSIF_USB_VENDOR_ID):
+        return "esp"
     return "other"
 
 
@@ -499,7 +502,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("port", nargs="?", default="", help="Explicit serial port.")
     parser.add_argument("--project", default="", help="Firmware module directory.")
     parser.add_argument("-b", "--baud", type=int, default=115200, help="Baud rate.")
-    parser.add_argument("-m", "--mode", choices=["pico", "probe", "any"], default="pico")
+    parser.add_argument(
+        "-m",
+        "--mode",
+        choices=["pico", "probe", "esp", "any"],
+        default="pico",
+    )
     parser.add_argument("--lock-policy", choices=["wait", "replace-own", "replace-any"], default="wait")
     parser.add_argument(
         "--follow-identity",

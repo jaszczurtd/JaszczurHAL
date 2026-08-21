@@ -18,6 +18,7 @@ document and the code disagree.
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, CPD, target builds, and example builds. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
+| Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board contract; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
@@ -92,8 +93,8 @@ a standalone setup diagnostic.
 ### `third_party/update_components.sh`
 
 The normal dependency-management entrypoint. It is a compatibility launcher
-for `scripts/component_manager.py all`, which processes all fifteen components
-in dependency order:
+for `scripts/component_manager.py all`, which processes fifteen baseline
+components in dependency order:
 
 1. BearSSL
 2. cJSON
@@ -111,6 +112,11 @@ in dependency order:
 14. picotool
 15. RISC-V toolchain
 
+ESP-IDF is the sixteenth managed component but remains opt-in because its
+checkout, recursive submodules, and target tools are large. The production
+ESP-IDF runner prepares it on first use; focused setup is available through
+`scripts/ensure_esp_idf.sh --enable` or `JH_ENABLE_ESP_IDF=1`.
+
 Normal mode makes each managed installation match its tracked configuration.
 `--verify-only` performs no fetch, extraction, checkout replacement, or build.
 picotool verification includes its required commands and the USB/signing
@@ -121,7 +127,7 @@ directory contract.
 ### `runalltests.sh`
 
 The complete local quality gate. `-j N`, `--jobs N`, and `-jN` select build
-parallelism. The seven gates are:
+parallelism. The eight gates are:
 
 1. required tools and managed-component verification;
 2. host tests, including the optional FreeRTOS POSIX suite;
@@ -129,8 +135,10 @@ parallelism. The seven gates are:
 4. cppcheck;
 5. clang-tidy for host/shared code and the STM32 backend, using both the
    `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
-6. STM32, RP2040/RP2350, native FreeRTOS, and RP feature-profile builds;
-7. every declared RP example, native parity fixture builds, and STM32
+6. PMD CPD duplicate detection across owned C/C++ implementations;
+7. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
+   ESP32-S3/ESP-IDF builds with artifact validation;
+8. every declared RP example, native parity fixture builds, and STM32
    examples.
 
 The script removes only its managed `.build/gate`, `.build/examples`, and
@@ -197,6 +205,39 @@ Default output:
 `ensure_freertos_kernel.sh` before CMake configuration. Important options are
 `--project-config`, repeatable `-D`, `--freertos`, `--freertos-kernel`,
 `--output`, `--toolchain`, `--clean`, and `--jobs`.
+
+### `scripts/build_esp_idf.py`
+
+Production project runner for targets whose board descriptor selects the
+`esp-idf` provider. It exposes three actions:
+
+| Action | Behavior |
+|---|---|
+| `build` | Optionally removes the selected output with `--clean`, generates project/board/SDK inputs, builds with the pinned ESP-IDF, captures toolchain provenance, and validates artifacts. |
+| `artifacts` | Revalidates an existing build and rewrites the deterministic `jh_esp_idf_artifacts.json` manifest without invoking the compiler. |
+| `flash` | Revalidates the existing build, requires `--port`, and invokes ESP-IDF flash with the complete image/offset set before validating the flash log and manifest again. |
+
+`--project` is required. `--target` defaults to `esp32s3`; its target descriptor
+selects `waveshare-esp32-s3-zero` when `--board` is omitted. `--output` must
+remain below either the project or repository `.build` root. Repeatable
+`--source` arguments replace automatic discovery; otherwise the runner includes
+supported files in the project root and recursively under `src/`. Repeatable
+`--feature` and `--define` arguments extend the project configuration.
+`--idf-dir` or `JH_ESP_IDF_DIR` selects an exact compatible external checkout.
+
+The runner consumes `boards/` and the feature registry directly. Target-
+required features participate in the resolved set, while requested or
+transitive features outside `supportedFeatures` fail with
+`[JH-CFG-UNSUPPORTED]`. The current ESP32-S3 allowlist contains only required
+FreeRTOS. It also owns `HAL_PROVIDE_APP_ENTRY`, the exact target/board
+selectors, generated `sdkconfig` defaults, and the controlled component graph.
+
+The output manifest uses only build-relative paths. It records ordered flash
+images and hashes; build artifacts; target, board, feature, partition, and
+`sdkconfig` facts; the ESP-IDF version/commit; actual compiler, CMake, Ninja,
+IDF Python and esptool versions; and the pinned `tools.json` digest.
+`scripts/build_esp_idf_phase0.py` is a compatibility wrapper that supplies the
+old fixture arguments to this production runner.
 
 ### `scripts/build_rp_native_parity_fixtures.sh`
 
@@ -398,8 +439,8 @@ projects, and `--verbose` records invoked commands in managed per-example logs
 below `.build/examples`.
 
 The Python registry is the source used by `generate`; the generated manifests
-are the source consumed by `build`. The full matrix is 104 configurations; the
-default `--gate` matrix is 56 configurations (29 RP2040 and 27 STM32G474).
+are the source consumed by `build`. The full matrix is 114 configurations; the
+default `--gate` matrix is 62 configurations (32 RP2040 and 30 STM32G474).
 RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 
@@ -463,9 +504,11 @@ The generated C header is included by `hal_config.h` and expands every
 target-independent transitive implication. Its generated `HAL_CONFIG_VERBOSE`
 section reports every active registered feature after the remaining
 configuration rules run. The generated CMake resolver supplies the same
-closure to RP and STM32G474 source and dependency selection. Board generation
-uses the resolved set for `featureHash` and the link contract, while retaining
-the direct set as `requestedFeatures`. `jh-vscode` resolves the registry after
+closure to RP and STM32G474 source and dependency selection. The ESP-IDF runner
+also resolves that closure, then enforces the target's `supportedFeatures`
+allowlist before its controlled minimal component graph is configured. Board
+generation uses the resolved set for `featureHash` and the link contract, while
+retaining the direct set as `requestedFeatures`. `jh-vscode` resolves the registry after
 manifest profile and variant overlays, exposes the result through
 `featureResolution`, and uses the resolved set for preflight and OTA decisions
 while passing direct requests to CMake.

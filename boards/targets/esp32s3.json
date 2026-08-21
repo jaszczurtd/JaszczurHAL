@@ -1,0 +1,47 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "target",
+  "id": "esp32s3",
+  "displayName": "Espressif ESP32-S3",
+  "description": "Dual-core Xtensa LX7 target built with the pinned ESP-IDF.",
+  "status": "experimental",
+  "architecture": {
+    "vendor": "espressif",
+    "family": "esp32",
+    "soc": "esp32s3",
+    "isa": "xtensa-lx7",
+    "cores": 2,
+    "mcuName": "ESP32-S3",
+    "mcuSubtype": "ESP32-S3",
+    "cpuArchName": "Xtensa LX7",
+    "hasFpu": true,
+    "backendName": "esp-idf"
+  },
+  "hal": { "targetSelector": "HAL_TARGET_ESP32_S3" },
+  "build": { "provider": "esp-idf", "recipe": "esp-idf-native", "idfTarget": "esp32s3" },
+  "gpio": {
+    "pinIdFormat": "integer",
+    "validPins": { "ranges": [{ "first": 0, "last": 21 }, { "first": 26, "last": 48 }] },
+    "halEncoding": { "kind": "identity-u8" },
+    "traits": {
+      "adc": { "ranges": [{ "first": 1, "last": 20 }] },
+      "input-only": { "values": [46] },
+      "rtc": { "ranges": [{ "first": 0, "last": 21 }] },
+      "strapping": { "values": [0, 3, 45, 46] },
+      "touch": { "ranges": [{ "first": 1, "last": 14 }] },
+      "usb": { "values": [19, 20] }
+    }
+  },
+  "memory": {
+    "regions": {
+      "internal-sram": { "kind": "ram", "sizeBytes": 524288, "dmaCapable": true }
+    },
+    "ramUsableBytes": 524288,
+    "externalRam": { "interfaces": ["quad", "octal"], "maxBytes": 33554432 }
+  },
+  "defaultBoard": "waveshare-esp32-s3-zero",
+  "components": { "esp-idf-native": { "mode": "required" } },
+  "requiredFeatures": ["HAL_ENABLE_FREERTOS"],
+  "supportedFeatures": ["HAL_ENABLE_FREERTOS"]
+}

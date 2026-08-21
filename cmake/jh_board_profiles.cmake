@@ -119,15 +119,21 @@ function(jh_generate_board_config)
 
     include("${JH_BOARD_OUTPUT_DIR}/jh_board_config.cmake")
     if(NOT "${JH_BOARD_REQUESTED_FEATURES}" STREQUAL
-       "${_jh_board_requested}" OR
-       NOT "${JH_BOARD_RESOLVED_FEATURES}" STREQUAL
-       "${_jh_board_resolved}")
+       "${_jh_board_requested}")
         message(FATAL_ERROR
             "Board generator feature resolution differs from CMake: "
             "requested '${JH_BOARD_REQUESTED_FEATURES}' vs "
-            "'${_jh_board_requested}', resolved "
-            "'${JH_BOARD_RESOLVED_FEATURES}' vs '${_jh_board_resolved}'")
+            "'${_jh_board_requested}'")
     endif()
+    foreach(_jh_expected_feature IN LISTS _jh_board_resolved)
+        list(FIND JH_BOARD_RESOLVED_FEATURES "${_jh_expected_feature}"
+            _jh_generated_feature_index)
+        if(_jh_generated_feature_index EQUAL -1)
+            message(FATAL_ERROR
+                "Board generator omitted resolved feature "
+                "'${_jh_expected_feature}'")
+        endif()
+    endforeach()
     file(GLOB _jh_board_descriptors CONFIGURE_DEPENDS
         "${JH_BOARD_ROOT}/boards/targets/*.json"
         "${JH_BOARD_ROOT}/boards/profiles/*.json")
@@ -155,6 +161,7 @@ function(jh_generate_board_config)
         JH_BOARD_RESOLVED_FEATURES_DIGEST
         JH_BOARD_FEATURE_HASH
         JH_BOARD_CONTRACT_SYMBOL
+        IDF_TARGET
         PICO_PLATFORM
         PICO_BOARD)
         if(DEFINED ${_variable})

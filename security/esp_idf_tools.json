@@ -1,0 +1,180 @@
+{
+  "schemaVersion": 2,
+  "espIdf": {
+    "version": "6.0.2",
+    "commit": "7101770dc6db2667b3c477cc31365dd1acd6db4e",
+    "targets": ["esp32s3"],
+    "toolsJsonSha256": "b403c25dc0c841dece4ac45abfa0a131f55ccae72db6be86ee36e3e69557f0e4",
+    "pythonRequirementsPath": "tools/requirements/requirements.core.txt",
+    "pythonToolsScope": "Espressif-maintained ESP-IDF tools declared directly by the core requirements; general-purpose third-party Python dependencies are tracked by their upstream environment lock rather than duplicated here."
+  },
+  "licenseNormalization": {
+    "GPL-3.0-with-GCC-exception": "GPL-3.0-or-later WITH GCC-exception-3.1"
+  },
+  "sbom": {
+    "scope": "development",
+    "paths": ["security/esp_idf_tools.json", "third_party/esp_idf_version.conf"],
+    "binaryTools": {
+      "type": "application",
+      "purlType": "generic"
+    },
+    "pythonTools": {
+      "type": "application",
+      "purlType": "pypi",
+      "supplier": "Espressif Systems"
+    }
+  },
+  "binaryTools": [
+    {
+      "name": "xtensa-esp-elf-gdb",
+      "displayName": "Espressif Xtensa GDB",
+      "version": "17.1_20260402",
+      "sourceLicense": "GPL-3.0-or-later",
+      "license": "GPL-3.0-or-later",
+      "supplier": "Espressif Systems and GNU contributors",
+      "upstream": "https://github.com/espressif/binutils-gdb",
+      "notes": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32-S3 development."
+    },
+    {
+      "name": "xtensa-esp-elf",
+      "displayName": "Espressif Xtensa GCC toolchain",
+      "version": "esp-15.2.0_20251204",
+      "sourceLicense": "GPL-3.0-with-GCC-exception",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "supplier": "Espressif Systems and GNU contributors",
+      "upstream": "https://github.com/espressif/crosstool-NG",
+      "notes": "Official compiler bundle used to build the ESP32-S3 firmware; the build manifest records the executable's actual version output."
+    },
+    {
+      "name": "riscv32-esp-elf",
+      "displayName": "Espressif RISC-V GCC toolchain",
+      "version": "esp-15.2.0_20251204",
+      "sourceLicense": "GPL-3.0-with-GCC-exception",
+      "license": "GPL-3.0-or-later WITH GCC-exception-3.1",
+      "supplier": "Espressif Systems and GNU contributors",
+      "upstream": "https://github.com/espressif/crosstool-NG",
+      "notes": "Official companion toolchain installed by ESP-IDF's esp32s3 tool set and retained in the development inventory."
+    },
+    {
+      "name": "esp32ulp-elf",
+      "displayName": "Espressif ESP32 ULP toolchain",
+      "version": "2.38_20240113",
+      "sourceLicense": "GPL-3.0-or-later",
+      "license": "GPL-3.0-or-later",
+      "supplier": "Espressif Systems and GNU contributors",
+      "upstream": "https://github.com/espressif/binutils-gdb",
+      "notes": "Official ULP assembler/linker bundle installed by the pinned ESP-IDF tool set."
+    },
+    {
+      "name": "openocd-esp32",
+      "displayName": "Espressif OpenOCD",
+      "version": "v0.12.0-esp32-20260424",
+      "sourceLicense": "GPL-2.0-only",
+      "license": "GPL-2.0-only",
+      "supplier": "Espressif Systems and OpenOCD contributors",
+      "upstream": "https://github.com/espressif/openocd-esp32",
+      "notes": "Official ESP-IDF OpenOCD bundle installed for native USB/JTAG development."
+    },
+    {
+      "name": "esp-rom-elfs",
+      "displayName": "Espressif ROM ELFs",
+      "version": "20241011",
+      "sourceLicense": "Apache-2.0",
+      "license": "Apache-2.0",
+      "type": "data",
+      "supplier": "Espressif Systems",
+      "upstream": "https://github.com/espressif/esp-rom-elfs",
+      "notes": "Official ROM symbol files selected by the pinned ESP-IDF tools manifest."
+    }
+  ],
+  "pythonTools": [
+    {
+      "name": "esptool",
+      "displayName": "esptool",
+      "version": "5.3.1",
+      "license": "GPL-2.0-or-later",
+      "upstream": "https://github.com/espressif/esptool",
+      "notes": "ESP-IDF Python-environment flashing tool; every production build records the actual installed version."
+    },
+    {
+      "name": "idf-component-manager",
+      "displayName": "ESP-IDF Component Manager",
+      "version": "3.0.3",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/idf-component-manager",
+      "notes": "Direct tool in the managed ESP-IDF Python environment used during project configuration."
+    },
+    {
+      "name": "esp-idf-monitor",
+      "displayName": "ESP-IDF Monitor",
+      "version": "1.9.0",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-monitor",
+      "notes": "Direct tool installed in the managed ESP-IDF Python environment; jh-vscode supplies its own persistent serial monitor frontend."
+    },
+    {
+      "name": "esp-coredump",
+      "displayName": "ESP Core Dump",
+      "version": "1.16.0",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-coredump",
+      "notes": "Direct tool installed in the managed ESP-IDF Python environment for firmware diagnostics."
+    },
+    {
+      "name": "esp-idf-kconfig",
+      "displayName": "ESP-IDF Kconfig",
+      "version": "3.12.0",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-kconfig",
+      "notes": "First-party parser used to resolve the pinned ESP-IDF Kconfig model."
+    },
+    {
+      "name": "esp-idf-nvs-partition-gen",
+      "displayName": "ESP-IDF NVS Partition Generator",
+      "version": "0.1.9",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-nvs-partition-gen",
+      "notes": "First-party generator declared by the pinned ESP-IDF core Python requirements."
+    },
+    {
+      "name": "esp-idf-size",
+      "displayName": "ESP-IDF Size",
+      "version": "2.3.1",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-size",
+      "notes": "First-party firmware size analysis tool in the managed ESP-IDF environment."
+    },
+    {
+      "name": "esp-idf-diag",
+      "displayName": "ESP-IDF Diagnostics",
+      "version": "0.2.0",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-diag",
+      "notes": "First-party diagnostics support declared by the pinned ESP-IDF core Python requirements."
+    },
+    {
+      "name": "esp-idf-panic-decoder",
+      "displayName": "ESP-IDF Panic Decoder",
+      "version": "1.5.0",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/esp-idf-panic-decoder",
+      "notes": "First-party panic decoding tool in the managed ESP-IDF environment."
+    },
+    {
+      "name": "pyclang",
+      "displayName": "pyclang",
+      "version": "0.7.0",
+      "license": "MIT",
+      "upstream": "https://pypi.org/project/pyclang/",
+      "notes": "Espressif-maintained clang-tidy runner declared by the pinned ESP-IDF core Python requirements."
+    },
+    {
+      "name": "freertos-gdb",
+      "displayName": "FreeRTOS GDB",
+      "version": "1.0.4",
+      "license": "Apache-2.0",
+      "upstream": "https://github.com/espressif/freertos-gdb",
+      "notes": "Espressif-maintained FreeRTOS debugger extension declared by the pinned ESP-IDF core Python requirements."
+    }
+  ]
+}
