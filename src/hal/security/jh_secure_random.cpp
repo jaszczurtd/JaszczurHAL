@@ -32,7 +32,7 @@ bool jh_constant_time_compare(const void *left, const void *right,
 /* Hardware targets provide a strong implementation in their platform source.
  * Keeping the fallback out of those archives prevents a weak definition from
  * satisfying the reference before the platform object is extracted. */
-#if !HAL_TARGET_IS_RP && !HAL_TARGET_IS_STM32G474
+#if !HAL_TARGET_IS_RP && !HAL_TARGET_IS_STM32G474 && !HAL_TARGET_IS_ESP32_FAMILY
 __attribute__((weak)) hal_status_t jh_secure_random_bytes(void *buffer,
                                                           size_t length) {
   if (buffer == NULL || length == 0u) {

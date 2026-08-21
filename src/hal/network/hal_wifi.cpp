@@ -1,6 +1,7 @@
 #include "hal/core/hal_config.h"
 
-#if defined(HAL_ENABLE_WIFI) && defined(HAL_NETWORK_BACKEND_CYW43)
+#if defined(HAL_ENABLE_WIFI) && (defined(HAL_NETWORK_BACKEND_CYW43) ||         \
+                                 defined(HAL_NETWORK_BACKEND_ESP_IDF))
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/network/hal_net.h"
@@ -97,6 +98,9 @@ hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode) {
   const hal_status_t start = begin_operation(nullptr);
   if (start != HAL_OK) {
     return start;
+  }
+  if (mode == HAL_WIFI_MODE_OFF) {
+    reset_transport_handles();
   }
   const hal_status_t status = ops->set_mode(mode);
   end_operation();

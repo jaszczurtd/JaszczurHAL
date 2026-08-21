@@ -4,33 +4,33 @@ This document is a high-level inventory of what JaszczurHAL offers. It is meant
 as a compact feature map, not an API reference. For function signatures,
 configuration details and module contracts, see [JaszczurHAL_API.md](JaszczurHAL_API.md).
 For the target-selectable VS Code firmware project model, see
-[FwProjectWorkflow.md](FwProjectWorkflow.md). For native RP OTA provisioning
-and operation, see [OTAWorkflow.md](OTAWorkflow.md).
+[FwProjectWorkflow.md](FwProjectWorkflow.md). For native RP and ESP32-S3 OTA
+provisioning and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 ## Platform and build capabilities
 
 | Area | What it offers | Source |
 |---|---|---|
 | RP2040 / RP2350 backend | Official Pico SDK backend and FreeRTOS (optional) for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
-| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040-LoRa-LF, Pico+Core1262-HF, NUCLEO-G474RE, Nucleo+Core1262-HF, Waveshare ESP32-S3-Zero, and host profiles. Released RP/STM/mock facades provide runtime capability state; ESP32-S3 Phase 1 consumes compile-time board facts only. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
+| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040-LoRa-LF, Pico+Core1262-HF, NUCLEO-G474RE, Nucleo+Core1262-HF, Waveshare ESP32-S3-Zero, and host profiles. RP, STM32G474, ESP32-S3, and mock builds expose the shared runtime board facade. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
 | STM32G474 backend | Bare-metal and FreeRTOS (optional) STM32G474 backend with startup/runtime glue, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
-| ESP32-S3 Phase 1 | Production ESP-IDF project build/flash/artifact runner, safe USB Serial/JTAG selection, VS Code build/upload/monitor/IntelliSense, exact ESP32-S3 and Waveshare ESP32-S3-Zero identity, generated flash/Quad-PSRAM contract, target-required FreeRTOS `app_start()`/`app_task0()` entry, and multi-image provenance. Physical closure verified the two-core/4 MiB flash/initialized 2 MiB PSRAM contract, three complete flashes, and monitor reconnect. The released feature allowlist excludes peripheral HAL backends and `app_task1()`. | [ESP32 implementation](../src/hal/impl/esp32/), [hardware fixture](../tests/hardware/esp32s3_phase1/) |
+| ESP32-S3 backend | Production ESP-IDF project build/flash/artifact runner, safe USB Serial/JTAG selection, VS Code build/upload/monitor/IntelliSense/raw-app OTA, generated board/memory contracts, FreeRTOS task0/task1 dispatch, core/peripheral backends, and native WiFi/lwIP services. The original Phase 2 subset passed its hardware fixture. Later peripherals and Phase 3 services compile/link together but still require hardware/lifecycle/security-negative validation. Storage and public USB lifecycle remain outside the backend. | [ESP32 implementation](../src/hal/impl/esp32/), [Phase 2 fixture](../tests/hardware/esp32s3_phase2/), [Phase 3 compile fixture](../tests/fixtures/esp32s3_phase3/) |
 | Mock backend | Deterministic host backend for unit tests and simulation-oriented development without hardware. | [mock backend](../src/hal/impl/.mock/) |
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/core/hal_config.h) |
 | Compiler portability layer | One header resolves the compiler extensions the HAL depends on - noreturn, forced inline, trap/unreachable, structure packing and leading-zero count - across GNU, Clang and MSVC. | [hal_compiler.h](../src/hal/core/hal_compiler.h) |
 | Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()`, ESP-IDF `app_main()`, and opt-in RP core-1 startup. | [hal_app.h](../src/hal/core/hal_app.h) |
-| FreeRTOS integration | Pinned upstream kernel with native RP2040/RP2350 SMP ports, STM32G474 Cortex-M4F port, FreeRTOS-aware mutex/delay/runtime reporting and HAL-owned application-task startup. | [RP FreeRTOS glue](../src/hal/impl/rp2040/freertos/), [STM32 FreeRTOS glue](../src/hal/impl/stm32g474/freertos/) |
-| Stack protection | Independent opt-ins provide synchronous Pico SDK/MPU stack-boundary guards and GCC/Clang `-fstack-protector-strong` frame canaries; FreeRTOS builds can also check task-stack boundaries. | [hal_system.h](../src/hal/system/hal_system.h), [module flags](api/02_module_flags.md) |
+| FreeRTOS integration | Pinned upstream kernel with native RP2040/RP2350 SMP ports and STM32G474 Cortex-M4F port, plus the scheduler supplied by pinned ESP-IDF. Includes FreeRTOS-aware mutex/delay/runtime reporting and HAL-owned application-task startup. | [portable app entry](../src/hal/core/hal_app.h), [module flags](api/02_module_flags.md) |
+| Stack protection | Independent opt-ins provide synchronous Pico SDK/MPU/ESP-IDF stack-boundary guards and GCC/Clang `-fstack-protector-strong` frame canaries where supported; FreeRTOS builds can also check task-stack boundaries. | [hal_system.h](../src/hal/system/hal_system.h), [module flags](api/02_module_flags.md) |
 | Dispatcher-backed firmware projects | Shared VS Code/CMake workflow for generated projects, migrated downstream modules and checked-in examples, with target/board selection and per-target CMake cache isolation. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Static library builds | Dedicated CMake/helper flows for official Pico SDK RP and STM32G474 builds; the RP flow also verifies ELF/BIN/UF2 generation and application-entry symbols. | [RP build](../rp_native_lib/), [STM32 build](../stm32_lib/) |
-| Validation gate | Full local gate for unit tests, Valgrind, static analysis, RP/STM target builds, a clean ESP32-S3/ESP-IDF multi-image build, and examples. | [runalltests.sh](../runalltests.sh) |
+| Validation gate | Full local gate for unit tests, Valgrind, static analysis, RP/STM target builds, the compile-only `esp32s3_phase3` ESP-IDF multi-image fixture, and examples. | [runalltests.sh](../runalltests.sh) |
 
 ## Core HAL
 
 | Area | What it offers | Source |
 |---|---|---|
-| GPIO | Portable digital I/O, pull modes and interrupts, including explicit IRQ core ownership and diagnostics on multicore targets. | [hal_gpio.h](../src/hal/gpio/hal_gpio.h) |
-| ADC | Portable analog input abstraction. | [hal_adc.h](../src/hal/analog/hal_adc.h) |
+| GPIO | Portable digital I/O, pull modes and interrupts, including explicit IRQ core ownership and diagnostics on multicore RP and ESP32-S3 targets. | [hal_gpio.h](../src/hal/gpio/hal_gpio.h) |
+| ADC | Portable, serialized analog input abstraction, including ESP32-S3 ADC oneshot channels selected from generated board pin masks. | [hal_adc.h](../src/hal/analog/hal_adc.h) |
 | DAC | True DAC output with additional diagnostics on STM32G474 and the host mock; targets without DAC hardware report `HAL_EUNSUPPORTED`. | [hal_dac.h](../src/hal/analog/hal_dac.h) |
 | PWM | Portable PWM output plus frequency-controlled PWM helpers. | [hal_pwm.h](../src/hal/gpio/hal_pwm.h), [hal_pwm_freq.h](../src/hal/gpio/hal_pwm_freq.h) |
 | Pulse counting | Edge/pulse counting for signal measurement and simple counter applications. | [hal_pcnt.h](../src/hal/analog/hal_pcnt.h) |
@@ -44,9 +44,9 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 
 | Area | What it offers | Source |
 |---|---|---|
-| UART | Hardware serial communication abstraction; RP2040 RX IRQ affinity follows the core that starts the UART. | [hal_uart.h](../src/hal/serial/hal_uart.h) |
+| UART | Hardware serial communication abstraction; RP2040 and ESP32-S3 lifecycle affinity follows the core that starts the UART. | [hal_uart.h](../src/hal/serial/hal_uart.h) |
 | USB device / CDC | Status-first USB lifecycle and CDC API with native RP TinyUSB ownership, descriptors, background pumping, bounded backpressure, 1200-bps BOOTSEL reset and a host mock. | [hal_usb.h](../src/hal/usb/hal_usb.h) |
-| Serial/debug console | One TX-serialized shared core with streamed task-context formatting, ISR-deferred logs, per-source error rate limiting, net-console mirroring and link-time RP USB CDC, STM32 USART2/stdout or mock capture/RX ports. | [hal_serial.h](../src/hal/serial/hal_serial.h), [serial API](api/08_sync_serial.md) |
+| Serial/debug console | One TX-serialized shared core with streamed task-context formatting, ISR-deferred logs, per-source error rate limiting, net-console mirroring and link-time RP USB CDC, ESP-IDF USB Serial/JTAG VFS, STM32 USART2/stdout, or mock capture/RX ports. | [hal_serial.h](../src/hal/serial/hal_serial.h), [serial API](api/08_sync_serial.md) |
 | Software serial | Target-optimized software UART: native Pico SDK PIO/DMA on RP2040 and a shared HAL GPIO backend on other targets. | [hal_swserial.h](../src/hal/serial/hal_swserial.h) |
 | I2C master | Portable i2c controller API with two-bus support, atomic helpers, bus recovery and a bounded 7-bit scanner accepting a watchdog/progress callback. | [hal_i2c.h](../src/hal/i2c/hal_i2c.h) |
 | I2C slave | Target-mode/register-map style I2C support. | [hal_i2c_slave.h](../src/hal/i2c/hal_i2c_slave.h) |
@@ -60,14 +60,14 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | STM32G474 native FDCAN | Native STM32G474 FDCAN backend. | [STM32 FDCAN backend](../src/hal/impl/stm32g474/hal_can_stm32g474_fdcan.cpp) |
 | MFRC522 RFID | Shared RFID reader driver over HAL SPI/I2C. | [hal_mfrc522.h](../src/hal/nfc/hal_mfrc522.h), [mfrc522 driver](../src/hal/nfc/mfrc522/) |
 | PN532 NFC/RFID | Shared NFC/RFID reader driver over HAL SPI/I2C/UART. | [hal_pn532.h](../src/hal/nfc/hal_pn532.h), [pn532 driver](../src/hal/nfc/pn532/) |
-| WiFi | CYW43/lwIP connectivity on Pico W, Pico 2 W, Pico+PIM730, and configured STM32G474+PIM730 hardware. | [hal_wifi.h](../src/hal/network/hal_wifi.h) |
+| WiFi | CYW43/lwIP connectivity on Pico W, Pico 2 W, Pico+PIM730 and configured STM32G474+PIM730 hardware, plus native ESP-IDF WiFi/`esp_netif`/lwIP on ESP32-S3. | [hal_wifi.h](../src/hal/network/hal_wifi.h) |
 | BLE Peripheral and Observer (experimental) | One Peripheral connection, copied legacy advertising, passive scanning with bounded copied reports and AD parsing, static GAP/GATT services, ATT MTU reporting, and a host mock on Pico W and STM32G474+PIM730. | [Bluetooth API](api/20_bluetooth.md) |
 | UDP | Handle-based multi-socket UDP transport plus legacy single-socket compatibility wrapper for WiFi builds. | [hal_udp.h](../src/hal/network/hal_udp.h) |
-| TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock/RP-family backends. | [hal_tcp.h](../src/hal/network/hal_tcp.h) |
+| TCP sockets | Handle-based TCP client sockets and listener/server handles with connect, bind/listen/accept, send/recv, shutdown and mock, CYW43/lwIP, and native ESP-IDF lwIP backends. | [hal_tcp.h](../src/hal/network/hal_tcp.h) |
 | JH BLE Stream v1 (experimental) | Bounded byte stream over one static GATT service, versioned framing with capability negotiation, mutual HMAC-SHA256 proofs, directional ChaCha20-Poly1305 keys, replay and rate-limit protection, and bounded RX/TX queues. | [Bluetooth API](api/20_bluetooth.md) |
-| HTTP server | Small poll-driven HTTP/1.1 server over HAL TCP with exact/prefix routes, request headers, buffered responses, automatic `Content-Length` and mock-testable request handling. | [hal_http_server.h](../src/hal/network/http/hal_http_server.h) |
+| HTTP server | Small poll-driven plaintext HTTP/1.1 server over HAL TCP with exact/prefix routes, request headers, buffered responses, automatic `Content-Length` and mock-testable request handling. No HTTPS-server API is defined. | [hal_http_server.h](../src/hal/network/http/hal_http_server.h) |
 | HTTP files | Callback-backed static file serving, ETag/`If-None-Match`, raw PUT and multipart upload helpers over HAL HTTP routes. | [hal_http_files.h](../src/hal/network/http/hal_http_files.h) |
-| WebSocket server | Small poll-driven WebSocket server over HAL TCP with HTTP Upgrade handshake, callbacks, send helpers and broadcast. | [hal_websocket.h](../src/hal/network/websocket/hal_websocket.h) |
+| WebSocket server | Small poll-driven plaintext WebSocket server over HAL TCP with HTTP Upgrade handshake, callbacks, send helpers and broadcast. No WSS or WebSocket-client API is defined. | [hal_websocket.h](../src/hal/network/websocket/hal_websocket.h) |
 | Net console | Password-protected TCP console that mirrors `hal_serial`/debug output to authenticated clients while preserving local UART/USB logs, plus bidirectional command input. | [hal_net_console.h](../src/hal/network/net_console/hal_net_console.h) |
 | Network commands | Shared JSON/text command dispatcher for HTTP and WebSocket control channels, backed by cJSON and `hal_status_t` responses. | [hal_net_commands.h](../src/hal/network/net_commands/hal_net_commands.h) |
 | BSD sockets adapter | Minimal IPv4 `sys/socket.h` / `netinet/in.h` / `arpa/inet.h` / `netdb.h` compatibility layer over HAL UDP/TCP handles, including `getaddrinfo()`, `setsockopt()`, `O_NONBLOCK`, `MSG_DONTWAIT` and `select()` readiness. | [socket.h](../src/sys/socket.h), [netdb.h](../src/netdb.h) |
@@ -75,7 +75,7 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | HTTP/HTTPS client | Bounded one-shot HTTP/1.1 requests over HAL TCP or verified BearSSL TLS, with caller-owned headers/body and explicit response metadata. | [hal_http_client.h](../src/hal/network/http/hal_http_client.h), [connectivity API](api/15_connectivity.md#halhttpclient-httphttps-client-opt-in-halenablehttpclient) |
 | Notifications | Backend-dispatched notification facade with a Telegram Bot API backend over the existing HTTP/HTTPS client. | [hal_notify.h](../src/hal/network/notify/hal_notify.h), [connectivity API](api/15_connectivity.md#halnotify-notifications-opt-in-halenablenotify) |
 | MQTT | PubSubClient-based MQTT connectivity wrapper. | [hal_mqtt.h](../src/hal/network/mqtt/hal_mqtt.h) |
-| OTA | Authenticated RP firmware updates over HAL UDP/TCP with versioned images, resumable program/staging swap, boot confirmation, rollback, discovery, and VS Code upload. | [hal_ota.h](../src/hal/network/ota/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
+| OTA | Native firmware updates over HAL UDP/TCP with discovery, optional password challenge, trial confirmation, rollback and VS Code upload. RP uses a signed versioned container and resumable swap; ESP32-S3 uses a manifest-validated raw application image and ESP-IDF OTA partitions. | [hal_ota.h](../src/hal/network/ota/hal_ota.h), [OTA workflow](OTAWorkflow.md) |
 | Calendar / NTP / time-of-day | Always-available Gregorian helpers plus one thread-safe runtime wall clock with source/status snapshots, RTC restore, NTP persistence, libc adapters, and bounded primary/secondary fallback. | [hal_time.h](../src/hal/time/hal_time.h) |
 | WireGuard | Shared host-lwIP WireGuard integration with split/full tunnel routing on capability-advertised backends. | [hal_wireguard.h](../src/hal/network/wireguard/hal_wireguard.h), [WireGuard engine](../src/hal/network/wireguard/core/) |
 | Cellular modem | Generic AT-command modem engine plus SimCom A76xx family support. | [hal_modem_at.h](../src/hal/modem/hal_modem_at.h), [hal_simcom_a76xx.h](../src/hal/modem/hal_simcom_a76xx.h) |
@@ -156,5 +156,5 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
 | Firmware project workflow | Manifest, target/board selection, source discovery, CMake or ESP-IDF provider dispatch, upload/monitor/IntelliSense behavior and generated files. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
-| Native RP OTA workflow | Firmware integration, build and first flash, VS Code upload, firewall, confirmation, rollback and recovery. | [OTAWorkflow.md](OTAWorkflow.md) |
+| Native OTA workflow | RP and ESP32-S3 firmware integration, target-specific artifacts, first flash, VS Code upload, firewall, confirmation, rollback and recovery. | [OTAWorkflow.md](OTAWorkflow.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

@@ -8,7 +8,7 @@
 ./scripts/build_rp_native_lib.sh --target rp2350-riscv
 ./scripts/build_stm32_lib.sh
 python3 scripts/build_esp_idf.py build \
-  --project tests/hardware/esp32s3_phase1 --clean
+  --project tests/fixtures/esp32s3_phase3 --clean
 ```
 
 > **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
@@ -374,20 +374,25 @@ The ESP32-S3 build is a firmware-project flow, not an installed
 ```bash
 # Clean build using the target's default board.
 python3 scripts/build_esp_idf.py build \
-  --project tests/hardware/esp32s3_phase1 \
+  --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 
 # Revalidate an existing build without compiling.
 python3 scripts/build_esp_idf.py artifacts \
-  --project tests/hardware/esp32s3_phase1 \
+  --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero
 
-# Revalidate, then flash all images at their manifest offsets.
+# Revalidate, then flash an application project at its manifest offsets.
 python3 scripts/build_esp_idf.py flash \
-  --project tests/hardware/esp32s3_phase1 \
+  --project path/to/esp32-project \
   --target esp32s3 --board waveshare-esp32-s3-zero \
   --port /dev/serial/by-id/<Espressif-USB-Serial-JTAG-device>
 ```
+
+`tests/fixtures/esp32s3_phase3` is the compile/link fixture used by CI and
+Gate 7. It selects every ESP32-S3 backend delivered through Phase 3 and proves
+feature resolution, component selection, compilation, linking, partition
+generation, and artifact publication. It is not a runtime hardware fixture.
 
 The default build directory is
 `<project>/.build/esp-idf/esp32s3/waveshare-esp32-s3-zero/`. `--output` may
@@ -408,9 +413,15 @@ includes the final `sdkconfig` digest and selected partition profile; toolchain
 provenance includes the pinned ESP-IDF version/commit, actual compiler, CMake,
 Ninja, IDF Python and esptool versions, and the ESP-IDF `tools.json` digest.
 
-The current target supports only its required `HAL_ENABLE_FREERTOS` feature.
-Other requested or transitively resolved `HAL_ENABLE_*` features fail with
-`[JH-CFG-UNSUPPORTED]`; portable ESP32 peripheral backends are Phase 2 work.
+The target always resolves `HAL_ENABLE_FREERTOS` and accepts the delivered
+Phase 2 peripheral flags plus the Phase 3 network/service graph. System,
+synchronization, GPIO, ADC, simple PWM, serial/debug, and timer sources are part
+of the baseline component. Requested or transitively resolved features outside
+that descriptor allowlist fail with `[JH-CFG-UNSUPPORTED]`.
+The generated project CMake file carries the resolved feature list, component
+source list, and public/private ESP-IDF component dependencies; the component
+recipe consumes those generated lists instead of maintaining a second source
+graph.
 `scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the
 isolated Phase 0 fixture.
 

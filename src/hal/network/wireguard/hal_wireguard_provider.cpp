@@ -1,5 +1,5 @@
 #include "hal/core/hal_target.h"
-#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474
+#if HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_ESP32_FAMILY
 
 #include "hal/core/hal_config.h"
 #ifdef HAL_ENABLE_WIREGUARD
@@ -76,5 +76,5 @@ bool jh_hal_wireguard_kick_provider(
   return ok;
 }
 
-#endif
-#endif
+#endif /* HAL_ENABLE_WIREGUARD */
+#endif /* supported host-lwIP target */

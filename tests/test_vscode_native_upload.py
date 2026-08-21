@@ -29,6 +29,50 @@ assert module.UF2_TARGETS == module.NATIVE_RP_TARGETS
 assert module.ota_listen_port({}) == 8266
 assert module.ota_listen_port({"listenPort": 0}) == 0
 assert module.ota_listen_port({"listenPort": 9000}) == 9000
+auth2_arguments = {
+    "password": "correct horse battery staple",
+    "command": 0,
+    "tcp_port": 3232,
+    "image_size": 4096,
+    "image_md5": "0123456789abcdef0123456789abcdef",
+    "device_nonce": "00112233445566778899aabbccddeeff",
+    "client_nonce": "ffeeddccbbaa99887766554433221100",
+}
+assert module.ota_auth2_tag(**auth2_arguments) == (
+    "c704cfc163213195568901d2399b8434e8e199d221fbfa82e83e2bfd8446bdf1"
+)
+uppercase_auth2_arguments = dict(auth2_arguments)
+uppercase_auth2_arguments["image_md5"] = auth2_arguments["image_md5"].upper()
+uppercase_auth2_arguments["device_nonce"] = auth2_arguments["device_nonce"].upper()
+uppercase_auth2_arguments["client_nonce"] = auth2_arguments["client_nonce"].upper()
+assert module.ota_auth2_tag(**uppercase_auth2_arguments) == module.ota_auth2_tag(
+    **auth2_arguments
+)
+for changed_field, changed_value in (
+    ("command", 100),
+    ("tcp_port", 3233),
+    ("image_size", 4097),
+    ("image_md5", "1123456789abcdef0123456789abcdef"),
+    ("device_nonce", "10112233445566778899aabbccddeeff"),
+    ("client_nonce", "0feeddccbbaa99887766554433221100"),
+):
+    changed = dict(auth2_arguments)
+    changed[changed_field] = changed_value
+    assert module.ota_auth2_tag(**changed) != module.ota_auth2_tag(
+        **auth2_arguments
+    )
+for invalid_auth2 in (
+    {**auth2_arguments, "command": 1},
+    {**auth2_arguments, "tcp_port": 0},
+    {**auth2_arguments, "image_size": 0x100000000},
+    {**auth2_arguments, "device_nonce": "not-a-nonce"},
+):
+    try:
+        module.ota_auth2_tag(**invalid_auth2)
+    except ValueError as error:
+        assert "AUTH2" in str(error)
+    else:
+        raise AssertionError("invalid AUTH2 input was accepted")
 assert (
     inspect.signature(module.upload_ota_container)
     .parameters["listen_port"]
@@ -52,6 +96,208 @@ for invalid_listen_port in (-1, 65536):
         assert "listen port" in str(error)
     else:
         raise AssertionError("invalid OTA TCP listen port was accepted")
+
+
+class FakeOtaReader:
+    def __init__(self, connection) -> None:
+        self.connection = connection
+
+    def readline(self, _size: int) -> bytes:
+        return f"{len(self.connection.sent[-1])}\n".encode("ascii")
+
+    def read(self, _size: int) -> bytes:
+        return b"OK"
+
+
+class FakeOtaConnection:
+    def __init__(self) -> None:
+        self.sent: list[bytes] = []
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.close()
+
+    def settimeout(self, _timeout: float) -> None:
+        return None
+
+    def makefile(self, mode: str):
+        assert mode == "rb"
+        return FakeOtaReader(self)
+
+    def sendall(self, payload: bytes) -> None:
+        self.sent.append(payload)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class FakeOtaServer:
+    def __init__(self, peer_ip: str) -> None:
+        self.peer_ip = peer_ip
+        self.connection = FakeOtaConnection()
+        self.bound = ("", 0)
+        self.accept_count = 0
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.closed = True
+
+    def setsockopt(self, *_args) -> None:
+        return None
+
+    def bind(self, address) -> None:
+        self.bound = address
+
+    def listen(self, _backlog: int) -> None:
+        return None
+
+    def settimeout(self, _timeout: float) -> None:
+        return None
+
+    def getsockname(self):
+        return ("0.0.0.0", self.bound[1] or 43210)
+
+    def accept(self):
+        self.accept_count += 1
+        return self.connection, (self.peer_ip, 55000)
+
+
+class FakeOtaUdp:
+    def __init__(self, responses: list[bytes], peer_ip: str) -> None:
+        self.responses = list(responses)
+        self.peer_ip = peer_ip
+        self.sent: list[bytes] = []
+        self.connected = None
+        self.closed = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self.closed = True
+
+    def bind(self, _address) -> None:
+        return None
+
+    def settimeout(self, _timeout: float) -> None:
+        return None
+
+    def connect(self, address) -> None:
+        self.connected = address
+
+    def getpeername(self):
+        return (self.peer_ip, 8266)
+
+    def send(self, payload: bytes) -> None:
+        self.sent.append(payload)
+
+    def recv(self, _size: int) -> bytes:
+        return self.responses.pop(0)
+
+
+class FakeOtaSockets:
+    def __init__(
+        self,
+        responses: list[bytes],
+        *,
+        udp_peer_ip: str = "192.0.2.32",
+        tcp_peer_ip: str = "192.0.2.32",
+    ) -> None:
+        self.server = FakeOtaServer(tcp_peer_ip)
+        self.udp = FakeOtaUdp(responses, udp_peer_ip)
+
+    def __call__(self, _family: int, socket_type: int):
+        if socket_type == module.socket.SOCK_STREAM:
+            return self.server
+        if socket_type == module.socket.SOCK_DGRAM:
+            return self.udp
+        raise AssertionError(f"unexpected socket type: {socket_type}")
+
+
+ota_payload = b"AUTH2 upload fixture"
+ota_device = {
+    "address": "ota-device.example",
+    "hostname": "ota-device",
+    "target": "esp32s3",
+    "port": 8266,
+}
+device_nonce = "00112233445566778899aabbccddeeff"
+client_random = bytes.fromhex("ffeeddccbbaa99887766554433221100")
+ota_sockets = FakeOtaSockets([f"AUTH2 {device_nonce}\n".encode("ascii"), b"OK\n"])
+with patch.object(
+    module.socket, "socket", side_effect=ota_sockets
+), patch.object(
+    module.socket,
+    "gethostbyname",
+    side_effect=AssertionError("TCP peer check must reuse the connected UDP IP"),
+), patch.object(module.os, "urandom", return_value=client_random):
+    module.upload_ota_container(
+        ota_device, ota_payload, "correct horse battery staple", 3232
+    )
+
+ota_md5 = hashlib.md5(ota_payload).hexdigest()
+expected_auth2 = module.ota_auth2_tag(
+    "correct horse battery staple",
+    0,
+    3232,
+    len(ota_payload),
+    ota_md5,
+    device_nonce,
+    client_random.hex(),
+)
+assert ota_sockets.udp.connected == ("ota-device.example", 8266)
+assert ota_sockets.udp.sent == [
+    f"0 3232 {len(ota_payload)} {ota_md5}\n".encode("ascii"),
+    f"201 {client_random.hex()} {expected_auth2}\n".encode("ascii"),
+]
+assert ota_sockets.server.connection.sent == [ota_payload]
+
+direct_ok_sockets = FakeOtaSockets([b"OK\n"])
+with patch.object(module.socket, "socket", side_effect=direct_ok_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "secret", 3232)
+    except RuntimeError as error:
+        assert "skipped AUTH2" in str(error)
+    else:
+        raise AssertionError("password-protected upload accepted direct OK")
+assert direct_ok_sockets.server.accept_count == 0
+
+legacy_sockets = FakeOtaSockets([f"AUTH {device_nonce}\n".encode("ascii")])
+with patch.object(module.socket, "socket", side_effect=legacy_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "secret", 3232)
+    except RuntimeError as error:
+        assert "obsolete OTA authentication" in str(error)
+    else:
+        raise AssertionError("legacy AUTH response enabled a downgrade")
+assert legacy_sockets.server.accept_count == 0
+
+wrong_peer_sockets = FakeOtaSockets(
+    [f"AUTH2 {device_nonce}\n".encode("ascii"), b"OK\n"],
+    tcp_peer_ip="192.0.2.99",
+)
+with patch.object(
+    module.socket, "socket", side_effect=wrong_peer_sockets
+), patch.object(module.os, "urandom", return_value=client_random):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "secret", 3232)
+    except RuntimeError as error:
+        assert "TCP peer differs" in str(error)
+    else:
+        raise AssertionError("OTA accepted a TCP peer from another address")
+assert wrong_peer_sockets.server.connection.closed
+assert wrong_peer_sockets.server.connection.sent == []
+
+passwordless_sockets = FakeOtaSockets([b"OK\n"])
+with patch.object(module.socket, "socket", side_effect=passwordless_sockets):
+    module.upload_ota_container(ota_device, ota_payload, "", 3232)
+assert passwordless_sockets.server.connection.sent == [ota_payload]
 assert module.native_rp_upload_uses_serial_bootsel(
     {"target": "rp2040"}, "serial"
 )
@@ -619,3 +865,99 @@ assert configured == {
     "target": "rp2350-arm",
     "port": 9000,
 }
+
+with TemporaryDirectory(prefix="jh-esp-ota-") as temporary_dir:
+    esp_project = Path(temporary_dir)
+    esp_build = esp_project / ".build"
+    esp_build.mkdir()
+    esp_application = esp_build / "application.bin"
+    esp_payload = b"\xe9raw-esp-idf-application-image"
+    esp_application.write_bytes(esp_payload)
+    esp_manifest = {
+        "integration": {
+            "resolvedFeatures": ["HAL_ENABLE_FREERTOS", "HAL_ENABLE_OTA"]
+        },
+        "flashImages": [
+            {
+                "offset": "0x20000",
+                "path": "application.bin",
+                "size": len(esp_payload),
+                "sha256": hashlib.sha256(esp_payload).hexdigest(),
+            }
+        ],
+    }
+    esp_config = {
+        "toolchain": "esp-idf",
+        "target": "esp32s3",
+        "board": "waveshare-esp32-s3-zero",
+        "buildDir": str(esp_build),
+        "ota": {
+            "host": "192.0.2.32",
+            "port": 8266,
+            "allowEmptyPassword": True,
+        },
+    }
+    with patch.object(
+        module,
+        "validate_esp_idf_artifact_manifest",
+        return_value=(
+            esp_manifest,
+            {"applicationBinary": esp_application},
+            [esp_application],
+        ),
+    ):
+        source, image = module.esp_idf_ota_image(esp_config, esp_project)
+    assert source == esp_application
+    assert image == esp_payload
+
+    invalid_manifest = json.loads(json.dumps(esp_manifest))
+    invalid_manifest["flashImages"][0]["sha256"] = "0" * 64
+    with patch.object(
+        module,
+        "validate_esp_idf_artifact_manifest",
+        return_value=(
+            invalid_manifest,
+            {"applicationBinary": esp_application},
+            [esp_application],
+        ),
+    ):
+        try:
+            module.esp_idf_ota_image(esp_config, esp_project)
+        except ValueError as error:
+            assert "differs from its manifest" in str(error)
+        else:
+            raise AssertionError("ESP OTA accepted an application hash mismatch")
+
+    esp_upload_args = SimpleNamespace(host=None, interactive=False)
+    with patch.object(
+        module,
+        "load_config_for_action",
+        return_value=(esp_project, esp_config, 0),
+    ), patch.object(
+        module, "command_build", return_value=0
+    ) as esp_build_mock, patch.object(
+        module,
+        "esp_idf_ota_image",
+        return_value=(esp_application, esp_payload),
+    ), patch.object(
+        module, "sign_ota_container"
+    ) as rp_sign_mock, patch.object(
+        module, "upload_ota_container"
+    ) as esp_upload_mock, patch.object(
+        module, "print_memory_map_overview"
+    ):
+        assert module.command_upload_ota(esp_upload_args) == 0
+
+    esp_build_mock.assert_called_once()
+    rp_sign_mock.assert_not_called()
+    esp_upload_mock.assert_called_once_with(
+        {
+            "address": "192.0.2.32",
+            "hostname": "192.0.2.32",
+            "target": "esp32s3",
+            "port": 8266,
+        },
+        esp_payload,
+        "",
+        8266,
+    )

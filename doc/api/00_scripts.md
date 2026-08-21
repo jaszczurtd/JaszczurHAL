@@ -228,9 +228,13 @@ supported files in the project root and recursively under `src/`. Repeatable
 The runner consumes `boards/` and the feature registry directly. Target-
 required features participate in the resolved set, while requested or
 transitive features outside `supportedFeatures` fail with
-`[JH-CFG-UNSUPPORTED]`. The current ESP32-S3 allowlist contains only required
-FreeRTOS. It also owns `HAL_PROVIDE_APP_ENTRY`, the exact target/board
-selectors, generated `sdkconfig` defaults, and the controlled component graph.
+`[JH-CFG-UNSUPPORTED]`. The ESP32-S3 allowlist contains required FreeRTOS,
+the delivered Phase 2 peripheral flags, and the Phase 3 network/service graph.
+Its system, sync, GPIO, ADC, simple PWM, serial/debug, and timer sources form
+the baseline. The runner also owns `HAL_PROVIDE_APP_ENTRY`, the exact
+target/board selectors, generated `sdkconfig` defaults, and the controlled
+component graph. It writes the resolved source/dependency lists into the
+generated project CMake input consumed by the ESP-IDF component.
 
 The output manifest uses only build-relative paths. It records ordered flash
 images and hashes; build artifacts; target, board, feature, partition, and
@@ -624,7 +628,7 @@ unsigned until the VS Code upload action applies the project password.
 `merge-uf2` combines the copy-to-RAM boot applier UF2 with the application UF2,
 rejecting conflicting address blocks and normalizing block numbering. Build
 artifacts remain below the resolved `.build/` directory. See
-[Native RP OTA Workflow](../OTAWorkflow.md) for the complete consumer workflow
+[Native OTA Workflow](../OTAWorkflow.md) for the complete consumer workflow
 around these artifacts.
 
 ### `scripts/vscode_library_workspace.py`

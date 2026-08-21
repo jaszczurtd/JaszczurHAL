@@ -5,7 +5,7 @@
 
 /**
  * @file hal_uart.h
- * @brief Hardware abstraction for RP2040 hardware UART ports.
+ * @brief Hardware abstraction for target hardware UART ports.
  *
  * The API is intentionally close to hal_swserial so both backends can be
  * swapped in application code with minimal changes.
@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-/** @brief Available hardware UART ports on the RP2040. */
+/** @brief Portable hardware UART port identifiers. */
 typedef enum {
   HAL_UART_PORT_1 = 1,
   HAL_UART_PORT_2 = 2,
@@ -75,15 +75,18 @@ bool hal_uart_set_tx(hal_uart_t h, uint8_t tx_pin);
  * Repeating this call reconfigures the port and clears its receive buffer and
  * error counters.
  *
- * @note On RP2040 this call installs the UART RX interrupt on the calling
- *       core. Reconfiguration and destruction must be performed from that
- *       same core. The current API does not expose or validate this implicit
- *       owner; in FreeRTOS/SMP builds call it from a task pinned to the
- *       intended core.
+ * @note On RP2040 and ESP32-S3, the calling core owns the active UART
+ *       lifecycle. Reconfiguration and destruction must be performed from
+ *       that same core. ESP32-S3 reports HAL_ESTATE for a wrong-core
+ *       reconfiguration; its compatibility destroy operation asserts and
+ *       retains the handle.
+ *       In FreeRTOS/SMP builds call lifecycle operations from a task pinned to
+ *       the intended core.
  *
  * @param config Frame format, e.g. HAL_UART_CFG_8N1.
  * @return HAL_OK on success; HAL_EINVAL for an invalid handle or zero baud;
- *         HAL_EBUSY when the backend could not enable reception.
+ *         HAL_ESTATE for a wrong-core ESP32-S3 reconfiguration; HAL_EBUSY
+ *         when the backend could not enable reception; or a backend error.
  */
 hal_status_t hal_uart_begin(hal_uart_t h, uint32_t baud, uint16_t config);
 
@@ -149,8 +152,9 @@ bool hal_uart_get_error_counters(hal_uart_t h,
 
 /**
  * @brief Release resources. The handle must not be used after this call.
- * @note On RP2040 call from the same core that successfully called
- *       hal_uart_begin(), because removal of the RX IRQ is core-local.
+ * @note On RP2040 and ESP32-S3 call from the same core that successfully
+ *       called hal_uart_begin(). A wrong-core ESP32-S3 call asserts and keeps
+ *       the handle active.
  */
 void hal_uart_destroy(hal_uart_t h);
 

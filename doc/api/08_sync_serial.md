@@ -18,9 +18,12 @@ void        hal_mutex_destroy(hal_mutex_t mutex);
 
 **impl/rp2040:** pico SDK `mutex_t` in normal RP2040 builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS + __FREERTOS` builds. Both are non-recursive and synchronize core0/core1 task callers.
 **impl/stm32g474:** single-core atomic spinlock in non-FreeRTOS builds; FreeRTOS mutex (`xSemaphoreCreateMutex`) in `HAL_ENABLE_FREERTOS` builds. Both are non-recursive.
+**impl/esp32:** ESP-IDF FreeRTOS mutex (`xSemaphoreCreateMutex`), non-recursive
+and task-context only.
 **impl/.mock:** `std::mutex`.
 **FreeRTOS note:** `hal_mutex_*` is FreeRTOS-aware on RP2040/RP2350 and
-STM32G474 when `HAL_ENABLE_FREERTOS` selects the pinned kernel.
+STM32G474 when `HAL_ENABLE_FREERTOS` selects the pinned kernel, and on ESP32-S3
+through the scheduler supplied by pinned ESP-IDF.
 `hal_mutex_*` remains task-context only; it is not an ISR API.
 Singleton/bus module mutexes use an internal atomic create-once helper where a
 defensive lazy fallback is still needed.
@@ -36,7 +39,7 @@ m_mutex_enter_blocking(name) // hal_mutex_lock(name)
 m_mutex_exit(name)           // hal_mutex_unlock(name)
 ```
 
-### Critical section (hard interrupt mask)
+### Critical section (hard target interrupt section)
 
 ```c
 void hal_critical_section_enter(void);  // save and disable interrupts
@@ -47,10 +50,13 @@ void hal_critical_section_exit(void);   // restore prior interrupt state
 `restore_interrupts()` (pico SDK), including FreeRTOS builds.
 **impl/stm32g474:** nesting-safe PRIMASK full interrupt mask, including
 FreeRTOS builds.
+**impl/esp32:** nesting-safe ESP-IDF `portMUX_TYPE` critical section shared by
+both cores, with per-core depth tracking.
 **impl/.mock:** no-ops.
-**Note:** This is a hard full interrupt mask for short timing-sensitive or
-ISR-shared sections. It is not a FreeRTOS scheduler lock and does not serialize
-task access across RP2040 cores; use `hal_mutex_t` for task mutual exclusion.
+**Note:** This uses each target's hard interrupt-critical mechanism for short
+timing-sensitive or ISR-shared sections. ESP32-S3 also serializes both cores
+with its shared portMUX; RP2040 masks only the calling core. It is not a
+FreeRTOS scheduler lock; use `hal_mutex_t` for task mutual exclusion.
 
 ### Examples
 
@@ -143,6 +149,9 @@ clears the registration.
 
 STM32G474 currently returns `HAL_EUNSUPPORTED`; the host mock provides
 deterministic RX/TX buffers and reset observation for unit tests.
+ESP32-S3 does not expose this public USB lifecycle: the target rejects
+`HAL_ENABLE_USB`, while its debug console uses the startup-owned ESP-IDF USB
+Serial/JTAG VFS described below.
 
 ---
 
@@ -260,9 +269,9 @@ void     hal_mock_debug_isr_restore_default_ring(void);  // restore production r
 `hal_deb()` and `hal_derr()` use **lazy init** - if `hal_debug_init()` has not been called
 before the first debug print, it is invoked automatically with `HAL_DEBUG_DEFAULT_BAUD`
 (default 9600, overridable via `-D`). The lazy init path and singleton mutex
-publication are atomically gated on RP2040/RP2350, STM32G474 and mock, so two
-tasks or cores do not concurrently reset the debug state or leak competing
-mutex allocations. Calling `debugInit()` is no longer mandatory.
+publication are atomically gated on RP2040/RP2350, STM32G474, ESP32-S3, and
+mock, so two tasks or cores do not concurrently reset the debug state or leak
+competing mutex allocations. Calling `debugInit()` is no longer mandatory.
 
 `hal_derr_limited()` reuses the same lazy init and applies global rate-limit config per
 error source tag (`source`) so errors from different modules do not suppress each other.
@@ -271,9 +280,9 @@ error source tag (`source`) so errors from different modules do not suppress eac
 
 `hal_serial_print()` and `hal_serial_println()` take the shared core's single
 global TX mutex around the underlying debug-console write path. The linked RP
-port writes through `hal_usb` CDC, while STM32 and mock select their respective
-transport ports. This serialises every emitter that ever reaches the wire -
-the debug helpers (`hal_deb`, `hal_derr`,
+port writes through `hal_usb` CDC, while ESP32-S3, STM32, and mock select their
+respective transport ports. This serialises every emitter that reaches the
+wire - the debug helpers (`hal_deb`, `hal_derr`,
 `hal_derr_limited`), the framed session helper
 (`hal_serial_session_println`), and any direct caller - against each
 other.
@@ -304,10 +313,11 @@ that want an extra transport poll before the TX mutex is released.
 Leaving `hal_serial_set_flush(false)` keeps the RP backend on its default
 path and avoids the optional extra poll/flush while preserving the TX mutex.
 It does not bypass the write loop's bounded retry when the CDC FIFO is full.
-On STM32G474, enabling the option waits for USART2's transmission-complete flag
-after each message. This is useful before STOP changes the peripheral clock or
-an application disables the console. The mock backend accepts the setter
-without target timing semantics.
+On ESP32-S3 the option maps to `fsync(stdout)` on the startup console VFS. On
+STM32G474, enabling it waits for USART2's transmission-complete flag after each
+message. This is useful before STOP changes the peripheral clock or an
+application disables the console. The mock backend accepts the setter without
+target timing semantics.
 
 ### Shared core and link-time transport ports
 
@@ -318,17 +328,23 @@ all common mutexes. The internal `jh_serial_port.h` contract is resolved at
 link time and deliberately exposes only transport operations: begin/configure,
 logical message boundary, byte write, target line ending/flush and byte RX.
 
-The three production ports are intentionally small:
+The production ports are intentionally small:
 
 - `impl/rp2040/hal_serial.cpp` owns USB CDC begin, TX/RX and optional flush;
+- `impl/esp32/hal_serial.cpp` reuses the ESP-IDF startup-owned USB Serial/JTAG
+  console VFS, adopts the official buffered `usb_serial_jtag_driver` or installs
+  that single driver if absent, and never registers a second VFS owner. The
+  baud argument is informational, RX is non-blocking with a 256-byte HAL
+  buffer, and optional flush maps to `fsync(stdout)`;
 - `impl/stm32g474/hal_serial.cpp` owns USART2 on hardware, host stdout for
   target sanity builds, and the currently unsupported RX result;
 - `impl/.mock/hal_serial.cpp` owns deterministic last-message capture, stdout
   observation and injectable binary RX.
 
 Line endings remain transport-specific: RP and STM32 hardware emit `\r\n`,
-while host-style STM32 and mock output use `\n`. Mock capture intentionally
-stores the message without its line ending, matching the historical test API.
+while ESP32-S3, host-style STM32, and mock output use `\n`. Mock capture
+intentionally stores the message without its line ending, matching the
+historical test API.
 The RP assertion path uses the same raw transport and net-console mirror but
 does not acquire the TX mutex, so fault output cannot block on a lock held by
 the failing context.

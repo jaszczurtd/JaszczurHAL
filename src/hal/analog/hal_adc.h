@@ -4,8 +4,9 @@
  * @file hal_adc.h
  * @brief Hardware abstraction for analog-to-digital conversion.
  *
- * Thread-safe and multicore-safe on RP2040/STM32G474 runtime paths. An
- * internal mutex serializes access to the shared ADC hardware/backend state.
+ * Thread-safe and multicore-safe on RP2040, STM32G474, and ESP32-S3 runtime
+ * paths. An internal mutex serializes access to the shared ADC
+ * hardware/backend state.
  */
 
 #include <stdint.h>

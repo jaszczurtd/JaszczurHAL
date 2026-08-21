@@ -70,8 +70,13 @@ because `_ex` already denotes the explicit pixel-type variant.
 
 **impl/rp2040:** shared `hal/gpio/neopixel/jh_neopixel.*` core + RP2040 PIO transport (`hal/gpio/neopixel/rp2040_pio.h`).
 **impl/stm32g474:** shared `hal/gpio/neopixel/jh_neopixel.*` core + cycle-timed GPIO transport in `impl/stm32g474/hal_rgb_led.cpp`.
+**impl/esp32:** shared NeoPixel core + ESP-IDF RMT TX channel and bytes encoder.
+The transport supports the public 800 kHz pixel formats, waits for queued
+transmission completion, and applies the reset/latch interval before returning.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
-**Thread safety:** RP2040 and STM32G474 backends are thread-safe for HAL calls. A HAL mutex serializes singleton strip state and transport access. Mock backend is unsynchronized and intended for single-threaded tests.
+**Thread safety:** RP2040, STM32G474, and ESP32-S3 backends are thread-safe for
+HAL calls. A HAL mutex serializes singleton strip state and transport access.
+Mock backend is unsynchronized and intended for single-threaded tests.
 
 **Mock helpers:**
 ```c

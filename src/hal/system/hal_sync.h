@@ -6,9 +6,10 @@
  *
  * On RP2040 non-FreeRTOS builds this wraps pico SDK mutex_t; on STM32G474
  * non-FreeRTOS builds it uses a single-core atomic spinlock. In supported
- * HAL_ENABLE_FREERTOS builds, hal_mutex_* uses a FreeRTOS mutex. Critical
- * sections remain a hard interrupt mask for timing-sensitive code; they are
- * not a scheduler lock and are not ISR-safe mutexes. Mock builds use
+ * HAL_ENABLE_FREERTOS builds, including ESP32-S3, hal_mutex_* uses a FreeRTOS
+ * mutex. Critical sections use target interrupt masking for timing-sensitive
+ * code; the ESP32-S3 path also uses a shared portMUX to serialize both cores.
+ * They are not a scheduler lock or an ISR-safe mutex. Mock builds use
  * std::mutex.
  */
 
@@ -59,7 +60,7 @@ void hal_mutex_unlock(hal_mutex_t mutex);
 void hal_mutex_destroy(hal_mutex_t mutex);
 
 /**
- * @brief Enter a hard critical section (disables interrupts on RP2040).
+ * @brief Enter a hard, target-specific interrupt critical section.
  *
  * Must be paired with hal_critical_section_exit().
  */

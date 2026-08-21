@@ -208,27 +208,24 @@ below a project or repository `.build` root. It records only relative paths in
 partition-table, application, log, and configuration artifacts can be uploaded
 from Windows CI without embedding a runner-specific absolute path.
 
-For the Phase 1 ESP32-S3 fixture, use native PowerShell and a COM port reported
-by the board's USB Serial/JTAG interface:
+Use native PowerShell to build the Phase 3 ESP32-S3 compile/link fixture:
 
 ```powershell
-.\vscode\entry\jh-vscode.cmd list-ports `
-  --project .\tests\hardware\esp32s3_phase1 --json
 .\vscode\entry\jh-vscode.cmd build `
-  --project .\tests\hardware\esp32s3_phase1
-.\vscode\entry\jh-vscode.cmd upload `
-  --project .\tests\hardware\esp32s3_phase1 --port COM7
-.\vscode\entry\jh-vscode.cmd monitor `
-  --project .\tests\hardware\esp32s3_phase1 --port COM7 `
-  --lock-policy replace-own
+  --project .\tests\fixtures\esp32s3_phase3
 ```
+
+This fixture is compile-only and is not an upload/monitor hardware acceptance
+probe. Device projects use `list-ports`, `upload`, and `monitor` with a COM port
+reported by the board's USB Serial/JTAG interface.
 
 The selected COM record must match the board registry's `303a:1001` programmer
 identity. A stale port, mismatching VID/PID, or several auto-detected matches is
 rejected. Upload cooperatively releases a JaszczurHAL-owned monitor and allows
 it to reconnect after ESP-IDF resets the board. `--allow-unverified-port` is an
 explicit escape hatch for a deliberately selected `--port`; generated tasks do
-not use it. ESP32-S3 Debug builds and Cortex-Debug profiles are outside Phase 1.
+not use it. ESP32-S3 Debug builds and managed Cortex-Debug profiles are not
+provided.
 
 GitHub Actions builds a generated consumer project from a path containing
 spaces for RP2040, RP2350 ARM, RP2350 RISC-V, and STM32G474 on native Windows.
@@ -243,9 +240,10 @@ different Winsock ABI. The native BearSSL integration also remains Linux-only
 because its harness and transport use Bash and POSIX sockets.
 
 The existing `windows-tooling` job also caches the pinned ESP-IDF checkout and
-official tools, performs a clean production build of the ESP32-S3 Phase 1
-fixture, and uploads its relocatable manifest, build log, bootloader,
-partition-table, and application images.
+official tools, performs a clean production build of the compile-only
+`tests/fixtures/esp32s3_phase3` project, and uploads its relocatable manifest,
+build log, bootloader, partition-table, and application images. A successful CI
+build does not establish Phase 3 runtime hardware behavior.
 
 No Windows static-analysis profile is declared by this checkout. The current
 managed Windows tool set and this host provide neither `clang-tidy` nor
@@ -298,7 +296,7 @@ Common failure paths are:
 
 Device selection, monitor ownership, BOOTSEL safety, and task behavior are
 described in [JaszczurHAL VS Code Entry](../vscode/README.md). OTA recovery and
-trial/rollback diagnostics are in [Native RP OTA Workflow](OTAWorkflow.md).
+trial/rollback diagnostics are in [Native OTA Workflow](OTAWorkflow.md).
 
 ## Current support boundary
 

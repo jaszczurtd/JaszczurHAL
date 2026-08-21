@@ -140,6 +140,9 @@ hal_status_t hal_gpio_get_interrupt_owner_ex(uint8_t pin,
  * On RP2040 all GPIO pins share a single IRQ (IO_IRQ_BANK0).
  * On STM32G474 GPIO interrupts are split across EXTI0..4, EXTI9_5 and
  * EXTI15_10; this call applies the same priority to all GPIO EXTI IRQ groups.
+ * On ESP32-S3 all HAL GPIO callbacks share one ESP-IDF ISR service allocated
+ * on the core that attaches the first callback; priority changes must run on
+ * that owner core.
  * Raising GPIO IRQ priority above other peripherals (e.g. I2C, SPI) can
  * prevent those ISRs from blocking edge counting and causing pulse loss.
  *

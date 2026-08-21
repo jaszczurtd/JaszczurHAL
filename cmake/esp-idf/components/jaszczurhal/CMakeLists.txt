@@ -12,35 +12,34 @@ endif()
 include("${_jh_project_config}")
 
 get_filename_component(JH_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../../.." ABSOLUTE)
-set(_jh_shared_source "${JH_ROOT}/src/hal/core/jh_handle_pool.cpp")
-set(_jh_app_entry "${JH_ROOT}/src/hal_app_entry.cpp")
-set(_jh_build_config
-    "${JH_ROOT}/src/hal/impl/esp32/hal_esp32_build_config.cpp")
+if(NOT JH_ESP_IDF_COMPONENT_SOURCES)
+    message(FATAL_ERROR "Generated ESP-IDF component source graph is empty")
+endif()
+if(NOT JH_ESP_IDF_COMPONENT_REQUIRES)
+    message(FATAL_ERROR "Generated ESP-IDF public dependency graph is empty")
+endif()
+set(_jh_sources ${JH_ESP_IDF_COMPONENT_SOURCES})
+
 set(_jh_link_definition
     "${_jh_generated_dir}/jh_link_contract_definition.c")
+list(APPEND _jh_sources "${_jh_link_definition}")
 foreach(_required_file
-    "${_jh_shared_source}"
-    "${_jh_app_entry}"
-    "${_jh_build_config}"
+    ${_jh_sources}
     "${_jh_generated_dir}/jh_board_config.h"
-    "${_jh_generated_dir}/jh_link_contract.h"
-    "${_jh_link_definition}")
+    "${_jh_generated_dir}/jh_link_contract.h")
     if(NOT EXISTS "${_required_file}")
         message(FATAL_ERROR "Required ESP-IDF input is missing: ${_required_file}")
     endif()
 endforeach()
 
 idf_component_register(
-    SRCS
-        "${_jh_shared_source}"
-        "${_jh_app_entry}"
-        "${_jh_build_config}"
-        "${_jh_link_definition}"
+    SRCS ${_jh_sources}
     INCLUDE_DIRS
         "${JH_ROOT}/src"
         "${_jh_generated_dir}"
         ${JH_ESP_IDF_PROJECT_INCLUDE_DIRS}
-    REQUIRES freertos esp_psram)
+    REQUIRES ${JH_ESP_IDF_COMPONENT_REQUIRES}
+    PRIV_REQUIRES ${JH_ESP_IDF_COMPONENT_PRIV_REQUIRES})
 
 target_compile_definitions(${COMPONENT_LIB} PRIVATE
     JH_ESP_IDF_COMPONENT_BUILD=1

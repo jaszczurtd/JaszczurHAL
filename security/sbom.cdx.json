@@ -176,7 +176,7 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact official ESP-IDF release used by the experimental native ESP32-S3 target. The checkout remains fetched on demand; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+          "value": "Exact official ESP-IDF release used by the supported native ESP32-S3 target. The checkout remains fetched on demand; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
         },
         {
           "name": "jaszczurhal:paths",
@@ -1867,5 +1867,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:f5cf8c8d-fdd4-8c54-d860-07a1ba47f974"
+  "serialNumber": "urn:uuid:e4fba209-b328-a89b-721f-058a9527d5ae"
 }

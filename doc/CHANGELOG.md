@@ -8,10 +8,39 @@ All notable changes to this project will be documented in this file.
   SKU 25081 board profile. The generated contract now carries ESP-IDF target,
   4 MiB flash, 2 MiB Quad PSRAM, pin-trait, native WiFi/Bluetooth/USB,
   `303a:1001` USB Serial/JTAG programming, and target-required FreeRTOS facts
-  with provenance. The controlled minimal ESP-IDF component builds the
-  portable `app_start()`/`app_task0()` entry and validates the final
-  `sdkconfig` against the generated target/board contract. The released target
-  allowlist rejects optional peripheral features until their ESP backends land.
+  with provenance. The controlled, feature-resolved ESP-IDF component builds
+  the portable application entry and validates the final `sdkconfig` against the
+  generated target/board contract.
+- Added the ESP32-S3 Phase 2 backend set: system timing/watchdog/architecture/
+  reset/UID/temperature services, FreeRTOS mutexes and critical sections,
+  generated-mask GPIO/IRQ and ADC, the existing USB Serial/JTAG console VFS
+  backed by one official buffered `usb_serial_jtag_driver`, UART1/UART2,
+  I2C0/I2C1 controller mode, SPI2/SPI3 controller mode, and a GPTimer-backed
+  default alarm pool. Completed the remaining Phase 2 implementations with
+  ESP-IDF I2C target mode, LEDC-backed simple/frequency-controlled PWM, RMT
+  NeoPixel transport, PCNT, four selectable GPTimer pools, download-boot entry,
+  FreeRTOS end-of-stack guard verification, and retained Xtensa fault snapshots.
+  `app_task1()` is available with explicit ESP-IDF task affinity. The target
+  allowlist now accepts these optional peripheral features in addition to
+  required FreeRTOS. The newly completed surfaces compile and link in the
+  Phase 3 fixture but have not yet received hardware acceptance coverage.
+- Completed the Phase 2 physical closure on Waveshare ESP32-S3-Zero: task0 and
+  task1 ran on cores 0/1, two GPIO callbacks ran in ISR context, ADC pull-down/
+  pull-up readings were 37/4095, UART GPIO loopback and SPI passed, an unwired
+  I2C scan returned `HAL_OK` with zero devices, 20 GPTimer callbacks ran in ISR
+  context, and bidirectional USB Serial/JTAG, system/sync, and documented
+  unsupported-operation checks passed. The `esp32s3` target and
+  `waveshare-esp32-s3-zero` board profiles are now marked supported.
+- Added the ESP32-S3 Phase 3 native connectivity and service graph: ESP-IDF
+  WiFi/`esp_netif`/lwIP lifecycle, resolver, TCP/UDP transports and native BSD
+  adapter; BearSSL TLS clients and HTTPS clients; plaintext HTTP and WebSocket
+  servers; MQTT over plaintext or TLS; NTP/time; raw ESP application OTA over
+  the `two-ota-large` trial/confirm/rollback layout; and the shared WireGuard
+  engine over an ESP lwIP extension port. `jh-vscode upload-ota` validates the
+  ESP-IDF artifact manifest and uploads the raw application image. There is no
+  public TLS server, HTTPS server, WSS, or WebSocket-client API. The full graph
+  compiles and links in `tests/fixtures/esp32s3_phase3`; hardware, lifecycle,
+  rollback, and negative-security validation remains pending.
 - Pinned ESP-IDF v6.0.2 at its exact release commit and added opt-in,
   recursive-submodule-aware SDK and `esp32s3` toolchain installation, SBOM
   provenance, and the production `build_esp_idf.py` project runner for build,
@@ -27,8 +56,7 @@ All notable changes to this project will be documented in this file.
   chip/core/flash/PSRAM facts and a repeated `app_task0()` heartbeat. Physical
   closure on the Waveshare board completed three full three-image uploads,
   matched the exact S3/two-core/4 MiB flash/initialized 2 MiB Quad PSRAM
-  contract, and verified monitor release/reconnect across reset. Peripheral HAL
-  validation remains Phase 2.
+  contract, and verified monitor release/reconnect across reset.
 - Added one shared `hal_time` wall-clock setter and status snapshot, 64-bit
   monotonic progression, RP/STM32 libc adapters, RTC restore, and automatic RTC
   persistence after validated NTP synchronization.

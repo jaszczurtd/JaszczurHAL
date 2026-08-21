@@ -7,8 +7,8 @@ ownership, and build/upload integration.
 
 Use [JaszczurHAL VS Code Entry](../vscode/README.md) for CLI actions and device
 safeguards, [Target and board profiles](boards_profiles_howto.md) for descriptor
-fields and generated contracts, and [Native RP OTA Workflow](OTAWorkflow.md)
-for the complete network-update path.
+fields and generated contracts, and [Native OTA Workflow](OTAWorkflow.md) for
+the target-specific network-update paths.
 
 ## Project layout
 
@@ -315,12 +315,14 @@ inputs, every `HAL_ENABLE_*` entry must be a standalone simple token separated
 with semicolons. Whitespace does not separate multiple feature definitions,
 and CMake generator expressions are rejected.
 
-The current `esp32s3` descriptor exposes a deliberately narrow released
-allowlist: only target-required `HAL_ENABLE_FREERTOS` is supported. The
-production runner rejects a requested feature or any dependency that resolves
-outside that set with `[JH-CFG-UNSUPPORTED]`. Peripheral modules and
-`HAL_ENABLE_APP_TASK1` are Phase 2 work even though the shared application-entry
-source already contains their future dispatch shape.
+The `esp32s3` descriptor supports target-required `HAL_ENABLE_FREERTOS`, the
+delivered Phase 2 peripheral flags, and the Phase 3 network/service flags. The
+set includes APP_TASK1, UART, I2C controller/target, SPI, PWM_FREQ, RGB_LED,
+PCNT, STACK_GUARD, WiFi, TCP/UDP, BSD sockets, TLS, HTTP client/server/files,
+WebSocket server, MQTT, time, OTA, and WireGuard. Simple PWM and the core
+system/synchronization/GPIO/ADC/serial/timer sources belong to its baseline
+component. The production runner rejects a requested feature or any dependency
+that resolves outside the descriptor allowlist with `[JH-CFG-UNSUPPORTED]`.
 
 For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
 paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal
@@ -436,9 +438,12 @@ For ESP32-S3, `Project: Serial Monitor` follows the single board matching the
 registry programmer identity when no explicit port is pinned. `Project:
 Refresh IntelliSense` consumes the Xtensa compile commands emitted by ESP-IDF
 without substituting an Arm IntelliSense mode. `build-debug` and managed
-Cortex-Debug profiles are not provided for ESP32-S3 in Phase 1.
+Cortex-Debug profiles are not provided for ESP32-S3.
 
 ## OTA manifest configuration
+
+For RP CMake projects, the manifest publishes the generated container and its
+build metadata alongside the shared OTA endpoint settings:
 
 ```json
 {
@@ -461,6 +466,10 @@ Cortex-Debug profiles are not provided for ESP32-S3 in Phase 1.
 }
 ```
 
+ESP-IDF projects omit the RP-specific `cmake` and `artifacts.ota` entries. Their
+production build manifest identifies the raw application BIN; the `ota` object
+above remains the shared host endpoint and authentication configuration.
+
 `ota.broadcast` selects the UDP discovery destination. `ota.host` pins a
 device address. `ota.listenPort` selects the host TCP callback listener; it
 defaults to `8266` so it matches the persistent LAN-scoped firewall rule
@@ -468,9 +477,11 @@ prepared by `runmefirst.sh`. An explicit zero requests an ephemeral port.
 `ota.passwordEnv` keeps the host secret outside the tracked manifest.
 
 The device hostname, UDP port, and password must match firmware configuration.
-See [Native RP OTA Workflow](OTAWorkflow.md) for provisioning, tasks,
-authentication, host firewall rules, trial confirmation, rollback, and
-recovery.
+See [Native OTA Workflow](OTAWorkflow.md) for target-specific artifacts,
+provisioning, tasks, authentication, host firewall rules, trial confirmation,
+rollback, and recovery. RP uploads sign the generated JaszczurHAL container;
+ESP-IDF uploads validate the production artifact manifest and transfer its raw
+application BIN without converting it into the RP container format.
 
 ## Examples and variants
 

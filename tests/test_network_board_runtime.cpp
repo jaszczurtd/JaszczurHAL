@@ -467,6 +467,36 @@ void test_close_during_udp_operation_is_deferred_until_backend_returns(void) {
                                         s_udp_handle, "x", 1u, &remote, &sent));
 }
 
+void test_wifi_mode_off_invalidates_transport_handles(void) {
+#if defined(JH_TEST_NETWORK_BOARD_ABSENT)
+  TEST_IGNORE_MESSAGE("The profile has no radio transport handles");
+#else
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_wifi_begin_station_ex("ssid", "password", false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tcp_socket_open_ex(&s_tcp_handle));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_open_ex(&s_udp_handle));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_wifi_set_mode_ex(HAL_WIFI_MODE_OFF));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_tcp_close_calls);
+  TEST_ASSERT_EQUAL_UINT32(1u, s_udp_close_calls);
+
+  size_t transferred = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL, hal_tcp_socket_send_ex(s_tcp_handle, "x", 1u, &transferred));
+  hal_net_endpoint_t remote{};
+  remote.family = HAL_NET_AF_INET;
+  remote.addr_len = HAL_NET_IPV4_ADDR_LEN;
+  remote.addr[0] = 192u;
+  remote.addr[1] = 0u;
+  remote.addr[2] = 2u;
+  remote.addr[3] = 1u;
+  remote.port = 1234u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      hal_udp_socket_sendto_ex(s_udp_handle, "x", 1u, &remote, &transferred));
+#endif
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_profile_and_runtime_state_gate_public_network_api);
@@ -476,5 +506,6 @@ int main(void) {
   RUN_TEST(test_numeric_ipv4_parsing_does_not_require_radio_access);
   RUN_TEST(test_close_during_tcp_operation_is_deferred_until_backend_returns);
   RUN_TEST(test_close_during_udp_operation_is_deferred_until_backend_returns);
+  RUN_TEST(test_wifi_mode_off_invalidates_transport_handles);
   return UNITY_END();
 }

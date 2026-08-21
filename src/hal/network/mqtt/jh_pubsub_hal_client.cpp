@@ -1,6 +1,8 @@
 #include "jh_pubsub_hal_client.h"
 
-#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474) && defined(HAL_ENABLE_MQTT)
+#if (HAL_TARGET_IS_RP || HAL_TARGET_IS_STM32G474 ||                            \
+     HAL_TARGET_IS_ESP32_FAMILY) &&                                            \
+    defined(HAL_ENABLE_MQTT)
 
 #include "hal/network/hal_net.h"
 #include "hal/serial/hal_serial.h"
@@ -383,4 +385,4 @@ int JHPubSubHalClient::connect_tls(const char *host, uint16_t port) {
 }
 #endif
 
-#endif /* (RP2040 || STM32G474) && HAL_ENABLE_MQTT */
+#endif /* supported hardware target && HAL_ENABLE_MQTT */

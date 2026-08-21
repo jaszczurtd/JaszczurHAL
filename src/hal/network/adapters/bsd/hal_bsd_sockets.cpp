@@ -1,7 +1,18 @@
 /** @file Public BSD/POSIX socket adapter over the shared HAL network API. */
 #include "hal/core/hal_config.h"
 
-#ifdef HAL_ENABLE_BSD_SOCKETS
+#if defined(HAL_ENABLE_BSD_SOCKETS) && defined(HAL_NETWORK_BACKEND_ESP_IDF)
+
+#include "hal/core/hal_target.h"
+
+#if !HAL_TARGET_IS_ESP32_FAMILY
+#error "HAL_NETWORK_BACKEND_ESP_IDF requires an ESP32-family target"
+#endif
+
+/* ESP-IDF exports the native lwIP BSD API. Defining the HAL compatibility
+ * symbols here would be macro-expanded to lwip_* and collide with ESP-IDF. */
+
+#elif defined(HAL_ENABLE_BSD_SOCKETS)
 
 #include "hal/core/hal_mutex_once.h"
 #include "hal/core/hal_target.h"

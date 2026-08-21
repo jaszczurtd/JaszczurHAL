@@ -83,6 +83,8 @@ typedef void (*hal_timer_callback_t)(hal_timer_t timer, void *user_data);
  *
  * This is an advanced API intended for scaling beyond the default pool.
  * On RP2040/RP2350 each timer instance has 4 hardware alarms.
+ * On ESP32-S3 each successfully created pool owns a separate general-purpose
+ * hardware timer.
  *
  * @param hardware_alarm_num Hardware alarm index (0..3 on RP2040 family).
  * @param max_timers         Requested logical timers in this pool.
@@ -103,6 +105,8 @@ hal_timer_pool_t hal_timer_pool_create_auto(uint16_t max_timers);
  * @brief Destroy a pool created by hal_timer_pool_create*().
  *
  * Passing NULL or HAL_TIMER_POOL_DEFAULT is a no-op.
+ * Call from task/thread context after externally synchronising other users of
+ * the pool; destruction from an alarm callback/ISR is not supported.
  */
 void hal_timer_pool_destroy(hal_timer_pool_t pool);
 
@@ -186,7 +190,14 @@ hal_timer_result_t hal_timer_create(hal_timer_pool_t pool, uint32_t period_us,
                                     hal_timer_callback_t callback,
                                     void *user_data, hal_timer_t *out_timer);
 
-/** @brief Destroy a managed timer object (stops active timer first). */
+/**
+ * @brief Destroy a managed timer object (stops active timer first).
+ *
+ * Call only from task/thread context, never from this timer's callback or an
+ * ISR. The caller must externally serialize destruction against every other
+ * operation using the same timer handle. On return, a callback already
+ * selected by the backend has finished and the handle is no longer valid.
+ */
 hal_timer_result_t hal_timer_destroy(hal_timer_t timer);
 
 /** @brief Start (arm) a managed timer. */

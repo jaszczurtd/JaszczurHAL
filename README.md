@@ -7,10 +7,21 @@ JaszczurHAL is a hardware abstraction layer and utility library for embedded pro
 RP2040 and RP2350 firmware builds directly against the official Pico SDK.
 STM32G474 is supported through the repository's bare-metal implementation and
 linker flow. The ESP32-S3 target provides a controlled native
-ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow;
-portable peripheral backends are planned for the next phase. FreeRTOS is
-optional on RP and STM32G474 and required by the ESP-IDF runtime. The mock
-backend provides deterministic host-side validation.
+ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow plus
+portable core, peripheral, and native connectivity backends. These include I2C
+controller/target, LEDC PWM, RMT NeoPixel, PCNT, GPTimer pools, WiFi,
+resolver, TCP/UDP and BSD sockets, BearSSL TLS clients, HTTP/HTTPS clients,
+plaintext HTTP/WebSocket servers, MQTT/TLS, NTP/time, raw ESP application OTA,
+and WireGuard. FreeRTOS is optional on RP and STM32G474 and required by the
+ESP-IDF runtime. The mock backend provides deterministic host-side validation.
+
+The existing ESP32-S3 Phase 2 hardware fixture verified both application tasks
+and the original system/sync/GPIO/ADC/serial/UART/I2C-controller/SPI/default-
+timer subset on Waveshare ESP32-S3-Zero. The later Phase 2 additions and the
+Phase 3 connectivity/service set are compile/link verified by
+`tests/fixtures/esp32s3_phase3`; their runtime and negative-security hardware
+validation remains pending. ESP32-S3 public USB-device lifecycle and storage
+backends are not included.
 
 ## How do you even pronounce this library name?
 
@@ -84,10 +95,9 @@ together. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h`, built on the portable entry-point contract:
 `app_start()`, `app_task0()`, and optional `app_task1()`
 (`HAL_ENABLE_APP_TASK1`, mapped to dual-core execution on RP and cooperative
-calls on bare-metal STM32G474). ESP-IDF Phase 1 maps `app_start()` and
-`app_task0()` to its already-running FreeRTOS scheduler; optional HAL modules
-and the second application task remain outside the released ESP32-S3 feature
-allowlist.
+calls on bare-metal STM32G474). ESP-IDF maps `app_start()`, `app_task0()`, and
+optional `app_task1()` to its already-running FreeRTOS scheduler. ESP32-S3
+defaults task0/task1 to cores 0/1 and allows explicit affinity overrides.
 
 The build matrix, requirements, per-example target coverage, and the rule to
 extend an existing project or variant before creating another directory are
@@ -158,7 +168,8 @@ JaszczurHAL hides the target-specific startup details, such as scheduler startup
 and optional application task placement. RP targets use the pinned
 FreeRTOS-Kernel with SMP support, while STM32G474 uses the same kernel with the
 Cortex-M4F port. ESP32-S3 uses the FreeRTOS instance supplied by the pinned
-ESP-IDF; its target descriptor adds `HAL_ENABLE_FREERTOS` as a required feature.
+ESP-IDF; its target descriptor adds `HAL_ENABLE_FREERTOS` as a required feature
+and supports the optional second application task.
 
 Detailed notes about kernel pinning, ports, and build variants are available in [lib_compilation.md](doc/lib_compilation.md) and [doc/api/04_multicore_drivers_migration.md](doc/api/04_multicore_drivers_migration.md).
 
@@ -207,9 +218,10 @@ It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
 documentation link validation, strict raw/effective feature lint, generated
 feature-artifact drift checks, and library/firmware compile gates for RP2040,
 RP2350 ARM, RP2350 RISC-V and STM32G474 across `HAL_ENABLE_*` profiles. Gate 7
-also performs a clean ESP32-S3 build through the pinned ESP-IDF and validates
-its multi-image artifact manifest. The examples and hardware-fixture compile
-matrices remain part of the gate.
+also performs a clean compile/link build of `tests/fixtures/esp32s3_phase3`
+through the pinned ESP-IDF and validates its multi-image artifact manifest.
+This fixture is not a hardware acceptance test. The examples and hardware-
+fixture compile matrices remain part of the gate.
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
 `tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
@@ -256,7 +268,7 @@ toolchain's compile database.
 - End-to-end project model and
   [adding project source files](doc/FwProjectWorkflow.md#adding-project-source-files):
   [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
-- Native RP network updates, first flash, and firewall requirements:
+- Native RP and ESP32-S3 network updates, first flash, and security boundaries:
   [OTAWorkflow.md](doc/OTAWorkflow.md)
 - [Full list of keyboard shortcuts](vscode/README.md#vs-code-keyboard-shortcuts)
 
@@ -276,12 +288,13 @@ Run and Debug workflow builds and loads the Debug ELF with managed OpenOCD and
 an Arm-capable GDB on Windows and Linux; see
 [Native Windows Setup](doc/windows_setup.md) for wiring and setup details.
 
-Both Linux and native Windows provide the complete VS Code firmware-development
-workflow, including builds, uploads, serial monitoring, OTA updates, and
-debugging for the released RP/STM paths. ESP32-S3 Phase 1 provides build,
-upload, monitor, and IntelliSense but no managed debug profile. Linux provides
-the full repository quality gate, including Valgrind, static analysis, and
-POSIX-only host integrations. See
+Both Linux and native Windows provide the VS Code firmware-development
+workflow for the released target paths. RP/STM targets provide their documented
+build, upload, monitor, OTA, and debug capabilities. ESP32-S3 provides build,
+serial upload, monitor, IntelliSense, and raw application OTA, but no managed
+debug profile; its OTA path still requires the Phase 3.5 hardware validation
+described above. Linux provides the full repository quality gate, including
+Valgrind, static analysis, and POSIX-only host integrations. See
 [Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
 explicit Linux-only boundaries.
 
@@ -308,7 +321,7 @@ Primary docs:
 - Process scripts and orchestration: [00_scripts.md](doc/api/00_scripts.md)
 - API reference: [JaszczurHAL_API.md](doc/JaszczurHAL_API.md)
 - Firmware project workflow: [FwProjectWorkflow.md](doc/FwProjectWorkflow.md)
-- Native RP OTA workflow: [OTAWorkflow.md](doc/OTAWorkflow.md)
+- Native OTA workflow: [OTAWorkflow.md](doc/OTAWorkflow.md)
 - Target and board profiles: [boards_profiles_howto.md](doc/boards_profiles_howto.md)
 - Changelog: [CHANGELOG.md](doc/CHANGELOG.md)
 - Build-time flags summary: [HAL_FLAGS](doc/HAL_FLAGS.txt)

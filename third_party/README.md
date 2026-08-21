@@ -85,14 +85,18 @@ pinned SDK environment, and validates the complete build contract:
 
 ```bash
 python3 scripts/build_esp_idf.py build \
-  --project tests/hardware/esp32s3_phase1 \
+  --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 ```
 
+This is the compile/link fixture used by CI and the local gate. It validates
+the complete delivered ESP32-S3 feature graph and artifacts without claiming
+runtime hardware acceptance.
+
 The runner generates `sdkconfig` defaults from the board flash/PSRAM facts,
-uses the shared `app_main()` entry and minimal ESP-IDF component graph, rejects
-features outside the target's released allowlist, and emits the relocatable
-`jh_esp_idf_artifacts.json` manifest. That manifest records every flash image
+uses the shared `app_main()` entry and generated feature-resolved ESP-IDF
+component graph, rejects features outside the target's allowlist, and emits the
+relocatable `jh_esp_idf_artifacts.json` manifest. That manifest records every flash image
 with its offset, size, and SHA-256, the partition-table profile, the final
 `sdkconfig` digest, the exact ESP-IDF commit, and actual compiler, CMake, Ninja,
 Python, esptool, and ESP-IDF tool-registry provenance. The default output is
@@ -101,8 +105,10 @@ directory below the project or repository `.build` root.
 
 `scripts/build_esp_idf_phase0.py` remains a thin compatibility wrapper around
 that runner for the isolated Phase 0 fixture. New project and CI commands use
-`scripts/build_esp_idf.py`. Native ESP32 peripheral HAL backends are outside
-Phase 1.
+`scripts/build_esp_idf.py`. ESP32-S3 includes baseline system/sync/GPIO/ADC/
+serial/simple-PWM/timer backends. Its feature-resolved component graph adds
+UART, I2C controller/target, SPI, PWM_FREQ, RMT/RGB, PCNT, stack-guard
+configuration, native connectivity/services, and optional APP_TASK1 dispatch.
 
 `security/esp_idf_tools.json` is the reviewed snapshot of the pin-selected tool
 environment. It records six binary/data tools and eleven first-party Espressif

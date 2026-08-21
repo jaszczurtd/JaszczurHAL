@@ -5,8 +5,9 @@
  * @brief Hardware abstraction for serial console I/O and debug logging.
  *
  * One target-independent core owns formatting, synchronization, rate limiting
- * and ISR deferral. A small link-time port routes bytes to RP USB CDC, STM32
- * USART2/host stdout, or the mock capture/RX transport.
+ * and ISR deferral. A small link-time port routes bytes to RP USB CDC, the
+ * ESP-IDF startup-owned USB Serial/JTAG console VFS, STM32 USART2/host stdout,
+ * or the mock capture/RX transport.
  */
 
 #include <stdbool.h>

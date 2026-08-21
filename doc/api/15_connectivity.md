@@ -159,8 +159,9 @@ See the public module headers for complete signatures.
 
 `hal_net.h` contains plain C value types shared by handle-based UDP, TCP, and
 BSD/POSIX compatibility layers. Endpoints have family-tagged storage for IPv4
-and IPv6. The current CYW43 backends advertise IPv4; unsupported families
-return `HAL_EUNSUPPORTED`.
+and IPv6. The current CYW43 backends advertise IPv4. ESP32-S3 advertises the
+families enabled in its ESP-IDF lwIP configuration; unsupported families return
+`HAL_EUNSUPPORTED`.
 
 ```c
 #include <hal/network/hal_net.h>
@@ -220,6 +221,8 @@ field is in host byte order; POSIX adapters perform their own `htons()` /
 - CYW43 backends resolve numeric literals locally and use their owned lwIP
   resolver for hostnames. Hostname resolution requires initialized hardware;
   literal parsing does not.
+- ESP32-S3 resolves through the native ESP-IDF lwIP `getaddrinfo()` path after
+  the WiFi/`esp_netif` lifecycle reaches a usable state.
 
 **Mock resolver helpers:**
 ```c
@@ -227,11 +230,31 @@ void hal_mock_net_reset(void);
 bool hal_mock_net_set_dns_entry(const char *host, const char *ip);
 ```
 
+### ESP32-S3 native backend and verification boundary
+
+The ESP32-S3 provider initializes NVS, `esp_netif`, the default ESP event loop,
+the station netif, and the native WiFi driver behind the existing public HAL
+facades. Event handlers translate station start/connect/disconnect, IPv4 lease,
+scan, authentication, missing-network, reconnect, and teardown state. TCP and
+UDP handles use bounded generation-checked pools over native lwIP sockets and
+`select()`. `HAL_ENABLE_BSD_SOCKETS` exposes ESP-IDF's native BSD API instead of
+defining the shared compatibility symbols a second time.
+
+The same graph builds the shared BearSSL TLS client, HTTP/HTTPS client,
+plaintext HTTP server, plaintext WebSocket server, MQTT with optional TLS,
+NTP/time, raw ESP application OTA, and WireGuard over the target's lwIP
+extension port. The public API has no TLS server, HTTPS server, WSS, or
+WebSocket client. `tests/fixtures/esp32s3_phase3` proves feature resolution,
+source/dependency selection, compilation, linking, partitions, and artifacts;
+it does not prove runtime hardware, lifecycle, rollback, or negative-security
+behavior.
+
 ## `hal_wifi` - WiFi  *(optional - `HAL_ENABLE_WIFI`)*
 
 RP builds that need WiFi select a radio-capable profile: `picow`, `pico2w`, or
-`pico-rm2`. `HAL_ENABLE_WIFI` selects the facade; dependent modules such as
-MQTT and WireGuard propagate it.
+`pico-rm2`. ESP32-S3 uses the native radio declared by its board profile.
+`HAL_ENABLE_WIFI` selects the facade; dependent modules such as MQTT and
+WireGuard propagate it.
 Network modules may also be compiled for a plain Pico profile; public calls
 then return `HAL_EUNSUPPORTED` without accessing CYW43 pins. On a capable
 profile, `hal_wifi_set_mode_ex(HAL_WIFI_MODE_STA)` and
@@ -327,12 +350,13 @@ const char *hal_wifi_encryption_to_string(hal_wifi_encryption_t encryption);
 **impl/rp2040:** JaszczurHAL-owned CYW43 driver and lwIP stack over PIO/gSPI.
 **impl/stm32g474:** the same CYW43/lwIP owner over the STM32G474 one-wire gSPI
 transport.
+**impl/esp32:** native ESP-IDF station lifecycle over NVS, `esp_netif`, the
+default event loop, `esp_wifi`, DHCP/DNS, scan, ping, and reconnect events.
 **impl/.mock:** state injection via mock helpers.
-**Thread safety:** The RP and STM32G474 hardware backends serialize public HAL
-wrapper calls. Internal singleton mutexes protect provider state, network
-service progress, and CYW43/lwIP stack access in bare-metal and FreeRTOS
-builds. The mock backend is a deterministic state-injection test double for
-single-threaded tests.
+**Thread safety:** The RP, STM32G474, and ESP32-S3 hardware backends serialize
+public HAL wrapper calls. Internal singleton mutexes protect provider state,
+network service progress, and stack access. The mock backend is a deterministic
+state-injection test double for single-threaded tests.
 
 **Mock helpers:**
 ```c
@@ -1252,11 +1276,12 @@ Default static limits can be overridden before including HAL headers:
 ---
 
 
-## `hal_ota` - authenticated firmware update  *(opt-in - `HAL_ENABLE_OTA`)*
+## `hal_ota` - firmware update with optional AUTH2  *(opt-in - `HAL_ENABLE_OTA`)*
 
-Thread-safe RP OTA service over HAL UDP/TCP. It uses a versioned JaszczurHAL
-container, coordinated flash writes, and a fixed boot applier with automatic
-trial boot, confirmation, and rollback.
+Thread-safe native OTA service over HAL UDP/TCP. RP and ESP32-S3 share the
+discovery, password-derived HMAC-SHA256 AUTH2 exchange, transfer, callbacks,
+and public boot-status contract while retaining target-specific image and
+activation models.
 
 ```c
 #include <hal/network/ota/hal_ota.h>
@@ -1305,23 +1330,43 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
 - `hal_ota_handle()` polls OTA transport and dispatches queued events to user callbacks.
 - Callback handlers can be replaced or unregistered by passing `NULL`.
 - Re-entering `hal_ota_begin()` clears queued mock/driver events before processing.
-- Native images contain target id, program offset, generation, version,
+- With a configured password, AUTH2 binds the command, callback port, image
+  size, image MD5, and independent device/client nonces. Authentication is
+  accepted only from the invitation's UDP address and source port; the TCP
+  callback must come from the same peer address. Legacy AUTH/200 messages are
+  rejected and a non-empty host password cannot accept a direct `OK`.
+- Omitting `hal_ota_set_password()` skips AUTH2. An empty password uses a
+  publicly known key. Both modes are unauthenticated and are suitable only for
+  isolated development networks.
+- RP native images contain target id, program offset, generation, version,
   payload SHA-256, HMAC-SHA256 and header CRC. The HMAC key is derived from the
   same application password used by transport authentication.
-- Native flash is split into a 16 KiB immutable boot region, equal
+- RP native flash is split into a 16 KiB immutable boot region, equal
   `program`/`staging` slots, a phase journal, scratch sector, two redundant
   state sectors and the existing LittleFS/EEPROM tail.
-- The boot applier swaps `program` and `staging` sector by sector. Its monotonic
+- The RP boot applier swaps `program` and `staging` sector by sector. Its monotonic
   phase journal lets it resume after power loss. An unconfirmed trial is
   reverted after `HAL_RP_OTA_MAX_BOOT_ATTEMPTS` boots.
+- ESP32-S3 accepts a raw ESP application BIN, verifies the transfer MD5 and
+  ESP-IDF image validation, writes the inactive OTA app partition through
+  `esp_ota_*`, selects it for boot, and restarts. Its generated defaults select
+  `two-ota-large` with ESP-IDF app rollback enabled. Boot status maps the
+  running/boot partitions and ESP OTA image states into the public stable,
+  pending, trial, rollback, and recovery modes.
 - Call `hal_ota_confirm_boot_ex()` only after application self-tests have
-  passed. Calling it while stable is harmless.
+  passed. On ESP32-S3 this calls
+  `esp_ota_mark_app_valid_cancel_rollback()`. Calling it while stable is
+  harmless.
 
 **impl/rp2040:** staging/applier implementation for RP2040 and RP2350.
+**impl/esp32:** native ESP-IDF OTA partitions and raw application images. The
+AUTH2 password is optional at the device API level; deployed systems must
+configure a non-empty secret and apply the ESP-IDF secure-boot/flash-encryption
+policy appropriate to their threat model.
 **impl/.mock:** deterministic event-injection test double.
-**Thread safety:** The RP-family backend is thread-safe and multicore-safe for public
-APIs. A singleton `hal_mutex_t` serializes all wrapper calls and callback
-dispatch is performed outside that lock.
+**Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
+multicore-safe for public APIs. A singleton `hal_mutex_t` serializes all wrapper
+calls and callback dispatch is performed outside that lock.
 
 **Mock helpers:**
 ```c
@@ -1337,9 +1382,9 @@ const char *hal_mock_ota_get_password(void);
 uint32_t    hal_mock_ota_get_handle_count(void);
 ```
 
-The complete native project, firmware, VS Code, firewall, confirmation,
-rollback, and recovery contract is documented in
-[Native RP OTA Workflow](../OTAWorkflow.md). A complete application is
+The target-specific project, firmware, VS Code, firewall, confirmation,
+rollback, recovery, and security contracts are documented in
+[Native OTA Workflow](../OTAWorkflow.md). The RP reference application is
 available in [`examples/25_ota`](../../examples/25_ota/).
 
 ---
@@ -1416,11 +1461,13 @@ bool     hal_udp_end_packet(void);
 
 **impl/rp2040:** JaszczurHAL-owned lwIP raw UDP engine with a static socket
 pool.
+**impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP UDP sockets
+and `select()` readiness/timeouts.
 **impl/.mock:** deterministic multi-socket test double with injected inbound
 packets, captured outbound packet metadata and payload.
-**Thread safety:** The RP-family backend is thread-safe and multicore-safe for public
-APIs. A singleton `hal_mutex_t` serializes access to the static UDP pool and
-the owned lwIP engine.
+**Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
+multicore-safe for public APIs. Backend-local mutexes protect their static UDP
+pools and stack operations.
 
 **Mock helpers:**
 ```c
@@ -1531,12 +1578,14 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener);
 
 **impl/rp2040:** JaszczurHAL-owned lwIP raw TCP engine with static socket and
 listener pools.
+**impl/esp32:** bounded HAL handle pool over native ESP-IDF lwIP TCP sockets,
+including timed connect, bind/listen/accept, shutdown, and `select()` readiness.
 **impl/.mock:** deterministic client/listener test double with scripted
 connect result, injected RX bytes, captured TX payload, captured remote
 endpoint and per-listener pending-client queues.
-**Thread safety:** The RP-family backend is thread-safe and multicore-safe for public
-APIs. A singleton `hal_mutex_t` serializes access to the static TCP pools and
-the owned lwIP engine.
+**Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
+multicore-safe for public APIs. Backend-local mutexes protect their static TCP
+pools and stack operations.
 
 **Mock helpers:**
 ```c
@@ -1654,8 +1703,11 @@ removed on exit.
 
 ## BSD sockets adapter  *(opt-in - `HAL_ENABLE_BSD_SOCKETS`)*
 
-Minimal IPv4 BSD/POSIX compatibility layer over `hal_udp` and `hal_tcp`.
-Enabling it automatically enables UDP, TCP and WiFi.
+Enabling this module automatically enables UDP, TCP and WiFi. CYW43 and mock
+builds use the minimal IPv4 BSD/POSIX compatibility layer over `hal_udp` and
+`hal_tcp` described below. ESP32-S3 exposes the native BSD API already provided
+by ESP-IDF lwIP; the shared adapter deliberately defines no competing socket
+symbols on that target.
 
 ```c
 #include <sys/socket.h>
@@ -1706,7 +1758,7 @@ void freeaddrinfo(struct addrinfo *res);
 const char *gai_strerror(int errcode);
 ```
 
-**MVP scope:** `AF_INET`, `SOCK_STREAM`, `SOCK_DGRAM`, TCP/UDP protocols,
+**Shared-adapter MVP scope:** `AF_INET`, `SOCK_STREAM`, `SOCK_DGRAM`, TCP/UDP protocols,
 `sockaddr_in`, byte-order helpers, IPv4 text/binary conversion, and one-result
 IPv4 `getaddrinfo()`. Descriptor values start at `HAL_BSD_SOCKET_FD_BASE` and
 are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
@@ -1773,6 +1825,9 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
 **shared thematic implementation:** `hal/network/adapters/bsd/hal_bsd_sockets.cpp`
 contains the fd-table adapter, address conversion helpers and `netdb.h`
 resolver glue.
+**impl/esp32:** native ESP-IDF lwIP BSD headers and symbols; descriptor and
+option behavior follows the pinned ESP-IDF configuration rather than the
+shared adapter's fixed fd table.
 **impl/.mock tests:** `test_bsd_sockets` covers behavior and errno mapping;
 `test_bsd_sockets_c_compile` verifies simple C TCP/UDP client/server shapes,
 `getaddrinfo()` and `setsockopt()` compile and link against the compatibility
@@ -1856,6 +1911,9 @@ port used by capability-advertised host-stack backends.
 **impl/rp2040:** HAL-owned lwIP extension and secure platform hooks.
 **impl/stm32g474:** shared CYW43/lwIP underlay, hardware RNG entropy, and
 HAL-synchronized NTP time.
+**impl/esp32:** shared WireGuard engine over the native ESP-IDF lwIP underlay,
+with explicit stack locking/netif access, native resolver, secure ESP entropy,
+and synchronized libc time for TAI64N handshakes.
 **impl/.mock:** deterministic stateful test double with captured configuration,
 peer endpoint injection and handshake-trigger observability.
 **Thread safety:** a singleton `hal_mutex_t` serializes all public wrapper
@@ -1930,6 +1988,7 @@ bool hal_mqtt_unsubscribe(const char *topic);
   adapter.
 - STM32G474 uses the same PubSubClient/HAL TCP adapter when its CYW43 gSPI
   backend is configured.
+- ESP32-S3 uses the same PubSubClient adapter over its native HAL TCP sockets.
 - With `HAL_ENABLE_TLS`, call `hal_mqtt_configure_tls_ex()` before connecting
   to enable MQTTS. The referenced trust anchors and callbacks follow the
   `hal_tls` lifetime rules. Reconfiguration closes the current transport.
@@ -1944,8 +2003,8 @@ bool hal_mqtt_unsubscribe(const char *topic);
 - Inbound messages are copied to an internal buffer and delivered from
   `hal_mqtt_loop()` after releasing the internal mutex.
 
-**impl/rp2040/stm32g474:** bundled `PubSubClient`
-(`frameworks/PubSubClient`) over `hal_tcp` or `hal_tls`.
+**impl/rp2040/stm32g474/esp32:** bundled `PubSubClient`
+(`frameworks/PubSubClient`) over `hal_tcp` or the BearSSL `hal_tls` client.
 **impl/.mock:** deterministic stateful test double with injectable connect result,
 loop result and inbound messages.
 **Thread safety:** A singleton `hal_mutex_t` serializes all MQTT client calls.

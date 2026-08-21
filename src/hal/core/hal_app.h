@@ -16,9 +16,10 @@
  *   @ref app_task1  - secondary loop. It is dispatched only when
  *                     @c HAL_ENABLE_APP_TASK1 is defined. On RP it starts the
  *                     core-1 path. On STM32 FreeRTOS builds it runs as a second
- *                     FreeRTOS task. On STM32 bare-metal and mock builds it
- * runs cooperatively after task0. If enabled but not implemented by the client,
- * a weak empty default is linked.
+ *                     FreeRTOS task. On ESP32-S3 it defaults to core 1. On
+ *                     STM32 bare-metal and mock builds it runs cooperatively
+ *                     after task0. If enabled but not implemented by the
+ *                     client, a weak empty default is linked.
  *
  * ── Backend mapping ──────────────────────────────────────────────────────────
  *
@@ -47,9 +48,13 @@
  *
  *   ESP32 family (ESP-IDF):
  *       app_main() -> app_start()
- *                  -> create app_task0
- *                  -> create app_task1 [only with HAL_ENABLE_APP_TASK1]
+ *                  -> create app_task0 pinned to core 0 by default
+ *                  -> create app_task1 pinned to core 1 by default
+ *                     [only with HAL_ENABLE_APP_TASK1]
  *                  -> return to the already-running ESP-IDF scheduler.
+ *       HAL_FREERTOS_TASK0_CORE / HAL_FREERTOS_TASK1_CORE may select a valid
+ *       target core or -1 for no affinity. Stack and priority overrides use
+ *       the same HAL_FREERTOS_TASK* macros as the other RTOS backends.
  *
  *   Mock / host:
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
@@ -94,6 +99,7 @@ void app_task0(void);
  * On STM32:  runs as a second FreeRTOS task when @c HAL_ENABLE_FREERTOS is
  *            defined, otherwise called cooperatively after app_task0() in the
  *            same super-loop.
+ * On ESP32-S3: runs as an ESP-IDF FreeRTOS task pinned to core 1 by default.
  * On mock:   called after app_task0() in the same loop when enabled.
  *
  * Weak-linked - if enabled but not defined by the client, the default is empty.

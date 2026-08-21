@@ -119,7 +119,23 @@ the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
 16-bit TIM6 periods, callback return values greater than zero reschedule the
 same alarm, and software pools provide the same public pool/cancel contract as
 RP2040.
-**Thread safety:** The RP-family backend is thread-safe and multicore-safe for scheduling/canceling and managed-timer state transitions. STM32G474 protects its alarm slot scheduler with short PRIMASK critical sections; alarm callbacks execute from the TIM6 IRQ on hardware. Keep callbacks short and non-blocking. Mock backend is deterministic for tests but not synchronized for concurrent host threads.
+**impl/esp32:** one 1 MHz ESP-IDF GPTimer backs the default logical alarm pool,
+which holds up to 16 simultaneous alarms by default. Positive callback return
+values reschedule the same alarm. `hal_timer_pool_create()` selects one of four
+target selector slots, while `hal_timer_pool_create_auto()` claims the first
+available slot; each successful pool owns a separate 1 MHz GPTimer and a
+caller-sized logical alarm array. Creation returns `NULL` when the selector,
+memory, or GPTimer resource is unavailable. Destroy first disarms, stops,
+disables, and deletes the GPTimer; if ESP-IDF rejects teardown, the context and
+selector remain retained instead of freeing callback state that an ISR could
+still reference. Managed timers work over either the default or a dedicated
+pool through the shared managed-timer layer.
+**Thread safety:** The RP-family and ESP32-S3 backends are thread-safe and
+multicore-safe for scheduling/canceling and managed-timer state transitions.
+STM32G474 protects its alarm slot scheduler with short PRIMASK critical
+sections. ESP32-S3 GPTimer and STM32G474 TIM6 callbacks execute in ISR context;
+keep callbacks short, non-blocking, and ISR-safe. Mock is deterministic for
+tests but not synchronized for concurrent host threads.
 
 ---
 
@@ -406,9 +422,21 @@ critical paths use DWT waits. The architecture snapshot combines generated
 target and board capacities with heap, stack, EEPROM, and LittleFS spans from
 the selected runtime and linker layout, and reports 170 MHz for both CPU and
 the primary peripheral clock.
+**impl/esp32:** `esp_timer_get_time()` supplies monotonic microsecond time;
+`hal_delay_ms()` uses `vTaskDelay()` only in legal scheduler task context and
+busy-waits before the scheduler, in ISR context, or inside a HAL critical
+section. System services use ESP-IDF task watchdog, heap, clock-tree,
+temperature-sensor, reset-reason, running-partition, and eFuse-MAC APIs. The
+architecture snapshot combines generated flash/PSRAM/CPU facts with live
+clock, partition, and heap values. `pause_on_debug` is accepted by the watchdog
+API but has no per-TWDT runtime mapping; ESP32 debugger control remains with
+OpenOCD. `hal_enter_bootloader()` requests the ROM download boot mode and
+restarts the chip; it returns `HAL_EUNSUPPORTED` when eFuse policy disables
+download modes.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
-**Thread safety:** RP-family time/watchdog APIs are safe to call from both
-cores. In RP and STM32G474 FreeRTOS modes, `hal_delay_ms()` yields or blocks
+**Thread safety:** RP-family and ESP32-S3 time/watchdog APIs are safe to call
+from both cores. In RP, STM32G474, and ESP32-S3 FreeRTOS modes,
+`hal_delay_ms()` yields or blocks
 the calling task only in legal task context and busy-waits in
 pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` blocks only the
 calling core. Mock state is intended for single-threaded tests.
@@ -648,6 +676,8 @@ void hal_mock_set_in_isr(bool in_isr);               // forces hal_in_isr() retu
   the external QSPI flash chip, read via `pico_get_unique_board_id()`.
   This identifier is persistent across reboots, unique per device, and used
   as the RP USB serial number.
+- On ESP32-S3 the source is the factory eFuse MAC. HAL zero-extends the 48-bit
+  value to the public 8-byte UID width without writing eFuses.
 - In the mock backend the default value is deterministic
   (`0xE6 0x61 0xA4 0xD1 0x23 0x45 0x67 0xAB` -> `"E661A4D1234567AB"`) so
   tests that compare the UID string can hard-code the expected value.
@@ -693,15 +723,16 @@ void               hal_stack_guard_check(void);
 ```
 
 `hal_fault_subsystem_init()` must run once, as early as possible in boot. The
-HAL-owned `main()` calls it before `app_start()`; applications that provide a
-custom `main()` call it themselves. It latches the silicon reset-reason flags,
-snapshots retained fault information into RAM, and clears volatile markers so
-the next event is detected fresh.
+HAL-owned entry calls it before `app_start()`; applications that provide a
+custom entry call it themselves. Backends with retained capture latch the
+silicon reset-reason flags, snapshot fault information into RAM, and clear
+volatile markers so the next event is detected fresh.
 
 Define `HAL_ENABLE_STACK_GUARD` to enable the hardware protection. Platform
-startup installs it before application code runs; the public init call reads
-back the executing core's MPU/MSPLIM/PMP state. It returns `HAL_EHW` if the
-compiled feature is present but the required hardware configuration is not.
+startup installs it before application code runs; the public init call verifies
+the target's MPU/MSPLIM/PMP state or ESP-IDF task-stack watchpoint
+configuration. It returns `HAL_EHW` if the compiled feature is present but the
+required hardware configuration is not.
 
 **Typical wiring (application setup / loop):**
 ```c
@@ -774,6 +805,23 @@ latched full PC/LR/xPSR/CFSR/HFSR/MMFAR/BFAR record is printed once. An MPU
 guard fault, a FreeRTOS task-stack report, or a compiler canary failure is
 retained and reported on the next boot as
 `HAL_RESET_REASON_STACK_OVERFLOW`.
+
+**impl/esp32:** Reset reasons are mapped from `esp_reset_reason()`, including
+watchdog, brownout, panic/CPU-lockup, debugger, glitch, and software resets.
+Early initialization installs chaining Xtensa fatal-exception handlers on both
+cores. They store PC, return address, processor state, exception cause, address,
+version, and checksum in RTC no-init memory before delegating to the previous
+ESP-IDF handler. The next boot validates and consumes the record;
+`hal_get_last_fault_ex()` exposes the portable PC/LR/PSR subset and returns
+`HAL_ENOENT` when no valid record exists. Brownout detection uses the silicon
+reset reason directly, and `hal_alive_mark()` remains a no-op. With
+`HAL_ENABLE_STACK_GUARD`, the generated ESP-IDF configuration enables the
+FreeRTOS end-of-stack watchpoint and `hal_stack_guard_init_ex()` verifies that
+configuration at runtime.
+
+The ESP32-S3 boot-entry, stack-guard, and retained-fault paths are implemented
+and compile/link covered; destructive fault injection and reset-retention
+behavior still require hardware validation.
 
 After a stack violation the HAL does not return to application code: stack data
 and return addresses are no longer trustworthy. The retained record is written

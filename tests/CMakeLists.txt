@@ -631,6 +631,16 @@ add_test(NAME test_esp32s3_phase1
         ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase1.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_esp32s3_phase2
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase2.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
+add_test(NAME test_esp32s3_phase3
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_esp32s3_phase3.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+)
 add_test(NAME test_esp_ci_contract
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_esp_ci_contract.py

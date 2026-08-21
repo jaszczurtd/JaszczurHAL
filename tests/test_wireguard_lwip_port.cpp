@@ -20,6 +20,7 @@ struct ExtensionState {
   uint32_t now_ms;
   unsigned enter_count;
   unsigned leave_count;
+  unsigned stack_depth;
   unsigned resolve_count;
   unsigned probe_count;
   unsigned random_count;
@@ -27,6 +28,7 @@ struct ExtensionState {
   char last_host[64];
   uint8_t last_probe[JH_LWIP_EXTENSION_IPV4_SIZE];
   uint16_t last_probe_port;
+  bool probe_called_inside_stack_guard;
 };
 
 ExtensionState extension_state;
@@ -54,12 +56,18 @@ hal_status_t fake_stack_enter(void *context, bool require_ipv4) {
   ExtensionState *state = static_cast<ExtensionState *>(context);
   ++state->enter_count;
   state->last_require_ipv4 = require_ipv4;
+  if (state->enter_status == HAL_OK) {
+    ++state->stack_depth;
+  }
   return state->enter_status;
 }
 
 void fake_stack_leave(void *context) {
   ExtensionState *state = static_cast<ExtensionState *>(context);
   ++state->leave_count;
+  if (state->stack_depth > 0u) {
+    --state->stack_depth;
+  }
 }
 
 hal_status_t fake_underlay_netif(void *context, void **out_netif) {
@@ -114,6 +122,7 @@ fake_send_udp_probe(void *context,
   ++state->probe_count;
   std::memcpy(state->last_probe, address, sizeof(state->last_probe));
   state->last_probe_port = port;
+  state->probe_called_inside_stack_guard = state->stack_depth != 0u;
   return state->probe_status;
 }
 
@@ -339,6 +348,7 @@ void test_extension_forwards_portable_operations_and_statuses(void) {
   TEST_ASSERT_EQUAL_UINT8_ARRAY(probe, extension_state.last_probe,
                                 sizeof(probe));
   TEST_ASSERT_EQUAL_UINT16(53u, extension_state.last_probe_port);
+  TEST_ASSERT_FALSE(extension_state.probe_called_inside_stack_guard);
 
   extension_state.resolve_status = HAL_ETIMEOUT;
   TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, jh_lwip_extension_resolve_ipv4(
@@ -521,18 +531,37 @@ void test_peer_endpoint_and_probe_retry_rate_limit(void) {
   const uint8_t probe[4] = {1u, 1u, 1u, 1u};
   TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(3u, poll_count);
-  TEST_ASSERT_EQUAL_UINT32(0u, extension_state.probe_count);
+  TEST_ASSERT_EQUAL_UINT32(1u, extension_state.probe_count);
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(probe, extension_state.last_probe,
+                                sizeof(probe));
+  TEST_ASSERT_EQUAL_UINT16(53u, extension_state.last_probe_port);
   extension_state.now_ms = 20u;
   TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(3u, poll_count);
+  TEST_ASSERT_EQUAL_UINT32(1u, extension_state.probe_count);
 
   extension_state.now_ms = 300u;
   poll_status = ERR_IF;
   TEST_ASSERT_FALSE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(4u, poll_count);
+  TEST_ASSERT_EQUAL_UINT32(1u, extension_state.probe_count);
   poll_status = ERR_OK;
-  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
+  extension_state.probe_status = HAL_EIO;
+  TEST_ASSERT_FALSE(wireguard.kick_handshake(probe, 53u, 250u));
   TEST_ASSERT_EQUAL_UINT32(5u, poll_count);
+  TEST_ASSERT_EQUAL_UINT32(2u, extension_state.probe_count);
+
+  // A failed probe must not advance the rate-limit timestamp, so retrying at
+  // the same monotonic time performs both poll and probe again.
+  extension_state.probe_status = HAL_OK;
+  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
+  TEST_ASSERT_EQUAL_UINT32(6u, poll_count);
+  TEST_ASSERT_EQUAL_UINT32(3u, extension_state.probe_count);
+
+  extension_state.now_ms = 301u;
+  TEST_ASSERT_TRUE(wireguard.kick_handshake(probe, 53u, 250u));
+  TEST_ASSERT_EQUAL_UINT32(6u, poll_count);
+  TEST_ASSERT_EQUAL_UINT32(3u, extension_state.probe_count);
 
   wireguard.end();
 }

@@ -3,10 +3,12 @@
 Hardware Abstraction Layer for embedded projects.
 The RP2040/RP2350 backend builds against the official Pico SDK. STM32G474 is
 available as a bare-metal or FreeRTOS backend with native peripheral support
-and the shared driver stack. ESP32-S3 plumbing provides exact
-target/board identity, ESP-IDF application entry, and build-contract
-validation while peripheral backends remain in progress. The
-application-facing HAL API stays stable across targets.
+and the shared driver stack. ESP32-S3 provides exact target/board identity,
+ESP-IDF application entry and build-contract validation plus the delivered
+core/peripheral backend set and native WiFi/lwIP connectivity graph. Its
+network surface includes TLS and HTTPS clients plus plaintext HTTP and
+WebSocket servers; no public TLS server, HTTPS server, WSS, or WebSocket-client
+API is defined. The application-facing HAL API stays stable across targets.
 
 This document is the established, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
@@ -78,7 +80,7 @@ doc/
   api/                      # split API chapters
     00_scripts.md           # essential process and orchestration architecture
   FwProjectWorkflow.md      # dispatcher-backed firmware project workflow
-  OTAWorkflow.md            # native RP OTA build, upload, firewall and recovery
+  OTAWorkflow.md            # native RP/ESP OTA build, upload and recovery
   HAL_FLAGS.txt             # HAL_ENABLE_* flag summary
   lib_compilation.md        # static-library build guide
   features.md               # high-level feature matrix
@@ -205,9 +207,9 @@ link the fixed package without invoking Python.
 - `doc/boards_profiles_howto.md` - declarative target/board descriptors,
   generated configuration, board-aware static libraries, and the procedure
   for adding a physical board.
-- `doc/OTAWorkflow.md` - complete native RP OTA contract: firmware
-  integration, build artifacts, VS Code upload, firewall, trial confirmation,
-  rollback, and recovery.
+- `doc/OTAWorkflow.md` - native RP and ESP32-S3 OTA contracts: firmware
+  integration, target-specific artifacts, VS Code upload, firewall, trial
+  confirmation, rollback, and recovery.
 - `SECURITY.md` - vulnerability reporting, triage and maintenance policy.
 - `security/third_party.json` - human-maintained third-party inventory.
 - `security/sbom.cdx.json` - generated CycloneDX SBOM.
@@ -282,8 +284,8 @@ Recommended split of responsibilities:
   development system
 - [FwProjectWorkflow.md](FwProjectWorkflow.md): dispatcher-backed firmware
   project workflow, including manifest/target/source/build/upload behavior
-- [OTAWorkflow.md](OTAWorkflow.md): native RP OTA configuration, provisioning,
-  upload, network/firewall, confirmation, rollback, and recovery
+- [OTAWorkflow.md](OTAWorkflow.md): native RP and ESP32-S3 OTA configuration,
+  provisioning, upload, network/firewall, confirmation, rollback, and recovery
 - `doc/JaszczurHAL_API.md`: module layout, migration notes, public API details, feature-flag reference
 
 Each document owns the details in its assigned scope. The others should provide
@@ -347,10 +349,11 @@ include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
 `nucleo-g474re`, `nucleo-g474re-pim730`, and
 `nucleo-g474re-core1262-hf`, and `waveshare-esp32-s3-zero`.
 
-The ESP32-S3 Phase 1 component consumes generated target/board facts and the
-link contract, but it does not compile the public `hal_board` runtime facade.
-Its board capabilities are therefore compile-time/build-contract metadata until
-the corresponding ESP peripheral and system backends are released.
+The ESP32-S3 component consumes generated target/board facts and the link
+contract and compiles the public `hal_board` runtime facade. Capability state
+still follows the shared owner model: a declared capability remains
+`HAL_BOARD_CAP_INACTIVE` until the module that owns it publishes an available
+or failed state.
 
 `HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
 On targets that build the runtime facade, users should query
@@ -426,7 +429,7 @@ The complete reference is split across the following focused documents:
 | 0 | [Process scripts and orchestration](api/00_scripts.md) | Essential operational architecture: workstation setup, managed dependencies, build entrypoints, examples, validation, security tooling, VS Code integration, artifact ownership, and the relationships between these processes |
 | 1 | [Library compilation guide](lib_compilation.md) | Building for all targets, generated board contracts, static-library helpers, FreeRTOS build variants, and firmware integration |
 | P | [Firmware project workflow](FwProjectWorkflow.md) | Dispatcher-backed VS Code firmware projects: manifest model, target/board selection, source discovery, per-target CMake cache layout, upload/debug-build behavior and generated files |
-| O | [Native RP OTA workflow](OTAWorkflow.md) | End-to-end OTA project/firmware configuration, artifacts, first flash, VS Code integration, firewall, confirmation, rollback, recovery and security boundary |
+| O | [Native OTA workflow](OTAWorkflow.md) | Target-specific RP and ESP32-S3 OTA project/firmware configuration, artifacts, first flash, VS Code integration, firewall, confirmation, rollback, recovery and security boundary |
 | 2 | [Module flags and configuration](api/02_module_flags.md) | `HAL_ENABLE_*` opt-in flags, dependency propagation, FreeRTOS selection, stack-size overrides, and core modules |
 | A | [Status API](api/01_status_api.md) | Foundational, cross-cutting: `hal_status_t` result codes, in-place migration of fallible `void` operations, `_ex` companions for retained value/handle/`bool` APIs, output-parameter forms and collision fallback. |
 | 3 | [Build dependencies and unit tests](api/03_build_tests.md) | Hardware and mock/PC dependency tables, ctest build/run instructions, full test-suite inventory, how to add a new test suite, mock time control |

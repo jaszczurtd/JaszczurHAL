@@ -69,6 +69,8 @@ jobs:
             'tests/test_component_manager.py',
             'tests/test_esp_idf_phase0.py',
             'tests/test_esp32s3_phase1.py',
+            'tests/test_esp32s3_phase2.py',
+            'tests/test_esp32s3_phase3.py',
             'tests/test_esp_ci_contract.py',
             'tests/test_board_generator.py',
             'tests/test_feature_registry.py'
@@ -80,32 +82,33 @@ jobs:
             }
           }
 
-      - name: Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF
+      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF
         shell: powershell
         run: |
           $python = '.\.build\windows\venv\Scripts\python.exe'
           $output = Join-Path $env:GITHUB_WORKSPACE `
-            '.build\ci\esp-idf\esp32s3-phase1'
+            '.build\ci\esp-idf\esp32s3-phase3'
           & $python scripts/build_esp_idf.py build `
-            --project tests/hardware/esp32s3_phase1 `
+            --project tests/fixtures/esp32s3_phase3 `
             --target esp32s3 `
             --board waveshare-esp32-s3-zero `
             --output $output `
             --clean
           if ($LASTEXITCODE -ne 0) {
-            throw "ESP32-S3 Phase 1 build failed with exit code $LASTEXITCODE"
+            throw "ESP32-S3 Phase 3 build failed with exit code $LASTEXITCODE"
           }
 
-      - name: Upload ESP32-S3 Phase 1 build artifacts
+      - name: Upload ESP32-S3 Phase 3 build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: windows-esp32s3-phase1
+          name: windows-esp32s3-phase3
           path: |
-            .build/ci/esp-idf/esp32s3-phase1/jh_esp_idf_artifacts.json
-            .build/ci/esp-idf/esp32s3-phase1/build.log
-            .build/ci/esp-idf/esp32s3-phase1/bootloader/bootloader.bin
-            .build/ci/esp-idf/esp32s3-phase1/partition_table/partition-table.bin
-            .build/ci/esp-idf/esp32s3-phase1/esp32s3_phase1.bin
+            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_artifacts.json
+            .build/ci/esp-idf/esp32s3-phase3/build.log
+            .build/ci/esp-idf/esp32s3-phase3/bootloader/bootloader.bin
+            .build/ci/esp-idf/esp32s3-phase3/partition_table/partition-table.bin
+            .build/ci/esp-idf/esp32s3-phase3/ota_data_initial.bin
+            .build/ci/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
           if-no-files-found: error
           include-hidden-files: true
 
@@ -483,25 +486,26 @@ jobs:
       - name: Test
         run: ctest --test-dir .build/ci/host --output-on-failure
 
-      - name: Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF
+      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF
         run: >-
           python3 scripts/build_esp_idf.py build
-          --project tests/hardware/esp32s3_phase1
+          --project tests/fixtures/esp32s3_phase3
           --target esp32s3
           --board waveshare-esp32-s3-zero
-          --output "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase1"
+          --output "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3"
           --clean
 
-      - name: Upload ESP32-S3 Phase 1 build artifacts
+      - name: Upload ESP32-S3 Phase 3 build artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: linux-esp32s3-phase1
+          name: linux-esp32s3-phase3
           path: |
-            .build/ci/esp-idf/esp32s3-phase1/jh_esp_idf_artifacts.json
-            .build/ci/esp-idf/esp32s3-phase1/build.log
-            .build/ci/esp-idf/esp32s3-phase1/bootloader/bootloader.bin
-            .build/ci/esp-idf/esp32s3-phase1/partition_table/partition-table.bin
-            .build/ci/esp-idf/esp32s3-phase1/esp32s3_phase1.bin
+            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_artifacts.json
+            .build/ci/esp-idf/esp32s3-phase3/build.log
+            .build/ci/esp-idf/esp32s3-phase3/bootloader/bootloader.bin
+            .build/ci/esp-idf/esp32s3-phase3/partition_table/partition-table.bin
+            .build/ci/esp-idf/esp32s3-phase3/ota_data_initial.bin
+            .build/ci/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
           if-no-files-found: error
           include-hidden-files: true
 

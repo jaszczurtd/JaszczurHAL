@@ -60,7 +60,9 @@ configuring hardware.
 
 **Output initial state:** `HAL_GPIO_OUTPUT_LOW/HIGH` and `HAL_GPIO_OUTPUT_OPEN_DRAIN_LOW/HIGH` make the intended initial latch state explicit. `HAL_GPIO_OUTPUT` remains compatible and means push-pull output with initial low.
 
-**Open drain:** On STM32G474 this maps to hardware open-drain. On RP2040 (native pico-sdk) it is emulated by driving LOW for `false` and releasing the pin as input (high-Z) for `true`.
+**Open drain:** On STM32G474 and ESP32-S3 this maps to hardware open-drain. On
+RP2040 (native pico-sdk) it is emulated by driving LOW for `false` and releasing
+the pin as input (high-Z) for `true`.
 
 **Thread safety:** `hal_gpio_write` / `hal_gpio_read` are thin pass-throughs. Concurrent access to different pins from different cores is safe. Concurrent access to the same pin from two cores requires external synchronization.
 
@@ -73,14 +75,20 @@ from either core. A detached pin returns `HAL_ENOENT` and writes
 `HAL_GPIO_IRQ_CORE_NONE`. The legacy attach wrapper binds the IRQ to its current
 caller core, while the legacy detach wrapper asserts if ownership is violated.
 On the single-core STM32G474 backend the only valid caller/owner is core 0.
+ESP32-S3 allocates one ESP-IDF GPIO ISR service for all HAL GPIO callbacks on
+the core that performs the first successful attach. Consequently every active
+HAL GPIO interrupt must use that same owner core until the last callback is
+detached and the service is released. A different owner reports `HAL_ESTATE`.
 The status APIs are intended for initialization/task diagnostics, not ISR
 context.
 This explicit ownership API covers GPIO interrupts only. Peripheral IRQs have
 their own backend contracts. In particular, the RP2040 hardware-UART RX IRQ is
 currently bound implicitly to the core that calls `hal_uart_begin()`; GPS
 inherits that behavior when built with `HAL_GPS_TRANSPORT_UART`. The UART API
-does not yet expose an owner query or reject wrong-core lifecycle operations,
-so begin/reconfigure/destroy must be serialized on the same core. See
+does not expose an owner query. RP begin/reconfigure/destroy must be serialized
+on the same core; ESP32-S3 additionally reports `HAL_ESTATE` for wrong-core
+reconfiguration and retains the handle when its compatibility destroy operation
+is called from another core. See
 the [`hal_uart` bus documentation](09_buses.md) and
 [`hal_gps` sensor documentation](11_sensors.md).
 RP2040 SoftwareSerial instead receives through PIO/DMA and does not install a
@@ -88,7 +96,18 @@ CPU RX interrupt.
 
 **STM32G474 routing:** Pin id is `port * 16 + pin` (`PA0=0`, `PB0=16`, ...). EXTI is line-based (`line == pin_number`), so only one port source can own a given line at a time; attaching another pin with the same pin number remaps that EXTI line.
 
-**IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is applied to all those NVIC entries.
+**IRQ priority:** `hal_gpio_set_irq_priority` sets GPIO interrupt priority. On
+RP2040 all GPIO pins share `IO_IRQ_BANK0`. On STM32G474 GPIO IRQs are split
+across `EXTI0..EXTI4`, `EXTI9_5`, and `EXTI15_10`; the same HAL priority is
+applied to all those NVIC entries. ESP32-S3 recreates its shared ISR service on
+the service-owner core; highest/high/default-or-low map to ESP-IDF interrupt
+levels 3/2/1.
+
+**impl/esp32:** Pin validation consumes the generated target-valid,
+input-only, board-exposed, hard-reserved, and soft-reserved masks. Hard-reserved
+USB/memory pins are rejected; soft-reserved board pins remain available for an
+intentional application override. GPIO callbacks run in ISR context through the
+shared ESP-IDF service.
 
 **Interrupt detach:** `hal_gpio_detach_interrupt` removes the registered callback and masks the pin/EXTI source where the backend supports hardware interrupt masking.
 
@@ -138,6 +157,11 @@ explicit `JH_G474_TIMCLK1_HZ` / `JH_G474_TIMCLK2_HZ` constants. Both are
 170 MHz in the current clock tree because APB1 and APB2 run without a
 prescaler; future APB changes must update the timer-kernel constants according
 to the STM32 timer x2 clock rule.
+
+**impl/esp32:** ESP-IDF LEDC output at 1 kHz. The backend allocates a logical
+LEDC channel lazily per output-capable pin, maps the selected 1..16-bit range to
+the hardware duty range, and releases all active simple-PWM channels when the
+global resolution changes.
 
 **Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins
 to TIM channels. Channels sharing a timer also share frequency/resolution, and
@@ -209,6 +233,11 @@ legacy init/read/read-and-reset wrappers retain their `bool`/`uint32_t` shapes.
 
 **impl/stm32g474:** TIM2 external-clock mode for channel 0.
 
+**impl/esp32:** four logical counters backed by ESP-IDF PCNT units. Each input
+selects rising, falling, or both edges; accumulated-count mode and signed-limit
+watch points extend the underlying counter for the public `uint32_t` result.
+Reinitializing a logical channel tears down its previous PCNT unit first.
+
 **impl/.mock:** in-memory counters with pulse injection helpers.
 
 
@@ -251,6 +280,12 @@ The PWM slice is configured at `hal_pwm_freq_create()` time but **not started** 
 function / TIM channel enable are deferred until the first `hal_pwm_freq_write()` call. This
 prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-on.
 
+**impl/esp32:** ESP-IDF LEDC through the same target-local allocator used by
+simple PWM. Creation reserves one bounded logical handle and a compatible LEDC
+timer/channel for the requested pin, frequency, and logical maximum. Writes
+clamp to that maximum; stop keeps the handle and destroy releases both logical
+and LEDC resources.
+
 **impl/.mock:** stores last written value; injectable via mock helpers.
 
 **Mock helpers:**
@@ -261,7 +296,11 @@ uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
 ```
 
-**Thread safety:** RP2040 and STM32G474 backends protect `hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` and `hal_pwm_freq_destroy()` with an internal mutex. Callers still own channel handle lifetime and must not use a handle after `hal_pwm_freq_destroy()`. Mock backend does not provide concurrent-access synchronization.
+**Thread safety:** RP2040, STM32G474, and ESP32-S3 backends protect
+`hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` and
+`hal_pwm_freq_destroy()` with an internal mutex. Callers still own channel
+handle lifetime and must not use a handle after `hal_pwm_freq_destroy()`. Mock
+backend does not provide concurrent-access synchronization.
 
 ---
 
@@ -348,8 +387,8 @@ void hal_adc_set_resolution(uint8_t bits);
 int  hal_adc_read(uint8_t pin);
 ```
 
-Default resolution is 12 bits (consistent across the RP2040, STM32G474 and mock
-backends).
+Default resolution is 12 bits (consistent across RP2040, STM32G474, ESP32-S3,
+and mock backends).
 
 **impl/rp2040:** native pico-sdk `hardware/adc.h` (`adc_init`, `adc_gpio_init`,
 `adc_select_input`, `adc_read`). Valid ADC pins are GPIO 26-29 (channels 0-3);
@@ -357,8 +396,15 @@ the 12-bit hardware sample is rescaled to the configured resolution.
 **impl/stm32g474:** ADC1 single-ended regular conversions with lazy regulator
 startup, calibration, and pin-to-channel validation. ADC12 is synchronously
 clocked from HCLK/4, or 42.5 MHz with the current 170 MHz clock tree.
+**impl/esp32:** ESP-IDF ADC oneshot conversion with lazy unit/channel setup and
+12 dB attenuation. Only ADC-capable pins that are exposed or soft-reserved by
+the generated board profile are accepted. The 12-bit hardware result is scaled
+to the configured 1..16-bit range; an invalid pin or conversion failure returns
+the compatibility value `0`.
 **impl/.mock:** injectable per-pin values via `hal_mock_adc_inject(pin, value)`.
-**Thread safety:** Thread-safe and multicore-safe. An internal mutex protects the RP2040 shared ADC multiplexer - concurrent `hal_adc_read()` calls from different cores are serialized automatically.
+**Thread safety:** Thread-safe and multicore-safe. An internal mutex protects
+the shared ADC state on RP2040, STM32G474, and ESP32-S3, so concurrent reads are
+serialized automatically.
 
 ---
 

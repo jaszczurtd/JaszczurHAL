@@ -259,7 +259,10 @@ void hal_watchdog_feed(void);
  * @brief Enable the hardware watchdog with the given timeout.
  * @param ms             Timeout in milliseconds.
  * @param pause_on_debug If true, pause the watchdog when a debugger is
- * attached.
+ *                       attached.
+ * @note On ESP32-S3 @p pause_on_debug is informational because OpenOCD owns
+ *       watchdog behavior while a core is halted; ESP-IDF exposes no
+ *       equivalent per-TWDT runtime setting.
  * @return HAL_OK on success, HAL_EINVAL for an unsupported timeout value, or
  *         HAL_EUNSUPPORTED when the backend has no watchdog implementation.
  */
@@ -370,6 +373,9 @@ const char *hal_reset_reason_str(hal_reset_reason_t reason);
  * @param out Destination structure.
  * @return HAL_OK when a snapshot was copied, HAL_EINVAL when @p out is NULL,
  *         or HAL_ENOENT when no captured fault is available.
+ * @note ESP32-S3 retains the Xtensa PC, return address, and processor-status
+ *       register across a fatal exception reset; Cortex-specific fields are
+ *       reported as zero.
  */
 hal_status_t hal_get_last_fault_ex(hal_fault_info_t *out);
 
@@ -405,7 +411,8 @@ void hal_clear_last_fault(void);
  * dip rather than a true cold boot.
  *
  * Backends with hardware BOR detection (e.g. RP2350) use the hardware flag
- * directly and ignore the marker.
+ * directly and ignore the marker. ESP32-S3 uses the ESP-IDF reset reason and
+ * does not retain a HAL alive marker.
  *
  * The function returns a stable value once @ref hal_fault_subsystem_init has
  * run; it does not depend on the marker being refreshed in the current boot.
@@ -422,7 +429,7 @@ bool hal_last_boot_was_brownout(void);
  * loop. The exact interval is not critical; once per second is more than
  * enough. The marker is cleared by @ref hal_fault_subsystem_init so that
  * the very first call after boot is what arms the heuristic for the *next*
- * boot.
+ * boot. This function is a no-op on ESP32-S3.
  */
 void hal_alive_mark(void);
 
@@ -434,6 +441,9 @@ void hal_alive_mark(void);
  * (MPU on RP2040, stack limit/PMP on RP2350); STM32G474 protects the bottom
  * 32 bytes of the main stack with an MPU region. FreeRTOS builds additionally
  * enable kernel task-stack overflow checking.
+ *
+ * ESP32-S3 uses the FreeRTOS end-of-stack watchpoint and canary configured at
+ * build time; this function confirms that those settings are active.
  *
  * Protection is installed during platform startup. This function is
  * idempotent and provides a target-independent way to verify availability.
@@ -472,6 +482,7 @@ void hal_idle(void);
  * Implementations:
  * - On Cortex-M targets (RP2040, STM32G474) this reads the IPSR register;
  *   any non-zero exception number means handler mode.
+ * - On ESP32-S3 this uses the ESP-IDF FreeRTOS port's ISR-context query.
  * - On mock/host builds the value is controlled by a test hook
  *   (default false). See hal_mock_set_in_isr().
  *
@@ -504,9 +515,9 @@ hal_status_t hal_read_chip_temp_ex(float *out_celsius);
 /**
  * @brief Read the on-chip temperature sensor.
  *
- * Compatibility wrapper over @ref hal_read_chip_temp_ex. On RP targets this
- * samples the native ADC channel connected to the die temperature sensor and
- * converts the raw reading to degrees Celsius.
+ * Compatibility wrapper over @ref hal_read_chip_temp_ex. RP targets sample
+ * the native ADC channel connected to the die sensor; ESP32-S3 uses the
+ * ESP-IDF temperature-sensor driver.
  *
  * The value is approximate and reflects the silicon temperature. Its accuracy
  * depends on the chip sensor and the board's ADC reference voltage.
@@ -521,6 +532,9 @@ float hal_read_chip_temp(void);
  * On RP targets this calls the ROM bootloader entry path (BOOTSEL mode),
  * disconnecting the running application and exposing the USB UF2 flashing
  * interface.
+ * ESP32-S3 requests ROM serial-download mode on the next reset when download
+ * mode has not been disabled by eFuse policy; otherwise it reports
+ * HAL_EUNSUPPORTED.
  *
  * Typical use:
  * - acknowledge the host command first,
@@ -550,7 +564,8 @@ hal_status_t hal_enter_bootloader(void);
  * @brief Read the 64-bit unique device identifier.
  *
  * On RP2040 hardware this wraps @c pico_get_unique_board_id() which reads the
- * 64-bit unique id stored in the external QSPI flash chip.
+ * 64-bit unique id stored in the external QSPI flash chip. ESP32-S3 returns an
+ * 8-byte value formed by zero-extending its 48-bit factory eFuse MAC.
  *
  * On mock/unit-test builds this returns a deterministic pattern, overridable
  * via @c hal_mock_set_device_uid().

@@ -161,6 +161,7 @@
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 on STM32G474 requires a board profile with CYW43"
 #endif
+
 #if (defined(HAL_CYW43_BUS_PICO_PIO) + defined(HAL_CYW43_BUS_STM32_GSPI)) != 1
 #error                                                                         \
     "HAL_NETWORK_BACKEND_CYW43 requires exactly one HAL_CYW43_BUS_* transport"
@@ -375,8 +376,11 @@
  * implementation.  A target may provide a compatibility default, but an
  * explicit HAL_NETWORK_BACKEND_* definition always remains authoritative. */
 #if defined(HAL_ENABLE_NETWORK_CORE) && !defined(HAL_NETWORK_BACKEND_CYW43) && \
+    !defined(HAL_NETWORK_BACKEND_ESP_IDF) &&                                   \
     !defined(HAL_NETWORK_BACKEND_MOCK) && !defined(HAL_NETWORK_BACKEND_ESP_AT)
-#if HAL_TARGET_IS_MOCK
+#if HAL_TARGET_IS_ESP32_FAMILY
+#define HAL_NETWORK_BACKEND_ESP_IDF 1
+#elif HAL_TARGET_IS_MOCK
 #define HAL_NETWORK_BACKEND_MOCK 1
 #endif
 #endif
@@ -391,6 +395,11 @@
 #else
 #define HAL_NETWORK_BACKEND_MOCK_SELECTED 0
 #endif
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF)
+#define HAL_NETWORK_BACKEND_ESP_IDF_SELECTED 1
+#else
+#define HAL_NETWORK_BACKEND_ESP_IDF_SELECTED 0
+#endif
 #if defined(HAL_NETWORK_BACKEND_ESP_AT)
 #define HAL_NETWORK_BACKEND_ESP_AT_SELECTED 1
 #else
@@ -398,8 +407,8 @@
 #endif
 
 #define HAL_NETWORK_BACKEND_SELECTION_COUNT                                    \
-  (HAL_NETWORK_BACKEND_CYW43_SELECTED + HAL_NETWORK_BACKEND_MOCK_SELECTED +    \
-   HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
+  (HAL_NETWORK_BACKEND_CYW43_SELECTED + HAL_NETWORK_BACKEND_ESP_IDF_SELECTED + \
+   HAL_NETWORK_BACKEND_MOCK_SELECTED + HAL_NETWORK_BACKEND_ESP_AT_SELECTED)
 
 #if defined(HAL_ENABLE_NETWORK_CORE) && HAL_NETWORK_BACKEND_SELECTION_COUNT == 0
 #error "JaszczurHAL network core requires exactly one HAL_NETWORK_BACKEND_*"
@@ -411,6 +420,12 @@
 #if defined(HAL_NETWORK_BACKEND_MOCK) && !HAL_TARGET_IS_MOCK
 #error "HAL_NETWORK_BACKEND_MOCK requires HAL_TARGET_MOCK"
 #endif
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) && !HAL_TARGET_IS_ESP32_FAMILY
+#error "HAL_NETWORK_BACKEND_ESP_IDF requires an ESP32-family target"
+#endif
+#if defined(HAL_NETWORK_BACKEND_ESP_IDF) && !HAL_BOARD_HAS_NATIVE_WIFI
+#error "HAL_NETWORK_BACKEND_ESP_IDF requires a board profile with native WiFi"
+#endif
 #if defined(HAL_NETWORK_BACKEND_ESP_AT) && !defined(HAL_ESP_AT_PROFILE_ESP8266)
 #error                                                                         \
     "HAL_NETWORK_BACKEND_ESP_AT requires an HAL_ESP_AT_PROFILE_* command profile"
@@ -418,6 +433,16 @@
 
 /* Backend topology/capability flags consumed by common network code. */
 #if defined(HAL_NETWORK_BACKEND_CYW43)
+#define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
+#define HAL_NETWORK_CORE_HAS_RESOLVER 1
+#define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1
+#define HAL_NETWORK_CORE_HAS_TCP_LISTENER 1
+#define HAL_NETWORK_CORE_HAS_UDP 1
+#define HAL_NETWORK_CORE_HAS_HOST_STACK_L3 1
+#define HAL_NETWORK_CORE_HAS_VIRTUAL_NETIF_ROUTE 1
+#define HAL_NETWORK_CORE_HAS_STACK_CONTEXT 1
+#define HAL_NETWORK_CORE_HAS_SECURE_ENTROPY 1
+#elif defined(HAL_NETWORK_BACKEND_ESP_IDF)
 #define HAL_NETWORK_CORE_HAS_WIFI_CONTROL 1
 #define HAL_NETWORK_CORE_HAS_RESOLVER 1
 #define HAL_NETWORK_CORE_HAS_TCP_CLIENT 1

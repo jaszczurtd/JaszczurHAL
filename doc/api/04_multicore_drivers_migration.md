@@ -4,11 +4,13 @@
 
 ## Multicore safety policy
 
-JaszczurHAL supports RP2040/RP2350 dual-core systems, using both core 0 and core 1 where available. STM32G474 is supported as well, and general mutex protection is available through the FreeRTOS-enabled path.
+JaszczurHAL supports RP2040/RP2350 and ESP32-S3 dual-core systems, using both
+core 0 and core 1 where available. STM32G474 is supported as well, and general
+mutex protection is available through the FreeRTOS-enabled path.
 
 The following design rules apply:
 
-### Native Pico SDK application entry
+### Portable application entry
 
 The native runtime owns `main()` when `HAL_PROVIDE_APP_ENTRY` is enabled.
 `app_start()` runs once before task dispatch. On bare-metal RP,
@@ -17,7 +19,9 @@ core 1 through `multicore_launch_core1()`, registers both participating cores
 with the flash transaction coordinator, and repeatedly dispatches
 `app_task1()`. On RP FreeRTOS SMP, the same hooks become tasks pinned to cores
 0 and 1. On STM32G474, bare-metal dispatch is cooperative in one super-loop,
-while FreeRTOS creates independent task0 and optional task1 tasks.
+while FreeRTOS creates independent task0 and optional task1 tasks. ESP-IDF
+already owns the scheduler; HAL creates task0 on core 0 by default and optional
+task1 on core 1, with explicit core overrides or `-1` for no affinity.
 
 The coordinator serializes native flash mutations, makes the other core safe,
 pauses TinyUSB, rejects active DMA and XIP-resident operation state, masks local
@@ -42,8 +46,9 @@ establish internal state.  They are **not** protected by mutexes because:
 
 After initialisation, most HAL runtime APIs support concurrent callers on
 RP2040/RP2350 dual-core firmware and on supported FreeRTOS builds, including
-STM32G474. Each module documents its exact thread-safety guarantee in the
-per-module section below. The general pattern is:
+STM32G474 and the delivered ESP32-S3 backend set. Each module documents its
+exact thread-safety guarantee in the per-module section below. The general
+pattern is:
 
 - **Per-instance mutexes** protect handle-based APIs (`hal_can`, `hal_thermocouple`, `hal_rtc`, `SmartTimers`).
 - **Per-bus mutexes** protect shared communication buses (`hal_spi`, `hal_i2c`).
@@ -52,8 +57,8 @@ per-module section below. The general pattern is:
   `hal_crypto`, `hal_constrain`, `hal_map`) are inherently thread-safe.
 
 Singleton and per-bus mutexes use an internal atomic create-once fallback, so
-two FreeRTOS tasks or RP2040 cores cannot publish different locks for the same
-module. Module init/begin calls still remain the preferred place to create
+two FreeRTOS tasks or hardware cores cannot publish different locks for the
+same module. Module init/begin calls still remain the preferred place to create
 those locks before normal runtime sharing.
 
 Modules documented as **"Not thread-safe"** (`hal_uart`, the optional
@@ -111,7 +116,7 @@ font headers (e.g. `TomThumb.h`, `Tiny3x3a2pt7b.h`).
 | Shared RTC facade | `hal_rtc.cpp` owns the handle pool, validation, mutexes, epoch conversion, status mapping, and compatibility wrappers; link-time providers supply shared PCF8563/DS3231 I2C behavior, the STM32G474 backup-domain RTC, the RP AON timer, or mock storage. | Keeps chip protocol, target registers, and test injection behind provider operations while allowing I2C and native providers to share one facade. |
 | Separate low-power API | `hal_power.h` owns portable states, policies, capabilities, wake reasons, and prepare/resume callbacks; target backends own WFI/STOP/Standby details and reuse the internal RTC relative-wake contract. | Prevents RTC device ownership from absorbing processor, clock-tree, peripheral-suspend, reset, or scheduler policy. |
 | Shared GPS facade | `hal_gps.cpp` selects HAL UART or SoftwareSerial at compile time and owns transport initialization, polling, framing fallback and availability. The shared GPS engine owns parsing, locking, diagnostics and every fix getter, including the mock injection path. | Removes identical RP2040/STM32G474 transport facades and the mock getter copy while preserving transport selection and deterministic injection. |
-| Shared serial/debug core | `hal_serial.cpp` owns formatting, prefixes, timestamps, mute/rate-limit state, the ISR SPSC ring, net-console mirroring, lazy create-once mutexes and public serial/debug entry points. Three link-time ports own only RP USB CDC, STM32 USART2/stdout, or mock capture/RX transport. | Removes three debug-core copies while preserving target line endings, RP flush/assertion output and atomic cross-task/cross-core message boundaries. |
+| Shared serial/debug core | `hal_serial.cpp` owns formatting, prefixes, timestamps, mute/rate-limit state, the ISR SPSC ring, net-console mirroring, lazy create-once mutexes and public serial/debug entry points. Link-time ports own only RP USB CDC, ESP32-S3 USB Serial/JTAG VFS, STM32 USART2/stdout, or mock capture/RX transport. | Keeps one formatting/state implementation while preserving target line endings, transport-specific flush behavior and atomic cross-task/cross-core message boundaries. |
 | Second I2C controller support | HAL I2C APIs and driver adapters use bus index 0/1 for the target's first and second hardware controllers. | Allows second controller usage without bypassing HAL thread-safety. |
 | Shared display stack | The vendored Adafruit GFX/ILI9341/ST77xx/SSD1306/BusIO libraries were replaced by a portable in-tree display stack (`hal/display/drivers/`) built only on HAL SPI/I2C/GPIO. The public facade covers ILI9341, ST77xx/GC9A01, SSD1306-family, SSD1331/SSD135x and ST7567 displays through GFX and capability-advertised raw writes. | One shared implementation drives RP2040 and STM32G474 identically and compiles out when the display module is disabled. |
 | Portable NMEA engine | `hal_gps` uses an in-tree NMEA parser (`hal/gps/gps_nmea_parser.cpp`), with parsing logic ported from TinyGPS++ (LGPL); TinyGPS++ itself is no longer bundled or linked. | The same parser/getter engine runs on RP2040, STM32G474 and mock, and compiles out with the GPS module disabled. |

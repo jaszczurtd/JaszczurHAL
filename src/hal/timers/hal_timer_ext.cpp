@@ -6,39 +6,66 @@
 
 struct hal_timer_impl_s {
   hal_timer_pool_t pool;
-  volatile uint32_t period_us;
+  uint32_t period_us;
   bool periodic;
   hal_timer_callback_t callback;
   void *user_data;
 
   hal_mutex_t mutex;
 
-  volatile hal_alarm_id_t alarm_id;
-  volatile hal_timer_state_t state;
-  volatile uint64_t next_fire_us;
-  volatile uint32_t paused_remaining_us;
+  hal_alarm_id_t alarm_id;
+  hal_timer_state_t state;
+  uint64_t next_fire_us;
+  uint32_t paused_remaining_us;
 
   // Number of callback invocations currently in flight. Incremented at
   // callback entry and decremented at exit. Used by hal_timer_destroy() to
   // drain any pending callback before freeing the timer object.
-  volatile uint32_t in_callback;
+  uint32_t in_callback;
 };
 
 static inline void timer_set_state_atomic(hal_timer_impl_t *t,
                                           hal_timer_state_t s) {
-  __atomic_store_n((int *)&t->state, (int)s, __ATOMIC_RELEASE);
+  __atomic_store_n(&t->state, s, __ATOMIC_RELEASE);
 }
 
 static inline hal_timer_state_t
 timer_get_state_atomic(const hal_timer_impl_t *t) {
-  return (hal_timer_state_t)__atomic_load_n((const int *)&t->state,
-                                            __ATOMIC_ACQUIRE);
+  return __atomic_load_n(&t->state, __ATOMIC_ACQUIRE);
+}
+
+static inline void timer_set_alarm_id_atomic(hal_timer_impl_t *t,
+                                             hal_alarm_id_t id) {
+  __atomic_store_n(&t->alarm_id, id, __ATOMIC_RELEASE);
+}
+
+static inline hal_alarm_id_t
+timer_get_alarm_id_atomic(const hal_timer_impl_t *t) {
+  return __atomic_load_n(&t->alarm_id, __ATOMIC_ACQUIRE);
+}
+
+static inline void timer_set_next_fire_atomic(hal_timer_impl_t *t,
+                                              uint64_t next_fire_us) {
+  __atomic_store_n(&t->next_fire_us, next_fire_us, __ATOMIC_RELEASE);
+}
+
+static inline uint64_t timer_get_next_fire_atomic(const hal_timer_impl_t *t) {
+  return __atomic_load_n(&t->next_fire_us, __ATOMIC_ACQUIRE);
+}
+
+static inline void timer_set_period_atomic(hal_timer_impl_t *t,
+                                           uint32_t period_us) {
+  __atomic_store_n(&t->period_us, period_us, __ATOMIC_RELEASE);
+}
+
+static inline uint32_t timer_get_period_atomic(const hal_timer_impl_t *t) {
+  return __atomic_load_n(&t->period_us, __ATOMIC_ACQUIRE);
 }
 
 static int64_t timer_internal_alarm_cb_body(hal_timer_impl_t *t) {
   if (timer_get_state_atomic(t) != HAL_TIMER_STATE_RUNNING) {
-    __atomic_store_n(&t->alarm_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
-    __atomic_store_n(&t->next_fire_us, 0u, __ATOMIC_RELEASE);
+    timer_set_alarm_id_atomic(t, HAL_ALARM_INVALID);
+    timer_set_next_fire_atomic(t, 0u);
     return 0;
   }
 
@@ -50,27 +77,27 @@ static int64_t timer_internal_alarm_cb_body(hal_timer_impl_t *t) {
     if (timer_get_state_atomic(t) == HAL_TIMER_STATE_RUNNING) {
       timer_set_state_atomic(t, HAL_TIMER_STATE_STOPPED);
     }
-    __atomic_store_n(&t->alarm_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
-    __atomic_store_n(&t->next_fire_us, 0u, __ATOMIC_RELEASE);
+    timer_set_alarm_id_atomic(t, HAL_ALARM_INVALID);
+    timer_set_next_fire_atomic(t, 0u);
     return 0;
   }
 
   if (timer_get_state_atomic(t) != HAL_TIMER_STATE_RUNNING) {
-    __atomic_store_n(&t->alarm_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
-    __atomic_store_n(&t->next_fire_us, 0u, __ATOMIC_RELEASE);
+    timer_set_alarm_id_atomic(t, HAL_ALARM_INVALID);
+    timer_set_next_fire_atomic(t, 0u);
     return 0;
   }
 
-  const uint32_t period = __atomic_load_n(&t->period_us, __ATOMIC_ACQUIRE);
+  const uint32_t period = timer_get_period_atomic(t);
   if (period == 0u) {
     timer_set_state_atomic(t, HAL_TIMER_STATE_STOPPED);
-    __atomic_store_n(&t->alarm_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
-    __atomic_store_n(&t->next_fire_us, 0u, __ATOMIC_RELEASE);
+    timer_set_alarm_id_atomic(t, HAL_ALARM_INVALID);
+    timer_set_next_fire_atomic(t, 0u);
     return 0;
   }
 
   const uint64_t now = hal_micros64();
-  __atomic_store_n(&t->next_fire_us, now + (uint64_t)period, __ATOMIC_RELEASE);
+  timer_set_next_fire_atomic(t, now + (uint64_t)period);
   return (int64_t)period;
 }
 
@@ -100,7 +127,7 @@ hal_timer_result_t hal_timer_create(hal_timer_pool_t pool, uint32_t period_us,
   }
 
   t->pool = pool;
-  t->period_us = period_us;
+  timer_set_period_atomic(t, period_us);
   t->periodic = periodic;
   t->callback = callback;
   t->user_data = user_data;
@@ -111,11 +138,11 @@ hal_timer_result_t hal_timer_create(hal_timer_pool_t pool, uint32_t period_us,
     return HAL_TIMER_ERR_NO_RESOURCE;
   }
 
-  t->alarm_id = HAL_ALARM_INVALID;
-  t->state = HAL_TIMER_STATE_STOPPED;
-  t->next_fire_us = 0u;
+  timer_set_alarm_id_atomic(t, HAL_ALARM_INVALID);
+  timer_set_state_atomic(t, HAL_TIMER_STATE_STOPPED);
+  timer_set_next_fire_atomic(t, 0u);
   t->paused_remaining_us = 0u;
-  t->in_callback = 0u;
+  __atomic_store_n(&t->in_callback, 0u, __ATOMIC_RELEASE);
 
   *out_timer = t;
   return HAL_TIMER_OK;
@@ -154,21 +181,21 @@ hal_timer_result_t hal_timer_start(hal_timer_t timer) {
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state == HAL_TIMER_STATE_RUNNING) {
+  if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_ERR_ALREADY_RUNNING;
   }
 
-  const uint32_t period = timer->period_us;
+  const uint32_t period = timer_get_period_atomic(timer);
   if (period == 0u || !timer->callback) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_ERR_INVALID_ARG;
   }
 
-  timer->state = HAL_TIMER_STATE_RUNNING;
+  timer_set_state_atomic(timer, HAL_TIMER_STATE_RUNNING);
   timer->paused_remaining_us = 0u;
-  timer->next_fire_us = hal_micros64() + (uint64_t)period;
-  timer->alarm_id = HAL_ALARM_INVALID;
+  timer_set_next_fire_atomic(timer, hal_micros64() + (uint64_t)period);
+  timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
   hal_mutex_unlock(timer->mutex);
 
   hal_timer_result_t add_res = HAL_TIMER_OK;
@@ -176,19 +203,19 @@ hal_timer_result_t hal_timer_start(hal_timer_t timer) {
       timer->pool, period, timer_internal_alarm_cb, timer, false, &add_res);
   if (id == HAL_ALARM_INVALID) {
     hal_mutex_lock(timer->mutex);
-    if (timer->state == HAL_TIMER_STATE_RUNNING) {
-      timer->state = HAL_TIMER_STATE_STOPPED;
-      timer->next_fire_us = 0u;
+    if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
+      timer_set_state_atomic(timer, HAL_TIMER_STATE_STOPPED);
+      timer_set_next_fire_atomic(timer, 0u);
       timer->paused_remaining_us = 0u;
     }
-    timer->alarm_id = HAL_ALARM_INVALID;
+    timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
     hal_mutex_unlock(timer->mutex);
     return add_res;
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state == HAL_TIMER_STATE_RUNNING) {
-    timer->alarm_id = id;
+  if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
+    timer_set_alarm_id_atomic(timer, id);
   } else {
     hal_timer_pool_cancel_alarm(timer->pool, id);
   }
@@ -202,15 +229,15 @@ hal_timer_result_t hal_timer_stop(hal_timer_t timer) {
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state == HAL_TIMER_STATE_STOPPED) {
+  if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_STOPPED) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_ERR_NOT_RUNNING;
   }
 
-  const hal_alarm_id_t id = timer->alarm_id;
-  timer->alarm_id = HAL_ALARM_INVALID;
-  timer->state = HAL_TIMER_STATE_STOPPED;
-  timer->next_fire_us = 0u;
+  const hal_alarm_id_t id = timer_get_alarm_id_atomic(timer);
+  timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
+  timer_set_state_atomic(timer, HAL_TIMER_STATE_STOPPED);
+  timer_set_next_fire_atomic(timer, 0u);
   timer->paused_remaining_us = 0u;
   hal_mutex_unlock(timer->mutex);
 
@@ -227,13 +254,13 @@ hal_timer_result_t hal_timer_pause(hal_timer_t timer) {
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state != HAL_TIMER_STATE_RUNNING) {
+  if (timer_get_state_atomic(timer) != HAL_TIMER_STATE_RUNNING) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_ERR_NOT_RUNNING;
   }
 
   const uint64_t now = hal_micros64();
-  const uint64_t next = timer->next_fire_us;
+  const uint64_t next = timer_get_next_fire_atomic(timer);
   uint64_t rem64 = (next > now) ? (next - now) : 0u;
   if (rem64 == 0u) {
     rem64 = 1u;
@@ -242,11 +269,11 @@ hal_timer_result_t hal_timer_pause(hal_timer_t timer) {
     rem64 = (uint64_t)UINT32_MAX;
   }
 
-  const hal_alarm_id_t id = timer->alarm_id;
-  timer->alarm_id = HAL_ALARM_INVALID;
-  timer->state = HAL_TIMER_STATE_PAUSED;
+  const hal_alarm_id_t id = timer_get_alarm_id_atomic(timer);
+  timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
+  timer_set_state_atomic(timer, HAL_TIMER_STATE_PAUSED);
   timer->paused_remaining_us = (uint32_t)rem64;
-  timer->next_fire_us = 0u;
+  timer_set_next_fire_atomic(timer, 0u);
   hal_mutex_unlock(timer->mutex);
 
   if (id != HAL_ALARM_INVALID) {
@@ -262,24 +289,24 @@ hal_timer_result_t hal_timer_resume(hal_timer_t timer) {
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state != HAL_TIMER_STATE_PAUSED) {
+  if (timer_get_state_atomic(timer) != HAL_TIMER_STATE_PAUSED) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_ERR_NOT_PAUSED;
   }
 
   uint32_t delay = timer->paused_remaining_us;
   if (delay == 0u) {
-    delay = timer->period_us;
+    delay = timer_get_period_atomic(timer);
     if (delay == 0u) {
       hal_mutex_unlock(timer->mutex);
       return HAL_TIMER_ERR_INVALID_ARG;
     }
   }
 
-  timer->state = HAL_TIMER_STATE_RUNNING;
+  timer_set_state_atomic(timer, HAL_TIMER_STATE_RUNNING);
   timer->paused_remaining_us = 0u;
-  timer->next_fire_us = hal_micros64() + (uint64_t)delay;
-  timer->alarm_id = HAL_ALARM_INVALID;
+  timer_set_next_fire_atomic(timer, hal_micros64() + (uint64_t)delay);
+  timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
   hal_mutex_unlock(timer->mutex);
 
   hal_timer_result_t add_res = HAL_TIMER_OK;
@@ -287,19 +314,19 @@ hal_timer_result_t hal_timer_resume(hal_timer_t timer) {
       timer->pool, delay, timer_internal_alarm_cb, timer, false, &add_res);
   if (id == HAL_ALARM_INVALID) {
     hal_mutex_lock(timer->mutex);
-    if (timer->state == HAL_TIMER_STATE_RUNNING) {
-      timer->state = HAL_TIMER_STATE_PAUSED;
+    if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
+      timer_set_state_atomic(timer, HAL_TIMER_STATE_PAUSED);
       timer->paused_remaining_us = delay;
-      timer->next_fire_us = 0u;
+      timer_set_next_fire_atomic(timer, 0u);
     }
-    timer->alarm_id = HAL_ALARM_INVALID;
+    timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
     hal_mutex_unlock(timer->mutex);
     return add_res;
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state == HAL_TIMER_STATE_RUNNING) {
-    timer->alarm_id = id;
+  if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
+    timer_set_alarm_id_atomic(timer, id);
   } else {
     hal_timer_pool_cancel_alarm(timer->pool, id);
   }
@@ -315,16 +342,17 @@ hal_timer_result_t hal_timer_set_period_us(hal_timer_t timer,
   }
 
   hal_mutex_lock(timer->mutex);
-  timer->period_us = period_us;
+  timer_set_period_atomic(timer, period_us);
 
-  if (!restart_if_running || timer->state != HAL_TIMER_STATE_RUNNING) {
+  if (!restart_if_running ||
+      timer_get_state_atomic(timer) != HAL_TIMER_STATE_RUNNING) {
     hal_mutex_unlock(timer->mutex);
     return HAL_TIMER_OK;
   }
 
-  const hal_alarm_id_t old_id = timer->alarm_id;
-  timer->alarm_id = HAL_ALARM_INVALID;
-  timer->next_fire_us = hal_micros64() + (uint64_t)period_us;
+  const hal_alarm_id_t old_id = timer_get_alarm_id_atomic(timer);
+  timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
+  timer_set_next_fire_atomic(timer, hal_micros64() + (uint64_t)period_us);
   hal_mutex_unlock(timer->mutex);
 
   if (old_id != HAL_ALARM_INVALID) {
@@ -336,17 +364,17 @@ hal_timer_result_t hal_timer_set_period_us(hal_timer_t timer,
       timer->pool, period_us, timer_internal_alarm_cb, timer, false, &add_res);
   if (new_id == HAL_ALARM_INVALID) {
     hal_mutex_lock(timer->mutex);
-    timer->state = HAL_TIMER_STATE_STOPPED;
-    timer->next_fire_us = 0u;
+    timer_set_state_atomic(timer, HAL_TIMER_STATE_STOPPED);
+    timer_set_next_fire_atomic(timer, 0u);
     timer->paused_remaining_us = 0u;
-    timer->alarm_id = HAL_ALARM_INVALID;
+    timer_set_alarm_id_atomic(timer, HAL_ALARM_INVALID);
     hal_mutex_unlock(timer->mutex);
     return add_res;
   }
 
   hal_mutex_lock(timer->mutex);
-  if (timer->state == HAL_TIMER_STATE_RUNNING) {
-    timer->alarm_id = new_id;
+  if (timer_get_state_atomic(timer) == HAL_TIMER_STATE_RUNNING) {
+    timer_set_alarm_id_atomic(timer, new_id);
   } else {
     hal_timer_pool_cancel_alarm(timer->pool, new_id);
   }
@@ -360,7 +388,7 @@ hal_timer_result_t hal_timer_get_period_us(hal_timer_t timer,
     return HAL_TIMER_ERR_INVALID_ARG;
   }
 
-  *out_period_us = __atomic_load_n(&timer->period_us, __ATOMIC_ACQUIRE);
+  *out_period_us = timer_get_period_atomic(timer);
   return HAL_TIMER_OK;
 }
 
@@ -378,11 +406,11 @@ hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer,
   }
 
   hal_mutex_lock(timer->mutex);
-  const hal_timer_state_t state = timer->state;
+  const hal_timer_state_t state = timer_get_state_atomic(timer);
 
   if (state == HAL_TIMER_STATE_RUNNING) {
     const uint64_t now = hal_micros64();
-    const uint64_t next = timer->next_fire_us;
+    const uint64_t next = timer_get_next_fire_atomic(timer);
     const uint64_t rem = (next > now) ? (next - now) : 0u;
     *out_remaining_us = (int64_t)rem;
     hal_mutex_unlock(timer->mutex);
