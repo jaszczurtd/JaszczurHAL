@@ -10,7 +10,9 @@ The tracked supply-chain surface includes:
 - bundled third-party source copied into `src/`,
 - pinned external checkouts used by the component updater, including BearSSL,
   cJSON, LodePNG, TJpg_Decoder, FatFs, Unity, lwIP, littlefs, BTstack, the
-  Semtech SX126x driver, FreeRTOS-Kernel and the Pico SDK,
+  Semtech SX126x driver, FreeRTOS-Kernel, Pico SDK, and ESP-IDF,
+- the exact binary and Python development tools selected by the pinned ESP-IDF
+  tool registry for `esp32s3`,
 - adapted upstream code where local changes may affect security behavior.
 
 The inventory does not replace per-product firmware analysis. Downstream
@@ -44,6 +46,7 @@ and recovery are documented in
 | `security/third_party.json` | Human-maintained source of truth for bundled and pinned components. |
 | `security/third_party.schema.json` | JSON schema for reviewing the inventory shape. |
 | `security/sbom.cdx.json` | Generated CycloneDX SBOM for the library repository. |
+| `security/esp_idf_tools.json` | Reviewed snapshot of the exact ESP-IDF target-tool versions, licenses, upstreams, framework commit, and `tools.json` digest. |
 | `security/vulnerability_log.md` | Human-maintained vulnerability assessment and patch log. |
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
 | `scripts/generate_sbom.py` | Offline SBOM generator using only Python standard library. |
@@ -56,9 +59,36 @@ and recovery are documented in
 ./scripts/generate_sbom.py
 ```
 
-The generator reads `security/third_party.json` and writes
-`security/sbom.cdx.json`. The generated SBOM is deterministic so normal
-regeneration should produce small, reviewable diffs.
+The generator reads `security/third_party.json` and
+`security/esp_idf_tools.json`, then writes `security/sbom.cdx.json`. The
+generated SBOM is deterministic so normal regeneration should produce small,
+reviewable diffs.
+
+## ESP-IDF tool provenance
+
+`third_party/esp_idf_version.conf` pins ESP-IDF v6.0.2 to one commit and selects
+`esp32s3`. `security/esp_idf_tools.json` records the matching official tool set:
+Xtensa GDB/GCC, the companion RISC-V GCC bundle, ESP32 ULP tools, Espressif
+OpenOCD, ROM ELF data, and eleven first-party Python tools declared directly by
+ESP-IDF's core requirements. Those Python entries cover esptool, component
+management, monitor, core-dump, Kconfig, NVS partition generation, size,
+diagnostic, panic-decoder, Clang Python-binding, and FreeRTOS GDB tooling.
+General-purpose transitive Python packages remain owned by the upstream
+environment requirements rather than being duplicated in this snapshot.
+`scripts/generate_sbom.py` expands the snapshot directly into development-scope
+CycloneDX components, including each tool's own reviewed SPDX license. The tool
+entries are not copied into `security/third_party.json`, which remains the
+source for the framework and the repository's other third-party components.
+
+Every production ESP-IDF build also emits
+`generated/jaszczurhal/jh_esp_idf_toolchain.json` and embeds it in
+`jh_esp_idf_artifacts.json`. This per-build record captures the actual compiler,
+CMake, Ninja, IDF Python, and esptool versions plus the framework `tools.json`
+SHA-256, while omitting absolute host paths. The artifact manifest separately
+records the exact ESP-IDF commit, final `sdkconfig` digest, partition-table
+profile/offset/hash, and every flashed image hash. The reviewed snapshot states
+what the pin selects; the build manifest proves what produced one firmware
+build.
 
 ## Check vulnerabilities
 
@@ -89,7 +119,8 @@ optional SBOM-based CVE check.
 
 This regenerates the SBOM to a temporary file and compares it with the committed
 `security/sbom.cdx.json`. CI uses this as a guard against changing
-`security/third_party.json` without committing the regenerated SBOM.
+`security/third_party.json` or `security/esp_idf_tools.json` without committing
+the regenerated SBOM.
 
 ## CI policy
 
@@ -141,11 +172,13 @@ optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
 2. Preserve upstream license files and attribution.
 3. Update `security/third_party.json` with the new version, tag, commit, purl
    or upstream reference.
-4. Run `./scripts/generate_sbom.py`.
-5. Run focused tests for the affected module and the relevant build target.
-6. If the update fixes or assesses a CVE, add an entry to
+4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
+   `tools.json` and managed Python environment, then review every tool license.
+5. Run `./scripts/generate_sbom.py`.
+6. Run focused tests for the affected module and the relevant build target.
+7. If the update fixes or assesses a CVE, add an entry to
    `security/vulnerability_log.md` with CVSS, affected flags and decision.
-7. Mention security-relevant updates in `doc/CHANGELOG.md`.
+8. Mention security-relevant updates in `doc/CHANGELOG.md`.
 
 ## Vulnerability assessment rules
 

@@ -15,7 +15,7 @@
     "reservations": { "status-led": { "pins": [{ "domain": "soc-gpio", "id": 25 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board GPIO status LED." } },
     "aliases": { "status-led": { "endpoint": { "domain": "soc-gpio", "id": 25 } } }
   },
-  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": false } },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": false }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": false }, "sx1262-radio": { "present": false } },
   "devices": { "statusLed": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 25 }, "activeLevel": "high" } },
   "peripherals": { "defaultsSource": "pico-sdk" },
   "components": {}

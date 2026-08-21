@@ -38,8 +38,58 @@
             "required": ["regions", "ramUsableBytes"],
             "properties": {
               "regions": { "type": "object" },
-              "ramUsableBytes": { "type": "integer", "minimum": 0 }
+              "ramUsableBytes": { "type": "integer", "minimum": 0 },
+              "externalRam": {
+                "type": "object",
+                "required": ["interfaces", "maxBytes"],
+                "properties": {
+                  "interfaces": {
+                    "type": "array",
+                    "items": { "enum": ["quad", "octal"] },
+                    "minItems": 1,
+                    "uniqueItems": true
+                  },
+                  "maxBytes": { "type": "integer", "minimum": 1 }
+                },
+                "additionalProperties": false
+              }
             }
+          },
+          "requiredFeatures": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$" },
+            "uniqueItems": true
+          },
+          "supportedFeatures": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^HAL_ENABLE_[A-Z0-9_]+$" },
+            "uniqueItems": true
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "board" } } },
+      "then": {
+        "properties": {
+          "programming": {
+            "type": "object",
+            "required": ["transport", "usb", "reset", "boot"],
+            "properties": {
+              "transport": { "const": "usb-serial-jtag" },
+              "usb": {
+                "type": "object",
+                "required": ["vid", "pid"],
+                "properties": {
+                  "vid": { "type": "integer", "minimum": 0, "maximum": 65535 },
+                  "pid": { "type": "integer", "minimum": 0, "maximum": 65535 }
+                },
+                "additionalProperties": false
+              },
+              "reset": { "const": "usb-serial-jtag-control-lines" },
+              "boot": { "const": "usb-serial-jtag-control-lines" }
+            },
+            "additionalProperties": false
           }
         }
       }

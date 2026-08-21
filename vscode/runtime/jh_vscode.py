@@ -293,7 +293,7 @@ def expand_config_sections(config: dict[str, Any], project_dir: Path) -> None:
         config["buildDir"] = expand_project_vars(config["buildDir"], project_dir, config)
     if "cmakeBuildDir" in config:
         config["cmakeBuildDir"] = expand_project_vars(config["cmakeBuildDir"], project_dir, config)
-    for section_name in ("artifacts", "upload", "ota", "hooks"):
+    for section_name in ("artifacts", "upload", "ota", "hooks", "espIdf"):
         section = config.get(section_name)
         if isinstance(section, dict):
             config[section_name] = {
@@ -386,22 +386,42 @@ def resolve_target_profile(
             registry_layer["cmake"] = {"cache": reg_cache}
         if isinstance(target_desc.get("upload"), dict):
             registry_layer["upload"] = dict(target_desc["upload"])
+        if isinstance(target_desc.get("espIdf"), dict):
+            registry_layer["espIdf"] = dict(target_desc["espIdf"])
+        board_desc = resolve_registry_board(target_desc, board)
+        if isinstance(board_desc, dict) and isinstance(
+            board_desc.get("identity"), dict
+        ):
+            registry_layer["identity"] = dict(board_desc["identity"])
 
     manifest_overlay: dict[str, Any] = {}
     if isinstance(profiles, dict) and isinstance(profiles.get(active), dict):
         manifest_overlay = profiles[active]
 
-    # Precedence (low -> high): registry target/board defaults are the FLOOR, the
+    # Precedence (low -> high): registry target/board defaults are the floor, the
     # base manifest overrides them, and the active target's targetProfiles overlay
-    # overrides the base. (CLI --target/--board is already folded into
-    # active/board.) So a project's explicit setting (e.g. upload.strategy) always
-    # beats a registry default, and a per-target profile beats the project-wide
-    # value. cmake.cache from all three layers deep-merges key-by-key. The active
-    # dispatcher target itself is pinned after the merge so legacy manifests with
-    # a hard-coded JH_TARGET cannot silently select a different backend.
+    # overrides the base. Provider/toolchain selection and its managed runner stay
+    # registry-owned. cmake.cache from all three layers deep-merges key-by-key.
+    # The active CMake dispatcher target itself is pinned after the merge so legacy
+    # manifests with a hard-coded JH_TARGET cannot select a different backend.
     base = dict(config)
     base.pop("targetProfiles", None)
     merged = deep_merge(deep_merge(registry_layer, base), manifest_overlay)
+    if registry_layer.get("toolchain"):
+        merged["toolchain"] = registry_layer["toolchain"]
+        sources["toolchain"] = f"registry:{active}.build.provider"
+    if isinstance(registry_layer.get("espIdf"), dict):
+        merged["espIdf"] = dict(registry_layer["espIdf"])
+        sources["espIdf"] = f"registry:{active}.build.provider"
+    registry_identity = registry_layer.get("identity")
+    if isinstance(registry_identity, dict):
+        effective_identity = dict(merged.get("identity") or {})
+        effective_identity.update(registry_identity)
+        SerialIdentityExpectation.from_config(effective_identity)
+        merged["identity"] = effective_identity
+        sources["identity"] = (
+            f"registry:{active}.boards.{board}.programming.usb"
+        )
     config.clear()
     config.update(merged)
 
@@ -409,7 +429,7 @@ def resolve_target_profile(
     expand_config_sections(config, project_dir)
 
     cmake = config.get("cmake")
-    if isinstance(cmake, dict):
+    if config.get("toolchain") == "cmake" and isinstance(cmake, dict):
         cache = cmake.get("cache")
         if not isinstance(cache, dict):
             cache = {}
@@ -420,7 +440,19 @@ def resolve_target_profile(
     registry_upload = target_desc.get("upload") if isinstance(target_desc, dict) else None
     overlay_upload = manifest_overlay.get("upload") if isinstance(manifest_overlay, dict) else None
     if (
+        config.get("toolchain") == "esp-idf"
+        and isinstance(registry_upload, dict)
+        and registry_upload.get("strategy")
+    ):
+        upload = config.get("upload")
+        if not isinstance(upload, dict):
+            upload = {}
+            config["upload"] = upload
+        upload["strategy"] = registry_upload["strategy"]
+        sources["upload"] = f"registry:{active}.upload.strategy"
+    if (
         target_switched
+        and config.get("toolchain") != "esp-idf"
         and isinstance(registry_upload, dict)
         and registry_upload.get("strategy")
         and not (isinstance(overlay_upload, dict) and overlay_upload.get("strategy"))
@@ -639,17 +671,28 @@ def resolve_registry_board_cache(target_desc: dict[str, Any], board_id: str | No
     """Effective CMake cache for a board: family cache overlaid by the board's
     own cache, with ${jhRoot} resolved to the absolute repo root."""
     cache: dict[str, Any] = dict(target_desc.get("cache") or {})
-    boards = target_desc.get("boards") or []
-    selected = board_id or target_desc.get("defaultBoard")
-    for board in boards:
-        if isinstance(board, dict) and board.get("id") == selected:
-            cache.update(board.get("cache") or {})
-            break
+    board = resolve_registry_board(target_desc, board_id)
+    if board is not None:
+        cache.update(board.get("cache") or {})
     root = str(jaszczurhal_root())
     return {
         key: (value.replace("${jhRoot}", root) if isinstance(value, str) else value)
         for key, value in cache.items()
     }
+
+
+def resolve_registry_board(
+    target_desc: dict[str, Any], board_id: str | None
+) -> dict[str, Any] | None:
+    selected = board_id or target_desc.get("defaultBoard")
+    return next(
+        (
+            board
+            for board in (target_desc.get("boards") or [])
+            if isinstance(board, dict) and board.get("id") == selected
+        ),
+        None,
+    )
 
 
 def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
@@ -667,6 +710,7 @@ def normalize_manifest(data: dict[str, Any]) -> dict[str, Any]:
         "cmake",
         "identity",
         "artifacts",
+        "espIdf",
         "upload",
         "ota",
         "hooks",
@@ -1293,10 +1337,34 @@ def resolve_hal_features(
 ) -> dict[str, Any]:
     validate_hal_enable_values(config, project_dir)
     module, model = hal_feature_support()
-    definitions = [
+    definitions: list[tuple[str, str | None, str]] = [
         *header_hal_feature_definitions(project_dir),
         *cache_hal_feature_definitions(config),
     ]
+    requested_symbols = {symbol for symbol, _, _ in definitions}
+    target = str(config.get("target") or "")
+    descriptor = target_descriptor(config)
+    required_features = (
+        descriptor.get("requiredFeatures", [])
+        if isinstance(descriptor, dict)
+        else []
+    )
+    for index, raw_feature in enumerate(required_features):
+        symbol = str(raw_feature).removesuffix("=1")
+        disabled = symbol.replace("HAL_ENABLE_", "HAL_DISABLE_", 1)
+        if disabled in requested_symbols:
+            raise ValueError(
+                f"[JH-CFG-TARGET-REQUIRED] {target} requires {symbol}; "
+                f"{disabled} cannot be requested"
+            )
+        if symbol not in requested_symbols:
+            definitions.append(
+                (
+                    symbol,
+                    "1",
+                    f"target:{target}:requiredFeatures[{index}]",
+                )
+            )
     requests = [
         module.FeatureRequest(symbol, value, source)
         for symbol, value, source in definitions
@@ -1306,17 +1374,27 @@ def resolve_hal_features(
     )
     if findings:
         raise ValueError("\n".join(sorted(set(findings))))
+    requested = [
+        symbol
+        for symbol in resolution.requested
+        if symbol in requested_symbols
+    ]
+    provenance = {
+        symbol: list(sources)
+        for symbol, sources in resolution.provenance.items()
+    }
+    for index, raw_feature in enumerate(required_features):
+        symbol = str(raw_feature).removesuffix("=1")
+        source = f"target:{target}:requiredFeatures[{index}]"
+        provenance[symbol] = sorted({*provenance.get(symbol, []), source})
     return {
         "registryDigest": model.digest,
-        "requestedFeatures": list(resolution.requested),
+        "requestedFeatures": requested,
         "resolvedFeatures": list(resolution.resolved),
         "resolvedFeaturesDigest": module.resolved_features_digest(
             resolution.resolved
         ),
-        "provenance": {
-            symbol: list(sources)
-            for symbol, sources in resolution.provenance.items()
-        },
+        "provenance": provenance,
     }
 
 
@@ -2117,6 +2195,10 @@ def select_verified_identity_port(config: dict[str, Any]) -> tuple[str | None, i
         port, link = matches[0]
         if link is not None:
             print(yellow_text(f"Using verified serial port: {port} ({link.name})"))
+            if link.is_absolute():
+                return str(link), 0
+            if get_platform_adapter().platform_name == "linux":
+                return str(Path("/dev/serial/by-id") / link.name), 0
         else:
             print(yellow_text(f"Using verified serial port: {port} (matched USB metadata)"))
         return str(port), 0
@@ -2178,26 +2260,49 @@ def upload_port_path_exists(port: str) -> bool:
     return get_platform_adapter().serial_port_exists(port)
 
 
-def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: bool = False) -> int:
-    if not identity_enabled(config):
-        return 0
-    if allow_unverified:
+def _resolve_checked_upload_port(
+    config: dict[str, Any],
+    port: str,
+    *,
+    allow_unverified: bool = False,
+    require_available: bool = False,
+    warn_unverified: bool = True,
+) -> tuple[str | None, int]:
+    identity_required = identity_enabled(config)
+    if identity_required and allow_unverified and warn_unverified:
         print("warning: unverified serial upload allowed by --allow-unverified-port", file=sys.stderr)
-        return 0
-    if not port:
+    if identity_required and not allow_unverified and not port:
         print_identity_upload_requirements(config)
-        return EXIT_UNSAFE_DEVICE
+        return None, EXIT_UNSAFE_DEVICE
+
+    if not port:
+        return None, 0
 
     adapter = get_platform_adapter()
     resolved = adapter.resolve_serial_port(port)
+    if not identity_required or allow_unverified:
+        if require_available and not adapter.serial_port_exists(resolved):
+            print(
+                f"error: selected upload port is stale or unavailable: {resolved}",
+                file=sys.stderr,
+            )
+            return None, EXIT_UNSAFE_DEVICE
+        return resolved, 0
+
     record = adapter.serial_port_record(resolved)
     if record is None:
         print(f"error: selected serial port is stale or unavailable: {resolved}", file=sys.stderr)
-        return EXIT_UNSAFE_DEVICE
+        return None, EXIT_UNSAFE_DEVICE
 
     match = match_serial_identity(record, expected_serial_identity(config))
     if match.verified:
-        return 0
+        if require_available and not adapter.serial_port_exists(resolved):
+            print(
+                f"error: selected upload port is stale or unavailable: {resolved}",
+                file=sys.stderr,
+            )
+            return None, EXIT_UNSAFE_DEVICE
+        return resolved, 0
 
     print(f"error: refusing upload to unverified port: {resolved}", file=sys.stderr)
     print(f"error: expected USB identity: {identity_display_text(config)}", file=sys.stderr)
@@ -2210,7 +2315,33 @@ def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: b
         for alias in record.aliases:
             print(f"  {alias}", file=sys.stderr)
     print("error: for first flash of a clean board, pass --allow-unverified-port with an explicit --port", file=sys.stderr)
-    return EXIT_UNSAFE_DEVICE
+    return None, EXIT_UNSAFE_DEVICE
+
+
+def verify_upload_port(config: dict[str, Any], port: str, *, allow_unverified: bool = False) -> int:
+    _, status = _resolve_checked_upload_port(
+        config,
+        port,
+        allow_unverified=allow_unverified,
+    )
+    return status
+
+
+def resolve_upload_port_for_flash(
+    config: dict[str, Any],
+    port: str,
+    *,
+    allow_unverified: bool = False,
+) -> tuple[str | None, int]:
+    """Recheck identity and resolve the exact device immediately before flash."""
+
+    return _resolve_checked_upload_port(
+        config,
+        port,
+        allow_unverified=allow_unverified,
+        require_available=True,
+        warn_unverified=False,
+    )
 
 
 def process_cmdline(pid: int) -> str:
@@ -2406,6 +2537,217 @@ def run_command_capture(
         while captured_size > capture_limit and captured:
             captured_size -= len(captured.pop(0))
     return int(process.wait()), "".join(captured)
+
+
+def esp_idf_configuration(config: dict[str, Any]) -> dict[str, Any]:
+    value = config.get("espIdf")
+    if not isinstance(value, dict):
+        raise ValueError("ESP-IDF target is missing its tooling configuration")
+    return value
+
+
+def esp_idf_runner(config: dict[str, Any], project_dir: Path) -> Path:
+    value = esp_idf_configuration(config).get("runner")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("ESP-IDF target is missing its runner path")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = project_dir / path
+    return path.resolve()
+
+
+def esp_idf_manifest_path(config: dict[str, Any], project_dir: Path) -> Path:
+    value = esp_idf_configuration(config).get("artifactManifest")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("ESP-IDF target is missing its artifact manifest path")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = project_dir / path
+    return path.resolve()
+
+
+def esp_idf_extra_arguments(config: dict[str, Any]) -> list[str]:
+    """Translate manifest-only build definitions to the ESP-IDF runner CLI.
+
+    ``hal_project_config.h`` remains owned by the project and is read by the
+    runner directly. Only definitions introduced through the VS Code manifest
+    are forwarded here.
+    """
+    cmake = config.get("cmake")
+    cache = cmake.get("cache") if isinstance(cmake, dict) else None
+    if not isinstance(cache, dict):
+        return []
+
+    features: list[str] = []
+    defines: list[str] = []
+
+    def add_unique(values: list[str], value: str) -> None:
+        if value not in values:
+            values.append(value)
+
+    for key, value in cache.items():
+        symbol = str(key)
+        if re.fullmatch(r"HAL_ENABLE_[A-Z0-9_]+", symbol):
+            if value is None or str(value) in {"", "1"}:
+                add_unique(features, symbol)
+        elif re.fullmatch(r"HAL_DISABLE_[A-Z0-9_]+", symbol):
+            suffix = "" if value is None or str(value) == "" else f"={value}"
+            add_unique(defines, f"{symbol}{suffix}")
+
+    for key in ("JH_EXTRA_DEFINES", "EXTRA_HAL_DEFINES"):
+        raw = cache.get(key)
+        if raw is None or raw == "":
+            continue
+        for item in str(raw).split(";"):
+            token = item.strip()
+            if not token:
+                continue
+            match = HAL_DEFINE_TOKEN_RE.fullmatch(token)
+            if match is not None and match.group("symbol").startswith(
+                "HAL_ENABLE_"
+            ):
+                add_unique(features, match.group("symbol"))
+            else:
+                add_unique(defines, token)
+
+    arguments: list[str] = []
+    for feature in features:
+        arguments.extend(["--feature", feature])
+    for define in defines:
+        arguments.extend(["--define", define])
+    return arguments
+
+
+def esp_idf_runner_command(
+    config: dict[str, Any],
+    project_dir: Path,
+    action: str,
+    *,
+    port: str | None = None,
+) -> list[str]:
+    target = str(config.get("target") or "").strip()
+    board = str(config.get("board") or "").strip()
+    if not target or not board:
+        raise ValueError("ESP-IDF runner requires a resolved target and board")
+    command = [
+        sys.executable,
+        str(esp_idf_runner(config, project_dir)),
+        action,
+        "--project",
+        str(project_dir),
+        "--target",
+        target,
+        "--board",
+        board,
+        "--output",
+        str(get_build_dir(config, project_dir)),
+    ]
+    if port is not None:
+        command.extend(["--port", port])
+    command.extend(esp_idf_extra_arguments(config))
+    return command
+
+
+def run_esp_idf_action(
+    config: dict[str, Any],
+    project_dir: Path,
+    action: str,
+    *,
+    port: str | None = None,
+) -> int:
+    build_dir = get_build_dir(config, project_dir)
+    if not managed_build_dir_allowed(build_dir, project_dir):
+        print(
+            f"error: refusing ESP-IDF output outside managed artifact roots: "
+            f"{build_dir}",
+            file=sys.stderr,
+        )
+        return EXIT_UNSAFE_DEVICE
+    try:
+        command = esp_idf_runner_command(
+            config, project_dir, action, port=port
+        )
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_CONFIG
+    return run_command(command, verbose=as_bool(config.get("verbose")))
+
+
+def _esp_idf_artifact_path(
+    build_dir: Path,
+    raw_path: Any,
+    field: str,
+) -> Path:
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise ValueError(f"ESP-IDF artifact manifest field {field} is invalid")
+    relative = Path(raw_path)
+    if relative.is_absolute():
+        raise ValueError(
+            f"ESP-IDF artifact manifest field {field} must be relative"
+        )
+    resolved = (build_dir / relative).resolve()
+    if not path_within(resolved, build_dir):
+        raise ValueError(
+            f"ESP-IDF artifact manifest field {field} escapes the build directory"
+        )
+    if not resolved.is_file():
+        raise ValueError(f"ESP-IDF artifact is missing: {resolved}")
+    return resolved
+
+
+def validate_esp_idf_artifact_manifest(
+    config: dict[str, Any], project_dir: Path
+) -> tuple[dict[str, Any], dict[str, Path], list[Path]]:
+    manifest_path = esp_idf_manifest_path(config, project_dir)
+    try:
+        manifest = load_json_file(manifest_path)
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"cannot load ESP-IDF artifact manifest {manifest_path}: {exc}"
+        ) from exc
+    if manifest.get("schemaVersion") != 1:
+        raise ValueError("ESP-IDF artifact manifest has an unsupported schema")
+    if manifest.get("target") != config.get("target"):
+        raise ValueError("ESP-IDF artifact manifest target does not match the build")
+    if manifest.get("board") != config.get("board"):
+        raise ValueError("ESP-IDF artifact manifest board does not match the build")
+
+    build_dir = get_build_dir(config, project_dir).resolve()
+    artifacts_raw = manifest.get("artifacts")
+    if not isinstance(artifacts_raw, dict):
+        raise ValueError("ESP-IDF artifact manifest is missing artifacts")
+    artifacts = {
+        str(name): _esp_idf_artifact_path(
+            build_dir, value, f"artifacts.{name}"
+        )
+        for name, value in artifacts_raw.items()
+    }
+
+    flash_images_raw = manifest.get("flashImages")
+    if not isinstance(flash_images_raw, list) or not flash_images_raw:
+        raise ValueError("ESP-IDF artifact manifest is missing flash images")
+    flash_images: list[Path] = []
+    seen_paths: set[Path] = set()
+    seen_offsets: set[str] = set()
+    for index, item in enumerate(flash_images_raw):
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"ESP-IDF artifact manifest flashImages[{index}] is invalid"
+            )
+        offset = item.get("offset")
+        if not isinstance(offset, str) or not offset.strip():
+            raise ValueError(
+                f"ESP-IDF artifact manifest flashImages[{index}].offset is invalid"
+            )
+        path = _esp_idf_artifact_path(
+            build_dir, item.get("path"), f"flashImages[{index}].path"
+        )
+        if offset in seen_offsets or path in seen_paths:
+            raise ValueError("ESP-IDF artifact manifest has duplicate flash images")
+        seen_offsets.add(offset)
+        seen_paths.add(path)
+        flash_images.append(path)
+    return manifest, artifacts, flash_images
 
 
 def memory_overview_enabled() -> bool:
@@ -3084,6 +3426,36 @@ def command_build(args: argparse.Namespace, *, debug: bool = False, show_memory_
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
+    if config.get("toolchain") == "esp-idf":
+        if debug:
+            print(
+                "error: ESP-IDF debug builds are not implemented by jh-vscode",
+                file=sys.stderr,
+            )
+            return EXIT_UNSUPPORTED
+        diagnostics = build_preflight_diagnostics(config, project_dir)
+        if diagnostics:
+            print_build_diagnostics(diagnostics)
+            return EXIT_BUILD
+        rc = run_esp_idf_action(config, project_dir, "build")
+        if rc != 0:
+            return EXIT_BUILD
+        rc = run_esp_idf_action(config, project_dir, "artifacts")
+        if rc != 0:
+            return EXIT_BUILD
+        try:
+            _, _, flash_images = validate_esp_idf_artifact_manifest(
+                config, project_dir
+            )
+            manifest_path = esp_idf_manifest_path(config, project_dir)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_BUILD
+        print(
+            f"ESP-IDF artifacts: {manifest_path} "
+            f"({len(flash_images)} flash images)"
+        )
+        return 0
     if config.get("toolchain") == "cmake":
         invalidate_status = invalidate_stable_firmware_artifacts(config, project_dir)
         if invalidate_status != 0:
@@ -3131,6 +3503,76 @@ def command_upload(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
+    if config.get("toolchain") == "esp-idf":
+        diagnostics = build_preflight_diagnostics(config, project_dir)
+        if diagnostics:
+            print_build_diagnostics(diagnostics)
+            return EXIT_UPLOAD
+        port = (
+            args.port
+            or config.get("uploadPort")
+            or (config.get("upload") or {}).get("port")
+        )
+        if not port and identity_enabled(config):
+            port, detect_status = select_verified_identity_port(config)
+            if detect_status != 0:
+                return detect_status
+        if not port:
+            print(
+                "error: ESP-IDF upload requires --port or a port selected "
+                "with change-port",
+                file=sys.stderr,
+            )
+            return EXIT_USAGE
+        verify_status = verify_upload_port(
+            config,
+            str(port),
+            allow_unverified=args.allow_unverified_port,
+        )
+        if verify_status != 0:
+            return verify_status
+        requested_port = str(port)
+        build_status = command_build(
+            args, debug=False, show_memory_overview=False
+        )
+        if build_status != 0:
+            return build_status
+        upload_port, recheck_status = resolve_upload_port_for_flash(
+            config,
+            requested_port,
+            allow_unverified=args.allow_unverified_port,
+        )
+        if recheck_status != 0:
+            return recheck_status
+        if upload_port is None:
+            print(
+                "error: ESP-IDF upload port disappeared after the build",
+                file=sys.stderr,
+            )
+            return EXIT_UNSAFE_DEVICE
+        release_status = release_port_for_upload(upload_port, project_dir)
+        if release_status != 0:
+            return release_status
+        try:
+            upload_port, final_status = resolve_upload_port_for_flash(
+                config,
+                requested_port,
+                allow_unverified=args.allow_unverified_port,
+            )
+            if final_status != 0:
+                return final_status
+            if upload_port is None:
+                print(
+                    "error: ESP-IDF upload port disappeared during monitor release",
+                    file=sys.stderr,
+                )
+                return EXIT_UNSAFE_DEVICE
+            rc = run_esp_idf_action(
+                config, project_dir, "flash", port=upload_port
+            )
+        finally:
+            end_upload_release(project_dir)
+        return 0 if rc == 0 else EXIT_UPLOAD
     if config.get("toolchain") != "cmake":
         print(f"error: upload for toolchain '{config.get('toolchain')}' is not implemented yet", file=sys.stderr)
         return EXIT_UNSUPPORTED
@@ -4114,13 +4556,21 @@ def command_monitor(args: argparse.Namespace, mode: str) -> int:
     if status != 0:
         return status
 
+    if mode == "pico" and config.get("toolchain") == "esp-idf":
+        mode = "esp"
+
     port = (
         args.port
         or config.get("uploadPort")
         or (config.get("upload") or {}).get("port")
     )
     identity_tokens: list[str] = []
-    if mode == "pico" and not args.port and identity_enabled(config):
+    follow_identity = (
+        mode in {"pico", "esp"}
+        and not args.port
+        and identity_enabled(config)
+    )
+    if follow_identity:
         identity_tokens = list(dict.fromkeys(expected_identity_tokens(config)))
         if not port or not upload_port_path_exists(str(port)):
             detected_port, detect_status = select_verified_identity_port(config)
@@ -4147,7 +4597,7 @@ def command_monitor(args: argparse.Namespace, mode: str) -> int:
         "--lock-policy",
         args.lock_policy,
     ]
-    if identity_tokens:
+    if follow_identity:
         cmd.append("--follow-identity")
         cmd.extend(
             [
@@ -4196,10 +4646,86 @@ def build_lock(config: dict[str, Any], project_dir: Path):
         yield
 
 
+def write_intellisense_configuration(
+    config: dict[str, Any],
+    project_dir: Path,
+    raw_compile_db: Path,
+    *,
+    intellisense_mode: str | None,
+) -> int:
+    build_dir = get_build_dir(config, project_dir)
+    patched_compile_db = build_dir / "compile_commands_patched.json"
+    try:
+        compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
+        if not isinstance(compile_db, list):
+            raise ValueError("compile database root must be an array")
+        patched_compile_db.write_text(
+            json.dumps(compile_db, indent=2) + "\n", encoding="utf-8"
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(
+            f"error: failed to write patched compile database: {exc}",
+            file=sys.stderr,
+        )
+        return EXIT_GENERIC
+
+    cpp_configuration: dict[str, Any] = {
+        "name": str(config.get("module") or project_dir.name),
+        "compileCommands": str(patched_compile_db),
+        "compilerPath": "",
+        "cStandard": "c11",
+        "cppStandard": "gnu++17",
+    }
+    if intellisense_mode is not None:
+        cpp_configuration["intelliSenseMode"] = intellisense_mode
+    cpp_props = {"configurations": [cpp_configuration], "version": 4}
+    cpp_props_path = project_dir / ".vscode" / "c_cpp_properties.json"
+    try:
+        cpp_props_path.write_text(
+            json.dumps(cpp_props, indent=4) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"error: failed to write {cpp_props_path}: {exc}", file=sys.stderr)
+        return EXIT_GENERIC
+
+    print(f"Wrote {patched_compile_db}")
+    print(f"Wrote {cpp_props_path}")
+    return 0
+
+
 def command_refresh_intellisense(args: argparse.Namespace) -> int:
     project_dir, config, status = load_config_for_action(args)
     if status != 0:
         return status
+    if config.get("toolchain") == "esp-idf":
+        build_status = command_build(
+            args, debug=False, show_memory_overview=False
+        )
+        if build_status != 0:
+            return build_status
+        try:
+            _, artifacts, _ = validate_esp_idf_artifact_manifest(
+                config, project_dir
+            )
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return EXIT_BUILD
+        raw_compile_db = artifacts.get("compileCommands")
+        if raw_compile_db is None:
+            print(
+                "error: ESP-IDF artifact manifest omitted compileCommands",
+                file=sys.stderr,
+            )
+            return EXIT_BUILD
+        # cpptools consumes the Xtensa compiler and flags directly from the
+        # ESP-IDF compile database; its fixed architecture modes do not model
+        # Xtensa accurately.
+        return write_intellisense_configuration(
+            config,
+            project_dir,
+            raw_compile_db,
+            intellisense_mode=None,
+        )
     if config.get("toolchain") == "cmake":
         target = cmake_targets(config)["compileDb"]
         rc = run_cmake_target(config, project_dir, target)
@@ -4209,7 +4735,6 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
         build_dir = get_build_dir(config, project_dir)
         cmake_build_dir = get_cmake_build_dir(config, project_dir)
         raw_compile_db = find_compile_database(cmake_build_dir, build_dir)
-        patched_compile_db = build_dir / "compile_commands_patched.json"
         if raw_compile_db is None:
             print(
                 "error: compile database was not generated; checked: "
@@ -4219,36 +4744,12 @@ def command_refresh_intellisense(args: argparse.Namespace) -> int:
             )
             return EXIT_BUILD
 
-        try:
-            compile_db = json.loads(raw_compile_db.read_text(encoding="utf-8"))
-            patched_compile_db.write_text(json.dumps(compile_db, indent=2) + "\n", encoding="utf-8")
-        except (OSError, json.JSONDecodeError) as exc:
-            print(f"error: failed to write patched compile database: {exc}", file=sys.stderr)
-            return EXIT_GENERIC
-
-        cpp_props = {
-            "configurations": [
-                {
-                    "name": str(config.get("module") or project_dir.name),
-                    "compileCommands": str(patched_compile_db),
-                    "intelliSenseMode": "gcc-arm",
-                    "compilerPath": "",
-                    "cStandard": "c11",
-                    "cppStandard": "gnu++17",
-                }
-            ],
-            "version": 4,
-        }
-        cpp_props_path = project_dir / ".vscode" / "c_cpp_properties.json"
-        try:
-            cpp_props_path.write_text(json.dumps(cpp_props, indent=4) + "\n", encoding="utf-8")
-        except OSError as exc:
-            print(f"error: failed to write {cpp_props_path}: {exc}", file=sys.stderr)
-            return EXIT_GENERIC
-
-        print(f"Wrote {patched_compile_db}")
-        print(f"Wrote {cpp_props_path}")
-        return 0
+        return write_intellisense_configuration(
+            config,
+            project_dir,
+            raw_compile_db,
+            intellisense_mode="gcc-arm",
+        )
     print(
         f"error: refresh-intellisense for toolchain "
         f"'{config.get('toolchain')}' is not implemented",

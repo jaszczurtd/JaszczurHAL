@@ -25,6 +25,12 @@
       "stateModel": "lifecycle",
       "runtimeOwner": "ble"
     },
+    "native-wifi": {
+      "bit": 5,
+      "macro": "HAL_BOARD_CAP_NATIVE_WIFI",
+      "stateModel": "lifecycle",
+      "runtimeOwner": "network"
+    },
     "sx1262-radio": {
       "bit": 3,
       "macro": "HAL_BOARD_CAP_SX1262_RADIO",

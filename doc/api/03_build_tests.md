@@ -6,6 +6,7 @@
 
 | HAL module | External dependency |
 |---|---|
+| ESP32-S3 Phase 1 entry/build contract | Pinned ESP-IDF `freertos`, `esp_system`, `esp_psram`, and `spi_flash` components. The production recipe uses a fixed minimal graph; ESP peripheral HAL modules are not released in Phase 1. |
 | `hal_gpio`, `hal_pwm`, `hal_adc`, `hal_system` | Pico SDK `hardware_*` / `pico_*` APIs on the RP family; STM32G474 register backend. `hal_system` also uses FreeRTOS task APIs in supported `HAL_ENABLE_FREERTOS` builds |
 | `hal_usb` | HAL-owned TinyUSB device on RP: CDC descriptors, IRQ/timer pump in bare builds, core-0 worker task in FreeRTOS builds, and BOOTSEL reset. STM32G474 is currently unsupported. Mock provides deterministic CDC buffers and a reset observer. |
 | `hal_serial` | One target-independent serial/debug core plus link-time ports: RP `hal_usb` CDC, STM32G474 debug USART2/host stdout, and mock stdout capture/injectable RX. |
@@ -100,10 +101,11 @@ Runs the complete quality-gate suite (8 gates, in order):
    `.build/gate/`)
 6. PMD CPD duplicate detection across owned C/C++ implementation sources
 7. Target builds (STM32G474 plus Pico SDK RP2040/RP2350 ARM/RP2350 RISC-V
-   entry/core probes, RP feature profiles, and six representative
-   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds)
-8. Examples build (52 dispatcher-backed `gateTargets` configurations: 27 for
-   RP2040 and 25 for STM32G474, plus the dedicated target/runtime fixtures)
+   entry/core probes, RP feature profiles, six representative
+   `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
+   ESP32-S3 build with the pinned ESP-IDF and validated multi-image manifest)
+8. Examples build (62 dispatcher-backed `gateTargets` configurations: 32 for
+   RP2040 and 30 for STM32G474, plus the dedicated target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
 
@@ -135,8 +137,9 @@ the complete Linux quality gate:
 - `windows-tooling` prepares the authenticated managed environment, repeats
   `runmefirst.ps1 -VerifyOnly`, runs the shared runtime/platform/bootstrap and
   generator tests, verifies the RP and STM32 FreeRTOS CMake dependency source
-  selection, then compiles and runs the portable host contracts with MSVC
-  `/W4 /permissive- /WX`;
+  selection, performs a clean production ESP32-S3/ESP-IDF build and uploads its
+  multi-image artifacts, then compiles and runs the portable host contracts
+  with MSVC `/W4 /permissive- /WX`;
 - `Windows firmware (<target>)` builds a generated consumer from a path
   containing spaces through Ninja for `rp2040`, `rp2350-arm`,
   `rp2350-riscv`, and `stm32g474`, checks the target artifacts and patched
@@ -149,7 +152,7 @@ remains in the Linux gate. Fiesta, DoomConsole, and Ford DPF Tracker own separat
 Windows firmware workflows, which provide consumer-specific integration
 coverage in addition to JaszczurHAL's generated-consumer fixture.
 
-### Native RP hardware fixtures
+### Hardware fixtures
 
 The repeatable physical-device probes use the same VS Code dispatcher as
 applications and keep their artifacts below `.build/hardware/`:
@@ -164,10 +167,14 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_sdlogger` | Physical SPI SD mount, deterministic append, flush/close, reset/remount, content and EEPROM log-counter persistence |
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
 | `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional packets, RSSI/SNR, sleep/wake and destroy/create reinitialization on integrated LF or external HF pairs |
+| `tests/hardware/esp32s3_phase1` | ESP32-S3 target/board identity, generated link contract, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. Peripheral HAL surfaces remain Phase 2. |
 
 Each fixture contains its exact build, upload and verifier commands in its
 local `README.md`. The storage probe supports `rp2040`, `rp2350-arm` and
-`rp2350-riscv`.
+`rp2350-riscv`. The ESP32-S3 Phase 1 fixture has completed its physical closure:
+three full three-image flashes, exact S3/two-core/4 MiB flash/initialized 2 MiB
+PSRAM runtime facts, and persistent-monitor release/reconnect with a repeated
+task heartbeat.
 
 ---
 

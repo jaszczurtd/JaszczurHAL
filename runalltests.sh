@@ -12,7 +12,7 @@
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
 #   6. Duplicate detection: PMD CPD (owned C/C++ implementation sources)
-#   7. Target builds (STM32 + native Pico SDK matrix)
+#   7. Target builds (STM32 + native Pico SDK matrix + ESP-IDF)
 #   8. Examples build (native RP + STM32G474)
 #
 # Usage:
@@ -318,9 +318,9 @@ run_logged "${LOG_ROOT}/jh_cpd.log" \
 pass "PMD CPD found zero duplicate groups at the 100-token threshold."
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GATE 7: Target static-library builds
+# GATE 7: Target builds
 # ═══════════════════════════════════════════════════════════════════════════════
-header "Gate 7/8: Target static-library builds"
+header "Gate 7/8: Target builds (STM32 + native Pico SDK + ESP-IDF)"
 
 info "Verifying libJaszczurHAL.a (STM32G474 backend, host compiler)..."
 # Already built above in gate 5 - just verify artifact exists
@@ -517,6 +517,17 @@ if grep -R -E '(^|[ /])core\.a([[:space:]]|$)|arduino-pico|Arduino\.h' \
 fi
 pass "Native RP images contain no removed carrier link inputs."
 
+info "Building the ESP32-S3 Phase 1 fixture with pinned ESP-IDF..."
+ESP32_PHASE1_BUILD_DIR="${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase1"
+run_logged "${LOG_ROOT}/jh_esp32s3_phase1.log" \
+    "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+        --project "${SCRIPT_DIR}/tests/hardware/esp32s3_phase1" \
+        --target esp32s3 \
+        --board waveshare-esp32-s3-zero \
+        --output "${ESP32_PHASE1_BUILD_DIR}" \
+        --clean
+pass "ESP32-S3 Phase 1 fixture produced a validated multi-image ESP-IDF build."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 8: Examples build
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -554,7 +565,7 @@ echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
 echo "  PMD CPD:          PASS (zero duplicate groups >= 100 tokens)"
-echo "  Target builds:    PASS (native Pico SDK + STM32G474)"
+echo "  Target builds:    PASS (native Pico SDK + STM32G474 + ESP32-S3/ESP-IDF)"
 echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
 echo ""
 echo "  Total time: ${SECONDS}s"

@@ -26,6 +26,12 @@
 #ifndef JH_EXPECT_MOCK
 #define JH_EXPECT_MOCK 0
 #endif
+#ifndef JH_EXPECT_ESP32_S3
+#define JH_EXPECT_ESP32_S3 0
+#endif
+#ifndef JH_EXPECT_ESP32_FAMILY
+#define JH_EXPECT_ESP32_FAMILY 0
+#endif
 #ifndef JH_EXPECT_RP
 #define JH_EXPECT_RP 0
 #endif
@@ -40,6 +46,8 @@ static_assert(HAL_TARGET_IS_RP2350_ARM == JH_EXPECT_RP2350_ARM);
 static_assert(HAL_TARGET_IS_RP2350_RISCV == JH_EXPECT_RP2350_RISCV);
 static_assert(HAL_TARGET_IS_STM32G474 == JH_EXPECT_STM32G474);
 static_assert(HAL_TARGET_IS_MOCK == JH_EXPECT_MOCK);
+static_assert(HAL_TARGET_IS_ESP32_S3 == JH_EXPECT_ESP32_S3);
+static_assert(HAL_TARGET_IS_ESP32_FAMILY == JH_EXPECT_ESP32_FAMILY);
 static_assert(HAL_TARGET_IS_RP == JH_EXPECT_RP);
 static_assert(HAL_RP_ARCH_ARM == JH_EXPECT_ARM);
 static_assert(HAL_RP_ARCH_RISCV == JH_EXPECT_RISCV);
@@ -67,6 +75,8 @@ static_assert(target_name_is(HAL_TARGET_NAME, "rp2350-arm"));
 static_assert(target_name_is(HAL_TARGET_NAME, "rp2350-riscv"));
 #elif defined(JH_EXPECT_NAME_STM32G474)
 static_assert(target_name_is(HAL_TARGET_NAME, "stm32g474"));
+#elif defined(JH_EXPECT_NAME_ESP32S3)
+static_assert(target_name_is(HAL_TARGET_NAME, "esp32s3"));
 #elif defined(JH_EXPECT_NAME_MOCK)
 static_assert(target_name_is(HAL_TARGET_NAME, "mock"));
 #else

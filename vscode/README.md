@@ -1,8 +1,8 @@
 # JaszczurHAL VS Code Entry
 
 This directory contains the shared VS Code firmware workflow for projects that
-use JaszczurHAL: build, debug build, upload, UF2 upload, serial monitor,
-IntelliSense refresh, board/port helpers, and USB identity cleanup.
+use JaszczurHAL: build, debug build, upload, UF2 upload, ESP-IDF flash, serial
+monitor, IntelliSense refresh, board/port helpers, and USB identity cleanup.
 
 The tracked configuration used when the JaszczurHAL repository root itself is
 opened in VS Code is a separate static-library workflow documented in the
@@ -118,7 +118,7 @@ uses `jaszczurhal.vscodeEntry`; the Windows override uses
 |---|---|---|
 | `Project: Build` | `build` | Builds the active target and board in Release mode and publishes its stable artifacts. This is the default VS Code build task. |
 | `Project: Build (Debug)` | `build-debug` | Uses a separate Debug CMake cache, publishes the Debug ELF, and serves as the pre-launch task for every managed Cortex-Debug profile. |
-| `Project: Upload` | `upload` | Builds and uploads through the active target backend: verified CDC-to-BOOTSEL UF2 for RP or OpenOCD for STM32G474. |
+| `Project: Upload` | `upload` | Builds and uploads through the active target backend: verified CDC-to-BOOTSEL UF2 for RP, OpenOCD for STM32G474, or a verified USB Serial/JTAG port for ESP32-S3. |
 | `Project: Upload (UF2 / BOOTSEL)` | `upload-uf2` | Builds an RP image, validates the UF2, and copies it to one verified BOOTSEL volume. It refuses ambiguous volumes. |
 | `Project: Upload (OTA)` | `upload-ota --interactive` | Builds and authenticates the OTA image, discovers matching native RP devices, and prompts when an explicit device choice is required. |
 | `Project: Discover OTA devices` | `ota-discover` | Lists compatible OTA responders and their address, target, generation, slot, and boot state. |
@@ -182,9 +182,9 @@ jh-vscode clear-identity --project /home/user/projects/Fiesta/src/ECU
 `--project`. Actions that touch a device must fail before accessing serial
 ports, BOOTSEL disks, or build artifacts when the target module is ambiguous.
 
-Firmware projects use `toolchain: "cmake"` and the shared JaszczurHAL
-dispatcher. `jh-vscode` resolves the active target/board, configures CMake, and
-runs the maintained firmware targets:
+RP and STM32 firmware projects use `toolchain: "cmake"` and the shared
+JaszczurHAL dispatcher. `jh-vscode` resolves the active target/board, configures
+CMake, and runs the maintained firmware targets:
 
 ```text
 firmware
@@ -217,6 +217,22 @@ serial port, normal `upload` releases the project monitor,
 performs a 1200-bps DTR touch, waits for the single BOOTSEL drive and copies the
 UF2. STM32G474 uses the registry's native target recipe, supports bare-metal
 and FreeRTOS firmware variants, and uploads through OpenOCD.
+
+ESP32-S3 projects use `toolchain: "esp-idf"`. The target registry
+provides `scripts/build_esp_idf.py`, the output manifest path, the ESP-IDF upload
+strategy, required FreeRTOS feature, and the selected board's programming USB
+VID/PID. `build` invokes the production runner and then independently
+revalidates `jh_esp_idf_artifacts.json`; it preserves the complete ordered
+bootloader, partition-table, and application image set rather than reducing it
+to one stable firmware file. `upload` rebuilds, releases the project monitor,
+and hands the verified port to the runner's `flash` action. `monitor` switches
+to ESP reconnect behavior and follows one matching USB Serial/JTAG device when
+no explicit port is pinned.
+
+`refresh-intellisense` builds and validates the ESP-IDF artifacts, then patches
+the emitted compile database for cpptools while retaining its Xtensa compiler
+and flags. Phase 1 does not provide `build-debug`, Cortex-Debug launch profiles,
+or ESP peripheral HAL modules.
 
 ## Adding Project Source Files
 
@@ -263,6 +279,11 @@ registry requirements and conflicts. `config-dump` exposes this result as
 `resolvedFeatures`, `resolvedFeaturesDigest`, and per-request `provenance`.
 Requested features remain the CMake inputs; preflight and OTA eligibility use
 the resolved set.
+
+The current `esp32s3` descriptor permits only its required
+`HAL_ENABLE_FREERTOS` feature. The production runner rejects requested or
+transitively resolved features outside that allowlist with
+`[JH-CFG-UNSUPPORTED]`.
 
 The project header is a macro-only input loaded before target auto-detection;
 do not include JaszczurHAL headers or use derived target/board selectors in it.
@@ -384,8 +405,8 @@ If `Ctrl+Shift+3` does not start the monitor, inspect the real user
 After editing the user keybindings file, reload the VS Code window if the old
 binding is still cached.
 
-After a successful `build`, `upload`, or `upload-uf2`, `jh-vscode` prints a
-compact ELF memory map overview when a `firmware.elf` artifact is available.
+After a successful CMake `build`, `upload`, or `upload-uf2`, `jh-vscode` prints
+a compact ELF memory map overview when a `firmware.elf` artifact is available.
 The overview is derived from `arm-none-eabi-objdump -h`, groups allocated
 sections by FLASH/XIP, SRAM, PSRAM, and OTHER, and shows VMA/LMA placement,
 section sizes, and short notes. Set `JH_VSCODE_MEMORY_OVERVIEW=0` to suppress
@@ -411,10 +432,18 @@ structured sysfs descriptors, including when pyserial has no matching record.
 Windows enumerates COM ports through pyserial and uses VID, PID, serial number,
 manufacturer, product, interface, location, and HWID.
 Every configured stable field must match; incomplete metadata remains
-unverified. First flashing a clean serial-only board must be an explicit
-operation with
+unverified. First flashing a clean serial-only board whose identity is supplied
+by its existing firmware must be an explicit operation with
 `--allow-unverified-port --port <port>`. Default VS Code tasks must not pass
 this flag.
+
+ESP32-S3 programmer identity comes from the selected board descriptor rather
+than a project-local copy. For `waveshare-esp32-s3-zero`, the native USB
+Serial/JTAG endpoint is `303a:1001`. An explicit port must resolve to a device
+with that VID/PID; a stale path or mismatch is rejected. Without an explicit
+port, upload and monitor may select exactly one verified match and reject zero
+or multiple matches. `--allow-unverified-port` remains an expert-only override
+for an explicit `--port`.
 
 ## Configuration Precedence
 
@@ -436,6 +465,10 @@ manufacturer/product, for example in `lsusb`, `dmesg`, VS Code Serial Monitor,
 `usbVid`, `usbPid`, `usbSerialNumber`, `usbInterface`, or `usbLocation`. A COM
 number is only a local selection stored in
 `.vscode/jaszczurhal.local.json`; it is never treated as stable identity.
+
+For ESP-IDF boards, `boards/profiles/<board>.json.programming.usb` describes
+the programmer endpoint's fixed VID/PID. `jh-vscode` projects that fact into
+the same verifier in memory; projects must not duplicate it in their manifest.
 
 For native RP builds, identity is injected through CMake cache entries:
 

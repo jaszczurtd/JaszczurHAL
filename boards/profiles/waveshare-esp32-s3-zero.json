@@ -1,0 +1,48 @@
+{
+  "$schema": "../board.schema.json",
+  "schemaVersion": 1,
+  "kind": "board",
+  "id": "waveshare-esp32-s3-zero",
+  "displayName": "Waveshare ESP32-S3-Zero SKU 25081",
+  "description": "ESP32-S3FH4R2 board with 4 MB flash, 2 MB Quad PSRAM, native USB, and WS2812 on GPIO21.",
+  "status": "experimental",
+  "compatibleTargets": ["esp32s3"],
+  "build": { "provider": "esp-idf" },
+  "hal": { "profileId": 14, "selector": "HAL_BOARD_PROFILE_WAVESHARE_ESP32_S3_ZERO", "legacySelectors": [], "autoDetectSelectors": [] },
+  "memory": {
+    "flash": { "source": "sdk", "expectedBytes": 4194304 },
+    "psram": { "interface": "quad", "sizeBytes": 2097152 }
+  },
+  "programming": {
+    "transport": "usb-serial-jtag",
+    "usb": { "vid": 12346, "pid": 4097 },
+    "reset": "usb-serial-jtag-control-lines",
+    "boot": "usb-serial-jtag-control-lines"
+  },
+  "gpio": {
+    "exposedPins": { "ranges": [{ "first": 1, "last": 18 }, { "first": 38, "last": 42 }, { "first": 45, "last": 45 }] },
+    "connectors": {
+      "castellated": { "pins": [{ "domain": "soc-gpio", "id": 1 }, { "domain": "soc-gpio", "id": 2 }, { "domain": "soc-gpio", "id": 3 }, { "domain": "soc-gpio", "id": 4 }, { "domain": "soc-gpio", "id": 5 }, { "domain": "soc-gpio", "id": 6 }, { "domain": "soc-gpio", "id": 7 }, { "domain": "soc-gpio", "id": 8 }, { "domain": "soc-gpio", "id": 9 }, { "domain": "soc-gpio", "id": 10 }, { "domain": "soc-gpio", "id": 11 }, { "domain": "soc-gpio", "id": 12 }, { "domain": "soc-gpio", "id": 13 }, { "domain": "soc-gpio", "id": 38 }, { "domain": "soc-gpio", "id": 39 }, { "domain": "soc-gpio", "id": 40 }, { "domain": "soc-gpio", "id": 41 }, { "domain": "soc-gpio", "id": 42 }, { "domain": "soc-gpio", "id": 45 }] },
+      "pads": { "pins": [{ "domain": "soc-gpio", "id": 14 }, { "domain": "soc-gpio", "id": 15 }, { "domain": "soc-gpio", "id": 16 }, { "domain": "soc-gpio", "id": 17 }, { "domain": "soc-gpio", "id": 18 }] }
+    },
+    "reservations": {
+      "boot-button": { "pins": [{ "domain": "soc-gpio", "id": 0 }], "owner": "board.boot-button", "strength": "soft", "reason": "BOOT button and download-mode strapping input." },
+      "native-usb": { "pins": [{ "domain": "soc-gpio", "id": 19 }, { "domain": "soc-gpio", "id": 20 }], "owner": "usb.serial-jtag", "strength": "hard", "reason": "Native USB D- and D+ connection to the USB-C connector." },
+      "status-led": { "pins": [{ "domain": "soc-gpio", "id": 21 }], "owner": "board.status-led", "strength": "soft", "reason": "On-board WS2812 data input." },
+      "unrouted-memory-pins": { "pins": [{ "domain": "soc-gpio", "id": 33 }, { "domain": "soc-gpio", "id": 34 }, { "domain": "soc-gpio", "id": 35 }, { "domain": "soc-gpio", "id": 36 }, { "domain": "soc-gpio", "id": 37 }], "owner": "board.unrouted-memory-pins", "strength": "hard", "reason": "Not routed to board pads; Waveshare reserves this group for memory variants." }
+    },
+    "aliases": {
+      "boot-button": { "endpoint": { "domain": "soc-gpio", "id": 0 } },
+      "status-led-data": { "endpoint": { "domain": "soc-gpio", "id": 21 } },
+      "uart0-rx": { "endpoint": { "domain": "soc-gpio", "id": 44 } },
+      "uart0-tx": { "endpoint": { "domain": "soc-gpio", "id": 43 } }
+    }
+  },
+  "capabilities": { "usb-device": { "present": true }, "cyw43": { "present": false }, "native-wifi": { "present": true }, "external-radio-frontend": { "present": false }, "bluetooth-controller": { "present": true }, "sx1262-radio": { "present": false } },
+  "devices": {
+    "bootButton": { "kind": "gpio", "endpoint": { "domain": "soc-gpio", "id": 0 }, "activeLevel": "low" },
+    "statusLed": { "kind": "addressable", "endpoint": { "domain": "soc-gpio", "id": 21 }, "protocol": "ws2812", "pixelOrder": { "source": "project", "value": null, "allowed": ["RGB", "GRB"] } }
+  },
+  "peripherals": { "defaultsSource": "esp-idf" },
+  "components": {}
+}

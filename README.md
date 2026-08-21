@@ -5,7 +5,12 @@ Author: Marcin 'Jaszczur' Kielesinski
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
 
 RP2040 and RP2350 firmware builds directly against the official Pico SDK.
-STM32G474 is supported through the repository's bare-metal implementation and linker flow. All targets are supported by optionally enabled FreeRTOS. The mock backend provides deterministic host-side validation.
+STM32G474 is supported through the repository's bare-metal implementation and
+linker flow. The ESP32-S3 target provides a controlled native
+ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow;
+portable peripheral backends are planned for the next phase. FreeRTOS is
+optional on RP and STM32G474 and required by the ESP-IDF runtime. The mock
+backend provides deterministic host-side validation.
 
 ## How do you even pronounce this library name?
 
@@ -79,7 +84,10 @@ together. Each example is a portable `app.c`/`app.cpp` with a matching
 `hal_project_config.h`, built on the portable entry-point contract:
 `app_start()`, `app_task0()`, and optional `app_task1()`
 (`HAL_ENABLE_APP_TASK1`, mapped to dual-core execution on RP and cooperative
-calls on STM32G474).
+calls on bare-metal STM32G474). ESP-IDF Phase 1 maps `app_start()` and
+`app_task0()` to its already-running FreeRTOS scheduler; optional HAL modules
+and the second application task remain outside the released ESP32-S3 feature
+allowlist.
 
 The build matrix, requirements, per-example target coverage, and the rule to
 extend an existing project or variant before creating another directory are
@@ -118,6 +126,7 @@ of the following in `hal_project_config.h` (or via `-D`):
 #define HAL_TARGET_RP2350_ARM    // RP2350, Cortex-M33
 #define HAL_TARGET_RP2350_RISCV  // RP2350, Hazard3 RISC-V
 #define HAL_TARGET_STM32G474     // STM32G474
+#define HAL_TARGET_ESP32_S3      // ESP32-S3, native ESP-IDF
 #define HAL_TARGET_MOCK          // host unit-test / simulation backend
 ```
 
@@ -145,7 +154,11 @@ FreeRTOS support is selected with an explicit compile-time flag:
 
 Applications use the standard upstream FreeRTOS headers and APIs directly on all supported targets.
 
-JaszczurHAL hides the target-specific startup details, such as scheduler startup and optional application task placement. RP targets use the pinned FreeRTOS-Kernel with SMP support, while STM32G474 uses the same kernel with the Cortex-M4F port.
+JaszczurHAL hides the target-specific startup details, such as scheduler startup
+and optional application task placement. RP targets use the pinned
+FreeRTOS-Kernel with SMP support, while STM32G474 uses the same kernel with the
+Cortex-M4F port. ESP32-S3 uses the FreeRTOS instance supplied by the pinned
+ESP-IDF; its target descriptor adds `HAL_ENABLE_FREERTOS` as a required feature.
 
 Detailed notes about kernel pinning, ports, and build variants are available in [lib_compilation.md](doc/lib_compilation.md) and [doc/api/04_multicore_drivers_migration.md](doc/api/04_multicore_drivers_migration.md).
 
@@ -193,8 +206,10 @@ It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
 `clang-tidy` and `cppcheck` static analysis, PMD CPD duplicate detection,
 documentation link validation, strict raw/effective feature lint, generated
 feature-artifact drift checks, and library/firmware compile gates for RP2040,
-RP2350 ARM, RP2350 RISC-V and STM32G474 across `HAL_ENABLE_*` profiles,
-including every declared example and hardware-fixture compile matrix.
+RP2350 ARM, RP2350 RISC-V and STM32G474 across `HAL_ENABLE_*` profiles. Gate 7
+also performs a clean ESP32-S3 build through the pinned ESP-IDF and validates
+its multi-image artifact manifest. The examples and hardware-fixture compile
+matrices remain part of the gate.
 
 Tool configuration lives alongside the sources: `.clang-tidy`,
 `tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
@@ -232,7 +247,9 @@ libraries/JaszczurHAL/vscode/entry/jh-vscode.cmd
 The entrypoint resolves project configuration, selects the active target/board,
 builds dispatcher-backed CMake firmware, performs identity-verified serial
 upload, handles RP2040 BOOTSEL/UF2 upload, delegates STM32 flashing to OpenOCD,
-starts persistent serial monitors, and refreshes IntelliSense.
+delegates ESP32-S3 build/flash to the production ESP-IDF runner, starts
+persistent serial monitors, and refreshes IntelliSense from the active
+toolchain's compile database.
 
 - CLI contract, task labels, keyboard shortcuts, and the project generator:
   [vscode/README.md](vscode/README.md)
@@ -261,16 +278,18 @@ an Arm-capable GDB on Windows and Linux; see
 
 Both Linux and native Windows provide the complete VS Code firmware-development
 workflow, including builds, uploads, serial monitoring, OTA updates, and
-debugging. Linux provides the full repository quality gate, including Valgrind,
-static analysis, and POSIX-only host integrations. See
+debugging for the released RP/STM paths. ESP32-S3 Phase 1 provides build,
+upload, monitor, and IntelliSense but no managed debug profile. Linux provides
+the full repository quality gate, including Valgrind, static analysis, and
+POSIX-only host integrations. See
 [Native Windows Setup](doc/windows_setup.md) for setup, verification, and the
 explicit Linux-only boundaries.
 
 ## Managed dependencies
 
-Tracked pins for Pico SDK, picotool, PMD CPD, the RP2350 RISC-V toolchain,
-FreeRTOS, BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP, littlefs,
-BTstack, and the Semtech SX126x driver live in
+Tracked pins for Pico SDK, ESP-IDF, picotool, PMD CPD, the RP2350 RISC-V
+toolchain, FreeRTOS, BearSSL, cJSON, LodePNG, TJpgDec, FatFs, Unity, lwIP,
+littlefs, BTstack, and the Semtech SX126x driver live in
 `third_party/*_version.conf`:
 
 ```bash

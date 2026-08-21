@@ -72,29 +72,44 @@ documented `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR`, and helper-script path
 options. Such user-managed paths are verified but are never replaced.
 
 ESP-IDF is pinned to an exact release commit and fetched on demand with
-`scripts/ensure_esp_idf.sh --enable`; the default updater does not download it
-until an ESP target is implemented. Its recursive submodules are part of the
+`scripts/ensure_esp_idf.sh --enable`. Its recursive submodules are part of the
 verified checkout contract. The same command idempotently runs the official
 ESP-IDF installer for `ESP_IDF_TARGETS`, then verifies the toolchain and Python
 environment. Set `JH_ESP_IDF_DIR` or pass `--dir` to verify and use an external
 checkout without replacing it. Source `third_party/esp-idf/export.sh` in each
 terminal that invokes ESP-IDF tools directly.
 
-Before the native target lands, the isolated Phase 0 integration spike verifies
-the pinned SDK, standard `app_main()` project flow, minimal component graph and
-complete flash image set. It discovers the controlled `jaszczurhal` ESP-IDF
-component, compiles one existing shared JaszczurHAL C++ source and consumes a
-generated per-build include/link contract. It does not provide the native ESP32
-target or backend planned for the next phase:
+The production runner accepts a project directory, resolves the
+`esp32s3` target and `waveshare-esp32-s3-zero` board descriptors, prepares the
+pinned SDK environment, and validates the complete build contract:
 
 ```bash
-python3 scripts/build_esp_idf_phase0.py --clean
+python3 scripts/build_esp_idf.py build \
+  --project tests/hardware/esp32s3_phase1 \
+  --target esp32s3 --board waveshare-esp32-s3-zero --clean
 ```
 
-On Windows, invoke the same script with the Python launcher available in that
-environment. Generated `sdkconfig`, binaries, metadata, logs and the relocatable
-`jh_esp_idf_phase0_artifacts.json` manifest remain under
-`.build/esp-idf/phase0/esp32s3/`.
+The runner generates `sdkconfig` defaults from the board flash/PSRAM facts,
+uses the shared `app_main()` entry and minimal ESP-IDF component graph, rejects
+features outside the target's released allowlist, and emits the relocatable
+`jh_esp_idf_artifacts.json` manifest. That manifest records every flash image
+with its offset, size, and SHA-256, the partition-table profile, the final
+`sdkconfig` digest, the exact ESP-IDF commit, and actual compiler, CMake, Ninja,
+Python, esptool, and ESP-IDF tool-registry provenance. The default output is
+`<project>/.build/esp-idf/<target>/<board>/`; `--output` may select another
+directory below the project or repository `.build` root.
+
+`scripts/build_esp_idf_phase0.py` remains a thin compatibility wrapper around
+that runner for the isolated Phase 0 fixture. New project and CI commands use
+`scripts/build_esp_idf.py`. Native ESP32 peripheral HAL backends are outside
+Phase 1.
+
+`security/esp_idf_tools.json` is the reviewed snapshot of the pin-selected tool
+environment. It records six binary/data tools and eleven first-party Espressif
+Python tools declared by the core ESP-IDF requirements, with exact versions,
+upstreams, and normalized SPDX licenses. The SBOM generator consumes this
+snapshot directly; the tool entries are not duplicated in
+`security/third_party.json`.
 
 ## Built tools and toolchains
 

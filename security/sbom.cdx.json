@@ -176,11 +176,755 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact official ESP-IDF release for native ESP32-family targets. The checkout is opt-in until the first ESP target lands; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+          "value": "Exact official ESP-IDF release used by the experimental native ESP32-S3 target. The checkout remains fetched on demand; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
         },
         {
           "name": "jaszczurhal:paths",
           "value": "third_party/esp-idf,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:espressif-xtensa-gdb@17.1_20260402",
+      "name": "Espressif Xtensa GDB",
+      "version": "17.1_20260402",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems and GNU contributors"
+      },
+      "purl": "pkg:generic/xtensa-esp-elf-gdb@17.1_20260402",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/binutils-gdb"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official ESP-IDF debugger bundle selected by the pinned tools manifest for ESP32-S3 development."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:espressif-xtensa-gcc-toolchain@esp-15.2.0_20251204",
+      "name": "Espressif Xtensa GCC toolchain",
+      "version": "esp-15.2.0_20251204",
+      "scope": "development",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later WITH GCC-exception-3.1"
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems and GNU contributors"
+      },
+      "purl": "pkg:generic/xtensa-esp-elf@esp-15.2.0_20251204",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/crosstool-NG"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official compiler bundle used to build the ESP32-S3 firmware; the build manifest records the executable's actual version output."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:espressif-risc-v-gcc-toolchain@esp-15.2.0_20251204",
+      "name": "Espressif RISC-V GCC toolchain",
+      "version": "esp-15.2.0_20251204",
+      "scope": "development",
+      "licenses": [
+        {
+          "expression": "GPL-3.0-or-later WITH GCC-exception-3.1"
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems and GNU contributors"
+      },
+      "purl": "pkg:generic/riscv32-esp-elf@esp-15.2.0_20251204",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/crosstool-NG"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official companion toolchain installed by ESP-IDF's esp32s3 tool set and retained in the development inventory."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:espressif-esp32-ulp-toolchain@2.38_20240113",
+      "name": "Espressif ESP32 ULP toolchain",
+      "version": "2.38_20240113",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems and GNU contributors"
+      },
+      "purl": "pkg:generic/esp32ulp-elf@2.38_20240113",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/binutils-gdb"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official ULP assembler/linker bundle installed by the pinned ESP-IDF tool set."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:espressif-openocd@v0.12.0-esp32-20260424",
+      "name": "Espressif OpenOCD",
+      "version": "v0.12.0-esp32-20260424",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-only"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems and OpenOCD contributors"
+      },
+      "purl": "pkg:generic/openocd-esp32@v0.12.0-esp32-20260424",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/openocd-esp32"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official ESP-IDF OpenOCD bundle installed for native USB/JTAG development."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "data",
+      "bom-ref": "pkg:espressif-rom-elfs@20241011",
+      "name": "Espressif ROM ELFs",
+      "version": "20241011",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:generic/esp-rom-elfs@20241011",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-rom-elfs"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Official ROM symbol files selected by the pinned ESP-IDF tools manifest."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esptool@5.3.1",
+      "name": "esptool",
+      "version": "5.3.1",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-2.0-or-later"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esptool@5.3.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esptool"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "ESP-IDF Python-environment flashing tool; every production build records the actual installed version."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-component-manager@3.0.3",
+      "name": "ESP-IDF Component Manager",
+      "version": "3.0.3",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/idf-component-manager@3.0.3",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/idf-component-manager"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Direct tool in the managed ESP-IDF Python environment used during project configuration."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-monitor@1.9.0",
+      "name": "ESP-IDF Monitor",
+      "version": "1.9.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-monitor@1.9.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-monitor"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Direct tool installed in the managed ESP-IDF Python environment; jh-vscode supplies its own persistent serial monitor frontend."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-core-dump@1.16.0",
+      "name": "ESP Core Dump",
+      "version": "1.16.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-coredump@1.16.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-coredump"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Direct tool installed in the managed ESP-IDF Python environment for firmware diagnostics."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-kconfig@3.12.0",
+      "name": "ESP-IDF Kconfig",
+      "version": "3.12.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-kconfig@3.12.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-kconfig"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "First-party parser used to resolve the pinned ESP-IDF Kconfig model."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-nvs-partition-generator@0.1.9",
+      "name": "ESP-IDF NVS Partition Generator",
+      "version": "0.1.9",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-nvs-partition-gen@0.1.9",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-nvs-partition-gen"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "First-party generator declared by the pinned ESP-IDF core Python requirements."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-size@2.3.1",
+      "name": "ESP-IDF Size",
+      "version": "2.3.1",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-size@2.3.1",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-size"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "First-party firmware size analysis tool in the managed ESP-IDF environment."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-diagnostics@0.2.0",
+      "name": "ESP-IDF Diagnostics",
+      "version": "0.2.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-diag@0.2.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-diag"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "First-party diagnostics support declared by the pinned ESP-IDF core Python requirements."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:esp-idf-panic-decoder@1.5.0",
+      "name": "ESP-IDF Panic Decoder",
+      "version": "1.5.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/esp-idf-panic-decoder@1.5.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf-panic-decoder"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "First-party panic decoding tool in the managed ESP-IDF environment."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:pyclang@0.7.0",
+      "name": "pyclang",
+      "version": "0.7.0",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/pyclang@0.7.0",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://pypi.org/project/pyclang/"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Espressif-maintained clang-tidy runner declared by the pinned ESP-IDF core Python requirements."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "bom-ref": "pkg:freertos-gdb@1.0.4",
+      "name": "FreeRTOS GDB",
+      "version": "1.0.4",
+      "scope": "development",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:pypi/freertos-gdb@1.0.4",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/freertos-gdb"
+        },
+        {
+          "type": "other",
+          "url": "security/esp_idf_tools.json",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Espressif-maintained FreeRTOS debugger extension declared by the pinned ESP-IDF core Python requirements."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "security/esp_idf_tools.json,third_party/esp_idf_version.conf"
         }
       ]
     },
@@ -403,9 +1147,7 @@
       "scope": "development",
       "licenses": [
         {
-          "license": {
-            "id": "GPL-3.0-or-later WITH GCC-exception-3.1"
-          }
+          "expression": "GPL-3.0-or-later WITH GCC-exception-3.1"
         }
       ],
       "supplier": {
@@ -1125,5 +1867,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:8939406f-6b5a-e85d-87f5-e69a47effc42"
+  "serialNumber": "urn:uuid:f5cf8c8d-fdd4-8c54-d860-07a1ba47f974"
 }

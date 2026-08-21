@@ -22,6 +22,14 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: Cache pinned ESP-IDF SDK and tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/esp-idf
+            ~/.espressif
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf') }}
+
       - name: Cache authenticated Windows tools
         uses: actions/cache@v4
         with:
@@ -60,6 +68,8 @@ jobs:
             'tests/test_vscode_build_environment.py',
             'tests/test_component_manager.py',
             'tests/test_esp_idf_phase0.py',
+            'tests/test_esp32s3_phase1.py',
+            'tests/test_esp_ci_contract.py',
             'tests/test_board_generator.py',
             'tests/test_feature_registry.py'
           )
@@ -69,6 +79,35 @@ jobs:
               throw "$test failed with exit code $LASTEXITCODE"
             }
           }
+
+      - name: Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF
+        shell: powershell
+        run: |
+          $python = '.\.build\windows\venv\Scripts\python.exe'
+          $output = Join-Path $env:GITHUB_WORKSPACE `
+            '.build\ci\esp-idf\esp32s3-phase1'
+          & $python scripts/build_esp_idf.py build `
+            --project tests/hardware/esp32s3_phase1 `
+            --target esp32s3 `
+            --board waveshare-esp32-s3-zero `
+            --output $output `
+            --clean
+          if ($LASTEXITCODE -ne 0) {
+            throw "ESP32-S3 Phase 1 build failed with exit code $LASTEXITCODE"
+          }
+
+      - name: Upload ESP32-S3 Phase 1 build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-esp32s3-phase1
+          path: |
+            .build/ci/esp-idf/esp32s3-phase1/jh_esp_idf_artifacts.json
+            .build/ci/esp-idf/esp32s3-phase1/build.log
+            .build/ci/esp-idf/esp32s3-phase1/bootloader/bootloader.bin
+            .build/ci/esp-idf/esp32s3-phase1/partition_table/partition-table.bin
+            .build/ci/esp-idf/esp32s3-phase1/esp32s3_phase1.bin
+          if-no-files-found: error
+          include-hidden-files: true
 
       - name: Verify FreeRTOS CMake dependency integration
         shell: powershell
@@ -372,6 +411,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Cache pinned ESP-IDF SDK and tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/esp-idf
+            ~/.espressif
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf') }}
+
       - name: Verify release metadata and tag ancestry
         run: |
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
@@ -435,6 +482,28 @@ jobs:
 
       - name: Test
         run: ctest --test-dir .build/ci/host --output-on-failure
+
+      - name: Build ESP32-S3 Phase 1 fixture with pinned ESP-IDF
+        run: >-
+          python3 scripts/build_esp_idf.py build
+          --project tests/hardware/esp32s3_phase1
+          --target esp32s3
+          --board waveshare-esp32-s3-zero
+          --output "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase1"
+          --clean
+
+      - name: Upload ESP32-S3 Phase 1 build artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-esp32s3-phase1
+          path: |
+            .build/ci/esp-idf/esp32s3-phase1/jh_esp_idf_artifacts.json
+            .build/ci/esp-idf/esp32s3-phase1/build.log
+            .build/ci/esp-idf/esp32s3-phase1/bootloader/bootloader.bin
+            .build/ci/esp-idf/esp32s3-phase1/partition_table/partition-table.bin
+            .build/ci/esp-idf/esp32s3-phase1/esp32s3_phase1.bin
+          if-no-files-found: error
+          include-hidden-files: true
 
   # ── Sanitizer and parser fuzz gate ─────────────────────────────────────────
   sanitizer-fuzz:

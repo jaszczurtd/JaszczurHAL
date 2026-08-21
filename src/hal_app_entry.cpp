@@ -3,7 +3,7 @@
  * @brief Platform entry-point shim - bridges app_start/app_task0/app_task1
  *        to the backend-specific entry mechanism.
  *
- * Compiled into libJaszczurHAL.a on all backends but emits code ONLY when
+ * Compiled into libJaszczurHAL.a on all backends but emits code only when
  * HAL_PROVIDE_APP_ENTRY is defined. Without the flag, this translation unit
  * produces zero symbols, so existing projects with their own main() are
  * unaffected.
@@ -232,6 +232,62 @@ int main(void) {
 }
 
 #endif /* HAL_ENABLE_FREERTOS */
+
+/* ESP-IDF starts the FreeRTOS scheduler before calling app_main(). */
+#elif HAL_TARGET_IS_ESP32_FAMILY
+
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+
+#ifndef HAL_FREERTOS_TASK0_STACK
+#define HAL_FREERTOS_TASK0_STACK 3072u
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_STACK
+#define HAL_FREERTOS_TASK1_STACK 3072u
+#endif
+
+#ifndef HAL_FREERTOS_TASK0_PRIORITY
+#define HAL_FREERTOS_TASK0_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+#ifndef HAL_FREERTOS_TASK1_PRIORITY
+#define HAL_FREERTOS_TASK1_PRIORITY (tskIDLE_PRIORITY + 1u)
+#endif
+
+static void hal_esp32_app_task0(void *arg) {
+  (void)arg;
+  for (;;) {
+    app_task0();
+  }
+}
+
+#ifdef HAL_ENABLE_APP_TASK1
+static void hal_esp32_app_task1(void *arg) {
+  (void)arg;
+  for (;;) {
+    app_task1();
+  }
+}
+#endif
+
+extern "C" void app_main(void) {
+  app_start();
+
+  BaseType_t created =
+      xTaskCreate(hal_esp32_app_task0, "jh_app0",
+                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK0_STACK, nullptr,
+                  (UBaseType_t)HAL_FREERTOS_TASK0_PRIORITY, nullptr);
+  configASSERT(created == pdPASS);
+
+#ifdef HAL_ENABLE_APP_TASK1
+  created =
+      xTaskCreate(hal_esp32_app_task1, "jh_app1",
+                  (configSTACK_DEPTH_TYPE)HAL_FREERTOS_TASK1_STACK, nullptr,
+                  (UBaseType_t)HAL_FREERTOS_TASK1_PRIORITY, nullptr);
+  configASSERT(created == pdPASS);
+#endif
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
  * Mock / host backend

@@ -3,8 +3,10 @@
 Hardware Abstraction Layer for embedded projects.
 The RP2040/RP2350 backend builds against the official Pico SDK. STM32G474 is
 available as a bare-metal or FreeRTOS backend with native peripheral support
-and the shared driver stack. The application-facing HAL API stays stable
-across targets.
+and the shared driver stack. ESP32-S3 plumbing provides exact
+target/board identity, ESP-IDF application entry, and build-contract
+validation while peripheral backends remain in progress. The
+application-facing HAL API stays stable across targets.
 
 This document is the established, detailed API reference.
 The top-level [README.md](../README.md) intentionally stays concise and links
@@ -54,6 +56,7 @@ config/                     # declarative HAL feature registry and schema
 rp_native_lib/              # Pico SDK RP2040/RP2350 static-library build
   MEMORY_MAP.md             # native RP firmware/storage/OTA layout
 cmake/
+  esp-idf/                  # controlled native ESP-IDF component recipe
   generated/                # generated production CMake feature resolver
   jh_rp_native_sdk.cmake    # shared RP library/firmware CMake glue
   targets/                  # VS Code dispatcher target recipes
@@ -62,6 +65,7 @@ scripts/
   # See doc/api/00_scripts.md for the complete process-script reference.
   build_rp_native_lib.sh    # RP ELF/BIN/UF2 build helper
   build_stm32_lib.sh        # STM32G474 static-library helper
+  build_esp_idf.py          # ESP-IDF project build/artifact/flash runner
   check_documentation_links.py # local Markdown link/anchor validation
   ensure_*.sh               # focused pinned-component fetch/verify helpers
   generate_sbom.py          # CycloneDX SBOM generator
@@ -88,6 +92,7 @@ vscode/                     # shared jh-vscode entry, schema, docs, generator
   tools/manage_vscode_extensions.py # checked/consented extension setup
 security/
   third_party.json          # third-party component inventory
+  esp_idf_tools.json        # reviewed ESP-IDF target-tool snapshot
   sbom.cdx.json             # generated CycloneDX SBOM
   vulnerability_log.md      # CVE/CVSS assessment and patch log
 src/
@@ -149,7 +154,12 @@ backends; portable domain code must depend only on HAL-level contracts.
 
 The versioned registry under `config/features/` generates the production C and
 CMake resolvers. `hal_config.h` includes the C closure, while RP and STM32G474
-CMake builds use the same resolved set for source and dependency selection.
+CMake builds use it for source and dependency selection. The ESP-IDF runner
+resolves the same request graph for board/link provenance, then rejects
+features outside the target descriptor's allowlist. Phase 1 deliberately
+builds a fixed minimal integration graph: the portable application entry,
+handle pool, ESP build-contract checks, generated link contract, and project
+sources. It does not yet select portable peripheral modules.
 The board generator records both `requestedFeatures` and `resolvedFeatures`;
 its feature hash and link contract use the resolved set. `jh-vscode` resolves
 the active profile and variant into the same closure and publishes the registry
@@ -170,10 +180,13 @@ link the fixed package without invoking Python.
   firmware-probe helper, including an archive-only `--library-only` mode and
   the optional pinned FreeRTOS SMP matrix.
 - `scripts/build_stm32_lib.sh` - STM32G474 static-library helper.
+- `scripts/build_esp_idf.py` - production ESP-IDF project build, artifact
+  validation, and flash helper with a relocatable multi-image manifest.
 - `third_party/update_components.sh` - synchronizes BearSSL, cJSON, LodePNG,
   TJpgDec, FatFs, Unity, lwIP, littlefs, BTstack, the Semtech SX126x driver,
   FreeRTOS, Pico SDK, picotool, PMD CPD and the RP2350 RISC-V toolchain to their
-  tracked `third_party/*_version.conf` pins.
+  tracked `third_party/*_version.conf` pins. ESP-IDF is prepared on demand by
+  its production runner or focused ensure command.
 - `scripts/generate_sbom.py` - deterministic CycloneDX SBOM generator for the
   security inventory.
 - `scripts/check_sbom.sh` - verifies that the committed SBOM matches the
@@ -332,15 +345,21 @@ profile from `boards/profiles/`; the generator emits the matching
 include `pico`, `picow`, `pico2`, `pico2w`, `pico-rm2`,
 `pico-core1262-hf`, `rp2040-plus-4mb`, `rp2040-zero`, `rp2040-lora-lf`,
 `nucleo-g474re`, `nucleo-g474re-pim730`, and
-`nucleo-g474re-core1262-hf`.
+`nucleo-g474re-core1262-hf`, and `waveshare-esp32-s3-zero`.
+
+The ESP32-S3 Phase 1 component consumes generated target/board facts and the
+link contract, but it does not compile the public `hal_board` runtime facade.
+Its board capabilities are therefore compile-time/build-contract metadata until
+the corresponding ESP peripheral and system backends are released.
 
 `HAL_BOARD_DECLARED_CAPABILITIES` describes fitted hardware at compile time.
-Runtime users should query `hal_board_get_info()` or
+On targets that build the runtime facade, users should query
+`hal_board_get_info()` or
 `hal_board_get_capability_state()`, then use
 `hal_board_require_capabilities()` before operations that require one or more
 of `HAL_BOARD_CAP_USB_DEVICE`, `HAL_BOARD_CAP_CYW43`,
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND`, `HAL_BOARD_CAP_SX1262_RADIO`, and
-`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER`.
+`HAL_BOARD_CAP_BLUETOOTH_CONTROLLER`, or `HAL_BOARD_CAP_NATIVE_WIFI`.
 A declared capability is initially
 `HAL_BOARD_CAP_INACTIVE`; its owner moves it to `AVAILABLE` or `FAILED`.
 The RP CYW43 provider publishes these transitions during init/deinit.
@@ -358,7 +377,8 @@ typedef enum {                               /* stable board identity */
   HAL_BOARD_RP2040_LORA_LF,
   HAL_BOARD_STM32G474_NUCLEO_PIM730,
   HAL_BOARD_RP_PICO_CORE1262_HF,
-  HAL_BOARD_STM32G474_NUCLEO_CORE1262_HF
+  HAL_BOARD_STM32G474_NUCLEO_CORE1262_HF,
+  HAL_BOARD_WAVESHARE_ESP32_S3_ZERO
 } hal_board_profile_t;
 
 typedef enum {                               /* runtime state of one capability */

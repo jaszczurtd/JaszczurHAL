@@ -13,6 +13,7 @@ set(JH_BOARD_COMPONENT_IDS
     rp-native
     stm32g474-native
     host-mock
+    esp-idf-native
     cyw43-pico-pio
     cyw43-stm32-gspi
     cyw43-lwip
@@ -27,6 +28,9 @@ set(JH_BOARD_COMPONENT_stm32g474_native_SLOT "target-runtime")
 
 set(JH_BOARD_COMPONENT_host_mock_PROVIDERS "host")
 set(JH_BOARD_COMPONENT_host_mock_SLOT "target-runtime")
+
+set(JH_BOARD_COMPONENT_esp_idf_native_PROVIDERS "esp-idf")
+set(JH_BOARD_COMPONENT_esp_idf_native_SLOT "target-runtime")
 
 set(JH_BOARD_COMPONENT_cyw43_pico_pio_PROVIDERS "pico-sdk")
 set(JH_BOARD_COMPONENT_cyw43_pico_pio_SLOT "network-radio-transport")

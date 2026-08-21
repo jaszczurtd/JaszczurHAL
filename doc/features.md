@@ -12,17 +12,18 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 | Area | What it offers | Source |
 |---|---|---|
 | RP2040 / RP2350 backend | Official Pico SDK backend and FreeRTOS (optional) for RP2040, RP2350 ARM, and RP2350 Hazard3 RISC-V, with exact chip and ISA selection. | [RP backend](../src/hal/impl/rp2040/), [native build](../rp_native_lib/) |
-| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040-LoRa-LF, Pico+Core1262-HF, NUCLEO-G474RE, Nucleo+Core1262-HF, and host profiles, with runtime state for USB, CYW43, and external radio hardware. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
+| Board profiles and runtime capabilities | Generated Pico, Pico W, Pico 2, Pico 2 W, Pico+PIM730, Waveshare RP2040-LoRa-LF, Pico+Core1262-HF, NUCLEO-G474RE, Nucleo+Core1262-HF, Waveshare ESP32-S3-Zero, and host profiles. Released RP/STM/mock facades provide runtime capability state; ESP32-S3 Phase 1 consumes compile-time board facts only. | [board registry](../boards/README.md), [hal_board.h](../src/hal/system/hal_board.h) |
 | STM32G474 backend | Bare-metal and FreeRTOS (optional) STM32G474 backend with startup/runtime glue, linker support, coordinated flash services, native peripherals, and optional CYW43-over-gSPI networking. | [STM32G474 backend](../src/hal/impl/stm32g474/) |
+| ESP32-S3 Phase 1 | Production ESP-IDF project build/flash/artifact runner, safe USB Serial/JTAG selection, VS Code build/upload/monitor/IntelliSense, exact ESP32-S3 and Waveshare ESP32-S3-Zero identity, generated flash/Quad-PSRAM contract, target-required FreeRTOS `app_start()`/`app_task0()` entry, and multi-image provenance. Physical closure verified the two-core/4 MiB flash/initialized 2 MiB PSRAM contract, three complete flashes, and monitor reconnect. The released feature allowlist excludes peripheral HAL backends and `app_task1()`. | [ESP32 implementation](../src/hal/impl/esp32/), [hardware fixture](../tests/hardware/esp32s3_phase1/) |
 | Mock backend | Deterministic host backend for unit tests and simulation-oriented development without hardware. | [mock backend](../src/hal/impl/.mock/) |
 | Compile-time opt-in modules | Optional features are selected with `HAL_ENABLE_*` flags and pull in only their dependencies. | [hal_config.h](../src/hal/core/hal_config.h) |
 | Compiler portability layer | One header resolves the compiler extensions the HAL depends on - noreturn, forced inline, trap/unreachable, structure packing and leading-zero count - across GNU, Clang and MSVC. | [hal_compiler.h](../src/hal/core/hal_compiler.h) |
-| Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()` and opt-in RP core-1 startup. | [hal_app.h](../src/hal/core/hal_app.h) |
+| Portable app entry | Common `app_start()` / `app_task0()` / optional `app_task1()` model across supported targets and examples, including HAL-owned `main()`, ESP-IDF `app_main()`, and opt-in RP core-1 startup. | [hal_app.h](../src/hal/core/hal_app.h) |
 | FreeRTOS integration | Pinned upstream kernel with native RP2040/RP2350 SMP ports, STM32G474 Cortex-M4F port, FreeRTOS-aware mutex/delay/runtime reporting and HAL-owned application-task startup. | [RP FreeRTOS glue](../src/hal/impl/rp2040/freertos/), [STM32 FreeRTOS glue](../src/hal/impl/stm32g474/freertos/) |
 | Stack protection | Independent opt-ins provide synchronous Pico SDK/MPU stack-boundary guards and GCC/Clang `-fstack-protector-strong` frame canaries; FreeRTOS builds can also check task-stack boundaries. | [hal_system.h](../src/hal/system/hal_system.h), [module flags](api/02_module_flags.md) |
 | Dispatcher-backed firmware projects | Shared VS Code/CMake workflow for generated projects, migrated downstream modules and checked-in examples, with target/board selection and per-target CMake cache isolation. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Static library builds | Dedicated CMake/helper flows for official Pico SDK RP and STM32G474 builds; the RP flow also verifies ELF/BIN/UF2 generation and application-entry symbols. | [RP build](../rp_native_lib/), [STM32 build](../stm32_lib/) |
-| Validation gate | Full local gate for unit tests, Valgrind, static analysis, target builds and examples. | [runalltests.sh](../runalltests.sh) |
+| Validation gate | Full local gate for unit tests, Valgrind, static analysis, RP/STM target builds, a clean ESP32-S3/ESP-IDF multi-image build, and examples. | [runalltests.sh](../runalltests.sh) |
 
 ## Core HAL
 
@@ -154,6 +155,6 @@ and operation, see [OTAWorkflow.md](OTAWorkflow.md).
 |---|---|---|
 | Portable examples | Buildable example applications covering core, sensors, displays, connectivity, storage and media modules. | [examples](../examples/) |
 | API reference | Detailed module contracts, signatures and backend notes. | [doc/api](api/) |
-| Firmware project workflow | Manifest, target/board selection, source discovery, upload/debug-build behavior and generated files for dispatcher-backed projects. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
+| Firmware project workflow | Manifest, target/board selection, source discovery, CMake or ESP-IDF provider dispatch, upload/monitor/IntelliSense behavior and generated files. | [FwProjectWorkflow.md](FwProjectWorkflow.md) |
 | Native RP OTA workflow | Firmware integration, build and first flash, VS Code upload, firewall, confirmation, rollback and recovery. | [OTAWorkflow.md](OTAWorkflow.md) |
 | Local datasheets | Local reference PDFs and notes for supported hardware. | [datasheets](datasheets/) |

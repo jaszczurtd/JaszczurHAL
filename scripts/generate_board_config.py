@@ -39,6 +39,8 @@ TARGET_FIELDS = COMMON_FIELDS | {
     "defaultBoard",
     "sourceFallbackBoard",
     "components",
+    "requiredFeatures",
+    "supportedFeatures",
 }
 BOARD_FIELDS = COMMON_FIELDS | {
     "compatibleTargets",
@@ -51,6 +53,7 @@ BOARD_FIELDS = COMMON_FIELDS | {
     "peripherals",
     "components",
     "constraints",
+    "programming",
 }
 COMPONENT_REGISTRY = {
     "rp-native": {"providers": {"pico-sdk"}, "slot": "target-runtime"},
@@ -59,6 +62,7 @@ COMPONENT_REGISTRY = {
         "slot": "target-runtime",
     },
     "host-mock": {"providers": {"host"}, "slot": "target-runtime"},
+    "esp-idf-native": {"providers": {"esp-idf"}, "slot": "target-runtime"},
     "cyw43-pico-pio": {
         "providers": {"pico-sdk"},
         "slot": "network-radio-transport",
@@ -706,18 +710,25 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
         "$.build",
         target["build"],
         {"provider", "recipe"},
-        {"provider", "recipe", "platform"},
+        {"provider", "recipe", "platform", "idfTarget"},
     )
-    if build["provider"] not in {"pico-sdk", "jh-stm32-baremetal", "host"}:
+    if build["provider"] not in {
+        "pico-sdk", "jh-stm32-baremetal", "esp-idf", "host"
+    }:
         fail(path, "$.build.provider", build["provider"], "a supported provider")
     if build["provider"] == "pico-sdk" and "platform" not in build:
         fail(path, "$.build.platform", None, "a Pico SDK platform")
+    if build["provider"] == "esp-idf" and (
+        not isinstance(build.get("idfTarget"), str)
+        or not ID_PATTERN.fullmatch(build["idfTarget"])
+    ):
+        fail(path, "$.build.idfTarget", build.get("idfTarget"), "an ESP-IDF target ID")
     gpio = exact_fields(
         path,
         "$.gpio",
         target["gpio"],
         {"pinIdFormat", "validPins", "halEncoding"},
-        {"pinIdFormat", "validPins", "halEncoding"},
+        {"pinIdFormat", "validPins", "halEncoding", "traits"},
     )
     valid_pins = expand_pin_set(path, "$.gpio.validPins", gpio["validPins"])
     if gpio["pinIdFormat"] == "integer":
@@ -743,12 +754,21 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
         {"kind"},
         {"kind"},
     )
+    traits = gpio.get("traits", {})
+    if not isinstance(traits, dict):
+        fail(path, "$.gpio.traits", traits, "an object")
+    for trait_id, pin_set in traits.items():
+        if not ID_PATTERN.fullmatch(trait_id):
+            fail(path, f"$.gpio.traits.{trait_id}", trait_id, "a kebab-case ID")
+        trait_pins = expand_pin_set(path, f"$.gpio.traits.{trait_id}", pin_set)
+        if not trait_pins <= valid_pins:
+            fail(path, f"$.gpio.traits.{trait_id}", sorted(trait_pins - valid_pins), "target valid pins")
     memory = exact_fields(
         path,
         "$.memory",
         target["memory"],
         {"regions", "ramUsableBytes"},
-        {"regions", "ramUsableBytes"},
+        {"regions", "ramUsableBytes", "externalRam"},
     )
     if not isinstance(memory["regions"], dict):
         fail(path, "$.memory.regions", memory["regions"], "an object")
@@ -790,6 +810,21 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
             memory["ramUsableBytes"],
             f"an integer in range 0..{ram_total_bytes}",
         )
+    external_ram = memory.get("externalRam")
+    if external_ram is not None:
+        external_ram = exact_fields(
+            path, "$.memory.externalRam", external_ram,
+            {"interfaces", "maxBytes"}, {"interfaces", "maxBytes"}
+        )
+        interfaces = external_ram["interfaces"]
+        if (
+            not isinstance(interfaces, list) or not interfaces
+            or any(item not in {"quad", "octal"} for item in interfaces)
+            or len(set(interfaces)) != len(interfaces)
+        ):
+            fail(path, "$.memory.externalRam.interfaces", interfaces, "unique quad/octal interfaces")
+        if not isinstance(external_ram["maxBytes"], int) or external_ram["maxBytes"] <= 0:
+            fail(path, "$.memory.externalRam.maxBytes", external_ram["maxBytes"], "a positive integer")
     if not isinstance(target["defaultBoard"], str):
         fail(path, "$.defaultBoard", target["defaultBoard"], "a board ID")
     if "sourceFallbackBoard" in target and not isinstance(
@@ -802,6 +837,48 @@ def validate_target(path: Path, target: dict[str, Any]) -> set[Any]:
             "a board ID",
         )
     validate_components(path, "$.components", target["components"], build["provider"])
+    required_features = target.get("requiredFeatures", [])
+    if not isinstance(required_features, list) or any(
+        not isinstance(item, str) for item in required_features
+    ):
+        fail(path, "$.requiredFeatures", required_features, "a feature symbol array")
+    if len(normalize_features(required_features)) != len(required_features):
+        fail(path, "$.requiredFeatures", required_features, "unique feature symbols")
+    supported_features = target.get("supportedFeatures")
+    if supported_features is not None:
+        if not isinstance(supported_features, list) or any(
+            not isinstance(item, str) or not item.startswith("HAL_ENABLE_")
+            for item in supported_features
+        ):
+            fail(
+                path,
+                "$.supportedFeatures",
+                supported_features,
+                "a HAL_ENABLE_* feature symbol array",
+            )
+        normalized_supported = normalize_features(supported_features)
+        if len(normalized_supported) != len(supported_features):
+            fail(
+                path,
+                "$.supportedFeatures",
+                supported_features,
+                "unique feature symbols",
+            )
+        required_symbols = {
+            item.removesuffix("=1") for item in normalize_features(required_features)
+        }
+        supported_symbols = {
+            item.removesuffix("=1") for item in normalized_supported
+        }
+        if not required_symbols <= supported_symbols:
+            fail(
+                path,
+                "$.supportedFeatures",
+                supported_features,
+                "a superset of target-required features",
+            )
+        resolve_features(supported_features, target)
+    resolve_features([], target)
     return valid_pins
 
 
@@ -886,7 +963,7 @@ def validate_board(
             "unique C macros",
         )
     memory = exact_fields(
-        path, "$.memory", board["memory"], {"flash"}, {"flash"}
+        path, "$.memory", board["memory"], {"flash"}, {"flash", "psram"}
     )
     flash = exact_fields(
         path,
@@ -904,6 +981,74 @@ def validate_board(
             flash["expectedBytes"],
             "a non-negative integer",
         )
+    psram = memory.get("psram")
+    if psram is not None:
+        psram = exact_fields(
+            path, "$.memory.psram", psram,
+            {"interface", "sizeBytes"}, {"interface", "sizeBytes"}
+        )
+        if psram["interface"] not in {"quad", "octal"}:
+            fail(path, "$.memory.psram.interface", psram["interface"], "quad or octal")
+        if not isinstance(psram["sizeBytes"], int) or psram["sizeBytes"] <= 0:
+            fail(path, "$.memory.psram.sizeBytes", psram["sizeBytes"], "a positive integer")
+        for target_id in compatible:
+            support = targets[target_id]["memory"].get("externalRam")
+            if (
+                support is None
+                or psram["interface"] not in support["interfaces"]
+                or psram["sizeBytes"] > support["maxBytes"]
+            ):
+                fail(path, "$.memory.psram", psram, f"external RAM supported by target {target_id}")
+    programming = board.get("programming")
+    if programming is not None:
+        programming = exact_fields(
+            path,
+            "$.programming",
+            programming,
+            {"transport", "usb", "reset", "boot"},
+            {"transport", "usb", "reset", "boot"},
+        )
+        if build["provider"] != "esp-idf":
+            fail(
+                path,
+                "$.programming",
+                programming,
+                "programming metadata for an ESP-IDF board",
+            )
+        if programming["transport"] != "usb-serial-jtag":
+            fail(
+                path,
+                "$.programming.transport",
+                programming["transport"],
+                "usb-serial-jtag",
+            )
+        usb = exact_fields(
+            path,
+            "$.programming.usb",
+            programming["usb"],
+            {"vid", "pid"},
+            {"vid", "pid"},
+        )
+        for field in ("vid", "pid"):
+            if (
+                not isinstance(usb[field], int)
+                or isinstance(usb[field], bool)
+                or not 0 <= usb[field] <= 0xFFFF
+            ):
+                fail(
+                    path,
+                    f"$.programming.usb.{field}",
+                    usb[field],
+                    "a 16-bit USB identifier",
+                )
+        for field in ("reset", "boot"):
+            if programming[field] != "usb-serial-jtag-control-lines":
+                fail(
+                    path,
+                    f"$.programming.{field}",
+                    programming[field],
+                    "usb-serial-jtag-control-lines",
+                )
     component_ids = validate_components(
         path, "$.components", board["components"], build["provider"]
     )
@@ -1247,8 +1392,20 @@ def validate_definitions(definitions: list[str]) -> None:
             )
 
 
-def resolve_features(features: list[str]) -> tuple[list[str], list[str]]:
+def resolve_features(
+    features: list[str], target: dict[str, Any]
+) -> tuple[list[str], list[str], dict[str, list[str]]]:
     normalized = normalize_features(features)
+    required = normalize_features(target.get("requiredFeatures", []))
+    requested_symbols = {item.removesuffix("=1") for item in normalized}
+    for definition in required:
+        symbol = definition.removesuffix("=1")
+        disabled = symbol.replace("HAL_ENABLE_", "HAL_DISABLE_", 1)
+        if disabled in requested_symbols:
+            raise DescriptorError(
+                f"[JH-CFG-TARGET-REQUIRED] {target['id']} requires {symbol}; "
+                f"{disabled} cannot be requested"
+            )
     requests = [
         generate_hal_features.FeatureRequest(
             symbol=definition.removesuffix("=1"),
@@ -1257,6 +1414,15 @@ def resolve_features(features: list[str]) -> tuple[list[str], list[str]]:
         )
         for index, definition in enumerate(normalized)
     ]
+    requests.extend(
+        generate_hal_features.FeatureRequest(
+            symbol=definition.removesuffix("=1"),
+            value="1",
+            source=f"target:{target['id']}:requiredFeatures[{index}]",
+        )
+        for index, definition in enumerate(required)
+        if definition.removesuffix("=1") not in requested_symbols
+    )
     try:
         model = generate_hal_features.load_registry(
             Path(__file__).resolve().parents[1] / "config"
@@ -1268,7 +1434,15 @@ def resolve_features(features: list[str]) -> tuple[list[str], list[str]]:
         raise DescriptorError(str(error)) from error
     if findings:
         raise DescriptorError("\n".join(findings))
-    return list(resolution.requested), list(resolution.resolved)
+    requested = [definition.removesuffix("=1") for definition in normalized]
+    provenance = {
+        symbol: list(sources) for symbol, sources in resolution.provenance.items()
+    }
+    for index, definition in enumerate(required):
+        symbol = definition.removesuffix("=1")
+        source = f"target:{target['id']}:requiredFeatures[{index}]"
+        provenance[symbol] = sorted({*provenance.get(symbol, []), source})
+    return requested, list(resolution.resolved), provenance
 
 
 def macro_suffix(identifier: str) -> str:
@@ -1439,6 +1613,7 @@ def selected_board_fact_lines(
     define_is_macros: bool,
 ) -> list[str]:
     lines: list[str] = []
+    flash_bytes = board["memory"]["flash"]["expectedBytes"]
     if define_selector:
         lines.append(f"#define {board['hal']['selector']} 1")
     lines.extend(
@@ -1448,9 +1623,25 @@ def selected_board_fact_lines(
             f"#define HAL_BOARD_PROFILE_TARGET {target_value}",
             f'#define HAL_BOARD_PROVIDER_BOARD "{board["build"].get("board", "")}"',
             f"#define HAL_BOARD_EXPECTED_FLASH_BYTES "
-            f"UINT32_C({board['memory']['flash']['expectedBytes']})",
+            f"UINT32_C({flash_bytes})",
         ]
     )
+    if flash_bytes > 0 and flash_bytes % (1024 * 1024) == 0:
+        lines.append(
+            f"#define HAL_BOARD_EXPECTED_FLASH_MIB {flash_bytes // (1024 * 1024)}"
+        )
+    psram = board["memory"].get("psram")
+    lines.extend(
+        [
+            f"#define HAL_BOARD_HAS_PSRAM {1 if psram else 0}",
+            "#define HAL_BOARD_PSRAM_BYTES "
+            f"UINT32_C({psram['sizeBytes'] if psram else 0})",
+        ]
+    )
+    if psram:
+        lines.append(
+            f"#define HAL_BOARD_PSRAM_INTERFACE_{psram['interface'].upper()} 1"
+        )
     if compile_definitions:
         lines.append(
             "/* Board/provider definitions required by direct compiler consumers. */"
@@ -1815,8 +2006,8 @@ def generate(
     output_dir: Path,
     requested_feature_inputs: list[str],
 ) -> None:
-    requested_features, resolved_features = resolve_features(
-        requested_feature_inputs
+    requested_features, resolved_features, feature_provenance = resolve_features(
+        requested_feature_inputs, target
     )
     resolved_features_digest = generate_hal_features.resolved_features_digest(
         resolved_features
@@ -1841,21 +2032,25 @@ def generate(
         "provider": board["build"]["provider"],
         "providerBoard": board["build"].get("board"),
         "platform": target["build"].get("platform"),
+        "idfTarget": target["build"].get("idfTarget"),
         "recipe": target["build"]["recipe"],
         "profileId": board["hal"]["profileId"],
         "selector": board["hal"]["selector"],
         "runtimeName": board["id"],
         "flashBytes": board["memory"]["flash"]["expectedBytes"],
+        "psram": board["memory"].get("psram"),
         "components": components,
         "boardCompileDefinitions": compile_definitions,
         "requestedFeatures": requested_features,
         "resolvedFeatures": resolved_features,
+        "featureProvenance": feature_provenance,
         "resolvedFeaturesDigest": resolved_features_digest,
         "features": resolved_features,
         "featureHash": feature_hash,
         "contractSymbol": contract_symbol,
         "capabilities": board["capabilities"],
         "gpio": board["gpio"],
+        "targetGpio": target["gpio"],
         "devices": board["devices"],
         "peripherals": board["peripherals"],
     }
@@ -1877,11 +2072,14 @@ def generate(
     ]
     if "platform" in target["build"]:
         cmake_lines.append(f'set(PICO_PLATFORM "{target["build"]["platform"]}")')
+    if "idfTarget" in target["build"]:
+        cmake_lines.append(f'set(IDF_TARGET "{target["build"]["idfTarget"]}")')
     if "board" in board["build"]:
         cmake_lines.append(f'set(PICO_BOARD "{board["build"]["board"]}")')
     config_lines = [
         "#pragma once",
         "/* Generated by generate_board_config.py; do not edit. */",
+        "#include <stdint.h>",
     ]
     config_lines.extend(selected_target_fact_lines(target))
     config_lines.extend(

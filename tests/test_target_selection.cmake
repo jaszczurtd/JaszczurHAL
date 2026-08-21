@@ -76,6 +76,9 @@ set(_rp2350_arm
 set(_rp2350_riscv
     -DJH_EXPECT_RP2350_RISCV=1 -DJH_EXPECT_RP=1 -DJH_EXPECT_RISCV=1
     -DJH_EXPECT_NAME_RP2350_RISCV=1)
+set(_esp32s3
+    -DJH_EXPECT_ESP32_S3=1 -DJH_EXPECT_ESP32_FAMILY=1
+    -DJH_EXPECT_NAME_ESP32S3=1)
 
 check_target(explicit_rp2040 TRUE ""
     -DHAL_TARGET_RP2040=1 ${_rp2040})
@@ -86,6 +89,8 @@ check_target(explicit_rp2350_riscv TRUE ""
 check_target(explicit_stm32 TRUE ""
     -DHAL_TARGET_STM32G474=1 -DJH_EXPECT_STM32G474=1
     -DJH_EXPECT_NAME_STM32G474=1)
+check_target(explicit_esp32s3 TRUE ""
+    -DHAL_TARGET_ESP32_S3=1 ${_esp32s3})
 check_target(explicit_mock TRUE ""
     -DHAL_TARGET_MOCK=1 -DJH_EXPECT_MOCK=1 -DJH_EXPECT_NAME_MOCK=1)
 
@@ -97,6 +102,8 @@ check_target(autodetect_rp2350_riscv TRUE ""
     -DPICO_RP2350=1 -D__riscv=1 ${_rp2350_riscv})
 check_target(autodetect_host_mock TRUE ""
     -DJH_EXPECT_MOCK=1 -DJH_EXPECT_NAME_MOCK=1)
+check_target(autodetect_esp32s3 TRUE ""
+    -DCONFIG_IDF_TARGET_ESP32S3=1 ${_esp32s3})
 
 check_target(ambiguous_rp2350_isa FALSE "target ISA is ambiguous"
     -DPICO_RP2350=1)

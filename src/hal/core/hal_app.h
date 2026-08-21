@@ -45,6 +45,12 @@
  *       HAL_FREERTOS_TASK0_STACK, HAL_FREERTOS_TASK1_STACK,
  *       HAL_FREERTOS_TASK0_PRIORITY, HAL_FREERTOS_TASK1_PRIORITY.
  *
+ *   ESP32 family (ESP-IDF):
+ *       app_main() -> app_start()
+ *                  -> create app_task0
+ *                  -> create app_task1 [only with HAL_ENABLE_APP_TASK1]
+ *                  -> return to the already-running ESP-IDF scheduler.
+ *
  *   Mock / host:
  *       main() { app_start(); for(;;) { app_task0(); optional app_task1(); } }
  *       (useful for standalone host demo apps; unit tests provide their own
