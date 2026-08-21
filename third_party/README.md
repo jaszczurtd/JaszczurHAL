@@ -42,6 +42,7 @@ entry point.
 | Semtech SX126x driver | `sx126x_driver_version.conf` | `sx126x_driver/` | Portable SX1261/SX1262 command driver for the LoRa provider |
 | FreeRTOS-Kernel | `freertos_core_version.conf` | `FreeRTOS-Kernel/` | Native RP SMP and STM32G474 FreeRTOS kernel |
 | Pico SDK | `pico_sdk_version.conf` | `pico-sdk/` | Native RP2040/RP2350 SDK |
+| ESP-IDF | `esp_idf_version.conf` | `esp-idf/` | Native ESP32-family SDK and tool bootstrap |
 | picotool | `picotool_version.conf` | `picotool/` | Source for the native RP upload/metadata utility |
 
 JaszczurHAL-owned BearSSL, cJSON, LodePNG, JPEG and FatFs integration wrappers,
@@ -69,6 +70,28 @@ the separately pinned `lwip/` checkout instead of the SDK's lwIP submodule.
 External FreeRTOS or Pico SDK checkouts can still be selected through the
 documented `JH_FREERTOS_KERNEL_DIR`, `JH_PICO_SDK_DIR`, and helper-script path
 options. Such user-managed paths are verified but are never replaced.
+
+ESP-IDF is pinned to an exact release commit and fetched on demand with
+`scripts/ensure_esp_idf.sh --enable`; the default updater does not download it
+until an ESP target is implemented. Its recursive submodules are part of the
+verified checkout contract. The same command idempotently runs the official
+ESP-IDF installer for `ESP_IDF_TARGETS`, then verifies the toolchain and Python
+environment. Set `JH_ESP_IDF_DIR` or pass `--dir` to verify and use an external
+checkout without replacing it. Source `third_party/esp-idf/export.sh` in each
+terminal that invokes ESP-IDF tools directly.
+
+Before the native target lands, the isolated Phase 0 integration spike verifies
+the pinned SDK, standard `app_main()` project flow, minimal component graph and
+complete flash image set without compiling JaszczurHAL as an ESP-IDF component:
+
+```bash
+python3 scripts/build_esp_idf_phase0.py --clean
+```
+
+On Windows, invoke the same script with the Python launcher available in that
+environment. Generated `sdkconfig`, binaries, metadata, logs and the relocatable
+`jh_esp_idf_phase0_artifacts.json` manifest remain under
+`.build/esp-idf/phase0/esp32s3/`.
 
 ## Built tools and toolchains
 

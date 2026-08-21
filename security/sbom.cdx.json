@@ -137,6 +137,54 @@
       ]
     },
     {
+      "type": "framework",
+      "bom-ref": "pkg:esp-idf@6.0.2",
+      "name": "ESP-IDF",
+      "version": "6.0.2",
+      "scope": "optional",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "supplier": {
+        "name": "Espressif Systems"
+      },
+      "purl": "pkg:github/espressif/esp-idf@7101770dc6db2667b3c477cc31365dd1acd6db4e",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/espressif/esp-idf"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp-idf",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
+          "url": "third_party/esp_idf_version.conf",
+          "comment": "repository path"
+        }
+      ],
+      "properties": [
+        {
+          "name": "jaszczurhal:commit",
+          "value": "7101770dc6db2667b3c477cc31365dd1acd6db4e"
+        },
+        {
+          "name": "jaszczurhal:notes",
+          "value": "Exact official ESP-IDF release for native ESP32-family targets. The checkout is opt-in until the first ESP target lands; its recursive submodules and target-specific tools are managed by the official framework. Bundled third-party components retain their upstream licenses."
+        },
+        {
+          "name": "jaszczurhal:paths",
+          "value": "third_party/esp-idf,third_party/esp_idf_version.conf"
+        }
+      ]
+    },
+    {
       "type": "library",
       "bom-ref": "pkg:btstack@v1.6.2-1-g501e6d2b8",
       "name": "BTstack",
@@ -1077,5 +1125,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:b63fa495-6526-1c44-2b19-b977da6a9c34"
+  "serialNumber": "urn:uuid:8939406f-6b5a-e85d-87f5-e69a47effc42"
 }

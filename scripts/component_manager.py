@@ -62,6 +62,7 @@ class GitComponent:
     required_paths: tuple[str, ...]
     clean: bool = False
     submodules_key: Optional[str] = None
+    recursive_submodules: bool = False
     version_validator: Optional[Callable[[Path, str], None]] = None
 
 
@@ -237,7 +238,37 @@ def _verify_required_paths(directory: Path, required_paths: Iterable[str]) -> No
         raise ComponentError(f"Checkout at {directory} is incomplete:\n{formatted}")
 
 
-def _sync_submodules(directory: Path, submodules: Sequence[str], verify_only: bool) -> None:
+def _sync_submodules(
+    directory: Path,
+    submodules: Sequence[str],
+    verify_only: bool,
+    *,
+    recursive: bool = False,
+) -> None:
+    if recursive:
+        status = _git_output(
+            directory, "submodule", "status", "--recursive", check=False
+        )
+        lines = status.splitlines()
+        ready = bool(lines) and all(line[0] not in ("-", "+", "U") for line in lines)
+        if ready:
+            return
+        if verify_only:
+            raise ComponentError(
+                f"Recursive submodules missing or mismatched at {directory} "
+                "(verify-only)."
+            )
+        info(f"Initialising recursive submodules: {directory.name}")
+        _git_output(
+            directory, "submodule", "update", "--init", "--recursive", "--depth", "1"
+        )
+        status = _git_output(directory, "submodule", "status", "--recursive")
+        lines = status.splitlines()
+        if not lines or any(line[0] in ("-", "+", "U") for line in lines):
+            raise ComponentError(
+                f"Recursive submodule verification failed: {directory}"
+            )
+        return
     for submodule in submodules:
         status = _git_output(
             directory, "submodule", "status", "--", submodule, check=False
@@ -273,6 +304,7 @@ def sync_git_checkout(
     verify_only: bool = False,
     clean: bool = False,
     submodules: Sequence[str] = (),
+    recursive_submodules: bool = False,
     required_paths: Sequence[str] = (),
 ) -> bool:
     """Synchronize an exact-ref checkout and return whether it changed."""
@@ -311,7 +343,9 @@ def sync_git_checkout(
             _git_output(destination, "clean", "-fdx")
             changed = True
 
-    _sync_submodules(destination, submodules, verify_only)
+    _sync_submodules(
+        destination, submodules, verify_only, recursive=recursive_submodules
+    )
     _verify_required_paths(destination, required_paths)
     actual = _git_head(destination)
     if actual != reference:
@@ -626,6 +660,57 @@ def _version_pico(directory: Path, expected: str) -> None:
         raise ComponentError(f"Pico SDK version mismatch: expected {expected}, found {found}.")
 
 
+def _version_esp_idf(directory: Path, expected: str) -> None:
+    text = (directory / "tools/cmake/version.cmake").read_text(encoding="utf-8")
+    parts = []
+    for suffix in ("MAJOR", "MINOR", "PATCH"):
+        match = re.search(
+            rf"set\(IDF_VERSION_{suffix}\s+(\d+)", text, re.MULTILINE
+        )
+        parts.append(match.group(1) if match else "")
+    found = ".".join(parts)
+    if found != expected:
+        raise ComponentError(
+            f"ESP-IDF version mismatch: expected {expected}, found {found}."
+        )
+
+
+def ensure_esp_idf_tools(
+    repo_root: Path,
+    directory: Path,
+    *,
+    verify_only: bool,
+) -> None:
+    config_path = repo_root / "third_party/esp_idf_version.conf"
+    config = parse_config(config_path)
+    require_values(config, ("ESP_IDF_TARGETS",), config_path)
+    targets = config["ESP_IDF_TARGETS"]
+    if not re.fullmatch(r"[a-z0-9]+(?:,[a-z0-9]+)*", targets):
+        raise ComponentError(
+            f"Invalid ESP_IDF_TARGETS in {config_path}: {targets}"
+        )
+
+    if not verify_only:
+        info(f"Installing ESP-IDF tools for: {targets}")
+        if sys.platform == "win32":
+            command = (
+                "cmd.exe", "/d", "/s", "/c", str(directory / "install.bat"),
+                targets,
+            )
+        else:
+            command = ("bash", str(directory / "install.sh"), targets)
+        _run(command, cwd=directory)
+
+    idf_tools = directory / "tools/idf_tools.py"
+    base_command = (
+        sys.executable, str(idf_tools), "--idf-path", str(directory)
+    )
+    _run((*base_command, "check"), cwd=directory)
+    _run((*base_command, "check-python-dependencies"), cwd=directory)
+    ok(f"ESP-IDF tools ready for {targets}: {directory}")
+    info(f"Activate them in the current shell with: . {directory / 'export.sh'}")
+
+
 GIT_COMPONENTS = {
     spec.name: spec
     for spec in (
@@ -715,6 +800,16 @@ GIT_COMPONENTS = {
             submodules_key="PICO_SDK_SUBMODULES",
             version_validator=_version_pico,
         ),
+        GitComponent(
+            "esp-idf", "ESP-IDF", "esp_idf_version.conf", "ESP_IDF",
+            (
+                "CMakeLists.txt", "components/esp_system", "tools/idf.py",
+                "tools/idf_tools.py", "tools/cmake/project.cmake",
+                "tools/cmake/version.cmake",
+            ),
+            recursive_submodules=True,
+            version_validator=_version_esp_idf,
+        ),
     )
 }
 
@@ -746,10 +841,17 @@ def ensure_git_component(
         repo_root, config[f"{spec.prefix}_DIR"], directory_override
     )
     submodules_text = config.get(spec.submodules_key or "", "")
+    if spec.recursive_submodules and submodule_override is not None:
+        raise ComponentError(
+            f"{spec.label} requires its complete recursive submodule set; "
+            "submodule overrides are unsupported."
+        )
     if submodule_override is not None:
         submodules_text = submodule_override
     submodules = tuple(shlex.split(submodules_text))
-    external = bool(directory_override) and name in ("freertos", "pico-sdk")
+    external = bool(directory_override) and name in (
+        "freertos", "pico-sdk", "esp-idf"
+    )
     if external:
         actual = _git_head(destination)
         if actual != config[f"{spec.prefix}_REF"]:
@@ -758,7 +860,10 @@ def ensure_git_component(
                 f"{config[f'{spec.prefix}_REF']}, "
                 f"found {_checkout_state(destination, actual)}."
             )
-        _sync_submodules(destination, submodules, verify_only)
+        _sync_submodules(
+            destination, submodules, verify_only,
+            recursive=spec.recursive_submodules,
+        )
         _verify_required_paths(destination, spec.required_paths)
         changed = False
     else:
@@ -769,6 +874,7 @@ def ensure_git_component(
             verify_only=verify_only,
             clean=spec.clean,
             submodules=submodules,
+            recursive_submodules=spec.recursive_submodules,
             required_paths=spec.required_paths,
         )
     if spec.version_validator:
@@ -1260,7 +1366,9 @@ def ensure_windows_tools(
 
 
 def _component_enabled(name: str, arguments: argparse.Namespace) -> bool:
-    if name not in ("freertos", "pico-sdk", "picotool", "riscv-toolchain"):
+    if name not in (
+        "freertos", "pico-sdk", "esp-idf", "picotool", "riscv-toolchain"
+    ):
         return True
     if name == "freertos":
         raw_definitions = os.environ.get("EXTRA_HAL_DEFINES", "")
@@ -1308,6 +1416,7 @@ def _component_enabled(name: str, arguments: argparse.Namespace) -> bool:
         return True
     environment = {
         "pico-sdk": "JH_ENABLE_PICO_SDK",
+        "esp-idf": "JH_ENABLE_ESP_IDF",
         "picotool": "JH_ENABLE_PICOTOOL",
         "riscv-toolchain": "JH_ENABLE_RISCV_TOOLCHAIN",
     }
@@ -1329,16 +1438,24 @@ def ensure_component(arguments: argparse.Namespace) -> None:
         directory = arguments.sdk_dir
     elif name == "pico-sdk" and os.environ.get("JH_PICO_SDK_DIR"):
         directory = os.environ["JH_PICO_SDK_DIR"]
+    if name == "esp-idf" and os.environ.get("JH_ESP_IDF_DIR"):
+        directory = os.environ["JH_ESP_IDF_DIR"]
     submodules = None
     if arguments.no_submodules:
         submodules = ""
     elif arguments.with_submodules is not None:
         submodules = arguments.with_submodules
     if name in GIT_COMPONENTS:
-        ensure_git_component(
+        component_directory = ensure_git_component(
             name, repo_root, verify_only=arguments.verify_only,
             directory_override=directory, submodule_override=submodules,
         )
+        if name == "esp-idf" and getattr(arguments, "install_sdk_tools", True):
+            ensure_esp_idf_tools(
+                repo_root,
+                component_directory,
+                verify_only=arguments.verify_only,
+            )
     elif name == "riscv-toolchain":
         ensure_riscv_toolchain(
             repo_root, verify_only=arguments.verify_only,
@@ -1380,6 +1497,7 @@ def _common_component_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-submodules", action="store_true")
     parser.add_argument("--with-submodules")
     parser.add_argument("--rebuild", action="store_true")
+    parser.set_defaults(install_sdk_tools=True)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -1439,6 +1557,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                     no_submodules=False,
                     with_submodules=None,
                     rebuild=False,
+                    install_sdk_tools=arguments.command != "source-components",
                 )
                 ensure_component(component_arguments)
             if arguments.command == "source-components":

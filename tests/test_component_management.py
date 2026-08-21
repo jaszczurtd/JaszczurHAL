@@ -29,6 +29,7 @@ configs = (
     "sx126x_driver_version.conf",
     "freertos_core_version.conf",
     "pico_sdk_version.conf",
+    "esp_idf_version.conf",
     "picotool_version.conf",
     "pmd_version.conf",
     "riscv_toolchain_version.conf",
@@ -151,6 +152,7 @@ wrapper_components = {
     "ensure_lodepng.sh": "lodepng",
     "ensure_lwip.sh": "lwip",
     "ensure_pico_sdk.sh": "pico-sdk",
+    "ensure_esp_idf.sh": "esp-idf",
     "ensure_picotool.sh": "picotool",
     "ensure_pmd.sh": "pmd",
     "ensure_riscv_toolchain.sh": "riscv-toolchain",
@@ -196,6 +198,7 @@ for component in (
     "littlefs",
     "BTstack",
     "sx126x_driver",
+    "esp-idf",
     "pmd",
 ):
     ignored = subprocess.run(
