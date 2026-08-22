@@ -72,17 +72,28 @@ hal_status_t hal_tls_default_entropy(void *, void *buffer, size_t length) {
   return jh_secure_random_bytes(buffer, length);
 }
 
-static void pool_lock(void) {
-  (void)jh_hal_mutex_create_once(&s_pool_mutex);
+static hal_status_t pool_lock(void) {
+  if (jh_hal_mutex_create_once(&s_pool_mutex) == NULL) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_pool_mutex);
   if (!s_pool_initialized) {
-    (void)jh_network_handle_pool_init(&s_handle_pool, s_handle_slots,
-                                      HAL_TLS_MAX_CLIENTS, JH_TLS_HANDLE_KIND);
+    hal_status_t status =
+        jh_network_handle_pool_init(&s_handle_pool, s_handle_slots,
+                                    HAL_TLS_MAX_CLIENTS, JH_TLS_HANDLE_KIND);
+    if (status != HAL_OK) {
+      hal_mutex_unlock(s_pool_mutex);
+      return status;
+    }
     for (size_t index = 0u; index < HAL_TLS_MAX_CLIENTS; ++index) {
-      (void)jh_hal_mutex_create_once(&s_client_mutexes[index]);
+      if (jh_hal_mutex_create_once(&s_client_mutexes[index]) == NULL) {
+        hal_mutex_unlock(s_pool_mutex);
+        return HAL_ENOMEM;
+      }
     }
     s_pool_initialized = true;
   }
+  return HAL_OK;
 }
 
 static void pool_unlock(void) { hal_mutex_unlock(s_pool_mutex); }
@@ -116,7 +127,10 @@ static void finalize_client(void *token) {
   }
   hal_mutex_lock(s_client_mutexes[index]);
   release_transport(client);
-  pool_lock();
+  if (pool_lock() != HAL_OK) {
+    hal_mutex_unlock(s_client_mutexes[index]);
+    return;
+  }
   memset(client, 0, sizeof(*client));
   pool_unlock();
   hal_mutex_unlock(s_client_mutexes[index]);
@@ -129,9 +143,11 @@ static hal_status_t begin_operation(hal_tls_client_t handle,
   }
   memset(operation, 0, sizeof(*operation));
 
-  pool_lock();
-  hal_status_t status =
-      jh_network_handle_acquire(&s_handle_pool, handle, &operation->lease);
+  hal_status_t status = pool_lock();
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = jh_network_handle_acquire(&s_handle_pool, handle, &operation->lease);
   if (status != HAL_OK) {
     pool_unlock();
     return HAL_EINVAL;
@@ -152,7 +168,11 @@ static hal_status_t begin_operation(hal_tls_client_t handle,
   pool_unlock();
 
   hal_mutex_lock(operation->mutex);
-  pool_lock();
+  status = pool_lock();
+  if (status != HAL_OK) {
+    hal_mutex_unlock(operation->mutex);
+    return status;
+  }
   const bool open =
       jh_network_handle_lease_is_open(&s_handle_pool, &operation->lease);
   const bool callback_active = operation->client->callback_active;
@@ -172,7 +192,9 @@ static hal_status_t begin_operation(hal_tls_client_t handle,
 static void end_operation(jh_tls_operation_t *operation) {
   hal_mutex_unlock(operation->mutex);
   void *deferred = NULL;
-  pool_lock();
+  if (pool_lock() != HAL_OK) {
+    return;
+  }
   (void)jh_network_handle_end_operation(&s_handle_pool, &operation->lease,
                                         &deferred);
   pool_unlock();
@@ -180,7 +202,9 @@ static void end_operation(jh_tls_operation_t *operation) {
 }
 
 static void begin_callback(jh_tls_operation_t *operation) {
-  pool_lock();
+  if (pool_lock() != HAL_OK) {
+    return;
+  }
   operation->client->callback_active = true;
   pool_unlock();
   hal_mutex_unlock(operation->mutex);
@@ -188,7 +212,9 @@ static void begin_callback(jh_tls_operation_t *operation) {
 
 static bool end_callback(jh_tls_operation_t *operation) {
   hal_mutex_lock(operation->mutex);
-  pool_lock();
+  if (pool_lock() != HAL_OK) {
+    return false;
+  }
   const bool open =
       jh_network_handle_lease_is_open(&s_handle_pool, &operation->lease);
   operation->client->callback_active = false;
@@ -447,7 +473,10 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
     return HAL_EINVAL;
   }
 
-  pool_lock();
+  hal_status_t status = pool_lock();
+  if (status != HAL_OK) {
+    return status;
+  }
   jh_tls_client_context_t *client = NULL;
   for (size_t index = 0u; index < HAL_TLS_MAX_CLIENTS; ++index) {
     if (!s_clients[index].allocated) {
@@ -466,8 +495,7 @@ hal_status_t hal_tls_client_create_ex(const hal_tls_client_config_t *config,
   }
 
   void *handle = NULL;
-  const hal_status_t status =
-      jh_network_handle_allocate(&s_handle_pool, client, &handle);
+  status = jh_network_handle_allocate(&s_handle_pool, client, &handle);
   if (status != HAL_OK) {
     memset(client, 0, sizeof(*client));
     pool_unlock();
@@ -770,7 +798,10 @@ hal_status_t hal_tls_client_get_last_error_ex(hal_tls_client_t handle,
 }
 
 hal_status_t hal_tls_client_close_ex(hal_tls_client_t handle) {
-  pool_lock();
+  const hal_status_t pool_status = pool_lock();
+  if (pool_status != HAL_OK) {
+    return pool_status;
+  }
   void *released = NULL;
   const hal_status_t status =
       jh_network_handle_begin_close(&s_handle_pool, handle, &released);

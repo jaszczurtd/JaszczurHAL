@@ -13,10 +13,16 @@ extern "C" {
  *
  * The device exposes an internal register map over I2C. A remote master
  * writes a one-byte register address, then reads N bytes starting from
- * that register. The slave auto-increments the pointer on each byte.
- * The register pointer intentionally survives STOP conditions, so a later
- * bare read continues from the last position unless the master first writes
- * a new register address. This matches common register-map device behavior.
+ * that register. The register pointer advances for every byte clocked by the
+ * master and survives STOP conditions, so a later bare read continues from
+ * the last position. Reads must stay within the configured register map.
+ *
+ * The ESP32 backend preserves this wire-level contract with an ESP-IDF TX
+ * FIFO/ring buffer. Its software producer advances by bytes accepted into
+ * that queue; bytes not yet clocked remain queued across STOP. Writing a new
+ * register address discards the old queued suffix and creates a fresh
+ * register-map snapshot. Consequently, local reg_write*() updates to bytes
+ * already queued become visible after the master selects a register again.
  *
  * Thread-safety:
  *   - hal_i2c_slave_init*() and hal_i2c_slave_deinit*() must be serialized by
@@ -112,11 +118,12 @@ uint8_t hal_i2c_slave_get_address(void);
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
 
 /**
- * @brief Return the number of completed I2C transactions (master reads
- *        and writes) since initialisation.
+ * @brief Return the backend-observed I2C activity count since initialisation.
  *
- * Incremented by the backend bus handler after completed master-initiated
- * reads and writes. Depending on the backend, this handler may be a hardware
+ * RP, STM32 and mock backends count completed master reads and writes. The
+ * ESP32 backend counts completed writes and read-service requests accepted by
+ * the ESP-IDF callback path because that driver does not expose read-complete
+ * byte counts. Depending on the backend, the handler may be a hardware
  * ISR/callback or a mock event path.
  * The value wraps at UINT32_MAX.
  *

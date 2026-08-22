@@ -209,22 +209,23 @@ bool JHWireGuardClient::begin_advanced(const uint8_t local_ip[4],
   return true;
 }
 
-void JHWireGuardClient::end() {
+hal_status_t JHWireGuardClient::end() {
   if (!initialized_) {
-    return;
+    return HAL_OK;
   }
 
   JHLwipExtensionGuard stack_guard(jh_lwip_extension_platform_port(), false);
   if (stack_guard.status() != HAL_OK) {
     log_e(TAG "Failed to enter lwIP context for teardown: %s",
           hal_status_to_string(stack_guard.status()));
-    return;
+    return stack_guard.status();
   }
 
   teardown_locked();
   initialized_ = false;
   has_kicked_ = false;
   last_kick_ms_ = 0u;
+  return HAL_OK;
 }
 
 bool JHWireGuardClient::peer_up(uint8_t current_endpoint_ip[4],

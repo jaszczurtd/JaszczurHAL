@@ -366,10 +366,10 @@ Connectivity
     Bounded one-shot HTTP/1.1 client over HAL TCP. Propagates: TCP, WIFI.
     HAL_ENABLE_TLS adds the verified HTTPS transport.
   HAL_ENABLE_OTA
-    Native update service over HAL UDP/TCP with discovery, optional password
-    challenge, trial boot, confirmation, rollback, and VS Code upload. RP uses
-    a signed JaszczurHAL container and swap engine; ESP32-S3 stages a raw ESP
-    application image with ESP-IDF OTA partitions.
+    Native update service over HAL UDP/TCP with discovery, optional fail-closed
+    AUTH2 password authentication, trial boot, confirmation, rollback, and VS
+    Code upload. RP uses a signed JaszczurHAL container and swap engine;
+    ESP32-S3 stages a raw ESP application image with ESP-IDF OTA partitions.
     Propagates: WIFI, UDP, TCP, CRYPTO, CRC.
   HAL_ENABLE_WIREGUARD
     Shared host-lwIP WireGuard wrapper. Propagates: UDP, WIFI. Requires

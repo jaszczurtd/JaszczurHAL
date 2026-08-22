@@ -31,6 +31,10 @@ hal_status_t jh_ota_parse_invitation(const uint8_t *data, size_t size,
                                      jh_ota_invitation_t *out_invitation);
 hal_status_t jh_ota_parse_auth_response(const uint8_t *data, size_t size,
                                         jh_ota_auth_response_t *out_response);
+/** Derive the lowercase ASCII MD5 key used by AUTH2 and RP image HMAC. */
+hal_status_t
+jh_ota_derive_password_key(const char *password,
+                           char out_key[JH_OTA_MD5_HEX_BUFFER_SIZE]);
 hal_status_t jh_ota_format_auth_transcript(
     const jh_ota_invitation_t *invitation,
     const char device_nonce[JH_OTA_MD5_HEX_BUFFER_SIZE],

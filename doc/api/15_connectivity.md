@@ -1330,14 +1330,18 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info);
 - `hal_ota_handle()` polls OTA transport and dispatches queued events to user callbacks.
 - Callback handlers can be replaced or unregistered by passing `NULL`.
 - Re-entering `hal_ota_begin()` clears queued mock/driver events before processing.
-- With a configured password, AUTH2 binds the command, callback port, image
-  size, image MD5, and independent device/client nonces. Authentication is
+- With a configured non-empty password, AUTH2 binds the command, callback
+  port, image size, image MD5, and independent device/client nonces. Authentication is
   accepted only from the invitation's UDP address and source port; the TCP
   callback must come from the same peer address. Legacy AUTH/200 messages are
   rejected and a non-empty host password cannot accept a direct `OK`.
-- Omitting `hal_ota_set_password()` skips AUTH2. An empty password uses a
-  publicly known key. Both modes are unauthenticated and are suitable only for
-  isolated development networks.
+- AUTH2 uses strict ASCII field framing and shortest-form decimal numbers;
+  ambiguous whitespace, embedded NULs, extra fields/lines, malformed lengths,
+  and leading-zero numeric aliases are rejected. Device/client nonces come
+  from the target secure-random provider and host OS CSPRNG respectively.
+- Omitting `hal_ota_set_password()` or passing an empty string skips AUTH2.
+  This mode is unauthenticated and is suitable only for isolated development
+  networks.
 - RP native images contain target id, program offset, generation, version,
   payload SHA-256, HMAC-SHA256 and header CRC. The HMAC key is derived from the
   same application password used by transport authentication.
@@ -1366,7 +1370,9 @@ policy appropriate to their threat model.
 **impl/.mock:** deterministic event-injection test double.
 **Thread safety:** RP-family and ESP32-S3 backends are thread-safe and
 multicore-safe for public APIs. A singleton `hal_mutex_t` serializes all wrapper
-calls and callback dispatch is performed outside that lock.
+calls and callback dispatch is performed outside that lock. Lazy mutex
+allocation is fail-closed: boolean operations return `false`, status operations
+return `HAL_ENOMEM`, and the service handler returns without touching state.
 
 **Mock helpers:**
 ```c

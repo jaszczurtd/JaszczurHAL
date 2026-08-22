@@ -161,7 +161,11 @@ to the STM32 timer x2 clock rule.
 **impl/esp32:** ESP-IDF LEDC output at 1 kHz. The backend allocates a logical
 LEDC channel lazily per output-capable pin, maps the selected 1..16-bit range to
 the hardware duty range, and releases all active simple-PWM channels when the
-global resolution changes.
+global resolution changes. The logical maximum uses LEDC's idle-high stop state
+for exact 100% output; a later lower write uses the duty-update path, which
+re-enables the waveform after that stop state. A failed channel stop/deconfigure
+keeps the internal channel owned and leaves the global resolution unchanged,
+preventing reuse of a still-active hardware channel.
 
 **Thread safety:** RP2040 maps pins to PWM hardware slices; STM32G474 maps pins
 to TIM channels. Channels sharing a timer also share frequency/resolution, and
@@ -284,7 +288,11 @@ prevents a glitch on pins with inverted logic (0 % duty = actuator ON) at power-
 simple PWM. Creation reserves one bounded logical handle and a compatible LEDC
 timer/channel for the requested pin, frequency, and logical maximum. Writes
 clamp to that maximum; stop keeps the handle and destroy releases both logical
-and LEDC resources.
+and LEDC resources. The shared allocator gives the logical maximum an exact
+idle-high 100% state and restarts LEDC on the next partial-duty write. If
+ESP-IDF rejects teardown, the logical handle and LEDC slot remain owned for a
+retry; checked builds report the failed `hal_pwm_freq_destroy()` with
+`HAL_ASSERT`.
 
 **impl/.mock:** stores last written value; injectable via mock helpers.
 

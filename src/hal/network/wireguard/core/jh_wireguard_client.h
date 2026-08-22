@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_status.h"
+
 #include <stdint.h>
 
 class JHWireGuardClient final {
@@ -14,7 +16,7 @@ public:
                       uint16_t remote_peer_port, const uint8_t allowed_ip[4],
                       const uint8_t allowed_mask[4]);
 
-  void end();
+  hal_status_t end();
   bool is_initialized() const { return initialized_; }
   bool peer_up(uint8_t current_endpoint_ip[4],
                uint16_t *current_endpoint_port) const;

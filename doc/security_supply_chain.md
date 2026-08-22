@@ -40,19 +40,23 @@ ESP-IDF artifact manifest. The host verifies the manifest size/SHA-256 record;
 the device verifies the protocol MD5 and calls ESP-IDF image validation before
 selecting the inactive OTA partition.
 
-Both targets use AUTH2 when firmware has a configured password. It computes
-HMAC-SHA256 with the lowercase ASCII MD5 of the password as key and binds the
+Both targets use AUTH2 when firmware has a configured non-empty password. It
+computes HMAC-SHA256 with the lowercase ASCII MD5 of the password as key and binds the
 command, callback TCP port, image size, image MD5, and independent 16-byte
 device and client nonces. The device pins authentication to the invitation's
 UDP address and source port and calls back to the same IPv4 address; the host
 uses a connected UDP socket and requires the TCP peer to match its selected UDP
-peer. A non-empty host password cannot fall back to direct `OK`, legacy `AUTH`,
-or legacy `200` authentication.
+peer. Both nonce generators use the platform secure-random provider. Strict
+ASCII parsing rejects ambiguous whitespace, embedded NULs, numeric aliases,
+malformed lengths and extra fields. A non-empty host password cannot fall back
+to direct `OK`, legacy `AUTH`, or legacy `200` authentication. Mutex-allocation
+failure leaves each target service stopped instead of entering an unlocked
+transport path.
 
 AUTH2 is symmetric password authentication, not modern image signing or
-encryption. Omitting the device password skips AUTH2; an empty password uses a
-publicly known key. `ota.allowEmptyPassword=true` only lets the host proceed in
-that explicitly unauthenticated development mode. Product authenticity,
+encryption. Omitting the device password or setting it to an empty string skips
+AUTH2. `ota.allowEmptyPassword=true` only lets the host proceed in that
+explicitly unauthenticated development mode. Product authenticity,
 confidentiality, and anti-rollback policy on ESP32-S3 require the appropriate
 ESP-IDF Secure Boot V2, flash-encryption, eFuse, protected-key, and recovery
 configuration. Normal uploads and tests do not enable irreversible eFuse

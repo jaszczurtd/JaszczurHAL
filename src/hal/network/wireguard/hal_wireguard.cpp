@@ -131,10 +131,9 @@ hal_wireguard_begin_ex(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
     return status;
   }
 
-  const bool ok = jh_hal_wireguard_begin_provider(
+  return jh_hal_wireguard_begin_provider(
       local_ip, private_key, remote_peer_address, remote_peer_public_key,
       remote_peer_port, nullptr, nullptr);
-  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_wireguard_begin(const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS],
@@ -219,10 +218,9 @@ hal_status_t hal_wireguard_begin_advanced_ex(
     return status;
   }
 
-  const bool ok = jh_hal_wireguard_begin_provider(
+  return jh_hal_wireguard_begin_provider(
       local_ip, private_key, remote_peer_address, remote_peer_public_key,
       remote_peer_port, allowed_ip, allowed_mask);
-  return ok ? HAL_OK : HAL_EIO;
 }
 
 bool hal_wireguard_begin_advanced(
@@ -275,10 +273,12 @@ bool hal_wireguard_begin_advanced_text(const char *local_ip_text,
       remote_peer_port, allowed_ip_text, allowed_mask_text));
 }
 
-void hal_wireguard_end(void) { jh_hal_wireguard_end_provider(); }
+void hal_wireguard_end(void) { (void)jh_hal_wireguard_end_provider(); }
 
 bool hal_wireguard_is_initialized(void) {
-  return jh_hal_wireguard_is_initialized_provider();
+  bool initialized = false;
+  return jh_hal_wireguard_is_initialized_provider(&initialized) == HAL_OK &&
+         initialized;
 }
 
 hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
@@ -302,13 +302,22 @@ hal_status_t hal_wireguard_peer_up_ex(char *endpoint_ip_out,
   uint8_t endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS] = {0u};
   uint16_t endpoint_port = 0u;
 
-  if (!jh_hal_wireguard_is_initialized_provider()) {
+  bool initialized = false;
+  hal_status_t status = jh_hal_wireguard_is_initialized_provider(&initialized);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (!initialized) {
     return HAL_EUNINIT;
   }
 
-  const bool up = jh_hal_wireguard_peer_up_provider(
+  bool up = false;
+  status = jh_hal_wireguard_peer_up_provider(
       endpoint_ip_out ? endpoint_ip : nullptr,
-      endpoint_port_out ? &endpoint_port : nullptr);
+      endpoint_port_out ? &endpoint_port : nullptr, &up);
+  if (status != HAL_OK) {
+    return status;
+  }
 
   if (!up) {
     return HAL_OK;
@@ -372,13 +381,16 @@ hal_status_t hal_wireguard_kick_handshake_ex(
     return status;
   }
 
-  if (!jh_hal_wireguard_is_initialized_provider()) {
+  bool initialized = false;
+  status = jh_hal_wireguard_is_initialized_provider(&initialized);
+  if (status != HAL_OK) {
+    return status;
+  }
+  if (!initialized) {
     return HAL_EUNINIT;
   }
 
-  const bool ok =
-      jh_hal_wireguard_kick_provider(probe_ip, probe_port, min_interval_ms);
-  return ok ? HAL_OK : HAL_EIO;
+  return jh_hal_wireguard_kick_provider(probe_ip, probe_port, min_interval_ms);
 }
 
 bool hal_wireguard_kick_handshake(

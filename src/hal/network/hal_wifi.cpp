@@ -8,6 +8,9 @@
 #include "hal/network/hal_wifi.h"
 #include "hal/network/jh_network_backend.h"
 #include "hal/network/jh_network_runtime.h"
+#if defined(HAL_ENABLE_WIREGUARD)
+#include "hal/network/wireguard/hal_wireguard_internal.h"
+#endif
 #include "hal/serial/hal_serial.h"
 #include "hal/system/hal_sync.h"
 
@@ -34,8 +37,21 @@ static void reset_transport_handles(void) {
 #endif
 }
 
-static void ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_wifi_mutex);
+static hal_status_t quiesce_persistent_services(void) {
+#if defined(HAL_ENABLE_WIREGUARD)
+  // WireGuard owns a raw lwIP netif and UDP PCB rather than a facade socket.
+  // It must be removed while the underlay is still alive. If entering the
+  // stack context fails, refuse the underlay transition without invalidating
+  // any transport handles.
+  return jh_hal_wireguard_end_provider();
+#else
+  return HAL_OK;
+#endif
+}
+
+static hal_status_t ensure_mutex(void) {
+  return jh_hal_mutex_create_once(&s_wifi_mutex) != nullptr ? HAL_OK
+                                                            : HAL_ENOMEM;
 }
 
 static const jh_network_wifi_ops_t *wifi_ops(void) {
@@ -47,7 +63,10 @@ static const jh_network_wifi_ops_t *wifi_ops(void) {
 }
 
 static hal_status_t begin_operation(uint32_t *out_timeout_ms) {
-  ensure_mutex();
+  const hal_status_t mutex_status = ensure_mutex();
+  if (mutex_status != HAL_OK) {
+    return mutex_status;
+  }
   hal_mutex_lock(s_wifi_mutex);
   if (s_operation_running) {
     hal_mutex_unlock(s_wifi_mutex);
@@ -100,9 +119,16 @@ hal_status_t hal_wifi_set_mode_ex(hal_wifi_mode_t mode) {
     return start;
   }
   if (mode == HAL_WIFI_MODE_OFF) {
-    reset_transport_handles();
+    const hal_status_t quiesce_status = quiesce_persistent_services();
+    if (quiesce_status != HAL_OK) {
+      end_operation();
+      return quiesce_status;
+    }
   }
   const hal_status_t status = ops->set_mode(mode);
+  if (status == HAL_OK && mode == HAL_WIFI_MODE_OFF) {
+    reset_transport_handles();
+  }
   end_operation();
   return status;
 }
@@ -124,8 +150,15 @@ hal_status_t hal_wifi_disconnect_ex(bool erase_credentials) {
   if (start != HAL_OK) {
     return start;
   }
-  reset_transport_handles();
+  const hal_status_t quiesce_status = quiesce_persistent_services();
+  if (quiesce_status != HAL_OK) {
+    end_operation();
+    return quiesce_status;
+  }
   const hal_status_t status = ops->disconnect(erase_credentials);
+  if (status == HAL_OK) {
+    reset_transport_handles();
+  }
   end_operation();
   return status;
 }
@@ -170,6 +203,15 @@ hal_status_t hal_wifi_begin_station_ex(const char *ssid, const char *password,
   if (start != HAL_OK) {
     return start;
   }
+  const hal_status_t quiesce_status = quiesce_persistent_services();
+  if (quiesce_status != HAL_OK) {
+    end_operation();
+    return quiesce_status;
+  }
+  // A join attempt replaces the station underlay even when the blocking
+  // result is authentication failure, no network, or timeout. Invalidate
+  // transports before handing control to the backend so no facade handle can
+  // survive a partially completed reassociation.
   reset_transport_handles();
   const hal_status_t status =
       ops->join(ssid, password, non_blocking, timeout_ms);
@@ -188,7 +230,10 @@ hal_status_t hal_wifi_set_timeout_ms_ex(uint32_t timeout_ms) {
   if (hardware_status != HAL_OK) {
     return hardware_status;
   }
-  ensure_mutex();
+  const hal_status_t mutex_status = ensure_mutex();
+  if (mutex_status != HAL_OK) {
+    return mutex_status;
+  }
   hal_mutex_lock(s_wifi_mutex);
   s_timeout_ms = timeout_ms;
   hal_mutex_unlock(s_wifi_mutex);
@@ -385,7 +430,9 @@ int hal_wifi_ping_ex(const char *host_or_ip, uint32_t timeout_ms) {
 }
 
 int hal_wifi_ping(const char *host_or_ip) {
-  ensure_mutex();
+  if (ensure_mutex() != HAL_OK) {
+    return -1;
+  }
   hal_mutex_lock(s_wifi_mutex);
   const uint32_t timeout_ms = s_timeout_ms;
   hal_mutex_unlock(s_wifi_mutex);

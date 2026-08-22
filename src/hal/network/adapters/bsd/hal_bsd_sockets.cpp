@@ -130,12 +130,22 @@ static hal_bsd_fd_entry_t s_fd_table[HAL_BSD_SOCKET_MAX_FDS];
 static hal_mutex_t s_fd_table_mutex = NULL;
 static uint16_t s_next_ephemeral_udp_port = 49152u;
 
-static void fd_table_lock(void) {
-  (void)jh_hal_mutex_create_once(&s_fd_table_mutex);
+static bool fd_table_lock(void) {
+  if (jh_hal_mutex_create_once(&s_fd_table_mutex) == NULL) {
+    errno = ENOMEM;
+    return false;
+  }
   hal_mutex_lock(s_fd_table_mutex);
+  return true;
 }
 
 static void fd_table_unlock(void) { hal_mutex_unlock(s_fd_table_mutex); }
+
+static void fd_table_relock(void) {
+  // Only used after this operation has already acquired and released the
+  // table, so the once-created mutex cannot be absent here.
+  hal_mutex_lock(s_fd_table_mutex);
+}
 
 static void clear_entry(hal_bsd_fd_entry_t *entry) {
   if (!entry) {
@@ -884,7 +894,9 @@ const char *gai_strerror(int errcode) {
 }
 
 int fcntl(int fd, int cmd, ...) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(fd);
   if (!entry) {
     fd_table_unlock();
@@ -934,7 +946,9 @@ int socket(int domain, int type, int protocol) {
   }
 
   if (type == SOCK_DGRAM && (protocol == 0 || protocol == IPPROTO_UDP)) {
-    fd_table_lock();
+    if (!fd_table_lock()) {
+      return -1;
+    }
     const int fd = allocate_fd();
     if (fd < 0) {
       fd_table_unlock();
@@ -958,7 +972,9 @@ int socket(int domain, int type, int protocol) {
   }
 
   if (type == SOCK_STREAM && (protocol == 0 || protocol == IPPROTO_TCP)) {
-    fd_table_lock();
+    if (!fd_table_lock()) {
+      return -1;
+    }
     const int fd = allocate_fd();
     if (fd < 0) {
       fd_table_unlock();
@@ -996,7 +1012,9 @@ prepare_endpoint_operation(int sockfd, const struct sockaddr *addr,
     errno = EINVAL;
     return NULL;
   }
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return NULL;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1050,7 +1068,9 @@ int listen(int sockfd, int backlog) {
     return -1;
   }
 
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1087,7 +1107,9 @@ int listen(int sockfd, int backlog) {
 }
 
 int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1111,7 +1133,7 @@ int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
     return -1;
   }
 
-  fd_table_lock();
+  fd_table_relock();
   const int accepted_fd = allocate_fd();
   if (accepted_fd < 0) {
     fd_table_unlock();
@@ -1177,7 +1199,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   if (!hal_tcp_socket_connect(tcp_socket, &endpoint, connect_timeout_ms)) {
     errno = nonblocking ? EINPROGRESS : ECONNREFUSED;
-    fd_table_lock();
+    fd_table_relock();
     hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
     if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
         failed->tcp_socket == tcp_socket) {
@@ -1189,7 +1211,7 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen) {
 
   /* Re-validate: the descriptor may have been closed while the lock was
    * released during the blocking connect. */
-  fd_table_lock();
+  fd_table_relock();
   hal_bsd_fd_entry_t *current = entry_for_fd(sockfd);
   if (current && current->kind == HAL_BSD_FD_TCP_SOCKET &&
       current->tcp_socket == tcp_socket) {
@@ -1211,7 +1233,9 @@ static hal_bsd_fd_entry_t *prepare_io_operation(int sockfd, const void *buffer,
     errno = EINVAL;
     return NULL;
   }
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return NULL;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1241,7 +1265,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
     const int sent = hal_udp_socket_sendto(udp, buf, len, &remote);
     if (sent < 0) {
       errno = EIO;
-      fd_table_lock();
+      fd_table_relock();
       hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
       if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
         entry_set_error(failed, errno);
@@ -1264,7 +1288,7 @@ ssize_t send(int sockfd, const void *buf, size_t len, int flags) {
   const int sent = hal_tcp_socket_send(tcp_socket, buf, len);
   if (sent < 0) {
     errno = ENOTCONN;
-    fd_table_lock();
+    fd_table_relock();
     hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
     if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
         failed->tcp_socket == tcp_socket) {
@@ -1296,7 +1320,7 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
         hal_udp_socket_recvfrom(udp, buf, len, NULL, timeout_ms);
     if (received < 0) {
       errno = EIO;
-      fd_table_lock();
+      fd_table_relock();
       hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
       if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
         entry_set_error(failed, errno);
@@ -1330,7 +1354,7 @@ ssize_t recv(int sockfd, void *buf, size_t len, int flags) {
   const int received = hal_tcp_socket_recv(tcp_socket, buf, len, timeout_ms);
   if (received < 0) {
     errno = ENOTCONN;
-    fd_table_lock();
+    fd_table_relock();
     hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
     if (failed && failed->kind == HAL_BSD_FD_TCP_SOCKET &&
         failed->tcp_socket == tcp_socket) {
@@ -1366,7 +1390,9 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
     return -1;
   }
 
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1393,7 +1419,7 @@ ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
   const int sent = hal_udp_socket_sendto(udp, buf, len, &remote);
   if (sent < 0) {
     errno = EIO;
-    fd_table_lock();
+    fd_table_relock();
     hal_bsd_fd_entry_t *failed = entry_for_fd(sockfd);
     if (failed && failed->kind == HAL_BSD_FD_UDP && failed->udp == udp) {
       entry_set_error(failed, errno);
@@ -1418,7 +1444,9 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
     return -1;
   }
 
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1465,7 +1493,9 @@ ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
 
 int setsockopt(int sockfd, int level, int optname, const void *optval,
                socklen_t optlen) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1512,7 +1542,9 @@ int setsockopt(int sockfd, int level, int optname, const void *optval,
 
 int getsockopt(int sockfd, int level, int optname, void *optval,
                socklen_t *optlen) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1560,7 +1592,9 @@ int getsockopt(int sockfd, int level, int optname, void *optval,
 }
 
 int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1581,7 +1615,9 @@ int getsockname(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
 }
 
 int getpeername(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1677,7 +1713,9 @@ static int select_poll_once(int nfds, const fd_set *requested_read,
                             const fd_set *requested_write,
                             const fd_set *requested_except, fd_set *ready_read,
                             fd_set *ready_write, fd_set *ready_except) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   if (ready_read) {
     FD_ZERO(ready_read);
   }
@@ -1786,7 +1824,9 @@ int shutdown(int sockfd, int how) {
     return -1;
   }
 
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(sockfd);
   if (!entry) {
     fd_table_unlock();
@@ -1804,7 +1844,9 @@ int shutdown(int sockfd, int how) {
 }
 
 int close(int fd) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return -1;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(fd);
   if (!entry) {
     fd_table_unlock();
@@ -1834,7 +1876,9 @@ ssize_t write(int fd, const void *buf, size_t count) {
 
 #if HAL_TARGET_IS_MOCK
 void hal_mock_bsd_sockets_reset(void) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return;
+  }
   for (size_t i = 0u; i < HAL_BSD_SOCKET_MAX_FDS; ++i) {
     if (s_fd_table[i].kind == HAL_BSD_FD_UDP) {
       hal_udp_socket_close(s_fd_table[i].udp);
@@ -1850,7 +1894,9 @@ void hal_mock_bsd_sockets_reset(void) {
 }
 
 hal_udp_socket_t hal_mock_bsd_socket_get_udp_handle(int fd) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return NULL;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(fd);
   if (!entry || entry->kind != HAL_BSD_FD_UDP) {
     fd_table_unlock();
@@ -1862,7 +1908,9 @@ hal_udp_socket_t hal_mock_bsd_socket_get_udp_handle(int fd) {
 }
 
 hal_tcp_socket_t hal_mock_bsd_socket_get_tcp_handle(int fd) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return NULL;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(fd);
   if (!entry || entry->kind != HAL_BSD_FD_TCP_SOCKET) {
     fd_table_unlock();
@@ -1874,7 +1922,9 @@ hal_tcp_socket_t hal_mock_bsd_socket_get_tcp_handle(int fd) {
 }
 
 hal_tcp_listener_t hal_mock_bsd_socket_get_tcp_listener(int fd) {
-  fd_table_lock();
+  if (!fd_table_lock()) {
+    return NULL;
+  }
   hal_bsd_fd_entry_t *entry = entry_for_fd(fd);
   if (!entry || entry->kind != HAL_BSD_FD_TCP_LISTENER) {
     fd_table_unlock();

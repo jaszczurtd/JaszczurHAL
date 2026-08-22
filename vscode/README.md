@@ -566,7 +566,9 @@ rejected unless `ota.allowEmptyPassword` is explicitly true. With a non-empty
 password, the host requires the shared HMAC-SHA256 AUTH2 exchange and rejects a
 direct `OK` or legacy `AUTH` response. `allowEmptyPassword` explicitly permits
 an unauthenticated development transfer; it does not configure a password on
-the device.
+the device. The host uses one connected UDP socket for invitation and AUTH2,
+accepts only strict control-line framing, and transfers data only when the TCP
+callback address matches the UDP peer selected by the OS.
 The host callback defaults to TCP/8266. `runmefirst.sh` offers a persistent,
 LAN-scoped firewall rule for that port after explicit confirmation.
 

@@ -20,6 +20,7 @@ namespace {
 
 hal_mutex_impl_t s_mutexes[8]{};
 size_t s_mutex_count;
+bool s_fail_mutex_allocations;
 unsigned s_wifi_calls;
 unsigned s_tcp_open_calls;
 unsigned s_tcp_connect_calls;
@@ -240,6 +241,9 @@ const jh_network_udp_ops_t kUdpOps = {
 } // namespace
 
 hal_mutex_t hal_mutex_create(void) {
+  if (s_fail_mutex_allocations) {
+    return nullptr;
+  }
   TEST_ASSERT_LESS_THAN(sizeof(s_mutexes) / sizeof(s_mutexes[0]),
                         s_mutex_count);
   return &s_mutexes[s_mutex_count++];
@@ -280,6 +284,7 @@ jh_network_backend_selected(void) {
 }
 
 void setUp(void) {
+  s_fail_mutex_allocations = false;
   for (auto &mutex : s_mutexes) {
     mutex.locked = false;
   }
@@ -307,6 +312,31 @@ void setUp(void) {
 }
 
 void tearDown(void) {}
+
+void test_network_facades_fail_closed_when_mutex_allocation_fails(void) {
+#if defined(JH_TEST_NETWORK_BOARD_ABSENT)
+  TEST_IGNORE_MESSAGE("The profile has no network hardware to mark available");
+#else
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_board_runtime_set_available(
+                                    jh_network_required_board_capabilities()));
+  s_fail_mutex_allocations = true;
+
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_wifi_set_timeout_ms_ex(100u));
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM,
+                        hal_wifi_begin_station_ex("ssid", "password", false));
+  TEST_ASSERT_EQUAL_INT(-1, hal_wifi_ping("192.0.2.1"));
+
+  hal_tcp_socket_t tcp = nullptr;
+  hal_udp_socket_t udp = nullptr;
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_tcp_socket_open_ex(&tcp));
+  TEST_ASSERT_NULL(tcp);
+  TEST_ASSERT_EQUAL_INT(HAL_ENOMEM, hal_udp_socket_open_ex(&udp));
+  TEST_ASSERT_NULL(udp);
+  TEST_ASSERT_EQUAL_UINT32(0u, s_wifi_calls);
+  TEST_ASSERT_EQUAL_UINT32(0u, s_tcp_open_calls);
+  TEST_ASSERT_EQUAL_UINT32(0u, s_udp_open_calls);
+#endif
+}
 
 void test_profile_and_runtime_state_gate_public_network_api(void) {
   hal_wifi_state_t wifi_state = HAL_WIFI_STATE_FAILED;
@@ -497,8 +527,41 @@ void test_wifi_mode_off_invalidates_transport_handles(void) {
 #endif
 }
 
+void test_failed_wifi_rejoin_invalidates_transport_handles(void) {
+#if defined(JH_TEST_NETWORK_BOARD_ABSENT)
+  TEST_IGNORE_MESSAGE("The profile has no radio transport handles");
+#else
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_wifi_begin_station_ex("ssid", "password", false));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_tcp_socket_open_ex(&s_tcp_handle));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_udp_socket_open_ex(&s_udp_handle));
+
+  s_join_status = HAL_ETIMEOUT;
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT, hal_wifi_begin_station_ex(
+                                          "replacement", "password", false));
+  TEST_ASSERT_EQUAL_UINT32(1u, s_tcp_close_calls);
+  TEST_ASSERT_EQUAL_UINT32(1u, s_udp_close_calls);
+
+  size_t transferred = 0u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW, hal_tcp_socket_send_ex(s_tcp_handle, "x", 1u, &transferred));
+  hal_net_endpoint_t remote{};
+  remote.family = HAL_NET_AF_INET;
+  remote.addr_len = HAL_NET_IPV4_ADDR_LEN;
+  remote.addr[0] = 192u;
+  remote.addr[1] = 0u;
+  remote.addr[2] = 2u;
+  remote.addr[3] = 1u;
+  remote.port = 1234u;
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EHW,
+      hal_udp_socket_sendto_ex(s_udp_handle, "x", 1u, &remote, &transferred));
+#endif
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_network_facades_fail_closed_when_mutex_allocation_fails);
   RUN_TEST(test_profile_and_runtime_state_gate_public_network_api);
   RUN_TEST(test_failed_probe_is_sticky_until_runtime_is_reset);
   RUN_TEST(test_pim730_requires_the_external_radio_frontend);
@@ -507,5 +570,6 @@ int main(void) {
   RUN_TEST(test_close_during_tcp_operation_is_deferred_until_backend_returns);
   RUN_TEST(test_close_during_udp_operation_is_deferred_until_backend_returns);
   RUN_TEST(test_wifi_mode_off_invalidates_transport_handles);
+  RUN_TEST(test_failed_wifi_rejoin_invalidates_transport_handles);
   return UNITY_END();
 }

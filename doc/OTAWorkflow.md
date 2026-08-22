@@ -23,8 +23,8 @@ another.
 
 ## Shared AUTH2 Transport Authentication
 
-With a configured password, the device and host use the fail-closed `AUTH2`
-exchange:
+With a configured non-empty password, the device and host use the fail-closed
+`AUTH2` exchange:
 
 1. The host sends `0 <tcp-port> <image-size> <image-md5>` from one connected
    UDP socket. The device records that socket's IPv4 address and source port.
@@ -42,22 +42,31 @@ exchange:
    authenticated transcript's TCP port. The host transfers data only when the
    TCP peer address matches the address selected by its connected UDP socket.
 
-When the host has a non-empty password, it requires `AUTH2`; a direct `OK`, the
-legacy `AUTH` challenge, and the legacy `200` response cannot downgrade the
-exchange. Endpoint binding also rejects a challenge response or TCP callback
-injected from another address. AUTH2 authenticates the password-derived proof
+Invitation and AUTH2 datagrams use one ASCII space between fields and no
+leading or trailing whitespace. A message may end directly after its last
+field, with one LF, or with one CRLF. Numeric fields use their shortest decimal
+form; hexadecimal input is accepted in either case and normalized to lowercase
+before the transcript is computed. Embedded NULs, extra lines, tabs, duplicate
+separators, leading-zero numeric aliases, malformed tags, and out-of-range
+values are rejected.
+
+When the host has a non-empty password, it requires a complete `AUTH2`
+exchange; a direct `OK`, the legacy `AUTH` challenge, and the legacy `200`
+response cannot downgrade it. Endpoint binding also rejects a challenge
+response from another UDP address or source port and a TCP callback from
+another address. Device and client nonces come from the target secure-random
+provider and the host OS CSPRNG. AUTH2 authenticates the password-derived proof
 and invitation but does not encrypt discovery, metadata, or firmware. The
 invitation binds the image through MD5 for transport compatibility, so target-
 specific image validation remains essential.
 
-Omitting `hal_ota_set_password()` makes the device accept invitations without
-AUTH2. Calling it with an empty string runs AUTH2 with a publicly known empty
-secret and provides no meaningful authenticity. The host permits either mode
-only when `ota.allowEmptyPassword` is explicitly `true`; that setting is an
-operator acknowledgement and does not configure the device. In either empty-
-secret mode, any network peer that can reach the OTA UDP service can initiate a
-transfer and supply an image that passes the target's remaining validation.
-Keep empty-secret mode limited to isolated development networks.
+Omitting `hal_ota_set_password()` or passing an empty string makes the device
+accept invitations without AUTH2. The host permits this mode only when
+`ota.allowEmptyPassword` is explicitly `true`; that setting is an operator
+acknowledgement and does not configure the device. Any network peer that can
+reach the OTA UDP service can then initiate a transfer and supply an image that
+passes the target's remaining validation. Keep this mode limited to isolated
+development networks.
 
 ## ESP32-S3 Workflow
 
@@ -381,12 +390,15 @@ Additional API rules:
   service has started.
 - The hostname must be non-empty. The default hostname, when none is provided,
   is the HAL target name.
-- Omitting the device password skips AUTH2. An empty device password uses a
-  publicly known key. The host rejects both empty-secret modes unless
-  `allowEmptyPassword` is explicit. Always set a non-empty product secret.
+- Omitting the device password or setting it to an empty string skips AUTH2.
+  The host rejects this mode unless `allowEmptyPassword` is explicit. Always
+  set a non-empty product secret.
 - `hal_ota_handle()` performs network service, processes discovery,
   authentication and transfer, and dispatches callbacks. Do not stop calling
   it while OTA is enabled.
+- Failure to allocate the backend mutex keeps the service stopped: boolean
+  operations return `false`, status operations return `HAL_ENOMEM`, and
+  `hal_ota_handle()` performs no work.
 - The device reboots automatically after accepting and validating a complete
   image.
 - `hal_ota_get_boot_info_ex()` reports stable, trial, rollback and recovery

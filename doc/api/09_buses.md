@@ -396,10 +396,17 @@ mutex in addition, since the HAL mutex is released at each `end_transmission`.
 
 Exposes a fixed-size register map over I2C slave mode. A remote master writes
 a one-byte register pointer, then reads N bytes starting from that address.
-The register pointer auto-increments on each byte read.
-The pointer intentionally survives STOP conditions, so a later bare read
-continues from the last position unless the master first writes a new register
-address. This mirrors common register-map peripherals.
+The pointer advances for each byte clocked by the master and survives STOP
+conditions, so a later bare read continues from the last position. Reads must
+stay within the configured register map.
+
+The ESP-IDF target API exposes bytes accepted into its TX FIFO/ring buffer, but
+not how many bytes the controller clocked. The ESP32 backend therefore uses a
+software producer cursor for the first register not yet accepted by ESP-IDF.
+Unclocked bytes remain in the FIFO/ring buffer across STOP, preserving the
+wire-level cursor. A new register-pointer write clears that pending suffix and
+queues a fresh snapshot from the selected register. Local `reg_write*()` calls
+do not change bytes already queued; select a register again to refresh them.
 
 This is independent of the I2C master module (`hal_i2c`) - both can be
 disabled/enabled separately, but they cannot share the same bus simultaneously.
@@ -435,7 +442,7 @@ uint16_t hal_i2c_slave_reg_read16_bus(uint8_t bus, uint8_t reg);
 uint8_t hal_i2c_slave_get_address(void);
 uint8_t hal_i2c_slave_get_address_bus(uint8_t bus);
 
-// Transaction counter - counts completed master reads and writes since init.
+// Backend-observed activity counter; see the target notes below.
 // Useful for detecting live bus activity without polling reg_write return values.
 // Resets on init. Wraps at UINT32_MAX. Thread-safe (atomic).
 uint32_t hal_i2c_slave_get_transaction_count(void);
@@ -455,8 +462,15 @@ trigger `HAL_ASSERT` in checked builds.
 **impl/esp32:** ESP-IDF I2C target devices on controller 0/1. Receive/request
 callbacks keep ISR work bounded and signal one FreeRTOS worker per active bus;
 the worker resets the TX FIFO or writes a register-map snapshot through the
-official target-mode driver. Deinit unregisters callbacks and waits for the
-worker before deleting driver, queue, and semaphore resources.
+official target-mode driver. A new register-pointer write resets stale queued
+TX data before the next snapshot. Partial queue acceptance advances only the
+producer cursor portion that ESP-IDF accepted; the remaining queued bytes carry
+the wire-level cursor across STOP. An intervening pointer write is protected by
+a generation check. This backend's transaction counter records
+completed writes and accepted read-service requests. Deinit first closes ISR
+event admission, unregisters callbacks, drains the worker, destroys the driver
+to form the interrupt-lifetime barrier, and only then deletes worker
+synchronization objects.
 **impl/.mock:** direct register-map access; simulation helpers for master write/read.
 **Thread safety:** `reg_write*` / `reg_read*` are thread-safe for normal task/core callers on hardware backends. The register map is protected by a short backend-local lock shared with bus callbacks/ISRs, so handlers do not take HAL mutexes in FreeRTOS builds. `init` / `deinit` must be serialized by the application during setup/teardown. Mock backend does not synchronize concurrent access.
 

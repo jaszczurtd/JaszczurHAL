@@ -111,9 +111,19 @@ hal_timer_state_t  hal_timer_get_state(hal_timer_t timer);
 hal_timer_result_t hal_timer_get_remaining_us(hal_timer_t timer, int64_t *out_remaining_us);
 ```
 
+Before `hal_timer_pool_destroy()`, stop and destroy every managed timer and
+cancel every low-level alarm associated with that pool, then ensure all of its
+callbacks have returned. External synchronization with other callers alone is
+not sufficient; pool destruction from an alarm callback/ISR is unsupported.
+
 **Layer model:** use low-level alarms for minimal ISR scheduling; use managed timers when you need start/stop/pause/resume/status semantics and periodic behavior.
 **Error model:** `_ex` functions return detailed `hal_timer_result_t` diagnostics (`INVALID_ARG`, `TIME_PASSED`, `POOL_FULL`, `NO_RESOURCE`, etc.) while legacy non-`_ex` variants preserve `HAL_ALARM_INVALID` compatibility.
-**impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling (`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0` are treated as invalid and mapped to explicit result codes in `_ex`.
+**impl/rp2040:** Pico SDK alarm pools (`pico/time.h`) and callback scheduling
+(`alarm_pool_add_alarm_in_us`, cancel APIs). `add_alarm_in_us()` outcomes `<= 0`
+are treated as invalid and mapped to explicit result codes in `_ex`. A stable
+dispatch record bridges the SDK allocation/publication window across cores;
+stale cancellation markers are cleared before publishing a reused Pico alarm
+ID, whose per-slot sequence repeats after 32767 allocations.
 **impl/stm32g474:** TIM6 runs as a 1 MHz one-shot alarm scheduler derived from
 the explicit 170 MHz APB1 timer-kernel clock. Long delays are chunked across
 16-bit TIM6 periods, callback return values greater than zero reschedule the
@@ -814,7 +824,10 @@ version, and checksum in RTC no-init memory before delegating to the previous
 ESP-IDF handler. The next boot validates and consumes the record;
 `hal_get_last_fault_ex()` exposes the portable PC/LR/PSR subset and returns
 `HAL_ENOENT` when no valid record exists. Brownout detection uses the silicon
-reset reason directly, and `hal_alive_mark()` remains a no-op. With
+reset reason directly, and `hal_alive_mark()` remains a no-op. A failed
+cross-core IPC installation leaves initialization incomplete, so a later
+`hal_fault_subsystem_init()` retries the missing core instead of publishing a
+partially installed state. With
 `HAL_ENABLE_STACK_GUARD`, the generated ESP-IDF configuration enables the
 FreeRTOS end-of-stack watchpoint and `hal_stack_guard_init_ex()` verifies that
 configuration at runtime.

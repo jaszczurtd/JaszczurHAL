@@ -57,7 +57,7 @@ def valid_report() -> dict[str, int | str]:
         "timer_count": 3,
         "timer_isr": 1,
         "serial_rx": 1,
-        "unsupported": 1,
+        "stack_guard": 1,
         "heap": 185000,
         "temp_centi": 3175,
         "status": "PASS",
@@ -210,6 +210,7 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
                 "HAL_ENABLE_FREERTOS",
                 "HAL_ENABLE_I2C",
                 "HAL_ENABLE_SPI",
+                "HAL_ENABLE_STACK_GUARD",
                 "HAL_ENABLE_UART",
             ],
         )
@@ -266,6 +267,12 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
         self.assertIn("xSemaphoreGiveFromISR(state.event_ready", source)
         self.assertIn("__atomic_exchange_n(&state.pending_events", source)
         self.assertNotIn("xQueueSendToBackFromISR", source)
+        worker = source[source.index("void worker_task(") : source.index(
+            "void stop_worker("
+        )]
+        self.assertLess(worker.index("i2c_slave_reset_tx_fifo(state.handle)"),
+                        worker.index("write_snapshot(state)"))
+        self.assertIn("bool transmit_pending = false;", worker)
 
     def test_i2c_slave_deregister_keeps_valid_isr_context(self) -> None:
         source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
@@ -280,6 +287,66 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
             source,
         )
 
+    def test_i2c_slave_snapshot_preserves_wire_cursor_via_idf_queue(self) -> None:
+        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
+            encoding="utf-8"
+        )
+        write_call = source.index("const esp_err_t result = i2c_slave_write(")
+        cursor_update = source.index(
+            "state.register_pointer = static_cast<uint16_t>(pointer + written);"
+        )
+        self.assertLess(write_call, cursor_update)
+        self.assertIn("state.register_selection_generation == generation", source)
+        self.assertIn("if (written > output)", source)
+        self.assertIn("if (output == 0u)", source)
+        self.assertIn("static_cast<uint32_t>(output), &written", source)
+        self.assertNotIn("HAL_I2C_SLAVE_REG_MAP_SIZE * 2u", source)
+        self.assertIn("This is the producer cursor", source)
+        self.assertIn("accepted but unclocked bytes", source)
+
+        receive = source[
+            source.index("bool IRAM_ATTR receive_callback(") : source.index(
+                "bool IRAM_ATTR request_callback("
+            )
+        ]
+        request = source[
+            source.index("bool IRAM_ATTR request_callback(") : source.index(
+                "void write_snapshot("
+            )
+        ]
+        self.assertIn("signal_from_isr(state, kEventResetTx", receive)
+        self.assertIn("signal_from_isr(state, kEventTransmit", request)
+        self.assertNotIn("kEventResetTx", request)
+
+        public_contract = (
+            ROOT / "src/hal/i2c/hal_i2c_slave.h"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "pointer advances for every byte clocked by the",
+            public_contract,
+        )
+        self.assertIn(
+            "bytes not yet clocked remain queued across STOP", public_contract
+        )
+        self.assertIn(
+            "local reg_write*() updates to bytes",
+            public_contract,
+        )
+
+    def test_i2c_slave_driver_lifetime_outlives_worker_and_isr_context(self) -> None:
+        source = (ROOT / "src/hal/impl/esp32/hal_i2c_slave.cpp").read_text(
+            encoding="utf-8"
+        )
+        release = source[source.index("esp_err_t release_slave(") :]
+        stop_worker = release.index("stop_worker(state);")
+        delete_driver = release.index("i2c_del_slave_device(state.handle)")
+        clear_driver_handle = release.index("state.handle = nullptr", delete_driver)
+        delete_event = release.index("vSemaphoreDelete(state.event_ready)")
+        self.assertLess(stop_worker, delete_driver)
+        self.assertLess(delete_driver, clear_driver_handle)
+        self.assertLess(clear_driver_handle, delete_event)
+        self.assertIn("ESP-IDF consumes the device allocation", release)
+
     def test_ledc_uses_idle_high_for_exact_full_on(self) -> None:
         source = (ROOT / "src/hal/impl/esp32/jh_esp32_ledc.cpp").read_text(
             encoding="utf-8"
@@ -287,6 +354,41 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
         self.assertIn("logical_value >= channel->logical_max", source)
         self.assertIn("(ledc_channel_t)channel->channel, 1u", source)
         self.assertIn("channel->full_on = full_on", source)
+        self.assertIn("!full_on && !newly_configured", source)
+        self.assertIn("ledc_set_duty_and_update(", source)
+
+    def test_ledc_failed_teardown_retains_hardware_and_logical_ownership(self) -> None:
+        ledc = (ROOT / "src/hal/impl/esp32/jh_esp32_ledc.cpp").read_text(
+            encoding="utf-8"
+        )
+        simple = (ROOT / "src/hal/impl/esp32/hal_pwm.cpp").read_text(
+            encoding="utf-8"
+        )
+        frequency = (ROOT / "src/hal/impl/esp32/hal_pwm_freq.cpp").read_text(
+            encoding="utf-8"
+        )
+        release = ledc[ledc.index("bool jh_esp32_ledc_release(") :]
+        deconfigure = release.index("ledc_channel_config(&config)")
+        clear = release.index("*channel = {};")
+        self.assertLess(deconfigure, clear)
+        self.assertIn("if (stop_result != ESP_OK)", release[:deconfigure])
+        self.assertIn("if (ledc_channel_config(&config) != ESP_OK)", release)
+        self.assertIn("if (jh_esp32_ledc_release(channel))", simple)
+        self.assertIn("if (released)", simple)
+        self.assertIn("destroyed = jh_esp32_ledc_release(channel->ledc)", frequency)
+        self.assertIn("if (destroyed)", frequency)
+
+    def test_rmt_teardown_retains_handles_until_successful_delete(self) -> None:
+        source = (ROOT / "src/hal/impl/esp32/hal_rgb_led.cpp").read_text(
+            encoding="utf-8"
+        )
+        channel_delete = source.index("rmt_del_channel(s_channel)")
+        channel_clear = source.index("s_channel = nullptr", channel_delete)
+        encoder_delete = source.index("rmt_del_encoder(s_encoder)")
+        encoder_clear = source.index("s_encoder = nullptr", encoder_delete)
+        self.assertLess(channel_delete, channel_clear)
+        self.assertLess(encoder_delete, encoder_clear)
+        self.assertIn("return jh_esp32_status_from_esp_err(delete_result);", source)
 
     def test_fault_init_retries_failed_cross_core_installation(self) -> None:
         source = (ROOT / "src/hal/impl/esp32/jh_esp32_fault.cpp").read_text(
@@ -303,6 +405,22 @@ class Phase2BackendLifecycleTests(unittest.TestCase):
         self.assertIn("hal_timer_create(s_timer_pool", source)
         self.assertIn("hal_timer_pool_destroy(s_timer_pool);", source)
         self.assertNotIn("hal_timer_pool_create_auto(1u) != nullptr", source)
+
+    def test_hardware_fixture_requires_implemented_stack_guard(self) -> None:
+        source = (FIXTURE / "app.cpp").read_text(encoding="utf-8")
+        config = (FIXTURE / "hal_project_config.h").read_text(encoding="utf-8")
+        self.assertIn("#define HAL_ENABLE_STACK_GUARD 1", config)
+        self.assertIn("hal_stack_guard_init_ex()", source)
+        self.assertNotIn("hal_enter_bootloader() == HAL_EUNSUPPORTED", source)
+        self.assertNotIn("hal_stack_guard_init_ex() == HAL_EUNSUPPORTED", source)
+
+    def test_compile_fixture_retains_destructive_boot_entry_without_running_it(self) -> None:
+        source = (
+            ROOT / "tests/fixtures/esp32s3_phase3/link_probe.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertIn("volatile bool s_run_link_probe;", source)
+        self.assertIn("if (!s_run_link_probe)", source)
+        self.assertIn("(void)hal_enter_bootloader();", source)
 
 
 if __name__ == "__main__":

@@ -46,16 +46,23 @@ void hal_pwm_set_resolution(uint8_t bits) {
   }
   hal_mutex_lock(mutex);
   const uint8_t next = clamp_resolution(bits);
+  bool released = true;
   if (next != s_resolution_bits) {
     for (jh_esp32_ledc_channel_t *&channel : s_channels) {
       if (channel != nullptr) {
-        jh_esp32_ledc_release(channel);
-        channel = nullptr;
+        if (jh_esp32_ledc_release(channel)) {
+          channel = nullptr;
+        } else {
+          released = false;
+        }
       }
     }
-    s_resolution_bits = next;
+    if (released) {
+      s_resolution_bits = next;
+    }
   }
   hal_mutex_unlock(mutex);
+  HAL_ASSERT(released, "hal_pwm_set_resolution: LEDC teardown failed");
 }
 
 bool hal_pwm_is_pin_supported(uint8_t pin) {

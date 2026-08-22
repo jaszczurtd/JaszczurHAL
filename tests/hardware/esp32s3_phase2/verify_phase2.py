@@ -34,7 +34,7 @@ INTEGER_FIELDS = {
     "timer_count",
     "timer_isr",
     "serial_rx",
-    "unsupported",
+    "stack_guard",
     "heap",
     "temp_centi",
 }
@@ -50,7 +50,7 @@ BOOLEAN_FIELDS = {
     "timer",
     "timer_isr",
     "serial_rx",
-    "unsupported",
+    "stack_guard",
 }
 
 

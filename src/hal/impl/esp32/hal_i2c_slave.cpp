@@ -27,7 +27,6 @@ static_assert(HAL_I2C_SLAVE_REG_MAP_SIZE <= 256u,
 namespace {
 
 constexpr uint8_t kBusCount = 2u;
-constexpr size_t kTxSnapshotSize = HAL_I2C_SLAVE_REG_MAP_SIZE * 2u;
 constexpr uint32_t kBufferDepth =
     HAL_I2C_SLAVE_REG_MAP_SIZE < 32u
         ? 128u
@@ -44,8 +43,8 @@ enum event_bits_t : uint32_t {
 struct slave_state_t {
   uint8_t registers[HAL_I2C_SLAVE_REG_MAP_SIZE];
   uint16_t register_pointer;
+  uint32_t register_selection_generation;
   uint8_t address;
-  bool initialized;
   i2c_slave_dev_handle_t handle;
   SemaphoreHandle_t event_ready;
   SemaphoreHandle_t worker_stopped;
@@ -93,6 +92,7 @@ bool IRAM_ATTR receive_callback(i2c_slave_dev_handle_t,
       state.registers[state.register_pointer++] = event->buffer[index];
     }
   }
+  ++state.register_selection_generation;
   portEXIT_CRITICAL_ISR(&s_register_lock);
   __atomic_fetch_add(&state.transaction_count, 1u, __ATOMIC_RELAXED);
 
@@ -115,32 +115,45 @@ bool IRAM_ATTR request_callback(i2c_slave_dev_handle_t,
 }
 
 void write_snapshot(slave_state_t &state) {
-  uint8_t snapshot[kTxSnapshotSize] = {};
+  uint8_t snapshot[HAL_I2C_SLAVE_REG_MAP_SIZE] = {};
   portENTER_CRITICAL_SAFE(&s_register_lock);
   const uint16_t pointer = state.register_pointer;
+  const uint32_t generation = state.register_selection_generation;
   size_t output = 0u;
-  for (uint16_t reg = pointer;
-       reg < HAL_I2C_SLAVE_REG_MAP_SIZE && output < kTxSnapshotSize; ++reg) {
+  for (uint16_t reg = pointer; reg < HAL_I2C_SLAVE_REG_MAP_SIZE; ++reg) {
     snapshot[output++] = state.registers[reg];
   }
-  state.register_pointer = HAL_I2C_SLAVE_REG_MAP_SIZE;
   portEXIT_CRITICAL_SAFE(&s_register_lock);
 
-  uint32_t total_written = 0u;
-  while (total_written < kTxSnapshotSize) {
-    uint32_t written = 0u;
-    const esp_err_t result = i2c_slave_write(
-        state.handle, snapshot + total_written,
-        (uint32_t)kTxSnapshotSize - total_written, &written, 20);
-    if (result != ESP_OK || written == 0u) {
-      break;
-    }
-    total_written += written;
+  if (output == 0u) {
+    return;
   }
+
+  uint32_t written = 0u;
+  const esp_err_t result = i2c_slave_write(
+      state.handle, snapshot, static_cast<uint32_t>(output), &written, 20);
+  if (result != ESP_OK || written == 0u) {
+    return;
+  }
+  if (written > output) {
+    written = static_cast<uint32_t>(output);
+  }
+
+  portENTER_CRITICAL_SAFE(&s_register_lock);
+  if (state.register_selection_generation == generation &&
+      state.register_pointer == pointer) {
+    /* This is the producer cursor, not the wire-visible cursor. ESP-IDF keeps
+     * accepted but unclocked bytes in its FIFO/ring buffer across STOP, so the
+     * master still observes one register-pointer step per clocked byte. */
+    state.register_pointer = static_cast<uint16_t>(pointer + written);
+  }
+  portEXIT_CRITICAL_SAFE(&s_register_lock);
 }
 
 void worker_task(void *argument) {
   slave_state_t &state = *static_cast<slave_state_t *>(argument);
+  bool reset_tx_pending = false;
+  bool transmit_pending = false;
   for (;;) {
     if (xSemaphoreTake(state.event_ready, portMAX_DELAY) != pdTRUE) {
       continue;
@@ -151,10 +164,22 @@ void worker_task(void *argument) {
       break;
     }
     if ((events & kEventResetTx) != 0u) {
-      (void)i2c_slave_reset_tx_fifo(state.handle);
+      reset_tx_pending = true;
     }
     if ((events & kEventTransmit) != 0u) {
+      transmit_pending = true;
+    }
+    if (reset_tx_pending) {
+      if (i2c_slave_reset_tx_fifo(state.handle) != ESP_OK) {
+        /* Never append a new snapshot behind stale FIFO data. A later read or
+         * pointer-write event wakes the worker and retries the reset. */
+        continue;
+      }
+      reset_tx_pending = false;
+    }
+    if (transmit_pending) {
       write_snapshot(state);
+      transmit_pending = false;
     }
   }
   xSemaphoreGive(state.worker_stopped);
@@ -173,7 +198,8 @@ void stop_worker(slave_state_t &state) {
   state.worker = nullptr;
 }
 
-void release_slave(slave_state_t &state) {
+esp_err_t release_slave(slave_state_t &state) {
+  esp_err_t teardown_result = ESP_OK;
   __atomic_store_n(&state.accepting_events, false, __ATOMIC_RELEASE);
   if (state.handle != nullptr) {
     const i2c_slave_event_callbacks_t callbacks = {};
@@ -184,7 +210,10 @@ void release_slave(slave_state_t &state) {
   }
   stop_worker(state);
   if (state.handle != nullptr) {
-    (void)i2c_del_slave_device(state.handle);
+    /* ESP-IDF consumes the device allocation from its destroy path even when
+     * final bus/clock cleanup reports an error. Never retain that handle. */
+    teardown_result = i2c_del_slave_device(state.handle);
+    state.handle = nullptr;
   }
   if (state.event_ready != nullptr) {
     vSemaphoreDelete(state.event_ready);
@@ -195,15 +224,15 @@ void release_slave(slave_state_t &state) {
   portENTER_CRITICAL_SAFE(&s_register_lock);
   memset(state.registers, 0, sizeof(state.registers));
   state.register_pointer = 0u;
+  state.register_selection_generation = 0u;
   state.address = 0u;
-  state.initialized = false;
-  state.handle = nullptr;
   state.event_ready = nullptr;
   state.worker_stopped = nullptr;
   state.worker = nullptr;
   portEXIT_CRITICAL_SAFE(&s_register_lock);
   __atomic_store_n(&state.pending_events, 0u, __ATOMIC_RELEASE);
   __atomic_store_n(&state.transaction_count, 0u, __ATOMIC_RELEASE);
+  return teardown_result;
 }
 
 } // namespace
@@ -228,14 +257,18 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
   }
   hal_mutex_lock(mutex);
   slave_state_t &state = s_slaves[index];
-  release_slave(state);
+  esp_err_t result = release_slave(state);
+  if (result != ESP_OK) {
+    hal_mutex_unlock(mutex);
+    HAL_ASSERT(false, "hal_i2c_slave_init: previous teardown failed");
+    return;
+  }
 
   state.event_ready = xSemaphoreCreateBinary();
   state.worker_stopped = xSemaphoreCreateBinary();
-  esp_err_t result =
-      state.event_ready != nullptr && state.worker_stopped != nullptr
-          ? ESP_OK
-          : ESP_ERR_NO_MEM;
+  result = state.event_ready != nullptr && state.worker_stopped != nullptr
+               ? ESP_OK
+               : ESP_ERR_NO_MEM;
   if (result == ESP_OK &&
       xTaskCreate(worker_task, "jh_i2c_target", kWorkerStackBytes, &state,
                   kWorkerPriority, &state.worker) != pdPASS) {
@@ -263,6 +296,7 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
     portENTER_CRITICAL_SAFE(&s_register_lock);
     memset(state.registers, 0, sizeof(state.registers));
     state.register_pointer = 0u;
+    state.register_selection_generation = 0u;
     state.address = address;
     portEXIT_CRITICAL_SAFE(&s_register_lock);
     __atomic_store_n(&state.pending_events, 0u, __ATOMIC_RELEASE);
@@ -271,12 +305,11 @@ void hal_i2c_slave_init_bus(uint8_t bus, uint8_t sda_pin, uint8_t scl_pin,
     result =
         i2c_slave_register_event_callbacks(state.handle, &callbacks, &state);
   }
-  if (result == ESP_OK) {
-    portENTER_CRITICAL_SAFE(&s_register_lock);
-    state.initialized = true;
-    portEXIT_CRITICAL_SAFE(&s_register_lock);
-  } else {
-    release_slave(state);
+  if (result != ESP_OK) {
+    const esp_err_t teardown_result = release_slave(state);
+    if (teardown_result != ESP_OK) {
+      result = teardown_result;
+    }
   }
   hal_mutex_unlock(mutex);
   HAL_ASSERT(result == ESP_OK,
@@ -292,8 +325,9 @@ void hal_i2c_slave_deinit_bus(uint8_t bus) {
     return;
   }
   hal_mutex_lock(mutex);
-  release_slave(s_slaves[index]);
+  const esp_err_t result = release_slave(s_slaves[index]);
   hal_mutex_unlock(mutex);
+  HAL_ASSERT(result == ESP_OK, "hal_i2c_slave_deinit: ESP-IDF teardown failed");
 }
 
 void hal_i2c_slave_reg_write8(uint8_t reg, uint8_t value) {

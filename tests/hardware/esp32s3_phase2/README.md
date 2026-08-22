@@ -6,8 +6,8 @@ no external sensor, jumper, or SPI/I2C device is required.
 
 The firmware checks:
 
-- system time, architecture, UID, heap, die temperature, watchdog, reset/fault
-  boundary, and explicit unsupported operations;
+- system time, architecture, UID, heap, die temperature, watchdog, retained-
+  fault boundary, and the enabled FreeRTOS stack-guard contract;
 - FreeRTOS mutexes, critical sections, and `app_task0`/`app_task1` affinity on
   cores 0/1;
 - GPIO input with pull-up, output/readback, and a same-owner reconfigured GPIO
@@ -18,7 +18,7 @@ The firmware checks:
   discovered devices is valid for an unwired board);
 - SPI2 master transactions, blocking DMA, and the synchronous async-DMA
   fallback without assuming received data from an absent slave;
-- managed default-pool GPTimer pause/resume, repeated ISR callbacks, and
+- managed dedicated-pool GPTimer pause/resume, repeated ISR callbacks, and
   teardown;
 - bidirectional debug traffic over the startup console's native USB
   Serial/JTAG VFS.
@@ -59,3 +59,8 @@ The verifier sends `PING` and accepts only a complete `status=PASS` report. A
 missing callback, wrong core, stalled RX path, out-of-range ADC result, or
 failed peripheral status therefore cannot be reported as a successful smoke
 test.
+
+The fixture intentionally does not call `hal_enter_bootloader()`: successful
+download-mode entry resets the MCU and requires a separate reconnect/recovery
+test. Its symbol is compile/link covered by the Phase 3 fixture, while the
+reset transition belongs to the Phase 3.5 hardware campaign.

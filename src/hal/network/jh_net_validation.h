@@ -54,4 +54,25 @@ static inline hal_status_t jh_net_validate_supported_endpoint_logged(
   return status;
 }
 
+static inline hal_status_t jh_net_prepare_receive_buffer(void *buffer,
+                                                         size_t capacity,
+                                                         size_t *out_received) {
+  if (out_received != NULL) {
+    *out_received = 0u;
+  }
+  return out_received == NULL || (capacity > 0u && buffer == NULL) ? HAL_EINVAL
+                                                                   : HAL_OK;
+}
+
+static inline hal_status_t
+jh_net_public_handle_status(hal_status_t acquire_status) {
+  return acquire_status == HAL_ENOMEM ? HAL_ENOMEM : HAL_EINVAL;
+}
+
+static inline int jh_net_receive_count(hal_status_t status, size_t received) {
+  return status == HAL_OK || status == HAL_EAGAIN || status == HAL_ETIMEOUT
+             ? (int)received
+             : -1;
+}
+
 #endif

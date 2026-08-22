@@ -5,6 +5,7 @@
 #define HAL_ENABLE_APP_TASK1 1
 #define HAL_ENABLE_I2C 1
 #define HAL_ENABLE_SPI 1
+#define HAL_ENABLE_STACK_GUARD 1
 #define HAL_ENABLE_UART 1
 
 /* Make the hardware affinity contract explicit and testable. */
