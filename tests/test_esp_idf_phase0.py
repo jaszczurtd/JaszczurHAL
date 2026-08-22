@@ -108,7 +108,10 @@ class ProjectModelTests(unittest.TestCase):
             (project / ".build/ignored/stale.c").write_text("stale\n")
             sources = esp_idf.resolve_project_sources(project, [])
             self.assertEqual(
-                [path.relative_to(project).as_posix() for path in sources],
+                [
+                    esp_idf._relative_to_project(path, project)
+                    for path in sources
+                ],
                 ["app.c", "src/worker.cpp"],
             )
 
@@ -422,7 +425,35 @@ class ArtifactTests(unittest.TestCase):
             self.assertEqual(project_config["projectIncludeDirs"], ["."])
             self.assertIsNone(project_config["projectConfigHeader"])
             self.validate_ninja_freshness.assert_called_once_with(
-                build_dir.resolve(), "firmware", manifest["toolchain"]
+                build_dir.resolve(), "firmware", manifest["toolchain"], None
+            )
+
+    def test_manifest_accepts_equivalent_canonical_path_aliases(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-artifacts-") as text:
+            root = Path(text)
+            alias_anchor = root / "path-alias"
+            alias_anchor.mkdir()
+            aliased_root = alias_anchor / ".."
+            project, build_dir, model = self._fixture(
+                aliased_root,
+                sdkconfig_defaults="CONFIG_COMPILER_OPTIMIZATION_DEBUG=y\n",
+            )
+
+            manifest = esp_idf.validate_artifacts(
+                ROOT,
+                project,
+                build_dir.resolve(),
+                model,
+                idf_version=PIN["ESP_IDF_VERSION"],
+                idf_commit=PIN["ESP_IDF_REF"],
+            )
+
+            self.assertEqual(
+                manifest["integration"]["projectSources"], ["app.c"]
+            )
+            self.assertEqual(
+                manifest["configuration"]["sdkconfigSha256"],
+                esp_idf._sha256(build_dir.resolve() / "sdkconfig"),
             )
 
     def test_manifest_rejects_incomplete_flash_set(self) -> None:
@@ -631,10 +662,12 @@ class ArtifactTests(unittest.TestCase):
 
 
 class NinjaFreshnessTests(unittest.TestCase):
-    def _fixture(self, root: Path) -> tuple[Path, dict[str, object]]:
+    def _fixture(
+        self, root: Path, executable: str = "ninja"
+    ) -> tuple[Path, dict[str, object]]:
         build_dir = root / "build"
         build_dir.mkdir()
-        ninja = root / "tools" / "ninja"
+        ninja = root / "tools" / executable
         ninja.parent.mkdir()
         ninja.write_text("test executable placeholder\n", encoding="utf-8")
         (build_dir / "CMakeCache.txt").write_text(
@@ -649,25 +682,44 @@ class NinjaFreshnessTests(unittest.TestCase):
             build_dir, provenance = self._fixture(Path(text))
             clean = mock.Mock(
                 returncode=0,
-                stdout="ninja: no work to do.\n",
-                stderr="",
+                stdout="ninja: no work to do.\r\n",
             )
+            environment = {"PATH": "/idf/tools", "JH_TEST_SENTINEL": "yes"}
             with mock.patch.object(
                 esp_idf.subprocess, "run", return_value=clean
             ) as run:
                 esp_idf.validate_ninja_freshness(
-                    build_dir, "firmware", provenance
+                    build_dir, "firmware", provenance, environment
                 )
             self.assertEqual(
                 run.call_args.args[0],
                 [str(Path(text) / "tools/ninja"), "-n", "firmware.elf"],
             )
             self.assertEqual(run.call_args.kwargs["cwd"], build_dir)
+            self.assertEqual(
+                run.call_args.kwargs["env"]["JH_ESP_IDF_GENERATED_DIR"],
+                str(build_dir / esp_idf.GENERATED_DIR_NAME),
+            )
+            self.assertEqual(
+                run.call_args.kwargs["env"]["JH_ESP_IDF_PROJECT_CONFIG"],
+                str(
+                    build_dir
+                    / esp_idf.GENERATED_DIR_NAME
+                    / esp_idf.PROJECT_CONFIG_CMAKE_NAME
+                ),
+            )
+            self.assertEqual(
+                run.call_args.kwargs["env"]["JH_TEST_SENTINEL"], "yes"
+            )
+            self.assertIs(
+                run.call_args.kwargs["stderr"], esp_idf.subprocess.STDOUT
+            )
+            self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+            self.assertEqual(run.call_args.kwargs["errors"], "replace")
 
             pending = mock.Mock(
                 returncode=0,
                 stdout="[1/1] compiler -c project/include/changed.h\n",
-                stderr="",
             )
             with mock.patch.object(
                 esp_idf.subprocess, "run", return_value=pending
@@ -678,6 +730,20 @@ class NinjaFreshnessTests(unittest.TestCase):
                     esp_idf.validate_ninja_freshness(
                         build_dir, "firmware", provenance
                     )
+
+    def test_ninja_dry_run_accepts_windows_executable_identity(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-ninja-win-") as text:
+            build_dir, provenance = self._fixture(Path(text), "ninja.exe")
+            clean = mock.Mock(returncode=0, stdout="ninja: no work to do.\r\n")
+            with mock.patch.object(
+                esp_idf.subprocess, "run", return_value=clean
+            ) as run:
+                esp_idf.validate_ninja_freshness(
+                    build_dir, "firmware", provenance, {"PATH": "C:\\idf"}
+                )
+            self.assertEqual(
+                run.call_args.args[0][0], str(Path(text) / "tools/ninja.exe")
+            )
 
 
 class SupplyChainContractTests(unittest.TestCase):
@@ -788,6 +854,44 @@ class SupplyChainContractTests(unittest.TestCase):
             with self.assertRaisesRegex(esp_idf.EspIdfError, "digest drift"):
                 esp_idf.verify_esp_idf_tools_contract(idf_dir, contract)
 
+    def test_tools_json_digest_accepts_crlf_but_rejects_content_drift(self) -> None:
+        contract = supply_chain_contract()
+        tools_document = binary_tools_document(contract)
+        content = (
+            json.dumps(tools_document, indent=2, sort_keys=True) + "\n"
+        ).encode("utf-8")
+        with tempfile.TemporaryDirectory(prefix="jh-esp-tools-crlf-") as text:
+            idf_dir = Path(text)
+            tools_path = idf_dir / "tools/tools.json"
+            tools_path.parent.mkdir()
+            tools_path.write_bytes(content)
+            expected_digest = esp_idf._sha256(tools_path)
+            fixture_contract = copy.deepcopy(contract)
+            fixture_contract["snapshot"]["espIdf"]["toolsJsonSha256"] = (
+                expected_digest
+            )
+
+            tools_path.write_bytes(content.replace(b"\n", b"\r\n"))
+            self.assertEqual(
+                esp_idf._normalized_lf_sha256(tools_path), expected_digest
+            )
+            self.assertEqual(
+                esp_idf.verify_esp_idf_tools_contract(
+                    idf_dir, fixture_contract
+                ),
+                tools_document,
+            )
+
+            tools_path.write_bytes(
+                content.replace(b'"tools"', b'"changed"', 1).replace(
+                    b"\n", b"\r\n"
+                )
+            )
+            with self.assertRaisesRegex(esp_idf.EspIdfError, "digest drift"):
+                esp_idf.verify_esp_idf_tools_contract(
+                    idf_dir, fixture_contract
+                )
+
     def test_all_snapshot_python_distributions_are_checked(self) -> None:
         contract = supply_chain_contract()
         versions = {
@@ -819,6 +923,215 @@ class SupplyChainContractTests(unittest.TestCase):
 
 
 class CommandContractTests(unittest.TestCase):
+    def _run_mocked_main(self, root: Path, action: str):
+        project = root / "project"
+        build_dir = root / ".build/esp-idf/firmware"
+        environment = {
+            "IDF_PATH": str(root / "idf"),
+            "IDF_PYTHON_ENV_PATH": str(root / "python"),
+            "PATH": "/idf/tools",
+        }
+        model = {
+            "target": "esp32s3",
+            "board": "waveshare-esp32-s3-zero",
+            "idfTarget": "esp32s3",
+        }
+        manifest = {
+            "target": model["target"],
+            "board": model["board"],
+            "flashImages": [{"path": "firmware.bin"}],
+        }
+        arguments = [
+            action,
+            "--project",
+            str(project),
+            "--repo-root",
+            str(root),
+            "--output",
+            str(build_dir),
+        ]
+        if action == "flash":
+            arguments.extend(("--port", "/dev/ttyACM0"))
+        with (
+            mock.patch.object(
+                esp_idf, "resolve_project_dir", return_value=project
+            ),
+            mock.patch.object(
+                esp_idf, "normalize_project_name", return_value="firmware"
+            ),
+            mock.patch.object(
+                esp_idf, "resolve_build_model", return_value=model
+            ),
+            mock.patch.object(
+                esp_idf, "resolve_build_dir", return_value=build_dir
+            ),
+            mock.patch.object(
+                esp_idf,
+                "_pin_config",
+                return_value={
+                    "ESP_IDF_TARGETS": "esp32s3",
+                    "ESP_IDF_VERSION": "6.0.2",
+                    "ESP_IDF_REF": "a" * 40,
+                },
+            ),
+            mock.patch.object(esp_idf, "prepare_feature_dependencies"),
+            mock.patch.object(esp_idf, "materialize_build_inputs"),
+            mock.patch.object(
+                esp_idf, "prepare_sdk", return_value=root / "idf"
+            ),
+            mock.patch.object(
+                esp_idf,
+                "exported_environment",
+                return_value=environment,
+            ),
+            mock.patch.object(esp_idf, "run_idf") as run_idf,
+            mock.patch.object(esp_idf, "_validate_clean_build_log"),
+            mock.patch.object(esp_idf, "collect_toolchain_provenance"),
+            mock.patch.object(
+                esp_idf, "validate_artifacts", return_value=manifest
+            ) as validate,
+            mock.patch("builtins.print"),
+        ):
+            result = esp_idf.main(arguments)
+        return result, environment, run_idf, validate
+
+    def test_main_passes_exported_environment_to_artifact_validation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-main-") as text:
+            result, environment, run_idf, validate = self._run_mocked_main(
+                Path(text), "build"
+            )
+            self.assertEqual(result, 0)
+            self.assertIs(run_idf.call_args.args[4], environment)
+            self.assertIs(
+                validate.call_args.kwargs["build_environment"], environment
+            )
+
+    def test_main_exports_environment_before_pre_flash_validation(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-main-") as text:
+            result, environment, run_idf, validate = self._run_mocked_main(
+                Path(text), "flash"
+            )
+            self.assertEqual(result, 0)
+            self.assertEqual(validate.call_count, 2)
+            for call in validate.call_args_list:
+                self.assertIs(call.kwargs["build_environment"], environment)
+            self.assertIs(run_idf.call_args.args[4], environment)
+            self.assertEqual(run_idf.call_args.args[5], "flash")
+
+    def test_run_idf_preserves_merged_output_and_failure_log(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-run-") as text:
+            root = Path(text)
+            build_dir = root / "build"
+            completed = mock.Mock(returncode=7, stdout="configure\ncompile\n")
+            environment = {
+                "IDF_PYTHON_ENV_PATH": str(root / "python"),
+                "PATH": "/idf/tools",
+            }
+            with mock.patch.object(
+                esp_idf.subprocess, "run", return_value=completed
+            ) as run, mock.patch("builtins.print") as output:
+                with self.assertRaisesRegex(
+                    esp_idf.EspIdfError, "failed with exit code 7"
+                ):
+                    esp_idf.run_idf(
+                        root,
+                        build_dir,
+                        root / "idf",
+                        "esp32s3",
+                        environment,
+                        "build",
+                    )
+
+            self.assertEqual(
+                (build_dir / esp_idf.LOG_NAME).read_text(encoding="utf-8"),
+                "configure\ncompile\n",
+            )
+            self.assertIs(run.call_args.kwargs["stdout"], subprocess.PIPE)
+            self.assertIs(run.call_args.kwargs["stderr"], subprocess.STDOUT)
+            self.assertEqual(run.call_args.kwargs["encoding"], "utf-8")
+            self.assertEqual(run.call_args.kwargs["errors"], "replace")
+            self.assertEqual(
+                run.call_args.kwargs["env"]["JH_ESP_IDF_GENERATED_DIR"],
+                str(build_dir / esp_idf.GENERATED_DIR_NAME),
+            )
+            output.assert_called_once_with(
+                "configure\ncompile\n", end="", flush=True
+            )
+
+    def test_run_idf_start_failure_is_persisted(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-run-") as text:
+            root = Path(text)
+            build_dir = root / "build"
+            environment = {"IDF_PYTHON_ENV_PATH": str(root / "python")}
+            with mock.patch.object(
+                esp_idf.subprocess,
+                "run",
+                side_effect=OSError("executable unavailable"),
+            ), mock.patch("builtins.print"):
+                with self.assertRaisesRegex(
+                    esp_idf.EspIdfError, "Cannot start ESP-IDF build"
+                ):
+                    esp_idf.run_idf(
+                        root,
+                        build_dir,
+                        root / "idf",
+                        "esp32s3",
+                        environment,
+                        "build",
+                    )
+            self.assertIn(
+                "executable unavailable",
+                (build_dir / esp_idf.LOG_NAME).read_text(encoding="utf-8"),
+            )
+
+    def test_failure_report_records_stage(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-failure-") as text:
+            build_dir = Path(text) / "build"
+            with mock.patch("builtins.print") as output:
+                esp_idf._report_failure(
+                    "artifact-validation", ValueError("stale graph"), build_dir
+                )
+            self.assertEqual(
+                (
+                    build_dir / esp_idf.FAILURE_DIAGNOSTIC_NAME
+                ).read_text(encoding="utf-8"),
+                "build_esp_idf.py: stage=artifact-validation failed: "
+                "stale graph\n",
+            )
+            output.assert_called_once_with(
+                "build_esp_idf.py: stage=artifact-validation failed: "
+                "stale graph",
+                file=sys.stderr,
+                flush=True,
+            )
+
+    def test_failure_report_does_not_mask_diagnostic_write_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-failure-") as text:
+            build_dir = Path(text) / "build"
+            with mock.patch.object(
+                Path,
+                "write_text",
+                side_effect=UnicodeError("encoding failure"),
+            ), mock.patch("builtins.print") as output:
+                esp_idf._report_failure(
+                    "artifact-validation", ValueError("stale graph"), build_dir
+                )
+
+            self.assertEqual(output.call_count, 2)
+            self.assertEqual(
+                output.call_args_list[0],
+                mock.call(
+                    "build_esp_idf.py: stage=artifact-validation failed: "
+                    "stale graph",
+                    file=sys.stderr,
+                    flush=True,
+                ),
+            )
+            self.assertIn(
+                "cannot persist failure diagnostic: encoding failure",
+                output.call_args_list[1].args[0],
+            )
+
     def test_collects_tool_versions_without_publishing_absolute_paths(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-tools-") as text:
             root = Path(text)
@@ -835,10 +1148,10 @@ class CommandContractTests(unittest.TestCase):
             (idf_dir / "tools").mkdir(parents=True)
             tools_document = binary_tools_document(supply_chain_contract())
             tools_path = idf_dir / "tools/tools.json"
-            tools_path.write_text(
-                json.dumps(tools_document, sort_keys=True) + "\n",
-                encoding="utf-8",
-            )
+            tools_content = (
+                json.dumps(tools_document, sort_keys=True) + "\n"
+            ).encode("utf-8")
+            tools_path.write_bytes(tools_content)
             build_dir.mkdir()
             (build_dir / esp_idf.GENERATED_DIR_NAME).mkdir(parents=True)
             (build_dir / "project_description.json").write_text(
@@ -856,6 +1169,7 @@ class CommandContractTests(unittest.TestCase):
             fixture_contract["snapshot"]["espIdf"]["toolsJsonSha256"] = (
                 esp_idf._sha256(tools_path)
             )
+            tools_path.write_bytes(tools_content.replace(b"\n", b"\r\n"))
             python_versions = {
                 item["name"]: item["version"]
                 for item in contract["pythonTools"]
@@ -922,7 +1236,7 @@ class CommandContractTests(unittest.TestCase):
             )
             self.assertEqual(
                 provenance["espIdfTools"]["sha256"],
-                esp_idf._sha256(idf_dir / "tools/tools.json"),
+                fixture_contract["snapshot"]["espIdf"]["toolsJsonSha256"],
             )
             self.assertEqual(
                 provenance["supplyChain"], contract["provenance"]

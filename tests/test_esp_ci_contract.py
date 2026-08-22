@@ -77,30 +77,114 @@ def require_uploaded_images(body: str, context: str) -> None:
         require(fragment in body, f"{context} artifact upload is missing {fragment!r}")
 
 
+def require_failure_diagnostics(body: str, context: str) -> None:
+    for fragment in (
+        "failure() && !cancelled() &&",
+        "steps.esp32_phase3_build.outcome == 'failure'",
+        "uses: actions/upload-artifact@v6",
+        "jh_esp_idf_failure.txt",
+        "build.log",
+        "generated/jaszczurhal/",
+        "CMakeCache.txt",
+        "CMakeConfigureLog.yaml",
+        "project_description.json",
+        "compile_commands.json",
+        "flasher_args.json",
+        "sdkconfig",
+        "if-no-files-found: warn",
+        "include-hidden-files: true",
+    ):
+        require(
+            fragment in body,
+            f"{context} failure diagnostics are missing {fragment!r}",
+        )
+
+
 windows = workflow_job("windows-tooling")
 linux = workflow_job("test")
 for body, context in ((windows, "windows-tooling"), (linux, "Linux test")):
+    build_marker = (
+        "      - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF\n"
+    )
+    failure_marker = (
+        "      - name: Upload ESP32-S3 Phase 3 failure diagnostics\n"
+    )
+    require(
+        body.index(build_marker) < body.index(failure_marker),
+        f"{context} failure upload appears before the ESP-IDF build step",
+    )
     build_step = workflow_step(
         body, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
     )
     require_real_esp_build(build_step, context)
     require(
+        "id: esp32_phase3_build" in build_step,
+        f"{context} ESP-IDF build step has no stable diagnostic id",
+    )
+    require(
         "--jobs" not in build_step,
         f"{context} passes the removed --jobs option to build_esp_idf.py",
     )
     require_esp_cache(body, context)
-    require_uploaded_images(body, context)
+    upload_step = workflow_step(body, "Upload ESP32-S3 Phase 3 build artifacts")
+    require_uploaded_images(upload_step, context)
+    failure_step = workflow_step(
+        body, "Upload ESP32-S3 Phase 3 failure diagnostics"
+    )
+    require_failure_diagnostics(failure_step, context)
+
+windows_build = workflow_step(
+    windows, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
+)
+for fragment in (
+    "$buildExitCode = $LASTEXITCODE",
+    "jh_esp_idf_failure.txt",
+    "Get-Content -LiteralPath $failureDiagnostic",
+    "Get-Content -LiteralPath $buildLog -Tail 300",
+    "ESP-IDF failure diagnostic:",
+    "Missing failure diagnostic:",
+    "exit $buildExitCode",
+):
+    require(
+        fragment in windows_build,
+        f"windows-tooling failure output is missing {fragment!r}",
+    )
+require(
+    windows_build.index("Get-Content -LiteralPath $buildLog -Tail 300")
+    < windows_build.index("Get-Content -LiteralPath $failureDiagnostic"),
+    "windows-tooling does not print the failure diagnostic after the log tail",
+)
+
+linux_build = workflow_step(
+    linux, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
+)
+for fragment in (
+    "build_exit=0",
+    "|| build_exit=$?",
+    "jh_esp_idf_failure.txt",
+    'tail -n 300 "${output}/build.log"',
+    "ESP-IDF failure diagnostic:",
+    "Missing failure diagnostic:",
+    'exit "${build_exit}"',
+):
+    require(
+        fragment in linux_build,
+        f"Linux test failure output is missing {fragment!r}",
+    )
+require(
+    linux_build.index('tail -n 300 "${output}/build.log"')
+    < linux_build.index(
+        "sed -n '1,120p' \"${output}/jh_esp_idf_failure.txt\""
+    ),
+    "Linux test does not print the failure diagnostic after the log tail",
+)
 
 require(
-    "$env:GITHUB_WORKSPACE" in workflow_step(
-        windows, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
-    ),
+    "$env:GITHUB_WORKSPACE" in windows_build,
     "windows-tooling ESP-IDF output is not rooted in GITHUB_WORKSPACE",
 )
 require(
-    "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3" in workflow_step(
-        linux, "Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF"
-    ),
+    "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3" in linux_build,
     "Linux test ESP-IDF output is not rooted in GITHUB_WORKSPACE",
 )
 

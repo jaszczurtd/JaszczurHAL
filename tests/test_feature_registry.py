@@ -1530,6 +1530,18 @@ require(
 root_effective_projects = {
     record["project"] for record in root_effective_report["configurations"]
 }
+phase3_fixture_records = [
+    record
+    for record in root_effective_report["configurations"]
+    if record["project"] == "tests/fixtures/esp32s3_phase3"
+]
+require(
+    len(phase3_fixture_records) == 1
+    and phase3_fixture_records[0]["target"] == "esp32s3"
+    and phase3_fixture_records[0]["board"] == "waveshare-esp32-s3-zero"
+    and "HAL_ENABLE_FREERTOS" in phase3_fixture_records[0]["resolvedFeatures"],
+    "the ESP32-S3 Phase 3 fixture lost its tracked target/board contract",
+)
 require(
     "vscode/examples" not in root_effective_projects,
     "the reference example manifest created an effective configuration",

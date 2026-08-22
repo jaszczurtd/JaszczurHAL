@@ -83,6 +83,7 @@ jobs:
           }
 
       - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF
+        id: esp32_phase3_build
         shell: powershell
         run: |
           $python = '.\.build\windows\venv\Scripts\python.exe'
@@ -94,8 +95,21 @@ jobs:
             --board waveshare-esp32-s3-zero `
             --output $output `
             --clean
-          if ($LASTEXITCODE -ne 0) {
-            throw "ESP32-S3 Phase 3 build failed with exit code $LASTEXITCODE"
+          $buildExitCode = $LASTEXITCODE
+          if ($buildExitCode -ne 0) {
+            $failureDiagnostic = Join-Path $output 'jh_esp_idf_failure.txt'
+            $buildLog = Join-Path $output 'build.log'
+            if (Test-Path -LiteralPath $buildLog) {
+              Write-Host 'Last 300 lines of the ESP-IDF build log:'
+              Get-Content -LiteralPath $buildLog -Tail 300
+            }
+            Write-Host 'ESP-IDF failure diagnostic:'
+            if (Test-Path -LiteralPath $failureDiagnostic) {
+              Get-Content -LiteralPath $failureDiagnostic
+            } else {
+              Write-Warning "Missing failure diagnostic: $failureDiagnostic"
+            }
+            exit $buildExitCode
           }
 
       - name: Upload ESP32-S3 Phase 3 build artifacts
@@ -110,6 +124,26 @@ jobs:
             .build/ci/esp-idf/esp32s3-phase3/ota_data_initial.bin
             .build/ci/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
           if-no-files-found: error
+          include-hidden-files: true
+
+      - name: Upload ESP32-S3 Phase 3 failure diagnostics
+        if: >-
+          ${{ failure() && !cancelled() &&
+          steps.esp32_phase3_build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: windows-esp32s3-phase3-failure
+          path: |
+            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_failure.txt
+            .build/ci/esp-idf/esp32s3-phase3/build.log
+            .build/ci/esp-idf/esp32s3-phase3/generated/jaszczurhal/
+            .build/ci/esp-idf/esp32s3-phase3/CMakeCache.txt
+            .build/ci/esp-idf/esp32s3-phase3/CMakeFiles/CMakeConfigureLog.yaml
+            .build/ci/esp-idf/esp32s3-phase3/project_description.json
+            .build/ci/esp-idf/esp32s3-phase3/compile_commands.json
+            .build/ci/esp-idf/esp32s3-phase3/flasher_args.json
+            .build/ci/esp-idf/esp32s3-phase3/sdkconfig
+          if-no-files-found: warn
           include-hidden-files: true
 
       - name: Verify FreeRTOS CMake dependency integration
@@ -487,13 +521,29 @@ jobs:
         run: ctest --test-dir .build/ci/host --output-on-failure
 
       - name: Build ESP32-S3 Phase 3 fixture with pinned ESP-IDF
-        run: >-
-          python3 scripts/build_esp_idf.py build
-          --project tests/fixtures/esp32s3_phase3
-          --target esp32s3
-          --board waveshare-esp32-s3-zero
-          --output "${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3"
-          --clean
+        id: esp32_phase3_build
+        run: |
+          output="${GITHUB_WORKSPACE}/.build/ci/esp-idf/esp32s3-phase3"
+          build_exit=0
+          python3 scripts/build_esp_idf.py build \
+            --project tests/fixtures/esp32s3_phase3 \
+            --target esp32s3 \
+            --board waveshare-esp32-s3-zero \
+            --output "${output}" \
+            --clean || build_exit=$?
+          if (( build_exit != 0 )); then
+            if [[ -f "${output}/build.log" ]]; then
+              echo 'Last 300 lines of the ESP-IDF build log:'
+              tail -n 300 "${output}/build.log"
+            fi
+            echo 'ESP-IDF failure diagnostic:'
+            if [[ -f "${output}/jh_esp_idf_failure.txt" ]]; then
+              sed -n '1,120p' "${output}/jh_esp_idf_failure.txt"
+            else
+              echo "Missing failure diagnostic: ${output}/jh_esp_idf_failure.txt" >&2
+            fi
+            exit "${build_exit}"
+          fi
 
       - name: Upload ESP32-S3 Phase 3 build artifacts
         uses: actions/upload-artifact@v6
@@ -507,6 +557,26 @@ jobs:
             .build/ci/esp-idf/esp32s3-phase3/ota_data_initial.bin
             .build/ci/esp-idf/esp32s3-phase3/esp32s3_phase3.bin
           if-no-files-found: error
+          include-hidden-files: true
+
+      - name: Upload ESP32-S3 Phase 3 failure diagnostics
+        if: >-
+          ${{ failure() && !cancelled() &&
+          steps.esp32_phase3_build.outcome == 'failure' }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: linux-esp32s3-phase3-failure
+          path: |
+            .build/ci/esp-idf/esp32s3-phase3/jh_esp_idf_failure.txt
+            .build/ci/esp-idf/esp32s3-phase3/build.log
+            .build/ci/esp-idf/esp32s3-phase3/generated/jaszczurhal/
+            .build/ci/esp-idf/esp32s3-phase3/CMakeCache.txt
+            .build/ci/esp-idf/esp32s3-phase3/CMakeFiles/CMakeConfigureLog.yaml
+            .build/ci/esp-idf/esp32s3-phase3/project_description.json
+            .build/ci/esp-idf/esp32s3-phase3/compile_commands.json
+            .build/ci/esp-idf/esp32s3-phase3/flasher_args.json
+            .build/ci/esp-idf/esp32s3-phase3/sdkconfig
+          if-no-files-found: warn
           include-hidden-files: true
 
   # ── Sanitizer and parser fuzz gate ─────────────────────────────────────────

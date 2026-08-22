@@ -39,6 +39,10 @@ examples/18_freertos_suite/ca_certificate.h
 !tests/hardware/*/.vscode/
 tests/hardware/*/.vscode/*
 !tests/hardware/*/.vscode/jaszczurhal.project.json
+# Keep the Phase 3 compile fixture's target/board contract tracked as well.
+!tests/fixtures/esp32s3_phase3/.vscode/
+tests/fixtures/esp32s3_phase3/.vscode/*
+!tests/fixtures/esp32s3_phase3/.vscode/jaszczurhal.project.json
 .idea/
 .codex
 *.swp

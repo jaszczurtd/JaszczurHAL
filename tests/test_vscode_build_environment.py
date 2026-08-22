@@ -472,7 +472,9 @@ def write_esp_idf_artifacts(build_dir: Path) -> None:
 
 with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text:
     temporary = Path(temporary_text)
-    project = temporary / "firmware project"
+    alias_root = temporary / "path alias"
+    alias_root.mkdir()
+    project = alias_root / ".." / alias_root.name / "firmware project"
     vscode_dir = project / ".vscode"
     build_dir = project / ".build"
     vscode_dir.mkdir(parents=True)
@@ -605,10 +607,16 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
     manifest, artifacts, flash_images = (
         runtime.validate_esp_idf_artifact_manifest(esp_config, project)
     )
+    expected_flash_images = [
+        (build_dir / "bootloader/bootloader.bin").resolve(),
+        (build_dir / "partition_table/partition-table.bin").resolve(),
+        (build_dir / "application.bin").resolve(),
+    ]
     require(
         manifest["target"] == "esp32s3"
-        and artifacts["applicationElf"] == build_dir / "application.elf"
-        and len(flash_images) == 3,
+        and artifacts["applicationElf"]
+        == (build_dir / "application.elf").resolve()
+        and flash_images == expected_flash_images,
         "jh-vscode collapsed or misresolved the ESP-IDF multi-image manifest",
     )
 

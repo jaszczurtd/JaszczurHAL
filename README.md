@@ -4,25 +4,6 @@ Author: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
 
-RP2040 and RP2350 firmware builds directly against the official Pico SDK.
-STM32G474 is supported through the repository's bare-metal implementation and
-linker flow. The ESP32-S3 target provides a controlled native
-ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow plus
-portable core, peripheral, and native connectivity backends. These include I2C
-controller/target, LEDC PWM, RMT NeoPixel, PCNT, GPTimer pools, WiFi,
-resolver, TCP/UDP and BSD sockets, BearSSL TLS clients, HTTP/HTTPS clients,
-plaintext HTTP/WebSocket servers, MQTT/TLS, NTP/time, raw ESP application OTA,
-and WireGuard. FreeRTOS is optional on RP and STM32G474 and required by the
-ESP-IDF runtime. The mock backend provides deterministic host-side validation.
-
-The existing ESP32-S3 Phase 2 hardware fixture verified both application tasks
-and the original system/sync/GPIO/ADC/serial/UART/I2C-controller/SPI/default-
-timer subset on Waveshare ESP32-S3-Zero. The later Phase 2 additions and the
-Phase 3 connectivity/service set are compile/link verified by
-`tests/fixtures/esp32s3_phase3`; their runtime and negative-security hardware
-validation remains pending. ESP32-S3 public USB-device lifecycle and storage
-backends are not included.
-
 ## How do you even pronounce this library name?
 
 Like this: **"YASH-choor-HAL"**. You're welcome. :)
@@ -49,6 +30,13 @@ JaszczurHAL introduces a practical boundary:
 Application code stays portable across the supported targets and runtimes.
 
 ## Supported modules (quick overview)
+
+RP2040 and RP2350 firmware builds directly against the official Pico SDK.
+STM32G474 is supported through the repository's bare-metal implementation and
+linker flow. The ESP32-S3 target provides a controlled native
+ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow plus
+portable core, peripheral, and native connectivity backends. FreeRTOS is optional
+on RP and STM32G474 and required by the ESP-IDF runtime. The mock backend provides deterministic host-side validation.
 
 See [features.md](doc/features.md) for a compact inventory of supported
 functionality and source links.
