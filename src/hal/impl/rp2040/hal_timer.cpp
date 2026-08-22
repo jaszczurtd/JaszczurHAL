@@ -11,14 +11,33 @@
 // HAL:      hal_alarm_id_t = int32_t, callback = int64_t (*)(hal_alarm_id_t,
 // void*) ABI-compatible - cast is safe.
 
+struct rp_alarm_dispatch_entry_s {
+  hal_alarm_callback_t callback;
+  void *user_data;
+  hal_alarm_id_t active_id;
+  hal_alarm_id_t cancelled_id;
+  uint32_t firing;
+};
+
+struct rp_alarm_dispatch_s {
+  rp_alarm_dispatch_entry_s *entries;
+  uint16_t entry_count;
+  uint32_t publishing;
+};
+
 struct hal_timer_pool_impl_s {
   alarm_pool_t *pool;
+  rp_alarm_dispatch_s dispatch;
 };
 
 static hal_mutex_t s_pool_api_mutex = NULL;
+static rp_alarm_dispatch_entry_s
+    s_default_dispatch_entries[PICO_TIME_DEFAULT_ALARM_POOL_MAX_TIMERS] = {};
+static rp_alarm_dispatch_s s_default_dispatch = {
+    s_default_dispatch_entries, PICO_TIME_DEFAULT_ALARM_POOL_MAX_TIMERS, 0u};
 
-static void timer_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_pool_api_mutex);
+static bool timer_ensure_mutex(void) {
+  return jh_hal_mutex_create_once(&s_pool_api_mutex) != NULL;
 }
 
 static uint16_t timer_cap_entries(uint16_t max_timers) {
@@ -36,6 +55,69 @@ static inline alarm_pool_t *resolve_pool(hal_timer_pool_t pool) {
   return alarm_pool_get_default();
 }
 
+static inline rp_alarm_dispatch_s *resolve_dispatch(hal_timer_pool_t pool) {
+  if (pool) {
+    return &pool->dispatch;
+  }
+  return &s_default_dispatch;
+}
+
+static inline int16_t timer_alarm_index(hal_alarm_id_t id) {
+  return (int16_t)(id >> 16);
+}
+
+static int64_t timer_dispatch_callback(alarm_id_t alarm_id, void *context) {
+  rp_alarm_dispatch_s *dispatch = (rp_alarm_dispatch_s *)context;
+  const int16_t index = timer_alarm_index((hal_alarm_id_t)alarm_id);
+  if (!dispatch || index < 0 || (uint16_t)index >= dispatch->entry_count) {
+    return 0;
+  }
+
+  rp_alarm_dispatch_entry_s &entry = dispatch->entries[index];
+  __atomic_add_fetch(&entry.firing, 1u, __ATOMIC_ACQ_REL);
+
+  int64_t delay_us = 0;
+  const hal_alarm_id_t active_id =
+      __atomic_load_n(&entry.active_id, __ATOMIC_ACQUIRE);
+  hal_alarm_id_t published_id = active_id;
+  uint32_t publishing = 0u;
+  if (published_id != (hal_alarm_id_t)alarm_id) {
+    publishing = __atomic_load_n(&dispatch->publishing, __ATOMIC_SEQ_CST);
+    if (publishing == 0u) {
+      /* Publication may have completed after the first active-ID load. */
+      published_id = __atomic_load_n(&entry.active_id, __ATOMIC_ACQUIRE);
+    }
+  }
+  if (published_id == (hal_alarm_id_t)alarm_id) {
+    // callback/user_data are published before active_id with release ordering.
+    // They remain unchanged until the Pico SDK has finished this callback and
+    // can reuse the corresponding alarm-pool entry.
+    hal_alarm_callback_t callback = entry.callback;
+    void *user_data = entry.user_data;
+    if (callback) {
+      delay_us = callback((hal_alarm_id_t)alarm_id, user_data);
+    }
+    if (delay_us <= 0) {
+      delay_us = 0;
+      hal_alarm_id_t expected = (hal_alarm_id_t)alarm_id;
+      (void)__atomic_compare_exchange_n(&entry.active_id, &expected,
+                                        HAL_ALARM_INVALID, false,
+                                        __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+    }
+  } else if (publishing != 0u ||
+             __atomic_load_n(&entry.cancelled_id, __ATOMIC_ACQUIRE) !=
+                 (hal_alarm_id_t)alarm_id) {
+    // The IRQ may run between the SDK allocating an entry and this backend
+    // publishing the returned alarm ID. A dispatch-wide publication count
+    // protects that otherwise unidentifiable entry; keep it alive and retry.
+    // A cancelled ID stops only when no allocation is being published.
+    delay_us = 1;
+  }
+
+  __atomic_sub_fetch(&entry.firing, 1u, __ATOMIC_ACQ_REL);
+  return delay_us;
+}
+
 static inline void timer_store_result(hal_timer_result_t *out_result,
                                       hal_timer_result_t value) {
   if (out_result) {
@@ -49,7 +131,9 @@ hal_timer_pool_t hal_timer_pool_create(uint8_t hardware_alarm_num,
     return NULL;
   }
 
-  timer_ensure_mutex();
+  if (!timer_ensure_mutex()) {
+    return NULL;
+  }
   hal_mutex_lock(s_pool_api_mutex);
 
   if (hardware_alarm_is_claimed((uint)hardware_alarm_num)) {
@@ -63,9 +147,19 @@ hal_timer_pool_t hal_timer_pool_create(uint8_t hardware_alarm_num,
     return NULL;
   }
 
-  h->pool = alarm_pool_create((uint)hardware_alarm_num,
-                              (uint)timer_cap_entries(max_timers));
+  const uint16_t entry_count = timer_cap_entries(max_timers);
+  h->dispatch.entries =
+      new (std::nothrow) rp_alarm_dispatch_entry_s[entry_count]();
+  h->dispatch.entry_count = entry_count;
+  if (!h->dispatch.entries) {
+    delete h;
+    hal_mutex_unlock(s_pool_api_mutex);
+    return NULL;
+  }
+
+  h->pool = alarm_pool_create((uint)hardware_alarm_num, (uint)entry_count);
   if (!h->pool) {
+    delete[] h->dispatch.entries;
     delete h;
     h = NULL;
   }
@@ -75,7 +169,9 @@ hal_timer_pool_t hal_timer_pool_create(uint8_t hardware_alarm_num,
 }
 
 hal_timer_pool_t hal_timer_pool_create_auto(uint16_t max_timers) {
-  timer_ensure_mutex();
+  if (!timer_ensure_mutex()) {
+    return NULL;
+  }
   hal_mutex_lock(s_pool_api_mutex);
 
   // Probe whether at least one hardware alarm is free before allocating.
@@ -96,12 +192,22 @@ hal_timer_pool_t hal_timer_pool_create_auto(uint16_t max_timers) {
     return NULL;
   }
 
+  const uint16_t entry_count = timer_cap_entries(max_timers);
+  h->dispatch.entries =
+      new (std::nothrow) rp_alarm_dispatch_entry_s[entry_count]();
+  h->dispatch.entry_count = entry_count;
+  if (!h->dispatch.entries) {
+    delete h;
+    hal_mutex_unlock(s_pool_api_mutex);
+    return NULL;
+  }
+
   // alarm_pool_create_with_unused_hardware_alarm() claims an unused
   // hardware alarm and creates the pool atomically - no claim/unclaim
   // window for another consumer to steal the alarm.
-  h->pool = alarm_pool_create_with_unused_hardware_alarm(
-      (uint)timer_cap_entries(max_timers));
+  h->pool = alarm_pool_create_with_unused_hardware_alarm((uint)entry_count);
   if (!h->pool) {
+    delete[] h->dispatch.entries;
     delete h;
     h = NULL;
   }
@@ -114,12 +220,17 @@ void hal_timer_pool_destroy(hal_timer_pool_t pool) {
   if (!pool || pool == HAL_TIMER_POOL_DEFAULT)
     return;
 
-  timer_ensure_mutex();
+  if (!timer_ensure_mutex()) {
+    return;
+  }
   hal_mutex_lock(s_pool_api_mutex);
   if (pool->pool) {
     alarm_pool_destroy(pool->pool);
     pool->pool = NULL;
   }
+  delete[] pool->dispatch.entries;
+  pool->dispatch.entries = NULL;
+  pool->dispatch.entry_count = 0u;
   delete pool;
   hal_mutex_unlock(s_pool_api_mutex);
 }
@@ -137,13 +248,34 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
     return HAL_ALARM_INVALID;
   }
 
-  alarm_id_t id = alarm_pool_add_alarm_in_us(target_pool, delay_us,
-                                             (alarm_callback_t)callback,
-                                             user_data, fire_if_past);
+  rp_alarm_dispatch_s *dispatch = resolve_dispatch(pool);
+  __atomic_add_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+  alarm_id_t id = alarm_pool_add_alarm_in_us(
+      target_pool, delay_us, timer_dispatch_callback, dispatch, fire_if_past);
   if (id > 0) {
+    const int16_t index = timer_alarm_index((hal_alarm_id_t)id);
+    if (!dispatch || index < 0 || (uint16_t)index >= dispatch->entry_count) {
+      (void)alarm_pool_cancel_alarm(target_pool, id);
+      __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
+      timer_store_result(out_result, HAL_TIMER_ERR_INTERNAL);
+      return HAL_ALARM_INVALID;
+    }
+
+    rp_alarm_dispatch_entry_s &entry = dispatch->entries[index];
+    entry.callback = callback;
+    entry.user_data = user_data;
+    /* Pico alarm IDs repeat after 32767 allocations per slot. Retire a stale
+     * cancellation marker before publishing a reused ID. publishing keeps a
+     * pre-publication IRQ from mistaking the new alarm for that cancellation.
+     */
+    __atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID, __ATOMIC_RELEASE);
+    __atomic_store_n(&entry.active_id, (hal_alarm_id_t)id, __ATOMIC_RELEASE);
+    __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
     timer_store_result(out_result, HAL_TIMER_OK);
     return (hal_alarm_id_t)id;
   }
+
+  __atomic_sub_fetch(&dispatch->publishing, 1u, __ATOMIC_SEQ_CST);
 
   if (id == 0) {
     timer_store_result(out_result, HAL_TIMER_ERR_TIME_PASSED);
@@ -161,7 +293,33 @@ bool hal_timer_pool_cancel_alarm(hal_timer_pool_t pool,
   alarm_pool_t *target_pool = resolve_pool(pool);
   if (!target_pool)
     return false;
-  return alarm_pool_cancel_alarm(target_pool, (alarm_id_t)alarm_id);
+
+  rp_alarm_dispatch_s *dispatch = resolve_dispatch(pool);
+  const int16_t index = timer_alarm_index(alarm_id);
+  rp_alarm_dispatch_entry_s *entry = NULL;
+  if (dispatch && index >= 0 && (uint16_t)index < dispatch->entry_count) {
+    entry = &dispatch->entries[index];
+    __atomic_store_n(&entry->cancelled_id, alarm_id, __ATOMIC_RELEASE);
+    hal_alarm_id_t expected = alarm_id;
+    (void)__atomic_compare_exchange_n(&entry->active_id, &expected,
+                                      HAL_ALARM_INVALID, false,
+                                      __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE);
+  }
+
+  const bool cancelled =
+      alarm_pool_cancel_alarm(target_pool, (alarm_id_t)alarm_id);
+
+  // Pico's cancel operation only marks the SDK entry. On the other core the
+  // IRQ may already have selected our stable dispatch record and be about to
+  // enter it. Task-context cancellation drains that dispatch before returning;
+  // exception context cannot wait (a callback cancelling itself would
+  // deadlock), but managed-timer destruction is explicitly task-only.
+  if (entry && __get_current_exception() == 0u) {
+    while (__atomic_load_n(&entry->firing, __ATOMIC_ACQUIRE) != 0u) {
+      tight_loop_contents();
+    }
+  }
+  return cancelled;
 }
 
 hal_alarm_id_t hal_timer_add_alarm_us(uint32_t delay_us,

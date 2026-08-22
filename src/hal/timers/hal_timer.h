@@ -105,8 +105,11 @@ hal_timer_pool_t hal_timer_pool_create_auto(uint16_t max_timers);
  * @brief Destroy a pool created by hal_timer_pool_create*().
  *
  * Passing NULL or HAL_TIMER_POOL_DEFAULT is a no-op.
- * Call from task/thread context after externally synchronising other users of
- * the pool; destruction from an alarm callback/ISR is not supported.
+ * Before destruction, stop/destroy every managed timer and cancel every
+ * low-level alarm associated with the pool, then ensure their callbacks have
+ * returned. Call from task/thread context after externally synchronising all
+ * other users of the pool; destruction from an alarm callback/ISR is not
+ * supported.
  */
 void hal_timer_pool_destroy(hal_timer_pool_t pool);
 

@@ -455,9 +455,9 @@ hal_status_t initialize_wifi_locked(void) {
     (void)teardown_wifi_locked();
     return HAL_ENOMEM;
   }
-  s_station_attached = true;
   esp_err_t esp_status = esp_netif_attach_wifi_station(s_station_netif);
   if (esp_status == ESP_OK) {
+    s_station_attached = true;
     esp_status = esp_wifi_set_default_wifi_sta_handlers();
     s_default_handlers_registered = esp_status == ESP_OK;
   }

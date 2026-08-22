@@ -73,6 +73,9 @@ because `_ex` already denotes the explicit pixel-type variant.
 **impl/esp32:** shared NeoPixel core + ESP-IDF RMT TX channel and bytes encoder.
 The transport supports the public 800 kHz pixel formats, waits for queued
 transmission completion, and applies the reset/latch interval before returning.
+Reinitialization disables and deletes the previous RMT channel before deleting
+its encoder. A failed delete keeps the corresponding live handle for the next
+teardown attempt; handles are cleared only after ESP-IDF confirms deletion.
 **impl/.mock:** records init parameters, pixel type, brightness and last colour; injectable via mock helpers.
 **Thread safety:** RP2040, STM32G474, and ESP32-S3 backends are thread-safe for
 HAL calls. A HAL mutex serializes singleton strip state and transport access.

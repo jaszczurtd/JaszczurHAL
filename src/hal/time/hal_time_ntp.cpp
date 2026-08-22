@@ -94,11 +94,29 @@ hal_mutex_t s_rtc_operation_mutex = nullptr;
 #endif
 bool s_service_active = false;
 
-hal_mutex_t state_mutex() { return jh_hal_mutex_create_once(&s_state_mutex); }
+hal_status_t lock_state(hal_mutex_t *out_mutex) {
+  if (out_mutex == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_mutex = jh_hal_mutex_create_once(&s_state_mutex);
+  if (*out_mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(*out_mutex);
+  return HAL_OK;
+}
 
 #ifdef HAL_ENABLE_RTC
-hal_mutex_t rtc_operation_mutex() {
-  return jh_hal_mutex_create_once(&s_rtc_operation_mutex);
+hal_status_t lock_rtc_operation(hal_mutex_t *out_mutex) {
+  if (out_mutex == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_mutex = jh_hal_mutex_create_once(&s_rtc_operation_mutex);
+  if (*out_mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(*out_mutex);
+  return HAL_OK;
 }
 #endif
 
@@ -131,21 +149,33 @@ void copy_server_name(char out[kServerNameSize], const char *server) {
   out[length] = '\0';
 }
 
-hal_udp_socket_t detach_socket() {
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
-  hal_udp_socket_t socket = s_state.ntp_socket;
+hal_status_t detach_socket(hal_udp_socket_t *out_socket) {
+  if (out_socket == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_socket = nullptr;
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
+  *out_socket = s_state.ntp_socket;
   s_state.ntp_socket = nullptr;
   s_state.ntp_pending = false;
   hal_mutex_unlock(mutex);
-  return socket;
+  return HAL_OK;
 }
 
-void close_current_request() {
-  hal_udp_socket_t socket = detach_socket();
+hal_status_t close_current_request() {
+  hal_udp_socket_t socket = nullptr;
+  const hal_status_t status = detach_socket(&socket);
+  if (status != HAL_OK) {
+    return status;
+  }
   if (socket != nullptr) {
     hal_udp_socket_close(socket);
   }
+  return HAL_OK;
 }
 
 hal_status_t start_request(const char *server) {
@@ -193,8 +223,12 @@ hal_status_t start_request(const char *server) {
   }
 
   const uint32_t started = hal_millis();
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    hal_udp_socket_close(socket);
+    return status;
+  }
   s_state.ntp_socket = socket;
   s_state.ntp_server = remote;
   memcpy(s_state.ntp_request, request, sizeof(request));
@@ -204,41 +238,54 @@ hal_status_t start_request(const char *server) {
   return HAL_OK;
 }
 
-RequestSnapshot request_snapshot() {
-  RequestSnapshot snapshot = {};
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
-  snapshot.socket = s_state.ntp_socket;
-  snapshot.server = s_state.ntp_server;
-  memcpy(snapshot.request, s_state.ntp_request, sizeof(snapshot.request));
-  snapshot.started = s_state.ntp_started;
-  snapshot.pending = s_state.ntp_pending;
+hal_status_t request_snapshot(RequestSnapshot *out_snapshot) {
+  if (out_snapshot == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_snapshot = {};
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
+  out_snapshot->socket = s_state.ntp_socket;
+  out_snapshot->server = s_state.ntp_server;
+  memcpy(out_snapshot->request, s_state.ntp_request,
+         sizeof(out_snapshot->request));
+  out_snapshot->started = s_state.ntp_started;
+  out_snapshot->pending = s_state.ntp_pending;
   hal_mutex_unlock(mutex);
-  return snapshot;
+  return HAL_OK;
 }
 
-ClockSnapshot clock_snapshot() {
-  ClockSnapshot snapshot = {};
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
-  snapshot.valid = s_state.time_valid;
-  snapshot.source = s_state.time_source;
-  snapshot.unix_base = s_state.unix_base;
-  snapshot.base_micros = s_state.unix_base_micros;
-  snapshot.base_monotonic_us = s_state.unix_base_monotonic_us;
-  snapshot.ntp_state = s_state.ntp_state;
-  snapshot.last_ntp_status = s_state.last_ntp_status;
-  snapshot.last_ntp_sync_unix = s_state.last_ntp_sync_unix;
+hal_status_t clock_snapshot(ClockSnapshot *out_snapshot) {
+  if (out_snapshot == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_snapshot = {};
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
+  out_snapshot->valid = s_state.time_valid;
+  out_snapshot->source = s_state.time_source;
+  out_snapshot->unix_base = s_state.unix_base;
+  out_snapshot->base_micros = s_state.unix_base_micros;
+  out_snapshot->base_monotonic_us = s_state.unix_base_monotonic_us;
+  out_snapshot->ntp_state = s_state.ntp_state;
+  out_snapshot->last_ntp_status = s_state.last_ntp_status;
+  out_snapshot->last_ntp_sync_unix = s_state.last_ntp_sync_unix;
 #ifdef HAL_ENABLE_RTC
-  snapshot.rtc = s_state.rtc;
-  snapshot.last_rtc_status = s_state.last_rtc_status;
+  out_snapshot->rtc = s_state.rtc;
+  out_snapshot->last_rtc_status = s_state.last_rtc_status;
 #endif
 #if HAL_TARGET_IS_MOCK
-  snapshot.local_valid = s_state.mock_local_valid;
-  snapshot.local = s_state.mock_local;
+  out_snapshot->local_valid = s_state.mock_local_valid;
+  out_snapshot->local = s_state.mock_local;
 #endif
   hal_mutex_unlock(mutex);
-  return snapshot;
+  return HAL_OK;
 }
 
 uint64_t elapsed_from_snapshot(const ClockSnapshot &snapshot,
@@ -291,36 +338,60 @@ void set_clock_locked(uint64_t unix_base, uint32_t base_micros,
 }
 
 #ifdef HAL_ENABLE_RTC
-void record_rtc_status(hal_rtc_t rtc, hal_status_t status) {
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+hal_status_t record_rtc_status(hal_rtc_t rtc, hal_status_t status) {
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t lock_status = lock_state(&mutex);
+  if (lock_status != HAL_OK) {
+    return lock_status;
+  }
   if (s_state.rtc == rtc) {
     s_state.last_rtc_status = status;
   }
   hal_mutex_unlock(mutex);
+  return HAL_OK;
 }
 
-void persist_ntp_to_rtc(uint64_t unix_time) {
-  hal_mutex_t operation_mutex = rtc_operation_mutex();
-  hal_mutex_lock(operation_mutex);
+hal_status_t persist_ntp_to_rtc(uint64_t unix_time) {
+  hal_mutex_t operation_mutex = nullptr;
+  hal_status_t status = lock_rtc_operation(&operation_mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_rtc_t rtc = nullptr;
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    hal_mutex_unlock(operation_mutex);
+    return status;
+  }
   if ((s_state.rtc_policy_flags & HAL_TIME_RTC_WRITE_AFTER_NTP) != 0u) {
     rtc = s_state.rtc;
   }
   hal_mutex_unlock(mutex);
   if (rtc != nullptr) {
-    record_rtc_status(rtc, hal_rtc_set_epoch_ex(rtc, unix_time));
+    const hal_status_t rtc_status = hal_rtc_set_epoch_ex(rtc, unix_time);
+    status = record_rtc_status(rtc, rtc_status);
+    if (status == HAL_OK) {
+      status = rtc_status;
+    }
   }
   hal_mutex_unlock(operation_mutex);
+  return status;
 }
 #endif
 
-bool finish_success(const RequestSnapshot &request, uint64_t unix_base,
-                    uint32_t base_micros, uint64_t base_monotonic_us) {
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+hal_status_t finish_success(const RequestSnapshot &request, uint64_t unix_base,
+                            uint32_t base_micros, uint64_t base_monotonic_us,
+                            bool *out_current) {
+  if (out_current == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_current = false;
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
   const bool current =
       s_state.ntp_pending && s_state.ntp_socket == request.socket;
   if (current) {
@@ -333,13 +404,21 @@ bool finish_success(const RequestSnapshot &request, uint64_t unix_base,
     s_state.ntp_pending = false;
   }
   hal_mutex_unlock(mutex);
-  return current;
+  *out_current = current;
+  return HAL_OK;
 }
 
-bool finish_timeout(const RequestSnapshot &request,
-                    char secondary[kServerNameSize]) {
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+hal_status_t finish_timeout(const RequestSnapshot &request,
+                            char secondary[kServerNameSize], bool *out_retry) {
+  if (out_retry == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_retry = false;
+  hal_mutex_t mutex = nullptr;
+  const hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
   const bool current =
       s_state.ntp_pending && s_state.ntp_socket == request.socket;
   bool retry = false;
@@ -357,17 +436,23 @@ bool finish_timeout(const RequestSnapshot &request,
     }
   }
   hal_mutex_unlock(mutex);
-  return retry;
+  *out_retry = retry;
+  return HAL_OK;
 }
 
-void ntp_service() {
+hal_status_t ntp_service() {
   if (!service_try_enter()) {
-    return;
+    return HAL_OK;
   }
-  const RequestSnapshot request = request_snapshot();
+  RequestSnapshot request = {};
+  hal_status_t status = request_snapshot(&request);
+  if (status != HAL_OK) {
+    service_leave();
+    return status;
+  }
   if (!request.pending || request.socket == nullptr) {
     service_leave();
-    return;
+    return HAL_OK;
   }
 
   (void)hal_net_service();
@@ -389,37 +474,54 @@ void ntp_service() {
       const uint32_t base_micros = static_cast<uint32_t>(
           (static_cast<uint64_t>(ntp_fraction) * UINT64_C(1000000)) >> 32u);
       const uint64_t base_monotonic_us = hal_micros64();
-      if (finish_success(request, unix_base, base_micros, base_monotonic_us)) {
+      bool current = false;
+      status = finish_success(request, unix_base, base_micros,
+                              base_monotonic_us, &current);
+      if (status != HAL_OK) {
+        service_leave();
+        return status;
+      }
+      if (current) {
         jh_time_platform_clock_changed();
 #ifdef HAL_ENABLE_RTC
-        persist_ntp_to_rtc(unix_base);
+        (void)persist_ntp_to_rtc(unix_base);
 #endif
         hal_udp_socket_close(request.socket);
       }
       service_leave();
-      return;
+      return HAL_OK;
     }
   }
 
   if (static_cast<uint32_t>(hal_millis() - request.started) < kNtpTimeoutMs) {
     service_leave();
-    return;
+    return HAL_OK;
   }
 
   char secondary[kServerNameSize] = {};
-  const bool retry = finish_timeout(request, secondary);
+  bool retry = false;
+  status = finish_timeout(request, secondary, &retry);
+  if (status != HAL_OK) {
+    service_leave();
+    return status;
+  }
   hal_udp_socket_close(request.socket);
   if (retry) {
     const hal_status_t retry_status = start_request(secondary);
     if (retry_status != HAL_OK) {
-      hal_mutex_t mutex = state_mutex();
-      hal_mutex_lock(mutex);
+      hal_mutex_t mutex = nullptr;
+      status = lock_state(&mutex);
+      if (status != HAL_OK) {
+        service_leave();
+        return status;
+      }
       s_state.ntp_state = HAL_TIME_NTP_FAILED;
       s_state.last_ntp_status = retry_status;
       hal_mutex_unlock(mutex);
     }
   }
   service_leave();
+  return HAL_OK;
 }
 
 bool set_process_timezone(const char *tz) {
@@ -452,13 +554,20 @@ bool hal_time_set_timezone(const char *tz) {
     hal_derr("hal_time_set_timezone: tz is NULL/empty");
     return false;
   }
+#if HAL_TARGET_IS_MOCK
+  hal_mutex_t mutex = nullptr;
+  if (lock_state(&mutex) != HAL_OK) {
+    return false;
+  }
+#endif
   if (!set_process_timezone(tz)) {
+#if HAL_TARGET_IS_MOCK
+    hal_mutex_unlock(mutex);
+#endif
     hal_derr("hal_time_set_timezone: environment update failed");
     return false;
   }
 #if HAL_TARGET_IS_MOCK
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
   copy_server_name(s_state.mock_timezone, tz);
   hal_mutex_unlock(mutex);
 #endif
@@ -471,8 +580,11 @@ hal_status_t hal_time_set_unix_ex(uint64_t unix_time, uint32_t micros,
     return HAL_EINVAL;
   }
 
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  hal_status_t status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
   set_clock_locked(unix_time, micros, hal_micros64(), source);
   if (source == HAL_TIME_SOURCE_NTP) {
     s_state.ntp_state = HAL_TIME_NTP_SYNCHRONIZED;
@@ -493,8 +605,16 @@ hal_status_t hal_time_get_status_ex(hal_time_status_t *out_status) {
   if (out_status == nullptr) {
     return HAL_EINVAL;
   }
-  ntp_service();
-  const ClockSnapshot snapshot = clock_snapshot();
+  *out_status = {};
+  hal_status_t snapshot_status = ntp_service();
+  if (snapshot_status != HAL_OK) {
+    return snapshot_status;
+  }
+  ClockSnapshot snapshot = {};
+  snapshot_status = clock_snapshot(&snapshot);
+  if (snapshot_status != HAL_OK) {
+    return snapshot_status;
+  }
   const uint64_t now_monotonic_us = hal_micros64();
   hal_time_status_t status = {};
   status.valid = snapshot.valid;
@@ -528,12 +648,19 @@ hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags) {
     return HAL_EINVAL;
   }
 
-  hal_mutex_t operation_mutex = rtc_operation_mutex();
-  hal_mutex_lock(operation_mutex);
+  hal_mutex_t operation_mutex = nullptr;
+  hal_status_t status = lock_rtc_operation(&operation_mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
   const bool restore_requested =
       (policy_flags & HAL_TIME_RTC_RESTORE_IF_VALID) != 0u;
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    hal_mutex_unlock(operation_mutex);
+    return status;
+  }
   if (s_state.rtc != nullptr) {
     hal_mutex_unlock(mutex);
     hal_mutex_unlock(operation_mutex);
@@ -574,7 +701,7 @@ hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags) {
   }
 
   uint64_t epoch = 0u;
-  hal_status_t status = hal_rtc_get_epoch_ex(rtc, &epoch);
+  status = hal_rtc_get_epoch_ex(rtc, &epoch);
   bool clock_changed = false;
   if (status == HAL_OK) {
     const uint64_t now_monotonic_us = hal_micros64();
@@ -592,16 +719,23 @@ hal_status_t hal_time_attach_rtc_ex(hal_rtc_t rtc, uint32_t policy_flags) {
   if (clock_changed) {
     jh_time_platform_clock_changed();
   }
-  record_rtc_status(rtc, status);
+  const hal_status_t record_status = record_rtc_status(rtc, status);
   hal_mutex_unlock(operation_mutex);
-  return HAL_OK;
+  return record_status;
 }
 
 hal_status_t hal_time_detach_rtc_ex(void) {
-  hal_mutex_t operation_mutex = rtc_operation_mutex();
-  hal_mutex_lock(operation_mutex);
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t operation_mutex = nullptr;
+  hal_status_t status = lock_rtc_operation(&operation_mutex);
+  if (status != HAL_OK) {
+    return status;
+  }
+  hal_mutex_t mutex = nullptr;
+  status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    hal_mutex_unlock(operation_mutex);
+    return status;
+  }
   if (s_state.rtc == nullptr) {
     hal_mutex_unlock(mutex);
     hal_mutex_unlock(operation_mutex);
@@ -630,9 +764,17 @@ hal_status_t hal_time_sync_ntp_ex(const char *primary_server,
   }
 
   service_enter();
-  close_current_request();
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_status_t status = close_current_request();
+  if (status != HAL_OK) {
+    service_leave();
+    return status;
+  }
+  hal_mutex_t mutex = nullptr;
+  status = lock_state(&mutex);
+  if (status != HAL_OK) {
+    service_leave();
+    return status;
+  }
   s_state.ntp_secondary_attempted = false;
   copy_server_name(s_state.ntp_secondary, secondary_server);
   s_state.ntp_state = HAL_TIME_NTP_IN_PROGRESS;
@@ -641,7 +783,7 @@ hal_status_t hal_time_sync_ntp_ex(const char *primary_server,
   copy_server_name(s_state.mock_primary, primary_server);
 #endif
   hal_mutex_unlock(mutex);
-  const hal_status_t status = start_request(primary_server);
+  status = start_request(primary_server);
   if (status != HAL_OK) {
     hal_mutex_lock(mutex);
     s_state.ntp_state = HAL_TIME_NTP_FAILED;
@@ -659,14 +801,24 @@ bool hal_time_sync_ntp(const char *primary_server,
 }
 
 uint64_t hal_time_unix(void) {
-  ntp_service();
-  const ClockSnapshot snapshot = clock_snapshot();
+  if (ntp_service() != HAL_OK) {
+    return 0u;
+  }
+  ClockSnapshot snapshot = {};
+  if (clock_snapshot(&snapshot) != HAL_OK) {
+    return 0u;
+  }
   return unix_from_snapshot(snapshot, hal_micros64());
 }
 
 bool hal_time_is_synced(uint64_t min_unix) {
-  ntp_service();
-  const ClockSnapshot snapshot = clock_snapshot();
+  if (ntp_service() != HAL_OK) {
+    return false;
+  }
+  ClockSnapshot snapshot = {};
+  if (clock_snapshot(&snapshot) != HAL_OK) {
+    return false;
+  }
   return snapshot.valid &&
          unix_from_snapshot(snapshot, hal_micros64()) >= min_unix;
 }
@@ -676,8 +828,13 @@ bool hal_time_get_local(struct tm *out_tm) {
     hal_derr("hal_time_get_local: out_tm is NULL");
     return false;
   }
-  ntp_service();
-  const ClockSnapshot snapshot = clock_snapshot();
+  if (ntp_service() != HAL_OK) {
+    return false;
+  }
+  ClockSnapshot snapshot = {};
+  if (clock_snapshot(&snapshot) != HAL_OK) {
+    return false;
+  }
 #if HAL_TARGET_IS_MOCK
   if (snapshot.local_valid) {
     *out_tm = snapshot.local;
@@ -769,8 +926,11 @@ int jh_time_libc_settimeofday(const struct timeval *time_value) {
 void hal_mock_time_reset(void) {
   service_enter();
   hal_udp_socket_t socket = nullptr;
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  if (lock_state(&mutex) != HAL_OK) {
+    service_leave();
+    return;
+  }
   socket = s_state.ntp_socket;
   memset(&s_state, 0, sizeof(s_state));
   hal_mutex_unlock(mutex);
@@ -785,8 +945,10 @@ void hal_mock_time_set_unix(uint64_t unix_time) {
 }
 
 void hal_mock_time_set_local(const struct tm *tm_local) {
-  hal_mutex_t mutex = state_mutex();
-  hal_mutex_lock(mutex);
+  hal_mutex_t mutex = nullptr;
+  if (lock_state(&mutex) != HAL_OK) {
+    return;
+  }
   s_state.mock_local_valid = tm_local != nullptr;
   if (tm_local != nullptr) {
     s_state.mock_local = *tm_local;

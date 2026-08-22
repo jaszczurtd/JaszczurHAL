@@ -1,4 +1,5 @@
 #include "hal/network/ota/jh_ota_protocol.h"
+#include "hal/security/hal_crypto.h"
 #include "utils/unity.h"
 
 #include <cstring>
@@ -37,6 +38,14 @@ void test_invitation_parser_rejects_bad_shape_and_ranges(void) {
       "0 3232 4096 short\n",
       "0 3232 4096 0123456789abcdef0123456789abcdeg\n",
       "0 3232 4096 0123456789abcdef0123456789abcdef junk\n",
+      " 0 3232 4096 0123456789abcdef0123456789abcdef\n",
+      "0  3232 4096 0123456789abcdef0123456789abcdef\n",
+      "0\t3232 4096 0123456789abcdef0123456789abcdef\n",
+      "0 03232 4096 0123456789abcdef0123456789abcdef\n",
+      "0 3232 04096 0123456789abcdef0123456789abcdef\n",
+      "0 3232 4096 0123456789abcdef0123456789abcdef \n",
+      "0 3232 4096 0123456789abcdef0123456789abcdef\n\n",
+      "0 3232 4096 0123456789abcdef0123456789abcdef\r",
   };
   for (const char *message : invalid) {
     jh_ota_invitation_t invitation{};
@@ -45,6 +54,15 @@ void test_invitation_parser_rejects_bad_shape_and_ranges(void) {
         jh_ota_parse_invitation(reinterpret_cast<const uint8_t *>(message),
                                 std::strlen(message), &invitation));
   }
+
+  const uint8_t embedded_nul[] = {
+      '0', ' ', '3', '2', '3', '2', ' ', '1', ' ', '0', '1', '2', '3', '4',
+      '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', '0', '1', '2',
+      '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', '\0'};
+  jh_ota_invitation_t invitation{};
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EINVAL,
+      jh_ota_parse_invitation(embedded_nul, sizeof(embedded_nul), &invitation));
 }
 
 void test_auth_parser_and_constant_shape_comparison(void) {
@@ -81,6 +99,26 @@ void test_auth_parser_and_constant_shape_comparison(void) {
       HAL_EINVAL,
       jh_ota_parse_auth_response(reinterpret_cast<const uint8_t *>(truncated),
                                  std::strlen(truncated), &response));
+
+  const char *noncanonical[] = {
+      " 201 0123456789abcdef0123456789abcdef "
+      "fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef\n",
+      "201  0123456789abcdef0123456789abcdef "
+      "fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef\n",
+      "0201 0123456789abcdef0123456789abcdef "
+      "fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef\n",
+      "201 0123456789abcdef0123456789abcdef\t"
+      "fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef\n",
+      "201 0123456789abcdef0123456789abcdef "
+      "fedcba9876543210fedcba98765432100123456789abcdef0123456789abcdef "
+      "\n",
+  };
+  for (const char *message : noncanonical) {
+    TEST_ASSERT_EQUAL_INT(
+        HAL_EINVAL,
+        jh_ota_parse_auth_response(reinterpret_cast<const uint8_t *>(message),
+                                   std::strlen(message), &response));
+  }
 }
 
 void test_auth_transcript_binds_complete_invitation(void) {
@@ -151,6 +189,43 @@ void test_auth_endpoint_comparison_binds_address_and_source_port(void) {
   TEST_ASSERT_FALSE(jh_ota_endpoint_equal(nullptr, &auth_source));
 }
 
+void test_auth2_hmac_matches_host_vector(void) {
+  jh_ota_invitation_t invitation{};
+  invitation.command = 0u;
+  invitation.tcp_port = 3232u;
+  invitation.image_size = 4096u;
+  std::memcpy(invitation.image_md5, "0123456789abcdef0123456789abcdef",
+              JH_OTA_MD5_HEX_BUFFER_SIZE);
+  char transcript[JH_OTA_AUTH_TRANSCRIPT_BUFFER_SIZE]{};
+  size_t transcript_length = 0u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_ota_format_auth_transcript(
+                            &invitation, "00112233445566778899aabbccddeeff",
+                            "ffeeddccbbaa99887766554433221100", transcript,
+                            sizeof(transcript), &transcript_length));
+
+  static const char password[] = "correct horse battery staple";
+  char password_md5[HAL_MD5_HEX_BUF_SIZE]{};
+  char tag[HAL_SHA256_HEX_BUF_SIZE]{};
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_ota_derive_password_key(password, password_md5));
+  TEST_ASSERT_EQUAL_STRING("9cc2ae8a1ba7a93da39b46fc1019c481", password_md5);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, jh_ota_derive_password_key("", password_md5));
+  TEST_ASSERT_EQUAL_STRING("d41d8cd98f00b204e9800998ecf8427e", password_md5);
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        jh_ota_derive_password_key(password, password_md5));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        jh_ota_derive_password_key(nullptr, password_md5));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL,
+                        jh_ota_derive_password_key(password, nullptr));
+  TEST_ASSERT_TRUE(hal_hmac_sha256_hex(
+      reinterpret_cast<const uint8_t *>(password_md5),
+      std::strlen(password_md5), reinterpret_cast<const uint8_t *>(transcript),
+      transcript_length, tag, sizeof(tag)));
+  TEST_ASSERT_EQUAL_STRING(
+      "c704cfc163213195568901d2399b8434e8e199d221fbfa82e83e2bfd8446bdf1", tag);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_invitation_parser_accepts_sketch_and_filesystem_commands);
@@ -158,5 +233,6 @@ int main(void) {
   RUN_TEST(test_auth_parser_and_constant_shape_comparison);
   RUN_TEST(test_auth_transcript_binds_complete_invitation);
   RUN_TEST(test_auth_endpoint_comparison_binds_address_and_source_port);
+  RUN_TEST(test_auth2_hmac_matches_host_vector);
   return UNITY_END();
 }

@@ -1212,10 +1212,12 @@ target_include_directories(test_ota_protocol PRIVATE
 )
 target_compile_definitions(test_ota_protocol PRIVATE
     HAL_TARGET_MOCK=1
+    HAL_ENABLE_CRYPTO
     HAL_ENABLE_UNITY
     UNITY_INCLUDE_CONFIG_H
 )
 jh_enable_host_warnings(test_ota_protocol ERRORS)
+target_link_libraries(test_ota_protocol PRIVATE hal_mock)
 add_test(NAME test_ota_protocol COMMAND test_ota_protocol)
 add_executable(test_ff16_memdisk
     test_ff16_memdisk.cpp

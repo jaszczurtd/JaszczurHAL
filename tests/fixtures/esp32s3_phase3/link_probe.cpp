@@ -142,6 +142,17 @@ void ota_error(hal_ota_error_t error, void *user) {
   (void)user;
 }
 
+int64_t alarm_callback(hal_alarm_id_t alarm_id, void *user) {
+  (void)alarm_id;
+  (void)user;
+  return 0;
+}
+
+void timer_callback(hal_timer_t timer, void *user) {
+  (void)timer;
+  (void)user;
+}
+
 } // namespace
 
 void jh_phase3_link_probe(void) {
@@ -150,17 +161,59 @@ void jh_phase3_link_probe(void) {
   }
 
   hal_i2c_slave_init(8u, 9u, 0x42u);
+  hal_i2c_slave_reg_write8(0u, 0x12u);
+  hal_i2c_slave_reg_write16(1u, 0x3456u);
+  (void)hal_i2c_slave_reg_read8(0u);
+  (void)hal_i2c_slave_reg_read16(1u);
+  (void)hal_i2c_slave_get_address();
+  (void)hal_i2c_slave_get_transaction_count();
+  hal_i2c_slave_deinit();
   (void)hal_pcnt_is_supported();
+  (void)hal_pcnt_channel_count();
+  (void)hal_pcnt_init_ex(0u, 17u, HAL_PCNT_EDGE_RISING);
+  uint32_t pulse_count = 0u;
+  (void)hal_pcnt_read_ex(0u, &pulse_count);
+  (void)hal_pcnt_reset(0u);
+  (void)hal_pcnt_read_and_reset_ex(0u, &pulse_count);
   hal_pwm_set_resolution(12u);
+  (void)hal_pwm_is_pin_supported(18u);
   hal_pwm_write(18u, 0u);
+  hal_pwm_write(18u, 4095u);
   hal_pwm_freq_channel_t pwm = hal_pwm_freq_create(18u, 1000u, 4095u);
+  (void)hal_pwm_freq_source_clock_hz(18u);
+  hal_pwm_freq_write(pwm, 4095);
+  hal_pwm_freq_stop(pwm);
   hal_pwm_freq_destroy(pwm);
+  (void)hal_rgb_led_init_ex(21u, 1u, HAL_RGB_LED_PIXEL_GRB_KHZ800);
+  hal_rgb_led_set_brightness(30u);
+  (void)hal_rgb_led_set_color(HAL_RGB_LED_BLUE);
   (void)hal_rgb_led_off();
   hal_timer_pool_t pool = hal_timer_pool_create_auto(1u);
+  hal_alarm_id_t alarm =
+      hal_timer_pool_add_alarm_us(pool, 1000u, alarm_callback, nullptr, false);
+  (void)hal_timer_pool_cancel_alarm(pool, alarm);
+  hal_timer_t timer = nullptr;
+  (void)hal_timer_create(pool, 1000u, true, timer_callback, nullptr, &timer);
+  (void)hal_timer_start(timer);
+  (void)hal_timer_pause(timer);
+  (void)hal_timer_resume(timer);
+  (void)hal_timer_set_period_us(timer, 2000u, true);
+  uint32_t timer_period_us = 0u;
+  int64_t timer_remaining_us = 0;
+  (void)hal_timer_get_period_us(timer, &timer_period_us);
+  (void)hal_timer_get_state(timer);
+  (void)hal_timer_get_remaining_us(timer, &timer_remaining_us);
+  (void)hal_timer_stop(timer);
+  (void)hal_timer_destroy(timer);
   hal_timer_pool_destroy(pool);
   (void)hal_stack_guard_init_ex();
+  (void)hal_stack_guard_init();
+  hal_stack_guard_check();
+  hal_fault_subsystem_init();
   hal_fault_info_t fault = {};
   (void)hal_get_last_fault_ex(&fault);
+  hal_clear_last_fault();
+  (void)hal_enter_bootloader();
 
   (void)hal_wifi_set_mode_ex(HAL_WIFI_MODE_OFF);
   (void)hal_net_get_capabilities();

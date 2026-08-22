@@ -1,20 +1,13 @@
 #include "jh_ota_protocol.h"
 
+#include "hal/security/hal_crypto.h"
+#include "hal/security/jh_secure_random.h"
+
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
 namespace {
-
-bool is_space(uint8_t value) {
-  return value == static_cast<uint8_t>(' ') ||
-         value == static_cast<uint8_t>('\t');
-}
-
-bool is_line_end(uint8_t value) {
-  return value == static_cast<uint8_t>('\r') ||
-         value == static_cast<uint8_t>('\n');
-}
 
 size_t bounded_string_length(const char *value, size_t capacity) {
   size_t length = 0u;
@@ -24,19 +17,14 @@ size_t bounded_string_length(const char *value, size_t capacity) {
   return length;
 }
 
-void skip_space(const uint8_t *data, size_t size, size_t *cursor) {
-  while (*cursor < size && is_space(data[*cursor])) {
-    ++(*cursor);
-  }
-}
-
 bool parse_uint(const uint8_t *data, size_t size, size_t *cursor,
                 uint32_t maximum, uint32_t *out_value) {
-  skip_space(data, size, cursor);
   if (*cursor >= size || data[*cursor] < static_cast<uint8_t>('0') ||
       data[*cursor] > static_cast<uint8_t>('9')) {
     return false;
   }
+
+  const size_t first_digit = *cursor;
 
   uint32_t value = 0u;
   while (*cursor < size && data[*cursor] >= static_cast<uint8_t>('0') &&
@@ -49,7 +37,18 @@ bool parse_uint(const uint8_t *data, size_t size, size_t *cursor,
     value = value * 10u + digit;
     ++(*cursor);
   }
+  if (*cursor - first_digit > 1u && data[first_digit] == '0') {
+    return false;
+  }
   *out_value = value;
+  return true;
+}
+
+bool consume_separator(const uint8_t *data, size_t size, size_t *cursor) {
+  if (*cursor >= size || data[*cursor] != static_cast<uint8_t>(' ')) {
+    return false;
+  }
+  ++(*cursor);
   return true;
 }
 
@@ -64,7 +63,6 @@ bool is_hex(uint8_t value) {
 
 bool parse_hex_token(const uint8_t *data, size_t size, size_t *cursor,
                      char *out, size_t hex_chars) {
-  skip_space(data, size, cursor);
   for (size_t index = 0u; index < hex_chars; ++index) {
     if (*cursor >= size || !is_hex(data[*cursor])) {
       return false;
@@ -79,8 +77,7 @@ bool parse_hex_token(const uint8_t *data, size_t size, size_t *cursor,
     ++(*cursor);
   }
   out[hex_chars] = '\0';
-  return *cursor >= size || is_space(data[*cursor]) ||
-         is_line_end(data[*cursor]);
+  return true;
 }
 
 bool normalize_hex_token(const char *input, size_t hex_chars, char *out) {
@@ -104,15 +101,16 @@ bool normalize_hex_token(const char *input, size_t hex_chars, char *out) {
   return true;
 }
 
-bool only_trailing_space(const uint8_t *data, size_t size, size_t cursor) {
-  while (cursor < size) {
-    if (!is_space(data[cursor]) && !is_line_end(data[cursor]) &&
-        data[cursor] != 0u) {
-      return false;
-    }
-    ++cursor;
+bool consume_optional_line_ending(const uint8_t *data, size_t size,
+                                  size_t cursor) {
+  if (cursor == size) {
+    return true;
   }
-  return true;
+  if (data[cursor] == static_cast<uint8_t>('\n')) {
+    return cursor + 1u == size;
+  }
+  return data[cursor] == static_cast<uint8_t>('\r') && cursor + 2u == size &&
+         data[cursor + 1u] == static_cast<uint8_t>('\n');
 }
 
 bool hex_equal_fixed(const char *left, const char *right, size_t chars) {
@@ -144,12 +142,14 @@ jh_ota_parse_invitation(const uint8_t *data, size_t size,
   uint32_t port = 0u;
   if (!parse_uint(data, size, &cursor, UINT16_MAX, &command) ||
       (command != 0u && command != 100u) ||
+      !consume_separator(data, size, &cursor) ||
       !parse_uint(data, size, &cursor, UINT16_MAX, &port) || port == 0u ||
+      !consume_separator(data, size, &cursor) ||
       !parse_uint(data, size, &cursor, UINT32_MAX, &parsed.image_size) ||
-      parsed.image_size == 0u ||
+      parsed.image_size == 0u || !consume_separator(data, size, &cursor) ||
       !parse_hex_token(data, size, &cursor, parsed.image_md5,
                        JH_OTA_MD5_HEX_CHARS) ||
-      !only_trailing_space(data, size, cursor)) {
+      !consume_optional_line_ending(data, size, cursor)) {
     return HAL_EINVAL;
   }
 
@@ -170,17 +170,43 @@ jh_ota_parse_auth_response(const uint8_t *data, size_t size,
   size_t cursor = 0u;
   uint32_t command = 0u;
   if (!parse_uint(data, size, &cursor, UINT16_MAX, &command) ||
-      command != 201u ||
+      command != 201u || !consume_separator(data, size, &cursor) ||
       !parse_hex_token(data, size, &cursor, parsed.client_nonce,
                        JH_OTA_MD5_HEX_CHARS) ||
+      !consume_separator(data, size, &cursor) ||
       !parse_hex_token(data, size, &cursor, parsed.response,
                        JH_OTA_AUTH_TAG_HEX_CHARS) ||
-      !only_trailing_space(data, size, cursor)) {
+      !consume_optional_line_ending(data, size, cursor)) {
     return HAL_EINVAL;
   }
 
   *out_response = parsed;
   return HAL_OK;
+}
+
+extern "C" hal_status_t
+jh_ota_derive_password_key(const char *password,
+                           char out_key[JH_OTA_MD5_HEX_BUFFER_SIZE]) {
+  if (password == nullptr || out_key == nullptr) {
+    return HAL_EINVAL;
+  }
+#if defined(HAL_ENABLE_CRYPTO)
+  char derived[JH_OTA_MD5_HEX_BUFFER_SIZE] = {};
+  if (!hal_md5_hex(reinterpret_cast<const uint8_t *>(password),
+                   strlen(password), derived, sizeof(derived))) {
+    jh_secure_zeroize(derived, sizeof(derived));
+    return HAL_EINTERNAL;
+  }
+  memcpy(out_key, derived, sizeof(derived));
+  jh_secure_zeroize(derived, sizeof(derived));
+  return HAL_OK;
+#else
+  /* Package-wide compile checks intentionally build this translation unit
+   * without optional features. Real OTA configurations imply CRYPTO through
+   * the generated feature closure; fail closed if that contract is bypassed. */
+  out_key[0] = '\0';
+  return HAL_EUNSUPPORTED;
+#endif
 }
 
 extern "C" hal_status_t jh_ota_format_auth_transcript(

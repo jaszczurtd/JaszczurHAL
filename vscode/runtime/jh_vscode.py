@@ -4107,10 +4107,16 @@ def upload_uf2_artifact(
 
 def parse_ota_discovery_response(payload: bytes, address: tuple[str, int]) -> dict[str, Any] | None:
     try:
-        fields = payload.decode("utf-8").strip().split()
-    except UnicodeDecodeError:
+        fields = ota_control_line(payload).split(" ")
+    except RuntimeError:
         return None
     if len(fields) != 8 or fields[:2] != ["JHOTA", "1"]:
+        return None
+    decimal_fields = fields[4:8]
+    if any(
+        re.fullmatch(r"0|[1-9][0-9]*", field) is None
+        for field in decimal_fields
+    ):
         return None
     try:
         port = int(fields[4])
@@ -4119,7 +4125,12 @@ def parse_ota_discovery_response(payload: bytes, address: tuple[str, int]) -> di
         mode = int(fields[7])
     except ValueError:
         return None
-    if not (1 <= port <= 65535) or slot_size <= 0:
+    if (
+        not (1 <= port <= 65535)
+        or not (1 <= slot_size <= 0xFFFFFFFF)
+        or not (0 <= generation <= 0xFFFFFFFF)
+        or not (0 <= mode <= 4)
+    ):
         return None
     return {
         "address": address[0],
@@ -4207,6 +4218,41 @@ def ota_auth2_tag(
     return hmac.new(
         password_md5.encode("ascii"), transcript, hashlib.sha256
     ).hexdigest()
+
+
+def ota_control_line(payload: bytes) -> str:
+    """Decode one exact OTA UDP control line."""
+    try:
+        text = payload.decode("ascii", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise RuntimeError("device returned a non-ASCII OTA response") from exc
+    if text.endswith("\r\n"):
+        text = text[:-2]
+    elif text.endswith("\n"):
+        text = text[:-1]
+    if (
+        not text
+        or text != text.strip()
+        or "\r" in text
+        or "\n" in text
+        or "\0" in text
+        or any(
+            ord(character) < 0x20 or ord(character) > 0x7E
+            for character in text
+        )
+    ):
+        raise RuntimeError("device returned an invalid OTA control line")
+    return text
+
+
+def ota_acknowledged_bytes(payload: bytes, remaining: int) -> int:
+    """Parse one positive, bounded decimal OTA TCP acknowledgement."""
+    if remaining <= 0 or re.fullmatch(rb"[1-9][0-9]*\n", payload) is None:
+        raise RuntimeError("invalid OTA byte acknowledgement")
+    acknowledged = int(payload[:-1])
+    if acknowledged > remaining:
+        raise RuntimeError("invalid OTA byte acknowledgement")
+    return acknowledged
 
 
 def print_ota_devices(devices: list[dict[str, Any]], *, as_json: bool) -> None:
@@ -4377,7 +4423,12 @@ def upload_ota_container(
 ) -> None:
     if not 0 <= listen_port <= 65535:
         raise ValueError("OTA TCP listen port must be in range 0..65535")
-    udp_address = (str(device["address"]), int(device["port"]))
+    if not container or len(container) > 0xFFFFFFFF:
+        raise ValueError("OTA image size must be in range 1..4294967295")
+    device_port = int(device["port"])
+    if not 1 <= device_port <= 65535:
+        raise ValueError("OTA device UDP port must be in range 1..65535")
+    udp_address = (str(device["address"]), device_port)
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server.bind(("", listen_port))
@@ -4399,14 +4450,10 @@ def upload_ota_container(
                 raise TimeoutError(
                     "timed out waiting for the OTA invitation response"
                 ) from exc
-            text = response.decode("ascii", errors="strict").strip()
-            if text.startswith("AUTH2 "):
-                nonce = text.split(maxsplit=1)[1]
-                if len(nonce) != 32 or any(
-                    character not in "0123456789abcdefABCDEF"
-                    for character in nonce
-                ):
-                    raise RuntimeError("device returned an invalid OTA nonce")
+            text = ota_control_line(response)
+            challenge = re.fullmatch(r"AUTH2 ([0-9a-fA-F]{32})", text)
+            if challenge is not None:
+                nonce = challenge.group(1)
                 client_nonce = os.urandom(16).hex()
                 image_md5 = hashlib.md5(container).hexdigest()
                 digest = ota_auth2_tag(
@@ -4425,16 +4472,26 @@ def upload_ota_container(
                     raise TimeoutError(
                         "timed out waiting for the OTA authentication response"
                     ) from exc
-                text = response.decode("ascii", errors="strict").strip()
-            elif text.startswith("AUTH "):
+                text = ota_control_line(response)
+                if text != "OK":
+                    raise RuntimeError(
+                        f"device rejected OTA authentication: {text}"
+                    )
+            elif text.startswith("AUTH2"):
+                raise RuntimeError("device returned an invalid OTA AUTH2 challenge")
+            elif text.startswith("AUTH"):
                 raise RuntimeError(
                     "device requested obsolete OTA authentication; AUTH2 is required"
                 )
-            elif text == "OK" and password:
+            elif password:
+                if text == "OK":
+                    raise RuntimeError(
+                        "device skipped AUTH2 while an OTA password is configured"
+                    )
                 raise RuntimeError(
-                    "device skipped AUTH2 while an OTA password is configured"
+                    f"device did not complete required OTA AUTH2: {text}"
                 )
-            if text != "OK":
+            elif text != "OK":
                 raise RuntimeError(f"device rejected OTA invitation: {text}")
 
         try:
@@ -4460,12 +4517,12 @@ def upload_ota_container(
                     line = reader.readline(32)
                     if not line:
                         raise RuntimeError("device closed OTA connection during transfer")
-                    acknowledged += int(line.strip())
-                if acknowledged != len(chunk):
-                    raise RuntimeError("invalid OTA byte acknowledgement")
+                    acknowledged += ota_acknowledged_bytes(
+                        line, len(chunk) - acknowledged
+                    )
                 sent += len(chunk)
                 print(f"\rOTA {sent}/{len(container)} bytes", end="", flush=True)
-            final = reader.read(2)
+            final = reader.read(3)
             if final != b"OK":
                 raise RuntimeError(f"device did not confirm OTA completion: {final!r}")
         print(f"\nOTA image accepted by {peer[0]}; device is rebooting.")

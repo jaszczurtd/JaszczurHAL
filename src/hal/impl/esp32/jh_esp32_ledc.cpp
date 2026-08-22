@@ -16,6 +16,8 @@
 
 static_assert(SOC_LEDC_TIMER_NUM > 0, "ESP32 LEDC requires a timer");
 static_assert(SOC_LEDC_CHANNEL_NUM > 0, "ESP32 LEDC requires a channel");
+static_assert(SOC_LEDC_CHANNEL_NUM <= UINT8_MAX,
+              "LEDC reference count must fit in uint8_t");
 
 struct jh_esp32_ledc_channel_s {
   bool in_use;
@@ -240,24 +242,34 @@ void jh_esp32_ledc_stop(jh_esp32_ledc_channel_t *channel) {
   hal_mutex_unlock(mutex);
 }
 
-void jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel) {
+bool jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel) {
   hal_mutex_t mutex = ledc_mutex();
   if (mutex == nullptr) {
-    return;
+    return false;
   }
   hal_mutex_lock(mutex);
   if (!valid_channel_locked(channel)) {
     hal_mutex_unlock(mutex);
-    return;
+    return false;
   }
 
   if (channel->configured) {
-    (void)ledc_stop(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel->channel, 0u);
+    const esp_err_t stop_result =
+        ledc_stop(LEDC_LOW_SPEED_MODE, (ledc_channel_t)channel->channel, 0u);
+    if (stop_result != ESP_OK) {
+      hal_mutex_unlock(mutex);
+      return false;
+    }
+    channel->full_on = false;
     ledc_channel_config_t config = {};
     config.speed_mode = LEDC_LOW_SPEED_MODE;
     config.channel = (ledc_channel_t)channel->channel;
     config.deconfigure = true;
-    (void)ledc_channel_config(&config);
+    if (ledc_channel_config(&config) != ESP_OK) {
+      /* The stopped channel remains owned and can be retried or restarted. */
+      hal_mutex_unlock(mutex);
+      return false;
+    }
   }
   timer_slot_t &timer = s_timers[channel->timer];
   if (timer.references > 0u) {
@@ -268,6 +280,7 @@ void jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel) {
   }
   *channel = {};
   hal_mutex_unlock(mutex);
+  return true;
 }
 
 uint32_t jh_esp32_ledc_source_clock_hz(void) { return source_clock_hz(); }

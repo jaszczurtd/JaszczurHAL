@@ -73,6 +73,40 @@ for invalid_auth2 in (
         assert "AUTH2" in str(error)
     else:
         raise AssertionError("invalid AUTH2 input was accepted")
+assert module.ota_control_line(b"OK") == "OK"
+assert module.ota_control_line(b"OK\n") == "OK"
+assert module.ota_control_line(b"OK\r\n") == "OK"
+for invalid_control_line in (
+    b"",
+    b" OK\n",
+    b"OK \n",
+    b"OK\r",
+    b"OK\n\n",
+    b"OK\x00\n",
+    b"OK\x1b[31m\n",
+    b"\xff",
+):
+    try:
+        module.ota_control_line(invalid_control_line)
+    except RuntimeError as error:
+        assert "OTA" in str(error)
+    else:
+        raise AssertionError("invalid OTA control line was accepted")
+assert module.ota_acknowledged_bytes(b"1024\n", 1024) == 1024
+for invalid_acknowledgement in (
+    b"0\n",
+    b"01\n",
+    b"+1\n",
+    b"1 \n",
+    b"1\r\n",
+    b"2\n",
+):
+    try:
+        module.ota_acknowledged_bytes(invalid_acknowledgement, 1)
+    except RuntimeError as error:
+        assert "acknowledgement" in str(error)
+    else:
+        raise AssertionError("invalid OTA acknowledgement was accepted")
 assert (
     inspect.signature(module.upload_ota_container)
     .parameters["listen_port"]
@@ -96,6 +130,17 @@ for invalid_listen_port in (-1, 65536):
         assert "listen port" in str(error)
     else:
         raise AssertionError("invalid OTA TCP listen port was accepted")
+for invalid_upload in (
+    ({"address": "192.0.2.1", "port": 8266}, b""),
+    ({"address": "192.0.2.1", "port": 0}, b"image"),
+    ({"address": "192.0.2.1", "port": 65536}, b"image"),
+):
+    try:
+        module.upload_ota_container(*invalid_upload, "", 8266)
+    except ValueError as error:
+        assert "OTA" in str(error)
+    else:
+        raise AssertionError("invalid OTA upload bounds were accepted")
 
 
 class FakeOtaReader:
@@ -106,13 +151,14 @@ class FakeOtaReader:
         return f"{len(self.connection.sent[-1])}\n".encode("ascii")
 
     def read(self, _size: int) -> bytes:
-        return b"OK"
+        return self.connection.final_response
 
 
 class FakeOtaConnection:
-    def __init__(self) -> None:
+    def __init__(self, final_response: bytes = b"OK") -> None:
         self.sent: list[bytes] = []
         self.closed = False
+        self.final_response = final_response
 
     def __enter__(self):
         return self
@@ -135,9 +181,9 @@ class FakeOtaConnection:
 
 
 class FakeOtaServer:
-    def __init__(self, peer_ip: str) -> None:
+    def __init__(self, peer_ip: str, final_response: bytes = b"OK") -> None:
         self.peer_ip = peer_ip
-        self.connection = FakeOtaConnection()
+        self.connection = FakeOtaConnection(final_response)
         self.bound = ("", 0)
         self.accept_count = 0
         self.closed = False
@@ -208,8 +254,9 @@ class FakeOtaSockets:
         *,
         udp_peer_ip: str = "192.0.2.32",
         tcp_peer_ip: str = "192.0.2.32",
+        final_response: bytes = b"OK",
     ) -> None:
-        self.server = FakeOtaServer(tcp_peer_ip)
+        self.server = FakeOtaServer(tcp_peer_ip, final_response)
         self.udp = FakeOtaUdp(responses, udp_peer_ip)
 
     def __call__(self, _family: int, socket_type: int):
@@ -278,6 +325,18 @@ with patch.object(module.socket, "socket", side_effect=legacy_sockets):
         raise AssertionError("legacy AUTH response enabled a downgrade")
 assert legacy_sockets.server.accept_count == 0
 
+legacy_200_sockets = FakeOtaSockets(
+    [b"200 0123456789abcdef0123456789abcdef\n"]
+)
+with patch.object(module.socket, "socket", side_effect=legacy_200_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "secret", 3232)
+    except RuntimeError as error:
+        assert "required OTA AUTH2" in str(error)
+    else:
+        raise AssertionError("legacy 200 response enabled a downgrade")
+assert legacy_200_sockets.server.accept_count == 0
+
 wrong_peer_sockets = FakeOtaSockets(
     [f"AUTH2 {device_nonce}\n".encode("ascii"), b"OK\n"],
     tcp_peer_ip="192.0.2.99",
@@ -298,6 +357,37 @@ passwordless_sockets = FakeOtaSockets([b"OK\n"])
 with patch.object(module.socket, "socket", side_effect=passwordless_sockets):
     module.upload_ota_container(ota_device, ota_payload, "", 3232)
 assert passwordless_sockets.server.connection.sent == [ota_payload]
+
+trailing_final_sockets = FakeOtaSockets([b"OK\n"], final_response=b"OK\n")
+with patch.object(module.socket, "socket", side_effect=trailing_final_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "", 3232)
+    except RuntimeError as error:
+        assert "confirm OTA completion" in str(error)
+    else:
+        raise AssertionError("non-canonical final OTA confirmation was accepted")
+
+noncanonical_ok_sockets = FakeOtaSockets([b"OK \n"])
+with patch.object(module.socket, "socket", side_effect=noncanonical_ok_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "", 3232)
+    except RuntimeError as error:
+        assert "OTA" in str(error)
+    else:
+        raise AssertionError("non-canonical OTA OK response was accepted")
+assert noncanonical_ok_sockets.server.accept_count == 0
+
+invalid_challenge_sockets = FakeOtaSockets(
+    [f"AUTH2 {device_nonce} extra\n".encode("ascii")]
+)
+with patch.object(module.socket, "socket", side_effect=invalid_challenge_sockets):
+    try:
+        module.upload_ota_container(ota_device, ota_payload, "secret", 3232)
+    except RuntimeError as error:
+        assert "invalid OTA AUTH2 challenge" in str(error)
+    else:
+        raise AssertionError("non-canonical AUTH2 challenge was accepted")
+assert invalid_challenge_sockets.server.accept_count == 0
 assert module.native_rp_upload_uses_serial_bootsel(
     {"target": "rp2040"}, "serial"
 )
@@ -829,6 +919,17 @@ assert device == {
     "bootMode": 2,
 }
 assert module.parse_ota_discovery_response(b"not ota", ("192.0.2.1", 1)) is None
+for invalid_discovery in (
+    b" JHOTA 1 pico-kitchen rp2040 8266 1007616 12 2\n",
+    b"JHOTA  1 pico-kitchen rp2040 8266 1007616 12 2\n",
+    b"JHOTA 1 pico-kitchen rp2040 08266 1007616 12 2\n",
+    b"JHOTA 1 pico-kitchen rp2040 8266 1007616 -1 2\n",
+    b"JHOTA 1 pico-kitchen rp2040 8266 1007616 12 5\n",
+    b"JHOTA 1 pico\x1b[31m rp2040 8266 1007616 12 2\n",
+):
+    assert module.parse_ota_discovery_response(
+        invalid_discovery, ("192.0.2.1", 8266)
+    ) is None
 
 discover_args = SimpleNamespace(host=None, json=False)
 with patch.object(

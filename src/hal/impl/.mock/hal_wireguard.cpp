@@ -39,7 +39,7 @@ MockWireGuardState s_wireguard;
 
 } // namespace
 
-bool jh_hal_wireguard_begin_provider(
+hal_status_t jh_hal_wireguard_begin_provider(
     const uint8_t local_ip[HAL_WIREGUARD_IPV4_OCTETS], const char *private_key,
     const char *remote_peer_address, const char *remote_peer_public_key,
     uint16_t remote_peer_port, const uint8_t *allowed_ip,
@@ -64,19 +64,31 @@ bool jh_hal_wireguard_begin_provider(
     s_wireguard.begin_advanced_called = s_wireguard.begin_result;
   }
   s_wireguard.initialized = s_wireguard.begin_result;
-  return s_wireguard.begin_result;
+  return s_wireguard.begin_result ? HAL_OK : HAL_EIO;
 }
 
-void jh_hal_wireguard_end_provider(void) { s_wireguard.initialized = false; }
-
-bool jh_hal_wireguard_is_initialized_provider(void) {
-  return s_wireguard.initialized;
+hal_status_t jh_hal_wireguard_end_provider(void) {
+  s_wireguard.initialized = false;
+  return HAL_OK;
 }
 
-bool jh_hal_wireguard_peer_up_provider(
-    uint8_t endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t *endpoint_port) {
+hal_status_t jh_hal_wireguard_is_initialized_provider(bool *out_initialized) {
+  if (out_initialized == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_initialized = s_wireguard.initialized;
+  return HAL_OK;
+}
+
+hal_status_t jh_hal_wireguard_peer_up_provider(
+    uint8_t endpoint_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t *endpoint_port,
+    bool *out_peer_up) {
+  if (out_peer_up == nullptr) {
+    return HAL_EINVAL;
+  }
+  *out_peer_up = false;
   if (!s_wireguard.peer_up_result) {
-    return false;
+    return HAL_OK;
   }
   if (endpoint_ip != nullptr) {
     memcpy(endpoint_ip, s_wireguard.peer_endpoint_ip,
@@ -85,21 +97,22 @@ bool jh_hal_wireguard_peer_up_provider(
   if (endpoint_port != nullptr) {
     *endpoint_port = s_wireguard.peer_endpoint_port;
   }
-  return true;
+  *out_peer_up = true;
+  return HAL_OK;
 }
 
 void jh_hal_wireguard_note_quick_check(void) {
   ++s_wireguard.peer_up_quick_call_count;
 }
 
-bool jh_hal_wireguard_kick_provider(
+hal_status_t jh_hal_wireguard_kick_provider(
     const uint8_t probe_ip[HAL_WIREGUARD_IPV4_OCTETS], uint16_t probe_port,
     uint32_t min_interval_ms) {
   memcpy(s_wireguard.last_probe_ip, probe_ip,
          sizeof(s_wireguard.last_probe_ip));
   s_wireguard.last_probe_port = probe_port;
   s_wireguard.last_probe_min_interval_ms = min_interval_ms;
-  return s_wireguard.kick_result;
+  return s_wireguard.kick_result ? HAL_OK : HAL_EIO;
 }
 
 void hal_mock_wireguard_reset(void) {

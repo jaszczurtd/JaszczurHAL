@@ -24,6 +24,20 @@ All notable changes to this project will be documented in this file.
   allowlist now accepts these optional peripheral features in addition to
   required FreeRTOS. The newly completed surfaces compile and link in the
   Phase 3 fixture but have not yet received hardware acceptance coverage.
+- Hardened the ESP32-S3 I2C target worker against coalesced ISR events and
+  teardown races. Register-pointer writes discard stale queued TX data,
+  snapshots contain only map bytes, partial queue acceptance preserves the
+  retry cursor, and driver destruction precedes deletion of callback-visible
+  synchronization objects. Documented the ESP-IDF snapshot-cursor and activity-
+  counter semantics without changing the exact byte-clocked contract of RP,
+  STM32, or mock backends.
+- Made the ESP32-S3 LEDC logical maximum an exact idle-high 100% state with a
+  verified transition back to waveform duty updates. Failed LEDC channel
+  teardown now retains both hardware and logical ownership, so simple-PWM
+  resolution changes and frequency-PWM destruction cannot recycle an active
+  channel. RMT teardown likewise retains channel/encoder handles until ESP-IDF
+  confirms deletion, and retained-fault initialization retries a failed cross-
+  core handler installation instead of marking partial setup complete.
 - Completed the Phase 2 physical closure on Waveshare ESP32-S3-Zero: task0 and
   task1 ran on cores 0/1, two GPIO callbacks ran in ISR context, ADC pull-down/
   pull-up readings were 37/4095, UART GPIO loopback and SPI passed, an unwired
@@ -37,7 +51,11 @@ All notable changes to this project will be documented in this file.
   servers; MQTT over plaintext or TLS; NTP/time; raw ESP application OTA over
   the `two-ota-large` trial/confirm/rollback layout; and the shared WireGuard
   engine over an ESP lwIP extension port. `jh-vscode upload-ota` validates the
-  ESP-IDF artifact manifest and uploads the raw application image. There is no
+  ESP-IDF artifact manifest and uploads the raw application image. Shared OTA
+  now uses strict fail-closed AUTH2 with an HMAC-SHA256 transcript binding the
+  command, callback port, image metadata and two CSPRNG nonces; it pins UDP
+  authentication and the TCP callback to the selected peer and rejects direct
+  `OK`/legacy downgrade paths when a host password is configured. There is no
   public TLS server, HTTPS server, WSS, or WebSocket-client API. The full graph
   compiles and links in `tests/fixtures/esp32s3_phase3`; hardware, lifecycle,
   rollback, and negative-security validation remains pending.

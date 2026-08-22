@@ -111,11 +111,15 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t channel) {
     return;
   }
   hal_mutex_lock(mutex);
+  bool destroyed = true;
   if (channel->in_use != 0) {
-    jh_esp32_ledc_release(channel->ledc);
-    memset(channel, 0, sizeof(*channel));
+    destroyed = jh_esp32_ledc_release(channel->ledc);
+    if (destroyed) {
+      memset(channel, 0, sizeof(*channel));
+    }
   }
   hal_mutex_unlock(mutex);
+  HAL_ASSERT(destroyed, "hal_pwm_freq_destroy: LEDC teardown failed");
 }
 
 #endif // HAL_ENABLE_PWM_FREQ

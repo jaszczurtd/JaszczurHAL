@@ -249,6 +249,95 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
             timer_backend,
         )
 
+    def test_managed_timer_cross_context_fields_use_atomic_helpers(self) -> None:
+        managed_timer = (
+            ROOT / "src/hal/timers/hal_timer_ext.cpp"
+        ).read_text(encoding="utf-8")
+        cross_context_access = re.compile(
+            r"\b(?:t|timer)->(?:state|alarm_id|next_fire_us|period_us)\b"
+        )
+        for line_number, line in enumerate(managed_timer.splitlines(), start=1):
+            if cross_context_access.search(line):
+                self.assertIn("__atomic_", line, f"non-atomic access at {line_number}")
+
+    def test_phase3_mutex_allocation_is_never_ignored(self) -> None:
+        sources = (
+            "src/hal/network/hal_wifi.cpp",
+            "src/hal/network/hal_tcp.cpp",
+            "src/hal/network/hal_udp.cpp",
+            "src/hal/network/tls/hal_tls.cpp",
+            "src/hal/network/mqtt/hal_mqtt.cpp",
+            "src/hal/network/wireguard/hal_wireguard_provider.cpp",
+            "src/hal/network/adapters/bsd/hal_bsd_sockets.cpp",
+            "src/hal/time/hal_time_ntp.cpp",
+            "src/hal/impl/esp32/esp32_network_backend.cpp",
+            "src/hal/impl/esp32/esp32_network_sockets.cpp",
+        )
+        for relative in sources:
+            source = (ROOT / relative).read_text(encoding="utf-8")
+            self.assertNotIn("(void)jh_hal_mutex_create_once", source, relative)
+            self.assertIn("HAL_ENOMEM", source, relative)
+
+    def test_rp_timer_uses_stable_dispatch_before_managed_callback(self) -> None:
+        source = (ROOT / "src/hal/impl/rp2040/hal_timer.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("timer_dispatch_callback", source)
+        self.assertIn("cancelled_id", source)
+        self.assertIn("entry->firing", source)
+        self.assertIn("__get_current_exception() == 0u", source)
+
+    def test_rp_timer_reused_id_cannot_match_stale_cancellation(self) -> None:
+        source = (ROOT / "src/hal/impl/rp2040/hal_timer.cpp").read_text(
+            encoding="utf-8"
+        )
+        add_start = source.index("hal_timer_pool_add_alarm_us_ex(")
+        add_end = source.index("bool hal_timer_pool_cancel_alarm(", add_start)
+        add_alarm = source[add_start:add_end]
+        publish_begin = add_alarm.index(
+            "__atomic_add_fetch(&dispatch->publishing"
+        )
+        sdk_add = add_alarm.index("alarm_pool_add_alarm_in_us(")
+        clear_cancellation = add_alarm.index(
+            "__atomic_store_n(&entry.cancelled_id, HAL_ALARM_INVALID"
+        )
+        publish_id = add_alarm.index("__atomic_store_n(&entry.active_id")
+        publish_end = add_alarm.index(
+            "__atomic_sub_fetch(&dispatch->publishing", publish_id
+        )
+        self.assertLess(publish_begin, sdk_add)
+        self.assertLess(sdk_add, clear_cancellation)
+        self.assertLess(clear_cancellation, publish_id)
+        self.assertLess(publish_id, publish_end)
+
+        callback_start = source.index("static int64_t timer_dispatch_callback(")
+        callback_end = source.index("static inline void timer_store_result(")
+        callback = source[callback_start:callback_end]
+        self.assertIn("__atomic_load_n(&dispatch->publishing", callback)
+        self.assertIn("publishing != 0u ||", callback)
+
+    def test_wifi_underlay_transition_is_transactional(self) -> None:
+        facade = (ROOT / "src/hal/network/hal_wifi.cpp").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("quiesce_persistent_services", facade)
+        self.assertRegex(
+            facade,
+            re.compile(
+                r"const hal_status_t status = ops->set_mode\(mode\);\s*"
+                r"if \(status == HAL_OK && mode == HAL_WIFI_MODE_OFF\) \{\s*"
+                r"reset_transport_handles\(\);",
+                re.MULTILINE,
+            ),
+        )
+
+        backend = (
+            ROOT / "src/hal/impl/esp32/esp32_network_backend.cpp"
+        ).read_text(encoding="utf-8")
+        attach = backend.index("esp_netif_attach_wifi_station(s_station_netif)")
+        published = backend.index("s_station_attached = true", attach)
+        self.assertLess(attach, published)
+
     def test_tls_dependency_is_synchronized_only_when_selected(self) -> None:
         model = resolve_model(ROOT, FIXTURE)
         with mock.patch.object(

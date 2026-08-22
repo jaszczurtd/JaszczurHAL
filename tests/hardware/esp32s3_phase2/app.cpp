@@ -51,7 +51,7 @@ struct Phase2Results {
   bool i2c;
   bool spi;
   bool timer_setup;
-  bool unsupported;
+  bool stack_guard;
   uint32_t heap_free;
   int32_t temperature_centi_celsius;
   int adc_low;
@@ -302,9 +302,10 @@ bool start_timer_test(void) {
   return paused && stayed_paused && hal_timer_resume(s_timer) == HAL_TIMER_OK;
 }
 
-bool unsupported_contract_is_explicit(void) {
-  return hal_enter_bootloader() == HAL_EUNSUPPORTED &&
-         hal_stack_guard_init_ex() == HAL_EUNSUPPORTED;
+bool test_stack_guard_contract(void) {
+  const hal_status_t status = hal_stack_guard_init_ex();
+  hal_stack_guard_check();
+  return status == HAL_OK && hal_stack_guard_init();
 }
 
 void process_debug_serial(void) {
@@ -375,7 +376,7 @@ void report_phase2(void) {
                      task1_count > 0u;
   const bool pass = s_results.system && s_results.sync && s_results.gpio &&
                     s_results.adc && s_results.uart && s_results.i2c &&
-                    s_results.spi && timer && s_results.unsupported && tasks &&
+                    s_results.spi && timer && s_results.stack_guard && tasks &&
                     serial_ping;
 
   char line[768] = {};
@@ -385,7 +386,7 @@ void report_phase2(void) {
                  " task1=%" PRIu32 " system=%u sync=%u gpio=%u irq=%" PRIu32
                  " irq_isr=%u adc=%u adc_low=%d adc_high=%d uart=%u i2c=%u"
                  " i2c_found=%u spi=%u timer=%u timer_count=%" PRIu32
-                 " timer_isr=%u serial_rx=%u unsupported=%u heap=%" PRIu32
+                 " timer_isr=%u serial_rx=%u stack_guard=%u heap=%" PRIu32
                  " temp_centi=%" PRId32 " status=%s",
                  sequence, HAL_TARGET_DESCRIPTOR_ID, HAL_BOARD_PROFILE_NAME,
                  __atomic_load_n(&s_task0_core, __ATOMIC_ACQUIRE),
@@ -399,7 +400,7 @@ void report_phase2(void) {
                  static_cast<unsigned int>(s_results.i2c_found),
                  s_results.spi ? 1u : 0u, timer ? 1u : 0u, timer_count,
                  __atomic_load_n(&s_timer_was_isr, __ATOMIC_ACQUIRE) ? 1u : 0u,
-                 serial_ping ? 1u : 0u, s_results.unsupported ? 1u : 0u,
+                 serial_ping ? 1u : 0u, s_results.stack_guard ? 1u : 0u,
                  s_results.heap_free, s_results.temperature_centi_celsius,
                  pass ? "PASS" : "FAIL");
   hal_serial_println(line);
@@ -421,7 +422,7 @@ extern "C" void app_start(void) {
   s_results.i2c = test_i2c();
   s_results.spi = test_spi();
   s_results.timer_setup = start_timer_test();
-  s_results.unsupported = unsupported_contract_is_explicit();
+  s_results.stack_guard = test_stack_guard_contract();
 
   /* Enable only after bounded startup probes; both tasks feed it thereafter. */
   s_results.system =

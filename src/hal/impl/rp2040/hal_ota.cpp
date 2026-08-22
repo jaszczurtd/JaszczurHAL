@@ -113,8 +113,8 @@ static bool update_end_no_lock(void) {
 
 static void update_abort_no_lock(void) { jh_rp_ota_storage_abort(); }
 
-static inline void ota_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_ota.mutex);
+static bool ota_ensure_mutex(void) {
+  return jh_hal_mutex_create_once(&s_ota.mutex) != nullptr;
 }
 
 static hal_status_t publish_mdns_no_lock(const char *hostname) {
@@ -514,7 +514,9 @@ bool hal_ota_set_port(uint16_t port) {
     hal_derr("hal_ota_set_port: port must be > 0");
     return false;
   }
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   const bool accepted = !s_ota.started;
   if (accepted) {
@@ -533,7 +535,9 @@ bool hal_ota_set_hostname(const char *hostname) {
     hal_derr("hal_ota_set_hostname: hostname exceeds 63 bytes");
     return false;
   }
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   bool accepted = true;
   if (s_ota.started) {
@@ -551,18 +555,23 @@ bool hal_ota_set_password(const char *password) {
     hal_derr("hal_ota_set_password: password pointer is NULL");
     return false;
   }
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
-  const bool accepted =
-      hal_md5_hex(reinterpret_cast<const uint8_t *>(password), strlen(password),
-                  s_ota.password_md5, sizeof(s_ota.password_md5));
-  s_ota.password_set = accepted;
+  const hal_status_t status =
+      jh_ota_derive_password_key(password, s_ota.password_md5);
+  if (status == HAL_OK) {
+    s_ota.password_set = password[0] != '\0';
+  }
   hal_mutex_unlock(s_ota.mutex);
-  return accepted;
+  return status == HAL_OK;
 }
 
 bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   s_ota.on_start = callback;
   s_ota.on_start_user = user;
@@ -571,7 +580,9 @@ bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user) {
 }
 
 bool hal_ota_on_end(hal_ota_on_end_callback_t callback, void *user) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   s_ota.on_end = callback;
   s_ota.on_end_user = user;
@@ -580,7 +591,9 @@ bool hal_ota_on_end(hal_ota_on_end_callback_t callback, void *user) {
 }
 
 bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   s_ota.on_progress = callback;
   s_ota.on_progress_user = user;
@@ -589,7 +602,9 @@ bool hal_ota_on_progress(hal_ota_on_progress_callback_t callback, void *user) {
 }
 
 bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   s_ota.on_error = callback;
   s_ota.on_error_user = user;
@@ -598,7 +613,9 @@ bool hal_ota_on_error(hal_ota_on_error_callback_t callback, void *user) {
 }
 
 bool hal_ota_begin(void) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
 
   if (s_ota.udp != nullptr) {
@@ -644,7 +661,9 @@ bool hal_ota_begin(void) {
 }
 
 void hal_ota_handle(void) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return;
+  }
   (void)hal_net_service();
 
   hal_mutex_lock(s_ota.mutex);
@@ -677,7 +696,9 @@ void hal_ota_handle(void) {
 }
 
 bool hal_ota_is_started(void) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return false;
+  }
   hal_mutex_lock(s_ota.mutex);
   const bool started = s_ota.started;
   hal_mutex_unlock(s_ota.mutex);
@@ -685,7 +706,9 @@ bool hal_ota_is_started(void) {
 }
 
 hal_status_t hal_ota_confirm_boot_ex(void) {
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_ota.mutex);
   const hal_status_t status = jh_rp_ota_storage_confirm_boot();
   hal_mutex_unlock(s_ota.mutex);
@@ -696,7 +719,9 @@ hal_status_t hal_ota_get_boot_info_ex(hal_ota_boot_info_t *out_info) {
   if (out_info == nullptr) {
     return HAL_EINVAL;
   }
-  ota_ensure_mutex();
+  if (!ota_ensure_mutex()) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_ota.mutex);
   jh_ota_boot_state_t state{};
   const hal_status_t status = jh_rp_ota_storage_get_state(&state);

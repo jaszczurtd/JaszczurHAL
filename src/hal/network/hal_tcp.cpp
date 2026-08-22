@@ -21,17 +21,23 @@ static jh_network_handle_pool_t s_listener_pool = {};
 static hal_mutex_t s_mutex = NULL;
 static bool s_pools_initialized = false;
 
-static void ensure_pools(void) {
-  (void)jh_hal_mutex_create_once(&s_mutex);
+static hal_status_t ensure_pools(void) {
+  if (jh_hal_mutex_create_once(&s_mutex) == nullptr) {
+    return HAL_ENOMEM;
+  }
   hal_mutex_lock(s_mutex);
+  hal_status_t status = HAL_OK;
   if (!s_pools_initialized) {
-    (void)jh_network_handle_pool_init(&s_socket_pool, s_socket_slots,
-                                      HAL_TCP_SOCKET_MAX_INSTANCES, 1u);
-    (void)jh_network_handle_pool_init(&s_listener_pool, s_listener_slots,
-                                      HAL_TCP_LISTENER_MAX_INSTANCES, 2u);
-    s_pools_initialized = true;
+    status = jh_network_handle_pool_init(&s_socket_pool, s_socket_slots,
+                                         HAL_TCP_SOCKET_MAX_INSTANCES, 1u);
+    if (status == HAL_OK) {
+      status = jh_network_handle_pool_init(&s_listener_pool, s_listener_slots,
+                                           HAL_TCP_LISTENER_MAX_INSTANCES, 2u);
+    }
+    s_pools_initialized = status == HAL_OK;
   }
   hal_mutex_unlock(s_mutex);
+  return status;
 }
 
 static const jh_network_tcp_ops_t *tcp_ops(void) {
@@ -45,7 +51,10 @@ static const jh_network_tcp_ops_t *tcp_ops(void) {
 
 static hal_status_t acquire_socket(hal_tcp_socket_t socket,
                                    jh_network_handle_lease_t *out_lease) {
-  ensure_pools();
+  const hal_status_t pool_status = ensure_pools();
+  if (pool_status != HAL_OK) {
+    return pool_status;
+  }
   hal_mutex_lock(s_mutex);
   const hal_status_t status = jh_network_handle_acquire(
       &s_socket_pool, reinterpret_cast<const void *>(socket), out_lease);
@@ -55,7 +64,10 @@ static hal_status_t acquire_socket(hal_tcp_socket_t socket,
 
 static hal_status_t acquire_listener(hal_tcp_listener_t listener,
                                      jh_network_handle_lease_t *out_lease) {
-  ensure_pools();
+  const hal_status_t pool_status = ensure_pools();
+  if (pool_status != HAL_OK) {
+    return pool_status;
+  }
   hal_mutex_lock(s_mutex);
   const hal_status_t status = jh_network_handle_acquire(
       &s_listener_pool, reinterpret_cast<const void *>(listener), out_lease);
@@ -107,12 +119,15 @@ hal_status_t hal_tcp_socket_open_ex(hal_tcp_socket_t *out_socket) {
       ops->socket_close == nullptr) {
     return HAL_EUNSUPPORTED;
   }
+  const hal_status_t pool_status = ensure_pools();
+  if (pool_status != HAL_OK) {
+    return pool_status;
+  }
   void *backend_token = nullptr;
   hal_status_t status = ops->socket_open(&backend_token);
   if (status != HAL_OK) {
     return status;
   }
-  ensure_pools();
   void *handle = nullptr;
   hal_mutex_lock(s_mutex);
   status = jh_network_handle_allocate(&s_socket_pool, backend_token, &handle);
@@ -143,8 +158,9 @@ hal_status_t hal_tcp_socket_connect_ex(hal_tcp_socket_t socket,
     return runtime_status;
   }
   jh_network_handle_lease_t lease = {};
-  if (acquire_socket(socket, &lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status = acquire_socket(socket, &lease);
+  if (acquire_status != HAL_OK) {
+    return jh_net_public_handle_status(acquire_status);
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   const hal_status_t status =
@@ -175,8 +191,9 @@ hal_status_t hal_tcp_socket_send_ex(hal_tcp_socket_t socket, const void *data,
     return runtime_status;
   }
   jh_network_handle_lease_t lease = {};
-  if (acquire_socket(socket, &lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status = acquire_socket(socket, &lease);
+  if (acquire_status != HAL_OK) {
+    return jh_net_public_handle_status(acquire_status);
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   const hal_status_t status =
@@ -196,19 +213,19 @@ int hal_tcp_socket_send(hal_tcp_socket_t socket, const void *data, size_t len) {
 hal_status_t hal_tcp_socket_recv_ex(hal_tcp_socket_t socket, void *buffer,
                                     size_t max_len, uint32_t timeout_ms,
                                     size_t *out_received) {
-  if (out_received != nullptr) {
-    *out_received = 0u;
-  }
-  if (out_received == nullptr || (max_len > 0u && buffer == nullptr)) {
-    return HAL_EINVAL;
+  const hal_status_t buffer_status =
+      jh_net_prepare_receive_buffer(buffer, max_len, out_received);
+  if (buffer_status != HAL_OK) {
+    return buffer_status;
   }
   const hal_status_t runtime_status = jh_network_require_ready();
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
   jh_network_handle_lease_t lease = {};
-  if (acquire_socket(socket, &lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status = acquire_socket(socket, &lease);
+  if (acquire_status != HAL_OK) {
+    return jh_net_public_handle_status(acquire_status);
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   const hal_status_t status =
@@ -225,9 +242,7 @@ int hal_tcp_socket_recv(hal_tcp_socket_t socket, void *buffer, size_t max_len,
   size_t received = 0u;
   const hal_status_t status =
       hal_tcp_socket_recv_ex(socket, buffer, max_len, timeout_ms, &received);
-  return status == HAL_OK || status == HAL_EAGAIN || status == HAL_ETIMEOUT
-             ? (int)received
-             : -1;
+  return jh_net_receive_count(status, received);
 }
 
 bool hal_tcp_socket_can_recv(hal_tcp_socket_t socket) {
@@ -288,7 +303,9 @@ void hal_tcp_socket_shutdown(hal_tcp_socket_t socket) {
 }
 
 void hal_tcp_socket_close(hal_tcp_socket_t socket) {
-  ensure_pools();
+  if (ensure_pools() != HAL_OK) {
+    return;
+  }
   void *token = nullptr;
   hal_mutex_lock(s_mutex);
   const hal_status_t status = jh_network_handle_begin_close(
@@ -315,12 +332,15 @@ hal_status_t hal_tcp_listener_open_ex(hal_tcp_listener_t *out_listener) {
       ops->listener_close == nullptr) {
     return HAL_EUNSUPPORTED;
   }
+  const hal_status_t pool_status = ensure_pools();
+  if (pool_status != HAL_OK) {
+    return pool_status;
+  }
   void *backend_token = nullptr;
   hal_status_t status = ops->listener_open(&backend_token);
   if (status != HAL_OK) {
     return status;
   }
-  ensure_pools();
   void *handle = nullptr;
   hal_mutex_lock(s_mutex);
   status = jh_network_handle_allocate(&s_listener_pool, backend_token, &handle);
@@ -350,8 +370,9 @@ hal_status_t hal_tcp_listener_bind_ex(hal_tcp_listener_t listener,
     return runtime_status;
   }
   jh_network_handle_lease_t lease = {};
-  if (acquire_listener(listener, &lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status = acquire_listener(listener, &lease);
+  if (acquire_status != HAL_OK) {
+    return acquire_status == HAL_ENOMEM ? HAL_ENOMEM : HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   const hal_status_t status =
@@ -377,8 +398,9 @@ hal_status_t hal_tcp_listener_listen_ex(hal_tcp_listener_t listener,
     return runtime_status;
   }
   jh_network_handle_lease_t lease = {};
-  if (acquire_listener(listener, &lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status = acquire_listener(listener, &lease);
+  if (acquire_status != HAL_OK) {
+    return acquire_status == HAL_ENOMEM ? HAL_ENOMEM : HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   const hal_status_t status =
@@ -406,8 +428,10 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
     return runtime_status;
   }
   jh_network_handle_lease_t listener_lease = {};
-  if (acquire_listener(listener, &listener_lease) != HAL_OK) {
-    return HAL_EINVAL;
+  const hal_status_t acquire_status =
+      acquire_listener(listener, &listener_lease);
+  if (acquire_status != HAL_OK) {
+    return acquire_status == HAL_ENOMEM ? HAL_ENOMEM : HAL_EINVAL;
   }
   const jh_network_tcp_ops_t *ops = tcp_ops();
   if (ops == nullptr || ops->listener_accept == nullptr ||
@@ -422,7 +446,11 @@ hal_status_t hal_tcp_listener_accept_ex(hal_tcp_listener_t listener,
   if (status != HAL_OK) {
     return status;
   }
-  ensure_pools();
+  const hal_status_t pool_status = ensure_pools();
+  if (pool_status != HAL_OK) {
+    ops->socket_close(socket_token);
+    return pool_status;
+  }
   void *handle = nullptr;
   hal_mutex_lock(s_mutex);
   status = jh_network_handle_allocate(&s_socket_pool, socket_token, &handle);
@@ -459,7 +487,9 @@ bool hal_tcp_listener_can_accept(hal_tcp_listener_t listener) {
 }
 
 void hal_tcp_listener_close(hal_tcp_listener_t listener) {
-  ensure_pools();
+  if (ensure_pools() != HAL_OK) {
+    return;
+  }
   void *token = nullptr;
   hal_mutex_lock(s_mutex);
   const hal_status_t status = jh_network_handle_begin_close(
@@ -473,7 +503,9 @@ void hal_tcp_listener_close(hal_tcp_listener_t listener) {
 }
 
 extern "C" void jh_network_facade_tcp_reset_all(void) {
-  ensure_pools();
+  if (ensure_pools() != HAL_OK) {
+    return;
+  }
   void *socket_tokens[HAL_TCP_SOCKET_MAX_INSTANCES] = {};
   void *listener_tokens[HAL_TCP_LISTENER_MAX_INSTANCES] = {};
   size_t socket_count = 0u;

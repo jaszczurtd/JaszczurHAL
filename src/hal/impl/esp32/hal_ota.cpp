@@ -696,12 +696,13 @@ bool hal_ota_set_password(const char *password) {
     return false;
   }
   hal_mutex_lock(s_ota.mutex);
-  const bool accepted =
-      hal_md5_hex(reinterpret_cast<const uint8_t *>(password), strlen(password),
-                  s_ota.password_md5, sizeof(s_ota.password_md5));
-  s_ota.password_set = accepted;
+  const hal_status_t status =
+      jh_ota_derive_password_key(password, s_ota.password_md5);
+  if (status == HAL_OK) {
+    s_ota.password_set = password[0] != '\0';
+  }
   hal_mutex_unlock(s_ota.mutex);
-  return accepted;
+  return status == HAL_OK;
 }
 
 bool hal_ota_on_start(hal_ota_on_start_callback_t callback, void *user) {

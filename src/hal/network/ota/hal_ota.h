@@ -76,9 +76,13 @@ bool hal_ota_set_port(uint16_t port);
 bool hal_ota_set_hostname(const char *hostname);
 
 /**
- * @brief Set OTA password.
+ * @brief Set the password used by AUTH2 and target image authentication.
+ *
+ * Omit this call or pass an empty string to use the explicitly
+ * unauthenticated development flow.
+ *
  * @param password Null-terminated password string (may be empty).
- * @return true when accepted.
+ * @return true when accepted; false on invalid input or an internal failure.
  */
 bool hal_ota_set_password(const char *password);
 

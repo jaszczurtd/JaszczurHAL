@@ -50,8 +50,8 @@ static uint32_t s_rx_overflow_count = 0;
 // Protected by s_mqtt_mutex. Only its owner may use s_dispatch_slot.
 static bool s_dispatch_active = false;
 
-static inline void mqtt_ensure_mutex(void) {
-  (void)jh_hal_mutex_create_once(&s_mqtt_mutex);
+static inline hal_status_t mqtt_ensure_mutex(void) {
+  return jh_hal_mutex_create_once(&s_mqtt_mutex) != NULL ? HAL_OK : HAL_ENOMEM;
 }
 
 static hal_status_t validate_non_empty(const char *value, const char *fn,
@@ -115,7 +115,10 @@ hal_status_t hal_mqtt_set_server_ex(const char *host, uint16_t port) {
     return HAL_EINVAL;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   snprintf(s_server_host, sizeof(s_server_host), "%s", host);
@@ -133,7 +136,10 @@ bool hal_mqtt_set_server(const char *host, uint16_t port) {
 
 hal_status_t hal_mqtt_set_callback_ex(hal_mqtt_message_callback_t callback,
                                       void *user) {
-  mqtt_ensure_mutex();
+  const hal_status_t status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   s_user_callback = callback;
@@ -154,7 +160,10 @@ hal_status_t hal_mqtt_set_keepalive_ex(uint16_t keepalive_s) {
     return HAL_EINVAL;
   }
 
-  mqtt_ensure_mutex();
+  const hal_status_t status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.setKeepAlive(keepalive_s);
@@ -173,7 +182,10 @@ hal_status_t hal_mqtt_set_socket_timeout_ex(uint16_t timeout_s) {
     return HAL_EINVAL;
   }
 
-  mqtt_ensure_mutex();
+  const hal_status_t status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.setSocketTimeout(timeout_s);
@@ -193,7 +205,10 @@ hal_status_t hal_mqtt_set_buffer_size_ex(uint16_t size) {
     return HAL_EINVAL;
   }
 
-  mqtt_ensure_mutex();
+  const hal_status_t status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   const bool ok = s_client.setBufferSize(size);
@@ -214,7 +229,10 @@ bool hal_mqtt_set_buffer_size(uint16_t size) {
 #ifdef HAL_ENABLE_TLS
 hal_status_t
 hal_mqtt_configure_tls_ex(const hal_tls_security_config_t *security) {
-  mqtt_ensure_mutex();
+  const hal_status_t mutex_status = mqtt_ensure_mutex();
+  if (mutex_status != HAL_OK) {
+    return mutex_status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
   const hal_status_t status = s_network_client.configure_tls(security);
   hal_mutex_unlock(s_mqtt_mutex);
@@ -222,7 +240,10 @@ hal_mqtt_configure_tls_ex(const hal_tls_security_config_t *security) {
 }
 
 hal_status_t hal_mqtt_disable_tls_ex(void) {
-  mqtt_ensure_mutex();
+  const hal_status_t status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
   s_network_client.disable_tls();
   hal_mutex_unlock(s_mqtt_mutex);
@@ -231,7 +252,9 @@ hal_status_t hal_mqtt_disable_tls_ex(void) {
 #endif
 
 uint16_t hal_mqtt_get_buffer_size(void) {
-  mqtt_ensure_mutex();
+  if (mqtt_ensure_mutex() != HAL_OK) {
+    return 0u;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   const uint16_t size = s_client.getBufferSize();
@@ -251,7 +274,10 @@ hal_status_t hal_mqtt_connect_ex(const char *client_id) {
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   if (!s_server_configured) {
@@ -291,7 +317,10 @@ hal_status_t hal_mqtt_connect_auth_ex(const char *client_id, const char *user,
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   if (!s_server_configured) {
@@ -313,7 +342,9 @@ bool hal_mqtt_connect_auth(const char *client_id, const char *user,
 }
 
 void hal_mqtt_disconnect(void) {
-  mqtt_ensure_mutex();
+  if (mqtt_ensure_mutex() != HAL_OK) {
+    return;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   s_client.disconnect();
@@ -322,7 +353,9 @@ void hal_mqtt_disconnect(void) {
 }
 
 bool hal_mqtt_connected(void) {
-  mqtt_ensure_mutex();
+  if (mqtt_ensure_mutex() != HAL_OK) {
+    return false;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   const bool connected = s_client.connected();
@@ -332,7 +365,9 @@ bool hal_mqtt_connected(void) {
 }
 
 int hal_mqtt_state(void) {
-  mqtt_ensure_mutex();
+  if (mqtt_ensure_mutex() != HAL_OK) {
+    return -1;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   const int state = s_client.state();
@@ -346,7 +381,10 @@ hal_status_t hal_mqtt_loop_ex(void) {
   if (runtime_status != HAL_OK) {
     return runtime_status;
   }
-  mqtt_ensure_mutex();
+  const hal_status_t mutex_status = mqtt_ensure_mutex();
+  if (mutex_status != HAL_OK) {
+    return mutex_status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   mqtt_bind_callback();
@@ -411,7 +449,10 @@ hal_status_t hal_mqtt_publish_ex(const char *topic, const uint8_t *payload,
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   bool connected = s_client.connected();
@@ -448,7 +489,10 @@ hal_status_t hal_mqtt_publish_str_ex(const char *topic, const char *payload,
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   bool connected = s_client.connected();
@@ -482,7 +526,10 @@ hal_status_t hal_mqtt_subscribe_ex(const char *topic, uint8_t qos) {
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   bool connected = s_client.connected();
@@ -510,7 +557,10 @@ hal_status_t hal_mqtt_unsubscribe_ex(const char *topic) {
     return status;
   }
 
-  mqtt_ensure_mutex();
+  status = mqtt_ensure_mutex();
+  if (status != HAL_OK) {
+    return status;
+  }
   hal_mutex_lock(s_mqtt_mutex);
 
   bool connected = s_client.connected();

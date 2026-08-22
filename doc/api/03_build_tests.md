@@ -169,7 +169,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | `tests/hardware/rp_ota` | Discovery, authentication, transfer, trial/confirm, rollback and USB/network recovery |
 | `tests/hardware/lora_sx1262` | Two-device SX1262 initialization, bidirectional packets, RSSI/SNR, sleep/wake and destroy/create reinitialization on integrated LF or external HF pairs |
 | `tests/hardware/esp32s3_phase1` | Phase 1 ESP32-S3 target/board identity, generated link contract, chip/core count, physical flash, initialized Quad PSRAM, and a repeated FreeRTOS `app_task0()` heartbeat over native USB Serial/JTAG. |
-| `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, default-pool timer callbacks, and explicit unsupported system operations. |
+| `tests/hardware/esp32s3_phase2` | ESP32-S3 Phase 2 runtime probe for both application tasks, system/sync, GPIO/IRQ, ADC, USB Serial/JTAG TX/RX, hardware UART, I2C master scan, SPI master transfer path, dedicated-pool timer callbacks, and enabled FreeRTOS stack-guard configuration. |
 
 Each fixture contains its exact build, upload and verifier commands in its
 local `README.md`. The storage probe supports `rp2040`, `rp2350-arm` and
@@ -178,16 +178,18 @@ three full three-image flashes, exact S3/two-core/4 MiB flash/initialized 2 MiB
 PSRAM runtime facts, and persistent-monitor release/reconnect with a repeated
 task heartbeat.
 
-The ESP32-S3 Phase 2 fixture has also completed its physical closure on the
-Waveshare ESP32-S3-Zero: task0/task1 affinity was cores 0/1, two GPIO callbacks
-ran in ISR context, ADC pull-down/pull-up readings were 37/4095, UART GPIO
-loopback and SPI passed, an unwired I2C scan returned `HAL_OK` with zero devices,
-20 GPTimer callbacks ran in ISR context, and bidirectional USB Serial/JTAG plus
-system/synchronization and documented unsupported-operation checks passed.
+An earlier revision of the ESP32-S3 Phase 2 fixture completed physical closure
+on the Waveshare ESP32-S3-Zero: task0/task1 affinity was cores 0/1, two GPIO
+callbacks ran in ISR context, ADC pull-down/pull-up readings were 37/4095, UART
+GPIO loopback and SPI passed, an unwired I2C scan returned `HAL_OK` with zero
+devices, 20 default-pool GPTimer callbacks ran in ISR context, and bidirectional
+USB Serial/JTAG plus system/synchronization checks passed.
 
-That Phase 2 result covers the fixture's original subset only. It does not
-validate the later I2C-target, PWM/PWM_FREQ, RMT/RGB, PCNT, dedicated timer
-pool, boot-entry, stack-guard, or retained-fault implementations.
+That historical result covers the original fixture subset only. The current
+fixture now requires a dedicated timer pool and the implemented stack guard,
+but those checks have not been rerun on hardware. I2C target, PWM/PWM_FREQ,
+RMT/RGB, PCNT, download-boot entry, destructive stack/fault injection, and
+retained-fault recovery also remain in the Phase 3.5 hardware campaign.
 
 ### ESP32-S3 compile/link fixture
 
@@ -398,6 +400,7 @@ ctest --test-dir .build/host -R test_my_module --output-on-failure
 | `test_hal_mqtt` | server/connect flow, publish/subscribe/unsubscribe capture, callback dispatch from `hal_mqtt_loop`, invalid input guards |
 | `test_hal_network_status` | Cross-module WiFi/DNS, TCP/UDP, MQTT and WireGuard status API validation, output initialization, pool exhaustion, state and failure mapping |
 | `test_hal_ota` | OTA config setters, begin/is_started flow, boot status/confirmation, callback dispatch from injected start/progress/error/end events, callback replace/unregister flow, re-begin queue-clear behavior, invalid input guards |
+| `test_ota_protocol` | Strict invitation/AUTH2 grammar, numeric and hexadecimal normalization, exact UDP endpoint identity, transcript field binding, constant-shape tag comparison and the shared host/device HMAC-SHA256 vector |
 | `test_ota_image` | Versioned OTA manifest and redundant boot-state encoding, CRC/HMAC validation, corruption handling, sequence wraparound and newest-record selection |
 | `test_ota_swap_engine` | Resumable program/staging sector swap across every simulated pre/post-mutation failure boundary, reverse swap rollback and corrupt phase rejection |
 | `test_rp_ota_artifacts` | Native RP OTA packaging helper, including RP2040-E14 sector padding, real-page preservation, UF2 renumbering and overlap rejection |
