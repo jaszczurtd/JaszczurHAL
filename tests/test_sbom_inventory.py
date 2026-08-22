@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from pathlib import Path
 import sys
@@ -14,6 +13,7 @@ import unittest
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_sbom  # noqa: E402
+import build_esp_idf  # noqa: E402
 
 
 def read_shell_assignments(path: Path) -> dict[str, str]:
@@ -132,7 +132,7 @@ class SbomInventoryTests(unittest.TestCase):
         if tools_json.is_file():
             self.assertEqual(
                 snapshot["espIdf"]["toolsJsonSha256"],
-                hashlib.sha256(tools_json.read_bytes()).hexdigest(),
+                build_esp_idf._normalized_lf_sha256(tools_json),
             )
             live_tools = {
                 item["name"]: item

@@ -1,0 +1,12 @@
+{
+  "$schema": "../../../../vscode/schema/jh_vscode_project.schema.json",
+  "schemaVersion": 1,
+  "project": "ESP32-S3 Phase 3 compile fixture",
+  "module": "esp32s3_phase3",
+  "target": "esp32s3",
+  "board": "waveshare-esp32-s3-zero",
+  "ota": {
+    "port": 8266,
+    "passwordEnv": "JH_OTA_PASSWORD"
+  }
+}

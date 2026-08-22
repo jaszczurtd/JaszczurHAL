@@ -4331,22 +4331,18 @@ def esp_idf_ota_image(
         raise ValueError(
             "ESP-IDF artifact manifest does not identify its application flash image"
         )
-    record = next(
-        (
-            item
-            for item in manifest.get("flashImages", [])
-            if isinstance(item, dict)
-            and _esp_idf_artifact_path(
-                get_build_dir(config, project_dir).resolve(),
-                item.get("path"),
-                "flashImages[].path",
-            )
-            == application
-        ),
-        None,
-    )
-    if record is None:
+    flash_records = manifest.get("flashImages")
+    application_index = flash_images.index(application)
+    if (
+        not isinstance(flash_records, list)
+        or application_index >= len(flash_records)
+        or not isinstance(flash_records[application_index], dict)
+    ):
         raise ValueError("ESP-IDF application image has no flash manifest record")
+    # The validator returns paths in flashImages order. Reuse that mapping:
+    # resolving a validated path again is redundant and may rewrite a Windows
+    # junction/short-path alias into a different lexical Path.
+    record = flash_records[application_index]
 
     image = application.read_bytes()
     if not image:

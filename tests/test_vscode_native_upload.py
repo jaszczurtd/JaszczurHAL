@@ -1006,6 +1006,10 @@ with TemporaryDirectory(prefix="jh-esp-ota-") as temporary_dir:
             {"applicationBinary": esp_application},
             [esp_application],
         ),
+    ), patch.object(
+        module,
+        "_esp_idf_artifact_path",
+        side_effect=AssertionError("validated paths must not be resolved twice"),
     ):
         source, image = module.esp_idf_ota_image(esp_config, esp_project)
     assert source == esp_application

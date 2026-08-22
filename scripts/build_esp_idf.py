@@ -23,6 +23,7 @@ import generate_hal_features
 MANIFEST_NAME = "jh_esp_idf_artifacts.json"
 LOG_NAME = "build.log"
 FLASH_LOG_NAME = "flash.log"
+FAILURE_DIAGNOSTIC_NAME = "jh_esp_idf_failure.txt"
 GENERATED_DIR_NAME = "generated/jaszczurhal"
 GENERATED_CONFIG_NAME = "jh_board_config.h"
 PROJECT_CONFIG_CMAKE_NAME = "jh_esp_idf_project.cmake"
@@ -224,12 +225,22 @@ class EspIdfError(RuntimeError):
     """Raised when the ESP-IDF build or artifact contract is invalid."""
 
 
+def _canonical_path(path: Path) -> Path:
+    """Return one filesystem identity for lexical and Windows 8.3 aliases."""
+    return path.resolve(strict=False)
+
+
 def _inside(path: Path, parent: Path) -> bool:
     try:
-        path.relative_to(parent)
+        _canonical_path(path).relative_to(_canonical_path(parent))
         return True
     except ValueError:
         return False
+
+
+def _relative_path(path: Path, parent: Path) -> str:
+    """Return a stable relative path after resolving filesystem aliases."""
+    return _canonical_path(path).relative_to(_canonical_path(parent)).as_posix()
 
 
 def resolve_project_dir(requested: Path) -> Path:
@@ -360,14 +371,14 @@ def _load_object(path: Path) -> dict[str, Any]:
 def _artifact_path(build_dir: Path, value: str) -> tuple[Path, str]:
     relative = Path(value)
     path = relative if relative.is_absolute() else build_dir / relative
-    resolved = path.resolve(strict=False)
-    if not _inside(resolved, build_dir.resolve()):
+    resolved = _canonical_path(path)
+    if not _inside(resolved, build_dir):
         raise EspIdfError(f"Artifact escapes the build directory: {value}")
     if not resolved.is_file():
         raise EspIdfError(f"Missing build artifact: {resolved}")
     if resolved.stat().st_size == 0:
         raise EspIdfError(f"Build artifact is empty: {resolved}")
-    return resolved, resolved.relative_to(build_dir.resolve()).as_posix()
+    return resolved, _relative_path(resolved, build_dir)
 
 
 def _sha256(path: Path) -> str:
@@ -376,6 +387,12 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _normalized_lf_sha256(path: Path) -> str:
+    """Hash text while treating Git's CRLF checkout as upstream LF."""
+    content = path.read_bytes().replace(b"\r\n", b"\n")
+    return hashlib.sha256(content).hexdigest()
 
 
 def _snapshot_tool_entries(
@@ -591,7 +608,7 @@ def verify_esp_idf_tools_contract(
     expected_digest = contract["snapshot"]["espIdf"]["toolsJsonSha256"]
     if not tools_path.is_file():
         raise EspIdfError(f"ESP-IDF tool registry is missing: {tools_path}")
-    actual_digest = _sha256(tools_path)
+    actual_digest = _normalized_lf_sha256(tools_path)
     if actual_digest != expected_digest:
         raise EspIdfError(
             "ESP-IDF tools/tools.json digest drift: expected "
@@ -877,7 +894,7 @@ def collect_toolchain_provenance(
         },
         "espIdfTools": {
             "path": "tools/tools.json",
-            "sha256": _sha256(tools_json),
+            "sha256": _normalized_lf_sha256(tools_json),
         },
         "supplyChain": {
             **contract["provenance"],
@@ -893,7 +910,7 @@ def collect_toolchain_provenance(
 
 def _relative_to_project(path: Path, project_dir: Path) -> str:
     try:
-        return path.resolve().relative_to(project_dir.resolve()).as_posix()
+        return _relative_path(path, project_dir)
     except ValueError as error:
         raise EspIdfError(f"Project input escapes {project_dir}: {path}") from error
 
@@ -1102,6 +1119,8 @@ def resolve_build_model(
     features: Sequence[str],
     definitions: Sequence[str],
 ) -> dict[str, Any]:
+    repo_root = _canonical_path(repo_root)
+    project_dir = _canonical_path(project_dir)
     try:
         targets, boards, capabilities = generate_board_config.load_registry(
             repo_root / "boards"
@@ -1265,10 +1284,12 @@ def _render_sdkconfig_defaults(model: Mapping[str, Any]) -> str:
 
 
 def _project_sdkconfig_defaults(project_dir: Path, build_dir: Path) -> list[Path]:
+    project_dir = _canonical_path(project_dir)
+    build_dir = _canonical_path(build_dir)
     defaults = [build_dir / GENERATED_DIR_NAME / SDKCONFIG_DEFAULTS_NAME]
     project_defaults = project_dir / "sdkconfig.defaults"
     if project_defaults.is_file():
-        defaults.append(project_defaults.resolve())
+        defaults.append(_canonical_path(project_defaults))
     return defaults
 
 
@@ -1284,13 +1305,19 @@ def _render_project_cmake(
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_PROJECT_SOURCES",
-            [path.as_posix() for path in model["projectSources"]],
+            [
+                _canonical_path(path).as_posix()
+                for path in model["projectSources"]
+            ],
         )
     )
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_PROJECT_INCLUDE_DIRS",
-            [path.as_posix() for path in model["projectIncludeDirs"]],
+            [
+                _canonical_path(path).as_posix()
+                for path in model["projectIncludeDirs"]
+            ],
         )
     )
     lines.extend(
@@ -1307,7 +1334,7 @@ def _render_project_cmake(
         _render_cmake_list(
             "JH_ESP_IDF_COMPONENT_SOURCES",
             [
-                (model["repoRoot"] / path).as_posix()
+                _canonical_path(model["repoRoot"] / path).as_posix()
                 for path in model["integrationSources"]
             ],
         )
@@ -1327,7 +1354,7 @@ def _render_project_cmake(
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_SDKCONFIG_DEFAULTS",
-            [path.as_posix() for path in sdkconfig_defaults],
+            [_canonical_path(path).as_posix() for path in sdkconfig_defaults],
         )
     )
     return "\n".join(lines) + "\n"
@@ -1348,6 +1375,8 @@ def _project_config_contract(
     model: Mapping[str, Any],
     sdkconfig_defaults: Sequence[Path],
 ) -> dict[str, Any]:
+    project_dir = _canonical_path(project_dir)
+    build_dir = _canonical_path(build_dir)
     source_paths = {
         _relative_to_project(path, project_dir): _project_input_digest(
             path, "source"
@@ -1358,7 +1387,7 @@ def _project_config_contract(
         (
             _relative_to_project(path, project_dir)
             if _inside(path, project_dir)
-            else path.relative_to(build_dir).as_posix()
+            else _relative_path(path, build_dir)
         ): _project_input_digest(path, "sdkconfig defaults")
         for path in sdkconfig_defaults
     }
@@ -1399,6 +1428,9 @@ def materialize_build_inputs(
     build_dir: Path,
     model: Mapping[str, Any],
 ) -> Path:
+    repo_root = _canonical_path(repo_root)
+    project_dir = _canonical_path(project_dir)
+    build_dir = _canonical_path(build_dir)
     generated_dir = build_dir / GENERATED_DIR_NAME
     generated_dir.mkdir(parents=True, exist_ok=True)
     try:
@@ -1484,6 +1516,8 @@ def validate_generated_project_contract(
     project_dir: Path, build_dir: Path, model: Mapping[str, Any]
 ) -> dict[str, Any]:
     """Reject artifacts built from stale project-owned build inputs."""
+    project_dir = _canonical_path(project_dir)
+    build_dir = _canonical_path(build_dir)
     generated_dir = build_dir / GENERATED_DIR_NAME
     sdkconfig_defaults = _project_sdkconfig_defaults(project_dir, build_dir)
     expected_cmake = _render_project_cmake(model, sdkconfig_defaults)
@@ -1519,6 +1553,7 @@ def validate_ninja_freshness(
     build_dir: Path,
     project_name: str,
     toolchain_provenance: Mapping[str, Any],
+    environment: Mapping[str, str] | None = None,
 ) -> None:
     """Use Ninja's dependency graph to reject stale application artifacts."""
     cache = _load_cmake_cache(build_dir / "CMakeCache.txt")
@@ -1540,14 +1575,20 @@ def validate_ninja_freshness(
         completed = subprocess.run(
             [str(ninja), "-n", f"{project_name}.elf"],
             cwd=build_dir,
+            env=_idf_environment(
+                os.environ if environment is None else environment,
+                build_dir,
+            ),
             check=False,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
             timeout=30,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         raise EspIdfError(f"Cannot check Ninja artifact freshness: {error}") from error
-    output = (completed.stdout + completed.stderr).strip()
+    output = (completed.stdout or "").strip()
     if completed.returncode:
         raise EspIdfError(
             "Ninja artifact freshness check failed with exit "
@@ -1561,6 +1602,14 @@ def validate_ninja_freshness(
 
 
 def _compiled_source(entries: list[Any], source: Path | str) -> bool:
+    if isinstance(source, Path):
+        expected = _canonical_path(source)
+        return any(
+            isinstance(entry, dict)
+            and isinstance(entry.get("file"), str)
+            and _canonical_path(Path(entry["file"])) == expected
+            for entry in entries
+        )
     normalized = str(source).replace("\\", "/")
     return any(
         isinstance(entry, dict)
@@ -1736,8 +1785,11 @@ def validate_artifacts(
     idf_version: str,
     idf_commit: str,
     write_manifest: bool = True,
+    build_environment: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    build_dir = build_dir.resolve()
+    repo_root = _canonical_path(repo_root)
+    project_dir = _canonical_path(project_dir)
+    build_dir = _canonical_path(build_dir)
     project_name = model["projectName"]
     required = {
         "applicationElf": f"{project_name}.elf",
@@ -1907,7 +1959,12 @@ def validate_artifacts(
     configuration = _partition_configuration(
         artifact_paths["sdkconfig"], flash_images
     )
-    validate_ninja_freshness(build_dir, project_name, toolchain_provenance)
+    validate_ninja_freshness(
+        build_dir,
+        project_name,
+        toolchain_provenance,
+        build_environment,
+    )
     manifest = {
         "schemaVersion": 1,
         "project": project_name,
@@ -1997,22 +2054,56 @@ def run_idf(
         action,
         port=port,
     )
-    completed = subprocess.run(
-        command,
-        cwd=repo_root,
-        env=_idf_environment(environment, build_dir),
-        check=False,
-        capture_output=True,
-        text=True,
-    )
     build_dir.mkdir(parents=True, exist_ok=True)
     log_name = FLASH_LOG_NAME if action == "flash" else LOG_NAME
-    log = completed.stdout + completed.stderr
-    (build_dir / log_name).write_text(log, encoding="utf-8")
-    print(log, end="")
+    log_path = build_dir / log_name
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=repo_root,
+            env=_idf_environment(environment, build_dir),
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as error:
+        log = f"Cannot start ESP-IDF {action}: {error}\n"
+        log_path.write_text(log, encoding="utf-8")
+        print(log, end="", flush=True)
+        raise EspIdfError(log.rstrip()) from error
+    log = completed.stdout or ""
+    log_path.write_text(log, encoding="utf-8")
+    print(log, end="", flush=True)
     if completed.returncode:
         raise EspIdfError(
             f"ESP-IDF {action} failed with exit code {completed.returncode}"
+        )
+
+
+def _clear_failure_diagnostic(build_dir: Path) -> None:
+    (build_dir / FAILURE_DIAGNOSTIC_NAME).unlink(missing_ok=True)
+
+
+def _report_failure(
+    stage: str, error: BaseException, build_dir: Path | None
+) -> None:
+    message = f"build_esp_idf.py: stage={stage} failed: {error}"
+    print(message, file=sys.stderr, flush=True)
+    if build_dir is None:
+        return
+    try:
+        build_dir.mkdir(parents=True, exist_ok=True)
+        (build_dir / FAILURE_DIAGNOSTIC_NAME).write_text(
+            message + "\n", encoding="utf-8"
+        )
+    except Exception as diagnostic_error:
+        print(
+            "build_esp_idf.py: cannot persist failure diagnostic: "
+            f"{diagnostic_error}",
+            file=sys.stderr,
+            flush=True,
         )
 
 
@@ -2058,9 +2149,13 @@ def create_parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = create_parser().parse_args(argv)
     repo_root = arguments.repo_root.expanduser().resolve()
+    build_dir: Path | None = None
+    build_environment: Mapping[str, str] | None = None
+    stage = "resolve-project"
     try:
         project_dir = resolve_project_dir(arguments.project)
         project_name = normalize_project_name(arguments.name, project_dir)
+        stage = "resolve-build-model"
         model = resolve_build_model(
             repo_root,
             project_dir,
@@ -2071,6 +2166,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             features=arguments.feature,
             definitions=arguments.define,
         )
+        stage = "resolve-build-directory"
         build_dir = resolve_build_dir(
             repo_root,
             project_dir,
@@ -2078,6 +2174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             model["target"],
             model["board"],
         )
+        stage = "validate-command"
         if arguments.action != "build" and arguments.clean:
             raise EspIdfError("--clean is supported only by the build action")
         if arguments.action == "flash" and not arguments.port:
@@ -2085,36 +2182,53 @@ def main(argv: Sequence[str] | None = None) -> int:
         if arguments.action != "flash" and arguments.port:
             raise EspIdfError("--port is supported only by the flash action")
 
+        stage = "load-version-pin"
         config = _pin_config(repo_root)
         if model["idfTarget"] not in config["ESP_IDF_TARGETS"].split(","):
             raise EspIdfError(
                 f"ESP-IDF target {model['idfTarget']!r} is not enabled by the pin"
             )
 
+        stage = "prepare-feature-dependencies"
         prepare_feature_dependencies(
             repo_root, model, verify_only=arguments.action != "build"
         )
 
         if arguments.action == "build":
             if arguments.clean and build_dir.exists():
+                stage = "clean-build-directory"
                 shutil.rmtree(build_dir)
+            stage = "clear-failure-diagnostic"
+            _clear_failure_diagnostic(build_dir)
+            stage = "materialize-build-inputs"
             materialize_build_inputs(repo_root, project_dir, build_dir, model)
+        else:
+            stage = "clear-failure-diagnostic"
+            _clear_failure_diagnostic(build_dir)
+
+        if arguments.action in {"build", "flash"}:
             directory_override = arguments.idf_dir or os.environ.get(
                 "JH_ESP_IDF_DIR", ""
             )
+            stage = f"prepare-sdk-for-{arguments.action}"
             idf_dir = prepare_sdk(repo_root, directory_override)
-            environment = exported_environment(idf_dir)
+            stage = f"export-{arguments.action}-environment"
+            build_environment = exported_environment(idf_dir)
+
+        if arguments.action == "build":
+            stage = "idf-build"
             run_idf(
                 repo_root,
                 build_dir,
                 idf_dir,
                 model["idfTarget"],
-                environment,
+                build_environment,
                 "build",
             )
+            stage = "toolchain-provenance"
             collect_toolchain_provenance(
                 idf_dir,
-                environment,
+                build_environment,
                 build_dir,
                 repo_root=repo_root,
                 idf_version=config["ESP_IDF_VERSION"],
@@ -2122,6 +2236,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 idf_target=model["idfTarget"],
             )
 
+        stage = "artifact-validation"
         manifest = validate_artifacts(
             repo_root,
             project_dir,
@@ -2129,33 +2244,33 @@ def main(argv: Sequence[str] | None = None) -> int:
             model,
             idf_version=config["ESP_IDF_VERSION"],
             idf_commit=config["ESP_IDF_REF"],
+            build_environment=build_environment,
         )
 
         if arguments.action == "flash":
-            directory_override = arguments.idf_dir or os.environ.get(
-                "JH_ESP_IDF_DIR", ""
-            )
-            idf_dir = prepare_sdk(repo_root, directory_override)
-            environment = exported_environment(idf_dir)
+            stage = "idf-flash"
             run_idf(
                 repo_root,
                 build_dir,
                 idf_dir,
                 model["idfTarget"],
-                environment,
+                build_environment,
                 "flash",
                 port=arguments.port,
             )
+            stage = "validate-flash-log"
             _validate_clean_build_log(build_dir / FLASH_LOG_NAME)
+            stage = "post-flash-toolchain-provenance"
             collect_toolchain_provenance(
                 idf_dir,
-                environment,
+                build_environment,
                 build_dir,
                 repo_root=repo_root,
                 idf_version=config["ESP_IDF_VERSION"],
                 idf_commit=config["ESP_IDF_REF"],
                 idf_target=model["idfTarget"],
             )
+            stage = "post-flash-artifact-validation"
             manifest = validate_artifacts(
                 repo_root,
                 project_dir,
@@ -2163,6 +2278,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 model,
                 idf_version=config["ESP_IDF_VERSION"],
                 idf_commit=config["ESP_IDF_REF"],
+                build_environment=build_environment,
             )
     except (
         OSError,
@@ -2171,7 +2287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         component_manager.ComponentError,
         generate_hal_features.RegistryError,
     ) as error:
-        print(f"build_esp_idf.py: {error}", file=sys.stderr)
+        _report_failure(stage, error, build_dir)
         return 1
 
     verb = "flashed" if arguments.action == "flash" else "verified"
