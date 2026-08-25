@@ -6,7 +6,7 @@
 
 /**
  * @file hal_ble.h
- * @brief Experimental Bluetooth Low Energy Peripheral and Observer API.
+ * @brief Bluetooth Low Energy Peripheral and Observer API.
  *
  * The first release supports one Peripheral connection, legacy advertising,
  * passive legacy scanning, ATT MTU reporting, and bounded event/report queues.
@@ -25,7 +25,6 @@
 extern "C" {
 #endif
 
-#define HAL_BLE_MATURITY_EXPERIMENTAL 1
 #define HAL_BLE_ADDRESS_LEN 6u
 #define HAL_BLE_ADDRESS_TEXT_SIZE 18u
 #define HAL_BLE_LEGACY_ADV_MAX_DATA_LEN 31u

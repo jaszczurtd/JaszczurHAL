@@ -401,22 +401,22 @@ require(
     full_configuration_counts
     == {
         "rp2040": 34,
-        "rp2350-arm": 26,
+        "rp2350-arm": 27,
         "rp2350-riscv": 22,
         "stm32g474": 32,
     }
-    and sum(full_configuration_counts.values()) == 114,
+    and sum(full_configuration_counts.values()) == 115,
     f"full dispatcher matrix changed: {full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
         "rp2040": 32,
-        "rp2350-arm": 0,
+        "rp2350-arm": 1,
         "rp2350-riscv": 0,
         "stm32g474": 30,
     }
-    and sum(gate_configuration_counts.values()) == 62,
+    and sum(gate_configuration_counts.values()) == 63,
     f"dispatcher gate matrix changed: {gate_configuration_counts}",
 )
 

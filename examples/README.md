@@ -14,14 +14,14 @@ by `vscode/entry/jh-vscode` and `cmake/jh_firmware_project`.
 ## Matrix and gate policy
 
 A configuration is one base project or project variant built for one target.
-The complete supported matrix contains 114 configurations:
+The complete supported matrix contains 115 configurations:
 
 | Matrix | `rp2040` | `rp2350-arm` | `rp2350-riscv` | `stm32g474` | Total |
 |---|---:|---:|---:|---:|---:|
-| Full supported matrix | 34 | 26 | 22 | 32 | **114** |
-| Default examples gate | 32 | 0 | 0 | 30 | **62** |
+| Full supported matrix | 34 | 27 | 22 | 32 | **115** |
+| Default examples gate | 32 | 1 | 0 | 30 | **63** |
 | Representative Gate 6 builds | 2 | 2 | 2 | 0 | **6** |
-| Example-related default HAL gate builds | 34 | 2 | 2 | 30 | **68** |
+| Example-related default HAL gate builds | 34 | 3 | 2 | 30 | **69** |
 
 The six Gate 6 invocations build the core-runtime and FreeRTOS representative
 firmware once with each RP toolchain/architecture. They deliberately exercise
@@ -49,9 +49,12 @@ the run to configurations whose `gateTargets` contain that target:
 # Complete matrix for one target.
 scripts/examples_dispatcher.py build --target rp2350-arm --jobs "$(nproc)"
 
-# Default examples gate: 32 RP2040 plus 30 STM32G474 configurations.
+# Default examples gate: 32 RP2040, one RP2350 ARM, and 30 STM32G474
+# configurations.
 scripts/examples_dispatcher.py build \
   --target rp2040 --gate --jobs "$(nproc)"
+scripts/examples_dispatcher.py build \
+  --target rp2350-arm --gate --jobs "$(nproc)"
 scripts/examples_dispatcher.py build \
   --target stm32g474 --gate --jobs "$(nproc)"
 ```
@@ -94,7 +97,7 @@ Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 | `23_io_pmic` | RGB LED, simple I/O expanders/DAC, and ADP5360 PMIC | `18_rgb_led`, `53_simple_io_chips`, `54_adp5360_pmic` | R0, RA, RV, S | R0, S | - |
 | `24_epd_display` | E-paper display facade and refresh path | `55_epd_display` | R0, RA, RV, S | R0, S | - |
 | `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | `57_ota` | R0, RA | R0 | - |
-| `26_ble_stream` | Experimental BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, S | R0, S | - |
+| `26_ble_stream` | BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, RA, S | R0, RA, S | - |
 | `27_lora_point_to_point` | Raw SX1262 ping/pong plus addressed, acknowledged and fragmented `hal_lora_link` messaging | `60_lora_point_to_point` | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.

@@ -9,10 +9,9 @@
  * @brief JH BLE Stream v1 - bounded byte stream over one static GATT service.
  *
  * The profile is a versioned JaszczurHAL contract. A client reads the protocol
- * version, capabilities and non-sensitive identity without a session. Every
- * mutating or sensitive operation requires a mutually authenticated session
- * built on a per-device secret, HMAC-SHA256 proofs and ChaCha20-Poly1305
- * frames.
+ * version and capabilities without a session. Every mutating or sensitive
+ * operation requires a mutually authenticated session built on a per-device
+ * secret, HMAC-SHA256 proofs and ChaCha20-Poly1305 frames.
  *
  * This file is the single source of truth for the service UUIDs, the frame
  * layout and the capability bits. Changing any of them raises the profile
@@ -29,8 +28,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#define HAL_BLE_STREAM_MATURITY_EXPERIMENTAL 1
 
 /** Profile label bound into every transcript. */
 #define HAL_BLE_STREAM_PROFILE_NAME "JH BLE Stream"
@@ -149,8 +146,6 @@ typedef enum {
 typedef struct {
   /** Capabilities advertised to the client and bound into the transcript. */
   uint16_t capabilities;
-  /** Optional read-only identity without sensitive data; may be NULL. */
-  const char *identity;
   /** Session lifetime without a valid frame; zero selects the default. */
   uint32_t idle_timeout_ms;
 } hal_ble_stream_config_t;

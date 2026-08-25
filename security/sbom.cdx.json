@@ -936,9 +936,7 @@
       "scope": "optional",
       "licenses": [
         {
-          "license": {
-            "id": "LicenseRef-BTstack-NonCommercial"
-          }
+          "expression": "LicenseRef-BTstack-NonCommercial OR LicenseRef-BTstack-RaspberryPi-Products"
         }
       ],
       "supplier": {
@@ -967,6 +965,11 @@
         },
         {
           "type": "other",
+          "url": "src/hal/bluetooth/LICENSE.RP",
+          "comment": "repository path"
+        },
+        {
+          "type": "other",
           "url": "src/hal/bluetooth",
           "comment": "repository path"
         }
@@ -978,7 +981,7 @@
         },
         {
           "name": "jaszczurhal:notes",
-          "value": "Exact Pico SDK-selected revision. Upstream permits personal, non-commercial use and requires notice reproduction; commercial firmware distribution requires a separate BlueKitchen license."
+          "value": "Exact Pico SDK-selected revision. The standard BlueKitchen grant is limited to personal, non-commercial use and imposes notice conditions. A separate Raspberry Pi grant permits a Customer to use and distribute BTstack only with the Products and Customer Products defined in src/hal/bluetooth/LICENSE.RP; it is not a general CYW43 permission. The applicable grant and notice obligations depend on the hardware and distribution."
         },
         {
           "name": "jaszczurhal:feature_flags",
@@ -986,7 +989,7 @@
         },
         {
           "name": "jaszczurhal:paths",
-          "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/bluetooth"
+          "value": "third_party/BTstack,third_party/btstack_version.conf,third_party/LICENSE.BTstack,src/hal/bluetooth/LICENSE.RP,src/hal/bluetooth"
         }
       ]
     },
@@ -1867,5 +1870,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:e4fba209-b328-a89b-721f-058a9527d5ae"
+  "serialNumber": "urn:uuid:26d4daba-c485-e17b-b3c8-a11b919a5c0b"
 }

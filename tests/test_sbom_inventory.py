@@ -197,6 +197,19 @@ class SbomInventoryTests(unittest.TestCase):
         self.assertEqual("2d228f2f862a95846c65a8518c79f48dfc8f188c",
                          properties["jaszczurhal:commit"])
         components = {item["name"]: item for item in sbom["components"]}
+        btstack = components["BTstack"]
+        self.assertEqual(
+            "LicenseRef-BTstack-NonCommercial OR "
+            "LicenseRef-BTstack-RaspberryPi-Products",
+            btstack["licenses"][0]["expression"],
+        )
+        btstack_paths = {
+            ref["url"]
+            for ref in btstack["externalReferences"]
+            if ref["type"] == "other"
+        }
+        self.assertIn("third_party/LICENSE.BTstack", btstack_paths)
+        self.assertIn("src/hal/bluetooth/LICENSE.RP", btstack_paths)
         expected_tools = {
             item["name"]: generate_sbom.make_component(item)
             for item in generate_sbom.esp_idf_tool_components(

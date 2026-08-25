@@ -1,9 +1,15 @@
 # Bluetooth Stage 1 hardware probe
 
-This private probe validates the pre-API CYW43/BTstack integration on the two
-boards selected by the design: STM32G474 Nucleo + PIM730 and Raspberry Pi Pico
-W. It deliberately enables no public Bluetooth feature macro and must not be
-used as an application API example.
+This internal probe validates the pre-API CYW43/BTstack integration. Its build
+matrix covers STM32G474 Nucleo + PIM730, Raspberry Pi Pico W, and RP2350 ARM
+Pico 2 W. It deliberately enables no public Bluetooth feature macro and must
+not be used as an application API example.
+
+The historical Stage 1 hardware runs below cover Nucleo+PIM730 and Pico W.
+Pico 2 W hardware acceptance uses the public
+[`bluetooth_observer`](../bluetooth_observer/) and
+[`bluetooth_stream`](../bluetooth_stream/) fixtures instead. RP2350 RISC-V is
+unsupported because its CYW43 Bluetooth transport is not enabled.
 
 The build owns BTstack sources directly and does not link `pico_cyw43_arch`,
 `pico_btstack_cyw43`, or Pico SDK Bluetooth storage glue. It brings up the

@@ -245,12 +245,17 @@ manifest = json.loads(
     ).read_text(encoding="utf-8")
 )
 require(
-    manifest["example"]["targets"] == ["stm32g474", "rp2040"],
-    "hardware probe does not cover both Stage 1 targets",
+    manifest["example"]["targets"]
+    == ["stm32g474", "rp2350-arm", "rp2040"],
+    "hardware probe does not cover all Stage 1 targets",
 )
 require(
     manifest["example"]["boards"]
-    == {"stm32g474": "nucleo-g474re-pim730", "rp2040": "picow"},
+    == {
+        "stm32g474": "nucleo-g474re-pim730",
+        "rp2350-arm": "pico2w",
+        "rp2040": "picow",
+    },
     "hardware probe selects unexpected boards",
 )
 variants = {item["id"]: item for item in manifest["example"]["variants"]}

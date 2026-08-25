@@ -5,10 +5,12 @@
     "example": {
         "targets": [
             "stm32g474",
+            "rp2350-arm",
             "rp2040"
         ],
         "boards": {
             "stm32g474": "nucleo-g474re-pim730",
+            "rp2350-arm": "pico2w",
             "rp2040": "picow"
         }
     },

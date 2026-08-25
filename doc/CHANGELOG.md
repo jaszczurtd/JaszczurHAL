@@ -4,6 +4,37 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Removed the unused `hal_ble_stream_config_t::identity` field and the obsolete
+  BLE maturity macros without changing the JH BLE Stream v1 GATT or frame
+  contract. Enabled the BLE backend for RP2350 ARM/Pico 2 W, retained RP2350
+  RISC-V as unsupported, and documented both the standard BlueKitchen BTstack
+  license and the separate Raspberry Pi Product/Customer Product grant in the
+  API and SBOM.
+- Extended the existing BLE Stream hardware fixture with a FreeRTOS variant,
+  public lifecycle restart without an MCU reset, 50 authenticated reconnects,
+  a sustained stream, deterministic RX saturation/recovery diagnostics, and
+  eight build tuples covering Pico W, Pico 2 W, Pico+RM2, and STM32G474+RM2.
+  The Linux/BlueZ oracle verifies pre-auth metadata, exact GATT ownership and
+  flags, both GATT write paths, compiled target/board/runtime identity, fresh
+  handshakes, controlled disconnects, and a measured five-minute stream rate.
+  Pico W bare-metal and Pico 2 W bare-metal/FreeRTOS passed the complete gate;
+  the corrected Pico W FreeRTOS image and external-radio tuples remain pending.
+- Revalidated passive Observer scanning on Pico W and Pico 2 W with retained
+  Teltonika/Eddystone reports and zero queue loss. Native Windows execution and
+  downstream consumer/lights-timer integration remain deferred and do not
+  block the recorded BLE hardware acceptance.
+- Closed the active BLE Stream plus WiFi/MQTT coexistence gate on Pico 2 W in
+  bare-metal and FreeRTOS builds. Both 10-minute Linux/BlueZ runs sustained
+  10.00 authenticated echoes/s with zero loss while the firmware disconnected
+  and restored WiFi and MQTT without dropping the BLE link; all BLE, Stream,
+  MQTT, HCI, queue, and event error counters remained clear. The stress oracle
+  also requires continuous MQTT echo progress and at least 90% of its fixed
+  10 Hz rate throughout the observation window.
+- Deferred CYW43/BLE startup in the public Stream example until the scheduler
+  is running, reserved a 1024-word FreeRTOS task stack, and strengthened the
+  unattended watchdog-reset oracle with a fresh random 64-bit boot identifier.
+  The test therefore distinguishes a real MCU reboot from a BLE-only restart
+  even when the previous reset reason was already watchdog.
 - Added the exact `esp32s3` target and Waveshare ESP32-S3-Zero
   SKU 25081 board profile. The generated contract now carries ESP-IDF target,
   4 MiB flash, 2 MiB Quad PSRAM, pin-trait, native WiFi/Bluetooth/USB,
@@ -453,9 +484,9 @@ to 1.9.1 or a later release.
   project or variant unless target, runtime, board, resource, or hardware
   constraints require a separate firmware project.
 
-### Experimental CYW43 Bluetooth bring-up
+### CYW43 Bluetooth bring-up
 
-- Added the experimental `hal_ble_stream` JH BLE Stream v1 profile: one static
+- Added the `hal_ble_stream` JH BLE Stream v1 profile: one static
   GATT service carrying a bounded byte stream, versioned framing with
   capability negotiation, and a mutually authenticated application session
   built on HMAC-SHA256 proofs and directional ChaCha20-Poly1305 keys. A client
@@ -480,16 +511,16 @@ to 1.9.1 or a later release.
   advertising-report queue with explicit overflow acknowledgement, and an
   allocation-free AD structure parser. Scanning remains mutually exclusive
   with advertising and connections and exposes no GATT client or pairing.
-- Added deterministic Observer mock coverage and a two-target hardware probe
+- Added deterministic Observer mock coverage and a multi-target hardware probe
   for Teltonika company data, iBeacon, and Eddystone signatures.
-- Added the experimental public `hal_ble` Peripheral API with copied legacy
+- Added the public `hal_ble` Peripheral API with copied legacy
   advertising, one opaque connection, bounded events, ATT MTU reporting, a
   static GAP/GATT database, and a deterministic host mock.
 - Added the `26_ble_stream` example and native build profiles for RP2040
   Pico W and STM32G474 NUCLEO+PIM730, backed by the same CYW43/BTstack runtime.
 - Declared Bluetooth controller board capabilities and the optional BTstack
   component, with public lifecycle, failure, and external-radio requirements.
-- Added the experimental `nucleo-g474re-pim730` board profile with fixed gSPI
+- Added the `nucleo-g474re-pim730` board profile with fixed gSPI
   pin ownership and CYW43 capabilities; network builds now reject the plain
   radio-less Nucleo profile at compile time.
 - Pinned the BTstack revision selected by Pico SDK 2.2.0 and added a private,

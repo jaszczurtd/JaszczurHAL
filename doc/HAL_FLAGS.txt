@@ -274,12 +274,15 @@ requests for derived symbols.
 
 Connectivity
   HAL_ENABLE_BLE
-    Experimental BLE Peripheral with one connection, copied legacy
+    BLE Peripheral and passive Observer with one connection, copied legacy
     advertising, bounded events, ATT MTU reporting, and static GAP/GATT
-    services. Supported on RP2040 Pico W, STM32G474+PIM730, and mock. Pulls
-    the pinned, non-commercial-use BTstack dependency into firmware.
+    services. Supported on RP2040 Pico W/Pico+PIM730/RM2, RP2350 ARM Pico 2 W,
+    STM32G474+PIM730/RM2, and mock. RP2350 RISC-V is unsupported. Pulls the
+    pinned BTstack dependency into firmware; the applicable standard or
+    Raspberry Pi product-scoped grant is described in
+    doc/api/20_bluetooth.md.
   HAL_ENABLE_BLE_STREAM
-    Experimental JH BLE Stream v1: one static GATT service carrying a bounded
+    JH BLE Stream v1: one static GATT service carrying a bounded
     byte stream behind a mutually authenticated application session. Enables
     HAL_ENABLE_BLE and HAL_ENABLE_CRYPTO. A client reads the protocol version
     and capabilities without a session; payload exchange requires proof of the

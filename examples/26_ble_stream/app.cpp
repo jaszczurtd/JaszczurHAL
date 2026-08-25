@@ -35,8 +35,13 @@ const uint8_t kDeviceSecret[HAL_BLE_STREAM_SECRET_MIN_LEN] = {
     0x75u, 0xB0u, 0x39u, 0xA8u, 0x4Fu, 0xD6u, 0x62u, 0x1Eu, 0xC4u, 0x97u};
 
 hal_ble_advertising_handle_t s_advertising;
+hal_status_t s_status = HAL_NONE;
 uint32_t s_next_telemetry_ms;
 uint32_t s_sequence;
+char s_pending_telemetry[48];
+size_t s_pending_telemetry_length;
+bool s_started;
+bool s_telemetry_pending;
 
 hal_ble_advertising_config_t advertising_config(void) {
   hal_ble_advertising_config_t config{};
@@ -74,9 +79,7 @@ void on_ble_event(const hal_ble_event_t *event, void *) {
     deb("Client connected");
     break;
   case HAL_BLE_EVENT_DISCONNECTED: {
-    deb("Client disconnected, advertising again");
-    const hal_ble_advertising_config_t config = advertising_config();
-    (void)hal_ble_advertising_start(&config, &s_advertising);
+    deb("Client disconnected; advertising resumes automatically");
     break;
   }
   case HAL_BLE_EVENT_MTU_UPDATED:
@@ -112,30 +115,86 @@ void drain_received_payloads(void) {
   }
 }
 
+void clear_pending_telemetry(void) {
+  s_pending_telemetry_length = 0u;
+  s_telemetry_pending = false;
+}
+
+hal_status_t flush_pending_telemetry(void) {
+  const hal_status_t status =
+      hal_ble_stream_send(s_pending_telemetry, s_pending_telemetry_length);
+  if (status != HAL_EAGAIN) {
+    clear_pending_telemetry();
+  }
+  return status;
+}
+
 void publish_telemetry(void) {
   hal_ble_stream_info_t info{};
   if (hal_ble_stream_get_info(&info) != HAL_OK ||
       info.state != HAL_BLE_STREAM_STATE_AUTHENTICATED) {
+    clear_pending_telemetry();
     return;
   }
+
+  if (s_telemetry_pending) {
+    const hal_status_t status = flush_pending_telemetry();
+    if (status == HAL_EAGAIN) {
+      return;
+    }
+    if (status != HAL_OK) {
+      derr("Stream telemetry retry failed: %s", hal_status_to_string(status));
+      return;
+    }
+    s_next_telemetry_ms = hal_millis() + kTelemetryPeriodMs;
+    return;
+  }
+
   if ((int32_t)(hal_millis() - s_next_telemetry_ms) < 0) {
     return;
   }
-  s_next_telemetry_ms = hal_millis() + kTelemetryPeriodMs;
 
-  char message[48];
-  const int written =
-      snprintf(message, sizeof(message), "seq=%lu uptime=%lu",
-               (unsigned long)++s_sequence, (unsigned long)hal_millis());
-  if (written <= 0) {
+  const int written = snprintf(
+      s_pending_telemetry, sizeof(s_pending_telemetry), "seq=%lu uptime=%lu",
+      (unsigned long)++s_sequence, (unsigned long)hal_millis());
+  if (written <= 0 || (size_t)written >= sizeof(s_pending_telemetry)) {
     return;
   }
-  const hal_status_t status = hal_ble_stream_send(message, (size_t)written);
+  s_pending_telemetry_length = (size_t)written;
+  s_telemetry_pending = true;
+  const hal_status_t status = flush_pending_telemetry();
   if (status == HAL_EAGAIN) {
-    deb("Stream TX backpressure, retrying later");
+    deb("Stream TX backpressure; one telemetry sample queued for retry");
   } else if (status != HAL_OK) {
     derr("Stream send failed: %s", hal_status_to_string(status));
+  } else {
+    s_next_telemetry_ms = hal_millis() + kTelemetryPeriodMs;
   }
+}
+
+hal_status_t initialize_runtime(void) {
+  hal_status_t status = hal_ble_initialize();
+  if (status != HAL_OK) {
+    return status;
+  }
+  status = hal_ble_set_event_callback(on_ble_event, nullptr);
+  if (status != HAL_OK) {
+    (void)hal_ble_deinitialize();
+    return status;
+  }
+
+  hal_ble_stream_config_t config{};
+  config.capabilities =
+      HAL_BLE_STREAM_CAP_TELEMETRY | HAL_BLE_STREAM_CAP_DIAGNOSTICS;
+  status = hal_ble_stream_initialize(&config);
+  if (status == HAL_OK) {
+    status = hal_ble_stream_set_secret(kDeviceSecret, sizeof(kDeviceSecret));
+  }
+  if (status != HAL_OK) {
+    (void)hal_ble_stream_deinitialize();
+    (void)hal_ble_deinitialize();
+  }
+  return status;
 }
 
 } // namespace
@@ -143,28 +202,27 @@ void publish_telemetry(void) {
 extern "C" void app_start(void) {
   debugInit();
   deb("JH BLE Stream v1 example");
-
-  if (hal_ble_initialize() != HAL_OK) {
-    derr("BLE initialize failed");
-    return;
-  }
-  (void)hal_ble_set_event_callback(on_ble_event, nullptr);
-
-  hal_ble_stream_config_t config{};
-  config.capabilities =
-      HAL_BLE_STREAM_CAP_TELEMETRY | HAL_BLE_STREAM_CAP_DIAGNOSTICS;
-  if (hal_ble_stream_initialize(&config) != HAL_OK) {
-    derr("Stream initialize failed");
-    return;
-  }
-  if (hal_ble_stream_set_secret(kDeviceSecret, sizeof(kDeviceSecret)) !=
-      HAL_OK) {
-    derr("Stream secret rejected");
-  }
 }
 
 extern "C" void app_task0(void) {
-  (void)hal_ble_poll();
+  if (!s_started) {
+    s_started = true;
+    s_status = initialize_runtime();
+    if (s_status != HAL_OK) {
+      derr("BLE Stream initialize failed: %s", hal_status_to_string(s_status));
+    }
+  }
+  if (s_status != HAL_OK) {
+    hal_delay_ms(1u);
+    return;
+  }
+  const hal_status_t status = hal_ble_poll();
+  if (status != HAL_OK && status != HAL_EOVERFLOW) {
+    s_status = status;
+    derr("BLE poll failed: %s", hal_status_to_string(status));
+    return;
+  }
   drain_received_payloads();
   publish_telemetry();
+  hal_delay_ms(1u);
 }

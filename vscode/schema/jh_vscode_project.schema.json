@@ -27,6 +27,25 @@
           "description": "Default board id used by the automated example dispatcher for each declared target.",
           "additionalProperties": { "type": "string" }
         },
+        "hardwareMatrix": {
+          "type": "array",
+          "description": "Auditable target, board, and runtime combinations required by a physical hardware gate. baremetal selects the base manifest; freertos selects the freertos variant.",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["target", "board", "runtime"],
+            "properties": {
+              "target": { "type": "string", "minLength": 1 },
+              "board": { "type": "string", "minLength": 1 },
+              "runtime": {
+                "type": "string",
+                "enum": ["baremetal", "freertos"]
+              }
+            }
+          }
+        },
         "gateTargets": {
           "type": "array",
           "description": "Representative target subset compiled by the examples quality gate. Supported targets remain declared in targets.",

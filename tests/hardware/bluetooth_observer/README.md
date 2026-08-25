@@ -1,7 +1,7 @@
 # Bluetooth Observer hardware probe
 
-This probe validates the experimental passive BLE Observer API on Raspberry Pi
-Pico W and STM32G474 Nucleo with PIM730/RM2. It starts passive legacy scanning,
+This probe validates the passive BLE Observer API on Raspberry Pi Pico W, Pico
+2 W, and STM32G474 Nucleo with PIM730/RM2. It starts passive legacy scanning,
 drains the bounded report queue, parses AD structures, and records Teltonika
 company data, iBeacon, and Eddystone signatures without initiating a BLE
 connection.
@@ -15,6 +15,10 @@ vscode/entry/jh-vscode build \
 
 vscode/entry/jh-vscode build \
   --project tests/hardware/bluetooth_observer \
+  --target rp2350-arm --board pico2w
+
+vscode/entry/jh-vscode build \
+  --project tests/hardware/bluetooth_observer \
   --target stm32g474 --board nucleo-g474re-pim730
 ```
 
@@ -23,9 +27,22 @@ Beacon report on each board, the total and dropped report counters, and the
 ELF/map memory summary. The test remains passive: scan responses, GATT client,
 connections, pairing, and bonding are outside this probe.
 
-## Recorded hardware result - 2026-08-05
+RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
+enabled.
 
-Both boards completed the passive scan with `HAL_OK`, entered
+## Recorded RP hardware results - 2026-08-25
+
+Both RP boards entered `HAL_BLE_STATE_SCANNING`, recognized Teltonika company
+ID `0x089A`, retained Eddystone signatures, and reported no queue loss:
+
+| Board | Reports observed | Signatures | Dropped | FLASH load | Static SRAM | Reserved SRAM |
+|---|---:|---|---:|---:|---:|---:|
+| RP2040 Pico W | 7 | Teltonika: 1, Eddystone: 3 | 0 | 408.1 KiB | 59.0 KiB | 6.0 KiB |
+| RP2350 ARM Pico 2 W | 7 | Teltonika: 1, Eddystone: 3 | 0 | 396.9 KiB | 58.6 KiB | 6.0 KiB |
+
+## Recorded Pico W and STM32G474 result - 2026-08-05
+
+Pico W and STM32G474 completed the passive scan with `HAL_OK`, entered
 `HAL_BLE_STATE_SCANNING`, recognized Teltonika company ID `0x089A`, and
 reported no queue loss:
 
