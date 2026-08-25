@@ -62,8 +62,8 @@ Stack protection uses two independent opt-ins:
 
 | Flag | Header | Impl | 3rd-party deps pulled in |
 |---|---|---|---|
-| `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | Experimental BLE Peripheral over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W, STM32G474+PIM730, and mock. BTstack carries a non-commercial-use restriction; see the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
-| `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Experimental bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
+| `HAL_ENABLE_BLE` | `hal_ble.h` | `hal_ble.cpp` + `hal/bluetooth/*` | BLE Peripheral and passive Observer over the pinned BTstack and CYW43 controller; supported on RP2040 Pico W/Pico+RM2, RP2350 ARM Pico 2 W, STM32G474+PIM730/RM2, and mock. RP2350 RISC-V is unsupported. The applicable standard or Raspberry Pi product-scoped BTstack grant is described in the [Bluetooth API](20_bluetooth.md#license-and-distribution-boundary). |
+| `HAL_ENABLE_BLE_STREAM` | `hal_ble_stream.h` | `hal_ble_stream.cpp` + `hal/bluetooth/*` | Authenticated bounded framed byte stream over BLE (propagates BLE + CRYPTO) |
 | `HAL_ENABLE_LORA` | `hal_lora_radio.h` | `hal_lora_radio.cpp` | Provider-neutral raw LoRa lifecycle, modem presets, blocking TX, polling RX, diagnostics, power state and time-on-air; requires exactly one provider |
 | `HAL_ENABLE_LORA_LINK` | `hal_lora_link.h` | `hal_lora_link.cpp` + `jh_lora_link_frame.cpp` | Reliable private messages with addressing, sequences, ACK/retry, duplicate suppression and fragmentation (propagates LORA + CRC); optional AEAD requires CRYPTO; see the [LoRa link API](22_lora_link.md) |
 | `HAL_ENABLE_SX126X` | `hal_lora_radio.h` | `hal_lora_radio.cpp` + `hal/radio/sx126x/*` + pinned Semtech driver | SX1262 plus experimental, software-only SX1261 provider over HAL SPI/GPIO (propagates LORA + SPI); see the [LoRa radio API](21_lora.md) |

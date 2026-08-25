@@ -5,10 +5,12 @@
     "example": {
         "targets": [
             "stm32g474",
+            "rp2350-arm",
             "rp2040"
         ],
         "boards": {
             "stm32g474": "nucleo-g474re-pim730",
+            "rp2350-arm": "pico2w",
             "rp2040": "picow"
         },
         "variants": [
@@ -17,13 +19,13 @@
                 "module": "bluetooth_stage1",
                 "sources": ["app.c"],
                 "extraDefines": ["JH_BLUETOOTH_STAGE1_PROBE"],
-                "targets": ["stm32g474", "rp2040"]
+                "targets": ["stm32g474", "rp2350-arm", "rp2040"]
             },
             {
                 "id": "wifi-only",
                 "module": "bluetooth_stage1_wifi_baseline",
                 "sources": ["app_wifi_baseline.c"],
-                "targets": ["stm32g474", "rp2040"],
+                "targets": ["stm32g474", "rp2350-arm", "rp2040"],
                 "cmake": {
                     "cache": {"JH_EXTRA_DEFINES": ""}
                 }

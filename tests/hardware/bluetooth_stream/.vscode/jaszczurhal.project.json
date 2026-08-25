@@ -5,12 +5,70 @@
     "example": {
         "targets": [
             "stm32g474",
+            "rp2350-arm",
             "rp2040"
         ],
         "boards": {
             "stm32g474": "nucleo-g474re-pim730",
+            "rp2350-arm": "pico2w",
             "rp2040": "picow"
-        }
+        },
+        "hardwareMatrix": [
+            {
+                "target": "rp2040",
+                "board": "picow",
+                "runtime": "baremetal"
+            },
+            {
+                "target": "rp2040",
+                "board": "picow",
+                "runtime": "freertos"
+            },
+            {
+                "target": "rp2040",
+                "board": "pico-rm2",
+                "runtime": "baremetal"
+            },
+            {
+                "target": "rp2040",
+                "board": "pico-rm2",
+                "runtime": "freertos"
+            },
+            {
+                "target": "rp2350-arm",
+                "board": "pico2w",
+                "runtime": "baremetal"
+            },
+            {
+                "target": "rp2350-arm",
+                "board": "pico2w",
+                "runtime": "freertos"
+            },
+            {
+                "target": "stm32g474",
+                "board": "nucleo-g474re-pim730",
+                "runtime": "baremetal"
+            },
+            {
+                "target": "stm32g474",
+                "board": "nucleo-g474re-pim730",
+                "runtime": "freertos"
+            }
+        ],
+        "variants": [
+            {
+                "id": "freertos",
+                "module": "bluetooth_stream_freertos",
+                "targets": [
+                    "stm32g474",
+                    "rp2350-arm",
+                    "rp2040"
+                ],
+                "extraDefines": [
+                    "HAL_ENABLE_FREERTOS"
+                ]
+            }
+        ]
     },
     "toolchain": "cmake",
     "target": "stm32g474",

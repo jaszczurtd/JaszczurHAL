@@ -5,14 +5,17 @@
     "example": {
         "targets": [
             "rp2040",
+            "rp2350-arm",
             "stm32g474"
         ],
         "boards": {
             "rp2040": "picow",
+            "rp2350-arm": "pico2w",
             "stm32g474": "nucleo-g474re-pim730"
         },
         "gateTargets": [
             "rp2040",
+            "rp2350-arm",
             "stm32g474"
         ],
         "covers": [

@@ -140,8 +140,9 @@
 #if !HAL_BOARD_HAS_BLUETOOTH_CONTROLLER
 #error "HAL_ENABLE_BLE requires a board profile with a Bluetooth controller"
 #endif
-#if !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
-#error "HAL_ENABLE_BLE is currently supported on RP2040, STM32G474, and mock"
+#if !(HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM ||                      \
+      HAL_TARGET_IS_STM32G474 || HAL_TARGET_IS_MOCK)
+#error "HAL_ENABLE_BLE is supported on RP2040, RP2350 ARM, STM32G474, and mock"
 #endif
 #endif
 

@@ -105,8 +105,9 @@ Runs the complete quality-gate suite (8 gates, in order):
    `01_core_runtime`/`18_freertos_suite` ELF/BIN/UF2 builds, and one clean
    compile-only `tests/fixtures/esp32s3_phase3` build with the pinned ESP-IDF
    and validated multi-image manifest)
-8. Examples build (62 dispatcher-backed `gateTargets` configurations: 32 for
-   RP2040 and 30 for STM32G474, plus the dedicated target/runtime fixtures)
+8. Examples build (63 dispatcher-backed `gateTargets` configurations: 32 for
+   RP2040, one for RP2350 ARM, and 30 for STM32G474, plus the dedicated
+   target/runtime fixtures)
 
 Exits non-zero on the first failure; logs capture any warnings/errors.
 

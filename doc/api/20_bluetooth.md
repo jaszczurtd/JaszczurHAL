@@ -2,9 +2,9 @@
 
 > **Part of [JaszczurHAL API Reference](../JaszczurHAL_API.md)**
 
-The `hal_ble` module is an **experimental**, opt-in Bluetooth Low Energy
-Peripheral and passive Observer API. Define `HAL_ENABLE_BLE` and include
-`hal/bluetooth/hal_ble.h` or the umbrella `JaszczurHAL.h` header.
+The `hal_ble` module is an opt-in Bluetooth Low Energy Peripheral and passive
+Observer API. Define `HAL_ENABLE_BLE` and include `hal/bluetooth/hal_ble.h` or
+the umbrella `JaszczurHAL.h` header.
 
 The current release provides one Peripheral connection, connectable legacy
 advertising, passive legacy scanning, copied advertising reports, AD structure
@@ -17,29 +17,84 @@ service and its notification path.
 
 ## Supported profiles
 
-| Target | Board | Radio |
-|---|---|---|
-| `rp2040` | `picow` | onboard CYW43439 |
-| `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI |
-| `mock` | `host-mock` | deterministic test backend |
+| Target | Board | Radio | Validation |
+|---|---|---|---|
+| `rp2040` | `picow` | onboard CYW43439 | Observer and bare-metal Stream hardware gates passed; FreeRTOS Stream rerun pending |
+| `rp2350-arm` | `pico2w` | onboard CYW43439 | Observer, bare-metal/FreeRTOS Stream, and active Stream+WiFi/MQTT coexistence gates passed |
+| `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
+| `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer hardware gates passed; extended Stream gate pending |
+| `mock` | `host-mock` | deterministic test backend | host tests |
 
-The Pico 2 W descriptor records the physical Bluetooth controller, but the
-public backend is not yet enabled for RP2350. `HAL_ENABLE_BLE` is rejected at
-compile time on unsupported targets and on profiles without a Bluetooth
-controller. Runtime capability checks use
+The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
+W with `rp2350-riscv` is unsupported because the CYW43 Bluetooth transport is
+not enabled for that target. `HAL_ENABLE_BLE` is rejected at compile time on
+unsupported targets and on profiles without a Bluetooth controller. Runtime
+capability checks use
 `HAL_BOARD_CAP_BLUETOOTH_CONTROLLER` and additionally require
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND` for an external module.
+
+The 2026-08-25 Linux/BlueZ Stream runs passed 50 authenticated reconnects,
+five minutes of approximately 10 messages per second, lifecycle restart,
+queue saturation/recovery, and the negative security cases on Pico W
+bare-metal and Pico 2 W bare-metal/FreeRTOS. An unattended watchdog reset
+changed the reported reset reason to watchdog, changed a random per-boot
+identifier, retained the controller address, and required a new authenticated
+session. This is an MCU-reset interruption test, not a physical removal of
+VBUS. The Pico W FreeRTOS run was not repeated after increasing the fixture
+task stack to 1024 words because that board became unavailable. Native Windows
+host validation and downstream consumer/lights-timer integration are deferred
+and do not block the current BLE acceptance results.
+
+Passive Observer validation on the same date passed on Pico W and Pico 2 W:
+both entered `HAL_BLE_STATE_SCANNING`, retained seven reports including one
+Teltonika and three Eddystone signatures, and reported zero queue drops.
 
 ## Lifecycle and polling
 
 ```cpp
-hal_status_t status = hal_ble_initialize();
-if (status == HAL_OK) {
-  status = hal_ble_set_event_callback(on_ble_event, context);
+#include <JaszczurHAL.h>
+
+#include <cstring>
+
+static hal_ble_advertising_handle_t advertising;
+static hal_status_t ble_status = HAL_NONE;
+static bool ble_started;
+
+static void on_ble_event(const hal_ble_event_t *event, void *) {
+  if (event->type == HAL_BLE_EVENT_CONTROLLER_READY) {
+    static const uint8_t payload[] = {
+        0x02, 0x01, 0x06,                   // general-discoverable flags
+        0x07, 0x09, 'J', 'H', ' ', 'B', 'L', 'E'}; // complete name
+    hal_ble_advertising_config_t config{};
+    config.interval_min = 0x00a0; // 100 ms
+    config.interval_max = 0x00a0;
+    config.data_length = static_cast<uint8_t>(sizeof(payload));
+    std::memcpy(config.data, payload, sizeof(payload));
+    (void)hal_ble_advertising_start(&config, &advertising);
+  }
 }
 
-for (;;) {
-  status = hal_ble_poll();
+static hal_status_t start_ble(void) {
+  hal_status_t status = hal_ble_initialize();
+  if (status == HAL_OK) {
+    status = hal_ble_set_event_callback(on_ble_event, nullptr);
+  }
+  return status;
+}
+
+extern "C" void app_task0(void) {
+  if (!ble_started) {
+    ble_started = true;
+    ble_status = start_ble();
+  }
+  if (ble_status != HAL_OK) {
+    hal_delay_ms(1u);
+    return;
+  }
+  const hal_status_t poll_status = hal_ble_poll();
+  if (poll_status != HAL_OK && poll_status != HAL_EOVERFLOW) {
+    /* Record or recover from the controller error. */
+  }
   hal_delay_ms(1u);
 }
 ```
@@ -91,6 +146,8 @@ must be at least the minimum and no greater than `0x4000`.
 before controller readiness starts when the controller becomes ready. A
 successful connection pauses it, and a disconnect restarts it while the
 request remains active. Stop the request with its opaque advertising handle.
+Do not submit a second start request after `HAL_BLE_EVENT_DISCONNECTED`; the
+original request already owns the automatic restart.
 
 ## Passive Observer scanning
 
@@ -120,6 +177,75 @@ payload bytes. `hal_ble_advertising_field_next()` iterates the length-prefixed
 AD structures without allocation. Start with an offset of zero; `HAL_EAGAIN`
 marks the end and `HAL_EIO` rejects malformed input. The returned field data
 points into the report and remains valid while that report object exists.
+
+### Observer example
+
+The following loop starts a 60 ms/30 ms passive scan and drains every retained
+report. Replace `consume_ad_field()` with application-specific handling for AD
+types such as complete local name (`0x09`) or manufacturer data (`0xff`).
+
+```cpp
+static void consume_ad_field(const hal_ble_advertising_report_t &report,
+                             const hal_ble_advertising_field_t &field);
+
+static hal_status_t observer_status = HAL_NONE;
+static bool observer_started;
+
+static void on_observer_event(const hal_ble_event_t *event, void *) {
+  if (event->type == HAL_BLE_EVENT_CONTROLLER_READY) {
+    hal_ble_scan_config_t scan{};
+    scan.interval = 0x0060; // 60 ms
+    scan.window = 0x0030;   // 30 ms
+    scan.filter_duplicates = true;
+    (void)hal_ble_scan_start(&scan);
+  }
+}
+
+static void drain_scan_reports(void) {
+  for (;;) {
+    hal_ble_advertising_report_t report{};
+    const hal_status_t status = hal_ble_scan_report_next(&report);
+    if (status == HAL_EOVERFLOW) {
+      continue; // Loss acknowledged; retained reports are still available.
+    }
+    if (status == HAL_EAGAIN) {
+      return;
+    }
+    if (status != HAL_OK) {
+      return;
+    }
+
+    size_t offset = 0;
+    hal_ble_advertising_field_t field{};
+    while (hal_ble_advertising_field_next(&report, &offset, &field) ==
+           HAL_OK) {
+      consume_ad_field(report, field);
+    }
+  }
+}
+
+static hal_status_t start_observer(void) {
+  hal_status_t status = hal_ble_initialize();
+  if (status == HAL_OK) {
+    status = hal_ble_set_event_callback(on_observer_event, nullptr);
+  }
+  return status;
+}
+
+extern "C" void app_task0(void) {
+  if (!observer_started) {
+    observer_started = true;
+    observer_status = start_observer();
+  }
+  if (observer_status != HAL_OK) {
+    hal_delay_ms(1u);
+    return;
+  }
+  (void)hal_ble_poll();
+  drain_scan_reports();
+  hal_delay_ms(1u);
+}
+```
 
 ## Connections and MTU
 
@@ -157,7 +283,7 @@ the generation.
 
 `HAL_ENABLE_BLE_STREAM` adds `hal_ble_stream.h`, a bounded byte stream carried
 by one static GATT service. The flag enables `HAL_ENABLE_BLE` and
-`HAL_ENABLE_CRYPTO`. Maturity is `experimental`.
+`HAL_ENABLE_CRYPTO`.
 
 The header is the single source of truth for the service UUIDs, the frame
 layout and the capability bits. Changing any of them raises the profile
@@ -219,31 +345,94 @@ directional counter; the next poll or can-send event retries it. The BTstack
 notification itself is issued only by the shared CYW43 radio service while it
 owns the radio lock.
 
-### Usage
+### Stream example
+
+Initialize the BLE subsystem from the first application-task iteration,
+install a unique provisioned secret, and then service both layers from that
+same task. On FreeRTOS targets `app_start()` runs before the scheduler and must
+not start CYW43. Advertising uses the Peripheral flow shown above; the fixed
+Stream service appears in its GATT database automatically. A Stream task needs
+at least the hardware-validated 1024-word stack budget used by the example and
+hardware fixture.
 
 ```c
-hal_ble_stream_config_t config = {0};
-config.capabilities = HAL_BLE_STREAM_CAP_TELEMETRY;
-if (hal_ble_stream_initialize(&config) == HAL_OK) {
-  (void)hal_ble_stream_set_secret(device_secret, sizeof(device_secret));
+hal_status_t start_stream(const uint8_t *device_secret, size_t secret_length) {
+  hal_status_t status = hal_ble_initialize();
+  if (status != HAL_OK) {
+    return status;
+  }
+
+  hal_ble_stream_config_t config = {0};
+  config.capabilities =
+      HAL_BLE_STREAM_CAP_TELEMETRY | HAL_BLE_STREAM_CAP_DIAGNOSTICS;
+  status = hal_ble_stream_initialize(&config);
+  if (status != HAL_OK) {
+    return status;
+  }
+  return hal_ble_stream_set_secret(device_secret, secret_length);
 }
 
-/* In the application loop, after hal_ble_poll(). */
-uint8_t payload[HAL_BLE_STREAM_MAX_PAYLOAD];
-size_t length = 0u;
-while (hal_ble_stream_receive(payload, sizeof(payload), &length) == HAL_OK) {
-  handle_request(payload, length);
+static uint8_t echo_payload[HAL_BLE_STREAM_MAX_PAYLOAD];
+static size_t echo_length;
+static bool echo_pending;
+
+static hal_status_t try_send_echo(void) {
+  const hal_status_t status =
+      hal_ble_stream_send(echo_payload, echo_length);
+  if (status != HAL_EAGAIN) {
+    echo_pending = false;
+    echo_length = 0u;
+  }
+  return status;
 }
 
-const hal_status_t sent = hal_ble_stream_send(reply, reply_length);
-if (sent == HAL_EAGAIN) {
-  /* Bounded TX queue is full; retry after the next poll. */
-} else if (sent == HAL_EOVERFLOW) {
-  /* The payload does not fit the negotiated ATT MTU. */
-} else if (sent == HAL_EAUTH) {
-  /* No authenticated session; the client must complete the handshake. */
+void service_stream(void) {
+  const hal_status_t poll_status = hal_ble_poll();
+  if (poll_status != HAL_OK && poll_status != HAL_EOVERFLOW) {
+    echo_pending = false;
+    echo_length = 0u;
+    return;
+  }
+
+  if (echo_pending) {
+    const hal_status_t sent = try_send_echo();
+    if (sent != HAL_OK) {
+      /* HAL_EAGAIN keeps exactly one pending echo; other errors discard it. */
+      return;
+    }
+  }
+
+  for (;;) {
+    const hal_status_t received =
+        hal_ble_stream_receive(echo_payload, sizeof(echo_payload), &echo_length);
+    if (received == HAL_EOVERFLOW) {
+      continue; /* Loss acknowledged; drain the retained queue. */
+    }
+    if (received != HAL_OK) {
+      echo_length = 0u;
+      break;
+    }
+
+    const hal_status_t sent = try_send_echo();
+    if (sent == HAL_EAGAIN) {
+      echo_pending = true;
+      return; /* Retry this echo before receiving another payload. */
+    } else if (sent == HAL_EOVERFLOW) {
+      /* The payload does not fit the negotiated ATT MTU. */
+      return;
+    } else if (sent == HAL_EAUTH) {
+      /* The session closed; the client must authenticate again. */
+      return;
+    } else if (sent != HAL_OK) {
+      return;
+    }
+  }
 }
 ```
+
+The example retains at most one echo after `HAL_EAGAIN` and retries it before
+removing another RX payload. A disconnect or any other send error discards that
+pending echo so data from an old session cannot enter a new one.
 
 `hal_ble_stream_get_info()` reports the state, negotiated capabilities,
 directional counters, authentication failures, replay rejections and queue
@@ -256,19 +445,48 @@ lock. Applications must not link Pico SDK `pico_cyw43_arch` or
 `pico_btstack_cyw43` alongside this backend. BLE callbacks are deferred until
 after radio servicing, so application code never runs under that lock.
 
+The 2026-08-25 Pico 2 W active coexistence gate kept an authenticated Stream
+connection active while MQTT traffic forced a WiFi disconnect and reconnect.
+Both bare-metal and FreeRTOS sustained 10.00 BLE echoes/s for more than 607 s
+with zero loss. Bare-metal completed 6079/6079 echoes (94.7 ms mean, 249.0 ms
+maximum latency); FreeRTOS completed 6077/6077 (93.7 ms mean, 204.1 ms
+maximum). Each run carried 34 BLE echoes through the WiFi reconnect window,
+re-established WiFi and MQTT, retained both radio-runtime references, and
+reported no BLE, Stream, MQTT, HCI, queue, or event errors. The measured
+maximum BLE poll time was 4.768 ms bare-metal and 5.618 ms FreeRTOS. The final
+FreeRTOS rerun used the strengthened MQTT-progress oracle: its observation
+delta was 5794 echoes at 9.66 Hz, with zero stagnant one-second summaries.
+
 ## License and distribution boundary
 
 BLE firmware links BlueKitchen BTstack from the exact revision recorded in
-`third_party/btstack_version.conf`. Its license permits redistribution and use
-only for personal benefit and not for commercial purpose or monetary gain.
-Distributors must reproduce the tracked
-[`third_party/LICENSE.BTstack`](../../third_party/LICENSE.BTstack) notice in
-source or binary distribution materials. Commercial products require a
-separate license from BlueKitchen. This restriction applies to BLE-enabled
-artifacts, not to JaszczurHAL builds that do not compile BTstack.
+`third_party/btstack_version.conf`. Two distinct license texts are tracked:
+
+- the standard BlueKitchen
+  [`third_party/LICENSE.BTstack`](../../third_party/LICENSE.BTstack) grant
+  permits redistribution, use, and modification only for personal benefit and
+  not for commercial purpose or monetary gain. Its source and binary
+  redistribution conditions require the copyright notice, conditions, and
+  disclaimer to be retained or reproduced as specified in that text;
+- the separate Raspberry Pi
+  [`src/hal/bluetooth/LICENSE.RP`](../../src/hal/bluetooth/LICENSE.RP) grant
+  applies to a `Customer`, defined as a purchaser of a listed `Product`. It
+  permits that Customer to use, modify, integrate, and distribute BTstack only
+  with the defined `Products` or `Customer Products`. The listed Products are
+  Pico W, Pico WH, Pico 2 W, Pico 2 WH, and RM2; Customer Products are products
+  manufactured or distributed by Customers which use or are derived from
+  those Products. This is a product-scoped grant, not a general permission for
+  every board or device containing a CYW43 controller.
+
+The applicable grant depends on the physical product and its distribution.
+Review the complete tracked license texts and satisfy the conditions of the
+grant relied upon; uses outside them may require a separate BlueKitchen
+license. This section is a technical inventory and is not legal advice. These
+conditions apply to BLE-enabled artifacts, not to JaszczurHAL builds that do
+not compile BTstack.
 
 See the buildable [`26_ble_stream` example](../../examples/26_ble_stream/) for
 the complete Peripheral startup and advertising flow plus an authenticated
-stream consumer. The dual-target
+stream consumer. The multi-target
 [`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/)
 drives the complete protocol from an independent BlueZ client.

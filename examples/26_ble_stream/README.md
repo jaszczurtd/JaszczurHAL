@@ -10,16 +10,35 @@ and exchanges payloads only inside a mutually authenticated session.
 The device advertises as `JH Stream`, serves the protocol version and the
 capability bitmask to any client, and refuses payload traffic until the client
 proves knowledge of the per-device secret. Once authenticated it publishes a
-telemetry line every second and logs whatever the client sends.
+telemetry line every second, retains at most one sample for retry during TX
+backpressure, and logs whatever the client sends.
 
 ## Build and run
 
 ```bash
 ./scripts/examples_dispatcher.py build --target rp2040 --example 26_ble_stream
+./scripts/examples_dispatcher.py build --target rp2350-arm --example 26_ble_stream
 ./scripts/examples_dispatcher.py build --target stm32g474 --example 26_ble_stream
 ```
 
-Supported profiles are RP2040 `picow` and STM32G474 `nucleo-g474re-pim730`.
+The dispatcher-backed default profiles are RP2040 `picow`, RP2350 ARM `pico2w`,
+and STM32G474 `nucleo-g474re-pim730`. RP2040 `pico-rm2` is also build-supported
+through an explicit board selection, but its dedicated hardware gate remains
+pending:
+
+```bash
+vscode/entry/jh-vscode build \
+  --project examples/26_ble_stream \
+  --target rp2040 --board pico-rm2
+```
+
+RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
+enabled.
+
+The example defers CYW43/BLE initialization until the first `app_task0()`
+iteration, after the FreeRTOS scheduler has started. Its project configuration
+selects a 1024-word task stack when FreeRTOS is enabled; the default 512-word
+stack is insufficient for the authenticated handshake on RP hardware.
 
 ## Provisioning the secret
 
@@ -53,8 +72,10 @@ handshake fits in one write; the example logs the MTU it observes.
 - publishing the service with a capability set;
 - refusing payload traffic without a session;
 - draining received payloads with explicit overflow reporting;
-- handling `HAL_EAGAIN` backpressure on send;
-- restarting advertising after a disconnect.
+- retaining and retrying one bounded telemetry sample after `HAL_EAGAIN`;
+- retaining one advertising request so advertising resumes automatically after
+  a disconnect.
 
-For an independent client implementation and dual-target negative test, see
+For an independent client implementation and multi-target stability/security
+test, see
 the [`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/).

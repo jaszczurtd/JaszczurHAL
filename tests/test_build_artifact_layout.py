@@ -51,6 +51,7 @@ for fixture in (
     "rp_sdlogger",
     "rp_ota",
     "bluetooth_stage1",
+    "bluetooth_stream",
 ):
     manifest = load_json(
         ROOT
@@ -69,6 +70,50 @@ for fixture in (
         == "${buildDir}",
         f"{fixture}: final artifacts do not follow buildDir",
     )
+
+bluetooth_stream_manifest = load_json(
+    ROOT
+    / "tests"
+    / "hardware"
+    / "bluetooth_stream"
+    / ".vscode"
+    / "jaszczurhal.project.json"
+)
+hardware_matrix = bluetooth_stream_manifest.get("example", {}).get(
+    "hardwareMatrix"
+)
+require(
+    isinstance(hardware_matrix, list),
+    "bluetooth_stream: example.hardwareMatrix is missing",
+)
+require(
+    all(
+        isinstance(entry, dict)
+        and set(entry) == {"target", "board", "runtime"}
+        and all(isinstance(value, str) for value in entry.values())
+        for entry in hardware_matrix
+    ),
+    "bluetooth_stream: hardwareMatrix entries must be exact string tuples",
+)
+expected_bluetooth_stream_matrix = {
+    ("rp2040", "picow", "baremetal"),
+    ("rp2040", "picow", "freertos"),
+    ("rp2040", "pico-rm2", "baremetal"),
+    ("rp2040", "pico-rm2", "freertos"),
+    ("rp2350-arm", "pico2w", "baremetal"),
+    ("rp2350-arm", "pico2w", "freertos"),
+    ("stm32g474", "nucleo-g474re-pim730", "baremetal"),
+    ("stm32g474", "nucleo-g474re-pim730", "freertos"),
+}
+actual_bluetooth_stream_matrix = {
+    (entry["target"], entry["board"], entry["runtime"])
+    for entry in hardware_matrix
+}
+require(
+    len(hardware_matrix) == len(expected_bluetooth_stream_matrix)
+    and actual_bluetooth_stream_matrix == expected_bluetooth_stream_matrix,
+    "bluetooth_stream: hardwareMatrix must declare exactly the eight gate images",
+)
 
 from board_registry import tooling_target_registry
 

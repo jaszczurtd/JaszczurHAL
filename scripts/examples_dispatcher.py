@@ -308,8 +308,9 @@ EXAMPLES: list[dict[str, Any]] = [
     },
     {
         "dir": "26_ble_stream",
-        "targets": ["rp2040", "stm32g474"],
+        "targets": ["rp2040", "rp2350-arm", "stm32g474"],
         "expandRpTargets": False,
+        "gateTargets": ["rp2040", "rp2350-arm", "stm32g474"],
         "board": "picow",
         "stm32Board": "nucleo-g474re-pim730",
         "covers": ["58_ble_peripheral", "59_ble_stream"],

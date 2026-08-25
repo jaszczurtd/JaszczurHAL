@@ -450,7 +450,7 @@ The complete reference is split across the following focused documents:
 | 17 | [cJSON](api/17_cJSON.md) | Managed `cJSON` / `cJSON_Utils`, include patterns, ownership rules, parsing, printing, JSON Pointer/Patch/Merge Patch examples |
 | 18 | [LodePNG](api/18_LodePNG.md) | Managed `LodePNG`, include patterns, embedded profile, memory ownership, PNG/Base64 asset script and RGB565 examples |
 | 19 | [JPEG](api/19_JPEG.md) | Managed `TJpgDec` core, embedded profile, memory ownership, JPEG/Base64 asset script and RGB565 examples |
-| 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Experimental Peripheral lifecycle, advertising, connection events, ATT MTU, bounded queues, board support, coexistence, and BTstack distribution boundary |
+| 20 | [Bluetooth Low Energy](api/20_bluetooth.md) | Peripheral and Observer lifecycle, advertising and scanning, connection events, ATT MTU, authenticated Stream, bounded queues, board support, coexistence, and BTstack distribution boundary |
 | 21 | [Raw LoRa radio](api/21_lora.md) | Validated SX1262 profiles plus experimental software-only SX1261/SX1276/SX1278, asynchronous TX/RX/CAD, current RSSI, capabilities, callbacks, diagnostics and time-on-air |
 | 22 | [Reliable LoRa link](api/22_lora_link.md) | 16-bit addressing, message sequences, ACK/retry, duplicate suppression, fragmentation and optional ChaCha20-Poly1305 over `hal_lora_radio` |
 

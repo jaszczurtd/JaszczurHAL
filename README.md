@@ -2,7 +2,7 @@
 
 Author: Marcin 'Jaszczur' Kielesinski
 
-JaszczurHAL is a hardware abstraction layer and utility library for embedded projects.
+JaszczurHAL is a hardware abstraction layer and utility library for embedded projects using RP2040/2350/STM32/ESP32.
 
 ## How do you even pronounce this library name?
 
@@ -33,9 +33,7 @@ Application code stays portable across the supported targets and runtimes.
 
 RP2040 and RP2350 firmware builds directly against the official Pico SDK.
 STM32G474 is supported through the repository's bare-metal implementation and
-linker flow. The ESP32-S3 target provides a controlled native
-ESP-IDF build, flash, serial-monitor, and board/memory-contract workflow plus
-portable core, peripheral, and native connectivity backends. FreeRTOS is optional
+linker flow. The ESP32-S3 target is build on top of ESP-IDF SDK. FreeRTOS is optional
 on RP and STM32G474 and required by the ESP-IDF runtime. The mock backend provides deterministic host-side validation.
 
 See [features.md](doc/features.md) for a compact inventory of supported

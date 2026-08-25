@@ -464,7 +464,7 @@ require(
     example_counts
     == {
         "rp2040": 26,
-        "rp2350-arm": 24,
+        "rp2350-arm": 25,
         "rp2350-riscv": 21,
         "stm32g474": 25,
     },
@@ -474,24 +474,24 @@ require(
     full_configuration_counts
     == {
         "rp2040": 34,
-        "rp2350-arm": 26,
+        "rp2350-arm": 27,
         "rp2350-riscv": 22,
         "stm32g474": 32,
     }
-    and sum(full_configuration_counts.values()) == 114,
-    "full example build matrix must contain exactly 114 configurations: "
+    and sum(full_configuration_counts.values()) == 115,
+    "full example build matrix must contain exactly 115 configurations: "
     f"{full_configuration_counts}",
 )
 require(
     gate_configuration_counts
     == {
         "rp2040": 32,
-        "rp2350-arm": 0,
+        "rp2350-arm": 1,
         "rp2350-riscv": 0,
         "stm32g474": 30,
     }
-    and sum(gate_configuration_counts.values()) == 62,
-    "example gate matrix must contain exactly 62 configurations: "
+    and sum(gate_configuration_counts.values()) == 63,
+    "example gate matrix must contain exactly 63 configurations: "
     f"{gate_configuration_counts}",
 )
 require(
@@ -597,8 +597,11 @@ ble_stream = load_json(
 require(
     set(ble_stream["example"]["covers"])
     == {"58_ble_peripheral", "59_ble_stream"}
-    and set(ble_stream["example"]["targets"]) == {"rp2040", "stm32g474"},
-    "26_ble_stream no longer represents both supported BLE examples",
+    and set(ble_stream["example"]["targets"])
+    == {"rp2040", "rp2350-arm", "stm32g474"}
+    and set(ble_stream["example"]["gateTargets"])
+    == {"rp2040", "rp2350-arm", "stm32g474"},
+    "26_ble_stream no longer represents the supported BLE targets",
 )
 
 

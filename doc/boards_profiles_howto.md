@@ -289,10 +289,11 @@ CYW43 backend, gSPI bus, stack, and pin definitions; direct compiler consumers
 must not duplicate those definitions with command-line `-D` options. The wiring
 and electrical constraints are documented in
 [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
-Pico W and the PIM730 profile also declare the lifecycle-owned
-`bluetooth-controller` capability and feature-gated `btstack-ble` component.
-Enabling `HAL_ENABLE_BLE` compiles that component; the physical capability
-alone never enables Bluetooth. See the [Bluetooth API](api/20_bluetooth.md).
+The `picow`, `pico2w`, `pico-rm2`, and `nucleo-g474re-pim730` profiles also
+declare the lifecycle-owned `bluetooth-controller` capability and
+feature-gated `btstack-ble` component. Enabling `HAL_ENABLE_BLE` compiles that
+component; the physical capability alone never enables Bluetooth. See the
+[Bluetooth API](api/20_bluetooth.md).
 
 The experimental `rp2040-lora-lf` profile describes Waveshare SKU 26592. It
 uses the existing `rp2040` target and Pico SDK `pico` board definition, reserves

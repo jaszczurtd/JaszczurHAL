@@ -1,7 +1,7 @@
 #ifndef JASZCZURHAL_BTSTACK_CONFIG_H
 #define JASZCZURHAL_BTSTACK_CONFIG_H
 
-/* Experimental BLE Peripheral sizing validated by the private bring-up. */
+/* BLE Peripheral sizing validated by the hardware gates. */
 #define ENABLE_LE_PERIPHERAL
 #define ENABLE_SOFTWARE_AES128
 
