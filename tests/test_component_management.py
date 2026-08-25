@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -140,23 +141,12 @@ require(
     not tuple(THIRD_PARTY.glob("*.patch")),
     "managed components use tracked patch files",
 )
+managed_contract = json.loads(
+    (ROOT / "config/tooling/managed_components.json").read_text(encoding="utf-8")
+)
 wrapper_components = {
-    "ensure_bearssl.sh": "bearssl",
-    "ensure_cjson.sh": "cjson",
-    "ensure_fatfs.sh": "fatfs",
-    "ensure_freertos_kernel.sh": "freertos",
-    "ensure_jpeg.sh": "jpeg",
-    "ensure_littlefs.sh": "littlefs",
-    "ensure_btstack.sh": "btstack",
-    "ensure_sx126x.sh": "sx126x",
-    "ensure_lodepng.sh": "lodepng",
-    "ensure_lwip.sh": "lwip",
-    "ensure_pico_sdk.sh": "pico-sdk",
-    "ensure_esp_idf.sh": "esp-idf",
-    "ensure_picotool.sh": "picotool",
-    "ensure_pmd.sh": "pmd",
-    "ensure_riscv_toolchain.sh": "riscv-toolchain",
-    "ensure_unity.sh": "unity",
+    helper_name: component_name
+    for component_name, helper_name in managed_contract["launchers"].items()
 }
 for helper_name, component_name in wrapper_components.items():
     helper_text = (ROOT / "scripts" / helper_name).read_text(encoding="utf-8")

@@ -60,6 +60,14 @@ enum {
   JH_BLE_ADV_FILTER_POLICY_ALL = 0u,
   JH_BLE_SCAN_TYPE_PASSIVE = 0u,
   JH_BLE_SCAN_FILTER_POLICY_ALL = 0u,
+#ifdef HAL_ENABLE_BLE_STREAM
+  /* 15 ms in 1.25 ms units; keep the authenticated request/notification
+   * round trip comfortably inside the profile's 10 Hz service target. */
+  JH_BLE_STREAM_CONNECTION_INTERVAL = 12u,
+  JH_BLE_STREAM_CONNECTION_LATENCY = 0u,
+  /* 4 seconds in 10 ms units. */
+  JH_BLE_STREAM_SUPERVISION_TIMEOUT = 400u,
+#endif
 };
 
 static hal_mutex_t backend_mutex(void) {
@@ -222,6 +230,15 @@ static void packet_handler(uint8_t packet_type, uint16_t channel,
     memcpy(event.address.bytes, peer, sizeof(event.address.bytes));
     event.address.type = address_type_from_btstack(peer_type);
     emit_event(&event);
+#ifdef HAL_ENABLE_BLE_STREAM
+    /* The central selects the initial connection interval. Ask it for the
+     * latency required by the fixed Stream profile; rejection is non-fatal
+     * and leaves the negotiated link usable. */
+    (void)gap_request_connection_parameter_update(
+        connection, JH_BLE_STREAM_CONNECTION_INTERVAL,
+        JH_BLE_STREAM_CONNECTION_INTERVAL, JH_BLE_STREAM_CONNECTION_LATENCY,
+        JH_BLE_STREAM_SUPERVISION_TIMEOUT);
+#endif
     return;
   }
 

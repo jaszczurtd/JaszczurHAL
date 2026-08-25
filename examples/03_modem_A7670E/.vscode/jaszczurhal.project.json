@@ -15,9 +15,6 @@
         },
         "gateTargets": [
             "rp2040"
-        ],
-        "covers": [
-            "05_modem_A7670E"
         ]
     },
     "toolchain": "cmake",

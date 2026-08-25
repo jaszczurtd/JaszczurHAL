@@ -1,7 +1,6 @@
 # 15 - OLED and character LCD
 
-This consolidated project exercises both portable display paths previously
-covered by examples 25 and 31:
+This project exercises both portable display paths:
 
 - SSD1306 128x64 OLED over I2C and the shared buffered `hal_display` API;
 - HD44780-compatible 16x2 LCD in four-bit GPIO mode (`RW` tied to GND).

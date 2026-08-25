@@ -431,7 +431,10 @@ FreeRTOS task-context delay yields to the scheduler; pre-scheduler, ISR, and
 critical paths use DWT waits. The architecture snapshot combines generated
 target and board capacities with heap, stack, EEPROM, and LittleFS spans from
 the selected runtime and linker layout, and reports 170 MHz for both CPU and
-the primary peripheral clock.
+the primary peripheral clock. The hardware watchdog uses IWDG with the 32 kHz
+nominal LSI clock, selects the shortest fitting prescaler, and accepts timeouts
+from 1 through 32768 ms. `pause_on_debug` controls the DBGMCU IWDG freeze bit.
+Watchdog reset classification uses the boot-latched `RCC_CSR_IWDGRSTF` flag.
 **impl/esp32:** `esp_timer_get_time()` supplies monotonic microsecond time;
 `hal_delay_ms()` uses `vTaskDelay()` only in legal scheduler task context and
 busy-waits before the scheduler, in ISR context, or inside a HAL critical
@@ -445,7 +448,9 @@ restarts the chip; it returns `HAL_EUNSUPPORTED` when eFuse policy disables
 download modes.
 **impl/.mock:** time driven by mock helpers; `hal_watchdog_caused_reboot`, `hal_get_free_heap`, chip temperature, and the device UID are injectable. `hal_enter_bootloader()` sets an observable flag instead of rebooting. `hal_in_isr()` returns the value set by `hal_mock_set_in_isr(bool)`.
 **Thread safety:** RP-family and ESP32-S3 time/watchdog APIs are safe to call
-from both cores. In RP, STM32G474, and ESP32-S3 FreeRTOS modes,
+from both cores. STM32G474 watchdog feeds are atomic register writes; callers
+must serialize watchdog reconfiguration. In RP, STM32G474, and ESP32-S3
+FreeRTOS modes,
 `hal_delay_ms()` yields or blocks
 the calling task only in legal task context and busy-waits in
 pre-scheduler/ISR/HAL-critical contexts; `hal_delay_us()` blocks only the

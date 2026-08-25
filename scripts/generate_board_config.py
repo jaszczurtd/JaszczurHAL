@@ -4,21 +4,46 @@
 from __future__ import annotations
 
 import argparse
-import difflib
+from functools import partial
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import sys
-import tempfile
 from typing import Any
 
+from codegen_support import (
+    atomic_write_text,
+    check_generated_outputs,
+    load_json_object,
+    require_exact_fields,
+    validation_error,
+    write_generated_outputs,
+)
 import generate_hal_features
+from repository_layout import (
+    BOARD_COMPONENTS_CMAKE_OUTPUT,
+    BOARD_FALLBACK_HEADER_OUTPUT,
+    BOARD_REGISTRY_HEADER_OUTPUT,
+)
+from tooling_contract import (
+    ToolingContractError,
+    load_tooling_contract,
+    require_list,
+    require_string,
+    require_string_list,
+)
 
 
 class DescriptorError(ValueError):
     """Descriptor validation failure with actionable context."""
+
+
+fail = partial(validation_error, DescriptorError)
+load_json = partial(load_json_object, error_type=DescriptorError)
+exact_fields = partial(require_exact_fields, error_type=DescriptorError)
+atomic_write = partial(atomic_write_text, error_type=DescriptorError)
 
 
 COMMON_FIELDS = {
@@ -55,35 +80,37 @@ BOARD_FIELDS = COMMON_FIELDS | {
     "constraints",
     "programming",
 }
-COMPONENT_REGISTRY = {
-    "rp-native": {"providers": {"pico-sdk"}, "slot": "target-runtime"},
-    "stm32g474-native": {
-        "providers": {"jh-stm32-baremetal"},
-        "slot": "target-runtime",
-    },
-    "host-mock": {"providers": {"host"}, "slot": "target-runtime"},
-    "esp-idf-native": {"providers": {"esp-idf"}, "slot": "target-runtime"},
-    "cyw43-pico-pio": {
-        "providers": {"pico-sdk"},
-        "slot": "network-radio-transport",
-    },
-    "cyw43-stm32-gspi": {
-        "providers": {"jh-stm32-baremetal"},
-        "slot": "network-radio-transport",
-    },
-    "cyw43-lwip": {
-        "providers": {"pico-sdk", "jh-stm32-baremetal"},
-        "slot": "network-stack",
-    },
-    "btstack-ble": {
-        "providers": {"pico-sdk", "jh-stm32-baremetal"},
-        "slot": "bluetooth-host-stack",
-    },
-    "sx126x-radio": {
-        "providers": {"pico-sdk", "jh-stm32-baremetal"},
-        "slot": "lora-radio-provider",
-    },
-}
+
+
+def load_component_registry() -> dict[str, dict[str, Any]]:
+    source = "board_components.json"
+    document = load_tooling_contract(source)
+    records = require_list(document, "components", source=source)
+    registry: dict[str, dict[str, Any]] = {}
+    for index, raw_record in enumerate(records):
+        record_source = f"{source}: components[{index}]"
+        if not isinstance(raw_record, dict):
+            raise ToolingContractError(f"{record_source} must be an object")
+        identifier = require_string(
+            raw_record.get("id"), "id", source=record_source
+        )
+        if identifier in registry:
+            raise ToolingContractError(
+                f"{record_source}: duplicate id {identifier!r}"
+            )
+        providers = require_string_list(
+            raw_record.get("providers"), "providers", source=record_source
+        )
+        registry[identifier] = {
+            "providers": set(providers),
+            "slot": require_string(
+                raw_record.get("slot"), "slot", source=record_source
+            ),
+        }
+    return registry
+
+
+COMPONENT_REGISTRY = load_component_registry()
 SINGLE_ENDPOINT_DEVICE_KINDS = {
     "gpio": {"activeLevel"},
     "component-gpio": {"activeLevel"},
@@ -189,40 +216,6 @@ STM32_PIN_PATTERN = re.compile(r"^P([A-Z])([0-9]|1[0-5])$")
 FEATURE_PATTERN = re.compile(
     r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
 )
-
-
-def fail(path: Path, json_path: str, value: Any, expected: str) -> None:
-    raise DescriptorError(
-        f"{path}: {json_path}: got {value!r}; expected {expected}"
-    )
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise DescriptorError(f"{path}: invalid JSON: {error}") from error
-    if not isinstance(value, dict):
-        fail(path, "$", value, "an object")
-    return value
-
-
-def exact_fields(
-    path: Path,
-    json_path: str,
-    value: Any,
-    required: set[str],
-    allowed: set[str],
-) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        fail(path, json_path, value, "an object")
-    missing = sorted(required - value.keys())
-    unknown = sorted(value.keys() - allowed)
-    if missing:
-        fail(path, json_path, missing, f"required fields {sorted(required)}")
-    if unknown:
-        fail(path, json_path, unknown, f"only fields {sorted(allowed)}")
-    return value
 
 
 def validate_common(path: Path, descriptor: dict[str, Any], kind: str) -> None:
@@ -2030,80 +2023,57 @@ def static_generated_outputs(
     capabilities: dict[str, Any],
 ) -> dict[Path, str]:
     return {
-        Path("src/hal/generated/jh_board_registry.h"): render_board_registry(
-            boards, capabilities
+        BOARD_REGISTRY_HEADER_OUTPUT: render_board_registry(boards, capabilities),
+        BOARD_FALLBACK_HEADER_OUTPUT: render_board_fallback_config(
+            targets, boards, capabilities
         ),
-        Path(
-            "src/hal/generated/jh_board_fallback_config.h"
-        ): render_board_fallback_config(targets, boards, capabilities),
+        BOARD_COMPONENTS_CMAKE_OUTPUT: render_board_components_cmake(),
     }
+
+
+def render_board_components_cmake() -> str:
+    """Render the CMake view of the authoritative board-component registry."""
+    lines = [
+        "# Generated by generate_board_config.py; do not edit.",
+        "set(JH_BOARD_COMPONENT_IDS",
+        *(f"    {identifier}" for identifier in COMPONENT_REGISTRY),
+        ")",
+        "",
+    ]
+    for identifier, entry in COMPONENT_REGISTRY.items():
+        key = identifier.replace("-", "_")
+        providers = ";".join(sorted(entry["providers"]))
+        lines.extend(
+            [
+                f'set(JH_BOARD_COMPONENT_{key}_PROVIDERS "{providers}")',
+                f'set(JH_BOARD_COMPONENT_{key}_SLOT "{entry["slot"]}")',
+                "",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def c_symbol_part(identifier: str) -> str:
     return identifier.replace("-", "_")
 
 
-def atomic_write(path: Path, content: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists() and path.read_text(encoding="utf-8") == content:
-        return
-    descriptor, temporary_name = tempfile.mkstemp(
-        prefix=f".{path.name}.", dir=path.parent, text=True
-    )
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(content)
-        os.replace(temporary_name, path)
-    finally:
-        try:
-            os.unlink(temporary_name)
-        except FileNotFoundError:
-            pass
-
-
 def write_static_outputs(repository_root: Path, outputs: dict[Path, str]) -> None:
-    changed = 0
-    for relative_path, content in outputs.items():
-        path = repository_root / relative_path
-        previous = path.read_text(encoding="utf-8") if path.exists() else None
-        atomic_write(path, content)
-        changed += int(previous != content)
-    print(f"generated {len(outputs)} board artifacts ({changed} changed)")
+    write_generated_outputs(
+        repository_root,
+        outputs,
+        artifact_kind="board",
+        error_type=DescriptorError,
+    )
 
 
 def check_static_outputs(repository_root: Path, outputs: dict[Path, str]) -> bool:
-    valid = True
-    for relative_path, expected in outputs.items():
-        path = repository_root / relative_path
-        try:
-            actual = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            print(f"error: missing generated artifact {path}", file=sys.stderr)
-            valid = False
-            continue
-        except OSError as error:
-            raise DescriptorError(
-                f"{path}: cannot read generated output: {error}"
-            ) from error
-        if actual == expected:
-            continue
-        valid = False
-        print(f"error: stale generated artifact {path}", file=sys.stderr)
-        diff = difflib.unified_diff(
-            actual.splitlines(),
-            expected.splitlines(),
-            fromfile=str(path),
-            tofile=f"generated:{relative_path}",
-            lineterm="",
-        )
-        for index, line in enumerate(diff):
-            if index == 120:
-                print("... diff truncated ...", file=sys.stderr)
-                break
-            print(line, file=sys.stderr)
-    if valid:
-        print(f"verified {len(outputs)} generated board artifacts")
-    return valid
+    return check_generated_outputs(
+        repository_root,
+        outputs,
+        artifact_kind="board",
+        error_type=DescriptorError,
+        diff_limit=120,
+    )
 
 
 def generate(

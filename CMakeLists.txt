@@ -55,7 +55,7 @@ endif()
 # CI memcheck job goes red instead of silently passing.
 find_program(MEMORYCHECK_COMMAND NAMES valgrind)
 set(MEMORYCHECK_COMMAND_OPTIONS
-    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --error-exitcode=1"
+    "--leak-check=full --show-leak-kinds=definite --errors-for-leak-kinds=definite --track-origins=yes --fair-sched=yes --error-exitcode=1"
     CACHE STRING "Flags passed to Valgrind by 'ctest -T memcheck'")
 set(MEMORYCHECK_SUPPRESSIONS_FILE
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/valgrind.supp"

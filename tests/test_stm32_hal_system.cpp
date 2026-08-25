@@ -22,7 +22,10 @@ extern "C" uint32_t hal_stm32g474_fault_test_stack_guard_base(void);
 extern "C" void hal_stm32g474_fault_test_set_retained_stack_overflow(void);
 extern "C" void hal_stm32g474_fault_test_corrupt_stack_guard(void);
 
-void setUp(void) { hal_stm32g474_fault_test_reset(); }
+void setUp(void) {
+  hal_stm32g474_fault_test_reset();
+  stm32g474_system_test_reset_watchdog();
+}
 
 void tearDown(void) {}
 
@@ -41,6 +44,15 @@ void test_stm32_reset_reason_watchdog_flags_map_to_watchdog(void) {
   hal_fault_subsystem_init();
 
   TEST_ASSERT_EQUAL_INT(HAL_RESET_REASON_WATCHDOG, (int)hal_get_reset_reason());
+  TEST_ASSERT_TRUE(hal_watchdog_caused_reboot());
+}
+
+void test_stm32_non_watchdog_reset_does_not_report_watchdog_reboot(void) {
+  hal_stm32g474_fault_test_set_rcc_csr(RCC_CSR_SFTRSTF);
+
+  hal_fault_subsystem_init();
+
+  TEST_ASSERT_FALSE(hal_watchdog_caused_reboot());
 }
 
 void test_stm32_reset_reason_bor_pin_without_alive_maps_to_power_on(void) {
@@ -219,8 +231,37 @@ void test_stm32_system_status_reports_unsupported_services(void) {
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_read_chip_temp_ex(&temperature));
   TEST_ASSERT_FLOAT_WITHIN(0.0001f, 123.0f, temperature);
   TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_read_chip_temp_ex(NULL));
-  TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_watchdog_enable(1000u, false));
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, hal_enter_bootloader());
+}
+
+void test_stm32_watchdog_rejects_out_of_range_timeouts(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_watchdog_enable(0u, false));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, hal_watchdog_enable(32769u, false));
+  TEST_ASSERT_FALSE(stm32g474_system_test_watchdog_enabled());
+}
+
+void test_stm32_watchdog_programs_shortest_fitting_prescaler(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_watchdog_enable(512u, true));
+
+  TEST_ASSERT_TRUE(stm32g474_system_test_watchdog_enabled());
+  TEST_ASSERT_TRUE(stm32g474_system_test_watchdog_pause_on_debug());
+  TEST_ASSERT_EQUAL_UINT32(0u, stm32g474_system_test_watchdog_prescaler());
+  TEST_ASSERT_EQUAL_UINT32(4095u, stm32g474_system_test_watchdog_reload());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_watchdog_enable(513u, false));
+  TEST_ASSERT_FALSE(stm32g474_system_test_watchdog_pause_on_debug());
+  TEST_ASSERT_EQUAL_UINT32(1u, stm32g474_system_test_watchdog_prescaler());
+  TEST_ASSERT_EQUAL_UINT32(2051u, stm32g474_system_test_watchdog_reload());
+}
+
+void test_stm32_watchdog_rounds_up_and_accepts_max_timeout(void) {
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_watchdog_enable(1u, false));
+  TEST_ASSERT_EQUAL_UINT32(0u, stm32g474_system_test_watchdog_prescaler());
+  TEST_ASSERT_EQUAL_UINT32(7u, stm32g474_system_test_watchdog_reload());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_watchdog_enable(32768u, false));
+  TEST_ASSERT_EQUAL_UINT32(6u, stm32g474_system_test_watchdog_prescaler());
+  TEST_ASSERT_EQUAL_UINT32(4095u, stm32g474_system_test_watchdog_reload());
 }
 
 void test_stm32_micros64_remains_monotonic_across_micros32_wrap(void) {
@@ -302,6 +343,7 @@ int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_stm32_reset_reason_soft_reset_maps_to_soft);
   RUN_TEST(test_stm32_reset_reason_watchdog_flags_map_to_watchdog);
+  RUN_TEST(test_stm32_non_watchdog_reset_does_not_report_watchdog_reboot);
   RUN_TEST(test_stm32_reset_reason_bor_pin_without_alive_maps_to_power_on);
   RUN_TEST(test_stm32_reset_reason_bor_with_alive_maps_to_brownout);
   RUN_TEST(test_stm32_fault_frame_overrides_rcc_reason);
@@ -316,6 +358,9 @@ int main(void) {
   RUN_TEST(test_stm32_stack_guard_api_reports_active_protection);
   RUN_TEST(test_stm32_stack_guard_api_detects_runtime_corruption);
   RUN_TEST(test_stm32_system_status_reports_unsupported_services);
+  RUN_TEST(test_stm32_watchdog_rejects_out_of_range_timeouts);
+  RUN_TEST(test_stm32_watchdog_programs_shortest_fitting_prescaler);
+  RUN_TEST(test_stm32_watchdog_rounds_up_and_accepts_max_timeout);
   RUN_TEST(test_stm32_micros64_remains_monotonic_across_micros32_wrap);
   RUN_TEST(test_stm32_hardware_time_composition_crosses_micros32_wrap);
   RUN_TEST(test_stm32_fdcan_timing_is_exact_at_170mhz);

@@ -184,40 +184,18 @@ Python.
 
 ## Tests and quality gates
 
-Host unit tests run against the deterministic mock backend:
-
-```bash
-cmake -S . -B .build/host
-cmake --build .build/host
-ctest --test-dir .build/host --output-on-failure
-```
-
-The full local gate mirrors CI (`.github/workflows/ci.yml`), which runs on
-every push and pull request to `main`:
-
 ```bash
 ./runalltests.sh
 ```
 
 It covers host unit tests (with FreeRTOS POSIX coverage), Valgrind memcheck,
-`clang-tidy` and `cppcheck` static analysis, PMD CPD duplicate detection,
-documentation link validation, strict raw/effective feature lint, generated
-feature-artifact drift checks, and library/firmware compile gates for RP2040,
-RP2350 ARM, RP2350 RISC-V and STM32G474 across `HAL_ENABLE_*` profiles. Gate 7
-also performs a clean compile/link build of `tests/fixtures/esp32s3_phase3`
-through the pinned ESP-IDF and validates its multi-image artifact manifest.
-This fixture is not a hardware acceptance test. The examples and hardware-
-fixture compile matrices remain part of the gate.
-
-Tool configuration lives alongside the sources: `.clang-tidy`,
-`tests/cppcheck-suppressions.txt`, `tests/valgrind.supp`, and
-`scripts/clang_tidy_files.py`. The shared `scripts/run_cpd.py` policy scans
-production, test, and example implementations from 100 tokens and blocks every
-reported duplicate group without exceptions. It also reports the union of
-duplicated token ranges as global and per-component coverage. A passing CPD
-gate therefore means that no duplicate group reached the detection threshold.
-Suite layout, dependencies, and instructions for adding tests are in
-[doc/api/03_build_tests.md](doc/api/03_build_tests.md).
+static analysis, duplicate and documentation checks, target/firmware build
+matrices, and separately executed physical hardware fixtures. The complete
+test architecture, requirements, configuration, extension rules, fixture
+procedures, and recorded results are in
+[Build dependencies, tests, and hardware fixtures](doc/api/03_build_tests.md).
+Runner and quality-gate implementation details are in
+[JaszczurHAL Process Scripts](doc/api/00_scripts.md).
 
 ## Security and SBOM
 

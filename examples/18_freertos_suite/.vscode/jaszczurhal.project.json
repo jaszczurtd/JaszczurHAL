@@ -19,18 +19,6 @@
             "rp2040",
             "stm32g474"
         ],
-        "covers": [
-            "15_wifi",
-            "29_freertos_smoke",
-            "35_cJSON",
-            "42_bsd_sockets_tcp_udp",
-            "48_http_server",
-            "49_websocket",
-            "50_net_console",
-            "51_net_commands",
-            "52_http_files",
-            "56_http_https_client"
-        ],
         "variants": [
             {
                 "id": "network",

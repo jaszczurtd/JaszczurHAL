@@ -1,6 +1,6 @@
 # 23 - External I/O, converters, PMIC and RGB LED
 
-This project consolidates examples 18, 53 and 54. One firmware build covers:
+One firmware build exercises:
 
 - MCP23017, PCA9654E and PCF8574 I2C GPIO expanders;
 - 74HC595 SPI output register;

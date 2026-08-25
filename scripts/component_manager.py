@@ -25,28 +25,29 @@ import urllib.parse
 import uuid
 import zipfile
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
 
-PIN_FILE = ".jh-archive-pin"
-MANIFEST_FILE = ".jh-content.sha256"
-VERSION_STAMP = ".jaszczurhal-component-version"
-EXCLUSIONS_FILE = ".jh-archive-exclusions"
-SOURCE_COMPONENT_ORDER = (
-    "bearssl",
-    "cjson",
-    "lodepng",
-    "jpeg",
-    "fatfs",
-    "unity",
-    "lwip",
-    "littlefs",
-    "btstack",
-    "sx126x",
-    "freertos",
-    "pico-sdk",
-    "pmd",
-    "picotool",
-    "riscv-toolchain",
+from repository_layout import (
+    ARCHIVE_EXCLUSIONS_FILE,
+    ARCHIVE_MANIFEST_FILE,
+    ARCHIVE_PIN_FILE,
+    COMPONENT_VERSION_STAMP,
 )
+from tooling_contract import (
+    ToolingContractError,
+    load_tooling_contract,
+    require_list,
+    require_object,
+    require_string,
+    require_string_list,
+)
+
+PIN_FILE = ARCHIVE_PIN_FILE
+MANIFEST_FILE = ARCHIVE_MANIFEST_FILE
+VERSION_STAMP = COMPONENT_VERSION_STAMP
+EXCLUSIONS_FILE = ARCHIVE_EXCLUSIONS_FILE
 
 
 class ComponentError(RuntimeError):
@@ -711,107 +712,90 @@ def ensure_esp_idf_tools(
     info(f"Activate them in the current shell with: . {directory / 'export.sh'}")
 
 
-GIT_COMPONENTS = {
-    spec.name: spec
-    for spec in (
-        GitComponent(
-            "bearssl", "BearSSL", "bearssl_version.conf", "BEARSSL",
-            ("LICENSE.txt", "inc/bearssl.h", "src/inner.h", "src/ssl/ssl_client.c"),
-        ),
-        GitComponent(
-            "cjson", "cJSON", "cjson_version.conf", "CJSON",
-            ("LICENSE", "cJSON.c", "cJSON.h", "cJSON_Utils.c", "cJSON_Utils.h"),
-            clean=True,
-        ),
-        GitComponent(
-            "lodepng", "LodePNG", "lodepng_version.conf", "LODEPNG",
-            ("LICENSE", "lodepng.cpp", "lodepng.h"), clean=True,
-        ),
-        GitComponent(
-            "jpeg", "TJpg_Decoder", "jpeg_version.conf", "JPEG",
-            ("license.txt", "src/tjpgd.c", "src/tjpgd.h", "src/tjpgdcnf.h"),
-            clean=True,
-        ),
-        GitComponent(
-            "fatfs", "FatFs", "fatfs_version.conf", "FATFS",
-            (
-                "LICENSE.txt", "source/00history.txt", "source/00readme.txt",
-                "source/diskio.h", "source/ff.c", "source/ff.h",
-                "source/ffsystem.c", "source/ffunicode.c",
+def _load_managed_component_catalog() -> tuple[
+    dict[str, GitComponent], tuple[str, ...], tuple[str, ...], dict[str, str]
+]:
+    source = "managed_components.json"
+    document = load_tooling_contract(source)
+    records = require_list(document, "gitComponents", source=source)
+    validators: dict[str, Callable[[Path, str], None]] = {
+        "littlefs": _version_littlefs,
+        "lwip": _version_lwip,
+        "freertos": _version_freertos,
+        "pico": _version_pico,
+        "esp-idf": _version_esp_idf,
+    }
+    components: dict[str, GitComponent] = {}
+    for index, raw_record in enumerate(records):
+        record_source = f"{source}: gitComponents[{index}]"
+        if not isinstance(raw_record, dict):
+            raise ToolingContractError(f"{record_source} must be an object")
+        name = require_string(raw_record.get("id"), "id", source=record_source)
+        if name in components:
+            raise ToolingContractError(f"{record_source}: duplicate id {name!r}")
+        validator_name = raw_record.get("versionValidator")
+        if validator_name is not None and validator_name not in validators:
+            raise ToolingContractError(
+                f"{record_source}: unknown versionValidator {validator_name!r}"
+            )
+        for flag in ("clean", "recursiveSubmodules"):
+            if flag in raw_record and not isinstance(raw_record[flag], bool):
+                raise ToolingContractError(f"{record_source}: {flag} must be boolean")
+        submodules_key = raw_record.get("submodulesKey")
+        if submodules_key is not None:
+            submodules_key = require_string(
+                submodules_key, "submodulesKey", source=record_source
+            )
+        components[name] = GitComponent(
+            name=name,
+            label=require_string(raw_record.get("label"), "label", source=record_source),
+            config=require_string(raw_record.get("config"), "config", source=record_source),
+            prefix=require_string(raw_record.get("prefix"), "prefix", source=record_source),
+            required_paths=require_string_list(
+                raw_record.get("requiredPaths"), "requiredPaths", source=record_source
             ),
-        ),
-        GitComponent(
-            "unity", "Unity", "unity_version.conf", "UNITY",
-            ("LICENSE.txt", "src/unity.c", "src/unity.h", "src/unity_internals.h"),
-            clean=True,
-        ),
-        GitComponent(
-            "lwip", "lwIP", "lwip_version.conf", "LWIP",
-            ("COPYING", "src/core/init.c", "src/include/lwip/init.h", "src/netif/ethernet.c"),
-            version_validator=_version_lwip,
-        ),
-        GitComponent(
-            "littlefs", "littlefs", "littlefs_version.conf", "LITTLEFS",
-            ("LICENSE.md", "lfs.c", "lfs.h", "lfs_util.c", "lfs_util.h"),
-            version_validator=_version_littlefs,
-        ),
-        GitComponent(
-            "btstack", "BTstack", "btstack_version.conf", "BTSTACK",
-            (
-                "LICENSE", "src/bluetooth.h", "src/hci.c",
-                "src/ble/att_server.c", "platform/embedded/btstack_run_loop_embedded.c",
-                "tool/compile_gatt.py",
+            clean=raw_record.get("clean", False),
+            submodules_key=submodules_key,
+            recursive_submodules=raw_record.get("recursiveSubmodules", False),
+            version_validator=(
+                validators[validator_name] if validator_name is not None else None
             ),
-        ),
-        GitComponent(
-            "sx126x", "Semtech SX126x driver",
-            "sx126x_driver_version.conf", "SX126X_DRIVER",
-            (
-                "LICENSE.txt", "src/sx126x.c", "src/sx126x.h",
-                "src/sx126x_hal.h", "src/sx126x_regs.h",
-                "src/sx126x_status.h", "src/sx126x_driver_version.c",
-                "src/sx126x_driver_version.h",
-            ),
-            clean=True,
-        ),
-        GitComponent(
-            "freertos", "FreeRTOS-Kernel", "freertos_core_version.conf", "FREERTOS_KERNEL",
-            (
-                "include/FreeRTOS.h", "include/task.h", "include/semphr.h",
-                "portable/GCC/ARM_CM4F/port.c", "portable/GCC/ARM_CM4F/portmacro.h",
-                "portable/MemMang/heap_4.c", "tasks.c", "queue.c", "list.c",
-                "timers.c", "event_groups.c", "stream_buffer.c",
-                "portable/ThirdParty/GCC/RP2040/port.c",
-                "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_ARM_NTZ/non_secure/port.c",
-                "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_RISC-V/port.c",
-            ),
-            submodules_key="FREERTOS_KERNEL_SUBMODULES",
-            version_validator=_version_freertos,
-        ),
-        GitComponent(
-            "pico-sdk", "Pico SDK", "pico_sdk_version.conf", "PICO_SDK",
-            (
-                "pico_sdk_init.cmake", "pico_sdk_version.cmake",
-                "external/pico_sdk_import.cmake",
-                "src/rp2_common/hardware_flash/include/hardware/flash.h",
-                "src/rp2_common/pico_multicore/include/pico/multicore.h",
-                "src/rp2040", "src/rp2350",
-            ),
-            submodules_key="PICO_SDK_SUBMODULES",
-            version_validator=_version_pico,
-        ),
-        GitComponent(
-            "esp-idf", "ESP-IDF", "esp_idf_version.conf", "ESP_IDF",
-            (
-                "CMakeLists.txt", "components/esp_system", "tools/idf.py",
-                "tools/idf_tools.py", "tools/cmake/project.cmake",
-                "tools/cmake/version.cmake",
-            ),
-            recursive_submodules=True,
-            version_validator=_version_esp_idf,
-        ),
+        )
+
+    tools = require_string_list(
+        document.get("toolComponents"), "toolComponents", source=source
     )
-}
+    default_order = require_string_list(
+        document.get("defaultOrder"), "defaultOrder", source=source
+    )
+    known = {*components, *tools}
+    unknown = sorted(set(default_order) - known)
+    if unknown:
+        raise ToolingContractError(
+            f"{source}: defaultOrder contains unknown components: {unknown}"
+        )
+    if "esp-idf" in default_order:
+        raise ToolingContractError(
+            f"{source}: optional esp-idf must not be in defaultOrder"
+        )
+    raw_launchers = require_object(document, "launchers", source=source)
+    launchers = {
+        require_string(identifier, "launcher id", source=source): require_string(
+            filename, f"launchers.{identifier}", source=source
+        )
+        for identifier, filename in raw_launchers.items()
+    }
+    if set(launchers) != known:
+        raise ToolingContractError(
+            f"{source}: launchers must cover every managed component"
+        )
+    return components, tools, default_order, launchers
+
+
+GIT_COMPONENTS, TOOL_COMPONENTS, SOURCE_COMPONENT_ORDER, COMPONENT_LAUNCHERS = (
+    _load_managed_component_catalog()
+)
+ALL_COMPONENT_NAMES = (*GIT_COMPONENTS, *TOOL_COMPONENTS)
 
 
 def _resolve_component_dir(repo_root: Path, configured: str, override: str) -> Path:
@@ -1504,9 +1488,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
     component = subparsers.add_parser("component", help="ensure one pinned component")
-    component.add_argument(
-        "name", choices=(*GIT_COMPONENTS, "pmd", "picotool", "riscv-toolchain")
-    )
+    component.add_argument("name", choices=ALL_COMPONENT_NAMES)
     _common_component_arguments(component)
 
     sources = subparsers.add_parser(

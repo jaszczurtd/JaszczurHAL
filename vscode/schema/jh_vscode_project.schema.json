@@ -51,11 +51,6 @@
           "description": "Representative target subset compiled by the examples quality gate. Supported targets remain declared in targets.",
           "items": { "type": "string" }
         },
-        "covers": {
-          "type": "array",
-          "description": "Historical example ids whose functionality is represented by this consolidated project.",
-          "items": { "type": "string" }
-        },
         "variants": {
           "type": "array",
           "items": {

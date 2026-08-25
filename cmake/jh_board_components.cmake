@@ -1,54 +1,7 @@
 include_guard(GLOBAL)
 
-# Central CMake registry of controlled board/target component IDs.
-#
-# Mirrors COMPONENT_REGISTRY in scripts/generate_board_config.py; the board
-# generator test asserts both registries stay in sync. Each component maps to
-# its allowed build provider(s) and an exclusive slot. Source integration is
-# owned by the build recipes (cmake/targets/*.cmake, stm32_lib, host build);
-# this registry validates the resolved component list and exposes
-# JH_BOARD_COMPONENT_<ID> flags for recipes and feature checks.
-
-set(JH_BOARD_COMPONENT_IDS
-    rp-native
-    stm32g474-native
-    host-mock
-    esp-idf-native
-    cyw43-pico-pio
-    cyw43-stm32-gspi
-    cyw43-lwip
-    btstack-ble
-    sx126x-radio)
-
-set(JH_BOARD_COMPONENT_rp_native_PROVIDERS "pico-sdk")
-set(JH_BOARD_COMPONENT_rp_native_SLOT "target-runtime")
-
-set(JH_BOARD_COMPONENT_stm32g474_native_PROVIDERS "jh-stm32-baremetal")
-set(JH_BOARD_COMPONENT_stm32g474_native_SLOT "target-runtime")
-
-set(JH_BOARD_COMPONENT_host_mock_PROVIDERS "host")
-set(JH_BOARD_COMPONENT_host_mock_SLOT "target-runtime")
-
-set(JH_BOARD_COMPONENT_esp_idf_native_PROVIDERS "esp-idf")
-set(JH_BOARD_COMPONENT_esp_idf_native_SLOT "target-runtime")
-
-set(JH_BOARD_COMPONENT_cyw43_pico_pio_PROVIDERS "pico-sdk")
-set(JH_BOARD_COMPONENT_cyw43_pico_pio_SLOT "network-radio-transport")
-
-set(JH_BOARD_COMPONENT_cyw43_stm32_gspi_PROVIDERS "jh-stm32-baremetal")
-set(JH_BOARD_COMPONENT_cyw43_stm32_gspi_SLOT "network-radio-transport")
-
-set(JH_BOARD_COMPONENT_cyw43_lwip_PROVIDERS
-    "pico-sdk;jh-stm32-baremetal")
-set(JH_BOARD_COMPONENT_cyw43_lwip_SLOT "network-stack")
-
-set(JH_BOARD_COMPONENT_btstack_ble_PROVIDERS
-    "pico-sdk;jh-stm32-baremetal")
-set(JH_BOARD_COMPONENT_btstack_ble_SLOT "bluetooth-host-stack")
-
-set(JH_BOARD_COMPONENT_sx126x_radio_PROVIDERS
-    "pico-sdk;jh-stm32-baremetal")
-set(JH_BOARD_COMPONENT_sx126x_radio_SLOT "lora-radio-provider")
+# Generated from config/tooling/board_components.json by the board generator.
+include("${CMAKE_CURRENT_LIST_DIR}/generated/jh_board_components_registry.cmake")
 
 # Validate the generated JH_BOARD_COMPONENTS list against the registry and
 # expose one JH_BOARD_COMPONENT_<ID> flag per resolved component.

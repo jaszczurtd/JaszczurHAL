@@ -191,11 +191,13 @@ one `_IS_<VALUE>` flag per allowed value and a `_NAME` string; STM32 symbolic
 pins are encoded into the same integer pin IDs the HAL consumes. The full
 descriptor also reaches `jh_board_resolved.json` unchanged for tooling.
 
-Component IDs come from a finite registry shared by the generator and
-`cmake/jh_board_components.cmake`. Every official build validates the
-resolved component list against that registry: an unknown component, a
-component that does not match the build provider, or two components claiming
-the same exclusive slot fail the configure step. Recipes may condition source
+Component IDs, providers, and exclusive slots come from the authoritative
+`config/tooling/board_components.json` contract. The board generator consumes
+it directly and writes the CMake projection included by
+`cmake/jh_board_components.cmake`. Every official build validates the resolved
+component list against that registry: an unknown component, a component that
+does not match the build provider, or two components claiming the same
+exclusive slot fail the configure step. Recipes may condition source
 integration on the exported `JH_BOARD_COMPONENT_<ID>` flags.
 
 ## Generation
@@ -230,8 +232,10 @@ python3 scripts/generate_board_config.py --boards-root boards --check-static
 ```
 
 These commands materialize the public enum/capability registry and the complete
-fallback configuration directly from the descriptors. This tracked registry is
-the only physical `jh_board_registry.h`; per-build output never duplicates it.
+fallback configuration directly from the descriptors, plus the CMake
+board-component registry from `config/tooling/board_components.json`. The
+tracked C header is the only physical `jh_board_registry.h`; per-build output
+never duplicates it.
 
 The deterministic output contains:
 
@@ -282,12 +286,12 @@ Build examples:
 ```
 
 `nucleo-g474re` describes the Nucleo board alone. Projects using the external
-PIM730/RM2 radio must select the experimental `nucleo-g474re-pim730` profile;
-it owns the fixed CYW43 gSPI pins and exports the radio capabilities and
-components required by network builds. Its generated board header also owns the
-CYW43 backend, gSPI bus, stack, and pin definitions; direct compiler consumers
-must not duplicate those definitions with command-line `-D` options. The wiring
-and electrical constraints are documented in
+PIM730/RM2 radio must select the supported `nucleo-g474re-pim730` profile; it
+owns the fixed CYW43 gSPI pins and exports the radio capabilities and components
+required by network builds. Its generated board header also owns the CYW43
+backend, gSPI bus, stack, and pin definitions; direct compiler consumers must
+not duplicate those definitions with command-line `-D` options. The wiring and
+electrical constraints are documented in
 [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
 The `picow`, `pico2w`, `pico-rm2`, and `nucleo-g474re-pim730` profiles also
 declare the lifecycle-owned `bluetooth-controller` capability and

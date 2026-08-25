@@ -18,13 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "01_blink",
-            "02_debug_helper",
-            "03_soft_timer_table",
-            "17_pid_controller",
-            "19_timer_ext"
         ]
     },
     "toolchain": "cmake",

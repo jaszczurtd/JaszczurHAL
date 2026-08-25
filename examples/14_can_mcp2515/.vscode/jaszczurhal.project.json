@@ -18,9 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "24_can_mcp2515"
         ]
     },
     "toolchain": "cmake",

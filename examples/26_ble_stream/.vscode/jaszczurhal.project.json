@@ -17,10 +17,6 @@
             "rp2040",
             "rp2350-arm",
             "stm32g474"
-        ],
-        "covers": [
-            "58_ble_peripheral",
-            "59_ble_stream"
         ]
     },
     "toolchain": "cmake",

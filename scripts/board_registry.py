@@ -9,6 +9,16 @@ from typing import Any
 from generate_board_config import load_registry
 
 
+def _registry_targets(
+    jh_root: Path,
+) -> list[tuple[str, dict[str, Any], dict[str, dict[str, Any]]]]:
+    targets, boards, _ = load_registry(jh_root / "boards")
+    return [
+        (target_id, target, boards)
+        for target_id, target in sorted(targets.items())
+    ]
+
+
 def board_programming_identity(board: dict[str, Any]) -> dict[str, Any]:
     """Return the exact USB identity declared by a board programmer."""
     programming = board.get("programming")
@@ -24,10 +34,9 @@ def board_programming_identity(board: dict[str, Any]) -> dict[str, Any]:
 
 def library_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
     """Return every supported static-library target and compatible board."""
-    targets, boards, _ = load_registry(jh_root / "boards")
     registry: dict[str, dict[str, Any]] = {}
 
-    for target_id, target in sorted(targets.items()):
+    for target_id, target, boards in _registry_targets(jh_root):
         provider = target["build"]["provider"]
         if provider not in {"host", "pico-sdk", "jh-stm32-baremetal"}:
             continue
@@ -59,10 +68,9 @@ def library_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
 
 def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
     """Return the jh-vscode registry derived exclusively from ``boards/``."""
-    targets, boards, _ = load_registry(jh_root / "boards")
     registry: dict[str, dict[str, Any]] = {}
 
-    for target_id, target in sorted(targets.items()):
+    for target_id, target, boards in _registry_targets(jh_root):
         provider = target["build"]["provider"]
         if provider == "host":
             continue

@@ -115,6 +115,43 @@ require(
     "bluetooth_stream: hardwareMatrix must declare exactly the eight gate images",
 )
 
+bluetooth_stream_variants = {
+    variant.get("id"): variant
+    for variant in bluetooth_stream_manifest.get("example", {}).get(
+        "variants", []
+    )
+    if isinstance(variant, dict)
+}
+expected_display_variants = {
+    "display": {
+        "module": "bluetooth_stream_display",
+        "defines": {
+            "JHBL5_ENABLE_DISPLAY=1",
+            "HAL_ENABLE_ILI9341",
+            "HAL_DISPLAY_ILI9341",
+        },
+    },
+    "display-freertos": {
+        "module": "bluetooth_stream_display_freertos",
+        "defines": {
+            "JHBL5_ENABLE_DISPLAY=1",
+            "HAL_ENABLE_ILI9341",
+            "HAL_DISPLAY_ILI9341",
+            "HAL_ENABLE_FREERTOS",
+        },
+    },
+}
+for variant_id, expected_variant in expected_display_variants.items():
+    variant = bluetooth_stream_variants.get(variant_id)
+    require(
+        isinstance(variant, dict)
+        and variant.get("module") == expected_variant["module"]
+        and variant.get("targets") == ["stm32g474"]
+        and set(variant.get("extraDefines", []))
+        == expected_variant["defines"],
+        f"bluetooth_stream:{variant_id} display load contract changed",
+    )
+
 from board_registry import tooling_target_registry
 
 tooling_registry = tooling_target_registry(ROOT)
@@ -152,6 +189,41 @@ require(
     'scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"' in quality_gate,
     "runalltests.sh does not keep CPD reports below .build/gate",
 )
+memcheck_gate = quality_gate.split('header "Gate 3/8', 1)[1].split(
+    'header "Gate 4/8', 1
+)[0]
+require(
+    'ctest --test-dir "${BUILD_DIR}" -N' in memcheck_gate
+    and "-L '^memcheck$'" in memcheck_gate
+    and "-LE '^no_memcheck$'" not in memcheck_gate
+    and '-R "${memcheck_regex}"' not in memcheck_gate,
+    "runalltests.sh memcheck does not select every labelled native test",
+)
+require(
+    '| tee "${LOG_ROOT}/jh_memcheck.log"' in memcheck_gate
+    and "| grep -E '(^[0-9]|Memory|passed|failed|Defects)'"
+    not in memcheck_gate,
+    "runalltests.sh memcheck progress is filtered or not logged live",
+)
+tests_cmake = (ROOT / "tests" / "CMakeLists.txt").read_text(encoding="utf-8")
+require(
+    "DIRECTORY PROPERTY TESTS" in tests_cmake
+    and "DIRECTORY PROPERTY BUILDSYSTEM_TARGETS" in tests_cmake
+    and 'APPEND PROPERTY LABELS memcheck' in tests_cmake
+    and "no_memcheck" not in tests_cmake,
+    "native CTest executables are not automatically labelled for memcheck",
+)
+for generator in (
+    "scripts/generate_hal_features.py --write",
+    "scripts/generate_board_config.py --boards-root boards --write-static",
+    "scripts/examples_dispatcher.py generate-template",
+    "scripts/examples_dispatcher.py generate",
+    "scripts/vscode_library_workspace.py sync-vscode",
+):
+    require(
+        generator in quality_gate,
+        f"runalltests.sh does not synchronize tracked output via {generator}",
+    )
 require(
     "/tmp/jh_" not in quality_gate,
     "runalltests.sh still writes logs outside .build",

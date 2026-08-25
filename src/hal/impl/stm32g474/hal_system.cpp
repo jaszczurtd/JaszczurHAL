@@ -77,9 +77,7 @@ void hal_delay_ms(uint32_t ms) {
 void hal_watchdog_feed(void) { stm32g474_system_watchdog_feed(); }
 
 hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug) {
-  (void)ms;
-  (void)pause_on_debug;
-  return HAL_EUNSUPPORTED;
+  return stm32g474_system_watchdog_enable(ms, pause_on_debug);
 }
 
 bool hal_watchdog_caused_reboot(void) {

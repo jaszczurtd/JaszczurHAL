@@ -11,9 +11,6 @@
         },
         "gateTargets": [
             "stm32g474"
-        ],
-        "covers": [
-            "38_stm32g474_fdcan_native"
         ]
     },
     "toolchain": "cmake",

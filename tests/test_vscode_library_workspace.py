@@ -34,7 +34,11 @@ require(
 
 for relative, expected in workspace.root_vscode_documents(ROOT).items():
     tracked = json.loads((ROOT / relative).read_text(encoding="utf-8"))
-    require(tracked == expected, f"tracked {relative} is stale")
+    require(
+        tracked == expected,
+        f"tracked {relative} is stale; run "
+        "'python3 scripts/vscode_library_workspace.py sync-vscode'",
+    )
 
 tasks = json.loads((ROOT / ".vscode/tasks.json").read_text(encoding="utf-8"))
 task_labels = {item["label"] for item in tasks["tasks"]}
@@ -72,8 +76,10 @@ stm32 = workspace.profile_from_selection(
 )
 stm32_paths = workspace.profile_paths(ROOT, stm32)
 stm32_commands = workspace.build_commands(ROOT, stm32, stm32_paths)
+stm32_helper = Path(stm32_commands[0][0])
 require(
-    stm32_commands[0][0].endswith("scripts/build_stm32_lib.sh"),
+    stm32_helper.name == "build_stm32_lib.sh"
+    and stm32_helper.parent.name == "scripts",
     "STM32 workspace build bypasses the static-library helper",
 )
 

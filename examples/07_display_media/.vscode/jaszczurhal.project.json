@@ -18,13 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "09_display_tft",
-            "36_lodePNG",
-            "37_lodePNG_ili9341_base64",
-            "40_jpeg",
-            "41_jpeg_ili931_base64"
         ]
     },
     "toolchain": "cmake",

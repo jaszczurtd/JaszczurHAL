@@ -18,10 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "28_pga2311",
-            "44_dacless_audio"
         ]
     },
     "toolchain": "cmake",

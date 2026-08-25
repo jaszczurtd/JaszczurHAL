@@ -5,16 +5,24 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
-import difflib
+from functools import partial
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
-import stat
 import sys
-import tempfile
 from typing import Any, Iterable
+
+from codegen_support import (
+    atomic_write_text,
+    check_generated_outputs,
+    load_json_object,
+    require_exact_fields,
+    validation_error,
+    write_generated_outputs,
+)
+from repository_layout import FEATURE_CMAKE_OUTPUT, FEATURE_HEADER_OUTPUT
 
 
 GENERATOR_VERSION = 1
@@ -35,6 +43,14 @@ IGNORED_INPUT_PARTS = {".build", ".git", "third_party"}
 
 class RegistryError(ValueError):
     """Feature registry validation failure with actionable context."""
+
+
+fail = partial(validation_error, RegistryError)
+load_json = partial(load_json_object, error_type=RegistryError)
+exact_fields = partial(require_exact_fields, error_type=RegistryError)
+atomic_write = partial(
+    atomic_write_text, error_type=RegistryError, mode=0o644
+)
 
 
 @dataclass(frozen=True)
@@ -98,40 +114,6 @@ class FeatureResolution:
     requested: tuple[str, ...]
     resolved: tuple[str, ...]
     provenance: dict[str, tuple[str, ...]]
-
-
-def fail(path: Path, json_path: str, value: Any, expected: str) -> None:
-    raise RegistryError(
-        f"{path}: {json_path}: got {value!r}; expected {expected}"
-    )
-
-
-def load_json(path: Path) -> dict[str, Any]:
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
-        raise RegistryError(f"{path}: invalid JSON: {error}") from error
-    if not isinstance(value, dict):
-        fail(path, "$", value, "an object")
-    return value
-
-
-def exact_fields(
-    path: Path,
-    json_path: str,
-    value: Any,
-    required: set[str],
-    allowed: set[str],
-) -> dict[str, Any]:
-    if not isinstance(value, dict):
-        fail(path, json_path, value, "an object")
-    missing = sorted(required - value.keys())
-    unknown = sorted(value.keys() - allowed)
-    if missing:
-        fail(path, json_path, missing, f"required fields {sorted(required)}")
-    if unknown:
-        fail(path, json_path, unknown, f"only fields {sorted(allowed)}")
-    return value
 
 
 def normalize_relation(
@@ -541,77 +523,29 @@ def render_cmake(model: FeatureModel) -> str:
 
 def generated_outputs(model: FeatureModel) -> dict[Path, str]:
     return {
-        Path("src/hal/generated/jh_hal_features.h"): render_header(model),
-        Path("cmake/generated/jh_hal_features.cmake"): render_cmake(model),
+        FEATURE_HEADER_OUTPUT: render_header(model),
+        FEATURE_CMAKE_OUTPUT: render_cmake(model),
     }
 
 
-def atomic_write(path: Path, content: str) -> bool:
-    try:
-        if path.exists() and path.read_text(encoding="utf-8") == content:
-            current_mode = stat.S_IMODE(path.stat().st_mode)
-            if os.name == "nt" or current_mode == 0o644:
-                return False
-            path.chmod(0o644)
-            return True
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary_name = tempfile.mkstemp(
-            prefix=f".{path.name}.", dir=path.parent, text=True
-        )
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-                stream.write(content)
-            if os.name != "nt":
-                os.chmod(temporary_name, 0o644)
-            os.replace(temporary_name, path)
-        finally:
-            try:
-                os.unlink(temporary_name)
-            except FileNotFoundError:
-                pass
-    except OSError as error:
-        raise RegistryError(f"{path}: cannot write generated output: {error}") from error
-    return True
-
-
 def write_outputs(output_root: Path, outputs: dict[Path, str]) -> None:
-    changed = 0
-    for relative_path, content in outputs.items():
-        changed += int(atomic_write(output_root / relative_path, content))
-    print(f"generated {len(outputs)} feature artifacts ({changed} changed)")
+    write_generated_outputs(
+        output_root,
+        outputs,
+        artifact_kind="feature",
+        error_type=RegistryError,
+        mode=0o644,
+    )
 
 
 def check_outputs(output_root: Path, outputs: dict[Path, str]) -> bool:
-    valid = True
-    for relative_path, expected in outputs.items():
-        path = output_root / relative_path
-        try:
-            actual = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            print(f"error: missing generated artifact {path}", file=sys.stderr)
-            valid = False
-            continue
-        except OSError as error:
-            raise RegistryError(f"{path}: cannot read generated output: {error}") from error
-        if actual == expected:
-            continue
-        valid = False
-        print(f"error: stale generated artifact {path}", file=sys.stderr)
-        diff = difflib.unified_diff(
-            actual.splitlines(),
-            expected.splitlines(),
-            fromfile=str(path),
-            tofile=f"generated:{relative_path}",
-            lineterm="",
-        )
-        for index, line in enumerate(diff):
-            if index == 80:
-                print("... diff truncated ...", file=sys.stderr)
-                break
-            print(line, file=sys.stderr)
-    if valid:
-        print(f"verified {len(outputs)} generated feature artifacts")
-    return valid
+    return check_generated_outputs(
+        output_root,
+        outputs,
+        artifact_kind="feature",
+        error_type=RegistryError,
+        diff_limit=80,
+    )
 
 
 def iter_lint_inputs(root: Path) -> list[Path]:
@@ -1312,6 +1246,29 @@ def effective_matrix_digest(records: list[dict[str, Any]]) -> str:
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
+def feature_resolution_record(
+    project: str,
+    target: str | None,
+    board: str | None,
+    variant: str | None,
+    resolution: FeatureResolution,
+) -> dict[str, Any]:
+    """Serialize one effective feature resolution for the lint report."""
+    return {
+        "project": project,
+        "target": target,
+        "board": board,
+        "variant": variant,
+        "requestedFeatures": list(resolution.requested),
+        "resolvedFeatures": list(resolution.resolved),
+        "resolvedFeaturesDigest": resolved_features_digest(resolution.resolved),
+        "provenance": {
+            symbol: list(sources)
+            for symbol, sources in resolution.provenance.items()
+        },
+    }
+
+
 def write_resolution_report(
     path: Path, model: FeatureModel, records: list[dict[str, Any]]
 ) -> None:
@@ -1421,21 +1378,13 @@ def lint_effective_inputs(
             )
             findings.extend(resolution_findings)
             records.append(
-                {
-                    "project": project_display,
-                    "target": active_target,
-                    "board": active_board,
-                    "variant": variant_id,
-                    "requestedFeatures": list(resolution.requested),
-                    "resolvedFeatures": list(resolution.resolved),
-                    "resolvedFeaturesDigest": resolved_features_digest(
-                        resolution.resolved
-                    ),
-                    "provenance": {
-                        symbol: list(sources)
-                        for symbol, sources in resolution.provenance.items()
-                    },
-                }
+                feature_resolution_record(
+                    project_display,
+                    active_target,
+                    active_board,
+                    variant_id,
+                    resolution,
+                )
             )
 
     for header_path in standalone_headers:
@@ -1453,21 +1402,9 @@ def lint_effective_inputs(
         )
         findings.extend(resolution_findings)
         records.append(
-            {
-                "project": project_display,
-                "target": None,
-                "board": None,
-                "variant": None,
-                "requestedFeatures": list(resolution.requested),
-                "resolvedFeatures": list(resolution.resolved),
-                "resolvedFeaturesDigest": resolved_features_digest(
-                    resolution.resolved
-                ),
-                "provenance": {
-                    symbol: list(sources)
-                    for symbol, sources in resolution.provenance.items()
-                },
-            }
+            feature_resolution_record(
+                project_display, None, None, None, resolution
+            )
         )
 
     records.sort(

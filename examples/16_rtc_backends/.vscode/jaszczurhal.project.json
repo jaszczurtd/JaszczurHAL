@@ -18,10 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "26_rtc_clock",
-            "27_rtc_ds3231"
         ]
     },
     "toolchain": "cmake",

@@ -263,7 +263,8 @@ void hal_watchdog_feed(void);
  * @note On ESP32-S3 @p pause_on_debug is informational because OpenOCD owns
  *       watchdog behavior while a core is halted; ESP-IDF exposes no
  *       equivalent per-TWDT runtime setting.
- * @return HAL_OK on success, HAL_EINVAL for an unsupported timeout value, or
+ * @return HAL_OK on success, HAL_EINVAL for an unsupported timeout value,
+ *         HAL_ETIMEOUT when hardware configuration does not settle, or
  *         HAL_EUNSUPPORTED when the backend has no watchdog implementation.
  */
 hal_status_t hal_watchdog_enable(uint32_t ms, bool pause_on_debug);

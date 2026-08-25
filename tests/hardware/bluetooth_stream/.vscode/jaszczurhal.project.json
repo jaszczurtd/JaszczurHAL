@@ -67,6 +67,31 @@
                 "extraDefines": [
                     "HAL_ENABLE_FREERTOS"
                 ]
+            },
+            {
+                "id": "display",
+                "module": "bluetooth_stream_display",
+                "targets": [
+                    "stm32g474"
+                ],
+                "extraDefines": [
+                    "JHBL5_ENABLE_DISPLAY=1",
+                    "HAL_ENABLE_ILI9341",
+                    "HAL_DISPLAY_ILI9341"
+                ]
+            },
+            {
+                "id": "display-freertos",
+                "module": "bluetooth_stream_display_freertos",
+                "targets": [
+                    "stm32g474"
+                ],
+                "extraDefines": [
+                    "JHBL5_ENABLE_DISPLAY=1",
+                    "HAL_ENABLE_ILI9341",
+                    "HAL_DISPLAY_ILI9341",
+                    "HAL_ENABLE_FREERTOS"
+                ]
             }
         ]
     },
