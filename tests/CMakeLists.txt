@@ -18,7 +18,7 @@ function(add_hal_freertos_posix_test NAME)
     target_link_libraries(${NAME} PRIVATE hal_freertos_posix)
     add_test(NAME ${NAME} COMMAND ${NAME})
     set_tests_properties(${NAME} PROPERTIES
-        LABELS "freertos_posix;no_memcheck"
+        LABELS "freertos_posix"
         TIMEOUT 20)
 endfunction()
 
@@ -540,6 +540,11 @@ add_test(NAME test_feature_registry_cmake
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_feature_registry.cmake
+)
+add_test(NAME test_tooling_contract
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/test_tooling_contract.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
 add_test(NAME test_vscode_native_workflow
     COMMAND ${Python3_EXECUTABLE}
@@ -1565,3 +1570,14 @@ if(JH_ENABLE_FUZZING)
     add_hal_fuzzer(fuzz_websocket)
     add_hal_fuzzer(fuzz_http_multipart)
 endif()
+
+# Memcheck direct native executables. Interpreter and script-mode tests exercise
+# their respective host tools, while cross-compiled firmware cannot run under
+# the host Valgrind process.
+get_property(_jh_registered_tests DIRECTORY PROPERTY TESTS)
+get_property(_jh_native_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+foreach(_jh_test IN LISTS _jh_registered_tests)
+    if(_jh_test IN_LIST _jh_native_targets)
+        set_property(TEST "${_jh_test}" APPEND PROPERTY LABELS memcheck)
+    endif()
+endforeach()

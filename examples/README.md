@@ -59,46 +59,44 @@ scripts/examples_dispatcher.py build \
   --target stm32g474 --gate --jobs "$(nproc)"
 ```
 
-## Project catalog and coverage
+## Project catalog
 
-The `covers` registry field records the legacy coverage IDs owned by each
-project. These values are audit identifiers, not current directories or link
-targets. Consolidated projects keep those behaviors in one firmware image or
-in a small set of explicit variants instead of recompiling the complete HAL for
-every individual demonstration.
+The registry describes only the current projects. Consolidated projects keep
+related behaviors in one firmware image or in a small set of explicit variants
+instead of recompiling the complete HAL for every individual demonstration.
 
 Target abbreviations used below are `R0` = `rp2040`, `RA` = `rp2350-arm`,
 `RV` = `rp2350-riscv`, and `S` = `stm32g474`.
 
-| Project | Purpose | Registry `covers` IDs | Supported targets | `gateTargets` | Variants |
-|---|---|---|---|---|---|
-| `01_core_runtime` | LED blink, debug/architecture report, soft-timer table, PID controller, managed timer | `01_blink`, `02_debug_helper`, `03_soft_timer_table`, `17_pid_controller`, `19_timer_ext` | R0, RA, RV, S | R0, S | - |
-| `02_crypto` | Hashing, authentication, encryption, and Base64 primitives | `04_crypto` | R0, RA, RV, S | R0, S | - |
-| `03_modem_A7670E` | SIMCom A7670/A7672 modem lifecycle and AT services | `05_modem_A7670E` | R0, RA, RV | R0 | - |
-| `04_sensor_hub` | DS18B20, BH1750, and DHT temperature/humidity sensors | `06_ds18b20`, `30_bh1750_light`, `43_dht_temperature_humidity` | R0, RA, RV, S | R0, S | - |
-| `05_serial_gps` | UART, GPS parsing/transport, and software-serial loopback | `07_gps`, `14_uart`, `22_gps_uart`, `45_swserial_loopback` | R0, RA, RV, S | R0, S | `swserial` on R0, RA, RV; gate on R0 |
-| `06_thermocouple` | Thermocouple facade and supported backends | `08_thermocouple` | R0, RA, RV, S | R0, S | - |
-| `07_display_media` | ILI9341 graphics, PNG/JPEG codecs, Base64 conversion, and RGB565 rendering | `09_display_tft`, `36_lodePNG`, `37_lodePNG_ili9341_base64`, `40_jpeg`, `41_jpeg_ili931_base64` | R0, RA, RV, S | R0, S | - |
-| `08_mqtt` | MQTT over the selected CYW43 network backend | `10_mqtt` | R0, RA, S | R0, S | - |
-| `09_wireguard` | WireGuard tunnel setup over the selected network backend | `11_wireguard` | R0, RA, S | R0, S | - |
-| `10_storage` | KV store, LittleFS, SD/FatFs logging, and persistent counters | `12_kv_store`, `16_littlefs`, `39_sdlogger` | R0, RA, RV, S | R0, S | - |
-| `11_i2c_slave` | I2C slave register-map operation | `13_i2c_slave` | R0, RA, RV, S | R0, S | - |
-| `12_i2c_scan` | Bounded I2C bus scanning | `20_i2c_scan` | R0, RA, RV, S | R0, S | - |
-| `13_adc` | Internal ADC sampling and external ADS1115 conversion | `21_adc_read`, `23_external_adc_ads1115` | R0, RA, RV, S | R0, S | - |
-| `14_can_mcp2515` | MCP2515 classic CAN backend | `24_can_mcp2515` | R0, RA, RV, S | R0, S | - |
-| `15_display_oled_lcd` | SSD1306 OLED and HD44780 character LCD | `25_display_oled`, `31_hd44780` | R0, RA, RV, S | R0, S | - |
-| `16_rtc_backends` | RTC facade, target-native relative wake-up, and portable low-power transitions | `26_rtc_clock`, `27_rtc_ds3231` | R0, RA, RV, S | R0, S | - |
-| `17_audio_output` | PGA2311 volume control and DMA/PWM audio output | `28_pga2311`, `44_dacless_audio` | R0, RA, RV, S | R0, S | - |
-| `18_freertos_suite` | FreeRTOS tasks/affinity, WiFi, cJSON, BSD sockets, HTTP/HTTPS client/server, files, WebSocket, network console, commands, and Telegram notifications | `15_wifi`, `29_freertos_smoke`, `35_cJSON`, `42_bsd_sockets_tcp_udp`, `48_http_server`, `49_websocket`, `50_net_console`, `51_net_commands`, `52_http_files`, `56_http_https_client` | R0, RA, RV, S | R0, S | `network` on R0, RA, S; gate on R0, S |
-| `19_touch` | TSC2007 and STMPE610 touch controllers | `32_tsc2007_touch`, `33_stmpe610_touch` | R0, RA, RV, S | R0, S | - |
-| `20_irsmall_decoder` | IRsmall protocol decoding | `34_irsmall_decoder` | R0, RA, RV, S | R0, S | - |
-| `21_stm32g474_fdcan_native` | Native STM32G474 FDCAN | `38_stm32g474_fdcan_native` | S | S | - |
-| `22_rfid_nfc` | MFRC522 RFID and PN532 NFC/RFID readers | `46_mfrc522_rfid`, `47_pn532_nfc` | R0, RA, RV, S | R0, S | - |
-| `23_io_pmic` | RGB LED, simple I/O expanders/DAC, and ADP5360 PMIC | `18_rgb_led`, `53_simple_io_chips`, `54_adp5360_pmic` | R0, RA, RV, S | R0, S | - |
-| `24_epd_display` | E-paper display facade and refresh path | `55_epd_display` | R0, RA, RV, S | R0, S | - |
-| `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | `57_ota` | R0, RA | R0 | - |
-| `26_ble_stream` | BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | `58_ble_peripheral`, `59_ble_stream` | R0, RA, S | R0, RA, S | - |
-| `27_lora_point_to_point` | Raw SX1262 ping/pong plus addressed, acknowledged and fragmented `hal_lora_link` messaging | `60_lora_point_to_point` | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
+| Project | Purpose | Supported targets | `gateTargets` | Variants |
+|---|---|---|---|---|
+| `01_core_runtime` | LED blink, debug/architecture report, soft-timer table, PID controller, managed timer | R0, RA, RV, S | R0, S | - |
+| `02_crypto` | Hashing, authentication, encryption, and Base64 primitives | R0, RA, RV, S | R0, S | - |
+| `03_modem_A7670E` | SIMCom A7670/A7672 modem lifecycle and AT services | R0, RA, RV | R0 | - |
+| `04_sensor_hub` | DS18B20, BH1750, and DHT temperature/humidity sensors | R0, RA, RV, S | R0, S | - |
+| `05_serial_gps` | UART, GPS parsing/transport, and software-serial loopback | R0, RA, RV, S | R0, S | `swserial` on R0, RA, RV; gate on R0 |
+| `06_thermocouple` | Thermocouple facade and supported backends | R0, RA, RV, S | R0, S | - |
+| `07_display_media` | ILI9341 graphics, PNG/JPEG codecs, Base64 conversion, and RGB565 rendering | R0, RA, RV, S | R0, S | - |
+| `08_mqtt` | MQTT over the selected CYW43 network backend | R0, RA, S | R0, S | - |
+| `09_wireguard` | WireGuard tunnel setup over the selected network backend | R0, RA, S | R0, S | - |
+| `10_storage` | KV store, LittleFS, SD/FatFs logging, and persistent counters | R0, RA, RV, S | R0, S | - |
+| `11_i2c_slave` | I2C slave register-map operation | R0, RA, RV, S | R0, S | - |
+| `12_i2c_scan` | Bounded I2C bus scanning | R0, RA, RV, S | R0, S | - |
+| `13_adc` | Internal ADC sampling and external ADS1115 conversion | R0, RA, RV, S | R0, S | - |
+| `14_can_mcp2515` | MCP2515 classic CAN backend | R0, RA, RV, S | R0, S | - |
+| `15_display_oled_lcd` | SSD1306 OLED and HD44780 character LCD | R0, RA, RV, S | R0, S | - |
+| `16_rtc_backends` | RTC facade, target-native relative wake-up, and portable low-power transitions | R0, RA, RV, S | R0, S | - |
+| `17_audio_output` | PGA2311 volume control and DMA/PWM audio output | R0, RA, RV, S | R0, S | - |
+| `18_freertos_suite` | FreeRTOS tasks/affinity, WiFi, cJSON, BSD sockets, HTTP/HTTPS client/server, files, WebSocket, network console, commands, and Telegram notifications | R0, RA, RV, S | R0, S | `network` on R0, RA, S; gate on R0, S |
+| `19_touch` | TSC2007 and STMPE610 touch controllers | R0, RA, RV, S | R0, S | - |
+| `20_irsmall_decoder` | IRsmall protocol decoding | R0, RA, RV, S | R0, S | - |
+| `21_stm32g474_fdcan_native` | Native STM32G474 FDCAN | S | S | - |
+| `22_rfid_nfc` | MFRC522 RFID and PN532 NFC/RFID readers | R0, RA, RV, S | R0, S | - |
+| `23_io_pmic` | RGB LED, simple I/O expanders/DAC, and ADP5360 PMIC | R0, RA, RV, S | R0, S | - |
+| `24_epd_display` | E-paper display facade and refresh path | R0, RA, RV, S | R0, S | - |
+| `25_ota` | Discovery, authenticated OTA staging, trial confirmation, rollback, and BOOTSEL recovery | R0, RA | R0 | - |
+| `26_ble_stream` | BLE Peripheral lifecycle and authenticated JH BLE Stream v1 | R0, RA, S | R0, RA, S | - |
+| `27_lora_point_to_point` | Raw SX1262 ping/pong plus addressed, acknowledged and fragmented `hal_lora_link` messaging | R0, S | R0, S | `probe`, `responder`, `link` and `link-responder` on R0, S; manual hardware variants `sf7` and `responder-sf7` |
 
 RP-family network builds use `picow` for RP2040 and `pico2w` for RP2350 ARM.
 RP2350 RISC-V configurations that require CYW43 are unsupported. STM32G474
@@ -143,7 +141,7 @@ requires an ESP-IDF build mode and per-example board/resource validation.
   components prepared by `./runmefirst.sh` or
   `./third_party/update_components.sh`.
 
-## Adding example coverage
+## Adding an example
 
 Before creating another directory, check whether the new behavior can extend
 an existing project or one of its variants. Consolidation is the default: it
@@ -152,10 +150,9 @@ many small firmware projects on every target.
 
 A separate project is appropriate when target, toolchain, runtime, board
 profile, mutually exclusive resources, or hardware contracts prevent a useful
-combined image. Document that constraint here and declare the exact `targets`,
-`gateTargets`, and legacy `covers` ownership in
-`scripts/examples_dispatcher.py`. Use a variant only when the behavior cannot
-be selected at runtime. Every change must retain unique coverage and review the
+combined image. Document that constraint here and declare the exact `targets`
+and `gateTargets` in `config/tooling/examples.json`. Use a variant only when the
+behavior cannot be selected at runtime. Every change must review the
 full-matrix and default-gate configuration counts.
 
 ## Build commands

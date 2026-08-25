@@ -1,8 +1,7 @@
 # 26 - BLE stream
 
-Consolidated BLE Peripheral and JH BLE Stream v1 example. It covers the former
-`58_ble_peripheral` advertising/connection lifecycle as well as the
-authenticated stream previously demonstrated here.
+BLE Peripheral and JH BLE Stream v1 example covering the
+advertising/connection lifecycle and the authenticated stream.
 
 The application is a connectable Peripheral that publishes the stream service
 and exchanges payloads only inside a mutually authenticated session.
@@ -78,4 +77,4 @@ handshake fits in one write; the example logs the MTU it observes.
 
 For an independent client implementation and multi-target stability/security
 test, see
-the [`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/).
+the [`bluetooth_stream` hardware gate](../../doc/api/03_build_tests.md#jh-ble-stream-v1-hardware-gate).

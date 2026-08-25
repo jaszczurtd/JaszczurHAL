@@ -354,7 +354,6 @@ require(
 example_counts = {target: 0 for target in known_targets}
 full_configuration_counts = {target: 0 for target in known_targets}
 gate_configuration_counts = {target: 0 for target in known_targets}
-legacy_coverage: list[str] = []
 requested_example_features: set[str] = set()
 for example_dir in example_dirs:
     manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
@@ -393,12 +392,6 @@ for example_dir in example_dirs:
         gate_targets.issubset(targets),
         f"{example_dir.name}: gateTargets escape supported targets",
     )
-    covers = metadata.get("covers")
-    require(
-        isinstance(covers, list) and covers,
-        f"{example_dir.name}: missing legacy coverage classification",
-    )
-    legacy_coverage.extend(str(item) for item in covers)
     boards = metadata.get("boards")
     require(
         isinstance(boards, dict),
@@ -494,14 +487,7 @@ require(
     "example gate matrix must contain exactly 63 configurations: "
     f"{gate_configuration_counts}",
 )
-require(
-    len(legacy_coverage) == 60
-    and len(set(legacy_coverage)) == 60
-    and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
-    "the 60 covered examples must each be covered exactly once",
-)
-
-legacy_feature_surface = {
+required_feature_surface = {
     "HAL_ENABLE_A7670",
     "HAL_ENABLE_ADP5360",
     "HAL_ENABLE_APP_TASK1",
@@ -569,13 +555,13 @@ feature_model = generate_hal_features.load_registry(ROOT / "config")
 resolved_example_features = set(
     feature_model.resolve_many(requested_example_features)
 )
-missing_legacy_features = sorted(
-    legacy_feature_surface.difference(resolved_example_features)
+missing_required_features = sorted(
+    required_feature_surface.difference(resolved_example_features)
 )
 require(
-    not missing_legacy_features,
-    "consolidated examples lost legacy feature coverage: "
-    + ", ".join(missing_legacy_features),
+    not missing_required_features,
+    "active examples lost required feature coverage: "
+    + ", ".join(missing_required_features),
 )
 
 serial_gps = load_json(
@@ -595,9 +581,7 @@ ble_stream = load_json(
     ROOT / "examples" / "26_ble_stream" / ".vscode" / "jaszczurhal.project.json"
 )
 require(
-    set(ble_stream["example"]["covers"])
-    == {"58_ble_peripheral", "59_ble_stream"}
-    and set(ble_stream["example"]["targets"])
+    set(ble_stream["example"]["targets"])
     == {"rp2040", "rp2350-arm", "stm32g474"}
     and set(ble_stream["example"]["gateTargets"])
     == {"rp2040", "rp2350-arm", "stm32g474"},

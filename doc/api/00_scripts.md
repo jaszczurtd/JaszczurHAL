@@ -29,6 +29,40 @@ component installations belong below `third_party/`. The directory model,
 target/board cache isolation, and generated-file ownership are defined in
 [Build Directories And Generated Files](../FwProjectWorkflow.md#build-directories-and-generated-files).
 
+## Tooling contracts
+
+`config/tooling/` contains versioned, repository-owned data shared by scripts,
+generated files, CMake, and host bootstrap code. Each JSON document has
+`schemaVersion: 1` and one domain owner:
+
+| Contract | Ownership |
+|---|---|
+| `artifacts.json` | Names archive metadata files and tracked generated outputs. |
+| `board_components.json` | Defines valid board components, providers, and exclusive slots. |
+| `examples.json` | Defines the checked-in active example registry. |
+| `managed_components.json` | Defines managed source/tool components, validation metadata, default order, and compatibility launchers. |
+
+Python consumers load these documents through `scripts/tooling_contract.py`.
+Named artifact paths are projected by `scripts/repository_layout.py`. CMake
+does not parse JSON during ordinary configuration: the board generator writes
+`cmake/generated/jh_board_components_registry.cmake` from
+`board_components.json`.
+
+After changing a board-component or generated-artifact contract, refresh and
+verify the tracked projections:
+
+```bash
+python3 scripts/generate_board_config.py --boards-root boards --write-static
+python3 scripts/generate_board_config.py --boards-root boards --check-static
+python3 scripts/generate_hal_features.py --write
+python3 scripts/generate_hal_features.py --check
+```
+
+Keep protocol and format literals close to their operations. In particular,
+explicit `encoding="utf-8"` arguments document the on-disk text contract and
+are intentionally not replaced by a global string constant. User-facing
+messages and one-off syntax tokens likewise stay with the code that owns them.
+
 ## Repository-Level Orchestrators
 
 These scripts are intentionally outside `scripts/` because they are top-level
@@ -94,7 +128,8 @@ a standalone setup diagnostic.
 
 The normal dependency-management entrypoint. It is a compatibility launcher
 for `scripts/component_manager.py all`, which processes fifteen baseline
-components in dependency order:
+components in the dependency order declared by
+`config/tooling/managed_components.json`:
 
 1. BearSSL
 2. cJSON
@@ -126,8 +161,11 @@ directory contract.
 
 ### `runalltests.sh`
 
-The complete local quality gate. `-j N`, `--jobs N`, and `-jN` select build
-parallelism. The eight gates are:
+The complete local quality gate. Before running its eight gates, it invokes the
+official generators for tracked feature, board, example, and root VS Code
+projections. A local run therefore repairs deterministic generated drift; CI
+uses the corresponding check modes so a commit cannot omit regenerated files.
+`-j N`, `--jobs N`, and `-jN` select build parallelism. The gates are:
 
 1. required tools and managed-component verification;
 2. host tests, including the optional FreeRTOS POSIX suite;
@@ -135,7 +173,8 @@ parallelism. The eight gates are:
 4. cppcheck;
 5. clang-tidy for host/shared code and the STM32 backend, using both the
    `JH_STM32_HOST_SANITY` host-compiler database and the real ARM database;
-6. PMD CPD duplicate detection across owned C/C++ implementations;
+6. PMD CPD duplicate detection across owned C/C++ implementations and Python
+   scripts;
 7. STM32, RP2040/RP2350, native FreeRTOS, RP feature-profile, and clean
    ESP32-S3/ESP-IDF builds with artifact validation;
 8. every declared RP example, native parity fixture builds, and STM32
@@ -143,6 +182,14 @@ parallelism. The eight gates are:
 
 The script removes only its managed `.build/gate`, `.build/examples`, and
 `.build/tests` trees at startup. It exits on the first failed gate.
+Gate 3 runs every directly registered native C/C++ test executable labelled
+`memcheck`. `MEMCHECK_REQUIRED_TESTS` remains a required critical subset and
+prevents those suites from silently leaving the selection. Python, CMake, and
+shell driver tests are excluded: wrapping their parent interpreter would
+measure that host tool rather than cross-compiled firmware or child processes.
+The Valgrind configuration uses fair thread scheduling so the native FreeRTOS
+POSIX scheduler tests are included without stalling. CTest progress is streamed
+unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`.
 
 ### `vscode/entry/jh-vscode` and `jh-vscode.cmd`
 
@@ -277,7 +324,9 @@ see [JaszczurHAL Library Compilation](../lib_compilation.md).
 clone/fetch/ref/origin/submodule checks, archive download and SHA-256,
 ZIP/`tar.gz` extraction, atomic replacement, content manifests, and version
 stamps. The focused `ensure_*.sh` files are Unix compatibility launchers that
-forward their existing CLI to this Python manager.
+forward their existing CLI to this Python manager. Component validation
+metadata, default ordering, and launcher mappings live in the versioned
+`config/tooling/managed_components.json` contract.
 
 The focused helpers read tracked pins from `third_party/*_version.conf`.
 Normally use `third_party/update_components.sh`; call an individual helper only
@@ -425,7 +474,8 @@ x86-64 and AArch64 Linux plus native AMD64 Windows.
 
 ### `scripts/examples_dispatcher.py`
 
-Owns the checked-in example registry and exposes five subcommands:
+Consumes the checked-in example registry from `config/tooling/examples.json`
+and exposes five subcommands:
 
 | Command | Behavior |
 |---|---|
@@ -442,10 +492,10 @@ Owns the checked-in example registry and exposes five subcommands:
 projects, and `--verbose` records invoked commands in managed per-example logs
 below `.build/examples`.
 
-The Python registry is the source used by `generate`; the generated manifests
-are the source consumed by `build`. The full matrix is 115 configurations; the
-default `--gate` matrix is 63 configurations (32 RP2040, one RP2350 ARM, and
-30 STM32G474).
+The JSON contract is the source used by `generate`; the generated manifests are
+the source consumed by `build`. The full matrix is 115 configurations; the
+default `--gate` matrix is 63 configurations (32 RP2040, one RP2350 ARM, and 30
+STM32G474).
 RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 
@@ -474,10 +524,11 @@ total/usable RAM as `HAL_TARGET_*` facts. System architecture snapshots consume
 those facts directly. Board-specific program-flash capacity remains available
 as `HAL_BOARD_EXPECTED_FLASH_BYTES`.
 
-`--write-static` refreshes the tracked `jh_board_registry.h` and
-`jh_board_fallback_config.h` directly from `boards/`; `--check-static` rejects
-missing or stale copies. CI runs the check independently of per-build board
-generation.
+`--write-static` refreshes the tracked `jh_board_registry.h`,
+`jh_board_fallback_config.h`, and board-component CMake registry. The first two
+come from `boards/`; the CMake projection comes from
+`config/tooling/board_components.json`. `--check-static` rejects missing or
+stale copies. CI runs the check independently of per-build board generation.
 
 ### `scripts/generate_hal_features.py`
 
@@ -531,6 +582,15 @@ Import-only projection of the validated `boards/` descriptors into the target
 and board model consumed by `jh-vscode`, project generators, and the example
 dispatcher. It deliberately contains no independent registry or command-line
 interface; descriptor files remain the source of truth.
+
+### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
+
+Import-only loaders for the versioned contracts under `config/tooling/`.
+`tooling_contract.py` validates the common schema and typed fields;
+`repository_layout.py` exposes named archive metadata and tracked generated
+artifact paths. Domain catalogs remain separate JSON documents rather than one
+global string module. The inventory, projection commands, and format-ownership
+rules are defined in [Tooling contracts](#tooling-contracts).
 
 ### `scripts/vscode_task_config.py`
 
@@ -673,13 +733,14 @@ instead.
 ### `scripts/run_cpd.py`
 
 Runs the managed PMD Copy/Paste Detector over owned C/C++ implementation
-sources. Every production, test, or example duplicate group from 100 tokens
-blocks the gate; there is no baseline or accepted-debt list. Generated and
-vendored implementations are excluded. The report also gives duplicate-token
-coverage globally and for the mock, RP2040, STM32G474, shared, and remaining
-portable scopes. Overlapping token ranges count only once. Deterministic source
-lists and XML reports are written to the requested output directory below
-`.build/`.
+sources and Python files below `scripts/`. Every production, test, or example
+C/C++ duplicate group from 100 tokens and every Python-script group from 50
+tokens blocks the gate; there is no baseline or accepted-debt list. Generated
+and vendored implementations are excluded. The report also gives
+duplicate-token coverage globally and for the mock, RP2040, STM32G474, shared,
+remaining portable, and Python-script scopes. Overlapping token ranges count
+only once. Deterministic source lists and XML reports are written to the
+requested output directory below `.build/`.
 
 ### `scripts/clang_tidy_files.py`
 

@@ -15,9 +15,6 @@
             "rp2040",
             "stm32g474"
         ],
-        "covers": [
-            "60_lora_point_to_point"
-        ],
         "variants": [
             {
                 "id": "probe",

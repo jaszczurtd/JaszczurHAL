@@ -18,10 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "46_mfrc522_rfid",
-            "47_pn532_nfc"
         ]
     },
     "toolchain": "cmake",

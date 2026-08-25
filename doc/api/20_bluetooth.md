@@ -19,10 +19,10 @@ service and its notification path.
 
 | Target | Board | Radio | Validation |
 |---|---|---|---|
-| `rp2040` | `picow` | onboard CYW43439 | Observer and bare-metal Stream hardware gates passed; FreeRTOS Stream rerun pending |
+| `rp2040` | `picow` | onboard CYW43439 | Observer and bare-metal/FreeRTOS Stream hardware gates passed |
 | `rp2350-arm` | `pico2w` | onboard CYW43439 | Observer, bare-metal/FreeRTOS Stream, and active Stream+WiFi/MQTT coexistence gates passed |
 | `rp2040` | `pico-rm2` | external PIM730/RM2 CYW43439 over PIO | build-supported; dedicated hardware gate pending |
-| `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer hardware gates passed; extended Stream gate pending |
+| `stm32g474` | `nucleo-g474re-pim730` | external PIM730/RM2 CYW43439 over gSPI | Peripheral and Observer gates plus full bare-metal/FreeRTOS Stream display-load gates, including IWDG reset, passed |
 | `mock` | `host-mock` | deterministic test backend | host tests |
 
 The RP2350 backend supports Pico 2 W only with the `rp2350-arm` target. Pico 2
@@ -39,11 +39,17 @@ queue saturation/recovery, and the negative security cases on Pico W
 bare-metal and Pico 2 W bare-metal/FreeRTOS. An unattended watchdog reset
 changed the reported reset reason to watchdog, changed a random per-boot
 identifier, retained the controller address, and required a new authenticated
-session. This is an MCU-reset interruption test, not a physical removal of
-VBUS. The Pico W FreeRTOS run was not repeated after increasing the fixture
-task stack to 1024 words because that board became unavailable. Native Windows
-host validation and downstream consumer/lights-timer integration are deferred
-and do not block the current BLE acceptance results.
+session. The same watchdog-reset oracle passed on STM32G474 with PIM730 and an
+ILI9341 load in both bare-metal and FreeRTOS builds, retaining address
+`28:CD:C1:19:18:19` across each reset. This is an MCU-reset interruption test,
+not a physical removal of VBUS. The corrected Pico W FreeRTOS fixture passed
+the complete gate after the Stream backend began requesting a 15 ms connection
+interval with zero peripheral latency: 50/50 reconnects, 3000 authenticated
+messages in 300.0 seconds (10.00 Hz), saturation, and all negative security
+and recovery cases. A central may reject the request without terminating the
+connection. Native Windows host validation and downstream consumer/lights-
+timer integration are deferred and do not block the recorded passing BLE
+hardware results.
 
 Passive Observer validation on the same date passed on Pico W and Pico 2 W:
 both entered `HAL_BLE_STATE_SCANNING`, retained seven reports including one
@@ -488,5 +494,5 @@ not compile BTstack.
 See the buildable [`26_ble_stream` example](../../examples/26_ble_stream/) for
 the complete Peripheral startup and advertising flow plus an authenticated
 stream consumer. The multi-target
-[`bluetooth_stream` hardware gate](../../tests/hardware/bluetooth_stream/)
+[`bluetooth_stream` hardware gate](03_build_tests.md#jh-ble-stream-v1-hardware-gate)
 drives the complete protocol from an independent BlueZ client.

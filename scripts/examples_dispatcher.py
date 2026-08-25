@@ -14,6 +14,11 @@ import tempfile
 import time
 from typing import Any
 
+from tooling_contract import (
+    ToolingContractError,
+    load_tooling_contract,
+    require_list,
+)
 from vscode_task_config import write_text_lf
 
 
@@ -26,356 +31,21 @@ REFERENCE_VSCODE_DIR = REPO_ROOT / "vscode" / "examples"
 
 RP_NATIVE_TARGETS = ["rp2040", "rp2350-arm", "rp2350-riscv"]
 GATE_PRIMARY_TARGETS = ["rp2040", "stm32g474"]
-LEGACY_EXAMPLE_IDS = [
-    f"{index:02d}_{name}"
-    for index, name in enumerate(
-        [
-            "blink",
-            "debug_helper",
-            "soft_timer_table",
-            "crypto",
-            "modem_A7670E",
-            "ds18b20",
-            "gps",
-            "thermocouple",
-            "display_tft",
-            "mqtt",
-            "wireguard",
-            "kv_store",
-            "i2c_slave",
-            "uart",
-            "wifi",
-            "littlefs",
-            "pid_controller",
-            "rgb_led",
-            "timer_ext",
-            "i2c_scan",
-            "adc_read",
-            "gps_uart",
-            "external_adc_ads1115",
-            "can_mcp2515",
-            "display_oled",
-            "rtc_clock",
-            "rtc_ds3231",
-            "pga2311",
-            "freertos_smoke",
-            "bh1750_light",
-            "hd44780",
-            "tsc2007_touch",
-            "stmpe610_touch",
-            "irsmall_decoder",
-            "cJSON",
-            "lodePNG",
-            "lodePNG_ili9341_base64",
-            "stm32g474_fdcan_native",
-            "sdlogger",
-            "jpeg",
-            "jpeg_ili931_base64",
-            "bsd_sockets_tcp_udp",
-            "dht_temperature_humidity",
-            "dacless_audio",
-            "swserial_loopback",
-            "mfrc522_rfid",
-            "pn532_nfc",
-            "http_server",
-            "websocket",
-            "net_console",
-            "net_commands",
-            "http_files",
-            "simple_io_chips",
-            "adp5360_pmic",
-            "epd_display",
-            "http_https_client",
-            "ota",
-            "ble_peripheral",
-            "ble_stream",
-            "lora_point_to_point",
-        ],
-        start=1,
+_EXAMPLE_CONTRACT = load_tooling_contract("examples.json")
+if set(_EXAMPLE_CONTRACT) != {"schemaVersion", "examples"}:
+    raise ToolingContractError(
+        "examples.json: only schemaVersion and examples are allowed"
     )
-]
-EXAMPLES: list[dict[str, Any]] = [
-    {
-        "dir": "01_core_runtime",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": [
-            "01_blink",
-            "02_debug_helper",
-            "03_soft_timer_table",
-            "17_pid_controller",
-            "19_timer_ext",
-        ],
-    },
-    {
-        "dir": "02_crypto",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["04_crypto"],
-    },
-    {
-        "dir": "03_modem_A7670E",
-        "targets": ["rp2040"],
-        "covers": ["05_modem_A7670E"],
-    },
-    {
-        "dir": "04_sensor_hub",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": [
-            "06_ds18b20",
-            "30_bh1750_light",
-            "43_dht_temperature_humidity",
-        ],
-    },
-    {
-        "dir": "05_serial_gps",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["07_gps", "14_uart", "22_gps_uart", "45_swserial_loopback"],
-        "sources": ["app.c"],
-        "variants": [
-            {
-                "id": "swserial",
-                "module": "05_serial_gps_swserial",
-                "sources": ["swserial_app.c"],
-                "targets": ["rp2040"],
-                "extraDefines": ["EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1"],
-            }
-        ],
-    },
-    {
-        "dir": "06_thermocouple",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["08_thermocouple"],
-    },
-    {
-        "dir": "07_display_media",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": [
-            "09_display_tft",
-            "36_lodePNG",
-            "37_lodePNG_ili9341_base64",
-            "40_jpeg",
-            "41_jpeg_ili931_base64",
-        ],
-    },
-    {
-        "dir": "08_mqtt",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["10_mqtt"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {
-        "dir": "09_wireguard",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["11_wireguard"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-    },
-    {
-        "dir": "10_storage",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["12_kv_store", "16_littlefs", "39_sdlogger"],
-    },
-    {
-        "dir": "11_i2c_slave",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["13_i2c_slave"],
-    },
-    {
-        "dir": "12_i2c_scan",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["20_i2c_scan"],
-    },
-    {
-        "dir": "13_adc",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["21_adc_read", "23_external_adc_ads1115"],
-    },
-    {
-        "dir": "14_can_mcp2515",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["24_can_mcp2515"],
-    },
-    {
-        "dir": "15_display_oled_lcd",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["25_display_oled", "31_hd44780"],
-    },
-    {
-        "dir": "16_rtc_backends",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["26_rtc_clock", "27_rtc_ds3231"],
-    },
-    {
-        "dir": "17_audio_output",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["28_pga2311", "44_dacless_audio"],
-    },
-    {
-        "dir": "18_freertos_suite",
-        "targets": ["rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474"],
-        "expandRpTargets": False,
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-        "covers": [
-            "15_wifi",
-            "29_freertos_smoke",
-            "35_cJSON",
-            "42_bsd_sockets_tcp_udp",
-            "48_http_server",
-            "49_websocket",
-            "50_net_console",
-            "51_net_commands",
-            "52_http_files",
-            "56_http_https_client",
-        ],
-        "sources": ["app.c"],
-        "variants": [
-            {
-                "id": "network",
-                "module": "18_freertos_network",
-                "sources": ["network_app.cpp"],
-                "targets": ["rp2040", "rp2350-arm", "stm32g474"],
-                "extraDefines": [
-                    "HAL_ENABLE_BSD_SOCKETS",
-                    "HAL_ENABLE_CJSON",
-                    "HAL_ENABLE_HTTP_CLIENT",
-                    "HAL_ENABLE_HTTP_FILES",
-                    "HAL_ENABLE_HTTP_SERVER",
-                    "HAL_ENABLE_NET_COMMANDS",
-                    "HAL_ENABLE_NET_CONSOLE",
-                    "HAL_ENABLE_NOTIFY_TELEGRAM",
-                    "HAL_ENABLE_TIME",
-                    "HAL_ENABLE_TLS",
-                    "HAL_ENABLE_WEBSOCKET",
-                    "HAL_ENABLE_WIFI",
-                    "HAL_FREERTOS_TASK0_STACK=1536",
-                    "HAL_FREERTOS_TASK1_STACK=384",
-                    "HAL_HTTP_SERVER_MAX_CLIENTS=1",
-                    "HAL_NET_CONSOLE_MAX_CLIENTS=1",
-                    "HAL_TCP_LISTENER_MAX_INSTANCES=4",
-                    "HAL_TCP_LISTENER_BACKLOG_MAX=2",
-                    "HAL_TCP_SOCKET_MAX_INSTANCES=6",
-                    "HAL_TLS_MAX_CLIENTS=1",
-                    "HAL_WEBSOCKET_MAX_CLIENTS=1",
-                ],
-            }
-        ],
-    },
-    {
-        "dir": "19_touch",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["32_tsc2007_touch", "33_stmpe610_touch"],
-    },
-    {
-        "dir": "20_irsmall_decoder",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["34_irsmall_decoder"],
-    },
-    {
-        "dir": "21_stm32g474_fdcan_native",
-        "targets": ["stm32g474"],
-        "target": "stm32g474",
-        "board": "nucleo-g474re",
-        "covers": ["38_stm32g474_fdcan_native"],
-    },
-    {
-        "dir": "22_rfid_nfc",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["46_mfrc522_rfid", "47_pn532_nfc"],
-    },
-    {
-        "dir": "23_io_pmic",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["18_rgb_led", "53_simple_io_chips", "54_adp5360_pmic"],
-    },
-    {
-        "dir": "24_epd_display",
-        "targets": ["rp2040", "stm32g474"],
-        "covers": ["55_epd_display"],
-    },
-    {
-        "dir": "25_ota",
-        "targets": ["rp2040"],
-        "covers": ["57_ota"],
-        "board": "picow",
-        "cache": {"JH_OTA_GENERATION": 1, "JH_OTA_VERSION": "example"},
-        "ota": {
-            "hostname": "jaszczurhal-ota",
-            "port": 8266,
-            "listenPort": 8266,
-            "password": "change-this-ota-password",
-        },
-    },
-    {
-        "dir": "26_ble_stream",
-        "targets": ["rp2040", "rp2350-arm", "stm32g474"],
-        "expandRpTargets": False,
-        "gateTargets": ["rp2040", "rp2350-arm", "stm32g474"],
-        "board": "picow",
-        "stm32Board": "nucleo-g474re-pim730",
-        "covers": ["58_ble_peripheral", "59_ble_stream"],
-    },
-    {
-        "dir": "27_lora_point_to_point",
-        "targets": ["rp2040", "stm32g474"],
-        "expandRpTargets": False,
-        "board": "pico-core1262-hf",
-        "stm32Board": "nucleo-g474re-core1262-hf",
-        "covers": ["60_lora_point_to_point"],
-        "variants": [
-            {
-                "id": "probe",
-                "module": "27_lora_point_to_point_probe",
-                "targets": ["rp2040", "stm32g474"],
-                "extraDefines": ["HAL_LORA_EXAMPLE_PROBE_ONLY=1"],
-            },
-            {
-                "id": "responder",
-                "module": "27_lora_point_to_point_responder",
-                "targets": ["rp2040", "stm32g474"],
-                "extraDefines": ["HAL_LORA_EXAMPLE_RESPONDER=1"],
-            },
-            {
-                "id": "sf7",
-                "module": "27_lora_point_to_point_sf7",
-                "targets": ["rp2040", "stm32g474"],
-                "gateTargets": [],
-                "extraDefines": [
-                    "HAL_LORA_EXAMPLE_SF=7",
-                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6",
-                ],
-            },
-            {
-                "id": "responder-sf7",
-                "module": "27_lora_point_to_point_responder_sf7",
-                "targets": ["rp2040", "stm32g474"],
-                "gateTargets": [],
-                "extraDefines": [
-                    "HAL_LORA_EXAMPLE_RESPONDER=1",
-                    "HAL_LORA_EXAMPLE_SF=7",
-                    "HAL_LORA_EXAMPLE_TX_POWER_DBM=6",
-                ],
-            },
-            {
-                "id": "link",
-                "module": "27_lora_point_to_point_link",
-                "sources": ["link_app.cpp"],
-                "targets": ["rp2040", "stm32g474"],
-                "extraDefines": ["HAL_ENABLE_LORA_LINK=1"],
-            },
-            {
-                "id": "link-responder",
-                "module": "27_lora_point_to_point_link_responder",
-                "sources": ["link_app.cpp"],
-                "targets": ["rp2040", "stm32g474"],
-                "extraDefines": [
-                    "HAL_ENABLE_LORA_LINK=1",
-                    "HAL_LORA_LINK_EXAMPLE_RESPONDER=1",
-                ],
-            },
-        ],
-    },
-]
+_EXAMPLE_RECORDS = require_list(
+    _EXAMPLE_CONTRACT, "examples", source="examples.json"
+)
+if any(not isinstance(entry, dict) for entry in _EXAMPLE_RECORDS):
+    raise ToolingContractError("examples.json: examples must contain objects")
+if any("covers" in entry for entry in _EXAMPLE_RECORDS):
+    raise ToolingContractError(
+        "examples.json: active examples must not contain historical covers"
+    )
+EXAMPLES: list[dict[str, Any]] = [dict(entry) for entry in _EXAMPLE_RECORDS]
 
 
 def json_text(data: Any) -> str:
@@ -450,18 +120,8 @@ def gate_targets(
     return [target for target in supported_targets if target in requested]
 
 
-def example_covers(entry: dict[str, Any]) -> list[str]:
-    covers = entry.get("covers")
-    if covers is None:
-        return [str(entry["dir"])]
-    if not isinstance(covers, list) or not covers:
-        raise ValueError(f"{entry['dir']}: covers must be a non-empty array")
-    return [str(item) for item in covers]
-
-
 def validate_example_registry() -> None:
     directories: set[str] = set()
-    coverage_owner: dict[str, str] = {}
     for entry in EXAMPLES:
         name = str(entry["dir"])
         if name in directories:
@@ -470,13 +130,6 @@ def validate_example_registry() -> None:
 
         supported = example_targets(entry)
         gate_targets(supported, entry.get("gateTargets"))
-        for covered in example_covers(entry):
-            owner = coverage_owner.get(covered)
-            if owner is not None:
-                raise ValueError(
-                    f"legacy example {covered} is covered by both {owner} and {name}"
-                )
-            coverage_owner[covered] = name
 
         for variant in entry.get("variants", []):
             variant_supported = example_targets(
@@ -484,19 +137,6 @@ def validate_example_registry() -> None:
                 [str(target) for target in variant.get("targets", entry["targets"])],
             )
             gate_targets(variant_supported, variant.get("gateTargets"))
-
-    expected = set(LEGACY_EXAMPLE_IDS)
-    actual = set(coverage_owner)
-    missing = sorted(expected.difference(actual))
-    unknown = sorted(actual.difference(expected))
-    if missing or unknown:
-        details = []
-        if missing:
-            details.append("missing: " + ", ".join(missing))
-        if unknown:
-            details.append("unknown: " + ", ".join(unknown))
-        raise ValueError("legacy example coverage mismatch; " + "; ".join(details))
-
 
 def default_target_board(entry: dict[str, Any]) -> tuple[str, str]:
     targets = example_targets(entry)
@@ -519,7 +159,6 @@ def manifest_for(entry: dict[str, Any]) -> dict[str, Any]:
         "gateTargets": gate_targets(
             example_targets(entry), entry.get("gateTargets")
         ),
-        "covers": example_covers(entry),
     }
     if entry.get("variants"):
         variants = []

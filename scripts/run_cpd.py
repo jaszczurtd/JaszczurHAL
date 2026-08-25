@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the pinned PMD CPD policy over JaszczurHAL-owned C/C++ sources."""
+"""Run the pinned PMD CPD policy over owned C/C++ and Python sources."""
 
 from __future__ import annotations
 
@@ -12,15 +12,18 @@ import sys
 import xml.etree.ElementTree as ET
 
 
-SOURCE_EXTENSIONS = frozenset({".c", ".cc", ".cpp", ".cxx"})
+CPP_SOURCE_EXTENSIONS = frozenset({".c", ".cc", ".cpp", ".cxx"})
+PYTHON_SOURCE_EXTENSIONS = frozenset({".py"})
 IGNORED_PATH_PARTS = frozenset({".build"})
 MINIMUM_TOKENS = 100
+SCRIPTS_PYTHON_MINIMUM_TOKENS = 50
 COVERAGE_SCOPE_ORDER = (
     "mock",
     "rp2040",
     "stm32g474",
     "portable-hal",
     "portable-other",
+    "scripts-python",
 )
 PRODUCTION_EXCLUDED_PREFIXES = (
     "src/hal/generated/",
@@ -86,7 +89,11 @@ def _is_generated_build_artifact(relative: str) -> bool:
 
 
 def collect_sources(
-    repo_root: Path, roots: tuple[str, ...], *, production: bool
+    repo_root: Path,
+    roots: tuple[str, ...],
+    *,
+    production: bool,
+    extensions: frozenset[str] = CPP_SOURCE_EXTENSIONS,
 ) -> list[Path]:
     sources: list[Path] = []
     for root_text in roots:
@@ -94,7 +101,7 @@ def collect_sources(
         if not root.is_dir():
             raise CpdError(f"CPD source root is missing: {root}")
         for path in root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() not in SOURCE_EXTENSIONS:
+            if not path.is_file() or path.suffix.lower() not in extensions:
                 continue
             relative = _relative_text(path, repo_root)
             if _is_generated_build_artifact(relative):
@@ -220,6 +227,7 @@ def run_scan(
     repo_root: Path,
     output_dir: Path,
     label: str,
+    language: str,
     sources: list[Path],
     minimum_tokens: int,
 ) -> CpdReport:
@@ -232,7 +240,7 @@ def run_scan(
         "--minimum-tokens",
         str(minimum_tokens),
         "--language",
-        "cpp",
+        language,
         "--file-list",
         str(file_list),
         "--format",
@@ -265,6 +273,8 @@ def run_scan(
 
 
 def _coverage_scope(path: str) -> str:
+    if path.startswith("scripts/"):
+        return "scripts-python"
     if path.startswith("src/hal/impl/.mock/"):
         return "mock"
     if path.startswith("src/hal/impl/rp2040/"):
@@ -348,7 +358,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--repo-root", type=Path, default=repo_root)
     parser.add_argument("--output-dir", type=Path, default=repo_root / ".build/gate/cpd")
     parser.add_argument("--pmd", default="")
-    parser.add_argument("--minimum-tokens", type=int, default=MINIMUM_TOKENS)
+    parser.add_argument(
+        "--minimum-tokens",
+        type=int,
+        default=MINIMUM_TOKENS,
+        help=(
+            "C/C++ duplicate threshold (default: 100); the scripts/Python "
+            "threshold is fixed at 50"
+        ),
+    )
     return parser
 
 
@@ -369,15 +387,23 @@ def main() -> int:
         test_sources = collect_sources(
             repo_root, ("tests", "examples"), production=False
         )
+        script_sources = collect_sources(
+            repo_root,
+            ("scripts",),
+            production=False,
+            extensions=PYTHON_SOURCE_EXTENSIONS,
+        )
         print(
             f"CPD scope: {len(production_sources)} production and "
-            f"{len(test_sources)} test/example implementation files."
+            f"{len(test_sources)} test/example implementation files, plus "
+            f"{len(script_sources)} Python script files."
         )
         production_report = run_scan(
             pmd,
             repo_root,
             output_dir,
             "production",
+            "cpp",
             production_sources,
             arguments.minimum_tokens,
         )
@@ -386,8 +412,18 @@ def main() -> int:
             repo_root,
             output_dir,
             "tests_examples",
+            "cpp",
             test_sources,
             arguments.minimum_tokens,
+        )
+        scripts_report = run_scan(
+            pmd,
+            repo_root,
+            output_dir,
+            "scripts_python",
+            "python",
+            script_sources,
+            SCRIPTS_PYTHON_MINIMUM_TOKENS,
         )
     except CpdError as error:
         print(f"run_cpd.py: {error}", file=sys.stderr)
@@ -395,7 +431,14 @@ def main() -> int:
 
     _print_scope("production", production_report, arguments.minimum_tokens)
     _print_scope("tests/examples", test_report, arguments.minimum_tokens)
-    total_groups = len(production_report.groups) + len(test_report.groups)
+    _print_scope(
+        "scripts/python", scripts_report, SCRIPTS_PYTHON_MINIMUM_TOKENS
+    )
+    total_groups = (
+        len(production_report.groups)
+        + len(test_report.groups)
+        + len(scripts_report.groups)
+    )
     if total_groups:
         sys.stdout.flush()
         print(
@@ -404,7 +447,10 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
-    print(f"CPD gate passed with zero duplicate groups; XML reports: {output_dir}")
+    print(
+        "CPD gate passed with zero duplicate groups at the configured "
+        f"C/C++ and Python thresholds; XML reports: {output_dir}"
+    )
     return 0
 
 

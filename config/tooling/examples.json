@@ -1,0 +1,363 @@
+{
+  "schemaVersion": 1,
+  "examples": [
+    {
+      "dir": "01_core_runtime",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "02_crypto",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "03_modem_A7670E",
+      "targets": [
+        "rp2040"
+      ]
+    },
+    {
+      "dir": "04_sensor_hub",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "05_serial_gps",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ],
+      "sources": [
+        "app.c"
+      ],
+      "variants": [
+        {
+          "id": "swserial",
+          "module": "05_serial_gps_swserial",
+          "sources": [
+            "swserial_app.c"
+          ],
+          "targets": [
+            "rp2040"
+          ],
+          "extraDefines": [
+            "EXAMPLE_SERIAL_GPS_USE_SWSERIAL=1"
+          ]
+        }
+      ]
+    },
+    {
+      "dir": "06_thermocouple",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "07_display_media",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "08_mqtt",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ],
+      "board": "picow",
+      "stm32Board": "nucleo-g474re-pim730"
+    },
+    {
+      "dir": "09_wireguard",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ],
+      "board": "picow",
+      "stm32Board": "nucleo-g474re-pim730"
+    },
+    {
+      "dir": "10_storage",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "11_i2c_slave",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "12_i2c_scan",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "13_adc",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "14_can_mcp2515",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "15_display_oled_lcd",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "16_rtc_backends",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "17_audio_output",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "18_freertos_suite",
+      "targets": [
+        "rp2040",
+        "rp2350-arm",
+        "rp2350-riscv",
+        "stm32g474"
+      ],
+      "expandRpTargets": false,
+      "board": "picow",
+      "stm32Board": "nucleo-g474re-pim730",
+      "sources": [
+        "app.c"
+      ],
+      "variants": [
+        {
+          "id": "network",
+          "module": "18_freertos_network",
+          "sources": [
+            "network_app.cpp"
+          ],
+          "targets": [
+            "rp2040",
+            "rp2350-arm",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_BSD_SOCKETS",
+            "HAL_ENABLE_CJSON",
+            "HAL_ENABLE_HTTP_CLIENT",
+            "HAL_ENABLE_HTTP_FILES",
+            "HAL_ENABLE_HTTP_SERVER",
+            "HAL_ENABLE_NET_COMMANDS",
+            "HAL_ENABLE_NET_CONSOLE",
+            "HAL_ENABLE_NOTIFY_TELEGRAM",
+            "HAL_ENABLE_TIME",
+            "HAL_ENABLE_TLS",
+            "HAL_ENABLE_WEBSOCKET",
+            "HAL_ENABLE_WIFI",
+            "HAL_FREERTOS_TASK0_STACK=1536",
+            "HAL_FREERTOS_TASK1_STACK=384",
+            "HAL_HTTP_SERVER_MAX_CLIENTS=1",
+            "HAL_NET_CONSOLE_MAX_CLIENTS=1",
+            "HAL_TCP_LISTENER_MAX_INSTANCES=4",
+            "HAL_TCP_LISTENER_BACKLOG_MAX=2",
+            "HAL_TCP_SOCKET_MAX_INSTANCES=6",
+            "HAL_TLS_MAX_CLIENTS=1",
+            "HAL_WEBSOCKET_MAX_CLIENTS=1"
+          ]
+        }
+      ]
+    },
+    {
+      "dir": "19_touch",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "20_irsmall_decoder",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "21_stm32g474_fdcan_native",
+      "targets": [
+        "stm32g474"
+      ],
+      "target": "stm32g474",
+      "board": "nucleo-g474re"
+    },
+    {
+      "dir": "22_rfid_nfc",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "23_io_pmic",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "24_epd_display",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ]
+    },
+    {
+      "dir": "25_ota",
+      "targets": [
+        "rp2040"
+      ],
+      "board": "picow",
+      "cache": {
+        "JH_OTA_GENERATION": 1,
+        "JH_OTA_VERSION": "example"
+      },
+      "ota": {
+        "hostname": "jaszczurhal-ota",
+        "port": 8266,
+        "listenPort": 8266,
+        "password": "change-this-ota-password"
+      }
+    },
+    {
+      "dir": "26_ble_stream",
+      "targets": [
+        "rp2040",
+        "rp2350-arm",
+        "stm32g474"
+      ],
+      "expandRpTargets": false,
+      "gateTargets": [
+        "rp2040",
+        "rp2350-arm",
+        "stm32g474"
+      ],
+      "board": "picow",
+      "stm32Board": "nucleo-g474re-pim730"
+    },
+    {
+      "dir": "27_lora_point_to_point",
+      "targets": [
+        "rp2040",
+        "stm32g474"
+      ],
+      "expandRpTargets": false,
+      "board": "pico-core1262-hf",
+      "stm32Board": "nucleo-g474re-core1262-hf",
+      "variants": [
+        {
+          "id": "probe",
+          "module": "27_lora_point_to_point_probe",
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_LORA_EXAMPLE_PROBE_ONLY=1"
+          ]
+        },
+        {
+          "id": "responder",
+          "module": "27_lora_point_to_point_responder",
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_LORA_EXAMPLE_RESPONDER=1"
+          ]
+        },
+        {
+          "id": "sf7",
+          "module": "27_lora_point_to_point_sf7",
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "gateTargets": [],
+          "extraDefines": [
+            "HAL_LORA_EXAMPLE_SF=7",
+            "HAL_LORA_EXAMPLE_TX_POWER_DBM=6"
+          ]
+        },
+        {
+          "id": "responder-sf7",
+          "module": "27_lora_point_to_point_responder_sf7",
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "gateTargets": [],
+          "extraDefines": [
+            "HAL_LORA_EXAMPLE_RESPONDER=1",
+            "HAL_LORA_EXAMPLE_SF=7",
+            "HAL_LORA_EXAMPLE_TX_POWER_DBM=6"
+          ]
+        },
+        {
+          "id": "link",
+          "module": "27_lora_point_to_point_link",
+          "sources": [
+            "link_app.cpp"
+          ],
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_LORA_LINK=1"
+          ]
+        },
+        {
+          "id": "link-responder",
+          "module": "27_lora_point_to_point_link_responder",
+          "sources": [
+            "link_app.cpp"
+          ],
+          "targets": [
+            "rp2040",
+            "stm32g474"
+          ],
+          "extraDefines": [
+            "HAL_ENABLE_LORA_LINK=1",
+            "HAL_LORA_LINK_EXAMPLE_RESPONDER=1"
+          ]
+        }
+      ]
+    }
+  ]
+}

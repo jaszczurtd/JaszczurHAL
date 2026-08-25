@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "components": [
+    {
+      "id": "rp-native",
+      "providers": [
+        "pico-sdk"
+      ],
+      "slot": "target-runtime"
+    },
+    {
+      "id": "stm32g474-native",
+      "providers": [
+        "jh-stm32-baremetal"
+      ],
+      "slot": "target-runtime"
+    },
+    {
+      "id": "host-mock",
+      "providers": [
+        "host"
+      ],
+      "slot": "target-runtime"
+    },
+    {
+      "id": "esp-idf-native",
+      "providers": [
+        "esp-idf"
+      ],
+      "slot": "target-runtime"
+    },
+    {
+      "id": "cyw43-pico-pio",
+      "providers": [
+        "pico-sdk"
+      ],
+      "slot": "network-radio-transport"
+    },
+    {
+      "id": "cyw43-stm32-gspi",
+      "providers": [
+        "jh-stm32-baremetal"
+      ],
+      "slot": "network-radio-transport"
+    },
+    {
+      "id": "cyw43-lwip",
+      "providers": [
+        "jh-stm32-baremetal",
+        "pico-sdk"
+      ],
+      "slot": "network-stack"
+    },
+    {
+      "id": "btstack-ble",
+      "providers": [
+        "jh-stm32-baremetal",
+        "pico-sdk"
+      ],
+      "slot": "bluetooth-host-stack"
+    },
+    {
+      "id": "sx126x-radio",
+      "providers": [
+        "jh-stm32-baremetal",
+        "pico-sdk"
+      ],
+      "slot": "lora-radio-provider"
+    }
+  ]
+}

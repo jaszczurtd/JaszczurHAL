@@ -1151,7 +1151,7 @@ def run(args) -> None:
             f"{before_restart['ble_generation']}->{after_restart['ble_generation']}"
         )
 
-        if args.target in {"rp2040", "rp2350-arm"}:
+        if args.target in {"rp2040", "rp2350-arm", "stm32g474"}:
             client, session = verify_simulated_power_loss(
                 args, client, session, history, identity, initial_address
             )

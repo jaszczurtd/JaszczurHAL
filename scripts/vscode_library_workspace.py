@@ -588,7 +588,10 @@ def sync_vscode_documents(repo_root: Path, check: bool) -> None:
             print(f"Wrote {path}")
     if stale and check:
         raise WorkspaceError(
-            "stale root VS Code files: " + ", ".join(stale),
+            "stale root VS Code files: "
+            + ", ".join(stale)
+            + "; run 'python3 scripts/vscode_library_workspace.py "
+            "sync-vscode' to refresh them",
             6,
         )
 

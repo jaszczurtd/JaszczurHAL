@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Keep GitHub CI at one all-features build per OS and architecture."""
+"""Audit GitHub CI quality gates and all-features architecture matrices."""
 
 from __future__ import annotations
 
@@ -10,6 +10,14 @@ import sys
 
 ROOT = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else Path(__file__).parents[1]
 WORKFLOW = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+for obsolete_action in ("actions/checkout@v5", "actions/cache@v4"):
+    if obsolete_action in WORKFLOW:
+        raise AssertionError(f"obsolete GitHub Action remains: {obsolete_action}")
+if "actions/checkout@v6" not in WORKFLOW or "actions/cache@v5" not in WORKFLOW:
+    raise AssertionError("current Node 24 GitHub Actions are not configured")
+if "\npermissions:\n  contents: read\n" not in WORKFLOW:
+    raise AssertionError("GitHub Actions token is not restricted to read-only contents")
 
 
 def job(name: str) -> str:
@@ -46,6 +54,23 @@ if "-DJH_ENABLE_ALL_FEATURES=ON" not in job("windows-static-library"):
     raise AssertionError("Windows architecture matrix does not enable all features")
 if "--all-features" not in job("linux-static-library"):
     raise AssertionError("Linux architecture matrix does not enable all features")
+
+test_job = job("test")
+for generated_check in (
+    "scripts/vscode_library_workspace.py sync-vscode --check",
+    "scripts/examples_dispatcher.py check-template",
+    "tests/test_tooling_contract.py .",
+):
+    if generated_check not in test_job:
+        raise AssertionError(
+            f"Linux CI does not fail early for generated drift: {generated_check}"
+        )
+
+windows_tooling = job("windows-tooling")
+if "'tests/test_vscode_library_workspace.py'" not in windows_tooling:
+    raise AssertionError(
+        "Windows tooling CI does not validate the root VS Code workspace"
+    )
 
 for obsolete in (
     "stm32-build",

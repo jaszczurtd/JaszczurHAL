@@ -9,6 +9,9 @@
 
 #include "stm32g474_system.h"
 
+#include "../../port/stm32g474_regs.h"
+#include "stm32g474_fault.h"
+
 #include <string.h>
 
 #if defined(HAL_ENABLE_FREERTOS) && !defined(JH_STM32G474_HW)
@@ -18,7 +21,6 @@
 
 #ifdef JH_STM32G474_HW
 /* Real hardware time base lives in port/system_stm32g474.c (SysTick). */
-#include "../../port/stm32g474_regs.h"
 extern "C" uint32_t stm32g474_systick_millis(void);
 extern "C" uint32_t stm32g474_systick_micros(void);
 extern "C" uint64_t stm32g474_systick_micros64(void);
@@ -63,10 +65,13 @@ uint64_t g_micros64 = 0u;
 uint8_t g_device_uid[8] = {0x47, 0x34, 0x74, 0x00, 0x00, 0x00, 0x00, 0x01};
 #endif
 
-bool g_watchdog_fed = false;
-bool g_watchdog_caused_reboot = false;
 #ifndef JH_STM32G474_HW
 uint32_t g_free_heap = 0u;
+bool g_watchdog_enabled = false;
+bool g_watchdog_fed = false;
+bool g_watchdog_pause_on_debug = false;
+uint32_t g_watchdog_prescaler = 0u;
+uint32_t g_watchdog_reload = 0u;
 #endif
 float g_chip_temp_c = 0.0f;
 
@@ -84,7 +89,58 @@ static uint32_t host_freertos_millis(void) {
 extern "C" void stm32g474_system_test_set_micros64(uint64_t micros) {
   g_micros64 = micros;
 }
+
+extern "C" void stm32g474_system_test_reset_watchdog(void) {
+  g_watchdog_enabled = false;
+  g_watchdog_fed = false;
+  g_watchdog_pause_on_debug = false;
+  g_watchdog_prescaler = 0u;
+  g_watchdog_reload = 0u;
+}
+
+extern "C" bool stm32g474_system_test_watchdog_enabled(void) {
+  return g_watchdog_enabled;
+}
+
+extern "C" uint32_t stm32g474_system_test_watchdog_prescaler(void) {
+  return g_watchdog_prescaler;
+}
+
+extern "C" uint32_t stm32g474_system_test_watchdog_reload(void) {
+  return g_watchdog_reload;
+}
+
+extern "C" bool stm32g474_system_test_watchdog_pause_on_debug(void) {
+  return g_watchdog_pause_on_debug;
+}
 #endif
+
+struct WatchdogConfig {
+  uint32_t prescaler_code;
+  uint32_t reload;
+};
+
+static bool watchdog_compute_config(uint32_t ms, WatchdogConfig *out) {
+  constexpr uint32_t kLsiHz = 32000u;
+  constexpr uint32_t kPrescalers[] = {4u, 8u, 16u, 32u, 64u, 128u, 256u};
+
+  if (ms == 0u || out == nullptr) {
+    return false;
+  }
+
+  for (uint32_t code = 0u;
+       code < (sizeof(kPrescalers) / sizeof(kPrescalers[0])); ++code) {
+    const uint64_t numerator = (uint64_t)ms * kLsiHz;
+    const uint64_t denominator = (uint64_t)1000u * kPrescalers[code];
+    const uint64_t ticks = (numerator + denominator - 1u) / denominator;
+    if (ticks >= 1u && ticks <= (uint64_t)IWDG_RLR_MASK + 1u) {
+      out->prescaler_code = code;
+      out->reload = (uint32_t)(ticks - 1u);
+      return true;
+    }
+  }
+  return false;
+}
 
 } // namespace
 
@@ -164,16 +220,57 @@ void stm32g474_system_delay_us(uint32_t us) {
 #endif
 }
 
-void stm32g474_system_watchdog_feed(void) { g_watchdog_fed = true; }
+void stm32g474_system_watchdog_feed(void) {
+#ifdef JH_STM32G474_HW
+  IWDG_KR = IWDG_KR_RELOAD;
+#else
+  g_watchdog_fed = true;
+#endif
+}
 
-void stm32g474_system_watchdog_enable(uint32_t ms, bool pause_on_debug) {
-  (void)ms;
-  (void)pause_on_debug;
+hal_status_t stm32g474_system_watchdog_enable(uint32_t ms,
+                                              bool pause_on_debug) {
+  WatchdogConfig config = {};
+  if (!watchdog_compute_config(ms, &config)) {
+    return HAL_EINVAL;
+  }
+
+#ifdef JH_STM32G474_HW
+  if (pause_on_debug) {
+    DBGMCU_APB1FZR1 |= DBGMCU_APB1FZR1_DBG_IWDG_STOP;
+  } else {
+    DBGMCU_APB1FZR1 &= ~DBGMCU_APB1FZR1_DBG_IWDG_STOP;
+  }
+
+  /* Starting IWDG also forces LSI on. Configuration remains writable only
+   * after the write-access key; wait for both shadow-register updates before
+   * loading the requested period. */
+  IWDG_KR = IWDG_KR_START;
+  IWDG_KR = IWDG_KR_WRITE_ACCESS;
+  IWDG_PR = config.prescaler_code;
+  IWDG_RLR = config.reload;
+
+  constexpr uint32_t kUpdatePollBudget = 20000000u;
+  uint32_t budget = kUpdatePollBudget;
+  while ((IWDG_SR & (IWDG_SR_PVU | IWDG_SR_RVU)) != 0u && budget > 0u) {
+    --budget;
+  }
+  if ((IWDG_SR & (IWDG_SR_PVU | IWDG_SR_RVU)) != 0u) {
+    return HAL_ETIMEOUT;
+  }
+  IWDG_KR = IWDG_KR_RELOAD;
+#else
+  g_watchdog_enabled = true;
   g_watchdog_fed = false;
+  g_watchdog_pause_on_debug = pause_on_debug;
+  g_watchdog_prescaler = config.prescaler_code;
+  g_watchdog_reload = config.reload;
+#endif
+  return HAL_OK;
 }
 
 bool stm32g474_system_watchdog_caused_reboot(void) {
-  return g_watchdog_caused_reboot;
+  return stm32g474_fault_get_reset_reason() == HAL_RESET_REASON_WATCHDOG;
 }
 
 void stm32g474_system_idle(void) {

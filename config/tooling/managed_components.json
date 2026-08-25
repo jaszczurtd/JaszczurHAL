@@ -1,0 +1,241 @@
+{
+  "schemaVersion": 1,
+  "gitComponents": [
+    {
+      "id": "bearssl",
+      "label": "BearSSL",
+      "config": "bearssl_version.conf",
+      "prefix": "BEARSSL",
+      "requiredPaths": [
+        "LICENSE.txt",
+        "inc/bearssl.h",
+        "src/inner.h",
+        "src/ssl/ssl_client.c"
+      ]
+    },
+    {
+      "id": "cjson",
+      "label": "cJSON",
+      "config": "cjson_version.conf",
+      "prefix": "CJSON",
+      "requiredPaths": [
+        "LICENSE",
+        "cJSON.c",
+        "cJSON.h",
+        "cJSON_Utils.c",
+        "cJSON_Utils.h"
+      ],
+      "clean": true
+    },
+    {
+      "id": "lodepng",
+      "label": "LodePNG",
+      "config": "lodepng_version.conf",
+      "prefix": "LODEPNG",
+      "requiredPaths": [
+        "LICENSE",
+        "lodepng.cpp",
+        "lodepng.h"
+      ],
+      "clean": true
+    },
+    {
+      "id": "jpeg",
+      "label": "TJpg_Decoder",
+      "config": "jpeg_version.conf",
+      "prefix": "JPEG",
+      "requiredPaths": [
+        "license.txt",
+        "src/tjpgd.c",
+        "src/tjpgd.h",
+        "src/tjpgdcnf.h"
+      ],
+      "clean": true
+    },
+    {
+      "id": "fatfs",
+      "label": "FatFs",
+      "config": "fatfs_version.conf",
+      "prefix": "FATFS",
+      "requiredPaths": [
+        "LICENSE.txt",
+        "source/00history.txt",
+        "source/00readme.txt",
+        "source/diskio.h",
+        "source/ff.c",
+        "source/ff.h",
+        "source/ffsystem.c",
+        "source/ffunicode.c"
+      ]
+    },
+    {
+      "id": "unity",
+      "label": "Unity",
+      "config": "unity_version.conf",
+      "prefix": "UNITY",
+      "requiredPaths": [
+        "LICENSE.txt",
+        "src/unity.c",
+        "src/unity.h",
+        "src/unity_internals.h"
+      ],
+      "clean": true
+    },
+    {
+      "id": "lwip",
+      "label": "lwIP",
+      "config": "lwip_version.conf",
+      "prefix": "LWIP",
+      "requiredPaths": [
+        "COPYING",
+        "src/core/init.c",
+        "src/include/lwip/init.h",
+        "src/netif/ethernet.c"
+      ],
+      "versionValidator": "lwip"
+    },
+    {
+      "id": "littlefs",
+      "label": "littlefs",
+      "config": "littlefs_version.conf",
+      "prefix": "LITTLEFS",
+      "requiredPaths": [
+        "LICENSE.md",
+        "lfs.c",
+        "lfs.h",
+        "lfs_util.c",
+        "lfs_util.h"
+      ],
+      "versionValidator": "littlefs"
+    },
+    {
+      "id": "btstack",
+      "label": "BTstack",
+      "config": "btstack_version.conf",
+      "prefix": "BTSTACK",
+      "requiredPaths": [
+        "LICENSE",
+        "src/bluetooth.h",
+        "src/hci.c",
+        "src/ble/att_server.c",
+        "platform/embedded/btstack_run_loop_embedded.c",
+        "tool/compile_gatt.py"
+      ]
+    },
+    {
+      "id": "sx126x",
+      "label": "Semtech SX126x driver",
+      "config": "sx126x_driver_version.conf",
+      "prefix": "SX126X_DRIVER",
+      "requiredPaths": [
+        "LICENSE.txt",
+        "src/sx126x.c",
+        "src/sx126x.h",
+        "src/sx126x_hal.h",
+        "src/sx126x_regs.h",
+        "src/sx126x_status.h",
+        "src/sx126x_driver_version.c",
+        "src/sx126x_driver_version.h"
+      ],
+      "clean": true
+    },
+    {
+      "id": "freertos",
+      "label": "FreeRTOS-Kernel",
+      "config": "freertos_core_version.conf",
+      "prefix": "FREERTOS_KERNEL",
+      "requiredPaths": [
+        "include/FreeRTOS.h",
+        "include/task.h",
+        "include/semphr.h",
+        "portable/GCC/ARM_CM4F/port.c",
+        "portable/GCC/ARM_CM4F/portmacro.h",
+        "portable/MemMang/heap_4.c",
+        "tasks.c",
+        "queue.c",
+        "list.c",
+        "timers.c",
+        "event_groups.c",
+        "stream_buffer.c",
+        "portable/ThirdParty/GCC/RP2040/port.c",
+        "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_ARM_NTZ/non_secure/port.c",
+        "portable/ThirdParty/Community-Supported-Ports/GCC/RP2350_RISC-V/port.c"
+      ],
+      "submodulesKey": "FREERTOS_KERNEL_SUBMODULES",
+      "versionValidator": "freertos"
+    },
+    {
+      "id": "pico-sdk",
+      "label": "Pico SDK",
+      "config": "pico_sdk_version.conf",
+      "prefix": "PICO_SDK",
+      "requiredPaths": [
+        "pico_sdk_init.cmake",
+        "pico_sdk_version.cmake",
+        "external/pico_sdk_import.cmake",
+        "src/rp2_common/hardware_flash/include/hardware/flash.h",
+        "src/rp2_common/pico_multicore/include/pico/multicore.h",
+        "src/rp2040",
+        "src/rp2350"
+      ],
+      "submodulesKey": "PICO_SDK_SUBMODULES",
+      "versionValidator": "pico"
+    },
+    {
+      "id": "esp-idf",
+      "label": "ESP-IDF",
+      "config": "esp_idf_version.conf",
+      "prefix": "ESP_IDF",
+      "requiredPaths": [
+        "CMakeLists.txt",
+        "components/esp_system",
+        "tools/idf.py",
+        "tools/idf_tools.py",
+        "tools/cmake/project.cmake",
+        "tools/cmake/version.cmake"
+      ],
+      "recursiveSubmodules": true,
+      "versionValidator": "esp-idf"
+    }
+  ],
+  "toolComponents": [
+    "pmd",
+    "picotool",
+    "riscv-toolchain"
+  ],
+  "defaultOrder": [
+    "bearssl",
+    "cjson",
+    "lodepng",
+    "jpeg",
+    "fatfs",
+    "unity",
+    "lwip",
+    "littlefs",
+    "btstack",
+    "sx126x",
+    "freertos",
+    "pico-sdk",
+    "pmd",
+    "picotool",
+    "riscv-toolchain"
+  ],
+  "launchers": {
+    "bearssl": "ensure_bearssl.sh",
+    "cjson": "ensure_cjson.sh",
+    "lodepng": "ensure_lodepng.sh",
+    "jpeg": "ensure_jpeg.sh",
+    "fatfs": "ensure_fatfs.sh",
+    "unity": "ensure_unity.sh",
+    "lwip": "ensure_lwip.sh",
+    "littlefs": "ensure_littlefs.sh",
+    "btstack": "ensure_btstack.sh",
+    "sx126x": "ensure_sx126x.sh",
+    "freertos": "ensure_freertos_kernel.sh",
+    "pico-sdk": "ensure_pico_sdk.sh",
+    "esp-idf": "ensure_esp_idf.sh",
+    "pmd": "ensure_pmd.sh",
+    "picotool": "ensure_picotool.sh",
+    "riscv-toolchain": "ensure_riscv_toolchain.sh"
+  }
+}

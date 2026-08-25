@@ -16,9 +16,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "11_wireguard"
         ]
     },
     "toolchain": "cmake",

@@ -5,7 +5,7 @@
   "id": "nucleo-g474re-pim730",
   "displayName": "ST NUCLEO-G474RE with PIM730/RM2",
   "description": "NUCLEO-G474RE with a fixed external CYW43 PIM730/RM2 radio frontend.",
-  "status": "experimental",
+  "status": "supported",
   "compatibleTargets": ["stm32g474"],
   "build": { "provider": "jh-stm32-baremetal" },
   "hal": { "profileId": 11, "selector": "HAL_BOARD_PROFILE_STM32G474_NUCLEO_PIM730", "legacySelectors": [], "autoDetectSelectors": [] },

@@ -18,10 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "32_tsc2007_touch",
-            "33_stmpe610_touch"
         ]
     },
     "toolchain": "cmake",

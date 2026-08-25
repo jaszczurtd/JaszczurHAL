@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "archiveMetadata": {
+    "pinFile": ".jh-archive-pin",
+    "manifestFile": ".jh-content.sha256",
+    "versionStamp": ".jaszczurhal-component-version",
+    "exclusionsFile": ".jh-archive-exclusions"
+  },
+  "generatedArtifacts": {
+    "featureHeader": "src/hal/generated/jh_hal_features.h",
+    "featureCmake": "cmake/generated/jh_hal_features.cmake",
+    "boardRegistryHeader": "src/hal/generated/jh_board_registry.h",
+    "boardFallbackHeader": "src/hal/generated/jh_board_fallback_config.h",
+    "boardComponentsCmake": "cmake/generated/jh_board_components_registry.cmake"
+  }
+}

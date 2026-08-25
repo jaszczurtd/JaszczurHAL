@@ -2,6 +2,10 @@
 #include <hal/security/jh_secure_random.h>
 #include <tools.h>
 
+#if defined(JHBL5_ENABLE_DISPLAY)
+#include <stdarg.h>
+#include <stdio.h>
+#endif
 #include <string.h>
 
 namespace {
@@ -32,8 +36,14 @@ constexpr char kPowerLossCommand[] = "JHBL5/POWER-LOSS";
 constexpr char kPowerLossResponse[] = "JHBL5/POWER-LOSS-ARMED";
 #if defined(HAL_ENABLE_FREERTOS)
 #define JHBL5_FIXTURE_RUNTIME_NAME "freertos"
+#if defined(JHBL5_ENABLE_DISPLAY)
+constexpr char kDisplayRuntimeName[] = "FreeRTOS";
+#endif
 #else
 #define JHBL5_FIXTURE_RUNTIME_NAME "baremetal"
+#if defined(JHBL5_ENABLE_DISPLAY)
+constexpr char kDisplayRuntimeName[] = "bare-metal";
+#endif
 #endif
 constexpr char kIdentityResponse[] =
     "J5I1|" HAL_TARGET_NAME "|" HAL_BOARD_PROFILE_NAME
@@ -44,6 +54,17 @@ constexpr size_t kStatsPayloadLength =
     (sizeof(kStatsResponse) - 1u) + (kStatsFieldCount * sizeof(uint32_t));
 constexpr size_t kBootPayloadLength =
     (sizeof(kBootResponse) - 1u) + sizeof(uint8_t) + kBootIdLength;
+#if defined(JHBL5_ENABLE_DISPLAY)
+static_assert(HAL_TARGET_IS_STM32G474,
+              "the BLE Stream display load variant is STM32G474-only");
+constexpr uint8_t kDisplayCsPin = 22u; /* PB6, CN5 D10 */
+constexpr uint8_t kDisplayDcPin = 39u; /* PC7, CN5 D9 */
+constexpr uint8_t kDisplayRstPin = 9u; /* PA9, CN5 D8 */
+constexpr int kDisplayWidth = 240;
+constexpr int kDisplayHeight = 320;
+constexpr int kDisplayLineHeight = 20;
+constexpr size_t kDisplayLineCapacity = 48u;
+#endif
 constexpr size_t authenticated_att_length(size_t payload_length) {
   return HAL_BLE_STREAM_FRAME_HEADER_LEN + HAL_BLE_STREAM_AEAD_COUNTER_LEN +
          payload_length + HAL_BLE_STREAM_AEAD_TAG_LEN +
@@ -81,10 +102,139 @@ bool s_power_loss_pending;
 hal_reset_reason_t s_boot_reason = HAL_RESET_REASON_UNKNOWN;
 uint64_t s_boot_id;
 char s_address[HAL_BLE_ADDRESS_TEXT_SIZE] = "unknown";
+#if defined(JHBL5_ENABLE_DISPLAY)
+uint32_t s_display_updates;
+bool s_display_ready;
+bool s_display_snapshot_valid;
+char s_display_address[HAL_BLE_ADDRESS_TEXT_SIZE];
+uint8_t s_display_ble_state;
+uint8_t s_display_stream_state;
+uint16_t s_display_mtu;
+uint32_t s_display_dropped_rx;
+uint32_t s_display_dropped_tx;
+uint32_t s_display_overflows;
+uint32_t s_display_auth_failures;
+uint32_t s_display_replay_rejections;
+uint32_t s_display_restarts;
+uint32_t s_display_lifecycle_failures;
+#endif
 
 bool deadline_reached(uint32_t now, uint32_t deadline) {
   return (int32_t)(now - deadline) >= 0;
 }
+
+#if defined(JHBL5_ENABLE_DISPLAY)
+hal_status_t display_printf_line(int line, uint16_t color, const char *format,
+                                 ...) {
+  char text[kDisplayLineCapacity];
+  va_list args;
+  va_start(args, format);
+  const int length = vsnprintf(text, sizeof(text), format, args);
+  va_end(args);
+  if (length < 0 || (size_t)length >= sizeof(text)) {
+    return HAL_EOVERFLOW;
+  }
+  return hal_display_print_line_ex(line, kDisplayLineHeight, text, true, color,
+                                   HAL_COLOR_BLACK);
+}
+
+hal_status_t initialize_display(void) {
+  hal_status_t status =
+      hal_display_init(kDisplayCsPin, kDisplayDcPin, kDisplayRstPin);
+  if (status == HAL_OK) {
+    status = hal_display_configure_ex(
+        kDisplayWidth, kDisplayHeight, HAL_DISPLAY_ROTATION_0,
+        HAL_DISPLAY_INVERT_OFF, HAL_DISPLAY_COLOR_ORDER_RGB);
+  }
+  if (status == HAL_OK) {
+    status = hal_display_fill_screen_ex(HAL_COLOR_BLACK);
+  }
+  if (status == HAL_OK) {
+    status = hal_display_set_default_font_ex();
+  }
+  if (status == HAL_OK) {
+    status = display_printf_line(0, HAL_COLOR_CYAN, "JH BLE + LCD gate");
+  }
+  if (status == HAL_OK) {
+    status = display_printf_line(1, HAL_COLOR_WHITE, "STM32G474 %s",
+                                 kDisplayRuntimeName);
+  }
+  s_display_ready = status == HAL_OK;
+  if (status == HAL_OK) {
+    deb("JHBL5 display ready SPI1 PA5/PA6/PA7 CS=PB6 DC=PC7 RST=PA9");
+  } else {
+    derr("JHBL5 display init=%s", hal_status_to_string(status));
+  }
+  return status;
+}
+
+hal_status_t render_display_summary(const hal_ble_info_t &ble,
+                                    const hal_ble_stream_info_t &stream) {
+  hal_status_t status = HAL_OK;
+  if (!s_display_snapshot_valid || strcmp(s_display_address, s_address) != 0) {
+    status = display_printf_line(2, HAL_COLOR_YELLOW, "%s", s_address);
+  }
+  if (status == HAL_OK &&
+      (!s_display_snapshot_valid || s_display_ble_state != (uint8_t)ble.state ||
+       s_display_stream_state != (uint8_t)stream.state ||
+       s_display_mtu != ble.mtu)) {
+    status = display_printf_line(3, HAL_COLOR_WHITE, "BLE %u STR %u MTU %u",
+                                 (unsigned)ble.state, (unsigned)stream.state,
+                                 (unsigned)ble.mtu);
+  }
+  if (status == HAL_OK) {
+    status =
+        display_printf_line(4, HAL_COLOR_GREEN, "RX %lu TX %lu",
+                            (unsigned long)s_received, (unsigned long)s_echoed);
+  }
+  if (status == HAL_OK && (!s_display_snapshot_valid ||
+                           s_display_dropped_rx != stream.dropped_rx_frames ||
+                           s_display_dropped_tx != stream.dropped_tx_frames ||
+                           s_display_overflows != s_receive_overflows)) {
+    status = display_printf_line(5, HAL_COLOR_ORANGE, "DROP %lu/%lu OV %lu",
+                                 (unsigned long)stream.dropped_rx_frames,
+                                 (unsigned long)stream.dropped_tx_frames,
+                                 (unsigned long)s_receive_overflows);
+  }
+  if (status == HAL_OK &&
+      (!s_display_snapshot_valid ||
+       s_display_auth_failures != stream.auth_failures ||
+       s_display_replay_rejections != stream.replay_rejections)) {
+    status = display_printf_line(6, HAL_COLOR_WHITE, "AUTH %lu REPLAY %lu",
+                                 (unsigned long)stream.auth_failures,
+                                 (unsigned long)stream.replay_rejections);
+  }
+  if (status == HAL_OK &&
+      (!s_display_snapshot_valid || s_display_restarts != s_restarts ||
+       s_display_lifecycle_failures != s_lifecycle_failures)) {
+    status = display_printf_line(7, HAL_COLOR_WHITE, "RESTART %lu LIFE %lu",
+                                 (unsigned long)s_restarts,
+                                 (unsigned long)s_lifecycle_failures);
+  }
+  if (status == HAL_OK) {
+    status = display_printf_line(
+        8, s_status == HAL_OK ? HAL_COLOR_GREEN : HAL_COLOR_RED,
+        "STATUS %u UP %lus", (unsigned)s_status,
+        (unsigned long)(hal_millis() / 1000u));
+  }
+  if (status == HAL_OK) {
+    memcpy(s_display_address, s_address, sizeof(s_display_address));
+    s_display_ble_state = (uint8_t)ble.state;
+    s_display_stream_state = (uint8_t)stream.state;
+    s_display_mtu = ble.mtu;
+    s_display_dropped_rx = stream.dropped_rx_frames;
+    s_display_dropped_tx = stream.dropped_tx_frames;
+    s_display_overflows = s_receive_overflows;
+    s_display_auth_failures = stream.auth_failures;
+    s_display_replay_rejections = stream.replay_rejections;
+    s_display_restarts = s_restarts;
+    s_display_lifecycle_failures = s_lifecycle_failures;
+    s_display_snapshot_valid = true;
+    ++s_display_updates;
+  }
+  return status;
+}
+#endif
 
 void write_u32_le(uint8_t *out, uint32_t value) {
   out[0] = (uint8_t)value;
@@ -256,7 +406,7 @@ void handle_payload(const uint8_t *payload, size_t length) {
     return;
   }
   if (payload_equals(payload, length, kPowerLossCommand, power_loss_length)) {
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_STM32G474
     if (send_payload(kPowerLossResponse, sizeof(kPowerLossResponse) - 1u) ==
         HAL_OK) {
       s_power_loss_at_ms = hal_millis() + kPowerLossDelayMs;
@@ -309,7 +459,7 @@ void echo_received(void) {
   }
 }
 
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_STM32G474
 [[noreturn]] void simulate_power_loss(void) {
   const hal_status_t status = hal_watchdog_enable(kPowerLossWatchdogMs, false);
   if (status != HAL_OK) {
@@ -390,6 +540,19 @@ void report_summary(void) {
       (unsigned long)stream.dropped_tx_frames,
       (unsigned long)s_receive_overflows, (unsigned long)s_restarts,
       (unsigned long)s_lifecycle_failures);
+#if defined(JHBL5_ENABLE_DISPLAY)
+  if (s_display_ready) {
+    const hal_status_t display_status = render_display_summary(ble, stream);
+    if (display_status != HAL_OK) {
+      s_display_ready = false;
+      s_status = display_status;
+      ++s_lifecycle_failures;
+      derr("JHBL5 display update=%s count=%lu",
+           hal_status_to_string(display_status),
+           (unsigned long)s_display_updates);
+    }
+  }
+#endif
 }
 
 } // namespace
@@ -403,7 +566,14 @@ extern "C" void app_start(void) {
 extern "C" void app_task0(void) {
   if (!s_started) {
     s_started = true;
-    s_status = jh_secure_random_bytes(&s_boot_id, sizeof(s_boot_id));
+#if defined(JHBL5_ENABLE_DISPLAY)
+    s_status = initialize_display();
+#else
+    s_status = HAL_OK;
+#endif
+    if (s_status == HAL_OK) {
+      s_status = jh_secure_random_bytes(&s_boot_id, sizeof(s_boot_id));
+    }
     if (s_status == HAL_OK && s_boot_id == 0u) {
       s_status = HAL_EIO;
     }
@@ -415,7 +585,7 @@ extern "C" void app_task0(void) {
   if (s_status == HAL_OK) {
     const uint32_t now = hal_millis();
     if (s_power_loss_pending && deadline_reached(now, s_power_loss_at_ms)) {
-#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM
+#if HAL_TARGET_IS_RP2040 || HAL_TARGET_IS_RP2350_ARM || HAL_TARGET_IS_STM32G474
       simulate_power_loss();
 #else
       s_power_loss_pending = false;

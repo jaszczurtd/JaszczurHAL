@@ -82,7 +82,7 @@ require(
 
 checked_static = run("--check-static")
 require(
-    checked_static.stdout.strip() == "verified 2 generated board artifacts",
+    checked_static.stdout.strip() == "verified 3 generated board artifacts",
     "tracked board artifacts are not verified deterministically",
 )
 
@@ -1504,9 +1504,9 @@ require(
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_board_config  # noqa: E402
 
-cmake_registry_text = (ROOT / "cmake/jh_board_components.cmake").read_text(
-    encoding="utf-8"
-)
+cmake_registry_text = (
+    ROOT / "cmake/generated/jh_board_components_registry.cmake"
+).read_text(encoding="utf-8")
 cmake_ids_match = re.search(
     r"set\(JH_BOARD_COMPONENT_IDS\s+([^)]*)\)", cmake_registry_text
 )

@@ -56,6 +56,18 @@ function Fail {
     throw $Message
 }
 
+$ArtifactsContractPath = Join-Path $RepoRoot 'config\tooling\artifacts.json'
+try {
+    $ArtifactsContract = Get-Content -LiteralPath $ArtifactsContractPath -Raw |
+        ConvertFrom-Json
+    $ComponentVersionStamp = [string]$ArtifactsContract.archiveMetadata.versionStamp
+} catch {
+    Fail "Cannot load tooling artifact contract ${ArtifactsContractPath}: $_"
+}
+if (-not $ComponentVersionStamp) {
+    Fail "Tooling artifact contract has no archiveMetadata.versionStamp"
+}
+
 function Read-PinConfig {
     param([string]$Path)
     $values = @{}
@@ -159,7 +171,7 @@ function Install-ManagedPythonBase {
         }
         Add-Type -AssemblyName System.IO.Compression.FileSystem
         [IO.Compression.ZipFile]::ExtractToDirectory($archive, $staging)
-        Set-Content -LiteralPath (Join-Path $staging '.jaszczurhal-component-version') `
+        Set-Content -LiteralPath (Join-Path $staging $ComponentVersionStamp) `
             -Value $ExpectedStamp -Encoding ASCII
 
         $candidate = Join-Path $staging $Config.WINDOWS_PYTHON_EXECUTABLE
@@ -199,7 +211,7 @@ function Ensure-ManagedPython {
     $config = Read-PinConfig $ToolConfig
     $baseRoot = Join-Path $ToolsRoot ("python-" + $config.WINDOWS_PYTHON_VERSION)
     $basePython = Join-Path $baseRoot $config.WINDOWS_PYTHON_EXECUTABLE
-    $baseStamp = Join-Path $baseRoot '.jaszczurhal-component-version'
+    $baseStamp = Join-Path $baseRoot $ComponentVersionStamp
     $expectedBase = "python|$($config.WINDOWS_PYTHON_VERSION)|$($config.WINDOWS_PYTHON_SHA256)"
     $baseReady = Test-ManagedPythonBase $basePython $baseStamp $expectedBase $config.WINDOWS_PYTHON_VERSION
     if (-not $baseReady) {
@@ -208,7 +220,7 @@ function Ensure-ManagedPython {
     }
 
     $requirementsHash = (Get-FileHash -LiteralPath $Requirements -Algorithm SHA256).Hash.ToLowerInvariant()
-    $venvStamp = Join-Path $VenvRoot '.jaszczurhal-component-version'
+    $venvStamp = Join-Path $VenvRoot $ComponentVersionStamp
     $expectedVenv = "python|$($config.WINDOWS_PYTHON_VERSION)|requirements|$requirementsHash"
     if (-not (Test-ManagedVenv $VenvPython $venvStamp $expectedVenv)) {
         if ($VerifyOnly) { Fail "Managed Python environment is missing or mismatched at $VenvRoot (verify-only)." }

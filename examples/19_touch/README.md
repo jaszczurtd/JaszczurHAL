@@ -1,8 +1,8 @@
 # 19 - Resistive touch controllers
 
-This project consolidates the former TSC2007 and STMPE610 examples. Both
-controllers share I2C bus 0 and are initialized independently; samples from
-each detected device are printed through the debug console.
+This project exercises the TSC2007 and STMPE610 controllers. Both share I2C bus
+0 and are initialized independently; samples from each detected device are
+printed through the debug console.
 
 | Target | SDA | SCL | TSC2007 | STMPE610 |
 | --- | --- | --- | --- | --- |

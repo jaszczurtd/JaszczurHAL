@@ -13,9 +13,6 @@
         },
         "gateTargets": [
             "rp2040"
-        ],
-        "covers": [
-            "57_ota"
         ]
     },
     "toolchain": "cmake",

@@ -346,7 +346,6 @@ require(
     "example registry must contain the ordered 01..27 active catalog",
 )
 
-legacy_coverage: list[str] = []
 full_configuration_counts = {
     target: 0
     for target in ("rp2040", "rp2350-arm", "rp2350-riscv", "stm32g474")
@@ -361,7 +360,6 @@ for entry in examples_dispatcher.EXAMPLES:
         set(selected_gate_targets).issubset(supported_targets),
         f"{entry['dir']}: gateTargets escape supported targets",
     )
-    legacy_coverage.extend(examples_dispatcher.example_covers(entry))
     for target in supported_targets:
         full_configuration_counts[target] += 1
         if target in selected_gate_targets:
@@ -391,12 +389,6 @@ for entry in examples_dispatcher.EXAMPLES:
             if target in variant_gate_targets:
                 gate_configuration_counts[target] += 1
 
-require(
-    len(legacy_coverage) == 60
-    and len(set(legacy_coverage)) == 60
-    and set(legacy_coverage) == set(examples_dispatcher.LEGACY_EXAMPLE_IDS),
-    "the dispatcher must cover each of the 60 examples exactly once",
-)
 require(
     full_configuration_counts
     == {

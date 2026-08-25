@@ -19,12 +19,6 @@
             "stm32g474",
             "rp2040"
         ],
-        "covers": [
-            "07_gps",
-            "14_uart",
-            "22_gps_uart",
-            "45_swserial_loopback"
-        ],
         "variants": [
             {
                 "id": "swserial",

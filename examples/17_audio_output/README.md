@@ -1,7 +1,6 @@
 # 17 - Audio output
 
-This consolidated project compiles and exercises both output paths previously
-shown by `28_pga2311` and `44_dacless_audio`:
+This project compiles and exercises both output paths:
 
 - PGA2311 stereo gain and mute control over SPI;
 - PWM audio generation with ADC-controlled frequency and the DMA-capable

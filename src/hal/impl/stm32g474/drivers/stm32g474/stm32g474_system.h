@@ -17,6 +17,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "hal/core/hal_status.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -35,6 +37,11 @@ uint64_t stm32g474_system_micros64(void);
 
 #ifdef JH_STM32G474_SYSTEM_TESTING
 void stm32g474_system_test_set_micros64(uint64_t micros);
+void stm32g474_system_test_reset_watchdog(void);
+bool stm32g474_system_test_watchdog_enabled(void);
+uint32_t stm32g474_system_test_watchdog_prescaler(void);
+uint32_t stm32g474_system_test_watchdog_reload(void);
+bool stm32g474_system_test_watchdog_pause_on_debug(void);
 #endif
 
 void stm32g474_system_delay_ms(uint32_t ms);
@@ -43,7 +50,7 @@ void stm32g474_system_delay_us(uint32_t us);
 /* -- Watchdog -------------------------------------------------------------- */
 
 void stm32g474_system_watchdog_feed(void);
-void stm32g474_system_watchdog_enable(uint32_t ms, bool pause_on_debug);
+hal_status_t stm32g474_system_watchdog_enable(uint32_t ms, bool pause_on_debug);
 bool stm32g474_system_watchdog_caused_reboot(void);
 
 /* -- Misc system services -------------------------------------------------- */

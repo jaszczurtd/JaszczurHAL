@@ -11,7 +11,7 @@
 #   3. Memory safety (Valgrind memcheck)
 #   4. Static analysis: cppcheck (all own code)
 #   5. Static analysis: clang-tidy (host + stm32 compile databases)
-#   6. Duplicate detection: PMD CPD (owned C/C++ implementation sources)
+#   6. Duplicate detection: PMD CPD (owned C/C++ and Python sources)
 #   7. Target builds (STM32 + native Pico SDK matrix + ESP-IDF)
 #   8. Examples build (native RP + STM32G474)
 #
@@ -110,6 +110,15 @@ SECONDS=0
 header "Clean start: removing build artifacts"
 clean_build_artifacts
 
+# ── Deterministic tracked projections ────────────────────────────────────────
+header "Synchronizing tracked generated artifacts"
+python3 scripts/generate_hal_features.py --write
+python3 scripts/generate_board_config.py --boards-root boards --write-static
+python3 scripts/examples_dispatcher.py generate-template
+python3 scripts/examples_dispatcher.py generate
+python3 scripts/vscode_library_workspace.py sync-vscode
+pass "Tracked generated artifacts synchronized with their source contracts."
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -188,19 +197,29 @@ MEMCHECK_REQUIRED_TESTS=(
     test_hal_rtc
 )
 
-info "Verifying shared-module test coverage in CTest..."
-ctest_tests=$(ctest --test-dir "${BUILD_DIR}" -N 2>/dev/null || true)
+info "Verifying native C/C++ memcheck coverage in CTest..."
+memcheck_tests=$(ctest --test-dir "${BUILD_DIR}" -N \
+    -L '^memcheck$' 2>/dev/null || true)
 for test_name in "${MEMCHECK_REQUIRED_TESTS[@]}"; do
-    if ! grep -q "${test_name}" <<<"${ctest_tests}"; then
-        fail "Missing CTest registration for ${test_name}"
+    if ! grep -qE ":[[:space:]]+${test_name}$" <<<"${memcheck_tests}"; then
+        fail "Required test is missing from the native memcheck set: ${test_name}"
         exit 1
     fi
 done
+memcheck_count=$(grep -cE '^[[:space:]]*Test[[:space:]]+#[0-9]+:' \
+    <<<"${memcheck_tests}" || true)
+if [[ "${memcheck_count}" -eq 0 ]]; then
+    fail "CTest did not expose any native tests labelled memcheck"
+    exit 1
+fi
 
-info "Running tests under Valgrind..."
-ctest --test-dir "${BUILD_DIR}" -T memcheck -LE no_memcheck --output-on-failure 2>&1 \
-    | tee "${LOG_ROOT}/jh_memcheck.log" \
-    | grep -E '(^[0-9]|Memory|passed|failed|Defects)'
+info "Running all ${memcheck_count} native C/C++ tests under Valgrind..."
+if ! ctest --test-dir "${BUILD_DIR}" -T memcheck \
+    -L '^memcheck$' --output-on-failure 2>&1 \
+    | tee "${LOG_ROOT}/jh_memcheck.log"; then
+    fail "Valgrind memcheck execution failed; see ${LOG_ROOT}/jh_memcheck.log"
+    exit 1
+fi
 
 # Check for defects in the memcheck output
 if grep -q "Memory checking results:" "${LOG_ROOT}/jh_memcheck.log"; then
@@ -312,10 +331,10 @@ pass "clang-tidy: no issues found."
 # ═══════════════════════════════════════════════════════════════════════════════
 header "Gate 6/8: Duplicate detection - PMD CPD"
 
-info "Scanning owned C/C++ implementation sources for exact duplication..."
+info "Scanning owned C/C++ implementations and Python scripts for duplication..."
 run_logged "${LOG_ROOT}/jh_cpd.log" \
     scripts/run_cpd.py --output-dir "${GATE_BUILD_ROOT}/cpd"
-pass "PMD CPD found zero duplicate groups at the 100-token threshold."
+pass "PMD CPD found zero C/C++ groups >= 100 or Python groups >= 50 tokens."
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 7: Target builds
@@ -564,7 +583,7 @@ echo "  FreeRTOS POSIX:   PASS"
 echo "  Valgrind:         PASS"
 echo "  cppcheck:         PASS"
 echo "  clang-tidy:       PASS"
-echo "  PMD CPD:          PASS (zero duplicate groups >= 100 tokens)"
+echo "  PMD CPD:          PASS (C/C++ >= 100, scripts/Python >= 50 tokens)"
 echo "  Target builds:    PASS (native Pico SDK + STM32G474 + ESP32-S3/ESP-IDF)"
 echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
 echo ""

@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Fixed the local Valgrind gate to automatically execute every native C/C++
+  test executable while excluding Python, CMake, and shell-driver tests. Fair
+  Valgrind thread scheduling includes the FreeRTOS POSIX runtime without a
+  scheduler stall. The declared `MEMCHECK_REQUIRED_TESTS` remains a checked
+  critical subset, and unfiltered progress streams to the terminal and managed
+  log without buffered `grep` output.
+- Centralized the complete operator reference for all 13 physical hardware
+  fixtures in `doc/api/03_build_tests.md`, including requirements, wiring,
+  commands, acceptance criteria, and recorded results. Removed the duplicated
+  per-fixture README files, completed the fixture index, redirected module and
+  workflow links to the central sections, and reduced the root test overview
+  to links for the test and process-script references. Also moved the local
+  `config/tooling` contract guide into the central process-script reference and
+  removed its redundant README.
+- Added the STM32G474 hardware-watchdog backend over the LSI-clocked IWDG,
+  including 1-32768 ms timeout validation, shortest-fitting prescaler/reload
+  selection, debugger-halt freeze control, watchdog feeding, and boot-latched
+  reset-cause reporting. Extended the BLE Stream power-loss oracle to exercise
+  the same unattended MCU-reset check on NUCLEO-G474RE plus PIM730/RM2. Both
+  bare-metal and FreeRTOS display-load variants passed the complete physical
+  gate: watchdog reset and recovery, 50 reconnects, five-minute stream,
+  saturation, and security cases while retaining the BLE address. Promoted the
+  `nucleo-g474re-pim730` board profile to `supported` after closing that
+  acceptance gate.
+- Added separate STM32G474 bare-metal and FreeRTOS BLE Stream display-load
+  variants for the NUCLEO-G474RE plus PIM730/RM2 fixture. The firmware updates
+  an ILI9341 over SPI1 throughout the existing authenticated reconnect, stream,
+  saturation, security and lifecycle gate while the radio retains its fixed
+  PB12-PB15 gSPI transport. Unchanged LCD rows are retained while counters and
+  uptime refresh once per second, preserving concurrent bus load without
+  consuming avoidable Stream throughput; the base eight-image hardware matrix
+  is unchanged. Both variants passed 50 authenticated reconnects, exactly 3000
+  messages in 300 seconds at 10.00 Hz, queue saturation and all negative
+  security/recovery cases. Watchdog-inclusive reruns then sustained 9.70 Hz in
+  bare-metal and 9.77 Hz in FreeRTOS and closed STM32 MCU-reset acceptance.
 - Removed the unused `hal_ble_stream_config_t::identity` field and the obsolete
   BLE maturity macros without changing the JH BLE Stream v1 GATT or frame
   contract. Enabled the BLE backend for RP2350 ARM/Pico 2 W, retained RP2350
@@ -17,8 +52,12 @@ All notable changes to this project will be documented in this file.
   The Linux/BlueZ oracle verifies pre-auth metadata, exact GATT ownership and
   flags, both GATT write paths, compiled target/board/runtime identity, fresh
   handshakes, controlled disconnects, and a measured five-minute stream rate.
-  Pico W bare-metal and Pico 2 W bare-metal/FreeRTOS passed the complete gate;
-  the corrected Pico W FreeRTOS image and external-radio tuples remain pending.
+  Pico W and Pico 2 W bare-metal/FreeRTOS passed the complete gate. The
+  corrected Pico W FreeRTOS image requests a 15 ms connection interval with
+  zero peripheral latency and passed watchdog recovery, 50 reconnects, 3000
+  messages in 300 seconds at 10.00 Hz, saturation, and all negative security
+  and recovery cases. External-radio tuples not listed separately above remain
+  pending.
 - Revalidated passive Observer scanning on Pico W and Pico 2 W with retained
   Teltonika/Eddystone reports and zero queue loss. Native Windows execution and
   downstream consumer/lights-timer integration remain deferred and do not

@@ -137,6 +137,25 @@
 #define RCC_CSR_WWDGRSTF (1u << 30)
 #define RCC_CSR_LPWRRSTF (1u << 31)
 
+/* ── Independent watchdog (IWDG, LSI-clocked) ─────────────────────────── */
+#define IWDG_BASE 0x40003000u
+#define IWDG_KR JH_REG32(IWDG_BASE + 0x00u)
+#define IWDG_PR JH_REG32(IWDG_BASE + 0x04u)
+#define IWDG_RLR JH_REG32(IWDG_BASE + 0x08u)
+#define IWDG_SR JH_REG32(IWDG_BASE + 0x0Cu)
+
+#define IWDG_KR_RELOAD 0xAAAAu
+#define IWDG_KR_WRITE_ACCESS 0x5555u
+#define IWDG_KR_START 0xCCCCu
+#define IWDG_RLR_MASK 0x0FFFu
+#define IWDG_SR_PVU (1u << 0)
+#define IWDG_SR_RVU (1u << 1)
+
+/* ── Debug MCU freeze control ──────────────────────────────────────────── */
+#define DBGMCU_BASE 0xE0042000u
+#define DBGMCU_APB1FZR1 JH_REG32(DBGMCU_BASE + 0x08u)
+#define DBGMCU_APB1FZR1_DBG_IWDG_STOP (1u << 12)
+
 /* ── FLASH controller (main flash erase/program) ────────────────────────── */
 #define FLASH_BASE 0x40022000u
 #define FLASH_ACR JH_REG32(FLASH_BASE + 0x00u)

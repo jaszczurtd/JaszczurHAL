@@ -55,12 +55,16 @@ def require_real_esp_build(body: str, context: str) -> None:
 
 def require_esp_cache(body: str, context: str) -> None:
     for fragment in (
-        "uses: actions/cache@v4",
+        "uses: actions/cache@v5",
         "third_party/esp-idf",
         "~/.espressif",
         "hashFiles('third_party/esp_idf_version.conf')",
     ):
         require(fragment in body, f"{context} ESP-IDF cache is missing {fragment!r}")
+    require(
+        "uses: actions/cache@v4" not in body,
+        f"{context} still uses the obsolete Node 20 cache action",
+    )
 
 
 def require_uploaded_images(body: str, context: str) -> None:

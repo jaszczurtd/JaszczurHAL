@@ -18,10 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "25_display_oled",
-            "31_hd44780"
         ]
     },
     "toolchain": "cmake",

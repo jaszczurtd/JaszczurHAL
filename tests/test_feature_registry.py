@@ -14,12 +14,6 @@ import subprocess
 import sys
 
 
-OUTPUTS = (
-    Path("src/hal/generated/jh_hal_features.h"),
-    Path("cmake/generated/jh_hal_features.cmake"),
-)
-
-
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise AssertionError(message)
@@ -41,6 +35,7 @@ TEST_ROOT = ROOT / ".build/tests/feature-registry"
 ESP_IDF_FAKE_INCLUDE = TEST_ROOT / "esp-idf-include"
 sys.path.insert(0, str(ROOT / "scripts"))
 import generate_hal_features  # noqa: E402
+from repository_layout import FEATURE_OUTPUTS as OUTPUTS  # noqa: E402
 
 
 def run_generator(

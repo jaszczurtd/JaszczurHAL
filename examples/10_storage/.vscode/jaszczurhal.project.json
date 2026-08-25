@@ -18,11 +18,6 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
-        ],
-        "covers": [
-            "12_kv_store",
-            "16_littlefs",
-            "39_sdlogger"
         ]
     },
     "toolchain": "cmake",
