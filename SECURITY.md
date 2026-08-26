@@ -49,7 +49,7 @@ Bundled or pinned third-party components are tracked in
 `security/third_party.json`. The CycloneDX SBOM is generated from that inventory:
 
 ```bash
-./scripts/generate_sbom.py
+python3 scripts/sync_generated.py --write
 ```
 
 Optional vulnerability checks regenerate the SBOM and then run local scanners

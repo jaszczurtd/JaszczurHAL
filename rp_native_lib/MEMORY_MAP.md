@@ -96,7 +96,7 @@ heap and stack macros at build time.
 actions. It reports FLASH/XIP, SRAM, reserved heap/stack, and load addresses
 from the final artifact.
 
-## Flash mutation contract
+## Flash mutation rules
 
 EEPROM/KV, LittleFS, and OTA staging writes use the shared RP flash transaction
 coordinator. It serializes callers, validates execution context, pauses the

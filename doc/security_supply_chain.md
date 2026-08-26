@@ -77,16 +77,18 @@ and recovery are documented in
 | `security/vulnerability_log.md` | Human-maintained vulnerability assessment and patch log. |
 | `SECURITY.md` | Reporting, triage, severity and maintenance policy. |
 | `scripts/generate_sbom.py` | Offline SBOM generator using only Python standard library. |
+| `scripts/sync_generated.py` | Shared refresh and read-only verification runner for all tracked generated artifacts, including the SBOM. |
 | `scripts/check_release_metadata.py` | Release gate for VERSION, changelog, SBOM, tag name and mainline ancestry. |
 | `scripts/check_vulnerabilities.sh` | Optional scanner wrapper for local vulnerability checks. |
 
 ## Generate the SBOM
 
 ```bash
-./scripts/generate_sbom.py
+python3 scripts/sync_generated.py --write
 ```
 
-The generator reads `security/third_party.json` and
+The shared runner invokes the SBOM generator, which reads
+`security/third_party.json` and
 `security/esp_idf_tools.json`, then writes `security/sbom.cdx.json`. The
 generated SBOM is deterministic so normal regeneration should produce small,
 reviewable diffs.
@@ -141,25 +143,26 @@ optional SBOM-based CVE check.
 ## Verify SBOM freshness
 
 ```bash
-./scripts/check_sbom.sh
+python3 scripts/sync_generated.py --check
 ```
 
-This regenerates the SBOM to a temporary file and compares it with the committed
-`security/sbom.cdx.json`. CI uses this as a guard against changing
-`security/third_party.json` or `security/esp_idf_tools.json` without committing
-the regenerated SBOM.
+This verifies every tracked generated artifact in read-only mode, including a
+temporary SBOM candidate compared with `security/sbom.cdx.json`. The focused
+compatibility command `./scripts/check_sbom.sh` delegates to the same SBOM
+check.
 
 ## CI policy
 
-GitHub Actions run a dedicated `security-scan` job on pull requests, pushes to
-`main`, a weekly schedule and manual dispatch. The job:
+GitHub Actions run a required `test` job and a dependent `security-scan` job on
+pull requests, pushes to `main`, a weekly schedule and manual dispatch. The
+test job verifies all generated artifacts, including the SBOM. The security
+job:
 
 - installs `osv-scanner` and `cve-bin-tool`,
-- verifies that `security/sbom.cdx.json` is current,
 - runs `osv-scanner` against the repository source tree,
 - runs `cve-bin-tool` against the CycloneDX SBOM.
 
-The job is intentionally separate from build/test/static-analysis jobs. Security
+Scanning is intentionally separate from build/test/static-analysis jobs. Security
 scanner failures can be triaged independently from compiler or test failures,
 and scheduled runs catch newly published CVEs even when the code has not
 changed.
@@ -201,7 +204,8 @@ optional local gate through `-DJH_ENABLE_THREAD_SANITIZER=ON`.
    or upstream reference.
 4. For ESP-IDF, refresh `security/esp_idf_tools.json` from the pinned
    `tools.json` and managed Python environment, then review every tool license.
-5. Run `./scripts/generate_sbom.py`.
+5. Run `python3 scripts/sync_generated.py --write` and review the generated
+   artifact diff.
 6. Run focused tests for the affected module and the relevant build target.
 7. If the update fixes or assesses a CVE, add an entry to
    `security/vulnerability_log.md` with CVSS, affected flags and decision.

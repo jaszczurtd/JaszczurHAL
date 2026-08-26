@@ -1,6 +1,6 @@
 # Windows Runtime
 
-The public CLI contract is shared with Linux and exposed through `entry/`.
+The public CLI interface is shared with Linux and exposed through `entry/`.
 
 `entry/jh-vscode.cmd` resolves Python and starts the same shared runtime as the
 Unix launcher. Firmware builds resolve the bootstrap-recorded tools, use the

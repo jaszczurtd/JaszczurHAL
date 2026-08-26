@@ -82,7 +82,7 @@ detached and the service is released. A different owner reports `HAL_ESTATE`.
 The status APIs are intended for initialization/task diagnostics, not ISR
 context.
 This explicit ownership API covers GPIO interrupts only. Peripheral IRQs have
-their own backend contracts. In particular, the RP2040 hardware-UART RX IRQ is
+their own backend requirements. In particular, the RP2040 hardware-UART RX IRQ is
 currently bound implicitly to the core that calls `hal_uart_begin()`; GPS
 inherits that behavior when built with `HAL_GPS_TRANSPORT_UART`. The UART API
 does not expose an owner query. RP begin/reconfigure/destroy must be serialized
@@ -135,7 +135,7 @@ void hal_pwm_write(uint8_t pin, uint32_t value);
 ```
 
 `hal_pwm` is the portable, simple PWM API. It has a deliberately small
-contract: resolution is 1..16 bits, `hal_pwm_write()` clamps values above the
+behavior: resolution is 1..16 bits, `hal_pwm_write()` clamps values above the
 current maximum, and unsupported pins trigger `HAL_ASSERT` in checked builds and
 are ignored. Use `hal_pwm_is_pin_supported()` before dynamic pin selection.
 

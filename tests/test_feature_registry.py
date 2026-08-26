@@ -686,6 +686,23 @@ TEST_ROOT.mkdir(parents=True)
 
 model = generate_hal_features.load_registry(CONFIG)
 require(len(model.features) == 103, "feature registry symbol count drifted")
+catalog_text = (ROOT / "doc/api/02_module_flags.md").read_text(encoding="utf-8")
+catalog_features = set(
+    re.findall(
+        r"^\| `(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)`\s+\|",
+        catalog_text,
+        re.MULTILINE,
+    )
+)
+public_features = {
+    name for name, feature in model.features.items() if feature.kind != "derived"
+}
+require(
+    catalog_features == public_features,
+    "public feature catalog drifted from config/features: "
+    f"missing={sorted(public_features - catalog_features)}, "
+    f"unknown={sorted(catalog_features - public_features)}",
+)
 require(
     sum(bool(feature.implies) for feature in model.features.values()) == 65,
     "feature registry implies-source count drifted",

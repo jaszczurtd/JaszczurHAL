@@ -16,11 +16,11 @@ document and the code disagree.
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
-| Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, and root VS Code generators and lists every file changed during synchronization. |
+| Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, root VS Code, and SBOM generators and lists every file changed during synchronization. |
 | Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, CPD, target builds, and example builds. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
-| Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board contract; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
+| Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures | `scripts/build_rp_native_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
@@ -31,13 +31,13 @@ component installations belong below `third_party/`. The directory model,
 target/board cache isolation, and generated-file ownership are defined in
 [Build Directories And Generated Files](../FwProjectWorkflow.md#build-directories-and-generated-files).
 
-## Tooling contracts
+## Tooling interfaces
 
 `config/tooling/` contains versioned, repository-owned data shared by scripts,
 generated files, CMake, and host bootstrap code. Each JSON document has
 `schemaVersion: 1` and one domain owner:
 
-| Contract | Ownership |
+| Data file | Ownership |
 |---|---|
 | `artifacts.json` | Names archive metadata files and tracked generated outputs. |
 | `board_components.json` | Defines valid board components, providers, and exclusive slots. |
@@ -59,7 +59,7 @@ python3 scripts/sync_generated.py --check
 ```
 
 Keep protocol and format literals close to their operations. In particular,
-explicit `encoding="utf-8"` arguments document the on-disk text contract and
+explicit `encoding="utf-8"` arguments document the on-disk text format and
 are intentionally not replaced by a global string constant. User-facing
 messages and one-off syntax tokens likewise stay with the code that owns them.
 
@@ -116,7 +116,7 @@ paths, and the current support boundary.
 ### `scripts/windows_host_inventory.ps1`
 
 Read-only Windows PowerShell 5.1 probe used by `runmefirst.ps1` for its final
-host-contract check. It reports the Windows build and architecture, long-path
+host-requirements check. It reports the Windows build and architecture, long-path
 settings, Git, Python, CMake, Ninja, GNU Arm, GNU RISC-V, OpenOCD, picotool,
 VS Code extensions, and optional repository line-ending checks. Required
 failures produce a nonzero exit code. `-Json` emits structured records,
@@ -157,13 +157,13 @@ Normal mode makes each managed installation match its tracked configuration.
 picotool verification includes its required commands and the USB/signing
 capabilities enabled by the currently available dependencies.
 See [Managed Third-Party Components](../../third_party/README.md) for the pin and
-directory contract.
+directory layout.
 
 ### `runalltests.sh`
 
 The complete local quality gate. Before running its eight gates, it invokes
-`scripts/sync_generated.py --write` for tracked feature, board, example, and
-root VS Code projections. A local run therefore repairs deterministic
+`scripts/sync_generated.py --write` for tracked feature, board, example, root
+VS Code, and SBOM projections. A local run therefore repairs deterministic
 generated drift and prints the changed-artifact list again in its final
 summary. `--check-generated` selects read-only verification instead. CI uses
 the same shared runner in check mode, so the list of generators is maintained
@@ -198,7 +198,7 @@ unfiltered to both the terminal and `.build/gate/logs/jh_memcheck.log`.
 
 The Unix and Windows launchers start one public Python entrypoint and shared
 firmware-project CLI. The Windows launcher validates Python 3 plus pyserial and
-preserves the CLI argument and exit-code contract. Firmware configuration uses
+preserves the CLI arguments and exit-code behavior. Firmware configuration uses
 Ninja by default, passes the active Python interpreter, exports compile
 commands, and resolves platform picotool/toolchain paths. Native Windows CMake
 trees use the bootstrap's short build root while final artifacts keep their
@@ -329,7 +329,7 @@ ZIP/`tar.gz` extraction, atomic replacement, content manifests, and version
 stamps. The focused `ensure_*.sh` files are Unix compatibility launchers that
 forward their existing CLI to this Python manager. Component validation
 metadata, default ordering, and launcher mappings live in the versioned
-`config/tooling/managed_components.json` contract.
+`config/tooling/managed_components.json` model.
 
 The focused helpers read tracked pins from `third_party/*_version.conf`.
 Normally use `third_party/update_components.sh`; call an individual helper only
@@ -495,21 +495,21 @@ and exposes five subcommands:
 projects, and `--verbose` records invoked commands in managed per-example logs
 below `.build/examples`.
 
-The JSON contract is the source used by `generate`; the generated manifests are
-the source consumed by `build`. The full matrix is 115 configurations; the
-default `--gate` matrix is 63 configurations (32 RP2040, one RP2350 ARM, and 30
-STM32G474).
+The JSON registry is the source used by `generate`; the generated manifests are
+the source consumed by `build`. The `list` action reports the current full and
+default-gate matrices without maintaining duplicate counts here.
 RISC-V WiFi examples remain excluded while RP2350 RISC-V + CYW43 is
 unsupported.
 
 See [JaszczurHAL Examples](../../examples/README.md) for the target matrix,
-application contract, and build commands.
+application interface, and build commands.
 
 ### `scripts/sync_generated.py`
 
 Single repository-level runner for every tracked generated artifact. `--write`
 refreshes the feature registry, static board registry, example VS Code files,
-and root VS Code files. `--check` invokes their read-only verification modes
+root VS Code files, and repository SBOM. `--check` invokes their read-only
+verification modes
 and fails on missing or stale output. The runner snapshots tracked and
 non-ignored files before execution, then prints the paths changed during the
 run. `--report-file <path>` also stores that final list for callers such as
@@ -527,7 +527,7 @@ validated build overlay used for generated output. `--output-dir` and
 definitions are projected consistently into
 `jh_board_resolved.json.boardCompileDefinitions`, generated
 `JH_BOARD_COMPILE_DEFINITIONS`, and `jh_board_config.h` macros for direct
-compiler use. The generated GCC/Clang contract reference uses a
+compiler use. The generated GCC/Clang link-signature reference uses a
 `constructor, used` root so target/board/feature mismatches remain link errors
 with section garbage collection enabled.
 
@@ -576,7 +576,7 @@ configuration rules run. The generated CMake resolver supplies the same
 closure to RP and STM32G474 source and dependency selection. The ESP-IDF runner
 also resolves that closure, then enforces the target's `supportedFeatures`
 allowlist before its controlled minimal component graph is configured. Board
-generation uses the resolved set for `featureHash` and the link contract, while
+generation uses the resolved set for `featureHash` and the link signature, while
 retaining the direct set as `requestedFeatures`. `jh-vscode` resolves the registry after
 manifest profile and variant overlays, exposes the result through
 `featureResolution`, and uses the resolved set for preflight and OTA decisions
@@ -586,7 +586,7 @@ Conditional defaults, provider choices, board capability checks, and target
 constraints remain in `hal_config.h`. CI runs `--check` and strict raw/effective
 lint, and uploads the deterministic resolution report. Installed RP and
 STM32G474 packages carry the generated feature/board headers, resolved board
-JSON, link-contract header, and reference source; a direct compiler consumer
+JSON, link-signature header, and reference source; a direct compiler consumer
 can compile and link those package artifacts without invoking Python.
 
 ### `scripts/board_registry.py`
@@ -598,12 +598,12 @@ interface; descriptor files remain the source of truth.
 
 ### `scripts/tooling_contract.py` and `scripts/repository_layout.py`
 
-Import-only loaders for the versioned contracts under `config/tooling/`.
+Import-only loaders for the versioned data models under `config/tooling/`.
 `tooling_contract.py` validates the common schema and typed fields;
 `repository_layout.py` exposes named archive metadata and tracked generated
 artifact paths. Domain catalogs remain separate JSON documents rather than one
 global string module. The inventory, projection commands, and format-ownership
-rules are defined in [Tooling contracts](#tooling-contracts).
+rules are defined in [Tooling interfaces](#tooling-interfaces).
 
 ### `scripts/vscode_task_config.py`
 
@@ -678,7 +678,7 @@ setup refuses to expose a port already used by a listener.
 
 ### `scripts/ota_firewall_common.py`
 
-Import-only contract shared by the Linux and Windows OTA firewall backends. It
+Import-only interface shared by the Linux and Windows OTA firewall backends. It
 owns the validated interface/subnet value, RFC1918 checks, and the common
 `SetupError` failure type. Direct callers should use
 `scripts/configure_ota_firewall.py` so platform selection, consent, and exit
@@ -790,14 +790,16 @@ Generates a deterministic CycloneDX 1.5 SBOM. It reads
 `security/third_party.json`, resolves the JaszczurHAL version from
 `VERSION`, and writes `security/sbom.cdx.json`.
 
-`--inventory` and `--output` override the default input and output paths. The
-generator uses only the Python standard library.
+`--inventory` and `--output` override the default input and output paths.
+`--check` generates a temporary candidate, compares it with the selected
+output, and fails without modifying the tracked file when it is missing or
+stale. The generator uses only the Python standard library.
 
 ### `scripts/check_sbom.sh`
 
-Generates the SBOM into a temporary file and compares it byte-for-byte with
-the tracked `security/sbom.cdx.json`. It does not modify the tracked SBOM.
-A mismatch prints a diff and fails. This is the CI freshness check.
+Compatibility wrapper that delegates to `scripts/generate_sbom.py --check`.
+The shared `scripts/sync_generated.py --check` runner is the repository and CI
+freshness gate.
 
 ### `scripts/check_vulnerabilities.sh`
 
@@ -841,7 +843,7 @@ JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
   dispatcher-backed firmware manifests, source discovery, target/board
   resolution, cache ownership, upload, and generated files.
 - [JaszczurHAL VS Code Entry](../../vscode/README.md) is the user-facing
-  `jh-vscode` CLI and VS Code task contract.
+  `jh-vscode` CLI and VS Code task interface.
 - [Target and board profiles](../boards_profiles_howto.md) documents descriptor
   fields and how registry defaults merge with project manifests.
 - [VS Code Entry Changelog](../../vscode/CHANGELOG.md) records implemented
@@ -851,7 +853,7 @@ JPEG use is documented in [JPEG API](19_JPEG.md#asset-script-jpeg-to-base64).
 - [Native RP Neutral Firmware](../../vscode/neutral_fw/rp_native/README.md)
   explains the default-identity image used by `jh-vscode clear-identity`.
 - [JaszczurHAL Examples](../../examples/README.md) documents the example registry,
-  target coverage, application entry contract, variants, and build commands.
+  target coverage, application entry interface, variants, and build commands.
 - [Managed Third-Party Components](../../third_party/README.md) documents tracked
   pins, ignored installations, updater behavior, and external checkout policy.
 - [Security Supply Chain](../security_supply_chain.md) documents SBOM generation,

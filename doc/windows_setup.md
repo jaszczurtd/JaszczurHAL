@@ -83,7 +83,7 @@ Useful modes are:
 # Prefer every pinned managed tool over a compatible system installation.
 .\runmefirst.ps1 -Force
 
-# Read-only component and host contract check.
+# Read-only component and host requirements check.
 .\runmefirst.ps1 -VerifyOnly
 
 # Check a headless firmware builder without requiring or configuring VS Code.
@@ -156,7 +156,7 @@ driver installation or rebinding was required. Managed OpenOCD detected both
 Cortex-M33 cores, and managed GNU Arm GDB loaded a Debug ELF, stopped at
 `main`, resumed to `app_start`, and detached. A final OpenOCD `reset run`
 returned the application USB CDC port. A DoomConsole follow-up also loaded its
-Debug ELF and stopped at `app_start` through the same launch-profile contract.
+Debug ELF and stopped at `app_start` through the same launch-profile settings.
 
 The native STM32 hardware smoke used a NUCLEO-G474RE with its on-board ST-Link
 V3J9M3 (`0483:374e`) on Windows 10 LTSC. Managed OpenOCD
@@ -233,7 +233,7 @@ The gate checks Ninja configuration, the target static library where
 applicable, representative firmware, declared artifacts, the patched compile
 database, MSVC warning settings, and the visible disabled classification of
 Windows-incompatible POSIX/FreeRTOS/BearSSL host tests. The MSVC job builds and
-runs a focused HAL CRC smoke test and the portable BSD socket-header contract
+runs a focused HAL CRC smoke test and the portable BSD socket-header interface
 with `/W4 /permissive- /WX`. The full BSD adapter exports POSIX symbol names
 and remains a firmware/Linux-host test instead of pretending to implement the
 different Winsock ABI. The native BearSSL integration also remains Linux-only

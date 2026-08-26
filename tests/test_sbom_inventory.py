@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 from pathlib import Path
 import sys
@@ -227,6 +229,24 @@ class SbomInventoryTests(unittest.TestCase):
             "GPL-3.0-or-later WITH GCC-exception-3.1",
             xtensa["licenses"][0]["expression"],
         )
+
+    def test_sbom_check_detects_missing_and_stale_output(self) -> None:
+        inventory = ROOT / "security/third_party.json"
+        tools = ROOT / "security/esp_idf_tools.json"
+        with tempfile.TemporaryDirectory(prefix="jh-sbom-check-test-") as text:
+            output = Path(text) / "sbom.cdx.json"
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                self.assertFalse(generate_sbom.check(inventory, output, tools))
+
+            generate_sbom.generate(inventory, output, tools)
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertTrue(generate_sbom.check(inventory, output, tools))
+
+            output.write_text("{}\n", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertFalse(generate_sbom.check(inventory, output, tools))
 
 
 if __name__ == "__main__":

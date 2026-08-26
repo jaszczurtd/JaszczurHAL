@@ -4,11 +4,13 @@
 from __future__ import annotations
 
 import argparse
+import difflib
 import hashlib
 import json
 import pathlib
 import re
 import sys
+import tempfile
 import uuid
 
 
@@ -333,6 +335,47 @@ def generate(
     )
 
 
+def check(
+    inventory_path: pathlib.Path,
+    output_path: pathlib.Path,
+    esp_idf_tools_path: pathlib.Path = DEFAULT_ESP_IDF_TOOLS,
+) -> bool:
+    """Verify that a generated SBOM matches the tracked output."""
+    with tempfile.TemporaryDirectory(prefix="jh-sbom-check-") as directory:
+        candidate = pathlib.Path(directory) / output_path.name
+        generate(inventory_path, candidate, esp_idf_tools_path)
+        expected = candidate.read_text(encoding="utf-8")
+
+    try:
+        actual = output_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(f"error: missing generated SBOM {output_path}", file=sys.stderr)
+        return False
+
+    if actual == expected:
+        print(f"Verified {output_path}")
+        return True
+
+    print(f"error: stale generated SBOM {output_path}", file=sys.stderr)
+    diff = difflib.unified_diff(
+        actual.splitlines(),
+        expected.splitlines(),
+        fromfile=str(output_path),
+        tofile=f"generated:{output_path.name}",
+        lineterm="",
+    )
+    for index, line in enumerate(diff):
+        if index == 120:
+            print("... diff truncated ...", file=sys.stderr)
+            break
+        print(line, file=sys.stderr)
+    print(
+        "Run: python3 scripts/generate_sbom.py",
+        file=sys.stderr,
+    )
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=pathlib.Path, default=DEFAULT_INVENTORY)
@@ -342,9 +385,16 @@ def main() -> int:
         default=DEFAULT_ESP_IDF_TOOLS,
     )
     parser.add_argument("--output", type=pathlib.Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify that the output is current without changing it",
+    )
     args = parser.parse_args()
 
     try:
+        if args.check:
+            return 0 if check(args.inventory, args.output, args.esp_idf_tools) else 1
         generate(args.inventory, args.output, args.esp_idf_tools)
     except Exception as exc:  # pragma: no cover - script diagnostics
         print(f"generate_sbom.py: {exc}", file=sys.stderr)

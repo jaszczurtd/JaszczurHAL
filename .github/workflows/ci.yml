@@ -782,12 +782,11 @@ jobs:
           --output-dir .build/ci/static-analysis/cpd
 
   # ── Security supply-chain gate ─────────────────────────────────────────────
-  # Regenerates the repository CycloneDX SBOM from security/third_party.json and
-  # verifies that the committed SBOM is up to date. Then runs osv-scanner against
-  # the source tree and cve-bin-tool against the generated SBOM. cve-bin-tool
+  # Uses the SBOM verified by the required test job, then runs osv-scanner against
+  # the source tree and cve-bin-tool against the regenerated SBOM. cve-bin-tool
   # intentionally does not scan the managed .build artifact tree because object
-  # files create excessive noise; the SBOM is the source of truth for tracked
-  # bundled and pinned dependencies.
+  # files create excessive noise; the reviewed inventories are the source of
+  # truth and the SBOM is their tracked generated projection.
   security-scan:
     runs-on: ubuntu-latest
     needs: test
@@ -815,9 +814,6 @@ jobs:
 
           python3 -m pipx install cve-bin-tool
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
-
-      - name: Verify generated SBOM is current
-        run: ./scripts/check_sbom.sh
 
       - name: Run vulnerability scan
         run: JH_SECURITY_SCAN_SOURCE=1 ./scripts/check_vulnerabilities.sh

@@ -32,12 +32,14 @@ CMake generator expressions are rejected.
 
 The declarative registry under `config/features/` is the production source for
 the feature graph. `hal_config.h` includes its generated C header, while CMake,
-the board/link contract and `jh-vscode` consume the generated resolver and its
+the board/link metadata and `jh-vscode` consume the generated resolver and its
 `requestedFeatures` / `resolvedFeatures` result.
 
 ### Available flags
 
-This section is the maintained public catalog of `HAL_ENABLE_*` flags.
+This section is the maintained public catalog of user-selectable
+`HAL_ENABLE_*` flags. A registry parity test prevents it from drifting from
+`config/features/`; internal derived symbols are intentionally omitted.
 `hal_config.h` remains the public configuration facade and retains contextual
 rules outside registry v1. `doc/HAL_FLAGS.txt` provides a concise text summary.
 
@@ -88,6 +90,7 @@ Stack protection uses two independent opt-ins:
 | `HAL_ENABLE_EEPROM` | `hal_eeprom.h` | `hal_eeprom.cpp` | Target flash EEPROM emulation; AT24C256 over HAL I2C when selected |
 | `HAL_ENABLE_KV` | `hal_kv.h` | `hal_kv.cpp` | *(propagates EEPROM)* |
 | `HAL_ENABLE_LITTLEFS` | `hal_littlefs.h` | `hal_littlefs.cpp` | LittleFS lifecycle helpers; native RP uses `HAL_RP_FLASH_LITTLEFS_SIZE`, STM32G474 uses `HAL_STM32_FLASH_LITTLEFS_SIZE` |
+| `HAL_ENABLE_FAT` | FatFs `ff.h` | managed FatFs sources and target disk I/O | Shared FatFs filesystem support used by SD-backed modules |
 | `HAL_ENABLE_SDLOGGER` | `hal_sdlogger.h` | `hal/storage/filesystem/sdlogger/hal_sdlogger.cpp` | SD logger over shared FatFs (propagates FAT + EEPROM + SPI) |
 | `HAL_ENABLE_UART` | `hal_uart.h` | `hal_uart.cpp` | Hardware UART |
 | `HAL_ENABLE_SWSERIAL` | `hal_swserial.h` | target `hal_swserial.cpp` | Native Pico SDK PIO/DMA software UART on RP2040; shared HAL GPIO backend on other targets |
@@ -256,8 +259,8 @@ that registry v1 cannot express:
 | Target and board rules | BLE controller/target/board support, CYW43 bus/stack/profile/pin and target/board constraints, FreeRTOS target/toolchain/header constraints, and the STM32G474-only FDCAN rule remain contextual. |
 | Defaults, tunables, layout and ranges | Target-dependent EEPROM defaults, storage/OTA region layout, CYW43 pin/clock/country defaults, pool sizes, backlog and TLS limits, plus the remaining tunable defaults and range checks stay in the facade. |
 
-These retained sections contain all 46 production compile-time `#error`
-checks.
+These retained sections contain the production compile-time diagnostics that
+depend on target, provider, board, or tunable context.
 
 Registry `resolvedFeatures` and its feature hash describe the registry v1
 closure. They do not append the two contextual propagation results above. A
@@ -265,8 +268,8 @@ GPS-only request can therefore finish preprocessing with `HAL_ENABLE_UART`,
 and AT24 EEPROM can finish with `HAL_ENABLE_I2C`, even though those additions
 are absent from `resolvedFeatures` and the feature hash.
 
-With `HAL_CONFIG_VERBOSE`, the generated header checks the complete inventory
-of all 101 registered `HAL_ENABLE_*` and `HAL_DISABLE_*` symbols. The report is
+With `HAL_CONFIG_VERBOSE`, the generated header checks every registered
+`HAL_ENABLE_*` and `HAL_DISABLE_*` symbol. The report is
 emitted after the retained conditional propagation, so its `#pragma message`
 output describes the final preprocessor state, including contextual I2C or
 UART additions.

@@ -17,9 +17,10 @@ Refresh the tracked artifacts after changing targets, profiles, capabilities,
 or device roles:
 
 ```bash
-python3 scripts/generate_board_config.py --boards-root boards --write-static
+python3 scripts/sync_generated.py --write
 ```
 
-CI verifies the result with `--check-static`. Do not edit
+CI verifies all tracked generated artifacts with
+`python3 scripts/sync_generated.py --check`. Do not edit
 `src/hal/generated/jh_board_registry.h` or
 `src/hal/generated/jh_board_fallback_config.h` manually.

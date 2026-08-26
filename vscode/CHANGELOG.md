@@ -112,7 +112,7 @@
 - Add STM32/OpenOCD upload handling, RP2040-only `upload-uf2` gating, and
   friendly axis-2/axis-3 build diagnostics for missing target backends and
   linker memory overflows.
-- Define the initial `jh-vscode` CLI contract and `--project` semantics.
+- Define the initial `jh-vscode` CLI interface and `--project` semantics.
 - Add a minimal project manifest schema.
 - Add neutral RP firmware for USB identity cleanup.
 - Add the Fiesta parity checklist placeholder before migrating Fiesta modules.
@@ -176,6 +176,6 @@
   debug build, identity-guarded serial upload, wrong-device refusal against
   Fiesta Clocks, persistent monitor reconnect, upload while monitor is active,
   single-drive BOOTSEL UF2 upload, and clear USB identity.
-- Clean the `router-reset/reseter` pilot to the new contract: project-owned
+- Clean the `router-reset/reseter` pilot to the new layout: project-owned
   CMake firmware generation, `Project:*` VS Code tasks, root workspace delegation
   to `--project reseter`, with obsolete project build files removed.

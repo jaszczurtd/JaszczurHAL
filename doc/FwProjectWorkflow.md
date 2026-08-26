@@ -7,7 +7,7 @@ ownership, and build/upload integration.
 
 Use [JaszczurHAL VS Code Entry](../vscode/README.md) for CLI actions and device
 safeguards, [Target and board profiles](boards_profiles_howto.md) for descriptor
-fields and generated contracts, and [Native OTA Workflow](OTAWorkflow.md) for
+fields and generated metadata, and [Native OTA Workflow](OTAWorkflow.md) for
 the target-specific network-update paths.
 
 ## Project layout
@@ -74,13 +74,12 @@ Every generated task uses `jaszczurhal.vscodeEntry` on Unix and the
 select the adjacent `jh-vscode` and `jh-vscode.cmd` launchers, which execute one
 shared Python runtime.
 
-Check all tracked VS Code files, regenerate the shared snippets, or regenerate
-every checked-in example project with:
+Check or regenerate every tracked repository artifact, including the shared
+snippets and checked-in example projects, with:
 
 ```bash
-scripts/examples_dispatcher.py check-template
-scripts/examples_dispatcher.py generate-template
-scripts/examples_dispatcher.py generate
+python3 scripts/sync_generated.py --check
+python3 scripts/sync_generated.py --write
 ```
 
 Recommended extensions can be checked without changing the VS Code profile:
@@ -327,12 +326,12 @@ that resolves outside the descriptor allowlist with `[JH-CFG-UNSUPPORTED]`.
 For a Fiesta-convention `firmware_entry.h`, `FIESTA_ENABLE_CORE1=1` must be
 paired with `HAL_ENABLE_APP_TASK1` in `hal_project_config.h` or another normal
 feature input. This keeps the generated entry adapter, requested/resolved
-feature sets, and link contract identical.
+feature sets, and link signature identical.
 
 The feature registry computes one target-independent transitive closure for
 all production consumers. The generated C header defines implied feature
 macros, CMake uses the resolved set for source and dependency selection, and
-board generation uses it for `featureHash` and the link contract. `jh-vscode`
+board generation uses it for `featureHash` and the link signature. `jh-vscode`
 uses the same closure for preflight and OTA eligibility while preserving the
 direct requests passed to CMake. Define `HAL_CONFIG_VERBOSE` to emit the
 generated report of every active registered feature during compilation.
@@ -399,14 +398,14 @@ that tree and never writes a second board registry.
 
 Generated outputs include:
 
-- resolved board CMake/header/JSON and link-contract translation units;
+- resolved board CMake/header/JSON and link-signature translation units;
 - raw `compile_commands.json` in the CMake tree and stable
   `compile_commands_patched.json` in `buildDir`;
 - `.vscode/c_cpp_properties.json`;
 - ELF/BIN/HEX/UF2/MAP or ELF/BIN/HEX/MAP target artifacts;
 - for ESP-IDF, `jh_esp_idf_artifacts.json`, the application ELF/MAP/BIN,
   bootloader and partition-table images, `sdkconfig`, build log, generated
-  board/link contracts, toolchain provenance, and the raw compile database;
+  board/link metadata, toolchain provenance, and the raw compile database;
 - OTA container and merged recovery UF2 when OTA is enabled.
 
 Tracked configuration remains in the manifest and `hal_project_config.h`.
