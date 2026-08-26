@@ -29,6 +29,12 @@ static hal_rtc_config_t config_for(hal_rtc_chip_t chip, uint8_t address) {
   return config;
 }
 
+static int last_write_frame(uint8_t *buffer, int capacity) {
+  const int count = hal_mock_i2c_get_write_frame_count();
+  TEST_ASSERT_TRUE_MESSAGE(count > 0, "no write frame logged");
+  return hal_mock_i2c_get_write_frame(count - 1, buffer, capacity);
+}
+
 void test_provider_selection_reports_chip_metadata(void) {
   const jh_rtc_provider_ops_t *pcf =
       jh_rtc_i2c_provider_get_ops(HAL_RTC_CHIP_PCF8563);
@@ -101,6 +107,25 @@ void test_ds3231_provider_translates_datetime_and_capabilities(void) {
   TEST_ASSERT_EQUAL_UINT8(12u, datetime.hour);
   TEST_ASSERT_TRUE(datetime.clock_integrity);
 
+  hal_mock_i2c_reset_write_log();
+  const uint8_t disabled_clkout_registers[] = {
+      0x08u, /* status: EN32kHz */
+      0xC0u, /* control: EOSC + BBSQW */
+  };
+  hal_mock_i2c_inject_rx(disabled_clkout_registers,
+                         (int)sizeof(disabled_clkout_registers));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_OK, provider->set_clkout_mode(s_context, HAL_RTC_CLKOUT_DISABLED));
+  uint8_t frame[2] = {};
+  TEST_ASSERT_EQUAL_INT(2, last_write_frame(frame, sizeof(frame)));
+  TEST_ASSERT_EQUAL_UINT8(0x0Eu, frame[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x04u, frame[1]);
+
+  hal_rtc_clkout_mode_t clkout_mode = HAL_RTC_CLKOUT_1_HZ;
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        provider->get_clkout_mode(s_context, &clkout_mode));
+  TEST_ASSERT_EQUAL_INT(HAL_RTC_CLKOUT_DISABLED, clkout_mode);
+
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, provider->set_interrupt_enable(
                                               s_context, HAL_RTC_IRQ_TIMER));
   TEST_ASSERT_EQUAL_INT(HAL_EUNSUPPORTED, provider->set_clkout_mode(
@@ -119,10 +144,35 @@ void test_ds3231_provider_translates_datetime_and_capabilities(void) {
   provider->deinitialize(s_context);
 }
 
+void test_ds3231_provider_propagates_i2c_failures(void) {
+  const jh_rtc_provider_ops_t *provider =
+      jh_rtc_i2c_provider_get_ops(HAL_RTC_CHIP_DS3231);
+  hal_rtc_config_t config =
+      config_for(HAL_RTC_CHIP_DS3231, (uint8_t)HAL_RTC_DS3231_DEFAULT_I2C_ADDR);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, provider->initialize(s_context, &config));
+
+  hal_mock_i2c_set_busy(true);
+  hal_rtc_datetime_t datetime = {};
+  float temperature_c = 0.0f;
+  bool integrity = false;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->get_datetime(s_context, &datetime));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->set_datetime(s_context, &datetime));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        provider->get_temperature(s_context, &temperature_c));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO,
+                        provider->get_clock_integrity(s_context, &integrity));
+  TEST_ASSERT_EQUAL_INT(
+      HAL_EIO, provider->set_clkout_mode(s_context, HAL_RTC_CLKOUT_DISABLED));
+  hal_mock_i2c_set_busy(false);
+
+  provider->deinitialize(s_context);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_provider_selection_reports_chip_metadata);
   RUN_TEST(test_pcf8563_provider_translates_datetime_and_flags);
   RUN_TEST(test_ds3231_provider_translates_datetime_and_capabilities);
+  RUN_TEST(test_ds3231_provider_propagates_i2c_failures);
   return UNITY_END();
 }

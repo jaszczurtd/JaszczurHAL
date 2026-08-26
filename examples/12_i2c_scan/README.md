@@ -5,14 +5,15 @@ I2C bus and printing every address that ACKs. Use it to confirm the bare-metal
 I2C1 master works on silicon before relying on it.
 
 - **I2C1**: SCL = **PB8**, SDA = **PB9** (NUCLEO expansion header: D15 = SCL, D14 = SDA)
-- 100 kHz standard mode (TIMINGR tuned for the 16 MHz HSI bring-up clock)
+- 100 kHz standard mode (TIMINGR uses the explicitly selected HSI16 kernel
+  clock and is independent of SYSCLK/PCLK1)
 - Uses `hal_i2c_scan()` and passes `hal_watchdog_feed` as the per-probe
   callback; formatting and the two-second repetition stay in the application.
 - Console: USART2 / ST-Link Virtual COM Port @ **115200 8N1**
 
-> Status: the I2C register sequence (I2C v2, AUTOEND) compiles and is written to
-> RM0440, but has **not** been validated on silicon in this repo. This example
-> is exactly that validation step - run it on your Nucleo-G474RE.
+The I2C1 route is physically validated on NUCLEO-G474RE with PCF8563 (`0x51`)
+and DS3231 (`0x68`) modules. The scanner uses 100 kHz; the same PB9/PB8 route
+is also exercised at 400 kHz by `examples/16_rtc_backends`.
 
 ## Hardware wiring
 
@@ -28,6 +29,19 @@ Nucleo-G474RE                 I2C device (e.g. PCF8563 RTC, AT24C256, BME280)
 
 External pull-ups (2.2k-10k to 3V3) are **required** - STM32 internal pull-ups
 are too weak for reliable I2C. Many breakout boards already include them.
+
+For a DS3231 module with a `+ D C NC -` connector, use:
+
+| Module pin | Connect to |
+|---|---|
+| `+` | `3V3` |
+| `D` | `D14` / `PB9` / SDA |
+| `C` | `D15` / `PB8` / SCL |
+| `NC` | Leave unconnected |
+| `-` | `GND` |
+
+Power the module from 3.3 V so any on-board I2C pull-ups also terminate at
+3.3 V.
 
 ## Build & flash (Linux Mint / Debian-like)
 
@@ -78,8 +92,7 @@ START / address / ACK / STOP all work end-to-end.
 
 ## Notes
 
-- This is bus 0 = I2C1 only. The HAL `bus 1` path exists but has no second
-  controller wired on this backend yet.
-- The TIMINGR constant assumes I2CCLK = 16 MHz (HSI/PCLK1 default of the
-  bring-up). If you raise the core clock via PLL, recompute TIMINGR
-  (`I2C_TIMINGR_100K_16MHZ` in `port/stm32g474_regs.h`).
+- This fixture exercises bus 0 = I2C1. The STM32G474 backend also supports bus
+  1 = I2C2 with a valid SDA/SCL alternate-function pair.
+- I2C1 and I2C2 explicitly select HSI16 as their kernel clock. The 16 MHz
+  TIMINGR presets therefore remain valid when SYSCLK or the APB clock changes.

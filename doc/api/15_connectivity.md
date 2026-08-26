@@ -1830,7 +1830,7 @@ are stored in a table sized by `HAL_BSD_SOCKET_MAX_FDS`.
 
 **shared thematic implementation:** `hal/network/adapters/bsd/hal_bsd_sockets.cpp`
 contains the fd-table adapter, address conversion helpers and `netdb.h`
-resolver glue.
+resolver support.
 **impl/esp32:** native ESP-IDF lwIP BSD headers and symbols; descriptor and
 option behavior follows the pinned ESP-IDF configuration rather than the
 shared adapter's fixed fd table.

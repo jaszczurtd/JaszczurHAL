@@ -60,7 +60,7 @@ rp_native_lib/              # Pico SDK RP2040/RP2350 static-library build
 cmake/
   esp-idf/                  # controlled native ESP-IDF component recipe
   generated/                # generated production CMake feature resolver
-  jh_rp_native_sdk.cmake    # shared RP library/firmware CMake glue
+  jh_rp_native_sdk.cmake    # shared RP library/firmware CMake integration
   targets/                  # VS Code dispatcher target recipes
 stm32_lib/                  # STM32G474 static-library CMake, toolchain, linker script
 scripts/
@@ -106,7 +106,7 @@ src/
   hal/                      # HAL umbrella + thematic shared domains
     hal.h                   # HAL-only umbrella include
     core/                   # configuration, status, assertions, compatibility
-    bluetooth/              # BLE public API, facade, and shared BTstack glue
+    bluetooth/              # BLE public API, facade, and shared BTstack support
     i2c/, spi/, serial/     # bus and serial APIs with common implementations
     time/, rtc/, power/     # wall time, RTC wake, and power management
     timers/                 # hardware, extended, soft, and SmartTimers APIs
@@ -134,7 +134,7 @@ src/
         drivers/
           stm32g474/        # STM32G474 SoC services (fault/system)
         freertos/           # STM32 FreeRTOSConfig and hooks
-        port/               # startup, SystemInit, linker-facing low-level glue
+        port/               # startup, SystemInit, linker-facing low-level support
   utils/                    # tools, PID, watchdog, draw helpers, Unity integration
 tests/                      # host unit tests (CMake + Unity)
   freertos_posix/           # optional host-side FreeRTOS POSIX scheduler tests
@@ -262,7 +262,7 @@ metadata.
 
 ## Memory maps
 
-Target-specific memory layout notes live next to the build glue for each
+Target-specific memory layout notes live next to the build support for each
 backend:
 
 - [RP memory map](../rp_native_lib/MEMORY_MAP.md) - application and OTA linker

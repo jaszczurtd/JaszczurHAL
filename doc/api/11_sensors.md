@@ -796,9 +796,12 @@ Internal provider operations separate that lifecycle from backend behavior:
   clock integrity/VL bit, alarm fields, timer mode+count, CLKOUT mode,
   interrupt enable mask and read-clear event flags).
 - **DS3231:** shared portable driver over the shared I2C provider with date-time,
-  clock integrity via OSF/`oscillatorCheck()`, alarm/IRQ mapping using Alarm2,
-  and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`).
-  Timer functions and `HAL_RTC_CLKOUT_32_HZ` are not supported and return `false`.
+  OSF clock-integrity handling, alarm/IRQ mapping using Alarm2, temperature,
+  and partial CLKOUT mapping (`1 Hz`, `1.024 kHz`, `32.768 kHz`). Date writes
+  update the complete calendar and clear OSF only after successful I2C access;
+  disabling CLKOUT leaves battery-backed timekeeping enabled. Provider I2C
+  failures propagate as `HAL_EIO`. Timer functions and
+  `HAL_RTC_CLKOUT_32_HZ` are not supported.
 - **STM32G474 internal RTC:** register-level backup-domain calendar using LSE
   or LSI, retained-time integrity, Alarm A polling and IRQ delivery through
   EXTI line 18, a one-shot relative wake-up timer through EXTI line 20 / IRQ 3,

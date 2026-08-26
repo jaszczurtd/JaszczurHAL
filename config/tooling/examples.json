@@ -132,6 +132,26 @@
       "targets": [
         "rp2040",
         "stm32g474"
+      ],
+      "sources": [
+        "app.c"
+      ],
+      "variants": [
+        {
+          "id": "display-clock",
+          "module": "16_rtc_display_clock",
+          "sources": [
+            "display_clock_app.cpp"
+          ],
+          "targets": [
+            "stm32g474"
+          ],
+          "gateTargets": [],
+          "extraDefines": [
+            "HAL_ENABLE_ILI9341",
+            "HAL_DISPLAY_ILI9341"
+          ]
+        }
       ]
     },
     {

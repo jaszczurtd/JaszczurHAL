@@ -18,6 +18,23 @@
         "gateTargets": [
             "stm32g474",
             "rp2040"
+        ],
+        "variants": [
+            {
+                "id": "display-clock",
+                "module": "16_rtc_display_clock",
+                "sources": [
+                    "display_clock_app.cpp"
+                ],
+                "targets": [
+                    "stm32g474"
+                ],
+                "gateTargets": [],
+                "extraDefines": [
+                    "HAL_ENABLE_ILI9341",
+                    "HAL_DISPLAY_ILI9341"
+                ]
+            }
         ]
     },
     "toolchain": "cmake",
@@ -30,7 +47,8 @@
         "cache": {
             "JH_ARTIFACT_DIR": "${buildDir}",
             "JH_PROJECT_DIR": "${project}",
-            "JH_MODULE_NAME": "16_rtc_backends"
+            "JH_MODULE_NAME": "16_rtc_backends",
+            "JH_PROJECT_SOURCES": "app.c"
         }
     },
     "artifacts": {

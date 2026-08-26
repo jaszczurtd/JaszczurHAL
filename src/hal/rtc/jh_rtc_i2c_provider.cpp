@@ -507,22 +507,31 @@ static hal_status_t ds_set_clkout(void *context, hal_rtc_clkout_mode_t mode) {
   }
 
   DS3231 *rtc = ds_device(context);
+  hal_status_t status = HAL_OK;
   switch (mode) {
   case HAL_RTC_CLKOUT_DISABLED:
-    rtc->enable32kHz(false);
-    rtc->enableOscillator(false, false, 0u);
+    status = rtc->set32kHzEx(false);
+    if (status == HAL_OK) {
+      status = rtc->setSquareWaveEx(false, false, 0u);
+    }
     break;
   case HAL_RTC_CLKOUT_1_HZ:
-    rtc->enable32kHz(false);
-    rtc->enableOscillator(true, false, 0u);
+    status = rtc->set32kHzEx(false);
+    if (status == HAL_OK) {
+      status = rtc->setSquareWaveEx(true, false, 0u);
+    }
     break;
   case HAL_RTC_CLKOUT_1024_HZ:
-    rtc->enable32kHz(false);
-    rtc->enableOscillator(true, false, 1u);
+    status = rtc->set32kHzEx(false);
+    if (status == HAL_OK) {
+      status = rtc->setSquareWaveEx(true, false, 1u);
+    }
     break;
   case HAL_RTC_CLKOUT_32768_HZ:
-    rtc->enableOscillator(false, false, 0u);
-    rtc->enable32kHz(true);
+    status = rtc->setSquareWaveEx(false, false, 0u);
+    if (status == HAL_OK) {
+      status = rtc->set32kHzEx(true);
+    }
     break;
   case HAL_RTC_CLKOUT_32_HZ:
     return HAL_EUNSUPPORTED;
@@ -530,6 +539,9 @@ static hal_status_t ds_set_clkout(void *context, hal_rtc_clkout_mode_t mode) {
     return HAL_EINVAL;
   }
 
+  if (status != HAL_OK) {
+    return status;
+  }
   ds_context(context)->clkout_mode = mode;
   return HAL_OK;
 }
@@ -617,11 +629,21 @@ static hal_status_t ds_get_datetime(void *context,
   }
 
   DS3231 *rtc = ds_device(context);
-  const DateTime now = RTClib::now(*rtc);
+  DateTime now;
+  hal_status_t status = rtc->getDateTimeEx(&now);
+  if (status != HAL_OK) {
+    return status;
+  }
+  bool integrity = false;
+  status = rtc->oscillatorCheckEx(&integrity);
+  if (status != HAL_OK) {
+    return status;
+  }
   *out_datetime = {
-      (uint8_t)now.second(), (uint8_t)now.minute(),       (uint8_t)now.hour(),
-      (uint8_t)now.day(),    (uint8_t)now.dayOfTheWeek(), (uint8_t)now.month(),
-      (uint16_t)now.year(),  rtc->oscillatorCheck(),
+      (uint8_t)now.second(),       (uint8_t)now.minute(),
+      (uint8_t)now.hour(),         (uint8_t)now.day(),
+      (uint8_t)now.dayOfTheWeek(), (uint8_t)now.month(),
+      (uint16_t)now.year(),        integrity,
   };
   return HAL_OK;
 }
@@ -635,16 +657,14 @@ static hal_status_t ds_set_datetime(void *context,
   const DateTime ds_datetime(datetime->year, datetime->month, datetime->day,
                              datetime->hour, datetime->minute,
                              datetime->second);
-  ds_device(context)->adjust(ds_datetime);
-  return HAL_OK;
+  return ds_device(context)->adjustEx(ds_datetime);
 }
 
 static hal_status_t ds_get_clock_integrity(void *context, bool *out_ok) {
   if (context == nullptr || out_ok == nullptr) {
     return HAL_EINVAL;
   }
-  *out_ok = ds_device(context)->oscillatorCheck();
-  return HAL_OK;
+  return ds_device(context)->oscillatorCheckEx(out_ok);
 }
 
 static hal_status_t ds_set_interrupt_enable(void *context, uint8_t irq_mask) {
@@ -696,8 +716,7 @@ static hal_status_t ds_get_temperature(void *context,
   if (context == nullptr || out_temperature_c == nullptr) {
     return HAL_EINVAL;
   }
-  *out_temperature_c = ds_device(context)->getTemperature();
-  return HAL_OK;
+  return ds_device(context)->getTemperatureEx(out_temperature_c);
 }
 
 static hal_status_t ds_get_clkout_mode(void *context,

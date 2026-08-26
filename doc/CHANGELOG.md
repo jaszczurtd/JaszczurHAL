@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Corrected DS3231 calendar writes to include the month register, clear OSF
+  after a successful adjustment, preserve the timekeeping oscillator when
+  CLKOUT is disabled, decode 12-hour calendar values, and propagate I2C errors
+  for date, integrity, CLKOUT, and temperature operations. STM32G474 firmware
+  now links newlib-nano floating-point formatting, and the PCF8563/DS3231 I2C
+  route and RTC flows are documented as physically validated on NUCLEO-G474RE.
 - Added feature-owned `buildEffects` for additive sources and managed BearSSL,
   LittleFS, and SX126x dependencies. CMake and ESP-IDF now consume the shared
   feature model, CYW43/BTstack option selection uses one reusable helper, and
@@ -1791,7 +1797,7 @@ to 1.9.1 or a later release.
 - Standardized the default RP2040 static-library build directory as
   `build_rp2040/` in the helper script, full test runner and build
   documentation.
-- Consolidated RP static-library CMake glue under `rp_native_lib/` and aligned
+- Consolidated RP static-library CMake integration under `rp_native_lib/` and aligned
   dependency pins with the official Pico SDK toolchain.
 
 ### hal_irsmall_decoder - shared IR receiver decoder
@@ -2023,7 +2029,7 @@ to 1.9.1 or a later release.
   NeoPixel core under `src/hal/gpio/neopixel/` (`jh_neopixel.{h,cpp}`),
   keeping the proven buffer layout, color-order mapping, latch timing and
   brightness scaling behavior from the upstream implementation.
-- Added RP2040 transport glue using PIO (`rp2040_pio.h`) and switched
+- Added RP2040 transport implementation using PIO (`rp2040_pio.h`) and switched
   `src/hal/impl/rp2040/hal_rgb_led.cpp` to the shared core.
 - Added a new STM32G474 `hal_rgb_led` backend using the same shared core with
   cycle-timed GPIO bitstream output, so `HAL_ENABLE_RGB_LED` now works on both

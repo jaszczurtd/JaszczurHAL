@@ -28,6 +28,16 @@ static bool s_power_exercised = false;
 static bool s_resumed_from_power_down = false;
 static const char *s_power_transition_name = "power";
 static uint32_t s_last_report_ms = 0u;
+static const hal_rtc_datetime_t s_seed_datetime = {
+    .second = 50u,
+    .minute = 34u,
+    .hour = 12u,
+    .day = 20u,
+    .weekday = 4u,
+    .month = 8u,
+    .year = 2026u,
+    .clock_integrity = true,
+};
 
 #ifndef HAL_EXAMPLE_RTC_POWER_DOWN_TEST
 #define HAL_EXAMPLE_RTC_POWER_DOWN_TEST 0
@@ -155,6 +165,43 @@ static void exercise_pcf8563_timer(hal_rtc_t rtc) {
   }
 }
 
+static hal_status_t seed_datetime(const char *name, hal_rtc_t rtc) {
+  const hal_status_t status = hal_rtc_set_datetime_ex(rtc, &s_seed_datetime);
+  if (status == HAL_OK) {
+    deb("%s seeded 2026-08-20 12:34:50", name);
+  } else {
+    derr("%s seed failed: %s", name, hal_status_to_string(status));
+  }
+  return status;
+}
+
+static bool ensure_external_datetime(const char *name, hal_rtc_t rtc) {
+  hal_rtc_datetime_t value = {0};
+  const hal_status_t read_status = hal_rtc_get_datetime_ex(rtc, &value);
+  if (read_status == HAL_OK && value.clock_integrity) {
+    return true;
+  }
+
+  if (read_status == HAL_OK) {
+    deb("%s clock integrity lost; seeding test time", name);
+  } else {
+    deb("%s calendar unavailable (%s); seeding test time", name,
+        hal_status_to_string(read_status));
+  }
+  if (seed_datetime(name, rtc) != HAL_OK) {
+    return false;
+  }
+
+  const hal_status_t verify_status = hal_rtc_get_datetime_ex(rtc, &value);
+  if (verify_status != HAL_OK) {
+    derr("%s seed readback failed: %s", name,
+         hal_status_to_string(verify_status));
+    return false;
+  }
+  deb("%s seed readback integrity=%u", name, value.clock_integrity ? 1u : 0u);
+  return true;
+}
+
 static hal_rtc_t init_rtc(hal_rtc_chip_t chip, uint8_t address,
                           const char *name) {
   hal_rtc_config_t config = {.chip = chip,
@@ -170,6 +217,10 @@ static hal_rtc_t init_rtc(hal_rtc_chip_t chip, uint8_t address,
     return NULL;
   }
 
+  if (!ensure_external_datetime(name, rtc)) {
+    hal_rtc_deinit(rtc);
+    return NULL;
+  }
   exercise_epoch(name, rtc);
   exercise_alarm(name, rtc);
   exercise_clkout(name, rtc);
@@ -206,24 +257,11 @@ static hal_rtc_t init_internal_rtc(void) {
       integrity ? 1u : 0u);
 
   if (!integrity) {
-    const hal_rtc_datetime_t seed = {
-        .second = 50u,
-        .minute = 34u,
-        .hour = 12u,
-        .day = 20u,
-        .weekday = 4u,
-        .month = 8u,
-        .year = 2026u,
-        .clock_integrity = true,
-    };
-    status = hal_rtc_set_datetime_ex(rtc, &seed);
+    status = seed_datetime(INTERNAL_RTC_NAME, rtc);
     if (status != HAL_OK) {
-      derr("%s seed failed: %s", INTERNAL_RTC_NAME,
-           hal_status_to_string(status));
       hal_rtc_deinit(rtc);
       return NULL;
     }
-    deb("%s seeded 2026-08-20 12:34:50", INTERNAL_RTC_NAME);
   } else {
     deb("%s retained time", INTERNAL_RTC_NAME);
   }

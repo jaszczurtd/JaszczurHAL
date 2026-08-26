@@ -370,11 +370,12 @@ void test_debug_formatter_handles_common_printf_conversions(void) {
   capture_buffer_t capture = {out, sizeof(out), 0u};
   out[0] = '\0';
 
-  capture_format(&capture, "n=%d hex=%04x str=%8.3s dyn=%*.*s ch=%c pct=%%",
-                 -42, 0x2a, "abcdef", 6, 2, "wxyz", 'Z');
+  capture_format(&capture,
+                 "n=%d hex=%04x str=%8.3s dyn=%*.*s ch=%c float=%.2f pct=%%",
+                 -42, 0x2a, "abcdef", 6, 2, "wxyz", 'Z', 25.25);
 
-  TEST_ASSERT_EQUAL_STRING("n=-42 hex=002a str=     abc dyn=    wx ch=Z pct=%",
-                           out);
+  TEST_ASSERT_EQUAL_STRING(
+      "n=-42 hex=002a str=     abc dyn=    wx ch=Z float=25.25 pct=%", out);
 }
 
 void test_hal_deb_streams_payload_beyond_mock_capture_buffer(void) {

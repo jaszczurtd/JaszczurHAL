@@ -145,19 +145,37 @@ byte DS3231::bcdToDec(byte val) {
 }
 
 DateTime RTClib::now(DS3231 &rtc) {
-  byte buffer[7] = {};
-  if (!rtc.readBytes(0x00u, buffer, 7u)) {
-    return DateTime(2000u, 1u, 1u, 0u, 0u, 0u);
+  DateTime value;
+  (void)rtc.getDateTimeEx(&value);
+  return value;
+}
+
+hal_status_t DS3231::getDateTimeEx(DateTime *out_datetime) {
+  if (out_datetime == nullptr) {
+    return HAL_EINVAL;
   }
 
-  const uint8_t ss = (uint8_t)(rtc.bcdToDec((byte)(buffer[0] & 0x7Fu)));
-  const uint8_t mm = rtc.bcdToDec(buffer[1]);
-  const uint8_t hh = rtc.bcdToDec(buffer[2]);
-  const uint8_t d = rtc.bcdToDec(buffer[4]);
-  const uint8_t m = rtc.bcdToDec(buffer[5] & 0x7Fu);
-  const uint16_t y = (uint16_t)(rtc.bcdToDec(buffer[6]) + 2000u);
+  byte buffer[7] = {};
+  if (!readBytes(0x00u, buffer, 7u)) {
+    return HAL_EIO;
+  }
 
-  return DateTime(y, m, d, hh, mm, ss);
+  const uint8_t ss = (uint8_t)bcdToDec((byte)(buffer[0] & 0x7Fu));
+  const uint8_t mm = bcdToDec((byte)(buffer[1] & 0x7Fu));
+  uint8_t hh = 0u;
+  if ((buffer[2] & 0x40u) != 0u) {
+    const bool pm = (buffer[2] & 0x20u) != 0u;
+    const uint8_t hour12 = bcdToDec((byte)(buffer[2] & 0x1Fu));
+    hh = hour12 == 12u ? (pm ? 12u : 0u) : (uint8_t)(hour12 + (pm ? 12u : 0u));
+  } else {
+    hh = bcdToDec((byte)(buffer[2] & 0x3Fu));
+  }
+  const uint8_t d = bcdToDec((byte)(buffer[4] & 0x3Fu));
+  const uint8_t m = bcdToDec((byte)(buffer[5] & 0x1Fu));
+  const uint16_t y = (uint16_t)(bcdToDec(buffer[6]) + 2000u);
+
+  *out_datetime = DateTime(y, m, d, hh, mm, ss);
+  return HAL_OK;
 }
 
 byte DS3231::getSecond() {
@@ -230,27 +248,30 @@ void DS3231::setEpoch(time_t epoch, bool flag_localtime) {
   setYear((byte)(tmnow.tm_year - 100U));
 }
 
-void DS3231::adjust(const DateTime &dt) {
+hal_status_t DS3231::adjustEx(const DateTime &dt) {
   const byte data[] = {
-      0x00u,
       decToBcd(dt.second()),
       decToBcd(dt.minute()),
       decToBcd(dt.hour()),
       decToBcd(dowToDS3231(dt.dayOfTheWeek())),
       decToBcd(dt.day()),
+      decToBcd(dt.month()),
       decToBcd((byte)(dt.year() - 2000u)),
-      0x00u,
   };
 
-  hal_i2c_begin_transmission_bus(_i2c_bus, _i2c_addr);
-  for (uint8_t i = 0u; i < (uint8_t)(sizeof(data) / sizeof(data[0])); ++i) {
-    if (hal_i2c_write_bus(_i2c_bus, data[i]) != 1) {
-      (void)hal_i2c_end_transmission_bus(_i2c_bus);
-      return;
-    }
+  if (!writeBytes(0x00u, data, (uint8_t)(sizeof(data) / sizeof(data[0])))) {
+    return HAL_EIO;
   }
-  (void)hal_i2c_end_transmission_bus(_i2c_bus);
+
+  byte status = 0u;
+  if (!readBytes(0x0Fu, &status, 1u)) {
+    return HAL_EIO;
+  }
+  status = (byte)(status & 0x7Fu);
+  return writeBytes(0x0Fu, &status, 1u) ? HAL_OK : HAL_EIO;
 }
+
+void DS3231::adjust(const DateTime &dt) { (void)adjustEx(dt); }
 
 void DS3231::setSecond(byte Second) {
   const byte data[] = {0x00u, decToBcd(Second)};
@@ -321,14 +342,25 @@ void DS3231::setClockMode(bool h12) {
   (void)writeBytes(data[0], &data[1], 1u);
 }
 
-float DS3231::getTemperature() {
+hal_status_t DS3231::getTemperatureEx(float *out_temperature_c) {
+  if (out_temperature_c == nullptr) {
+    return HAL_EINVAL;
+  }
+
   byte buffer[2] = {0u, 0u};
   if (!readBytes(0x11u, buffer, 2u)) {
-    return -9999.0f;
+    return HAL_EIO;
   }
 
   const int16_t itemp = (int16_t)((buffer[0] << 8) | (buffer[1] & 0xC0u));
-  return (float)itemp / 256.0f;
+  *out_temperature_c = (float)itemp / 256.0f;
+  return HAL_OK;
+}
+
+float DS3231::getTemperature() {
+  float temperature_c = -9999.0f;
+  (void)getTemperatureEx(&temperature_c);
+  return temperature_c;
 }
 
 void DS3231::getA1Time(byte &A1Day, byte &A1Hour, byte &A1Minute,
@@ -558,8 +590,54 @@ void DS3231::enable32kHz(bool TF) {
 }
 
 bool DS3231::oscillatorCheck() {
-  const byte temp_buffer = readControlByte(1);
-  return (temp_buffer & 0b10000000u) == 0u;
+  bool ok = false;
+  (void)oscillatorCheckEx(&ok);
+  return ok;
+}
+
+hal_status_t DS3231::oscillatorCheckEx(bool *out_ok) {
+  if (out_ok == nullptr) {
+    return HAL_EINVAL;
+  }
+
+  byte status = 0u;
+  if (!readBytes(0x0Fu, &status, 1u)) {
+    return HAL_EIO;
+  }
+  *out_ok = (status & 0x80u) == 0u;
+  return HAL_OK;
+}
+
+hal_status_t DS3231::setSquareWaveEx(bool enabled, bool battery,
+                                     byte frequency) {
+  if (frequency > 3u) {
+    return HAL_EINVAL;
+  }
+
+  byte control = 0u;
+  if (!readBytes(0x0Eu, &control, 1u)) {
+    return HAL_EIO;
+  }
+
+  control = (byte)(control & (byte) ~(0x80u | 0x40u | 0x18u | 0x04u));
+  if (enabled) {
+    control = (byte)(control | (byte)(frequency << 3u));
+    if (battery) {
+      control = (byte)(control | 0x40u);
+    }
+  } else {
+    control = (byte)(control | 0x04u);
+  }
+  return writeBytes(0x0Eu, &control, 1u) ? HAL_OK : HAL_EIO;
+}
+
+hal_status_t DS3231::set32kHzEx(bool enabled) {
+  byte status = 0u;
+  if (!readBytes(0x0Fu, &status, 1u)) {
+    return HAL_EIO;
+  }
+  status = enabled ? (byte)(status | 0x08u) : (byte)(status & 0xF7u);
+  return writeBytes(0x0Fu, &status, 1u) ? HAL_OK : HAL_EIO;
 }
 
 byte DS3231::readControlByte(bool which) {

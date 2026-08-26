@@ -79,7 +79,7 @@ the scheduler, mutex, delay, and create-once integration on the host.
 Bundled or ported low-level drivers live under `src/hal/impl/rp2040/drivers/`
 or the relevant thematic directory under `src/hal/`.
 Bundled high-level integration frameworks live under the relevant thematic
-directory under `src/hal/`. Target-specific glue remains under `src/hal/impl/`.
+directory under `src/hal/`. Target-specific support remains under `src/hal/impl/`.
 These sources are HAL-internal implementation details (not public API).
 
 ### Inventory, authors and license paths

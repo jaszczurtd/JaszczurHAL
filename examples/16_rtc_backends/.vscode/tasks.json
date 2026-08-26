@@ -329,6 +329,24 @@
                 "showReuseMessage": false
             },
             "problemMatcher": []
+        },
+        {
+            "label": "Project: Build variant: display-clock",
+            "detail": "Compile example variant display-clock",
+            "type": "shell",
+            "command": "${config:jaszczurhal.vscodeEntry}",
+            "windows": {
+                "command": "${config:jaszczurhal.vscodeEntryWindows}"
+            },
+            "args": [
+                "build",
+                "--project",
+                "${workspaceFolder}",
+                "--variant",
+                "display-clock"
+            ],
+            "group": "build",
+            "problemMatcher": "$gcc"
         }
     ]
 }

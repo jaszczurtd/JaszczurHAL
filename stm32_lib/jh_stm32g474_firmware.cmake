@@ -192,6 +192,7 @@ function(jh_add_stm32g474_firmware TARGET)
         "-Wl,-Map,$<TARGET_FILE_DIR:${TARGET}>/${TARGET}.map"
         -nostartfiles
         -Wl,--gc-sections
+        -Wl,-u,_printf_float
         --specs=nano.specs
         --specs=nosys.specs
     )

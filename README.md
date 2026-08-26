@@ -3,6 +3,7 @@
 Author: Marcin 'Jaszczur' Kielesinski
 
 JaszczurHAL is a hardware abstraction layer and utility library for embedded projects using RP2040/2350/STM32/ESP32.
+See [features.md](doc/features.md) for a compact inventory of supported modules and functionality.
 
 ## How do you even pronounce this library name?
 
@@ -29,15 +30,7 @@ JaszczurHAL introduces a practical boundary:
 
 Application code stays portable across the supported targets and runtimes.
 
-## Supported modules (quick overview)
-
-RP2040 and RP2350 firmware builds directly against the official Pico SDK.
-STM32G474 is supported through the repository's bare-metal implementation and
-linker flow. The ESP32-S3 target is build on top of ESP-IDF SDK. FreeRTOS is optional
-on RP and STM32G474 and required by the ESP-IDF runtime. The mock backend provides deterministic host-side validation.
-
-See [features.md](doc/features.md) for a compact inventory of supported
-functionality and source links.
+The project is already very useful, but there are still a few areas here and there that remain WIP. Unfortunately, besides working on a hobby project, one also has to earn a living - and find time for life itself. :)
 
 ## Is this used by anything real?
 
@@ -87,6 +80,15 @@ defaults task0/task1 to cores 0/1 and allows explicit affinity overrides.
 The build matrix, requirements, per-example target coverage, and the rule to
 extend an existing project or variant before creating another directory are
 maintained in [examples/README.md](examples/README.md).
+
+## Supported targets and modules (quick overview)
+
+RP2040 and RP2350 firmware builds directly against the official Pico SDK.
+STM32G474 is supported through the repository's bare-metal implementation and
+linker flow. The ESP32-S3 target is build on top of ESP-IDF SDK. FreeRTOS is optional
+on RP and STM32G474 and required by the ESP-IDF runtime. The mock backend provides deterministic host-side validation.
+
+See [features.md](doc/features.md) for a compact inventory of supported functionality and modules.
 
 ## Module selection (quick)
 

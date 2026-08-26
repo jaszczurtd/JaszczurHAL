@@ -219,7 +219,8 @@ void test_set_clock_mode_sets_and_clears_12h_bit(void) {
 
 void test_adjust_writes_burst_starting_at_seconds_register(void) {
   DateTime dt(2026u, 5u, 24u, 13u, 14u, 15u);
-  s_rtc->adjust(dt);
+  inject1(0x8Cu); /* OSF plus preserved EN32kHz/alarm flags. */
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->adjustEx(dt));
 
   uint8_t f[16] = {};
   TEST_ASSERT_EQUAL_INT(8, get_frame(0, f, sizeof(f)));
@@ -229,7 +230,17 @@ void test_adjust_writes_burst_starting_at_seconds_register(void) {
   TEST_ASSERT_EQUAL_UINT8(0x13u, f[3]);
   TEST_ASSERT_EQUAL_UINT8(0x07u, f[4]); /* dow Sunday=7 (DS3231 convention) */
   TEST_ASSERT_EQUAL_UINT8(0x24u, f[5]);
-  TEST_ASSERT_EQUAL_UINT8(0x26u, f[6]);
+  TEST_ASSERT_EQUAL_UINT8(0x05u, f[6]);
+  TEST_ASSERT_EQUAL_UINT8(0x26u, f[7]);
+  TEST_ASSERT_EQUAL_INT(1, get_frame(1, f, sizeof(f)));
+  TEST_ASSERT_EQUAL_UINT8(0x0Fu, f[0]);
+  TEST_ASSERT_EQUAL_INT(2, get_frame(2, f, sizeof(f)));
+  TEST_ASSERT_EQUAL_UINT8(0x0Fu, f[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x0Cu, f[1]);
+
+  hal_mock_i2c_set_busy(true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->adjustEx(dt));
+  hal_mock_i2c_set_busy(false);
 }
 
 void test_rtclib_now_decodes_timekeeping_register_block(void) {
@@ -244,6 +255,20 @@ void test_rtclib_now_decodes_timekeeping_register_block(void) {
   TEST_ASSERT_EQUAL_UINT8(12u, now.hour());
   TEST_ASSERT_EQUAL_UINT8(34u, now.minute());
   TEST_ASSERT_EQUAL_UINT8(56u, now.second());
+}
+
+void test_status_datetime_read_decodes_12h_pm_and_reports_bus_failure(void) {
+  const uint8_t regs[] = {0x56u, 0x34u, 0x61u, 0x02u,
+                          0x24u, 0x05u, 0x26u}; /* 1:34:56 PM */
+  hal_mock_i2c_inject_rx(regs, (int)sizeof(regs));
+  DateTime now;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->getDateTimeEx(&now));
+  TEST_ASSERT_EQUAL_UINT8(13u, now.hour());
+
+  hal_mock_i2c_set_busy(true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->getDateTimeEx(&now));
+  hal_mock_i2c_set_busy(false);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, s_rtc->getDateTimeEx(nullptr));
 }
 
 void test_alarm1_set_and_get_preserve_masks_and_day_mode(void) {
@@ -386,6 +411,37 @@ void test_control_register_helpers_enable_oscillator_and_32khz(void) {
   TEST_ASSERT_TRUE(s_rtc->oscillatorCheck());
 }
 
+void test_status_control_helpers_keep_timekeeping_running(void) {
+  uint8_t f[2] = {};
+
+  /* Disabling CLKOUT must clear EOSC/BBSQW/RS and select interrupt mode while
+   * preserving CONV and alarm-enable bits. In particular, EOSC must remain
+   * clear so battery-backed timekeeping continues. */
+  inject1(0xE3u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->setSquareWaveEx(false, false, 0u));
+  TEST_ASSERT_EQUAL_INT(2, last_write_frame(f, sizeof(f)));
+  TEST_ASSERT_EQUAL_UINT8(0x0Eu, f[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x27u, f[1]);
+  TEST_ASSERT_EQUAL_UINT8(0u, f[1] & 0x80u);
+
+  hal_mock_i2c_reset_write_log();
+  inject1(0x80u);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, s_rtc->set32kHzEx(true));
+  TEST_ASSERT_EQUAL_INT(2, last_write_frame(f, sizeof(f)));
+  TEST_ASSERT_EQUAL_UINT8(0x0Fu, f[0]);
+  TEST_ASSERT_EQUAL_UINT8(0x88u, f[1]);
+
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, s_rtc->setSquareWaveEx(true, false, 4u));
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, s_rtc->oscillatorCheckEx(nullptr));
+
+  hal_mock_i2c_set_busy(true);
+  bool integrity = true;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->setSquareWaveEx(false, false, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->set32kHzEx(false));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->oscillatorCheckEx(&integrity));
+  hal_mock_i2c_set_busy(false);
+}
+
 void test_set_epoch_and_datetime_helpers(void) {
   /* 2000-01-01 00:00:00 UTC */
   hal_mock_i2c_reset_write_log();
@@ -419,8 +475,11 @@ void test_datetime_helpers_use_full_gregorian_calendar(void) {
 void test_temperature_read_failure_returns_sentinel(void) {
   /* Busy bus forces endTransmission != 0, making readBytes() fail. */
   hal_mock_i2c_set_busy(true);
+  float temperature_c = 0.0f;
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, s_rtc->getTemperatureEx(&temperature_c));
   TEST_ASSERT_FLOAT_WITHIN(0.001f, -9999.0f, s_rtc->getTemperature());
   hal_mock_i2c_set_busy(false);
+  TEST_ASSERT_EQUAL_INT(HAL_EINVAL, s_rtc->getTemperatureEx(nullptr));
 }
 
 /* ── Temperature (reg 0x11/0x12, signed, 0.25 C steps) ──────────────────── */
@@ -453,11 +512,13 @@ int main(void) {
   RUN_TEST(test_set_clock_mode_sets_and_clears_12h_bit);
   RUN_TEST(test_adjust_writes_burst_starting_at_seconds_register);
   RUN_TEST(test_rtclib_now_decodes_timekeeping_register_block);
+  RUN_TEST(test_status_datetime_read_decodes_12h_pm_and_reports_bus_failure);
   RUN_TEST(test_alarm1_set_and_get_preserve_masks_and_day_mode);
   RUN_TEST(test_alarm2_set_and_get_preserve_masks_and_day_mode);
   RUN_TEST(test_simple_alarm_helpers_program_expected_masks);
   RUN_TEST(test_alarm_enable_disable_and_flags_paths);
   RUN_TEST(test_control_register_helpers_enable_oscillator_and_32khz);
+  RUN_TEST(test_status_control_helpers_keep_timekeeping_running);
   RUN_TEST(test_set_epoch_and_datetime_helpers);
   RUN_TEST(test_datetime_helpers_use_full_gregorian_calendar);
   RUN_TEST(test_get_temperature_positive);
