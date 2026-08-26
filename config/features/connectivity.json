@@ -19,9 +19,15 @@
     },
     "HAL_ENABLE_CELLULAR_MODEM": {},
     "HAL_ENABLE_HTTP_CLIENT": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/http/hal_http_client.cpp"]
+      },
       "implies": ["HAL_ENABLE_TCP"]
     },
     "HAL_ENABLE_HTTP_FILES": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/http/hal_http_files.cpp"]
+      },
       "implies": [
         "HAL_ENABLE_HTTP_SERVER",
         "HAL_ENABLE_NETWORK_CORE",
@@ -30,6 +36,9 @@
       ]
     },
     "HAL_ENABLE_HTTP_SERVER": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/http/hal_http_server.cpp"]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
     "HAL_ENABLE_LORA": {},
@@ -37,6 +46,15 @@
       "implies": ["HAL_ENABLE_CRC", "HAL_ENABLE_LORA"]
     },
     "HAL_ENABLE_MQTT": {
+      "buildEffects": {
+        "featureSources": [
+          "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp"
+        ],
+        "portableSources": [
+          "src/hal/network/mqtt/hal_mqtt.cpp",
+          "src/hal/network/mqtt/jh_pubsub_hal_client.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_NETWORK_CORE",
         "HAL_ENABLE_TCP",
@@ -44,6 +62,13 @@
       ]
     },
     "HAL_ENABLE_NETWORK_CORE": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/hal_net.cpp",
+          "src/hal/network/jh_network_backend.cpp",
+          "src/hal/network/jh_network_handle_pool.cpp"
+        ]
+      },
       "kind": "derived",
       "note": "Shared network core selected by public connectivity features."
     },
@@ -70,6 +95,12 @@
       ]
     },
     "HAL_ENABLE_OTA": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/ota/jh_ota_protocol.cpp",
+          "src/hal/security/jh_secure_random.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_CRC",
         "HAL_ENABLE_CRYPTO",
@@ -80,6 +111,9 @@
       ]
     },
     "HAL_ENABLE_SX126X": {
+      "buildEffects": {
+        "dependencies": ["sx126x"]
+      },
       "conflicts": ["HAL_ENABLE_SX127X"],
       "implies": ["HAL_ENABLE_LORA", "HAL_ENABLE_SPI"]
     },
@@ -88,9 +122,19 @@
       "implies": ["HAL_ENABLE_LORA", "HAL_ENABLE_SPI"]
     },
     "HAL_ENABLE_TCP": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/hal_tcp.cpp"]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_WIFI"]
     },
     "HAL_ENABLE_TIME": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/time/hal_time.cpp",
+          "src/hal/time/hal_time_ntp.cpp",
+          "src/hal/time/jh_calendar.c"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_NETWORK_CORE",
         "HAL_ENABLE_UDP",
@@ -98,18 +142,54 @@
       ]
     },
     "HAL_ENABLE_TLS": {
+      "buildEffects": {
+        "dependencies": ["bearssl"],
+        "portableSources": [
+          "src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp",
+          "src/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp",
+          "src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp",
+          "src/hal/network/tls/hal_tls.cpp",
+          "src/hal/security/jh_secure_random.cpp"
+        ]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
     "HAL_ENABLE_UDP": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/hal_udp.cpp"]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_WIFI"]
     },
     "HAL_ENABLE_WEBSOCKET": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/websocket/hal_websocket.cpp"]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE", "HAL_ENABLE_TCP"]
     },
     "HAL_ENABLE_WIFI": {
+      "buildEffects": {
+        "portableSources": ["src/hal/network/hal_wifi.cpp"]
+      },
       "implies": ["HAL_ENABLE_NETWORK_CORE"]
     },
     "HAL_ENABLE_WIREGUARD": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/jh_lwip_extension.cpp",
+          "src/hal/network/wireguard/core/crypto/blake2s.c",
+          "src/hal/network/wireguard/core/crypto/chacha20.c",
+          "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
+          "src/hal/network/wireguard/core/crypto/crypto.c",
+          "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
+          "src/hal/network/wireguard/core/crypto/x25519.c",
+          "src/hal/network/wireguard/core/jh_wireguard_client.cpp",
+          "src/hal/network/wireguard/core/wireguard-platform.c",
+          "src/hal/network/wireguard/core/wireguard.c",
+          "src/hal/network/wireguard/core/wireguardif.c",
+          "src/hal/network/wireguard/hal_wireguard.cpp",
+          "src/hal/network/wireguard/hal_wireguard_provider.cpp"
+        ]
+      },
       "implies": [
         "HAL_ENABLE_NETWORK_CORE",
         "HAL_ENABLE_UDP",

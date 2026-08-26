@@ -2,9 +2,9 @@
 include_guard(GLOBAL)
 
 set(JH_HAL_FEATURE_SCHEMA_VERSION 1)
-set(JH_HAL_FEATURE_GENERATOR_VERSION 1)
-set(JH_HAL_FEATURE_REGISTRY_DIGEST "66fd0c1bbf212bfa80e93571a76fac7fbf66e5795470b9c0fd2a05df3cc1b4fb")
-set(JH_HAL_FEATURE_SCHEMA_DIGEST "b780541f032bed027acf75ec9a510de872c23bdc0dec71dc25803893fd6f8594")
+set(JH_HAL_FEATURE_GENERATOR_VERSION 2)
+set(JH_HAL_FEATURE_REGISTRY_DIGEST "3a8f1a288923f38702a158869bdfd037f19d0db782c6bfd4a02799312d20d740")
+set(JH_HAL_FEATURE_SCHEMA_DIGEST "2c12d1033fd2d687c9cf3905c9ca9d67c41241930fc3cb7c31f9f2b3e7812e07")
 
 set(JH_HAL_FEATURE_SYMBOLS
     "HAL_DISABLE_ASSERTS"
@@ -228,6 +228,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_CRC_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRC_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRC_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRC_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_CRC_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/security/hal_crc.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_DOMAIN "core")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_KIND "feature")
@@ -235,6 +238,13 @@ set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_CRYPTO_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/wireguard/core/crypto/chacha20.c"
+    "src/hal/network/wireguard/core/crypto/chacha20poly1305.c"
+    "src/hal/network/wireguard/core/crypto/crypto.c"
+    "src/hal/network/wireguard/core/crypto/poly1305-donna.c"
+    "src/hal/security/hal_crypto.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_DAC_DOMAIN "core")
 set(JH_HAL_FEATURE_HAL_ENABLE_DAC_KIND "feature")
@@ -391,6 +401,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_CLIENT_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_CLIENT_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_CLIENT_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_CLIENT_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/http/hal_http_client.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_KIND "feature")
@@ -408,6 +421,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_FILES_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/http/hal_http_files.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_KIND "feature")
@@ -422,6 +438,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_HTTP_SERVER_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/http/hal_http_server.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_DOMAIN "buses")
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_KIND "feature")
@@ -429,6 +448,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_I2C_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_I2C_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/i2c/hal_i2c.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_SLAVE_DOMAIN "buses")
 set(JH_HAL_FEATURE_HAL_ENABLE_I2C_SLAVE_KIND "feature")
@@ -505,6 +527,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_LITTLEFS_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_LITTLEFS_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_LITTLEFS_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_LITTLEFS_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_LITTLEFS_BUILD_EFFECT_DEPENDENCIES
+    "littlefs"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_LORA_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_LORA_KIND "feature")
@@ -660,6 +685,13 @@ set(JH_HAL_FEATURE_HAL_ENABLE_MQTT_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_MQTT_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_MQTT_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_MQTT_BUILD_EFFECT_FEATURE_SOURCES
+    "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp"
+)
+set(JH_HAL_FEATURE_HAL_ENABLE_MQTT_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/mqtt/hal_mqtt.cpp"
+    "src/hal/network/mqtt/jh_pubsub_hal_client.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_KIND "derived")
@@ -667,6 +699,11 @@ set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_NETWORK_CORE_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/hal_net.cpp"
+    "src/hal/network/jh_network_backend.cpp"
+    "src/hal/network/jh_network_handle_pool.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_NET_COMMANDS_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_NET_COMMANDS_KIND "feature")
@@ -761,6 +798,10 @@ set(JH_HAL_FEATURE_HAL_ENABLE_OTA_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_OTA_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_OTA_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_OTA_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/ota/jh_ota_protocol.cpp"
+    "src/hal/security/jh_secure_random.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_PCA9654E_DOMAIN "buses")
 set(JH_HAL_FEATURE_HAL_ENABLE_PCA9654E_KIND "feature")
@@ -871,6 +912,10 @@ set(JH_HAL_FEATURE_HAL_ENABLE_RGB_LED_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_RGB_LED_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_RGB_LED_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_RGB_LED_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_RGB_LED_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/gpio/hal_rgb_led.cpp"
+    "src/hal/gpio/neopixel/jh_neopixel.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_RTC_DOMAIN "sensors")
 set(JH_HAL_FEATURE_HAL_ENABLE_RTC_KIND "feature")
@@ -900,6 +945,10 @@ set(JH_HAL_FEATURE_HAL_ENABLE_SPI_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_SPI_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_SPI_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_SPI_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_SPI_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/spi/hal_spi.cpp"
+    "src/hal/spi/hal_spi_device.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_SSD1306_DOMAIN "displays")
 set(JH_HAL_FEATURE_HAL_ENABLE_SSD1306_KIND "feature")
@@ -1064,6 +1113,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_SX126X_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_SX126X_CONFLICTS
     "HAL_ENABLE_SX127X"
 )
+set(JH_HAL_FEATURE_HAL_ENABLE_SX126X_BUILD_EFFECT_DEPENDENCIES
+    "sx126x"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_SX127X_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_SX127X_KIND "feature")
@@ -1092,6 +1144,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_TCP_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_TCP_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_TCP_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_TCP_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/hal_tcp.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_TFT_DOMAIN "displays")
 set(JH_HAL_FEATURE_HAL_ENABLE_TFT_KIND "feature")
@@ -1127,6 +1182,11 @@ set(JH_HAL_FEATURE_HAL_ENABLE_TIME_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_TIME_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_TIME_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_TIME_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/time/hal_time.cpp"
+    "src/hal/time/hal_time_ntp.cpp"
+    "src/hal/time/jh_calendar.c"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_TLS_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_TLS_KIND "feature")
@@ -1141,6 +1201,16 @@ set(JH_HAL_FEATURE_HAL_ENABLE_TLS_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_TLS_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_TLS_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_TLS_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp"
+    "src/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp"
+    "src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp"
+    "src/hal/network/tls/hal_tls.cpp"
+    "src/hal/security/jh_secure_random.cpp"
+)
+set(JH_HAL_FEATURE_HAL_ENABLE_TLS_BUILD_EFFECT_DEPENDENCIES
+    "bearssl"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_TSC2007_DOMAIN "sensors")
 set(JH_HAL_FEATURE_HAL_ENABLE_TSC2007_KIND "feature")
@@ -1185,6 +1255,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_UDP_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_UDP_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_UDP_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_UDP_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/hal_udp.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_DOMAIN "core")
 set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_KIND "feature")
@@ -1192,6 +1265,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_TRANSITIVE_IMPLIES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_UNITY_BUILD_EFFECT_FEATURE_SOURCES
+    "src/utils/unity.c"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_KIND "feature")
@@ -1206,6 +1282,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_WEBSOCKET_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/websocket/hal_websocket.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_KIND "feature")
@@ -1217,6 +1296,9 @@ set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_WIFI_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/hal_wifi.cpp"
+)
 
 set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_DOMAIN "connectivity")
 set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_KIND "feature")
@@ -1232,6 +1314,21 @@ set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_TRANSITIVE_IMPLIES
 )
 set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_REQUIRES "")
 set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_CONFLICTS "")
+set(JH_HAL_FEATURE_HAL_ENABLE_WIREGUARD_BUILD_EFFECT_PORTABLE_SOURCES
+    "src/hal/network/jh_lwip_extension.cpp"
+    "src/hal/network/wireguard/core/crypto/blake2s.c"
+    "src/hal/network/wireguard/core/crypto/chacha20.c"
+    "src/hal/network/wireguard/core/crypto/chacha20poly1305.c"
+    "src/hal/network/wireguard/core/crypto/crypto.c"
+    "src/hal/network/wireguard/core/crypto/poly1305-donna.c"
+    "src/hal/network/wireguard/core/crypto/x25519.c"
+    "src/hal/network/wireguard/core/jh_wireguard_client.cpp"
+    "src/hal/network/wireguard/core/wireguard-platform.c"
+    "src/hal/network/wireguard/core/wireguard.c"
+    "src/hal/network/wireguard/core/wireguardif.c"
+    "src/hal/network/wireguard/hal_wireguard.cpp"
+    "src/hal/network/wireguard/hal_wireguard_provider.cpp"
+)
 
 function(jh_hal_resolve_features REQUESTED_OUT RESOLVED_OUT)
     if(NOT REQUESTED_OUT OR NOT RESOLVED_OUT)
@@ -1305,4 +1402,36 @@ function(jh_hal_resolve_features REQUESTED_OUT RESOLVED_OUT)
 
     set(${REQUESTED_OUT} "${_jh_requested}" PARENT_SCOPE)
     set(${RESOLVED_OUT} "${_jh_resolved}" PARENT_SCOPE)
+endfunction()
+
+function(jh_hal_resolve_build_effects
+        FEATURE_SOURCES_OUT PORTABLE_SOURCES_OUT DEPENDENCIES_OUT)
+    set(_jh_feature_sources "")
+    set(_jh_portable_sources "")
+    set(_jh_dependencies "")
+    foreach(_jh_feature IN LISTS ARGN)
+        list(FIND JH_HAL_FEATURE_SYMBOLS "${_jh_feature}" _jh_known)
+        if(_jh_known EQUAL -1)
+            message(FATAL_ERROR
+                "[JH-CFG-UNKNOWN] unknown resolved feature ${_jh_feature}")
+        endif()
+        set(_jh_feature_sources_var
+            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_FEATURE_SOURCES")
+        set(_jh_portable_sources_var
+            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_PORTABLE_SOURCES")
+        set(_jh_dependencies_var
+            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_DEPENDENCIES")
+        list(APPEND _jh_feature_sources ${${_jh_feature_sources_var}})
+        list(APPEND _jh_portable_sources ${${_jh_portable_sources_var}})
+        list(APPEND _jh_dependencies ${${_jh_dependencies_var}})
+    endforeach()
+    list(REMOVE_DUPLICATES _jh_feature_sources)
+    list(REMOVE_DUPLICATES _jh_portable_sources)
+    list(REMOVE_DUPLICATES _jh_dependencies)
+    list(SORT _jh_feature_sources)
+    list(SORT _jh_portable_sources)
+    list(SORT _jh_dependencies)
+    set(${FEATURE_SOURCES_OUT} "${_jh_feature_sources}" PARENT_SCOPE)
+    set(${PORTABLE_SOURCES_OUT} "${_jh_portable_sources}" PARENT_SCOPE)
+    set(${DEPENDENCIES_OUT} "${_jh_dependencies}" PARENT_SCOPE)
 endfunction()

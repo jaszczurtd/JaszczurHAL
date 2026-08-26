@@ -7,7 +7,11 @@
     "HAL_ENABLE_HC595": {
       "implies": ["HAL_ENABLE_SPI"]
     },
-    "HAL_ENABLE_I2C": {},
+    "HAL_ENABLE_I2C": {
+      "buildEffects": {
+        "portableSources": ["src/hal/i2c/hal_i2c.cpp"]
+      }
+    },
     "HAL_ENABLE_I2C_SLAVE": {},
     "HAL_ENABLE_MCP23017": {
       "implies": ["HAL_ENABLE_I2C"]
@@ -36,7 +40,14 @@
     "HAL_ENABLE_PN532": {
       "implies": ["HAL_ENABLE_SPI"]
     },
-    "HAL_ENABLE_SPI": {},
+    "HAL_ENABLE_SPI": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/spi/hal_spi.cpp",
+          "src/hal/spi/hal_spi_device.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_STM32G474_FDCAN": {
       "implies": ["HAL_ENABLE_CAN"]
     },

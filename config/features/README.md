@@ -32,6 +32,22 @@ Source and dependency selection use `resolvedFeatures`. Diagnostics retain
 request. `jh_board_resolved.json` stores both sets and their digest. Its
 compatibility field `features` is an alias of `resolvedFeatures`.
 
+Optional `buildEffects` records keep additive build inputs beside the feature
+that owns them:
+
+- `featureSources` lists sources that every build must add when the feature is
+  active, such as Unity or PubSubClient;
+- `portableSources` lists target-independent implementations consumed by
+  selective build systems; broad source inventories use the list for
+  validation without adding the files twice;
+- `dependencies` selects an existing managed source manifest. Supported names
+  are `bearssl`, `littlefs`, and `sx126x`.
+
+The generator validates and emits these records for CMake. ESP-IDF reads the
+same registry model and combines portable sources with its target-owned source
+map. Target adapters, board capabilities, flash layouts, and special firmware
+images remain outside `buildEffects`.
+
 Consumer inputs can be checked independently of the build resolver:
 
 ```bash

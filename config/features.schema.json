@@ -34,6 +34,36 @@
         "pattern": "^HAL_(ENABLE|DISABLE)_[A-Z0-9_]+$"
       }
     },
+    "sourcePathArray": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^src/[A-Za-z0-9_./+-]+\\.(c|cc|cpp|S)$"
+      }
+    },
+    "managedBuildDependency": {
+      "enum": ["bearssl", "littlefs", "sx126x"]
+    },
+    "buildEffects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "featureSources": {
+          "$ref": "#/$defs/sourcePathArray"
+        },
+        "portableSources": {
+          "$ref": "#/$defs/sourcePathArray"
+        },
+        "dependencies": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/managedBuildDependency"
+          }
+        }
+      }
+    },
     "symbol": {
       "type": "object",
       "additionalProperties": false,
@@ -49,6 +79,9 @@
         },
         "conflicts": {
           "$ref": "#/$defs/symbolNameArray"
+        },
+        "buildEffects": {
+          "$ref": "#/$defs/buildEffects"
         },
         "note": {
           "type": "string",

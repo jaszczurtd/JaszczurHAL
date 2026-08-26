@@ -21,24 +21,19 @@ pico_sdk_init()
 
 set(SRC "${JH_ROOT}/src")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
-include("${JH_ROOT}/cmake/jh_btstack.cmake")
 include("${JH_ROOT}/cmake/jh_rp_hal_sources.cmake")
 include("${JH_ROOT}/cmake/jh_bearssl.cmake")
+include("${JH_ROOT}/cmake/jh_feature_build_effects.cmake")
 include("${JH_ROOT}/cmake/jh_managed_frameworks.cmake")
-include("${JH_ROOT}/cmake/jh_littlefs.cmake")
-include("${JH_ROOT}/cmake/jh_sx126x.cmake")
 include("${JH_ROOT}/cmake/jh_stack_protector.cmake")
-jh_bearssl_source_manifest(
-    _jh_native_bearssl_sources
-    _jh_native_bearssl_include_dirs)
 jh_managed_framework_include_dirs(_jh_native_framework_include_dirs)
 jh_managed_framework_configure_sources()
 
 jh_hal_define_enabled(_jh_native_eeprom HAL_ENABLE_EEPROM)
 jh_hal_define_enabled(_jh_native_internal_rtc HAL_ENABLE_INTERNAL_RTC)
-jh_hal_define_enabled(_jh_native_littlefs HAL_ENABLE_LITTLEFS)
+jh_feature_build_dependency_enabled(_jh_native_littlefs littlefs
+    FEATURES ${JH_RESOLVED_FEATURES})
 jh_hal_define_enabled(_jh_native_ota HAL_ENABLE_OTA)
-jh_hal_define_enabled(_jh_native_sx126x HAL_ENABLE_SX126X)
 jh_hal_define_enabled(_jh_native_stack_guard HAL_ENABLE_STACK_GUARD)
 jh_hal_define_enabled(_jh_native_stack_protector HAL_ENABLE_STACK_PROTECTOR)
 if(_jh_native_ota AND JH_RP_TARGET_NAME STREQUAL "rp2350-riscv")
@@ -144,33 +139,27 @@ if(_jh_native_ota)
     endforeach()
 endif()
 
+jh_collect_feature_build_effects(_jh_native_build_effects
+    ROOT "${JH_ROOT}"
+    FEATURES ${JH_RESOLVED_FEATURES})
 jh_collect_rp_hal_sources(JH_RP_HAL_SOURCES "${SRC}" EXCLUDE_APP_ENTRY)
+list(APPEND JH_RP_HAL_SOURCES
+    ${_jh_native_build_effects_FEATURE_SOURCES}
+    ${_jh_native_build_effects_DEPENDENCY_SOURCES})
 add_library(JaszczurHAL STATIC ${JH_RP_HAL_SOURCES})
-if(_jh_native_sx126x)
-    jh_sx126x_source_manifest(
-        _jh_native_sx126x_sources
-        _jh_native_sx126x_include_dirs)
-    target_sources(JaszczurHAL PRIVATE ${_jh_native_sx126x_sources})
-    target_include_directories(JaszczurHAL PRIVATE
-        ${_jh_native_sx126x_include_dirs})
-    set_source_files_properties(${_jh_native_sx126x_sources}
+if(_jh_native_build_effects_SX126X_SOURCES)
+    set_source_files_properties(${_jh_native_build_effects_SX126X_SOURCES}
         PROPERTIES COMPILE_OPTIONS "-w")
 endif()
-if(_jh_native_littlefs)
-    jh_littlefs_source_manifest(
-        _jh_native_littlefs_sources
-        _jh_native_littlefs_include_dirs)
-    target_sources(JaszczurHAL PRIVATE ${_jh_native_littlefs_sources})
-    target_include_directories(JaszczurHAL PRIVATE
-        ${_jh_native_littlefs_include_dirs})
-    set_source_files_properties(${_jh_native_littlefs_sources}
+if(_jh_native_build_effects_LITTLEFS_SOURCES)
+    set_source_files_properties(${_jh_native_build_effects_LITTLEFS_SOURCES}
         PROPERTIES COMPILE_DEFINITIONS LFS_NO_ASSERT)
 endif()
 
 target_include_directories(JaszczurHAL PUBLIC
     "${SRC}"
     "${SRC}/hal/impl/rp2040/drivers/usb"
-    ${_jh_native_bearssl_include_dirs}
+    ${_jh_native_build_effects_INCLUDE_DIRS}
     ${_jh_native_framework_include_dirs})
 if(DEFINED HAL_PROJECT_CONFIG_DIR)
     target_include_directories(JaszczurHAL PUBLIC ${HAL_PROJECT_CONFIG_DIR})
@@ -262,7 +251,8 @@ if(_jh_native_internal_rtc)
     target_link_libraries(JaszczurHAL PUBLIC pico_aon_timer)
 endif()
 
-jh_hal_define_enabled(_jh_native_tls HAL_ENABLE_TLS)
+jh_feature_build_dependency_enabled(_jh_native_tls bearssl
+    FEATURES ${JH_RESOLVED_FEATURES})
 if(_jh_native_tls)
     jh_add_bearssl_source_library(jh_bearssl_rp_native)
     target_link_libraries(jh_bearssl_rp_native PRIVATE pico_stdlib)
@@ -304,25 +294,12 @@ if(_jh_native_cyw43_backend)
         JH_BLUETOOTH_STAGE1_PROBE)
     jh_hal_define_enabled(_jh_native_ble HAL_ENABLE_BLE)
     jh_hal_define_enabled(_jh_native_ble_stream HAL_ENABLE_BLE_STREAM)
-    if(_jh_native_bluetooth_stage1 AND _jh_native_ble)
-        message(FATAL_ERROR
-            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
-    endif()
-    set(_jh_native_cyw43_options LWIP)
-    if(_jh_native_ota)
-        list(APPEND _jh_native_cyw43_options MDNS)
-    endif()
-    if(_jh_native_bluetooth_stage1 OR _jh_native_ble)
-        list(APPEND _jh_native_cyw43_options BLUETOOTH)
-    endif()
-    jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_native_cyw43_options})
-    if(_jh_native_bluetooth_stage1)
-        jh_target_enable_btstack_stage1(JaszczurHAL)
-    elseif(_jh_native_ble_stream)
-        jh_target_enable_btstack_ble_stream(JaszczurHAL)
-    elseif(_jh_native_ble)
-        jh_target_enable_btstack_ble(JaszczurHAL)
-    endif()
+    jh_target_enable_cyw43_feature_stack(JaszczurHAL
+        LWIP TRUE
+        OTA "${_jh_native_ota}"
+        BLUETOOTH_STAGE1 "${_jh_native_bluetooth_stage1}"
+        BLE "${_jh_native_ble}"
+        BLE_STREAM "${_jh_native_ble_stream}")
 elseif(_jh_pico_board_has_cyw43)
     target_compile_definitions(JaszczurHAL PUBLIC
         JH_RP_CYW43_LED_ONLY=1

@@ -103,6 +103,10 @@ def reverse_registry_order(destination: Path) -> None:
             for relation in ("implies", "requires", "conflicts"):
                 if relation in record:
                     record[relation] = list(reversed(record[relation]))
+            build_effects = record.get("buildEffects", {})
+            for effect in ("featureSources", "portableSources", "dependencies"):
+                if effect in build_effects:
+                    build_effects[effect] = list(reversed(build_effects[effect]))
             symbols[name] = record
         document["symbols"] = symbols
         path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
@@ -730,6 +734,36 @@ require(
     == ("HAL_ENABLE_CRC", "HAL_ENABLE_LORA"),
     "reliable LoRa link dependencies drifted",
 )
+effect_features = (
+    "HAL_ENABLE_LITTLEFS",
+    "HAL_ENABLE_MQTT",
+    "HAL_ENABLE_SX126X",
+    "HAL_ENABLE_TLS",
+    "HAL_ENABLE_UNITY",
+)
+feature_sources, portable_sources, build_dependencies = model.resolve_build_effects(
+    effect_features
+)
+require(
+    feature_sources
+    == (
+        "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp",
+        "src/utils/unity.c",
+    ),
+    "feature-owned source effects drifted",
+)
+require(
+    "src/hal/network/mqtt/hal_mqtt.cpp" in portable_sources
+    and "src/hal/network/tls/hal_tls.cpp" in portable_sources,
+    "portable source effects drifted",
+)
+require(
+    build_dependencies == ("bearssl", "littlefs", "sx126x"),
+    "managed build dependency effects drifted",
+)
+for feature in model.features.values():
+    for source in (*feature.feature_sources, *feature.portable_sources):
+        require((ROOT / source).is_file(), f"registered build source is missing: {source}")
 source_symbols: set[str] = set()
 for source_path in (ROOT / "src/hal").rglob("*"):
     if not source_path.is_file() or "generated" in source_path.parts:
@@ -847,6 +881,12 @@ require("Resolved implications of HAL_ENABLE_BLE_STREAM" in header, "missing BLE
 require("#define HAL_ENABLE_CRYPTO 1" in header, "missing BLE crypto implication")
 require("Resolved implications of HAL_ENABLE_MQTT" in header, "missing MQTT closure")
 require("[JH-CFG-DERIVED]" in header, "derived header rule missing")
+generated_cmake = (first_output / OUTPUTS[1]).read_text(encoding="utf-8")
+require(
+    "function(jh_hal_resolve_build_effects" in generated_cmake
+    and "JH_HAL_FEATURE_HAL_ENABLE_TLS_BUILD_EFFECT_DEPENDENCIES" in generated_cmake,
+    "generated CMake omitted feature build effects",
+)
 require(
     model.schema_digest in header
     and model.schema_digest
@@ -1652,6 +1692,20 @@ if ARGS.cmake or shutil.which("cmake"):
                 'set(expected "HAL_ENABLE_BLE;HAL_ENABLE_BLE_STREAM;HAL_ENABLE_CRYPTO;HAL_ENABLE_MQTT;HAL_ENABLE_NETWORK_CORE;HAL_ENABLE_TCP;HAL_ENABLE_WIFI")',
                 'if(NOT "${resolved}" STREQUAL "${expected}")',
                 '    message(FATAL_ERROR "unexpected resolved=${resolved}")',
+                "endif()",
+                "jh_hal_resolve_build_effects(effect_sources portable_sources",
+                "    effect_dependencies HAL_ENABLE_LITTLEFS HAL_ENABLE_MQTT",
+                "    HAL_ENABLE_SX126X HAL_ENABLE_TLS HAL_ENABLE_UNITY)",
+                'set(expected_effect_sources "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp;src/utils/unity.c")',
+                'if(NOT "${effect_sources}" STREQUAL "${expected_effect_sources}")',
+                '    message(FATAL_ERROR "unexpected effect sources=${effect_sources}")',
+                "endif()",
+                'if(NOT "${effect_dependencies}" STREQUAL "bearssl;littlefs;sx126x")',
+                '    message(FATAL_ERROR "unexpected effect dependencies=${effect_dependencies}")',
+                "endif()",
+                'list(FIND portable_sources "src/hal/network/tls/hal_tls.cpp" tls_source_index)',
+                "if(tls_source_index EQUAL -1)",
+                '    message(FATAL_ERROR "TLS portable source effect is missing")',
                 "endif()",
                 "",
             ]

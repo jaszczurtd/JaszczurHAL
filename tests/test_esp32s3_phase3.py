@@ -170,7 +170,7 @@ class Phase3RegistryAndBuildTests(unittest.TestCase):
         self.assertIn("jh_bearssl_source_manifest", component)
         self.assertIn("idf_component_register", component)
 
-        wireguard_sources, _, _ = esp_idf.resolve_component_contract(
+        wireguard_sources, _, _ = esp_idf.resolve_component_build_inputs(
             [
                 "HAL_ENABLE_FREERTOS",
                 "HAL_ENABLE_NETWORK_CORE",

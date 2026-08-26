@@ -82,28 +82,19 @@ function(jh_add_stm32g474_firmware TARGET)
     set(_g474 "${_jh_src}/hal/impl/stm32g474")
     set(_ldscript "${ARG_JH_ROOT}/stm32_lib/STM32G474RETx_FLASH.ld")
     include("${ARG_JH_ROOT}/cmake/jh_bearssl.cmake")
+    include("${ARG_JH_ROOT}/cmake/jh_feature_build_effects.cmake")
     include("${ARG_JH_ROOT}/cmake/jh_managed_frameworks.cmake")
-    include("${ARG_JH_ROOT}/cmake/jh_littlefs.cmake")
-    include("${ARG_JH_ROOT}/cmake/jh_sx126x.cmake")
-    jh_bearssl_source_manifest(
-        _jh_bearssl_sources
-        _jh_bearssl_include_dirs)
     jh_managed_framework_include_dirs(_jh_framework_include_dirs)
     jh_managed_framework_configure_sources()
-    jh_littlefs_source_manifest(
-        _littlefs
-        _jh_littlefs_include_dirs)
-    jh_cmake_defines_contain(_jh_has_sx126x HAL_ENABLE_SX126X
-        ${_jh_selection_features})
+    jh_collect_feature_build_effects(_jh_build_effects
+        ROOT "${ARG_JH_ROOT}"
+        FEATURES ${_jh_selection_features})
+    jh_feature_build_dependency_enabled(_jh_has_tls bearssl
+        FEATURES ${_jh_selection_features})
     jh_cmake_defines_contain(_jh_has_stack_protector
         HAL_ENABLE_STACK_PROTECTOR ${_jh_selection_features})
-    set(_jh_sx126x_sources)
-    set(_jh_sx126x_include_dirs)
-    if(_jh_has_sx126x)
-        jh_sx126x_source_manifest(
-            _jh_sx126x_sources
-            _jh_sx126x_include_dirs)
-    endif()
+    set(_littlefs ${_jh_build_effects_LITTLEFS_SOURCES})
+    set(_jh_sx126x_sources ${_jh_build_effects_SX126X_SOURCES})
 
     # Backend + target-independent thematic sources.
     file(GLOB _impl CONFIGURE_DEPENDS "${_g474}/*.cpp")
@@ -130,28 +121,6 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}/utils/draw7Segment.cpp"
         "${_jh_src}/utils/multicoreWatchdog.cpp"
     )
-    foreach(_definition IN LISTS _jh_selection_features)
-        if("${_definition}" MATCHES "^HAL_ENABLE_UNITY(=|$)")
-            list(APPEND _utils "${_jh_src}/utils/unity.c")
-            break()
-        endif()
-    endforeach()
-
-    set(_jh_mqtt_sources)
-    set(_jh_mqtt_includes)
-    set(_jh_has_tls FALSE)
-    foreach(_definition IN LISTS _jh_selection_features)
-        if("${_definition}" MATCHES "^HAL_ENABLE_MQTT(=|$)")
-            list(APPEND _jh_mqtt_sources
-                "${_jh_src}/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp")
-            list(APPEND _jh_mqtt_includes
-                "${_jh_src}/hal/network/mqtt/PubSubClient/src")
-        endif()
-        if("${_definition}" MATCHES "^HAL_ENABLE_TLS(=|$)")
-            set(_jh_has_tls TRUE)
-        endif()
-    endforeach()
-
     add_executable(${TARGET}
         ${ARG_SOURCES}
         "${_g474}/port/startup_stm32g474.c"
@@ -162,11 +131,10 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_g474}/port/runtime/stm32g474_syscalls.c"
         ${_impl}
         ${_drivers}
-        ${_littlefs}
-        ${_jh_sx126x_sources}
+        ${_jh_build_effects_FEATURE_SOURCES}
+        ${_jh_build_effects_DEPENDENCY_SOURCES}
         ${_hal_common}
         ${_utils}
-        ${_jh_mqtt_sources}
     )
 
     set_target_properties(${TARGET} PROPERTIES
@@ -179,11 +147,8 @@ function(jh_add_stm32g474_firmware TARGET)
         "${_jh_src}"
         "${_jh_src}/hal"
         "${_g474}"
-        ${_jh_littlefs_include_dirs}
-        ${_jh_sx126x_include_dirs}
-        ${_jh_bearssl_include_dirs}
+        ${_jh_build_effects_INCLUDE_DIRS}
         ${_jh_framework_include_dirs}
-        ${_jh_mqtt_includes}
         ${ARG_INCLUDES}
     )
 

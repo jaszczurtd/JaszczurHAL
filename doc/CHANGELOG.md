@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added feature-owned `buildEffects` for additive sources and managed BearSSL,
+  LittleFS, and SX126x dependencies. CMake and ESP-IDF now consume the shared
+  feature model, CYW43/BTstack option selection uses one reusable helper, and
+  STM32 no longer compiles LittleFS when the feature is disabled.
 - Added the CycloneDX SBOM to the shared generated-artifact runner and its
   read-only CI verification path. Audited the maintained documentation against
   current registries and public headers, removed duplicated inventories,

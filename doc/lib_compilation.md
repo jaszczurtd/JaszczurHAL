@@ -67,6 +67,13 @@ Production feature resolution distinguishes:
 - `resolvedFeatures`: the sorted transitive registry closure used for source,
   dependency, and link-signature selection.
 
+Feature records may also declare additive `buildEffects`. Generated CMake data
+selects feature-owned sources and managed BearSSL, LittleFS, or SX126x source
+manifests for RP and STM32. ESP-IDF consumes portable source effects from the
+same registry and adds only its ESP32-specific backend files locally. Board
+facts, target adapters, flash layout, and special firmware images remain owned
+by their respective build recipes.
+
 An exact target may add a required feature. ESP32-S3 always adds
 `HAL_ENABLE_FREERTOS` with target provenance because ESP-IDF starts its
 scheduler before `app_main()`.

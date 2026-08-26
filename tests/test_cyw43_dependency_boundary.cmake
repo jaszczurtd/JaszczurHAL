@@ -72,7 +72,8 @@ foreach(_mdns_source IN ITEMS
 endforeach()
 
 foreach(_mdns_contract IN ITEMS
-        "list(APPEND _jh_native_cyw43_options MDNS)"
+        "if(JH_CYW43_FEATURE_OTA)"
+        "list(APPEND _jh_cyw43_options MDNS)"
         "LWIP_MDNS_RESPONDER 1"
         "LWIP_MDNS_SEARCH 0"
         "LWIP_NUM_NETIF_CLIENT_DATA 1"
@@ -97,8 +98,8 @@ foreach(_mdns_contract IN ITEMS
 endforeach()
 
 foreach(_stm32_mdns_contract IN ITEMS
-        "HAL_ENABLE_OTA \${_feature_defines}|list(APPEND _stm32_cyw43_options MDNS)"
-        "HAL_ENABLE_OTA \${_jh_stm32_selection_defines}|list(APPEND _jh_stm32_cyw43_options MDNS)")
+        "HAL_ENABLE_OTA \${_feature_defines}|OTA \"\${_stm32_has_ota}\""
+        "HAL_ENABLE_OTA \${_jh_stm32_selection_defines}|OTA \"\${_jh_stm32_has_ota}\"")
     string(REPLACE "|" ";" _stm32_mdns_parts
         "${_stm32_mdns_contract}")
     list(GET _stm32_mdns_parts 0 _stm32_ota_detection)

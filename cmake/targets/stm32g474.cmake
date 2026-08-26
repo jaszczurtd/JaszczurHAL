@@ -25,7 +25,6 @@ include("${JH_ROOT}/stm32_lib/jh_stm32g474_firmware.cmake")
 include("${JH_ROOT}/stm32_lib/freertos_stm32g474.cmake")
 include("${JH_ROOT}/cmake/jh_entry_adapter.cmake")
 include("${JH_ROOT}/cmake/jh_cyw43_driver.cmake")
-include("${JH_ROOT}/cmake/jh_btstack.cmake")
 
 set(JH_EXTRA_INCLUDES "" CACHE STRING "Extra include dirs for the firmware")
 set(JH_EXTRA_LIBRARIES "" CACHE STRING "Extra flat library dirs to compile+include (';'-separated), e.g. Credentials")
@@ -112,28 +111,12 @@ if(_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE_STREAM ${_feature_defines})
     jh_cmake_defines_contain(_stm32_has_ota
         HAL_ENABLE_OTA ${_feature_defines})
-    if(_stm32_has_bluetooth_stage1 AND _stm32_has_ble)
-        message(FATAL_ERROR
-            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
-    endif()
-    set(_stm32_cyw43_options)
-    if(_stm32_has_cyw43_lwip)
-        list(APPEND _stm32_cyw43_options LWIP)
-    endif()
-    if(_stm32_has_ota)
-        list(APPEND _stm32_cyw43_options MDNS)
-    endif()
-    if(_stm32_has_bluetooth_stage1 OR _stm32_has_ble)
-        list(APPEND _stm32_cyw43_options BLUETOOTH)
-    endif()
-    jh_target_enable_cyw43_driver(firmware ${_stm32_cyw43_options})
-    if(_stm32_has_bluetooth_stage1)
-        jh_target_enable_btstack_stage1(firmware)
-    elseif(_stm32_has_ble_stream)
-        jh_target_enable_btstack_ble_stream(firmware)
-    elseif(_stm32_has_ble)
-        jh_target_enable_btstack_ble(firmware)
-    endif()
+    jh_target_enable_cyw43_feature_stack(firmware
+        LWIP "${_stm32_has_cyw43_lwip}"
+        OTA "${_stm32_has_ota}"
+        BLUETOOTH_STAGE1 "${_stm32_has_bluetooth_stage1}"
+        BLE "${_stm32_has_ble}"
+        BLE_STREAM "${_stm32_has_ble_stream}")
 endif()
 
 if(NOT "${_stm32_main_stack_size}" STREQUAL "")
