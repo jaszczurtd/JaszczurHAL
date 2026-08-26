@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased] - 2026-08-11
 
+- Added one shared generated-artifact runner for feature, board, example, and
+  root VS Code projections. The full local gate now reports changed generated
+  files at the end and offers `--check-generated`; CI uses the same generator
+  list in read-only mode. Restored minimal per-fixture README links while
+  retaining the central hardware guide as the sole operator reference.
 - Fixed the local Valgrind gate to automatically execute every native C/C++
   test executable while excluding Python, CMake, and shell-driver tests. Fair
   Valgrind thread scheduling includes the FreeRTOS POSIX runtime without a
@@ -13,7 +18,7 @@ All notable changes to this project will be documented in this file.
 - Centralized the complete operator reference for all 13 physical hardware
   fixtures in `doc/api/03_build_tests.md`, including requirements, wiring,
   commands, acceptance criteria, and recorded results. Removed the duplicated
-  per-fixture README files, completed the fixture index, redirected module and
+  per-fixture instructions, completed the fixture index, redirected module and
   workflow links to the central sections, and reduced the root test overview
   to links for the test and process-script references. Also moved the local
   `config/tooling` contract guide into the central process-script reference and

@@ -16,6 +16,8 @@ document and the code disagree.
 | Prepare a native Windows workstation | `powershell -NoProfile -ExecutionPolicy Bypass -File .\runmefirst.ps1` | Prepares the pinned managed Python environment, native toolchains, source components, Cortex-Debug user paths, and the Windows host self-check. |
 | Synchronize managed dependencies | `./third_party/update_components.sh` | Fetches missing components and replaces managed installations that differ from tracked pins. |
 | Verify dependencies without changing them | `./third_party/update_components.sh --verify-only` | Checks all managed component versions, commits, required files, PMD archive state, built picotool, and the RISC-V toolchain stamp. |
+| Refresh all tracked generated files | `python3 scripts/sync_generated.py --write` | Runs the feature, board, example, and root VS Code generators and lists every file changed during synchronization. |
+| Verify all tracked generated files | `python3 scripts/sync_generated.py --check` | Runs every generator in read-only verification mode and fails on missing or stale output. |
 | Run the complete repository gate | `./runalltests.sh` | Cleans managed gate outputs and runs tests, Valgrind, static analysis, CPD, target builds, and example builds. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board contract; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
@@ -48,14 +50,12 @@ does not parse JSON during ordinary configuration: the board generator writes
 `cmake/generated/jh_board_components_registry.cmake` from
 `board_components.json`.
 
-After changing a board-component or generated-artifact contract, refresh and
-verify the tracked projections:
+After changing board-component data or another generator input, refresh and
+verify all tracked projections through the shared runner:
 
 ```bash
-python3 scripts/generate_board_config.py --boards-root boards --write-static
-python3 scripts/generate_board_config.py --boards-root boards --check-static
-python3 scripts/generate_hal_features.py --write
-python3 scripts/generate_hal_features.py --check
+python3 scripts/sync_generated.py --write
+python3 scripts/sync_generated.py --check
 ```
 
 Keep protocol and format literals close to their operations. In particular,
@@ -161,11 +161,14 @@ directory contract.
 
 ### `runalltests.sh`
 
-The complete local quality gate. Before running its eight gates, it invokes the
-official generators for tracked feature, board, example, and root VS Code
-projections. A local run therefore repairs deterministic generated drift; CI
-uses the corresponding check modes so a commit cannot omit regenerated files.
-`-j N`, `--jobs N`, and `-jN` select build parallelism. The gates are:
+The complete local quality gate. Before running its eight gates, it invokes
+`scripts/sync_generated.py --write` for tracked feature, board, example, and
+root VS Code projections. A local run therefore repairs deterministic
+generated drift and prints the changed-artifact list again in its final
+summary. `--check-generated` selects read-only verification instead. CI uses
+the same shared runner in check mode, so the list of generators is maintained
+in one place. `-j N`, `--jobs N`, and `-jN` select build parallelism. The gates
+are:
 
 1. required tools and managed-component verification;
 2. host tests, including the optional FreeRTOS POSIX suite;
@@ -501,6 +504,16 @@ unsupported.
 
 See [JaszczurHAL Examples](../../examples/README.md) for the target matrix,
 application contract, and build commands.
+
+### `scripts/sync_generated.py`
+
+Single repository-level runner for every tracked generated artifact. `--write`
+refreshes the feature registry, static board registry, example VS Code files,
+and root VS Code files. `--check` invokes their read-only verification modes
+and fails on missing or stale output. The runner snapshots tracked and
+non-ignored files before execution, then prints the paths changed during the
+run. `--report-file <path>` also stores that final list for callers such as
+`runalltests.sh`.
 
 ### `scripts/generate_board_config.py`
 

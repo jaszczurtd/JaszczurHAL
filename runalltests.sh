@@ -16,9 +16,10 @@
 #   8. Examples build (native RP + STM32G474)
 #
 # Usage:
-#   ./runalltests.sh          # run everything
-#   ./runalltests.sh -j8      # override parallel jobs
-#   ./runalltests.sh --help   # show help
+#   ./runalltests.sh                   # run everything and refresh generated files
+#   ./runalltests.sh --check-generated # fail instead of repairing generated drift
+#   ./runalltests.sh -j8               # override parallel jobs
+#   ./runalltests.sh --help            # show help
 #
 # Prerequisites:
 #   Run ./runmefirst.sh once to install all required tooling.
@@ -29,6 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_ROOT="${SCRIPT_DIR}/.build"
 GATE_BUILD_ROOT="${BUILD_ROOT}/gate"
 LOG_ROOT="${GATE_BUILD_ROOT}/logs"
+GENERATED_REPORT="${LOG_ROOT}/generated_artifacts.txt"
 export PYTHONPYCACHEPREFIX="${BUILD_ROOT}/python-cache"
 cd "${SCRIPT_DIR}"
 
@@ -90,11 +92,13 @@ clean_build_artifacts() {
 
 # ── Args ─────────────────────────────────────────────────────────────────────
 JOBS="$(nproc 2>/dev/null || echo 4)"
+CHECK_GENERATED=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         -j|--jobs) JOBS="$2"; shift 2 ;;
         -j*)       JOBS="${1#-j}"; shift ;;
+        --check-generated) CHECK_GENERATED=1; shift ;;
         -h|--help)
             awk 'NR >= 4 { if ($0 ~ /^# =/) exit; print }' "$0"
             exit 0
@@ -111,13 +115,15 @@ header "Clean start: removing build artifacts"
 clean_build_artifacts
 
 # ── Deterministic tracked projections ────────────────────────────────────────
-header "Synchronizing tracked generated artifacts"
-python3 scripts/generate_hal_features.py --write
-python3 scripts/generate_board_config.py --boards-root boards --write-static
-python3 scripts/examples_dispatcher.py generate-template
-python3 scripts/examples_dispatcher.py generate
-python3 scripts/vscode_library_workspace.py sync-vscode
-pass "Tracked generated artifacts synchronized with their source contracts."
+if [[ "${CHECK_GENERATED}" -eq 1 ]]; then
+    header "Verifying tracked generated artifacts"
+    python3 scripts/sync_generated.py --check --report-file "${GENERATED_REPORT}"
+    pass "Tracked generated artifacts match their source data."
+else
+    header "Synchronizing tracked generated artifacts"
+    python3 scripts/sync_generated.py --write --report-file "${GENERATED_REPORT}"
+    pass "Tracked generated artifacts synchronized with their source data."
+fi
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # GATE 1: Tool presence check
@@ -586,6 +592,11 @@ echo "  clang-tidy:       PASS"
 echo "  PMD CPD:          PASS (C/C++ >= 100, scripts/Python >= 50 tokens)"
 echo "  Target builds:    PASS (native Pico SDK + STM32G474 + ESP32-S3/ESP-IDF)"
 echo "  Examples builds:  PASS (RP2040 + STM32G474 gate sets; RP2350 probes)"
+echo ""
+echo "  Generated artifacts:"
+while IFS= read -r report_line; do
+    echo "    ${report_line}"
+done < "${GENERATED_REPORT}"
 echo ""
 echo "  Total time: ${SECONDS}s"
 echo ""
