@@ -57,13 +57,23 @@ if "--all-features" not in job("linux-static-library"):
 
 test_job = job("test")
 for generated_check in (
-    "scripts/vscode_library_workspace.py sync-vscode --check",
-    "scripts/examples_dispatcher.py check-template",
+    "scripts/sync_generated.py --check",
     "tests/test_tooling_contract.py .",
 ):
     if generated_check not in test_job:
         raise AssertionError(
             f"Linux CI does not fail early for generated drift: {generated_check}"
+        )
+for duplicated_check in (
+    "scripts/generate_hal_features.py --check",
+    "scripts/generate_board_config.py --boards-root boards --check-static",
+    "scripts/vscode_library_workspace.py sync-vscode --check",
+    "scripts/examples_dispatcher.py check-template",
+):
+    if duplicated_check in test_job:
+        raise AssertionError(
+            f"Linux CI bypasses the shared generated-artifact runner: "
+            f"{duplicated_check}"
         )
 
 windows_tooling = job("windows-tooling")

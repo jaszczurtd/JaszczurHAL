@@ -470,19 +470,10 @@ jobs:
             python3 scripts/check_release_metadata.py
           fi
 
-      - name: Verify generated feature registry
-        run: python3 scripts/generate_hal_features.py --check
-
-      - name: Verify generated tooling projections
+      - name: Verify generated artifacts
         run: |
-          python3 scripts/vscode_library_workspace.py sync-vscode --check
-          python3 scripts/examples_dispatcher.py check-template
+          python3 scripts/sync_generated.py --check
           python3 tests/test_tooling_contract.py .
-
-      - name: Verify generated board registry and fallback
-        run: >-
-          python3 scripts/generate_board_config.py
-          --boards-root boards --check-static
 
       - name: Validate effective feature configuration
         run: |

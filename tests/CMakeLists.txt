@@ -546,6 +546,11 @@ add_test(NAME test_tooling_contract
         ${CMAKE_CURRENT_SOURCE_DIR}/test_tooling_contract.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
+add_test(NAME test_generated_artifacts
+    COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/sync_generated.py
+        --check
+)
 add_test(NAME test_vscode_native_workflow
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_vscode_native_workflow.py

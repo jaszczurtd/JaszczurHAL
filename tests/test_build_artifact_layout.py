@@ -24,6 +24,28 @@ def load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+hardware_reference = (ROOT / "doc" / "api" / "03_build_tests.md").read_text(
+    encoding="utf-8"
+)
+for fixture_dir in sorted((ROOT / "tests" / "hardware").iterdir()):
+    if not fixture_dir.is_dir():
+        continue
+    readme_path = fixture_dir / "README.md"
+    require(
+        readme_path.is_file(),
+        f"{fixture_dir.name}: local README link is missing",
+    )
+    readme = readme_path.read_text(encoding="utf-8")
+    require(
+        "../../../doc/api/03_build_tests.md#" in readme,
+        f"{fixture_dir.name}: README does not link to the central fixture reference",
+    )
+    require(
+        f"`tests/hardware/{fixture_dir.name}`" in hardware_reference,
+        f"{fixture_dir.name}: fixture is missing from the central reference index",
+    )
+
+
 for example_dir in examples_dispatcher.selected_example_dirs([]):
     manifest_path = example_dir / ".vscode" / "jaszczurhal.project.json"
     manifest = load_json(manifest_path)
@@ -213,7 +235,22 @@ require(
     and "no_memcheck" not in tests_cmake,
     "native CTest executables are not automatically labelled for memcheck",
 )
-for generator in (
+require(
+    'scripts/sync_generated.py --write --report-file "${GENERATED_REPORT}"'
+    in quality_gate,
+    "runalltests.sh does not use the shared generated-artifact writer",
+)
+require(
+    "--check-generated) CHECK_GENERATED=1" in quality_gate
+    and 'scripts/sync_generated.py --check --report-file "${GENERATED_REPORT}"'
+    in quality_gate,
+    "runalltests.sh does not expose strict generated-artifact verification",
+)
+require(
+    'done < "${GENERATED_REPORT}"' in quality_gate,
+    "runalltests.sh does not include generated changes in its final summary",
+)
+for duplicated_generator in (
     "scripts/generate_hal_features.py --write",
     "scripts/generate_board_config.py --boards-root boards --write-static",
     "scripts/examples_dispatcher.py generate-template",
@@ -221,8 +258,9 @@ for generator in (
     "scripts/vscode_library_workspace.py sync-vscode",
 ):
     require(
-        generator in quality_gate,
-        f"runalltests.sh does not synchronize tracked output via {generator}",
+        duplicated_generator not in quality_gate,
+        f"runalltests.sh bypasses the shared generated-artifact runner: "
+        f"{duplicated_generator}",
     )
 require(
     "/tmp/jh_" not in quality_gate,

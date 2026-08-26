@@ -64,14 +64,15 @@ SDK is required.
 |---|---|---|---|
 | Host/mock unit tests | `tests/CMakeLists.txt`, `tests/test_*.cpp`, root `CMakeLists.txt` | CMake plus CTest | Add a Unity suite and register it with `add_hal_test(...)`, or declare a dedicated executable for extra sources. |
 | FreeRTOS POSIX host tests | `tests/freertos_posix/`, `JH_ENABLE_FREERTOS_POSIX_TESTS` | CTest through the host build or full gate | Add a target with `add_hal_freertos_posix_test(...)`. |
-| Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling contracts described in `00_scripts.md` | `./runalltests.sh` | Extend the owning gate and its focused regression tests; keep generated artifacts below `.build/`. |
-| Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the manifest target/board/variant matrix and its artifact-contract test. |
+| Repository quality gate | `runalltests.sh`, `.github/workflows/ci.yml`, and the tooling data described in `00_scripts.md` | `./runalltests.sh` | Extend the owning gate and its focused regression tests; keep generated artifacts below `.build/`. |
+| Firmware compile fixtures | `tests/fixtures/<fixture>/.vscode/jaszczurhal.project.json` | `jh-vscode` or the target production runner | Extend the manifest target/board/variant matrix and its artifact-layout test. |
 | Physical hardware fixtures | `tests/hardware/<fixture>/` source, manifest, and verifier | Build/upload through `jh-vscode` or the target production runner, then run the verifier documented below | Add the firmware, explicit hardware matrix, host oracle, acceptance criteria, and a subsection in this document. |
 
 The executable files above are the source of truth when prose and behavior
-disagree. Hardware fixtures do not keep separate README files; their complete
-operator instructions, wiring, requirements, and recorded acceptance results
-are centralized in the [Hardware fixtures](#hardware-fixtures) section below.
+disagree. Each hardware fixture keeps only a short README link for local
+discovery. Complete operator instructions, wiring, requirements, and recorded
+acceptance results are centralized in the
+[Hardware fixtures](#hardware-fixtures) section below.
 
 ---
 
@@ -110,7 +111,13 @@ Configures your local environment for the first time:
 **`runalltests.sh`** - Full validation gate
 ```bash
 ./runalltests.sh
+./runalltests.sh --check-generated
 ```
+The default mode refreshes deterministic tracked output before the gates and
+lists files changed by that synchronization in the final summary.
+`--check-generated` verifies the same output without repairing drift; CI uses
+this stricter mode through `scripts/sync_generated.py --check`.
+
 Runs the complete quality-gate suite (8 gates, in order):
 1. Tool-presence check
 2. Host/mock unit tests (`.build/gate/host/` + ctest, incl. FreeRTOS POSIX)
