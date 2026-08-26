@@ -33,28 +33,6 @@ capability checks use
 `HAL_BOARD_CAP_BLUETOOTH_CONTROLLER` and additionally require
 `HAL_BOARD_CAP_EXTERNAL_RADIO_FRONTEND` for an external module.
 
-The 2026-08-25 Linux/BlueZ Stream runs passed 50 authenticated reconnects,
-five minutes of approximately 10 messages per second, lifecycle restart,
-queue saturation/recovery, and the negative security cases on Pico W
-bare-metal and Pico 2 W bare-metal/FreeRTOS. An unattended watchdog reset
-changed the reported reset reason to watchdog, changed a random per-boot
-identifier, retained the controller address, and required a new authenticated
-session. The same watchdog-reset oracle passed on STM32G474 with PIM730 and an
-ILI9341 load in both bare-metal and FreeRTOS builds, retaining address
-`28:CD:C1:19:18:19` across each reset. This is an MCU-reset interruption test,
-not a physical removal of VBUS. The corrected Pico W FreeRTOS fixture passed
-the complete gate after the Stream backend began requesting a 15 ms connection
-interval with zero peripheral latency: 50/50 reconnects, 3000 authenticated
-messages in 300.0 seconds (10.00 Hz), saturation, and all negative security
-and recovery cases. A central may reject the request without terminating the
-connection. Native Windows host validation and downstream consumer/lights-
-timer integration are deferred and do not block the recorded passing BLE
-hardware results.
-
-Passive Observer validation on the same date passed on Pico W and Pico 2 W:
-both entered `HAL_BLE_STATE_SCANNING`, retained seven reports including one
-Teltonika and three Eddystone signatures, and reported zero queue drops.
-
 ## Lifecycle and polling
 
 ```cpp
