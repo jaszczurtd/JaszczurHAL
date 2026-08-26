@@ -294,8 +294,8 @@ electrical constraints are documented in
 [Connectivity](api/15_connectivity.md#cyw43-backend-configuration-and-lifecycle).
 The `picow`, `pico2w`, `pico-rm2`, and `nucleo-g474re-pim730` profiles also
 declare the lifecycle-owned `bluetooth-controller` capability and
-feature-gated `btstack-ble` component. Enabling `HAL_ENABLE_BLE` compiles that
-component; the physical capability alone never enables Bluetooth. See the
+feature-gated `btstack-host` component. Enabling `HAL_ENABLE_BLE` compiles
+that component; the physical capability alone never enables Bluetooth. See the
 [Bluetooth API](api/20_bluetooth.md).
 
 The experimental `rp2040-lora-lf` profile describes Waveshare SKU 26592. It

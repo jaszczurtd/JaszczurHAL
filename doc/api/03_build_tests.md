@@ -197,7 +197,7 @@ applications and keep their artifacts below `.build/hardware/`:
 | Fixture | Coverage |
 |---|---|
 | `tests/hardware/bluetooth_stage1` | Internal pre-API CYW43/BTstack controller, advertising, static GATT and WiFi-only memory baseline on Pico W and STM32G474/PIM730. |
-| `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
+| `tests/hardware/bluetooth_observer` | Public passive Observer scan, bounded report queue and Teltonika/iBeacon/Eddystone BLE parsing on Pico W, Pico 2 W and STM32G474/PIM730. |
 | `tests/hardware/bluetooth_stream` | Public BLE lifecycle and authenticated Stream gate across target/board/runtime tuples, including reconnect, watchdog, sustained traffic, saturation and negative security cases. |
 | `tests/hardware/rp_usb_cdc_echo` | Native TinyUSB CDC enumeration, backpressure, reconnect and throughput |
 | `tests/hardware/rp_usb_multicore` | Concurrent CDC producers on both RP cores, record integrity, completeness and affinity in bare-metal/FreeRTOS |
@@ -754,33 +754,6 @@ connections, pairing, and bonding are outside this probe.
 
 RP2350 RISC-V is unsupported because its CYW43 Bluetooth transport is not
 enabled.
-
-#### Recorded RP hardware results - 2026-08-25
-
-Both RP boards entered `HAL_BLE_STATE_SCANNING`, recognized Teltonika company
-ID `0x089A`, retained Eddystone signatures, and reported no queue loss:
-
-| Board | Reports observed | Signatures | Dropped | FLASH load | Static SRAM | Reserved SRAM |
-|---|---:|---|---:|---:|---:|---:|
-| RP2040 Pico W | 7 | Teltonika: 1, Eddystone: 3 | 0 | 408.1 KiB | 59.0 KiB | 6.0 KiB |
-| RP2350 ARM Pico 2 W | 7 | Teltonika: 1, Eddystone: 3 | 0 | 396.9 KiB | 58.6 KiB | 6.0 KiB |
-
-#### Recorded Pico W and STM32G474 result - 2026-08-05
-
-Pico W and STM32G474 completed the passive scan with `HAL_OK`, entered
-`HAL_BLE_STATE_SCANNING`, recognized Teltonika company ID `0x089A`, and
-reported no queue loss:
-
-| Board | Reports observed | Signatures | Dropped | FLASH load | Static SRAM | Reserved SRAM |
-|---|---:|---|---:|---:|---:|---:|
-| RP2040 Pico W | 4 | Teltonika: 1, Eddystone: 3 | 0 | 407.2 KiB | 58.0 KiB | 6.0 KiB |
-| STM32G474 Nucleo + PIM730 | 15 | Teltonika: 1, Eddystone: 3 | 0 | 334.5 KiB | 49.1 KiB | 3.0 KiB |
-
-The Nucleo trace included the complete Teltonika report from
-`7C:D9:F4:14:38:8C`, local name `MP1_FEE349`, RSSI -89 dBm, and manufacturer
-data beginning with little-endian company ID `9A 08`. The Pico W summary
-independently recorded one Teltonika report. Duplicate filtering was enabled,
-so each distinct advertisement was retained only once.
 
 ### JH BLE Stream v1 hardware gate
 

@@ -5,16 +5,16 @@
 
 #include "btstack.h"
 #include "hal/core/hal_config.h"
-#include "jh_ble_controller.h"
 #include "jh_btstack_hci_transport_cyw43.h"
-#include "jh_btstack_run_loop.h"
+#include "jh_btstack_host.h"
 #include "jh_stage1_probe_gatt.h"
 
 static btstack_packet_callback_registration_t s_hci_events;
 static jh_bluetooth_stage1_snapshot_t s_snapshot;
 static uint8_t s_value[32] = {'J', 'H', ' ', 'S', 't', 'a', 'g', 'e', ' ', '1'};
 static uint16_t s_value_length = 10u;
-static const jh_ble_controller_t *s_controller;
+static jh_bluetooth_host_reference_t s_host_reference;
+static bool s_hci_handler_registered;
 
 enum {
   JH_BLE_AD_TYPE_FIELD_SIZE = 1u,
@@ -128,40 +128,15 @@ static int att_write_callback(hci_con_handle_t connection_handle,
   return 0;
 }
 
-static void controller_invalidated(void *context, uint32_t generation) {
-  jh_btstack_run_loop_invalidate(context, generation);
-  jh_btstack_cyw43_transport_invalidate();
+static void stage1_profile_invalidated(void *context, uint32_t generation) {
+  (void)context;
+  (void)generation;
   s_snapshot.last_status = HAL_EHW;
   s_snapshot.transport_status = HAL_EHW;
 }
 
-hal_status_t jh_bluetooth_stage1_start(void) {
-  if (s_snapshot.started) {
-    return HAL_ESTATE;
-  }
-
-  btstack_memory_init();
-  hal_status_t status = jh_btstack_run_loop_init();
-  if (status != HAL_OK) {
-    s_snapshot.last_status = status;
-    return status;
-  }
-  s_controller = jh_ble_controller_backend();
-  if (s_controller == NULL || s_controller->start == NULL ||
-      s_controller->stop == NULL || s_controller->service == NULL) {
-    s_snapshot.last_status = HAL_ECONFIG;
-    return HAL_ECONFIG;
-  }
-  status = s_controller->start(s_controller->context,
-                               jh_btstack_run_loop_service_once, NULL,
-                               controller_invalidated, NULL);
-  if (status != HAL_OK) {
-    s_snapshot.last_status = status;
-    return status;
-  }
-
-  hci_init(jh_btstack_cyw43_hci_transport_instance(), NULL);
-  l2cap_init();
+static hal_status_t stage1_profile_start(void *context) {
+  (void)context;
   sm_init();
   att_server_init(profile_data, att_read_callback, att_write_callback);
 
@@ -172,14 +147,51 @@ hal_status_t jh_bluetooth_stage1_start(void) {
                               (uint8_t *)s_advertising_data);
   gap_advertisements_enable(1u);
 
+  memset(&s_hci_events, 0, sizeof(s_hci_events));
   s_hci_events.callback = packet_handler;
   hci_add_event_handler(&s_hci_events);
+  s_hci_handler_registered = true;
+  return HAL_OK;
+}
 
-  const int power_status = hci_power_control(HCI_POWER_ON);
-  if (power_status != 0) {
-    (void)s_controller->stop(s_controller->context);
-    s_snapshot.last_status = HAL_EIO;
-    return HAL_EIO;
+static void stage1_profile_stop(void *context) {
+  (void)context;
+  gap_advertisements_enable(0u);
+  if (s_hci_handler_registered) {
+    hci_remove_event_handler(&s_hci_events);
+    s_hci_handler_registered = false;
+  }
+  att_server_deinit();
+  sm_deinit();
+  s_snapshot.started = false;
+  s_snapshot.controller_ready = false;
+  s_snapshot.advertising = false;
+  s_snapshot.connected = false;
+}
+
+static hal_status_t stage1_profile_service(void *context) {
+  (void)context;
+  return HAL_OK;
+}
+
+static const jh_bluetooth_host_profile_ops_t s_profile_ops = {
+    .context = NULL,
+    .start = stage1_profile_start,
+    .stop = stage1_profile_stop,
+    .service = stage1_profile_service,
+    .invalidated = stage1_profile_invalidated,
+};
+
+hal_status_t jh_bluetooth_stage1_start(void) {
+  if (s_snapshot.started) {
+    return HAL_ESTATE;
+  }
+
+  const hal_status_t status = jh_btstack_host_acquire(
+      JH_BLUETOOTH_HOST_PROFILE_BLE, &s_profile_ops, &s_host_reference);
+  if (status != HAL_OK) {
+    s_snapshot.last_status = status;
+    return status;
   }
   s_snapshot.started = true;
   s_snapshot.last_status = HAL_OK;
@@ -191,7 +203,7 @@ hal_status_t jh_bluetooth_stage1_service(void) {
     return HAL_EUNINIT;
   }
   const hal_status_t service_status =
-      s_controller->service(s_controller->context);
+      jh_btstack_host_service(&s_host_reference);
   if (service_status != HAL_OK) {
     s_snapshot.last_status = service_status;
     return service_status;

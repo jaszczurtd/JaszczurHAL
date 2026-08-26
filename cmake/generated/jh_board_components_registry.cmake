@@ -7,7 +7,7 @@ set(JH_BOARD_COMPONENT_IDS
     cyw43-pico-pio
     cyw43-stm32-gspi
     cyw43-lwip
-    btstack-ble
+    btstack-host
     sx126x-radio
 )
 
@@ -32,8 +32,8 @@ set(JH_BOARD_COMPONENT_cyw43_stm32_gspi_SLOT "network-radio-transport")
 set(JH_BOARD_COMPONENT_cyw43_lwip_PROVIDERS "jh-stm32-baremetal;pico-sdk")
 set(JH_BOARD_COMPONENT_cyw43_lwip_SLOT "network-stack")
 
-set(JH_BOARD_COMPONENT_btstack_ble_PROVIDERS "jh-stm32-baremetal;pico-sdk")
-set(JH_BOARD_COMPONENT_btstack_ble_SLOT "bluetooth-host-stack")
+set(JH_BOARD_COMPONENT_btstack_host_PROVIDERS "jh-stm32-baremetal;pico-sdk")
+set(JH_BOARD_COMPONENT_btstack_host_SLOT "bluetooth-host-stack")
 
 set(JH_BOARD_COMPONENT_sx126x_radio_PROVIDERS "jh-stm32-baremetal;pico-sdk")
 set(JH_BOARD_COMPONENT_sx126x_radio_SLOT "lora-radio-provider")

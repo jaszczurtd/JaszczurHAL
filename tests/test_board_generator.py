@@ -637,7 +637,7 @@ run(
 pim730_resolved = load(pim730_output / "jh_board_resolved.json")
 require(
     pim730_resolved["components"]
-    == ["btstack-ble", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
+    == ["btstack-host", "cyw43-lwip", "cyw43-stm32-gspi", "stm32g474-native"],
     "NUCLEO PIM730 component set mismatch",
 )
 require(

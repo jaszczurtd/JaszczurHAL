@@ -23,7 +23,7 @@
       "bit": 4,
       "macro": "HAL_BOARD_CAP_BLUETOOTH_CONTROLLER",
       "stateModel": "lifecycle",
-      "runtimeOwner": "ble"
+      "runtimeOwner": "bluetooth"
     },
     "native-wifi": {
       "bit": 5,

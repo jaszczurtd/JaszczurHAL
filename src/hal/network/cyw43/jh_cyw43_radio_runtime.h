@@ -12,7 +12,7 @@ extern "C" {
 
 typedef enum {
   JH_CYW43_RADIO_CLIENT_WIFI = 0,
-  JH_CYW43_RADIO_CLIENT_BLE,
+  JH_CYW43_RADIO_CLIENT_BLUETOOTH,
   JH_CYW43_RADIO_CLIENT_COUNT,
 } jh_cyw43_radio_client_t;
 
@@ -41,7 +41,7 @@ typedef struct {
   jh_cyw43_radio_state_t state;
   uint32_t generation;
   uint16_t wifi_references;
-  uint16_t ble_references;
+  uint16_t bluetooth_references;
 } jh_cyw43_radio_runtime_snapshot_t;
 
 typedef struct {
