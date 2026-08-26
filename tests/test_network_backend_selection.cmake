@@ -159,8 +159,8 @@ file(READ "${JH_ROOT}/stm32_lib/CMakeLists.txt" _stm32_library_cmake)
 foreach(_stm32_cyw43_contract IN ITEMS
         "jh_cyw43_driver.cmake"
         "HAL_CYW43_BUS_STM32_GSPI"
-        "list(APPEND _jh_stm32_cyw43_options LWIP)"
-        "jh_target_enable_cyw43_driver(JaszczurHAL \${_jh_stm32_cyw43_options})")
+        "jh_target_enable_cyw43_feature_stack(JaszczurHAL"
+        "LWIP \"\${_jh_stm32_has_cyw43_lwip}\"")
     string(FIND "${_stm32_library_cmake}" "${_stm32_cyw43_contract}"
         _stm32_cyw43_contract_at)
     if(_stm32_cyw43_contract_at EQUAL -1)

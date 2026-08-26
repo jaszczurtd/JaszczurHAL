@@ -125,7 +125,15 @@ incremental_config = scratch / "incremental-config"
 incremental_build = scratch / "incremental-build"
 try:
     with_flag = subprocess.run(
-        [cmake, "-S", str(ROOT / "stm32_lib"), "-B", str(accepted), HOST_SANITY_FLAG],
+        [
+            cmake,
+            "-S",
+            str(ROOT / "stm32_lib"),
+            "-B",
+            str(accepted),
+            HOST_SANITY_FLAG,
+            "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        ],
         check=False,
         capture_output=True,
         text=True,
@@ -139,6 +147,21 @@ try:
         "host-compiler sanity build" in with_flag.stdout,
         "host-compiler STM32 configure does not report its mode",
     )
+    baseline_commands = json.loads(
+        (accepted / "compile_commands.json").read_text(encoding="utf-8")
+    )
+    baseline_sources = {
+        Path(str(entry["file"])).resolve().as_posix()
+        for entry in baseline_commands
+    }
+    for suffix in (
+        "/third_party/littlefs/lfs.c",
+        "/third_party/littlefs/lfs_util.c",
+    ):
+        require(
+            not any(source.endswith(suffix) for source in baseline_sources),
+            f"disabled LittleFS selected an STM32 source: {suffix}",
+        )
 
     project_config.mkdir(parents=True)
     (project_config / "hal_project_config.h").write_text(
@@ -146,6 +169,7 @@ try:
         "#define HAL_ENABLE_TLS 1\n"
         "#define HAL_ENABLE_BLE 1\n"
         "#define HAL_ENABLE_FREERTOS 1\n"
+        "#define HAL_ENABLE_LITTLEFS 1\n"
         "#define HAL_ENABLE_UNITY 1\n",
         encoding="utf-8",
     )
@@ -183,6 +207,8 @@ try:
         "/third_party/BearSSL/src/aead/ccm.c",
         "/third_party/BTstack/src/ble/att_db.c",
         "/third_party/FreeRTOS-Kernel/tasks.c",
+        "/third_party/littlefs/lfs.c",
+        "/third_party/littlefs/lfs_util.c",
         "/src/utils/unity.c",
     ):
         require(

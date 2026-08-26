@@ -204,16 +204,6 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
         "${SRC_DIR}/hal/impl/rp2040/drivers/*.S"
     )
 
-    set(_framework_sources)
-    jh_hal_define_enabled(_enable_mqtt HAL_ENABLE_MQTT)
-    if(_enable_mqtt)
-        file(GLOB_RECURSE _mqtt_sources CONFIGURE_DEPENDS
-            "${SRC_DIR}/hal/network/mqtt/PubSubClient/*.cpp"
-            "${SRC_DIR}/hal/network/mqtt/PubSubClient/*.c"
-        )
-        list(APPEND _framework_sources ${_mqtt_sources})
-    endif()
-
     if(NOT JH_RP_SOURCES_EXCLUDE_APP_ENTRY)
         list(APPEND _common_sources "${SRC_DIR}/hal_app_entry.cpp")
     endif()
@@ -224,15 +214,9 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
         "${SRC_DIR}/utils/draw7Segment.cpp"
         "${SRC_DIR}/utils/pidController.cpp"
     )
-    jh_hal_define_enabled(_enable_unity HAL_ENABLE_UNITY)
-    if(_enable_unity)
-        list(APPEND _utility_sources "${SRC_DIR}/utils/unity.c")
-    endif()
-
     set(${OUT_VAR}
         ${_rp_impl_sources}
         ${_driver_sources}
-        ${_framework_sources}
         ${_common_sources}
         ${_utility_sources}
         PARENT_SCOPE

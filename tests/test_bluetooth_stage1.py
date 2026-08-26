@@ -63,9 +63,13 @@ require(
 for recipe, text in (("RP", rp_cmake), ("STM32", stm32_cmake)):
     require(
         "JH_BLUETOOTH_STAGE1_PROBE" in text
-        and "jh_target_enable_btstack_stage1" in text,
+        and "jh_target_enable_cyw43_feature_stack" in text,
         f"{recipe} recipe does not conditionally integrate the private probe",
     )
+require(
+    "jh_target_enable_btstack_stage1" in cyw43_cmake,
+    "the shared CYW43 feature helper does not select the Stage 1 BTstack mode",
+)
 
 config = (
     ROOT / "src/hal/bluetooth/btstack_config.h"

@@ -1,4 +1,5 @@
 include_guard(GLOBAL)
+include("${CMAKE_CURRENT_LIST_DIR}/jh_btstack.cmake")
 
 function(jh_cyw43_source_manifest OUT_SOURCES OUT_INCLUDES)
     cmake_parse_arguments(JH_CYW43 "LWIP;BLUETOOTH;MDNS" "" "" ${ARGN})
@@ -155,5 +156,38 @@ function(jh_target_enable_cyw43_driver TARGET_NAME)
     if(JH_CYW43_BLUETOOTH)
         target_compile_definitions(${TARGET_NAME} PRIVATE
             JH_CYW43_BLUETOOTH=1)
+    endif()
+endfunction()
+
+# Apply the feature-derived CYW43 and BTstack modes to a target. Callers retain
+# ownership of provider detection and pass resolved boolean inputs here.
+function(jh_target_enable_cyw43_feature_stack TARGET_NAME)
+    cmake_parse_arguments(JH_CYW43_FEATURE ""
+        "LWIP;OTA;BLUETOOTH_STAGE1;BLE;BLE_STREAM" "" ${ARGN})
+    if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 AND
+       (JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM))
+        message(FATAL_ERROR
+            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
+    endif()
+
+    set(_jh_cyw43_options)
+    if(JH_CYW43_FEATURE_LWIP)
+        list(APPEND _jh_cyw43_options LWIP)
+    endif()
+    if(JH_CYW43_FEATURE_OTA)
+        list(APPEND _jh_cyw43_options MDNS)
+    endif()
+    if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1 OR
+       JH_CYW43_FEATURE_BLE OR JH_CYW43_FEATURE_BLE_STREAM)
+        list(APPEND _jh_cyw43_options BLUETOOTH)
+    endif()
+    jh_target_enable_cyw43_driver(${TARGET_NAME} ${_jh_cyw43_options})
+
+    if(JH_CYW43_FEATURE_BLUETOOTH_STAGE1)
+        jh_target_enable_btstack_stage1(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_BLE_STREAM)
+        jh_target_enable_btstack_ble_stream(${TARGET_NAME})
+    elseif(JH_CYW43_FEATURE_BLE)
+        jh_target_enable_btstack_ble(${TARGET_NAME})
     endif()
 endfunction()

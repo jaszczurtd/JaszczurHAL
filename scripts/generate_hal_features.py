@@ -25,10 +25,13 @@ from codegen_support import (
 from repository_layout import FEATURE_CMAKE_OUTPUT, FEATURE_HEADER_OUTPUT
 
 
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 SCHEMA_VERSION = 1
 SYMBOL_PATTERN = re.compile(r"^HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+$")
 DOMAIN_PATTERN = re.compile(r"^[a-z][a-z0-9-]*$")
+BUILD_SOURCE_PATTERN = re.compile(
+    r"^src/[A-Za-z0-9_./+-]+\.(?:c|cc|cpp|S)$"
+)
 MANIFEST_DEFINITION_PATTERN = re.compile(
     r"^(?:-D)?(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(?:=(.*))?$"
 )
@@ -37,7 +40,15 @@ HEADER_DEFINITION_PATTERN = re.compile(
     r"(HAL_(?:ENABLE|DISABLE)_[A-Z0-9_]+)(.*)$"
 )
 FRAGMENT_FIELDS = {"$schema", "schemaVersion", "domain", "symbols"}
-SYMBOL_FIELDS = {"kind", "implies", "requires", "conflicts", "note"}
+SYMBOL_FIELDS = {
+    "kind",
+    "implies",
+    "requires",
+    "conflicts",
+    "buildEffects",
+    "note",
+}
+BUILD_EFFECT_FIELDS = {"featureSources", "portableSources", "dependencies"}
 IGNORED_INPUT_PARTS = {".build", ".git", "third_party"}
 
 
@@ -63,6 +74,9 @@ class Feature:
     implies: tuple[str, ...]
     requires: tuple[str, ...]
     conflicts: tuple[str, ...]
+    feature_sources: tuple[str, ...]
+    portable_sources: tuple[str, ...]
+    build_dependencies: tuple[str, ...]
     note: str | None
 
 
@@ -96,6 +110,23 @@ class FeatureModel:
                 resolved.add(dependency)
                 pending.append(dependency)
         return tuple(sorted(resolved))
+
+    def resolve_build_effects(
+        self, resolved: Iterable[str]
+    ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+        feature_sources: list[str] = []
+        portable_sources: list[str] = []
+        dependencies: list[str] = []
+        for name in sorted(set(resolved)):
+            feature = self.features[name]
+            feature_sources.extend(feature.feature_sources)
+            portable_sources.extend(feature.portable_sources)
+            dependencies.extend(feature.build_dependencies)
+        return (
+            tuple(sorted(set(feature_sources))),
+            tuple(sorted(set(portable_sources))),
+            tuple(sorted(set(dependencies))),
+        )
 
 
 @dataclass(frozen=True)
@@ -136,7 +167,51 @@ def normalize_relation(
     return tuple(sorted(normalized))
 
 
-def validate_fragment(path: Path, document: dict[str, Any]) -> dict[str, Feature]:
+def normalize_build_sources(
+    path: Path, json_path: str, value: Any
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        fail(path, json_path, value, "an array of repository source paths")
+    normalized: list[str] = []
+    for index, source in enumerate(value):
+        if not isinstance(source, str) or not BUILD_SOURCE_PATTERN.fullmatch(source):
+            fail(
+                path,
+                f"{json_path}[{index}]",
+                source,
+                "a source path below src/",
+            )
+        normalized.append(source)
+    if len(set(normalized)) != len(normalized):
+        fail(path, json_path, value, "unique repository source paths")
+    return tuple(sorted(normalized))
+
+
+def normalize_build_dependencies(
+    path: Path, json_path: str, value: Any, allowed: frozenset[str]
+) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        fail(path, json_path, value, "an array of managed dependency names")
+    normalized: list[str] = []
+    for index, dependency in enumerate(value):
+        if not isinstance(dependency, str) or dependency not in allowed:
+            fail(
+                path,
+                f"{json_path}[{index}]",
+                dependency,
+                "one of " + ", ".join(sorted(allowed)),
+            )
+        normalized.append(dependency)
+    if len(set(normalized)) != len(normalized):
+        fail(path, json_path, value, "unique managed dependency names")
+    return tuple(sorted(normalized))
+
+
+def validate_fragment(
+    path: Path,
+    document: dict[str, Any],
+    managed_dependencies: frozenset[str],
+) -> dict[str, Feature]:
     exact_fields(path, "$", document, FRAGMENT_FIELDS, FRAGMENT_FIELDS)
     if document["$schema"] != "../features.schema.json":
         fail(path, "$.$schema", document["$schema"], "'../features.schema.json'")
@@ -164,6 +239,45 @@ def validate_fragment(path: Path, document: dict[str, Any]) -> dict[str, Feature
         note = record.get("note")
         if note is not None and (not isinstance(note, str) or not note.strip()):
             fail(path, f"{symbol_path}.note", note, "a non-empty string")
+        raw_build_effects = record.get("buildEffects", {})
+        if not isinstance(raw_build_effects, dict):
+            fail(
+                path,
+                f"{symbol_path}.buildEffects",
+                raw_build_effects,
+                "an object",
+            )
+        build_effects = exact_fields(
+            path,
+            f"{symbol_path}.buildEffects",
+            raw_build_effects,
+            set(),
+            BUILD_EFFECT_FIELDS,
+        )
+        feature_sources = normalize_build_sources(
+            path,
+            f"{symbol_path}.buildEffects.featureSources",
+            build_effects.get("featureSources", []),
+        )
+        portable_sources = normalize_build_sources(
+            path,
+            f"{symbol_path}.buildEffects.portableSources",
+            build_effects.get("portableSources", []),
+        )
+        overlap = set(feature_sources) & set(portable_sources)
+        if overlap:
+            fail(
+                path,
+                f"{symbol_path}.buildEffects",
+                sorted(overlap),
+                "disjoint featureSources and portableSources",
+            )
+        build_dependencies = normalize_build_dependencies(
+            path,
+            f"{symbol_path}.buildEffects.dependencies",
+            build_effects.get("dependencies", []),
+            managed_dependencies,
+        )
         result[name] = Feature(
             name=name,
             domain=domain,
@@ -177,6 +291,9 @@ def validate_fragment(path: Path, document: dict[str, Any]) -> dict[str, Feature
             conflicts=normalize_relation(
                 path, f"{symbol_path}.conflicts", record.get("conflicts", [])
             ),
+            feature_sources=feature_sources,
+            portable_sources=portable_sources,
+            build_dependencies=build_dependencies,
             note=note.strip() if note is not None else None,
         )
     return result
@@ -215,6 +332,11 @@ def normalized_digest(features: dict[str, Feature]) -> str:
                 "implies": list(feature.implies),
                 "requires": list(feature.requires),
                 "conflicts": list(feature.conflicts),
+                "buildEffects": {
+                    "featureSources": list(feature.feature_sources),
+                    "portableSources": list(feature.portable_sources),
+                    "dependencies": list(feature.build_dependencies),
+                },
                 "note": feature.note,
             }
             for name, feature in sorted(features.items())
@@ -243,6 +365,25 @@ def load_registry(config_root: Path) -> FeatureModel:
             schema.get("$schema"),
             "the JSON Schema 2020-12 URI",
         )
+    managed_dependencies_value = (
+        schema.get("$defs", {}).get("managedBuildDependency", {}).get("enum")
+    )
+    if (
+        not isinstance(managed_dependencies_value, list)
+        or not managed_dependencies_value
+        or any(
+            not isinstance(value, str) or not DOMAIN_PATTERN.fullmatch(value)
+            for value in managed_dependencies_value
+        )
+        or len(set(managed_dependencies_value)) != len(managed_dependencies_value)
+    ):
+        fail(
+            schema_path,
+            "$.$defs.managedBuildDependency.enum",
+            managed_dependencies_value,
+            "unique lower-case managed dependency names",
+        )
+    managed_dependencies = frozenset(managed_dependencies_value)
     features_root = config_root / "features"
     try:
         fragments = sorted(features_root.glob("*.json"))
@@ -254,7 +395,9 @@ def load_registry(config_root: Path) -> FeatureModel:
     features: dict[str, Feature] = {}
     owners: dict[str, Path] = {}
     for path in fragments:
-        for name, feature in validate_fragment(path, load_json(path)).items():
+        for name, feature in validate_fragment(
+            path, load_json(path), managed_dependencies
+        ).items():
             if name in features:
                 raise RegistryError(
                     f"{path}: $.symbols.{name}: duplicate symbol; "
@@ -284,6 +427,15 @@ def load_registry(config_root: Path) -> FeatureModel:
             raise RegistryError(
                 f"{owners[name]}: $.symbols.{name}.kind: "
                 "HAL_DISABLE_* symbols cannot be derived"
+            )
+        if name.startswith("HAL_DISABLE_") and (
+            feature.feature_sources
+            or feature.portable_sources
+            or feature.build_dependencies
+        ):
+            raise RegistryError(
+                f"{owners[name]}: $.symbols.{name}.buildEffects: "
+                "HAL_DISABLE_* symbols cannot add build inputs"
             )
 
     detect_implies_cycles(features)
@@ -438,6 +590,27 @@ def render_cmake(model: FeatureModel) -> str:
         lines.extend(cmake_set(f"{prefix}_TRANSITIVE_IMPLIES", model.closure(name)))
         lines.extend(cmake_set(f"{prefix}_REQUIRES", feature.requires))
         lines.extend(cmake_set(f"{prefix}_CONFLICTS", feature.conflicts))
+        if feature.feature_sources:
+            lines.extend(
+                cmake_set(
+                    f"{prefix}_BUILD_EFFECT_FEATURE_SOURCES",
+                    feature.feature_sources,
+                )
+            )
+        if feature.portable_sources:
+            lines.extend(
+                cmake_set(
+                    f"{prefix}_BUILD_EFFECT_PORTABLE_SOURCES",
+                    feature.portable_sources,
+                )
+            )
+        if feature.build_dependencies:
+            lines.extend(
+                cmake_set(
+                    f"{prefix}_BUILD_EFFECT_DEPENDENCIES",
+                    feature.build_dependencies,
+                )
+            )
         lines.append("")
 
     lines.extend(
@@ -514,6 +687,38 @@ def render_cmake(model: FeatureModel) -> str:
             "",
             '    set(${REQUESTED_OUT} "${_jh_requested}" PARENT_SCOPE)',
             '    set(${RESOLVED_OUT} "${_jh_resolved}" PARENT_SCOPE)',
+            "endfunction()",
+            "",
+            "function(jh_hal_resolve_build_effects",
+            "        FEATURE_SOURCES_OUT PORTABLE_SOURCES_OUT DEPENDENCIES_OUT)",
+            "    set(_jh_feature_sources \"\")",
+            "    set(_jh_portable_sources \"\")",
+            "    set(_jh_dependencies \"\")",
+            "    foreach(_jh_feature IN LISTS ARGN)",
+            "        list(FIND JH_HAL_FEATURE_SYMBOLS \"${_jh_feature}\" _jh_known)",
+            "        if(_jh_known EQUAL -1)",
+            "            message(FATAL_ERROR",
+            '                "[JH-CFG-UNKNOWN] unknown resolved feature ${_jh_feature}")',
+            "        endif()",
+            "        set(_jh_feature_sources_var",
+            '            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_FEATURE_SOURCES")',
+            "        set(_jh_portable_sources_var",
+            '            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_PORTABLE_SOURCES")',
+            "        set(_jh_dependencies_var",
+            '            "JH_HAL_FEATURE_${_jh_feature}_BUILD_EFFECT_DEPENDENCIES")',
+            "        list(APPEND _jh_feature_sources ${${_jh_feature_sources_var}})",
+            "        list(APPEND _jh_portable_sources ${${_jh_portable_sources_var}})",
+            "        list(APPEND _jh_dependencies ${${_jh_dependencies_var}})",
+            "    endforeach()",
+            "    list(REMOVE_DUPLICATES _jh_feature_sources)",
+            "    list(REMOVE_DUPLICATES _jh_portable_sources)",
+            "    list(REMOVE_DUPLICATES _jh_dependencies)",
+            "    list(SORT _jh_feature_sources)",
+            "    list(SORT _jh_portable_sources)",
+            "    list(SORT _jh_dependencies)",
+            '    set(${FEATURE_SOURCES_OUT} "${_jh_feature_sources}" PARENT_SCOPE)',
+            '    set(${PORTABLE_SOURCES_OUT} "${_jh_portable_sources}" PARENT_SCOPE)',
+            '    set(${DEPENDENCIES_OUT} "${_jh_dependencies}" PARENT_SCOPE)',
             "endfunction()",
             "",
         ]

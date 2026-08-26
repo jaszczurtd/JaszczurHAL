@@ -73,45 +73,17 @@ ESP_IDF_BASE_SOURCES = (
     "src/hal/impl/esp32/jh_esp32_fault.cpp",
     "src/hal/impl/esp32/jh_esp32_ledc.cpp",
 )
-ESP_IDF_FEATURE_SOURCES = {
-    "HAL_ENABLE_CRC": ("src/hal/security/hal_crc.cpp",),
-    "HAL_ENABLE_CRYPTO": (
-        "src/hal/security/hal_crypto.cpp",
-        "src/hal/network/wireguard/core/crypto/chacha20.c",
-        "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
-        "src/hal/network/wireguard/core/crypto/crypto.c",
-        "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
-    ),
-    "HAL_ENABLE_HTTP_CLIENT": (
-        "src/hal/network/http/hal_http_client.cpp",
-    ),
-    "HAL_ENABLE_HTTP_FILES": (
-        "src/hal/network/http/hal_http_files.cpp",
-    ),
-    "HAL_ENABLE_HTTP_SERVER": (
-        "src/hal/network/http/hal_http_server.cpp",
-    ),
+ESP_IDF_TARGET_SOURCES = {
     "HAL_ENABLE_I2C": (
-        "src/hal/i2c/hal_i2c.cpp",
         "src/hal/impl/esp32/hal_i2c.cpp",
     ),
     "HAL_ENABLE_I2C_SLAVE": (
         "src/hal/impl/esp32/hal_i2c_slave.cpp",
     ),
-    "HAL_ENABLE_MQTT": (
-        "src/hal/network/mqtt/hal_mqtt.cpp",
-        "src/hal/network/mqtt/jh_pubsub_hal_client.cpp",
-        "src/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp",
-    ),
     "HAL_ENABLE_NETWORK_CORE": (
-        "src/hal/network/hal_net.cpp",
-        "src/hal/network/jh_network_backend.cpp",
-        "src/hal/network/jh_network_handle_pool.cpp",
         "src/hal/impl/esp32/esp32_network_backend.cpp",
     ),
     "HAL_ENABLE_OTA": (
-        "src/hal/network/ota/jh_ota_protocol.cpp",
-        "src/hal/security/jh_secure_random.cpp",
         "src/hal/impl/esp32/esp32_secure_random.cpp",
         "src/hal/impl/esp32/hal_ota.cpp",
     ),
@@ -120,56 +92,25 @@ ESP_IDF_FEATURE_SOURCES = {
         "src/hal/impl/esp32/hal_pwm_freq.cpp",
     ),
     "HAL_ENABLE_RGB_LED": (
-        "src/hal/gpio/hal_rgb_led.cpp",
-        "src/hal/gpio/neopixel/jh_neopixel.cpp",
         "src/hal/impl/esp32/hal_rgb_led.cpp",
     ),
     "HAL_ENABLE_SPI": (
-        "src/hal/spi/hal_spi.cpp",
-        "src/hal/spi/hal_spi_device.cpp",
         "src/hal/impl/esp32/hal_spi.cpp",
     ),
     "HAL_ENABLE_TCP": (
-        "src/hal/network/hal_tcp.cpp",
         "src/hal/impl/esp32/esp32_network_sockets.cpp",
     ),
     "HAL_ENABLE_TIME": (
-        "src/hal/time/hal_time.cpp",
-        "src/hal/time/hal_time_ntp.cpp",
-        "src/hal/time/jh_calendar.c",
         "src/hal/impl/esp32/hal_time.cpp",
     ),
     "HAL_ENABLE_TLS": (
-        "src/hal/network/tls/hal_tls.cpp",
-        "src/hal/network/tls/BearSSL/jh_bearssl_engine.cpp",
-        "src/hal/network/tls/BearSSL/jh_bearssl_hal_tcp_io.cpp",
-        "src/hal/network/tls/BearSSL/jh_bearssl_provider.cpp",
-        "src/hal/security/jh_secure_random.cpp",
         "src/hal/impl/esp32/esp32_secure_random.cpp",
     ),
     "HAL_ENABLE_UDP": (
-        "src/hal/network/hal_udp.cpp",
         "src/hal/impl/esp32/esp32_network_sockets.cpp",
     ),
     "HAL_ENABLE_UART": ("src/hal/impl/esp32/hal_uart.cpp",),
-    "HAL_ENABLE_WEBSOCKET": (
-        "src/hal/network/websocket/hal_websocket.cpp",
-    ),
-    "HAL_ENABLE_WIFI": ("src/hal/network/hal_wifi.cpp",),
     "HAL_ENABLE_WIREGUARD": (
-        "src/hal/network/jh_lwip_extension.cpp",
-        "src/hal/network/wireguard/hal_wireguard.cpp",
-        "src/hal/network/wireguard/hal_wireguard_provider.cpp",
-        "src/hal/network/wireguard/core/jh_wireguard_client.cpp",
-        "src/hal/network/wireguard/core/wireguard-platform.c",
-        "src/hal/network/wireguard/core/wireguard.c",
-        "src/hal/network/wireguard/core/wireguardif.c",
-        "src/hal/network/wireguard/core/crypto/blake2s.c",
-        "src/hal/network/wireguard/core/crypto/chacha20.c",
-        "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
-        "src/hal/network/wireguard/core/crypto/crypto.c",
-        "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
-        "src/hal/network/wireguard/core/crypto/x25519.c",
         "src/hal/impl/esp32/esp32_secure_random.cpp",
         "src/hal/impl/esp32/esp32_lwip_extension_port.cpp",
     ),
@@ -205,8 +146,10 @@ ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
     "HAL_ENABLE_PCNT": ("esp_driver_pcnt",),
     "HAL_ENABLE_RGB_LED": ("esp_driver_rmt",),
     "HAL_ENABLE_SPI": ("esp_driver_spi",),
-    "HAL_ENABLE_TLS": ("jh_bearssl",),
     "HAL_ENABLE_UART": ("esp_driver_uart",),
+}
+ESP_IDF_MANAGED_DEPENDENCIES = {
+    "bearssl": ("jh_bearssl",),
 }
 GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_board_resolved.json",
@@ -1073,19 +1016,39 @@ def validate_supported_features(
     )
 
 
-def resolve_component_contract(
+def resolve_component_build_inputs(
     resolved_features: Sequence[str],
+    feature_model: generate_hal_features.FeatureModel | None = None,
 ) -> tuple[list[str], list[str], list[str]]:
     """Resolve the ESP-IDF source/dependency graph from the feature set."""
+    if feature_model is None:
+        feature_model = generate_hal_features.load_registry(
+            Path(__file__).resolve().parents[1] / "config"
+        )
     enabled = set(resolved_features)
+    try:
+        feature_sources, portable_sources, managed_dependencies = (
+            feature_model.resolve_build_effects(enabled)
+        )
+    except KeyError as error:
+        raise EspIdfError(f"Unknown resolved feature: {error.args[0]}") from error
     sources = list(ESP_IDF_BASE_SOURCES)
+    sources.extend(feature_sources)
+    sources.extend(portable_sources)
     private_dependencies = list(ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES)
-    for feature in sorted(ESP_IDF_FEATURE_SOURCES):
+    for feature in sorted(ESP_IDF_TARGET_SOURCES):
         if feature in enabled:
-            sources.extend(ESP_IDF_FEATURE_SOURCES[feature])
+            sources.extend(ESP_IDF_TARGET_SOURCES[feature])
             private_dependencies.extend(
                 ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES.get(feature, ())
             )
+    for dependency in managed_dependencies:
+        components = ESP_IDF_MANAGED_DEPENDENCIES.get(dependency)
+        if components is None:
+            raise EspIdfError(
+                f"ESP-IDF does not support managed dependency {dependency!r}"
+            )
+        private_dependencies.extend(components)
     return (
         list(dict.fromkeys(sources)),
         list(ESP_IDF_PUBLIC_COMPONENT_DEPENDENCIES),
@@ -1168,7 +1131,10 @@ def resolve_build_model(
         integration_sources,
         component_dependencies,
         private_component_dependencies,
-    ) = resolve_component_contract(resolved_features)
+    ) = resolve_component_build_inputs(
+        resolved_features,
+        generate_hal_features.load_registry(repo_root / "config"),
+    )
     compile_features = set(command_line_features)
     for required in target_descriptor.get("requiredFeatures", []):
         symbol = required.removesuffix("=1")

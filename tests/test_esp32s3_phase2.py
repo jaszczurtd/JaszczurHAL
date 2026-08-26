@@ -225,7 +225,7 @@ class Phase2RegistryAndBuildModelTests(unittest.TestCase):
             "src/hal/impl/esp32/hal_uart.cpp",
         }
         baseline_sources, _, baseline_dependencies = (
-            esp_idf.resolve_component_contract(["HAL_ENABLE_FREERTOS"])
+            esp_idf.resolve_component_build_inputs(["HAL_ENABLE_FREERTOS"])
         )
         self.assertIn("src/hal/impl/esp32/hal_adc.cpp", baseline_sources)
         self.assertTrue(optional_sources.isdisjoint(baseline_sources))

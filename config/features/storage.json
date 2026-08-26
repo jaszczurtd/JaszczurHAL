@@ -8,7 +8,11 @@
     "HAL_ENABLE_KV": {
       "implies": ["HAL_ENABLE_EEPROM"]
     },
-    "HAL_ENABLE_LITTLEFS": {},
+    "HAL_ENABLE_LITTLEFS": {
+      "buildEffects": {
+        "dependencies": ["littlefs"]
+      }
+    },
     "HAL_ENABLE_SDLOGGER": {
       "implies": ["HAL_ENABLE_EEPROM", "HAL_ENABLE_FAT", "HAL_ENABLE_SPI"]
     }

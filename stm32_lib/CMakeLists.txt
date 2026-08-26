@@ -102,20 +102,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SRC ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 include(${CMAKE_CURRENT_SOURCE_DIR}/freertos_stm32g474.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_bearssl.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_feature_build_effects.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_managed_frameworks.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_cyw43_driver.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_btstack.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_littlefs.cmake)
-include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_sx126x.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/../cmake/jh_stack_protector.cmake)
-jh_bearssl_source_manifest(
-    _jh_stm32_bearssl_sources
-    _jh_stm32_bearssl_include_dirs)
 jh_managed_framework_include_dirs(_jh_stm32_framework_include_dirs)
 jh_managed_framework_configure_sources()
-jh_littlefs_source_manifest(
-    STM32_LITTLEFS_SOURCES
-    STM32_LITTLEFS_INCLUDE_DIRS)
 set(_jh_extra_hal_defines
     ${JH_BOARD_COMPILE_DEFINITIONS}
     ${EXTRA_HAL_DEFINES})
@@ -123,6 +115,17 @@ set(_jh_stm32_selection_defines
     ${_jh_extra_hal_defines}
     ${_jh_project_features}
     ${JH_RESOLVED_FEATURES})
+jh_collect_feature_build_effects(_jh_stm32_build_effects
+    ROOT "${JH_ROOT}"
+    FEATURES ${JH_RESOLVED_FEATURES})
+jh_feature_build_dependency_enabled(_jh_stm32_has_littlefs littlefs
+    FEATURES ${JH_RESOLVED_FEATURES})
+jh_feature_build_dependency_enabled(_jh_stm32_has_tls bearssl
+    FEATURES ${JH_RESOLVED_FEATURES})
+set(STM32_LITTLEFS_SOURCES
+    ${_jh_stm32_build_effects_LITTLEFS_SOURCES})
+set(STM32_SX126X_SOURCES
+    ${_jh_stm32_build_effects_SX126X_SOURCES})
 
 # ── HAL implementation sources (STM32G474 skeleton) ────────────────────────
 file(GLOB STM32_IMPL_SOURCES ${SRC}/hal/impl/stm32g474/*.cpp)
@@ -143,26 +146,9 @@ list(APPEND STM32_SHARED_SOURCES
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
 )
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
-set(STM32_MQTT_INCLUDE_DIRS)
-jh_cmake_defines_contain(_jh_stm32_has_mqtt HAL_ENABLE_MQTT
-    ${_jh_stm32_selection_defines})
-if(_jh_stm32_has_mqtt)
-    list(APPEND STM32_IMPL_SOURCES
-        ${SRC}/hal/network/mqtt/PubSubClient/src/PubSubClient.cpp)
-    list(APPEND STM32_MQTT_INCLUDE_DIRS
-        ${SRC}/hal/network/mqtt/PubSubClient/src)
-endif()
-list(APPEND STM32_IMPL_SOURCES ${STM32_LITTLEFS_SOURCES})
-jh_cmake_defines_contain(_jh_stm32_has_sx126x HAL_ENABLE_SX126X
-    ${_jh_stm32_selection_defines})
-set(STM32_SX126X_INCLUDE_DIRS)
-set(STM32_SX126X_SOURCES)
-if(_jh_stm32_has_sx126x)
-    jh_sx126x_source_manifest(
-        STM32_SX126X_SOURCES
-        STM32_SX126X_INCLUDE_DIRS)
-    list(APPEND STM32_IMPL_SOURCES ${STM32_SX126X_SOURCES})
-endif()
+list(APPEND STM32_IMPL_SOURCES
+    ${_jh_stm32_build_effects_FEATURE_SOURCES}
+    ${_jh_stm32_build_effects_DEPENDENCY_SOURCES})
 
 # ── Common entry source ─────────────────────────────────────────────────────
 set(HAL_COMMON_SOURCES
@@ -174,14 +160,6 @@ set(UTIL_SOURCES
     ${SRC}/utils/pidController.cpp
     ${SRC}/utils/draw7Segment.cpp
 )
-
-# Unity is opt-in through the same cache/project feature surfaces as other
-# feature-owned sources.
-jh_cmake_defines_contain(_jh_stm32_unity_enabled HAL_ENABLE_UNITY
-    ${_jh_stm32_selection_defines})
-if(_jh_stm32_unity_enabled)
-    list(APPEND UTIL_SOURCES ${SRC}/utils/unity.c)
-endif()
 
 add_library(JaszczurHAL STATIC
     ${STM32_IMPL_SOURCES}
@@ -201,10 +179,7 @@ endif()
 target_include_directories(JaszczurHAL PUBLIC
     ${SRC}
     ${JH_BOARD_GENERATED_DIR}
-    ${STM32_LITTLEFS_INCLUDE_DIRS}
-    ${STM32_SX126X_INCLUDE_DIRS}
-    ${STM32_MQTT_INCLUDE_DIRS}
-    ${_jh_stm32_bearssl_include_dirs}
+    ${_jh_stm32_build_effects_INCLUDE_DIRS}
     ${_jh_stm32_framework_include_dirs}
 )
 file(REMOVE "${CMAKE_BINARY_DIR}/include/generated/jh_board_registry.h")
@@ -217,8 +192,6 @@ add_custom_command(TARGET JaszczurHAL POST_BUILD
         "${CMAKE_BINARY_DIR}/include/generated"
     VERBATIM)
 
-jh_cmake_defines_contain(_jh_stm32_has_littlefs HAL_ENABLE_LITTLEFS
-    ${_jh_stm32_selection_defines})
 jh_cmake_defines_contain(_jh_stm32_has_littlefs_size
     HAL_STM32_FLASH_LITTLEFS_SIZE ${_jh_stm32_selection_defines})
 set(_jh_stm32_littlefs_link_size "")
@@ -267,32 +240,14 @@ if(_jh_stm32_has_cyw43_gspi)
         HAL_ENABLE_BLE_STREAM ${_jh_stm32_selection_defines})
     jh_cmake_defines_contain(_jh_stm32_has_ota
         HAL_ENABLE_OTA ${_jh_stm32_selection_defines})
-    if(_jh_stm32_has_bluetooth_stage1 AND _jh_stm32_has_ble)
-        message(FATAL_ERROR
-            "Select either JH_BLUETOOTH_STAGE1_PROBE or HAL_ENABLE_BLE")
-    endif()
-    set(_jh_stm32_cyw43_options)
-    if(_jh_stm32_has_cyw43_lwip)
-        list(APPEND _jh_stm32_cyw43_options LWIP)
-    endif()
-    if(_jh_stm32_has_ota)
-        list(APPEND _jh_stm32_cyw43_options MDNS)
-    endif()
-    if(_jh_stm32_has_bluetooth_stage1 OR _jh_stm32_has_ble)
-        list(APPEND _jh_stm32_cyw43_options BLUETOOTH)
-    endif()
-    jh_target_enable_cyw43_driver(JaszczurHAL ${_jh_stm32_cyw43_options})
-    if(_jh_stm32_has_bluetooth_stage1)
-        jh_target_enable_btstack_stage1(JaszczurHAL)
-    elseif(_jh_stm32_has_ble_stream)
-        jh_target_enable_btstack_ble_stream(JaszczurHAL)
-    elseif(_jh_stm32_has_ble)
-        jh_target_enable_btstack_ble(JaszczurHAL)
-    endif()
+    jh_target_enable_cyw43_feature_stack(JaszczurHAL
+        LWIP "${_jh_stm32_has_cyw43_lwip}"
+        OTA "${_jh_stm32_has_ota}"
+        BLUETOOTH_STAGE1 "${_jh_stm32_has_bluetooth_stage1}"
+        BLE "${_jh_stm32_has_ble}"
+        BLE_STREAM "${_jh_stm32_has_ble_stream}")
 endif()
 
-jh_cmake_defines_contain(_jh_stm32_has_tls HAL_ENABLE_TLS
-    ${_jh_stm32_selection_defines})
 if(_jh_stm32_has_tls)
     jh_add_bearssl_source_library(jh_bearssl_stm32)
     target_link_libraries(JaszczurHAL PUBLIC jh_bearssl_stm32)

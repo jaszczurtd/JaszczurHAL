@@ -6,8 +6,22 @@
     "HAL_DISABLE_ASSERTS": {},
     "HAL_ENABLE_APP_TASK1": {},
     "HAL_ENABLE_CJSON": {},
-    "HAL_ENABLE_CRC": {},
-    "HAL_ENABLE_CRYPTO": {},
+    "HAL_ENABLE_CRC": {
+      "buildEffects": {
+        "portableSources": ["src/hal/security/hal_crc.cpp"]
+      }
+    },
+    "HAL_ENABLE_CRYPTO": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/network/wireguard/core/crypto/chacha20.c",
+          "src/hal/network/wireguard/core/crypto/chacha20poly1305.c",
+          "src/hal/network/wireguard/core/crypto/crypto.c",
+          "src/hal/network/wireguard/core/crypto/poly1305-donna.c",
+          "src/hal/security/hal_crypto.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_DAC": {},
     "HAL_ENABLE_DACLESS": {
       "implies": ["HAL_ENABLE_DMA_PWM_AUDIO", "HAL_ENABLE_PWM_FREQ"]
@@ -27,9 +41,20 @@
       "implies": ["HAL_ENABLE_CRYPTO", "HAL_ENABLE_PNG"]
     },
     "HAL_ENABLE_PWM_FREQ": {},
-    "HAL_ENABLE_RGB_LED": {},
+    "HAL_ENABLE_RGB_LED": {
+      "buildEffects": {
+        "portableSources": [
+          "src/hal/gpio/hal_rgb_led.cpp",
+          "src/hal/gpio/neopixel/jh_neopixel.cpp"
+        ]
+      }
+    },
     "HAL_ENABLE_STACK_GUARD": {},
     "HAL_ENABLE_STACK_PROTECTOR": {},
-    "HAL_ENABLE_UNITY": {}
+    "HAL_ENABLE_UNITY": {
+      "buildEffects": {
+        "featureSources": ["src/utils/unity.c"]
+      }
+    }
   }
 }
